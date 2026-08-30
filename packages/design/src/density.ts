@@ -1,6 +1,5 @@
 // One 4px base, six rungs, and the scale STOPS there: the largest rhythm step
-// is the 32px desktop content margin, so a seventh rung could only be "one more
-// than the biggest one".
+// is the 32px desktop content margin, so a seventh could only be "bigger".
 
 export interface DensityScale {
   1: number;
@@ -20,9 +19,9 @@ export const spacing = {
   6: 32,
 } as const satisfies DensityScale;
 
-/** The only two values below the 4px base, NAMED so the exception is claimed
- *  rather than eyeballed: these are seams, not rhythm steps. A third sub-base
- *  value is a system change, never a call-site decision. */
+/** The only values below the 4px base, NAMED so the exception is claimed
+ *  rather than eyeballed: seams, not rhythm steps. A third is a system
+ *  change, never a call-site decision. */
 export const subBase = {
   /** The seam between two images in a mosaic — a cut, not a gap. */
   gutter: 2,
@@ -35,41 +34,45 @@ export const subBase = {
 export const metrics = {
   /** Every control, UNDER A POINTER; on touch it is `controlTouch`. */
   control: 34,
-  /** A FLOOR, not a preference (v7 §C): `--target-min` starts here and only a
-   *  `(pointer: fine)` query lowers it, so an unproven surface keeps 44. */
+  /** A FLOOR, not a preference (v7 §C): only `(pointer: fine)` lowers
+   *  `--target-min`, so an unproven surface keeps 44. */
   controlTouch: 44,
   row: 44,
   /** The one control allowed under 34px: a segment is not the primary target. */
   segmented: 28,
-  /** The phone narrows the fact-list key column rather than wrapping the key,
-   *  so the value edge stays aligned down the list. */
+  /** The phone narrows this rather than wrapping the key, so the value edge
+   *  stays aligned down the list. */
   keyCol: 150,
   keyColTouch: 110,
-  /** The navigation stem: never themed, never scrolled away, never resized.
-   *  The invariant is the RESERVATION, not the number. */
+  /** Never themed, never scrolled away, never resized. The invariant is the
+   *  RESERVATION, not the number. */
   stem: 240,
-  /** An app's OWN destination rail, pointer only — not a second stem: the stem
-   *  answers which app, this answers where in it. On touch the same
-   *  destinations are the app band or shelf strip, never hidden behind this. */
+  /** An app's OWN destination rail, pointer only — not a second stem: the
+   *  stem answers which app, this answers where in it. On touch the same
+   *  destinations are the app band, never hidden behind this. */
   appRail: 232,
-  /** Pointer rows only: anywhere this is a target it takes `row`, because 44 is
-   *  the floor and this rung may never be spent on a finger. */
+  /** Pointer rows only: anywhere this is a target it takes `row`, because 44
+   *  is the floor and this rung is never spent on a finger. */
   appRailRow: 30,
+  /** The compact band's FRAME capsule — the way home, square, OUTSIDE the
+   *  app's tab group. Above the 44 floor: it is the one target reached for
+   *  without looking. A metric, not a call-site number, because the shell's
+   *  band and the phone's band must draw the SAME plate. */
+  bandCapsule: 52,
 } as const;
 
 export type MetricKey = keyof typeof metrics;
 
-/** A SEPARATE scale from `spacing`: 18 deliberately does not sit on the 4px
- *  base, because a page margin is the paper's edge to the text block, not a gap
- *  between two things. Only `mobile` is lowered to native (`toNativeTheme`). */
+/** A SEPARATE scale from `spacing`: 18 deliberately misses the 4px base,
+ *  because a page margin is the paper's edge to the text block, not a gap. */
 export const pageMargin = {
   desktop: 32,
   mobile: 18,
 } as const;
 
-/** Tiers scale ROW HEIGHT and CONTENT PADDING only, never control size; mobile
- *  renders one tier looser than declared. `dense` bottoms out at the control
- *  height: below it a row is no longer a target. */
+/** Tiers scale ROW HEIGHT and CONTENT PADDING only, never control size, and
+ *  mobile renders one tier looser. `dense` bottoms out at the control height:
+ *  below it a row is no longer a target. */
 export const DENSITY_TIERS = {
   comfortable: { pad: spacing[4], row: metrics.row },
   compact: { pad: spacing[3], row: 38 },

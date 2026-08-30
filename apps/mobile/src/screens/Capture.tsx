@@ -9,6 +9,7 @@ import type { CaptureKind, CapturePreview } from "@centraid/client/capture";
 
 import Icon from "../kit/components/Icon";
 import { Text, TextInput } from "../kit/components/NativeText";
+import Tappable from "../kit/components/Tappable";
 import TopSafeArea from "../kit/components/TopSafeArea";
 import { useReplicaQuery } from "../kit/hooks/useReplicaQuery";
 import { useReplica } from "../kit/replica/ReplicaProvider";
@@ -158,13 +159,13 @@ export default function CaptureScreen({
   return (
     <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
-        <Pressable
+        <Tappable
           accessibilityRole="button"
           accessibilityLabel="Close quick capture"
           onPress={() => navigation.goBack()}
         >
           <Icon name="x" size={24} color={colors.text} />
-        </Pressable>
+        </Tappable>
         <Pressable
           accessibilityRole="button"
           onPress={() => navigation.navigate("Scan")}

@@ -17,7 +17,7 @@
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: var(--sp-3) var(--agenda-margin);
+  padding: var(--sp-3) var(--page-margin);
   border-block-end: 1px solid var(--line);
 }
 

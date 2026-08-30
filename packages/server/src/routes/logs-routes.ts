@@ -9,6 +9,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { SseStream } from "@centraid/server/engine";
 
+import { unrefTimer } from "../lib/unref-timer.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type {
   GatewayLogEntry,
@@ -66,7 +67,7 @@ export function makeLogsRouteHandler(
     const heartbeat = setInterval(() => {
       stream.comment("ping");
     }, 30_000);
-    heartbeat.unref?.();
+    unrefTimer(heartbeat);
 
     let closed = false;
     let unsub = (): void => undefined;

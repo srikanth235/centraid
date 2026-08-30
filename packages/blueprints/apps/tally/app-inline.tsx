@@ -7,7 +7,7 @@
 
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, CHANGE_TABLES } from "./app-root.tsx";
-import pendingProjection from "./pending-projection.ts";
+import { tallyPendingProjection as pendingProjection } from "./pending-projection.ts";
 import activityQuery from "./queries/activity.ts";
 import dashboardQuery from "./queries/dashboard.ts";
 import friendQuery from "./queries/friend.ts";

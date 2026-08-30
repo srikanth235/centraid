@@ -62,6 +62,19 @@ export function localTallyNet(
         }>
       ).map((split) => [split.party_id, split.share_minor])
     ),
+    payers: Object.fromEntries(
+      (
+        db.vault
+          .prepare(
+            `SELECT party_id, paid_minor FROM tally_expense_payer
+              WHERE expense_id = ? ORDER BY party_id`
+          )
+          .all(expense.expense_id) as Array<{
+          party_id: string;
+          paid_minor: number;
+        }>
+      ).map((payer) => [payer.party_id, payer.paid_minor])
+    ),
   }));
   const settlements = db.vault
     .prepare(

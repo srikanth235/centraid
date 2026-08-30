@@ -1,10 +1,8 @@
-// The invariants the whole app rests on. Tally derives every figure at read
-// time from one fold, so the fold's arithmetic is the product: if a group's
-// nets stop summing to zero, or the pairwise view stops agreeing with the
-// per-member view, some member is being told a number nobody owes.
-//
-// Multi-payer expenses are exercised throughout, because that is where a
-// per-payer attribution can silently drift from the per-member totals.
+// The invariants the whole app rests on: Tally derives every figure at read
+// time from one fold. If a group's nets stop summing to zero, or the pairwise
+// view stops agreeing with the per-member view, some member is being told a
+// number nobody owes. Multi-payer expenses are exercised throughout — that is
+// where per-payer attribution drifts silently.
 
 import { describe, expect, test } from "vitest";
 
@@ -37,19 +35,22 @@ function sum(values: Iterable<number>): number {
   return total;
 }
 
-describe("expensePayers — the multi-payer compat rule", () => {
-  test("no payer rows reads as the single paid_by payer", () => {
+describe("expensePayers — payer rows are ground facts, never inferred", () => {
+  test("no payer rows attributes nothing — the compat fallback is gone", () => {
+    // Every expense carries payer rows (#883, ruling O-payers): an empty set
+    // is an unfinished write, and showing it is more honest than guessing.
     expect(
       expensePayers({
         group_id: GROUP,
         paid_by: "a",
         amount_minor: 900,
         splits: {},
+        payers: {},
       })
-    ).toStrictEqual([["a", 900]]);
+    ).toStrictEqual([]);
   });
 
-  test("declared payers win over paid_by", () => {
+  test("declared payers are read as declared", () => {
     expect(
       expensePayers({
         group_id: GROUP,
@@ -131,6 +132,7 @@ describe("a group's per-member positions", () => {
           paid_by: "c",
           amount_minor: 1000,
           splits: { a: 333, b: 333, c: 334 },
+          payers: { c: 1000 },
         },
       ],
       [{ group_id: GROUP, from_party: "b", to_party: "a", amount_minor: 250 }]
@@ -157,8 +159,15 @@ describe("a group's per-member positions", () => {
         paid_by: "a",
         amount_minor: 500,
         splits: { a: 250, b: 250 },
+        payers: { a: 500 },
       },
-      { group_id: null, paid_by: "a", amount_minor: 700, splits: { b: 700 } },
+      {
+        group_id: null,
+        paid_by: "a",
+        amount_minor: 700,
+        splits: { b: 700 },
+        payers: { a: 700 },
+      },
     ]);
     expect(sum(tallyGroupNet(d, GROUP).values())).toBe(0);
     expect(tallyGroupNet(d, GROUP).get("a")).toBe(0);
@@ -173,6 +182,7 @@ describe("who owes whom inside a group", () => {
         paid_by: "a",
         amount_minor: 900,
         splits: { a: 300, b: 300, c: 300 },
+        payers: { a: 900 },
       },
     ]),
     data(
@@ -240,7 +250,6 @@ describe("who owes whom inside a group", () => {
 
   test("open debts are the positive half of the matrix", () => {
     const pair = tallyGroupPairNets(ledgers[0]!, GROUP);
-    // One payer, three equal shares: b owes a and c owes a. Two debts.
     expect(tallyOpenDebtCount(pair)).toBe(2);
     expect(pair.get("b")?.get("a")).toBe(300);
     expect(pair.get("c")?.get("a")).toBe(300);
@@ -254,6 +263,7 @@ describe("who owes whom inside a group", () => {
           paid_by: "a",
           amount_minor: 900,
           splits: { a: 300, b: 300, c: 300 },
+          payers: { a: 900 },
         },
       ],
       [{ group_id: GROUP, from_party: "b", to_party: "a", amount_minor: 300 }]

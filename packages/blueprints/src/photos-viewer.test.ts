@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 // Stage rules for viewer + slideshow + editor (v4 handoff §7.1-§7.4), asserted
-// as rules, not pixel snapshots: --stage is one value in BOTH themes; the
-// spacer beside the flexible title does not flex; actions go icon-only below
-// 840px OF BAR; the zoom readout is exact; `Save as a new photograph` is the
-// ONE filled element and a disabled commit is not filled.
+// as rules, not pixel snapshots: --stage is one value in BOTH themes; actions
+// go icon-only below 840px OF BAR; `Save as a new photograph` is the ONE
+// filled element and a disabled commit is not filled.
 //
 // jsdom because app modules reach the browser kit (fmtBytes, staging) at
 // import time. App sources load by file URL (`src/` is its own tsconfig
@@ -446,6 +445,8 @@ describe("the transport, one slot and three variants", () => {
   it("keeps the track determinate and inside its own bounds", () => {
     expect(clock(8)).toBe("0:08");
     expect(clock(24)).toBe("0:24");
+    // Past an hour the clock grows a field.
+    expect(clock(3_904)).toBe("1:05:04");
     expect(trackFraction(0, 0)).toBe(0);
     expect(trackFraction(12, 24)).toBe(0.5);
     expect(trackFraction(99, 24)).toBe(1);

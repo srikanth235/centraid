@@ -6,9 +6,10 @@
 // drift silently, and record the ruling as a bare citation, never a narrative.
 // The rules that decide each audit:
 //
-//  - The canonical walk is `listVaultEntities` (schema/tables.ts), NOT "every
-//    table in the file". An unregistered table is absent from every export
-//    (#724 W5). Registering it is the whole fix.
+//  - The canonical walk is `listVaultEntities` (schema/tables.ts over
+//    schema/entity-catalog.ts), NOT "every table in the file". An unregistered
+//    table is absent from every export (#724 W5). Registering it is the whole
+//    fix.
 //  - `exportVault` does `SELECT *` over each registered table, so a new column,
 //    a widened CHECK, or a rename rides along with no code change here. Keep it
 //    that way: `portability.test.ts` fails if the walk ever becomes a column
@@ -29,55 +30,49 @@
 //    build may hold values this build's CHECKs refuse, and that is deliberate
 //    (#750).
 
-// Schema/export audit #865: `sync_connection_credential` gains one column,
-// `refresh_capability`, and it MUST be carried. It is the Worker-minted HMAC
-// a stored Assist refresh token is redeemable with — a restore that dropped
-// it would hand back tokens that `/refresh` refuses (missing capability),
-// so every Google connection would look like a withdrawn grant until the
-// owner re-ran the ceremony. No adapter and no content bytes: it is a sealed
-// cell on an already-walked table (`sync.connection_credential` in
-// schema/tables.ts). `exportVault` walks `SELECT *`, so the column rides
-// along with no code change here, which is why the audit is pinned by a
-// test: `portability.test.ts`'s "an Assist refresh capability survives
-// export and restore" fails if that walk ever becomes a column list. The
-// column arrives on existing files as migration rung five (plain ADD COLUMN).
+// Schema/export audit #865: `sync_connection_credential.refresh_capability`
+// MUST be carried. It is the Worker-minted HMAC a stored Assist refresh token
+// is redeemable with — dropping it hands back tokens `/refresh` refuses, so
+// every Google connection reads as a withdrawn grant. A sealed cell on an
+// already-walked table, pinned by `portability.test.ts`'s "an Assist refresh
+// capability survives export and restore".
 
-// Schema/export audit #872: Tally gains two tables and four columns, and all
-// of them MUST be carried. `tally_expense_payer` is who actually put money
-// down — it is a GROUND FACT the balance fold reads, so a restore that dropped
-// it would hand back a vault whose expenses nobody paid for; `tally_nudge` is
-// the record that the owner prepared a reminder, an intention nothing else
-// holds. Both are registered in schema/tables.ts, which is what puts them in
-// the walk. The columns ride the same `SELECT *`: `tally_expense.split_method`
-// and `split_params_json` (the division an expense was entered with, without
-// which every restored edit re-opens as exact amounts), and
-// `tally_group.simplify_opt_in` and `archived_at` (two owner decisions — a
-// dropped opt-in silently re-wires who owes whom on the next read, and a
-// dropped archive puts a group the owner filed away back in the lists).
-// `tally_expense.group_id` becomes nullable and `tally_expense_line_item`
-// gains `expense_id` with a nullable `receipt_id`: shape changes on
-// already-walked tables, carried with no adapter. No content bytes are
-// involved — a receipt's photo was already carried as core content.
+// Schema/export audit #872: Tally gains two tables and four columns, all of
+// which MUST be carried. `tally_expense_payer` is the GROUND FACT of who put
+// money down, without which restored expenses have no payer; `tally_nudge` is
+// the record that the owner prepared a reminder. The columns ride the same
+// `SELECT *`: `tally_expense.split_method`/`split_params_json` (without them
+// every restored edit re-opens as exact amounts) and
+// `tally_group.simplify_opt_in`/`archived_at` (two owner decisions — a dropped
+// opt-in re-wires who owes whom, a dropped archive un-files a group).
 
 // Schema/export audit #872 (Locker): five tables enter the canonical walk and
-// three columns join `locker_item`, and all of them MUST be carried.
-// `locker_item_alias` existed in DDL but was never registered — the connector
-// binding was written, resolvable at reveal time, and absent from every
-// export, so a restore silently broke every `locker:@<alias>:<column>`
-// connector. `locker_item_field` is the member's own sections and fields and
-// the storage every expansion item type is built from; `locker_item_address`
-// the extra addresses a login answers to, each with its own match policy;
-// `locker_item_passkey` the passkey slot; `locker_item_history` the durable
-// item and password history, which is the ONLY record that a password was
-// ever rotated. Each is a fact the owner entered or a record only this vault
-// holds. Registration in schema/tables.ts is the whole fix — `exportVault`
-// walks `SELECT *`, so the three new `locker_item` columns
-// (`password_set_at`, `archived_at`, and the widened `type` CHECK's fifteen
-// values) ride along with no code change here, and so do the sidecars' sealed
-// cells, which stay CIPHERTEXT in the artifact exactly like
-// `locker_item.password` — the bundle carries the DEK, never plaintext.
-// No adapter and no content bytes: a file pinned to a locker item was already
-// carried as core content through `core_attachment`.
+// three columns join `locker_item`, and all MUST be carried.
+// `locker_item_alias` binds connectors (`locker:@<alias>:<column>`);
+// `locker_item_field` is the member's own sections and fields;
+// `locker_item_address` the extra addresses a login answers to;
+// `locker_item_passkey` the passkey slot; `locker_item_history` the ONLY
+// record that a password was ever rotated. Each is a fact the owner entered.
+// Registration in schema/tables.ts is the whole fix — the `SELECT *` walk
+// carries the new `locker_item` columns and the sidecars' sealed cells, which
+// stay CIPHERTEXT: the bundle carries the DEK, never plaintext.
+
+// Schema/export audit #883: the legacy authority stores fold into one table
+// and the SET of decisions carried is unchanged — only where they live.
+// `share.authority` and `share.delivery_config` enter the walk; `share.grant`
+// and `enrich.consent` leave it with the tables rung six drops. The member's
+// device trust moves out of `consent_device.trust` into a row of its own, so
+// that table's `SELECT *` narrows by exactly the value that moved. No adapter,
+// no content bytes. Watch `share_delivery_config`: dropping it would silently
+// reset a per-grant size ceiling to the vault-wide default, which is why it is
+// registered rather than treated as derivable machinery.
+
+// Schema/export audit #883 (entity catalog extract): `VAULT_ENTITIES` moved
+// from tables.ts to schema/entity-catalog.ts so engine W can read the
+// declarations. No table, no column, no sealed cell. `listVaultEntities`
+// still walks `VAULT_TABLES` derived from that catalog; `exportVault`'s
+// SELECT * is unchanged. The schema-dir hash includes the new module and
+// `entity-labels.test.ts`, which is why the fingerprint moved again.
 
 import { createHash } from "node:crypto";
 

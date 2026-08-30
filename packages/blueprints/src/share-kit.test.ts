@@ -1,5 +1,5 @@
-// The ceremony-free Commons destination model (#731): a roster of
-// people, never another vault owned by the same person.
+// The ceremony-free Commons destination model (#731): a roster of people,
+// never another vault.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -56,20 +56,12 @@ const shareKit = (await import(moduleUrl)) as {
       }>;
     }
   ) => Record<string, "read" | "read+write">;
-  loadShareCircles: () => Promise<Array<{ circleId: string; label: string }>>;
-  loadShareDestinations: (
-    currentScopeId: string | null | undefined,
+  readShareCircles: () => Promise<Array<{ circleId: string; label: string }>>;
+  readShareDestinations: (
     scopes: readonly Scope[]
   ) => Promise<ShareDestination[]>;
-  shareBlockedReason: (
-    destinations: readonly ShareDestination[]
-  ) => string | null;
   isPendingPartyId: (partyId: string) => boolean;
   quickAddedDestination: (partyId: string, label: string) => ShareDestination;
-  withQuickAddedPerson: (
-    destinations: readonly ShareDestination[],
-    added: ShareDestination
-  ) => ShareDestination[];
   nearNameMatches: (
     destinations: readonly ShareDestination[],
     name: string
@@ -248,44 +240,6 @@ describe("quick-add laws — minting a person from the sheet itself", () => {
         ?.id
     ).toBe(shareKit.quickAddedDestination("asha", "Asha").id);
   });
-
-  it("appends the added person to the listed destinations", () => {
-    expect(
-      shareKit.withQuickAddedPerson(
-        [{ id: "party:ben", label: "Ben", partyId: "ben" }],
-        shareKit.quickAddedDestination("asha", "Asha")
-      )
-    ).toStrictEqual([
-      { id: "party:ben", label: "Ben", partyId: "ben" },
-      { id: "party:asha", label: "Asha", partyId: "asha" },
-    ]);
-  });
-
-  it("never lists the same party twice, even under a different label", () => {
-    const listed: ShareDestination[] = [
-      {
-        id: "asha-vault",
-        label: "Asha",
-        partyId: "asha",
-        vaultId: "asha-vault",
-      },
-    ];
-    expect(
-      shareKit.withQuickAddedPerson(
-        listed,
-        shareKit.quickAddedDestination("asha", "Asha Rao")
-      )
-    ).toStrictEqual(listed);
-  });
-
-  it("does not treat two vault-less destinations as the same party", () => {
-    expect(
-      shareKit.withQuickAddedPerson(
-        [{ id: "own", label: "Library" }],
-        shareKit.quickAddedDestination("asha", "Asha")
-      )
-    ).toHaveLength(2);
-  });
 });
 
 describe("nearNameMatches — did you mean someone already listed?", () => {
@@ -327,24 +281,7 @@ describe("isPendingPartyId", () => {
   });
 });
 
-describe("shareBlockedReason", () => {
-  it("states the honest zero-destination reason", () => {
-    expect(shareKit.shareBlockedReason([])).toBe(
-      "There is nobody to share with yet — add someone by name below."
-    );
-  });
-
-  it("never blocks on two or more destinations — the sheet lists all of them", () => {
-    expect(
-      shareKit.shareBlockedReason([
-        { id: "a", label: "A" },
-        { id: "b", label: "B" },
-      ])
-    ).toBeNull();
-  });
-});
-
-describe("loadShareDestinations — live window.centraid.links()", () => {
+describe("readShareDestinations — live window.centraid.links()", () => {
   afterEach(() => {
     delete (globalThis as { window?: unknown }).window;
   });
@@ -363,13 +300,13 @@ describe("loadShareDestinations — live window.centraid.links()", () => {
           ]),
       },
     };
-    const listed = await shareKit.loadShareDestinations("own", [OWN, FAMILY]);
+    const listed = await shareKit.readShareDestinations([OWN, FAMILY]);
     expect(listed.map((d: ShareDestination) => d.id)).toStrictEqual(["peer-1"]);
   });
 
   it("answers no people when the host has no People or link plane", async () => {
     (globalThis as { window?: unknown }).window = { centraid: {} };
-    const listed = await shareKit.loadShareDestinations("own", [OWN, FAMILY]);
+    const listed = await shareKit.readShareDestinations([OWN, FAMILY]);
     expect(listed).toStrictEqual([]);
   });
 
@@ -381,7 +318,7 @@ describe("loadShareDestinations — live window.centraid.links()", () => {
       },
     };
     await expect(
-      shareKit.loadShareDestinations("own", [OWN, FAMILY])
+      shareKit.readShareDestinations([OWN, FAMILY])
     ).resolves.toStrictEqual([
       { id: "party:asha", label: "Asha", partyId: "asha" },
     ]);
@@ -396,7 +333,7 @@ describe("loadShareDestinations — live window.centraid.links()", () => {
           ]),
       },
     };
-    await expect(shareKit.loadShareCircles()).resolves.toMatchObject([
+    await expect(shareKit.readShareCircles()).resolves.toMatchObject([
       { circleId: "trip", label: "Goa trip" },
     ]);
   });

@@ -15,7 +15,7 @@ const FRONTMATTER_RE = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---\r?\n?/u;
 
 /** Gateway `skills/` catalog; same path from dist/ and src/ layouts. */
 export function skillsDir(): string {
-  return fileURLToPath(new URL("../../skills", import.meta.url));
+  return fileURLToPath(new URL("../../skills", import.meta.url).href);
 }
 
 export function parseSkillFile(raw: string): {

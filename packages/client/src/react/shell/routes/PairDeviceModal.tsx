@@ -4,6 +4,7 @@ import type { JSX } from "react";
 import { createGatewayDeviceTicket } from "../../../gateway-client.js";
 import DevicePairPanel from "../../screens/DevicePairPanel.js";
 import { cx } from "../../ui/cx.js";
+import ShellModal from "../../ui/ShellModal.js";
 import { iconSvg } from "../iconSvg.js";
 
 import controlsCss from "../../styles/controls.module.css";
@@ -43,11 +44,11 @@ export default function PairDeviceModal({
         tabIndex={-1}
         onClick={onClose}
       />
-      <dialog
-        open
+      <ShellModal
+        layer="inline"
         className={vaultModalStyles.profModal}
-        aria-modal="true"
-        data-testid="pair-device-modal"
+        ariaModal
+        data={{ "data-testid": "pair-device-modal" }}
       >
         <div className={vaultModalStyles.profModalHead}>
           <span
@@ -73,7 +74,7 @@ export default function PairDeviceModal({
             onClose={onClose}
           />
         </div>
-      </dialog>
+      </ShellModal>
     </div>
   );
 }

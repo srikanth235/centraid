@@ -15,8 +15,11 @@ import {
   pendingOverlayCopy,
 } from "../../_shared/pending-overlay.ts";
 import { displayText } from "../../_shared/untrusted.ts";
+import { virtualItemAria } from "../../_shared/virtual-window.ts";
+import { virtualBlockProps } from "../../_shared/VirtualWindow.tsx";
 import { metaSentence, typeChip, verdictOf } from "../format.ts";
 import type { LockerRow } from "../types.ts";
+import type { RowPosition } from "./Windowed.tsx";
 
 import styles from "./Rows.module.css";
 
@@ -38,10 +41,13 @@ export interface ItemRowProps {
   /** A verdict this list asserts over the row's own (Review names the check
    *  it grouped by). */
   status?: { label: string; tone: "net" | "seam" } | null;
+  /** Position in a WINDOWED set (`Windowed.tsx`). Present only where the list
+   *  windows, and then the row IS the list item, never a wrapper around it. */
+  position?: RowPosition;
 }
 
 export function ItemRow(props: ItemRowProps): ReactNode {
-  const { row } = props;
+  const { position, row } = props;
   const pending = readPendingOverlay(row as unknown as Record<string, unknown>);
   const verdict = props.status === undefined ? verdictOf(row) : props.status;
   const meta = [metaSentence(row), props.meta].filter(Boolean).join("  ·  ");
@@ -51,11 +57,18 @@ export function ItemRow(props: ItemRowProps): ReactNode {
       <span className={styles.meta}>{meta}</span>
     </>
   );
+  const Box = position ? "li" : "div";
   return (
-    <div
+    <Box
       className={styles.rowWrap}
       data-item-id={row.item_id}
       {...(pending ? { "data-pending": "true" } : {})}
+      {...(position
+        ? {
+            ...virtualBlockProps(position.index),
+            ...virtualItemAria(position.index, position.setSize),
+          }
+        : {})}
     >
       <div className={styles.row}>
         <span className={styles.chip} aria-hidden="true">
@@ -102,7 +115,7 @@ export function ItemRow(props: ItemRowProps): ReactNode {
           {pendingOverlayCopy(pending)}
         </p>
       ) : null}
-    </div>
+    </Box>
   );
 }
 

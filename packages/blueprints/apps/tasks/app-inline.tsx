@@ -3,7 +3,7 @@
 
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, CHANGE_TABLES } from "./app-root.tsx";
-import pendingProjection from "./pending-projection.ts";
+import { tasksPendingProjection as pendingProjection } from "./pending-projection.ts";
 import boardQuery from "./queries/board.ts";
 import searchQuery from "./queries/search.ts";
 

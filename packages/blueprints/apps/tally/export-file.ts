@@ -1,5 +1,4 @@
-// BALANCES ARE ABSENT BY CONSTRUCTION: nothing here folds a figure, and
-// `balances_excluded` travels in the JSON.
+// BALANCES ARE ABSENT BY CONSTRUCTION: nothing here folds a figure.
 import type { ExportData } from "./types.ts";
 
 function cell(value: unknown): string {
@@ -19,7 +18,7 @@ function rowsToCsv(rows: readonly Record<string, unknown>[]): string {
   return [head, ...body].join("\n");
 }
 
-/** Three tables in one file — one row type would invent columns. */
+/** Three tables: one row type would invent columns. */
 export function exportFile(
   data: ExportData,
   format: string
@@ -47,17 +46,5 @@ export function exportFile(
   return { name: `${slug || "ledger"}.csv`, type: "text/csv", text };
 }
 
-/** `<a download>` over an object URL: the one path every seat has. */
-export function saveExportFile(file: {
-  name: string;
-  type: string;
-  text: string;
-}): void {
-  const blob = new Blob([file.text], { type: `${file.type};charset=utf-8` });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = file.name;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
+// Handing the file over is the format kit's (#883) — one path for every seat.
+export { saveExportFile } from "../_shared/format-kit.ts";

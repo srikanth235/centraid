@@ -1,3 +1,4 @@
+import { DAY_MS } from "../_shared/format-kit.ts";
 import { DFILTERS, sharedWithOption } from "./drive-copy.ts";
 import type { FilterAxis } from "./drive-copy.ts";
 // The filter row's MEANING (Docs spec §4.2), pure and DOM-free. An option with
@@ -36,8 +37,6 @@ const TYPE_PREDICATE: Readonly<Record<string, (doc: DriveDoc) => boolean>> = {
   // `Folder` is absent: a folder is a label, not a row in this set (§2).
 };
 
-const DAY = 86_400_000;
-
 const MODIFIED_WINDOW: Readonly<Record<string, number>> = {
   Today: 1,
   "Last 7 days": 7,
@@ -46,7 +45,7 @@ const MODIFIED_WINDOW: Readonly<Record<string, number>> = {
 
 function modifiedWithin(doc: DriveDoc, days: number, now: number): boolean {
   const stamp = Date.parse(doc.updated_at || doc.created_at || "");
-  return Number.isNaN(stamp) ? false : now - stamp <= days * DAY;
+  return Number.isNaN(stamp) ? false : now - stamp <= days * DAY_MS;
 }
 
 function modifiedThisYear(doc: DriveDoc, now: number): boolean {

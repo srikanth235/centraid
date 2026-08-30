@@ -37,6 +37,7 @@ export function SearchShelf({
   onRetry,
   onOpenGroup,
   reachFacts,
+  inputRef,
   children,
 }: {
   query: string;
@@ -52,6 +53,8 @@ export function SearchShelf({
   /** A scope that did not answer, named BESIDE the hits still on screen
    *  (#726 D10/D11). */
   reachFacts?: readonly { label: string; value: string }[];
+  /** Hands the field back so `Clear` can empty it; see the note on the input. */
+  inputRef?: (el: HTMLInputElement | null) => void;
   children?: React.ReactNode;
 }) {
   return (
@@ -60,14 +63,24 @@ export function SearchShelf({
         <label className="kit-sr-only" htmlFor="searchInput">
           Search photographs
         </label>
+        {/* UNCONTROLLED ON PURPOSE (#883 C4), the same call Docs' own field
+            makes. This shelf renders the whole justified timeline of the
+            current hits as its children, so a controlled field made every
+            keystroke a re-render of the route: type eight letters and the grid
+            is rebuilt eight times before the first result lands. Uncontrolled,
+            the character the member typed is already on screen — it is the
+            browser's own — and the route follows on the debounce.
+            `defaultValue` seeds a fresh mount and never clobbers a field the
+            member is typing into; `Clear` empties it through `inputRef`. */}
         <input
+          ref={inputRef}
           id="searchInput"
           type="search"
           className={styles.input}
           placeholder={SEARCH_COPY.placeholder}
-          value={query}
+          defaultValue={query}
           autoComplete="off"
-          onChange={(e) => onQuery(e.target.value)}
+          onInput={(e) => onQuery(e.currentTarget.value)}
         />
         {query ? (
           // Mono, underlined TEXT (§9) — never an icon button.

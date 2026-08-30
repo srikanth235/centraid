@@ -14,9 +14,8 @@
 
 .shell {
   composes: kit-app-shell from global;
-  /* THE PAGE MARGIN IS DECLARED ONCE AND INHERITED. The notices, the tool row
-     and every row begin on the same edge. */
-  --content-margin: 22px;
+  /* THE PAGE MARGIN IS THE SYSTEM'S (#883). The notices, the tool row and
+     every row read `--page-margin` directly, so nothing here restates it. */
   --rail-width: 232px;
 }
 
@@ -53,7 +52,7 @@
 
 .banner {
   margin-block: var(--sp-2);
-  margin-inline: var(--content-margin);
+  margin-inline: var(--page-margin);
 }
 
 /* The tool row: the count and the lenses. ONE horizontal scroller at the
@@ -64,7 +63,7 @@
   align-items: center;
   gap: var(--sp-2);
   min-block-size: var(--h-control);
-  padding-inline: var(--content-margin);
+  padding-inline: var(--page-margin);
   padding-block: var(--sp-1);
   overflow-x: auto;
   scrollbar-width: none;
@@ -74,7 +73,7 @@
   flex: 1;
   min-block-size: 0;
   overflow-y: auto;
-  padding-inline: var(--content-margin);
+  padding-inline: var(--page-margin);
   padding-block-end: var(--sp-5);
 }
 

@@ -93,5 +93,3 @@ export const tasksPendingProjection = definePendingProjection({
     },
   },
 });
-
-export default tasksPendingProjection;

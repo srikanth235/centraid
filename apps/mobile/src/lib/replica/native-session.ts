@@ -1,4 +1,7 @@
-import { projectPendingWrite } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import {
+  PENDING_OVERLAY_FIELDS,
+  projectPendingWrite,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { pendingProjectionFor } from "@centraid/blueprints/apps/_shared/pending-projections";
 // governance: allow-repo-hygiene file-size-limit (#419) the native session is one cohesive coordinator wiring store, intent outbox, windowed bootstrap, SSE feed, and AppState drain across a single lifecycle
 import {
@@ -37,6 +40,7 @@ import type {
   ReplicaShape,
   ReplicaSqliteDriver,
   ReplicaStatus,
+  PreparedReplicaWrite,
   ReplicaValue,
   ReplicaWriteMutationInput,
 } from "@centraid/client/replica/native";
@@ -45,10 +49,14 @@ import { appActionPath } from "@centraid/core/protocol";
 import { backoffSchedule } from "../backoff";
 import type { BackoffSchedule } from "../backoff";
 import { MobileIntentIds } from "./mobile-intent-id";
+import type { MountedReadResult } from "./mounted-read-scoping";
 import { NativeReplicaStore } from "./native-replica-store";
 import { isReplicaStorageFullError } from "./replica-storage-error";
+import { noteResyncVerdict } from "./resync-notice";
 import { SqliteIntentStore } from "./sqlite-intent-store";
 import type { NativeIntentAttention } from "./sqlite-intent-store";
+import { stewardDeviceLabel } from "./steward-label";
+import type { MountedSteward } from "./steward-label";
 
 export type NativeReadRequest = Omit<ReplicaReadRequest, "shapeId"> & {
   shapeId?: string;
@@ -66,16 +74,10 @@ export interface NativeWriteInput {
   intentId?: string;
   baseVersions?: ReplicaBaseVersion[];
   /**
-   * THE ONLINE-ONLY DOOR (blueprint-seats contract H; docs/mobile-offline.md).
-   *
-   * A sealed input must never cross the durable session boundary: the outbox
-   * outlives the process, and a secret that reaches it has left the memory-only
-   * world the app promised. `true` sends the action straight to the gateway and
-   * NEVER enqueues — a transport failure surfaces as a failure, because falling
-   * back to the queue is precisely the thing this flag forbids.
-   *
-   * The browser seat's counterpart is `centraid-inline.ts`'s `opts.onlineOnly`;
-   * the action list is `apps/locker/writes.ts` `ONLINE_ONLY_ACTIONS`.
+   * The online-only door (blueprint-seats contract H; docs/mobile-offline.md).
+   * A sealed input must never reach the outbox, which outlives the process.
+   * `true` goes straight to the gateway and NEVER enqueues; a transport failure
+   * surfaces as a failure, since the queue fallback is what this forbids.
    */
   onlineOnly?: boolean;
 }
@@ -91,10 +93,11 @@ export interface RebootstrapOptions {
 
 /** Structural surface consumed by mobile app features across one or N vaults. */
 export interface MobileReplicaSession {
+  /** `MountedReadResult` widens the wire result with what a degraded read cost. */
   read: (
     appId: string,
     request: NativeReadRequest
-  ) => Promise<ReplicaReadWireResult>;
+  ) => Promise<MountedReadResult>;
   search: (
     appId: string,
     request: NativeSearchRequest
@@ -137,21 +140,15 @@ export interface CreateNativeReplicaSessionOptions {
   /** Non-streaming transport to the tunnel loopback proxy (`http://127.0.0.1:<port>`). */
   fetcher: ReplicaFetcher;
   changeFeed: NativeChangeFeed;
-  /**
-   * The SQLite driver backing both the replica store and the intent outbox.
-   * Production passes `openNativeReplicaDriver(...)` (op-sqlite); tests pass a
-   * `node:sqlite` stand-in. Injected rather than constructed here so this module
-   * never imports the native op-sqlite binding.
-   */
+  /** Injected, never constructed here, so this module never imports op-sqlite. */
   driver: ReplicaSqliteDriver;
   appState?: AppStateLike;
   isConnected?: () => boolean;
   isNetworkWorkAllowed?: () => Promise<boolean>;
   retryDelayMs?: number;
   /**
-   * Hermes has no WebCrypto. These default to the `expo-crypto` implementations
-   * in `./native-hash`, imported lazily so a node test can inject its own and
-   * never load an Expo native module.
+   * Hermes has no WebCrypto; these default to `./native-hash` (expo-crypto),
+   * imported lazily so an injecting test never loads an Expo native module.
    */
   digest?: ReplicaDigest;
   idFactory?: ReplicaIdFactory;
@@ -161,28 +158,34 @@ export interface CreateNativeReplicaSessionOptions {
    */
   bootstrapWindow?: number;
   /**
-   * Return from `start()` once page one is durable and readable, then backfill
-   * in the background. Foreground mobile sessions enable this; headless jobs
-   * and compatibility callers wait for convergence.
+   * Return from `start()` once page one is durable, then backfill behind it.
+   * Headless jobs leave it off and wait for convergence.
    */
   progressiveBootstrap?: boolean;
   onBootstrapProgress?: (progress: {
     phase: "first-page" | "backfill" | "complete";
     pages: number;
   }) => void;
-  /**
-   * The device ran out of room and the coordinator parked the feed. Fires once
-   * per pause, so the mounting surface can raise `out of room` without polling.
-   */
+  /** Fires once per storage-full pause, so the mount need not poll. */
   onStorageFull?: (error: unknown) => void;
+  /**
+   * Who a queued write into THIS vault may wait for. Set only where
+   * `MountedReplicaScope.personal === false`; absent means the member's own
+   * vault, where a write waits for nobody and a steward label would be fiction.
+   */
+  steward?: MountedSteward;
 }
 
-/**
- * Retry ceiling: five minutes keeps a phone that lost coverage overnight at a
- * dozen wake-ups, not thousands. Reconnect, foreground and a new write each
- * reset the sequence, so nothing waits this long once the gateway answers.
- */
+/** Ceiling, not the usual wait: reconnect, foreground and writes all reset. */
 const MAX_INTENT_RETRY_DELAY_MS = 5 * 60_000;
+
+/**
+ * Deliberately not `waiting for a connection`: that row is drawn and merely
+ * unsent, while this one cannot be drawn at all until the shape catalog lands
+ * with bootstrap page one (docs/mobile-offline.md: absent is never empty).
+ */
+export const NOT_YET_SYNCED =
+  "Saved on this phone; it appears here once this vault finishes its first sync.";
 
 interface Waiter {
   resolve: (result: NativeWriteResult) => void;
@@ -190,11 +193,10 @@ interface Waiter {
 }
 
 /**
- * Headless single-process replica session for React Native. Wires the op-sqlite
- * store, the SQLite intent outbox, a `ReplicaCoordinator` and the HTTP transport
- * into: foreground delta pulls (on AppState active and on connect), an SSE feed
- * while active, feed teardown on background, and a rebootstrap flow that survives
- * without dropping queued intents.
+ * Headless single-process replica session for React Native: store, intent
+ * outbox, coordinator and transport wired into foreground delta pulls, an SSE
+ * feed while active, teardown on background, and a rebootstrap that keeps
+ * queued intents.
  */
 export class NativeReplicaSession implements MobileReplicaSession {
   readonly #coordinator: ReplicaCoordinator;
@@ -212,6 +214,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   readonly #onBootstrapProgress:
     | CreateNativeReplicaSessionOptions["onBootstrapProgress"]
     | undefined;
+  readonly #stewardLabel: string | undefined;
   #previewReady:
     | { resolve: () => void; reject: (error: unknown) => void }
     | undefined;
@@ -241,6 +244,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       | "bootstrapWindow"
       | "progressiveBootstrap"
       | "onBootstrapProgress"
+      | "steward"
     > & { idFactory: ReplicaIdFactory }
   ) {
     this.#coordinator = coordinator;
@@ -262,6 +266,9 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#bootstrapWindow = options.bootstrapWindow;
     this.#progressiveBootstrap = options.progressiveBootstrap ?? false;
     this.#onBootstrapProgress = options.onBootstrapProgress;
+    this.#stewardLabel = options.steward
+      ? stewardDeviceLabel(options.steward.displayName)
+      : undefined;
   }
 
   get coordinator(): ReplicaCoordinator {
@@ -282,7 +289,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
     const status = await this.#coordinator.status();
     await this.#coordinator.recoverSending();
     this.#hasCursor = status.cursor !== null;
-    if (status.cursor) this.#catalog = await this.#coordinator.catalog();
+    if (status.cursor) {
+      this.#catalog = await this.#coordinator.catalog();
+      // A relaunch after a first-open write: the catalog is durable now, and
+      // the intent that was admitted without one is still waiting to be drawn.
+      await this.backfillDeferredProjections();
+    }
     if (
       (status.coverage === "partial" ||
         (status.cursor === null && status.coverage !== "complete")) &&
@@ -384,19 +396,21 @@ export class NativeReplicaSession implements MobileReplicaSession {
       input: input.input as Readonly<Record<string, unknown>>,
       intentId,
     });
-    // On a first-open offline launch there is no replica catalog to validate
-    // the optimistic row against. Preserve the durable action intent and defer
-    // only its projection until canonical bootstrap data arrives.
-    const { optimistic, dependencies } =
-      this.#catalog.length === 0
-        ? { optimistic: [], dependencies: [] }
-        : prepareReplicaWrite(
+    // No catalog yet (first-open offline launch): keep the durable intent, defer
+    // only its projection, and RECORD the deferral so
+    // `backfillDeferredProjections` can finish it when page one lands.
+    const deferred = this.#catalog.length === 0;
+    const { optimistic, dependencies } = deferred
+      ? { optimistic: [], dependencies: [] }
+      : this.stamped(
+          prepareReplicaWrite(
             appId,
             input.optimistic ?? projected.optimistic,
             this.#catalog,
             this.resolveShapeId.bind(this),
             false
-          );
+          )
+        );
     const baseVersions =
       input.baseVersions ??
       projected.baseVersions ??
@@ -423,13 +437,17 @@ export class NativeReplicaSession implements MobileReplicaSession {
       dependencies,
       ...(baseVersions.length > 0 ? { baseVersions } : {}),
     } satisfies EnqueueIntentInput);
+    // Absent is never empty: a deferred act is durable yet draws nothing, so it
+    // says so rather than borrowing the ordinary offline sentence.
+    if (deferred) await this.markDeferred(intent);
     const settled = terminalResult(intent);
     if (settled) return settled;
     if (!this.#isConnected()) {
       return {
         intentId: intent.intentId,
         status: "queued",
-        reason: "waiting for a connection",
+        // Both are true; say the one that explains the missing row.
+        reason: deferred ? NOT_YET_SYNCED : "waiting for a connection",
       };
     }
     const admitted = new Promise<NativeWriteResult>((resolve, reject) => {
@@ -442,10 +460,89 @@ export class NativeReplicaSession implements MobileReplicaSession {
   }
 
   /**
-   * The online-only transport. One POST to the app's own action handler,
-   * carrying the addressed vault, and no durable trace of the payload on this
-   * device: no intent id, no optimistic projection, no outbox row. The result
-   * is `executed` or it throws — there is deliberately no `queued` branch.
+   * The steward label is a fact about the MOUNT, so stamping it at admission
+   * lets the overlay name it before any round trip. Runs AFTER
+   * `validateOptimisticMutation`: `PENDING_OVERLAY_FIELDS` skip column checks.
+   */
+  private stamped(prepared: PreparedReplicaWrite): PreparedReplicaWrite {
+    const steward = this.#stewardLabel;
+    if (steward === undefined) return prepared;
+    return {
+      ...prepared,
+      optimistic: prepared.optimistic.map((mutation) =>
+        mutation.op === "upsert"
+          ? {
+              ...mutation,
+              values: {
+                ...mutation.values,
+                [PENDING_OVERLAY_FIELDS.steward]: steward,
+              },
+            }
+          : mutation
+      ),
+    };
+  }
+
+  /** Say the durable act is unrendered, on the row itself, until it is not. */
+  private async markDeferred(intent: ReplicaIntent): Promise<void> {
+    await this.#intentStore
+      .transition(intent.intentId, [intent.state], { reason: NOT_YET_SYNCED })
+      .catch(() => undefined);
+  }
+
+  /**
+   * Project the intents admitted with no catalog, once page one lands (#883
+   * D1). Patches the SAME intent through the outbox's atomic transition — id,
+   * payload hash and queue position untouched, so an in-flight `write()` still
+   * settles on it. Idempotent: an intent with a projection is skipped.
+   */
+  private async backfillDeferredProjections(): Promise<void> {
+    if (this.#catalog.length === 0) return;
+    const pending = await this.#coordinator.pendingIntents();
+    for (const intent of pending) {
+      if (intent.optimistic.length > 0 || intent.state === "executed") continue;
+      const projected = projectPendingWrite(
+        pendingProjectionFor(intent.appId),
+        {
+          appId: intent.appId,
+          action: intent.action,
+          input: intent.input as Readonly<Record<string, unknown>>,
+          intentId: intent.intentId,
+        }
+      );
+      if (projected.optimistic.length === 0) continue;
+      let prepared: PreparedReplicaWrite;
+      try {
+        prepared = this.stamped(
+          prepareReplicaWrite(
+            intent.appId,
+            projected.optimistic,
+            this.#catalog,
+            this.resolveShapeId.bind(this),
+            false
+          )
+        );
+      } catch {
+        // Still durable, still sends; a shape this grant lacks never draws.
+        continue;
+      }
+      // Sequential: each transition is a durable state move on one outbox.
+      // oxlint-disable-next-line no-await-in-loop
+      await this.#intentStore
+        .transition(intent.intentId, [intent.state], {
+          optimistic: prepared.optimistic,
+          dependencies: prepared.dependencies,
+          // The row draws itself now, so the sentence that stood in for it goes.
+          ...(intent.reason === NOT_YET_SYNCED ? { reason: undefined } : {}),
+        })
+        .catch(() => undefined);
+    }
+  }
+
+  /**
+   * The online-only transport: no durable trace of the payload on this device —
+   * no intent id, no projection, no outbox row — and `executed` or throw, with
+   * deliberately no `queued` branch.
    */
   private async postAction(
     appId: string,
@@ -471,9 +568,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
       );
     }
     const output = (await response.json()) as ReplicaValue;
-    // The id is local and disposable: nothing persisted it, and no later
-    // outcome will arrive quoting it. It exists so the one write-outcome
-    // surface (`kit/replica/write-outcome.ts`) takes the same shape here.
+    // Local and disposable: nothing persisted it and no outcome will quote it.
+    // It exists so `kit/replica/write-outcome.ts` sees one shape.
     return {
       intentId: `online-only:${appId}:${input.action}`,
       status: "executed",
@@ -701,7 +797,14 @@ export class NativeReplicaSession implements MobileReplicaSession {
     return true;
   }
 
-  requireBootstrap(): void {
+  /**
+   * The gateway's rebootstrap frame is recorded BEFORE the wipe-and-refetch
+   * (#883 C6), so the member can be told why. No detail records nothing rather
+   * than inventing a reason.
+   */
+  requireBootstrap(detail?: unknown): void {
+    if (detail !== undefined)
+      noteResyncVerdict(detail, this.#gatewayAuth.vaultId);
     this.#hasCursor = false;
     if (!this.#closed)
       void this.bootstrapWhenReachable().catch(() => undefined);
@@ -798,9 +901,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
   }
 
   /**
-   * Windowed bootstrap. `runWindowedBootstrap` owns the page walk, the commit at
-   * the page-1 cursor and the mandatory convergence replay; the replica only
-   * reports a cursor once all of that has succeeded.
+   * `runWindowedBootstrap` owns the page walk, the page-1 cursor commit and the
+   * mandatory convergence replay; a cursor is reported only once all succeed.
    */
   private async bootstrap(): Promise<void> {
     const abort = new AbortController();
@@ -840,6 +942,9 @@ export class NativeReplicaSession implements MobileReplicaSession {
         },
         onFirstPage: async () => {
           this.#catalog = await this.#coordinator.catalog();
+          // Page one IS the catalog, so a write admitted without one becomes
+          // visible with the first rows rather than after the whole walk.
+          await this.backfillDeferredProjections();
           this.#onBootstrapProgress?.({ phase: "first-page", pages: 1 });
           this.#previewReady?.resolve();
           this.#previewReady = undefined;
@@ -854,6 +959,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     }
     this.#hasCursor = true;
     this.#catalog = await this.#coordinator.catalog();
+    await this.backfillDeferredProjections();
     this.#onBootstrapProgress?.({ phase: "complete", pages: 0 });
     for (const outcome of resolved)
       this.resolveWaiter(outcome.intentId, outcome);
@@ -945,11 +1051,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     }, this.#retryBackoff.next());
   }
 
-  /**
-   * Something changed that could make the next attempt succeed — a reconnect, a
-   * foreground, a fresh write — so the drainer should not keep waiting out an
-   * outage-length delay.
-   */
+  /** Something changed, so do not keep waiting out an outage-length delay. */
   private resetRetry(): void {
     this.#retryBackoff.reset();
     if (!this.#retryTimer) return;
@@ -1022,11 +1124,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   }
 }
 
-/**
- * Open a native replica session: build the store + intent outbox over one
- * op-sqlite handle (or an injected driver), wire the coordinator to the change
- * feed and transport, and start the sync loop.
- */
+/** Store and intent outbox share ONE driver handle. */
 export async function createNativeReplicaSession(
   options: CreateNativeReplicaSessionOptions
 ): Promise<NativeReplicaSession> {
@@ -1078,7 +1176,7 @@ export async function createNativeReplicaSession(
         fetcher
       ).catch(() => undefined);
     },
-    onRebootstrapRequired: () => session?.requireBootstrap(),
+    onRebootstrapRequired: (detail) => session?.requireBootstrap(detail),
     // The op-sqlite taxonomy, not the normalized-name default: the driver
     // raises the platform's own SQLITE_FULL/ENOSPC shapes, and only this
     // classifier recognises all of them (./replica-storage-error).

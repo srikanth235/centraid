@@ -1,14 +1,17 @@
 // The selection bar (v4 §6): TWO ARRANGEMENTS OF ONE TABLE.
-// `buildSelectionActions` is the ONE place the fixed order and the Trash
-// shelf's swap live, so the views and the tests cannot drift. *Share* (#825)
-// opens the shared grant kit: no destination list or share call of its own.
+// `_shared/selection-engine.ts` owns the fixed order and the Trash shelf's
+// swap, so views and tests cannot drift. *Share* (#825) opens the shared grant
+// kit: no destination list or share call of its own.
+//
+// `buildPhotoSelectionActions` is an ADAPTER over that engine (#883): icon KEY
+// → this app's icon component, plus the Trash arm's confirm label.
 import { useRef } from "react";
 import type { FC } from "react";
 
 import { armConfirm } from "@centraid/design/elements";
 
 import { GrantSheet } from "../../_shared/GrantSheet.tsx";
-import { buildSelectionActions as buildSharedSelectionActions } from "../../_shared/selection-engine.ts";
+import { buildSelectionActions } from "../../_shared/selection-engine.ts";
 import type { SelectionShelfKind } from "../../_shared/selection-engine.ts";
 import { parseAssetKey } from "../asset-key.ts";
 import { ONE_AT_A_TIME, usePhotoShare } from "../grant-audiences.ts";
@@ -71,7 +74,7 @@ export interface BuildSelectionActionsInput {
 }
 
 /** Pure, so order, swap and disabled state are testable unrendered (§6). */
-export function buildSelectionActions({
+export function buildPhotoSelectionActions({
   count,
   shelfKind,
   copyLabel,
@@ -94,7 +97,7 @@ export function buildSelectionActions({
   const share = copyBlocked
     ? { unavailableReason: copyBlocked }
     : { run: onShare };
-  return buildSharedSelectionActions({
+  return buildSelectionActions({
     count,
     shelf: shelfKind,
     copyLabel,
@@ -193,7 +196,7 @@ export function SelectionBarView({
 
   // countRef is dereferenced only at event time, never during render.
   // oxlint-disable-next-line react/react-compiler
-  const actions = buildSelectionActions({
+  const actions = buildPhotoSelectionActions({
     count,
     shelfKind,
     // WHO is the sheet's question (#726); HOW MANY refuses here.
@@ -255,7 +258,6 @@ export function SelectionBarView({
             <div key={spec.id} className={`bar-menu-wrap ${styles.menuWrap}`}>
               <ActionButton spec={spec} labelled={labelled} />
               {menuOpen ? (
-                // The away-click listener is selection.tsx's.
                 <div className={`kit-popover ${styles.albumMenu}`} role="menu">
                   {albumList.length === 0 ? (
                     <p className={`${styles.albumMenuEmpty} kit-muted`}>
@@ -319,7 +321,6 @@ export interface SelectionBottomBarProps {
   onAddToAlbum: () => void;
 }
 
-/** Never measured for labels: at 390px every target names itself. */
 export function SelectionBottomBar({
   selectedIds,
   visible,
@@ -333,7 +334,7 @@ export function SelectionBottomBar({
   const count = selectedIds.size;
   const share = usePhotoShare(notice);
   const [only] = [...selectedIds];
-  const actions = buildSelectionActions({
+  const actions = buildPhotoSelectionActions({
     count,
     shelfKind,
     copyLabel: "Share",
@@ -399,7 +400,6 @@ export function SelectionBottomBar({
               className={`${styles.bottomAction} ${spec.destructive ? styles.destructive : ""}`}
               disabled={spec.disabled}
               aria-label={spec.label}
-              // The read-only story is the `.reason` line, not a tooltip.
               title={spec.reason ?? spec.label}
               onClick={(e) => {
                 if (

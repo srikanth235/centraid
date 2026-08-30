@@ -18,8 +18,8 @@ export interface Place {
 
 export interface Asset {
   asset_id: string;
-  /** The scope this row is shown FROM (#599): content ids collide, so an
-   *  unscoped blob reference paints the WRONG image. */
+  /** The scope this row is shown FROM (#599): ids collide, so an unscoped
+   *  blob reference paints the WRONG image. */
   scope_id?: string | null;
   content_id?: string | null;
   favorite?: number | boolean | null;
@@ -107,10 +107,7 @@ export interface ActivityItem {
   date: string;
 }
 
-export interface CustodyMeta {
-  label: string;
-  tone: "ok" | "warn" | "danger";
-}
+export type { CustodyMeta } from "../_shared/format-kit.ts";
 
 export interface LibraryData {
   assets?: Asset[];

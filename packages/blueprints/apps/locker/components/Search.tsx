@@ -24,6 +24,7 @@ import {
 import type { LockerRow } from "../types.ts";
 import { SEARCH_NOTE } from "../view-copy.ts";
 import { ItemRow, Section } from "./Rows.tsx";
+import { WindowedRows } from "./Windowed.tsx";
 
 import styles from "./Rows.module.css";
 
@@ -71,14 +72,18 @@ export function SearchScreen(props: SearchScreenProps): ReactNode {
           meta={SEARCH_SCOPE}
           count={results.length}
         >
-          {results.map((row) => (
-            <ItemRow
-              key={row.item_id}
-              row={row}
-              onOpen={props.onOpen}
-              meta={SEARCH_MATCHED}
-            />
-          ))}
+          {/* Windowed (#883 C4): a two-letter term matches the whole vault. */}
+          <WindowedRows className={styles.list} rows={results}>
+            {(row, position) => (
+              <ItemRow
+                key={row.item_id}
+                position={position}
+                row={row}
+                onOpen={props.onOpen}
+                meta={SEARCH_MATCHED}
+              />
+            )}
+          </WindowedRows>
         </Section>
       </SearchScaffold>
     </div>

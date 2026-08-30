@@ -10,10 +10,6 @@ import { ConversationStore } from "../conversation/store.js";
 import { makeJournalDbProvider, openJournalDb } from "../stores/gateway-db.js";
 import { InsightsStore } from "./insights-store.js";
 
-/**
- * `runs` writes the conversation ledger; `insights` reads the `run_summary`
- * VIEW that derives from it.
- */
 function setup(): { runs: ConversationStore; insights: InsightsStore } {
   const dir = tempDirSync("centraid-insights-");
   const ledger = makeJournalDbProvider(path.join(dir, "journal.db"));
@@ -23,7 +19,6 @@ function setup(): { runs: ConversationStore; insights: InsightsStore } {
   };
 }
 
-/** Insert a finished turn with one step item under a conversation of the given kind. */
 function seedRun(
   runs: ConversationStore,
   opts: {
@@ -40,6 +35,10 @@ function seedRun(
     costSource?: "harness" | "estimated";
     retryOf?: string;
     startedAt?: number;
+    /** Defaults to 200ms. */
+    runMs?: number;
+    /** Leave the turn OPEN — `run_summary` admits only finished turns. */
+    unfinished?: boolean;
     ok?: boolean;
   }
 ): string {
@@ -89,9 +88,10 @@ function seedRun(
     endedAt: startedAt + 100,
     durationMs: 100,
   });
+  if (opts.unfinished) return runId;
   runs.finishTurn({
     turnId: runId,
-    endedAt: startedAt + 200,
+    endedAt: startedAt + (opts.runMs ?? 200),
     ok: opts.ok !== false,
   });
   return runId;
@@ -328,6 +328,103 @@ describe("InsightsStore (#514)", () => {
     expect(s.peakDay!.costUsd).toBeGreaterThanOrEqual(0.1);
   });
 
+  it("splits each day by outcome, in runs and in spend", () => {
+    const { runs, insights } = setup();
+    const now = Date.now();
+    seedRun(runs, {
+      kind: "chat",
+      inputTokens: 100,
+      costUsd: 0.1,
+      costSource: "harness",
+      startedAt: now,
+      model: "m",
+      harness: "p",
+    });
+    seedRun(runs, {
+      kind: "chat",
+      inputTokens: 20,
+      costUsd: 0.03,
+      costSource: "harness",
+      startedAt: now,
+      model: "m",
+      harness: "p",
+      ok: false,
+    });
+    const s = insights.summary();
+    const today = s.daily.at(-1);
+    expect(today?.runs).toBe(2);
+    expect(today?.failedRuns).toBe(1);
+    expect(today?.failedCostUsd).toBeCloseTo(0.03, 4);
+    // Same failure predicate as the window-wide KPI.
+    expect(s.kpis.failedRuns).toBe(1);
+    expect(s.kpis.failedCostUsd).toBeCloseTo(0.03, 4);
+  });
+
+  it("reports a day with no failures as a zero split, never as unknown", () => {
+    const { runs, insights } = setup();
+    seedRun(runs, {
+      kind: "chat",
+      inputTokens: 10,
+      costUsd: 0.02,
+      costSource: "harness",
+      model: "m",
+      harness: "p",
+    });
+    const today = insights.summary().daily.at(-1);
+    expect(today?.failedRuns).toBe(0);
+    expect(today?.failedCostUsd).toBe(0);
+  });
+
+  it("reports the median finished-run duration", () => {
+    const { runs, insights } = setup();
+    const now = Date.now();
+    for (const runMs of [1000, 5000, 3000])
+      seedRun(runs, {
+        kind: "chat",
+        inputTokens: 1,
+        startedAt: now,
+        model: "m",
+        harness: "p",
+        runMs,
+      });
+    expect(insights.summary().kpis.medianRunMs).toBe(3000);
+  });
+
+  it("averages the two middle runs when the window holds an even count", () => {
+    const { runs, insights } = setup();
+    const now = Date.now();
+    for (const runMs of [1000, 2000, 4000, 9000])
+      seedRun(runs, {
+        kind: "chat",
+        inputTokens: 1,
+        startedAt: now,
+        model: "m",
+        harness: "p",
+        runMs,
+      });
+    expect(insights.summary().kpis.medianRunMs).toBe(3000);
+  });
+
+  it("withholds the duration entirely when no run has finished", () => {
+    const { runs, insights } = setup();
+    seedRun(runs, {
+      kind: "chat",
+      inputTokens: 1,
+      model: "m",
+      harness: "p",
+      unfinished: true,
+    });
+    const s = insights.summary();
+    // A turn with no end is not a run yet: absent, never "0s".
+    expect("medianRunMs" in s.kpis).toBe(false);
+    expect(s.kpis.generations).toBe(0);
+  });
+
+  it("withholds the duration on an empty ledger", () => {
+    const { insights } = setup();
+    expect("medianRunMs" in insights.summary().kpis).toBe(false);
+  });
+
   it("rolls tokens across chat and automation", () => {
     const { runs, insights } = setup();
     seedRun(runs, {
@@ -379,6 +476,7 @@ function seedDigest(
     automationRef?: string | null;
     lastEndedAt: number;
     runCount?: number;
+    errCount?: number;
     tokens?: number;
     cost?: number;
     modelsJson?: string;
@@ -388,10 +486,10 @@ function seedDigest(
   db.prepare(
     `INSERT INTO conversation_digest (
        conversation_id, kind, automation_ref, app_id, automation_name,
-       first_started_at, last_ended_at, run_count, retry_count,
+       first_started_at, last_ended_at, run_count, err_count, retry_count,
        total_input_tokens, total_output_tokens, total_cache_read_tokens, total_cache_write_tokens,
        total_cost_usd, step_count, tool_count, models_json, efforts_json, updated_at
-     ) VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, 0, ?, 0, 0, 0, ?, 0, 0, ?, ?, ?)`
+     ) VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, 0, ?, 0, 0, 0, ?, 0, 0, ?, ?, ?)`
   ).run(
     d.conversationId,
     d.kind ?? "chat",
@@ -399,6 +497,7 @@ function seedDigest(
     d.lastEndedAt - 1000,
     d.lastEndedAt,
     d.runCount ?? 1,
+    d.errCount ?? 0,
     d.tokens ?? 0,
     d.cost ?? 0,
     d.modelsJson ?? "[]",
@@ -445,7 +544,53 @@ describe("InsightsStore digest union (#438 + #514)", () => {
     expect(s.byEffort).toStrictEqual([
       { effort: "medium", runs: 3, tokens: 1000, costUsd: 0.05 },
     ]);
-    // bySource includes live + digest
     expect(s.bySource.some((r) => r.kind === "chat")).toBe(true);
+  });
+
+  it("carries an archived day's failure COUNT but claims no archived failed spend", () => {
+    const { runs, insights, db } = setupWithDb();
+    const now = Date.now();
+    const archConv = runs.createConversation({
+      kind: "chat",
+      userId: "u",
+      id: "arch-fail",
+    });
+    const archivedDay = now - 10 * 86_400_000;
+    seedDigest(db, {
+      conversationId: archConv.id,
+      lastEndedAt: archivedDay,
+      tokens: 1000,
+      cost: 0.5,
+      runCount: 4,
+      errCount: 2,
+    });
+    const s = insights.summary({ windowDays: 365 });
+    const day = s.daily.find(
+      (d) => d.date === new Date(archivedDay).toISOString().slice(0, 10)
+    );
+    expect(day?.runs).toBe(4);
+    expect(day?.failedRuns).toBe(2);
+    // A digest has no failure-cost column: a floor, not an invented split.
+    expect(day?.failedCostUsd).toBe(0);
+  });
+
+  it("keeps the median duration live-arm — a digest has no per-run timing", () => {
+    const { runs, insights, db } = setupWithDb();
+    const now = Date.now();
+    const archConv = runs.createConversation({
+      kind: "chat",
+      userId: "u",
+      id: "arch-dur",
+    });
+    seedDigest(db, {
+      conversationId: archConv.id,
+      lastEndedAt: now - 10 * 86_400_000,
+      tokens: 1000,
+      cost: 0.5,
+      runCount: 4,
+    });
+    const s = insights.summary({ windowDays: 365 });
+    expect(s.kpis.generations).toBe(4);
+    expect("medianRunMs" in s.kpis).toBe(false);
   });
 });

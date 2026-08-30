@@ -12,6 +12,7 @@ import { clearPinnedThumbnailPacks } from "../../lib/replica/thumbnail-pack";
 import Icon from "../components/Icon";
 import { Text } from "../components/NativeText";
 import OutOfRoom from "../components/OutOfRoom";
+import Tappable from "../components/Tappable";
 import { borders, family, radii, t, useTheme } from "../theme";
 import { usePendingChanges } from "./pending-changes";
 import PendingChangesSheet from "./PendingChangesSheet";
@@ -237,14 +238,14 @@ export default function ReplicaStatusBar(): React.JSX.Element {
             <Text style={[styles.hintText, { color: colors.textSoft }]}>
               {row.label}
             </Text>
-            <Pressable
+            <Tappable
               accessibilityLabel={`${row.action} ${notice.label}`}
               onPress={() => dismissRevokedNotice?.(notice.vaultId)}
             >
               <Text style={[styles.refreshText, { color: colors.accent }]}>
                 {row.action}
               </Text>
-            </Pressable>
+            </Tappable>
           </View>
         );
       })}

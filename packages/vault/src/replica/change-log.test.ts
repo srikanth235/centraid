@@ -4,6 +4,7 @@ import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { applyExtBand } from "../gateway/ext.js";
 import type { ExtTableSpec } from "../schema/ext.js";
+import { REPLICA_SCHEMA_EPOCH } from "../schema/replica.js";
 import { listVaultEntities, resolveEntity } from "../schema/tables.js";
 import {
   appendReplicaChange,
@@ -144,9 +145,9 @@ describe("change-log", () => {
     vault
       .prepare(
         `INSERT INTO consent_device
-         (device_id, owner_party_id, name, public_key, trust, enrolled_at)
+         (device_id, owner_party_id, name, public_key, enrolled_at)
        VALUES ('credential-device', 'credential-party', 'Before device',
-               'public-never-log', 'full', ?)`
+               'public-never-log', ?)`
       )
       .run(now);
     const since = currentReplicaLogState(vault).watermark;
@@ -389,7 +390,7 @@ describe("change-log", () => {
     expect(result.floor.seq).toBe(2);
   });
 
-  test("count pressure compacts the full window to the latest entry per row", () => {
+  test("count pressure folds a hot row to its latest entry WITHOUT moving the floor", () => {
     const { vault } = open();
     const epoch = currentReplicaLogState(vault).epoch;
     for (let index = 0; index < 1_001; index += 1) {
@@ -413,7 +414,8 @@ describe("change-log", () => {
       overflow: 0,
       retained: 1,
     });
-    expect(result.floor).toStrictEqual({ epoch, seq: 1_000 });
+    // Churn on one row must not push the floor.
+    expect(result.floor).toStrictEqual({ epoch, seq: 0 });
     expect(
       readReplicaChanges(vault, { since: result.floor }).changes
     ).toStrictEqual([
@@ -422,9 +424,117 @@ describe("change-log", () => {
     expect(
       readReplicaChanges(vault, { since: alreadyCurrent }).changes
     ).toStrictEqual([]);
-    expect(() =>
-      readReplicaChanges(vault, { since: { epoch, seq: 999 } })
-    ).toThrow(ReplicaRebootstrapRequiredError);
+    expect(
+      readReplicaChanges(vault, { since: { epoch, seq: 999 } }).changes
+    ).toStrictEqual([
+      expect.objectContaining({ seq: 1_001, rowId: "hot-row" }),
+    ]);
+    // A survivor's prior never reaches back to the INSERT.
+    expect(
+      readReplicaChanges(vault, { since: result.floor }).changes[0]
+    ).toMatchObject({ op: "update", priorOp: "update" });
+  });
+
+  test("a commit group is folded only when EVERY one of its entries is superseded", () => {
+    const { vault } = open();
+    const epoch = currentReplicaLogState(vault).epoch;
+    vault.exec("BEGIN IMMEDIATE");
+    const mixed = beginReplicaCommit(vault);
+    appendReplicaChange(vault, {
+      entity: "core.party",
+      rowId: "hot",
+      op: "insert",
+    });
+    appendReplicaChange(vault, {
+      entity: "core.party",
+      rowId: "cold",
+      op: "insert",
+    });
+    endReplicaCommit(vault, mixed);
+    vault.exec("COMMIT");
+    for (const op of ["update", "update", "update"] as const) {
+      vault.exec("BEGIN IMMEDIATE");
+      const solo = beginReplicaCommit(vault);
+      appendReplicaChange(vault, { entity: "core.party", rowId: "hot", op });
+      endReplicaCommit(vault, solo);
+      vault.exec("COMMIT");
+    }
+
+    const result = pruneReplicaChanges(vault, {
+      now: new Date("2026-07-15T00:00:00.000Z"),
+      maxEntries: 3,
+    });
+
+    // No page may ever carry half of one transaction.
+    expect(
+      readReplicaChanges(vault, { since: { epoch, seq: 0 } }).changes.map(
+        (change) => change.seq
+      )
+    ).toStrictEqual([1, 2, 5]);
+    expect(result).toMatchObject({ compacted: 2, overflow: 0 });
+    expect(result.floor.seq).toBe(0);
+  });
+
+  test("shape-control entities are never folded", () => {
+    const { vault } = open();
+    const epoch = currentReplicaLogState(vault).epoch;
+    for (const op of ["insert", "update", "update"] as const) {
+      appendReplicaChange(vault, {
+        entity: "consent.access_grant",
+        rowId: "grant-1",
+        op,
+      });
+    }
+    appendReplicaChange(vault, {
+      entity: "core.party",
+      rowId: "hot",
+      op: "insert",
+    });
+    appendReplicaChange(vault, {
+      entity: "core.party",
+      rowId: "hot",
+      op: "update",
+    });
+
+    const result = pruneReplicaChanges(vault, {
+      now: new Date("2026-07-15T00:00:00.000Z"),
+      maxEntries: 4,
+    });
+
+    expect(result.compacted).toBe(1);
+    expect(
+      readReplicaChanges(vault, {
+        since: { epoch, seq: result.floor.seq },
+      }).changes.map((change) => `${change.entity}:${change.seq}`)
+    ).toStrictEqual([
+      "consent.access_grant:1",
+      "consent.access_grant:2",
+      "consent.access_grant:3",
+      "core.party:5",
+    ]);
+  });
+
+  test("compaction never rewinds the watermark or drops a row's last entry", () => {
+    const { vault } = open();
+    const before = currentReplicaLogState(vault);
+    for (let index = 0; index < 60; index += 1) {
+      appendReplicaChange(vault, {
+        entity: "core.party",
+        rowId: `row-${index % 3}`,
+        op: index < 3 ? "insert" : "update",
+      });
+    }
+    const watermark = currentReplicaLogState(vault).watermark;
+    expect(watermark.seq).toBeGreaterThan(before.watermark.seq);
+
+    pruneReplicaChanges(vault, { maxEntries: 3 });
+
+    expect(currentReplicaLogState(vault).watermark).toStrictEqual(watermark);
+    expect(
+      readReplicaChanges(vault, { since: { epoch: watermark.epoch, seq: 0 } })
+        .changes.map((change) => change.rowId)
+        .sort()
+    ).toStrictEqual(["row-0", "row-1", "row-2"]);
   });
 
   test("epoch bump invalidates old cursors and new changes continue above the prior watermark", () => {
@@ -461,7 +571,7 @@ describe("change-log", () => {
       .run();
     const after = initializeReplicaProtocol(vault);
     expect(after.epoch).not.toBe(before.epoch);
-    expect(after.schemaEpoch).toBe(2);
+    expect(after.schemaEpoch).toBe(REPLICA_SCHEMA_EPOCH);
     expect(after.epochReason).toBe("schema-change");
   });
 
@@ -492,8 +602,6 @@ describe("change-log", () => {
     expect(schemaVersion()).toBeGreaterThan(stable);
     initializeReplicaProtocol(vault);
     expect(recordedVersion()).not.toBe(stableMarker);
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({
       ...vault
         .prepare(

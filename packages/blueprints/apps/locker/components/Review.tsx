@@ -32,6 +32,7 @@ import {
 } from "../route-copy.ts";
 import type { CheckKey, LockerRow } from "../types.ts";
 import { ItemRow, Section } from "./Rows.tsx";
+import { WindowedRows } from "./Windowed.tsx";
 
 import styles from "./Rows.module.css";
 
@@ -158,16 +159,23 @@ export function ReviewScreen(props: ReviewScreenProps): ReactNode {
           meta={REVIEW_ITEMS_META}
           count={register.items.length}
         >
-          {register.items.map((row) => (
-            <ItemRow
-              key={row.item_id}
-              row={row}
-              verb={{
-                label: REVIEW_CHANGE_IT,
-                run: () => props.onChange(row),
-              }}
-            />
-          ))}
+          {/* Windowed (#883 C4): one verdict can hold the entire window — a
+              vault of reused passwords is exactly the case this screen is
+              for. The two REGISTERS above are not, and for their own reason:
+              each is one row per check, and the checks are enumerated. */}
+          <WindowedRows className={styles.list} rows={register.items}>
+            {(row, position) => (
+              <ItemRow
+                key={row.item_id}
+                position={position}
+                row={row}
+                verb={{
+                  label: REVIEW_CHANGE_IT,
+                  run: () => props.onChange(row),
+                }}
+              />
+            )}
+          </WindowedRows>
         </Section>
       ) : null}
     </div>

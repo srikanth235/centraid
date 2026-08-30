@@ -6,16 +6,16 @@
  * mirroring the library projection's shape row-for-row so the UI renders
  * either list with the same code.
  *
- * People-journal entries are EXCLUDED from the hits (#834 R-journal) exactly
- * as they are from the library: the Journal place is their one home in Notes.
- * The exclusion runs over the ranked hits, so a search whose every match was
- * a journal entry answers an empty list rather than a filtered-looking one.
+ * People-journal entries are EXCLUDED from the hits (#834 R-journal): the
+ * Journal place is their one home in Notes. The exclusion runs over the ranked
+ * hits, so an all-journal search answers an empty list, not a filtered one.
  *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
  */
 
 import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
+import { decodeNoteBody } from "../note-body.ts";
 
 interface NoteRow {
   note_id: string;
@@ -90,28 +90,8 @@ function attachmentsBySubject(
   return bySubject;
 }
 
-function decodeBody(uri: unknown): string {
-  if (typeof uri !== "string" || !uri.startsWith("data:"))
-    return "(external content)";
-  const comma = uri.indexOf(",");
-  if (comma === -1) return "(external content)";
-  const meta = uri.slice(0, comma);
-  const payload = uri.slice(comma + 1);
-  try {
-    if (meta.includes(";base64")) {
-      return typeof Buffer === "undefined"
-        ? atob(payload)
-        : Buffer.from(payload, "base64").toString("utf8");
-    }
-    return decodeURIComponent(payload);
-  } catch {
-    return "(external content)";
-  }
-}
-
-// Same list-row discipline as library.ts: results carry a short preview + the
-// checklist tally, never the whole body (#404). See library.ts for the
-// shape's home.
+// Same list-row discipline as library.ts: a short preview + the checklist
+// tally, never the whole body (#404).
 const CHECK_RE = /^\s*[-*] \[(?<mark> |x|X)\]\s?(?<text>.*)$/u;
 
 function previewOf(body: unknown): string {
@@ -239,7 +219,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     // Vault order is rank order (best match first) — keep it.
     const notes = hits.map((n) => {
       const notebookIds = notebooksByNote.get(n.note_id) ?? [];
-      const decoded = decodeBody(
+      const decoded = decodeNoteBody(
         contentById.get(n.body_content_id ?? "")?.content_uri
       );
       return {

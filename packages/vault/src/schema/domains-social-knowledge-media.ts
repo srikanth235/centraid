@@ -1,5 +1,4 @@
-// Domain DDL — schemas `social`, `knowledge`, `media` from
-// duaility-ontology.html §03.
+// `social_contact_card` is retired (#883); rung one's text is history.
 
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 

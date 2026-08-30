@@ -1,8 +1,13 @@
-// A note's body history is the same append-only `revises` content-item chain
-// used by Docs. This query walks only the selected note's chain and decodes
-// text bodies for an owner-visible preview; no command fabricates history.
+// Body history is the append-only `revises` content-item chain, walked for the
+// selected note only. No command fabricates history.
 
-const RELATIONS_SCHEME_URI = "urn:duaility:relations";
+import {
+  RELATIONS_SCHEME_URI,
+  findSchemeConcept,
+} from "../../_shared/concept-scheme-kit.ts";
+import { decodeNoteBody } from "../note-body.ts";
+
+const REVISES_NOTATION = "revises";
 const MAX_CHAIN_STEPS = 500;
 
 interface NoteRow {
@@ -20,23 +25,6 @@ interface ContentRow {
   content_uri?: string | null;
   media_type?: string | null;
   created_at?: string;
-}
-
-function decodeBody(uri: string | null | undefined): string {
-  if (!uri?.startsWith("data:")) return "(external content)";
-  const comma = uri.indexOf(",");
-  if (comma === -1) return "(external content)";
-  const meta = uri.slice(0, comma);
-  const payload = uri.slice(comma + 1);
-  try {
-    return meta.includes(";base64")
-      ? typeof Buffer === "undefined"
-        ? atob(payload)
-        : Buffer.from(payload, "base64").toString("utf8")
-      : decodeURIComponent(payload);
-  } catch {
-    return "(unreadable content)";
-  }
 }
 
 export default async function noteHistory({ input, ctx }: HandlerArgs) {
@@ -57,17 +45,15 @@ export default async function noteHistory({ input, ctx }: HandlerArgs) {
       ctx.vault.read({ entity: "core.concept_scheme", purpose }),
       ctx.vault.read({ entity: "core.concept", purpose }),
     ]);
-    const schemeId = (
-      schemes.rows as Array<{ scheme_id: string; uri: string }>
-    )?.find((row) => row.uri === RELATIONS_SCHEME_URI)?.scheme_id;
-    const relationId = (
+    const relationId = findSchemeConcept(
+      schemes.rows as Array<{ scheme_id: string; uri: string }>,
       concepts.rows as Array<{
         concept_id: string;
         scheme_id: string;
         notation: string;
-      }>
-    )?.find(
-      (row) => row.scheme_id === schemeId && row.notation === "revises"
+      }>,
+      RELATIONS_SCHEME_URI,
+      REVISES_NOTATION
     )?.concept_id;
 
     const chain = [note.body_content_id];
@@ -118,7 +104,7 @@ export default async function noteHistory({ input, ctx }: HandlerArgs) {
         const content = byId.get(contentId);
         return {
           content_id: contentId,
-          body: decodeBody(content?.content_uri),
+          body: decodeNoteBody(content?.content_uri),
           media_type: content?.media_type ?? null,
           current: index === 0,
           asserted_at:

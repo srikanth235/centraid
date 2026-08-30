@@ -7,11 +7,11 @@ export interface TallyBalanceExpense {
   amount_minor: number;
   splits: Readonly<Record<string, number>>;
   /**
-   * Who actually put money down, in minor units. Absent or empty means the
-   * degenerate single-payer case, which reads as `{ [paid_by]: amount_minor }`
-   * — the compat rule that keeps a reader that only knows `paid_by` right.
+   * Who actually put money down, in minor units. REQUIRED (#883, ruling
+   * O-payers): every expense carries payer rows, so a caller that cannot
+   * supply them is reading the wrong thing.
    */
-  payers?: Readonly<Record<string, number>>;
+  payers: Readonly<Record<string, number>>;
 }
 
 export interface TallyBalanceData {
@@ -26,18 +26,15 @@ export interface TallyBalanceData {
 }
 
 /**
- * Who paid what on one expense. THE single place the multi-payer compat rule
- * is applied, so no fold has to remember it.
+ * Who paid what on one expense, zero-contributions dropped. Payer rows are
+ * ground facts (#883, ruling O-payers): a fold that finds none is reading an
+ * expense the vault never finished writing, and must show that rather than
+ * invent a fallback.
  */
 export function expensePayers(
   expense: TallyBalanceExpense
 ): Array<[string, number]> {
-  const declared = Object.entries(expense.payers ?? {}).filter(
-    ([, paid]) => paid !== 0
-  );
-  return declared.length > 0
-    ? declared
-    : [[expense.paid_by, expense.amount_minor]];
+  return Object.entries(expense.payers).filter(([, paid]) => paid !== 0);
 }
 
 /** One participant owing one payer, in minor units. */
@@ -49,17 +46,13 @@ export interface TallyAttribution {
 
 /**
  * Who owes whom for ONE expense. THE single attribution rule — every pairwise
- * view (the owner-vs-friend fold and the in-group matrix) calls this, so the
- * two can never disagree about who a share is owed to.
+ * view calls this, so no two can disagree about who a share is owed to.
  *
- * Shares and payments are matched off against each other in a fixed order
- * (largest first, then by party id) rather than by pro-rating each share
- * across each payer. That matters for more than tidiness: pro-rating rounds
- * per share, and the rounded portions then fail to add back up to what each
- * payer actually put down — a cent short here, a cent over there, and the
- * pairwise view stops reconciling with the per-member fold. Matching off
- * exhausts both sides exactly, so every participant's rows sum to their share
- * and every payer's column sums to what they paid, with no remainder to place.
+ * Shares and payments are matched off in a fixed order (largest first, then by
+ * party id) rather than pro-rated: pro-rating rounds per share, the rounded
+ * portions stop adding back to what each payer put down, and the pairwise view
+ * stops reconciling with the per-member fold. Matching off exhausts both sides
+ * exactly, with no remainder to place.
  */
 export function attributeExpense(
   expense: TallyBalanceExpense

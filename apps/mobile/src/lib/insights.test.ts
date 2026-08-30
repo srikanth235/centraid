@@ -24,6 +24,7 @@ import {
   formatCount,
   formatMs,
   formatUsd,
+  formatDuration,
   formatUptime,
   relativeTime,
 } from "./insights";
@@ -57,6 +58,17 @@ describe("Insights format helpers", () => {
     expect(formatMs(0.8)).toBe("0.8 ms");
     expect(formatMs(42.2)).toBe("42 ms");
     expect(formatMs(Number.NaN)).toBe("—");
+  });
+
+  it("formatDuration keeps a sub-second run in ms rather than calling it 0s", () => {
+    expect(formatDuration(0)).toBe("0 ms");
+    expect(formatDuration(420)).toBe("420 ms");
+    expect(formatDuration(1400)).toBe("1s");
+    expect(formatDuration(95_000)).toBe("1m 35s");
+    expect(formatDuration(120_000)).toBe("2m");
+    expect(formatDuration(3 * 3_600_000 + 25 * 60_000)).toBe("3h 25m");
+    expect(formatDuration(-1)).toBe("—");
+    expect(formatDuration(Number.NaN)).toBe("—");
   });
 
   describe(relativeTime, () => {

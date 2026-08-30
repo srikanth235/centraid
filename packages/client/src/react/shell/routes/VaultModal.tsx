@@ -5,6 +5,7 @@ import { IDENTITY_COLORS } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
 import { cx } from "../../ui/cx.js";
+import ShellModal from "../../ui/ShellModal.js";
 import { iconSvg } from "../iconSvg.js";
 
 import controlsCss from "../../styles/controls.module.css";
@@ -126,7 +127,7 @@ export default function VaultModal({
         tabIndex={-1}
         onClick={onCancel}
       />
-      <dialog open className={styles.profModal} aria-modal="true">
+      <ShellModal layer="inline" className={styles.profModal} ariaModal>
         <div className={styles.profModalHead}>
           <span
             className={styles.profModalHeadIcon}
@@ -258,7 +259,7 @@ export default function VaultModal({
             {mode === "add" ? "Create profile" : "Save changes"}
           </button>
         </div>
-      </dialog>
+      </ShellModal>
     </div>
   );
 }

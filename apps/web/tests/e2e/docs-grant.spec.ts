@@ -8,7 +8,7 @@ import { toCss } from "@centraid/design";
 
 // DOCS ON THE GRANT PLANE, in a real browser (#825): the shipped details rail
 // stubbed at `window.centraid.grants` (the one reach-in a web blueprint has).
-// Proves the APP: object-first sheet, registry-decided verbs, one status line.
+// Proves the APP: object-first sheet, registry verbs, one status line.
 
 declare global {
   interface Window {
@@ -27,8 +27,7 @@ const DETAILS = path.join(
 const EVIDENCE_DIR = path.join(REPO_ROOT, "artifacts/e2e/ui-impact");
 const EVIDENCE_PNG = "issue-825-docs-grant.png";
 
-/** The shipped rail over a stub bridge answering the declared registry, one
- * standing grant and a create — `webGrantDoor()`'s surface. */
+/** The shipped rail over a stub bridge — `webGrantDoor()`'s surface. */
 const ENTRY = `
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -61,6 +60,10 @@ window.centraid = {
             revokedAt: null,
             grantedBy: "party-owner",
             maxSizeBytes: null,
+            // From the WIRE, never derived here (ruling V-phrases): this is
+            // what grantPhrase() answers for a single delivered row.
+            phrase: "shared",
+            reason: "the vault it addresses is holding it",
             fulfillment: [
               { peerVaultId: "vault-ravi", state: "delivered", updatedAt: "", detail: null },
             ],
@@ -121,7 +124,7 @@ createRoot(document.getElementById("root")).render(
 );
 `;
 
-/** Bundle the shipped rail, its CSS modules included, for the browser. */
+/** Bundle the shipped rail, CSS modules included, for the browser. */
 async function bundleRail(): Promise<{ js: string; css: string }> {
   const result = await build({
     stdin: {
@@ -170,7 +173,7 @@ test("Docs shares a document through the one shared grant kit", async ({
   const dialog = page.locator("dialog.kit-modal-back");
   await expect(dialog).toBeVisible();
 
-  // OBJECT-FIRST: the document is a fixed line; the sheet asks only who.
+  // OBJECT-FIRST: the document is fixed; the sheet asks only who.
   await expect(dialog.getByText("Trip plan")).toBeVisible();
   await expect(dialog.getByLabel("What to share")).toHaveCount(0);
 
@@ -178,7 +181,15 @@ test("Docs shares a document through the one shared grant kit", async ({
   await expect(dialog.getByRole("button", { name: "Can edit" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Can view" })).toBeVisible();
 
-  await expect(dialog.getByText("Delivered")).toBeVisible();
+  // The standing row carries the vault's phrase and reason, both verbatim.
+  await expect(dialog.locator('[data-phrase="shared"]')).toHaveText(
+    "Can view · Shared"
+  );
+  await expect(
+    dialog.getByText("the vault it addresses is holding it")
+  ).toBeVisible();
+  // A row the wire answered for never falls back to the unstated marker.
+  await expect(dialog.locator('[data-phrase="unstated"]')).toHaveCount(0);
 
   await mkdir(EVIDENCE_DIR, { recursive: true });
   await page.screenshot({

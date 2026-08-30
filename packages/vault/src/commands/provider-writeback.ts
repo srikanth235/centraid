@@ -1,10 +1,10 @@
-// Bidirectional provider continuation (#630): a local edit of a row
-// that came from Google becomes an already-approved outbox artifact. The
-// edit itself is the user's consent to update that same provider object;
-// credentials remain executor-only, and revoke/needs-auth leaves the durable
-// item approved for reconnect rather than losing it.
+// Bidirectional provider continuation (#630): a local edit of a provider-owned
+// row becomes an already-approved outbox artifact — the edit IS the consent.
+// Credentials stay executor-only, and revoke leaves the item approved for
+// reconnect rather than losing it.
 
 import type { HandlerCtx } from "../gateway/types.js";
+import { contactReach } from "./contact-reach.js";
 
 interface Mapping {
   connection_id: string;
@@ -70,8 +70,8 @@ function eventArtifact(
           ...(event.start_tz ? { timeZone: event.start_tz } : {}),
         };
   };
-  // Google expects prefixed RRULE lines. Canonical storage is bare `FREQ=…`
-  // (and may still hold legacy `RRULE:…` from older pulls) — never double-prefix.
+  // Google expects prefixed RRULE lines; canonical storage is bare `FREQ=…`
+  // and may hold legacy `RRULE:…`, so never double-prefix.
   const recurrence = event.rrule
     ? event.rrule
         .split("\n")
@@ -141,35 +141,9 @@ function contactArtifact(
     birth_date: string | null;
     updated_at: string;
   };
-  const channels = ctx.db
-    .prepare(
-      `SELECT kind, normalized_value, label
-         FROM social_contact_channel
-        WHERE party_id = ? AND kind IN ('email','phone')
-        ORDER BY kind, is_preferred DESC, channel_id`
-    )
-    .all(partyId) as {
-    kind: string;
-    normalized_value: string;
-    label: string | null;
-  }[];
-  const identifiers = ctx.db
-    .prepare(
-      `SELECT scheme AS kind, value AS normalized_value, label
-         FROM core_party_identifier
-        WHERE party_id = ? AND scheme IN ('email','tel') AND valid_to IS NULL
-        ORDER BY scheme, is_primary DESC, identifier_id`
-    )
-    .all(partyId) as {
-    kind: string;
-    normalized_value: string;
-    label: string | null;
-  }[];
-  const merged = new Map<string, (typeof channels)[number]>();
-  for (const channel of [...channels, ...identifiers]) {
-    const kind = channel.kind === "tel" ? "phone" : channel.kind;
-    merged.set(`${kind}:${channel.normalized_value}`, { ...channel, kind });
-  }
+  // ONE read of the reach set: the legacy identifier rows moved onto
+  // channels, so nothing reconciles here (#883).
+  const reach = contactReach(ctx.db, partyId, ["email", "phone"]);
   const [familyName, givenName] = (party.sort_name ?? "")
     .split(",")
     .map((value) => value.trim());
@@ -189,12 +163,12 @@ function contactArtifact(
         ...(familyName ? { familyName } : {}),
       },
     ],
-    emailAddresses: [...merged.values()]
+    emailAddresses: reach
       .filter((item) => item.kind === "email")
-      .map((item) => ({ value: item.normalized_value, type: item.label })),
-    phoneNumbers: [...merged.values()]
+      .map((item) => ({ value: item.normalizedValue, type: item.label })),
+    phoneNumbers: reach
       .filter((item) => item.kind === "phone")
-      .map((item) => ({ value: item.normalized_value, type: item.label })),
+      .map((item) => ({ value: item.normalizedValue, type: item.label })),
     birthdays: date
       ? [
           {
@@ -313,10 +287,7 @@ function queue(
   ctx.wrote("outbox.item", itemId);
 }
 
-/**
- * Continue local edits back to the provider only when a durable external-id
- * map proves that the canonical row came from that exact connection.
- */
+/** Only when a durable external-id map proves the origin connection. */
 export function queueProviderWriteback(
   ctx: HandlerCtx,
   targetType: "core.event" | "core.party",

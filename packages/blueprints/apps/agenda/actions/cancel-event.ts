@@ -1,29 +1,19 @@
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
 /**
- * Ask to cancel an event: status flips to cancelled and SEQUENCE bumps, but
- * the command is medium-risk and apps run at a low risk ceiling, so the
- * vault PARKS it for the owner's confirmation. 'parked' comes back through
- * here as a first-class outcome for the UI to narrate — an ask in flight,
- * not an error.
+ * Cancel an event. Medium-risk against the app risk ceiling, so the vault
+ * parks it for the owner: `parked` is a first-class outcome to narrate, an
+ * ask in flight rather than an error.
  */
 export default async function cancelEvent({
   body,
   ctx,
 }: HandlerArgs): Promise<ActionResult> {
-  const input = (body ?? {}) as Record<string, unknown>;
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "schedule.cancel_event",
-      input: {
-        event_id: String(input.event_id ?? ""),
-      },
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  const input = actionInput(body);
+  return runVaultAction(ctx, {
+    command: "schedule.cancel_event",
+    input: {
+      event_id: String(input.event_id ?? ""),
+    },
+  });
 }

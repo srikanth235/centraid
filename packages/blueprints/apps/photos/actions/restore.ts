@@ -1,25 +1,12 @@
-/**
- * Bring a trashed photo back through media.restore_asset. The asset row
- * and its bytes un-soft-delete with metadata intact; album membership is
- * not restored, matching the benchmark's trash model. Restoring a live
- * photo fails as a precondition, not an error. Risk low.
- *
- * @type {import('@centraid/server/engine').ActionHandler}
- */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
+/** The asset row and its bytes un-soft-delete with metadata intact; album
+ *  membership is NOT restored. Restoring a live photo fails as a
+ *  precondition. */
 export default async function restore({ body, ctx }: HandlerArgs) {
-  const input = (body ?? {}) as Record<string, unknown>;
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "media.restore_asset",
-      input: { asset_id: String(input.asset_id ?? "") },
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  const input = actionInput(body);
+  return runVaultAction(ctx, {
+    command: "media.restore_asset",
+    input: { asset_id: String(input.asset_id ?? "") },
+  });
 }

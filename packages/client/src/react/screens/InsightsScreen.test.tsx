@@ -4,13 +4,14 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, test } from "vitest";
 
-import type { InsightsSummary } from "../screen-contracts.js";
 import {
-  buildBars,
-  harnessBreakdown,
-  pricingLine,
-  sourceFacts,
-} from "./insights-model.js";
+  insightBreakdowns,
+  insightPricingLine,
+  insightSourceFacts,
+} from "@centraid/design/blocks";
+
+import type { InsightsSummary } from "../screen-contracts.js";
+import { WEB_INSIGHT_WORDS } from "./insights-model.js";
 import InsightsScreen from "./InsightsScreen.js";
 import type { ResourceUsageDTO } from "./resource-summary.js";
 
@@ -59,9 +60,30 @@ const summary: InsightsSummary = {
     },
   ],
   daily: [
-    { costUsd: 0.1, date: day(-29), runs: 2, tokens: 1000 },
-    { costUsd: 0.4, date: day(-1), runs: 5, tokens: 4000 },
-    { costUsd: 0.2, date: day(0), runs: 3, tokens: 2000 },
+    {
+      costUsd: 0.1,
+      date: day(-29),
+      failedCostUsd: 0,
+      failedRuns: 0,
+      runs: 2,
+      tokens: 1000,
+    },
+    {
+      costUsd: 0.4,
+      date: day(-1),
+      failedCostUsd: 0.2,
+      failedRuns: 2,
+      runs: 5,
+      tokens: 4000,
+    },
+    {
+      costUsd: 0.2,
+      date: day(0),
+      failedCostUsd: 0,
+      failedRuns: 0,
+      runs: 3,
+      tokens: 2000,
+    },
   ],
   generatedAt: GENERATED_AT,
   peakDay: {
@@ -224,6 +246,65 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     );
   });
 
+  it("gives a day's failed spend its own segment, and only that day's", () => {
+    const el = screen();
+    const columns = [...el.querySelectorAll(".column")];
+    // 9 Jun spent $0.40, half of it on two failed runs.
+    const failedDay = columns.at(-2);
+    expect(failedDay?.querySelector(".fail")).not.toBeNull();
+    expect(
+      (failedDay as HTMLElement | undefined)?.style.getPropertyValue(
+        "--bar-fail"
+      )
+    ).toBe("50");
+    expect(failedDay?.getAttribute("title")).toBe(
+      "9 Jun · $0.40 · 5 runs · 2 failed"
+    );
+    // The quiet day keeps ONE segment: a zero-height fail spends a colour.
+    expect(columns.at(-1)?.querySelector(".fail")).toBeNull();
+  });
+
+  it("names the failed colour only when a column can draw it", () => {
+    expect(
+      [...screen().querySelectorAll(".legendFail")].map((n) => n.textContent)
+    ).toStrictEqual(["failed"]);
+    act(() => root?.unmount());
+    root = null;
+    container?.remove();
+    // A window whose days hold no failure gets no legend at all.
+    const quiet = screen({
+      summary: {
+        ...summary,
+        daily: summary.daily.map((point) => ({
+          ...point,
+          failedCostUsd: 0,
+          failedRuns: 0,
+        })),
+      },
+    });
+    expect(quiet.querySelector(".legend")).toBeNull();
+  });
+
+  it("states a typical run duration, and withholds it when nothing finished", () => {
+    const timed = screen({
+      summary: { ...summary, kpis: { ...summary.kpis, medianRunMs: 95_000 } },
+    });
+    expect(
+      [...timed.querySelectorAll(".factKey")].map((n) => n.textContent)
+    ).toContain("typical run");
+    expect(
+      [...timed.querySelectorAll(".factValue")].map((n) => n.textContent)
+    ).toContain("1m 35s");
+    act(() => root?.unmount());
+    root = null;
+    container?.remove();
+    // An old vault that timed nothing shows no row — never "0s".
+    const untimed = screen();
+    expect(
+      [...untimed.querySelectorAll(".factKey")].map((n) => n.textContent)
+    ).not.toContain("typical run");
+  });
+
   it("marks the axis with real dates, and names the peak the plot cannot", () => {
     const el = screen();
     const marks = [...el.querySelectorAll(".axisLabel")].map(
@@ -244,13 +325,10 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     expect(el.querySelector(".axisLabel")?.textContent).toBe("4 Jun");
   });
 
-  it("claims no per-column outcome split the rollup cannot serve", () => {
-    const el = screen();
-    // No failed segment and no legend: the daily rollup counts runs, not
-    // outcomes, so the chart says runs. The failure count lives in the meta.
-    expect(el.querySelector(".fail")).toBeNull();
-    expect(el.querySelector(".legend")).toBeNull();
-    expect(el.textContent).toContain("42 runs · 2 failed");
+  it("still states the window's failure count in words above the chart", () => {
+    // The per-column split is the day's; the meta line remains the only place
+    // the WINDOW's total is stated, so the two never have to be read together.
+    expect(screen().textContent).toContain("42 runs · 2 failed");
   });
 
   it("says every section, including the four categorical breakdowns", () => {
@@ -309,7 +387,7 @@ describe("screens/InsightsScreen (v9, #765)", () => {
   });
 
   it("keeps the pricing honesty — an unpriced run is unknown, never free", () => {
-    expect(pricingLine(summary)).toBe(
+    expect(insightPricingLine(summary, WEB_INSIGHT_WORDS)).toBe(
       "$2.10 harness-reported · $1.30 estimated · 1 unpriced."
     );
     const el = screen();
@@ -380,72 +458,33 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     expect(el.querySelector("h1")).toBeNull();
     expect(el.textContent).not.toContain("Where it went");
   });
-});
-
-describe("screens/InsightsScreen — folding the rollup into columns", () => {
-  it("folds by calendar offset, so a quiet week does not slide the busy days", () => {
-    const bars = buildBars(summary, 30, false);
-    expect(bars).toHaveLength(30);
-    // day(-29) is the window's first day; day(-1)/day(0) are its last.
-    expect(bars[0]?.ok).toBeGreaterThan(0);
-    expect(bars[1]?.ok).toBe(0);
-    expect(bars.at(-1)?.label).toBe("10 Jun · $0.20 · 3 runs");
-  });
-
-  it("draws SPEND, so a cheap busy day cannot outrank an expensive quiet one", () => {
-    const bars = buildBars(summary, 30, false);
-    // day(-1) cost the most ($0.40) though day(0) is not far behind in runs.
-    expect(bars.at(-2)?.ok).toBe(100);
-    expect(bars.at(-1)?.ok).toBe(50);
-    expect(bars.every((b) => b.ok >= 0 && b.ok <= 100)).toBe(true);
-  });
-
-  it("folds only on the compact form factor, and says the span it folded", () => {
-    const folded = buildBars(summary, 90, true);
-    expect(folded).toHaveLength(10);
-    expect(folded[0]?.label).toContain(" – ");
-    // Under a pointer a ninety-day window is ninety columns.
-    expect(buildBars(summary, 90, false)).toHaveLength(90);
-  });
 
   it("omits a source with no runs rather than reporting a zero", () => {
-    expect(sourceFacts({ ...summary, bySource: [] })).toStrictEqual([]);
-    expect(sourceFacts(summary).map((f) => f.key)).toStrictEqual([
-      "automations",
-      "the assistant",
-    ]);
+    expect(
+      insightSourceFacts({ ...summary, bySource: [] }, WEB_INSIGHT_WORDS)
+    ).toStrictEqual([]);
+    expect(
+      insightSourceFacts(summary, WEB_INSIGHT_WORDS).map((f) => f.key)
+    ).toStrictEqual(["automations", "the assistant"]);
   });
 
   it("measures a fully unpriced window in tokens rather than drawing nothing", () => {
-    const unpriced = harnessBreakdown({
-      ...summary,
-      byHarness: [
-        { costUsd: 0, harness: "codex", runs: 2, tokens: 3000 },
-        { costUsd: 0, harness: "claude-code", runs: 1, tokens: 1000 },
-      ],
-    });
+    const unpriced = insightBreakdowns(
+      {
+        ...summary,
+        byHarness: [
+          { costUsd: 0, harness: "codex", runs: 2, tokens: 3000 },
+          { costUsd: 0, harness: "claude-code", runs: 1, tokens: 1000 },
+        ],
+      },
+      WEB_INSIGHT_WORDS
+    ).harness;
     expect(unpriced.unit).toBe("of tokens");
     expect(unpriced.meta).toBe("sorted by tokens");
     expect(unpriced.rows.map((r) => r.weight)).toStrictEqual([3000, 1000]);
   });
 });
 
-/*
- * The law #765 broke and #775 restored: the gateway computes a rollup, and the
- * page either SAYS a field or WITHHOLDS it on the record. A field that is
- * neither is what a silent deletion looks like — the gateway keeps paying to
- * compute `retries` and `failedCostUsd`, the page stops drawing them, and every
- * remaining test is still green because none of them enumerate the payload.
- *
- * The fixture above is typed `InsightsSummary`, so the gateway adding a field
- * fails typecheck here first; this test then makes the fixture's fields answer
- * for themselves. Deleting a rendered field breaks the probe; deleting it on
- * purpose means moving it into WITHHELD with the reason, which is a reviewable
- * line in a diff rather than an absence nobody can see.
- */
-
-/** Everything a reader can actually get off the page: its words, plus the
- *  per-column figures a pointer reads from each column's own `title`. */
 function readable(el: HTMLElement): string {
   return [
     el.textContent ?? "",
@@ -455,14 +494,11 @@ function readable(el: HTMLElement): string {
   ].join(" ¶ ");
 }
 
-/** A rollup whose only job is to give the two fields the shared fixture leaves
- *  at zero a value to show. A zero is an absence, not a rendering. */
 const withUnreported: InsightsSummary = {
   ...summary,
   kpis: { ...summary.kpis, unpricedRuns: 0, unreportedRuns: 4 },
 };
 
-/** field → the exact string it puts on the page, and the rollup that shows it. */
 const RENDERS: Readonly<
   Record<string, { shows: string; from?: InsightsSummary }>
 > = {
@@ -472,8 +508,6 @@ const RENDERS: Readonly<
   byModel: { shows: "claude-opus-4-8" },
   bySource: { shows: "$2.00 · 8k · 6 runs" },
   daily: { shows: "10 Jun · $0.20 · 3 runs" },
-  // The rollup's own clock is what the axis is dated against — a summary read
-  // an hour later still names the same oldest day.
   generatedAt: { shows: "12 May" },
   "kpis.estimatedCostUsd": { shows: "$1.30 estimated" },
   "kpis.failedCostUsd": { shows: "2 · $0.40 spent" },
@@ -494,8 +528,6 @@ const RENDERS: Readonly<
   recent: { shows: "A failed run" },
 };
 
-/** field → why the page does not say it. Not a backlog: each line is a stated
- *  product decision, and moving a field in here is a reviewed edit. */
 const WITHHELD: Readonly<Record<string, string>> = {
   "kpis.appsTouched":
     "the rollup counts it, but 'how many apps did work touch' is a different question from 'what did this cost' — the page has one subject and does not borrow this one.",
@@ -503,8 +535,6 @@ const WITHHELD: Readonly<Record<string, string>> = {
     "the window is the shell's own state, passed as the `windowDays` prop; the copy inside the rollup is the window the GATEWAY answered for and would silently disagree with the picker after a change.",
 };
 
-/** Every field of the rollup, `kpis` expanded key by key — a container is not a
- *  leaf, so a newly served KPI must answer for itself. */
 function rollupFields(rollup: InsightsSummary): string[] {
   return [
     ...Object.keys(rollup).filter((key) => key !== "kpis"),

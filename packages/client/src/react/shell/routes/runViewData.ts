@@ -1,3 +1,5 @@
+import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
+
 // Run-view snapshot derivation. Pure: turns the live run model (row + run
 // record + node map + streamed text) into the RunViewSnapshot the RunViewScreen
 // renders in both timeline + log modes, so the screen formats nothing itself.
@@ -81,7 +83,7 @@ export function buildRunSnapshot(
     const day =
       ds === new Date(nowMs).toDateString()
         ? "Today"
-        : ds === new Date(nowMs - 86_400_000).toDateString()
+        : ds === new Date(nowMs - DAY_MS).toDateString()
           ? "Yesterday"
           : d.toLocaleDateString(undefined, {
               weekday: "short",

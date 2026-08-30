@@ -1,23 +1,10 @@
 // @vitest-environment jsdom
 //
-// The grant sheet, web seat (#825). Five claims:
-//
-//  1. AUDIENCE-FIRST works end to end — person → what → capability → one write
-//     door, carrying exactly the request the route takes.
-//  2. `edit` is drawn ONLY where the declared registry answers it, a registry
-//     still in flight refuses nothing, an unreadable one says which happened,
-//     and the co-contribution sentence belongs to a group and nothing else.
-//  2b. REFUSED IS NOT UNREACHABLE (#880): a gateway that answered no and one
-//     nothing reached each keep their own sentence, on the registry read and
-//     on the standing read alike.
-//  3. An invitation nobody has accepted reads as pending, never as an error;
-//     a person this vault has never reached says so in her own line; and a
-//     reach nothing has read yet says NOTHING about her, on either entry.
-//  4. Revoking asks first, in the honest best-effort words, and then reports
-//     the ROUTE'S sentence verbatim rather than a local paraphrase.
-//  5. NO SILENT SUCCESS. An audience this vault does not know, and a standing
-//     grant the route left at another capability, each get their own sentence
-//     instead of borrowing "nothing shared" or "already shared".
+// The grant sheet, web seat (#825). Each test names the claim it holds; two
+// the titles cannot carry: REFUSED IS NOT UNREACHABLE (#880) — a gateway that
+// answered no and one nothing reached keep their own sentences — and CHANGING
+// A STANDING ANSWER IS WITHDRAW-THEN-GRANT (#883, ruling V-table), never an
+// answer edited in place.
 import { act } from "react";
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -92,11 +79,16 @@ describe("the grant sheet, web seat", () => {
       expect(status).toStrictEqual(["Already shared with Priya"]);
     });
 
-    test("a capability the route did not change is not reported as a change", async () => {
+    test("changing a standing capability asks first, then withdraws and grants again", async () => {
+      // #883 (ruling V-table): the plane refuses an answer edited in place, so
+      // the sheet does not post one. It names the consequence — their copy is
+      // asked for back — and only then runs the withdraw-then-grant pair.
       const standing = standingGrant({
         subjectType: "tally.group",
         subjectId: "group-1",
       });
+      const changed: Array<[string, GrantRequest]> = [];
+      const created: GrantRequest[] = [];
       const { container, status } = await mount({
         subjects: [GROUP_SUBJECT],
         door: stubDoor({
@@ -106,22 +98,112 @@ describe("the grant sheet, web seat", () => {
               channel: { state: "live" as const },
               grants: [standing],
             }),
-          // What the route answers for a standing `view` when `edit` is asked
-          // for: `exists`, and the capability untouched.
-          create: () =>
-            Promise.resolve({
-              ok: true,
-              outcome: "exists_other_capability",
-              standing: "view",
-              grant: standing,
-            }),
+          create: (request) => {
+            created.push(request);
+            return Promise.resolve({ ok: true, outcome: "created" as const });
+          },
+          changeCapability: (grantId, request) => {
+            changed.push([grantId, request]);
+            return Promise.resolve({ ok: true, outcome: "created" as const });
+          },
         }),
       });
       await act(async () => pressing(container, "Can edit").click());
-      await act(async () => pressing(container, "Share").click());
-      expect(status).toStrictEqual([
-        "Already shared with Priya for viewing; changing access is not offered yet — revoke and share again to change it.",
+      // The primary action is worded as the change, not as the mechanism.
+      expect(
+        buttons(container).some((button) => button.textContent === "Share")
+      ).toBe(false);
+      await act(async () => pressing(container, "Change access").click());
+      expect(container.textContent).toContain(
+        "asked to remove its copy and is sent a fresh one"
+      );
+      // Nothing has been written yet: the question is still open.
+      expect(changed).toStrictEqual([]);
+      await act(async () => pressing(container, "Change access").click());
+      expect(changed).toStrictEqual([
+        [
+          "grant-1",
+          {
+            audienceKind: "party",
+            audienceId: "party-priya",
+            subjectType: "tally.group",
+            subjectId: "group-1",
+            capability: "edit",
+            subjectLabel: "Ski trip",
+          },
+        ],
       ]);
+      // Never the plain create door: that post is the one the route refuses.
+      expect(created).toStrictEqual([]);
+      expect(status).toStrictEqual(["Priya can now edit it"]);
+    });
+
+    test("backing out of the change writes nothing at all", async () => {
+      const standing = standingGrant({
+        subjectType: "tally.group",
+        subjectId: "group-1",
+      });
+      const changed: string[] = [];
+      const { container, status } = await mount({
+        subjects: [GROUP_SUBJECT],
+        door: stubDoor({
+          forParty: () =>
+            Promise.resolve({
+              known: true,
+              channel: { state: "live" as const },
+              grants: [standing],
+            }),
+          changeCapability: (grantId) => {
+            changed.push(grantId);
+            return Promise.resolve({ ok: true, outcome: "created" as const });
+          },
+        }),
+      });
+      await act(async () => pressing(container, "Can edit").click());
+      await act(async () => pressing(container, "Change access").click());
+      await act(async () => pressing(container, "Leave it as it is").click());
+      expect(changed).toStrictEqual([]);
+      expect(status).toStrictEqual([]);
+      // The sheet is back, still offering the change.
+      expect(
+        buttons(container).some(
+          (button) => button.textContent === "Change access"
+        )
+      ).toBe(true);
+    });
+
+    test("the standing row prints the vault's phrase and reason, never one of its own", async () => {
+      // The wire says where a grant stands; the row prints exactly that.
+      const { container } = await mount({
+        door: stubDoor({
+          forParty: () =>
+            Promise.resolve({
+              known: true,
+              channel: { state: "live" as const },
+              grants: [
+                standingGrant({
+                  phrase: "on its way",
+                  reason:
+                    "there is no way to reach them yet; the ask is recorded",
+                  fulfillment: [
+                    {
+                      peerVaultId: "vault-priya",
+                      state: "awaiting_channel",
+                      updatedAt: "",
+                      detail: null,
+                    },
+                  ],
+                }),
+              ],
+            }),
+        }),
+      });
+      expect(container.textContent).toContain("On its way");
+      expect(container.textContent).toContain(
+        "there is no way to reach them yet; the ask is recorded"
+      );
+      // A locally derived word may not reach the surface at all.
+      expect(container.textContent).not.toContain("Invitation pending");
     });
 
     test("a refusal is shown in the route's own words", async () => {
@@ -278,12 +360,20 @@ describe("the grant sheet, web seat", () => {
             sent.push(request);
             return Promise.resolve({ ok: true, outcome: "created" });
           },
+          changeCapability: (_grantId, request) => {
+            sent.push(request);
+            return Promise.resolve({ ok: true, outcome: "created" });
+          },
         }),
       });
       expect(
         buttons(container).some((button) => button.textContent === "Can edit")
       ).toBe(false);
-      await act(async () => pressing(container, "Share").click());
+      // Narrowing a standing `edit` the registry no longer offers is still a
+      // CHANGE to the answer, so it goes through withdraw-then-grant and asks
+      // first — what it may never do is post the undrawn `edit` back.
+      await act(async () => pressing(container, "Change access").click());
+      await act(async () => pressing(container, "Change access").click());
       expect(sent.map((request) => request.capability)).toStrictEqual(["view"]);
     });
 

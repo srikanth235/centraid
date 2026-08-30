@@ -320,12 +320,9 @@ describe("google-contacts-pull", () => {
       payload: {
         fn: "Asha Rao",
         sortName: "Rao, Asha",
-        // A birthday without a year still records month/day. NOTE: the
-        // current template yields THREE leading dashes ("--" placeholder
-        // plus the joining "-"), where vCard's yearless form is "--09-05".
-        // Recorded as-is per the source-level-contract rule; flagged in the
-        // #781 slice report as a suspected live defect, not fixed here.
-        bday: "---09-05",
+        // A birthday without a year still records month/day, in vCard's
+        // yearless form — two leading dashes, never three.
+        bday: "--09-05",
         identifiers: [
           { scheme: "email", value: "asha@example.com", label: "home" },
           { scheme: "tel", value: "+91 98765", label: null },

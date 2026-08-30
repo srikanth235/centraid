@@ -1,6 +1,5 @@
-// Docs' claim on the phone's bottom band (#821): five destinations, the fifth
-// being More, which opens a sheet, never a route. Restated rather than
-// imported from Photos' band — one app may not import another
+// Docs' claim on the phone's bottom band (#821). Restated rather than imported
+// from Photos' band: one app may not import another
 // (`scripts/check-import-boundaries.ts`). No `react-native` here, so the rules
 // stay assertable.
 
@@ -14,8 +13,14 @@ import {
 } from "@centraid/blueprints/apps/docs/shelves";
 import { MORE_ROWS } from "@centraid/blueprints/apps/docs/view-copy";
 
+import { BAND_CAPSULE } from "../../kit/band/band-capsule";
+import type { BandCapsule } from "../../kit/band/band-capsule";
 import type { BandOwner } from "../../kit/band/band-owner";
 import type { DocsStackParamList } from "../../navigation";
+
+// The frame's capsule lives in `kit/band/band-capsule.ts` (#883 B5); only the
+// TYPE is re-exported here.
+export type { BandCapsule } from "../../kit/band/band-capsule";
 
 export type DocsBandDestinationKey =
   | "all"
@@ -32,8 +37,6 @@ export interface DocsBandDestination {
 
 export const DOCS_BAND_MAX_DESTINATIONS = 5;
 
-export const DOCS_BAND_CAPSULE_SIZE = 52;
-
 export const DOCS_BAND_DESTINATIONS: readonly DocsBandDestination[] = [
   { key: "all", label: "All", icon: "FileText" },
   { key: "folders", label: "Folders", icon: "Folder" },
@@ -42,28 +45,11 @@ export const DOCS_BAND_DESTINATIONS: readonly DocsBandDestination[] = [
   { key: "more", label: "More", icon: "more-vertical" },
 ];
 
-export interface DocsBandCapsule {
-  label: "Home";
-  icon: "Home";
-  size: number;
-  edge: "leading";
-  /** `false` is why the capsule is not a sixth tab. */
-  inTabGroup: false;
-}
-
-export const DOCS_BAND_CAPSULE: DocsBandCapsule = {
-  label: "Home",
-  icon: "Home",
-  size: DOCS_BAND_CAPSULE_SIZE,
-  edge: "leading",
-  inTabGroup: false,
-};
-
 export type ResolvedDocsBand =
   | {
       owner: "app";
       destinations: readonly DocsBandDestination[];
-      capsule: DocsBandCapsule;
+      capsule: BandCapsule;
     }
   | { owner: "host" };
 
@@ -77,7 +63,7 @@ export function resolveDocsBand(owner: BandOwner): ResolvedDocsBand {
   return {
     owner: "app",
     destinations: DOCS_BAND_DESTINATIONS,
-    capsule: DOCS_BAND_CAPSULE,
+    capsule: BAND_CAPSULE,
   };
 }
 
@@ -96,7 +82,7 @@ export interface DocsMoreRow {
   meta?: string;
 }
 
-/** Labels and meta come from `MORE_ROWS`, never respelled here. */
+/** From `MORE_ROWS`, never respelled here. */
 const SHEET_SHELVES: readonly { key: DocsMoreRowKey; shelf: string }[] = [
   { key: "recent", shelf: RECENT },
   { key: "starred", shelf: STARRED },

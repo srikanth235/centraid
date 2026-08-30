@@ -6,8 +6,7 @@
  * counts from when they were added, so a fresh contact reads as on-track.
  *
  * The app's own views compute Reconnect / Upcoming / Favorites client-side
- * from the `people` window; this query is the same judgment server-side —
- * used for the Activity feed and as a stable summary surface.
+ * from the `people` window; this query is the same judgment server-side.
  *
  * A cadence of 0 days means "no cadence set", not "overdue every day": those
  * people are excluded from Reconnect entirely rather than pinned to the top of
@@ -19,7 +18,17 @@
  * four original counts stand.
  */
 
-import { daysSinceContact, daysUntilMonthDay, isOverdue } from "../format.ts";
+import {
+  FLAGS_SCHEME_URI,
+  STARRED_NOTATION,
+  findSchemeConcept,
+} from "../../_shared/concept-scheme-kit.ts";
+import {
+  daysSinceContact,
+  daysUntilMonthDay,
+  isOverdue,
+  toLinkCount,
+} from "../format.ts";
 import { readLiveBindings } from "./_shared.ts";
 
 interface RawProfile {
@@ -81,8 +90,6 @@ interface PartyEntry {
   name?: string;
 }
 
-const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
-
 export default async function dashboard({ ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
   const window = 9_999;
@@ -118,13 +125,13 @@ export default async function dashboard({ ctx }: HandlerArgs) {
       };
     }
 
-    const flagsScheme = schemeRows.find((s) => s.uri === FLAGS_SCHEME_URI);
-    const starredConceptId = flagsScheme
-      ? (conceptRows.find(
-          (c) =>
-            c.scheme_id === flagsScheme.scheme_id && c.notation === "starred"
-        )?.concept_id ?? null)
-      : null;
+    const starredConceptId =
+      findSchemeConcept(
+        schemeRows,
+        conceptRows,
+        FLAGS_SCHEME_URI,
+        STARRED_NOTATION
+      )?.concept_id ?? null;
 
     const [parties, tags, dates, activityLinks, bindings] = await Promise.all([
       ctx.vault.read({
@@ -278,7 +285,7 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         upcoming: upcoming.length,
         starred,
         linked,
-        to_link: linked === null ? null : profileRows.length - linked,
+        to_link: toLinkCount(profileRows.length, linked),
       },
     };
   } catch (error) {

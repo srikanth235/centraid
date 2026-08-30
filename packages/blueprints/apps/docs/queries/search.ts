@@ -7,14 +7,22 @@
  */
 
 import {
+  FLAGS_SCHEME_URI,
+  FOLDER_SCHEME_URI,
+  ROOT_FOLDER_NOTATION,
+  STARRED_NOTATION,
+  conceptsInScheme,
+  findConcept,
+  findScheme,
+  findSchemeConcept,
+} from "../../_shared/concept-scheme-kit.ts";
+import {
   readCustodyByContent,
   readLabelsByDocument,
   readSharesByDocument,
 } from "./_shared.ts";
 import type { ConceptRow, SchemeRow, TagRow } from "./_shared.ts";
 
-const FOLDER_SCHEME_URI = "https://centraid.dev/schemes/folders";
-const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
 const DOCUMENT_TARGET_TYPE = "core.document";
 
 interface SearchHit {
@@ -73,12 +81,11 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       concepts: conceptRows,
     });
 
-    const scheme = schemeRows.find((s) => s.uri === FOLDER_SCHEME_URI);
-    const schemeConcepts = conceptRows.filter(
-      (c) => scheme && c.scheme_id === scheme.scheme_id
-    );
+    const scheme = findScheme(schemeRows, FOLDER_SCHEME_URI);
+    const schemeConcepts = conceptsInScheme(conceptRows, scheme);
     const rootFolderId =
-      schemeConcepts.find((c) => c.notation === "root")?.concept_id ?? null;
+      findConcept(schemeConcepts, scheme, ROOT_FOLDER_NOTATION)?.concept_id ??
+      null;
 
     // A document is a wrapper tagged with a folders-scheme concept.
     const folderConceptIds = new Set(schemeConcepts.map((c) => c.concept_id));
@@ -89,13 +96,13 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     }
 
     // Starred rides the tag read already in hand (#274).
-    const flagsScheme = schemeRows.find((s) => s.uri === FLAGS_SCHEME_URI);
-    const starredConceptId = flagsScheme
-      ? (conceptRows.find(
-          (c) =>
-            c.scheme_id === flagsScheme.scheme_id && c.notation === "starred"
-        )?.concept_id ?? null)
-      : null;
+    const starredConceptId =
+      findSchemeConcept(
+        schemeRows,
+        conceptRows,
+        FLAGS_SCHEME_URI,
+        STARRED_NOTATION
+      )?.concept_id ?? null;
     const starredIds = new Set(
       tagRows
         .filter(
@@ -104,7 +111,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         .map((t) => t.target_id)
     );
 
-    // Bounded by the matched wrappers' own current_content_id set; custody rides the same set.
+    // Bounded by the matched wrappers' current_content_id set, custody too.
     const contentIds = [...new Set(hits.map((d) => d.current_content_id))];
     const [contents, custodyByContent, sharesByDoc] = await Promise.all([
       contentIds.length > 0

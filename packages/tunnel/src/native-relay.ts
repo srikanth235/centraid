@@ -45,7 +45,7 @@ function loadBinding(): NativeBinding {
     import.meta.url
   );
   binding = createRequire(import.meta.url)(
-    fileURLToPath(artifact)
+    fileURLToPath(artifact.href)
   ) as NativeBinding;
   return binding;
 }

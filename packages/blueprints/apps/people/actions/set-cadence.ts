@@ -1,19 +1,8 @@
-/**
- * Set how often you want to reach out to a person. Runs through people.set_cadence — consent-checked and receipted, risk low.
- */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
 export default async function setCadence({ body, ctx }: HandlerArgs) {
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "people.set_cadence",
-      input: (body ?? {}) as Record<string, unknown>,
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  return runVaultAction(ctx, {
+    command: "people.set_cadence",
+    input: actionInput(body),
+  });
 }

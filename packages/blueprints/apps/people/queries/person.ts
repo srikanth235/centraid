@@ -1,23 +1,29 @@
 /**
- * One person's full profile, gathered from the vault: the party (name), the
- * people_profile (role, cadence, last-contacted, how-you-met, avatar hue), the
- * party's contact identifiers (phone/email), and every child record — list,
- * favorite, relationships, important dates, notes (annotations on the party),
- * tasks, gift ideas, open debts and the interaction history. Nothing is stored
- * by the app; it is all a read of the owner's vault.
+ * One person's full profile, gathered from the vault: the party, its
+ * people_profile, the party's contact identifiers and every child record.
+ * Nothing is stored by the app; it is all a read of the owner's vault.
  *
- * It also answers the sharing questions about them (./_shared.ts): which
- * vault(s) they are linked to, what the owner has shared with them, and which
- * invitations they have not answered. Those reads deny independently of the
- * profile — People's `share.*` scopes are newer than the app, so on an
- * existing vault they wait for the owner — and a denial leaves the three
- * fields null instead of blanking the person.
+ * The sharing questions (./_shared.ts) deny independently of the profile —
+ * People's `share.*` scopes are newer than the app, so on an existing vault
+ * they wait for the owner — and a denial leaves those three fields null
+ * instead of blanking the person.
  */
 
+import {
+  FLAGS_SCHEME_URI,
+  LIST_SCHEME_URI,
+  RELATIONS_SCHEME_URI,
+  STARRED_NOTATION,
+  conceptsInScheme,
+  findScheme,
+  findSchemeConcept,
+} from "../../_shared/concept-scheme-kit.ts";
+import { PENDING_OVERLAY_FIELDS } from "../../_shared/pending-overlay.ts";
 import { readPersonShareLinks } from "./_shared.ts";
 
 interface RawProfile {
   role?: string | null;
+  nickname?: string | null;
   avatar_color?: string | null;
   cadence_days: number;
   last_contacted_at?: string | null;
@@ -29,11 +35,6 @@ interface RawParty {
   party_id: string;
   display_name: string;
   kind?: string;
-}
-
-interface RawIdentifier {
-  scheme: string;
-  value: string;
 }
 
 interface RawContactChannel {
@@ -117,12 +118,7 @@ interface ContactEntry {
   provenance?: Record<string, unknown> | null;
   duplicate_party_ids?: string[];
   duplicate_names?: string[];
-  legacy?: boolean;
 }
-
-const LIST_SCHEME_URI = "https://centraid.dev/schemes/lists";
-const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
-const RELATIONS_SCHEME_URI = "urn:duaility:relations";
 
 export default async function personHandler({ input, ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
@@ -149,7 +145,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
     if (!profile || !party) return { person: null };
 
     const [
-      ids,
       channelRowsResult,
       outgoingLinks,
       incomingLinks,
@@ -163,11 +158,10 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       vault,
       shareLinks,
     ] = await Promise.all([
-      ctx.vault.read({
-        entity: "core.party_identifier",
-        where: [{ column: "party_id", op: "eq", value: partyId }],
-        purpose,
-      }),
+      // `core.party_identifier` is NOT read here any more (#883, ruling
+      // O-contact): reachability has one store, and the read-time fold of
+      // legacy `tel`/`email` identifier rows back into this list went with the
+      // rung that moved them onto channels.
       ctx.vault.read({
         entity: "social.contact_channel",
         purpose,
@@ -239,7 +233,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       readPersonShareLinks(ctx.vault, partyId),
     ]);
 
-    const identifierRows = (ids.rows ?? []) as unknown as RawIdentifier[];
     const allChannelRows = (channelRowsResult.rows ??
       []) as unknown as RawContactChannel[];
     const channelRows = allChannelRows.filter(
@@ -270,8 +263,9 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
             concept.notation?.startsWith("people-")
         )
     );
-    const relationSchemeId = schemeRows.find(
-      (scheme) => scheme.uri === RELATIONS_SCHEME_URI
+    const relationSchemeId = findScheme(
+      schemeRows,
+      RELATIONS_SCHEME_URI
     )?.scheme_id;
     const giftTaskIds = new Set(
       incoming
@@ -376,19 +370,19 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
     const interactionNoteRows = (interactionNotes.rows ??
       []) as unknown as Array<RawNote & { target_id: string }>;
 
-    const listScheme = schemeRows.find((s) => s.uri === LIST_SCHEME_URI);
     const listConceptIds = new Set<string>(
-      conceptRows
-        .filter((c) => listScheme && c.scheme_id === listScheme.scheme_id)
-        .map((c) => c.concept_id)
+      conceptsInScheme(
+        conceptRows,
+        findScheme(schemeRows, LIST_SCHEME_URI)
+      ).map((c) => c.concept_id)
     );
-    const flagsScheme = schemeRows.find((s) => s.uri === FLAGS_SCHEME_URI);
-    const starredConceptId = flagsScheme
-      ? (conceptRows.find(
-          (c) =>
-            c.scheme_id === flagsScheme.scheme_id && c.notation === "starred"
-        )?.concept_id ?? null)
-      : null;
+    const starredConceptId =
+      findSchemeConcept(
+        schemeRows,
+        conceptRows,
+        FLAGS_SCHEME_URI,
+        STARRED_NOTATION
+      )?.concept_id ?? null;
     let listId: string | null = null;
     let starred = false;
     for (const t of tagRows) {
@@ -451,24 +445,19 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
           ),
         };
       });
-    const channelKeys = new Set(
-      channelRows.map(
-        (channel) => `${channel.kind}:${channel.normalized_value}`
-      )
-    );
-    for (const i of identifierRows) {
-      const kind =
-        i.scheme === "tel" ? "phone" : i.scheme === "email" ? "email" : null;
-      if (!kind) continue;
-      const key = `${kind}:${i.value.trim().toLocaleLowerCase("en-US")}`;
-      if (!channelKeys.has(key))
-        contact.push({ kind, value: i.value, legacy: true });
-    }
-
     const person = {
+      // Stamps ride along: the detail draws the roster's chip (#864).
+      ...Object.fromEntries(
+        Object.values(PENDING_OVERLAY_FIELDS).flatMap((field) =>
+          field in profile
+            ? [[field, (profile as unknown as Record<string, unknown>)[field]]]
+            : []
+        )
+      ),
       party_id: partyId,
       name: party.display_name,
       role: profile.role ?? "",
+      nickname: profile.nickname ?? "",
       avatar_color: profile.avatar_color ?? null,
       cadence_days: profile.cadence_days,
       last_contacted_at: profile.last_contacted_at ?? null,

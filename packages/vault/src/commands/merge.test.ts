@@ -1,6 +1,6 @@
-// core.merge_party (#290): folding a duplicate person re-points
-// every reference — engine FKs, polymorphic (type, id) pairs, identifiers
-// with primary demotion, the external-id map — and deletes the duplicate.
+// core.merge_party (#290): folding a duplicate re-points every reference —
+// engine FKs, polymorphic pairs, identifiers with primary demotion, the
+// external-id map — and deletes the duplicate.
 
 import { beforeEach, describe, expect, test } from "vitest";
 
@@ -54,10 +54,9 @@ describe("merge", () => {
     });
   }
 
-  test("merge re-points identifiers (primary demoted), FK rows and the map; duplicate gone", () => {
+  test("merge re-points reach and keys (preferred demoted), FK rows and the map; duplicate gone", () => {
     const john = addParty("John Smith", "john@work.example");
     const dupe = addParty("J. Smith", "jsmith@personal.example");
-    // A canonical task hanging off the duplicate (engine FK).
     db.vault
       .prepare(
         `INSERT INTO schedule_task
@@ -65,7 +64,6 @@ describe("merge", () => {
        VALUES ('task-1', ?, 'quarterly catch-up', 'needs-action', 0)`
       )
       .run(dupe);
-    // A mapped external id pointing at the duplicate.
     db.vault
       .prepare(
         `INSERT INTO sync_connection (connection_id, kind, label, principal, status, trust, created_at)
@@ -90,13 +88,14 @@ describe("merge", () => {
         .prepare("SELECT 1 AS x FROM core_party WHERE party_id = ?")
         .get(dupe)
     ).toBeUndefined();
+    // A channel merges by the register's rule: the survivor keeps its
+    // preferred slot and the incoming address is demoted, never dropped.
     const ids = db.vault
       .prepare(
-        "SELECT value, is_primary FROM core_party_identifier WHERE party_id = ? ORDER BY value"
+        `SELECT normalized_value AS value, is_preferred AS is_primary
+           FROM social_contact_channel WHERE party_id = ? ORDER BY value`
       )
       .all(john);
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect(ids.map((row) => ({ ...row }))).toStrictEqual([
       { value: "john@work.example", is_primary: 1 },
       { value: "jsmith@personal.example", is_primary: 0 }, // demoted, never lost
@@ -199,10 +198,13 @@ describe("merge", () => {
       .run(now, now, now, now, now, now);
     db.vault
       .prepare(
-        `INSERT INTO core_party_identifier (identifier_id, party_id, scheme, value, is_primary, valid_from)
-       VALUES ('di-1', 'dup-a', 'email', 'js@work.example', 1, ?), ('di-2', 'dup-b', 'tel', '+15550001', 1, ?)`
+        `INSERT INTO social_contact_channel
+           (channel_id, party_id, kind, value, normalized_value, is_preferred,
+            created_at, updated_at)
+       VALUES ('dc-1', 'dup-a', 'email', 'js@work.example', 'js@work.example', 1, ?, ?),
+              ('dc-2', 'dup-b', 'phone', '+15550001', '+15550001', 1, ?, ?)`
       )
-      .run(now, now);
+      .run(now, now, now, now);
     const outcome = gw.invoke(owner, {
       command: "core.find_duplicate_parties",
       input: {},
@@ -218,7 +220,7 @@ describe("merge", () => {
     );
     expect(pair).toBeDefined();
     expect(String(pair?.a_identifiers)).toContain("email:js@work.example");
-    expect(String(pair?.b_identifiers)).toContain("tel:+15550001");
+    expect(String(pair?.b_identifiers)).toContain("phone:+15550001");
     expect(
       candidates.some((c) => c.party_a === "solo" || c.party_b === "solo")
     ).toBe(false);

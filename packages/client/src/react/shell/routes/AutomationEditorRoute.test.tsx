@@ -82,8 +82,7 @@ vi.mock(import("../PageScroll.js"), () => ({
 vi.mock(import("../../screens/AutomationEditorScreen.js"), () => ({
   default: (props: AutomationEditorBridgeProps) => {
     captured.props = props;
-    // An empty fragment renders nothing (same as `null` did), but matches the
-    // real screen's `JSX.Element` return type.
+    // Empty fragment: renders nothing, still a `JSX.Element`.
     return <></>;
   },
 }));
@@ -196,7 +195,7 @@ describe("AutomationEditorRoute", () => {
     ]);
     api.listVaultEntityTypes
       .mockReset()
-      .mockResolvedValue(["business.invoice", "core.transaction"]);
+      .mockResolvedValue(["schedule.task", "core.transaction"]);
     api.readAutomationSource
       .mockReset()
       .mockResolvedValue({ manifest: "{}", handler: "export default {}" });
@@ -219,14 +218,14 @@ describe("AutomationEditorRoute", () => {
         title: "Invoice amount",
         subtitle: null,
         thumbnail_content_id: null,
-        sourceType: "business.invoice",
+        sourceType: "schedule.task",
         sourceId: "invoice-1",
         sourceField: "amount",
       },
     ]);
     api.searchVaultEntities.mockReset().mockResolvedValue([
       {
-        type: "business.invoice",
+        type: "schedule.task",
         id: "invoice-1",
         status: "active",
         title: "Invoice 1",
@@ -391,7 +390,7 @@ describe("AutomationEditorRoute", () => {
           model: null,
           name: "Daily revised",
           harness: null,
-          triggers: [{ kind: "data", entities: ["business.invoice"] }],
+          triggers: [{ kind: "data", entities: ["schedule.task"] }],
         })
       ).resolves.toBe(true);
       expect(api.updateAutomation).toHaveBeenCalledWith(
@@ -403,7 +402,7 @@ describe("AutomationEditorRoute", () => {
           model: null,
           harness: null,
           vault: expect.objectContaining({
-            scopes: [{ schema: "business", table: "invoice", verbs: "read" }],
+            scopes: [{ schema: "schedule", table: "task", verbs: "read" }],
           }),
         })
       );
@@ -416,9 +415,9 @@ describe("AutomationEditorRoute", () => {
       );
 
       await expect(bridge.onCompile(true)).resolves.toBe("compile-1");
-      await expect(bridge.onSearchEntities("invoice")).resolves.toHaveLength(3);
+      await expect(bridge.onSearchEntities("task")).resolves.toHaveLength(3);
       await expect(bridge.loadEntityTypes?.()).resolves.toContain(
-        "business.invoice"
+        "schedule.task"
       );
       const catalog = await bridge.loadConnectorCatalog?.();
       expect(catalog?.[0]?.connection?.connectionId).toBe("connection-1");
@@ -484,14 +483,14 @@ describe("AutomationEditorRoute", () => {
       });
       const bridge = await mount({
         templateId: "template-1",
-        watchEntity: "business.invoice",
+        watchEntity: "schedule.task",
       });
       await bridge.loadData();
       expect(helpers.buildCreateData).toHaveBeenCalledWith(
         expect.objectContaining({
           instructions: "Template instructions",
           template: expect.objectContaining({ id: "template-1" }),
-          watchEntity: "business.invoice",
+          watchEntity: "schedule.task",
         })
       );
       await expect(

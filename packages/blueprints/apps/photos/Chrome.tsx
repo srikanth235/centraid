@@ -1,11 +1,16 @@
 // The Photos chrome as JSX — a ROUTE INSIDE THE FRAME (v4 §3). NONE of these
 // may come back: hamburger or drawer, in-pane search, zoom pair, slideshow
 // button, the app's own title/count/Select/Import, `#noticeBanner`, a consent
-// strip — the frame owns each, and permission is a SCREEN (§13). Overlays
-// re-scope absolute against `.shell` (#505 trap 7); selection has NO overlay
-// of its own (§6). The imperative nodes keep their ids and a literal `hidden`.
+// strip — the frame owns each, and permission is a SCREEN (§13), so no
+// `ConsentBanner`/`NoticeBanner` stands here. Overlays re-scope absolute
+// against `.shell` (#505 trap 7); selection has NO overlay of its own (§6).
+// The imperative nodes keep their ids and a literal `hidden`.
 import type { ReactNode } from "react";
 
+import { DropOverlay, ScrollHost } from "../_shared/AppChrome.tsx";
+import { chromeClass } from "../_shared/chrome-kit.ts";
+import { KitModal } from "../_shared/KitModal.tsx";
+import { MEDIA_ROOT_ATTR } from "./media-observer.ts";
 import { EMPTY_ACTIONS, EMPTY_TITLE } from "./view-copy.ts";
 
 import styles from "./Chrome.module.css";
@@ -40,13 +45,25 @@ export function Chrome({ slots }: ChromeProps): ReactNode {
             already loaded bytes. */}
         <div id="live" className={styles.live} hidden={denied}>
           <div id="shelfStripMount">{slots.shelfStrip}</div>
+          {/* NOT `ChromeToolbar`: this is a MOUNT two owners take turns at
+              (`selection.tsx` measures and disables it by id), and each writes
+              its own `role="toolbar"` row into it — a second role here would
+              announce two toolbars where one stands. */}
           <div id="toolbarMount">{slots.toolbar}</div>
 
           {/* The rail is a flex SIBLING of the pane, which is what makes the
               two columns scroll independently. */}
           <div className={styles.contentRow}>
             {slots.navRail}
-            <div id="scrollPane" className={styles.scroll}>
+            {/* The lookahead observer roots itself HERE (media-observer.ts):
+                a `rootMargin` only expands an observer's own root, so a
+                viewport-rooted one is clipped by this pane and never looks a
+                screen ahead. Declared, never re-derived per tile. */}
+            <ScrollHost
+              id="scrollPane"
+              className={styles.scroll}
+              data={{ [MEDIA_ROOT_ATTR]: "" }}
+            >
               {slots.banner}
               <section
                 id="grid"
@@ -89,7 +106,7 @@ export function Chrome({ slots }: ChromeProps): ReactNode {
                   </button>
                 </div>
               </div>
-            </div>
+            </ScrollHost>
           </div>
         </div>
       </main>
@@ -120,46 +137,49 @@ export function Chrome({ slots }: ChromeProps): ReactNode {
         hidden
       />
 
-      <dialog
+      {/* The kit modal's INLINE layer for all three: `open` is mandatory and
+          visibility is driven through `hidden` from the app's own code, so the
+          top layer — which would cover the frame's app bar — is never taken. */}
+      <KitModal
+        layer="inline"
         id="lightbox"
-        open
         className={styles.lightbox}
-        aria-modal="true"
-        aria-label="Photo viewer"
-        tabIndex={-1}
+        ariaModal
+        label="Photo viewer"
+        focusable
         hidden
       >
         {slots.lightbox}
-      </dialog>
-      {/* Never `showModal()`: `open` is mandatory, and visibility is driven
-          through `hidden`. */}
-      <dialog
+      </KitModal>
+      <KitModal
+        layer="inline"
         id="slideshow"
-        open
         className={styles.slideshow}
-        aria-modal="true"
-        aria-label="Slideshow"
+        ariaModal
+        label="Slideshow"
         hidden
       >
         {slots.slideshow}
-      </dialog>
-      <dialog
+      </KitModal>
+      <KitModal
+        layer="inline"
         id="picker"
-        open
-        className={`kit-modal-back ${styles.picker}`}
-        aria-label="Add photos to album"
+        className={chromeClass("kit-modal-back", styles.picker)}
+        label="Add photos to album"
         hidden
       >
         {slots.picker}
-      </dialog>
-      <div
+      </KitModal>
+      {/* `upload.ts` writes `hidden` on this node itself while a drag is over
+          the pane, so `visible` is the resting state and never changes: React
+          re-renders around the attribute rather than reclaiming it. */}
+      <DropOverlay
         id="dropOverlay"
-        className={`kit-drop ${styles.dropOverlay}`}
-        aria-hidden="true"
-        hidden
+        className={styles.dropOverlay}
+        visible={false}
       >
-        <div className="kit-drop-card">Drop to add to your library</div>
-      </div>
+        Drop to add to your library
+      </DropOverlay>
     </div>
   );
 }

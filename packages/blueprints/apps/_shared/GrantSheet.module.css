@@ -94,10 +94,10 @@
   color: var(--text-soft);
 }
 
-/* A grant addressed to no vault yet, an invitation still pending: the seam
-   rung, not the error rung. */
-.standingMeta[data-delivery="awaiting_channel"],
-.standingMeta[data-delivery="none"] {
+/* A grant the vault says is still on its way: the seam rung, not the error
+   rung. The attribute carries the WIRE's phrase (#883, ruling V-phrases), so
+   this selector cannot disagree with the words beside it. */
+.standingMeta[data-phrase="on its way"] {
   color: var(--seam);
 }
 

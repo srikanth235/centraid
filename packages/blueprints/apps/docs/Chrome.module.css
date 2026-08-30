@@ -19,18 +19,15 @@
 
 .shell {
   composes: kit-app-shell kit-app-defer-drawer from global;
-  /* THE PAGE MARGIN IS DECLARED ONCE, HERE, AND INHERITED — the same fix
-     Photos made (apps/photos/Chrome.module.css). Every row that spans the pane
-     carried its own: the scroll host a hardcoded 22px, and then the breadcrumb,
-     the filter row and the caption each added `--sp-4` INSIDE it. Rows in the
-     scroll were double-padded — crumb text and filter pills at 38px above cards
-     that began at 22 — and the strip, which is not inside the scroll, landed
-     its first label at a third value again. The handoff gives `breadBlock` and
-     `filterBlock` no inline padding at all for exactly this reason: the stage
-     owns the margin, and a block that adds its own cannot line up with the one
-     beside it. One property now, read by every row, and the compact rung is a
-     one-line change instead of a five-line one. */
-  --content-margin: 22px;
+  /* THE PAGE MARGIN IS NOT DECLARED HERE. Every row that spans the pane reads
+     `--page-margin` — the system's one number, 32px under a pointer and 18px
+     on touch — so nothing in this app restates it (#883). The app-local
+     `--content-margin: 22px` this file used to declare was a third value the
+     product does not have, and the compact rung under `.isNarrow` was a
+     fourth: width is a canvas, not a surface, so a narrower pane carries no
+     margin of its own. The handoff gives `breadBlock` and `filterBlock` no
+     inline padding at all for the same reason — the stage owns the margin, and
+     a block that adds its own cannot line up with the one beside it. */
   /* Docs-specific tokens folded from app.css :root. The shared blueprint layer
      supplies everything else.
 
@@ -223,7 +220,7 @@
   align-items: center;
   gap: var(--sp-3);
   min-block-size: var(--h-control);
-  padding: var(--sp-2) var(--content-margin);
+  padding: var(--sp-2) var(--page-margin);
   flex-wrap: wrap;
   flex-shrink: 0;
 }
@@ -252,7 +249,7 @@
   /* The notice banner is an `<output>` (its native role IS status), which is
      inline by default — the banner shape needs a block box. */
   display: block;
-  margin: 14px var(--content-margin) 0;
+  margin: 14px var(--page-margin) 0;
 }
 
 /* `.toolbar` and everything it held — `.toolbarTitle` / `.title` / `.sub`,
@@ -286,7 +283,7 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 2px var(--content-margin) 40px;
+  padding: 2px var(--page-margin) 40px;
 }
 
 /* ---------- Grid + list containers ---------- */
@@ -359,15 +356,11 @@
 .shell.isNarrow.sideOpen .scrim {
   animation: kit-fade var(--dur-2) var(--ease-entry);
 }
-.shell.isNarrow .topbar {
-  padding-inline: var(--sp-4);
-}
-.shell.isNarrow .banner {
-  margin-inline: var(--sp-4);
-}
-.shell.isNarrow {
-  --content-margin: var(--sp-4);
-}
+/* NO COMPACT MARGIN RUNG HERE (#883). `--page-margin` already steps 32 → 18
+   across the pointer/touch axis, which is the ONE axis the surface has; a
+   narrow pane is the same surface at a smaller width, and a third inset
+   declared on a width class is the "second set of values" DESIGN.md's freedom
+   table refuses an app. */
 .shell.isNarrow .scroll {
   /* Clearance for the host shell's compact action button, which floats over
      the bottom of the app pane — without it the last row's metadata sits

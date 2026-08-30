@@ -28,6 +28,7 @@ import { photosFaceMatchedOn } from "@centraid/blueprints/apps/photos/shared-cop
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import Tappable from "../../kit/components/Tappable";
 import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { gridImageProps } from "../../kit/media/grid-image";
@@ -156,9 +157,8 @@ export default function FaceReview({
     sourceAsset?.assetId ?? "none"
   );
 
-  /** The optimistic row is an upsert for all three answers: a rejection
-   *  deletes nothing, so the local row must land answered or the queue
-   *  rebuilds with the face in it. Rejected/dismissed carry no party (#712). */
+  /** An upsert for all three answers: a rejection deletes nothing, so the row
+   *  must land answered or the queue rebuilds with the face in it (#712). */
   async function answer(
     kind: "confirm" | "reject" | "dismiss",
     partyId?: string
@@ -454,7 +454,7 @@ export default function FaceReview({
                       name this face yourself
                     </Text>
                   </View>
-                  <Pressable
+                  <Tappable
                     accessibilityLabel="Name this face"
                     accessibilityHint={
                       busy
@@ -464,9 +464,6 @@ export default function FaceReview({
                           : undefined
                     }
                     accessibilityRole="button"
-                    accessibilityState={{
-                      disabled: busy || people.length === 0,
-                    }}
                     disabled={busy || people.length === 0}
                     onPress={() => setPickerOpen((v) => !v)}
                   >
@@ -475,7 +472,7 @@ export default function FaceReview({
                     >
                       Name →
                     </Text>
-                  </Pressable>
+                  </Tappable>
                 </View>
                 {pickerOpen ? (
                   <View style={styles.picker}>
@@ -515,10 +512,9 @@ export default function FaceReview({
                       keep the face, do not name it
                     </Text>
                   </View>
-                  <Pressable
+                  <Tappable
                     accessibilityLabel="Keep unnamed"
                     accessibilityRole="button"
-                    accessibilityState={{ disabled: busy }}
                     disabled={busy}
                     onPress={() => void dismiss()}
                   >
@@ -527,7 +523,7 @@ export default function FaceReview({
                     >
                       Keep unnamed
                     </Text>
-                  </Pressable>
+                  </Tappable>
                 </View>
                 <View style={styles.row}>
                   <View style={styles.rowText}>
@@ -538,7 +534,7 @@ export default function FaceReview({
                       decide later; it stays in the queue
                     </Text>
                   </View>
-                  <Pressable
+                  <Tappable
                     accessibilityLabel="Skip this face"
                     accessibilityRole="button"
                     onPress={skip}
@@ -548,7 +544,7 @@ export default function FaceReview({
                     >
                       Skip
                     </Text>
-                  </Pressable>
+                  </Tappable>
                 </View>
               </View>
             </>

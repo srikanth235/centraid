@@ -18,17 +18,16 @@ import {
 import type { WireRow, WireTallyGroup } from "./closure.js";
 import { freeId, insert, one } from "./sql.js";
 
-/** What one projected row became in the audience vault. */
+/** What a projected row became in the audience vault. */
 export interface ProjectedRow {
   itemId: string;
   deduped: boolean;
 }
 
 /**
- * Re-seal a Locker item under the AUDIENCE vault's DEK. The sealed value's
- * AAD binds the row id, so a re-keyed row must also be re-sealed under its
- * (possibly new) id — which is why this needs both keys and therefore only
- * works in the local composition.
+ * Re-seal a Locker item under the AUDIENCE vault's DEK. The AAD binds the row
+ * id, so a re-keyed row must be re-sealed under its new id — which needs both
+ * keys, and so works only in the local composition.
  */
 export function projectLockerItem(
   audience: DatabaseSync,
@@ -64,10 +63,9 @@ export function projectLockerItem(
 }
 
 /**
- * Project a whole group ledger. `audienceContentId` maps an origin receipt's
- * content item onto the row the closure's shared content pool already
- * projected; a receipt whose content never crossed is skipped rather than
- * inserted against a dangling FK.
+ * `audienceContentId` maps an origin receipt's content item onto the row the
+ * shared content pool already projected; a receipt whose content never crossed
+ * is skipped rather than inserted against a dangling FK.
  */
 export function projectTallyGroup(
   audience: DatabaseSync,
@@ -106,8 +104,8 @@ export function projectTallyGroup(
 }
 
 /**
- * Accounting parties, adopted where the audience already knows the id. An
- * avatar is dropped: it names a content item that was never in this closure.
+ * Adopted where the audience knows the id. The avatar is dropped: it names a
+ * content item that was never in this closure.
  */
 function projectParties(
   audience: DatabaseSync,
@@ -131,7 +129,7 @@ function projectParties(
   return partyIds;
 }
 
-/** The group's circle, re-owned by the audience and named without collision. */
+/** Re-owned by the audience and named without collision. */
 function projectCircle(
   audience: DatabaseSync,
   closure: WireTallyGroup
@@ -177,6 +175,11 @@ function projectLedger(
       ...split,
       party_id: mappedParty(partyIds, split.party_id),
     });
+  for (const payer of closure.payers)
+    insert(audience, "tally_expense_payer", {
+      ...payer,
+      party_id: mappedParty(partyIds, payer.party_id),
+    });
   for (const settlement of closure.settlements)
     insert(audience, "tally_settlement", {
       ...settlement,
@@ -205,23 +208,32 @@ function projectLedger(
     insert(audience, "schedule_recurrence_exception", exception);
 }
 
-/** Receipt rows and their OCR structure, so the audience ledger reconciles. */
+/** Receipts and their OCR structure, so the audience ledger reconciles. */
 function projectReceipts(
   audience: DatabaseSync,
   closure: WireTallyGroup,
   partyIds: Map<string, string>,
   audienceContentId: (originContentId: string) => string | undefined
 ): void {
+  // A receipt crosses as the attachment it is (#883).
+  const crossed = new Set<string>();
   for (const receipt of closure.receipts) {
     const contentId = audienceContentId(String(receipt.content_id));
     if (!contentId) continue;
-    insert(audience, "tally_expense_receipt", {
-      ...receipt,
-      content_id: contentId,
-    });
+    insert(audience, "core_attachment", { ...receipt, content_id: contentId });
+    crossed.add(String(receipt.attachment_id));
   }
+  // A line whose receipt did NOT cross keeps its typed amounts and loses only
+  // the photo pointer, which would otherwise name an attachment this vault
+  // does not hold.
   for (const line of closure.lineItems)
-    insert(audience, "tally_expense_line_item", line);
+    insert(audience, "tally_expense_line_item", {
+      ...line,
+      receipt_id:
+        line.receipt_id != null && crossed.has(String(line.receipt_id))
+          ? line.receipt_id
+          : null,
+    });
   for (const allocation of closure.lineAllocations)
     insert(audience, "tally_expense_line_allocation", {
       ...allocation,
@@ -236,7 +248,7 @@ function mappedParty(ids: Map<string, string>, value: unknown): string {
   return mapped;
 }
 
-/** The audience vault's own owner — every re-owned row points here. */
+/** Every re-owned row points here. */
 export function ownerPartyId(db: DatabaseSync): string {
   const owner = db
     .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")

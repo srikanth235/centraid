@@ -26,7 +26,6 @@ import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
 import { photosPendingLine } from "./photos-pending";
 import {
-  NO_DOWNLOAD_REASON,
   batchFavorite,
   batchPurge,
   batchRestore,
@@ -42,6 +41,7 @@ import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
+import { useSelectionDownload } from "./use-photo-download";
 import { usePhotoSelectionShare } from "./use-photo-selection-share";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
@@ -56,7 +56,7 @@ export default function PhotoStateView({
   navigation,
 }: PhotosScreenProps<"PhotoStateView">): React.JSX.Element {
   const { colors } = useTheme();
-  const { session } = useReplica();
+  const { session, online } = useReplica();
   const { refreshing, refreshNow } = useReplicaRefresh();
   const timeline = usePhotoTimeline();
   const { pending } = usePendingChanges(session);
@@ -144,6 +144,10 @@ export default function PhotoStateView({
     surfaceWriteOutcome(result);
   };
   const selected = vaultAssets(assets, selection);
+  const downloadHandler = useSelectionDownload({
+    online,
+    targets: () => selected,
+  });
   const share = usePhotoSelectionShare(
     () => selected,
     () => setSelection(new Set())
@@ -232,7 +236,7 @@ export default function PhotoStateView({
         : writeBlockedReason!,
     },
     share: share.handler,
-    download: { unavailableReason: NO_DOWNLOAD_REASON },
+    download: downloadHandler,
     trash: canWrite
       ? {
           run:

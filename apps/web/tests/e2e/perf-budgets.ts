@@ -23,49 +23,30 @@ export interface OpenBudget {
 
 export interface AppOpenBudget extends OpenBudget {
   /**
-   * Max summed `encodedBodySize` in bytes for SAME-ORIGIN resources.
+   * Max summed `encodedBodySize` for SAME-ORIGIN resources. `transferSize` is 0
+   * for anything the SW answers from Cache Storage, so wire bytes cannot fence
+   * WEIGHT: `maxTransferBytes` says "an open must not go back to the network",
+   * this says "an open must not get heavier".
    *
-   * `transferSize` is 0 for anything the service worker answers out of Cache
-   * Storage, and by the time an app can be opened the SW has precached the
-   * whole dist — so wire bytes for an inline app open are 0 and cannot fence
-   * WEIGHT. `encodedBodySize` is populated either way, so it is what grows
-   * when an app's chunk grows. The two ceilings fence different regressions:
-   * `maxTransferBytes` says "an open must not go back to the network",
-   * `maxEncodedBytes` says "an open must not get heavier".
-   *
-   * READ IT AS DECODED (RAW) WEIGHT, NEVER AS A WIRE FIGURE. Cache Storage
-   * holds decoded bodies, so an SW-served chunk reports its raw size here —
-   * measured directly: a 50,020-byte script served from the SW cache reports
-   * `transferSize: 0, encodedBodySize: 50,020`. Brotli would put the same
-   * chunk near a quarter of that, so re-seeding this ceiling off a compressed
-   * number would set it ~4x too tight.
+   * READ IT AS DECODED (RAW) WEIGHT, NEVER AS A WIRE FIGURE — Cache Storage
+   * holds decoded bodies. Re-seeding this off a Brotli number would set it
+   * roughly 4x too tight.
    */
   maxEncodedBytes: number;
   /**
-   * Min summed `encodedBodySize` in bytes for SAME-ORIGIN resources — an
-   * up-only FLOOR, not a ceiling (`ratchet-floors.mjs` treats `min*` keys as
-   * floors, so lowering one needs an approvedDeviation just as widening a
-   * ceiling does).
-   *
-   * A bare `> 0` guard is not enough to keep this rig honest. If a future
-   * shell change modulepreloads the app chunk, or the bundling workstream
-   * folds `app-inline` into `boot` (the stated goal in scripts/perf/README.md),
-   * the measured cold delta collapses from ~112 KB to whatever incidental byte
-   * lands in the window — every ceiling above passes, and the app-open weight
-   * ratchet silently stops measuring the app. The floor makes that failure
-   * loud instead of green.
+   * An up-only FLOOR, not a ceiling (`ratchet-floors.mjs` treats `min*` keys as
+   * floors). A bare `> 0` guard would not keep the rig honest: modulepreloading
+   * the app chunk, or folding `app-inline` into `boot`, collapses the measured
+   * cold delta to whatever incidental byte lands in the window — every ceiling
+   * passes and the weight ratchet silently stops measuring the app.
    */
   minEncodedBytes: number;
   /**
-   * Max resource-timing entries across ALL origins, not just same-origin.
-   *
-   * The byte fences above are deliberately same-origin, because the harness
-   * gateway answers on another port without a Timing-Allow-Origin header and
-   * reports 0 bytes for every control / replica / query call. That makes
-   * cross-origin BYTES unmeasurable here — but not cross-origin REQUESTS,
-   * which are counted honestly. Without this key an app open could fire any
-   * number of extra gateway round-trips completely unfenced, which is the
-   * regression an inline app is most likely to introduce.
+   * Max resource-timing entries across ALL origins. The byte fences above are
+   * same-origin because the harness gateway reports 0 bytes without a
+   * Timing-Allow-Origin header — cross-origin REQUESTS are still countable,
+   * and unfenced gateway round-trips are the regression an inline app is most
+   * likely to introduce.
    */
   maxTotalRequests: number;
 }
@@ -190,10 +171,14 @@ export const perfBudgets: PerfBudgets = {
       // Ceilings = measured + 1 request / ~6% byte headroom for CI jitter.
       maxRequests: 10,
       // Measured 0: the SW precache crawl (apps/web/public/sw.js) finishes
-      // during install, and the probe waits for `serviceWorker.controller`
-      // before opening, so every chunk is answered from Cache Storage. The
-      // ceiling is not 0 because a single conditional revalidation is legal;
-      // it is small enough that re-fetching one app chunk fails the build.
+      // before `clients.claim()`, and the probe waits for
+      // `serviceWorker.controller` before opening, so every chunk is answered
+      // from Cache Storage. #883 C5 moved that crawl out of `install` and into
+      // `activate` and made it parallel, but deliberately kept it AHEAD of
+      // `claim()` precisely so this number stays 0 — claiming first would let
+      // an app open against a half-filled cache. The ceiling is not 0 because a
+      // single conditional revalidation is legal; it is small enough that
+      // re-fetching one app chunk fails the build.
       maxTransferBytes: 8_000,
       maxEncodedBytes: 120_000,
       // Floor: CI linux (PR #800 run 31921007894) measured 80_561 on both

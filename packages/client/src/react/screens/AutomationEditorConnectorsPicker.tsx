@@ -7,6 +7,7 @@ import type {
 } from "../screen-contracts.js";
 import { cx } from "../ui/cx.js";
 import { Button, Icon } from "../ui/index.js";
+import ShellModal from "../ui/ShellModal.js";
 import { ConnectorBrandGlyph } from "./connectorBrandMarks.js";
 import type { ConnectorTone } from "./connectorBrandMarks.js";
 
@@ -301,12 +302,12 @@ export function AutomationEditorConnectorsPicker({
   };
 
   return (
-    <dialog
-      open
+    <ShellModal
+      layer="inline"
       className={styles.connPicker}
-      aria-modal="false"
-      aria-labelledby={titleId}
-      data-testid="automation-connectors-picker"
+      ariaModal={false}
+      labelledBy={titleId}
+      data={{ "data-testid": "automation-connectors-picker" }}
     >
       <div className={styles.connPickerHead}>
         <div>
@@ -502,6 +503,6 @@ export function AutomationEditorConnectorsPicker({
           })
         )}
       </div>
-    </dialog>
+    </ShellModal>
   );
 }

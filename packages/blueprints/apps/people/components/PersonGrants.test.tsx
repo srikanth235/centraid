@@ -1,19 +1,10 @@
 // @vitest-environment jsdom
 //
-// THE PERSON SCREEN AS THE GRANT DASHBOARD (#825). Five claims:
-//
-//  1. Every live grant reaching the party is listed, from the ONE read the
-//     ruling names (`?partyId=`), and a revoked grant is not among them.
-//  2. `awaiting_channel` reads as `Invitation pending`, and a person this
-//     vault has never reached reads as an invitation opportunity — never as an
-//     error, and never hidden.
-//  3. `Revoke` asks first in the KIT'S words, and then reports the ROUTE'S
-//     sentence verbatim.
-//  4. Absent is never empty: a refused read prints the refusal, an unknown
-//     party says the vault has no record of them, and only a read that came
-//     back empty says nothing is shared.
-//  5. Sharing is ONE GESTURE with no link step: the sheet's own Share sends
-//     the grant the sheet was opened on, for a person with no channel at all.
+// THE PERSON SCREEN AS THE GRANT DASHBOARD (#825). The claims are the test
+// names below; two constraints they encode and a reader must not relax: the
+// listing comes from the ONE read the ruling names (`?partyId=`), and every
+// standing is the VAULT'S phrase (#883, ruling V-phrases), never one derived
+// here.
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -46,6 +37,9 @@ function grant(overrides: Partial<GrantRecord> = {}): GrantRecord {
         detail: null,
       },
     ],
+    // The vault's own words for where it stands (ruling V-phrases).
+    phrase: "shared",
+    reason: "the vault it addresses is holding it",
     ...overrides,
   };
 }
@@ -67,6 +61,8 @@ function stubDoor(overrides: Partial<GrantDoor> = {}): GrantDoor {
     forSubject: () => Promise.resolve([]),
     create: () => Promise.resolve({ ok: true, outcome: "created" as const }),
     revoke: () => Promise.resolve({ ok: true, message: "no longer shared" }),
+    changeCapability: () =>
+      Promise.resolve({ ok: true, outcome: "created" as const }),
     ...overrides,
   };
 }
@@ -147,7 +143,7 @@ describe("the person screen's grant dashboard", () => {
     expect(text).toContain("document");
     expect(text).toContain("photo");
     expect(text).not.toContain("folder");
-    expect(text).toContain("Delivered");
+    expect(text).toContain("Shared");
   });
 
   test("an unreached person is an invitation opportunity, not an error", async () => {
@@ -159,6 +155,9 @@ describe("the person screen's grant dashboard", () => {
             channel: null,
             grants: [
               grant({
+                phrase: "on its way",
+                reason:
+                  "there is no way to reach them yet; the ask is recorded",
                 fulfillment: [
                   {
                     peerVaultId: "vault-priya",
@@ -176,7 +175,8 @@ describe("the person screen's grant dashboard", () => {
     // The reach line names the opportunity; the grant row names the wait.
     expect(text).toContain("Not reached yet");
     expect(text).toContain("Sharing sends an invitation first.");
-    expect(text).toContain("Invitation pending");
+    // The row's standing is the WIRE's phrase, never one derived here.
+    expect(text).toContain("On its way");
   });
 
   test("revoke asks in the kit's words, then reports the route's sentence", async () => {

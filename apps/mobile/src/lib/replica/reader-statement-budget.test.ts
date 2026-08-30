@@ -1,33 +1,28 @@
 // How many SQLite statements one mounted read costs (#880).
 //
-// `tests/experience-budgets/client-query-counts.json` fences the gateway's
-// vault plane by intercepting `DatabaseSync.prepare` and counting statements
-// per screen (tests/quality/first-paint-query-counts.test.ts). The phone had no
-// counterpart: its reads never touch that plane, they go to the mounted
-// multi-vault reader, and nothing said how many statements a screen's worth of
-// them costs. A read that quietly grew a per-scope round trip — one more
-// existence probe, one more metadata lookup — would have shown up only as a
-// slower Home on somebody's device.
-//
-// This budget is stated in STATEMENTS, not milliseconds, and therefore does not
-// belong in tests/experience-budgets/mobile.json: that directory is "what the
-// vault owner feels", and its README is explicit that a machine-cost number
-// belongs with the machine-cost budgets instead. So the ceiling lives here,
-// next to the reader it fences, and this test is its whole enforcement.
+// Phone reads go to the mounted multi-vault reader, never the gateway's vault
+// plane that `client-query-counts.json` fences, so a read that grows a
+// per-scope round trip would otherwise surface only as a slower Home. The
+// budget is in STATEMENTS, not milliseconds, so it lives beside the reader it
+// fences rather than in tests/experience-budgets/mobile.json ("what the vault
+// owner feels"), and this test is its whole enforcement.
 //
 // What the shape is, per read, over S mounted scopes:
 //
 //   1  entity-schema union      (one statement across all scopes)
 //   1  content-hash lookup      (cached per app+purpose+entity after the first)
 //   S  pending-overlay probes   (one `sqlite_master` existence check per scope)
-//   1  order-pushdown probe     (ordered reads only; refused ones never probe)
-//   1  canonical page           (one UNION, per-scope `ORDER BY … LIMIT` inside)
+//   1  composed page            (one UNION of per-vault arms, ordered and
+//                                limited once at the top — #883 D1)
 //   S  source-state reads       (cursor + coverage, one per scope)
 //
 // So a read costs `2S + k`, k small — linear in MOUNTED VAULTS and constant in
 // LIBRARY SIZE. That second half is the load-bearing claim: the fixture below
 // saturates every ordered page, so the numbers are measured on the path a real
 // library takes, not on an empty vault.
+// An ordered read carries no separate order probe: the page proves its own
+// order with window columns, and the two shapes it cannot answer for say so
+// (`mounted-read-scoping.ts`).
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -343,12 +338,14 @@ function household(): {
   return { driver, reader: new MultiVaultReplicaReader(driver, scopes) };
 }
 
-/** Classify one statement into the six kinds a read is made of. */
+/** Classify one statement into the kinds a read is made of. */
 function bucket(sql: string): string {
   if (sql.includes("sqlite_master")) return "overlayProbe";
   if (sql.includes("replica_intent_outbox")) return "overlayRows";
-  if (sql.includes("AS order_withheld")) return "orderProbe";
-  if (sql.includes("r.payload_json, r.oversized_json")) return "rows";
+  // The census shares the page's scan, so it has to be recognised first.
+  if (sql.includes("count(DISTINCT")) return "tieCensus";
+  if (sql.includes("AS verdict")) return "page";
+  if (sql.includes("r.row_id, r.payload_json")) return "overlayTargets";
   if (sql.includes("replica_bootstrap_progress")) return "state";
   if (sql.includes("replica_entity_schema AS es")) return "schema";
   return "other";
@@ -411,19 +408,18 @@ describe("mounted reader statement budget (#880)", () => {
       expect(shapeOf(driver.statements)).toStrictEqual({
         schema: 2,
         overlayProbe: SCOPES.length,
-        orderProbe: 1,
-        rows: 1,
+        page: 1,
         state: SCOPES.length,
       });
       // `schema: 2` is the entity-schema union plus the content-hash lookup,
       // which reads the same table; the second is cached from here on.
-      expect(driver.statements).toHaveLength(2 * SCOPES.length + 4);
+      expect(driver.statements).toHaveLength(2 * SCOPES.length + 3);
     } finally {
       reader.close();
     }
   });
 
-  test("an id-filtered read on a content-hashed entity never probes an order", async () => {
+  test("an id-filtered read on a content-hashed entity is still one page", async () => {
     const { driver, reader } = household();
     try {
       await reader.read(
@@ -431,8 +427,9 @@ describe("mounted reader statement budget (#880)", () => {
         idFilter("core.content_item", "content_id", ["content-personal-0001"])
       );
       const counts = shapeOf(driver.statements);
-      expect(counts["orderProbe"]).toBeUndefined();
-      expect(counts["rows"]).toBe(1);
+      // No order to prove and no tie to census: the whole read is one page.
+      expect(counts["tieCensus"]).toBeUndefined();
+      expect(counts["page"]).toBe(1);
     } finally {
       reader.close();
     }
@@ -441,16 +438,16 @@ describe("mounted reader statement budget (#880)", () => {
   /**
    * THE CEILING. 12 reads over 4 mounted vaults.
    *
-   * Observed 2026-08-27, Node SQLite driver over the production reader: 135
-   * statements — exactly `12 x (1 schema + 4 overlay probes + 1 page + 4
-   * states) + 12 content-hash lookups + 3 order probes`, with no residue. The
-   * ceiling is that number plus ~12% headroom, so one more tile (11) lands
-   * without a fight while a new per-scope round trip inside the reader (12 at
-   * once, and 12 more for every mounted vault a household adds) does not. It
-   * may only fall.
+   * Observed 2026-08-28 over the composed plan (#883 D1), Node SQLite driver
+   * over the production reader: 132 statements — exactly `12 x (1 schema + 4
+   * overlay probes + 1 page + 4 states) + 12 content-hash lookups`, with no
+   * residue. The ceiling is that number plus ~12%
+   * headroom, so one more tile lands without a fight while a new per-scope
+   * round trip inside the reader (12 at once, and 12 more for every mounted
+   * vault a household adds) does not. It may only fall.
    */
   test("Home's cold start stays inside its statement ceiling", async () => {
-    const HOME_COLD_START_STATEMENT_CEILING = 152;
+    const HOME_COLD_START_STATEMENT_CEILING = 148;
     const { driver, reader } = household();
     try {
       // Sequential on purpose: the reader caches the content-hash lookup per
@@ -463,10 +460,10 @@ describe("mounted reader statement budget (#880)", () => {
         HOME_COLD_START_STATEMENT_CEILING
       );
       // Linear in mounted vaults, constant in library size: every statement
-      // belongs to one of the six known kinds, and none of them repeats per
-      // row or per page.
+      // belongs to one of the known kinds, and none of them repeats per row or
+      // per page.
       expect(shapeOf(driver.statements)["other"]).toBeUndefined();
-      expect(shapeOf(driver.statements)["rows"]).toBe(HOME_COLD_START.length);
+      expect(shapeOf(driver.statements)["page"]).toBe(HOME_COLD_START.length);
     } finally {
       reader.close();
     }

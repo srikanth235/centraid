@@ -1,6 +1,5 @@
-// Durable time semantics and the organizational spine (#630).
-// These objects are part of the pre-release base contract consumed together by
-// Agenda, Tasks, People, and Tally.
+// Durable time semantics and the organizational spine (#630), for Agenda,
+// Tasks, People and Tally. Rung seven supersedes objects here in place.
 
 export const TIME_ORGANIZE_DDL = `
 ALTER TABLE core_event ADD COLUMN end_tz TEXT;

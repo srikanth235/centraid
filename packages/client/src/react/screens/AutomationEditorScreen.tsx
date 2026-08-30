@@ -56,9 +56,8 @@ type TriggerDraft = {
   event: string;
   filterRepo: string;
 };
-// Mirrors packages/server/src/automation/manifest/manifest.ts `CONDITION_OPS` — kept
-// in sync by hand since the renderer bundle doesn't pull in the automation
-// runtime package (main-process-only dependency today).
+// Mirrors `CONDITION_OPS` in the automation manifest — hand-synced, because the
+// renderer bundle cannot pull in the main-process-only automation runtime.
 const CONDITION_OPS = [
   "eq",
   "ne",
@@ -100,9 +99,8 @@ const EVENTS_BY_CONNECTOR = {
     { id: "issue", label: "Issue event" },
   ],
 } as const;
-/** Run-outcome notifications. Centraid surfaces failures on Home under needs
- *  attention today — only App / Off are real. (Email options were removed so
- *  the control doesn't promise a channel that isn't wired yet.) */
+/** Run-outcome notifications. Failures surface on Home under needs attention;
+ *  only App / Off are wired, and the control must promise nothing else. */
 type NotifyMode = "app" | "off";
 const NOTIFY_OPTIONS: readonly { id: NotifyMode; label: string }[] = [
   { id: "app", label: "In the app" },
@@ -1097,7 +1095,7 @@ export default function AutomationEditorScreen({
                     value={trigger.entity}
                     list={entityTypes}
                     onChange={(entity) => update({ entity })}
-                    placeholder="business.invoice"
+                    placeholder="schedule.task"
                   />
                 </div>
                 <div className={styles.subField}>

@@ -150,7 +150,12 @@ async function bundle(
         REPO_ROOT,
         "packages/design/src/elements/index.ts"
       ),
+      "@centraid/blueprints/apps/_shared/format-kit": path.join(
+        REPO_ROOT,
+        "packages/blueprints/apps/_shared/format-kit.ts"
+      ),
     },
+    loader: { ".module.css": "local-css" },
     bundle: true,
     define: { "process.env.NODE_ENV": '"production"' },
     format: "iife",
@@ -203,6 +208,7 @@ async function mount(
     console.log(`agenda-band pageerror: ${error.message}`);
   });
   await page.addScriptTag({ content: js });
+  await page.waitForSelector('nav[data-band="app"]', { timeout: 15_000 });
 }
 
 test("Agenda's compact band offers Search, never Month, and lands where it says", async ({

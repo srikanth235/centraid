@@ -5,7 +5,7 @@
    full ink rung — every crumb before it is soft, which is what makes the
    chain read as "you are here, and here is the way back". */
 
-/* NO INLINE PADDING. The scroll host supplies `--content-margin`; a block
+/* NO INLINE PADDING. The scroll host supplies `--page-margin`; a block
    that adds its own sits at a different left edge from the row set beneath it,
    which is exactly what it did. The handoff's `breadBlock` is `padding: 12px 0
    8px` for the same reason. */

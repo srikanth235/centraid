@@ -1,4 +1,5 @@
-import { act, createElement } from "react";
+import { act, createElement, memo, useEffect, useState } from "react";
+import type { ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +8,7 @@ import {
   peekQuery,
   resetQueryCache,
   revalidateQuery,
+  useCachedQuery,
   writeQuery,
 } from "./queryCache.js";
 import type { QueryState } from "./queryCache.js";
@@ -137,14 +139,81 @@ describe("queryCache", () => {
     expect(peekQuery<string[]>("apps")?.data).toStrictEqual(["app"]);
   });
 
+  // ── referential stability (#883) ──────────────────────────────────────────
+  //
+  // The hook's result is handed down as a prop and depended on in effects, so a
+  // fresh object per render is a re-render per frame in every consumer under it.
+  describe("stable identity", () => {
+    it("hands back the same object while nothing in the cache moves", async () => {
+      const seen: unknown[] = [];
+      const childRenders = { count: 0 };
+      const host = document.createElement("div");
+      document.body.append(host);
+      const root = createRoot(host);
+      // Written from an EFFECT: reassigning an outer binding during render is
+      // the side effect the compiler rule forbids.
+      const control: { bump: () => void } = { bump: () => undefined };
+
+      // Memoized on the query result alone, so it re-renders exactly when that
+      // identity changes — the cost under measurement.
+      const Child = memo((_: { query: unknown }): null => {
+        childRenders.count += 1;
+        return null;
+      });
+      Child.displayName = "StabilityProbe";
+      const Reader = (): ReactElement => {
+        const [, setTick] = useState(0);
+        useEffect(() => {
+          control.bump = () => setTick((tick) => tick + 1);
+        });
+        const query = useCachedQuery("stable:a", () =>
+          Promise.resolve(["one"])
+        );
+        seen.push(query);
+        return createElement(Child, { query });
+      };
+
+      await act(async () => {
+        root.render(createElement(Reader));
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const settledRenders = childRenders.count;
+      const settledIdentity = seen.at(-1);
+
+      // Three parent renders that change nothing this hook reads.
+      await act(async () => {
+        control.bump();
+      });
+      await act(async () => {
+        control.bump();
+      });
+      await act(async () => {
+        control.bump();
+      });
+
+      expect(seen.at(-1)).toBe(settledIdentity);
+      expect(childRenders.count).toBe(settledRenders);
+
+      // A real change still propagates — stability is not staleness.
+      await act(async () => {
+        writeQuery("stable:a", ["two"]);
+      });
+      expect(seen.at(-1)).not.toBe(settledIdentity);
+      expect(childRenders.count).toBe(settledRenders + 1);
+
+      act(() => root.unmount());
+      host.remove();
+    });
+  });
+
   // ── surviving a reload ────────────────────────────────────────────────────
   //
-  // Route-to-route already works: the value outlives the component. What did
-  // NOT survive was the JS context itself, so a reload — or the OS evicting an
-  // installed PWA — put every screen back to skeletons.
-  //
-  // A reload is simulated the only honest way: `vi.resetModules()` and a fresh
-  // import, so the in-memory Map is genuinely new while localStorage is not.
+  // A reload — or the OS evicting an installed PWA — drops the JS context, so
+  // without write-through every screen returns to skeletons. Simulated the only
+  // honest way: `vi.resetModules()` and a fresh import, so the in-memory Map is
+  // genuinely new while localStorage is not.
   describe("persisted keys", () => {
     type Mod = typeof import("./queryCache.js");
 
@@ -210,9 +279,8 @@ describe("queryCache", () => {
     });
 
     it("shapes the value on the way out — a handle that cannot survive is dropped", async () => {
-      // Home's mosaic carries `URL.createObjectURL` handles, which die with the
-      // document that made them. Persisting one paints a broken image on the
-      // very boot this exists to speed up.
+      // `URL.createObjectURL` handles die with their document, so persisting
+      // one paints a broken image on the very boot this speeds up.
       const first = await reboot();
       await readOnce(
         first,
@@ -240,10 +308,8 @@ describe("queryCache", () => {
     });
 
     it("survives a loader that resolves with nothing, and drops the stale copy", async () => {
-      // `JSON.stringify(undefined)` is `undefined`, not a string, so a byte
-      // check OUTSIDE the settle handler's try would throw and kill the publish
-      // that follows it: the key would stay on its hydrated copy forever and
-      // the revalidation would become a silent unhandled rejection.
+      // `JSON.stringify(undefined)` is not a string, so the byte check must
+      // stay inside the settle handler's try.
       const mod = await reboot();
       await readOnce(mod, "home:none", () => Promise.resolve({ n: 1 }));
       expect(

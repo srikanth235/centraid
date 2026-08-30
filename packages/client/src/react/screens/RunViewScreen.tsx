@@ -11,7 +11,7 @@ import type {
   RunViewSnapshot,
 } from "../screen-contracts.js";
 import { cx } from "../ui/cx.js";
-import { Icon } from "../ui/index.js";
+import { Button, Icon } from "../ui/index.js";
 import Message from "./AssistantMessage.js";
 import type { MessageCallbacks } from "./AssistantMessage.js";
 
@@ -190,9 +190,12 @@ export default function RunViewScreen({
     return (
       <div className={au.auLoading}>
         <div className={au.auCrumb}>
-          <button type="button" onClick={onBack}>
-            Automations
-          </button>
+          <Button
+            variant="quiet"
+            size="chrome"
+            label="Automations"
+            onClick={onBack}
+          />
           <span className={au.auCrumbSep} aria-hidden="true">
             <Icon name="ArrowRight" size={12} />
           </span>

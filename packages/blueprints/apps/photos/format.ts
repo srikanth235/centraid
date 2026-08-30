@@ -1,26 +1,23 @@
-// Pure formatting/predicate helpers over an asset row — no DOM, IO or state.
+// Pure formatting over an asset row — no DOM, IO or state.
 import { fmtBytes, localDayKey } from "@centraid/design/elements";
 
-import type { Asset, CustodyMeta, ExifRow } from "./types.ts";
+import {
+  fmtDay as sharedFmtDay,
+  mediaClock as clock,
+} from "../_shared/format-kit.ts";
+import type { Asset, ExifRow } from "./types.ts";
 
 export function dayKey(iso: string | number | Date | null | undefined): string {
   // Local wall clock, never the UTC slice: an evening photo is not tomorrow's.
   return iso ? localDayKey(iso) : "";
 }
 
+/** Kit words for Today/Yesterday; the short weekday is Photos' own. */
 export function fmtDay(key: string): string {
-  if (!key) return "Undated";
-  if (key === localDayKey(new Date())) return "Today";
-  if (key === localDayKey(new Date(Date.now() - 86400000))) return "Yesterday";
-  try {
-    return new Date(`${key}T00:00:00`).toLocaleDateString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return key;
-  }
+  return sharedFmtDay(key, {
+    absolute: { day: "numeric", month: "short", weekday: "short" },
+    undated: "Undated",
+  });
 }
 
 export function fmtMonth(key: string): string {
@@ -43,6 +40,10 @@ export function toLocalInputValue(iso: string | null | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// One clock, the kit's, so two surfaces cannot report two lengths for one
+// recording (#883).
+export { mediaClock as clock } from "../_shared/format-kit.ts";
+
 export function assetBytes(asset: Asset): number | null {
   const recorded = asset.byte_size ?? asset.bytes ?? asset.size_bytes;
   if (typeof recorded === "number") return recorded;
@@ -56,8 +57,6 @@ export function assetBytes(asset: Asset): number | null {
   return null;
 }
 
-// A key this vault never writes simply renders no row, so unpopulated camera
-// fields are safe to list here.
 const EXIF_LABELS: Record<string, string> = {
   make: "Camera make",
   model: "Camera model",
@@ -73,7 +72,6 @@ const EXIF_LABELS: Record<string, string> = {
   artist: "Artist",
 };
 
-/** Empty when nothing is known; the panel owns that copy. */
 export function exifRows(asset: Asset): ExifRow[] {
   const rows: ExifRow[] = [];
   let exif: Record<string, unknown> | null = null;
@@ -114,8 +112,8 @@ export function exifRows(asset: Asset): ExifRow[] {
       if (FOLDED.has(key)) continue;
       if (exif[key] != null) rows.push({ label, value: String(exif[key]) });
     }
-    // NO location row, ever: a place is a phrase (`place-phrase.ts`), and
-    // coordinates never go to a map host to answer what the device can.
+    // NO location row, ever: a place is a phrase; coordinates never go to a
+    // map host.
   }
   if (asset.width && asset.height) {
     rows.push({
@@ -124,12 +122,7 @@ export function exifRows(asset: Asset): ExifRow[] {
     });
   }
   if (Number.isFinite(Number(asset.duration_s))) {
-    const seconds = Math.round(Number(asset.duration_s));
-    const minutes = Math.floor(seconds / 60);
-    rows.push({
-      label: "Duration",
-      value: `${minutes}:${String(seconds % 60).padStart(2, "0")}`,
-    });
+    rows.push({ label: "Duration", value: clock(Number(asset.duration_s)) });
   }
   const size = fmtBytes(assetBytes(asset));
   if (size) rows.push({ label: "File size", value: size });
@@ -151,22 +144,9 @@ export function exifRows(asset: Asset): ExifRow[] {
   return rows;
 }
 
-// The blob custody projection in owner-facing words plus a tone the CSS keys
-// off. A custody-less row gets null, and the caller draws nothing.
-const CUSTODY_META: Record<string, CustodyMeta> = {
-  "local-only": { label: "On this device only", tone: "warn" },
-  // "warn", not "ok": a queued copy is not a copy.
-  "pending-offsite": { label: "Copy queued, not finished", tone: "warn" },
-  replicated: { label: "Backed up", tone: "ok" },
-  "remote-only": { label: "Only in the cloud", tone: "warn" },
-  missing: { label: "Missing — needs attention", tone: "danger" },
-};
-
-export function custodyMeta(
-  state: string | null | undefined
-): CustodyMeta | null {
-  return CUSTODY_META[state ?? ""] ?? null;
-}
+// Custody words plus a tone the CSS keys off; null when the row has none. The
+// table is the format kit's (#883) — one answer for photograph and document.
+export { custodyMeta } from "../_shared/format-kit.ts";
 
 export function isVideoAsset(asset: Asset): boolean {
   const uri = asset.content_uri;

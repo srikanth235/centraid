@@ -150,6 +150,11 @@ function InlineAppMount({
     [primaryIdentity]
   );
   const descriptor = use(descriptorPromise).default;
+  if (!descriptor) {
+    throw new Error(
+      `Inline app "${appId}" loaded without a default descriptor export`
+    );
+  }
   const lease = use(primaryLease);
 
   const [installation, setInstallation] = useState(() => {

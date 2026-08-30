@@ -702,8 +702,10 @@ export default function PhotosHome({
           ]}
         >
           {/* Add to album holds iOS' Share position because there is no OS
-              share sheet to hand a multi-select out to — faking one is the
-              defect `NO_DOWNLOAD_REASON` names honestly. */}
+              share sheet to hand a multi-select out to; drawing one anyway
+              would be a control that cannot keep its word. (This bar is three
+              slots by design and carries no Download — the shelves' five-slot
+              bar is where that verb lives, and since #883 C6 it is live.) */}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Add to album"

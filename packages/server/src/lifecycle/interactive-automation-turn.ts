@@ -35,6 +35,7 @@ import type {
 import type * as TypeImport_4y0tle from "@centraid/server/engine";
 
 import { journalConversationStore } from "../journal-stores.js";
+import { unrefTimer } from "../lib/unref-timer.js";
 import {
   automationContextPreamble,
   boundedRawJson,
@@ -256,7 +257,7 @@ export async function runInteractiveAutomationTurn(
         () => store.refreshTurnLock(conversationId, lockToken),
         60_000
       );
-      lockLeaseHeartbeat.unref?.();
+      unrefTimer(lockLeaseHeartbeat);
       try {
         const conversation = store.getConversation(conversationId);
         if (!conversation) {

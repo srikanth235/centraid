@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./access-lens": "./src/access-lens.ts",
     "./boot": "./src/react/boot.tsx",
     "./replica": "./src/replica/index.ts",
     "./replica/native": "./src/replica/native.ts",
@@ -21,6 +22,7 @@
     "./insights-copy": "./src/insights-copy.ts",
     "./notifications-copy": "./src/notifications-copy.ts",
     "./sharing-copy": "./src/sharing-copy.ts",
+    "./status-channel": "./src/status-channel.ts",
     "./surface-copy": "./src/surface-copy.ts",
     "./styles.css": "./src/styles.css"
   },

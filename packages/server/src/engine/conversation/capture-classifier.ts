@@ -1,3 +1,4 @@
+import { unrefTimer } from "../../lib/unref-timer.js";
 import type { TurnStreamEvent } from "./runner.js";
 import { TurnPlane } from "./turn-plane.js";
 import type { RunTurnFn, HarnessPrefs, TurnInput } from "./turn.js";
@@ -76,7 +77,7 @@ export async function classifyCaptureWithHarness(
   const timer = deps.timeoutMs
     ? setTimeout(() => controller.abort(), deps.timeoutMs)
     : undefined;
-  timer?.unref?.();
+  unrefTimer(timer);
   let text = "";
   const onEvent = (event: TurnStreamEvent): void => {
     if (event.type === "assistant.delta") text += event.delta;

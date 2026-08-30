@@ -32,10 +32,8 @@ export const RAIL_DAY_CONTEXT = "Day context";
 export const RAIL_DAY_CONTEXT_EMPTY = "Nothing decorating these days yet.";
 export const RAIL_MINI_MONTH = "Month at a glance";
 
-/**
- * Day-context words live in `day-context-copy.ts` — import-free so the phone
- * can share it (#834). Re-exported so there is still one definition.
- */
+/** Day-context words live in `day-context-copy.ts`, import-free so the phone
+ *  can share them (#834). */
 export {
   BIRTHDAY_LEAD_DEFAULT_DAYS,
   BIRTHDAY_LEADS,
@@ -64,7 +62,6 @@ export const STATE_READ_FAILED = "The vault could not be reached.";
 export const STATE_DAY_ONE = "No events yet.";
 export const STATE_DAY_ONE_ACTION = "Add the first one";
 
-export const DENIED_TITLE = "No vault access yet.";
 export const PARTLY_DENIED_TITLE = "Part of this agenda is out of reach.";
 export function partlyDeniedLine(names: readonly string[]): string {
   return `Hidden while denied: ${names.join(", ")}.`;

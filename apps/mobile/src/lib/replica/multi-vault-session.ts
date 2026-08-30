@@ -1,10 +1,10 @@
 import type {
   ReplicaCoverage,
   ReplicaInvalidation,
-  ReplicaReadWireResult,
   ReplicaSearchWireResult,
 } from "@centraid/client/replica/native";
 
+import type { MountedReadResult } from "./mounted-read-scoping";
 import type {
   MultiVaultReplicaReader,
   MountedReplicaScope,
@@ -120,10 +120,7 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     this.#reclaimRevokedReplica = options.reclaimRevokedReplica;
   }
 
-  read(
-    appId: string,
-    request: NativeReadRequest
-  ): Promise<ReplicaReadWireResult> {
+  read(appId: string, request: NativeReadRequest): Promise<MountedReadResult> {
     return this.#reader.read(appId, request);
   }
 

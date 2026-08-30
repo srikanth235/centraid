@@ -400,7 +400,6 @@ describe("tasks", () => {
     });
     expect(edited.status).toBe("executed");
 
-    // Editing an unrelated field leaves the note alone.
     const titled = gw.invoke(owner, {
       command: "schedule.edit_task",
       input: { task_id: taskId, title: "Book flights to Goa" },
@@ -427,7 +426,6 @@ describe("tasks", () => {
     };
     expect(row.description).toBeNull();
 
-    // Set and clear together is a contradiction, refused.
     const both = gw.invoke(owner, {
       command: "schedule.edit_task",
       input: { task_id: taskId, description: "x", clear_description: true },
@@ -436,7 +434,7 @@ describe("tasks", () => {
     expect(both.status).toBe("failed");
   });
 
-  test("delete_task removes the row and its subtasks, not a cancelled status", () => {
+  test("delete_task trashes the row and its subtasks, not a cancelled status", () => {
     const parent = addTask({ title: "Plan the trip" });
     const child = addTask({ title: "Book flights", parent_task_id: parent });
     const outcome = gw.invoke(owner, {
@@ -445,12 +443,64 @@ describe("tasks", () => {
       purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
+    // Trashing is not cancelling: the status is untouched.
     const rows = db.vault
       .prepare(
-        "SELECT task_id, status FROM schedule_task WHERE task_id IN (?, ?)"
+        `SELECT task_id, status, deleted_at IS NOT NULL AS trashed,
+                purge_at IS NOT NULL AS scheduled
+           FROM schedule_task WHERE task_id IN (?, ?) ORDER BY title`
       )
-      .all(parent, child) as { task_id: string; status: string }[];
-    expect(rows).toStrictEqual([]);
+      .all(parent, child) as {
+      task_id: string;
+      status: string;
+      trashed: number;
+      scheduled: number;
+    }[];
+    expect(rows.map((row) => ({ ...row }))).toStrictEqual([
+      { task_id: child, status: "needs-action", trashed: 1, scheduled: 1 },
+      { task_id: parent, status: "needs-action", trashed: 1, scheduled: 1 },
+    ]);
+  });
+
+  test("restore_task brings back the branch that was trashed with it", () => {
+    const parent = addTask({ title: "Plan the trip" });
+    const child = addTask({ title: "Book flights", parent_task_id: parent });
+    gw.invoke(owner, {
+      command: "schedule.delete_task",
+      input: { task_id: parent },
+      purpose: "dpv:ServiceProvision",
+    });
+    const restored = gw.invoke(owner, {
+      command: "schedule.restore_task",
+      input: { task_id: parent },
+      purpose: "dpv:ServiceProvision",
+    });
+    expect(restored.status).toBe("executed");
+    expect(
+      db.vault
+        .prepare(
+          `SELECT count(*) AS n FROM schedule_task
+            WHERE task_id IN (?, ?) AND deleted_at IS NULL AND purge_at IS NULL`
+        )
+        .get(parent, child)
+    ).toMatchObject({ n: 2 });
+  });
+
+  test("a trashed task is not there to act on until it is restored", () => {
+    const taskId = addTask({ title: "Plan the trip" });
+    gw.invoke(owner, {
+      command: "schedule.delete_task",
+      input: { task_id: taskId },
+      purpose: "dpv:ServiceProvision",
+    });
+    const outcome = gw.invoke(owner, {
+      command: "schedule.set_task_status",
+      input: { task_id: taskId, status: "completed" },
+      purpose: "dpv:ServiceProvision",
+    });
+    expect(outcome.status).toBe("failed");
+    assert(outcome.status === "failed");
+    expect(outcome.predicate).toContain("task_exists");
   });
 
   test("delete_task on an unknown task is refused by precondition", () => {

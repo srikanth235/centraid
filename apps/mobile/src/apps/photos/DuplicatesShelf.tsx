@@ -9,7 +9,6 @@
 import React, { useMemo, useState } from "react";
 import {
   Alert,
-  Pressable,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
@@ -23,6 +22,7 @@ import {
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import Tappable from "../../kit/components/Tappable";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import {
@@ -44,7 +44,6 @@ import { justify } from "./justify";
 import { usePhotosRung } from "./photos-rung-store";
 import { rungHeight } from "./photos-rungs";
 import {
-  NO_DOWNLOAD_REASON,
   batchFavorite,
   batchTrash,
   vaultAssets,
@@ -54,6 +53,7 @@ import PhotosScreen from "./PhotosScreen";
 import PhotoTile from "./PhotoTile";
 import type { PhotoAsset } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
+import { useSelectionDownload } from "./use-photo-download";
 import { usePhotoSelectionShare } from "./use-photo-selection-share";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
@@ -65,7 +65,7 @@ export default function DuplicatesShelf({
 }: PhotosScreenProps<"DuplicatesShelf">): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { session } = useReplica();
+  const { session, online } = useReplica();
   const timeline = usePhotoTimeline();
   const [selection, setSelection] = useState(new Set<string>());
   const clusters = useMemo(
@@ -83,6 +83,10 @@ export default function DuplicatesShelf({
     surfaceWriteOutcome(result);
   };
   const selected = vaultAssets(shown, selection);
+  const downloadHandler = useSelectionDownload({
+    online,
+    targets: () => selected,
+  });
   // Shared third selection target across Photos shelves (grant moment/refusal
   // grammar must not drift).
   const share = usePhotoSelectionShare(
@@ -123,7 +127,7 @@ export default function DuplicatesShelf({
     },
     // Share is one standing grant over one photograph, via the kit.
     share: share.handler,
-    download: { unavailableReason: NO_DOWNLOAD_REASON },
+    download: downloadHandler,
     // The shelf's own verb (proto:4437 — "selecting a copy marks it for
     // trash"), with the same confirm as the rest of Photos.
     trash: writeBlockedReason
@@ -151,7 +155,7 @@ export default function DuplicatesShelf({
   return (
     <PhotosScreen current="more" selection={selectionBar}>
       <View style={styles.header}>
-        <Pressable
+        <Tappable
           accessibilityLabel={selecting ? "Clear selection" : "Back to Photos"}
           accessibilityRole="button"
           onPress={() =>
@@ -163,21 +167,21 @@ export default function DuplicatesShelf({
             size={selecting ? 22 : 26}
             color={colors.text}
           />
-        </Pressable>
+        </Tappable>
         <Text style={styles.title} numberOfLines={1}>
           {selecting ? `${selection.size} selected` : "Duplicates"}
         </Text>
         {/* Primary (proto:4800-4803): into the cluster-at-a-time review.
             Hidden while a selection is live — the foot is then the bar. */}
         {selecting || clusters.length === 0 ? null : (
-          <Pressable
+          <Tappable
             accessibilityLabel="Review duplicates"
             accessibilityRole="button"
             onPress={() => navigation.navigate("DuplicateReview")}
             style={styles.primary}
           >
             <Text style={styles.primaryText}>Review duplicates</Text>
-          </Pressable>
+          </Tappable>
         )}
       </View>
       <ReplicaStatusBar />

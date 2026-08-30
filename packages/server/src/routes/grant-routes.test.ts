@@ -1,14 +1,8 @@
 /*
- * The grant plane's owner surface, end to end (#825): a share is said as a
- * sentence and kept in the same gesture, read back audience-first and
- * subject-first, and ended by one revoke that carries the removal out.
- *
- * What this pins that the store's unit tests cannot: the wire keeps ABSENT
- * apart from EMPTY on every read — a person this vault has never reached
- * carries `channel: null` beside `grants: []`, and a grant nobody can see is
- * `not_found` rather than an empty answer — and a subject the vault has no
- * fulfillment strategy for is refused at the door with copy that says what it
- * COULD do instead.
+ * The grant plane's owner surface, end to end (#825). What this pins that the
+ * store's unit tests cannot: the wire keeps ABSENT apart from EMPTY on every
+ * read, and a subject with no fulfillment strategy is refused at the door with
+ * copy naming what the vault COULD do instead.
  */
 
 import { mkdirSync } from "node:fs";
@@ -23,14 +17,17 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import {
   blobUriFor,
   bootstrapVault,
+  createGateway,
   nowIso,
   openVaultDb,
+  registerShareCommands,
   uuidv7,
 } from "@centraid/vault";
 import type { BootstrapResult, VaultDb } from "@centraid/vault";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
+import { createGrantRefreshDoorbell } from "../serve/grant-fulfillment.js";
 import { makeGrantRouteHandler } from "./grant-routes.js";
 
 const ORIGIN = "vlt_priya";
@@ -128,6 +125,21 @@ function world(options: { linked?: boolean } = {}): World {
     [ORIGIN, priya.vault],
     [AUDIENCE, ravi.vault],
   ]);
+  // `build-gateway.ts`'s wiring in miniature (V-writer, V-delivery): the pack
+  // is the only writer and delivery hangs off the post-commit doorbell, so
+  // this file exercises the real path.
+  const host = { vaultFor: (vaultId: string) => mounted.get(vaultId) };
+  const doorbell = createGrantRefreshDoorbell({ host, windowMs: 0 });
+  const gateway = createGateway(priya.vault, {
+    onProvenanceCommitted: (entityTypes) =>
+      doorbell.ring(ORIGIN, entityTypes ?? []),
+  });
+  registerShareCommands(gateway);
+  const ownerCredential = {
+    kind: "device" as const,
+    deviceId: priya.boot.deviceId,
+    deviceKey: priya.boot.deviceKey,
+  };
   return {
     priya,
     ravi,
@@ -141,8 +153,13 @@ function world(options: { linked?: boolean } = {}): World {
         vaultId: ORIGIN,
         db: priya.vault,
         ownerPartyId: priya.boot.ownerPartyId,
+        invoke: async (command, input) =>
+          gateway.invoke(ownerCredential, {
+            command,
+            input,
+            purpose: "dpv:ServiceProvision",
+          }),
       }),
-      host: { vaultFor: (vaultId) => mounted.get(vaultId) },
     }),
   };
 }
@@ -211,21 +228,23 @@ describe("routes/grants", () => {
       },
     });
     expect(created.status).toBe(201);
-    expect(created.body).toMatchObject({
-      outcome: "created",
-      fulfillmentPass: { origin: "mounted" },
-    });
+    // No `fulfillmentPass`: the route does not deliver (V-delivery). The share
+    // is HERE by the time the response is written — the write's own doorbell
+    // carried it — and says so in the ruled vocabulary (V-phrases).
+    expect(created.body).toMatchObject({ outcome: "created" });
+    expect(created.body.fulfillmentPass).toBeUndefined();
     const grant = created.body.grant as Record<string, unknown>;
     expect(grant).toMatchObject({
       subjectType: "core.document",
       capability: "view",
       revokedAt: null,
       fulfillment: [{ peerVaultId: AUDIENCE, state: "delivered" }],
+      phrase: "shared",
+      reason: "the vault it addresses is holding it",
     });
     expect(audienceTitles(house.ravi)).toStrictEqual(["Trip plan"]);
 
-    // Audience-first: everything Ravi can reach, in one query, with the
-    // channel it would be delivered over.
+    // Audience-first: all Ravi can reach, with the channel it arrives over.
     const reach = await call(house, {
       method: "GET",
       url: `/centraid/_vault/grants?partyId=${house.raviParty}`,
@@ -270,11 +289,13 @@ describe("routes/grants", () => {
     });
     expect(revoked.status).toBe(200);
     expect(revoked.body).toMatchObject({ outcome: "revoked" });
-    // The sentence is DERIVED: this copy really was delivered and really was
-    // taken back, so the owner is told exactly that and nothing softer.
-    expect(revoked.body.message).toBe(
-      "no longer shared; every copy it delivered has been removed"
-    );
+    // The sentence is DERIVED: delivered, then taken back, so the owner hears
+    // exactly that. "No longer shared" is the PHRASE (V-phrases), so the
+    // message carries only the reason.
+    expect(revoked.body).toMatchObject({
+      grant: { phrase: "withdrawn", confirmed: true },
+      message: "every copy it delivered has been removed",
+    });
     expect(audienceTitles(house.ravi)).toStrictEqual([]);
     const after = await call(house, {
       method: "GET",
@@ -285,9 +306,8 @@ describe("routes/grants", () => {
       fulfillment: [{ peerVaultId: AUDIENCE, state: "removed" }],
     });
 
-    // A revoked grant leaves the live answer and stays in the history one:
-    // `includeRevoked=1` is the difference between "what stands" and "what
-    // was ever decided", and the two must not be the same read.
+    // `includeRevoked=1` separates "what stands" from "what was ever decided";
+    // the two must not be one read.
     const live = await call(house, {
       method: "GET",
       url: `/centraid/_vault/grants?audienceKind=party&audienceId=${house.raviParty}`,
@@ -306,9 +326,8 @@ describe("routes/grants", () => {
   });
 
   test("revoking says which of the three removals actually happened", async () => {
-    // (1) Nothing was ever delivered — an audience with no channel parks at
-    // an invitation and holds no copy. The sentence must not imply a peer was
-    // asked to delete something it never had.
+    // (1) Never delivered: an audience with no channel parks at an invitation,
+    // so the sentence must not imply a peer was asked to delete anything.
     const parked = world({ linked: false });
     const never = await call(parked, {
       method: "POST",
@@ -328,13 +347,21 @@ describe("routes/grants", () => {
       url: `/centraid/_vault/grants/${(never.body.grant as Record<string, unknown>).grantId as string}/revoke`,
       deviceId: parked.laptop,
     });
-    expect(undelivered.body.message).toBe(
-      "no longer shared; no delivered copy remains — nothing needed removing"
+    // V-phrases: `withdrawn` settles CONFIRMED only because nothing was
+    // delivered — no peer had anything to acknowledge.
+    expect(undelivered.body).toMatchObject({
+      grant: { phrase: "withdrawn", confirmed: true },
+      message: "no copy had been delivered — there was nothing to remove",
+    });
+    // Per LOCUS (V-locus): a person's copy lives in THEIR vault, so the honest
+    // promise names it.
+    expect(undelivered.body.promise).toBe(
+      "their vault is asked to remove its copy; it is no longer shared either way"
     );
 
-    // (2) Delivered, then the audience vault is not mounted here any more.
-    // The removal was sent and nobody confirmed it — the owner is told so
-    // rather than being promised a deletion this host cannot witness.
+    // (2) Delivered, then the audience vault left this host: the removal was
+    // sent and unconfirmed, and the owner hears that rather than a promise
+    // this host cannot witness.
     const house = world();
     const created = await call(house, {
       method: "POST",
@@ -357,9 +384,15 @@ describe("routes/grants", () => {
       url: `/centraid/_vault/grants/${grantId}/revoke`,
       deviceId: house.laptop,
     });
+    // Asked, NOT confirmed — the copy may not be called removed until the peer
+    // says it is (V-phrases).
     expect(unconfirmed.body.message).toBe(
-      "no longer shared; a vault holding a copy has been asked to remove it and has not yet confirmed"
+      "removal sent to vlt_ravi; the peer has not acknowledged it"
     );
+    expect(unconfirmed.body.grant).toMatchObject({
+      phrase: "withdrawn",
+      confirmed: false,
+    });
     // Honest to the end: the peer still holds it, and the row says so.
     expect(audienceTitles(house.ravi)).toStrictEqual(["Trip plan"]);
     expect(unconfirmed.body.grant).toMatchObject({
@@ -429,8 +462,7 @@ describe("routes/grants", () => {
     expect(unasked.status).toBe(400);
     expect(unasked.body.error).toBe("query_required");
 
-    // A stranger's id must not borrow "nothing is shared with them": this
-    // vault has never heard of them, which is its own answer.
+    // A stranger's id must not borrow "nothing is shared with them".
     const strangers = await Promise.all(
       [
         `/centraid/_vault/grants?partyId=${uuidv7()}`,
@@ -444,8 +476,7 @@ describe("routes/grants", () => {
       expect(stranger.status).toBe(404);
       expect(stranger.body.error).toBe("audience_not_found");
     }
-    // …and a party this vault DOES know, with nothing shared, still answers
-    // the empty list. Two facts, two answers.
+    // …and a known party with nothing shared still answers the empty list.
     const known = await call(house, {
       method: "GET",
       url: `/centraid/_vault/grants?audienceKind=party&audienceId=${house.raviParty}`,

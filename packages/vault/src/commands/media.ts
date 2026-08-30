@@ -10,6 +10,7 @@ import {
 } from "../blob/mint.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { CONTENT_REFERENCES } from "../schema/content-references.js";
 import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import {
   loadEntityRevision,
@@ -231,41 +232,11 @@ export function adoptAssetForContentTx(
 }
 
 /**
- * Every canonical table that can rent a content item besides the asset itself.
- * The LAST reference decides whether bytes soft-delete.
+ * Does nothing rent these bytes any more? The LAST reference decides whether
+ * bytes soft-delete, and the reference list is the one in
+ * `schema/content-references.ts` (#883, ruling O-attach) rather than a copy
+ * that could fall behind a new byte-bearing column.
  */
-const CONTENT_REFERENCES: {
-  table: string;
-  column: string;
-  onlyLive?: string;
-}[] = [
-  { table: "core_attachment", column: "content_id" },
-  { table: "core_party", column: "avatar_content_id" },
-  // A trashed note is not a rental (#308): its body releases with it, and
-  // knowledge.restore_note un-trashes both.
-  {
-    table: "knowledge_note",
-    column: "body_content_id",
-    onlyLive: "deleted_at IS NULL",
-  },
-  { table: "social_message", column: "body_content_id" },
-  { table: "business_invoice", column: "pdf_content_id" },
-  { table: "home_warranty", column: "terms_content_id" },
-  { table: "home_maintenance_plan", column: "instructions_content_id" },
-  // A trashed asset is not a rental — it must not keep its bytes alive, or
-  // trash could never release anything.
-  {
-    table: "media_asset",
-    column: "content_id",
-    onlyLive: "deleted_at IS NULL",
-  },
-  // A document's CURRENT content is a rental like any other (#352). Superseded
-  // revisions are NOT — the chain-aware check in gateway/duties.ts covers them,
-  // because "still part of some live document's history" is not a single-column
-  // FK lookup. A trashed document still lives; only purge releases it.
-  { table: "core_document", column: "current_content_id" },
-];
-
 export function contentUnreferenced(
   ctx: HandlerCtx,
   contentId: string

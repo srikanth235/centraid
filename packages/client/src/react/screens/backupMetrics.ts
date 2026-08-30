@@ -4,6 +4,8 @@
  * is `null`. Declared cadence is the slowest of RPO/snapshot/verify.
  */
 
+import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
+
 import type { StorageConnectionUsageDTO } from "../../gateway-client.js";
 import { deriveStorageMetrics } from "../../storage-metrics.js";
 import type {
@@ -14,7 +16,6 @@ import type {
 import type { BackupStatusDTO, BackupVaultStatusDTO } from "./BackupCard.js";
 
 const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOUR_MS;
 
 function parseIso(iso: string | undefined): number | null {
   if (!iso) return null;

@@ -24,8 +24,8 @@
     },
     "L3": {
       "command": "bun run test:qualities backup-archaeology schema-migration-corpus",
-      "seed": "truncate the forward migration to VAULT_MIGRATIONS.slice(0, 1), or tamper a census count in scripts/corpora/schema-epoch-census.json",
-      "failure": "the epoch sweep fails at 'expected 1 to be 3'; a tampered census fails the growth-guard and the restore census"
+      "seed": "truncate the corpus's forward migration to VAULT_MIGRATIONS.slice(0, 1) in scripts/corpora/vault-corpus.ts, or tamper a census count in scripts/corpora/schema-epoch-census.json",
+      "failure": "all seven epoch sweeps fail at 'expected 1 to be 7'; a tampered manifest census fails the growth-guard's strict-equal against the seed's EXPECTED_CENSUS"
     },
     "T6": {
       "command": "node node_modules/vitest/vitest.mjs run --project @centraid/server hostile-peer -t 'replayed as a fresh'",
@@ -118,9 +118,9 @@
       "failure": "the harness observes SIGKILL and verifies recovery invariants"
     },
     "R2": {
-      "command": "bun run test:qualities -t 'PWA IndexedDB and mobile SQLite'",
-      "seed": "drop the offline send and reset the first reconnect",
-      "failure": "only the retry crosses HTTP and duplicate replay must not add rows"
+      "command": "bun run test:qualities -t 'PWA IndexedDB and mobile SQLite'; node node_modules/vitest/vitest.mjs run --project @centraid/server src/routes/replica-projection.test.ts -t SABOTAGE",
+      "seed": "drop the offline send and reset the first reconnect; for the compacted change log, strip the inherited prior (prior_op/prior_old_values_json set NULL) or delete a row's last surviving entry",
+      "failure": "only the retry crosses HTTP and duplicate replay must not add rows; a stripped prior loses the filter-exit delete so the catch-up replay diverges from the uncompacted vault, and a dropped last entry strands the deleted row"
     },
     "R3": {
       "command": "bun run test:qualities -t 'R3: every expected health component'",
@@ -2068,6 +2068,11 @@
       "owner": "packages/blueprints/src/one-computation.test.ts",
       "flow": "blueprint-one-computation-law"
     },
+    "select-all-filtered": {
+      "statement": "Select-all takes the rows the current filter shows, never the whole table, and a selection survives a filter change through pruneSelection rather than being carried onto rows the member never saw.",
+      "owner": "packages/blueprints/src/select-all-scope.test.ts",
+      "flow": "blueprint-select-all-law"
+    },
     "people-photograph-counts": {
       "statement": "Every seat counts distinct confirmed photographs, not face regions or unconfirmed proposals, and keeps unnamed groups separate.",
       "owner": "packages/blueprints/apps/_shared/people-counts.test.ts",
@@ -3843,6 +3848,22 @@
       "appEngineColumn": false
     },
     {
+      "id": "action-kit",
+      "label": "Action-handler spine",
+      "source": ["packages/blueprints/apps/_shared/action-kit.ts"],
+      "propertyFlow": null,
+      "mutationSeed": null,
+      "appEngineColumn": false
+    },
+    {
+      "id": "concept-scheme",
+      "label": "Concept-scheme vocabulary",
+      "source": ["packages/blueprints/apps/_shared/concept-scheme-kit.ts"],
+      "propertyFlow": null,
+      "mutationSeed": null,
+      "appEngineColumn": false
+    },
+    {
       "id": "reachability",
       "label": "Handler reachability",
       "source": [
@@ -4390,6 +4411,15 @@
       "tier": "contract",
       "owner": "packages/blueprints/src/one-computation.test.ts",
       "minimumTests": 3
+    },
+    {
+      "id": "blueprint-select-all-law",
+      "name": "Select-all is the filtered set, and a filter change prunes it",
+      "surface": "blueprints",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/blueprints/src/select-all-scope.test.ts",
+      "minimumTests": 7
     },
     {
       "id": "enrichment-service-contract",
@@ -4991,7 +5021,8 @@
       "dimension": "correctness",
       "tier": "unit",
       "owner": "packages/vault/src/gateway/search.test.ts",
-      "minimumTests": 19
+      "minimumTests": 18,
+      "approvedMinimumTestsDeviation": "#883 ruling O-domains retired the `home.*` domain from the ontology, and rung seven drops its tables. `home.asset_item` was one of the flow's searchable surfaces, so its owning test ('name and serial match; disposal keeps the row searchable') lost its SUBJECT, not its assertions: there is no live entity left for an equivalent test to search. `social.contact_card` left the FTS registry in the same rung (ruling O-contact) but never had a test here. The floor drops by exactly the one retired surface; every live surface the flow covers still owns its test, and the two-direct-column shape the retired test exercised is still exercised by `schedule.task` (title + description) in 'People canonical gift tasks and journal notes are searchable too'."
     },
     {
       "id": "vault-enrichment",

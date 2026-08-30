@@ -75,7 +75,7 @@
 .list {
   display: flex;
   flex-direction: column;
-  padding: var(--sp-2) var(--content-margin) 0;
+  padding: var(--sp-2) var(--page-margin) 0;
 }
 
 .row {

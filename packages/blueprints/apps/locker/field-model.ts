@@ -3,6 +3,7 @@
 // A VALUE — `sealed: true`, `value: null`, and nothing here turns a presence
 // into a plaintext.
 
+import { DAY_MS } from "../_shared/format-kit.ts";
 import { HISTORY_PASSWORD_LABEL, PASSKEY_KEY_ROW } from "./item-copy.ts";
 import type { SidecarTarget } from "./permits.ts";
 import type {
@@ -149,7 +150,7 @@ export function passwordAge(
   now: number
 ): string {
   if (!setAt) return "";
-  const days = Math.floor((now - new Date(setAt).getTime()) / 86_400_000);
+  const days = Math.floor((now - new Date(setAt).getTime()) / DAY_MS);
   if (!Number.isFinite(days) || days < 0) return "";
   if (days === 0) return "set today";
   if (days === 1) return "set yesterday";

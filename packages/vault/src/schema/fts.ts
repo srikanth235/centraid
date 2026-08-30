@@ -14,6 +14,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { sealedColumnsOf } from "./sealed.js";
+import { resolveEntity } from "./tables.js";
 
 /** Decoded text of a canonical body, or null for anything non-text. */
 export function contentText(
@@ -60,7 +61,17 @@ export interface FtsEntitySpec {
   deletedColumn?: string;
 }
 
-const SPECS: readonly FtsEntitySpec[] = [
+// The baseline's spec list, in the order rung one composed it. Two entries
+// are RETIRED by #883 (`social.contact_card`, `home.asset_item`) and rung
+// seven drops their shadow tables, but rung one's text is history and stays
+// byte-identical — so they live on here and are filtered out of `SPECS`, the
+// live registry every other reader uses.
+const RETIRED_ENTITIES: ReadonlySet<string> = new Set([
+  "social.contact_card",
+  "home.asset_item",
+]);
+
+const BASELINE_SPECS: readonly FtsEntitySpec[] = [
   {
     // Photo captions are stored as the content item's title. Keeping this a
     // direct-column surface makes the Photos grid search complete without
@@ -187,6 +198,31 @@ const SPECS: readonly FtsEntitySpec[] = [
   },
 ];
 
+/**
+ * Spec changes applied to the LIVE registry only (#883). Rung one's text never
+ * changes, so a patch here reaches an existing file the one way a generated
+ * trigger body can: rung seven re-generates that entity's shadow table.
+ */
+const SPEC_PATCHES: Readonly<Record<string, Partial<FtsEntitySpec>>> = {
+  // O-trash: Tasks and Agenda gained the trash pair, so a trashed row leaves
+  // the index the moment it is trashed, exactly as Docs/Photos/Locker's does.
+  "schedule.task": { deletedColumn: "deleted_at" },
+  "core.event": { deletedColumn: "deleted_at" },
+  // O-contact: `social.contact_card` retired and its display facts are the
+  // profile's now, so the nickname stays searchable where the role already was.
+  "people.profile": {
+    columns: [
+      { name: "role", kind: "column" },
+      { name: "nickname", kind: "column" },
+    ],
+  },
+};
+
+/** The baseline minus what #883 retired, plus its patches. */
+const SPECS: readonly FtsEntitySpec[] = BASELINE_SPECS.filter(
+  (spec) => !RETIRED_ENTITIES.has(spec.entity)
+).map((spec) => ({ ...spec, ...SPEC_PATCHES[spec.entity] }));
+
 /** What the gateway needs to run (and consent-clamp) a search. */
 export interface SearchableEntity {
   /** Physical FTS5 table. */
@@ -206,8 +242,29 @@ export interface SearchableEntity {
   alsoConsent: readonly string[];
 }
 
+/**
+ * THE REGISTRY OWNS THE NAME (#883). A spec names its entity logically and
+ * asks `tables.ts` what that is physically. The mechanical fallback answers
+ * for RETIRED entities only — the ones `BASELINE_SPECS` still carries because
+ * rung one's text is history — and `assertFtsSpecsRegistered` proves nothing
+ * live reaches it.
+ */
 function physical(entity: string): string {
-  return entity.replace(".", "_");
+  return resolveEntity(entity)?.physical ?? entity.replace(".", "_");
+}
+
+/**
+ * Every live spec names a registered entity. Called by `migrateVault`, so an
+ * unregistered spec fails at open rather than generating triggers over a name
+ * nothing else can resolve.
+ */
+export function assertFtsSpecsRegistered(): void {
+  for (const spec of SPECS) {
+    if (resolveEntity(spec.entity)) continue;
+    throw new Error(
+      `fts spec names ${spec.entity}, which the table registry does not declare — the registry is the one owner of an entity's name (issue #883, ruling O-label)`
+    );
+  }
 }
 
 function maskColumnsOf(spec: FtsEntitySpec): string[] {
@@ -233,23 +290,19 @@ export const SEARCHABLE: Readonly<Record<string, SearchableEntity>> =
   );
 
 /**
- * Per-document index budget (#367): a body can be arbitrarily
- * large (a pasted transcript, an imported email, an extracted PDF's text
- * layer), but the FTS shadow tables are a SEARCH index, not a second copy
- * of the canonical bytes — the canonical body/derivative stays complete and
- * untruncated; only what feeds the index is capped. Generous by design
- * (256KB covers the overwhelming majority of real bodies whole); anything
- * past it is still searchable up to the cut, just not beyond it.
+ * Per-document index budget (#367). The shadow tables are a SEARCH index, not
+ * a second copy: the canonical body stays complete and untruncated, and only
+ * what feeds the index is capped. Anything past the cut is still searchable up
+ * to it.
  */
 export const FTS_BODY_INDEX_BUDGET_CHARS = 256 * 1024;
 
 const TRUNCATION_MARKER = " ...(truncated for search index)";
 
 /**
- * Wrap a body-text SQL expression so it never feeds more than `budgetChars`
- * into the index. `expr` is inlined twice (length check + substr) — fine
- * for a trigger that runs once per write, and keeps this a pure SQL
- * expression with no bound parameters (trigger bodies are static DDL).
+ * Cap a body-text SQL expression at `budgetChars`. `expr` is inlined twice
+ * (length check + substr): trigger bodies are static DDL, so this must stay a
+ * pure expression with no bound parameters.
  */
 export function truncateForIndex(
   expr: string,
@@ -318,10 +371,8 @@ function liveGuardOf(spec: FtsEntitySpec, prefix: string): string {
 }
 
 /**
- * The full-table backfill: every live row's current value, re-derived.
- * Shared by the migration DDL (backfilling a pre-index vault) and
- * `rebuildFtsIndex` (re-deriving after e.g. `FTS_BODY_INDEX_BUDGET_CHARS`
- * changes) — same statement, same truncation policy, one definition.
+ * The full-table backfill. Shared by the migration DDL and `rebuildFtsIndex`
+ * so both apply the same truncation policy from one definition.
  */
 function backfillStatement(spec: FtsEntitySpec): string {
   const base = physical(spec.entity);
@@ -374,24 +425,45 @@ ${backfillStatement(spec)}
  * Migration rung: shadow tables, sync triggers, and a backfill of whatever
  * rows a pre-index vault already holds (a no-op on fresh files).
  */
-export const FTS_DDL: string = SPECS.map(entityDdl).join("\n");
+export const FTS_DDL: string = BASELINE_SPECS.map(entityDdl).join("\n");
 
 const SPEC_BY_ENTITY: ReadonlyMap<string, FtsEntitySpec> = new Map(
   SPECS.map((s) => [s.entity, s])
 );
 
 /**
- * Rebuild path (#367): the index is derived and rebuildable — if
- * `FTS_BODY_INDEX_BUDGET_CHARS` (or a spec) changes, existing indexed rows
- * still carry the OLD truncation, since FTS5's own `('rebuild')` command
- * only re-derives the internal index structures from what fts5 itself
- * already stored, not from the base tables. This re-runs the real backfill
- * (delete + re-derive from the base table) so a budget change actually
- * reflows every live row.
+ * One entity's shadow table, triggers and backfill, from the LIVE spec. Rung
+ * seven re-generates an index whose spec changed: trigger bodies are static
+ * DDL, reachable only by dropping and re-creating them (#883).
+ */
+export function ftsEntityDdl(entity: string): string {
+  const spec = SPEC_BY_ENTITY.get(entity);
+  if (!spec) throw new Error(`not a searchable entity: ${entity}`);
+  return entityDdl(spec);
+}
+
+/**
+ * Drop one entity's shadow table and its sync triggers. Takes the logical name
+ * rather than a spec so a RETIRED entity — one whose base table is going away
+ * in the same rung — can still be cleaned up after it has left `SPECS`.
+ */
+export function ftsDropDdl(entity: string): string {
+  const fts = `fts_${physical(entity)}`;
+  return `DROP TRIGGER IF EXISTS ${fts}_ai;
+DROP TRIGGER IF EXISTS ${fts}_au;
+DROP TRIGGER IF EXISTS ${fts}_ad;
+DROP TABLE IF EXISTS ${fts};`;
+}
+
+/**
+ * Rebuild path (#367). FTS5's own `('rebuild')` re-derives only from what fts5
+ * already stored, so it leaves the OLD truncation in place when
+ * `FTS_BODY_INDEX_BUDGET_CHARS` or a spec changes; this re-runs the real
+ * backfill from the base table instead.
  *
- * `core.document` is NOT covered here — schema/blob.ts overrides its
- * triggers with a derivative-aware body expression (extracted text wins
- * over the raw decode); use `rebuildDocumentFtsIndex` (blob.ts) for it.
+ * `core.document` is NOT covered here — `schema/blob.ts` overrides its
+ * triggers with a derivative-aware body expression; use
+ * `rebuildDocumentFtsIndex` for it.
  */
 export function rebuildFtsIndex(vault: DatabaseSync, entity: string): void {
   if (entity === "core.document") {

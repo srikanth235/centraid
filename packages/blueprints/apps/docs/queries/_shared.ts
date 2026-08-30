@@ -5,7 +5,12 @@
  * build-manifest.mjs's install-copy walk.
  */
 
-const TAGS_SCHEME_URI = "centraid:tags:v1";
+import {
+  TAGS_SCHEME_URI,
+  conceptsInScheme,
+  findScheme,
+} from "../../_shared/concept-scheme-kit.ts";
+
 const DOCUMENT_TARGET_TYPE = "core.document";
 const FOLDER_CONTAINER_TYPE = "docs.folder";
 
@@ -56,12 +61,12 @@ export async function readLabelsByDocument({
   concepts,
 }: LabelArgs): Promise<Map<string, LabelEntry[]>> {
   const tagsByDoc = new Map<string, LabelEntry[]>();
-  const tagsScheme = (schemes ?? []).find((s) => s.uri === TAGS_SCHEME_URI);
+  const tagsScheme = findScheme(schemes, TAGS_SCHEME_URI);
   if (!tagsScheme || documentIds.length === 0) return tagsByDoc;
   const labelConceptById = new Map<string, string | undefined>(
-    (concepts ?? [])
-      .filter((c) => c.scheme_id === tagsScheme.scheme_id)
-      .map((c) => [c.concept_id, c.pref_label ?? c.notation] as const)
+    conceptsInScheme(concepts, tagsScheme).map(
+      (c) => [c.concept_id, c.pref_label ?? c.notation] as const
+    )
   );
   const labelTags = await ctx.vault.read({
     entity: "core.tag",

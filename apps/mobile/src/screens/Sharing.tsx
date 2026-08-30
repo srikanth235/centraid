@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { parseCommonsInvite } from "@centraid/blueprints/apps/_shared/commons-invite";
 import type { CommonsInviteClaim } from "@centraid/blueprints/apps/_shared/commons-invite";
+import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
 import {
   SHARING_INVALID_INVITE,
   SHARING_STEWARD_PARKED,
@@ -13,6 +14,7 @@ import { formatBytes } from "@centraid/design";
 
 import Icon from "../kit/components/Icon";
 import { Text, TextInput } from "../kit/components/NativeText";
+import Tappable from "../kit/components/Tappable";
 import TopSafeArea from "../kit/components/TopSafeArea";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import { density, radii, t, useTheme } from "../kit/theme";
@@ -46,8 +48,6 @@ import type {
   ShareScope,
 } from "./sharing-reads";
 import SharingLinkRow, { LinkTicketPanel } from "./SharingLinkRow";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const NOT_ASKED: ScopedShareRead<never> = { rows: [], missed: [] };
 
@@ -202,13 +202,13 @@ export default function SharingScreen({
   return (
     <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
-        <Pressable
+        <Tappable
           accessibilityLabel="Back"
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
           <Icon name="chevron-left" size={26} color={colors.text} />
-        </Pressable>
+        </Tappable>
         <View style={styles.headerCopy}>
           <Text style={[t("title"), { color: colors.text }]}>
             People &amp; circles

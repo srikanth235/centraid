@@ -1,3 +1,5 @@
+import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
+
 // Automation thread data (#387): one conversation per automation, every fire a
 // run in it. Consent endpoints are GLOBAL, so this filters them to the
 // automation's actor; hero/trigger/status come from automationsData.ts.
@@ -88,7 +90,7 @@ function dateGroupLabel(startedAt: number): string {
   const now = new Date();
   const ds = d.toDateString();
   if (ds === now.toDateString()) return "Today";
-  if (ds === new Date(now.getTime() - 86_400_000).toDateString())
+  if (ds === new Date(now.getTime() - DAY_MS).toDateString())
     return "Yesterday";
   return d.toLocaleDateString(undefined, {
     weekday: "short",

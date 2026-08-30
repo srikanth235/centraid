@@ -2,7 +2,10 @@
 // Enrichment commands (#299): verbs staging cannot express. OCR → inline `text` derivative (FTS on parent, #296). Face loop is one verb with three answers (#712).
 
 import { stampDerivation } from "../enrich/derivation.js";
-import { recordEnrichConsent } from "../enrich/egress-consent.js";
+import {
+  readEnrichConsentId,
+  recordEnrichConsent,
+} from "../enrich/egress-consent.js";
 import type {
   EnrichConsentDecision,
   EnrichEgressClass,
@@ -493,21 +496,22 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
         decision: "granted",
         now: ctx.now,
       });
-      const consent = ctx.db
-        .prepare(
-          `SELECT consent_id FROM enrich_consent
-            WHERE capability = ? AND egress = 'on-device' AND scope_ref = ''`
-        )
-        .get(input.capability) as { consent_id: string } | undefined;
-      if (consent) ctx.wrote("enrich.consent", consent.consent_id);
+      const consentId = readEnrichConsentId(ctx.db, {
+        capability: input.capability,
+        egress: "on-device",
+        scopeRef: "",
+      });
+      if (consentId) ctx.wrote("share.authority", consentId);
     }
     return { request_id: requestId };
   },
 };
 
 /**
- * One writer of `enrich_consent` (#807). Gateway only reads it. Decline is a record (`declined` ≠ never asked).
- * `confirm: true` so an app/agent parks. `receipt_id` stays NULL here — minted after commit.
+ * One writer of the enrichment egress answers (#807), rows of the one
+ * authority plane (#883). Decline is a record (`declined` ≠ never asked).
+ * `confirm: true` so an app or agent parks. `receipt_id` is minted after
+ * commit.
  */
 const RECORD_CONSENT: CommandDefinition = {
   name: "enrich.record_consent",
@@ -538,9 +542,11 @@ const RECORD_CONSENT: CommandDefinition = {
   postconditions: [
     {
       name: "answer_recorded",
-      sql: `SELECT count(*) AS n FROM enrich_consent
-             WHERE capability = :capability AND egress = :egress
-               AND scope_ref = :scope_ref AND decision = :decision`,
+      sql: `SELECT count(*) AS n FROM share_authority
+             WHERE principal_kind = 'harness' AND subject_type = 'enrich.scope'
+               AND verb = :capability AND principal_id = :egress
+               AND subject_id = :scope_ref AND decision = :decision
+               AND revoked_at IS NULL`,
       column: "n",
       op: "eq",
       value: 1,
@@ -567,17 +573,13 @@ const RECORD_CONSENT: CommandDefinition = {
       now: ctx.now,
     });
     // Read the row's own id back rather than mint one: a re-given answer keeps
-    // the id it was first recorded under (the writer UPSERTs), so provenance
-    // chains per ANSWER instead of per keystroke.
-    const stored = ctx.db
-      .prepare(
-        `SELECT consent_id FROM enrich_consent
-          WHERE capability = ? AND egress = ? AND scope_ref = ?`
-      )
-      .get(input.capability, input.egress, scopeRef) as
-      | { consent_id: string }
-      | undefined;
-    if (stored) ctx.wrote("enrich.consent", stored.consent_id);
+    // the id it was first recorded under, so provenance chains per ANSWER.
+    const storedId = readEnrichConsentId(ctx.db, {
+      capability: input.capability,
+      egress: input.egress,
+      scopeRef,
+    });
+    if (storedId) ctx.wrote("share.authority", storedId);
     return {
       capability: input.capability,
       egress: input.egress,

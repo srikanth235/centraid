@@ -160,7 +160,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["core.event", "schedule.attendee", "schedule.event_ext"]
     },
     {
       "name": "rsvp",
@@ -185,7 +185,7 @@
         "required": ["event_id", "party_id", "partstat"],
         "additionalProperties": false
       },
-      "writes": []
+      "writes": ["schedule.attendee"]
     },
     {
       "name": "edit-event",
@@ -219,7 +219,12 @@
         "required": ["event_id"],
         "additionalProperties": false
       },
-      "writes": []
+      "writes": [
+        "core.event",
+        "outbox.item",
+        "schedule.attendee",
+        "schedule.event_ext"
+      ]
     },
     {
       "name": "edit-occurrence",
@@ -243,7 +248,7 @@
         "required": ["event_id", "original_start", "scope", "action"],
         "additionalProperties": false
       },
-      "writes": []
+      "writes": ["core.event", "outbox.item", "schedule.recurrence_exception"]
     },
     {
       "name": "cancel-event",
@@ -274,7 +279,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["core.event", "outbox.item"]
     },
     {
       "name": "attach",
@@ -329,7 +334,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["core.attachment", "core.content_item"]
     },
     {
       "name": "detach",
@@ -360,7 +365,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["core.attachment"]
     }
   ],
   "queries": [

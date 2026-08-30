@@ -1,14 +1,12 @@
-/**
- * Edit a task's fields through the vault's typed command. Only the fields
- * the user actually changed are forwarded; clearing a due date or a note
- * is the explicit clear_due / clear_description intent, never an empty
- * string. Outcome passed through for the UI to narrate.
- */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
+/** Only changed fields are forwarded; clearing a due date or a note is the
+ *  explicit clear_due / clear_description intent, never an empty string. */
 export default async function edit({
   body,
   ctx,
 }: HandlerArgs): Promise<ActionResult> {
-  const raw = (body ?? {}) as Record<string, unknown>;
+  const raw = actionInput(body);
   const input: Record<string, unknown> = { task_id: String(raw.task_id ?? "") };
   if (raw.title) input.title = String(raw.title);
   if (raw.description) input.description = String(raw.description);
@@ -22,18 +20,5 @@ export default async function edit({
   if (raw.clear_remind === true) input.clear_remind = true;
   if (raw.rrule) input.rrule = String(raw.rrule);
   if (raw.clear_rrule === true) input.clear_rrule = true;
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "schedule.edit_task",
-      input,
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  return runVaultAction(ctx, { command: "schedule.edit_task", input });
 }

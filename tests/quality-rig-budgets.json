@@ -28,13 +28,19 @@
     },
     "tests/perf/desktop-cold.perf.test.ts": {
       "lane": "perf",
-      "volume": "1 desktop main-core cold module import",
-      "budgetMs": 3000
+      "volume": "1 cold import of the desktop MAIN-PROCESS graph in a fresh child process with `electron` stubbed — apps/desktop/dist/main/local-gateway.js and the sibling main modules it drags in (430-431 modules since #883 C5, down from 1,001-1,003 in C1). Before #883 C1 this rig imported gateway-supervisor-core.ts, a ZERO-import file, and timed one module parse.",
+      "_budgetMsNote": "Ratcheted 3000 -> 1300 by #883 C5. C5 took the @centraid/server barrel off the main-process critical path (subpath imports in gateway-paths.ts/detached-gateway.ts, dynamic import of embedded-gateway.js) and 16 samples on a SHARED linux x64 container measured 396-431 ms at load average ~1.5 and 500-649 ms at load average ~8 (4 cores), against 952-1105 ms on the same host before the change. 1300 ms is ~3x the quiet-host maximum and ~2x the contended one, the same headroom convention the experience budgets use for a single-host measurement.",
+      "budgetMs": 1300
     },
     "tests/perf/desktop-launch.perf.test.ts": {
       "lane": "perf",
       "volume": "1 REAL Electron cold launch (mock gateway, 1 app, fresh userData — an EMPTY vault, not year-3); measured by apps/desktop/tests/e2e/launch-time.spec.ts and consumed here as an artifact",
       "_noBudgetMs": "Deliberate. A cold Electron launch on a shared CI runner has no distribution yet; the gate is the 30-sample/1.5x drift budget. An absolute ceiling lands in tests/experience-budgets/desktop.json once ~10 green nightlies justify one."
+    },
+    "tests/perf/gateway-request-volume.perf.test.ts": {
+      "lane": "perf",
+      "volume": "A YEAR-3-SHAPED vault seeded through packages/test-kit's seedYear3Vault — 5,000 core_party, 10,000 photos (one core_content_item + one media_asset each), 200 conversations x 12 turns, plus the sealed-locker and parked-action axes: ~27,600 domain rows and the replica change log their inserts produced. Then 30 serial GETs per core route (p95), one windowed replica bootstrap page lane, and one cold reopen of the SEEDED vault directory. A bounded approximation of the declared year-3 table (90,000 photo assets / ~22,000 turns) that a 60 s perf lane can build honestly (#883 C1)",
+      "_noBudgetMs": "Deliberate. The ceilings this rig asserts are `coreRouteP95Ms` and `gatewayColdStartMs` in tests/experience-budgets/gateway.json — the SAME entries the empty-vault forked-child lane (tests/perf/gateway-request.perf.test.ts) asserts, so the pair now fences both the transport floor and the volume case against one number. A separate absolute duration ceiling here would fence the seed, which is setup rather than measurement."
     },
     "tests/perf/gateway-request.perf.test.ts": {
       "lane": "perf",
@@ -149,9 +155,40 @@
       "volume": "YEAR-3: 10 GiB of CAS bytes (CENTRAID_SCALE_RESTORE_GIB, default 10) across 4 MiB objects + 5,000 core_party rows + one content row per object — backup, restore, then foreign_key_check and integrity_check timed in ISOLATION on the restored vault.db",
       "_noBudgetMs": "Deliberate. Restore duration at this size has never been observed on CI hardware; inventing an absolute ceiling would be the guess this rig exists to replace. Gated by the 30-sample/1.5x drift budget once a distribution exists. The rig SKIPS unless CENTRAID_SCALE_RESTORE_GIB is set, so it cannot slow the normal nightly scale job or the PR lane."
     },
+    "tests/scale/browser-replica-query.scale.test.ts": {
+      "lane": "scale",
+      "volume": "YEAR-3: 50,000 replica rows in one entity inside the shipping client query core (ReplicaSqliteStore over a node:sqlite driver — the same read path web and native run), then three reads: a full-entity materialisation, a filtered + sorted 200-row page, and an `in` over 1,000 ids (#883 C1 before-instrument, re-baselined by C3 once the grammar was compiled to SQL)",
+      "_noBudgetMs": "Deliberate. The rig's ceilings are PER READ, not per rig — FULL_READ_CEILING_MS / FILTERED_READ_CEILING_MS / IN_READ_CEILING_MS in its own body, each asserted there — because one rig duration would say nothing about which of the three reads regressed. #883 C3 pushed the read grammar into SQL and the seeded `in` DEBT MARKER is paid: 122,300 ms observed on 2026-08-28 became 64-70 ms, so the three ceilings were tightened from 20,000 / 10,000 / 400,000 to 4,000 / 1,500 / 1,500 and the whole rig now runs in about six seconds instead of two to three minutes. All three stay tighten-only, and the 30-sample/1.5x drift gate is the steady-state gate."
+    },
+    "tests/scale/photo-similarity.scale.test.ts": {
+      "lane": "scale",
+      "volume": "YEAR-3: 90,000 media assets each with one 512-float `embed-image` embedding (184 MB of float32 vectors), 8 planted near-matches, then one 20-hit semantic search through EACH shipping ranker (#883 C2, the measurement docs/decisions.md ruling Q12 defers the vector-engine choice to)",
+      "_noBudgetMs": "Deliberate. The ceilings are PER ENGINE and per resource, not per rig — `photoSemanticSearchAtYear3` in tests/experience-budgets/gateway.json (ceilingMs, ceilingRssDeltaBytes, ceilingEventLoopBlockMs), each asserted in the rig body for both rankers — because one rig duration would be dominated by seeding 90,000 rows and would say nothing about which engine regressed. The 30-sample/1.5x drift gate is the duration gate."
+    },
+    "tests/scale/replica-sse-fanout.scale.test.ts": {
+      "lane": "scale",
+      "volume": "16 concurrent replica SSE subscriptions against one real serve() gateway over a 2,000-row replicated table, then 50 commits pushed one at a time — each commit waited out to EVERY subscriber before the next is written (#883 C1's before-instrument, now C2's gate for the shared projection + subscriber cap)",
+      "_measured": "BEFORE (#883 C1): two 2026-08-28 runs on a shared 4-vCPU linux container measured 16,969 ms and 16,781 ms of fan-out wall clock (per-commit median 333/327 ms, p95 429/419 ms, 11,904/11,860 prepared vault statements PER COMMIT — about 744 per subscriber, the O(subscribers) projection cost this rig exists to witness); a third on the C2 container measured 13,443 ms at 10,784 statements. AFTER (#883 C2, routes/replica-fanout.ts — one commit registration and one memoised projection per (authorization x cursor) per commit generation, fanned to every subscriber): three consecutive runs on that same container measured 1,077 / 1,183 / 1,151 ms, per-commit median 19-21 ms, p95 53-54 ms, and 658 statements per commit on all three — one projection per commit rather than sixteen. budgetMs is ratcheted 45,000 -> 3,600, ~3x the worst of the three, the same contended-runner headroom convention the previous number used; the 30-sample/1.5x drift gate tracks steady state. The statement count is now ALSO gated, in the rig body (SHARED_PROJECTION_STATEMENTS_CEILING = 1,200), as a mechanism assertion rather than a cost budget — the rig's comment argues why that survives #873.",
+      "budgetMs": 3600
+    },
+    "tests/scale/replica-reconnect.scale.test.ts": {
+      "lane": "scale",
+      "volume": "YEAR-3: 50,000 replica rows walked by a windowed HTTP bootstrap, a live change stream attached and then dropped, 25 commits written while the client is away, and the stale cursor resumed — reconnect-to-first-correct-frame (#883 C1, the probe tests/experience-budgets/gateway.json#reconnectToFresh asked for)",
+      "_noBudgetMs": "Deliberate. The rig's own wall clock is dominated by seeding 50,000 rows and walking them through the bootstrap route — work that is SETUP for the measurement, not the measurement. What it gates is `reconnectToFresh.ceilingMs` in tests/experience-budgets/gateway.json (asserted in the rig body, tighten-only there), and the recorded drift series is the reconnect interval itself rather than the rig duration."
+    },
+    "tests/scale/mobile-reconnect-to-fresh.scale.test.ts": {
+      "lane": "scale",
+      "volume": "YEAR-3: 50,000 mobile replica rows read through the native SQLite session, with 25 missed changes replayed after a background/foreground transition",
+      "_noBudgetMs": "Deliberate. The rig measures the client-side resume interval against `reconnectToFresh.ceilingMs` in tests/experience-budgets/mobile.json; setup and fixture construction are not the user-facing interval, and the 30-sample/1.5x drift gate tracks that interval once nightly history exists."
+    },
     "tests/scale/replica-bootstrap.scale.test.ts": {
       "lane": "scale",
       "volume": "50,000 rows — client windowed bootstrap with an in-flight deletion, plus the gateway windowed-page walk resumed across a vault-plane restart (#750)"
+    },
+    "tests/scale/replica-retention.scale.test.ts": {
+      "lane": "scale",
+      "volume": "45 simulated days x 4,000 replica writes (90% of them concentrated on 400 hot rows), run TWICE — once with the entry cap alone and once with compaction — then the worst-day resumable window measured on each (#883, the retention half of change-log.ts)",
+      "_noBudgetMs": "Deliberate. What this rig gates is a WINDOW IN DAYS, not a duration: the worst day a returning phone can still resume from, asserted in the rig body against REPLICA_RETENTION_DAYS. The wall clock is dominated by seeding 360,000 writes twice, which is setup for that measurement rather than the measurement, and no absolute ceiling has a distribution behind it yet — the 30-sample/1.5x drift gate is the duration gate."
     },
     "tests/scale/tunnel-pairs.scale.test.ts": {
       "lane": "scale",

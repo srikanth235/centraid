@@ -1,28 +1,22 @@
-// The schema ladder for vault.db and journal.db. Rung one is the baseline,
-// composed of every owner table's DDL in dependency order, including what
-// #726's forward rename and #731's Commons control plane used to
-// ship as separate rungs. Rung two (#821) is the first genuine upgrade
-// rung: relaxing a CHECK in the baseline text reaches new files only, so
-// vaults already stamped v1 need a vault-preserving rebuild to get there.
-// Rung three (#825) adds the grant plane's tables and restates live
-// commons grants into them; it is written `IF NOT EXISTS` + backfill so a
-// fresh file, which got the tables from the baseline, walks it as a no-op.
-// `migrate()` applies rungs transactionally and stamps `PRAGMA user_version`,
-// and that version number is load-bearing beyond this file: it is the
-// downgrade guard
-// (`VaultSchemaAheadError`, thrown when a file's version exceeds what this
-// build's ladder knows how to reach) and it is the "schema version this
-// build understands" reported by the gateway's backup/recovery provenance
-// (`packages/server/src/backup/backup-service.ts`,
-// `packages/server/src/backup/recover-internals.ts` read
-// `VAULT_MIGRATIONS.length`). A fresh file walks EVERY rung (rung two is a
-// faithful re-creation on a table that already has the relaxed CHECK; rung
-// three creates tables the baseline already made and backfills from an empty
-// commons plane), so the two paths land on the same shape and version.
+// The schema ladder for vault.db and journal.db. `migrate()` applies rungs
+// transactionally and stamps `PRAGMA user_version`; that number is load-bearing
+// beyond this file — it is the downgrade guard (`VaultSchemaAheadError`) and
+// the "schema version this build understands" the backup/recovery provenance
+// reports from `VAULT_MIGRATIONS.length`.
+//
+// Rung one is the baseline: every owner table's DDL in dependency order. A
+// fresh file still walks EVERY later rung, most as faithful no-ops (`IF NOT
+// EXISTS` creates, backfills that select nothing), so both paths land on the
+// same shape and version. Rungs five, six and seven are the exceptions that
+// prove the rule: they create what the baseline does not, or drop what it
+// still does, and a fresh file reaches the shape by walking each exactly once.
+// THE BASELINE TEXT IS HISTORY — a store this build no longer wants is still
+// created by rung one and dropped by the rung that replaces it (#883).
 
 import type { DatabaseSync } from "node:sqlite";
 
 import { AGENT_DDL } from "./agent.js";
+import { SHARE_AUTHORITY_MIGRATION_DDL } from "./authority.js";
 import { BLOB_TRANSFER_DDL } from "./blob-transfer.js";
 import { BLOB_DDL } from "./blob.js";
 import { COMMONS_RESILIENCE_DDL } from "./commons-resilience.js";
@@ -62,10 +56,11 @@ import { TALLY_DDL, TALLY_RECEIPT_DDL } from "./domains-tally.js";
 import { ENRICH_DDL } from "./enrich.js";
 import { ENTITY_REVISIONS_DDL } from "./entity-revisions.js";
 import { APP_EXT_DDL } from "./ext.js";
-import { FTS_DDL } from "./fts.js";
-import { JOURNAL_DDL } from "./journal.js";
+import { FTS_DDL, assertFtsSpecsRegistered } from "./fts.js";
+import { JOURNAL_DDL, JOURNAL_PROVENANCE_TIME_INDEX_DDL } from "./journal.js";
 import { RENAME_INBOX_NOTICE_DDL } from "./notifications.js";
 import { OUTBOX_DDL } from "./outbox.js";
+import { ONTOLOGY_RECONCILE_MIGRATION_DDL } from "./reconcile.js";
 import { REPLICA_DDL } from "./replica.js";
 import { SEED_DDL } from "./seed.js";
 import { SHARE_COMMONS_DDL } from "./share-commons.js";
@@ -79,6 +74,7 @@ import {
   SYNC_CREDENTIAL_REFRESH_CAPABILITY_DDL,
   SYNC_DDL,
 } from "./sync.js";
+import { assertVaultRegistryLabels } from "./tables.js";
 import { TIME_ORGANIZE_DDL } from "./time-organize.js";
 
 /**
@@ -175,17 +171,13 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // See `PEOPLE_PROFILE_CADENCE_FLOOR_DDL` for why a rebuild, and for how the
   // rung handles foreign keys inside the runner's transaction.
   PEOPLE_PROFILE_CADENCE_FLOOR_DDL,
-  // Rung three (#825): the grant plane reaches files stamped before it.
-  // The DDL is `IF NOT EXISTS` throughout, so a fresh file — which already got
-  // the tables from the baseline above — walks this rung as a no-op create
-  // plus a backfill that selects from an empty `share_circle_grant`, and the
-  // two paths land on the same shape and version.
+  // Rung three (#825): the grant plane reaches files stamped before it. `IF
+  // NOT EXISTS` throughout, so a fresh file walks it as a no-op create plus a
+  // backfill over an empty `share_circle_grant`.
   SHARE_GRANT_BACKFILL_DDL,
-  // Rung four (#846): `share_fulfillment.delivered_at`, the durable
-  // memory of delivery that revocation reads instead of inferring it from the
-  // live `state`. A table rebuild rather than an ADD COLUMN so the rung is
-  // also a faithful no-op on a fresh file that got the column from the
-  // baseline; see the DDL for the backfill and foreign-key reasoning.
+  // Rung four (#846): `share_fulfillment.delivered_at`, the durable memory of
+  // delivery revocation reads instead of inferring it from `state`. A rebuild
+  // rather than ADD COLUMN, so it is also a no-op on a fresh file.
   SHARE_FULFILLMENT_DELIVERY_MEMORY_DDL,
   // Rung five (issue #865): `sync_connection_credential.refresh_capability`,
   // the Worker-minted HMAC a stored Assist refresh token is redeemable with.
@@ -193,12 +185,46 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // this column, so both fresh and stamped files reach the same shape by
   // walking exactly this ALTER once.
   SYNC_CREDENTIAL_REFRESH_CAPABILITY_DDL,
+  // Rung six (issue #883): the one authority plane. `share_grant`,
+  // `enrich_consent` and `consent_device.trust` fold into `share_authority`
+  // and are dropped in the same pass — a superseded store is never carried
+  // beside its replacement. Like rung five there is no baseline copy, so fresh
+  // and stamped files both reach the shape by walking exactly this rung once;
+  // see `schema/authority.ts` for the column-for-column mapping and for why
+  // `share_fulfillment` and `consent_device` are rebuilt rather than altered.
+  SHARE_AUTHORITY_MIGRATION_DDL,
+  // Rung seven (issue #883): the ontology reconciliation. Reachability leaves
+  // the identity register for `social_contact_channel`, `social_contact_card`
+  // and `tally_expense_receipt` fold onto the party spine and the attachment
+  // spine, Tasks and Agenda gain the trash pair, the thirteen tables missing an
+  // `updated_at` trigger get one, and `home.*`/`business.*` leave the ontology
+  // for proposal #885. Like rungs five and six there is no baseline copy of any
+  // of it, so fresh and stamped files both reach the shape by walking exactly
+  // this rung once; see `schema/reconcile.ts` for the per-store landing and for
+  // why the rung REFUSES rather than drops where a row would have nowhere to go.
+  ONTOLOGY_RECONCILE_MIGRATION_DDL,
 ];
 
-export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];
+export const JOURNAL_MIGRATIONS: readonly string[] = [
+  JOURNAL_DDL,
+  // Journal rung two (#883): the provenance stream's time index. journal.db has
+  // its own ladder and its own `user_version`; a vault.db rung can never reach
+  // it, which is why this is a second rung here rather than a statement in the
+  // vault's rung seven.
+  JOURNAL_PROVENANCE_TIME_INDEX_DDL,
+];
 
-/** Apply the current pre-release vault schema. */
+/**
+ * Apply the current pre-release vault schema.
+ *
+ * THE REGISTRY IS CHECKED FIRST (#883). Both gates are memoised pure functions
+ * of module state, so this costs one pass per process — and it is the moment
+ * worth failing at: an unnamed entity, or an FTS spec over a table the
+ * registry does not declare, is a defect in the build, not in the file.
+ */
 export function migrateVault(db: DatabaseSync): void {
+  assertVaultRegistryLabels();
+  assertFtsSpecsRegistered();
   migrate(db, VAULT_MIGRATIONS);
 }
 
@@ -210,12 +236,10 @@ function currentVersion(db: DatabaseSync): number {
 }
 
 /**
- * Thrown when a file's `PRAGMA user_version` is ahead of what this build's
- * migration ladder knows how to reach — a newer-software backup restored
- * onto older software, or the app itself downgraded. The old loop was
- * forward-only and would silently no-op in this case, leaving the gateway
- * to open (and write into) a schema shape it doesn't understand. Callers
- * must let this propagate; opening the file anyway risks silent corruption.
+ * A file's `PRAGMA user_version` is ahead of what this build's ladder reaches:
+ * a newer-software backup restored onto older software, or a downgrade.
+ * Callers must let this propagate — opening the file anyway would write into a
+ * schema shape this build does not understand.
  */
 export class VaultSchemaAheadError extends Error {
   constructor(
@@ -254,22 +278,16 @@ export function migrate(db: DatabaseSync, migrations: readonly string[]): void {
 /*
  * Batched, resumable data rewrites (#659).
  *
- * The ladder above is right for DDL: a rung is small, atomic, and its cost is
- * independent of how much is in the vault. It is exactly wrong for a rung
- * that has to REWRITE rows — a single transaction over a table with a
- * million rows blocks the whole vault for as long as it takes, and a crash
- * halfway through means starting over from the top on the next open, forever
- * if the rewrite cannot finish inside one window.
+ * The ladder above is right for DDL — small, atomic, cost independent of vault
+ * size — and exactly wrong for a rung that REWRITES rows: one transaction over
+ * a million rows holds the vault for its duration, and a crash restarts it
+ * from the top, forever if it cannot finish inside one window. Here the
+ * rewrite runs in bounded batches, each committing its own cursor, so a pass
+ * may stop at any boundary and resume there.
  *
- * This primitive is the alternative: the rewrite runs in bounded batches, each
- * batch commits with its own cursor, and a pass may stop at any batch boundary
- * and resume exactly where it stopped. A host can therefore run a few batches
- * per sweep instead of holding the vault hostage at startup.
- *
- * No shipped rung needs it yet; it exists so that the first one that does is
- * not tempted to write the single-transaction version. The cursor table is
- * created on demand rather than as a rung of its own so that adopting the
- * primitive is a code change, not a schema-version bump.
+ * No shipped rung needs it yet; it exists so the first one that does is not
+ * tempted to write the single-transaction version. The cursor table is created
+ * on demand, so adopting the primitive is a code change, not a version bump.
  */
 
 const MIGRATION_CURSOR_DDL = `
@@ -289,11 +307,10 @@ export interface BatchedRewrite {
   /** Stable name. The resume cursor is stored under it — never reuse one. */
   name: string;
   /**
-   * Selects the next keys to rewrite. Bound with `:cursor` (the last key of
-   * the previous batch, `''` on the first run) and `:limit`; must return one
-   * TEXT column aliased `key`, ordered ascending, and must select only keys
-   * strictly greater than `:cursor`. Ordering by the key is what makes the
-   * cursor a resume point rather than an offset.
+   * Bound with `:cursor` (last key of the previous batch, `''` first run) and
+   * `:limit`; returns one TEXT column aliased `key`, ascending, strictly
+   * greater than `:cursor`. That ordering makes the cursor a resume point
+   * rather than an offset.
    */
   selectBatchSql: string;
   /** Rewrites ONE row. Bound with `:key`. */
@@ -310,10 +327,9 @@ export interface BatchedMigrationResult {
 }
 
 /**
- * Run up to `maxBatches` batches of a data-rewriting migration, committing
- * each batch with its cursor. Calling it again resumes from the last
- * committed cursor; calling it after completion is a no-op that costs one
- * indexed read of the cursor row.
+ * Up to `maxBatches` batches, each committed with its cursor. A repeat call
+ * resumes from the last committed cursor; after completion it is a no-op
+ * costing one indexed read.
  */
 export function runBatchedMigration(
   db: DatabaseSync,

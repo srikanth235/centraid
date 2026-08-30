@@ -11,7 +11,6 @@ import { afterEach, describe, expect, test } from "vitest";
 import { registerAttachmentCommands } from "../commands/attachments.js";
 import { registerDocumentCommands } from "../commands/documents.js";
 import { registerEnrichCommands } from "../commands/enrich.js";
-import { registerHomeCommands } from "../commands/home.js";
 import { registerKnowledgeCommands } from "../commands/knowledge.js";
 import { registerLockerCommands } from "../commands/locker.js";
 import { registerMediaCommands } from "../commands/media.js";
@@ -32,15 +31,14 @@ interface RegisteredCommand {
   inputKeys: Set<string>;
 }
 
-/** Every command whose pack can address a shareable container, read back from
- *  `agent_command` — the registry the gateway itself authorizes against. */
+/** Read back from `agent_command`, the registry the gateway authorizes
+ *  against. */
 function registeredCommands(): Map<string, RegisteredCommand> {
   const { origin } = household();
   const gateway = createGateway(origin);
   registerAttachmentCommands(gateway);
   registerDocumentCommands(gateway);
   registerEnrichCommands(gateway);
-  registerHomeCommands(gateway);
   registerKnowledgeCommands(gateway);
   registerLockerCommands(gateway);
   registerMediaCommands(gateway);

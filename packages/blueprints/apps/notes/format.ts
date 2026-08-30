@@ -1,6 +1,8 @@
+import { DAY_MS, MONTHS, decodeDataUri } from "../_shared/format-kit.ts";
+
 // Pure projections over a note — no app state, no vault IO, no JSX. THE
 // UNTITLED NOTE IS THE DEFAULT CASE (Notes spec §1): `promote` is the single
-// answer every surface reads, and no surface may derive its own.
+// answer, and no surface may derive its own.
 
 export type Block =
   | { kind: "check"; checked: boolean; text: string; line: number }
@@ -81,12 +83,10 @@ export interface Promoted {
   preview: string;
 }
 
-/** Stored name for a note that has no title of its own. */
 export const UNTITLED_NOTE = "Untitled note";
 
-/** UNTITLED covers a missing title, the empty-note sentinel, AND a title
- *  equal to the first line — the shape `create_note` leaves behind. The
- *  preview starts below the heading. */
+/** UNTITLED covers a missing title, the sentinel, AND a title equal to the
+ *  first line — the shape `create_note` leaves behind. */
 export function promote(note: {
   title?: unknown;
   preview?: unknown;
@@ -113,32 +113,18 @@ export function promote(note: {
   };
 }
 
+/** The ruled decoder (#883 B4), but empty where a list says "(external
+ *  content)": a writing surface opens empty, never on a parenthetical. */
 export function decodeTextContent(uri: unknown): string {
-  if (typeof uri !== "string" || !uri.startsWith("data:")) return "";
-  const comma = uri.indexOf(",");
-  if (comma < 0) return "";
-  const payload = uri.slice(comma + 1);
-  try {
-    if (!uri.slice(0, comma).includes(";base64"))
-      return decodeURIComponent(payload);
-    // Hermes has no Buffer; `atob`'s bytes still need UTF-8 decoding.
-    return decodeURIComponent(
-      Array.from(
-        globalThis.atob(payload),
-        (byte) => `%${byte.codePointAt(0)!.toString(16).padStart(2, "0")}`
-      ).join("")
-    );
-  } catch {
-    return "";
-  }
+  return decodeDataUri(typeof uri === "string" ? uri : null) ?? "";
 }
 
 export type Segment =
   | { kind: "text"; from: number; to: number; text: string }
   | { kind: "check"; line: number; checked: boolean; text: string };
 
-/** A CHECKLIST LINE IS A CONTROL, never a second rendered copy beside the
- *  writing surface. `from`/`to` are character offsets into the body. */
+/** A CHECKLIST LINE IS A CONTROL, never a second rendered copy. `from`/`to`
+ *  are character offsets into the body. */
 export function bodySegments(body: string): Segment[] {
   const lines = body.split("\n");
   const out: Segment[] = [];
@@ -180,23 +166,6 @@ export function deriveTitle(title: unknown, body: unknown): string {
   return firstLine ? firstLine.trim().slice(0, 80) : "";
 }
 
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
-
-const DAY_MS = 86_400_000;
-
 /** A FACT, NOT A REPRIMAND: an old note says only when it last changed. */
 export function ageLabel(when: unknown, now: number = Date.now()): string {
   const stamp = Date.parse(String(when ?? ""));
@@ -222,7 +191,7 @@ export function daysLeft(
 }
 
 /** The ONE observable form of "two devices changed this passage": identical
- *  `asserted_at` stamps. The conflict panel is drawn from this, never a guess. */
+ *  `asserted_at` stamps. The conflict panel reads this, never a guess. */
 export function hasConcurrentVersions(
   versions: ReadonlyArray<{ asserted_at: string }>
 ): boolean {

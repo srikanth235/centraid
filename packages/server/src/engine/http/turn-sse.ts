@@ -12,6 +12,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { unrefTimer } from "../../lib/unref-timer.js";
 import { HarnessSessions } from "../conversation/harness-sessions.js";
 import type {
   ConversationHistoryStore,
@@ -207,7 +208,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
   const heartbeat = setInterval(() => {
     stream.comment("ping");
   }, 30_000);
-  heartbeat.unref?.();
+  unrefTimer(heartbeat);
 
   const writeEvent = (event: TurnStreamEvent): void => {
     stream.event(event.type, JSON.stringify(event));
@@ -403,7 +404,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
             60_000
           )
         : undefined;
-      lockLeaseHeartbeat?.unref?.();
+      unrefTimer(lockLeaseHeartbeat);
       try {
         // A key naming a recorded turn replays it, skipping harness AND
         // recordTurn; in-flight duplicates queue on the lock, so no 409 (#420).

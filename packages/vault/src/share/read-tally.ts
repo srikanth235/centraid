@@ -1,13 +1,11 @@
 // The origin-side read of a Tally group (#726 split of household.ts).
 //
-// A Tally group is the one shareable item that is a LEDGER rather than a
-// document: it only means anything alongside its circle, its accounting
-// parties and every expense/split/settlement that balances it. So the whole
-// sub-graph crosses, and — unlike a photograph's `creator_party_id` — the
-// party rows DO come with it: a balance naming a party the audience has never
-// heard of is not a privacy win, it is a broken ledger. They cross as
-// ACCOUNTING parties (core_party rows), never as principals; nothing here
-// touches consent, membership or identity.
+// A Tally group is the one shareable item that is a LEDGER: it means nothing
+// without its circle, its accounting parties and every expense that balances
+// it, so the whole sub-graph crosses. Unlike a photograph's `creator_party_id`
+// the party rows DO come — a balance naming a party the audience never heard of
+// is a broken ledger, not a privacy win. They cross as ACCOUNTING parties,
+// never principals.
 //
 // Receipt bytes ride the closure's shared content pool (read-closure.ts), so a
 // receipt photographed once and also shared on its own crosses once.
@@ -47,6 +45,14 @@ export function readTallyGroup(
       String(expense.expense_id)
     )
   );
+  const payers = expenses.flatMap((expense) =>
+    rows(
+      origin,
+      "tally_expense_payer",
+      "expense_id",
+      String(expense.expense_id)
+    )
+  );
   const settlements = rows(origin, "tally_settlement", "group_id", itemId);
   const recurring = rows(origin, "tally_recurring_expense", "group_id", itemId);
   const exceptions = recurring.flatMap(
@@ -58,20 +64,26 @@ export function readTallyGroup(
         )
         .all(String(template.template_id)) as WireRow[]
   );
-  const receipts = expenses.flatMap((expense) =>
-    rows(
-      origin,
-      "tally_expense_receipt",
-      "expense_id",
-      String(expense.expense_id)
-    )
+  // A receipt is the `role='receipt'` attachment on the expense (#883).
+  const receipts = expenses.flatMap(
+    (expense) =>
+      origin
+        .prepare(
+          `SELECT * FROM core_attachment
+            WHERE target_type = 'tally.expense' AND target_id = ?
+              AND role = 'receipt'
+            ORDER BY attachment_id`
+        )
+        .all(String(expense.expense_id)) as WireRow[]
   );
-  const lineItems = receipts.flatMap((receipt) =>
+  // Read by EXPENSE, not by receipt: a typed line belongs to the expense, and
+  // a "By line" division may have no photo at all.
+  const lineItems = expenses.flatMap((expense) =>
     rows(
       origin,
       "tally_expense_line_item",
-      "receipt_id",
-      String(receipt.receipt_id)
+      "expense_id",
+      String(expense.expense_id)
     )
   );
   const lineAllocations = lineItems.flatMap((line) =>
@@ -91,6 +103,7 @@ export function readTallyGroup(
       ...members.map((row) => String(row.party_id)),
       ...expenses.map((row) => String(row.paid_by)),
       ...splits.map((row) => String(row.party_id)),
+      ...payers.map((row) => String(row.party_id)),
       ...settlements.flatMap((row) => [
         String(row.from_party),
         String(row.to_party),
@@ -100,6 +113,7 @@ export function readTallyGroup(
     ]),
     expenses,
     splits,
+    payers,
     settlements,
     recurring,
     exceptions,

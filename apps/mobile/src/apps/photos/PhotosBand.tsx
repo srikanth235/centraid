@@ -1,6 +1,6 @@
 // The phone's bottom band (§3.1). Opaque paper, never glass: contrast must not
-// depend on what was photographed. Content ends ABOVE the band by LAYOUT (a
-// `flex:none` sibling), never by padding on the scroll content.
+// depend on what was photographed. Content ends ABOVE the band by LAYOUT, never
+// by padding on the scroll content.
 
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -15,11 +15,12 @@ import {
   BAND_TOP_GAP,
 } from "../../kit/band-surface";
 import type { BandOwner } from "../../kit/band/band-owner";
+import BandCapsuleControl from "../../kit/band/BandCapsule";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
-import { BAND_CAPSULE, resolveBand } from "./photos-band";
+import { resolveBand } from "./photos-band";
 import type { BandDestinationKey } from "./photos-band";
 
 const GROUP_GUTTER = 2;
@@ -51,14 +52,7 @@ export default function PhotosBand({
       <View
         style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={BAND_CAPSULE.label}
-          onPress={onHome}
-          style={[styles.capsule, { width: BAND_CAPSULE.size }]}
-        >
-          <Icon name={BAND_CAPSULE.icon} size={19} color={colors.textSoft} />
-        </Pressable>
+        <BandCapsuleControl onPress={onHome} />
       </View>
     );
   }
@@ -68,14 +62,7 @@ export default function PhotosBand({
     // No `accessibilityRole` here: a tablist would nest the capsule in the group.
     <View style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}>
       {/* A FRAME control on the frame's page colour, never Photos' mat. */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={capsule.label}
-        onPress={onHome}
-        style={[styles.capsule, { width: capsule.size }]}
-      >
-        <Icon name={capsule.icon} size={19} color={colors.textSoft} />
-      </Pressable>
+      <BandCapsuleControl capsule={capsule} onPress={onHome} />
 
       {/* ONE group; the gap between the plates is the seam. */}
       <View style={styles.group} accessibilityRole="tablist">
@@ -135,15 +122,6 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: BAND_INSET,
       paddingTop: BAND_TOP_GAP,
     },
-    capsule: {
-      alignItems: "center",
-      // The frame's page colour, never Photos' mat.
-      backgroundColor: colors.bg,
-      borderColor: colors.lineStrong,
-      borderRadius: BAND_RADIUS,
-      borderWidth: BAND_BORDER,
-      justifyContent: "center",
-    },
     group: {
       alignItems: "stretch",
       backgroundColor: colors.bgElev,
@@ -159,8 +137,8 @@ const makeStyles = (colors: ThemeColors) =>
       ...t("control"),
       alignSelf: "stretch",
       color: colors.textSoft,
-      // NO `fontFamily` OVERRIDE: `t("control")` is already sansMedium. Active
-      // state is colour plus the ink rule, never weight.
+      // No `fontFamily` override: `t("control")` is sansMedium. Active state
+      // is colour plus the ink rule, never weight.
       textAlign: "center",
     },
     labelActive: { color: colors.text },

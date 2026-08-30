@@ -9,6 +9,7 @@
 import type { ReactNode } from "react";
 
 import { LoadingSkeleton } from "../../_shared/LoadingSkeleton.tsx";
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
 import {
   cadenceLineLabel,
@@ -113,6 +114,10 @@ export function PersonRoute(props: PersonRouteProps): ReactNode {
             <div className={shared.heroRole}>{displayText(person.role)}</div>
           ) : null}
         </div>
+        <PendingWriteActions
+          row={person as unknown as Record<string, unknown>}
+          onEdit={props.onEdit}
+        />
         <StarButton
           name={person.name}
           starred={person.starred}

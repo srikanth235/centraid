@@ -6,7 +6,7 @@
 // An edge is a copy between two vaults ONE PERSON owns. There is no D9 ask
 // surface here — no `GET …/edges/pending`, no `POST …/edges/:id/answer`
 // (#825, ruling G-copy); sharing with another person is a standing grant, read
-// and written through `src/kit/share/grants-transport.ts`.
+// and written through `src/kit/share/grant-seat.ts`.
 import { ROUTES } from "@centraid/core/protocol";
 
 import { authHeader } from "../gateway";

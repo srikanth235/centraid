@@ -1,22 +1,14 @@
 /**
- * The People journal is now a projection over canonical knowledge notes and
- * contact activities (#450). Owner-authored entries are knowledge.note
- * rows tagged in the People-journal scheme; automatic entries are
- * core.activity rows linked `about` a party, with optional annotations.
+ * The People journal projects canonical rows (#450): owner entries are
+ * knowledge.note rows tagged in the People-journal scheme; automatic ones
+ * are core.activity rows linked `about` a party, with annotations.
  */
 
-interface RawTag {
-  target_id: string;
-  concept_id: string;
-}
+import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
+
 interface RawConcept {
   concept_id: string;
-  scheme_id: string;
   notation: string;
-}
-interface RawScheme {
-  scheme_id: string;
-  uri: string;
 }
 interface RawNote {
   note_id: string;
@@ -50,8 +42,6 @@ interface RawProfile {
   avatar_color?: string | null;
 }
 
-const JOURNAL_SCHEME_URI = "https://centraid.dev/schemes/people-journal";
-
 function decodeText(uri: string | undefined): string {
   if (!uri?.startsWith("data:")) return "";
   const comma = uri.indexOf(",");
@@ -66,14 +56,9 @@ function decodeText(uri: string | undefined): string {
 export default async function journalHandler({ ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
   try {
-    const [tags, concepts, schemes, activityLinks] = await Promise.all([
-      ctx.vault.read({
-        entity: "core.tag",
-        where: [{ column: "target_type", op: "eq", value: "knowledge.note" }],
-        purpose,
-      }),
+    const [journalNoteIds, concepts, activityLinks] = await Promise.all([
+      readJournalNoteIds(ctx.vault, purpose),
       ctx.vault.read({ entity: "core.concept", purpose }),
-      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
       ctx.vault.read({
         entity: "core.link",
         where: [
@@ -85,17 +70,7 @@ export default async function journalHandler({ ctx }: HandlerArgs) {
       }),
     ]);
     const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
-    const journalScheme = ((schemes.rows ?? []) as unknown as RawScheme[]).find(
-      (scheme) => scheme.uri === JOURNAL_SCHEME_URI
-    );
-    const markerId = conceptRows.find(
-      (concept) =>
-        concept.scheme_id === journalScheme?.scheme_id &&
-        concept.notation === "entry"
-    )?.concept_id;
-    const noteIds = ((tags.rows ?? []) as unknown as RawTag[])
-      .filter((tag) => tag.concept_id === markerId)
-      .map((tag) => tag.target_id);
+    const noteIds = [...journalNoteIds];
     const links = (activityLinks.rows ?? []) as unknown as RawLink[];
     const activityIds = [...new Set(links.map((link) => link.from_id))];
     const partyIds = [...new Set(links.map((link) => link.to_id))];

@@ -67,12 +67,10 @@ import {
   updateVaultPresentation,
   registerAttachmentCommands,
   registerTagCommands,
-  registerBusinessCommands,
   registerDocumentCommands,
   registerEnrichCommands,
   registerFinanceCommands,
   registerHealthCommands,
-  registerHomeCommands,
   registerLockerCommands,
   registerKnowledgeCommands,
   registerLinkCommands,
@@ -83,6 +81,7 @@ import {
   registerScheduleCommands,
   registerSocialCommands,
   registerOutboxCommands,
+  registerShareCommands,
   registerJudgmentCommands,
   registerSyncCommands,
   registerTallyCommands,
@@ -137,6 +136,7 @@ import type {
 } from "@centraid/vault";
 
 import { loadSqliteVec } from "../enrich/sqlite-vec.js";
+import { unrefTimer } from "../lib/unref-timer.js";
 import { GroupCommitQueue } from "./group-commit-queue.js";
 import { decideJournalArchive } from "./journal-limit.js";
 import { NoticeStore } from "./notices.js";
@@ -423,10 +423,10 @@ export class VaultPlane {
   private readonly onNotificationsChanged:
     | ((vaultId: string, wake: boolean) => void)
     | undefined;
-  private sweepTimer: NodeJS.Timeout | undefined;
-  private firstSweep: NodeJS.Immediate | undefined;
-  private walTimer: NodeJS.Timeout | undefined;
-  private firstWalTick: NodeJS.Immediate | undefined;
+  private sweepTimer: ReturnType<typeof setTimeout> | undefined;
+  private firstSweep: ReturnType<typeof setImmediate> | undefined;
+  private walTimer: ReturnType<typeof setTimeout> | undefined;
+  private firstWalTick: ReturnType<typeof setImmediate> | undefined;
   private lastJournalArchivalAt = 0;
   private readonly journalLimitBytes: () => number | null;
   private journalArchiveRung = 0;
@@ -549,7 +549,6 @@ export class VaultPlane {
     registerFinanceCommands(this.gateway);
     registerHealthCommands(this.gateway);
     registerKnowledgeCommands(this.gateway);
-    registerBusinessCommands(this.gateway);
     registerAttachmentCommands(this.gateway);
     registerTagCommands(this.gateway);
     registerLinkCommands(this.gateway);
@@ -557,13 +556,13 @@ export class VaultPlane {
     registerMediaCommands(this.gateway);
     registerMediaGazetteerCommands(this.gateway);
     registerDocumentCommands(this.gateway);
-    registerHomeCommands(this.gateway);
     registerPeopleCommands(this.gateway);
     registerLockerCommands(this.gateway);
     registerTallyCommands(this.gateway);
     registerSyncCommands(this.gateway);
     registerEnrichCommands(this.gateway);
     registerOutboxCommands(this.gateway);
+    registerShareCommands(this.gateway);
     registerJudgmentCommands(this.gateway);
     registerAtlasCommands(this.gateway);
     // Handlers live in gateway memory, contract rows in the vault, so every
@@ -1735,13 +1734,10 @@ export class VaultPlane {
   }
 
   /**
-   * A consent refusal an app renders as its access state should be able to say
-   * WHEN the grant went. The vault already records it — the revoke duty stamps
-   * `consent_access_grant.revoked_at` — but the app cannot read that table,
-   * because losing the grant is exactly what put it here. So the host attaches
-   * the time to the refusal. Absent when the refusal was never a revocation
-   * (a scope never granted, a purpose the policy forbids): the field's absence
-   * is honest, and no caller may invent one.
+   * The host attaches WHEN the grant went: `consent_access_grant.revoked_at`
+   * records it, but the app cannot read that table — losing the grant is what
+   * put it here. Absent when the refusal was never a revocation (a scope never
+   * granted, a purpose the policy forbids); no caller may invent one.
    */
   private withRevocationTime(
     appId: string,
@@ -2107,7 +2103,7 @@ export class VaultPlane {
       this.walTick();
       this.scheduleWalCapture();
     }, jitterDelayMs(this.walCaptureDelayMs()));
-    this.walTimer.unref();
+    unrefTimer(this.walTimer);
   }
 
   private scheduleSweep(): void {
@@ -2117,7 +2113,7 @@ export class VaultPlane {
       this.runSweep();
       this.scheduleSweep();
     }, jitterDelayMs(this.sweepIntervalMs));
-    this.sweepTimer.unref();
+    unrefTimer(this.sweepTimer);
   }
 
   rescheduleWalCapture(): void {
@@ -2141,7 +2137,7 @@ export class VaultPlane {
         this.firstWalTick = undefined;
         this.walTick();
       });
-      this.firstWalTick.unref();
+      unrefTimer(this.firstWalTick);
     }
     this.scheduleWalCapture();
   }
@@ -2153,7 +2149,7 @@ export class VaultPlane {
       this.firstSweep = undefined;
       if (!this.closed) this.runSweep();
     });
-    this.firstSweep.unref();
+    unrefTimer(this.firstSweep);
     this.scheduleSweep();
     if (!this.walLifecycleEnabled) return;
     // Also deferred (#411): the first tick mints the generation base, which

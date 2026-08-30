@@ -282,7 +282,11 @@ export function useSurfaceActs(input: SurfaceActsInput): SurfaceActs {
         publish(EXPORT_NOTHING);
         return;
       }
-      saveExportFile(exportFileName(payload), exportCsv(payload));
+      saveExportFile({
+        name: exportFileName(payload),
+        text: exportCsv(payload),
+        type: "text/csv",
+      });
       publish(EXPORT_WRITTEN);
     })();
   }, [bagRef, bump, publish]);

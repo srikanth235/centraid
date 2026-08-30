@@ -79,7 +79,7 @@ describe("atlas-census", () => {
       .prepare(
         `INSERT INTO core_party_identifier
          (identifier_id, party_id, scheme, value, is_primary, valid_from)
-       VALUES ('id1', 'p1', 'email', 'ravi@example.com', 1, ?)`
+       VALUES ('id1', 'p1', 'url', 'https://ravi.example', 1, ?)`
       )
       .run(now);
 
@@ -180,21 +180,20 @@ describe("atlas-census", () => {
     }
   });
 
-  test("graph nodes speak human: curated friendly+blurb, uncurated fall back", () => {
+  test("graph nodes speak human: ontology friendly+blurb, machinery named only", () => {
     const db = freshVault();
     const graph = atlasGraph(db.vault);
 
-    // A curated ontology kind emits its friendly name and its blurb.
     const party = graph.nodes.find((n) => n.physical === "core_party");
     expect(party?.friendly).toBe("People");
     expect(party?.blurb).toBe("Everyone you know — people and organisations.");
 
-    // An uncurated kind falls back: friendly === label, and no blurb is emitted.
-    const uncurated = graph.nodes.find((n) => n.blurb === undefined);
-    expect(uncurated).toBeDefined();
-    expect(uncurated!.friendly).toBe(uncurated!.label);
+    // A machinery kind is NAMED by the registry too and emits no blurb (#883).
+    const machinery = graph.nodes.find((n) => n.blurb === undefined);
+    expect(machinery).toBeDefined();
+    expect(machinery!.friendly).not.toBe("");
 
-    // friendly is ALWAYS present; blurb NEVER without a curated friendly name.
+    // friendly is ALWAYS present; blurb NEVER without a friendly name.
     for (const node of graph.nodes) {
       expect(node.friendly).toBeTypeOf("string");
     }
@@ -281,25 +280,27 @@ describe("atlas-census", () => {
         counted += 1;
       }
     }
-    // Every registered table (minus the deferred grant plane) is still counted:
-    // the batch is an arithmetic identity, not a narrower census.
+    // EVERY registered table is counted: the batch is an arithmetic identity,
+    // not a narrower census (#883).
     expect(counted).toBe(
       Object.values(VAULT_TABLES).flat().length +
-        Object.values(JOURNAL_TABLES).flat().length -
-        2
+        Object.values(JOURNAL_TABLES).flat().length
     );
     const walkedTotal = census.packs.reduce((sum, p) => sum + p.rows, 0);
     expect(census.totals.rows).toBe(walkedTotal);
   });
 
-  test("census first paint defers grant-plane row counts (#825)", () => {
+  test("the census counts the authority plane again (#883 V-census)", () => {
     const db = freshVault();
     const census = atlasCensus(db.vault, db.journal);
     const physicals = census.packs.flatMap((pack) =>
       pack.tables.map((table) => table.physical)
     );
-    expect(physicals).not.toContain("share_grant");
-    expect(physicals).not.toContain("share_fulfillment");
+    // Atlas states ROW COUNTS, the grant surfaces LIVE grants: both true, and
+    // different on purpose.
+    expect(physicals).toContain("share_authority");
+    expect(physicals).toContain("share_delivery_config");
+    expect(physicals).toContain("share_fulfillment");
   });
 
   test("pulse buckets provenance writes by entity_type and day within the window", () => {

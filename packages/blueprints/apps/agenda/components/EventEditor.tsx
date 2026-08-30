@@ -1,9 +1,8 @@
 // The editor — one modal for both the new event and the edit, because they
 // are the same seven fields and a second composer is a second product.
 //
-// It carries: title, the all-day switch (which is the event's recurrence
-// SEMANTICS, not a display toggle), start and end, the repeat picker, the
-// calendar, the guests with their RSVP state, and the reminder lead.
+// The all-day switch is the event's recurrence SEMANTICS, not a display
+// toggle.
 //
 // REPEAT SHOWS THE SUMMARY, NEVER THE RULE. The event's current repetition is
 // read from `recurrence_summary`, the one sentence the shared summariser
@@ -17,6 +16,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, ReactNode } from "react";
 
+import { KitModal } from "../../_shared/KitModal.tsx";
 import { displayText, safeExternalUrl } from "../../_shared/untrusted.ts";
 import { needsScopePanel, occurrenceEdit } from "../edits.ts";
 import type { EditScope } from "../edits.ts";
@@ -58,9 +58,7 @@ import {
 import styles from "./EventEditor.module.css";
 
 export interface EventEditorProps {
-  /** The event being changed, or null while composing a new one. */
   event: AgEvent | null;
-  /** The slot a quick add started from, when there is one. */
   draft?: { start: Date; end: Date; title: string } | undefined;
   calendars: readonly Calendar[];
   parties: readonly PartyOption[];
@@ -91,10 +89,7 @@ function firstReminder(json: string | null | undefined): number | null {
 
 export function EventEditor(props: EventEditorProps): ReactNode {
   const ev = props.event;
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
-  /** Restored on close: focus goes back to whatever opened the editor. */
-  const priorFocus = useRef<HTMLElement | null>(null);
 
   const [summary, setSummary] = useState(
     () => ev?.summary ?? props.draft?.title ?? ""
@@ -123,15 +118,11 @@ export function EventEditor(props: EventEditorProps): ReactNode {
   );
   const [scopeOpen, setScopeOpen] = useState(false);
 
+  // The editor opens on its first field. `KitModal` is a CHILD, so its own
+  // effect has already put the dialog on the top layer by the time this runs
+  // — and it is what hands focus back to the opener on close.
   useEffect(() => {
-    priorFocus.current = document.activeElement as HTMLElement | null;
-    const dialog = dialogRef.current;
-    dialog?.showModal();
     titleRef.current?.focus();
-    return () => {
-      dialog?.close();
-      priorFocus.current?.focus();
-    };
   }, []);
 
   const toggleGuest = (partyId: string): void => {
@@ -229,12 +220,12 @@ export function EventEditor(props: EventEditorProps): ReactNode {
         aria-label={CLOSE}
         onClick={props.onClose}
       />
-      <dialog
-        ref={dialogRef}
+      <KitModal
+        layer="top"
         className={`kit-modal ${styles.editor}`}
-        aria-modal="true"
-        aria-labelledby="agendaEditorTitle"
-        onCancel={props.onClose}
+        ariaModal
+        labelledBy="agendaEditorTitle"
+        onDismiss={props.onClose}
       >
         <header className={styles.head}>
           <h2 id="agendaEditorTitle" className={styles.heading}>
@@ -446,7 +437,7 @@ export function EventEditor(props: EventEditorProps): ReactNode {
             </button>
           )}
         </div>
-      </dialog>
+      </KitModal>
     </div>
   );
 }

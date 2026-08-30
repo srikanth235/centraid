@@ -1,4 +1,5 @@
-// governance: allow-repo-hygiene file-size-limit — this file holds the app's whole orchestration as one React tree by design (#505); it is smaller than the served app.tsx + app-inline.tsx it replaces. Splitting it belongs to the app's own code evolution, not this migration.
+// governance: allow-repo-hygiene file-size-limit — this file holds the app's
+// whole orchestration as one React tree by design (#505).
 import {
   useCallback,
   useEffect,
@@ -26,11 +27,13 @@ import { readGrantAudiences } from "../_shared/grant-audiences.ts";
 import { grantPlaneAvailable } from "../_shared/grant-gateway.ts";
 import type { GrantAudienceOption } from "../_shared/grant-plane.ts";
 import { GrantSheet } from "../_shared/GrantSheet.tsx";
+import { MoreSheet } from "../_shared/MoreSheet.tsx";
 import { navSeat } from "../_shared/nav-seat.ts";
 import { NavRail } from "../_shared/NavRail.tsx";
 import { mountedScopes } from "../_shared/scope-kit.ts";
 import { SearchScaffold } from "../_shared/SearchScaffold.tsx";
 import { SAVED_TO_MY_VAULT } from "../_shared/shared-copy.ts";
+import { ShelfStrip } from "../_shared/ShelfStrip.tsx";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import {
@@ -44,7 +47,6 @@ import { Details } from "./components/Details.tsx";
 import { DriveRoute } from "./components/DriveRoute.tsx";
 import { FoldersRoute } from "./components/FoldersRoute.tsx";
 import { InfoToggle } from "./components/InfoToggle.tsx";
-import { MoreSheet } from "./components/MoreSheet.tsx";
 import { NewDocRoute } from "./components/NewDocRoute.tsx";
 import { NewMenu } from "./components/NewMenu.tsx";
 import { QuickLook } from "./components/QuickLook.tsx";
@@ -52,7 +54,6 @@ import { ScanRoute } from "./components/ScanRoute.tsx";
 import { SearchField } from "./components/SearchField.tsx";
 import { PermissionPanel, ReadOnlyPanel } from "./components/SeatStates.tsx";
 import { OfflineBanner } from "./components/Shared.tsx";
-import { ShelfStrip } from "./components/ShelfStrip.tsx";
 import { FolderList, Storage } from "./components/Sidebar.tsx";
 import { StorageRoute } from "./components/StorageRoute.tsx";
 import { UploadQueue } from "./components/UploadQueue.tsx";
@@ -75,6 +76,7 @@ import { docsNavRail } from "./nav-rail.ts";
 import { createNav } from "./nav.ts";
 import {
   CAPABILITIES,
+  DSHELVES,
   FILING,
   FOLDERS,
   LOCKER,
@@ -92,10 +94,11 @@ import {
   shelfFromSegment,
   showsDrive,
   showsViewToggle,
+  stripShelf,
 } from "./shelves.ts";
 import type { ShelfId } from "./shelves.ts";
 import type { AppData, AppState, DriveDoc, Folder, SortKey } from "./types.ts";
-import { captionFor } from "./view-copy.ts";
+import { captionFor, MORE_FOOTER, MORE_ROWS, MORE_TITLE } from "./view-copy.ts";
 import {
   emptyStateView,
   libraryReachability,
@@ -704,6 +707,7 @@ export function Root({
     goneFolderRef.current = survived.goneFolder;
   }
   state.visibleRows = logic.currentRows();
+  logic.pruneVisibleSelection();
   const rows = state.visibleRows;
 
   const active = logic.activeFiles();
@@ -853,7 +857,8 @@ export function Root({
   const shelfStrip =
     seat === "strip" ? (
       <ShelfStrip
-        shelf={state.shelf}
+        shelves={DSHELVES}
+        current={stripShelf(state.shelf)}
         counts={shelfCounts}
         onSelect={selectShelf}
         narrow={narrow}
@@ -873,11 +878,31 @@ export function Root({
         })}
       />
     ) : null;
+  // The band's sixth slot, drawn by the ONE shared sheet (#883 B9). Docs owns
+  // the TABLE: which rows are live, and the count-plus-rule the meta reads.
   const moreSheet = moreOpen ? (
     <MoreSheet
-      shelf={state.shelf}
-      counts={shelfCounts}
-      onSelect={selectShelf}
+      label={MORE_TITLE}
+      rows={MORE_ROWS.filter((row) => row.live).map((row) => {
+        const count =
+          typeof row.shelf === "string"
+            ? shelfCounts.get(row.shelf)
+            : undefined;
+        const meta =
+          count === undefined
+            ? row.meta
+            : row.meta
+              ? `${count} · ${row.meta}`
+              : String(count);
+        return {
+          key: row.label,
+          label: row.label,
+          ...(meta === undefined ? {} : { meta }),
+          ...(row.shelf === state.shelf ? { current: true } : {}),
+          select: () => selectShelf(row.shelf),
+        };
+      })}
+      footer={MORE_FOOTER}
       onClose={() => setMoreOpen(false)}
     />
   ) : null;
@@ -1075,7 +1100,7 @@ export function Root({
         }}
       />
       {/* THE FIELD IS THE SEARCH SHELF'S FIRST BLOCK (SearchField.tsx,
-          `fieldBlock`), inside the scroll host so it takes `--content-margin`
+          `fieldBlock`), inside the scroll host so it takes `--page-margin`
           from the same place the rows do. */}
       {onSearchShelf ? (
         <>

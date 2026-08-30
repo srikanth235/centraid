@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import Icon from "../kit/components/Icon";
 import { Text, TextInput } from "../kit/components/NativeText";
+import Tappable from "../kit/components/Tappable";
 import { family, radii, t } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 
@@ -17,13 +18,13 @@ export function CloseHeader({
 }): React.JSX.Element {
   return (
     <View style={styles.header}>
-      <Pressable
+      <Tappable
         accessibilityRole="button"
         accessibilityLabel="Close scan"
         onPress={onClose}
       >
         <Icon name="x" size={24} color={colors.text} />
-      </Pressable>
+      </Tappable>
       <Text style={[styles.title, { color: colors.text }]}>Scan & review</Text>
       <View style={styles.headerGap} />
     </View>

@@ -8,6 +8,15 @@
  * first, then role, then notes.
  */
 
+import {
+  FLAGS_SCHEME_URI,
+  LIST_SCHEME_URI,
+  STARRED_NOTATION,
+  conceptsInScheme,
+  findScheme,
+  findSchemeConcept,
+} from "../../_shared/concept-scheme-kit.ts";
+
 interface PartyHit {
   party_id?: string;
   _snippet?: string;
@@ -49,9 +58,6 @@ interface RawScheme {
   scheme_id: string;
 }
 
-const LIST_SCHEME_URI = "https://centraid.dev/schemes/lists";
-const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
-
 export default async function searchHandler({ input, ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
   const term = String(input?.term ?? "").trim();
@@ -78,7 +84,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       }),
     ]);
 
-    // Ranked, de-duped party ids: name hits first, then role, then notes.
     const snippetByParty = new Map<string, string>();
     const order: string[] = [];
     const consider = (
@@ -140,19 +145,19 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const nameById = new Map<string, string>(
       partyRows.map((p) => [p.party_id, p.display_name] as const)
     );
-    const listScheme = schemeRows.find((s) => s.uri === LIST_SCHEME_URI);
     const listConceptIds = new Set<string>(
-      conceptRows
-        .filter((c) => listScheme && c.scheme_id === listScheme.scheme_id)
-        .map((c) => c.concept_id)
+      conceptsInScheme(
+        conceptRows,
+        findScheme(schemeRows, LIST_SCHEME_URI)
+      ).map((c) => c.concept_id)
     );
-    const flagsScheme = schemeRows.find((s) => s.uri === FLAGS_SCHEME_URI);
-    const starredConceptId = flagsScheme
-      ? (conceptRows.find(
-          (c) =>
-            c.scheme_id === flagsScheme.scheme_id && c.notation === "starred"
-        )?.concept_id ?? null)
-      : null;
+    const starredConceptId =
+      findSchemeConcept(
+        schemeRows,
+        conceptRows,
+        FLAGS_SCHEME_URI,
+        STARRED_NOTATION
+      )?.concept_id ?? null;
     const listByParty = new Map<string, string>();
     const starredParties = new Set<string>();
     for (const t of tagRows) {

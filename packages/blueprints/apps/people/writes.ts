@@ -1,7 +1,6 @@
-// People's writes: one door (`window.centraid.write` + `publishOutcome` on
-// the frame status line). An outcome is not a throw — check `executed`. Undo
-// only where a true reverse write exists; a compensating write would lie
-// about the vault.
+// One door (`window.centraid.write` + `publishOutcome` on the frame status
+// line). An outcome is not a throw — check `executed`. Undo only where a true
+// reverse write exists; a compensating write would lie about the vault.
 import { publishOutcome } from "../_shared/app-frame.tsx";
 import type { InlineFrame } from "../inline-types.ts";
 import { OUTCOMES, REFUSALS } from "./people-copy.ts";
@@ -17,12 +16,12 @@ import type {
 interface WriteDeps {
   frame: InlineFrame;
   refresh: () => Promise<void>;
-  /** Outcome is on the status line; the ambient sentence must not overwrite it. Cleared by the next navigation. */
+  /** The ambient sentence must not overwrite an outcome on the status line. */
   hold: () => void;
   notice: (text?: string) => void;
 }
 
-/** Each non-executed status keeps its own sentence. */
+/** Each non-executed status has its own sentence. */
 function refusal(outcome: VaultOutcome | undefined): string {
   if (outcome?.status === "parked") return REFUSALS.parked;
   if (outcome?.status === "queued" || outcome?.status === "in-flight")
@@ -32,7 +31,7 @@ function refusal(outcome: VaultOutcome | undefined): string {
 }
 
 export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
-  /** Intent id minted here so a pending write is recognisable as this app's (`pending-projection.ts`). */
+  /** Intent id minted here so `pending-projection.ts` can recognise it. */
   async function act(
     action: string,
     input: Record<string, unknown>
@@ -49,19 +48,26 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     }
   }
 
-  /** Report an outcome and refresh. Returns whether the write landed. */
+  /** QUEUED IS NOT A REFUSAL: durable in the outbox and already projected, so
+   *  the row's pending chip carries it — and no Undo, because a reverse write
+   *  against a row the vault never saw is not a reversal. */
   async function settle(
     outcome: VaultOutcome | undefined,
     text: string,
     undo?: () => void
   ): Promise<boolean> {
     hold();
-    if (outcome?.status !== "executed") {
+    const queued =
+      outcome?.status === "queued" || outcome?.status === "in-flight";
+    if (outcome?.status !== "executed" && !queued) {
       publishOutcome(frame, { text: refusal(outcome) });
       return false;
     }
     notice("");
-    publishOutcome(frame, { text, ...(undo ? { undo } : {}) });
+    publishOutcome(
+      frame,
+      queued ? { text: REFUSALS.queued } : { text, ...(undo ? { undo } : {}) }
+    );
     await refresh();
     return true;
   }
@@ -113,8 +119,8 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     await settle(outcome, OUTCOMES.restored(person.name));
   }
 
-  // New person is one command; edit is two because cadence is `set-cadence`.
-  // Pass `previous` — after the write those values are gone.
+  // Edit is two commands: cadence is `set-cadence`. Pass `previous` — after
+  // the write those values are gone.
   async function savePerson(
     draft: PersonDraft,
     previous: PersonDetail | null
@@ -264,7 +270,7 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     await settle(outcome, OUTCOMES.channelRemoved(channel.kind));
   }
 
-  /** No reverse — modal confirm, not Undo. */
+  /** No reverse: modal confirm, not Undo. */
   async function mergePeople(
     source: PersonRow,
     target: { party_id: string; name: string }

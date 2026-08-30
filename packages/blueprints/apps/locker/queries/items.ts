@@ -5,6 +5,15 @@
  * sealed boundary; secrets NEVER ride this payload.
  */
 
+import {
+  FLAGS_SCHEME_URI,
+  LOCKER_TAGS_SCHEME_URI,
+  STARRED_NOTATION,
+  conceptsInScheme,
+  findScheme,
+  findSchemeConcept,
+} from "../../_shared/concept-scheme-kit.ts";
+
 export interface RawItem {
   item_id: string;
   type: string;
@@ -84,13 +93,9 @@ interface DecoratedItem {
   expiry: string | null;
   updated_at?: string;
   purge_at: string | null;
-  /**
-   * The connector alias (#298 item 4), read back at last: `locker_item_alias`
-   * became a REGISTERED table in #872, so the mapping the write path has
-   * always maintained is finally something a read can return. Until then the
-   * form had nothing to pre-fill and no way to show what a typed value would
-   * overwrite — the first paper cut README-Locker §8 names.
-   */
+  /** The connector alias (#298 item 4), read back from the registered
+   *  `locker_item_alias` table (#872), so the form can pre-fill and show what a
+   *  typed value would overwrite. */
   alias: string | null;
   /** Archived items are kept forever and hidden from the default window. */
   archived: boolean;
@@ -98,8 +103,6 @@ interface DecoratedItem {
   password_set_at: string | null;
 }
 
-const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
-const LOCKER_TAGS_SCHEME_URI = "https://centraid.dev/schemes/locker-tags";
 const ITEM_TYPE = "locker.item";
 
 /** A safe, secret-free subtitle for a list row. */
@@ -262,12 +265,12 @@ export async function readTags(
     ],
     purpose,
   });
-  const tagScheme = vocab.schemes.find((s) => s.uri === LOCKER_TAGS_SCHEME_URI);
+  const tagScheme = findScheme(vocab.schemes, LOCKER_TAGS_SCHEME_URI);
   if (!tagScheme) return map;
   const labelByConcept = new Map(
-    vocab.concepts
-      .filter((c) => c.scheme_id === tagScheme.scheme_id)
-      .map((c) => [c.concept_id, c.pref_label] as const)
+    conceptsInScheme(vocab.concepts, tagScheme).map(
+      (c) => [c.concept_id, c.pref_label] as const
+    )
   );
   for (const t of (tags.rows ?? []) as unknown as TagRow[]) {
     const label = labelByConcept.get(t.concept_id);
@@ -289,12 +292,12 @@ export async function readStarred(
   const starred = new Set<string>();
   if (ids.length === 0) return starred;
   const vocab = tables ?? (await readConceptTables(ctx, purpose));
-  const flagsScheme = vocab.schemes.find((s) => s.uri === FLAGS_SCHEME_URI);
-  const starredConcept = flagsScheme
-    ? vocab.concepts.find(
-        (c) => c.scheme_id === flagsScheme.scheme_id && c.notation === "starred"
-      )
-    : undefined;
+  const starredConcept = findSchemeConcept(
+    vocab.schemes,
+    vocab.concepts,
+    FLAGS_SCHEME_URI,
+    STARRED_NOTATION
+  );
   if (!starredConcept) return starred;
   const tags = await ctx.vault.read({
     entity: "core.tag",

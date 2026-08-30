@@ -1,21 +1,10 @@
-/**
- * Remove one tag edge from a note through core.untag_item. The shared
- * concept (and its scheme) survive — other subjects may still carry it.
- */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
+/** Only the edge goes: the shared concept and its scheme survive. */
 export default async function removeTag({ body, ctx }: HandlerArgs) {
-  const input = (body ?? {}) as Record<string, unknown>;
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "core.untag_item",
-      input: { tag_id: String(input.tag_id ?? "") },
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  const input = actionInput(body);
+  return runVaultAction(ctx, {
+    command: "core.untag_item",
+    input: { tag_id: String(input.tag_id ?? "") },
+  });
 }

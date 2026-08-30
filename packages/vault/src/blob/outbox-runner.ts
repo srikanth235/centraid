@@ -1,6 +1,7 @@
 import { rmSync } from "node:fs";
 import type { DatabaseSync } from "node:sqlite";
 
+import { unrefTimer } from "../lib/unref-timer.js";
 import { jitterDelayMs } from "../timer-jitter.js";
 import type { BlobCache } from "./cache.js";
 import type { RemoteTier } from "./custody-types.js";
@@ -33,7 +34,7 @@ export interface BlobOutboxRunnerOptions {
 
 /** Continuous single-flight custody drain with bounded per-blob workers (#414). */
 export class BlobOutboxRunner {
-  private timer: NodeJS.Timeout | undefined;
+  private timer: ReturnType<typeof setTimeout> | undefined;
   private flight: Promise<void> | null = null;
   private closing = false;
   private closed = false;
@@ -84,7 +85,7 @@ export class BlobOutboxRunner {
       this.timer = undefined;
       this.kick();
     }, jitterDelayMs(delay));
-    this.timer.unref();
+    unrefTimer(this.timer);
   }
 
   private deps() {

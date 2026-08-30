@@ -26,6 +26,11 @@
         "verbs": "read"
       },
       {
+        "schema": "core",
+        "table": "attachment",
+        "verbs": "read"
+      },
+      {
         "schema": "tally",
         "table": "friend",
         "verbs": "read"
@@ -58,11 +63,6 @@
       {
         "schema": "tally",
         "table": "expense_payer",
-        "verbs": "read"
-      },
-      {
-        "schema": "tally",
-        "table": "expense_receipt",
         "verbs": "read"
       },
       {
@@ -374,7 +374,16 @@
           }
         }
       },
-      "writes": []
+      "writes": [
+        "core.attachment",
+        "core.content_derivative",
+        "core.content_item",
+        "tally.expense",
+        "tally.expense_line_allocation",
+        "tally.expense_line_item",
+        "tally.expense_payer",
+        "tally.expense_split"
+      ]
     },
     {
       "name": "add-expense",
@@ -547,7 +556,13 @@
           }
         }
       },
-      "writes": []
+      "writes": [
+        "tally.expense",
+        "tally.expense_line_allocation",
+        "tally.expense_line_item",
+        "tally.expense_payer",
+        "tally.expense_split"
+      ]
     },
     {
       "name": "save-recurring-expense",
@@ -670,7 +685,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["tally.recurring_expense"]
     },
     {
       "name": "materialize-recurring-expense",
@@ -705,7 +720,12 @@
           }
         }
       },
-      "writes": []
+      "writes": [
+        "tally.expense",
+        "tally.expense_payer",
+        "tally.expense_split",
+        "tally.recurring_expense"
+      ]
     },
     {
       "name": "edit-recurring-expense-occurrence",
@@ -751,7 +771,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["schedule.recurrence_exception", "tally.recurring_expense"]
     },
     {
       "name": "edit-expense",
@@ -925,7 +945,13 @@
           }
         }
       },
-      "writes": []
+      "writes": [
+        "tally.expense",
+        "tally.expense_line_allocation",
+        "tally.expense_line_item",
+        "tally.expense_payer",
+        "tally.expense_split"
+      ]
     },
     {
       "name": "delete-expense",
@@ -956,7 +982,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["tally.expense"]
     },
     {
       "name": "undo-expense",
@@ -991,7 +1017,14 @@
           }
         }
       },
-      "writes": []
+      "writes": [
+        "core.entity_revision",
+        "tally.expense",
+        "tally.expense_line_allocation",
+        "tally.expense_line_item",
+        "tally.expense_payer",
+        "tally.expense_split"
+      ]
     },
     {
       "name": "restore-expense",
@@ -1022,7 +1055,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["tally.expense"]
     },
     {
       "name": "settle-up",
@@ -1068,11 +1101,11 @@
           }
         }
       },
-      "writes": []
+      "writes": ["core.account", "core.transaction", "tally.settlement"]
     },
     {
       "name": "add-friend",
-      "description": "Add a friend through tally.add_friend — mints a canonical person party. The avatar hue is derived from the party, not stored here.",
+      "description": "Add a friend through tally.add_friend — enrolls a person party the vault already knows when one is named or reachable at the address given, and mints one only when it knows nobody. The avatar hue is derived from the party, not stored here.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -1080,6 +1113,18 @@
           "name": {
             "type": "string",
             "minLength": 1
+          },
+          "party_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "email": {
+            "type": "string",
+            "minLength": 3
+          },
+          "phone": {
+            "type": "string",
+            "minLength": 3
           }
         },
         "required": ["name"],
@@ -1099,7 +1144,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["core.party", "social.contact_channel", "tally.friend"]
     },
     {
       "name": "create-group",
@@ -1143,7 +1188,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["social.circle", "social.circle_member", "tally.group"]
     },
     {
       "name": "rename-group",
@@ -1178,7 +1223,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["social.circle", "tally.group"]
     },
     {
       "name": "add-group-member",
@@ -1213,7 +1258,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["social.circle_member", "tally.group"]
     },
     {
       "name": "remove-group-member",
@@ -1248,7 +1293,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["social.circle_member", "tally.group"]
     },
     {
       "name": "delete-group",
@@ -1279,7 +1324,12 @@
           }
         }
       },
-      "writes": []
+      "writes": [
+        "social.circle",
+        "social.circle_member",
+        "tally.group",
+        "tally.settlement"
+      ]
     },
     {
       "name": "reallocate-receipt",
@@ -1369,7 +1419,12 @@
           }
         }
       },
-      "writes": []
+      "writes": [
+        "tally.expense",
+        "tally.expense_line_allocation",
+        "tally.expense_line_item",
+        "tally.expense_split"
+      ]
     },
     {
       "name": "set-group-simplification",
@@ -1403,7 +1458,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["tally.group"]
     },
     {
       "name": "leave-group",
@@ -1438,7 +1493,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["social.circle", "social.circle_member", "tally.group"]
     },
     {
       "name": "archive-group",
@@ -1472,7 +1527,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["tally.group"]
     },
     {
       "name": "nudge",
@@ -1514,7 +1569,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["tally.nudge"]
     }
   ],
   "queries": [

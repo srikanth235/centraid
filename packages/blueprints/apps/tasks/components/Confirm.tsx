@@ -5,13 +5,11 @@
 // Only Delete takes the outlined `net` control, and `net` is outlined and never
 // filled anywhere in this system.
 //
-// A REAL `<dialog>` OPENED WITH `showModal()`. That is what makes Escape,
-// the focus trap and the inert background the platform's job rather than this
-// app's; and focus goes back to the control that opened it on close, because a
-// member who dismissed a question should be standing where they asked it.
-import { useEffect, useRef } from "react";
+// `_shared/KitModal.tsx` owns Escape, the focus trap, the inert background,
+// and returning focus to the control that opened it.
 import type { ReactNode } from "react";
 
+import { KitModal } from "../../_shared/KitModal.tsx";
 import { CANCEL, DELETE_CONFIRM, RELEASE_CONFIRM } from "../view-copy.ts";
 
 import styles from "./Board.module.css";
@@ -23,29 +21,13 @@ export interface ConfirmProps {
 }
 
 export function Confirm(props: ConfirmProps): ReactNode {
-  const ref = useRef<HTMLDialogElement | null>(null);
-  const priorFocus = useRef<Element | null>(null);
-  const { onCancel } = props;
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    priorFocus.current = document.activeElement;
-    // `showModal` rather than the `open` attribute: only the modal form makes
-    // the rest of the page inert and gives Escape its meaning for free.
-    if (!dialog.open) dialog.showModal();
-    const close = (): void => onCancel();
-    dialog.addEventListener("close", close);
-    return () => {
-      dialog.removeEventListener("close", close);
-      const opener = priorFocus.current;
-      if (opener instanceof HTMLElement) opener.focus();
-    };
-  }, [onCancel]);
-
   const copy = props.kind === "release" ? RELEASE_CONFIRM : DELETE_CONFIRM;
   return (
-    <dialog ref={ref} className={`kit-modal ${styles.confirm}`}>
+    <KitModal
+      layer="top"
+      className={`kit-modal ${styles.confirm}`}
+      onDismiss={props.onCancel}
+    >
       <h2 className={styles.confirmTitle}>{copy.title}</h2>
       <p className={styles.confirmBody}>{copy.bodyA}</p>
       <p className={styles.confirmBody}>{copy.bodyB}</p>
@@ -62,6 +44,6 @@ export function Confirm(props: ConfirmProps): ReactNode {
           {copy.verb}
         </button>
       </div>
-    </dialog>
+    </KitModal>
   );
 }

@@ -42,5 +42,3 @@ export const lockerPendingProjection = definePendingProjection({
     "clear-passkey": pendingItemAction,
   },
 });
-
-export default lockerPendingProjection;

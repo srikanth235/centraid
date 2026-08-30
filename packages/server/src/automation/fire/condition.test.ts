@@ -14,7 +14,7 @@ import { readConditionCursor, readDataCursor } from "./condition.js";
 
 const TRIGGER: ConditionTrigger = {
   kind: "condition",
-  entity: "business.invoice",
+  entity: "schedule.task",
   where: [{ column: "due_at", op: "within-next-days", value: 3 }],
 };
 
@@ -176,7 +176,7 @@ describe(readDataCursor, () => {
       now: new Date(5_000),
     });
 
-    // The feed's watermark is its last returned row, so committing it is only
+    // The feed's watermark is its last returned row, so committing it is
     // honest when every returned row is delivered.
     expect(requests).toStrictEqual([{ cursor: "p1", limit: 2 }]);
     expect(result.elements).toStrictEqual([

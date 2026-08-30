@@ -1,13 +1,13 @@
-// One document's PROSE, as this device can actually have it (#821,
-// §6 and §9 share it): inline `data:` bodies decode locally (the vault mints
-// small text inline — blob/mint.ts), everything else is one authenticated
-// fetch off the gateway's blob route. Where neither works the hook says WHY,
-// so the screen can state the absence instead of spinning.
+// One document's PROSE as this device can have it (#821 §6/§9): inline `data:`
+// bodies decode locally, PINNED bodies come off this phone's disk (#883 C6),
+// everything else is one authenticated fetch. Where none works the hook says
+// WHY, so the screen states the absence instead of spinning.
 //
-// The synchronous answers (no text kind, inline body, offline) are DERIVED at
-// render rather than mirrored into state — only the fetch, an external
-// system, lives in the effect, keyed by the one URL it resolves.
+// ONE effect keyed by one resolved location: a second effect for the local
+// case would be a second place for the precedence to be wrong. Synchronous
+// answers are DERIVED at render; only the fetch lives in the effect.
 
+import { File } from "expo-file-system";
 import { useEffect, useMemo, useState } from "react";
 
 import { isTextKind } from "@centraid/blueprints/apps/docs/format";
@@ -16,6 +16,7 @@ import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { authHeader } from "../../lib/gateway";
 import type { MobileDriveDoc } from "./docs-projection";
 import { decodeTextDataUri, docBytesUrl } from "./document-read-model";
+import { pinnedDocUri } from "./offline-pin";
 
 export interface UseDocumentTextResult {
   /** The document's own body. `""` is a real (blank) body; `null` is absent. */
@@ -35,6 +36,12 @@ interface FetchedBody {
   result: UseDocumentTextResult;
 }
 
+async function readGatewayText(url: string): Promise<string> {
+  const response = await fetch(url, { headers: authHeader() });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.text();
+}
+
 export function useDocumentText(
   doc: MobileDriveDoc | undefined
 ): UseDocumentTextResult {
@@ -48,14 +55,31 @@ export function useDocumentText(
   const isInline =
     inlineBody !== null || String(contentUri ?? "").startsWith("data:");
 
+  /**
+   * A PINNED document reads from disk and never asks the gateway (#883 C6);
+   * checking `online` first would spend the "available offline" promise.
+   */
+  const localUri = useMemo(() => pinnedDocUri(doc, vaultId), [doc, vaultId]);
+
   const fetchUrl = useMemo(() => {
-    if (!contentId || !textKind || isInline || !online) return null;
+    if (!contentId || !textKind || isInline) return null;
+    if (localUri) return localUri;
+    if (!online) return null;
     return docBytesUrl(
       { content_id: contentId, content_uri: contentUri },
       gatewayBase,
       vaultId
     );
-  }, [contentId, textKind, isInline, online, contentUri, gatewayBase, vaultId]);
+  }, [
+    contentId,
+    textKind,
+    isInline,
+    localUri,
+    online,
+    contentUri,
+    gatewayBase,
+    vaultId,
+  ]);
 
   const [fetched, setFetched] = useState<FetchedBody | null>(null);
 
@@ -64,9 +88,9 @@ export function useDocumentText(
     let active = true;
     void (async () => {
       try {
-        const response = await fetch(fetchUrl, { headers: authHeader() });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const body = await response.text();
+        const body = fetchUrl.startsWith("file://")
+          ? await new File(fetchUrl).text()
+          : await readGatewayText(fetchUrl);
         if (active)
           setFetched({ url: fetchUrl, result: { text: body, loading: false } });
       } catch {

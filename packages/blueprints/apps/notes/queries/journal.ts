@@ -6,6 +6,7 @@
  */
 
 import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
+import { decodeNoteBody } from "../note-body.ts";
 
 interface NoteRow {
   note_id: string;
@@ -20,26 +21,6 @@ interface NoteRow {
 interface ContentRow {
   content_id: string;
   content_uri?: string;
-}
-
-/** Inline `data:` bodies decoded; anything else is opaque, as in library. */
-function decodeBody(uri: unknown): string {
-  if (typeof uri !== "string" || !uri.startsWith("data:"))
-    return "(external content)";
-  const comma = uri.indexOf(",");
-  if (comma === -1) return "(external content)";
-  const meta = uri.slice(0, comma);
-  const payload = uri.slice(comma + 1);
-  try {
-    if (meta.includes(";base64")) {
-      return typeof Buffer === "undefined"
-        ? atob(payload)
-        : Buffer.from(payload, "base64").toString("utf8");
-    }
-    return decodeURIComponent(payload);
-  } catch {
-    return "(external content)";
-  }
 }
 
 // Preview + checklist tally, never a whole body — the derivations `library`
@@ -134,7 +115,7 @@ export default async function journalHandler({ input, ctx }: HandlerArgs) {
 
     return {
       entries: rows.map((note) => {
-        const body = decodeBody(uriById.get(note.body_content_id ?? ""));
+        const body = decodeNoteBody(uriById.get(note.body_content_id ?? ""));
         return {
           note_id: note.note_id,
           title: note.title,
@@ -146,7 +127,7 @@ export default async function journalHandler({ input, ctx }: HandlerArgs) {
           check: checkOf(body),
         };
       }),
-      // Full slice means there is more behind it, as in the library window.
+      // A full slice means there is more behind it.
       truncated: ((notes.rows ?? []) as unknown[]).length >= window,
       window,
     };

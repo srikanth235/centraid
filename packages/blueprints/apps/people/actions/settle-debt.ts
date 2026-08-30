@@ -1,19 +1,9 @@
-/**
- * Settle a debt (marks it closed, kept as history). Runs through people.settle_debt — consent-checked and receipted, risk low.
- */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
+/** Closed, not deleted: settled debts stay as history. */
 export default async function settleDebt({ body, ctx }: HandlerArgs) {
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "people.settle_debt",
-      input: (body ?? {}) as Record<string, unknown>,
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  return runVaultAction(ctx, {
+    command: "people.settle_debt",
+    input: actionInput(body),
+  });
 }

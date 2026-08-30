@@ -44,8 +44,8 @@ describe("InProcessScheduler.reconcile", () => {
 });
 
 describe("InProcessScheduler.tick", () => {
-  // Catch-up across a slept window (which instant, how many skipped) is owned
-  // by cron-cursor.test.ts — this owns the scheduler wiring around it.
+  // Catch-up across a slept window is owned by cron-cursor.test.ts; this owns
+  // the scheduler wiring around it.
   it("fires each due cron once per minute", async () => {
     const fired: string[] = [];
     const clock = at(8, 0);
@@ -98,7 +98,7 @@ describe("condition-trigger watches", () => {
       { kind: "cron" as const, expr: "0 8 * * *" },
       {
         kind: "condition" as const,
-        entity: "business.invoice",
+        entity: "schedule.task",
         ...(every === undefined ? {} : { every }),
       },
     ];
@@ -208,7 +208,7 @@ describe("InProcessScheduler.nudge", () => {
       nudgeDelayMs: 25,
     });
     await s.reconcile([
-      dataRow("studio/invoices", ["business.invoice"]),
+      dataRow("studio/invoices", ["schedule.task"]),
       dataRow("studio/transactions", ["core.transaction"]),
     ]);
     evals.length = 0;
@@ -216,13 +216,13 @@ describe("InProcessScheduler.nudge", () => {
     // Model five committed write hints spread across a tight burst rather
     // than five calls in the same JS turn. The fixed window starts at the
     // first hint and all later hints inside it join the same pass.
-    s.nudge(["business.invoice"]);
+    s.nudge(["schedule.task"]);
     await vi.advanceTimersByTimeAsync(5);
-    s.nudge(["business.invoice"]);
+    s.nudge(["schedule.task"]);
     await vi.advanceTimersByTimeAsync(5);
-    s.nudge(["business.invoice"]);
-    s.nudge(["business.invoice"]);
-    s.nudge(["business.invoice"]);
+    s.nudge(["schedule.task"]);
+    s.nudge(["schedule.task"]);
+    s.nudge(["schedule.task"]);
     expect(evals).toStrictEqual([]);
     await vi.advanceTimersByTimeAsync(15);
 
@@ -239,13 +239,10 @@ describe("InProcessScheduler.nudge", () => {
       nudgeDelayMs: 0,
     });
     const condition = {
-      ...dataRow("studio/condition", ["business.invoice"]),
-      triggers: [{ kind: "condition" as const, entity: "business.invoice" }],
+      ...dataRow("studio/condition", ["schedule.task"]),
+      triggers: [{ kind: "condition" as const, entity: "schedule.task" }],
     };
-    await s.reconcile([
-      dataRow("studio/data", ["business.invoice"]),
-      condition,
-    ]);
+    await s.reconcile([dataRow("studio/data", ["schedule.task"]), condition]);
     evals.length = 0;
 
     s.tick();
@@ -253,8 +250,8 @@ describe("InProcessScheduler.nudge", () => {
       ["studio/data", 0],
       ["studio/condition", 0],
     ]);
-    s.nudge(["business.invoice"]);
-    // nudgeDelayMs: 0 still schedules via setTimeout — advance the fake clock.
+    s.nudge(["schedule.task"]);
+    // nudgeDelayMs: 0 still schedules via setTimeout; advance the clock.
     await vi.advanceTimersByTimeAsync(0);
 
     expect(evals).toStrictEqual([

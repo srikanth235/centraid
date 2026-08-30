@@ -6,7 +6,6 @@ export type MobileNotificationsDestination =
   | { kind: "outbox"; itemId: string }
   | { kind: "notifications" };
 
-/** Resolve a notice to the native surface where the owner can act on it. */
 export function mobileNotificationsDestination(
   notice: MobileNotice
 ): MobileNotificationsDestination {
@@ -17,6 +16,10 @@ export function mobileNotificationsDestination(
         : notice.sourceRef;
     return { kind: "automation-thread", automationRef };
   }
+  // A received share has no destination by ruling, not by gap (#883 V-notice):
+  // the subject lands wherever its app keeps that kind of thing, and no route
+  // means "the thing Priya just shared". Do not invent one here.
+  if (notice.detail.sourceType === "share") return { kind: "notifications" };
   if (notice.kind === "gateway-health") return { kind: "gateway-alerts" };
   if (notice.kind === "outbox") {
     const itemId =
@@ -25,9 +28,7 @@ export function mobileNotificationsDestination(
         : notice.sourceRef;
     return { kind: "outbox", itemId };
   }
-  // An app-scoped notice has no destination of its own: every app is a native
-  // cover reached from Home, and there is no generic per-app screen left to
-  // push (#799). The notice list is where the
-  // owner reads it, so that is where the tap lands.
+  // App-scoped notices have no screen of their own — every app is a cover
+  // reached from Home (#799).
   return { kind: "notifications" };
 }

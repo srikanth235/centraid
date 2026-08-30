@@ -2,7 +2,13 @@
 // those are the frame's. A null slot renders nothing, not an empty container.
 import type { ReactNode } from "react";
 
-import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
+import {
+  AskMount,
+  ChromeToolbar,
+  ConsentBanner,
+  NoticeBanner,
+} from "../_shared/AppChrome.tsx";
+import { chromeClass } from "../_shared/chrome-kit.ts";
 
 import styles from "./Chrome.module.css";
 
@@ -21,13 +27,11 @@ export interface ChromeProps {
 }
 
 export function Chrome(props: ChromeProps): ReactNode {
-  const shellClass = [
+  const shellClass = chromeClass(
     styles.shell,
-    props.narrow ? styles.isNarrow : "",
-    props.consent ? styles.denied : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+    props.narrow && styles.isNarrow,
+    props.consent && styles.denied
+  );
 
   return (
     <div
@@ -37,34 +41,28 @@ export function Chrome(props: ChromeProps): ReactNode {
       data-density="comfortable"
     >
       <main className={styles.main}>
-        {props.slots.toolbar ? (
-          <div className={styles.toolbar} role="toolbar" aria-label="View">
-            {props.slots.toolbar}
-          </div>
-        ) : null}
+        <ChromeToolbar className={styles.toolbar} label="View">
+          {props.slots.toolbar}
+        </ChromeToolbar>
 
         {props.consent ? (
-          // `id="consentBanner"` is onFocusRefresh's denied→recovered hook.
-          <div id="consentBanner" className={`kit-banner ${styles.banner}`}>
-            <strong>No vault access yet.</strong>{" "}
-            <span>{props.consent.message}</span>
-            <VaultAccessButton />
-          </div>
+          <ConsentBanner
+            message={props.consent.message}
+            className={styles.banner}
+          />
         ) : null}
-        {/* Driven by logic.ts; keep out of React reconciliation. */}
-        <output
-          id="noticeBanner"
-          className={`kit-banner notice ${styles.banner}`}
-          aria-live="polite"
-          hidden
-        />
+        <NoticeBanner className={styles.banner} />
 
         <div className={styles.content}>
           {props.slots.rail}
-          <div className={styles.scroll}>{props.slots.scroll}</div>
+          {/* The declared scroll pane (`_shared/VirtualWindow.tsx`
+              SCROLL_HOST_ATTR): the library's row arrangement windows against
+              this box. */}
+          <div className={styles.scroll} data-scroll-host="">
+            {props.slots.scroll}
+          </div>
         </div>
-        {/* Assistant mount: kitAsk is unreachable without this node. */}
-        <div className={styles.askMount} data-ask-mount />
+        <AskMount className={styles.askMount} />
       </main>
 
       {props.slots.overlays}

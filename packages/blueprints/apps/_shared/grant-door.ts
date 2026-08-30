@@ -1,21 +1,23 @@
 /**
- * ONE WRITE DOOR OVER THE GRANT PLANE (#825).
- *
- * Seats supply transport only; parsing and every sentence a member reads are
- * decided here. Route messages are reported verbatim. A 404 is an answer
- * (`known: false`), not a read failure.
+ * ONE WRITE DOOR OVER THE GRANT PLANE (#825). Seats supply transport only;
+ * parsing and every sentence a member reads are decided here. Route messages
+ * are reported verbatim; a 404 is an answer (`known: false`), not a read
+ * failure.
  */
 
 import {
+  GRANT_AWAITING_CONFIRMATION,
   GRANT_FAILED,
+  GRANT_QUEUED,
   GRANT_UNREACHABLE,
   REVOKE_FAILED,
+  REVOKE_QUEUED,
   REVOKE_UNREACHABLE,
 } from "./grant-copy.ts";
 import type {
   GrantAudienceKind,
-  GrantCapability,
   GrantChannel,
+  GrantLocus,
   GrantRecord,
   GrantRequest,
   GrantSubject,
@@ -25,47 +27,23 @@ import {
   parseChannel,
   parseGrant,
   parseGrants,
+  parseLoci,
   parseSubjectOffers,
 } from "./grant-plane.ts";
+import { isGrantUnreachable, isQueuedGrantAnswer } from "./grant-transport.ts";
+import type { GrantWireCalls } from "./grant-transport.ts";
 
-/**
- * The transport's own verdict, raised by a seat when the request never reached
- * the gateway. It is a MARKED error rather than an inference here, because only
- * the transport knows whether anything left the device — this door sees a
- * rejected promise either way, and guessing from the message would turn a
- * gateway's own words into an outage story or the reverse.
- */
-export class GrantUnreachableError extends Error {
-  readonly grantTransport = "unreachable" as const;
-  constructor(op: string, cause?: unknown) {
-    super(`${op}: the gateway could not be reached`, { cause });
-    this.name = "GrantUnreachableError";
-  }
-}
+/* Re-exported from `grant-transport.ts`, which a seat can import without this
+ * file's relative imports; readers of the door keep one import site. */
+export {
+  GrantUnreachableError,
+  isGrantUnreachable,
+} from "./grant-transport.ts";
+export type { GrantWireCalls } from "./grant-transport.ts";
 
-/** Duck-typed on purpose: a seat bundled through a separate module graph still
- *  answers true, where `instanceof` would silently answer false. */
-export function isGrantUnreachable(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error as { grantTransport?: unknown }).grantTransport === "unreachable"
-  );
-}
-
-/** Why a read or write did not land. Two words, never one. */
 export type GrantFailureReach = "unreachable" | "refused";
 
-export interface GrantWireCalls {
-  subjects: () => Promise<unknown>;
-  forParty: (partyId: string) => Promise<unknown | undefined>;
-  forAudience: (
-    kind: GrantAudienceKind,
-    id: string
-  ) => Promise<unknown | undefined>;
-  forSubject: (subjectType: string, subjectId: string) => Promise<unknown>;
-  create: (request: GrantRequest) => Promise<unknown>;
-  revoke: (grantId: string) => Promise<unknown>;
-}
+const AWAITING_CONFIRMATION = "awaiting_confirmation";
 
 export interface PartyReach {
   known: boolean;
@@ -73,12 +51,14 @@ export interface PartyReach {
   grants: GrantRecord[];
 }
 
-/** `readable` keeps "refused" distinct from "could not ask", and `reach` keeps
- *  the two ways of not-asking apart. `reach` is absent when `readable`. */
+/** `reach` tells the two ways of not-asking apart; absent when `readable`. */
 export interface SubjectRegistry {
   readable: boolean;
   offers: GrantSubjectOffer[];
   reach?: GrantFailureReach;
+  /** Per-locus revoke promise in the vault's own words (ruling V-locus), for a
+   *  replica dashboard with no route body; absent means print nothing. */
+  loci?: Partial<Record<GrantLocus, string>>;
 }
 
 export interface AudienceGrants {
@@ -86,20 +66,23 @@ export interface AudienceGrants {
   grants: GrantRecord[];
 }
 
-/** The route says `exists` at ANY capability, so a bare "already shared" would
- * claim a widening that never happened. */
+/** `exists` is the same answer read back, never a widening. */
 export type GrantCreateOutcome =
   | { ok: true; outcome: "created" | "exists"; grant?: GrantRecord }
-  | {
-      ok: true;
-      outcome: "exists_other_capability";
-      standing: GrantCapability;
-      grant: GrantRecord;
-    }
+  | { ok: true; outcome: "awaiting_confirmation"; message: string }
+  /** Held durably by the seat's queue (#883) — neither refused nor landed. */
+  | { ok: true; outcome: "queued"; message: string }
   | { ok: false; message: string; reach: GrantFailureReach };
 
 export type GrantRevokeOutcome =
-  | { ok: true; message: string }
+  | {
+      ok: true;
+      message: string;
+      promise?: string;
+      /** Held, not yet asked of the audience (#883). No `promise` rides with
+       *  it: the route has not spoken, and this door speaks for no vault. */
+      queued?: true;
+    }
   | { ok: false; message: string; reach: GrantFailureReach };
 
 export interface GrantDoor {
@@ -109,6 +92,13 @@ export interface GrantDoor {
   forSubject: (subject: GrantSubject) => Promise<GrantRecord[]>;
   create: (request: GrantRequest) => Promise<GrantCreateOutcome>;
   revoke: (grantId: string) => Promise<GrantRevokeOutcome>;
+  /** WITHDRAW then GRANT — the only change the plane allows (ruling V-table),
+   *  ordered and stopping at the first refusal. The withdrawal is real while it
+   *  runs, so a surface states that cost first. */
+  changeCapability: (
+    grantId: string,
+    request: GrantRequest
+  ) => Promise<GrantCreateOutcome>;
 }
 
 function body(value: unknown): Record<string, unknown> {
@@ -117,9 +107,8 @@ function body(value: unknown): Record<string, unknown> {
     : {};
 }
 
-/** An unreachable gateway said NOTHING, so its own words are not available to
- *  quote and the transport's internal message is not member-facing copy. A
- *  refusal keeps the route's words where it sent any. */
+/** An unreachable gateway said NOTHING, and the transport's internal message
+ *  is not member-facing copy. A refusal keeps the route's words. */
 function outcomeMessage(
   error: unknown,
   refused: string,
@@ -132,13 +121,15 @@ function outcomeMessage(
 }
 
 export function grantDoor(calls: GrantWireCalls): GrantDoor {
-  return {
+  const door: GrantDoor = {
     async subjects() {
       // Never guess offers on a read failure — it offers verbs the vault lacks.
       try {
+        const answer = body(await calls.subjects());
         return {
           readable: true,
-          offers: parseSubjectOffers(body(await calls.subjects()).subjects),
+          offers: parseSubjectOffers(answer.subjects),
+          loci: parseLoci(answer.loci),
         };
       } catch (error) {
         return {
@@ -176,20 +167,23 @@ export function grantDoor(calls: GrantWireCalls): GrantDoor {
 
     async create(request) {
       try {
-        const out = body(await calls.create(request));
-        const outcome = out.outcome === "exists" ? "exists" : "created";
-        const grant = parseGrant(out.grant);
-        if (
-          outcome === "exists" &&
-          grant &&
-          grant.capability !== request.capability
-        )
+        const answer = await calls.create(request);
+        // The queued mark is the transport's, never inferred here.
+        if (isQueuedGrantAnswer(answer))
+          return { ok: true, outcome: "queued", message: GRANT_QUEUED };
+        const out = body(answer);
+        // A 2xx: only the body tells a parked ask from a grant that landed.
+        if (out.error === AWAITING_CONFIRMATION)
           return {
             ok: true,
-            outcome: "exists_other_capability",
-            standing: grant.capability,
-            grant,
+            outcome: "awaiting_confirmation",
+            message:
+              typeof out.message === "string" && out.message.length
+                ? out.message
+                : GRANT_AWAITING_CONFIRMATION,
           };
+        const outcome = out.outcome === "exists" ? "exists" : "created";
+        const grant = parseGrant(out.grant);
         return { ok: true, outcome, ...(grant ? { grant } : {}) };
       } catch (error) {
         return {
@@ -201,12 +195,20 @@ export function grantDoor(calls: GrantWireCalls): GrantDoor {
 
     async revoke(grantId) {
       try {
-        const out = body(await calls.revoke(grantId));
+        const answer = await calls.revoke(grantId);
+        if (isQueuedGrantAnswer(answer))
+          return { ok: true, queued: true, message: REVOKE_QUEUED };
+        const out = body(answer);
         const message =
           typeof out.message === "string" && out.message.length
             ? out.message
             : REVOKE_FAILED;
-        return { ok: true, message };
+        // Only where the route sent one — this door invents no promises.
+        const promise =
+          typeof out.promise === "string" && out.promise.length
+            ? out.promise
+            : undefined;
+        return { ok: true, message, ...(promise ? { promise } : {}) };
       } catch (error) {
         return {
           ok: false,
@@ -214,5 +216,17 @@ export function grantDoor(calls: GrantWireCalls): GrantDoor {
         };
       }
     },
+
+    async changeCapability(grantId, request) {
+      const withdrawn = await door.revoke(grantId);
+      if (!withdrawn.ok)
+        return {
+          ok: false,
+          message: withdrawn.message,
+          reach: withdrawn.reach,
+        };
+      return door.create(request);
+    },
   };
+  return door;
 }

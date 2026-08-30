@@ -1,9 +1,8 @@
 /*
  * A4/A7 tripwires for `apps/_shared/placement-registry.ts` (#712). A4:
- * `PlaceableItemType` stays vault's `ShareableItemType` minus `"locker.item"`
- * — blueprints cannot import `@centraid/vault`, so this source-scans
- * `closure.ts` rather than proving it in types. A7: Locker is structurally
- * excluded from sharing, in the registry and in every `itemType` passed.
+ * `PlaceableItemType` stays vault's `ShareableItemType` minus `"locker.item"`;
+ * blueprints cannot import `@centraid/vault`, so this source-scans
+ * `closure.ts`. A7: Locker is structurally excluded from sharing.
  */
 
 import { readFileSync, readdirSync } from "node:fs";
@@ -21,12 +20,11 @@ interface PlacementEntity {
 const registryModuleUrl = pathToFileURL(
   path.resolve(import.meta.dirname, "../apps/_shared/placement-registry.ts")
 ).href;
-const { PLACEABLE_ITEM_TYPES, PLACEMENT_REGISTRY } = (await import(
-  registryModuleUrl
-)) as {
-  PLACEABLE_ITEM_TYPES: readonly string[];
+const { PLACEMENT_REGISTRY } = (await import(registryModuleUrl)) as {
   PLACEMENT_REGISTRY: readonly PlacementEntity[];
 };
+
+const placeableItemTypes = PLACEMENT_REGISTRY.map((entity) => entity.itemType);
 
 const PACKAGE_ROOT = path.resolve(import.meta.dirname, "..");
 const CLOSURE_PATH = path.resolve(
@@ -73,9 +71,9 @@ describe("placement registry (A4) mirrors vault's ShareableItemType minus locker
     expect(vaultTypes).toContain("locker.item");
   });
 
-  it("PLACEABLE_ITEM_TYPES is exactly vault's list minus locker.item", () => {
+  it("the registry is exactly vault's list minus locker.item", () => {
     const expected = vaultTypes.filter((t) => t !== "locker.item").toSorted();
-    expect([...PLACEABLE_ITEM_TYPES].toSorted()).toStrictEqual(expected);
+    expect([...placeableItemTypes].toSorted()).toStrictEqual(expected);
   });
 
   it("every registry entry's itemType is unique", () => {
@@ -94,7 +92,7 @@ describe("locker is structurally excluded from placement (A7)", () => {
     expect(
       PLACEMENT_REGISTRY.some((entity) => entity.itemType === "locker.item")
     ).toBe(false);
-    expect(PLACEABLE_ITEM_TYPES).not.toContain("locker.item");
+    expect(placeableItemTypes).not.toContain("locker.item");
   });
 
   it("no bundled app source passes locker.item as a placement itemType", () => {
@@ -113,7 +111,6 @@ describe("locker is structurally excluded from placement (A7)", () => {
 describe("Tally consumes the placement engine with zero engine edits (A6)", () => {
   const ENGINE_FILES = [
     path.join(APPS_DIR, "_shared", "placement-registry.ts"),
-    path.join(APPS_DIR, "_shared", "ShareSheet.tsx"),
     path.resolve(
       PACKAGE_ROOT,
       "../../apps/mobile/src/kit/share/ShareSheet.tsx"
@@ -223,11 +220,7 @@ describe("native Photos selection reaches the grant plane by subject", () => {
 });
 
 describe("unjoined Commons invitations have a complete sender/receiver handoff", () => {
-  it("web and native consume returned claims and expose deliberate copy/share actions", () => {
-    const web = readFileSync(
-      path.join(APPS_DIR, "_shared", "ShareSheet.tsx"),
-      "utf8"
-    );
+  it("the sender surface consumes returned claims and offers deliberate copy/share actions", () => {
     const native = readFileSync(
       path.resolve(
         PACKAGE_ROOT,
@@ -235,9 +228,6 @@ describe("unjoined Commons invitations have a complete sender/receiver handoff",
       ),
       "utf8"
     );
-    expect(web).toContain("result.claims");
-    expect(web).toContain("Copy invite");
-    expect(web).toContain("Share invite");
     expect(native).toContain("result.claims");
     expect(native).toContain("Clipboard.setStringAsync");
     expect(native).toContain("Share.share");
@@ -262,11 +252,7 @@ describe("unjoined Commons invitations have a complete sender/receiver handoff",
 });
 
 describe("named-circle reuse stays exact", () => {
-  it("web and native detach circleId on every individual roster/capability edit", () => {
-    const web = readFileSync(
-      path.join(APPS_DIR, "_shared", "ShareSheet.tsx"),
-      "utf8"
-    );
+  it("the share sheet detaches circleId on every individual roster/capability edit", () => {
     const native = readFileSync(
       path.resolve(
         PACKAGE_ROOT,
@@ -274,11 +260,9 @@ describe("named-circle reuse stays exact", () => {
       ),
       "utf8"
     );
-    for (const source of [web, native]) {
-      expect(source).toContain("manualShareSelection");
-      expect(source).toContain("setSelectedCircleId(next.circleId)");
-      expect(source).toContain("Named group ·");
-    }
+    expect(native).toContain("manualShareSelection");
+    expect(native).toContain("setSelectedCircleId(next.circleId)");
+    expect(native).toContain("Named group ·");
   });
 });
 

@@ -1,3 +1,5 @@
+import { unrefTimer } from "../lib/unref-timer.js";
+
 export type GroupCommitResult =
   | { ok: true; value: unknown }
   | { ok: false; error: unknown };
@@ -36,12 +38,12 @@ export class GroupCommitQueue {
       if (this.pending.length >= this.maxBatch) {
         if (this.timer) clearTimeout(this.timer);
         this.timer = setTimeout(() => this.flush(), 0);
-        this.timer.unref?.();
+        unrefTimer(this.timer);
         return;
       }
       if (!this.timer) {
         this.timer = setTimeout(() => this.flush(), this.windowMs);
-        this.timer.unref?.();
+        unrefTimer(this.timer);
       }
     });
   }
@@ -75,7 +77,7 @@ export class GroupCommitQueue {
     // Recursive enqueues get their own window, not an unbounded batch.
     if (this.pending.length > 0 && !this.timer) {
       this.timer = setTimeout(() => this.flush(), this.windowMs);
-      this.timer.unref?.();
+      unrefTimer(this.timer);
     }
   }
 

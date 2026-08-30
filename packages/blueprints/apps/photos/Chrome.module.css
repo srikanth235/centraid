@@ -86,17 +86,14 @@
   /* Positioning context for the lightbox/slideshow/selection-bar overlays, so
      they overlay the app pane inline — never the shell chrome. */
   -webkit-font-smoothing: antialiased;
-  /* THE PAGE MARGIN IS DECLARED ONCE, HERE, AND INHERITED. Every row that
-     spans the pane — the shelf strip, the toolbar, the album bar, the
-     selection bar, the scroller — used to carry its own hardcoded `20px`,
-     which is how five files come to disagree the moment one of them is
-     edited. They now read `var(--content-margin)`, so the compact rung below is a
-     one-line change instead of a five-line one.
-     20px was also not a number the system has: `--page-margin` is 32 on
-     desktop and 18 on the phone (`packages/design/src/density.ts`), the same
-     scale every native screen already insets by. The web simply had no token
-     to read, so this app guessed — and guessed a third value. */
-  --content-margin: var(--page-margin);
+  /* THE PAGE MARGIN IS THE SYSTEM'S (#883). Every row that spans the pane —
+     the shelf strip, the toolbar, the album bar, the selection bar, the
+     scroller — used to carry its own hardcoded `20px`, which is how five files
+     come to disagree the moment one of them is edited; then they read one
+     app-local alias, which is how eight apps come to disagree. They now read
+     `--page-margin` itself: 32 on desktop and 18 on the phone
+     (`packages/design/src/density.ts`), the same scale every native screen
+     already insets by. */
 }
 
 /* ---------- Main ---------- */
@@ -132,7 +129,7 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 2px var(--content-margin) var(--sp-6);
+  padding: 2px var(--page-margin) var(--sp-6);
 }
 .content {
   position: relative;

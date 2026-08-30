@@ -13,7 +13,12 @@ import {
   shelfCopy,
 } from "@centraid/blueprints/apps/notes/view-copy";
 
+import { BAND_CAPSULE } from "../../kit/band/band-capsule";
+import type { BandCapsule } from "../../kit/band/band-capsule";
 import type { BandOwner } from "../../kit/band/band-owner";
+
+export { BAND_CAPSULE } from "../../kit/band/band-capsule";
+export type { BandCapsule } from "../../kit/band/band-capsule";
 
 export type NotesBandDestinationKey =
   | "library"
@@ -29,8 +34,6 @@ export interface NotesBandDestination {
 }
 
 export const NOTES_BAND_MAX_DESTINATIONS = 5;
-
-export const NOTES_BAND_CAPSULE_SIZE = 52;
 
 const BAND_ICONS: Readonly<Record<NotesBandDestinationKey, string>> = {
   library: "FileText",
@@ -49,29 +52,12 @@ export const NOTES_BAND_DESTINATIONS: readonly NotesBandDestination[] = [
   { key: "more", label: "More", icon: BAND_ICONS.more },
 ];
 
-export interface NotesBandCapsule {
-  label: "Home";
-  icon: "Home";
-  size: number;
-  edge: "leading";
-  /** `false` is the whole reason it is not a sixth tab. */
-  inTabGroup: false;
-}
-
-export const NOTES_BAND_CAPSULE: NotesBandCapsule = {
-  label: "Home",
-  icon: "Home",
-  size: NOTES_BAND_CAPSULE_SIZE,
-  edge: "leading",
-  inTabGroup: false,
-};
-
 /** Exactly one band exists at any moment. */
 export type ResolvedNotesBand =
   | {
       owner: "app";
       destinations: readonly NotesBandDestination[];
-      capsule: NotesBandCapsule;
+      capsule: BandCapsule;
     }
   | { owner: "host" };
 
@@ -85,7 +71,7 @@ export function resolveNotesBand(owner: BandOwner): ResolvedNotesBand {
   return {
     owner: "app",
     destinations: NOTES_BAND_DESTINATIONS,
-    capsule: NOTES_BAND_CAPSULE,
+    capsule: BAND_CAPSULE,
   };
 }
 

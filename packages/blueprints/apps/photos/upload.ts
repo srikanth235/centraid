@@ -1,5 +1,5 @@
-// Upload pipeline: hash + client thumb staging, then the typed `upload` command
-// per file. `refresh`/`setUploading` are the only app-level state touched here.
+// Upload pipeline: hash + client thumb staging, then the typed `upload`
+// command per file.
 import {
   isPendingOffsite,
   stageDerivative,
@@ -32,7 +32,7 @@ interface MediaMeta {
   thumbhash?: string;
 }
 
-// 64-bit dHash (#299 Tier 0): 9×8 grayscale, bit = "left brighter than right".
+// 64-bit dHash (#299 Tier 0): 9×8 grayscale.
 export function dHashFromImage(
   img: HTMLImageElement | ImageBitmap
 ): string | null {
@@ -265,8 +265,8 @@ export async function runUpload(
   setImportEnabled(false);
 
   let added = 0;
-  // Ids, not a count: "already here" and "restored" share one command output
-  // and only the id separates them (`tallyDedupes`).
+  // Ids, not a count: "already here" and "restored" share one output and only
+  // the id separates them.
   const dedupedIds: string[] = [];
   let parked = 0;
   let pendingOffsite = 0;
@@ -281,8 +281,7 @@ export async function runUpload(
     notice(`Importing ${i + 1} of ${accepted.length}…`);
     let staged;
     try {
-      // Bytes go into the SAME scope as the command that claims them, or the
-      // claim names a sha that scope has never seen.
+      // Bytes go into the SAME scope as the command that claims them.
       staged = await stageFileBytes(file, "", {
         hash: true,
         ...(scope ? { scope } : {}),
@@ -404,6 +403,12 @@ export function applyUploadTarget(): void {
   }
 }
 
+/**
+ * Wires the import doors and RETURNS ITS OWN TEARDOWN (#883): the `window`
+ * listeners below close over the app root's store, its assets and its React
+ * roots, so one left registered keeps a closed app's whole detached subtree
+ * reachable. The contract is a disposer, not a void.
+ */
 export function wireUpload({
   uploadFiles,
   isAlbumSelected,
@@ -412,40 +417,43 @@ export function wireUpload({
   uploadFiles: (files: File[]) => Promise<void> | void;
   isAlbumSelected: () => boolean;
   openPicker: () => void;
-}): void {
-  $("emptyUpload").addEventListener("click", () => {
+}): () => void {
+  const onImportClick = (): void => {
     // Inside a real album the natural "add" is from the library, not disk.
     if (isAlbumSelected()) openPicker();
     else $("fileInput").click();
-  });
-
-  $("fileInput").addEventListener("change", async () => {
+  };
+  const onFilesChosen = async (): Promise<void> => {
     const input = $<HTMLInputElement>("fileInput");
     const files = [...input.files!];
     input.value = "";
     await uploadFiles(files);
-  });
+  };
+  const emptyUpload = $("emptyUpload");
+  const fileInput = $("fileInput");
+  emptyUpload.addEventListener("click", onImportClick);
+  fileInput.addEventListener("change", onFilesChosen);
 
   let dragDepth = 0;
 
-  window.addEventListener("dragenter", (e) => {
+  const onDragEnter = (e: DragEvent): void => {
     if (!dragHasFiles(e)) return;
     e.preventDefault();
     dragDepth += 1;
     $("dropOverlay").hidden = false;
-  });
+  };
 
-  window.addEventListener("dragover", (e) => {
+  const onDragOver = (e: DragEvent): void => {
     if (dragHasFiles(e)) e.preventDefault();
-  });
+  };
 
-  window.addEventListener("dragleave", (e) => {
+  const onDragLeave = (e: DragEvent): void => {
     if (!dragHasFiles(e)) return;
     dragDepth = Math.max(0, dragDepth - 1);
     if (dragDepth === 0) $("dropOverlay").hidden = true;
-  });
+  };
 
-  window.addEventListener("drop", (e) => {
+  const onDrop = (e: DragEvent): void => {
     if (!dragHasFiles(e)) return;
     e.preventDefault();
     dragDepth = 0;
@@ -453,12 +461,28 @@ export function wireUpload({
     void filesFromDataTransfer(e.dataTransfer).then((files) => {
       if (files.length > 0) void uploadFiles(files);
     });
-  });
+  };
 
-  window.addEventListener("paste", (e) => {
+  const onPaste = (e: ClipboardEvent): void => {
     const tag = (e.target as HTMLElement | null)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return; // never hijack a text field
     const files = [...(e.clipboardData?.files ?? [])];
     if (files.length > 0) void uploadFiles(files);
-  });
+  };
+
+  window.addEventListener("dragenter", onDragEnter);
+  window.addEventListener("dragover", onDragOver);
+  window.addEventListener("dragleave", onDragLeave);
+  window.addEventListener("drop", onDrop);
+  window.addEventListener("paste", onPaste);
+
+  return () => {
+    emptyUpload.removeEventListener("click", onImportClick);
+    fileInput.removeEventListener("change", onFilesChosen);
+    window.removeEventListener("dragenter", onDragEnter);
+    window.removeEventListener("dragover", onDragOver);
+    window.removeEventListener("dragleave", onDragLeave);
+    window.removeEventListener("drop", onDrop);
+    window.removeEventListener("paste", onPaste);
+  };
 }

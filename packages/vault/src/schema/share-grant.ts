@@ -1,12 +1,17 @@
 // The grant plane (#825). A share is a STANDING GRANT — an audience, a
-// subject, a capability — and that meaning lives in `share_grant`. Delivery is
-// a separate question: `share_fulfillment` holds one row per audience vault,
-// so "who may see this" never again depends on whether a transport succeeded.
-// The channel is not a third table: `share_party_vault_binding` (#731) already
-// answers "does this person have a vault to deliver into", reframed by
-// grant/channel.ts rather than duplicated. Commons (`share_circle_grant` and
-// its op log) is NOT superseded — it stays the fulfillment STRATEGY for edit
-// capability, the way closure reprojection is the strategy for view.
+// subject, a capability — and delivery is a separate question:
+// `share_fulfillment` holds one row per audience vault, so "who may see this"
+// never again depends on whether a transport succeeded. The channel is not a
+// third table: `share_party_vault_binding` (#731) already answers "does this
+// person have a vault to deliver into", reframed by grant/channel.ts rather
+// than duplicated. Commons (`share_circle_grant` and its op log) is NOT
+// superseded — it stays the fulfillment STRATEGY for edit capability, the way
+// closure reprojection is the strategy for view.
+//
+// EVERYTHING BELOW IS HISTORY: the meaning half lives in `share_authority`,
+// which rung six migrates this table into and drops (#883). A rung is a fixed
+// instruction to a file that already exists, so the fresh baseline still
+// creates `share_grant` for rung six to read.
 
 // Polymorphic `(subject_type, subject_id)`: the subject vocabulary is
 // `ShareableItemType` (share/closure.ts), which spans core, docs, media and
@@ -17,18 +22,14 @@
 // real reference.
 /**
  * `share_fulfillment`'s columns, named once so the delivery-memory rung below
- * can rebuild the table against exactly this shape.
+ * rebuilds the table against exactly this shape.
  *
- * `delivered_at` is the DURABLE memory of delivery, and it is deliberately not
- * derivable from `state`. `state` is a live freshness reading: a pass that
- * cannot reach the peer drops a `delivered` row back to `syncing`, which is
- * honest about the copy possibly being stale. Revocation asks a different
- * question — "did this peer ever receive the subject?" — and reading the
- * answer off `state` made a delivered-then-degraded grant settle `removed`
- * ("nothing had been delivered") while the audience vault still held the whole
- * projection: the owner was told a share was gone when it was not (#846).
- * Set once, on the first delivery, and cleared only by a removal that
- * verifiably took the projection with it.
+ * `delivered_at` is the DURABLE memory of delivery, deliberately not derivable
+ * from `state`, which is a live freshness reading: an unreachable pass drops a
+ * `delivered` row to `syncing`. Revocation asks a different question — "did
+ * this peer ever receive the subject?" — and answering it from `state` settles
+ * a degraded grant `removed` while the audience still holds the projection
+ * (#846). Set once on first delivery, cleared only by a verified removal.
  */
 const SHARE_FULFILLMENT_COLUMNS = `
   grant_id      TEXT NOT NULL REFERENCES share_grant(grant_id) ON DELETE CASCADE,

@@ -1,5 +1,5 @@
-/* Renderer-side gateway HTTP client (#141). Own module so the data-plane
- * and editing clients do not form an import cycle. */
+/* Renderer-side gateway HTTP client (#141); own module so the data-plane and
+ * editing clients cannot cycle. */
 
 import { GatewayClientError, href, VAULT_HEADER } from "./gateway-auth.js";
 import type { GatewayAuth } from "./gateway-auth.js";
@@ -28,7 +28,7 @@ let cachedClientSessionId: string | undefined;
 
 export const CLIENT_SESSION_HEADER = "x-centraid-client-session";
 
-/** Per-tab ceremony binding. Never an OAuth URL: the gateway records it beside state. */
+/** Per-tab ceremony binding, never an OAuth URL. */
 export function clientSessionId(): string {
   if (cachedClientSessionId) return cachedClientSessionId;
   const storageKey = "centraid.oauth.client-session.v1";
@@ -39,7 +39,7 @@ export function clientSessionId(): string {
       return saved;
     }
   } catch {
-    // sessionStorage denied — in-memory binding still protects this tab.
+    // Denied: the in-memory id still binds.
   }
   const bytes = new Uint8Array(32);
   globalThis.crypto.getRandomValues(bytes);
@@ -49,7 +49,7 @@ export function clientSessionId(): string {
   try {
     window.sessionStorage.setItem(storageKey, cachedClientSessionId);
   } catch {
-    // sessionStorage denied — in-memory id already set.
+    // Denied: the in-memory id still binds.
   }
   return cachedClientSessionId;
 }
@@ -61,6 +61,7 @@ export function withClientSession(headers: HeadersInit): Headers {
 }
 
 export function auth(): Promise<GatewayAuth> {
+  ensureGatewayAuthInvalidation();
   if (!cachedAuth) cachedAuth = window.CentraidApi.getGatewayAuth();
   return cachedAuth;
 }
@@ -69,9 +70,17 @@ export function resetGatewayAuthCache(): void {
   cachedAuth = undefined;
 }
 
-window.CentraidApi.onGatewayChanged(() => resetGatewayAuthCache());
-// Vault switch (#289) keeps the gateway; only `x-centraid-vault` changes.
-window.CentraidApi.onVaultChanged?.(() => resetGatewayAuthCache());
+let invalidationInstalled = false;
+
+// Never module scope: hosts assign `window.CentraidApi` at their own eval, so
+// load order would turn load-bearing (#883).
+export function ensureGatewayAuthInvalidation(): void {
+  if (invalidationInstalled) return;
+  invalidationInstalled = true;
+  window.CentraidApi.onGatewayChanged(() => resetGatewayAuthCache());
+  // Vault switch (#289) keeps the gateway; only `x-centraid-vault` changes.
+  window.CentraidApi.onVaultChanged?.(() => resetGatewayAuthCache());
+}
 
 export async function doFetch(
   baseUrl: string,
@@ -114,7 +123,7 @@ async function withVaultHeader(init: RequestInit): Promise<RequestInit> {
   return { ...init, headers };
 }
 
-/** Non-JSON body is not the gateway. Raw body is diagnostic, never user-facing. */
+/** Non-JSON body is not the gateway; raw body is diagnostic only. */
 export function nonJsonError(
   op: string,
   status: number,

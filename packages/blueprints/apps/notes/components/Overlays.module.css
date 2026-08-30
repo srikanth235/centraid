@@ -1,5 +1,6 @@
-/* The powerbox, the confirms and the band's More sheet. A dialog is one of
-   the three places `--shadow-*` is allowed: it is genuinely over the page. */
+/* The powerbox and the confirms. A dialog is one of the three places
+   `--shadow-*` is allowed: it is genuinely over the page. The band's More
+   sheet is `_shared/MoreSheet.module.css` (#883 B9). */
 
 .powerbox,
 .confirm {
@@ -151,38 +152,4 @@
 .destructive {
   color: var(--net);
   border-color: var(--net);
-}
-
-/* ---------- The band's More sheet ---------- */
-
-.sheet {
-  position: fixed;
-  inset-inline: 0;
-  bottom: 0;
-  z-index: 40;
-  background: var(--bg-elev);
-  border-top: 1px solid var(--line);
-  border-top-left-radius: var(--r-lg);
-  border-top-right-radius: var(--r-lg);
-  box-shadow: var(--shadow-lg);
-  padding: var(--sp-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  animation: kit-rise var(--dur-2) var(--ease-entry);
-}
-
-.sheetRow {
-  min-height: var(--target-min);
-  display: flex;
-  align-items: center;
-  padding: 0 var(--sp-2);
-  border-radius: var(--r-md);
-  font: var(--t-body);
-  color: var(--text);
-  text-align: start;
-}
-.sheetRow[aria-current="page"] {
-  background: var(--bg-sunken);
-  font: var(--t-label-on);
 }

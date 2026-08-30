@@ -1,10 +1,7 @@
 // The band Agenda has claimed, rendered.
 //
-// Two plates in a transparent row — the frame's Home capsule on the frame's
-// neutral page colour, then the app's destinations as one group on `bgElev` —
-// the same anatomy `DocsBand.tsx` draws, from the same shared plate geometry
-// in `kit/band-surface.ts`. This file renders `agenda-band.ts` and adds
-// nothing.
+// Anatomy and shared plate geometry: `PhotosBand.tsx` and
+// `kit/band-surface.ts`. This file renders `agenda-band.ts` and adds nothing.
 //
 // When the member has handed the band back (`owner === "host"`) the tab group
 // goes and the capsule STAYS.
@@ -24,11 +21,12 @@ import {
   BAND_TOP_GAP,
 } from "../../kit/band-surface";
 import type { BandOwner } from "../../kit/band/band-owner";
+import BandCapsuleControl from "../../kit/band/BandCapsule";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
-import { AGENDA_BAND_CAPSULE, resolveAgendaBand } from "./agenda-band";
+import { resolveAgendaBand } from "./agenda-band";
 import type { AgendaBandDestinationKey } from "./agenda-band";
 
 const GROUP_GUTTER = 2;
@@ -57,18 +55,7 @@ export default function AgendaBand({
       <View
         style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={AGENDA_BAND_CAPSULE.label}
-          onPress={onHome}
-          style={[styles.capsule, { width: AGENDA_BAND_CAPSULE.size }]}
-        >
-          <Icon
-            name={AGENDA_BAND_CAPSULE.icon}
-            size={19}
-            color={colors.textSoft}
-          />
-        </Pressable>
+        <BandCapsuleControl onPress={onHome} />
       </View>
     );
   }
@@ -76,14 +63,7 @@ export default function AgendaBand({
   const { capsule } = band;
   return (
     <View style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={capsule.label}
-        onPress={onHome}
-        style={[styles.capsule, { width: capsule.size }]}
-      >
-        <Icon name={capsule.icon} size={19} color={colors.textSoft} />
-      </Pressable>
+      <BandCapsuleControl capsule={capsule} onPress={onHome} />
 
       <View style={styles.group} accessibilityRole="tablist">
         {band.destinations.map((destination) => {
@@ -140,14 +120,6 @@ const makeStyles = (colors: ThemeColors) =>
       minHeight: BAND_HEIGHT,
       paddingHorizontal: BAND_INSET,
       paddingTop: BAND_TOP_GAP,
-    },
-    capsule: {
-      alignItems: "center",
-      backgroundColor: colors.bg,
-      borderColor: colors.lineStrong,
-      borderRadius: BAND_RADIUS,
-      borderWidth: BAND_BORDER,
-      justifyContent: "center",
     },
     group: {
       alignItems: "stretch",

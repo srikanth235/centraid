@@ -550,6 +550,10 @@ interface CentraidClient {
    * and refusal law lives once in `_shared/grant-door.ts`, shared with the
    * native seat, so no app reads a payload itself. A refused call rejects with
    * the route's OWN message, which the sheet prints verbatim.
+   *
+   * The bridge is the shared `GrantWireCalls` since #883, built by the shell
+   * over `_shared/grant-transport.ts` — this declaration is its shape at the
+   * host boundary, not a second transport.
    */
   grants?: {
     subjects: () => Promise<unknown>;

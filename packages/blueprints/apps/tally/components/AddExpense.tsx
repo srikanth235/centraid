@@ -27,6 +27,7 @@
 // none of it is written to the vault as a balance.
 import type { ReactNode } from "react";
 
+import { DAY_MS } from "../../_shared/format-kit.ts";
 import {
   ADD_COMMIT,
   ADD_HEAD,
@@ -74,7 +75,7 @@ import styles from "./Compose.module.css";
 function yesterdayOf(today: string): string {
   const stamp = Date.parse(`${today.slice(0, 10)}T00:00:00.000Z`);
   if (Number.isNaN(stamp)) return today;
-  return new Date(stamp - 86_400_000).toISOString().slice(0, 10);
+  return new Date(stamp - DAY_MS).toISOString().slice(0, 10);
 }
 
 export interface AddExpenseProps {

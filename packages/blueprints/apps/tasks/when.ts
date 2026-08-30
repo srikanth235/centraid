@@ -1,14 +1,15 @@
-/**
- * WHEN a task is (#834). Import-free so Home and the phone can both read it.
- * `format.ts` and `logic.ts` re-export from here — one definition of
- * `landsToday`. An undated task never touches Today.
- */
+// `.js` specifier: the client program typechecks this module and does not
+// enable `allowImportingTsExtensions`. A package import of format-kit also
+// failed Rolldown in the gateway image, which copies sources and not dist.
+import { DAY_MS, MONTHS } from "../_shared/format-kit.js";
+
+/** WHEN a task is (#834). Import-free so Home and the phone can read it;
+ *  `format.ts`/`logic.ts` re-export — one definition of `landsToday`. */
 
 /**
- * Local YYYY-MM-DD for an instant in `timeZone` (IANA), or the host zone when
- * omitted. Intl, not `Date#getFullYear` plus a post-start `process.env.TZ`
- * write: Node ignores TZ after boot, which is how "Today is the member's day"
- * went green on a Mac and red on UTC CI.
+ * Local YYYY-MM-DD in `timeZone` (IANA), or the host zone. Intl, not
+ * `Date#getFullYear` with a post-boot `process.env.TZ` write: Node ignores TZ
+ * after boot, so that goes green on a Mac and red on UTC CI.
  */
 function civilDay(instant: Date, timeZone?: string): string | null {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -24,8 +25,8 @@ function civilDay(instant: Date, timeZone?: string): string | null {
   return `${year}-${month}-${day}`;
 }
 
-/** A civil day key (`2026-08-21`) for an ISO instant or a date-only value.
- *  Instants use the member's local calendar day — never the UTC prefix. */
+/** A civil day key (`2026-08-21`). Instants use the member's local calendar
+ *  day — never the UTC prefix. */
 export function dayKey(value: string, timeZone?: string): string {
   if (isDateOnly(value)) return value.slice(0, 10);
   const parsed = new Date(value);
@@ -46,7 +47,7 @@ export function daysBetween(
   const a = Date.parse(`${dayKey(from, timeZone)}T00:00:00Z`);
   const b = Date.parse(`${dayKey(to, timeZone)}T00:00:00Z`);
   if (Number.isNaN(a) || Number.isNaN(b)) return 0;
-  return Math.round((b - a) / 86_400_000);
+  return Math.round((b - a) / DAY_MS);
 }
 
 const WEEKDAYS = [
@@ -58,21 +59,6 @@ const WEEKDAYS = [
   "Friday",
   "Saturday",
 ];
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
-
 export function weekdayName(value: string): string {
   const parsed = new Date(`${dayKey(value)}T00:00:00Z`);
   return WEEKDAYS[parsed.getUTCDay()] ?? "";
@@ -120,23 +106,19 @@ export function isOverdueWhen(task: TaskWhen, now: string): boolean {
   return daysBetween(now, due) < 0;
 }
 
-/** VTODO open set — the only statuses the live board may still act on. */
+/** VTODO open set — the statuses the live board may act on. */
 export function isOpenStatus(status: string): boolean {
   return status === "needs-action" || status === "in-process";
 }
 
-/** The fields family nesting reads off a board row. */
 export interface FamilyRow {
   task_id: string;
   parent_task_id?: string | null;
   status: string;
 }
 
-/**
- * Does this row belong on the OPEN board as a family root? An unfinished
- * child of a completed or released parent is a root of its own — completing
- * the parent must not hide remaining work.
- */
+/** An unfinished child of a completed or released parent is a root of its own
+ *  — completing the parent must not hide remaining work. */
 export function isOpenBoardRoot(
   task: FamilyRow,
   parent: FamilyRow | undefined
@@ -146,11 +128,8 @@ export function isOpenBoardRoot(
   return !parent || !isOpenStatus(parent.status);
 }
 
-/**
- * Split a flat task list into the open board and the logbook. Unfinished
- * children of a closed parent are promoted onto the open board; the logbook
- * parent keeps only closed children, so the same row is never drawn twice.
- */
+/** Unfinished children of a closed parent are promoted onto the open board;
+ *  the logbook parent keeps only closed children, so no row is drawn twice. */
 export function nestTaskFamilies<T extends FamilyRow>(
   rows: readonly T[],
   decorate: (task: T, children: T[]) => T

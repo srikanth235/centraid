@@ -1,3 +1,4 @@
+import { plural } from "../_shared/format-kit.ts";
 // Timeline month/day buckets (v4 §4.3). Pure/DOM-free so header, ticks, and tests share one derivation. Copy is final.
 import { dayKey, fmtMonth, isVideoAsset } from "./format.ts";
 import { readableName } from "./place-map.ts";
@@ -16,9 +17,6 @@ export interface MonthGroup {
   days: DayGroup[];
   assets: Asset[];
 }
-
-const plural = (n: number, word: string): string =>
-  `${n} ${word}${n === 1 ? "" : "s"}`;
 
 export function monthCount(assets: readonly Asset[]): string {
   const videos = assets.filter((asset) => isVideoAsset(asset)).length;
@@ -42,7 +40,7 @@ export function dayMeta(assets: readonly Asset[]): string {
   return names.size === 1 && named ? `${count} · ${[...names][0]}` : count;
 }
 
-/** Caller sorts; preserve order so trash (`deleted_at`) and library (`taken_at`) can share it. */
+/** Caller sorts; preserve order so trash and library can share it. */
 export function groupByMonth(assets: readonly Asset[]): MonthGroup[] {
   const months = new Map<string, Map<string, Asset[]>>();
   for (const asset of assets) {

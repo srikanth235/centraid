@@ -2,10 +2,10 @@ export function automationRow(): CentraidAutomationRow {
   const triggers: CentraidAutomationManifest["triggers"] = [
     { kind: "webhook", id: "hook-1" },
     { kind: "cron", expr: "0 9 * * *" },
-    { kind: "data", entities: ["business.invoice"], every: "5m" },
+    { kind: "data", entities: ["schedule.task"], every: "5m" },
     {
       kind: "condition",
-      entity: "business.invoice",
+      entity: "schedule.task",
       every: "10m",
       where: [{ column: "status", op: "eq", value: "open" }],
     },

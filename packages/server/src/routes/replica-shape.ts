@@ -1,8 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit (#406) consent selection, temporal membership, and opaque row identity form one security boundary
-// Server-derived replica shapes (#406): existing app consent scopes
-// intersected with the acting owner's write authority. There is no replica field
-// in app manifests; this module projects the grants already enforced by the
-// vault gateway into a row/column-minimized offline shape.
+// Server-derived replica shapes (#406): app consent scopes intersected with the
+// acting owner's write authority. Manifests carry no replica field; this module
+// projects gateway-enforced grants into a row/column-minimized offline shape.
 
 import crypto from "node:crypto";
 import type { DatabaseSync, SQLInputValue, StatementSync } from "node:sqlite";
@@ -13,6 +12,7 @@ import {
   currentReplicaLogState,
   evaluateConsent,
   listVaultEntities,
+  readReplicaRow,
   readReplicaRows,
   replicaUnavailableColumnsOf,
   resolveEntity,
@@ -27,8 +27,7 @@ export const REPLICA_MAX_VALUE_BYTES = 64 * 1024;
 export const REPLICA_SYNTHETIC_PRIMARY_KEY = "__centraid_row_id";
 
 export interface ReplicaShapeAccess {
-  /** Ownership-sourced write authority (#726): the device's owner owns the
-   *  vault. Commons readers use independently resident vault rows. */
+  /** Ownership-sourced write authority (#726), not a grant. */
   canWrite: boolean;
   rememberDevice: boolean;
   /** Trusted web-app session header or an explicit shell selection. */
@@ -80,26 +79,45 @@ interface TableColumn {
 
 interface TemporalFingerprintCacheEntry {
   epoch: string;
-  /**
-   * The last replica-log seq that touched THIS entity — not the global
-   * watermark (#659). Keyed on the watermark, the cache would be
-   * invalid after any commit anywhere in the vault, so a note edit would force
-   * a full-table scan + sha256 of the calendar's temporal membership on the
-   * very next poll.
-   */
+  /** Last log seq touching THIS entity, never the global watermark (#659):
+   *  keyed on the watermark, any commit anywhere would force a rescan. */
   entitySeq: number;
   computedAt: number;
   validUntil: number;
   digest: string;
+  /** Membership behind `digest`; absent past `INCREMENTAL_MEMBERSHIP_LIMIT`. */
+  membership?: Map<string, string[]>;
+  /** A row past its transition must be re-evaluated though nothing wrote it. */
+  transitions?: Map<string, number>;
 }
 
 const DAY_MS = 86_400_000;
 
 /**
- * The highest replica-log seq recorded against one entity in the current epoch.
- * Backed by `idx_replica_change_latest_row (epoch, entity, row_id, seq DESC)`,
- * so this is an index probe, not a scan.
+ * Bounds on WORK PER CALL: above either, recompute from the table. Incremental
+ * costs a read + probe per CHANGED row, full one of each per row in the entity.
  */
+const INCREMENTAL_MEMBERSHIP_LIMIT = 50_000;
+const INCREMENTAL_CHANGE_LIMIT = 5_000;
+
+/** `undefined` past `limit`. Backed by `idx_replica_change_latest_row`. */
+function changedRowIdsSince(
+  db: DatabaseSync,
+  epoch: string,
+  entity: string,
+  sinceSeq: number,
+  limit: number
+): string[] | undefined {
+  const rows = preparedStatement(
+    db,
+    `SELECT DISTINCT row_id FROM replica_change
+      WHERE epoch = ? AND entity = ? AND seq > ?
+      LIMIT ?`
+  ).all(epoch, entity, sinceSeq, limit + 1) as { row_id: string }[];
+  return rows.length > limit ? undefined : rows.map((row) => row.row_id);
+}
+
+/** Index probe, not a scan — `idx_replica_change_latest_row` covers it. */
 function entityChangeSeq(
   db: DatabaseSync,
   epoch: string,
@@ -116,10 +134,16 @@ const temporalFingerprintCache = new WeakMap<
   Map<string, TemporalFingerprintCacheEntry>
 >();
 
+/**
+ * Cached: this runs once per vault ENTITY per subscriber per commit. `physical`
+ * comes from the vault registry, never the wire — that is what makes the
+ * interpolation safe.
+ */
 function tableColumns(db: DatabaseSync, physical: string): TableColumn[] {
-  return db
-    .prepare(`PRAGMA table_info(${JSON.stringify(physical)})`)
-    .all() as unknown as TableColumn[];
+  return preparedStatement(
+    db,
+    `PRAGMA table_info(${JSON.stringify(physical)})`
+  ).all() as unknown as TableColumn[];
 }
 
 function quoteIdentifier(value: string): string {
@@ -153,8 +177,7 @@ function alternativeFor(
     return undefined;
   }
   const actual = new Set(columns.map((column) => column.name));
-  // A malformed or unavailable-value filter fails closed; membership must never
-  // become broader merely because a replica cannot evaluate the predicate.
+  // Fails closed: membership never widens because a replica cannot evaluate.
   if (
     filters.some(
       (filter) => !actual.has(filter.column) || unavailable.has(filter.column)
@@ -174,8 +197,7 @@ function alternativeFor(
           .map((column) => column.name)
           .filter((column) => !unavailable.has(column))
       : mask.filter((column) => actual.has(column) && !unavailable.has(column));
-  // Mirrors applyFieldMask: a scope that selects zero real fields is invalid,
-  // not an identity-only widening through the replica protocol.
+  // Mirrors applyFieldMask: zero real fields is invalid, not identity-only.
   if (allowed.length === 0) return undefined;
   try {
     const compiled = compileFilters(db, physical, filters, now);
@@ -194,8 +216,7 @@ function alternativeFor(
       membershipParams: compiled.params,
       historicalParams: historical.params,
     } as ScopeAlternative;
-    // StatementSync exposes expandedSQL (including last bindings) when
-    // enumerated. Keep both statements strictly internal to the server shape.
+    // Non-enumerable: StatementSync exposes expandedSQL with its last bindings.
     Object.defineProperties(alternative, {
       membership: {
         value: db.prepare(
@@ -296,8 +317,85 @@ function temporalFingerprint(
     return cached.digest;
   }
 
-  const membership: Array<[string, string[]]> = [];
-  let validUntil = Number.POSITIVE_INFINITY;
+  const memberColumns = (row: ReplicaRow): string[] | undefined => {
+    const applicable = entity.alternatives.filter((alternative) =>
+      alternativeMatches(entity, row, alternative)
+    );
+    if (applicable.length === 0) return undefined;
+    const columns = new Set(
+      applicable.flatMap((alternative) => alternative.columns)
+    );
+    if (entity.primaryKey === REPLICA_SYNTHETIC_PRIMARY_KEY) {
+      columns.add(REPLICA_SYNTHETIC_PRIMARY_KEY);
+    }
+    return [...columns].sort();
+  };
+  const rowTransition = (row: ReplicaRow): number | undefined => {
+    let soonest: number | undefined;
+    for (const filter of entity.alternatives.flatMap(
+      (alternative) => alternative.filters
+    )) {
+      const transition = nextTemporalTransition(row, filter, nowMs);
+      if (transition === undefined) continue;
+      soonest =
+        soonest === undefined ? transition : Math.min(soonest, transition);
+    }
+    return soonest;
+  };
+
+  // Incremental (#883 C2): only a row the log says was written, or one past its
+  // recorded transition, can have MOVED. The retained map carries the rest.
+  const priorMembership = cached?.membership;
+  const priorTransitions = cached?.transitions;
+  const changed =
+    priorMembership && priorTransitions && cached.epoch === state.epoch
+      ? changedRowIdsSince(
+          db,
+          state.epoch,
+          entity.entity,
+          cached.entitySeq,
+          INCREMENTAL_CHANGE_LIMIT
+        )
+      : undefined;
+  if (priorMembership && priorTransitions && changed) {
+    const stale = new Set(changed);
+    for (const [rowId, at] of priorTransitions)
+      if (at <= nowMs) stale.add(rowId);
+    const membership = new Map(priorMembership);
+    const transitions = new Map(priorTransitions);
+    for (const rowId of stale) {
+      const row = readReplicaRow(db, entity.entity, rowId, {
+        maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+      });
+      // Gone from the table is gone from the membership; the log's own delete
+      // entry is what put the id in `stale`.
+      if (!row) {
+        membership.delete(rowId);
+        transitions.delete(rowId);
+        continue;
+      }
+      const columns = memberColumns(row);
+      if (columns) membership.set(rowId, columns);
+      else membership.delete(rowId);
+      const transition = rowTransition(row);
+      if (transition === undefined) transitions.delete(rowId);
+      else transitions.set(rowId, transition);
+    }
+    const digest = digestOfMembership(membership);
+    cache.set(key, {
+      epoch: state.epoch,
+      entitySeq,
+      computedAt: nowMs,
+      validUntil: soonestTransition(transitions),
+      digest,
+      membership,
+      transitions,
+    });
+    return digest;
+  }
+
+  const membership = new Map<string, string[]>();
+  const transitions = new Map<string, number>();
   let after: string | undefined;
   do {
     const page = readReplicaRows(db, entity.entity, {
@@ -306,55 +404,76 @@ function temporalFingerprint(
       maxValueBytes: REPLICA_MAX_VALUE_BYTES,
     });
     for (const row of page.rows) {
-      const applicable = entity.alternatives.filter((alternative) =>
-        alternativeMatches(entity, row, alternative)
-      );
-      if (applicable.length > 0) {
-        const columns = new Set(
-          applicable.flatMap((alternative) => alternative.columns)
-        );
-        if (entity.primaryKey === REPLICA_SYNTHETIC_PRIMARY_KEY) {
-          columns.add(REPLICA_SYNTHETIC_PRIMARY_KEY);
-        }
-        membership.push([row.rowId, [...columns].sort()]);
-      }
-      for (const filter of entity.alternatives.flatMap(
-        (alternative) => alternative.filters
-      )) {
-        const transition = nextTemporalTransition(row, filter, nowMs);
-        if (transition !== undefined)
-          validUntil = Math.min(validUntil, transition);
-      }
+      const columns = memberColumns(row);
+      if (columns) membership.set(row.rowId, columns);
+      const transition = rowTransition(row);
+      if (transition !== undefined) transitions.set(row.rowId, transition);
     }
     after = page.nextAfter;
   } while (after);
-  const digest = crypto
-    .createHash("sha256")
-    .update(JSON.stringify(membership))
-    .digest("hex");
+  const digest = digestOfMembership(membership);
+  // Retain the membership only while carrying it is cheaper than rebuilding it.
+  const retainable =
+    membership.size + transitions.size <= INCREMENTAL_MEMBERSHIP_LIMIT;
   cache.set(key, {
     epoch: state.epoch,
     entitySeq,
     computedAt: nowMs,
-    validUntil,
+    validUntil: soonestTransition(transitions),
     digest,
+    ...(retainable ? { membership, transitions } : {}),
   });
   return digest;
 }
 
-/** Build one independent shape per active app + purpose pair. */
+/**
+ * ONE CANONICAL ORDER, so incremental and full cannot disagree: the digest feeds
+ * the shape id, and an id depending on WHICH path produced it would rebootstrap
+ * every device. Row-id sort is the only order a mutated map can also reach.
+ */
+function digestOfMembership(membership: Map<string, string[]>): string {
+  const ordered = [...membership.entries()].sort(([left], [right]) =>
+    left < right ? -1 : left > right ? 1 : 0
+  );
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(ordered))
+    .digest("hex");
+}
+
+function soonestTransition(transitions: Map<string, number>): number {
+  let soonest = Number.POSITIVE_INFINITY;
+  for (const at of transitions.values()) soonest = Math.min(soonest, at);
+  return soonest;
+}
+
+export interface BuildReplicaShapesOptions {
+  /**
+   * Skip every other app's consent evaluation and pragmas (#883 C2). The id's
+   * `${appId}:` prefix only NARROWS the walk — the shape is still derived from
+   * live grants, so naming an app you hold no grant for yields nothing.
+   */
+  onlyShapeId?: string;
+}
+
 export function buildReplicaShapes(
   db: DatabaseSync,
   access: ReplicaShapeAccess,
-  now = new Date().toISOString()
+  now = new Date().toISOString(),
+  options: BuildReplicaShapesOptions = {}
 ): ReplicaServerShape[] {
   const grantees = readGrantees(db, now, access.appId);
   const shapes: ReplicaServerShape[] = [];
   const nowMs = Date.parse(now);
   const replicaEpoch = currentReplicaLogState(db).epoch;
+  const onlyAppId =
+    options.onlyShapeId === undefined
+      ? undefined
+      : options.onlyShapeId.slice(0, options.onlyShapeId.lastIndexOf(":"));
   for (const grantee of grantees) {
     if (!grantee.signing_key) continue;
     const appId = grantee.app_name;
+    if (onlyAppId !== undefined && appId !== onlyAppId) continue;
     const purpose = grantee.purpose;
     const entities: ReplicaEntityShape[] = [];
     for (const entity of listVaultEntities(db)) {
@@ -380,8 +499,7 @@ export function buildReplicaShapes(
         if (decision.decision !== "allow") continue;
         effective = decision;
       } catch {
-        // Malformed grant/policy JSON fails closed just as a replica shape
-        // must; it can never fall through to a later, broader grant.
+        // Fails closed; never falls through to a later, broader grant.
         continue;
       }
       const info = tableColumns(db, ref.physical);
@@ -402,10 +520,8 @@ export function buildReplicaShapes(
       if (!alternative) continue;
       const alternatives = [alternative];
       const allowed = new Set(alternatives.flatMap((scope) => scope.columns));
-      // Sticky availability metadata covers ordinary consent masks as well as
-      // structurally forbidden fields. A local handler that touches or
-      // spreads a masked field must rerun online; silently returning
-      // `undefined` would change the existing handler's semantics.
+      // Sticky over consent masks too: a handler touching a masked field must
+      // rerun online rather than see `undefined` and change its semantics.
       const hasUnavailableFields =
         unavailable.size > 0 ||
         alternatives.some((scope) =>
@@ -530,7 +646,6 @@ function alternativeMatches(
   }
 }
 
-/** Field union for the alternatives whose row predicates actually match. */
 export function replicaRowColumns(
   shape: ReplicaServerShape,
   entity: string,
@@ -620,7 +735,6 @@ export interface ReplicaRowWire {
   oversizedFields?: string[];
 }
 
-/** Apply row predicates + per-alternative field masks to one sealed-safe row. */
 export function shapeReplicaRow(
   shape: ReplicaServerShape,
   entity: string,

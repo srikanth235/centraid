@@ -1,4 +1,4 @@
-// Shared mount + door stubs for the web grant-sheet suites (#825).
+// Mount + door stubs for the web grant-sheet suites (#825).
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -49,6 +49,10 @@ export function standingGrant(
         detail: null,
       },
     ],
+    // The vault's own V-phrases: omitting them would let a surface pass
+    // while re-deriving them.
+    phrase: "shared",
+    reason: "the vault it addresses is holding it",
     ...overrides,
   };
 }
@@ -61,6 +65,8 @@ export function stubDoor(overrides: Partial<GrantDoor> = {}): GrantDoor {
     forSubject: () => Promise.resolve([]),
     create: () => Promise.resolve({ ok: true, outcome: "created" as const }),
     revoke: () => Promise.resolve({ ok: true, message: "no longer shared" }),
+    changeCapability: () =>
+      Promise.resolve({ ok: true, outcome: "created" as const }),
     ...overrides,
   };
 }
@@ -82,11 +88,8 @@ export function pressing(
   return found;
 }
 
-/**
- * Mount the sheet and record what it SAYS rather than which functions ran:
- * the status line is the sheet's one feedback channel, so the list of
- * sentences that reached it is the observable outcome under test.
- */
+/** The status line is the sheet's one feedback channel: its sentences are
+ *  the observable outcome, not which functions ran. */
 export async function mount(
   props: Partial<Parameters<typeof GrantSheet>[0]> = {}
 ): Promise<{ container: HTMLElement; status: string[] }> {

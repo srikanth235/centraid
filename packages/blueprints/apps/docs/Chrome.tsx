@@ -4,10 +4,16 @@
 // TRAP #5: stamp NO global `docs`/`is-narrow`/`side-open` trio beside the
 // module-scoped classes — sibling `*.module.css` would reach across the module
 // boundary. Narrowness travels as `data-narrow`/`narrow`; every variable
-// region arrives as a slot.
+// region is a slot.
 import type { ReactNode } from "react";
 
-import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
+import {
+  ChromeToolbar,
+  ConsentBanner,
+  DropOverlay,
+  NoticeBanner,
+} from "../_shared/AppChrome.tsx";
+import { chromeClass } from "../_shared/chrome-kit.ts";
 
 import styles from "./Chrome.module.css";
 
@@ -48,15 +54,13 @@ export function Chrome(props: ChromeProps): ReactNode {
   // Destructure refs first, or every later `props.*` read taints (#573).
   const { uploadRef } = props;
 
-  const shellClass = [
+  const shellClass = chromeClass(
     styles.shell,
-    props.narrow ? styles.isNarrow : "",
-    props.ready ? styles.ready : "",
-    props.sideOpen ? styles.sideOpen : "",
-    props.consent ? styles.denied : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+    props.narrow && styles.isNarrow,
+    props.ready && styles.ready,
+    props.sideOpen && styles.sideOpen,
+    props.consent && styles.denied
+  );
 
   return (
     <div
@@ -188,32 +192,21 @@ export function Chrome(props: ChromeProps): ReactNode {
       <main className={styles.main}>
         {/* Controls only; the frame's app bar owns rule, title and count.
             `aria-label` follows what the row is currently for. */}
-        {props.slots.toolbar ? (
-          <div
-            className={styles.toolbar}
-            data-selecting={String(props.selecting)}
-            role="toolbar"
-            aria-label={props.selecting ? "Selection actions" : "View"}
-          >
-            {props.slots.toolbar}
-          </div>
-        ) : null}
+        <ChromeToolbar
+          className={styles.toolbar}
+          selecting={props.selecting}
+          label={props.selecting ? "Selection actions" : "View"}
+        >
+          {props.slots.toolbar}
+        </ChromeToolbar>
 
         {props.consent ? (
-          // `id="consentBanner"` lets onFocusRefresh bypass its throttle (#505).
-          <div id="consentBanner" className={`kit-banner ${styles.banner}`}>
-            <strong>No vault access yet.</strong>{" "}
-            <span>{props.consent.message}</span>
-            <VaultAccessButton />
-          </div>
+          <ConsentBanner
+            message={props.consent.message}
+            className={styles.banner}
+          />
         ) : null}
-        {/* Driven imperatively by logic.ts; never reconciled. */}
-        <output
-          id="noticeBanner"
-          className={`kit-banner notice ${styles.banner}`}
-          aria-live="polite"
-          hidden
-        />
+        <NoticeBanner className={styles.banner} />
 
         {/* A slot because WHETHER it renders is a routing question. */}
         {props.slots.shelfStrip}
@@ -221,7 +214,12 @@ export function Chrome(props: ChromeProps): ReactNode {
         {/* The rail is furniture, not an overlay: the set reflows beside it. */}
         <div className={styles.content}>
           {props.slots.navRail}
-          <div className={styles.scroll}>{props.slots.scroll}</div>
+          {/* The declared scroll pane (`_shared/VirtualWindow.tsx`
+              SCROLL_HOST_ATTR): the drive's row set windows against this box
+              rather than walking ancestors to find what scrolls. */}
+          <div className={styles.scroll} data-scroll-host="">
+            {props.slots.scroll}
+          </div>
           {props.slots.rail}
         </div>
       </main>
@@ -241,11 +239,9 @@ export function Chrome(props: ChromeProps): ReactNode {
         aria-label="Upload files"
         onChange={props.onUploadChange}
       />
-      <div className="kit-drop" hidden={!props.dropVisible} aria-hidden="true">
-        <div className="kit-drop-card">
-          <span>{props.dropTarget}</span>
-        </div>
-      </div>
+      <DropOverlay visible={props.dropVisible}>
+        <span>{props.dropTarget}</span>
+      </DropOverlay>
     </div>
   );
 }

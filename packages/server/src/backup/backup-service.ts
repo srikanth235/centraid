@@ -50,6 +50,7 @@ import {
 } from "@centraid/vault";
 import type { BackupPolicy, RemoteTier } from "@centraid/vault";
 
+import { unrefTimer } from "../lib/unref-timer.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
 import type { HealthRegistry } from "../serve/health-registry.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
@@ -283,8 +284,8 @@ export class BackupService {
     | undefined;
   private readonly authorizedOwnerId: (() => string | undefined) | undefined;
   private keyring: Keyring | undefined;
-  private timer: NodeJS.Timeout | undefined;
-  private walTimer: NodeJS.Timeout | undefined;
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  private walTimer: ReturnType<typeof setTimeout> | undefined;
   private walTimerDueAtMs: number | undefined;
   /** One drain pass at a time; ticks that land mid-pass are skipped. */
   private draining = false;
@@ -1607,9 +1608,9 @@ export class BackupService {
       if (this.stopped) return;
       runScheduled();
       this.timer = setInterval(runScheduled, HOUR_MS);
-      this.timer.unref();
+      unrefTimer(this.timer);
     }, jitterDelayMs(HOUR_MS));
-    this.timer.unref();
+    unrefTimer(this.timer);
     void this.refreshWalSchedule().catch((error) => {
       this.logger.warn(
         `backup: wal scheduler setup failed: ${error instanceof Error ? error.message : String(error)}`
@@ -1668,7 +1669,7 @@ export class BackupService {
         );
       });
     }, delayMs);
-    this.walTimer.unref();
+    unrefTimer(this.walTimer);
   }
 
   /** AWAITS the chain: provider calls are not cancellable and a run still

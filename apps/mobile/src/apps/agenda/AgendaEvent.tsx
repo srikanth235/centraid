@@ -15,6 +15,7 @@ import { readPendingOverlay } from "@centraid/blueprints/apps/_shared/pending-ov
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import Tappable from "../../kit/components/Tappable";
 import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import {
@@ -156,13 +157,13 @@ export default function AgendaEvent({
       edges={["top", "bottom"]}
     >
       <View style={styles.header}>
-        <Pressable
+        <Tappable
           accessibilityRole="button"
           accessibilityLabel="Back to the agenda"
           onPress={() => navigation.goBack()}
         >
           <Icon name="ChevronLeft" size={26} color={colors.text} />
-        </Pressable>
+        </Tappable>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Event</Text>
         <View style={styles.headerSpacer} />
       </View>

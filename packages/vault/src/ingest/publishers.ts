@@ -1,10 +1,16 @@
-// governance: allow-repo-hygiene file-size-limit the per-entity publishers are one closed vocabulary — probe/create/update share the provenance-stamping contract (#290)
+// governance: allow-repo-hygiene file-size-limit the per-entity publishers are one closed vocabulary sharing the provenance-stamping contract (#290)
 // Per-entity publishers (#290): only this code turns a staged payload into
 // vault rows. `probe` adopts; `create`/`update` write and report touched rows.
 
 import type { DatabaseSync } from "node:sqlite";
 
 import { promoteStagedBlob } from "../blob/promote.js";
+import {
+  bindContactReach,
+  contactReachKey,
+  partyForReach,
+  reachKindOf,
+} from "../commands/contact-reach.js";
 import { setStarredTx } from "../commands/flags.js";
 import { assertTextBodyWithinBudget } from "../commands/inline-body-guard.js";
 import {
@@ -122,6 +128,20 @@ function bindIdentifiers(
     ).map((r) => r.scheme)
   );
   for (const identifier of identifiers) {
+    // Reach binds as a channel, an identity key as a register row (#883).
+    const channelId = bindContactReach(vault, {
+      channelId: uuidv7(),
+      partyId,
+      scheme: identifier.scheme,
+      value: identifier.value,
+      label: identifier.label,
+      provenanceJson: JSON.stringify({ source: "import" }),
+      now: nowIso(),
+    });
+    if (channelId !== null) {
+      wrote.push({ type: "social.contact_channel", id: channelId });
+      continue;
+    }
     const exists = vault
       .prepare(
         "SELECT 1 AS x FROM core_party_identifier WHERE scheme = ? AND value = ?"
@@ -155,18 +175,42 @@ function partyByIdentifiers(
   identifiers: PartyPayload["identifiers"]
 ): string | null {
   for (const identifier of identifiers) {
-    const row = vault
-      .prepare(
-        `SELECT party_id FROM core_party_identifier
-          WHERE scheme = ? AND value = ? AND (valid_to IS NULL OR valid_to > ?)
-          ORDER BY is_primary DESC LIMIT 1`
-      )
-      .get(identifier.scheme, identifier.value, nowIso()) as
-      | { party_id: string }
-      | undefined;
-    if (row) return row.party_id;
+    const partyId = partyForReach(
+      vault,
+      identifier.scheme,
+      identifier.value,
+      nowIso()
+    );
+    if (partyId) return partyId;
   }
   return null;
+}
+
+/** In whichever store owns the claim. */
+function identifierHeld(
+  vault: DatabaseSync,
+  partyId: string,
+  identifier: PartyPayload["identifiers"][number]
+): boolean {
+  const kind = reachKindOf(identifier.scheme);
+  if (kind) {
+    return (
+      vault
+        .prepare(
+          `SELECT 1 AS x FROM social_contact_channel
+            WHERE party_id = ? AND kind = ? AND normalized_value = ?`
+        )
+        .get(partyId, kind, contactReachKey(kind, identifier.value)) !==
+      undefined
+    );
+  }
+  return (
+    vault
+      .prepare(
+        "SELECT 1 AS x FROM core_party_identifier WHERE scheme = ? AND value = ?"
+      )
+      .get(identifier.scheme, identifier.value) !== undefined
+  );
 }
 
 function ensurePeopleProfile(
@@ -197,12 +241,7 @@ const partyPublisher: Publisher = {
     const partyId = partyByIdentifiers(vault, p.identifiers);
     if (!partyId) return null;
     const missing = p.identifiers.filter(
-      (i) =>
-        !vault
-          .prepare(
-            "SELECT 1 AS x FROM core_party_identifier WHERE scheme = ? AND value = ?"
-          )
-          .get(i.scheme, i.value)
+      (i) => !identifierHeld(vault, partyId, i)
     );
     return missing.length > 0
       ? {
@@ -623,7 +662,7 @@ function noteContent(
   return { id, wrote: [{ type: "core.content_item", id }] };
 }
 
-// Find-or-create nested collections (#721) — never mint a second name the vault holds.
+// Find-or-create nested collections; never mint a name the vault holds.
 function ensureCollectionPath(
   vault: DatabaseSync,
   ownerPartyId: string,
@@ -774,8 +813,8 @@ const notePublisher: Publisher = {
 };
 
 // ── media.asset (photo-library import, issue #721 A1) ─────────────
-// Same row as a phone upload: write through media.add_asset primitives, not a
-// second insert. Sidecar + album folder are the archive-only extras.
+// Same row as a phone upload: through `media.add_asset` primitives, never a
+// second insert. Sidecar and album folder are archive-only extras.
 
 export interface MediaAssetPayload {
   stagedSha: string;
@@ -901,8 +940,7 @@ const mediaAssetPublisher: Publisher = {
       wrote.push({ type: entityType, id: entityId2 });
     };
     const deps = { vault, now, newId: uuidv7, wrote: collect };
-    // COALESCE capture time: sidecar absence is not a correction. Capture
-    // group is additive, never re-pointed.
+    // Sidecar absence is not a correction; the capture group is additive.
     vault
       .prepare(
         `UPDATE media_asset

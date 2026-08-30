@@ -18,8 +18,14 @@
 // and re-carved for the routes still to land — independently.
 import type { ReactNode } from "react";
 
+import {
+  AskMount,
+  ChromeToolbar,
+  ConsentBanner,
+  ScrollHost,
+} from "../_shared/AppChrome.tsx";
+import { chromeClass } from "../_shared/chrome-kit.ts";
 import { LoadingSkeleton } from "../_shared/LoadingSkeleton.tsx";
-import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
 
 import styles from "./Chrome.module.css";
 
@@ -62,13 +68,11 @@ export interface ChromeProps {
 }
 
 export function Chrome(props: ChromeProps): ReactNode {
-  const shellClass = [
+  const shellClass = chromeClass(
     styles.shell,
-    props.narrow ? styles.isNarrow : "",
-    props.consent ? styles.denied : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+    props.narrow && styles.isNarrow,
+    props.consent && styles.denied
+  );
 
   return (
     <div className={shellClass} data-tally-root data-density="comfortable">
@@ -80,15 +84,10 @@ export function Chrome(props: ChromeProps): ReactNode {
 
       <main className={styles.main}>
         {props.consent ? (
-          // `id="consentBanner"` is the hook the shared kit's onFocusRefresh
-          // reads to detect a denied→recovered flip and bypass its 30s focus
-          // throttle; without it a refocus after a grant would be throttled and
-          // the read never retried.
-          <div id="consentBanner" className={`kit-banner ${styles.banner}`}>
-            <strong>No vault access yet.</strong>{" "}
-            <span>{props.consent.message}</span>
-            <VaultAccessButton />
-          </div>
+          <ConsentBanner
+            message={props.consent.message}
+            className={styles.banner}
+          />
         ) : null}
 
         {props.slots.backRow ? (
@@ -97,33 +96,24 @@ export function Chrome(props: ChromeProps): ReactNode {
 
         {props.slots.notices}
 
-        {props.slots.toolbar ? (
-          <div
-            className={styles.toolbar}
-            role="toolbar"
-            aria-label="Tally view"
-          >
-            {props.slots.toolbar}
-          </div>
-        ) : null}
+        <ChromeToolbar className={styles.toolbar} label="Tally view">
+          {props.slots.toolbar}
+        </ChromeToolbar>
 
-        <div className={styles.scroll}>
-          {props.loading ? (
-            <div className={styles.skeleton} aria-hidden="true">
-              <LoadingSkeleton rows={6} />
-            </div>
-          ) : (
-            props.slots.scroll
-          )}
-        </div>
+        <ScrollHost
+          className={styles.scroll}
+          loading={props.loading}
+          skeletonClassName={styles.skeleton}
+          skeleton={<LoadingSkeleton rows={6} />}
+        >
+          {props.slots.scroll}
+        </ScrollHost>
 
-        {/* THE ASSISTANT'S VERBS. The panel is the shell's
-            (`kit-ask-inline.ts`), it streams a turn under this app's id, and
-            the verbs ARE this app's manifest — `add-expense`, `settle-up`,
-            `add-friend` and the six queries. It mounts only where the app
-            gives it a mount point, which is why the seam is here: without this
-            node the descriptor's `kitAsk` config is real and unreachable. */}
-        <div className={styles.askMount} data-ask-mount />
+        {/* THE ASSISTANT'S VERBS stream a turn under this app's id, and the
+            verbs ARE this app's manifest — `add-expense`, `settle-up`,
+            `add-friend` and the six queries. The panel mounts only where the
+            app gives it a mount point, which is why the seam is here. */}
+        <AskMount className={styles.askMount} />
       </main>
 
       {props.slots.overlays}

@@ -424,7 +424,12 @@
   padding: var(--sp-2);
 }
 
-.attachmentMenu button {
+/* ONE OWNER, and it carries the class (`scripts/component-existence-ledger.mjs`
+ * counts class-less buttons as second primitives). The kit Button is the wrong
+ * control here: this row lives in a `role="menu"` popover, so it must carry
+ * `role="menuitem"`, and the kit Button renders a plain `<button>` with no role
+ * slot. */
+.attachmentMenuItem {
   min-block-size: var(--h-row);
   padding-inline: var(--sp-3);
   border: 0;
@@ -436,7 +441,7 @@
   cursor: pointer;
 }
 
-.attachmentMenu button:hover {
+.attachmentMenuItem:hover {
   background: var(--bg-hover);
 }
 

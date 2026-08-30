@@ -1,25 +1,15 @@
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
 /**
- * Delete a note through the vault's typed command. The note goes away with
- * its placements, annotations and attachment edges; the body is a deduped
- * canonical content item, so its bytes are only released when nothing else
- * shares them — the outcome reports body_released either way.
+ * Placements, annotations and attachment edges go with the note; the deduped
+ * body's bytes release only when nothing else shares them (body_released).
  */
 export default async function deleteNote({ body, ctx }: HandlerArgs) {
-  const input = (body ?? {}) as Record<string, unknown>;
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "knowledge.delete_note",
-      input: {
-        note_id: String(input.note_id ?? ""),
-      },
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  const input = actionInput(body);
+  return runVaultAction(ctx, {
+    command: "knowledge.delete_note",
+    input: {
+      note_id: String(input.note_id ?? ""),
+    },
+  });
 }

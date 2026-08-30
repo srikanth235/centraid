@@ -17,7 +17,6 @@ export type LiveQueryRunner<T> = (
   signal: AbortSignal
 ) => Promise<LiveQueryExecution<T>>;
 
-/** Awaitable first result plus an ongoing local subscription. */
 export class LiveQuery<T> implements PromiseLike<T> {
   readonly #observers = new Set<LiveQueryObserver<T>>();
   readonly #first: Promise<T>;
@@ -25,6 +24,7 @@ export class LiveQuery<T> implements PromiseLike<T> {
   readonly #rejectFirst: (error: unknown) => void;
   #firstSettled = false;
   #dependencies = new Set<string>();
+  #entities = new Set<string>();
   #current: T | undefined;
   #hasCurrent = false;
   #running = false;
@@ -46,7 +46,7 @@ export class LiveQuery<T> implements PromiseLike<T> {
     void this.run();
   }
 
-  // oxlint-disable-next-line unicorn/no-thenable -- (#406) read() intentionally remains await-compatible while adding subscribe(); governance: allow-no-unjustified-suppressions compatibility contract
+  // oxlint-disable-next-line unicorn/no-thenable -- (#406) read() stays awaitable alongside subscribe(); governance: allow-no-unjustified-suppressions contract
   then<TResult1 = T, TResult2 = never>(
     onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
@@ -95,10 +95,17 @@ export class LiveQuery<T> implements PromiseLike<T> {
     return () => this.#disposeListeners.delete(listener);
   }
 
+  /** Skip only when dependency and invalidation both name rows, and different
+   *  ones; anything wider reruns (#883). */
   private matches(invalidation: ReplicaInvalidation): boolean {
     if (invalidation.source === "purge") return true;
     if (this.#dependencies.size === 0) return true;
-    return this.#dependencies.has(keyOf(invalidation));
+    if (!this.#entities.has(entityKeyOf(invalidation))) return false;
+    if (invalidation.rowId === undefined) return true;
+    return (
+      this.#dependencies.has(entityKeyOf(invalidation)) ||
+      this.#dependencies.has(keyOf(invalidation))
+    );
   }
 
   private async run(): Promise<void> {
@@ -113,6 +120,7 @@ export class LiveQuery<T> implements PromiseLike<T> {
         const execution = await this.runner(abort.signal);
         if (abort.signal.aborted || this.#disposed) return;
         this.#dependencies = new Set(execution.dependencies.map(keyOf));
+        this.#entities = new Set(execution.dependencies.map(entityKeyOf));
         this.#current = execution.value;
         this.#hasCurrent = true;
         if (!this.#firstSettled) {
@@ -123,7 +131,7 @@ export class LiveQuery<T> implements PromiseLike<T> {
           try {
             observer.next(execution.value);
           } catch {
-            /* One subscriber cannot prevent delivery to the others. */
+            /* Isolate subscribers from each other. */
           }
         }
       } catch (error) {
@@ -136,7 +144,7 @@ export class LiveQuery<T> implements PromiseLike<T> {
           try {
             observer.error?.(error);
           } catch {
-            /* One subscriber cannot prevent delivery to the others. */
+            /* Isolate subscribers from each other. */
           }
         }
       } finally {
@@ -153,6 +161,13 @@ export class LiveQuery<T> implements PromiseLike<T> {
   }
 }
 
-function keyOf(dependency: ReplicaDependency): string {
+/** NUL-joined: no id carries that byte, so parts cannot collide. */
+function entityKeyOf(dependency: ReplicaDependency): string {
   return `${dependency.shapeId}\u0000${dependency.entity}`;
+}
+
+function keyOf(dependency: ReplicaDependency): string {
+  return dependency.rowId === undefined
+    ? entityKeyOf(dependency)
+    : `${entityKeyOf(dependency)}\u0000${dependency.rowId}`;
 }

@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); People owns the whole keep-in-touch loop — persons, lists, interactions, tasks, dates, relationships, gifts, debts and the journal — so it is large by design.
+// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); People owns the whole keep-in-touch loop, so it is large by design.
 // People commands (schema `people`): the personal-CRM write surface. A person
 // is a canonical core.party (kind='person') plus a 1:1 people_profile holding
 // the keep-in-touch facts — role, avatar hue, cadence, last-contacted, how you
@@ -304,6 +304,9 @@ const ADD_PERSON: CommandDefinition = {
     properties: {
       display_name: { type: "string", minLength: 1 },
       role: { type: "string" },
+      // A name the member uses for this person, not the one on their
+      // passport (#883).
+      nickname: { type: "string" },
       avatar_color: { type: "string" },
       cadence_days: { type: "integer", minimum: 0 },
       list_id: { type: "string", minLength: 1 },
@@ -341,6 +344,7 @@ function addPerson(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
     display_name: string;
     role?: string;
+    nickname?: string;
     avatar_color?: string;
     cadence_days: number;
     list_id?: string;
@@ -356,13 +360,14 @@ function addPerson(ctx: HandlerCtx): Record<string, unknown> {
   const profileId = ctx.newId();
   ctx.db
     .prepare(
-      `INSERT INTO people_profile (profile_id, party_id, role, avatar_color, cadence_days, last_contacted_at, met, created_at)
-       VALUES (?, ?, ?, ?, ?, NULL, NULL, ?)`
+      `INSERT INTO people_profile (profile_id, party_id, role, nickname, avatar_color, cadence_days, last_contacted_at, met, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?)`
     )
     .run(
       profileId,
       partyId,
       input.role ?? null,
+      input.nickname ?? null,
       input.avatar_color ?? null,
       input.cadence_days,
       ctx.now
@@ -388,6 +393,7 @@ const EDIT_PERSON: CommandDefinition = {
       party_id: { type: "string", minLength: 1 },
       display_name: { type: "string", minLength: 1 },
       role: { type: "string" },
+      nickname: { type: "string" },
       avatar_color: { type: "string" },
       met: { type: "string" },
     },
@@ -430,6 +436,7 @@ function editPerson(ctx: HandlerCtx): Record<string, unknown> {
     party_id: string;
     display_name?: string;
     role?: string;
+    nickname?: string;
     avatar_color?: string;
     met?: string;
   };
@@ -447,6 +454,10 @@ function editPerson(ctx: HandlerCtx): Record<string, unknown> {
   if (input.role !== undefined) {
     sets.push("role = ?");
     values.push(input.role);
+  }
+  if (input.nickname !== undefined) {
+    sets.push("nickname = ?");
+    values.push(input.nickname);
   }
   if (input.avatar_color !== undefined) {
     sets.push("avatar_color = ?");

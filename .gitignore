@@ -50,3 +50,9 @@ packages/blueprints/.app-boot/
 # Design-agent handoff prototypes (#707) are reference-only: read them locally,
 # never commit them. The brief itself is quoted in full in the issue.
 docs/design/handoff-binding-layer/
+
+# electron-builder's output tree (`directories.output` in
+# apps/desktop/electron-builder.yml), produced by `bun run --cwd apps/desktop
+# dist`/`dist:dir`. Packaged apps carry the whole Electron runtime; CI uploads
+# them as release artifacts and never commits them.
+apps/desktop/release/

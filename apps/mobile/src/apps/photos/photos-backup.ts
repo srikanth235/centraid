@@ -1,13 +1,16 @@
-// Photos' seat on the transfer engine (#711). Serial run lives in
-// `kit/transfer/transfer-run.ts`. Here: camera-roll originals, Live Photo as
-// two uploads sharing a capture group, stall copy. `runBackup` is the
-// manual override; `automaticBackupCandidates` is the consent-gated path (S4).
+// Photos' seat on the transfer engine (#711); the serial run lives in
+// `kit/transfer/transfer-run.ts`. `runBackup` is the manual override,
+// `automaticBackupCandidates` the consent-gated path (S4).
 
 import { File } from "expo-file-system";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import { automaticTransferPlan } from "../../kit/transfer/transfer-consent";
+import {
+  automaticTransferAllowed,
+  automaticTransferPlan,
+  hydrateBackupConsent,
+} from "../../kit/transfer/transfer-consent";
 import type { BackupConsentRecord } from "../../kit/transfer/transfer-consent";
 import {
   TransferSourceUnavailableError,
@@ -18,6 +21,7 @@ import type {
   TransferProgress,
   TransferSend,
 } from "../../kit/transfer/transfer-run";
+import type { CameraRollScope } from "../../lib/camera-roll/watcher";
 import type { MobileReplicaSession } from "../../lib/replica/native-session";
 import { backupDeviceMedia } from "../../lib/upload/media-producer";
 import { nativeUploadPolicy } from "../../lib/upload/native-policy";
@@ -27,6 +31,8 @@ import {
   liveVideoUri,
   openDeviceOriginal,
 } from "./device-media";
+import { photoTimelineEngine } from "./timeline-engine";
+import type { TimelineSnapshot } from "./timeline-engine";
 import type { PhotoAsset } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
 
@@ -66,7 +72,7 @@ export interface BackupOutcome {
   paused?: string;
 }
 
-/** Bytes resolve inside `open()` so a long run never holds originals open. */
+/** Bytes resolve inside `open()`; a long run never holds originals open. */
 function photoEntry(
   asset: PhotoAsset,
   localId: string,
@@ -85,7 +91,7 @@ function photoEntry(
           throw new TransferSourceUnavailableError(IN_CLOUD_MESSAGE);
         throw error;
       }
-      // Paired MOV is its own durable upload; resolve first — the still's capture group depends on it.
+      // Paired MOV is its own durable upload; the still's capture group needs it.
       const companion = await liveVideoUri(original.asset);
       const sends: Array<TransferSend<PhotoRecord>> = [
         {
@@ -159,10 +165,7 @@ export async function runBackup(
   };
 }
 
-/**
- * Consent gate, once. `local-only` is the sweep's set. Pure: unanswered or
- * declined latch returns nothing.
- */
+/** Pure consent gate: an unanswered or declined latch returns nothing. */
 export function automaticBackupCandidates(
   consent: BackupConsentRecord | undefined,
   assets: readonly PhotoAsset[]
@@ -177,7 +180,7 @@ export function automaticBackupCandidates(
 export interface AutomaticBackupState {
   remaining: number;
   sent: number;
-  /** iCloud originals — counted and shown, or the member is told everything is backed up. */
+  /** iCloud originals: counted and shown, never silently dropped. */
   deferred: number;
   running: boolean;
   blocked?: string;
@@ -193,7 +196,6 @@ interface SweepScope {
   vaultId?: string;
 }
 
-/** Async walk reporting through a callback — an external system the hook syncs with. */
 async function sweepOnce(
   scope: SweepScope,
   pending: readonly PhotoAsset[],
@@ -222,8 +224,73 @@ async function sweepOnce(
 }
 
 /**
- * Not a background service: the durable queue survives death and re-drains
- * on foreground. One sweep at a time — two would double every count.
+ * A cold walk over a 50,000-item roll is seconds, not minutes; past this the
+ * pass reports nothing and the NEXT trigger retries.
+ */
+const SWEEP_SNAPSHOT_TIMEOUT_MS = 30_000;
+
+function settledTimeline(
+  timeoutMs = SWEEP_SNAPSHOT_TIMEOUT_MS
+): Promise<TimelineSnapshot | undefined> {
+  const ready = photoTimelineEngine.getSnapshot();
+  if (!ready.loading) return Promise.resolve(ready);
+  // Two promises with ONE resolve site each, raced: the teardown belongs to
+  // the race, so either arm winning drops both subscription and timer.
+  let unsubscribe = (): void => undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const settled = new Promise<TimelineSnapshot>((resolve) => {
+    unsubscribe = photoTimelineEngine.subscribe(() => {
+      const snapshot = photoTimelineEngine.getSnapshot();
+      if (!snapshot.loading) resolve(snapshot);
+    });
+  });
+  const timedOut = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), timeoutMs);
+  });
+  return Promise.race([settled, timedOut]).finally(() => {
+    if (timer) clearTimeout(timer);
+    unsubscribe();
+  });
+}
+
+/**
+ * The sweep with no mounted screen (#883 C6). RELEASES the timeline engine
+ * afterwards, so a member who never opens Photos does not pay for a
+ * permanently-held camera-roll walk between sweeps.
+ */
+export async function sweepCameraRollBackup(
+  scope: CameraRollScope
+): Promise<void> {
+  const consent = await hydrateBackupConsent();
+  // An unanswered latch means the watcher fires and nothing moves.
+  if (!automaticTransferAllowed(consent)) return;
+  if (!(await nativeUploadPolicy().canTransfer())) return;
+  const release = photoTimelineEngine.acquire();
+  try {
+    photoTimelineEngine.setSession(scope.session, scope.gatewayBase);
+    const snapshot = await settledTimeline();
+    if (!snapshot) return;
+    const candidates = automaticBackupCandidates(consent, snapshot.assets);
+    if (candidates.length === 0) return;
+    await sweepOnce(
+      {
+        session: scope.session,
+        gatewayBase: scope.gatewayBase,
+        ...(scope.vaultId ? { vaultId: scope.vaultId } : {}),
+      },
+      candidates,
+      () => undefined
+    );
+  } finally {
+    release();
+  }
+}
+
+/**
+ * Live counts for a MOUNTED screen; `sweepCameraRollBackup` covers the
+ * unmounted case and neither supersedes the other. `runCameraRollSweep`'s
+ * serialization plus the queue's drain lock are why two triggers cannot
+ * double-enqueue one photograph.
  */
 export function useAutomaticPhotoBackup(
   consent: BackupConsentRecord | undefined

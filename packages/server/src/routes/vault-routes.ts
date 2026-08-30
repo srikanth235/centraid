@@ -43,6 +43,7 @@ import type { KeyStore, EnrichTier } from "@centraid/vault";
 import type { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
 import type { StorageConnectionStore } from "../backup/storage-connections.js";
 import { ensureProviderCasTarget } from "../backup/storage-credentials.js";
+import { unrefTimer } from "../lib/unref-timer.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
@@ -924,7 +925,7 @@ export function makeVaultRouteHandler(
         const heartbeat = setInterval(() => {
           if (!res.writableEnded) res.write(": ping\n\n");
         }, 30_000);
-        heartbeat.unref?.();
+        unrefTimer(heartbeat);
         let closed = false;
         const cleanup = (): void => {
           if (closed) return;

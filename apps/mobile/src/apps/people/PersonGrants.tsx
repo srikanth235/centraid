@@ -57,7 +57,7 @@ import {
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import { nativeGrantDoor } from "../../kit/share/grants-transport";
+import { nativeGrantDoor } from "../../kit/share/grant-seat";
 import GrantSheet from "../../kit/share/GrantSheet";
 import PeopleConfirm from "./PeopleConfirm";
 import {
@@ -113,7 +113,7 @@ export default function PersonGrants(
     [available, door, partyId]
   );
 
-  // Deferred off the effect body: a synchronous setState here would cascade a
+  // Deferred off the effect body: a sync setState here would cascade a
   // second render before the first has painted.
   useEffect(() => {
     let active = true;

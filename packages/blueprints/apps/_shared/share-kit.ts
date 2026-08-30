@@ -1,5 +1,5 @@
+// The Commons share plane picks PEOPLE: an own second vault is never a member.
 import type { InlineScope } from "../inline-types.ts";
-// Commons picks PEOPLE: an own second vault is never a member.
 import { mountedScopes } from "./scope-kit.ts";
 
 export interface ShareDestination {
@@ -35,7 +35,6 @@ export function selectedShareMembers(
   return destinations.flatMap((destination) => {
     const capability = selections[destination.id];
     if (!capability) return [];
-    // Unsettled ids are dropped, not sent.
     if (destination.partyId && isPendingPartyId(destination.partyId)) return [];
     return [
       {
@@ -66,16 +65,6 @@ export function selectionsForCircle(
   );
 }
 
-export async function loadShareCircles(): Promise<ShareCircle[]> {
-  if (!window.centraid.shareCircles) return [];
-  try {
-    return await window.centraid.shareCircles();
-  } catch {
-    return [];
-  }
-}
-
-/** `label`: the linked vault's own name, from the gateway (#750). */
 export interface LinkRow {
   linkId: string;
   vaultId: string;
@@ -139,17 +128,6 @@ export function quickAddedDestination(
   return { id: `party:${partyId}`, label, partyId };
 }
 
-export function withQuickAddedPerson(
-  destinations: readonly ShareDestination[],
-  added: ShareDestination
-): ShareDestination[] {
-  const duplicate = destinations.some(
-    (destination) =>
-      destination.partyId !== undefined && destination.partyId === added.partyId
-  );
-  return duplicate ? [...destinations] : [...destinations, added];
-}
-
 /** Loose on purpose: rosters spell names out; typists don't. */
 export function nearNameMatches(
   destinations: readonly ShareDestination[],
@@ -164,8 +142,8 @@ export function nearNameMatches(
   });
 }
 
-/** Strict: a failed read throws rather than answering empty. The link
- *  fallback is feature detection, never failure handling. */
+/** A read throws rather than answering empty (#883): the link fallback is
+ *  feature detection, never failure handling. */
 export async function readShareDestinations(
   scopes: readonly InlineScope[] = mountedScopes()
 ): Promise<ShareDestination[]> {
@@ -178,33 +156,4 @@ export async function readShareDestinations(
 export async function readShareCircles(): Promise<ShareCircle[]> {
   if (!window.centraid.shareCircles) return [];
   return await window.centraid.shareCircles();
-}
-
-/** Never throws — cf. `readShareDestinations`. */
-export async function loadShareDestinations(
-  _currentScopeId: string | null | undefined,
-  scopes: readonly InlineScope[] = mountedScopes()
-): Promise<ShareDestination[]> {
-  if (window.centraid.shareTargets) {
-    try {
-      return peopleDestinations(await window.centraid.shareTargets(), scopes);
-    } catch {
-      // A transient read must not hide a linked destination.
-    }
-  }
-  let links: LinkRow[] = [];
-  try {
-    links = (await window.centraid.links?.()) ?? [];
-  } catch {
-    links = [];
-  }
-  return linkedDestinations(links, scopes);
-}
-
-export function shareBlockedReason(
-  destinations: readonly ShareDestination[]
-): string | null {
-  return destinations.length === 0
-    ? "There is nobody to share with yet — add someone by name below."
-    : null;
 }

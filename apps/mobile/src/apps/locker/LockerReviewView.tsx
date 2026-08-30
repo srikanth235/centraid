@@ -10,9 +10,12 @@
 // and over how many items. Both registers come from `review-model.ts`, which
 // reads the same `matchesCheck` derivation the list's verdict lens uses — so
 // pressing a count can never open a lens over a different set.
+//
+// WINDOWED (#883 C4): a verdict can hold it all.
 
 import React, { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { FlatList, StyleSheet, View } from "react-native";
+import type { ListRenderItemInfo } from "react-native";
 
 import { reviewRegister } from "@centraid/blueprints/apps/locker/review-model";
 import {
@@ -80,8 +83,14 @@ export default function LockerReviewView(
     ? (register.attention.find((row) => row.key === lens)?.items ?? [])
     : register.items;
 
-  return (
-    <ScrollView contentContainerStyle={styles.scroll}>
+  const renderItem = ({
+    item,
+  }: ListRenderItemInfo<LockerRowData>): React.JSX.Element => (
+    <LockerRow row={item} onOpen={props.onOpen} />
+  );
+
+  const head = (
+    <View>
       <LockerNotice
         state={props.state}
         pending={props.pending}
@@ -145,16 +154,22 @@ export default function LockerReviewView(
       {shown.length > 0 ? (
         <View style={styles.block}>
           <SectionBlock label={REVIEW_ITEMS} meta={REVIEW_ITEMS_META} />
-          {shown.map((row) => (
-            <LockerRow
-              key={lockerRowKey(row)}
-              row={row}
-              onOpen={props.onOpen}
-            />
-          ))}
         </View>
       ) : null}
-    </ScrollView>
+    </View>
+  );
+
+  return (
+    <FlatList
+      contentContainerStyle={styles.scroll}
+      data={shown}
+      keyExtractor={lockerRowKey}
+      ListHeaderComponent={head}
+      initialNumToRender={12}
+      maxToRenderPerBatch={12}
+      renderItem={renderItem}
+      windowSize={7}
+    />
   );
 }
 

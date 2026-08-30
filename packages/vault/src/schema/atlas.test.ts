@@ -85,18 +85,21 @@ describe("atlas", () => {
     }
   });
 
-  test("curated kinds carry name+blurb; uncurated kinds fall back with no blurb", () => {
+  test("ontology kinds carry name+blurb; machinery is named with no blurb", () => {
     const byLogical = atlasTablesByLogical();
-    // A curated kind: friendly is the curated name, blurb is the curated blurb.
+    // Both name and blurb are the registry's (#883).
     const party = byLogical.get("core.party")!;
     expect(party.friendly).toBe("People");
     expect(party.blurb).toBe(ATLAS_KIND_FRIENDLY["core.party"]!.blurb);
-    expect(party.friendly).not.toBe(party.label); // curated name overrode "Party".
+    expect(party.friendly).not.toBe(party.label); // the name overrode "Party".
 
-    // An uncurated machinery kind: friendly === label, no blurb fabricated.
+    // A machinery kind is NAMED and carries no blurb.
     const provenance = byLogical.get("consent.provenance")!;
-    expect(provenance.friendly).toBe(provenance.label);
+    expect(provenance.friendly).toBe("Provenance");
     expect(provenance.blurb).toBeUndefined();
+    const authority = byLogical.get("share.authority")!;
+    expect(authority.friendly).toBe("Access answers");
+    expect(authority.blurb).toBeUndefined();
   });
 
   test("physical/logical names derive from schema_table and index round-trips", () => {

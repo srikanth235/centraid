@@ -10,6 +10,8 @@ The default workload is 120 writes (60 `core.party`, 60 `core.place`) with 30 in
 
 Ceilings live in `low-end-budgets.json`. Lower a ceiling whenever a measured optimization establishes a smaller stable baseline; never widen one merely to make a regression pass.
 
+`results/issue-883-baseline.json` is the current re-baseline (2026-08-28, linux x64, 4 vCPU shared container, `CENTRAID_HARDWARE_PROFILE=constrained`, exact strace fsync counts): request p99 32.07 ms, throughput 175.5 writes/s, peak RSS 214.97 MB, event-loop peak p99 12.39 ms, 0.25 fsync per write, 82.8 kB written per write, and a zero-growth 65-second idle window. Every check passed with no failures, so no ceiling moved — the file records where the gateway actually sits before the [#883](https://github.com/srikanth235/centraid/issues/883) hot-path work, so the same numbers can be compared after it.
+
 ## Issue #456 iteration history
 
 | Run | Request p99 | Throughput | Peak RSS | Event-loop peak p99 | Outcome |

@@ -2,15 +2,89 @@
 
 ## Open
 
-- **Three surfaces #882 added to the phone are unvirtualized.**
-  `apps/mobile/src/apps/notes/NotesPlaces.tsx`, `NotesHistory.tsx` and
-  `apps/mobile/src/apps/locker/LockerAccessView.tsx` render through a `ScrollView`
-  with `.map()` rather than a `FlatList`, and none is pinned by
-  `scripts/accessibility-contract.test.mjs`. Locker's Access history is the one
-  that will bite first: the phone route carries no `item_id`, so it reads **every**
-  item's history — an unbounded list with no windowing. Found by the independent
+- **The comment-density ratchet does not measure what its header claims.**
+  `scripts/check-comment-density-ratchet.mjs` says its parser walk "catches
+  trailing comments (they lead the NEXT token), JSX comments, and the file-end
+  comments carried by the EOF token". `commentRanges()` calls only
+  `ts.getLeadingCommentRanges` at each leaf token, and TypeScript classifies a
+  comment sharing a line with the preceding token as TRAILING trivia, which that
+  function skips by design. So `const a = 1; // note` and `<div>{/* note */}</div>`
+  both score zero comment characters while counting toward the denominator.
+  Measured across the 4,077 tracked files: **79,832 hidden comment characters,
+  0.36% of the tree**; global share 14.55% measured against 14.91% true; 549
+  files whose number changes; 529 that would exceed their pin; 101 hiding more
+  than 200 characters each. The worst are JSX-heavy components where the
+  invisible prose is most of the file — `docs/components/List.tsx` 10.3% → 44.8%,
+  `Grid.tsx` 11.8% → 43.8%, `photos/Chrome.tsx` 11.1% → 42.2%. The perverse
+  consequence is that unmeasured comments are pure denominator, so *deleting*
+  JSX prose raises a `.tsx` file's measured share — #883's sweep hit exactly that
+  on `List.tsx`. Two remedies, an order of magnitude apart: fix the scanner and
+  clean the ~101 files that carry real hidden prose, or fix the scanner and
+  re-seed with a recorded deviation the way the 2026-08-25 seed was recorded.
+  That the down-only pin rule makes a measurement *correction* impossible without
+  a deviation is a design gap in the ratchet worth settling on its own. Found by
+  #883's ceremony against #861's gate; not taken there, because either remedy
+  changes a blocking gate well outside that issue's scope.
+
+- **`portable-export.ts` keeps an append-only audit ledger in the State layer.**
+  `packages/vault/src/gateway/portable-export.ts` declares itself the
+  schema/export completeness audit owner and accumulates one narrative entry per
+  issue in its header (#865, #872 twice, #883). AGENTS.md puts append-only
+  evidence in receipts and keeps `docs/`-and-code state freely revisable, so this
+  header grows one paragraph per schema wave and never sheds one. #883 compressed
+  the entries to their MUST-carry facts rather than restructure the convention.
+  The durable fix is to keep the invariant ("every registered table rides the
+  `SELECT *` walk; here is what would break if it stopped") in the file and move
+  the per-issue audit trail to the receipts that already exist.
+
+- **`evaluateReplicaRead` has no production caller on any host.**
+  `packages/client/src/replica/query.ts` still exports it, but the store compiles
+  the grammar to SQL in `read-plan.ts` and mobile's multi-vault reader composes a
+  plan; the function survives only as the oracle the pushdown parity suites
+  execute against. That is a legitimate use — an independent implementation is
+  what makes a parity proof mean anything — but it is not what the file says it
+  is, and a second implementation nobody runs drifts. Whether the proof or the
+  function should go is the open decision.
+
+- **An ordered replica page cannot use an index while its refusal guards ride
+  the same statement.** `planComposedReplicaRead` puts one
+  `max(CASE ... END) OVER ()` column in the select list per order guard, and a
+  window function over an unbounded frame must see every row before the first
+  one is emitted — so an ordered read materialises the whole entity whatever the
+  ORDER BY key is made of. Measured on the 2026-08-29 development container
+  against the 50,000-row year-3 corpus
+  (`tests/scale/browser-replica-query.fixture.ts`), through `store.read`:
+  103 ms for the filtered newest-first page, 174 ms unfiltered. Adding an index
+  over the exact ORDER BY expression and changing nothing else moves those to
+  103 ms and 171 ms — no effect, because the plan never reaches the index.
+  Removing the guards (and, for the filtered read, the `(verdict = 0) ASC` tier
+  that leads the sort) moves them to **2.2 ms and 0.4 ms** on the same index.
+  So the ~50-400x lives behind the guards, not behind the extraction. A guard
+  restructure is the lever, and it is a correctness change, not a storage one:
+  a set-wide census answers "does any kept row hold an unorderable value", and
+  making it cheap means either a second statement over the same filtered set
+  (measured 65 ms) or widening the question to the whole entity (measured 24 ms)
+  — a new divergence, since the refusal would then fire on rows the filter
+  excluded. Found while auditing #883's D1 clause, and not taken there because
+  the clause it disproves is a storage clause.
+
+- **Two surfaces #882 added to the phone are unvirtualized.**
+  `apps/mobile/src/apps/notes/NotesPlaces.tsx` and `NotesHistory.tsx` render
+  through a `ScrollView` with `.map()` rather than a `FlatList`, and neither is
+  pinned by `scripts/accessibility-contract.test.mjs`. Found by the independent
   audit on #882, not a regression of any existing contract (these files are new),
-  and the fix is the same shape the Tasks board already uses.
+  and the fix is the same shape the Tasks board already uses. Locker's Access
+  history was the third; #883 C4 windowed it with Locker's other list surfaces
+  and pinned all of them in the contract.
+- **The phone's Access history cannot narrow to one item.**
+  `lockerAccess` (`apps/mobile/src/apps/locker/locker-gateway.ts`) never sends
+  `item_id`, so the phone always reads the newest receipts across every item
+  while the browser offers *This item* as a lens (`components/Access.tsx`
+  `onNarrow` → `surface-acts.handleNarrowAccess`). The READ is bounded either
+  way — `queries/access.ts` clamps `limit` to 20…2,000 and both hosts take the
+  200 default — so this is a missing lens, not an unbounded query. Closing it
+  wants an entry point that carries an item id (the item screen's *Access*
+  verb), which is a route change rather than a list one.
 - **Agenda's search field appears to stall while you type.** The input is
   controlled off `state.search`, but `applySearchInput` is a trailing-edge 200ms
   debounce, so the value the field renders only catches up after the pause.
@@ -18,31 +92,6 @@
   deliberately not changed there — that slice preserved the wiring rather than
   altering behaviour under a band fix. The fix is to let the input hold its own
   immediate value and debounce only the query.
-- **The #880 mobile wave's residuals, in one place.** Each is understood, none is a
-  regression, and every one is a follow-up somebody should be able to find:
-  - `has_unavailable_fields` silently reverts an ordered tile to a full read. The
-    pushdown probe refuses an undisclosed order column, which is correct — but the
-    fallback is invisible, so a tile that was paging yesterday can be reading the whole
-    entity today with nothing said anywhere.
-  - The pushed ordered sort is O(library) inside SQLite. `ORDER BY json_extract(...)`
-    has no index behind it; the win is that the rows never cross into JS. A stored,
-    indexed order column is the next lever.
-  - Steward "waiting for X" has no native producer. `stewardLabel` is never stamped by
-    the mobile session, so the honest overlay sentence the commons rail supports cannot
-    be drawn on the phone.
-  - First-open pre-bootstrap projections never backfill. A write admitted before
-    bootstrap keeps its empty optimistic row after the shape catalog arrives.
-  - Three web-seat sharing exports are dead and awaiting a deletion slice:
-    `packages/blueprints/apps/_shared/ShareSheet.tsx#ShareSheet`,
-    `packages/blueprints/apps/_shared/grant-plane.ts#offersCapability`, and
-    `packages/blueprints/apps/_shared/placement-registry.ts#PLACEABLE_ITEM_TYPES`. They
-    are held out of the reachability gate with reasons rather than allowlisted silently.
-  - The multiplex shape-changed path re-emits until the client reconnects. The scoped
-    rebootstrap frame is correct per mount, but a client that ignores it keeps being told.
-  - A non-rebootstrap projection error still tears down all mounts. Saying "this one
-    mount failed" needs wire vocabulary the protocol does not have yet, and inventing it
-    inside the route was refused.
-
 - **CI's Rust toolchain floats, so a clippy release can turn any branch red.**
   `.github/workflows/ci.yml` installs `dtolnay/rust-toolchain` with `toolchain: stable`,
   unpinned, while `packages/tunnel/data-plane/Cargo.toml` declares only `rust-version =
@@ -54,12 +103,6 @@
   governance-gated toolchain config change and deserves its own argument rather than a
   drive-by pin.
 
-- **`packages/blueprints/index.json` colorKeys disagree with the apps' own hues.** The
-  catalog lists Locker as `indigo` and Tally as `forest`, while the v17 handoff and both
-  `app.json` files say rose and indigo respectively. Pre-existing before #872 (that change
-  set touched only the `version` lines of those stanzas); whichever surface reads the
-  catalog colour draws the wrong hue. Surfaced by the #872 receipt audit.
-
 - **Banner-heavy modules are a size smell, not a comment smell.** The files
   that need many section banners to stay navigable —
   `packages/server/src/engine/handlers/dispatcher.ts`,
@@ -70,21 +113,6 @@
   The #861 sweep normalized the banner style but deliberately did not touch
   the shape (settled Q4 on the issue): whether these modules should split is a
   code-ownership question that wants its own proposal, not a comment fix.
-
-- **Two dead exports serving a retired builder view.** `CodeLang`
-  (`packages/client/src/format.ts`) and `DiffRow`/`diffRows`
-  (`packages/client/src/diff.ts`) are referenced only inside their own
-  defining files — the builder Code view / Diff toggle they served is gone.
-  Found by the #861 Phase 2 comment sweep (a comment-only pass, so the
-  exports were left in place); they want deleting under their own change.
-
-- **Comments still speaking "chat" for the conversation ledger.** ~8 comment
-  sites (`packages/client/src/centraid-api.d.ts`,
-  `gateway-client-conversation.ts`, `gateway-client.ts`, and one contract-test
-  header) use the banned "chat"/"chat session" vocabulary for the
-  conversation ⊃ turn ⊃ item ledger. Neighbouring occurrences are real UI
-  strings, so the rename wants one coherent pass with the vocabulary rule in
-  hand, not a piecemeal comment sweep (#861).
 
 - **Blueprint handler contracts live in inert JSDoc, not types.** The
   `apps/photos` action/query handlers are dynamically loaded default exports;
@@ -137,22 +165,6 @@
   pinned — nothing today copies `crash.log` into a shareable artifact, so no
   invariant is violated. It becomes a defect the day something does.
 
-- **A parallel wave leaves repo-wide gates unrun, and only the sweep finds
-  out.** The three #834 wave slices each verified their own tree (per-tree
-  `oxlint` over changed files, per-package typecheck, per-app suites) and
-  reported clean; the wave-3 sweep then found four reds none of them could
-  have seen — a manifest/pending-overlay law disagreement in
-  `packages/blueprints` (a new action with no projection row), eleven root
-  `bun run lint` findings across the wave trees, an
-  `lint:engine-conformance` vocabulary hit, and a U4 copy flag on a string
-  written during the sweep itself. Each was cheap to fix and none needed a
-  gate knob, but they arrived at the end of the umbrella rather than inside
-  the slice that caused them. The norm worth considering
-  ([docs/multi-agent.md](docs/multi-agent.md)): a slice's exit condition is
-  the repo-wide gate for the lanes its tree participates in — at minimum
-  `bun run lint` and the owning package's whole `test` — not the subset of
-  files it touched.
-
 - **A place shared into an audience scope may be phrased against the wrong
   Home.** #816 made "what leaves with a copy" a decided question for the OS
   share path (`share-place.ts`: a chosen precision, GPS stripped below the
@@ -166,76 +178,55 @@
 
 - **Two container-hermeticity defects found by an attempted in-container full
   coverage run** (13,203 green / 3 red, all environmental): (1)
-  `packages/agent-runtime/src/backends/acp/launch.test.ts` inherits the real
+  `packages/server/src/acp/backends/acp/launch.test.ts` inherits the real
   `process.env` through `planLaunch`, so a host that exports `IS_SANDBOX`
   (this container: `yes`) fails two assertions — the test should stub the
   variable, not trust the host; (2)
-  `packages/gateway/src/serve/gateway-db-lock.integration.test.ts` shells out
+  `packages/server/src/serve/gateway-db-lock.integration.test.ts` shells out
   to the `sqlite3` CLI, absent here — a candidate for the new
   `tests/env-red.json` inventory (guard on CLI presence) or a rewrite against
-  `node:sqlite`.
+  `node:sqlite`. Both still red in this container at #883's close, and both
+  paths are restated here because the packages they used to name
+  (`agent-runtime`, `gateway`) no longer exist.
+
+- **A packaged desktop cannot spawn its detached gateway, whatever the CLI
+  path resolves to.** #883 repaired both dead branches of
+  `resolveGatewayCliPath()` (the exports map did not carry `./package.json`, and
+  the monorepo fallback climbed one level short), and package resolution is now
+  correct in every installed layout. Verified against a real
+  `electron-builder --dir` build, the remaining gap is downstream of resolution:
+  `@centraid/server` is packed into `app.asar` and is NOT in
+  `app.asar.unpacked`, while `resolveNodeBin()` returns plain `"node"` under
+  Electron — and a plain Node process cannot read an asar member (checked: it
+  fails `Cannot find module`, while the same path under `ELECTRON_RUN_AS_NODE=1`
+  reads fine). A packaged consumer build also has no reason to assume `node` is
+  on `PATH` at all. Closing it means either unpacking the server's transitive
+  graph or running the daemon on the Electron binary as node, and both change
+  which process owns the detached child — the H2/H3 ownership contract — so it
+  wants its own measurement rather than a drive-by. Not a regression: the path
+  was broken before #883 too, in a different way.
+
+- **A retired entity left an inaccurate coverage comment behind.**
+  `packages/vault/src/schema/search.test.ts:401` says the deleted
+  `home.asset_item` describe block's coverage survives "by `core.party` … and
+  `locker.item` above" — neither entity is searched anywhere in that file. The
+  two-direct-column shape it cared about is actually covered by `schedule.task`.
+  Harmless (the accurate statement is recorded in the `minimumTests` deviation
+  pin next to the number), but the comment should be corrected by whoever next
+  edits that file.
 - **Five `photos-*.mjs` Maestro flows are unlinted.** `scripts/lint-e2e-flows.mjs`
   `FILES` omits all five photos flows (`photos-search.mjs` even carries a
   marker for a nonexistent rule name, `input-observed`). Adding them may
   surface latent findings in five flows at once, so it deserves its own pass
   rather than a drive-by (#781 wave 3 added only the new `places-seat.mjs`).
-- **`PlacesView` prints raw coordinate-shaped place names** on shelf cards
-  (`row.name` without `readableName`), while the web shelf and the phone's own
-  map refuse them — seeded places are coordinate-named, so real shelves show
-  headings like "39.0021, -120.1131". Cosmetic divergence; fix alongside the
-  next Places pass.
-- **`google-contacts-pull` renders yearless birthdays as `---09-05`** (the
-  `"--"` placeholder plus the joining `"-"`); vCard's yearless form is
-  `--09-05`. Asserted as-is with a NOTE in
-  `packages/blueprints/automations/pull-connectors.test.ts` so the fix must
-  flip a test. `google-calendar-invite-send` also uses wall-clock `new Date()`
-  (DTSTAMP) and `Math.random()` (MIME boundary) inside the published handler —
+- **`google-calendar-invite-send` uses wall-clock `new Date()`** (DTSTAMP)
+  and `Math.random()` (MIME boundary) inside the published handler —
   nondeterminism the connector lane's lint doesn't catch; its tests
   deliberately don't assert those bytes.
 - **`apps/desktop/tests/e2e` standalone `tsc` has 13 pre-existing errors**
   (missing `window.CentraidApi` augmentation when run outside the harness)
   and `apps/web/tests/e2e/tsconfig.json` likewise; neither is wired to a gate,
   so spec type rot is invisible. Wire or retire the configs.
-- **Web shell palette click race after reload**: the Search button paints
-  before its listener attaches, so early clicks are silently lost. Four web
-  e2e specs work around it with a retry poll; the product should attach before
-  paint or render disabled.
-- **People surfaces no pending-state marker** (no `kit-pending-chip` anywhere
-  in the app) and `AddPersonModal` closes only on `executed` — an offline add
-  looks like a failure while the row is in fact projected and durable.
-- **The daily rollup has no per-day failure split, so the bars carry one
-  segment.** The automations and insights surfaces draw a bar per day, and the
-  v9 bar block stacks succeeded-then-failed with a fail-first clamp
-  (`packages/design/src/blocks/bars.ts`). The rollup the gateway records does
-  not separate the two, so every bar is drawn as a single run count and the
-  legend is withheld rather than invented. When the rollup gains the split the
-  block needs no change — only the caller's second segment.
-
-- **No run durations are recorded, so both surfaces withhold the
-  median-duration fact.** The v9 facts panel for automations names a typical
-  run duration. Nothing in the run ledger stores a start/finish pair, so
-  desktop, PWA and mobile all omit the row instead of computing something that
-  would look authoritative and be wrong. Recording the pair is a gateway-side
-  change; the panels already have the slot.
-
-- **`ShelfStrip` and `MoreSheet` are near-duplicates in Photos and Docs.** The
-  shelf *model* is now shared (`packages/blueprints/apps/_shared/shelves.ts`),
-  but these two components are still written twice because their CSS modules
-  genuinely diverge (`--content-margin` vs `--sp-4`, the mono-numeric token
-  trio, Docs' `meta`/`footer` rows against Photos' bare count). The repo's
-  shared-component pattern is one component plus one shared CSS module
-  (`_shared/SearchScaffold.tsx`), so merging them changes rendered output and
-  needs `design:gallery` baselines regenerated — too much for a drive-by.
-
-- **Modals are the one control the shell hand-rolls.** Six raw `<dialog>`
-  elements with no kit component behind them: `AllAppsSheet`, `PaletteScreen`,
-  `VaultModal`, `TestConnectionModal`, `ConnectFlowModal`, `RenameGatewayModal`.
-  Three of the four modals share `vaultModalStyles.profModal`, so it is
-  half-centralised by copying a class name rather than by a component. This is
-  the largest remaining gap between the shell and the design system — the audit
-  in #765 found the shell otherwise clean (zero raw `<input>`, `<textarea>` or
-  `<table>`; mobile has zero raw `<TextInput>` and routes all 692 `<Text>`
-  through the kit's `NativeText`).
 
 - **Two raw `<button>`s carry no styling at all.** `AutomationThreadScreen` and
   `RunViewScreen` each render `<button type="button" onClick={onBack}>` with no
@@ -243,28 +234,6 @@
   until quick capture was retired from this seat.) Eight more raw buttons use a
   local class and four already ride shared ones (`controlsCss.chip`,
   `buttonCss.ghost`); the unstyled two are the unambiguous misses.
-
-- **21 mobile `<Pressable>`s act as buttons without the kit.** Many carry
-  `accessibilityRole="button"` explicitly. They cluster in `apps/agenda`,
-  `apps/tasks`, `apps/tally`, `apps/locker` and `apps/people` — the same apps as
-  the entry below, and the same root cause.
-
-- **The design gates enforce tokens, not components.** This is the structural
-  reason the three items above drift silently: a hand-rolled `<button>` or
-  `<dialog>` styled with `var(--…)` passes `lint-design-tokens`,
-  `lint-hairline`, `lint-type-floor` and every other gate green. The gates ask
-  "did you use a raw value?", never "did you use the component that exists?".
-  Closing that would need a rule that knows which elements have kit equivalents
-  — worth doing before the vocabulary grows again.
-
-- **Six blueprint apps still draw their own chrome.** `agenda`, `locker`,
-  `notes`, `people`, `tally` and `tasks` each carry a hand-rolled `Chrome.tsx`
-  (231, 105, 295, 378, 306 and 223 lines) with its own topbar, hamburger,
-  drawer scrim and theme button — a second chrome inside the frame's chrome,
-  which is exactly what Photos and Docs stopped doing in #765. They already
-  import the frame contract, so the contribution channel is there; adopting it
-  is per-app work that touches each app's interaction model and wants its own
-  issue rather than a widened design-system pass.
 
 - #496 — **Test infrastructure assurance** (enforcement, signal, coverage).
   Parent backlog for ruleset on `main`, nightly auto-issue + Pages main-only
@@ -289,65 +258,97 @@
   React flip; appearance-prefs, profile view-models, insights formatters, and
   near-duplicate `relativeTime` still need consolidation / floors — #545 D5/B8).
 
-- **Expired `peer_link_tickets` rows are filtered, never purged.** Observed
-  while building the hostile-peer lane (#842 W2.3). `hasPending` and `claim`
-  both exclude rows by `expires_at`, so the *logical* reclaim is correct and
-  tested — the door closes on time and an expired ticket cannot be claimed.
-  But nothing physically deletes the row, so an abandoned-ticket workload
-  grows the table without bound. This mirrors the pairing `tickets` table
-  exactly, which is documented as "short-lived by design", so it is recorded
-  as a longevity observation rather than a defect: the two tables should
-  either both gain a purge or the design note should say why unbounded growth
-  is acceptable. Not pinned — no invariant is currently violated.
-
-- **A composite write-marker the demo purge can never address.**
-  `add_receipt_expense` stamps
-  `ctx.wrote("tally.expense_line_allocation", "<lineId>:<partyId>")` — a joined
-  key, where every other marker is a single primary-key value. The demo-purge
-  walk resolves a marker by asking `pkColumn` for the table's key and deleting
-  where it equals the id, so a composite can never match a row and those
-  allocations are simply invisible to it. Harmless today: allocations are
-  children of a line whose own marker IS addressable, and nothing in the demo
-  set purges by that path. It is recorded because it is the same hazard the
-  #873 payer work deliberately avoided (`tally_expense_payer` rows are written
-  under the expense's own id, not a `expense:party` pair), so the two should be
-  made consistent in one deliberate pass rather than each discovered again.
-  Surfaced during the #873 Tally backend slice. Not pinned — no invariant is
-  currently violated.
-
-- **A new sealed column is only draft-band-safe if two lists agree.**
-  `SEALED_COLUMNS` in `packages/vault/src/schema/sealed.ts` says which cells
-  are ciphertext at rest; `SEALED_PAYLOAD_FIELDS` says which keys the import
-  staging plane must seal inside a `sync_import_row.payload_json`. They are
-  separate registries with no structural link, so a column added to the first
-  and not the second is sealed everywhere durable EXCEPT the draft band, and
-  nothing said so. #873 hit exactly that: Locker's three sidecar columns
-  (`item_field.value_sealed`, `item_history.password`,
-  `item_passkey.private_key`) landed in `SEALED_COLUMNS` alone, and a custom
-  field's secret, a previous password and a passkey's key material would have
-  sat in a draft row in the clear. Caught PRE-MERGE by the T3 canary, which
-  stages one row per `SEALED_COLUMNS` entry and now fails when the two lists
-  disagree, and fixed in the same change. Recorded as a gap CLASS rather than a
-  fixed bug: the canary catches the omission for `SEALED_PAYLOAD_FIELDS`, but
-  the same "two registries, one implied invariant" shape recurs wherever a
-  sealed column needs a second declaration, and the durable fix is to derive
-  the payload list from the column list rather than to keep them in step by
-  hand.
-
-- **The #825 Atlas grant-plane exclusion has outlived its reason.**
-  `atlasCensus` skips `share.grant` and `share.fulfillment` on first paint, and
-  the comment at the `continue` said why plainly: two more `COUNT(*)` would
-  push the first-paint SQL budget past 140. #873 batched the census counts into
-  one compound statement per file, so registering a table costs a scan but
-  never a statement, and the budget fell 140 → 13 — which retires that
-  rationale entirely. The census could honestly count the grant plane again for
-  no statement cost. It was NOT re-included here, because whether Atlas should
-  show grants as a data kind is a payload-shape and product question (the grant
-  surfaces already answer "how many grants", and Atlas showing a second count
-  could disagree with them), not a budget one. Wants its own issue, with the
-  budget argument no longer available on either side.
-
 ## Resolved
+
+- #883 — The #880 residuals register is closed, six of seven. The stored,
+  indexed order column is **not** among them — the sort was pushed into SQLite,
+  but the ORDER BY still reads `json_extract`, and measurement says it should
+  (see the open entry above and D-order in
+  [docs/decisions.md](docs/decisions.md#grants-v2--one-authority-plane-883)); the
+  `has_unavailable_fields` fallback is on the wire and the replica rig asserts
+  pushdown actually engaged, so a tile that silently reverted to a full read now
+  says so; the native session produces `stewardLabel`, so the phone can draw the
+  commons "waiting for X" sentence its rail already supported; a write admitted
+  before bootstrap backfills its projection at first page, at completion and on
+  relaunch instead of keeping an empty optimistic row; the three dead web-seat
+  sharing exports (`ShareSheet`, `offersCapability`, `PLACEABLE_ITEM_TYPES`) are
+  deleted rather than held out of the reachability gate; the multiplex
+  shape-changed path re-emits under a bound with a terminal frame; and the wire
+  grew a per-mount `error` kind, so one failed projection no longer tears down
+  every mount. The vocabulary that last item needed is the thing that had been
+  missing — inventing it inside the route was refused at the time, and it landed
+  with the SSE slice that owned the protocol.
+
+- #883 — Four ledger items resolved in the schema and sweep passes they
+  belonged to. Expired `peer_link_tickets` are physically purged, not merely
+  filtered, so an abandoned-ticket workload no longer grows the table without
+  bound. `SEALED_PAYLOAD_FIELDS` now DERIVES from `SEALED_COLUMNS` rather than
+  restating it, which is the durable fix the entry asked for: the two lists
+  cannot disagree, and the derived set was a strict superset of the hand list,
+  so nothing lost protection on the way. The composite `<lineId>:<partyId>` write
+  marker in `add_receipt_expense` was removed rather than extended — a joined key
+  is unaddressable by every `pkColumn` consumer, so it was the defect shape, not
+  a missing marker. And the Atlas grant-plane census exclusion is gone: #873 had
+  already retired its budget rationale, ruling D4a settled the product question,
+  and the census counts the plane again for no statement cost.
+
+- #883 — The component-existence debt is measured, and all three of its lanes
+  are empty. `scripts/component-existence-ledger.mjs` is the rule the "design
+  gates enforce tokens, not components" entry asked for: it knows which elements
+  have kit equivalents and fails on a new instance AND on an uncounted cleanup,
+  so the census cannot drift from the tree. The shell's raw `<dialog>`s are one
+  `ShellModal` over the single `modal-kit` law and the dialog lane is empty; the
+  21 style-less mobile `<Pressable>`s are the kit's `Tappable` and that lane is
+  empty too. The button lane went last: every shell segmented strip and tab band
+  is `settings-controls.tsx`'s `Segmented` over `.segOption`, every other
+  class-less shell button is the kit `Button` (the crash wall's one way out
+  included), and the Assistant companion's attachment row — which cannot take
+  the kit Button, because a `role="menu"` popover's children need a
+  `role="menuitem"` the kit has no slot for — took the lane's other end state and
+  named its class. The six hand-rolled blueprint `Chrome.tsx` files adopt the frame
+  chrome (231/105/295/378/306/223 lines became 97/106/72/92/122/79, each over
+  `_shared/AppChrome`), so the second chrome inside the frame's chrome is gone.
+
+- #883 — The parallel-wave lesson is now a written norm rather than an
+  observation. [docs/multi-agent.md](docs/multi-agent.md) G1 states it as this
+  umbrella's invariant D7: a slice's exit condition is the repo-wide gate for
+  every lane its tree participates in — at minimum root `bun run lint` and the
+  whole `test` suite of the package it edits — never the touched-file subset,
+  so repo-wide reds surface inside the slice that caused them.
+
+- #883 — The daily rollup now splits each day by outcome and the payload
+  carries a typical run duration, so the bars draw their second segment and the
+  spend panel its `typical run` row on all three seats. The failure predicate is
+  the KPI rollup's, reused; the column's failed slice is failed SPEND, because a
+  column's height is spend. No schema change was needed for the duration —
+  `turns.ended_at` was already stamped at every completion path and already
+  exposed by the `run_summary` view; what was missing was a p50 over it. Both
+  figures stay WITHHELD rather than zeroed where the vault cannot speak: an
+  archived day contributes its failure count but no failed spend (a digest has
+  no failure-cost column), and a window with no finished run carries no duration
+  at all.
+
+- #883 — Live-defect sweep across the eight seats. `index.json`'s eight
+  template rows now carry the hue their `app.json` and the design registry
+  already agreed on. Photos computes a duration ONCE (`apps/photos/format.ts`
+  `clock`), so the viewer bar, the tile badge and the info row all say
+  `1:05:04` past an hour instead of `65:00`. People's journal query consumes
+  the shared `_shared/journal-scheme.ts` walk rather than a second copy of it,
+  and a queued People write is an honest landing: `settle()` re-reads the
+  roster the outbox projected into and the roster and person rows wear the
+  shared pending chip, so an offline add reads as saved-on-this-device rather
+  than failed. The web shell's ⌘K listener attaches in a layout effect —
+  before paint — closing the window in which a shortcut against a visible
+  shell was swallowed. `google-contacts-pull` writes vCard's yearless
+  birthday (`--09-05`, not `---09-05`). The Photos collections rail sends
+  place names through `readableName` like every other place surface, so a
+  coordinate pair is never printed as a name. Tasks' pending notice agrees in
+  number ("1 write is"). The retired builder view's dead `CodeLang` export is
+  local again and `diff.ts` (`DiffRow`/`lineDiff`, consumed only by its own
+  test) is deleted. `to_link` is one helper (`toLinkCount`) shared by the
+  dashboard query and the phone's model, absent-never-zero intact. Eight
+  comment sites stop calling the conversation ⊃ turn ⊃ item ledger a "chat";
+  the `kind: "chat"` union values and UI strings are untouched.
 
 - #880 — A second offline write settles now. The defect was measured in
   `apps/web/tests/e2e/offline-search.spec.ts` (#846): with the gateway severed

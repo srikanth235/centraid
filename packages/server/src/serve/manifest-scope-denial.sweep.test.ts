@@ -34,8 +34,8 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
   });
 
   test("the sweep loaded every bundled manifest through its real validator", () => {
-    // A regression here means the template tree moved and the sweep is silently
-    // scanning fewer manifests — the exact way a tripwire rots to green.
+    // A drop here means the template tree moved and the sweep is scanning
+    // fewer manifests — the exact way a tripwire rots to green.
     expect({
       apps: MANIFESTS.filter((m) => m.kind === "apps").length,
       automations: MANIFESTS.filter((m) => m.kind === "automations").length,
@@ -44,14 +44,12 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
     }).toStrictEqual({
       apps: 8,
       automations: 29,
-      // `release-notes-drafter` declares no vault block at all — see its own
-      // case below, which pins what that means for consent.
+      // `release-notes-drafter` declares no vault block; its own case below
+      // pins what that means for consent.
       withScopes: 36,
-      // +20 for Locker's #872 surface: five sidecar reads (alias, fields,
-      // addresses, passkey, history), two content-spine reads for attachments,
-      // one row-filtered read of `consent.receipt` for access history, ten new
-      // locker acts, and attach/detach.
-      declaredScopes: 278,
+      // `app-manifest-reads.test.ts` is the gate keeping a manifest's declared
+      // reads and its seats' actual reads honest; this number only tracks them.
+      declaredScopes: 276,
     });
     // Every scope-carrying manifest rides the one defaulted DPV purpose.
     expect([
@@ -91,9 +89,8 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
             if (decision.decision === "allow") allowed += 1;
           }
         }
-        // Counted rather than merely looped: a manifest whose scopes vanished
-        // (or that declares none, like `release-notes-drafter`) must say so as
-        // a number, not as a silently empty loop body.
+        // Counted, not merely looped: a manifest whose scopes vanished must
+        // say so as a number, not as a silently empty loop body.
         expect(allowed).toBe(
           manifest.scopes.reduce((n, s) => n + verbsOf(s.verbs).length, 0)
         );
@@ -101,13 +98,11 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
     );
 
     test("a declared rowFilter/fieldMask reaches the allow decision intact", () => {
-      // The bundled manifests that anchor a schema-wide read: people and tally
-      // each attenuate `core.entity_revision` to their own entity type, and
-      // locker (#872) attenuates `consent.receipt` to its own object types so
-      // an access-history grant is "my own reveals", not a key to the vault's
-      // whole receipt stream. That one matters more than the other two: the
-      // gateway's structural per-entity guard covers `consent.provenance`
-      // only, so for `consent.receipt` this rowFilter IS the boundary.
+      // Manifests anchoring a schema-wide read attenuate it: people and tally
+      // to their own entity type, locker (#872) `consent.receipt` to its own
+      // object types. That last matters most — the gateway's structural
+      // per-entity guard covers `consent.provenance` only, so here the
+      // rowFilter IS the boundary.
       const anchored = MANIFESTS.filter((manifest) =>
         manifest.scopes.some((scope) => scope.rowFilter !== undefined)
       );

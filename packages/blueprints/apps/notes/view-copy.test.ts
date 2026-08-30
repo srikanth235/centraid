@@ -95,6 +95,9 @@ describe("the spec's copy table, verbatim", () => {
     expect(pendingStatus(3)).toBe(
       "3 writes queued on this device · they settle when the gateway answers"
     );
+    expect(pendingStatus(1)).toBe(
+      "1 write queued on this device · it settles when the gateway answers"
+    );
   });
 
   test("the window says it is a window", () => {

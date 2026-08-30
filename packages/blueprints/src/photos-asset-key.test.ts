@@ -9,16 +9,13 @@
 //
 // LAYOUT NOTE. These modules are unit-testable without a booted app, so the
 // real sources are copied into a temp dir beside two stubs and imported from
-// there; shared pure helpers keep their production-relative path under
-// `_shared/`. The modules UNDER TEST are byte-identical apart from ONE
-// rewritten specifier, so this is still testing the real code — only the two
-// effect boundaries are replaced.
+// there, byte-identical apart from ONE rewritten specifier: this still tests
+// the real code, with two effect boundaries replaced.
 //
-// The design package's element layer is stubbed rather than loaded because
-// importing it defines custom elements, which needs a DOM this node-side suite
-// has no reason to boot. It cannot be `vi.mock`ed: the copies are loaded by
-// native `import()` from outside the project root (vite refuses a module
-// there), which never reaches vitest's module registry.
+// The design element layer is stubbed rather than loaded: importing it defines
+// custom elements, needing a DOM this node-side suite has no reason to boot. It
+// cannot be `vi.mock`ed — the copies load by native `import()` from outside the
+// project root, which never reaches vitest's module registry.
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -109,6 +106,16 @@ mkdirSync(path.join(root, "_shared"), { recursive: true });
 copyFileSync(
   path.resolve(PHOTOS, "../_shared/selection-engine.ts"),
   path.join(root, "_shared/selection-engine.ts")
+);
+// The format kit is copied too (`format.ts` re-exports its custody table,
+// #883); its one package import is rewritten onto the same element stub,
+// because the temp root has no `node_modules` to walk.
+writeFileSync(
+  path.join(root, "_shared/format-kit.ts"),
+  readFileSync(
+    path.resolve(PHOTOS, "../_shared/format-kit.ts"),
+    "utf8"
+  ).replaceAll('"@centraid/design"', '"../photos/elements-stub.ts"')
 );
 
 // The element surface these two modules actually touch. `format.ts` wants two

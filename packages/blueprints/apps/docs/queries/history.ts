@@ -6,8 +6,11 @@
  * (valid_from), never created_at.
  */
 
-// Mirrors packages/vault/src/commands/links.ts's RELATIONS_SCHEME_URI.
-const RELATIONS_SCHEME_URI = "urn:duaility:relations";
+import {
+  RELATIONS_SCHEME_URI,
+  findSchemeConcept,
+} from "../../_shared/concept-scheme-kit.ts";
+
 const REVISES_RELATION = "revises";
 // Caps runaway growth.
 const MAX_CHAIN_STEPS = 500;
@@ -56,16 +59,12 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
       ctx.vault.read({ entity: "core.concept_scheme", purpose }),
       ctx.vault.read({ entity: "core.concept", purpose }),
     ]);
-    const relScheme = ((schemes.rows ?? []) as unknown as SchemeRow[]).find(
-      (s) => s.uri === RELATIONS_SCHEME_URI
-    );
-    const revisesConceptId = relScheme
-      ? ((concepts.rows ?? []) as unknown as ConceptRow[]).find(
-          (c) =>
-            c.scheme_id === relScheme.scheme_id &&
-            c.notation === REVISES_RELATION
-        )?.concept_id
-      : undefined;
+    const revisesConceptId = findSchemeConcept(
+      (schemes.rows ?? []) as unknown as SchemeRow[],
+      (concepts.rows ?? []) as unknown as ConceptRow[],
+      RELATIONS_SCHEME_URI,
+      REVISES_RELATION
+    )?.concept_id;
 
     const chainIds = [doc.current_content_id];
     const assertedAtOf = new Map<string, string>(); // content_id -> the outgoing edge's valid_from

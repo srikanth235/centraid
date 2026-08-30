@@ -239,7 +239,7 @@ export function responseFor(rawUrl: string, init?: RequestInit): Response {
     });
   if (path === "/centraid/_vault/agents") return json({ agents: [] });
   if (path === "/centraid/_vault/entities")
-    return json({ entities: ["business.invoice"] });
+    return json({ entities: ["tally.expense"] });
   if (path.startsWith("/centraid/_vault/picker")) return json({ cards: [] });
   if (path.startsWith("/centraid/_vault/anchors")) return json({ anchors: [] });
   if (path === "/centraid/_vault/apps") return json({ apps: [] });
@@ -298,9 +298,7 @@ export function responseFor(rawUrl: string, init?: RequestInit): Response {
   if (path.startsWith("/centraid/_apps/") && method === "DELETE")
     return json({ id: "daily" });
 
-  // Fail closed. A blanket `{ ok: true }` made this a contract test that
-  // could not fail: a client calling a renamed or misspelled path still
-  // resolved and passed. An unrouted path is a broken contract (#541).
+  // Fail closed: an unrouted path is a broken contract, not a pass (#541).
   throw new Error(`unrouted gateway path: ${method} ${path}`);
 }
 

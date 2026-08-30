@@ -16,6 +16,7 @@ import type { ReactNode } from "react";
 
 import { bandClaim as claimBand, countLabel } from "../_shared/app-frame.tsx";
 import type { AppBarBase } from "../_shared/app-frame.tsx";
+import { Segmented } from "../_shared/Segmented.tsx";
 import type {
   InlineAppBarContribution,
   InlineBandClaim,
@@ -38,8 +39,7 @@ const SEGMENTS: readonly ShelfId[] = [null, ACTIVITY, GROUPS, WAITING];
 
 export interface AppBarState extends AppBarBase {
   shelf: ShelfId;
-  /** The open group's or friend's own name — a descent carries ITS title in
-   *  the bar, not the route's generic one. */
+  /** The open group's or friend's own name: a descent carries ITS title. */
   subjectName?: string;
   /** What the count counts on this route ("expenses", "members"). */
   unit?: string;
@@ -69,18 +69,15 @@ export function appBar(state: AppBarState): InlineAppBarContribution {
   const actions: ReactNode = state.quiet ? null : (
     <>
       {state.compact ? null : (
-        <fieldset className="kit-seg" aria-label="Tally view">
-          {SEGMENTS.map((shelf) => (
-            <button
-              key={String(shelf)}
-              type="button"
-              aria-pressed={bandActiveId(state.shelf) === bandActiveId(shelf)}
-              onClick={() => state.onSelect(shelf)}
-            >
-              {shelfLabel(shelf)}
-            </button>
-          ))}
-        </fieldset>
+        <Segmented
+          label="Tally view"
+          options={SEGMENTS.map((shelf) => ({
+            key: String(shelf),
+            label: shelfLabel(shelf),
+            pressed: bandActiveId(state.shelf) === bandActiveId(shelf),
+            select: () => state.onSelect(shelf),
+          }))}
+        />
       )}
       {/* The quiet verb: `Itemise` where the member is looking at one
           expense, `Settle up` everywhere else. */}

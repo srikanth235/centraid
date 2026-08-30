@@ -53,11 +53,13 @@ describe("portable export", () => {
       .run(uuidv7(), now, now);
     db.vault
       .prepare(
-        `INSERT INTO core_party_identifier
-           (identifier_id, party_id, scheme, value, label, is_primary, verified_at, valid_from, valid_to)
-         VALUES (?, ?, 'email', 'priya@example.test', 'home', 1, NULL, ?, NULL)`
+        `INSERT INTO social_contact_channel
+           (channel_id, party_id, kind, label, value, normalized_value,
+            is_preferred, created_at, updated_at)
+         VALUES (?, ?, 'email', 'home', 'priya@example.test',
+                 'priya@example.test', 1, ?, ?)`
       )
-      .run(uuidv7(), boot.ownerPartyId, now);
+      .run(uuidv7(), boot.ownerPartyId, now, now);
     const accountId = uuidv7();
     db.vault
       .prepare(

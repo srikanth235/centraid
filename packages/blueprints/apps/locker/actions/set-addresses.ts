@@ -1,5 +1,7 @@
-// Whole-list replace, unlike `set-field`: no address is a secret. The primary
-// stays `locker_item.url`, so Companion candidates and bindings are untouched.
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
+// Whole-list replace — no address is a secret. The primary locker_item.url
+// and its Companion bindings are untouched.
 
 interface AddressInput {
   url?: unknown;
@@ -7,7 +9,7 @@ interface AddressInput {
 }
 
 export default async function setAddresses({ body, ctx }: HandlerArgs) {
-  const input = (body ?? {}) as Record<string, unknown>;
+  const input = actionInput(body);
   const supplied = Array.isArray(input.addresses)
     ? (input.addresses as AddressInput[])
     : [];
@@ -23,18 +25,8 @@ export default async function setAddresses({ body, ctx }: HandlerArgs) {
       },
     ];
   });
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "locker.set_addresses",
-      input: { item_id: String(input.item_id ?? ""), addresses },
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  return runVaultAction(ctx, {
+    command: "locker.set_addresses",
+    input: { item_id: String(input.item_id ?? ""), addresses },
+  });
 }

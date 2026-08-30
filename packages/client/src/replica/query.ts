@@ -59,17 +59,22 @@ function comparable(
   return typeof value === "boolean" ? (value ? 1 : 0) : value;
 }
 
-const textEncoder = new TextEncoder();
+// Lifting surrogates above `U+FFFF` makes UTF-16 unit order match UTF-8 byte
+// order (SQLite BINARY). Well-formed text only.
+const SURROGATE_LIFT = 0x28_00;
 
 function compareBinaryText(left: string, right: string): number {
-  const a = textEncoder.encode(left);
-  const b = textEncoder.encode(right);
-  const length = Math.min(a.length, b.length);
+  const length = Math.min(left.length, right.length);
   for (let index = 0; index < length; index += 1) {
-    const difference = (a[index] ?? 0) - (b[index] ?? 0);
-    if (difference !== 0) return difference;
+    const a = left.charCodeAt(index);
+    const b = right.charCodeAt(index);
+    if (a !== b) return codePointKey(a) - codePointKey(b);
   }
-  return a.length - b.length;
+  return left.length - right.length;
+}
+
+function codePointKey(unit: number): number {
+  return unit >= 0xd8_00 && unit <= 0xdf_ff ? unit + SURROGATE_LIFT : unit;
 }
 
 function compare(
@@ -82,9 +87,8 @@ function compare(
   if (a === undefined) return -1;
   if (b === undefined) return 1;
   if (typeof a === "number" && typeof b === "number") return a - b;
-  // The replica wire does not carry a physical SQLite column affinity. Mixed
-  // TEXT/NUMERIC comparisons can therefore differ from the canonical SQL
-  // read; transparently rerun online instead of inventing a JS type order.
+  // No column affinity on the wire: mixed TEXT/NUMERIC can differ from the
+  // canonical read — rerun online, never invent a JS type order.
   if (typeof a !== typeof b) {
     throw new OnlineOnlyError(
       "mixed-type comparison requires canonical SQLite affinity"
@@ -194,8 +198,8 @@ export function applyOptimisticMutations(
     try {
       validateOptimisticMutation(mutation, schema, rows.has(mutation.rowId));
     } catch (error) {
-      // A legacy/bad durable intent must not poison every read of its entity.
-      // New intents are rejected at enqueue; old records are ignored here.
+      // A bad durable intent must not poison every read of its entity; new
+      // ones are rejected at enqueue.
       if (
         error instanceof ReplicaProtocolError ||
         error instanceof OnlineOnlyError
@@ -225,7 +229,6 @@ export function applyOptimisticMutations(
   return [...rows.values()];
 }
 
-/** Validate an optimistic mutation before it enters the durable outbox. */
 export function validateOptimisticMutation(
   mutation: OptimisticMutation,
   schema: ReplicaEntitySchema,
@@ -253,7 +256,11 @@ export function validateOptimisticMutation(
   }
 }
 
-/** Fixed-grammar local equivalent of ctx.vault.read. No caller text becomes SQL. */
+/**
+ * Fixed-grammar local equivalent of ctx.vault.read. No caller text becomes SQL.
+ * The store compiles the grammar to SQL (`read-plan.ts`); with no production
+ * caller left, this survives as the pushdown parity oracle.
+ */
 export function evaluateReplicaRead(
   canonical: ReplicaRowEnvelope[],
   schema: ReplicaEntitySchema,
@@ -295,9 +302,8 @@ export function evaluateReplicaRead(
       );
       if (ordered !== 0) return dir === "desc" ? -ordered : ordered;
       if (!visiblePrimaryKey || visiblePrimaryKey === column) return 0;
-      // Canonical reads append the exposed scalar PK in ascending BINARY
-      // order. Mirroring that fixed tie-break makes ORDER BY ... LIMIT stable
-      // across refreshes without exposing a masked/composite identity.
+      // Canonical reads tie-break on the exposed scalar PK, ascending BINARY —
+      // mirror it or ORDER BY ... LIMIT drifts across refreshes.
       return compare(
         scalar(left.values[visiblePrimaryKey], "primary-key orderBy tie-break"),
         scalar(right.values[visiblePrimaryKey], "primary-key orderBy tie-break")
@@ -319,17 +325,22 @@ export function evaluateReplicaRead(
   if (!Number.isSafeInteger(requestedLimit)) {
     throw new ReplicaProtocolError("Read limit must be a safe integer");
   }
-  // A ten-year native Photos library legitimately exceeds 10k rows. This is
-  // local SQLite-derived data (not one network response); bootstrap and wire
-  // routes keep their independent authenticated work limits.
+  // Local SQLite-derived data, not a network response; a ten-year Photos
+  // library exceeds 10k rows.
   const limit = Math.min(Math.max(requestedLimit, 1), 100_000);
   return rows.slice(0, limit);
 }
 
+/**
+ * Wrap one row so touching a field this replica does not hold escalates online
+ * instead of reading `undefined`. Never gate it behind a dev flag.
+ */
 export function guardReplicaRow(
   envelope: ReplicaRowEnvelope,
   guard: OnlineOnlyGuard
 ): ReplicaRow {
+  if (envelope.oversizedFields.length === 0 && !envelope.hasUnavailableFields)
+    return { ...envelope.values };
   const unavailable = new Map<string, string>();
   for (const field of envelope.oversizedFields)
     unavailable.set(field, `oversized field ${field}`);

@@ -25,7 +25,9 @@ import {
 } from "@centraid/design/elements";
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
+import { MoreSheet } from "../_shared/MoreSheet.tsx";
 import { libraryReachability } from "../_shared/view-state-kit.ts";
+import { useVisibleInterval } from "../_shared/visible-interval.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { WINDOW_MAX, WINDOW_STEP, makeBag } from "./bag.ts";
 import type { Bag } from "./bag.ts";
@@ -35,7 +37,6 @@ import { ItemScreen } from "./components/Item.tsx";
 import { Lenses } from "./components/Lenses.tsx";
 import { LockerList } from "./components/List.tsx";
 import { Lock } from "./components/Lock.tsx";
-import { MoreSheet } from "./components/MoreSheet.tsx";
 import { Confirm, PermitGate } from "./components/PermitGate.tsx";
 import { Rail } from "./components/Rail.tsx";
 import { Screens, isRoutedScreen } from "./components/Screens.tsx";
@@ -59,8 +60,13 @@ import { useRouteActs } from "./route-acts.ts";
 import {
   EXPORT_CONFIRM_LABEL,
   EXPORT_CONFIRM_TITLE,
+  MORE_CLOSE,
+  MORE_FOOT,
+  MORE_TITLE,
   PURGE_CONFIRM_LABEL,
   PURGE_CONFIRM_TITLE,
+  SURFACE_META,
+  SURFACE_TITLE,
 } from "./route-copy.ts";
 import {
   SESSION_IDLE_MS,
@@ -115,7 +121,7 @@ import {
 } from "./view-copy.ts";
 import { restoreWrite, starWrite, trashWrite } from "./writes.ts";
 
-/** The vault entities this app's queries read — the doorbell filter. */
+/** The doorbell filter: the vault entities this app's queries read. */
 export const CHANGE_TABLES = [
   "locker.item",
   "core.tag",
@@ -242,7 +248,6 @@ export function Root({
     // The host says the session is gone: relock rather than render a list the
     // member is no longer entitled to.
     if (next?.authRequired) {
-      // The HOST is the one saying so, so it needs no telling.
       relock(false);
       setLoaded(true);
       return;
@@ -272,7 +277,7 @@ export function Root({
         trash && !trash.vaultDenied ? (trash.items ?? []) : [];
     } catch {
       // Trash is an advisory count on a rail row; a failed pull leaves it
-      // unstated rather than stale. The list above is the read that matters.
+      // unstated rather than stale.
       bagRef.current.trashRows = [];
     }
     bump();
@@ -322,8 +327,7 @@ export function Root({
     [frame, refresh]
   );
 
-  /** The one status line, for the handful of narrations that are not writes —
-   *  a generator draw, and what it did not save. */
+  /** The one status line, for narrations that are not writes. */
   const publish = useCallback(
     (text: string): void => publishOutcome(frame, { text }),
     [frame]
@@ -626,13 +630,13 @@ export function Root({
 
   // The revealed field's own second hand. It ticks ONLY while something is
   // revealed — a countdown running over a screen with nothing on it would be
-  // a heartbeat this app has no reason to have.
+  // a heartbeat this app has no reason to have — and, since #883 C4, only while
+  // the document is visible. A countdown behind another window is the same
+  // heartbeat with the screen switched off; the catch-up fire on return means
+  // the number that comes back is the real remaining time and the expiry sweep
+  // below runs against it immediately.
   const revealCount = Object.keys(bag.revealedAt).length;
-  useEffect(() => {
-    if (revealCount === 0) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [revealCount]);
+  useVisibleInterval(() => setNow(Date.now()), 1000, revealCount > 0);
 
   // A reveal outlives neither its permit nor the member's attention: once the
   // countdown reaches zero the value leaves the bag, without being asked — and
@@ -1165,8 +1169,18 @@ export function Root({
           moreSheet:
             bag.moreOpen && !shut ? (
               <MoreSheet
-                shelves={MORE_SHELVES}
-                onSelect={go}
+                label={MORE_TITLE}
+                title={MORE_TITLE}
+                rows={MORE_SHELVES.map((entry) => ({
+                  key: String(entry),
+                  label: SURFACE_TITLE[String(entry)] ?? String(entry),
+                  ...(SURFACE_META[String(entry)] === undefined
+                    ? {}
+                    : { note: SURFACE_META[String(entry)] }),
+                  select: () => go(entry),
+                }))}
+                footer={MORE_FOOT}
+                closeLabel={MORE_CLOSE}
                 onClose={() => {
                   bagRef.current.moreOpen = false;
                   bump();

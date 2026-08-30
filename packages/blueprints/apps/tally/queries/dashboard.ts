@@ -4,22 +4,26 @@
 /**
  * The dashboard, and the shared balance engine every Tally query reads through.
  * Balances are DERIVED here, never stored: loadTally() pulls the ground facts
- * (the owner, friends, groups, members, expenses with their splits, and
- * settlements) in a handful of bounded reads, and pairwise()/groupNet() fold
- * them into net positions in minor units. The owner is the vault's
- * owner_party_id — the implicit `me`; everyone else is a canonical core.party
- * carried by a tally_friend row. All money is INTEGER minor units; the app
- * formats it. A consent denial is a first-class outcome the UI renders as the
- * access state.
+ * in a handful of bounded reads, and pairwise()/groupNet() fold them into net
+ * positions. The owner is the vault's owner_party_id — the implicit `me`;
+ * everyone else is a canonical core.party carried by a tally_friend row. All
+ * money is INTEGER minor units. A consent denial is a first-class outcome the
+ * UI renders as the access state.
  */
 
-import { BRAND, identityColor, identityInitials } from "@centraid/design";
+import {
+  BRAND,
+  identityInitials,
+  partyHueKey,
+  partyHueValue,
+} from "@centraid/design";
 
 import {
   attributeExpense,
   expensePayers,
   tallyGroupNet,
 } from "../../../src/tally-balance.ts";
+import { DAY_MS } from "../../_shared/format-kit.ts";
 import {
   PENDING_OVERLAY_FIELDS,
   pendingOverlayCopy,
@@ -202,8 +206,14 @@ export async function loadTally(
       limit: 2000,
       purpose,
     }),
+    // A receipt IS the `role='receipt'` attachment on the expense (#883,
+    // ruling O-attach).
     ctx.vault.read({
-      entity: "tally.expense_receipt",
+      entity: "core.attachment",
+      where: [
+        { column: "target_type", op: "eq", value: "tally.expense" },
+        { column: "role", op: "eq", value: "receipt" },
+      ],
       limit: 2_000,
       purpose,
     }),
@@ -231,11 +241,9 @@ export async function loadTally(
 
   const friends = (friendsRes.rows ?? []) as unknown as FriendRow[];
   const friendPartyIds = friends.map((f) => f.party_id);
-  // Circle membership is current state, while the ledger is durable history.
-  // A member who has left the circle must therefore remain nameable anywhere
-  // an expense or settlement still refers to them. Query every ledger party,
-  // not only today's friend/member roster, so group() can label that durable
-  // participant honestly instead of collapsing them to "Someone".
+  // Circle membership is current state, the ledger durable history: a member
+  // who left must stay nameable wherever an expense or settlement still refers
+  // to them, so query every ledger party rather than today's roster.
   const activeExpenseIds = new Set(
     ((expensesRes.rows ?? []) as unknown as ExpenseRowRaw[]).map(
       (expense) => expense.expense_id
@@ -285,8 +293,11 @@ export async function loadTally(
     display_name?: string;
   }>;
   const nameById = new Map(partyRows.map((p) => [p.party_id, p.display_name]));
+  // THE PARTY HUE, not `identityColor` (#883, ruling O-identity): the person
+  // wheel has eight places, and the vault wheel's ninth is the ink brand —
+  // keying off it draws a person as a black disc.
   const colorByParty = new Map(
-    friends.map((f) => [f.party_id, identityColor(f.party_id)])
+    friends.map((f) => [f.party_id, partyHueValue(partyHueKey(f.party_id)!)])
   );
 
   const people = new Map<string, ServerPerson>();
@@ -303,7 +314,8 @@ export async function loadTally(
     people.set(f.party_id, {
       party_id: f.party_id,
       name,
-      color: colorByParty.get(f.party_id) || identityColor(f.party_id),
+      color:
+        colorByParty.get(f.party_id) ?? partyHueValue(partyHueKey(f.party_id)!),
       initials: identityInitials(name),
       is_me: false,
     });
@@ -314,7 +326,7 @@ export async function loadTally(
     people.set(partyId, {
       party_id: partyId,
       name,
-      color: identityColor(partyId),
+      color: partyHueValue(partyHueKey(partyId)!),
       initials: identityInitials(name),
       is_me: false,
     });
@@ -354,11 +366,17 @@ export async function loadTally(
       splitsByExpense.set(s.expense_id, {});
     splitsByExpense.get(s.expense_id)![s.party_id] = s.share_minor;
   }
-  const receiptRows = (receiptsRes.rows ?? []) as unknown as Array<{
-    receipt_id: string;
-    expense_id: string;
-    content_id: string;
-  }>;
+  const receiptRows = (
+    (receiptsRes.rows ?? []) as unknown as Array<{
+      attachment_id: string;
+      target_id: string;
+      content_id: string;
+    }>
+  ).map((row) => ({
+    receipt_id: row.attachment_id,
+    expense_id: row.target_id,
+    content_id: row.content_id,
+  }));
   const receiptContentIds = [
     ...new Set(receiptRows.map((row) => row.content_id)),
   ];
@@ -391,8 +409,8 @@ export async function loadTally(
     allocationsByLine.get(allocation.line_item_id)![allocation.party_id] =
       allocation.share_minor;
   }
-  // Lines now hang off the EXPENSE, with the receipt as an optional
-  // decoration, so the "By line" division has typed lines and no photo.
+  // Lines hang off the EXPENSE, the receipt an optional decoration, so the
+  // "By line" division has typed lines and no photo.
   const linesByExpense = new Map<string, ReceiptLineFact[]>();
   for (const line of (receiptLinesRes.rows ?? []) as unknown as Array<{
     line_item_id: string;
@@ -471,10 +489,9 @@ export async function loadTally(
 
 /**
  * The denial the UI renders as its access state. `revoked_at` is present only
- * when the refusal really was a revocation — the gateway attaches the time it
- * recorded, because a revoked app cannot read the consent tables to find out
- * for itself. Null the rest of the time: the app says what it knows and never
- * invents a timestamp.
+ * when the refusal really was a revocation — the gateway attaches the time,
+ * because a revoked app cannot read the consent tables. Null otherwise: the
+ * app never invents a timestamp.
  */
 export function deniedPayload(error: unknown): {
   code?: string;
@@ -494,7 +511,7 @@ export function personOf(data: TallyData, pid: string): ServerPerson {
     data.people.get(pid) || {
       party_id: pid,
       name: "Someone",
-      color: identityColor(pid),
+      color: partyHueValue(partyHueKey(pid)!),
       initials: identityInitials("Someone"),
       is_me: false,
     }
@@ -791,7 +808,7 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
     }));
     const now = new Date();
     const rangeFrom = now.toISOString();
-    const rangeTo = new Date(now.getTime() + 180 * 86_400_000).toISOString();
+    const rangeTo = new Date(now.getTime() + 180 * DAY_MS).toISOString();
     const exceptionRows = exceptionRes.rows ?? [];
     const recurring = (
       (recurringRes.rows ?? []) as unknown as RecurringRow[]

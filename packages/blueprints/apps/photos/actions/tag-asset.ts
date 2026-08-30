@@ -1,30 +1,16 @@
-/**
- * Add a free-form label to a photo through core.tag_item (#352
- * phase 3/4) — additive and idempotent over the shared "Tags" concept
- * scheme (packages/vault/src/commands/tags.ts, the same scheme notes/tasks
- * tag through); tagging the same label twice just dedupes onto the one
- * tag row.
- *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
- */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
+/** Additive and idempotent over the one shared "Tags" concept scheme
+ *  (packages/vault/src/commands/tags.ts): the same label twice dedupes onto
+ *  one tag row. */
 export default async function tagAsset({ body, ctx }: HandlerArgs) {
-  const input = (body ?? {}) as Record<string, unknown>;
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "core.tag_item",
-      input: {
-        subject_type: "media.asset",
-        subject_id: String(input.asset_id ?? ""),
-        label: String(input.label ?? ""),
-      },
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  const input = actionInput(body);
+  return runVaultAction(ctx, {
+    command: "core.tag_item",
+    input: {
+      subject_type: "media.asset",
+      subject_id: String(input.asset_id ?? ""),
+      label: String(input.label ?? ""),
+    },
+  });
 }

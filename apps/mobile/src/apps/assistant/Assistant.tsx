@@ -22,6 +22,7 @@ import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
 import type { SheetOption } from "../../kit/components/OptionSheet";
+import Tappable from "../../kit/components/Tappable";
 import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useTheme } from "../../kit/theme";
 import type { AssistantFullScreenProps } from "../../navigation";
@@ -171,14 +172,14 @@ export default function AssistantScreen({
   return (
     <TopSafeArea style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
-        <Pressable
+        <Tappable
           accessibilityRole="button"
           accessibilityLabel="Back to home"
           hitSlop={10}
           onPress={() => navigation.goBack()}
         >
           <Icon name="arrow-left" size={26} color={colors.text} />
-        </Pressable>
+        </Tappable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Assistant</Text>
           <Text style={styles.subtitle}>Ask about your vault</Text>

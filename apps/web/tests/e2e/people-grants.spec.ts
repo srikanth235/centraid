@@ -28,12 +28,33 @@ const SECTION = path.join(
 const EVIDENCE_DIR = path.join(REPO_ROOT, "artifacts/e2e/ui-impact");
 const EVIDENCE_PNG = "issue-825-people-grants.png";
 
-/** Harness entry: the SHIPPED section with a door stubbing delivered vs
- *  parked-awaiting-invitation grants. */
+/** Harness entry: the SHIPPED section, with a door stubbing delivered vs
+ *  parked grants. */
 const ENTRY = `
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { PersonGrants } from ${JSON.stringify(SECTION)};
+
+// Phrase and reason come from the WIRE, never worked out on this side (ruling
+// V-phrases) — so the stub carries what grantPhrase() yields for these rows:
+// one delivered row is "shared", an awaiting_channel row is "on its way", and
+// no rows at all is "on its way" for a different reason.
+const standing = (state) => {
+  if (!state)
+    return {
+      phrase: "on its way",
+      reason: "no vault has been addressed for it yet",
+    };
+  if (state === "delivered")
+    return {
+      phrase: "shared",
+      reason: "the vault it addresses is holding it",
+    };
+  return {
+    phrase: "on its way",
+    reason: "there is no way to reach them yet; the ask is recorded",
+  };
+};
 
 const grant = (id, subjectType, state) => ({
   grantId: id,
@@ -45,6 +66,7 @@ const grant = (id, subjectType, state) => ({
   revokedAt: null,
   grantedBy: "party-owner",
   maxSizeBytes: null,
+  ...standing(state),
   fulfillment: state
     ? [{ peerVaultId: "vault-priya", state, updatedAt: "", detail: null }]
     : [],
@@ -100,7 +122,7 @@ createRoot(document.getElementById("root")).render(
 );
 `;
 
-/** Bundle the shipped section, its CSS modules included, for the browser. */
+/** Bundle the shipped section, CSS modules included, for the browser. */
 async function bundleSection(): Promise<{ js: string; css: string }> {
   const result = await build({
     stdin: {
@@ -143,8 +165,10 @@ test("the person screen lists live grants and shares in one gesture", async ({
   await page.addScriptTag({ content: js });
 
   await expect(page.getByText("Shared with them")).toBeVisible();
-  await expect(page.getByText("Delivered")).toBeVisible();
-  await expect(page.getByText("Invitation pending")).toBeVisible();
+  // Each row wears the vault's own phrase: the delivered document is settled,
+  // the photo parked for want of a channel is travelling.
+  await expect(page.getByText("Shared", { exact: true })).toBeVisible();
+  await expect(page.getByText("On its way", { exact: true })).toBeVisible();
 
   // Not reached is an OPPORTUNITY, not an error or a link ceremony.
   await expect(

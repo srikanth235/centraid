@@ -1,11 +1,10 @@
 // The Locker chrome — a ROUTE INSIDE THE FRAME (README-Locker §1). Geometry
 // only.
 //
-// The stem, the app bar, the back row, the ONE status line, the sheets and the
-// phone's band are the SYSTEM'S; this file draws the two regions that are the
-// app's own — the 232px rail on a wide pointer surface, and the scroll host
-// everything else stands in — and nothing more. It adds no token, no rung, no
-// colour and no control recipe.
+// The stem, app bar, back row, status line, sheets and phone band are the
+// SYSTEM'S; this file draws only the app's own two regions — the 232px rail on
+// a wide pointer surface and the scroll host — and adds no token, rung, colour
+// or control recipe.
 //
 // THE ONE THING IT DECIDES: whether the rail is drawn at all. `railOn` is the
 // gate from `shelves.ts` (`suppressesNavigation`), passed down as a fact: a
@@ -17,8 +16,14 @@
 // `docs/Chrome.tsx` use.
 import type { ReactNode } from "react";
 
+import {
+  AskMount,
+  ChromeToolbar,
+  ConsentBanner,
+  ScrollHost,
+} from "../_shared/AppChrome.tsx";
+import { chromeClass } from "../_shared/chrome-kit.ts";
 import { LoadingSkeleton } from "../_shared/LoadingSkeleton.tsx";
-import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
 
 import styles from "./Chrome.module.css";
 
@@ -54,13 +59,11 @@ export interface ChromeProps {
 }
 
 export function Chrome(props: ChromeProps): ReactNode {
-  const shellClass = [
+  const shellClass = chromeClass(
     styles.shell,
-    props.narrow ? styles.isNarrow : "",
-    props.consent ? styles.denied : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+    props.narrow && styles.isNarrow,
+    props.consent && styles.denied
+  );
 
   return (
     <div className={shellClass} data-locker-root data-density="comfortable">
@@ -72,42 +75,27 @@ export function Chrome(props: ChromeProps): ReactNode {
 
       <main className={styles.main}>
         {props.consent ? (
-          // `id="consentBanner"` is the hook the shared kit's onFocusRefresh
-          // reads to detect a denied→recovered flip and bypass its 30s focus
-          // throttle; without it a refocus after a grant would be throttled
-          // and the read never retried (#505).
-          <div id="consentBanner" className={`kit-banner ${styles.banner}`}>
-            <strong>No vault access yet.</strong>{" "}
-            <span>{props.consent.message}</span>
-            <VaultAccessButton />
-          </div>
+          <ConsentBanner
+            message={props.consent.message}
+            className={styles.banner}
+          />
         ) : null}
 
         {props.slots.notices}
 
-        {props.slots.toolbar ? (
-          <div
-            className={styles.toolbar}
-            role="toolbar"
-            aria-label="Locker view"
-          >
-            {props.slots.toolbar}
-          </div>
-        ) : null}
+        <ChromeToolbar className={styles.toolbar} label="Locker view">
+          {props.slots.toolbar}
+        </ChromeToolbar>
 
-        <div className={styles.scroll}>
-          {props.loading ? (
-            <div className={styles.skeleton} aria-hidden="true">
-              <LoadingSkeleton rows={6} />
-            </div>
-          ) : (
-            props.slots.scroll
-          )}
-        </div>
-        {/* The shell's Ask panel mounts here. The panel is the shell's
-            (`kit-ask-inline.ts`); this node is the seam that makes the
-            descriptor's `kitAsk` config reachable at all. */}
-        <div className={styles.askMount} data-ask-mount />
+        <ScrollHost
+          className={styles.scroll}
+          loading={props.loading}
+          skeletonClassName={styles.skeleton}
+          skeleton={<LoadingSkeleton rows={6} />}
+        >
+          {props.slots.scroll}
+        </ScrollHost>
+        <AskMount className={styles.askMount} />
       </main>
 
       {props.slots.overlays}

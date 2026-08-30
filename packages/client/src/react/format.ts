@@ -37,6 +37,8 @@ export function insUsd(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
+export { insDuration } from "../insights-copy.js";
+
 /** Run-kind → display label. */
 export function insKindLabel(kind: string): string {
   if (kind === "chat") {

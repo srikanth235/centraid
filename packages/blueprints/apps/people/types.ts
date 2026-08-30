@@ -1,6 +1,6 @@
-// People's view models and the FROZEN prop contract for its eight screens. A
-// field the vault does not have is ABSENT here, or a screen draws a fact
-// nobody stored. Screens own no state and no reads of their own.
+// People's view models and the FROZEN prop contract for its screens. A field
+// the vault does not have is ABSENT here, or a screen draws a fact nobody
+// stored. Screens own no state and no reads of their own.
 import type { SearchStatus } from "../_shared/search-scaffold.ts";
 import type { ShelfId } from "./shelves.ts";
 
@@ -44,7 +44,7 @@ export interface PendingInvite {
   created_at: string;
 }
 
-/** `legacy` rows come from a party identifier: no id to edit. */
+/** Every reach row is a `social.contact_channel` (#883, ruling O-contact). */
 export interface ContactChannel {
   channel_id?: string;
   kind: "phone" | "email" | "address" | "handle";
@@ -55,7 +55,6 @@ export interface ContactChannel {
   provenance?: Record<string, unknown> | null;
   duplicate_party_ids?: string[];
   duplicate_names?: string[];
-  legacy?: boolean;
 }
 
 export interface ImportantDate {
@@ -98,7 +97,7 @@ export interface PersonDetail {
   pending_invites: PendingInvite[] | null;
 }
 
-/** The cadence pair is joined in from the roster read, so it is optional. */
+/** Joined in from the roster read, so optional. */
 export interface PersonCard {
   party_id: string;
   name: string;

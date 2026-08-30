@@ -1,25 +1,11 @@
-/**
- * Remove a document's star through core.unstar_document — deletes the
- * flags-scheme tag on the canonical content item (#274). Idempotent;
- * refuses trashed documents (a trashed document keeps its star through
- * restore). Risk low.
- */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
 export default async function unstar({ body, ctx }: HandlerArgs) {
-  const input = (body ?? {}) as Record<string, unknown>;
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "core.unstar_document",
-      input: {
-        document_id: String(input.document_id ?? ""),
-      },
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  const input = actionInput(body);
+  return runVaultAction(ctx, {
+    command: "core.unstar_document",
+    input: {
+      document_id: String(input.document_id ?? ""),
+    },
+  });
 }

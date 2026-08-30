@@ -1,11 +1,8 @@
 /*
- * Grants ride the ORDINARY replica plane (#825). There is no bespoke client
- * read for who a vault shares with: `share.grant` and `share.fulfillment` are
- * consent-shaped entities like any other, so an app the owner approved gets
- * them in its shape, with the same field masks, the same change log, and the
- * same denial behaviour — and an app the owner did not approve gets nothing,
- * which is what lets a surface say "we cannot see" rather than "shared with
- * nobody".
+ * Grants ride the ORDINARY replica plane (#825): `share.authority` and
+ * `share.fulfillment` are consent-shaped entities like any other. An
+ * unapproved app gets nothing, which is what lets a surface say "we cannot
+ * see" rather than "shared with nobody".
  */
 
 import crypto from "node:crypto";
@@ -54,7 +51,7 @@ describe("grant plane on the replica", () => {
     vault.approveGrant("people", {
       purpose: "dpv:ServiceProvision",
       scopes: [
-        { schema: "share", table: "grant", verbs: "read" },
+        { schema: "share", table: "authority", verbs: "read" },
         { schema: "share", table: "fulfillment", verbs: "read" },
       ],
     });
@@ -63,21 +60,66 @@ describe("grant plane on the replica", () => {
       rememberDevice: true,
       appId: "people",
     });
-    const grant = shape?.entityMap.get("share.grant");
+    // The plane's own column names: one table, one vocabulary (#883).
+    const grant = shape?.entityMap.get("share.authority");
     expect(grant?.columns).toStrictEqual(
       expect.arrayContaining<string>([
-        "grant_id",
-        "audience_kind",
-        "audience_id",
+        "authority_id",
+        "principal_kind",
+        "principal_id",
         "subject_type",
         "subject_id",
-        "capability",
+        "verb",
+        "decision",
         "revoked_at",
       ])
     );
     expect(shape?.entityMap.get("share.fulfillment")?.columns).toStrictEqual(
       expect.arrayContaining<string>(["grant_id", "peer_vault_id", "state"])
     );
+  });
+
+  /*
+   * THE SHIPPED MANIFEST UNBLOCKS IT (#883): the test above approves a
+   * hand-written scope, proving the machinery, not the product. Read off disk
+   * because a scope typed here would pass while the shipped one drifted.
+   */
+  test("People's SHIPPED manifest is what carries the authority plane to a seat", async () => {
+    const manifest = JSON.parse(
+      await fs.readFile(
+        new URL("../../../blueprints/apps/people/app.json", import.meta.url),
+        "utf8"
+      )
+    ) as {
+      vault: { purpose: string; scopes: { verbs: string }[] };
+    };
+    const vault = await plane();
+    vault.approveGrant("people", {
+      purpose: manifest.vault.purpose,
+      scopes: manifest.vault.scopes.filter((scope) =>
+        scope.verbs.includes("read")
+      ) as Parameters<typeof vault.approveGrant>[1]["scopes"],
+    });
+    const [shape] = buildReplicaShapes(vault.db.vault, {
+      canWrite: false,
+      rememberDevice: true,
+      appId: "people",
+    });
+    const authority = shape?.entityMap.get("share.authority");
+    expect(authority?.columns).toStrictEqual(
+      expect.arrayContaining<string>([
+        "authority_id",
+        "principal_kind",
+        "principal_id",
+        "verb",
+        "decision",
+        "granted_at",
+        "revoked_at",
+      ])
+    );
+    // Every principal kind rides the SAME shape: one lens over one table
+    // (V-dashboard), not four reads.
+    expect(authority?.primaryKey).toBe("authority_id");
   });
 
   test("an app the owner never approved for shares sees no grant entity at all", async () => {
@@ -91,8 +133,8 @@ describe("grant plane on the replica", () => {
       rememberDevice: true,
       appId: "people",
     });
-    // Absent from the shape, not present-and-empty: the client cannot tell
-    // itself a story about who this vault shares with.
-    expect(shape?.entityMap.has("share.grant")).toBe(false);
+    // Absent from the shape, not present-and-empty: no client can tell itself
+    // a story about who this vault shares with.
+    expect(shape?.entityMap.has("share.authority")).toBe(false);
   });
 });

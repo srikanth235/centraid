@@ -1,35 +1,24 @@
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
 /**
- * Add a document through core.add_document. Bytes arrive either STAGED
- * (#296: the app streamed them to /_vault/blobs and claims the sha
- * here — big files, text extracted server-side for search) or as a small
- * inline data: URI. Omit folder_id for the drive's top level; re-uploading
- * identical bytes restores them from trash and renames them. Risk low.
+ * Bytes arrive staged (#296) or as a small inline data: URI. Re-uploading
+ * identical bytes restores the deduped document from trash and renames it.
  */
 export default async function upload({ body, ctx }: HandlerArgs) {
-  const input = (body ?? {}) as Record<string, unknown>;
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "core.add_document",
-      input: {
-        ...(input.staged_sha == null
-          ? { data_uri: String(input.data_uri ?? "") }
-          : { staged_sha: String(input.staged_sha) }),
-        title: String(input.title ?? ""),
-        ...(input.folder_id == null
-          ? {}
-          : { folder_id: String(input.folder_id) }),
-        ...(input.extracted_text == null
-          ? {}
-          : { extracted_text: String(input.extracted_text) }),
-      },
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  const input = actionInput(body);
+  return runVaultAction(ctx, {
+    command: "core.add_document",
+    input: {
+      ...(input.staged_sha == null
+        ? { data_uri: String(input.data_uri ?? "") }
+        : { staged_sha: String(input.staged_sha) }),
+      title: String(input.title ?? ""),
+      ...(input.folder_id == null
+        ? {}
+        : { folder_id: String(input.folder_id) }),
+      ...(input.extracted_text == null
+        ? {}
+        : { extracted_text: String(input.extracted_text) }),
+    },
+  });
 }

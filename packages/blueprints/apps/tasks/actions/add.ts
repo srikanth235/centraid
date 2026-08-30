@@ -1,15 +1,12 @@
-/**
- * Add a task through the vault's typed command. The row lands in
- * schedule.task with provenance naming this invocation — this app stores
- * nothing. Optional fields are forwarded only when present, so the
- * command contract (additionalProperties: false) sees exactly what the
- * user set. Outcome passed through for the UI to narrate.
- */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
+/** Optional fields are forwarded only when present, so the command contract
+ *  (additionalProperties: false) sees exactly what the user set. */
 export default async function add({
   body,
   ctx,
 }: HandlerArgs): Promise<ActionResult> {
-  const raw = (body ?? {}) as Record<string, unknown>;
+  const raw = actionInput(body);
   const input: Record<string, unknown> = { title: String(raw.title ?? "") };
   if (raw.description) input.description = String(raw.description);
   if (raw.due_at) input.due_at = String(raw.due_at);
@@ -19,18 +16,5 @@ export default async function add({
   if (raw.rrule) input.rrule = String(raw.rrule);
   if (raw.remind_before_min != null)
     input.remind_before_min = Number(raw.remind_before_min);
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "schedule.add_task",
-      input,
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  return runVaultAction(ctx, { command: "schedule.add_task", input });
 }

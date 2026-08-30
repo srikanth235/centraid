@@ -67,9 +67,8 @@ describe("the phone's bottom row", () => {
   });
 
   test("the labels are the phone's short forms — the accessible name of every target", () => {
-    // The row does not DRAW these (the chip/capsule arrangement has nowhere to
-    // put a word without turning a 44 target into a 70 one), but every target
-    // takes its `accessibilityLabel` from this same field.
+    // The row does not DRAW these, but every target takes its
+    // `accessibilityLabel` from this field.
     expect(VIEWER_BOTTOM_ACTIONS.map((action) => action.label)).toStrictEqual([
       "Copy to another place",
       "Favorite",
@@ -97,9 +96,8 @@ describe("the bottom row's anatomy: chip · capsule · chip", () => {
   });
 
   test("the two ends are exactly the actions with consequences outside the photograph", () => {
-    // Copy to vault reaches outside this vault; Trash is the only destructive
-    // one. Everything in the middle changes this photograph and nothing else —
-    // that is what the grouping is FOR, so it is asserted, not left to the eye.
+    // The ends reach outside this photograph; the middle does not. That is
+    // what the grouping is FOR, so it is asserted, not left to the eye.
     const ends = VIEWER_BOTTOM_GROUPS.filter(
       (group) => group.shape === "chip"
     ).flatMap((group) => [...group.actions]);
@@ -256,8 +254,8 @@ describe("what the stage's one line says", () => {
   );
 
   test("a phone with nothing to fetch teaches the gestures", () => {
-    // Nothing else on the phone says a swipe pages, a pinch zooms or an upward
-    // drag opens the info — and none of those are discoverable by looking.
+    // None of these gestures are discoverable by looking, and nothing else
+    // says them.
     expect(
       viewerStatus({ bytes: onDevice, kind: "photo", scale: 1 })
     ).toStrictEqual({
@@ -365,6 +363,14 @@ describe("transports", () => {
     // truncating here would give the same file two durations.
     expect(formatMediaClock(24.6)).toBe("0:25");
     expect(formatMediaClock(-3)).toBe("0:00");
+  });
+
+  test("past an hour it says hours — `90:00` is not an hour (#883 B5)", () => {
+    // One file, one screen, one length: both the transport and the tile read
+    // this from `_shared/format-kit.ts`.
+    expect(formatMediaClock(3700)).toBe("1:01:40");
+    expect(formatMediaClock(3_904)).toBe("1:05:04");
+    expect(formatMediaClock(5400)).toBe("1:30:00");
   });
 });
 

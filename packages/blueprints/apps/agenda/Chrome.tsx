@@ -3,8 +3,13 @@
 // Everything variable arrives as a slot; `dayContext` is the day-context seam.
 import type { ReactNode } from "react";
 
-import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
-import { DENIED_TITLE, RAIL_CALENDARS, RAIL_DAY_CONTEXT } from "./view-copy.ts";
+import {
+  AskMount,
+  ConsentBanner,
+  NoticeBanner,
+} from "../_shared/AppChrome.tsx";
+import { chromeClass } from "../_shared/chrome-kit.ts";
+import { RAIL_CALENDARS, RAIL_DAY_CONTEXT } from "./view-copy.ts";
 
 import styles from "./Chrome.module.css";
 
@@ -31,14 +36,12 @@ export interface ChromeProps {
 }
 
 export function Chrome(props: ChromeProps): ReactNode {
-  const shellClass = [
+  const shellClass = chromeClass(
     styles.shell,
-    props.narrow ? styles.isNarrow : "",
-    props.ready ? styles.ready : "",
-    props.consent ? styles.denied : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+    props.narrow && styles.isNarrow,
+    props.ready && styles.ready,
+    props.consent && styles.denied
+  );
 
   return (
     <div
@@ -67,19 +70,12 @@ export function Chrome(props: ChromeProps): ReactNode {
 
       <main className={styles.main}>
         {props.consent ? (
-          // `id="consentBanner"` — refresh kit hook for denied→recovered (bypass focus throttle).
-          <div id="consentBanner" className={`kit-banner ${styles.banner}`}>
-            <strong>{DENIED_TITLE}</strong> <span>{props.consent.message}</span>
-            <VaultAccessButton />
-          </div>
+          <ConsentBanner
+            message={props.consent.message}
+            className={styles.banner}
+          />
         ) : null}
-        {/* Imperative writes from logic.ts — never reconcile this node. */}
-        <output
-          id="noticeBanner"
-          className={`kit-banner notice ${styles.banner}`}
-          aria-live="polite"
-          hidden
-        />
+        <NoticeBanner className={styles.banner} />
 
         {props.slots.searchField}
 
@@ -91,8 +87,7 @@ export function Chrome(props: ChromeProps): ReactNode {
           <div className={styles.canvas}>{props.slots.canvas}</div>
           {props.slots.detail}
         </div>
-        {/* kitAsk mount: without this node the descriptor config is unreachable. */}
-        <div className={styles.askMount} data-ask-mount />
+        <AskMount className={styles.askMount} />
       </main>
 
       {props.slots.overlays}

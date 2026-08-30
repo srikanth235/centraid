@@ -1,8 +1,7 @@
 /**
- * Grant sheet, native seat (#825). Audience-first (G-audience): person → what
- * → capability. Object-first is an ENTRY via `subject`, not a second sheet.
- * `edit` only where the subject registry answers it. Feedback is `onStatus`,
- * never a toast.
+ * Grant sheet, native seat (#825). Audience-first: person → what → capability.
+ * Object-first is an ENTRY via `subject`, not a second sheet. Feedback is
+ * `onStatus`, never a toast.
  */
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -10,11 +9,14 @@ import { Modal, Pressable, ScrollView, View } from "react-native";
 
 import { NOBODY_TO_SHARE_WITH } from "@centraid/blueprints/apps/_shared/grant-audiences";
 import {
+  accessChangedOutcome,
   alreadyGrantedOutcome,
   audienceNotKnown,
+  CHANGE_ACCESS_ACTION,
+  CHANGE_ACCESS_CANCEL_ACTION,
   capabilityLabel,
-  capabilityUnchangedOutcome,
-  deliveryLabel,
+  changeAccessConfirmBody,
+  changeAccessConfirmTitle,
   GRANT_SHEET_TITLE,
   GRANTS_UNREACHABLE,
   GRANTS_UNREADABLE,
@@ -25,7 +27,10 @@ import {
   reachNote,
   REGISTRY_UNREACHABLE,
   REGISTRY_UNREADABLE,
+  REVOKE_CANCEL_ACTION,
   REVOKE_CONFIRM_ACTION,
+  revokeConfirmBody,
+  revokeConfirmTitle,
   subjectNotOfferable,
 } from "@centraid/blueprints/apps/_shared/grant-copy";
 import { isGrantUnreachable } from "@centraid/blueprints/apps/_shared/grant-door";
@@ -38,7 +43,6 @@ import {
   channelReach,
   defaultCapability,
   drawableCapability,
-  grantDelivery,
   grantOverSubject,
   grantRequestFor,
   liveGrants,
@@ -53,12 +57,19 @@ import type {
 } from "@centraid/blueprints/apps/_shared/grant-plane";
 
 import { Text } from "../components/NativeText";
+import Tappable from "../components/Tappable";
 import TopSafeArea from "../components/TopSafeArea";
 import { useReplica } from "../replica/ReplicaProvider";
 import { useTheme } from "../theme";
-import { nativeGrantDoor } from "./grants-transport";
+import { nativeGrantDoor } from "./grant-seat";
+import {
+  audienceLabelFor,
+  subjectKey,
+  subjectTitle,
+} from "./grant-sheet-labels";
 import { styles } from "./GrantSheet.styles";
 import { GrantSheetConfirm } from "./GrantSheetConfirm";
+import { GrantSheetStanding } from "./GrantSheetStanding";
 
 export interface GrantSheetProps {
   visible: boolean;
@@ -72,28 +83,6 @@ export interface GrantSheetProps {
   door?: GrantDoor;
 }
 
-function subjectKey(subject: GrantSubject): string {
-  return `${subject.subjectType}:${subject.subjectId}`;
-}
-
-function subjectTitle(subject: GrantSubject): string {
-  return subject.label?.trim()
-    ? subject.label.trim()
-    : subjectNoun(subject.subjectType);
-}
-
-function audienceLabelFor(
-  grant: GrantRecord,
-  audiences: readonly GrantAudienceOption[]
-): string {
-  const match = audiences.find(
-    (option) =>
-      option.kind === grant.audience.kind && option.id === grant.audience.id
-  );
-  if (match) return match.label;
-  return grant.audience.kind === "circle" ? "a named group" : "this person";
-}
-
 export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
   const { colors } = useTheme();
   const replica = useReplica();
@@ -103,19 +92,20 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     [props.door, gatewayBase]
   );
 
-  // `null` = unread. Empty registry is "cannot be shared" — do not paint that early.
+  // `null` = unread; an empty registry is a claim, so do not paint it early.
   const [registry, setRegistry] = useState<SubjectRegistry | null>(null);
   const [audienceId, setAudienceId] = useState(props.audienceId ?? "");
   const [subjectId, setSubjectId] = useState("");
   // `null` = unchosen; capability is derived at render, not in an effect.
   const [picked, setPicked] = useState<GrantCapability | null>(null);
   const [standing, setStanding] = useState<GrantRecord[] | null>(null);
-  // `undefined` until a read answers. `null` would paint "Not reached yet" for one frame.
+  // `undefined` until a read answers; `null` paints a claim for one frame.
   const [channel, setChannel] = useState<GrantChannel>(undefined);
   const [audienceKnown, setAudienceKnown] = useState(true);
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<GrantRecord | null>(null);
+  const [changeConfirm, setChangeConfirm] = useState(false);
 
   const audience =
     props.audiences.find((option) => option.id === audienceId) ??
@@ -124,13 +114,13 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
   const subject =
     offered.find((candidate) => subjectKey(candidate) === subjectId) ??
     offered[0];
-  // Effect keys, not objects — a rebuilt roster array must not re-read every render.
+  // Effect keys, not objects: a rebuilt array must not re-read every render.
   const audienceKey = audience?.id ?? "";
   const audienceKind = audience?.kind ?? "party";
   const pinnedType = props.subject?.subjectType ?? "";
   const pinnedId = props.subject?.subjectId ?? "";
 
-  // Reset + registry read deferred off the effect body — sync setState would cascade.
+  // Deferred off the effect body: sync setState would cascade.
   useEffect(() => {
     if (!props.visible) return;
     let active = true;
@@ -139,6 +129,7 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
       setBusy(false);
       setRefusal(null);
       setConfirming(null);
+      setChangeConfirm(false);
       setPicked(null);
       setAudienceId(props.audienceId ?? "");
       setSubjectId("");
@@ -151,8 +142,8 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     };
   }, [props.visible, props.audienceId, door]);
 
-  // Reach is about the person, not the door. Object-first still names
-  // someone, so it still owes a reach read (`forSubject` cannot answer one).
+  // Reach is about the person, not the door, and `forSubject` cannot answer
+  // one — so object-first still owes a reach read.
   useEffect(() => {
     if (!props.visible) return;
     if (!pinnedType && !audienceKey) return;
@@ -209,8 +200,8 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     };
   }, [props.visible, pinnedType, pinnedId, audienceKind, audienceKey, door]);
 
-  // Open on the standing capability — do not propose a downgrade or a widen.
-  // Derived at render; an effect writing it back would be a second source of truth.
+  // Open on the standing capability: never propose a change.
+  // Derived at render; an effect writing it back is a second truth.
   const alreadyStanding =
     subject && standing
       ? grantOverSubject(
@@ -223,13 +214,13 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
   const capabilities = subject
     ? capabilitiesFor(registry?.offers ?? [], subject.subjectType)
     : [];
-  // Clamp to drawable: a standing `edit` the registry narrowed must not be posted.
+  // Clamp to drawable: a narrowed standing `edit` must not be posted.
   const capability = drawableCapability(
     capabilities,
     picked ?? defaultCapability(alreadyStanding)
   );
   const noun = subject ? subjectNoun(subject.subjectType) : "shared item";
-  // Unread, empty-for-subject, refused, unreachable. Only the second refuses.
+  // Of unread, empty, refused and unreachable, only empty refuses.
   const registryPending = registry === null;
   const registryProblem =
     registry !== null && !registry.readable
@@ -247,7 +238,7 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     ? groupContributionNote(subject.subjectType, capability)
     : null;
   const rows = standing ? liveGrants(standing) : [];
-  // Unknown audience gets its own sentence — "nothing shared" is a lie.
+  // Unknown audience gets its own sentence; "nothing shared" is a lie.
   const standingEmptyLine = audienceKnown
     ? nothingSharedYet(
         props.subject
@@ -257,6 +248,11 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     : audienceNotKnown(audience?.label ?? "this audience");
   const showStanding = audienceKnown && rows.length > 0;
   const reach = channelReach(channel);
+  // The standing answer this submit REPLACES; same verb is not a change.
+  const changing =
+    alreadyStanding && alreadyStanding.capability !== capability
+      ? alreadyStanding
+      : undefined;
   const blocked =
     !audience ||
     !subject ||
@@ -267,6 +263,12 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
 
   const submit = async (): Promise<void> => {
     if (!audience || !subject || blocked) return;
+    // Another verb cannot be widened or narrowed in place (V-table), and the
+    // change costs the audience their copy while it runs. Ask first.
+    if (changing) {
+      setChangeConfirm(true);
+      return;
+    }
     setBusy(true);
     setRefusal(null);
     const outcome = await door.create(
@@ -277,12 +279,39 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
       setRefusal(outcome.message);
       return;
     }
+    // A HELD share is not a granted one (#883): the granted sentence would
+    // claim an audience can see something no vault was asked about.
     props.onStatus(
-      outcome.outcome === "exists_other_capability"
-        ? capabilityUnchangedOutcome(audience.label, outcome.standing)
+      outcome.outcome === "awaiting_confirmation" ||
+        outcome.outcome === "queued"
+        ? outcome.message
         : outcome.outcome === "exists"
           ? alreadyGrantedOutcome(audience.label)
           : grantedOutcome(audience.label, capability)
+    );
+    props.onClose();
+  };
+
+  /** Withdraw, then grant again — the plane's only way to change an answer. */
+  const changeAccess = async (): Promise<void> => {
+    if (!audience || !subject || !changing) return;
+    setBusy(true);
+    setRefusal(null);
+    const outcome = await door.changeCapability(
+      changing.grantId,
+      grantRequestFor(audience, subject, capability)
+    );
+    setBusy(false);
+    setChangeConfirm(false);
+    if (!outcome.ok) {
+      setRefusal(outcome.message);
+      return;
+    }
+    props.onStatus(
+      outcome.outcome === "awaiting_confirmation" ||
+        outcome.outcome === "queued"
+        ? outcome.message
+        : accessChangedOutcome(audience.label, capability)
     );
     props.onClose();
   };
@@ -292,7 +321,7 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     const outcome = await door.revoke(grant.grantId);
     setBusy(false);
     setConfirming(null);
-    // Route sentence, verbatim — nothing here may soften it.
+    // Route sentence, verbatim: never soften it.
     props.onStatus(outcome.message);
     if (outcome.ok)
       setStanding((current) =>
@@ -325,12 +354,29 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
 
   const confirmView = confirming ? (
     <GrantSheetConfirm
-      audienceLabel={audienceLabelFor(confirming, props.audiences)}
+      body={revokeConfirmBody(
+        audienceLabelFor(confirming, props.audiences),
+        subjectNoun(confirming.subjectType)
+      )}
       busy={busy}
+      cancelLabel={REVOKE_CANCEL_ACTION}
       colors={colors}
+      confirmLabel={REVOKE_CONFIRM_ACTION}
+      destructive
       onCancel={() => setConfirming(null)}
       onConfirm={() => void revoke(confirming)}
-      subjectNoun={subjectNoun(confirming.subjectType)}
+      title={revokeConfirmTitle(audienceLabelFor(confirming, props.audiences))}
+    />
+  ) : changeConfirm && changing && audience ? (
+    <GrantSheetConfirm
+      body={changeAccessConfirmBody(subjectNoun(changing.subjectType))}
+      busy={busy}
+      cancelLabel={CHANGE_ACCESS_CANCEL_ACTION}
+      colors={colors}
+      confirmLabel={CHANGE_ACCESS_ACTION}
+      onCancel={() => setChangeConfirm(false)}
+      onConfirm={() => void changeAccess()}
+      title={changeAccessConfirmTitle(audience.label, capability)}
     />
   ) : null;
 
@@ -346,9 +392,9 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
           <Text style={[styles.title, { color: colors.text }]}>
             {GRANT_SHEET_TITLE}
           </Text>
-          <Pressable accessibilityRole="button" onPress={props.onClose}>
+          <Tappable accessibilityLabel="Cancel" onPress={props.onClose}>
             <Text style={{ color: colors.accent }}>Cancel</Text>
-          </Pressable>
+          </Tappable>
         </View>
 
         {confirmView ?? (
@@ -469,62 +515,17 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
                 ) : null}
               </View>
 
-              <View style={styles.section}>
-                <Text style={[styles.eyebrow, { color: colors.textSoft }]}>
-                  Already shared
-                </Text>
-                {standing === null ? (
-                  <Text style={[styles.note, { color: colors.textSoft }]}>
-                    Reading shares…
-                  </Text>
-                ) : showStanding ? (
-                  rows.map((grant) => (
-                    <View
-                      key={grant.grantId}
-                      style={[styles.row, { borderColor: colors.line }]}
-                    >
-                      <View style={styles.rowCopy}>
-                        <Text style={{ color: colors.text }}>
-                          {props.subject
-                            ? audienceLabelFor(grant, props.audiences)
-                            : subjectNoun(grant.subjectType)}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.note,
-                            {
-                              color:
-                                grantDelivery(grant) === "delivered" ||
-                                grantDelivery(grant) === "removed"
-                                  ? colors.textSoft
-                                  : colors.seam,
-                            },
-                          ]}
-                        >
-                          {capabilityLabel(grant.capability)} ·{" "}
-                          {deliveryLabel(grantDelivery(grant))}
-                        </Text>
-                      </View>
-                      <Pressable
-                        accessibilityLabel={`Revoke ${subjectNoun(grant.subjectType)}`}
-                        accessibilityRole="button"
-                        accessibilityState={{ disabled: busy }}
-                        disabled={busy}
-                        onPress={() => setConfirming(grant)}
-                        style={[styles.pill, { borderColor: colors.net }]}
-                      >
-                        <Text style={{ color: colors.net }}>
-                          {REVOKE_CONFIRM_ACTION}
-                        </Text>
-                      </Pressable>
-                    </View>
-                  ))
-                ) : (
-                  <Text style={[styles.note, { color: colors.textSoft }]}>
-                    {standingEmptyLine}
-                  </Text>
-                )}
-              </View>
+              <GrantSheetStanding
+                audiences={props.audiences}
+                busy={busy}
+                colors={colors}
+                emptyLine={standingEmptyLine}
+                onRevoke={setConfirming}
+                rows={rows}
+                showStanding={showStanding}
+                standing={standing}
+                subject={props.subject}
+              />
 
               {refusal ? (
                 <Text style={[styles.note, { color: colors.net }]}>
@@ -547,7 +548,11 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
                 ]}
               >
                 <Text style={{ color: colors.textInv }}>
-                  {busy ? "Sharing…" : GRANT_SHEET_TITLE}
+                  {busy
+                    ? "Sharing…"
+                    : changing
+                      ? CHANGE_ACCESS_ACTION
+                      : GRANT_SHEET_TITLE}
                 </Text>
               </Pressable>
             </View>

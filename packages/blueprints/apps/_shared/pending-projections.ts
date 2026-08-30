@@ -1,11 +1,11 @@
-import agenda from "../agenda/pending-projection.js";
-import docs from "../docs/pending-projection.js";
-import locker from "../locker/pending-projection.js";
-import notes from "../notes/pending-projection.js";
-import people from "../people/pending-projection.js";
-import photos from "../photos/pending-projection.js";
-import tally from "../tally/pending-projection.js";
-import tasks from "../tasks/pending-projection.js";
+import { agendaPendingProjection as agenda } from "../agenda/pending-projection.js";
+import { docsPendingProjection as docs } from "../docs/pending-projection.js";
+import { lockerPendingProjection as locker } from "../locker/pending-projection.js";
+import { notesPendingProjection as notes } from "../notes/pending-projection.js";
+import { peoplePendingProjection as people } from "../people/pending-projection.js";
+import { photosPendingProjection as photos } from "../photos/pending-projection.js";
+import { tallyPendingProjection as tally } from "../tally/pending-projection.js";
+import { tasksPendingProjection as tasks } from "../tasks/pending-projection.js";
 import type { PendingProjectionDeclaration } from "./pending-overlay.js";
 
 const DECLARATIONS = new Map<string, PendingProjectionDeclaration>(

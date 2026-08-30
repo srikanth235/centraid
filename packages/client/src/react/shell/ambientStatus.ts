@@ -1,3 +1,5 @@
+import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
+
 import type { ShellRoute } from "../../app-shell-context.js";
 // The shell's standing status sentence (#707, invariant 5). "unknown" never
 // resolves to "Ready": that is what the line shows when all is fine but idle,
@@ -24,8 +26,6 @@ export interface AmbientSignal {
   copy: string;
   action?: { label: string; route: ShellRoute };
 }
-
-const DAY = 86_400_000;
 
 function ageLabel(at: number | undefined, now: number): string | undefined {
   if (at === undefined) return undefined;
@@ -73,8 +73,8 @@ export function ambientSignalFor(input: AmbientSignalInput): AmbientSignal {
 
   const backupAge =
     input.lastBackupAt === undefined ? undefined : now - input.lastBackupAt;
-  if (backupAge !== undefined && backupAge >= 2 * DAY) {
-    const days = Math.floor(backupAge / DAY);
+  if (backupAge !== undefined && backupAge >= 2 * DAY_MS) {
+    const days = Math.floor(backupAge / DAY_MS);
     const copy = `Backup overdue by ${days} ${days === 1 ? "day" : "days"}`;
     return seat === "viewer"
       ? { copy, tone: "attention" }

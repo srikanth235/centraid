@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import { parseLociBody } from "../../access-lens.js";
 import { DEVICES_EMPTY_BODY, DEVICES_EMPTY_TITLE } from "../../devices-copy.js";
 import type {
   CentraidGatewayDevice,
@@ -10,6 +11,7 @@ import type {
 } from "../../gateway-client.js";
 import type { OpsState } from "../shell/opsBar.js";
 import type { OwnerScope } from "../shell/ownerScope.js";
+import { accessRegistryReader } from "../shell/routes/settingsAccessData.js";
 import { startVisibilityTicker } from "../shell/routes/visibility-ticker.js";
 import {
   clearRouteSignals,
@@ -38,8 +40,7 @@ import styles from "./HouseholdScreen.module.css";
 // Devices (#599, #726) — which machines hold a copy of this vault, and whose.
 // Identity (title, count, verbs, health) is published to the frame via
 // `routeVitals`; nothing here draws its own header. "Other gateways" and
-// nominee recovery are non-goals: this product has vault-to-vault links and
-// shared-space steward recovery (#726 D3).
+// nominee recovery are non-goals (#726).
 
 const NO_DEVICES = async (): Promise<CentraidGatewayDevice[]> => [];
 const NO_REVOKE = async (): Promise<{ removed: boolean }> => ({
@@ -245,11 +246,28 @@ export default function HouseholdScreen(
       ? { onUpdateCompute: props.onUpdateDeviceCompute }
       : {}),
   });
+  /* What a revoke here can promise is the vault's own boundary sentence, read
+     from the grant registry; unread, it is simply not said (#883). */
+  const [boundaryPromise, setBoundaryPromise] = useState<string>("");
+  useEffect(() => {
+    if (!hasRoster) return undefined;
+    let cancelled = false;
+    void accessRegistryReader()
+      .then((registry) => registry.subjects())
+      .then((body) => {
+        if (!cancelled) setBoundaryPromise(parseLociBody(body).boundary ?? "");
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [hasRoster]);
+
   const ownVaultIds = useMemo(() => vaults.map((vault) => vault.id), [vaults]);
   const requests = usePendingRequests(sharing, ownVaultIds);
 
-  // A consent surface's healthy first state, not a failure; no device plane at
-  // all is a different sentence, said below.
+  // A consent surface's healthy first state, not a failure; no device plane is
+  // a different sentence, said below.
   const onlyThisDevice =
     roster.deviceCount === 0 ||
     (roster.deviceCount === 1 && roster.self?.devices[0]?.current === true);
@@ -444,6 +462,7 @@ export default function HouseholdScreen(
       {hasRoster && state !== "loading" && state !== "error" ? (
         <DevicesCard
           now={now}
+          {...(boundaryPromise ? { boundaryPromise } : {})}
           onPairingChange={setPairing}
           pairing={pairing}
           roster={roster}

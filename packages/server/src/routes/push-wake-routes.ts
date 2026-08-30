@@ -3,6 +3,7 @@ import type { IncomingMessage } from "node:http";
 import { AUTHED_DEVICE_HEADER } from "@centraid/server/engine";
 import { subscribeReplicaCommits } from "@centraid/vault";
 
+import { unrefTimer } from "../lib/unref-timer.js";
 import { assertPublicPushEndpoint } from "../push/endpoint-guard.js";
 import { createWebPushSender } from "../push/web-push.js";
 import type { WebPushSender } from "../push/web-push.js";
@@ -214,7 +215,7 @@ export class PushWakeRelay {
       this.#timers.delete(vaultId);
       void this.wake(vaultId);
     }, 10_000);
-    timer.unref?.();
+    unrefTimer(timer);
     this.#timers.set(vaultId, timer);
   }
 
@@ -229,7 +230,7 @@ export class PushWakeRelay {
       this.#dueArmTimers.delete(vaultId);
       this.armDue(plane);
     }, 10_000);
-    timer.unref?.();
+    unrefTimer(timer);
     this.#dueArmTimers.set(vaultId, timer);
   }
 
@@ -268,7 +269,7 @@ export class PushWakeRelay {
       this.#dueTimers.delete(vaultId);
       this.armDue(plane);
     }, delay);
-    timer.unref?.();
+    unrefTimer(timer);
     this.#dueTimers.set(vaultId, timer);
   }
 

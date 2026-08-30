@@ -28,6 +28,15 @@
 
 /* ---------- The item row (§5) ---------- */
 
+/* A WINDOWED LIST IS A REAL `<ul>` (Windowed.tsx), which needs the browser's
+   own marker and indent taken off it — the rows carry the whole rhythm and a
+   bullet column would shift every one of them. */
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
 .rowWrap {
   border-block-end: 1px solid var(--line);
 }
@@ -468,20 +477,6 @@
   align-items: center;
   padding-block: var(--sp-3) var(--sp-1);
   max-inline-size: 520px;
-}
-
-/* One row of the More sheet: the surface's name and what it is for. */
-.moreRow {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-hair);
-  min-block-size: var(--density-row);
-  inline-size: 100%;
-  text-align: start;
-  background: none;
-  border: 0;
-  border-block-end: 1px solid var(--line);
-  padding: 0;
 }
 
 /* ---------- The lock and first-run gates ---------- */

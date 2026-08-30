@@ -41,7 +41,7 @@ describe("parties", () => {
     return (outcome as { output: { party_id: string } }).output.party_id;
   }
 
-  test("add_party mints a person with identifiers, first per scheme primary", () => {
+  test("add_party mints a person; reach binds as channels, first per kind preferred", () => {
     const partyId = addParty({
       display_name: "Ravi Kumar",
       sort_name: "Kumar, Ravi",
@@ -59,18 +59,48 @@ describe("parties", () => {
       display_name: "Ravi Kumar",
       sort_name: "Kumar, Ravi",
     });
-    const ids = db.vault
+    // Email and phone are REACH and land on `social_contact_channel` (#883);
+    // the first of a kind claims the preferred slot.
+    const channels = db.vault
       .prepare(
-        "SELECT scheme, value, is_primary FROM core_party_identifier WHERE party_id = ? ORDER BY scheme, is_primary DESC"
+        `SELECT kind, value, normalized_value, is_preferred
+           FROM social_contact_channel WHERE party_id = ?
+          ORDER BY kind, is_preferred DESC, normalized_value`
       )
-      .all(partyId) as { scheme: string; value: string; is_primary: number }[];
-    expect(ids).toHaveLength(3);
+      .all(partyId) as {
+      kind: string;
+      value: string;
+      normalized_value: string;
+      is_preferred: number;
+    }[];
+    expect(channels.map((row) => ({ ...row }))).toStrictEqual([
+      {
+        kind: "email",
+        value: "ravi@example.com",
+        normalized_value: "ravi@example.com",
+        is_preferred: 1,
+      },
+      {
+        kind: "email",
+        value: "ravi@home.example",
+        normalized_value: "ravi@home.example",
+        is_preferred: 0,
+      },
+      {
+        kind: "phone",
+        value: "+91-98-0000-0000",
+        normalized_value: "+919800000000",
+        is_preferred: 1,
+      },
+    ]);
+    // Nothing landed in the register: none of these is a key.
     expect(
-      ids.filter((i) => i.scheme === "email" && i.is_primary === 1)
-    ).toHaveLength(1);
-    expect(
-      ids.filter((i) => i.scheme === "tel" && i.is_primary === 1)
-    ).toHaveLength(1);
+      db.vault
+        .prepare(
+          "SELECT count(*) AS n FROM core_party_identifier WHERE party_id = ?"
+        )
+        .get(partyId)
+    ).toMatchObject({ n: 0 });
   });
 
   test("add_party defaults to kind person and no identifiers", () => {
@@ -95,7 +125,7 @@ describe("parties", () => {
     expect(outcome.status).toBe("failed");
     assert(outcome.status === "failed");
     expect(outcome.reason).toContain("already identifies");
-    // The refusal left no half-created party behind (transactional).
+    // The refusal left no half-created party behind.
     const count = db.vault
       .prepare(
         `SELECT count(*) AS n FROM core_party WHERE display_name = 'A Second Ravi'`
@@ -126,11 +156,8 @@ describe("parties", () => {
     };
     expect(party.display_name).toBe("Ravi Kumar");
     expect(party.birth_date).toBe("1988-04-12");
-    // updated_at is an ISO-8601 string; toBeGreaterThanOrEqual asserts its
-    // operands are number/bigint and throws on strings, so the comparison is
-    // named here and the boolean is what gets asserted (ISO-8601 sorts
-    // chronologically). The second expect() argument is the message printed on
-    // failure, so it names both operands.
+    // `toBeGreaterThanOrEqual` throws on strings, so the ISO-8601 comparison
+    // is made here and the boolean asserted.
     const stampNotRewound = party.updated_at >= before.updated_at;
     expect(stampNotRewound, `${party.updated_at} >= ${before.updated_at}`).toBe(
       true
