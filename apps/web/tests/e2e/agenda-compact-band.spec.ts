@@ -150,7 +150,12 @@ async function bundle(
         REPO_ROOT,
         "packages/design/src/elements/index.ts"
       ),
+      "@centraid/blueprints/apps/_shared/format-kit": path.join(
+        REPO_ROOT,
+        "packages/blueprints/apps/_shared/format-kit.ts"
+      ),
     },
+    loader: { ".module.css": "local-css" },
     bundle: true,
     define: { "process.env.NODE_ENV": '"production"' },
     format: "iife",

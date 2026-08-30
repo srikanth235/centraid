@@ -7,6 +7,28 @@ import { defineConfig } from "vite";
 const fromHere = (p: string): string =>
   fileURLToPath(new URL(p, import.meta.url));
 
+// Exact `.tsx` descriptors: the package `./apps/*` map is `*.ts`, and the
+// client tsconfig stub has no runtime default. A miss loads `undefined` and
+// the inline host dies on `descriptor.queries`.
+const INLINE_APPS = [
+  "agenda",
+  "docs",
+  "locker",
+  "notes",
+  "people",
+  "photos",
+  "tally",
+  "tasks",
+] as const;
+
+const blueprintInlineAliases = INLINE_APPS.map((app) => ({
+  find: new RegExp(
+    `^@centraid\\/blueprints\\/apps\\/${app}\\/app-inline$`,
+    "u"
+  ),
+  replacement: fromHere(`../../packages/blueprints/apps/${app}/app-inline.tsx`),
+}));
+
 export default defineConfig({
   // file:// shell: default `base: '/'` resolved the replica sqlite worker to `file:///assets/…` and it never started.
   base: "./",
@@ -20,6 +42,7 @@ export default defineConfig({
           "../../packages/blueprints/apps/_shared/format-kit.ts"
         ),
       },
+      ...blueprintInlineAliases,
       {
         // Subpath, never the barrel: the design root export is reachable from Expo and must stay DOM-free.
         find: /^@centraid\/design\/elements$/u,

@@ -2181,6 +2181,14 @@ Round after `5924b7f82` (required CI red on that squash):
   fixture with `holidays`, crash boundary, host default-view applied once,
   band tab lights immediately.
 
+- Web/desktop e2e: first-party open died on
+  `Cannot read properties of undefined (reading 'queries')`. The
+  `#883` `package.json` `./apps/*` → `*.ts` map missed `app-inline.tsx`,
+  so the lazy import resolved without a default descriptor. Exact
+  `.tsx` exports plus Vite aliases; `packages/client/src/react/shell/routes/InlineAppRoute.tsx`
+  now refuses a missing default instead of reading `.queries` on
+  `undefined`; compact-band esbuild also maps format-kit and CSS modules.
+
 ### Decisions
 
 - #883 re-pins governed fingerprints after Grants v2 + ontology consolidation. `packages/vault/src/schema/sealed.ts`: ruling D4c makes `SEALED_PAYLOAD_FIELDS` DERIVE from `SEALED_COLUMNS` instead of restating it by hand — the derived set is a strict SUPERSET of the hand list, so no staged key lost protection. `packages/server/src/automation/manifest/manifest.ts`: a JSDoc example named `business.invoice` becomes `schedule.task` after ruling O-domains. `tests/matrix.json` whole-file fingerprint moves because the ledger gained the select-all law, action-kit and concept-scheme engine rows, and L3/R2 demonstrated-red seeds now name rung-7 epoch sweeps and compacted replica sabotage; no quality lost a gate, the vault-search floor drop of 19→18 is the one retired `home.asset_item` surface with its own `approvedMinimumTestsDeviation`, and no waiver, budget or allowlist was widened to make anything green.
@@ -3120,3 +3128,4 @@ Every path in this change set, named for receipt-per-issue file coverage.
 - `tests/schema-export-fingerprint.json`
 - `tests/suite-wall-clock.json`
 - `tests/tsconfig.json`
+- `packages/client/src/react/shell/routes/InlineAppRoute.tsx`

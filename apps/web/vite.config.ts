@@ -11,6 +11,28 @@ import { fontFilePath } from "@centraid/design/fonts";
 const fromHere = (path: string): string =>
   fileURLToPath(new URL(path, import.meta.url));
 
+// Exact `.tsx` descriptors: the package `./apps/*` map is `*.ts`, and the
+// client tsconfig stub has no runtime default. A miss loads `undefined` and
+// the inline host dies on `descriptor.queries`.
+const INLINE_APPS = [
+  "agenda",
+  "docs",
+  "locker",
+  "notes",
+  "people",
+  "photos",
+  "tally",
+  "tasks",
+] as const;
+
+const blueprintInlineAliases = INLINE_APPS.map((app) => ({
+  find: new RegExp(
+    `^@centraid\\/blueprints\\/apps\\/${app}\\/app-inline$`,
+    "u"
+  ),
+  replacement: fromHere(`../../packages/blueprints/apps/${app}/app-inline.tsx`),
+}));
+
 const appVersion = JSON.parse(readFileSync(fromHere("./package.json"), "utf8"))
   .version as string;
 
@@ -108,6 +130,7 @@ export default defineConfig({
           "../../packages/blueprints/apps/_shared/format-kit.ts"
         ),
       },
+      ...blueprintInlineAliases,
       {
         find: "@centraid/client",
         replacement: fromHere("../../packages/client/src"),
