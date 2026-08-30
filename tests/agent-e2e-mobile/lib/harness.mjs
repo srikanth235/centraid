@@ -117,6 +117,11 @@ export const CONFIRM_SYSTEM_OPEN = `# iOS system confirmation for a custom-schem
 // accessibility driver before the workflow's outer timeout destroys evidence.
 const MAESTRO_CHUNK_TIMEOUT_MS = 12 * 60_000;
 const COMMAND_TIMEOUT_MS = 30_000;
+// CoreSimulator can take longer than the ordinary command budget while its
+// launchd service is waking or several hosted jobs are booting devices at
+// once. Keep the timeout bounded, but do not turn a slow simulator query into
+// a false "no device" setup failure.
+const XCRUN_TIMEOUT_MS = 90_000;
 const MAX_COMMAND_OUTPUT_BYTES = 1024 * 1024;
 const MAESTRO_DRIVER_STARTUP_TIMEOUT_MS = 180_000;
 const DETACHED = process.platform !== "win32";
@@ -183,13 +188,11 @@ function spawnText(
 // Pick the first booted iOS Simulator. Real-device support comes later
 // (Maestro takes --device for that; the seed/install story is different).
 async function bootedIosSim() {
-  const out = await spawnText("xcrun", [
-    "simctl",
-    "list",
-    "devices",
-    "booted",
-    "--json",
-  ]);
+  const out = await spawnText(
+    "xcrun",
+    ["simctl", "list", "devices", "booted", "--json"],
+    { timeoutMs: XCRUN_TIMEOUT_MS }
+  );
   const data = JSON.parse(out);
   const preferred =
     process.env.MAESTRO_DEVICE_UDID ?? process.env.SIMULATOR_UDID;
@@ -250,13 +253,11 @@ async function bootedDevice() {
 async function appInstalled(device, appId) {
   if (device.platform === "ios") {
     try {
-      await spawnText("xcrun", [
-        "simctl",
-        "get_app_container",
-        device.udid,
-        appId,
-        "app",
-      ]);
+      await spawnText(
+        "xcrun",
+        ["simctl", "get_app_container", device.udid, appId, "app"],
+        { timeoutMs: XCRUN_TIMEOUT_MS }
+      );
       return true;
     } catch {
       return false;
