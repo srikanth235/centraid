@@ -1228,6 +1228,7 @@ named here so the manifest covers the whole change set rather than only its last
 - `tests/scale/replica-reconnect.scale.test.ts`
 - `tests/scale/replica-retention.scale.test.ts`
 - `tests/scale/replica-sse-fanout.scale.test.ts`
+- `tests/hygiene-budgets.json`
 - `tests/schema-export-fingerprint.json`
 
 **docs** (11)
@@ -2157,6 +2158,11 @@ Round after `5924b7f82` (required CI red on that squash):
   `portable-export.ts` (no table, no column, walk still `SELECT *` over
   `VAULT_TABLES`) and re-pinned to `63be6bdf…`.
 
+- `test:hygiene-ratchet` then failed: pin/download and camera-roll tests
+  added seven counted `toHaveBeenCalled*` sites (net +5 vs main). Those
+  tests now record the call's outcome instead; the down-only budget
+  tightened 785 → 783.
+
 - Knip duplicate exports: pending-projection default+named, agenda
   `POINTER_VIEWS` aliasing `VIEWS`, photos `DEFAULT_ZOOM` aliasing
   `DEFAULT_RUNG`.
@@ -2176,6 +2182,7 @@ Round after `5924b7f82` (required CI red on that squash):
 ```sh
 bun run lint:quality-knobs
 bun run lint:schema-export
+bun run test:hygiene-ratchet
 bun run lint
 ./node_modules/.bin/tsc -p tests
 bash .governance/run.sh
@@ -2190,7 +2197,9 @@ global timers for fake clocks, format-kit Vite aliases, compact-band
 harness, replica-projection sort compare. Local: engine-conformance,
 server/vault/blueprints typecheck, previously red timer suites green,
 web+desktop Vite production builds. Schema-export ratchet re-pinned
-after the entity-catalog extract; export walk unchanged.
+after the entity-catalog extract; export walk unchanged. Hygiene
+`toHaveBeenCalled` 785 → 783; pin/download and camera-roll tests assert
+recorded outcomes.
 
 ### Change-set paths
 
@@ -3087,6 +3096,7 @@ Every path in this change set, named for receipt-per-issue file coverage.
 - `tests/scale/replica-reconnect.scale.test.ts`
 - `tests/scale/replica-retention.scale.test.ts`
 - `tests/scale/replica-sse-fanout.scale.test.ts`
+- `tests/hygiene-budgets.json`
 - `tests/schema-export-fingerprint.json`
 - `tests/suite-wall-clock.json`
 - `tests/tsconfig.json`

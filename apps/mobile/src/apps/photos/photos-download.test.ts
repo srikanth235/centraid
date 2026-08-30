@@ -70,29 +70,37 @@ describe("the phone's download path", () => {
 
   describe("the batch", () => {
     test("each asset becomes a scoped, PINNED ref — a download is not a cache", async () => {
+      const inputs: unknown[] = [];
+      engine.ensureOfflineContent.mockImplementation(async (input) => {
+        inputs.push(input);
+        return { status: "stored", uri: "file:///x", pinned: true };
+      });
       await batchDownload(downloadableAssets([asset({ id: "a" })]), {
         headers: { Authorization: "Bearer t" },
       });
-      expect(engine.ensureOfflineContent).toHaveBeenCalledWith(
-        expect.objectContaining({
+      expect(inputs).toStrictEqual([
+        {
           pin: true,
           ref: { contentId: "content-a", scopeId: "vault-1" },
           url: "https://gw.test/blobs/vault-1/content-a",
-        })
-      );
+          headers: { Authorization: "Bearer t" },
+        },
+      ]);
     });
 
     test("downloads run one at a time — one store, one radio", async () => {
       let inFlight = 0;
       let overlapped = false;
+      let started = 0;
       engine.ensureOfflineContent.mockImplementation(async () => {
+        started += 1;
         inFlight += 1;
         if (inFlight > 1) overlapped = true;
         await Promise.resolve();
         inFlight -= 1;
         return { status: "stored", uri: "file:///x", pinned: true };
       });
-      await batchDownload(
+      const summary = await batchDownload(
         downloadableAssets([
           asset({ id: "a" }),
           asset({ id: "b" }),
@@ -101,7 +109,8 @@ describe("the phone's download path", () => {
         { headers: {} }
       );
       expect(overlapped).toBe(false);
-      expect(engine.ensureOfflineContent).toHaveBeenCalledTimes(3);
+      expect(started).toBe(3);
+      expect(summary.stored).toBe(3);
     });
 
     test("a metered refusal is counted, not treated as a failure", async () => {

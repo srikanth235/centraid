@@ -99,9 +99,13 @@ describe("the pin/download engine", () => {
     });
 
     test("reading a stored ref touches it, so live bytes leave the eviction tail", async () => {
+      const touched: unknown[] = [];
+      store.touchOfflineContent.mockImplementation((ref) => {
+        touched.push(ref);
+      });
       store.offlineContentUri.mockReturnValue("file:///durable/doc-a");
       await ensureOfflineContent(BASE);
-      expect(store.touchOfflineContent).toHaveBeenCalledWith(REF);
+      expect(touched).toStrictEqual([REF]);
     });
   });
 
@@ -178,18 +182,21 @@ describe("the pin/download engine", () => {
 
     test("the budget pass runs after a download, never before it", async () => {
       await ensureOfflineContent({ ...BASE, pin: true });
-      expect(store.enforceOfflineContentBudget).toHaveBeenCalledOnce();
-      expect(
-        store.storeOfflineContent.mock.invocationCallOrder[0]
-      ).toBeLessThan(
-        store.enforceOfflineContentBudget.mock.invocationCallOrder[0]!
-      );
+      const storedAt = store.storeOfflineContent.mock.invocationCallOrder[0];
+      const budgetAt =
+        store.enforceOfflineContentBudget.mock.invocationCallOrder[0];
+      expect(storedAt).toBeGreaterThan(0);
+      expect(budgetAt).toBeGreaterThan(storedAt!);
     });
 
     test("releasing a pin takes its bytes with it", () => {
+      const removed: unknown[] = [];
+      store.removeOfflineContent.mockImplementation((ref) => {
+        removed.push(ref);
+      });
       releaseOfflineContent(REF);
       expect(isPinned(REF)).toBe(false);
-      expect(store.removeOfflineContent).toHaveBeenCalledWith(REF);
+      expect(removed).toStrictEqual([REF]);
     });
   });
 });

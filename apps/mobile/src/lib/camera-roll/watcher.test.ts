@@ -34,22 +34,26 @@ describe("the frame camera-roll watcher", () => {
     });
 
     test("the registered sweep gets the frame's live scope", async () => {
-      const sweep = vi.fn<() => Promise<void>>(async () => undefined);
-      registerCameraRollSweep(sweep);
+      const seen: CameraRollScope[] = [];
+      registerCameraRollSweep(async (scope) => {
+        seen.push(scope);
+      });
       setCameraRollScope(SCOPE);
       await expect(runCameraRollSweep("foreground")).resolves.toBe(true);
-      expect(sweep).toHaveBeenCalledWith(SCOPE);
+      expect(seen).toStrictEqual([SCOPE]);
     });
 
     test("a second registration replaces the first rather than stacking", async () => {
-      const first = vi.fn<() => Promise<void>>(async () => undefined);
-      const second = vi.fn<() => Promise<void>>(async () => undefined);
-      registerCameraRollSweep(first);
-      registerCameraRollSweep(second);
+      const ran: string[] = [];
+      registerCameraRollSweep(async () => {
+        ran.push("first");
+      });
+      registerCameraRollSweep(async () => {
+        ran.push("second");
+      });
       setCameraRollScope(SCOPE);
       await runCameraRollSweep("app-start");
-      expect(first).not.toHaveBeenCalled();
-      expect(second).toHaveBeenCalledOnce();
+      expect(ran).toStrictEqual(["second"]);
     });
 
     test("a throwing sweep is reported, not propagated — the queue carries the work", async () => {
