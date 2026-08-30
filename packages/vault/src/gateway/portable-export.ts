@@ -6,9 +6,10 @@
 // drift silently, and record the ruling as a bare citation, never a narrative.
 // The rules that decide each audit:
 //
-//  - The canonical walk is `listVaultEntities` (schema/tables.ts), NOT "every
-//    table in the file". An unregistered table is absent from every export
-//    (#724 W5). Registering it is the whole fix.
+//  - The canonical walk is `listVaultEntities` (schema/tables.ts over
+//    schema/entity-catalog.ts), NOT "every table in the file". An unregistered
+//    table is absent from every export (#724 W5). Registering it is the whole
+//    fix.
 //  - `exportVault` does `SELECT *` over each registered table, so a new column,
 //    a widened CHECK, or a rename rides along with no code change here. Keep it
 //    that way: `portability.test.ts` fails if the walk ever becomes a column
@@ -65,6 +66,13 @@
 // no content bytes. Watch `share_delivery_config`: dropping it would silently
 // reset a per-grant size ceiling to the vault-wide default, which is why it is
 // registered rather than treated as derivable machinery.
+
+// Schema/export audit #883 (entity catalog extract): `VAULT_ENTITIES` moved
+// from tables.ts to schema/entity-catalog.ts so engine W can read the
+// declarations. No table, no column, no sealed cell. `listVaultEntities`
+// still walks `VAULT_TABLES` derived from that catalog; `exportVault`'s
+// SELECT * is unchanged. The schema-dir hash includes the new module and
+// `entity-labels.test.ts`, which is why the fingerprint moved again.
 
 import { createHash } from "node:crypto";
 

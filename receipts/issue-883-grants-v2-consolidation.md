@@ -2151,6 +2151,12 @@ Round after `5924b7f82` (required CI red on that squash):
   reconnect-to-fresh scale rig is registered in quality-rig-budgets and
   consumes `rigDriftBudgetMs`.
 
+- `lint:schema-export` failed on the squash pin: the catalog extract
+  (`schema/entity-catalog.ts` plus `entity-labels.test.ts`) moved the
+  schema-dir hash after `f1c87ee1…` was written. Re-audited
+  `portable-export.ts` (no table, no column, walk still `SELECT *` over
+  `VAULT_TABLES`) and re-pinned to `63be6bdf…`.
+
 - Knip duplicate exports: pending-projection default+named, agenda
   `POINTER_VIEWS` aliasing `VIEWS`, photos `DEFAULT_ZOOM` aliasing
   `DEFAULT_RUNG`.
@@ -2169,6 +2175,7 @@ Round after `5924b7f82` (required CI red on that squash):
 
 ```sh
 bun run lint:quality-knobs
+bun run lint:schema-export
 bun run lint
 ./node_modules/.bin/tsc -p tests
 bash .governance/run.sh
@@ -2182,7 +2189,8 @@ cited above. Round after 5924b7f82: engine W reads entity-catalog,
 global timers for fake clocks, format-kit Vite aliases, compact-band
 harness, replica-projection sort compare. Local: engine-conformance,
 server/vault/blueprints typecheck, previously red timer suites green,
-web+desktop Vite production builds.
+web+desktop Vite production builds. Schema-export ratchet re-pinned
+after the entity-catalog extract; export walk unchanged.
 
 ### Change-set paths
 
