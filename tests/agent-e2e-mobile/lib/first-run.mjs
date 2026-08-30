@@ -100,14 +100,18 @@ ${conditionalRetry}`;
  * not a reliable Maestro selector on iOS, while the button is the product's
  * own idempotent seed boundary. The populated Photos tile remains mandatory.
  */
-export const FILL_SAMPLE_IF_DAYONE = `- tapOn:
+export function fillSampleContentFlow(requiredLauncher = "Open Photos.*") {
+  return `- tapOn:
     text: "Fill it with sample content"
     optional: true
     retryTapIfNoChange: true
 - extendedWaitUntil:
-    visible: "Open Photos.*"
+    visible: "${requiredLauncher}"
     timeout: 240000
 `;
+}
+
+export const FILL_SAMPLE_IF_DAYONE = fillSampleContentFlow();
 
 /**
  * The dev-client launcher, recovered by deep link.

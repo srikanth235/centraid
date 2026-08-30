@@ -93,7 +93,10 @@ await runFlow("sharing-invite", async (ctx) => {
   // Pairing alone leaves Home in its intentionally empty state. Refresh the
   // deterministic demo projection so the Tally launcher is a real reachable
   // subject before the sharing assertion begins.
-  await ctx.configureGateway({ fillSampleContent: true });
+  await ctx.configureGateway({
+    fillSampleContent: true,
+    requiredLauncher: "Open Tally.*",
+  });
 
   await ctx.run(
     `appId: ${ctx.state.appId}

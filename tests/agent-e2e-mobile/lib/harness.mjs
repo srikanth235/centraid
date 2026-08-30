@@ -27,7 +27,7 @@ import {
 import {
   COMPLETE_PROFILE_NAME,
   DISMISS_KEYBOARD_ONBOARDING,
-  FILL_SAMPLE_IF_DAYONE,
+  fillSampleContentFlow,
   LAUNCHER_RECOVERY,
   retryableTapCommands,
 } from "./first-run.mjs";
@@ -672,6 +672,7 @@ export async function runFlow(slug, fn) {
     // (photos-permissions) or that only wait on the band label (cold-start,
     // volume-proof).
     fillSampleContent = false,
+    requiredLauncher = "Open Photos.*",
   } = {}) => {
     if (!gatewayUrl) {
       throw new Error(
@@ -693,7 +694,7 @@ ${LAUNCHER_RECOVERY}- extendedWaitUntil:
         await ctx.run(
           `appId: ${state.appId}
 ---
-${FILL_SAMPLE_IF_DAYONE}`,
+${fillSampleContentFlow(requiredLauncher)}`,
           "fill-sample-content"
         );
       }
@@ -793,7 +794,7 @@ ${retryableTapCommands("Enter Centraid")}
       await ctx.run(
         `appId: ${state.appId}
 ---
-${FILL_SAMPLE_IF_DAYONE}`,
+${fillSampleContentFlow(requiredLauncher)}`,
         "fill-sample-content"
       );
     }
