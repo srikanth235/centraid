@@ -330,7 +330,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event.inputs.mobile_lane == 'a' && '[{"lane":"a","shard":"core"}]' || github.event.inputs.mobile_lane == 'b' && '[{"lane":"b","shard":"photos"},{"lane":"b","shard":"home-apps"},{"lane":"b","shard":"places"},{"lane":"b","shard":"sharing"}]' || '[{"lane":"a","shard":"core"},{"lane":"b","shard":"photos"},{"lane":"b","shard":"home-apps"},{"lane":"b","shard":"places"},{"lane":"b","shard":"sharing"},{"lane":"performance","shard":"photos-frames"}]') }}
+        include: ${{ fromJSON(github.event.inputs.mobile_lane == 'a' && '[{"lane":"a","shard":"core"}]' || github.event.inputs.mobile_lane == 'b' && '[{"lane":"b","shard":"photos-library"},{"lane":"b","shard":"photos-viewer"},{"lane":"b","shard":"photos-search"},{"lane":"b","shard":"photos-select-write"},{"lane":"b","shard":"photos-permissions"},{"lane":"b","shard":"home-docs"},{"lane":"b","shard":"home-agenda"},{"lane":"b","shard":"home-notes"},{"lane":"b","shard":"home-tasks"},{"lane":"b","shard":"home-people"},{"lane":"b","shard":"home-tally"},{"lane":"b","shard":"home-locker"},{"lane":"b","shard":"places"},{"lane":"b","shard":"sharing"}]' || '[{"lane":"a","shard":"core"},{"lane":"b","shard":"photos"},{"lane":"b","shard":"home-apps"},{"lane":"b","shard":"places"},{"lane":"b","shard":"sharing"},{"lane":"performance","shard":"photos-frames"}]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Start the mobile shard clock
@@ -453,16 +453,23 @@ jobs:
             node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?
           fi
           exit "$ec"
-      # The suite runners are the canonical fixture owners registered by the
-      # test matrix. They preserve one fresh pairing followed by bounded reuse,
-      # emit one result per journey, and enforce their suite deadlines.
+      # The scheduled matrix uses aggregate suites so one paired profile can
+      # cover the full nightly roster. Focused Lane B deliberately fans out
+      # independent functionality claims into throwaway jobs: every app gets
+      # its own verdict and a slow/broken app cannot starve unrelated signal.
       - name: Run lane B — Photos functionality
         id: lane_b_photos
-        if: matrix.shard == 'photos'
+        if: matrix.shard == 'photos' || matrix.shard == 'photos-library' || matrix.shard == 'photos-viewer' || matrix.shard == 'photos-search' || matrix.shard == 'photos-select-write' || matrix.shard == 'photos-permissions'
         env:
           MAESTRO_PLATFORM: ios
           MOBILE_E2E_EMBEDDED: "1"
-        run: node tests/agent-e2e-mobile/run-photos-suite.mjs
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.shard }}" = photos ]; then
+            node tests/agent-e2e-mobile/run-photos-suite.mjs
+          else
+            node tests/agent-e2e-mobile/flows/${{ matrix.shard }}.mjs
+          fi
       - name: Run lane B — Places
         id: lane_b_places
         if: matrix.shard == 'places'
@@ -472,11 +479,23 @@ jobs:
         run: node tests/agent-e2e-mobile/flows/places-seat.mjs
       - name: Run lane B — Home app functionality
         id: lane_b_home_apps
-        if: matrix.shard == 'home-apps'
+        if: matrix.shard == 'home-apps' || matrix.shard == 'home-docs' || matrix.shard == 'home-agenda' || matrix.shard == 'home-notes' || matrix.shard == 'home-tasks' || matrix.shard == 'home-people' || matrix.shard == 'home-tally' || matrix.shard == 'home-locker'
         env:
           MAESTRO_PLATFORM: ios
           MOBILE_E2E_EMBEDDED: "1"
-        run: node tests/agent-e2e-mobile/run-home-apps-suite.mjs
+        run: |
+          set -euo pipefail
+          case "${{ matrix.shard }}" in
+            home-apps) node tests/agent-e2e-mobile/run-home-apps-suite.mjs ;;
+            home-docs) node tests/agent-e2e-mobile/flows/docs-drive.mjs ;;
+            home-agenda) node tests/agent-e2e-mobile/flows/agenda-week.mjs ;;
+            home-notes) node tests/agent-e2e-mobile/flows/notes-library.mjs ;;
+            home-tasks) node tests/agent-e2e-mobile/flows/tasks-board.mjs ;;
+            home-people) node tests/agent-e2e-mobile/flows/people-roster.mjs ;;
+            home-tally) node tests/agent-e2e-mobile/flows/tally-derived.mjs ;;
+            home-locker) node tests/agent-e2e-mobile/flows/locker-gate.mjs ;;
+            *) echo "::error::unknown Home Lane B shard ${{ matrix.shard }}"; exit 1 ;;
+          esac
       - name: Run lane B — Sharing invitation surfaces
         id: lane_b_sharing
         if: matrix.shard == 'sharing'

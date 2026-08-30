@@ -111,10 +111,12 @@ export const CONFIRM_SYSTEM_OPEN = `# iOS system confirmation for a custom-schem
     text: "^Close$"
     optional: true
 `;
-// An individual chunk owns one coherent user interaction. Fresh pairing is the
-// slowest legitimate chunk (~4 minutes on the reviewed CI runner); 12 minutes
-// leaves ample network/render headroom while still terminating a wedged
-// accessibility driver before the workflow's outer timeout destroys evidence.
+// An individual chunk owns one coherent user interaction. Keep pairing and
+// profile completion in the same Maestro invocation: the iOS driver startup is
+// expensive on hosted runners, and splitting those sequential setup actions
+// turns infrastructure cost into a misleading app timeout. The invocation is
+// still marked sensitive while the ticket is in scope, so its diagnostics are
+// sanitized before upload.
 const MAESTRO_CHUNK_TIMEOUT_MS = 12 * 60_000;
 const COMMAND_TIMEOUT_MS = 30_000;
 // CoreSimulator can take longer than the ordinary command budget while its
@@ -687,17 +689,10 @@ export async function runFlow(slug, fn) {
     clearState: false
 ${LAUNCHER_RECOVERY}- extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}`,
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+${fillSampleContent ? fillSampleContentFlow(requiredLauncher) : ""}`,
         "reuse-paired-gateway"
       );
-      if (fillSampleContent) {
-        await ctx.run(
-          `appId: ${state.appId}
----
-${fillSampleContentFlow(requiredLauncher)}`,
-          "fill-sample-content"
-        );
-      }
       await markPairedFixtureReady();
       ctx.note(`reused the paired nightly profile for ${gatewayUrl}`);
       return;
@@ -753,27 +748,6 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 - extendedWaitUntil:
     visible: "Who's using this phone[?]|You're all set, [^.]+[.]"
     timeout: 90000
-`,
-      "configure-gateway",
-      {
-        maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
-        sensitive: true,
-      }
-    );
-
-    // A second, non-sensitive Maestro chunk keeps the pairing capability out
-    // of retained diagnostics while proving both legitimate identity paths.
-    // Ownership (#726) killed the pre-named-invite mint: a ticket can no
-    // longer carry a chosen label, so the FIRST pairing against a fresh
-    // gateway always lands the placeholder owner "You" (not a set name) and
-    // shows the form. A later flow that reuses the same nightly gateway
-    // process finds that owner already renamed "Nightly" by the run below
-    // and skips straight to Done — both are real product paths, so the
-    // pattern above accepts either. COMPLETE_PROFILE_NAME carries the
-    // bounded recovery for the lost-keystroke flake (see first-run.mjs).
-    await ctx.run(
-      `appId: ${state.appId}
----
 ${COMPLETE_PROFILE_NAME}- extendedWaitUntil:
     visible: "You're all set, [^.]+[.]"
     timeout: 60000
@@ -787,17 +761,15 @@ ${retryableTapCommands("Enter Centraid")}
 # so the next tap never uses coordinates captured before that layout shift.
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
-    timeout: 30000`,
-      "complete-onboarding"
+    timeout: 30000
+${fillSampleContent ? fillSampleContentFlow(requiredLauncher) : ""}
+`,
+      "configure-gateway",
+      {
+        maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
+        sensitive: true,
+      }
     );
-    if (fillSampleContent) {
-      await ctx.run(
-        `appId: ${state.appId}
----
-${fillSampleContentFlow(requiredLauncher)}`,
-        "fill-sample-content"
-      );
-    }
     await markPairedFixtureReady();
     ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
   };

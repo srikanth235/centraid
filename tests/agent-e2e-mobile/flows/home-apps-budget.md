@@ -1,5 +1,11 @@
 # Home-app journey budget
 
+Focused PR Lane B does not use this aggregate budget: it fans the seven Home
+journeys into independent throwaway matrix jobs, so each app gets its own
+verdict and one slow app cannot consume another app's wall-clock allowance.
+This document governs the aggregate scheduled suite, which remains useful for
+checking paired-state reuse as a separate claim.
+
 The seven journeys `docs-drive`, `agenda-week`, `notes-library`, `tasks-board`, `people-roster`, `tally-derived` and `locker-gate` share one gateway process and one paired simulator profile. `run-home-apps-suite.mjs` pairs fresh during the Docs journey and the remaining six reuse that paired profile (`MAESTRO_REUSE_PAIRED_STATE=1`). The runner fails when aggregate wall time is **twelve minutes or more**, measured from the first flow process start through the seventh verdict. Every journey still writes an independent verdict, including after an earlier failure.
 
 **Where ten minutes came from.** This is a FIRST-LAND ceiling, not an observed number plus headroom — nothing in this suite has run on a device yet, so there is no distribution to sit on top of. It was derived from the one measured neighbour: `run-photos-suite.mjs` holds five journeys over one app cover at eight minutes, and the harness prices a fresh pairing at roughly four of those minutes on the reviewed CI runner. The original five opened five different covers and three of them pushed a second route, so two extra minutes of navigation was the honest allowance — eight plus two.

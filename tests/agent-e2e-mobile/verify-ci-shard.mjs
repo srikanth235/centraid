@@ -12,6 +12,18 @@ const shardSuites = {
   "home-apps": "home-apps",
 };
 const standalone = {
+  "photos-library": "tests/agent-e2e-mobile/flows/photos-library.mjs",
+  "photos-viewer": "tests/agent-e2e-mobile/flows/photos-viewer.mjs",
+  "photos-search": "tests/agent-e2e-mobile/flows/photos-search.mjs",
+  "photos-select-write": "tests/agent-e2e-mobile/flows/photos-select-write.mjs",
+  "photos-permissions": "tests/agent-e2e-mobile/flows/photos-permissions.mjs",
+  "home-docs": "tests/agent-e2e-mobile/flows/docs-drive.mjs",
+  "home-agenda": "tests/agent-e2e-mobile/flows/agenda-week.mjs",
+  "home-notes": "tests/agent-e2e-mobile/flows/notes-library.mjs",
+  "home-tasks": "tests/agent-e2e-mobile/flows/tasks-board.mjs",
+  "home-people": "tests/agent-e2e-mobile/flows/people-roster.mjs",
+  "home-tally": "tests/agent-e2e-mobile/flows/tally-derived.mjs",
+  "home-locker": "tests/agent-e2e-mobile/flows/locker-gate.mjs",
   places: "tests/agent-e2e-mobile/flows/places-seat.mjs",
   sharing: "tests/agent-e2e-mobile/flows/sharing-invite.mjs",
   "photos-frames": "tests/agent-e2e-mobile/flows/scroll-frames.mjs",
