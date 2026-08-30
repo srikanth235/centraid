@@ -128,21 +128,22 @@ if (suite === "photos" || suite === "home-apps") {
 }
 
 if (shard === "all") {
-  const missing = [];
-  for (const flow of expected) {
-    try {
-      await fs.access(
-        path.join(
-          repoRoot,
-          "artifacts",
-          "e2e",
-          `${runtimeSlug(flow)}-${platform}.json`
+  const present = await Promise.all(
+    expected.map((flow) =>
+      fs
+        .access(
+          path.join(
+            repoRoot,
+            "artifacts",
+            "e2e",
+            `${runtimeSlug(flow)}-${platform}.json`
+          )
         )
-      );
-    } catch {
-      missing.push(flow);
-    }
-  }
+        .then(() => true)
+        .catch(() => false)
+    )
+  );
+  const missing = expected.filter((_, index) => !present[index]);
   if (missing.length > 0) {
     await Promise.all(
       missing.map((flow) =>
@@ -165,24 +166,26 @@ if (shard === "all") {
 const runEntries = await fs
   .readdir(path.join(import.meta.dirname, "runs"), { withFileTypes: true })
   .catch(() => []);
-const missing = [];
-for (const flow of expected) {
-  const candidates = runEntries.filter(
-    (entry) =>
-      entry.isDirectory() && entry.name.startsWith(`${runtimeSlug(flow)}-`)
-  );
-  const verdicts = await Promise.all(
-    candidates.map((entry) =>
-      fs
-        .access(
-          path.join(import.meta.dirname, "runs", entry.name, "verdict.md")
-        )
-        .then(() => true)
-        .catch(() => false)
-    )
-  );
-  if (!verdicts.some(Boolean)) missing.push(flow);
-}
+const verdicted = await Promise.all(
+  expected.map(async (flow) => {
+    const candidates = runEntries.filter(
+      (entry) =>
+        entry.isDirectory() && entry.name.startsWith(`${runtimeSlug(flow)}-`)
+    );
+    const verdicts = await Promise.all(
+      candidates.map((entry) =>
+        fs
+          .access(
+            path.join(import.meta.dirname, "runs", entry.name, "verdict.md")
+          )
+          .then(() => true)
+          .catch(() => false)
+      )
+    );
+    return verdicts.some(Boolean);
+  })
+);
+const missing = expected.filter((_, index) => !verdicted[index]);
 if (missing.length > 0) {
   await Promise.all(
     missing.map((flow) =>

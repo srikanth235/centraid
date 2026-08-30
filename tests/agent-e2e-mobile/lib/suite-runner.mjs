@@ -39,6 +39,19 @@ function sameIdentity(left, right) {
   return IDENTITY_FIELDS.every((field) => left?.[field] === right?.[field]);
 }
 
+// A non-zero exit means different things depending on how far the flow got: a
+// missing prerequisite marker says the fixture or pairing never came up, while
+// a present one says the app assertion itself is what failed.
+function classifyOutcome({ childRunnerError, timedOut, code, prerequisite }) {
+  if (childRunnerError || timedOut) {
+    return { failureClass: "infrastructure", phase: "execution" };
+  }
+  if (code === 0) return {};
+  return prerequisite
+    ? { failureClass: "product_assertion", phase: "assertion" }
+    : { failureClass: "prerequisite", phase: "fixture_or_pairing" };
+}
+
 async function writeSyntheticEvidence(repoRoot, platform, result) {
   const slug = path.basename(result.file, ".mjs");
   const owner = path.relative(repoRoot, result.file).split(path.sep).join("/");
@@ -66,7 +79,13 @@ async function writeSyntheticEvidence(repoRoot, platform, result) {
   );
 }
 
+function clearTimers(timers) {
+  for (const timer of timers) clearTimeout(timer);
+  timers.length = 0;
+}
+
 function runChild(file, { env, timeoutMs }) {
+  const timers = [];
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [file], {
       detached: DETACHED,
@@ -92,11 +111,17 @@ function runChild(file, { env, timeoutMs }) {
         }
       }, KILL_GRACE_MS);
       forceKillTimer.unref();
+      timers.push(forceKillTimer);
     }, timeoutMs);
     timeout.unref();
+    timers.push(timeout);
+    // A child can emit both `error` and `close`; the first one that arrives
+    // owns the verdict, and the second must not re-settle the promise.
+    let settled = false;
     const finish = (code) => {
-      clearTimeout(timeout);
-      if (forceKillTimer) clearTimeout(forceKillTimer);
+      if (settled) return;
+      settled = true;
+      clearTimers(timers);
       resolve({ code: code ?? 1, timedOut });
     };
     child.once("close", finish);
@@ -192,11 +217,13 @@ export async function runMobileSuite({
       markerDir,
       `${String(index + 1).padStart(2, "0")}-${path.basename(flow.file, ".mjs")}.json`
     );
+    // oxlint-disable-next-line no-await-in-loop -- one marker cleared per flow, immediately before that flow writes it
     await fs.rm(prerequisiteFile, { force: true });
     const flowStartedAt = performance.now();
     let child;
     let childRunnerError;
     try {
+      // oxlint-disable-next-line no-await-in-loop -- the suite IS sequential: one simulator, and each flow inherits the paired state the previous one left
       child = await childRunner(flow.file, {
         timeoutMs: remainingMs,
         env: {
@@ -212,6 +239,7 @@ export async function runMobileSuite({
       child = { code: 1, timedOut: false };
     }
     const elapsedMs = performance.now() - flowStartedAt;
+    // oxlint-disable-next-line no-await-in-loop -- reads the marker the flow that just finished wrote; there is nothing to overlap it with
     const prerequisite = await readPrerequisite(prerequisiteFile);
     const identityMatches =
       prerequisite !== null &&
@@ -224,24 +252,12 @@ export async function runMobileSuite({
     let reason = childRunnerError
       ? `child runner failed: ${childRunnerError.message ?? childRunnerError}`
       : undefined;
-    let failureClass = childRunnerError
-      ? "infrastructure"
-      : child.timedOut
-        ? "infrastructure"
-        : child.code !== 0
-          ? prerequisite
-            ? "product_assertion"
-            : "prerequisite"
-          : undefined;
-    let phase = childRunnerError
-      ? "execution"
-      : child.timedOut
-        ? "execution"
-        : child.code !== 0
-          ? prerequisite
-            ? "assertion"
-            : "fixture_or_pairing"
-          : undefined;
+    let { failureClass, phase } = classifyOutcome({
+      childRunnerError,
+      timedOut: child.timedOut,
+      code: child.code,
+      prerequisite,
+    });
     if (status === "success" && !identityMatches) {
       status = "failure";
       reason = prerequisite

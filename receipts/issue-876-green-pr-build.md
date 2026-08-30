@@ -130,6 +130,10 @@ journeys survivable:
 - `tests/agent-e2e-mobile/flows/tasks-board.mjs`
 - `tests/agent-e2e-mobile/flows/volume-proof.mjs`
 - `tests/agent-e2e-mobile/lib/ci-gateway.mjs`
+- `tests/agent-e2e-mobile/lib/suite-runner.mjs`
+- `tests/agent-e2e-mobile/lib/suite-runner.test.mjs`
+- `tests/agent-e2e-mobile/verify-ci-shard.mjs`
+- `tests/agent-e2e-shared/harness.mjs`
 - `tests/agent-e2e-mobile/lib/first-run.mjs`
 - `tests/agent-e2e-mobile/lib/harness.mjs`
 - `tests/agent-e2e-mobile/lib/metro.mjs`
@@ -188,6 +192,7 @@ sequence is removed.
 | --- | --- | --- |
 | 2026-08-29 | grok | - |
 | 2026-08-30 | codex | 01a04413-e091-7563-9c88-25bd90ba9192 |
+| 2026-08-30 | claude-code | d88cbd4a-3e84-50a0-ad50-b25930e14750 |
 
 ### Changed paths
 
@@ -218,3 +223,40 @@ Local verification is green for repository typecheck, mobile/server typecheck
 and targeted tests, flow lint, matrix/wiring validation, workflow pin lint,
 format check, YAML parsing, JavaScript syntax, and suite/evidence tests.
 The focused iOS lane B CI run remains the final acceptance check.
+
+## Continuation — static gate and locker `.some()` findings (2026-08-30)
+
+The `static` gate was red on 16 oxlint errors, every one of them in the mobile
+E2E harness this change set introduced, and `suite-runner.test.mjs` never ran:
+`scripts/test-report/vitest.config.ts` matches it, but it was written against
+`node:test`, so vitest reported "No test suite found in file".
+
+What changed:
+
+- `tests/agent-e2e-mobile/lib/suite-runner.mjs` — the child promise settles
+  once (a child can emit both `error` and `close`), the kill timers are
+  collected so cleanup lives outside the promise executor, and the nested
+  failure ternaries move into `classifyOutcome`. The two remaining awaits
+  inside the flow loop carry per-line waivers: the suite drives one simulator
+  and each flow inherits the paired state the previous one left.
+- `tests/agent-e2e-mobile/lib/suite-runner.test.mjs` — ported to vitest so the
+  lane that includes it can actually run it, with the temp root taken from
+  `@centraid/test-kit`'s `tempDir()` so a failing test cannot leak it.
+- `tests/agent-e2e-mobile/verify-ci-shard.mjs` — both evidence roll-ups use
+  `Promise.all`; the per-flow checks are independent.
+- `tests/agent-e2e-mobile/lib/ci-gateway.mjs` and
+  `tests/agent-e2e-shared/harness.mjs` — named redaction capture groups, and
+  statement bodies for the two `close()` promise executors.
+- `apps/mobile/src/apps/locker/LockerHome.tsx` — `isConflicted` and `isParked`
+  are called through arrows so `.some()` cannot hand them an index or the
+  array.
+
+Verification:
+
+```sh
+bun run lint
+bunx oxfmt -c oxfmt.config.ts --disable-nested-config --check .
+bun run scripts:test
+node node_modules/vitest/vitest.mjs run --config scripts/test-report/vitest.config.ts tests/agent-e2e-mobile/lib
+cd apps/mobile && bun run typecheck
+```

@@ -60,11 +60,11 @@ export default function LockerHome({
   const pendingCount = lockerPendingCount(pending);
   const pendingWait = lockerPendingLine(pending);
   const state = lockerScreenState({
-    conflicted: vault.rows.some(isConflicted),
+    conflicted: vault.rows.some((row) => isConflicted(row)),
     denied: vault.denied !== null,
     loaded: vault.loaded,
     online: replica.online,
-    parked: vault.rows.some(isParked),
+    parked: vault.rows.some((row) => isParked(row)),
     pending: pendingCount,
     reauth: vault.reauth,
     rows: vault.rows.length,

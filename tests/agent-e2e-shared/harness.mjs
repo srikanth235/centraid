@@ -6,10 +6,13 @@ import path from "node:path";
 export function redactSensitive(value) {
   return String(value)
     .replace(/\bBearer\s+[^\s"'`]+/giu, "Bearer [REDACTED]")
-    .replace(/([?&](?:token|ticket|authorization)=)[^&#\s]+/giu, "$1[REDACTED]")
     .replace(
-      /("(?:token|ticket|authorization)"\s*:\s*")[^"]+("?)/giu,
-      "$1[REDACTED]$2"
+      /(?<query>[?&](?:token|ticket|authorization)=)[^&#\s]+/giu,
+      "$<query>[REDACTED]"
+    )
+    .replace(
+      /(?<lead>"(?:token|ticket|authorization)"\s*:\s*")[^"]+(?<trail>"?)/giu,
+      "$<lead>[REDACTED]$<trail>"
     )
     .replace(/\b[A-Za-z0-9_-]{120,}\b/gu, "[REDACTED_CAPABILITY]");
 }

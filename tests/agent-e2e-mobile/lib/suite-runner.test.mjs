@@ -1,15 +1,15 @@
-import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+
+import { expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { runMobileSuite } from "./suite-runner.mjs";
 
+/** Build a throwaway repo root removed after this test file finishes. */
 async function fixture() {
-  const root = await fs.mkdtemp(
-    path.join(os.tmpdir(), "centraid-mobile-suite-")
-  );
+  const root = await tempDir("centraid-mobile-suite-");
   return {
     root,
     environment: {
@@ -48,13 +48,13 @@ test("a missing pairing prerequisite blocks dependent flows", async () => {
       return { code: 1, timedOut: false };
     },
   });
-  assert.deepEqual(called, ["/bootstrap.mjs"]);
-  assert.deepEqual(
-    result.results.map(({ status }) => status),
-    ["failure", "blocked"]
-  );
-  assert.equal(result.results[0].failureClass, "prerequisite");
-  assert.equal(result.results[0].phase, "fixture_or_pairing");
+  expect(called).toEqual(["/bootstrap.mjs"]);
+  expect(result.results.map(({ status }) => status)).toEqual([
+    "failure",
+    "blocked",
+  ]);
+  expect(result.results[0].failureClass).toBe("prerequisite");
+  expect(result.results[0].phase).toBe("fixture_or_pairing");
 });
 
 test("a child-runner exception becomes structured infrastructure evidence", async () => {
@@ -71,16 +71,15 @@ test("a child-runner exception becomes structured infrastructure evidence", asyn
       throw new Error("driver could not be started");
     },
   });
-  assert.deepEqual(
-    result.results.map(({ status }) => status),
-    ["failure"]
-  );
-  assert.equal(result.results[0].failureClass, "infrastructure");
-  assert.equal(result.results[0].phase, "execution");
-  assert.match(result.results[0].reason, /driver could not be started/u);
-  await fs.access(
-    path.join(root, "artifacts/e2e-suites/ios-child-runner-error.json")
-  );
+  expect(result.results.map(({ status }) => status)).toEqual(["failure"]);
+  expect(result.results[0].failureClass).toBe("infrastructure");
+  expect(result.results[0].phase).toBe("execution");
+  expect(result.results[0].reason).toMatch(/driver could not be started/u);
+  await expect(
+    fs.access(
+      path.join(root, "artifacts/e2e-suites/ios-child-runner-error.json")
+    )
+  ).resolves.toBeUndefined();
 });
 
 test("a ready-only marker cannot establish a paired fixture", async () => {
@@ -104,10 +103,10 @@ test("a ready-only marker cannot establish a paired fixture", async () => {
       return { code: 0, timedOut: false };
     },
   });
-  assert.deepEqual(
-    result.results.map(({ status }) => status),
-    ["failure", "blocked"]
-  );
+  expect(result.results.map(({ status }) => status)).toEqual([
+    "failure",
+    "blocked",
+  ]);
 });
 
 test("a journey failure after pairing does not masquerade as fixture failure", async () => {
@@ -136,13 +135,13 @@ test("a journey failure after pairing does not masquerade as fixture failure", a
       return { code: file === "/first.mjs" ? 1 : 0, timedOut: false };
     },
   });
-  assert.deepEqual(called, ["/first.mjs", "/second.mjs"]);
-  assert.deepEqual(
-    result.results.map(({ status }) => status),
-    ["failure", "success"]
-  );
-  assert.equal(result.results[0].failureClass, "product_assertion");
-  assert.equal(result.results[0].phase, "assertion");
+  expect(called).toEqual(["/first.mjs", "/second.mjs"]);
+  expect(result.results.map(({ status }) => status)).toEqual([
+    "failure",
+    "success",
+  ]);
+  expect(result.results[0].failureClass).toBe("product_assertion");
+  expect(result.results[0].phase).toBe("assertion");
 });
 
 test("a required fixture journey failure blocks the remaining suite", async () => {
@@ -173,10 +172,10 @@ test("a required fixture journey failure blocks the remaining suite", async () =
       return { code: 1, timedOut: false };
     },
   });
-  assert.deepEqual(
-    result.results.map(({ status }) => status),
-    ["failure", "blocked"]
-  );
+  expect(result.results.map(({ status }) => status)).toEqual([
+    "failure",
+    "blocked",
+  ]);
 });
 
 test("a changed paired identity fails closed and blocks dependants", async () => {
@@ -206,8 +205,9 @@ test("a changed paired identity fails closed and blocks dependants", async () =>
       return { code: 0, timedOut: false };
     },
   });
-  assert.deepEqual(
-    result.results.map(({ status }) => status),
-    ["success", "failure", "blocked"]
-  );
+  expect(result.results.map(({ status }) => status)).toEqual([
+    "success",
+    "failure",
+    "blocked",
+  ]);
 });

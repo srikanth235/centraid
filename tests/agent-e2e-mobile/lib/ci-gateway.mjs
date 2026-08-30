@@ -32,7 +32,10 @@ const hostEndpointId = kitlessHostIdentity(
 const redactLog = (value) =>
   String(value)
     .replace(/\bBearer\s+\S+/giu, "Bearer [REDACTED]")
-    .replace(/([?&](?:token|ticket|authorization)=)[^&#\s]+/giu, "$1[REDACTED]")
+    .replace(
+      /(?<lead>[?&](?:token|ticket|authorization)=)[^&#\s]+/giu,
+      "$<lead>[REDACTED]"
+    )
     .replace(/\b[A-Za-z0-9_-]{120,}\b/gu, "[REDACTED_CAPABILITY]");
 const logger = {
   info: (message) => console.log(`[mobile-ci-gateway] ${redactLog(message)}`),
@@ -164,8 +167,12 @@ function close() {
   closePromise ??= (async () => {
     server.closeAllConnections?.();
     await Promise.race([
-      new Promise((resolve) => server.close(resolve)),
-      new Promise((resolve) => setTimeout(resolve, 5_000)),
+      new Promise((resolve) => {
+        server.close(resolve);
+      }),
+      new Promise((resolve) => {
+        setTimeout(resolve, 5_000);
+      }),
     ]);
     await endpoint?.close();
     await gateway.stop();
