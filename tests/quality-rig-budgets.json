@@ -176,6 +176,11 @@
       "volume": "YEAR-3: 50,000 replica rows walked by a windowed HTTP bootstrap, a live change stream attached and then dropped, 25 commits written while the client is away, and the stale cursor resumed — reconnect-to-first-correct-frame (#883 C1, the probe tests/experience-budgets/gateway.json#reconnectToFresh asked for)",
       "_noBudgetMs": "Deliberate. The rig's own wall clock is dominated by seeding 50,000 rows and walking them through the bootstrap route — work that is SETUP for the measurement, not the measurement. What it gates is `reconnectToFresh.ceilingMs` in tests/experience-budgets/gateway.json (asserted in the rig body, tighten-only there), and the recorded drift series is the reconnect interval itself rather than the rig duration."
     },
+    "tests/scale/mobile-reconnect-to-fresh.scale.test.ts": {
+      "lane": "scale",
+      "volume": "YEAR-3: 50,000 mobile replica rows read through the native SQLite session, with 25 missed changes replayed after a background/foreground transition",
+      "_noBudgetMs": "Deliberate. The rig measures the client-side resume interval against `reconnectToFresh.ceilingMs` in tests/experience-budgets/mobile.json; setup and fixture construction are not the user-facing interval, and the 30-sample/1.5x drift gate tracks that interval once nightly history exists."
+    },
     "tests/scale/replica-bootstrap.scale.test.ts": {
       "lane": "scale",
       "volume": "50,000 rows — client windowed bootstrap with an in-flight deletion, plus the gateway windowed-page walk resumed across a vault-plane restart (#750)"

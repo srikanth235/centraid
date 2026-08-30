@@ -2146,6 +2146,11 @@ Round after `5924b7f82` (required CI red on that squash):
 - Gateway image / inline-app load: `tasks/when.ts` imported format-kit by
   package name; Rolldown in the Docker build could not resolve it. Relative
   `.js` import plus web/desktop Vite aliases.
+- Law `insights-rollup-render-or-withhold` lives in
+  `InsightsScreen.test.tsx` (the matrix owner, 22 tests). The mobile
+  reconnect-to-fresh scale rig is registered in quality-rig-budgets and
+  consumes `rigDriftBudgetMs`.
+
 - Knip duplicate exports: pending-projection default+named, agenda
   `POINTER_VIEWS` aliasing `VIEWS`, photos `DEFAULT_ZOOM` aliasing
   `DEFAULT_RUNG`.

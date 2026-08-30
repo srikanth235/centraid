@@ -2,9 +2,13 @@ import { act } from "react";
 import type { JSX } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, test } from "vitest";
 
-import { insightPricingLine } from "@centraid/design/blocks";
+import {
+  insightBreakdowns,
+  insightPricingLine,
+  insightSourceFacts,
+} from "@centraid/design/blocks";
 
 import type { InsightsSummary } from "../screen-contracts.js";
 import { WEB_INSIGHT_WORDS } from "./insights-model.js";
@@ -453,5 +457,123 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     expect(el.querySelector("svg")).toBeNull();
     expect(el.querySelector("h1")).toBeNull();
     expect(el.textContent).not.toContain("Where it went");
+  });
+
+  it("omits a source with no runs rather than reporting a zero", () => {
+    expect(
+      insightSourceFacts({ ...summary, bySource: [] }, WEB_INSIGHT_WORDS)
+    ).toStrictEqual([]);
+    expect(
+      insightSourceFacts(summary, WEB_INSIGHT_WORDS).map((f) => f.key)
+    ).toStrictEqual(["automations", "the assistant"]);
+  });
+
+  it("measures a fully unpriced window in tokens rather than drawing nothing", () => {
+    const unpriced = insightBreakdowns(
+      {
+        ...summary,
+        byHarness: [
+          { costUsd: 0, harness: "codex", runs: 2, tokens: 3000 },
+          { costUsd: 0, harness: "claude-code", runs: 1, tokens: 1000 },
+        ],
+      },
+      WEB_INSIGHT_WORDS
+    ).harness;
+    expect(unpriced.unit).toBe("of tokens");
+    expect(unpriced.meta).toBe("sorted by tokens");
+    expect(unpriced.rows.map((r) => r.weight)).toStrictEqual([3000, 1000]);
+  });
+});
+
+function readable(el: HTMLElement): string {
+  return [
+    el.textContent ?? "",
+    ...[...el.querySelectorAll("[title]")].map(
+      (node) => node.getAttribute("title") ?? ""
+    ),
+  ].join(" ¶ ");
+}
+
+const withUnreported: InsightsSummary = {
+  ...summary,
+  kpis: { ...summary.kpis, unpricedRuns: 0, unreportedRuns: 4 },
+};
+
+const RENDERS: Readonly<
+  Record<string, { shows: string; from?: InsightsSummary }>
+> = {
+  attention: { shows: "Daily Digest · 59% of spend" },
+  byEffort: { shows: "$0.80 · 7k · 4 runs" },
+  byHarness: { shows: "$2.50 · 11k · 7 runs" },
+  byModel: { shows: "claude-opus-4-8" },
+  bySource: { shows: "$2.00 · 8k · 6 runs" },
+  daily: { shows: "10 Jun · $0.20 · 3 runs" },
+  generatedAt: { shows: "12 May" },
+  "kpis.estimatedCostUsd": { shows: "$1.30 estimated" },
+  "kpis.failedCostUsd": { shows: "2 · $0.40 spent" },
+  "kpis.failedRuns": { shows: "42 runs · 2 failed" },
+  "kpis.forecastCostUsd": { shows: "$5.10" },
+  "kpis.generations": { shows: "42 · 3 retried" },
+  "kpis.harnessReportedCostUsd": { shows: "$2.10 harness-reported" },
+  "kpis.hydrationTokens": { shows: "128k · 1k hydration" },
+  "kpis.retries": { shows: "· 3 retried" },
+  "kpis.totalCostUsd": { shows: "$3.40" },
+  "kpis.totalTokens": { shows: "128k" },
+  "kpis.unpricedRuns": { shows: "1 unpriced." },
+  "kpis.unreportedRuns": {
+    from: withUnreported,
+    shows: "4 no usage reported.",
+  },
+  peakDay: { shows: "Busiest 9 Jun: $0.40" },
+  recent: { shows: "A failed run" },
+};
+
+const WITHHELD: Readonly<Record<string, string>> = {
+  "kpis.appsTouched":
+    "the rollup counts it, but 'how many apps did work touch' is a different question from 'what did this cost' — the page has one subject and does not borrow this one.",
+  windowDays:
+    "the window is the shell's own state, passed as the `windowDays` prop; the copy inside the rollup is the window the GATEWAY answered for and would silently disagree with the picker after a change.",
+};
+
+function rollupFields(rollup: InsightsSummary): string[] {
+  return [
+    ...Object.keys(rollup).filter((key) => key !== "kpis"),
+    ...Object.keys(rollup.kpis).map((key) => `kpis.${key}`),
+  ].sort();
+}
+
+describe("screens/InsightsScreen — the gateway's rollup, field by field (#775)", () => {
+  afterEach(() => {
+    act(() => root?.unmount());
+    root = null;
+    container?.remove();
+    container = null;
+  });
+
+  test("[law:insights-rollup-render-or-withhold] every field of the gateway's rollup is on the page or withheld on the record", () => {
+    expect(rollupFields(summary)).toStrictEqual(
+      [...Object.keys(RENDERS), ...Object.keys(WITHHELD)].sort()
+    );
+
+    const byRollup = new Map<InsightsSummary, string[]>();
+    for (const [field, { from }] of Object.entries(RENDERS)) {
+      const rollup = from ?? summary;
+      byRollup.set(rollup, [...(byRollup.get(rollup) ?? []), field]);
+    }
+
+    const unsaid: string[] = [];
+    for (const [rollup, fields] of byRollup) {
+      const words = readable(screen({ summary: rollup }));
+      unsaid.push(
+        ...fields.filter(
+          (field) => !words.includes(RENDERS[field]?.shows ?? "")
+        )
+      );
+      act(() => root?.unmount());
+      root = null;
+      container?.remove();
+      container = null;
+    }
+    expect(unsaid).toStrictEqual([]);
   });
 });
