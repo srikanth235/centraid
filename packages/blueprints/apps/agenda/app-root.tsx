@@ -165,6 +165,8 @@ export function Root({
   const [layersReady, setLayersReady] = useState(false);
   const prefsRef = useRef<ReturnType<typeof createMemberPrefs> | null>(null);
   prefsRef.current ??= createMemberPrefs(() => bump());
+  /** The host default-view knob applies once at mount, never after a band tap. */
+  const appliedDefaultView = useRef(false);
   const layers = prefsRef.current.read().layers;
 
   const state = stateRef.current;
@@ -297,7 +299,8 @@ export function Root({
     (el: HTMLDivElement | null) => {
       rootElRef.current = el;
       rootRef(el);
-      if (el) {
+      if (el && !appliedDefaultView.current) {
+        appliedDefaultView.current = true;
         const knob =
           el.dataset.appDefaultView ??
           document.documentElement.dataset.appDefaultView;
@@ -318,6 +321,8 @@ export function Root({
     (next: ViewKind) => {
       if (stateRef.current.view === next) return;
       stateRef.current.view = next;
+      // Light the band destination immediately; load() is the rows, not the tab.
+      bump();
       void load();
     },
     [load]

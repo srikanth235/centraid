@@ -34,7 +34,7 @@ const AWAITING = "No answer yet";
 
 /** The seat the shell gives an inline app: bar, app, claimed band. */
 const entry = (compact: boolean): string => `
-import { createElement, useRef, useState } from "react";
+import { Component, createElement, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Root } from ${JSON.stringify(AGENDA_ROOT)};
 import AppBand from ${JSON.stringify(APP_BAND)};
@@ -73,6 +73,8 @@ window.centraid = {
         calendars: [{ calendar_id: "cal-personal", name: "Personal" }],
       };
     if (query === "parties") return { parties: [], me: "p-me" };
+    if (query === "day-context")
+      return { birthdays: [], due: [], holidays: [] };
     return {};
   },
   write: async () => ({ status: "executed" }),
@@ -116,7 +118,24 @@ function Seat() {
   );
 }
 
-createRoot(document.getElementById("root")).render(createElement(Seat));
+class Crash extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { err: null };
+  }
+  static getDerivedStateFromError(err) {
+    return { err: err && err.stack ? err.stack : String(err) };
+  }
+  render() {
+    if (this.state.err)
+      return createElement("pre", { id: "crash" }, this.state.err);
+    return this.props.children;
+  }
+}
+
+createRoot(document.getElementById("root")).render(
+  createElement(Crash, null, createElement(Seat))
+);
 `;
 
 async function bundle(
@@ -125,6 +144,13 @@ async function bundle(
 ): Promise<{ css: string; js: string }> {
   const result = await build({
     stdin: { contents, loader: "tsx", resolveDir: here, sourcefile: name },
+    alias: {
+      "@centraid/design": path.join(REPO_ROOT, "packages/design/src/index.ts"),
+      "@centraid/design/elements": path.join(
+        REPO_ROOT,
+        "packages/design/src/elements/index.ts"
+      ),
+    },
     bundle: true,
     define: { "process.env.NODE_ENV": '"production"' },
     format: "iife",
@@ -173,6 +199,9 @@ async function mount(
       `<style>${css}</style><style>${HARNESS_CSS}</style>` +
       `<body><div id="root"></div></body>`
   );
+  page.on("pageerror", (error) => {
+    console.log(`agenda-band pageerror: ${error.message}`);
+  });
   await page.addScriptTag({ content: js });
 }
 
@@ -181,6 +210,10 @@ test("Agenda's compact band offers Search, never Month, and lands where it says"
 }) => {
   test.setTimeout(120_000);
   await mount(page, true, 390);
+  const crash = page.locator("#crash");
+  if ((await crash.count()) > 0) {
+    throw new Error((await crash.textContent()) ?? "crash");
+  }
 
   const band = page.locator('nav[data-band="app"]');
   const tab = (name: string): ReturnType<typeof band.getByRole> =>

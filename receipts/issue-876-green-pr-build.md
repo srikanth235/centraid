@@ -195,3 +195,4 @@ sequence is removed.
 - `apps/mobile/src/lib/replica/multi-vault-session.test.ts`
 - `apps/mobile/src/lib/replica/native-session.test.ts`
 
+- `packages/blueprints/apps/agenda/app-root.tsx`
