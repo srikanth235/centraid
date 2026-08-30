@@ -22,7 +22,7 @@ export const VIEWS: readonly ViewKind[] = [
   "waiting",
 ];
 
-export const POINTER_VIEWS: readonly ViewKind[] = VIEWS;
+export const POINTER_VIEWS: readonly ViewKind[] = VIEWS.slice();
 
 /** Month and Week absent BY TYPE: 7 columns at 390px are unreadable. */
 export type TouchView = "day" | "schedule" | "waiting";

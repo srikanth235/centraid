@@ -7,7 +7,7 @@
 
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, CHANGE_TABLES } from "./app-root.tsx";
-import pendingProjection from "./pending-projection.ts";
+import { notesPendingProjection as pendingProjection } from "./pending-projection.ts";
 import historyQuery from "./queries/history.ts";
 import journalQuery from "./queries/journal.ts";
 import libraryQuery from "./queries/library.ts";

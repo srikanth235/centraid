@@ -7,7 +7,7 @@
 
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, CHANGE_TABLES } from "./app-root.tsx";
-import pendingProjection from "./pending-projection.ts";
+import { agendaPendingProjection as pendingProjection } from "./pending-projection.ts";
 import dayContextQuery from "./queries/day-context.ts";
 import partiesQuery from "./queries/parties.ts";
 import searchQuery from "./queries/search.ts";

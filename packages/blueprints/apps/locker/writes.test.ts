@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import lockerPendingProjection from "./pending-projection.ts";
+import { lockerPendingProjection } from "./pending-projection.ts";
 import {
   ONLINE_ONLY_ACTIONS,
   addItemWrite,

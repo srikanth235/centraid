@@ -49,5 +49,3 @@ export const agendaPendingProjection = definePendingProjection({
     },
   },
 });
-
-export default agendaPendingProjection;

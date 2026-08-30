@@ -7,7 +7,7 @@
 
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, CHANGE_TABLES } from "./app-root.tsx";
-import pendingProjection from "./pending-projection.ts";
+import { lockerPendingProjection as pendingProjection } from "./pending-projection.ts";
 import authQuery from "./queries/auth.ts";
 import itemQuery from "./queries/item.ts";
 import itemsQuery from "./queries/items.ts";

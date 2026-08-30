@@ -34,7 +34,7 @@ export function rungHeight(
 
 export const ZOOM_LEVELS: readonly number[] = RUNGS.map((r) => r.desktop);
 // `number`, not `Rung`: callers walk it by ±1.
-export const DEFAULT_ZOOM: number = DEFAULT_RUNG;
+export const DEFAULT_ZOOM: number = 2;
 
 // Deliberately not the repo's 720px default.
 export const BREAKPOINT = 860;

@@ -672,6 +672,25 @@ named here so the manifest covers the whole change set rather than only its last
 - `packages/blueprints/apps/photos/format.ts`
 - `packages/blueprints/apps/photos/grouping.ts`
 - `packages/blueprints/apps/photos/layout.ts`
+- `packages/blueprints/apps/_shared/pending-projections.ts`
+- `packages/blueprints/apps/agenda/app-inline.tsx`
+- `packages/blueprints/apps/agenda/pending-projection.ts`
+- `packages/blueprints/apps/agenda/views.ts`
+- `packages/blueprints/apps/docs/app-inline.tsx`
+- `packages/blueprints/apps/docs/pending-projection.ts`
+- `packages/blueprints/apps/locker/app-inline.tsx`
+- `packages/blueprints/apps/locker/pending-projection.ts`
+- `packages/blueprints/apps/locker/writes.test.ts`
+- `packages/blueprints/apps/notes/app-inline.tsx`
+- `packages/blueprints/apps/notes/pending-projection.ts`
+- `packages/blueprints/apps/people/app-inline.tsx`
+- `packages/blueprints/apps/people/pending-projection.ts`
+- `packages/blueprints/apps/photos/app-inline.tsx`
+- `packages/blueprints/apps/photos/pending-projection.ts`
+- `packages/blueprints/apps/tally/app-inline.tsx`
+- `packages/blueprints/apps/tally/pending-projection.ts`
+- `packages/blueprints/apps/tasks/app-inline.tsx`
+- `packages/blueprints/apps/tasks/pending-projection.ts`
 - `packages/blueprints/apps/photos/media-observer.ts`
 - `packages/blueprints/apps/photos/media.ts`
 - `packages/blueprints/apps/photos/queries/_shared.ts`
@@ -2127,6 +2146,10 @@ Round after `5924b7f82` (required CI red on that squash):
 - Gateway image / inline-app load: `tasks/when.ts` imported format-kit by
   package name; Rolldown in the Docker build could not resolve it. Relative
   `.js` import plus web/desktop Vite aliases.
+- Knip duplicate exports: pending-projection default+named, agenda
+  `POINTER_VIEWS` aliasing `VIEWS`, photos `DEFAULT_ZOOM` aliasing
+  `DEFAULT_RUNG`.
+
 - Compact-band harness: source `@centraid/design` alias, `day-context`
   fixture with `holidays`, crash boundary, host default-view applied once,
   band tab lights immediately.
@@ -2599,6 +2622,25 @@ Every path in this change set, named for receipt-per-issue file coverage.
 - `packages/blueprints/apps/photos/format.ts`
 - `packages/blueprints/apps/photos/grouping.ts`
 - `packages/blueprints/apps/photos/layout.ts`
+- `packages/blueprints/apps/_shared/pending-projections.ts`
+- `packages/blueprints/apps/agenda/app-inline.tsx`
+- `packages/blueprints/apps/agenda/pending-projection.ts`
+- `packages/blueprints/apps/agenda/views.ts`
+- `packages/blueprints/apps/docs/app-inline.tsx`
+- `packages/blueprints/apps/docs/pending-projection.ts`
+- `packages/blueprints/apps/locker/app-inline.tsx`
+- `packages/blueprints/apps/locker/pending-projection.ts`
+- `packages/blueprints/apps/locker/writes.test.ts`
+- `packages/blueprints/apps/notes/app-inline.tsx`
+- `packages/blueprints/apps/notes/pending-projection.ts`
+- `packages/blueprints/apps/people/app-inline.tsx`
+- `packages/blueprints/apps/people/pending-projection.ts`
+- `packages/blueprints/apps/photos/app-inline.tsx`
+- `packages/blueprints/apps/photos/pending-projection.ts`
+- `packages/blueprints/apps/tally/app-inline.tsx`
+- `packages/blueprints/apps/tally/pending-projection.ts`
+- `packages/blueprints/apps/tasks/app-inline.tsx`
+- `packages/blueprints/apps/tasks/pending-projection.ts`
 - `packages/blueprints/apps/photos/media-observer.ts`
 - `packages/blueprints/apps/photos/media.ts`
 - `packages/blueprints/apps/photos/queries/_shared.ts`
