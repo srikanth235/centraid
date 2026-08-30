@@ -22,7 +22,7 @@
 // scripts/lint-e2e-flows.mjs).
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import { SCREEN_TRANSITION_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 await runFlow("tasks-board", async (ctx) => {
   await ctx.ensureDemo("tasks");
@@ -36,7 +36,7 @@ ${retryableTapCommands("Open Tasks.*")}
 # group todayGroups() flagged for attention, which is the overdue group alone.
 - extendedWaitUntil:
     visible: "Move all to today"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${SCREEN_TRANSITION_TIMEOUT_MS}
 - assertVisible: "[1-9][0-9]* · nothing was deleted"
 - assertVisible: "Rotate the tires before the drive"
 - takeScreenshot: tasks-today

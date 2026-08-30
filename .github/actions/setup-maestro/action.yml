@@ -1,0 +1,50 @@
+name: Set up pinned Maestro
+description: Install and verify the exact Maestro CLI archive used by mobile E2E.
+inputs:
+  version:
+    description: Exact Maestro CLI version
+    required: true
+  sha256:
+    description: SHA-256 digest of the official maestro.zip release asset
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Restore pinned Maestro CLI
+      id: cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/centraid-maestro
+        key: maestro-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}-${{ inputs.sha256 }}
+    - name: Install and verify pinned Maestro CLI
+      shell: bash
+      env:
+        EXPECTED_VERSION: ${{ inputs.version }}
+        EXPECTED_SHA256: ${{ inputs.sha256 }}
+      run: |
+        set -euo pipefail
+        archive="$HOME/.cache/centraid-maestro/maestro-${EXPECTED_VERSION}.zip"
+        mkdir -p "$(dirname "$archive")"
+        if [ ! -s "$archive" ]; then
+          curl --fail --location --retry 3 \
+            "https://github.com/mobile-dev-inc/Maestro/releases/download/cli-${EXPECTED_VERSION}/maestro.zip" \
+            --output "$archive"
+        fi
+        actual_sha="$(shasum -a 256 "$archive" | cut -d' ' -f1)"
+        test "$actual_sha" = "$EXPECTED_SHA256" || {
+          echo "::error::Maestro archive checksum mismatch"
+          exit 1
+        }
+        install_dir="$HOME/.maestro"
+        staging="$RUNNER_TEMP/maestro-${EXPECTED_VERSION}"
+        rm -rf "$staging" "$install_dir/bin" "$install_dir/lib"
+        mkdir -p "$staging" "$install_dir"
+        unzip -q "$archive" -d "$staging"
+        cp -R "$staging/maestro/." "$install_dir/"
+        echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+        installed="$($HOME/.maestro/bin/maestro --version 2>&1 | tail -1 | tr -d '\r')"
+        test "$installed" = "$EXPECTED_VERSION" || {
+          echo "::error::Expected Maestro $EXPECTED_VERSION, got $installed"
+          exit 1
+        }
+        echo "Maestro $installed"

@@ -21,8 +21,11 @@
 // Both assertions are on copy the asserted screen alone publishes (issue #483's
 // non-vacuous rules; this file is discovered by scripts/lint-e2e-flows.mjs).
 
-import { retryableTapCommands } from "../lib/first-run.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import {
+  DISMISS_KEYBOARD_ONBOARDING,
+  retryableTapCommands,
+} from "../lib/first-run.mjs";
+import { SCREEN_TRANSITION_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 /** Balances' own ambient sentence — `apps/tally/view-copy.ts` BALANCES_STATUS,
  *  drawn into the app bar by `TallyScreen.tsx` and published nowhere else. */
@@ -32,6 +35,16 @@ const BALANCES_STATUS =
 /** The §6 hero sub-line, with the counts the figure was derived from. The
  *  numbers are the seeded vault's, so they are matched rather than pinned. */
 const HERO_SUB = "Derived from .* expenses and .* settlements.*";
+const GROUPS_STATUS =
+  "A group is a shared circle . members co-contribute from their own vaults";
+const GROUP_HERO_SUB =
+  "Every member computes this figure themselves, from the same facts.";
+const ADD_STATUS =
+  "Six ways to divide it . the method is recorded with the shares";
+const DESCRIPTION_PLACEHOLDER = "Dinner at the Ship";
+const AMOUNT_PLACEHOLDER = "0.00";
+const QUEUED_REASON = ".*on a device, not in the vault yet.*";
+const DEMO_GROUP = "Tahoe Trip";
 
 await runFlow("tally-derived", async (ctx) => {
   await ctx.ensureDemo("tally");
@@ -43,7 +56,7 @@ await runFlow("tally-derived", async (ctx) => {
 ${retryableTapCommands("Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${SCREEN_TRANSITION_TIMEOUT_MS}
 # The figure names the rows it was derived from, so a member can go and count
 # them. A stored balance would have no counts to name.
 - assertVisible: "${HERO_SUB}"
@@ -52,27 +65,87 @@ ${retryableTapCommands("Open Tally.*")}
     "derived-at-read-time"
   );
 
-  await ctx.run(
-    `appId: ${ctx.state.appId}
+  // Waiting is backed by this device's durable outbox, not the seeded ledger.
+  // Maestro can create that state deterministically on Android by disconnecting
+  // the emulator before composing an expense. iOS Simulator has no supported
+  // airplane-mode command, so its pending-write companion remains the native
+  // restart test rather than a vacuous device assertion.
+  if (ctx.state.platform === "android") {
+    const pendingExpense = `Pending contribution ${ctx.state.runId}`;
+    try {
+      await ctx.run(
+        `appId: ${ctx.state.appId}
+---
+${retryableTapCommands("Groups", BALANCES_STATUS)}
+- extendedWaitUntil:
+    visible: "${GROUPS_STATUS}"
+    timeout: 20000
+${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
+- extendedWaitUntil:
+    visible: "${GROUP_HERO_SUB}"
+    timeout: 20000
+- setAirplaneMode: enabled
+${retryableTapCommands("Add expense", GROUP_HERO_SUB)}
+- extendedWaitUntil:
+    visible: "${ADD_STATUS}"
+    timeout: 20000
+- tapOn: "${DESCRIPTION_PLACEHOLDER}"
+- inputText: "${pendingExpense}"
+- assertVisible: "${pendingExpense}"
+${DISMISS_KEYBOARD_ONBOARDING}
+- tapOn: "${AMOUNT_PLACEHOLDER}"
+- inputText: "12.34"
+- assertVisible: "12.34"
+- hideKeyboard
+- assertVisible: "Lands in ${DEMO_GROUP} . queued on this device until the gateway answers"
+- tapOn:
+    text: "Add expense"
+    below: "Lands in ${DEMO_GROUP}.*"
+${retryableTapCommands("Waiting", GROUP_HERO_SUB)}
+- extendedWaitUntil:
+    visible: "Every contribution says whose it is, where it is, and what it is waiting on"
+    timeout: 20000
+# A real queued outbox row is the precondition for the negative assertions.
+- assertVisible: "QUEUED"
+- assertVisible: "${QUEUED_REASON}"
+- assertVisible: "Your own writes, from this device.*"
+# THE HONEST-DOORS CLAIM. No mobile transport reaches the per-intent decide
+# door, so neither verb may be drawn on this real pending row.
+- assertNotVisible: "Approve"
+- assertNotVisible: "Decline"
+- takeScreenshot: tally-waiting-pending-no-decide
+`,
+        "waiting-with-pending-row"
+      );
+    } finally {
+      await ctx.run(
+        `appId: ${ctx.state.appId}
+---
+- setAirplaneMode: disabled
+`,
+        "restore-network"
+      );
+    }
+  } else {
+    await ctx.run(
+      `appId: ${ctx.state.appId}
 ---
 - tapOn: "Waiting"
 - extendedWaitUntil:
     visible: "Every contribution says whose it is, where it is, and what it is waiting on"
-    timeout: 30000
-# Whose writes this seat can honestly account for — its own outbox.
+    timeout: 20000
 - assertVisible: "Your own writes, from this device.*"
-# THE HONEST-DOORS CLAIM. No mobile transport reaches the per-intent decide
-# door, so neither verb may be drawn. Adding the buttons without the door
-# turns exactly this red.
-- assertNotVisible: "Approve"
-- assertNotVisible: "Decline"
-- takeScreenshot: tally-waiting-no-decide
+- takeScreenshot: tally-waiting-ios-surface
 `,
-    "waiting-without-a-verb"
-  );
+      "waiting-surface-without-pending-claim"
+    );
+    ctx.note(
+      "iOS proved the Waiting surface but made no withheld-verb claim without a real pending row; the native restart companion owns that state"
+    );
+  }
 
   ctx.note(
-    "Balances stated its derivation with the counts behind it; Waiting drew its own scope and neither Approve nor Decline"
+    "Balances stated its derivation with the counts behind it; Android also proved a real queued Waiting row offers neither Approve nor Decline"
   );
   return {
     pass: true,

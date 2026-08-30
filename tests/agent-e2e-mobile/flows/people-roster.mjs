@@ -38,7 +38,7 @@
 // scripts/lint-e2e-flows.mjs).
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import { SCREEN_TRANSITION_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 await runFlow("people-roster", async (ctx) => {
   await ctx.ensureDemo("people");
@@ -52,7 +52,7 @@ ${retryableTapCommands("Open People.*")}
 # so it could not tell an arrival from a tap that did nothing.
 - extendedWaitUntil:
     visible: "Open Grandpa Ray"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${SCREEN_TRANSITION_TIMEOUT_MS}
 - assertVisible: "Open Maya Alvarez"
 - assertVisible: "Open Jake Bennett"
 - assertVisible: "Open Chris Okafor"

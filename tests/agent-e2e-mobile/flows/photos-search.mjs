@@ -1,5 +1,5 @@
 import { retryableTapCommands } from "../lib/first-run.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import { SCREEN_TRANSITION_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 await runFlow("photos-search", async (ctx) => {
   await ctx.ensureDemo("photos");
@@ -10,7 +10,7 @@ await runFlow("photos-search", async (ctx) => {
 ${retryableTapCommands("Open Photos.*")}
 - extendedWaitUntil:
     visible: "Collections"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${SCREEN_TRANSITION_TIMEOUT_MS}
 ${retryableTapCommands("Search")}
 - tapOn: "Search photographs"
 - inputText: "Tahoe scouting"
@@ -23,6 +23,9 @@ ${retryableTapCommands("Search")}
 ${retryableTapCommands("Open Tahoe scouting.*")}
 - extendedWaitUntil:
     visible: ".*Tahoe scouting.*"
+    timeout: 15000
+- extendedWaitUntil:
+    visible: "Emerald Bay overlook"
     timeout: 15000
 - tapOn:
     text: ".*Emerald Bay overlook.*|.*emerald-bay-overlook.*"

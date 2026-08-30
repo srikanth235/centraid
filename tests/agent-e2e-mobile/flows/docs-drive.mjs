@@ -21,7 +21,7 @@
 // scripts/lint-e2e-flows.mjs).
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import { SCREEN_TRANSITION_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 await runFlow("docs-drive", async (ctx) => {
   await ctx.ensureDemo("docs");
@@ -35,7 +35,7 @@ ${retryableTapCommands("Open Docs.*")}
 # part of the assertion.
 - extendedWaitUntil:
     visible: "[0-9,]+ · press and hold a row for quick actions"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${SCREEN_TRANSITION_TIMEOUT_MS}
 - assertVisible: "Tahoe packing list"
 - assertVisible: "Renters insurance policy.*"
 - takeScreenshot: docs-all-shelf

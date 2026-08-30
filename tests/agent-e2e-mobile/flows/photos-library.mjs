@@ -1,7 +1,10 @@
 import { retryableTapCommands } from "../lib/first-run.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import { SCREEN_TRANSITION_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
-const now = new Date();
+const now = new Date(process.env.MOBILE_E2E_FIXTURE_NOW ?? Date.now());
+if (Number.isNaN(now.valueOf())) {
+  throw new Error("MOBILE_E2E_FIXTURE_NOW is not an ISO date");
+}
 const currentYear = String(now.getFullYear());
 const currentMonth = new Intl.DateTimeFormat("en-US", {
   month: "long",
@@ -17,7 +20,7 @@ await runFlow("photos-library", async (ctx) => {
 ${retryableTapCommands("Open Photos.*")}
 - extendedWaitUntil:
     visible: "Collections"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${SCREEN_TRANSITION_TIMEOUT_MS}
 ${retryableTapCommands("Library")}
 - extendedWaitUntil:
     visible: "Select"

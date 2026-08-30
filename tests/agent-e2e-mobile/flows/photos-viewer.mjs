@@ -2,7 +2,7 @@ import { copyFile, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import { SCREEN_TRANSITION_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 await runFlow("photos-viewer", async (ctx) => {
   await ctx.ensureDemo("photos");
@@ -13,7 +13,7 @@ await runFlow("photos-viewer", async (ctx) => {
 ${retryableTapCommands("Open Photos.*")}
 - extendedWaitUntil:
     visible: "Collections"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${SCREEN_TRANSITION_TIMEOUT_MS}
 ${retryableTapCommands("Library")}
 - extendedWaitUntil:
     visible: "Select"

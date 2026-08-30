@@ -4,7 +4,8 @@
 // exercise clone/publish/list/static-serve. The HTTP listener remains
 // loopback-only; remote app traffic crosses the proved Iroh transport.
 
-import { mkdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 
@@ -28,10 +29,16 @@ const keyStore = new KeyStore(layout.keysDir);
 const hostEndpointId = kitlessHostIdentity(
   keyStore.loadOrCreate("endpoint-key.bin")
 );
+const redactLog = (value) =>
+  String(value)
+    .replace(/\bBearer\s+\S+/giu, "Bearer [REDACTED]")
+    .replace(/([?&](?:token|ticket|authorization)=)[^&#\s]+/giu, "$1[REDACTED]")
+    .replace(/\b[A-Za-z0-9_-]{120,}\b/gu, "[REDACTED_CAPABILITY]");
 const logger = {
-  info: (message) => console.log(`[mobile-ci-gateway] ${message}`),
-  warn: (message) => console.warn(`[mobile-ci-gateway] ${message}`),
-  error: (message) => console.error(`[mobile-ci-gateway] ${message}`),
+  info: (message) => console.log(`[mobile-ci-gateway] ${redactLog(message)}`),
+  warn: (message) => console.warn(`[mobile-ci-gateway] ${redactLog(message)}`),
+  error: (message) =>
+    console.error(`[mobile-ci-gateway] ${redactLog(message)}`),
 };
 const runtime = {};
 const devicePlane = makeDaemonDevicePlane({
@@ -65,7 +72,20 @@ const gateway = await buildGateway({
 runtime.gateway = gateway;
 await gateway.start(`http://127.0.0.1:${port}`);
 
+let ready = false;
 const server = http.createServer((request, response) => {
+  if (request.url === "/centraid/_ci/ready") {
+    response.statusCode = ready ? 200 : 503;
+    response.setHeader("content-type", "application/json");
+    response.end(
+      JSON.stringify({
+        ready,
+        fixtureId: ready ? runtime.fixtureId : null,
+        gatewayEndpointId: ready ? runtime.endpoint?.endpointId : null,
+      })
+    );
+    return;
+  }
   void gateway
     .composedHandler(request, response)
     .then((handled) => {
@@ -96,10 +116,17 @@ if (!fixture.ok || fixtureBody?.ok !== true) {
     `mobile CI fixture failed at ${fixtureBody?.appId ?? "unknown app"}: ${fixtureBody?.error ?? fixture.status}`
   );
 }
-console.log(
-  `mobile CI fixture ready (seeded ${fixtureBody.seeded?.join(", ") ?? "none"})`
-);
-
+const fixtureApps = Array.isArray(fixtureBody.apps)
+  ? fixtureBody.apps
+      .map((app) => ({ appId: app?.appId, rows: Number(app?.rows ?? 0) }))
+      .filter(
+        (app) => typeof app.appId === "string" && app.appId && app.rows > 0
+      )
+      .sort((left, right) => left.appId.localeCompare(right.appId))
+  : [];
+if (fixtureApps.length === 0 || typeof fixtureBody.now !== "string") {
+  throw new Error("mobile CI fixture returned no versionable app manifest");
+}
 const endpoint = await devicePlane.startEndpoint({
   baseUrl: `http://127.0.0.1:${port}`,
   // The CI HTTP listener deliberately has no bearer. Iroh still proves and
@@ -111,15 +138,40 @@ if (!endpoint) {
   throw new Error("mobile CI gateway could not start its Iroh endpoint");
 }
 runtime.endpoint = endpoint;
+const fixtureIdentity = {
+  version: 1,
+  seed: 1,
+  now: fixtureBody.now,
+  gatewayEndpointId: endpoint.endpointId,
+  apps: fixtureApps,
+};
+const fixtureId = createHash("sha256")
+  .update(JSON.stringify(fixtureIdentity))
+  .digest("hex");
+runtime.fixtureId = fixtureId;
+await writeFile(
+  path.join(dataDir, "mobile-e2e-fixture.json"),
+  `${JSON.stringify({ fixtureId, ...fixtureIdentity }, null, 2)}\n`
+);
+console.log(
+  `mobile CI fixture ready (${fixtureApps.length} apps; seeded ${fixtureBody.seeded?.join(", ") ?? "none"}; id ${fixtureId.slice(0, 12)})`
+);
+ready = true;
 console.log(`mobile CI gateway listening on http://127.0.0.1:${port}`);
 
-async function close() {
-  await new Promise((resolve) => {
-    server.close(resolve);
-  });
-  await endpoint?.close();
-  await gateway.stop();
-  database.close();
+let closePromise;
+function close() {
+  closePromise ??= (async () => {
+    server.closeAllConnections?.();
+    await Promise.race([
+      new Promise((resolve) => server.close(resolve)),
+      new Promise((resolve) => setTimeout(resolve, 5_000)),
+    ]);
+    await endpoint?.close();
+    await gateway.stop();
+    database.close();
+  })();
+  return closePromise;
 }
 
 for (const signal of ["SIGINT", "SIGTERM"]) {

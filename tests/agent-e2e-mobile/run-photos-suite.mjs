@@ -1,47 +1,34 @@
-import { spawn } from "node:child_process";
 import path from "node:path";
 
+import { runMobileSuite } from "./lib/suite-runner.mjs";
+
 const FLOWS = [
-  "photos-permissions.mjs",
   "photos-library.mjs",
   "photos-viewer.mjs",
   "photos-search.mjs",
   "photos-select-write.mjs",
+  "photos-permissions.mjs",
+];
+const FLOW_NAMES = [
+  "Photos library",
+  "Photos viewer",
+  "Photos search",
+  "Photos select and write",
+  "Photos permissions",
 ];
 const BUDGET_MS = 8 * 60_000;
 const flowsDir = path.join(import.meta.dirname, "flows");
 
-function runFlow(file, reusePairedState) {
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, [path.join(flowsDir, file)], {
-      env: {
-        ...process.env,
-        ...(reusePairedState ? { MAESTRO_REUSE_PAIRED_STATE: "1" } : {}),
-      },
-      stdio: "inherit",
-    });
-    child.on("exit", (code) => resolve(code ?? 1));
-    child.on("error", () => resolve(1));
-  });
-}
-
-const startedAt = Date.now();
-async function runRemainingFlows(index = 0, exitCode = 0) {
-  const flow = FLOWS[index];
-  if (!flow) return exitCode;
-  const code = await runFlow(flow, index > 0);
-  return runRemainingFlows(index + 1, code === 0 ? exitCode : 1);
-}
-let exitCode = await runRemainingFlows();
-
-const elapsedMs = Date.now() - startedAt;
-console.log(
-  `[photos-suite] aggregate ${Math.ceil(elapsedMs / 1000)}s / ${BUDGET_MS / 1000}s budget`
-);
-if (elapsedMs >= BUDGET_MS) {
-  console.error(
-    "[photos-suite] FAIL: the five Photos journeys exceeded eight minutes"
-  );
-  exitCode = 1;
-}
-process.exitCode = exitCode;
+await runMobileSuite({
+  suite: "Photos functionality",
+  budgetMs: BUDGET_MS,
+  flows: FLOWS.map((file, index) => ({
+    name: FLOW_NAMES[index],
+    file: path.join(flowsDir, file),
+    // The denial journey is deliberately last and pairs from clean app state:
+    // its OS permission mutation and empty-vault premise cannot contaminate
+    // the fixture-backed functionality chain.
+    reusePairedState: index > 0 && index < FLOWS.length - 1,
+    requiredForFollowing: index === 0,
+  })),
+});

@@ -6,7 +6,13 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { discoverFiles, lintFlowSource } from "./lint-e2e-flows.mjs";
+import { FLOW_CATALOG } from "../tests/agent-e2e-mobile/ci-flow-catalog.mjs";
+import {
+  discoverFiles,
+  lintFlowSource,
+  readCanonicalSurfaces,
+  validateFlowCatalog,
+} from "./lint-e2e-flows.mjs";
 
 const rules = (src) =>
   lintFlowSource(src)
@@ -173,5 +179,90 @@ test("an allow marker naming a rule that does not exist suppresses nothing", () 
       '# e2e-lint-allow: input-observed — sounds plausible, is not a rule\n- inputText: "x"\n- tapOn: "Save"\n'
     ),
     ["unasserted-input"]
+  );
+});
+
+// ---- CI ownership catalog. A flow may be intentionally manual, but it may
+// never be accidentally absent from the roster or appear wired only in a dead
+// runner.
+
+test("every flow on disk has an explicit CI or manual classification", () => {
+  assert.deepEqual(
+    Object.keys(FLOW_CATALOG)
+      .filter((file) => file.startsWith(`${FLOW_DIR}/`))
+      .sort(),
+    readdirSync(repoFile(FLOW_DIR))
+      .filter((name) => name.endsWith(".mjs"))
+      .map((name) => `${FLOW_DIR}/${name}`)
+      .sort()
+  );
+  assert.deepEqual(validateFlowCatalog(), []);
+});
+
+test("a newly discovered flow fails until it is classified", () => {
+  const newFlow = `${FLOW_DIR}/new-flow.mjs`;
+  const errors = validateFlowCatalog({
+    files: [...discoverFiles(), newFlow],
+  });
+  assert.ok(
+    errors.some(
+      (error) => error.includes(`not classified`) && error.includes(newFlow)
+    )
+  );
+});
+
+test("a manual flow requires a reason and no CI metadata", () => {
+  const catalog = {
+    ...FLOW_CATALOG,
+    [`${FLOW_DIR}/home-loads.mjs`]: {
+      ownership: "manual",
+      reason: "   ",
+    },
+  };
+  const errors = validateFlowCatalog({ catalog });
+  assert.ok(
+    errors.some((error) => error.includes("manual flow has no reason"))
+  );
+});
+
+test("a CI flow must be reachable through its claimed platform surface", () => {
+  const catalog = {
+    ...FLOW_CATALOG,
+    [`${FLOW_DIR}/home-loads.mjs`]: {
+      ownership: "ci",
+      platforms: ["ios"],
+      suite: "standalone",
+    },
+  };
+  const surfaces = readCanonicalSurfaces();
+  surfaces.workflow = surfaces.workflow.replace(
+    `${FLOW_DIR}/home-loads.mjs`,
+    `${FLOW_DIR}/retired-home-loads.mjs`
+  );
+  const errors = validateFlowCatalog({ catalog, surfaces });
+  assert.ok(
+    errors.some(
+      (error) =>
+        error.includes("home-loads.mjs") &&
+        error.includes("ios") &&
+        error.includes("not referenced")
+    )
+  );
+});
+
+test("a suite flow must remain reachable from the workflow and its runner", () => {
+  const surfaces = readCanonicalSurfaces();
+  surfaces.workflow = surfaces.workflow.replace(
+    "tests/agent-e2e-mobile/run-photos-suite.mjs",
+    "tests/agent-e2e-mobile/retired-photos-suite.mjs"
+  );
+  const errors = validateFlowCatalog({ surfaces });
+  assert.ok(
+    errors.some(
+      (error) =>
+        error.includes("photos-library.mjs") &&
+        error.includes("ios") &&
+        error.includes("does not invoke")
+    )
   );
 });

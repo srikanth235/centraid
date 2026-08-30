@@ -27,16 +27,26 @@ on:
           - mutation
           - fuzz
           - join
+      mobile_lane:
+        description: "When suite=mobile, run all iOS lanes or only the focused lane"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - a
+          - b
 
 # #496 C3 — overlapping schedule + dispatch must not double-run macOS.
 concurrency:
-  group: e2e-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  group: e2e-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.suite || 'scheduled' }}-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mobile_lane || 'all' }}
+  # A newer manual diagnosis supersedes an older run on the same ref. Scheduled
+  # runs still serialize instead of cancelling one another, preserving nightly
+  # evidence while avoiding hours spent on obsolete manual attempts.
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
 
 permissions:
   contents: read
-  # E3 auto-issue on red nightly needs issues:write when the failure job runs.
-  issues: write
 
 jobs:
   desktop-e2e:
@@ -191,23 +201,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
-      - name: Select Xcode 26.4 or newer
+      - name: Select the pinned Xcode toolchain
         run: |
           set -euo pipefail
-          selected=""
-          for app in $(ls -d /Applications/Xcode_26.*.app 2>/dev/null | sort -V -r); do
-            version="${app#/Applications/Xcode_}"
-            version="${version%.app}"
-            major="${version%%.*}"
-            rest="${version#*.}"
-            minor="${rest%%.*}"
-            if [ "$major" -gt 26 ] || { [ "$major" -eq 26 ] && [ "$minor" -ge 4 ]; }; then
-              selected="$app"
-              break
-            fi
-          done
-          test -n "$selected" || {
-            echo "::error::no Xcode ≥26.4 under /Applications (ExpoModulesJSI floor)"
+          selected="/Applications/Xcode_26.4.1.app"
+          test -d "$selected" || {
+            echo "::error::pinned Xcode 26.4.1 is unavailable"
             ls -d /Applications/Xcode*.app || true
             exit 1
           }
@@ -250,7 +249,7 @@ jobs:
           else
             output="$RUNNER_TEMP/centraid-ios-e2e-build"
             rm -rf "$output"
-            bunx expo run:ios --configuration Release --device generic --no-bundler --output "$output"
+            EXPO_PUBLIC_CENTRAID_E2E=1 bunx expo run:ios --configuration Release --device generic --no-bundler --output "$output"
             app="$(find "$output" -type d -name 'Centraid.app' -print -quit 2>/dev/null || true)"
             test -n "$app" || { echo "::error::Release Centraid.app not found in $output"; exit 1; }
             test -s "$app/main.jsbundle" || {
@@ -294,6 +293,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
       - name: Build the mobile gateway runtime
         run: |
           set -euo pipefail
@@ -321,12 +322,19 @@ jobs:
       always() && needs.mobile-e2e-ios-build.result == 'success' && needs.mobile-e2e-ios-gateway-build.result == 'success' && (github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile')
     runs-on: macos-26
     timeout-minutes: 90
+    env:
+      MAESTRO_VERSION: 2.6.1
+      MAESTRO_SHA256: 3440825f514f537c6a96bcf5de995780c2a4a7f83a43208fdc95d4f1fecfad3b
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: "180000"
+      DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
     strategy:
       fail-fast: false
       matrix:
-        lane: [a, b]
+        include: ${{ fromJSON(github.event.inputs.mobile_lane == 'a' && '[{"lane":"a","shard":"core"}]' || github.event.inputs.mobile_lane == 'b' && '[{"lane":"b","shard":"photos"},{"lane":"b","shard":"home-apps"},{"lane":"b","shard":"places"},{"lane":"b","shard":"sharing"}]' || '[{"lane":"a","shard":"core"},{"lane":"b","shard":"photos"},{"lane":"b","shard":"home-apps"},{"lane":"b","shard":"places"},{"lane":"b","shard":"sharing"},{"lane":"performance","shard":"photos-frames"}]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Start the mobile shard clock
+        run: node -e 'require("node:fs").appendFileSync(process.env.GITHUB_ENV, `MOBILE_E2E_SHARD_STARTED_AT=${Date.now()}\n`)'
       - uses: ./.github/actions/setup
       - name: Download the embedded iOS E2E app
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -338,28 +346,48 @@ jobs:
         with:
           name: mobile-e2e-ios-gateway
           path: ${{ runner.temp }}/centraid-mobile-gateway-artifact
-      - name: Install Maestro CLI
-        env:
-          MAESTRO_VERSION: 2.6.1
-        run: |
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: ./.github/actions/setup-maestro
+        with:
+          version: ${{ env.MAESTRO_VERSION }}
+          sha256: ${{ env.MAESTRO_SHA256 }}
       - name: Boot an iOS simulator and install the app
         run: |
           set -euo pipefail
-          udid="$(xcrun simctl list devices available --json | node -e '
+          selection="$(xcrun simctl list devices available --json | node -e '
             let input="";
             process.stdin.on("data", chunk => input += chunk);
             process.stdin.on("end", () => {
-              const devices = Object.values(JSON.parse(input).devices).flat();
-              const phone = devices.find(device => device.isAvailable && /iPhone/.test(device.name));
+              const devices = Object.entries(JSON.parse(input).devices)
+                .flatMap(([runtime, entries]) => entries.map(device => ({ ...device, runtime })))
+                .filter(device =>
+                  device.isAvailable &&
+                  device.name === "iPhone 17 Pro" &&
+                  device.runtime === "com.apple.CoreSimulator.SimRuntime.iOS-26-4"
+                )
+                .sort((left, right) => left.udid < right.udid ? -1 : 1);
+              const phone = devices[0];
               if (!phone) process.exit(1);
-              process.stdout.write(phone.udid);
+              process.stdout.write(`${phone.udid}\t${phone.name}\t${phone.runtime}`);
             });
           ')"
+          IFS=$'\t' read -r udid device_name runtime <<< "$selection"
+          echo "Selected simulator: $device_name ($runtime) $udid"
           echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
-          xcrun simctl boot "$udid" || true
+          echo "MAESTRO_DEVICE_UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl shutdown "$udid" 2>/dev/null || true
+          xcrun simctl erase "$udid"
+          xcrun simctl boot "$udid"
           xcrun simctl bootstatus "$udid" -b
+          xcrun simctl status_bar "$udid" override --time '09:41' --batteryState charged --batteryLevel 100
+          xcrun simctl ui "$udid" appearance light
+          xcrun simctl spawn "$udid" defaults write NSGlobalDomain AppleLanguages -array en
+          xcrun simctl spawn "$udid" defaults write NSGlobalDomain AppleLocale en_US
+          mkdir -p artifacts/mobile-e2e
+          xcrun simctl list devices --json > "artifacts/mobile-e2e/simulator-${{ matrix.lane }}-${{ matrix.shard }}.json"
           app_root="$RUNNER_TEMP/centraid-ios-e2e-app"
           rm -rf "$app_root"
           mkdir -p "$app_root"
@@ -373,19 +401,45 @@ jobs:
         run: |
           set -euo pipefail
           tar -xzf "$RUNNER_TEMP/centraid-mobile-gateway-artifact/centraid-mobile-gateway-dist.tar.gz" -C "$GITHUB_WORKSPACE"
-          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway-${{ matrix.lane }}"
-          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > "/tmp/centraid-mobile-gateway-${{ matrix.lane }}.log" 2>&1 &
+          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway-${{ matrix.lane }}-${{ matrix.shard }}"
+          log_file="$GITHUB_WORKSPACE/artifacts/mobile-e2e/gateway-${{ matrix.lane }}-${{ matrix.shard }}.log"
+          mkdir -p "$(dirname "$log_file")"
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > "$log_file" 2>&1 &
           echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
+          echo "CENTRAID_MOBILE_GATEWAY_DATA_DIR=$gateway_dir" >> "$GITHUB_ENV"
           echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
+          ready=0
           for attempt in {1..90}; do
-            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then
+              ready=1
+              break
+            fi
             sleep 2
           done
-          cat "/tmp/centraid-mobile-gateway-${{ matrix.lane }}.log"
-          exit 1
+          if [ "$ready" -ne 1 ]; then
+            cat "$log_file"
+            exit 1
+          fi
+          fixture_file="$gateway_dir/mobile-e2e-fixture.json"
+          test -s "$fixture_file" || { echo "::error::mobile fixture manifest missing"; exit 1; }
+          node --input-type=module - "$fixture_file" "$GITHUB_ENV" <<'NODE'
+          import { appendFile, readFile } from "node:fs/promises";
+          const [fixturePath, envPath] = process.argv.slice(2);
+          const fixture = JSON.parse(await readFile(fixturePath, "utf8"));
+          if (!fixture.fixtureId || !fixture.now || !Array.isArray(fixture.apps)) {
+            throw new Error("mobile fixture manifest is incomplete");
+          }
+          await appendFile(envPath, [
+            `MOBILE_E2E_FIXTURE_ID=${fixture.fixtureId}`,
+            `MOBILE_E2E_FIXTURE_NOW=${fixture.now}`,
+            `MOBILE_E2E_FIXTURE_APPS_JSON=${JSON.stringify(fixture.apps)}`,
+            "",
+          ].join("\n"));
+          NODE
+          cp "$fixture_file" "artifacts/mobile-e2e/fixture-${{ matrix.lane }}-${{ matrix.shard }}.json"
       - run: node scripts/test-report/prepare.mjs
       - name: Run iOS Maestro lane ${{ matrix.lane }}
-        if: matrix.lane == 'a'
+        if: matrix.shard == 'core'
         env:
           MAESTRO_PLATFORM: ios
           MOBILE_E2E_EMBEDDED: "1"
@@ -399,194 +453,49 @@ jobs:
             node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?
           fi
           exit "$ec"
-      - name: Run lane B — Photos grid frame probe
-        id: lane_b_scroll_frames
-        if: matrix.lane == 'b'
-        continue-on-error: true
+      # The suite runners are the canonical fixture owners registered by the
+      # test matrix. They preserve one fresh pairing followed by bounded reuse,
+      # emit one result per journey, and enforce their suite deadlines.
+      - name: Run lane B — Photos functionality
+        id: lane_b_photos
+        if: matrix.shard == 'photos'
         env:
           MAESTRO_PLATFORM: ios
           MOBILE_E2E_EMBEDDED: "1"
-        run: node tests/agent-e2e-mobile/flows/scroll-frames.mjs
-      - name: Start lane B — Photos functionality budget
-        if: matrix.lane == 'b'
-        run: date +%s > "$RUNNER_TEMP/centraid-lane-b-photos-start"
-      - name: Run lane B — Photos permissions
-        id: lane_b_photos_permissions
-        if: matrix.lane == 'b'
-        continue-on-error: true
-        env:
-          MAESTRO_PLATFORM: ios
-          MOBILE_E2E_EMBEDDED: "1"
-        run: node tests/agent-e2e-mobile/flows/photos-permissions.mjs
-      - name: Run lane B — Photos library
-        id: lane_b_photos_library
-        if: matrix.lane == 'b'
-        continue-on-error: true
-        env:
-          MAESTRO_PLATFORM: ios
-          MOBILE_E2E_EMBEDDED: "1"
-          MAESTRO_REUSE_PAIRED_STATE: "1"
-        run: node tests/agent-e2e-mobile/flows/photos-library.mjs
-      - name: Run lane B — Photos viewer
-        id: lane_b_photos_viewer
-        if: matrix.lane == 'b'
-        continue-on-error: true
-        env:
-          MAESTRO_PLATFORM: ios
-          MOBILE_E2E_EMBEDDED: "1"
-          MAESTRO_REUSE_PAIRED_STATE: "1"
-        run: node tests/agent-e2e-mobile/flows/photos-viewer.mjs
-      - name: Run lane B — Photos search
-        id: lane_b_photos_search
-        if: matrix.lane == 'b'
-        continue-on-error: true
-        env:
-          MAESTRO_PLATFORM: ios
-          MOBILE_E2E_EMBEDDED: "1"
-          MAESTRO_REUSE_PAIRED_STATE: "1"
-        run: node tests/agent-e2e-mobile/flows/photos-search.mjs
-      - name: Run lane B — Photos select and write
-        id: lane_b_photos_select_write
-        if: matrix.lane == 'b'
-        continue-on-error: true
-        env:
-          MAESTRO_PLATFORM: ios
-          MOBILE_E2E_EMBEDDED: "1"
-          MAESTRO_REUSE_PAIRED_STATE: "1"
-        run: node tests/agent-e2e-mobile/flows/photos-select-write.mjs
-      - name: Check lane B — Photos functionality budget
-        id: lane_b_photos_budget
-        if: always() && matrix.lane == 'b'
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          elapsed=$(( $(date +%s) - $(cat "$RUNNER_TEMP/centraid-lane-b-photos-start") ))
-          echo "Photos functionality suite: ${elapsed}s / 480s budget"
-          test "$elapsed" -lt 480
+        run: node tests/agent-e2e-mobile/run-photos-suite.mjs
       - name: Run lane B — Places
         id: lane_b_places
-        if: matrix.lane == 'b'
-        continue-on-error: true
+        if: matrix.shard == 'places'
         env:
           MAESTRO_PLATFORM: ios
           MOBILE_E2E_EMBEDDED: "1"
         run: node tests/agent-e2e-mobile/flows/places-seat.mjs
-      - name: Start lane B — Home app functionality budget
-        if: matrix.lane == 'b'
-        run: date +%s > "$RUNNER_TEMP/centraid-lane-b-home-start"
-      - name: Run lane B — Docs
-        id: lane_b_docs
-        if: matrix.lane == 'b'
-        continue-on-error: true
+      - name: Run lane B — Home app functionality
+        id: lane_b_home_apps
+        if: matrix.shard == 'home-apps'
         env:
           MAESTRO_PLATFORM: ios
           MOBILE_E2E_EMBEDDED: "1"
-        run: node tests/agent-e2e-mobile/flows/docs-drive.mjs
-      - name: Run lane B — Agenda
-        id: lane_b_agenda
-        if: matrix.lane == 'b'
-        continue-on-error: true
+        run: node tests/agent-e2e-mobile/run-home-apps-suite.mjs
+      - name: Run lane B — Sharing invitation surfaces
+        id: lane_b_sharing
+        if: matrix.shard == 'sharing'
         env:
           MAESTRO_PLATFORM: ios
           MOBILE_E2E_EMBEDDED: "1"
-          MAESTRO_REUSE_PAIRED_STATE: "1"
-        run: node tests/agent-e2e-mobile/flows/agenda-week.mjs
-      - name: Run lane B — Notes
-        id: lane_b_notes
-        if: matrix.lane == 'b'
-        continue-on-error: true
+        run: node tests/agent-e2e-mobile/flows/sharing-invite.mjs
+      # Performance has its own shard and is excluded from a focused lane-B
+      # dispatch, so functionality is neither delayed nor masked by the probe.
+      - name: Run lane B — Photos grid frame probe
+        id: lane_b_scroll_frames
+        if: matrix.shard == 'photos-frames'
         env:
           MAESTRO_PLATFORM: ios
           MOBILE_E2E_EMBEDDED: "1"
-          MAESTRO_REUSE_PAIRED_STATE: "1"
-        run: node tests/agent-e2e-mobile/flows/notes-library.mjs
-      - name: Run lane B — Tasks
-        id: lane_b_tasks
-        if: matrix.lane == 'b'
-        continue-on-error: true
-        env:
-          MAESTRO_PLATFORM: ios
-          MOBILE_E2E_EMBEDDED: "1"
-          MAESTRO_REUSE_PAIRED_STATE: "1"
-        run: node tests/agent-e2e-mobile/flows/tasks-board.mjs
-      - name: Run lane B — People
-        id: lane_b_people
-        if: matrix.lane == 'b'
-        continue-on-error: true
-        env:
-          MAESTRO_PLATFORM: ios
-          MOBILE_E2E_EMBEDDED: "1"
-          MAESTRO_REUSE_PAIRED_STATE: "1"
-        run: node tests/agent-e2e-mobile/flows/people-roster.mjs
-      - name: Run lane B — Tally
-        id: lane_b_tally
-        if: matrix.lane == 'b'
-        continue-on-error: true
-        env:
-          MAESTRO_PLATFORM: ios
-          MOBILE_E2E_EMBEDDED: "1"
-          MAESTRO_REUSE_PAIRED_STATE: "1"
-        run: node tests/agent-e2e-mobile/flows/tally-derived.mjs
-      - name: Run lane B — Locker
-        id: lane_b_locker
-        if: matrix.lane == 'b'
-        continue-on-error: true
-        env:
-          MAESTRO_PLATFORM: ios
-          MOBILE_E2E_EMBEDDED: "1"
-          MAESTRO_REUSE_PAIRED_STATE: "1"
-        run: node tests/agent-e2e-mobile/flows/locker-gate.mjs
-      - name: Check lane B — Home app functionality budget
-        id: lane_b_home_budget
-        if: always() && matrix.lane == 'b'
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          elapsed=$(( $(date +%s) - $(cat "$RUNNER_TEMP/centraid-lane-b-home-start") ))
-          echo "Home app functionality suite: ${elapsed}s / 720s budget"
-          test "$elapsed" -lt 720
-      - name: Aggregate lane B functionality results
-        if: always() && matrix.lane == 'b'
-        run: |
-          set -euo pipefail
-          {
-            echo "## iOS lane B functionality"
-            echo ""
-            echo "| Journey | Result |"
-            echo "| --- | --- |"
-            echo "| Photos grid frame probe | ${{ steps.lane_b_scroll_frames.outcome }} |"
-            echo "| Photos permissions | ${{ steps.lane_b_photos_permissions.outcome }} |"
-            echo "| Photos library | ${{ steps.lane_b_photos_library.outcome }} |"
-            echo "| Photos viewer | ${{ steps.lane_b_photos_viewer.outcome }} |"
-            echo "| Photos search | ${{ steps.lane_b_photos_search.outcome }} |"
-            echo "| Photos select and write | ${{ steps.lane_b_photos_select_write.outcome }} |"
-            echo "| Places | ${{ steps.lane_b_places.outcome }} |"
-            echo "| Docs | ${{ steps.lane_b_docs.outcome }} |"
-            echo "| Agenda | ${{ steps.lane_b_agenda.outcome }} |"
-            echo "| Notes | ${{ steps.lane_b_notes.outcome }} |"
-            echo "| Tasks | ${{ steps.lane_b_tasks.outcome }} |"
-            echo "| People | ${{ steps.lane_b_people.outcome }} |"
-            echo "| Tally | ${{ steps.lane_b_tally.outcome }} |"
-            echo "| Locker | ${{ steps.lane_b_locker.outcome }} |"
-            echo "| Photos budget | ${{ steps.lane_b_photos_budget.outcome }} |"
-            echo "| Home apps budget | ${{ steps.lane_b_home_budget.outcome }} |"
-          } >> "$GITHUB_STEP_SUMMARY"
-          test "${{ steps.lane_b_scroll_frames.outcome }}" = success
-          test "${{ steps.lane_b_photos_permissions.outcome }}" = success
-          test "${{ steps.lane_b_photos_library.outcome }}" = success
-          test "${{ steps.lane_b_photos_viewer.outcome }}" = success
-          test "${{ steps.lane_b_photos_search.outcome }}" = success
-          test "${{ steps.lane_b_photos_select_write.outcome }}" = success
-          test "${{ steps.lane_b_places.outcome }}" = success
-          test "${{ steps.lane_b_docs.outcome }}" = success
-          test "${{ steps.lane_b_agenda.outcome }}" = success
-          test "${{ steps.lane_b_notes.outcome }}" = success
-          test "${{ steps.lane_b_tasks.outcome }}" = success
-          test "${{ steps.lane_b_people.outcome }}" = success
-          test "${{ steps.lane_b_tally.outcome }}" = success
-          test "${{ steps.lane_b_locker.outcome }}" = success
-          test "${{ steps.lane_b_photos_budget.outcome }}" = success
-          test "${{ steps.lane_b_home_budget.outcome }}" = success
+        run: node tests/agent-e2e-mobile/flows/scroll-frames.mjs
+      - name: Require complete shard evidence
+        if: always()
+        run: node tests/agent-e2e-mobile/verify-ci-shard.mjs "${{ matrix.shard }}" ios
       - name: Remove sensitive pairing diagnostics
         if: always()
         run: |
@@ -595,17 +504,35 @@ jobs:
               -path '*/maestro-debug/*-configure-gateway' \
               -prune -exec rm -rf {} +
           fi
+      - name: Stop the mobile test gateway
+        if: always()
+        run: |
+          if [ -n "${CENTRAID_MOBILE_GATEWAY_PID:-}" ]; then
+            kill -TERM "$CENTRAID_MOBILE_GATEWAY_PID" 2>/dev/null || true
+            for attempt in {1..20}; do
+              kill -0 "$CENTRAID_MOBILE_GATEWAY_PID" 2>/dev/null || break
+              sleep 1
+            done
+            if kill -0 "$CENTRAID_MOBILE_GATEWAY_PID" 2>/dev/null; then
+              kill -KILL "$CENTRAID_MOBILE_GATEWAY_PID" 2>/dev/null || true
+            fi
+          fi
+          case "${CENTRAID_MOBILE_GATEWAY_DATA_DIR:-}" in
+            "$RUNNER_TEMP"/centraid-mobile-gateway-*)
+              rm -rf "$CENTRAID_MOBILE_GATEWAY_DATA_DIR"
+              ;;
+          esac
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: nightly-evidence-mobile-ios-${{ matrix.lane }}
+          name: nightly-evidence-mobile-ios-${{ matrix.lane }}-${{ matrix.shard }}
           path: artifacts/
           retention-days: 7
           if-no-files-found: ignore
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: nightly-debug-mobile-runs-ios-${{ matrix.lane }}
+          name: nightly-debug-mobile-runs-ios-${{ matrix.lane }}-${{ matrix.shard }}
           path: tests/agent-e2e-mobile/runs/
           retention-days: 7
           if-no-files-found: ignore
@@ -624,21 +551,88 @@ jobs:
         run: |
           test "${{ needs.mobile-e2e-ios-build.result }}" = success
           test "${{ needs.mobile-e2e-ios-lanes.result }}" = success
-  # #496 PC1 / #630 — Android runs the same eight native blueprint covers as
-  # iOS. Flake budget:
-  # one retry at the flow harness; job failure still reds nightly. Metro and the
-  # paired gateway must be up before Maestro.
-  mobile-e2e-android:
+  # Build the Android release artifact before the emulator starts. Gradle and
+  # the emulator are the two heaviest consumers on ubuntu; making this a
+  # separate job lets the emulator test job spend its time on Maestro only.
+  mobile-e2e-android-build:
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile-android'
     runs-on: ubuntu-latest
-    # 120, not the iOS job's 60: this lane can pay a cold-cache gradle build
-    # (~21 min, #535) before any flow runs, and swiftshader software rendering
-    # makes each journey slower than the hardware-accelerated iOS simulator.
-    # Raised from 90 when #781 added the three experience probes to this lane.
-    timeout-minutes: 120
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+      - name: Build mobile workspace and fingerprint the release inputs
+        id: android_build
+        run: |
+          set -euo pipefail
+          bun run turbo run build --filter=@centraid/mobile...
+          fp="$(node apps/mobile/scripts/native-fingerprint.mjs android)"
+          jdk="$(java -version 2>&1 | head -1 | shasum -a 256 | cut -d' ' -f1)"
+          source_hash="$(git ls-files apps/mobile packages/client packages/blueprints packages/core packages/design package.json bun.lock | xargs shasum -a 256 | shasum -a 256 | cut -c1-16)"
+          echo "key=jdk${jdk:0:12}-fp${fp}-src${source_hash}" >> "$GITHUB_OUTPUT"
+      - name: Restore cached Android release artifact
+        id: android_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/centraid-mobile-e2e-android
+          key: android-app-${{ runner.os }}-${{ steps.android_build.outputs.key }}
+      - name: Build and validate Android release artifact
+        id: build_release
+        run: |
+          set -euo pipefail
+          apk_cache="$RUNNER_TEMP/centraid-mobile-e2e-android/app-release.apk"
+          if [ ! -s "$apk_cache" ]; then
+            EXPO_PUBLIC_CENTRAID_E2E=1 apps/mobile/android/gradlew -p apps/mobile/android :app:assembleRelease --console=plain
+            apk="$(find apps/mobile/android -type f -path '*/outputs/apk/release/*.apk' -print -quit 2>/dev/null || true)"
+            test -n "$apk" || { echo "::error::built release apk not found"; exit 1; }
+            mkdir -p "$(dirname "$apk_cache")"
+            cp "$apk" "$apk_cache"
+            echo "built=true" >> "$GITHUB_OUTPUT"
+          fi
+          unzip -l "$apk_cache" 'assets/index.android.bundle' >/dev/null || {
+            echo "::error::Android release artifact has no embedded JS bundle"
+            exit 1
+          }
+      - name: Save Android release artifact cache
+        if: steps.build_release.outputs.built == 'true'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/centraid-mobile-e2e-android
+          key: android-app-${{ runner.os }}-${{ steps.android_build.outputs.key }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mobile-e2e-android-app
+          path: ${{ runner.temp }}/centraid-mobile-e2e-android/app-release.apk
+          retention-days: 7
+
+  # #496 PC1 / #630 — Android runs the same native blueprint covers as iOS.
+  # The release artifact and gateway are prepared before the emulator starts.
+  mobile-e2e-android:
+    needs: [mobile-e2e-android-build]
+    if: >
+      always() && needs.mobile-e2e-android-build.result == 'success' && (github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile-android')
+    runs-on: ubuntu-latest
+    # Swiftshader software rendering makes each journey slower than the
+    # hardware-accelerated iOS simulator, but Gradle is deliberately isolated
+    # in mobile-e2e-android-build and never runs in this test job.
+    timeout-minutes: 90
+    env:
+      MAESTRO_VERSION: 2.6.1
+      MAESTRO_SHA256: 3440825f514f537c6a96bcf5de995780c2a4a7f83a43208fdc95d4f1fecfad3b
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: "180000"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Start the mobile shard clock
+        run: node -e 'require("node:fs").appendFileSync(process.env.GITHUB_ENV, `MOBILE_E2E_SHARD_STARTED_AT=${Date.now()}\n`)'
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
@@ -651,67 +645,60 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      # Pin the build JDK to 17 so gradle (via `expo run:android`) is stable and
-      # the fingerprint's jdk<hash> component does not drift with runner images.
+      # Pin the runtime JDK to 17 so any native tooling used by the emulator
+      # action is stable. The release Gradle build already happened upstream.
       - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
         with:
           distribution: temurin
           java-version: "17"
-      # Fingerprint the Android native build inputs — same mechanism as the iOS
-      # job (apps/mobile/scripts/native-fingerprint.mjs). Keyed so a JS-only
-      # commit reuses the cached .apk while any native-input change rebuilds it.
-      # The Android build toolchain (Gradle/AGP/NDK/compileSdk) lives in the
-      # tracked android/ gradle files, which the fingerprint already hashes; the
-      # host JDK is folded in separately (jdk<hash>), mirroring iOS's xc<hash>.
-      - name: Fingerprint the Android native build inputs
-        id: native_android
-        working-directory: apps/mobile
-        run: |
-          set -euo pipefail
-          fp="$(node scripts/native-fingerprint.mjs android)"
-          test -n "$fp" || { echo "::error::empty Android fingerprint"; exit 1; }
-          jdk="$(java -version 2>&1 | head -1 | shasum -a 256 | cut -d' ' -f1)"
-          echo "hash=jdk${jdk:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
-          echo "Android native fingerprint: fp=$fp jdk=$jdk"
-      - name: Install Maestro CLI
-        run: |
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
-      - name: Build mobile workspace (host, before emulator)
-        run: bun run turbo run build --filter=@centraid/mobile...
+      - uses: ./.github/actions/setup-maestro
+        with:
+          version: ${{ env.MAESTRO_VERSION }}
+          sha256: ${{ env.MAESTRO_SHA256 }}
       - name: Build and start the tokenless mobile test gateway
         run: |
+          set -euo pipefail
           bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
-          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          mkdir -p artifacts/mobile-e2e
+          log_file="$GITHUB_WORKSPACE/artifacts/mobile-e2e/gateway-android.log"
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > "$log_file" 2>&1 &
           echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
+          echo "CENTRAID_MOBILE_GATEWAY_DATA_DIR=$gateway_dir" >> "$GITHUB_ENV"
           echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
+          ready=0
           for attempt in {1..90}; do
-            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then
+              ready=1
+              break
+            fi
             sleep 2
           done
-          cat /tmp/centraid-mobile-gateway.log
-          exit 1
-      - name: Start Metro
-        working-directory: apps/mobile
-        run: |
-          CI=1 nohup bunx expo start --dev-client > /tmp/centraid-metro-android.log 2>&1 &
-          for attempt in {1..90}; do
-            if curl -fsS http://127.0.0.1:8081/status; then exit 0; fi
-            sleep 2
-          done
-          cat /tmp/centraid-metro-android.log
-          exit 1
-      # Restore the built Android dev-client .apk. Same all-or-nothing, split
-      # restore/save rationale as the iOS job: the emulator action's script runs
-      # the build, so a cache HIT skips gradle entirely and just adb-installs the
-      # banked apk. No restore-keys — a partial match would install a stale apk.
-      - name: Restore the built Android app
-        id: android_app
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+          if [ "$ready" -ne 1 ]; then
+            cat "$log_file"
+            exit 1
+          fi
+          fixture_file="$gateway_dir/mobile-e2e-fixture.json"
+          node --input-type=module - "$fixture_file" "$GITHUB_ENV" <<'NODE'
+          import { appendFile, readFile } from "node:fs/promises";
+          const [fixturePath, envPath] = process.argv.slice(2);
+          const fixture = JSON.parse(await readFile(fixturePath, "utf8"));
+          if (!fixture.fixtureId || !fixture.now || !Array.isArray(fixture.apps)) {
+            throw new Error("mobile fixture manifest is incomplete");
+          }
+          await appendFile(envPath, [
+            `MOBILE_E2E_FIXTURE_ID=${fixture.fixtureId}`,
+            `MOBILE_E2E_FIXTURE_NOW=${fixture.now}`,
+            `MOBILE_E2E_FIXTURE_APPS_JSON=${JSON.stringify(fixture.apps)}`,
+            "",
+          ].join("\n"));
+          NODE
+          cp "$fixture_file" artifacts/mobile-e2e/fixture-android.json
+      - name: Download the embedded Android E2E app
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: ~/.cache/centraid-mobile-e2e-android
-          key: android-app-${{ runner.os }}-${{ steps.native_android.outputs.hash }}
+          name: mobile-e2e-android-app
+          path: ${{ runner.temp }}/centraid-mobile-e2e-android
       # AVD snapshot caching — the reactivecircus best practice. The first run
       # boots a clean emulator once and banks a booted-state snapshot; every
       # later run resumes from it in seconds instead of a ~40s cold boot. It also
@@ -750,10 +737,8 @@ jobs:
         # v2.38.0 — prior pin 1dcd009…dd was a typo/orphan SHA (#535 F6).
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         env:
-          # Read inside the action's script to branch build-vs-install. The apk
-          # lives under $HOME so it carries from the restore step into the
-          # action's shell (same runner, same home).
-          ANDROID_CACHE_HIT: ${{ steps.android_app.outputs.cache-hit }}
+          # The release artifact was downloaded before emulator startup.
+          ANDROID_E2E_APK: ${{ runner.temp }}/centraid-mobile-e2e-android/app-release.apk
         with:
           api-level: 34
           # x86_64 (not arm64-v8a) so /dev/kvm on the Linux runner accelerates it.
@@ -763,7 +748,7 @@ jobs:
           # Match the snapshot-gen step's AVD shape exactly (or the cached
           # snapshot will not load). 4 GB / 4 cores on the 16 GB / 4-vCPU runner
           # gives the app real headroom, so the launcher is far less likely to
-          # ANR under Metro + app load.
+          # ANR under embedded-bundle app load.
           ram-size: 4096M
           cores: 4
           force-avd-creation: false
@@ -775,6 +760,9 @@ jobs:
           # comments and non-ASCII chars tripped its parser (#535). Keep this a
           # single line that hands off to a committed bash file instead.
           script: bash apps/mobile/scripts/android-emulator-e2e.sh
+      - name: Require complete Android evidence
+        if: always()
+        run: node tests/agent-e2e-mobile/verify-ci-shard.mjs all android
       # Mirrors the iOS job's identical step. The harness already rm -rf's this
       # directory in a finally, so this is belt-and-braces against a run that
       # dies before the finally — but it was iOS-only, which meant an Android
@@ -787,17 +775,22 @@ jobs:
               -path '*/maestro-debug/*-configure-gateway' \
               -prune -exec rm -rf {} +
           fi
-      # Bank the apk even if a later flow failed — the artifact is the product of
-      # the fingerprinted inputs regardless of whether Maestro passed (see iOS).
-      # Guarded on the build having actually produced an apk, so a cache-hit run
-      # does not re-save what it just restored and a run that died before the
-      # build cannot cache an empty directory.
-      - name: Save the built Android app
-        if: always() && steps.emu.outputs.built == 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/centraid-mobile-e2e-android
-          key: android-app-${{ runner.os }}-${{ steps.native_android.outputs.hash }}
+      - name: Stop the mobile test gateway
+        if: always()
+        run: |
+          if [ -n "${CENTRAID_MOBILE_GATEWAY_PID:-}" ]; then
+            kill -TERM "$CENTRAID_MOBILE_GATEWAY_PID" 2>/dev/null || true
+            for attempt in {1..20}; do
+              kill -0 "$CENTRAID_MOBILE_GATEWAY_PID" 2>/dev/null || break
+              sleep 1
+            done
+            if kill -0 "$CENTRAID_MOBILE_GATEWAY_PID" 2>/dev/null; then
+              kill -KILL "$CENTRAID_MOBILE_GATEWAY_PID" 2>/dev/null || true
+            fi
+          fi
+          if [ "${CENTRAID_MOBILE_GATEWAY_DATA_DIR:-}" = "$RUNNER_TEMP/centraid-mobile-gateway" ]; then
+            rm -rf "$CENTRAID_MOBILE_GATEWAY_DATA_DIR"
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

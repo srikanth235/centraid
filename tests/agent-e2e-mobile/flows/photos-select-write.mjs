@@ -1,5 +1,5 @@
 import { retryableTapCommands } from "../lib/first-run.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import { SCREEN_TRANSITION_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 await runFlow("photos-select-write", async (ctx) => {
   await ctx.ensureDemo("photos");
@@ -10,7 +10,7 @@ await runFlow("photos-select-write", async (ctx) => {
 ${retryableTapCommands("Open Photos.*")}
 - extendedWaitUntil:
     visible: "Collections"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${SCREEN_TRANSITION_TIMEOUT_MS}
 ${retryableTapCommands("Library")}
 - extendedWaitUntil:
     visible: "Select"
@@ -41,9 +41,14 @@ ${retryableTapCommands("Collections")}
 - assertVisible: "Restore"
 - tapOn: "Restore"
 - extendedWaitUntil:
-    notVisible: "Photo Selected"
-    timeout: 20000
+    visible: "Trash is empty[.]"
+    timeout: ${SCREEN_TRANSITION_TIMEOUT_MS}
 - takeScreenshot: photos-write-restored
+${retryableTapCommands("Collections")}
+${retryableTapCommands("Library")}
+- extendedWaitUntil:
+    visible: "Open album Tahoe scouting, 4 photos"
+    timeout: ${SCREEN_TRANSITION_TIMEOUT_MS}
 `,
     "select-trash-restore"
   );

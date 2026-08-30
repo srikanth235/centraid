@@ -31,8 +31,9 @@
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
 import {
-  FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
+  RELAUNCH_TIMEOUT_MS,
+  SCREEN_TRANSITION_TIMEOUT_MS,
   runFlow,
 } from "../lib/harness.mjs";
 
@@ -57,7 +58,7 @@ await runFlow("locker-gate", async (ctx) => {
 ${retryableTapCommands("Open Locker.*")}
 - extendedWaitUntil:
     visible: "Choose a passphrase"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${SCREEN_TRANSITION_TIMEOUT_MS}
 - assertVisible: "Nothing is browsable until there is a passphrase"
 ${GATE_ASSERTIONS}
 - takeScreenshot: locker-gate
@@ -72,11 +73,11 @@ ${GATE_ASSERTIONS}
 ---
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${RELAUNCH_TIMEOUT_MS}
 ${retryableTapCommands("Open Locker.*")}
 - extendedWaitUntil:
     visible: "Choose a passphrase"
-    timeout: 30000
+    timeout: ${SCREEN_TRANSITION_TIMEOUT_MS}
 ${GATE_ASSERTIONS}
 - takeScreenshot: locker-gate-after-restart
 `,

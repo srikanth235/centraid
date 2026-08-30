@@ -21,7 +21,7 @@
 // scripts/lint-e2e-flows.mjs).
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import { SCREEN_TRANSITION_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 await runFlow("notes-library", async (ctx) => {
   await ctx.ensureDemo("notes");
@@ -32,7 +32,7 @@ await runFlow("notes-library", async (ctx) => {
 ${retryableTapCommands("Open Notes.*")}
 - extendedWaitUntil:
     visible: "New note"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${SCREEN_TRANSITION_TIMEOUT_MS}
 # The row's own accessible name, built by the blueprint's promote().
 - assertVisible: "Open Mom's chili, written down properly"
 # …and the preview under it, which is the note's BODY. The row collapses the

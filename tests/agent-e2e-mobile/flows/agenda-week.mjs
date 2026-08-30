@@ -22,7 +22,7 @@
 // scripts/lint-e2e-flows.mjs).
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import { SCREEN_TRANSITION_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 await runFlow("agenda-week", async (ctx) => {
   await ctx.ensureDemo("agenda");
@@ -35,7 +35,7 @@ ${retryableTapCommands("Open Agenda.*")}
 # and is deliberately not asserted (scripts/lint-e2e-flows.mjs enforces that).
 - extendedWaitUntil:
     visible: "Go to today"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${SCREEN_TRANSITION_TIMEOUT_MS}
 - assertVisible: "New event"
 - takeScreenshot: agenda-day
 # A band tab stays on screen after it is tapped, so the conditional-retry

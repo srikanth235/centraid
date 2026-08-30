@@ -170,6 +170,7 @@ export function makeDemoRouteHandler(
 
       sendJson(res, 200, {
         ok: true,
+        now,
         seeded,
         skipped,
         apps: plane.demoStatus(),

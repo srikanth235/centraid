@@ -21,7 +21,7 @@
 // scripts/lint-e2e-flows.mjs).
 
 import { settledRetryableTapCommands } from "../lib/first-run.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import { SCREEN_TRANSITION_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 await runFlow("places-seat", async (ctx) => {
   await ctx.ensureDemo("photos");
@@ -32,7 +32,7 @@ await runFlow("places-seat", async (ctx) => {
 ${settledRetryableTapCommands("Open Photos.*")}
 - extendedWaitUntil:
     visible: "Collections"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${SCREEN_TRANSITION_TIMEOUT_MS}
 # The Places section sits below Memories/Albums/People on the Collections
 # page; its heading is the "Open Places, N" Pressable.
 - scrollUntilVisible:
@@ -56,23 +56,9 @@ ${settledRetryableTapCommands("Open map")}
     visible: "Plotted from your own photographs."
     timeout: 30000
 - assertVisible: "[1-9][0-9]* of [1-9][0-9]*"
-# The pin press happens on the SKETCH ground. The real ground's pins are
-# native on iOS — MapKit annotations publishing only the count numeral, with
-# no accessible name a selector or a screen reader can land on
-# (places-map-apple.tsx; Android's MapLibre markers wrap the accessible
-# PlacePin). The mode chip is the product's own switch between grounds, and
-# the sketch's note copy proves the switch took before any pin is pressed.
-- tapOn:
-    text: "^Map mode$"
-    retryTapIfNoChange: true
-- tapOn:
-    text: "Private sketch"
-    retryTapIfNoChange: true
-- extendedWaitUntil:
-    visible: "Nothing is fetched.*"
-    timeout: 15000
-# Press a pin (each is a Pressable labelled "<where>, N photographs?") and
-# the readout replaces the resting sentence with "<where> · N".
+# Press a pin on the real native ground. MapKit and MapLibre both publish the
+# same accessible "<where>, N photographs" control over their native marker.
+# The readout replaces the resting sentence with "<where> · N".
 - tapOn:
     text: ".*, [0-9]+ photographs?"
 - extendedWaitUntil:

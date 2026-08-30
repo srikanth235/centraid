@@ -8,8 +8,9 @@
 // Every journey still writes an independent verdict, including after an earlier
 // failure — a mid-run failure must not grey the later cells (#535 F4).
 
-import { spawn } from "node:child_process";
 import path from "node:path";
+
+import { runMobileSuite } from "./lib/suite-runner.mjs";
 
 // Docs stays FIRST: it is the flow that pairs fresh, and every later entry runs
 // with MAESTRO_REUSE_PAIRED_STATE=1 against the profile it left behind.
@@ -23,42 +24,26 @@ const FLOWS = [
   "tally-derived.mjs",
   "locker-gate.mjs",
 ];
+const FLOW_NAMES = [
+  "Docs",
+  "Agenda",
+  "Notes",
+  "Tasks",
+  "People",
+  "Tally",
+  "Locker",
+];
 // See flows/home-apps-budget.md for how this ceiling was derived and what to do
 // when it is breached. Do not raise it to buy time.
 const BUDGET_MS = 12 * 60_000;
 const flowsDir = path.join(import.meta.dirname, "flows");
 
-function runFlow(file, reusePairedState) {
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, [path.join(flowsDir, file)], {
-      env: {
-        ...process.env,
-        ...(reusePairedState ? { MAESTRO_REUSE_PAIRED_STATE: "1" } : {}),
-      },
-      stdio: "inherit",
-    });
-    child.on("exit", (code) => resolve(code ?? 1));
-    child.on("error", () => resolve(1));
-  });
-}
-
-const startedAt = Date.now();
-async function runRemainingFlows(index = 0, exitCode = 0) {
-  const flow = FLOWS[index];
-  if (!flow) return exitCode;
-  const code = await runFlow(flow, index > 0);
-  return runRemainingFlows(index + 1, code === 0 ? exitCode : 1);
-}
-let exitCode = await runRemainingFlows();
-
-const elapsedMs = Date.now() - startedAt;
-console.log(
-  `[home-apps-suite] aggregate ${Math.ceil(elapsedMs / 1000)}s / ${BUDGET_MS / 1000}s budget`
-);
-if (elapsedMs >= BUDGET_MS) {
-  console.error(
-    "[home-apps-suite] FAIL: the six home-app journeys exceeded eleven minutes"
-  );
-  exitCode = 1;
-}
-process.exitCode = exitCode;
+await runMobileSuite({
+  suite: "Home app functionality",
+  budgetMs: BUDGET_MS,
+  flows: FLOWS.map((file, index) => ({
+    name: FLOW_NAMES[index],
+    file: path.join(flowsDir, file),
+    reusePairedState: index > 0,
+  })),
+});

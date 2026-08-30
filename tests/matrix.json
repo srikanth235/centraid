@@ -4207,12 +4207,6 @@
         "budgetMinutes": 8,
         "flows": [
           {
-            "id": "photos-permissions",
-            "label": "Photos permissions",
-            "owner": "tests/agent-e2e-mobile/flows/photos-permissions.mjs",
-            "flow": "mobile-photos-permissions"
-          },
-          {
             "id": "photos-library",
             "label": "Photos library",
             "owner": "tests/agent-e2e-mobile/flows/photos-library.mjs",
@@ -4235,6 +4229,12 @@
             "label": "Photos select and write",
             "owner": "tests/agent-e2e-mobile/flows/photos-select-write.mjs",
             "flow": "mobile-photos-select-write"
+          },
+          {
+            "id": "photos-permissions",
+            "label": "Photos permissions",
+            "owner": "tests/agent-e2e-mobile/flows/photos-permissions.mjs",
+            "flow": "mobile-photos-permissions"
           }
         ]
       },

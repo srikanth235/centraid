@@ -7,11 +7,8 @@ The structural payoff matches the desktop layer: the device (sim, emulator, or r
 ## One-time setup
 
 ```sh
-# 1. Maestro 2.x CLI (the `mcp` subcommand only exists in 2.x). The
-#    versioned brew formula is the only path right now — the
-#    cask-resolution default points at an unrelated music app, and the
-#    plain `mobile-dev-inc/tap/maestro` formula tops out at 1.38.
-brew install mobile-dev-inc/tap/maestro@2.0-dev.1
+# 1. Match CI's exact Maestro version.
+MAESTRO_VERSION=2.6.1 curl -fsSL https://get.maestro.mobile.dev | bash
 
 # 2. JS deps. Worktrees inherit the lockfile but not node_modules.
 bun install
@@ -33,13 +30,13 @@ After step 4, Claude Code gains MCP tools: `list_devices`, `inspect_view_hierarc
 
 ## Running flows
 
-For the normal local development build, Metro must be running before any flow:
+For a normal local development build, Metro must be running before any flow:
 
 ```sh
 cd apps/mobile && bunx expo start --dev-client
 ```
 
-To exercise the same deterministic, packager-free mode as CI, build and install the Release app on a booted simulator, then set `MOBILE_E2E_EMBEDDED=1` when running a flow:
+CI runs self-contained Release artifacts on both platforms. To exercise the same deterministic, packager-free mode locally, build and install a Release app, then set `MOBILE_E2E_EMBEDDED=1` when running a flow:
 
 ```sh
 cd apps/mobile && bunx expo run:ios --configuration Release --device <simulator-udid> --no-bundler
@@ -74,12 +71,14 @@ runs/<slug>-<runId>/
   state.json                    ← runId, runDir, udid, appId
   flows/<NN-label>.yaml         ← every ctx.run() chunk, in order
   screenshots/<name>.png        ← whatever `takeScreenshot:` produced
+  maestro-debug/<NN-label>/      ← Maestro logs, commands, and failure images
+  maestro-reports/<NN-label>.xml ← JUnit result for each retained chunk
   verdict.md                    ← PASS/FAIL + notes (written last)
 ```
 
 `runs/` is gitignored — workspaces are tied to local sim UDIDs.
 
-Maestro also keeps its own per-step debug artifacts (ai-report.html, failure screenshots) at `~/.maestro/tests/<timestamp>/`. Useful when a flow fails and the on-disk state alone isn't enough.
+The harness passes both `--debug-output` and `--test-output-dir`, so CI evidence is self-contained under the run directory rather than depending on `~/.maestro/tests`. Capability-bearing pairing chunks are the exception: their diagnostics and JUnit report are deleted before upload, while the retained YAML contains only the `MAESTRO_PAIRING_TICKET` placeholder.
 
 ## Authoring a flow
 
@@ -127,7 +126,7 @@ ctx surface:
 - `ctx.run(yaml, hint?, options?)` — execute a Maestro YAML chunk. Each call spawns `maestro test` once (~hundreds of ms overhead), so batch many directives per call rather than one-per-action. The harness uses the internal `sensitive` option only for capability-bearing input; it suppresses console/debug retention and keeps the live value in a `MAESTRO_*` variable.
 - `ctx.restart()` — `stopApp` + `launchApp { clearState: false }` with a 300ms pre-stop delay (analogous to the desktop harness's flushMs before SIGTERM, gives AsyncStorage time to flush).
 - `ctx.configureGateway(url?, token?)` — clear app state, mint a pairing ticket from the declared gateway (ownership: the ticket lands the phone in whichever owner host custody resolves — a fresh gateway founds a placeholder owner, a reused one lands on the owner an earlier flow already named), redeem it through the real ticket-only onboarding UI, and complete the test profile. Journeys that need a gateway call this themselves so their prerequisites do not depend on execution order. Live tickets and their Maestro diagnostics are never kept in uploaded run artifacts.
-- `ctx.ensureDemo(appId)` — idempotently load the named gateway demo scenario before pairing. Each seeded Photos journey calls it when run independently. In `run-photos-suite.mjs`, the permissions journey first proves the empty-vault denial state, the library journey then seeds and pairs Photos, and the remaining journeys reuse that paired app state so the suite shares one boot and seed.
+- `ctx.ensureDemo(appId)` — idempotently load the named gateway demo scenario before pairing. Each seeded journey calls it when run independently. The CI suite runner records whether pairing/reuse completed; a missing prerequisite marks later state-dependent journeys `blocked` instead of misreporting them as independent app failures.
 - `ctx.note(msg)` — record an observation; surfaces under `## Notes` in `verdict.md`.
 
 Authoring rules of thumb (carried over from desktop):
@@ -150,12 +149,11 @@ Authoring rules of thumb (carried over from desktop):
 | --- | --- |
 | `flows/home-loads.mjs` | ticket-only onboarding renders on a cleared client |
 | `flows/native-v0-resilience.mjs` | all eight native covers open from Home, plus Settings and a process-restart smoke; Android additionally owns the airplane-mode pending-write restart |
-| `run-photos-suite.mjs` (5 flows) | the Photos seat: refused permission, library, viewer, search, select-and-write — budget in [flows/photos-budget.md](flows/photos-budget.md) |
-| `run-home-apps-suite.mjs` (5 flows) | the Docs, Agenda, Notes, Tasks and Locker seats — budget in [flows/home-apps-budget.md](flows/home-apps-budget.md) |
+| `run-photos-suite.mjs` (5 flows) | the Photos seat: library, viewer, search, select-and-write, then an isolated refused-permission journey — budget in [flows/photos-budget.md](flows/photos-budget.md) |
+| `run-home-apps-suite.mjs` (7 flows) | the Docs, Agenda, Notes, Tasks, People, Tally, and Locker seats — budget in [flows/home-apps-budget.md](flows/home-apps-budget.md) |
 | `flows/places-seat.mjs` | the Places shelf, map, and pin readout over real `geo_lat`/`geo_lng` rows |
+| `flows/sharing-invite.mjs` | the Tally sharing producer, invitation sheet, and redemption surface; Android also proves the offline verb is withheld |
 | `flows/cold-start.mjs`, `flows/scroll-frames.mjs`, `flows/volume-proof.mjs` | the three experience probes named by [tests/experience-budgets/mobile.json](../experience-budgets/mobile.json) |
-
-Tally has no journey here: it is held under issue #831.
 
 ## Device-only claims
 
@@ -232,11 +230,11 @@ cd apps/mobile && bunx expo prebuild --no-install --platform android --clean
 
 That re-runs Expo's native-template generation. The resulting changes under `apps/mobile/android/` are local-only artifacts (similar to how `apps/mobile/ios/Centraid.xcodeproj/project.pbxproj` gets rewritten by `pod install`) — don't commit them. Reverting them after the build succeeds is safe; gradle's incremental build keeps working.
 
-The harness automatically runs `adb reverse tcp:8081 tcp:8081` during `setup()` so the dev client (which fetches `http://localhost:8081`) reaches Metro on the host. No manual port forwarding needed.
+For local Android development builds, the harness automatically runs `adb reverse tcp:8081 tcp:8081` so the dev client reaches Metro. CI installs a Release APK with `assets/index.android.bundle` embedded and performs no Metro forwarding.
 
 ## Known caveats
 
-- **Maestro `2.0-dev.1`'s iOS driver is flaky** on iOS 26.4 / Xcode 26.4.1 once a flow gets past ~10 commands — common failure modes are `Failed to connect to /127.0.0.1:7001`, `kAXErrorInvalidUIElement` from the accessibility tree, and visibility polls timing out on elements that _are_ visible in the hierarchy. **Keep iOS flows short and batch directives** until 2.x ships a stable release. `home-loads.mjs` (5 directives) runs reliably on both platforms; longer flows on iOS have hit driver disconnects during text input. The Android driver (UIAutomator2) doesn't exhibit this — flows that work on both targets are best validated against Android first.
+- **Maestro 2.6.1's iOS driver can still disconnect on long chunks** on iOS 26.4 / Xcode 26.4.1 (`Failed to connect to /127.0.0.1:7001`, `kAXErrorInvalidUIElement`). Keep each interaction chunk coherent and bounded; the harness preserves JUnit and debug output and does not retry product assertions.
 - **Maestro's text matcher misses RN `TextInput` values** in some cases — the value appears in `inspect_view_hierarchy` (under both `text=` and `value=`), but `assertVisible: "<substring>"` against it doesn't match. Read AsyncStorage from disk (see "Authoring rules of thumb") rather than relying on UI assertions for state.
 - **A passing step is not a working step.** Every one of these was green in CI while doing nothing, and all of them came from writing selectors out of the React source instead of off a running app. Drive the simulator and read `inspect_view_hierarchy` before you trust a selector:
   - _Matching is substring-based._ `tapOn: "http://127.0.0.1:18789"` matched the help paragraph that mentions the URL, not the input below it. The tap "COMPLETED", the `inputText` went nowhere, and Save persisted an empty string. Disambiguate with a relative anchor (`below: "Dev fallback for simulators.*"`).

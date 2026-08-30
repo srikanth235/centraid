@@ -7,8 +7,8 @@ import {
   retryableTapCommands,
 } from "../lib/first-run.mjs";
 import {
-  FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
+  RELAUNCH_TIMEOUT_MS,
   runFlow,
 } from "../lib/harness.mjs";
 
@@ -171,7 +171,7 @@ await runFlow("native-v0-resilience", async (ctx) => {
     clearState: false
 ${LAUNCHER_RECOVERY}- extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${RELAUNCH_TIMEOUT_MS}
 ${scrollToTile}${openCommands}
 - extendedWaitUntil:
     visible: "${surface.marker}"
@@ -212,7 +212,7 @@ ${scrollToTile}${openCommands}
     clearState: false
 ${LAUNCHER_RECOVERY}- extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${RELAUNCH_TIMEOUT_MS}
 ${retryableTapCommands("Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
@@ -266,7 +266,7 @@ ${retryableTapCommands("Waiting", GROUP_HERO_SUB)}
     clearState: false
 ${LAUNCHER_RECOVERY}- extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${RELAUNCH_TIMEOUT_MS}
 ${retryableTapCommands("Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
@@ -309,7 +309,7 @@ ${retryableTapCommands("Waiting", BALANCES_STATUS)}
 ---
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${RELAUNCH_TIMEOUT_MS}
 - takeScreenshot: after-force-kill
 `,
     "after-force-kill"

@@ -196,3 +196,25 @@ sequence is removed.
 - `apps/mobile/src/lib/replica/native-session.test.ts`
 
 - `packages/blueprints/apps/agenda/app-root.tsx`
+
+## Continuation — Maestro CI blind-spot hardening (2026-08-30)
+
+The follow-up pass keeps the required mobile signal functionality-first while
+making the execution and verdict trustworthy:
+
+- iOS lane B is split into parallel Photos, Home-apps, Places, and Sharing
+  shards; the performance probe is separate and never masks functionality.
+- iOS and Android install deterministic embedded-bundle artifacts. Android
+  builds the Release APK once in a cacheable job before the emulator starts;
+  the test job performs no Gradle build or Metro launch.
+- Each gateway creates a hashed fixture manifest, each shard has a bounded
+  deadline, Maestro is checksum-pinned, and setup/pairing/identity failures
+  fail closed with synthetic evidence instead of disappearing from the report.
+- The flow catalog and linter prove every mobile journey is classified,
+  reachable, and free of vacuous route/input assertions. Native Places pins
+  are real controls, and Photos/Tally writes assert their post-write state.
+
+Local verification is green for repository typecheck, mobile/server typecheck
+and targeted tests, flow lint, matrix/wiring validation, workflow pin lint,
+format check, YAML parsing, JavaScript syntax, and suite/evidence tests.
+The focused iOS lane B CI run remains the final acceptance check.

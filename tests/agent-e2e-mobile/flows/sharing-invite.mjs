@@ -40,8 +40,9 @@ import path from "node:path";
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
 import {
-  FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
+  RELAUNCH_TIMEOUT_MS,
+  SCREEN_TRANSITION_TIMEOUT_MS,
   runFlow,
 } from "../lib/harness.mjs";
 
@@ -97,7 +98,7 @@ await runFlow("sharing-invite", async (ctx) => {
 ${retryableTapCommands("Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${SCREEN_TRANSITION_TIMEOUT_MS}
 ${retryableTapCommands("Groups", BALANCES_STATUS)}
 - extendedWaitUntil:
     visible: "${GROUPS_STATUS}"
@@ -144,7 +145,7 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
     clearState: false
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${RELAUNCH_TIMEOUT_MS}
 ${retryableTapCommands("Open vault menu")}
 - extendedWaitUntil:
     visible: "GO TO"
@@ -213,11 +214,11 @@ ${retryableTapCommands(".*Settings", "GO TO")}
     clearState: false
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${RELAUNCH_TIMEOUT_MS}
 ${retryableTapCommands("Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+    timeout: ${SCREEN_TRANSITION_TIMEOUT_MS}
 ${retryableTapCommands("Groups", BALANCES_STATUS)}
 - extendedWaitUntil:
     visible: "${GROUPS_STATUS}"

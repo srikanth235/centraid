@@ -9,6 +9,7 @@ import { Image as ExpoImage } from "expo-image";
 import type { ImageRef } from "expo-image";
 import { AppleMaps } from "expo-maps";
 import React, { useEffect, useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import {
   coordAt,
@@ -19,6 +20,7 @@ import {
 } from "@centraid/blueprints/apps/photos/place-map";
 import type { MapPin } from "@centraid/blueprints/apps/photos/place-map";
 
+import { pinLabel } from "./places-model";
 import { PIN_TAP_RADIUS } from "./PlacesRealMap";
 import type { PlacesBasemapProps } from "./PlacesRealMap";
 
@@ -62,49 +64,72 @@ export default function PlacesAppleMap({
 }: PlacesBasemapProps): React.JSX.Element {
   usePinIcons(pins);
   return (
-    <AppleMaps.View
-      style={{ height, width }}
-      cameraPosition={{
-        coordinates: { latitude: camera.lat, longitude: camera.lng },
-        zoom: tileZoomFor(camera),
-      }}
-      // Our pins only — vendor POIs are a competing dataset.
-      properties={{
-        isMyLocationEnabled: false,
-        isTrafficEnabled: false,
-        pointsOfInterest: { including: [] },
-        selectionEnabled: false,
-      }}
-      uiSettings={{ myLocationButtonEnabled: false, scaleBarEnabled: true }}
-      annotations={pins.map((pin) => {
-        const icon = pin.thumb ? icons.get(pin.thumb) : undefined;
-        // Anchor to the ground, not the box: pins hold still under a finger.
-        const where = coordAt(camera, { height, width }, pin.x, pin.y);
-        return {
-          id: pin.key,
-          coordinates: { latitude: where.lat, longitude: where.lng },
-          text: String(pin.count),
-          ...(icon ? { icon } : {}),
-          ...(pin.key === activeKey ? { title: pin.name ?? undefined } : {}),
-        };
-      })}
-      onCameraMove={(event) => {
-        onCamera({
-          lat: event.coordinates.latitude ?? camera.lat,
-          lng: event.coordinates.longitude ?? camera.lng,
-          // Latitude: the axis with uniform degrees (matches Android).
-          kmPerPx: kmPerPxForSpan(event.latitudeDelta, height),
-        });
-      }}
-      onMapClick={(event) => {
-        const point = projectAt(
-          camera,
-          { height, width },
-          event.coordinates.latitude ?? camera.lat,
-          event.coordinates.longitude ?? camera.lng
-        );
-        onRead(pinAtPoint(pins, point.x, point.y, PIN_TAP_RADIUS));
-      }}
-    />
+    <View style={{ height, width }}>
+      <AppleMaps.View
+        style={StyleSheet.absoluteFill}
+        cameraPosition={{
+          coordinates: { latitude: camera.lat, longitude: camera.lng },
+          zoom: tileZoomFor(camera),
+        }}
+        // Our pins only — vendor POIs are a competing dataset.
+        properties={{
+          isMyLocationEnabled: false,
+          isTrafficEnabled: false,
+          pointsOfInterest: { including: [] },
+          selectionEnabled: false,
+        }}
+        uiSettings={{ myLocationButtonEnabled: false, scaleBarEnabled: true }}
+        annotations={pins.map((pin) => {
+          const icon = pin.thumb ? icons.get(pin.thumb) : undefined;
+          // Anchor to the ground, not the box: pins hold still under a finger.
+          const where = coordAt(camera, { height, width }, pin.x, pin.y);
+          return {
+            id: pin.key,
+            coordinates: { latitude: where.lat, longitude: where.lng },
+            text: String(pin.count),
+            ...(icon ? { icon } : {}),
+            ...(pin.key === activeKey ? { title: pin.name ?? undefined } : {}),
+          };
+        })}
+        onCameraMove={(event) => {
+          onCamera({
+            lat: event.coordinates.latitude ?? camera.lat,
+            lng: event.coordinates.longitude ?? camera.lng,
+            // Latitude: the axis with uniform degrees (matches Android).
+            kmPerPx: kmPerPxForSpan(event.latitudeDelta, height),
+          });
+        }}
+        onMapClick={(event) => {
+          const point = projectAt(
+            camera,
+            { height, width },
+            event.coordinates.latitude ?? camera.lat,
+            event.coordinates.longitude ?? camera.lng
+          );
+          onRead(pinAtPoint(pins, point.x, point.y, PIN_TAP_RADIUS));
+        }}
+      />
+      {/* expo-maps annotations expose only their count to iOS accessibility.
+          These transparent controls share the projected pin centres and the
+          same read action, making the REAL MapKit ground operable by VoiceOver
+          and deterministic device automation without drawing a second pin. */}
+      <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+        {pins.map((pin) => (
+          <Pressable
+            accessibilityLabel={pinLabel(pin)}
+            accessibilityRole="button"
+            key={pin.key}
+            onPress={() => onRead(pin)}
+            style={{
+              height: PIN_TAP_RADIUS * 2,
+              left: pin.x - PIN_TAP_RADIUS,
+              position: "absolute",
+              top: pin.y - PIN_TAP_RADIUS,
+              width: PIN_TAP_RADIUS * 2,
+            }}
+          />
+        ))}
+      </View>
+    </View>
   );
 }

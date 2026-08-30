@@ -13,6 +13,11 @@ import { t, useTheme } from "../theme";
 const PROBE_PATH = "perf-frames";
 const DEFAULT_WINDOW_MS = 4_000;
 const MAX_WINDOW_MS = 30_000;
+// CI drives a Release app with an embedded bundle, so __DEV__ is false there.
+// The explicit build-time flag enables only this measurement surface in the
+// disposable E2E artifact; shipping Release builds keep it absent.
+const FRAME_PROBE_ENABLED =
+  __DEV__ || process.env.EXPO_PUBLIC_CENTRAID_E2E === "1";
 
 /** Hardcoded Maestro testID handles. */
 const FRAME_PROBE_SAMPLING_ID = "perf-frame-sampling";
@@ -32,7 +37,7 @@ export default function FrameProbe(): React.JSX.Element | null {
   const [report, setReport] = useState<string>();
 
   useEffect(() => {
-    if (!__DEV__) return undefined;
+    if (!FRAME_PROBE_ENABLED) return undefined;
     let armed = true;
     let running = false;
     const arm = (url: string): void => {
@@ -64,7 +69,7 @@ export default function FrameProbe(): React.JSX.Element | null {
     };
   }, []);
 
-  if (!__DEV__) return null;
+  if (!FRAME_PROBE_ENABLED) return null;
   if (sampling) {
     // Present but nearly nothing: drawn inside the window being measured.
     return (

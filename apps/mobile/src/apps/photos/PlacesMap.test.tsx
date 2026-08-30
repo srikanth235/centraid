@@ -476,6 +476,12 @@ describe("what the Places map asks of anybody, per mode", () => {
     }
   });
 
+  it("publishes an accessible control over every real MapKit pin", () => {
+    const apple = source("places-map-apple.tsx");
+    expect(apple).toContain("accessibilityLabel={pinLabel(pin)}");
+    expect(apple).toContain("onPress={() => onRead(pin)}");
+  });
+
   it("names exactly one remote host across the whole map surface", () => {
     // Any second URL in these files is a second thing fetched — the egress claim
     // breaking.

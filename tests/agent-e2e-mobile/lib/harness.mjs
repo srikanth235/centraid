@@ -45,17 +45,15 @@ const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 const RUNS_DIR = path.join(__dirname, "..", "runs");
 
-// iOS bundle id, and the Android *release* applicationId. Android *debug*
-// builds append `.debug` (applicationIdSuffix in android/app/build.gradle, kept
-// so a debug build and a Play-release build can coexist on one device —
-// J1/#501). The agent-e2e build is a debug build, so on Android the package
-// that actually installs and launches is the suffixed `dev.centraid.mobile.debug`.
+// iOS bundle id and Android release applicationId. Local Android development
+// builds append `.debug`; embedded CI builds exercise the release package so
+// both platforms validate the same bundle-owning runtime shape.
 // `setup()` resolves the id per platform and threads it through `state.appId`;
 // flows must launch the package that is installed, not this base id, so they
 // read `ctx.state.appId` rather than importing APP_ID.
 export const APP_ID = "dev.centraid.mobile";
 const appIdForPlatform = (platform) =>
-  platform === "android" ? `${APP_ID}.debug` : APP_ID;
+  platform === "android" && !MOBILE_E2E_EMBEDDED ? `${APP_ID}.debug` : APP_ID;
 
 /**
  * Budget for the first `assertVisible` after a `clearState: true` launch.
@@ -76,6 +74,11 @@ const appIdForPlatform = (platform) =>
  * dispatch 32933893665's reuse launches exceeded 120s before Home mounted.
  */
 export const FIRST_LAUNCH_TIMEOUT_MS = 240_000;
+// Ordinary in-app navigation is never allowed to consume the cold-launch
+// allowance. A broken tap or destination fails near the action that broke,
+// while onboarding, pairing, and first replica paint retain their own budget.
+export const SCREEN_TRANSITION_TIMEOUT_MS = 30_000;
+export const RELAUNCH_TIMEOUT_MS = 60_000;
 // The Home band's accessibility label (apps/mobile/src/screens/home/
 // HomeBand.tsx). The previous marker, "Home ready", was HomeStatusLine's
 // settled-state label until #789 replaced that component's copy with the
@@ -113,22 +116,67 @@ export const CONFIRM_SYSTEM_OPEN = `# iOS system confirmation for a custom-schem
 // leaves ample network/render headroom while still terminating a wedged
 // accessibility driver before the workflow's outer timeout destroys evidence.
 const MAESTRO_CHUNK_TIMEOUT_MS = 12 * 60_000;
+const COMMAND_TIMEOUT_MS = 30_000;
+const MAX_COMMAND_OUTPUT_BYTES = 1024 * 1024;
+const MAESTRO_DRIVER_STARTUP_TIMEOUT_MS = 180_000;
+const DETACHED = process.platform !== "win32";
 
-function spawnText(cmd, args, opts = {}) {
+function killTree(child, signal) {
+  try {
+    if (DETACHED && child.pid) process.kill(-child.pid, signal);
+    else child.kill(signal);
+  } catch {
+    // The command may already have exited.
+  }
+}
+
+function spawnText(
+  cmd,
+  args,
+  { timeoutMs = COMMAND_TIMEOUT_MS, sensitive = false, ...spawnOptions } = {}
+) {
   return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, { ...opts, stdio: ["ignore", "pipe", "pipe"] });
+    const p = spawn(cmd, args, {
+      ...spawnOptions,
+      detached: DETACHED,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     let out = "";
     let err = "";
-    p.stdout.on("data", (d) => (out += d.toString()));
-    p.stderr.on("data", (d) => (err += d.toString()));
-    p.on("exit", (code) => {
-      if (code === 0) resolve(out);
-      else
-        reject(
-          new Error(`${cmd} ${args.join(" ")} exited ${code}: ${err || out}`)
-        );
+    let forceKillTimer;
+    let settled = false;
+    let timedOut = false;
+    const append = (current, chunk) =>
+      `${current}${chunk.toString()}`.slice(-MAX_COMMAND_OUTPUT_BYTES);
+    p.stdout.on("data", (d) => (out = append(out, d)));
+    p.stderr.on("data", (d) => (err = append(err, d)));
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      killTree(p, "SIGTERM");
+      forceKillTimer = setTimeout(() => killTree(p, "SIGKILL"), 5_000);
+      forceKillTimer.unref();
+    }, timeoutMs);
+    timeout.unref();
+    const finish = (callback) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (forceKillTimer) clearTimeout(forceKillTimer);
+      callback();
+    };
+    p.on("close", (code) => {
+      finish(() => {
+        if (timedOut) {
+          reject(new Error(`${cmd} exceeded its ${timeoutMs}ms timeout`));
+        } else if (code === 0) {
+          resolve(out);
+        } else {
+          const detail = sensitive ? "" : `: ${err || out}`;
+          reject(new Error(`${cmd} exited ${code}${detail}`));
+        }
+      });
     });
-    p.on("error", reject);
+    p.on("error", (error) => finish(() => reject(error)));
   });
 }
 
@@ -143,9 +191,15 @@ async function bootedIosSim() {
     "--json",
   ]);
   const data = JSON.parse(out);
+  const preferred =
+    process.env.MAESTRO_DEVICE_UDID ?? process.env.SIMULATOR_UDID;
   for (const list of Object.values(data.devices ?? {})) {
     for (const dev of list ?? []) {
-      if (dev.state === "Booted") return dev.udid;
+      if (
+        dev.state === "Booted" &&
+        (!preferred || String(dev.udid) === preferred)
+      )
+        return dev.udid;
     }
   }
   return null;
@@ -157,9 +211,16 @@ async function bootedIosSim() {
 async function bootedAndroidEmu() {
   try {
     const out = await spawnText("adb", ["devices"]);
+    const preferred =
+      process.env.ANDROID_SERIAL ?? process.env.MAESTRO_DEVICE_UDID;
     for (const line of out.split("\n").slice(1)) {
       const [serial, state] = line.split("\t");
-      if (state?.trim() === "device" && serial) return serial.trim();
+      if (
+        state?.trim() === "device" &&
+        serial &&
+        (!preferred || serial.trim() === preferred)
+      )
+        return serial.trim();
     }
   } catch {
     // adb not installed or daemon refused — no Android target.
@@ -294,13 +355,42 @@ export async function setup({ runId } = {}) {
 // `--udid` pins Maestro to the chosen device — without it Maestro picks any
 // connected target, which silently runs flows on the wrong platform when
 // both an iOS sim and an Android emulator are booted.
+async function readJunitSummary(reportFile, { required }) {
+  let xml;
+  try {
+    xml = await fs.readFile(reportFile, "utf8");
+  } catch (error) {
+    if (required)
+      throw new Error(`Maestro emitted no JUnit report at ${reportFile}`, {
+        cause: error,
+      });
+    return { tests: 0, failures: 0, skipped: 0 };
+  }
+  const summary = {
+    tests: (xml.match(/<testcase(?:\s|>)/gu) ?? []).length,
+    failures: (xml.match(/<(?:failure|error)(?:\s|>)/gu) ?? []).length,
+    skipped: (xml.match(/<skipped(?:\s|>)/gu) ?? []).length,
+  };
+  if (required && summary.tests === 0) {
+    throw new Error(
+      `Maestro JUnit report contains no test cases: ${reportFile}`
+    );
+  }
+  return summary;
+}
+
 async function runMaestroChunk(
   yaml,
   { state, label, maestroEnv = {}, sensitive = false }
 ) {
   const flowFile = path.join(state.flowsDir, `${label}.yaml`);
   const debugDir = path.join(state.runDir, "maestro-debug", label);
+  const reportsDir = sensitive
+    ? debugDir
+    : path.join(state.runDir, "maestro-reports");
+  const reportFile = path.join(reportsDir, `${label}.xml`);
   await fs.writeFile(flowFile, yaml);
+  await fs.mkdir(reportsDir, { recursive: true });
   // `--debug-output` redirects Maestro's own per-step screenshots and view
   // hierarchies into the run dir. Without it they land in `~/.maestro/tests/`,
   // which the nightly workflow does not upload — so a CI failure arrived with
@@ -309,6 +399,13 @@ async function runMaestroChunk(
   // nothing to diagnose at all. Keep this pointed inside `state.runDir`, which
   // is already an uploaded artifact path.
   const run = sensitive ? spawnQuiet : spawnLive;
+  const sanitizedReport = path.join(
+    state.runDir,
+    "maestro-reports",
+    `${label}.sanitized.json`
+  );
+  let commandError;
+  let junitSummary = { tests: 0, failures: 0, skipped: 0 };
   try {
     await run(
       "maestro",
@@ -318,23 +415,55 @@ async function runMaestroChunk(
         "test",
         "--debug-output",
         debugDir,
+        "--test-output-dir",
+        debugDir,
         "--flatten-debug-output",
+        "--format",
+        "junit",
+        "--output",
+        reportFile,
         flowFile,
       ],
       {
         cwd: state.screenshotsDir,
-        env: { ...process.env, ...maestroEnv },
+        env: {
+          ...process.env,
+          MAESTRO_DRIVER_STARTUP_TIMEOUT:
+            process.env.MAESTRO_DRIVER_STARTUP_TIMEOUT ??
+            String(MAESTRO_DRIVER_STARTUP_TIMEOUT_MS),
+          ...maestroEnv,
+        },
         timeoutMs: MAESTRO_CHUNK_TIMEOUT_MS,
       }
     );
+    junitSummary = await readJunitSummary(reportFile, { required: true });
+  } catch (error) {
+    commandError = error;
+    junitSummary = await readJunitSummary(reportFile, { required: false });
+    throw error;
   } finally {
     // A pairing ticket is a live enrollment capability. Sensitive flows use a
     // MAESTRO_* variable so the retained YAML contains only a placeholder, run
     // without console output, and discard Maestro's hierarchy/screenshots even
     // on failure. The workflow repeats this cleanup before artifact upload as a
     // defense against abrupt harness termination.
-    if (sensitive) await fs.rm(debugDir, { force: true, recursive: true });
+    if (sensitive) {
+      await fs.mkdir(path.dirname(sanitizedReport), { recursive: true });
+      await fs.writeFile(
+        sanitizedReport,
+        `${JSON.stringify(
+          {
+            status: commandError ? "failed" : "passed",
+            ...junitSummary,
+          },
+          null,
+          2
+        )}\n`
+      );
+      await fs.rm(debugDir, { force: true, recursive: true });
+    }
   }
+  return sensitive ? sanitizedReport : reportFile;
 }
 
 /**
@@ -376,7 +505,33 @@ async function runMaestroChunk(
  *     verdict.md                ← PASS/FAIL + notes (written last)
  */
 export async function runFlow(slug, fn) {
-  const state = await setup({ runId: `${slug}-${defaultRunId()}` });
+  const t0 = Date.now();
+  const runId = `${slug}-${defaultRunId()}`;
+  const owner = path
+    .relative(REPO_ROOT, path.resolve(process.argv[1] ?? ""))
+    .split(path.sep)
+    .join("/");
+  let state;
+  try {
+    state = await setup({ runId });
+  } catch (error) {
+    const runDir = path.join(RUNS_DIR, runId);
+    await fs.mkdir(runDir, { recursive: true });
+    await writeFlowVerdict({
+      repoRoot: REPO_ROOT,
+      slug,
+      runDir,
+      elapsedMs: Date.now() - t0,
+      error,
+      notes: [],
+      metadata: { phase: "setup" },
+      debug:
+        "Setup failed before Maestro started; inspect the suite result and gateway/simulator setup steps.",
+      owner,
+    });
+    console.error(error);
+    process.exit(1);
+  }
   console.log(`[runFlow] ${slug}`);
   console.log(`  run dir : ${path.relative(REPO_ROOT, state.runDir)}`);
   console.log(`  target  : ${state.platform} ${state.udid}`);
@@ -389,10 +544,12 @@ export async function runFlow(slug, fn) {
   };
 
   const notes = [];
+  const reportPaths = [];
   const run = async (yaml, hint, options = {}) => {
     const label = nextLabel(hint);
     console.log(`  run     : ${label}`);
-    await runMaestroChunk(yaml, { state, label, ...options });
+    const report = await runMaestroChunk(yaml, { state, label, ...options });
+    reportPaths.push(path.relative(REPO_ROOT, report));
   };
   const ctx = {
     state,
@@ -401,6 +558,33 @@ export async function runFlow(slug, fn) {
       console.log(`  note    : ${m}`);
     },
     run,
+  };
+
+  const markPairedFixtureReady = async () => {
+    const marker = process.env.MOBILE_E2E_PREREQUISITE_FILE;
+    if (!marker) return;
+    await fs.mkdir(path.dirname(marker), { recursive: true });
+    const temporary = `${marker}.${process.pid}.tmp`;
+    await fs.writeFile(
+      temporary,
+      `${JSON.stringify(
+        {
+          ready: true,
+          runId: state.runId,
+          platform: state.platform,
+          udid: state.udid,
+          appId: state.appId,
+          gatewayUrl: process.env.MAESTRO_GATEWAY_URL ?? null,
+          fixtureId:
+            process.env.MOBILE_E2E_FIXTURE_ID ??
+            `local:${process.env.MAESTRO_GATEWAY_URL ?? "unknown"}`,
+          capturedAt: new Date().toISOString(),
+        },
+        null,
+        2
+      )}\n`
+    );
+    await fs.rename(temporary, marker);
   };
 
   // Mint the one-time pairing ticket the phone will redeem.
@@ -421,9 +605,12 @@ export async function runFlow(slug, fn) {
       // A daemon started with a pinned `CENTRAID_GATEWAY_TOKEN` rejects the
       // bearer the CLI would otherwise derive from `keys/endpoint-key.bin`, so
       // the pin has to travel with the subprocess.
-      const pairEnv = gatewayToken
-        ? { env: { ...process.env, CENTRAID_GATEWAY_TOKEN: gatewayToken } }
-        : {};
+      const pairEnv = {
+        sensitive: true,
+        ...(gatewayToken
+          ? { env: { ...process.env, CENTRAID_GATEWAY_TOKEN: gatewayToken } }
+          : {}),
+      };
       const out = await spawnText(
         "node",
         [
@@ -458,7 +645,7 @@ export async function runFlow(slug, fn) {
           ...(gatewayToken ? { authorization: `Bearer ${gatewayToken}` } : {}),
         },
         body: JSON.stringify({
-          ttlMinutes: 15,
+          ttlMinutes: 5,
         }),
       }
     );
@@ -502,6 +689,7 @@ ${LAUNCHER_RECOVERY}- extendedWaitUntil:
 ${fillSampleContent ? FILL_SAMPLE_IF_DAYONE : ""}`,
         "reuse-paired-gateway"
       );
+      await markPairedFixtureReady();
       ctx.note(`reused the paired nightly profile for ${gatewayUrl}`);
       return;
     }
@@ -516,6 +704,7 @@ ${fillSampleContent ? FILL_SAMPLE_IF_DAYONE : ""}`,
     const freshLaunch = MOBILE_E2E_EMBEDDED
       ? `- launchApp:
     clearState: true
+    clearKeychain: ${state.platform === "ios" ? "true" : "false"}
 `
       : `- launchApp:
     clearState: true
@@ -593,6 +782,7 @@ ${retryableTapCommands("Enter Centraid")}
 ${fillSampleContent ? FILL_SAMPLE_IF_DAYONE : ""}`,
       "complete-onboarding"
     );
+    await markPairedFixtureReady();
     ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
   };
 
@@ -624,6 +814,21 @@ ${fillSampleContent ? FILL_SAMPLE_IF_DAYONE : ""}`,
     const current = status.apps.find((app) => app?.appId === appId);
     if (!current?.seedable)
       throw new Error(`gateway does not ship the ${appId} demo scenario`);
+    const expectedApps = JSON.parse(
+      process.env.MOBILE_E2E_FIXTURE_APPS_JSON ?? "[]"
+    );
+    const expected = Array.isArray(expectedApps)
+      ? expectedApps.find((app) => app?.appId === appId)
+      : undefined;
+    if (
+      expected &&
+      (!Number.isFinite(expected.rows) ||
+        Number(current.rows) !== expected.rows)
+    ) {
+      throw new Error(
+        `${appId} demo fixture mismatch: expected ${expected.rows} rows, found ${current.rows}`
+      );
+    }
     if (Number(current.rows) > 0) {
       ctx.note(`${appId} demo already present (${current.rows} rows)`);
       return;
@@ -717,7 +922,6 @@ ${LAUNCHER_RECOVERY}`,
 
   let error;
   let result;
-  const t0 = Date.now();
   try {
     result = await fn(ctx);
   } catch (caughtError) {
@@ -734,16 +938,18 @@ ${LAUNCHER_RECOVERY}`,
     error,
     notes,
     result,
-    metadata: { platform: state.platform, udid: state.udid, app: state.appId },
+    metadata: {
+      platform: state.platform,
+      udid: state.udid,
+      app: state.appId,
+      reports: reportPaths.join(", "),
+    },
     debug:
-      "Maestro keeps per-step screenshots and ai-report.html under `~/.maestro/tests/<timestamp>/`; the newest directory belongs to this run.",
+      "Maestro JUnit, command metadata, logs, and failure screenshots are retained inside this run's `maestro-reports/` and `maestro-debug/` directories.",
     // Owner must be the flow FILE the matrix names, not the flow id — they
     // differ for volume-proof.mjs (id "mobile-volume-proof"), and an id-derived
     // path makes the evidence unmappable in the zero-grey report.
-    owner: path
-      .relative(REPO_ROOT, path.resolve(process.argv[1] ?? ""))
-      .split(path.sep)
-      .join("/"),
+    owner,
   });
 
   if (!pass) {

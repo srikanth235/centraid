@@ -8,6 +8,7 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
   defaultRunId,
   qualityRegressionBudget,
+  redactSensitive,
   recordQualityResult,
   writeFlowVerdict,
 } from "./harness.mjs";
@@ -60,6 +61,17 @@ describe("qualityRegressionBudget", () => {
 });
 
 describe("writeFlowVerdict", () => {
+  test("redacts capabilities before they cross the verdict boundary", () => {
+    const ticket = "a".repeat(140);
+    expect(
+      redactSensitive(
+        `Bearer secret-token https://host.test/?ticket=${ticket} {"authorization":"private"}`
+      )
+    ).toBe(
+      'Bearer [REDACTED] https://host.test/?ticket=[REDACTED] {"authorization":"[REDACTED]"}'
+    );
+  });
+
   test("writes PASS verdict.md and optional evidence JSON", async () => {
     const runDir = await makeRunDir();
     const repoRoot = runDir;

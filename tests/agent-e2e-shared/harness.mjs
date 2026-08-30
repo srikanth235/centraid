@@ -2,6 +2,18 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+/** Defense-in-depth boundary for every retained verdict or diagnostic string. */
+export function redactSensitive(value) {
+  return String(value)
+    .replace(/\bBearer\s+[^\s"'`]+/giu, "Bearer [REDACTED]")
+    .replace(/([?&](?:token|ticket|authorization)=)[^&#\s]+/giu, "$1[REDACTED]")
+    .replace(
+      /("(?:token|ticket|authorization)"\s*:\s*")[^"]+("?)/giu,
+      "$1[REDACTED]$2"
+    )
+    .replace(/\b[A-Za-z0-9_-]{120,}\b/gu, "[REDACTED_CAPABILITY]");
+}
+
 /** Shared run identity used by the desktop, mobile and pairing manual-QA adapters. */
 export function defaultRunId() {
   const stamp = new Date()
@@ -159,19 +171,25 @@ export async function writeFlowVerdict({
     "run dir": runDir,
     ...metadata,
   })) {
-    lines.push(`- ${label}: \`${value}\``);
+    lines.push(`- ${label}: \`${redactSensitive(value)}\``);
   }
   lines.push("");
   if (error) {
-    lines.push("## Error", "```", error.stack ?? String(error), "```", "");
+    lines.push(
+      "## Error",
+      "```",
+      redactSensitive(error.stack ?? String(error)),
+      "```",
+      ""
+    );
     if (debug) lines.push("## Debug", "", debug, "");
   }
   if (notes.length) {
     lines.push("## Notes");
-    for (const note of notes) lines.push(`- ${note}`);
+    for (const note of notes) lines.push(`- ${redactSensitive(note)}`);
     lines.push("");
   }
-  if (result?.notes) lines.push("## Result", String(result.notes), "");
+  if (result?.notes) lines.push("## Result", redactSensitive(result.notes), "");
   const verdict = path.join(runDir, "verdict.md");
   await fs.writeFile(verdict, lines.join("\n"));
   if (owner) {

@@ -175,11 +175,15 @@ describe("demo routes", () => {
       method: "POST",
     });
     expect(loaded.status).toBe(200);
-    await expect(loaded.json()).resolves.toMatchObject({
+    const loadedBody = await loaded.json();
+    expect(loadedBody).toMatchObject({
       ok: true,
       seeded: ["beta"],
       skipped: ["alpha"],
     });
+    expect((loadedBody as { now?: string }).now).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u
+    );
 
     rows = [{ appId: "alpha", rows: 4 }];
     mocks.runHandler.mockResolvedValueOnce({

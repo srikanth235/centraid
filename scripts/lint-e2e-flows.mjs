@@ -45,6 +45,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+import { FLOW_CATALOG } from "../tests/agent-e2e-mobile/ci-flow-catalog.mjs";
+
 const ROOT = path.resolve(import.meta.dirname, "..");
 
 // The roster is DISCOVERED, never hand-listed. A hardcoded list is a silent
@@ -62,6 +64,22 @@ const SCAN_DIRS = [
   "tests/agent-e2e-mobile/flows",
   "tests/agent-e2e-mobile/lib",
 ];
+
+// These are the only mobile Maestro execution surfaces. Keep this list small
+// and explicit: a new runner must be added here before a catalog entry can
+// claim it, so adding a file without wiring it into CI cannot look like
+// coverage.
+export const CANONICAL_SURFACES = Object.freeze({
+  workflow: ".github/workflows/e2e.yml",
+  androidRunner: "apps/mobile/scripts/android-emulator-e2e.sh",
+  suiteRunners: Object.freeze({
+    photos: "tests/agent-e2e-mobile/run-photos-suite.mjs",
+    "home-apps": "tests/agent-e2e-mobile/run-home-apps-suite.mjs",
+  }),
+});
+
+const RUNNER_SUITES = new Set(Object.keys(CANONICAL_SURFACES.suiteRunners));
+const DIRECT_SUITES = new Set(["lane-a", "standalone"]);
 
 // Vitest/node:test siblings are excluded by rule: `*.test.mjs` files assert the
 // linter's and the harness's behaviour with deliberately-violating FIXTURES, so
@@ -92,6 +110,144 @@ export function discoverFiles(root = ROOT) {
 }
 
 const isFlowFile = (rel) => rel.startsWith(`${SCAN_DIRS[0]}/`);
+
+/** Read the surfaces used by the catalog reachability check. Missing files are
+ * represented as null so the linter can report a useful wiring error instead
+ * of throwing before it explains which surface disappeared. */
+export function readCanonicalSurfaces(root = ROOT) {
+  const read = (rel) => {
+    try {
+      return readFileSync(path.resolve(root, rel), "utf8");
+    } catch {
+      return null;
+    }
+  };
+  return {
+    workflow: read(CANONICAL_SURFACES.workflow),
+    androidRunner: read(CANONICAL_SURFACES.androidRunner),
+    suiteRunners: Object.fromEntries(
+      Object.entries(CANONICAL_SURFACES.suiteRunners).map(([suite, rel]) => [
+        suite,
+        read(rel),
+      ])
+    ),
+  };
+}
+
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+
+/** Match a committed path or a quoted basename. Suite runners use basenames
+ * when they join each file to their shared flows directory; direct runners use
+ * the repository-relative path. Comments are removed before matching so a
+ * retired flow mentioned in prose cannot satisfy the ownership contract. */
+function references(source, rel) {
+  if (typeof source !== "string") return false;
+  const code = source
+    .split("\n")
+    .filter((line) => !/^\s*(?:#|\/\/)/u.test(line))
+    .join("\n");
+  if (code.includes(rel)) return true;
+  const basename = path.basename(rel);
+  return new RegExp(`["']${escapeRegExp(basename)}["']`, "u").test(code);
+}
+
+/** Validate the flow roster and prove every CI-owned flow is reachable from
+ * the canonical platform surface it claims. Exported so tests can exercise
+ * the fail paths with synthetic rosters and surface text. */
+export function validateFlowCatalog({
+  root = ROOT,
+  files = discoverFiles(root),
+  catalog = FLOW_CATALOG,
+  surfaces = readCanonicalSurfaces(root),
+} = {}) {
+  const errors = [];
+  const discovered = new Set(files.filter(isFlowFile));
+  const declared = new Set(
+    Object.keys(catalog).filter((rel) => rel.startsWith(`${SCAN_DIRS[0]}/`))
+  );
+
+  for (const rel of [...discovered].sort()) {
+    if (!declared.has(rel))
+      errors.push(`flow is not classified in ci-flow-catalog.mjs: ${rel}`);
+  }
+  for (const rel of [...declared].sort()) {
+    if (!discovered.has(rel))
+      errors.push(`catalog flow does not exist on disk: ${rel}`);
+  }
+
+  for (const [rel, entry] of Object.entries(catalog)) {
+    if (!rel.startsWith(`${SCAN_DIRS[0]}/`)) {
+      errors.push(`catalog entry is outside the mobile flow directory: ${rel}`);
+      continue;
+    }
+    if (!entry || typeof entry !== "object") {
+      errors.push(`catalog entry is not an object: ${rel}`);
+      continue;
+    }
+    if (entry.ownership === "manual") {
+      if (typeof entry.reason !== "string" || !entry.reason.trim())
+        errors.push(`manual flow has no reason: ${rel}`);
+      if (entry.platforms !== undefined || entry.suite !== undefined)
+        errors.push(`manual flow must not declare CI metadata: ${rel}`);
+      continue;
+    }
+    if (entry.ownership !== "ci") {
+      errors.push(`flow ownership must be ci or manual: ${rel}`);
+      continue;
+    }
+    if (
+      !Array.isArray(entry.platforms) ||
+      entry.platforms.length === 0 ||
+      new Set(entry.platforms).size !== entry.platforms.length ||
+      entry.platforms.some((platform) => !["ios", "android"].includes(platform))
+    ) {
+      errors.push(`CI flow must declare unique ios/android platforms: ${rel}`);
+    }
+    if (typeof entry.suite !== "string" || !entry.suite.trim()) {
+      errors.push(`CI flow must declare a suite: ${rel}`);
+      continue;
+    }
+    if (!RUNNER_SUITES.has(entry.suite) && !DIRECT_SUITES.has(entry.suite)) {
+      errors.push(`CI flow declares an unknown suite "${entry.suite}": ${rel}`);
+      continue;
+    }
+
+    for (const platform of entry.platforms ?? []) {
+      const surface =
+        platform === "ios" ? surfaces.workflow : surfaces.androidRunner;
+      const surfaceLabel =
+        platform === "ios"
+          ? CANONICAL_SURFACES.workflow
+          : CANONICAL_SURFACES.androidRunner;
+      if (surface == null) {
+        errors.push(`missing ${platform} canonical surface ${surfaceLabel}`);
+        continue;
+      }
+      if (RUNNER_SUITES.has(entry.suite)) {
+        const runner = CANONICAL_SURFACES.suiteRunners[entry.suite];
+        if (!references(surface, runner)) {
+          errors.push(
+            `${rel} is not reachable on ${platform}: ${surfaceLabel} does not invoke ${runner}`
+          );
+          continue;
+        }
+        const runnerSource = surfaces.suiteRunners?.[entry.suite];
+        if (runnerSource == null) {
+          errors.push(`missing canonical suite runner ${runner}`);
+        } else if (!references(runnerSource, rel)) {
+          errors.push(
+            `${rel} is not referenced by canonical suite runner ${runner}`
+          );
+        }
+      } else if (!references(surface, rel)) {
+        errors.push(
+          `${rel} is not referenced by the ${platform} canonical surface ${surfaceLabel}`
+        );
+      }
+    }
+  }
+  return errors;
+}
 
 // Tab-bar labels + route names. These come from apps/mobile/App.tsx (Tab.Screen
 // tabBarLabel / name) — the label is drawn in the tab bar on every screen, and
@@ -333,6 +489,14 @@ function selfTest() {
 function main() {
   selfTest();
   const files = discoverFiles();
+  const catalogErrors = validateFlowCatalog({ files });
+  if (catalogErrors.length > 0) {
+    console.error(
+      "\nFAIL — mobile Maestro flow catalog is incomplete or unwired:\n"
+    );
+    for (const error of catalogErrors) console.error(`  ${error}`);
+    process.exit(1);
+  }
   let stepsScanned = 0;
   let filesScanned = 0;
   const findings = [];
