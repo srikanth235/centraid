@@ -1,3 +1,5 @@
+import type { RebootstrapOptions } from "../../lib/replica/native-session";
+
 /**
  * Home's "Fill it with sample content" path after pairing.
  *
@@ -8,7 +10,9 @@
  */
 export interface DemoReplica {
   refresh?: () => Promise<unknown>;
-  session?: { rebootstrap?: () => Promise<void> };
+  session?: {
+    rebootstrap?: (options?: RebootstrapOptions) => Promise<void>;
+  };
 }
 
 export interface SeedDemoAndRefreshReplica {
@@ -41,7 +45,7 @@ export async function seedDemoAndRefreshReplica(
   // Reachability can still say offline even though the seed request just
   // proved the tunnel; a failed refresh must not skip the snapshot rebuild.
   await args.replica.refresh?.().catch(() => undefined);
-  await args.replica.session?.rebootstrap?.();
+  await args.replica.session?.rebootstrap?.({ force: true });
   await (args.wait ?? delay)(RETRY_MS);
-  await args.replica.session?.rebootstrap?.();
+  await args.replica.session?.rebootstrap?.({ force: true });
 }

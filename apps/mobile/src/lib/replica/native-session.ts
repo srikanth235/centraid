@@ -84,6 +84,11 @@ export type NativeWriteResult =
   | IntentOutcome
   | { intentId: string; status: "queued" | "in-flight"; reason?: string };
 
+export interface RebootstrapOptions {
+  /** The caller has just completed an explicit online operation. */
+  force?: boolean;
+}
+
 /** Structural surface consumed by mobile app features across one or N vaults. */
 export interface MobileReplicaSession {
   read: (
@@ -110,7 +115,7 @@ export interface MobileReplicaSession {
   ) => () => void;
   pullNow: () => Promise<void | boolean>;
   /** Rebuild the local replica from the gateway's current snapshot. */
-  rebootstrap?: () => Promise<void>;
+  rebootstrap?: (options?: RebootstrapOptions) => Promise<void>;
 }
 
 /** AppState-shaped foreground signal; RN's `AppState` satisfies it. */
@@ -630,7 +635,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     if (this.#hasCursor) {
       void this.pullNow().catch(() => undefined);
     } else {
-      void this.bootstrapWhenReachable();
+      void this.bootstrapWhenReachable().catch(() => undefined);
     }
     void this.flushIntents();
   }
@@ -698,12 +703,15 @@ export class NativeReplicaSession implements MobileReplicaSession {
 
   requireBootstrap(): void {
     this.#hasCursor = false;
-    if (!this.#closed) void this.bootstrapWhenReachable();
+    if (!this.#closed)
+      void this.bootstrapWhenReachable().catch(() => undefined);
   }
 
   /** Force a full snapshot when a write is intentionally outside the feed. */
-  async rebootstrap(): Promise<void> {
+  async rebootstrap(options?: RebootstrapOptions): Promise<void> {
+    const force = options?.force === true;
     if (this.#closed) return;
+    if (!force && !this.#isConnected()) return;
     this.#hasCursor = false;
     // Progressive bootstrap resolves after page one while its backfill can
     // still be running. A refresh requested from that preview supersedes the
@@ -716,14 +724,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
       await inFlight.catch(() => undefined);
     }
     if (this.#closed) return;
-    // This is an explicit rebuild requested after an online operation. The
-    // reachability flag is deliberately advisory and can lag the tunnel that
-    // just accepted that operation; the fetcher is the authority here. Keep
-    // the transfer-policy gate in bootstrapWhenReachable(), but do not drop a
-    // successful seed merely because the provider has not published `online`
-    // yet.
-    this.#hasCursor = false;
-    if (!(await this.#isNetworkWorkAllowed())) return;
+    if (!force && !this.#isConnected()) return;
+    // The forced form is used only after a user-visible online operation, such
+    // as Home's demo seed. That operation already proved this tunnel works;
+    // stale reachability and the background transfer policy must not discard
+    // its follow-up snapshot. All automatic/background paths remain gated.
+    if (!force && !(await this.#isNetworkWorkAllowed())) return;
     if (this.#bootstrapPromise) return this.#bootstrapPromise;
     this.#bootstrapPromise = this.bootstrap().finally(() => {
       this.#bootstrapPromise = undefined;
@@ -768,7 +774,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       if (this.#hasCursor) {
         void this.pullNow().catch(() => undefined);
       } else {
-        void this.bootstrapWhenReachable();
+        void this.bootstrapWhenReachable().catch(() => undefined);
       }
       void this.flushIntents();
     } else if (state === "background") {
@@ -779,8 +785,13 @@ export class NativeReplicaSession implements MobileReplicaSession {
   private async bootstrapWhenReachable(): Promise<void> {
     if (this.#bootstrapPromise || this.#closed || !this.#isConnected())
       return this.#bootstrapPromise;
-    if (!(await this.#isNetworkWorkAllowed())) return;
-    this.#bootstrapPromise = this.bootstrap().finally(() => {
+    // Reserve the slot before awaiting policy. Otherwise requireBootstrap()
+    // and an explicit post-write rebuild can both pass the empty-slot check
+    // during that await and leave the stale walk's rejection unobserved.
+    this.#bootstrapPromise = (async () => {
+      if (!(await this.#isNetworkWorkAllowed())) return;
+      await this.bootstrap();
+    })().finally(() => {
       this.#bootstrapPromise = undefined;
     });
     return this.#bootstrapPromise;

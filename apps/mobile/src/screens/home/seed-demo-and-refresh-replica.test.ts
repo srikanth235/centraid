@@ -41,6 +41,12 @@ describe(seedDemoAndRefreshReplica, () => {
       "rebootstrap",
     ]);
     expect(replica.session.rebootstrap).toHaveBeenCalledTimes(2);
+    expect(replica.session.rebootstrap).toHaveBeenNthCalledWith(1, {
+      force: true,
+    });
+    expect(replica.session.rebootstrap).toHaveBeenNthCalledWith(2, {
+      force: true,
+    });
     expect(wait).toHaveBeenCalledWith(500);
   });
 

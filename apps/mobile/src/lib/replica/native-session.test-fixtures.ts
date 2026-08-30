@@ -148,7 +148,7 @@ export function createFeed(): FakeFeed {
   };
 }
 
-type Responder = () => Response;
+type Responder = () => Response | Promise<Response>;
 
 interface FakeGateway {
   on: (pathFragment: string, responder: Responder) => FakeGateway;

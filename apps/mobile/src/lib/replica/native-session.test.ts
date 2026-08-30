@@ -210,10 +210,11 @@ describe(createNativeReplicaSession, () => {
       digest: nodeDigest,
       idFactory: sequentialIds(),
       isConnected: () => false,
+      isNetworkWorkAllowed: async () => false,
     });
     try {
       expect((await session.status()).cursor).toBeNull();
-      await session.rebootstrap();
+      await session.rebootstrap({ force: true });
       expect((await session.status()).cursor).toStrictEqual({
         epoch: "replica-1",
         seq: 1,
