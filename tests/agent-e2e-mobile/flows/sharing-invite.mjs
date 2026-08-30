@@ -90,7 +90,10 @@ await runFlow("sharing-invite", async (ctx) => {
   // pairing so it arrives in the first replica clone; the GET guard makes a
   // second call a no-op.
   await ctx.ensureDemo("tally");
-  await ctx.configureGateway();
+  // Pairing alone leaves Home in its intentionally empty state. Refresh the
+  // deterministic demo projection so the Tally launcher is a real reachable
+  // subject before the sharing assertion begins.
+  await ctx.configureGateway({ fillSampleContent: true });
 
   await ctx.run(
     `appId: ${ctx.state.appId}

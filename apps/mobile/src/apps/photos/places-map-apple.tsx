@@ -113,11 +113,16 @@ export default function PlacesAppleMap({
           These transparent controls share the projected pin centres and the
           same read action, making the REAL MapKit ground operable by VoiceOver
           and deterministic device automation without drawing a second pin. */}
-      <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+      <View
+        pointerEvents="box-none"
+        style={[StyleSheet.absoluteFill, { zIndex: 1 }]}
+      >
         {pins.map((pin) => (
           <Pressable
+            accessible
             accessibilityLabel={pinLabel(pin)}
             accessibilityRole="button"
+            collapsable={false}
             key={pin.key}
             onPress={() => onRead(pin)}
             style={{
@@ -126,6 +131,7 @@ export default function PlacesAppleMap({
               position: "absolute",
               top: pin.y - PIN_TAP_RADIUS,
               width: PIN_TAP_RADIUS * 2,
+              zIndex: 1,
             }}
           />
         ))}
