@@ -7,6 +7,7 @@ import React from "react";
 import { Alert, View } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
+import { TEST_ID_PREFIXES } from "../../kit/test-ids";
 import { useTheme } from "../../kit/theme";
 import { styles } from "./PhotoLightbox.styles";
 import { ViewerChromePlate, ViewerChromeTarget } from "./PhotoLightboxChrome";
@@ -119,6 +120,9 @@ export function PhotoLightboxToolbar({
                     run[id]();
                   }}
                   selected={selected}
+                  // The action's own id — `label` swaps to "Save to my vault"
+                  // on a foreign asset, so it cannot be a locator.
+                  testID={`${TEST_ID_PREFIXES.photosViewerAction}${id}`}
                   tone={action.tone}
                   wide={group.shape === "capsule"}
                 />

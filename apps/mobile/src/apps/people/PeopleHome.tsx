@@ -59,6 +59,7 @@ import TopSafeArea from "../../kit/components/TopSafeArea";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
+import { TEST_IDS } from "../../kit/test-ids";
 import {
   borders,
   pageMargin,
@@ -272,8 +273,13 @@ function RosterBody({
         <FlashList
           data={rows}
           keyExtractor={(person) => person.party_id}
-          renderItem={({ item }) => (
-            <RosterRow person={item} onOpen={onOpen} onStar={onStar} />
+          renderItem={({ item, index }) => (
+            <RosterRow
+              person={item}
+              first={index === 0}
+              onOpen={onOpen}
+              onStar={onStar}
+            />
           )}
         />
       )}
@@ -283,10 +289,13 @@ function RosterBody({
 
 function RosterRow({
   person,
+  first,
   onOpen,
   onStar,
 }: {
   person: MobilePersonRow;
+  /** The roster's leading row; only it carries a handle. */
+  first: boolean;
   onOpen: (partyId: string) => void;
   onStar: (person: MobilePersonRow) => void;
 }): React.JSX.Element {
@@ -299,6 +308,7 @@ function RosterRow({
   return (
     <PersonRow
       avatar={person}
+      {...(first ? { testID: TEST_IDS.people.rowFirst } : {})}
       avatarLink={
         person.linked === true
           ? "linked"

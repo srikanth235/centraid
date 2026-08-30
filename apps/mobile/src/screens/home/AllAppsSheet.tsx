@@ -27,6 +27,7 @@ import AppMark from "../../kit/components/AppMark";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
 import { borders, family, metrics, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { LauncherItem } from "./catalog";
@@ -120,6 +121,7 @@ export default function AllAppsSheet({
       />
       <View
         style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}
+        testID={TEST_IDS.home.allApps}
       >
         <View style={styles.header}>
           <Text style={styles.title}>{ALL_APPS_TITLE}</Text>
@@ -276,6 +278,9 @@ function PlaceRow({
       accessibilityLabel={`${place.name}. ${place.what}`}
       onPress={onOpen}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      // Settings is reached from HERE, not from a drawer: `home-place-settings`
+      // is the handle for it (there is no vault drawer on this shell).
+      testID={`${TEST_ID_PREFIXES.homePlace}${place.id}`}
     >
       {/* Places own no hue: bare mark in the faintest ink token — nothing
           here is "current". */}

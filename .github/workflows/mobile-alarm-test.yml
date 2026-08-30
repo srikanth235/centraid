@@ -1,0 +1,158 @@
+# governance: allow-toolchain-config issue #890 — the quarterly alarm test, the
+# one lane in this repo whose PASS condition is a red suite.
+name: mobile-alarm-test
+
+# #890 W6 — MUTATION TESTING FOR THE E2E LAYER.
+#
+# Every other gate answers "does the product still work?". This one answers the
+# question no green run can: "would this suite notice if it did not?". Six
+# mobile flows were once green while observing nothing (#474/#478/#483), and the
+# only reason anybody found out was a human reading the YAML. A suite that
+# cannot be shown to go red is not evidence, it is a habit.
+#
+# So this lane builds the app with ONE surface deliberately blanked
+# (EXPO_PUBLIC_CENTRAID_E2E_ALARM=home, wired at
+# apps/mobile/src/kit/e2e-alarm.ts) and requires the PR-gate suite to FAIL.
+# A GREEN SUITE HERE FAILS THE JOB — that is the alarm not sounding.
+#
+# Quarterly, not nightly: the mutation is a whole extra native build, the answer
+# changes only when the suite's selectors change, and the PR gate already runs
+# the same five journeys every day against the unmutated build. Dispatchable, so
+# a wave that rewrites selectors — as #890 W2 did — can ask the question
+# immediately instead of waiting for the quarter.
+on:
+  schedule:
+    # 03:00 UTC on the 1st of Jan/Apr/Jul/Oct.
+    - cron: "0 3 1 1,4,7,10 *"
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-alarm-test-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  alarm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install Maestro CLI
+        # Same pin as every other mobile lane — an alarm test driven by a
+        # different device driver than the lane it is auditing would be
+        # auditing something else.
+        env:
+          MAESTRO_VERSION: 2.6.1
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Build and start the tokenless mobile test gateway
+        run: |
+          bun run turbo run build --filter=@centraid/server
+          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
+          for attempt in {1..90}; do
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/centraid-mobile-gateway.log
+          exit 1
+      # DELIBERATELY NO APK CACHE. This lane must build a mutated binary; a
+      # restored cache would install the UNMUTATED app and the suite would pass,
+      # which this job reads as "the alarm did not sound" and fails on. That
+      # would be a correct verdict about the wrong artifact — the worst kind.
+      - name: AVD cache
+        id: avd_cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-x86_64-google_apis-pixel6-r4096-c4-v1
+      - name: Create AVD + snapshot (cache miss only)
+        if: steps.avd_cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 4096M
+          cores: 4
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Generated AVD snapshot for caching."
+      - name: Run the critical five against a build with Home blanked
+        id: mutated
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          CENTRAID_MOBILE_BUILD: release
+          CENTRAID_MOBILE_LANE: alarm
+          # THE MUTATION. Inlined by Metro into the embedded bundle at export
+          # time, so the app the emulator installs really is missing its Home
+          # surface. Every flow in the suite waits on HOME_READY_MARKER, which
+          # is the band's accessibility label, so all five must fail.
+          EXPO_PUBLIC_CENTRAID_E2E_ALARM: home
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 4096M
+          cores: 4
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
+          disable-animations: true
+          script: bash apps/mobile/scripts/android-emulator-pr-gate.sh
+      - name: Remove sensitive pairing diagnostics
+        if: always()
+        run: |
+          if [ -d tests/agent-e2e-mobile/runs ]; then
+            find tests/agent-e2e-mobile/runs -type d \
+              -path '*/maestro-debug/*-configure-gateway' \
+              -prune -exec rm -rf {} +
+          fi
+      # THE INVERTED VERDICT. This is the whole job.
+      - name: The alarm must have sounded
+        run: |
+          set -euo pipefail
+          outcome='${{ steps.mutated.outcome }}'
+          echo "suite outcome against the mutated build: $outcome"
+          if [ "$outcome" = "success" ]; then
+            echo "::error::THE ALARM DID NOT SOUND. The critical five passed against a build whose Home surface renders nothing. Whatever those five flows are observing, it is not the product. Read the run artifacts before trusting any recent green: this is the #474/#478/#483 failure shape, and it is the reason this lane exists."
+            exit 1
+          fi
+          echo "The suite failed against the mutated build, which is the pass condition."
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: mobile-alarm-test-runs
+          path: tests/agent-e2e-mobile/runs/
+          retention-days: 30
+          if-no-files-found: ignore
+      - name: File a tracking issue when the alarm fails to sound
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/ci/file-tracking-issue.mjs \
+            --title "[mobile-alarm-test] the mobile suite did not notice a blanked Home" \
+            --body "The quarterly alarm test built the app with EXPO_PUBLIC_CENTRAID_E2E_ALARM=home — Home renders nothing — and the critical five passed anyway. Every recent green on the PR gate, the canary and the nightly is suspect until this is explained: a suite that cannot be shown to go red is not evidence. Evidence: the mobile-alarm-test-runs artifact on run ${{ github.run_id }}. Do not silence this lane."

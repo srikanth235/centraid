@@ -70,6 +70,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
+import { TEST_IDS } from "../../kit/test-ids";
 import { useTheme } from "../../kit/theme";
 import type { NotesScreenProps as NotesRouteProps } from "../../navigation";
 import NoteEditor from "./NoteEditor";
@@ -105,9 +106,12 @@ const PLACE_FOR_TAB: Readonly<Record<NotesBandDestinationKey, NotesPlace>> = {
  *  title of its own shows its first line, and the preview picks up below. */
 function NoteRow({
   note,
+  first,
   onOpen,
 }: {
   note: NativeNote;
+  /** The leading row of the reading room; only it carries a handle. */
+  first: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
   const { colors } = useTheme();
@@ -119,6 +123,7 @@ function NoteRow({
       accessibilityRole="button"
       accessibilityLabel={`Open ${shown.heading || "the untitled note"}`}
       onPress={onOpen}
+      testID={first ? TEST_IDS.notes.rowFirst : undefined}
       style={[styles.note, { borderBottomColor: colors.line }]}
     >
       <Text
@@ -128,9 +133,13 @@ function NoteRow({
         {note.pinned ? "★ " : ""}
         {shown.heading}
       </Text>
+      {/* The preview is the note's BODY, a SECOND replica read joined to the row
+          on device — so it gets a handle of its own. A dropped join is headings
+          above empty previews, and nothing else on this row can see that. */}
       {shown.preview ? (
         <Text
           numberOfLines={2}
+          testID={first ? TEST_IDS.notes.rowFirstPreview : undefined}
           style={[styles.notePreview, { color: colors.textSoft }]}
         >
           {shown.preview.replaceAll("\n", " ")}
@@ -408,8 +417,12 @@ export default function NotesHome({
               onRefresh={() => void pull()}
             />
           }
-          renderItem={({ item }) => (
-            <NoteRow note={item} onOpen={() => openNote(item)} />
+          renderItem={({ item, index }) => (
+            <NoteRow
+              note={item}
+              first={index === 0}
+              onOpen={() => openNote(item)}
+            />
           )}
           ListEmptyComponent={
             <View style={styles.empty}>
@@ -531,6 +544,7 @@ export default function NotesHome({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="New note"
+          testID={TEST_IDS.notes.capture}
           onPress={() => {
             setCreating(true);
             setSelectedId(undefined);

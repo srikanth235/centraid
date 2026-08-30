@@ -35,6 +35,7 @@ import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
+import { TEST_IDS } from "../../kit/test-ids";
 import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { authHeader } from "../../lib/gateway";
@@ -441,6 +442,7 @@ export function PhotosSearchView({
           <Icon name="search" size={16} color={colors.textSoft} />
           <TextInput
             accessibilityLabel="Search photographs"
+            testID={TEST_IDS.photos.searchField}
             autoFocus
             value={term}
             onChangeText={onTerm}

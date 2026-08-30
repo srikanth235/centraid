@@ -1,0 +1,52 @@
+{
+  "$comment": "The seat-verb register (#890 W5). Every `seats.originActs` entry an app manifest declares is an act ONLY the phone can perform — a camera, a scanner, a voice capture, an autofill provider — so each is by construction a device-only claim and each owes either an owning journey or a conscious, dated gap. `scripts/lint-seat-verbs.mjs` holds this file against `packages/blueprints/apps/*/app.json`, so a new app or a new verb cannot land without one or the other, and a verb that is deleted from a manifest cannot leave a phantom claim here. Before this register, 'are all critical journeys covered?' was a question nobody could answer mechanically.",
+  "$shape": {
+    "owned": "{ \"owner\": \"tests/agent-e2e-mobile/flows/<flow>.mjs\", \"assertion\": \"the sentence the flow asserts that carries this act\" } — the owner must be a flow the roster schedules, checked against roster.json.",
+    "gap": "{ \"gap\": true, \"since\": \"YYYY-MM-DD\", \"trackingIssue\": <n>, \"blocker\": \"what makes this un-automatable TODAY, not what would be nice\" } — `since` is what makes it DATED: an undated gap is indistinguishable from an oversight, and the audit ritual reads these dates."
+  },
+  "$honesty": "Every row below is a gap today, and that is the finding rather than an omission. 6 origin acts are declared across 5 apps and NONE has a device journey: the roster reads 8/8 apps and writes ~2.5/8, and every one of the acts that only a phone can perform is on the unwritten side. Photos' camera is the nearest to reachable (an `xcrun simctl addmedia` library plus a granted-permission launch); the scanner, the voice capture and the autofill provider each need out-of-band tooling the harness does not wrap. Naming them as dated gaps is the point: they were invisible before, and now a new verb cannot join them quietly. The counts in this sentence are derived from the rows below — an earlier draft said five across four and was wrong, which is the exact failure mode a register exists to prevent.",
+  "acts": {
+    "docs.scanner": {
+      "gap": true,
+      "since": "2026-08-30",
+      "trackingIssue": 890,
+      "surface": "apps/mobile/src/screens/Scan.tsx",
+      "blocker": "The scanner reads a live camera feed. A simulator's camera is a synthetic pattern and an emulator's `-camera-back none` is what keeps the AVD snapshot bootable at all, so there is no frame source a flow can put a real document in front of. The tractable half — that the scan surface OPENS and states its refusal when the camera grant is denied — is a real journey and is the first thing to write here; the recognition half needs a device farm, which #890 records as a deferred release-cadence spend."
+    },
+    "locker.autofill": {
+      "gap": true,
+      "since": "2026-08-30",
+      "trackingIssue": 890,
+      "surface": "apps/mobile/src/apps/locker/locker-device-auth.ts",
+      "blocker": "Autofill is an OS credential-provider extension: the act happens in ANOTHER app's text field, driven by the system, with the reveal gated behind `SecureStore` `requireAuthentication`. Maestro drives one app under test and has no biometric control, so neither half is reachable. Android could synthesise the fingerprint out of band (`adb -e emu finger touch`), which is the Android-first route; iOS Simulator's Face ID enrolment is a Simulator.app menu action with no CLI, and remains an honest gap."
+    },
+    "notes.capture": {
+      "gap": true,
+      "since": "2026-08-30",
+      "trackingIssue": 890,
+      "surface": "apps/mobile/src/screens/Capture.tsx",
+      "blocker": "The frame-level capture surface (Capture.tsx / ShareIntentIngest.tsx) is reached from OUTSIDE the app — a share sheet in another app, or a system capture affordance. Android can synthesise it (`adb shell am start -a android.intent.action.SEND` with a staged file) and that is the tractable route; iOS needs a second app to share from. Distinct from the in-app Notes quick-capture, which IS covered inside `flows/notes-library.mjs` — the act declared here is the frame-level one."
+    },
+    "notes.voice": {
+      "gap": true,
+      "since": "2026-08-30",
+      "trackingIssue": 890,
+      "surface": "apps/mobile/src/apps/notes",
+      "blocker": "Voice capture needs a microphone feed. A simulator has none a flow can speak into, and the transcript half runs through an on-device recognizer whose output a test cannot make deterministic. What IS testable at this tier — that the affordance appears, that a denied microphone grant produces the app's refusal rather than a silent no-op — is the journey to write first, and it is smaller than it looks."
+    },
+    "photos.camera": {
+      "gap": true,
+      "since": "2026-08-30",
+      "trackingIssue": 890,
+      "surface": "apps/mobile/src/apps/photos/PhotoAccessPanel.tsx",
+      "blocker": "The REFUSED camera-roll path is owned (`flows/photos-permissions.mjs`) and is the harder, more valuable half — a fabricated grid is indistinguishable from a working one on an empty vault, which is why the denial landed first. The GRANTED path is the gap: it needs a simulator library filled by `xcrun simctl addmedia` before the flow runs, plus iOS's third authorization state (`limited`), which has no Android counterpart. This is the closest of the five to reachable and should be the first one closed."
+    },
+    "tally.camera": {
+      "gap": true,
+      "since": "2026-08-30",
+      "trackingIssue": 890,
+      "surface": "packages/blueprints/apps/tally",
+      "blocker": "Tally's camera act is receipt capture, so it inherits `docs.scanner`'s blocker — a live frame source a flow can aim at a receipt — and adds its own: the captured bytes are then read by a recognition handler whose output would have to be deterministic for an assertion to mean anything. The seat's read side is covered (`flows/tally-derived.mjs`); this is the write side that needs a lens."
+    }
+  }
+}

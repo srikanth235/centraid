@@ -7,6 +7,7 @@ import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
+import { TEST_IDS } from "../../kit/test-ids";
 import {
   setAppearance,
   spacing,
@@ -31,7 +32,8 @@ export default function AppearanceSection(): React.JSX.Element {
 
   return (
     <SettingsSection label="Appearance">
-      <View style={styles.segment}>
+      {/* The first section Settings publishes: proof of arrival with no scroll. */}
+      <View style={styles.segment} testID={TEST_IDS.settings.appearance}>
         {OPTIONS.map((opt) => {
           const active = opt.value === current;
           return (

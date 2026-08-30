@@ -16,6 +16,7 @@ import {
 import type { View as RNView } from "react-native";
 
 import { BAND_INSET, BAND_RADIUS } from "../band-surface";
+import { TEST_IDS } from "../test-ids";
 import { borders, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 import Icon from "./Icon";
@@ -335,11 +336,16 @@ export default function AnchoredMenu({
         accessibilityLabel="Close menu"
         onPress={onClose}
         style={styles.backdrop}
+        // The backdrop sits OUTSIDE the modal's accessibility subtree, which is
+        // why a flow could only reach it by tapping a fixed screen fraction
+        // (`10%,50%` in flows/photos-viewer.mjs). `testID` reaches it directly.
+        testID={TEST_IDS.shell.menuBackdrop}
       />
       <View
         accessibilityViewIsModal
         accessibilityRole="menu"
         style={[styles.card, placement]}
+        testID={TEST_IDS.shell.menuCard}
       >
         <ScrollView>
           <MenuBody

@@ -9,6 +9,7 @@ import { Text } from "../../kit/components/NativeText";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { imageSource } from "../../kit/media/media-source";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { TEST_ID_PREFIXES, TEST_IDS } from "../../kit/test-ids";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
@@ -45,7 +46,7 @@ export default function PlacesView({
     // The band via the shell (#712): a bare SafeAreaView leaves the OS
     // gesture as the only exit. current="more" = arrived via More.
     <PhotosScreen current="more">
-      <View style={styles.header}>
+      <View style={styles.header} testID={TEST_IDS.places.shelf}>
         {/* No back chevron: two exits already; a third breaks §F's rule. */}
         <Text style={styles.title}>Places</Text>
         {/* Places · N — shelf size, mono (proto:3939); "N of M" belongs to
@@ -54,6 +55,7 @@ export default function PlacesView({
         <Pressable
           accessibilityLabel="Open map"
           accessibilityRole="button"
+          testID={TEST_IDS.places.mapOpen}
           onPress={() => navigation.navigate("PlacesMap")}
           style={[styles.mapChip, { borderColor: colors.line }]}
         >
@@ -75,11 +77,12 @@ export default function PlacesView({
             not.
           </Text>
         }
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`${item.name}, ${item.count} photographs`}
             style={styles.card}
+            testID={`${TEST_ID_PREFIXES.placesCard}${index}`}
             onPress={() =>
               navigation.navigate("PlaceDetail", {
                 placeKey: item.id,

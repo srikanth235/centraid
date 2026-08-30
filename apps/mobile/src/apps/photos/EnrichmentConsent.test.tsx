@@ -176,7 +176,7 @@ vi.mock(
     }) as unknown as Partial<ThemeModule>
 );
 
-describe("the native enrichment consent surface", () => {
+describe("the enrichment consent surface on the phone seat", () => {
   let host: HTMLDivElement;
   let root: Root;
   const onRunOnDevice = vi.fn<() => void>();

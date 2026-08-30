@@ -24,6 +24,7 @@ import {
   defaultRunId,
   writeFlowVerdict,
 } from "../../agent-e2e-shared/harness.mjs";
+import { classifyFailure, countMaestroAssertions } from "./failure-class.mjs";
 import {
   DISMISS_KEYBOARD_ONBOARDING,
   retryableTapCommands,
@@ -35,6 +36,7 @@ import {
   prewarmMetroBundle,
   waitForMetroReachable,
 } from "./metro.mjs";
+import { appendRunRecord, ledgerPathFromEnv } from "./run-ledger.mjs";
 import { spawnLive, spawnQuiet } from "./spawn.mjs";
 
 const __dirname = import.meta.dirname;
@@ -44,14 +46,36 @@ const RUNS_DIR = path.join(__dirname, "..", "runs");
 // iOS bundle id, and the Android *release* applicationId. Android *debug*
 // builds append `.debug` (applicationIdSuffix in android/app/build.gradle, kept
 // so a debug build and a Play-release build can coexist on one device —
-// J1/#501). The agent-e2e build is a debug build, so on Android the package
-// that actually installs and launches is the suffixed `dev.centraid.mobile.debug`.
-// `setup()` resolves the id per platform and threads it through `state.appId`;
-// flows must launch the package that is installed, not this base id, so they
-// read `ctx.state.appId` rather than importing APP_ID.
+// J1/#501). `setup()` resolves the id per platform AND per build type and
+// threads it through `state.appId`; flows must launch the package that is
+// installed, not this base id, so they read `ctx.state.appId` rather than
+// importing APP_ID.
 export const APP_ID = "dev.centraid.mobile";
+
+/**
+ * Which artifact this run drives (#890 W1). `release` is what every scheduled
+ * lane sets — CI tests the build a member installs, with the Hermes bundle
+ * embedded, no Metro and no dev launcher. `dev` is the LOCAL exploratory rig:
+ * `expo start --dev-client` plus a debug build, which is the loop the Maestro
+ * MCP session uses and the only place the dev-harness machinery below belongs.
+ *
+ * Default `dev` rather than `release` on purpose. A local operator with a dev
+ * build and Metro running is the unconfigured case, and defaulting the other way
+ * would make their first run fail on a missing package with a confusing message.
+ * Every CI lane sets it explicitly, and validate-nightly-wiring.mjs refuses a
+ * lane that starts Metro, so the default cannot leak back into CI unnoticed.
+ */
+export const BUILD_TYPE =
+  process.env.CENTRAID_MOBILE_BUILD === "release" ? "release" : "dev";
+export const IS_RELEASE_BUILD = BUILD_TYPE === "release";
+
+// A release Android build has NO applicationIdSuffix, so it installs under the
+// base id; a debug build installs as `dev.centraid.mobile.debug`. iOS carries
+// one bundle id for both configurations. Getting this wrong does not fail
+// loudly at install — it fails several minutes later inside Maestro, on a
+// launch of a package that is not there (#535).
 const appIdForPlatform = (platform) =>
-  platform === "android" ? `${APP_ID}.debug` : APP_ID;
+  platform === "android" && !IS_RELEASE_BUILD ? `${APP_ID}.debug` : APP_ID;
 
 /**
  * Budget for the first `assertVisible` after a `clearState: true` launch.
@@ -79,15 +103,24 @@ export const FIRST_LAUNCH_TIMEOUT_MS = 120_000;
 // the band mounts, which may precede tile settlement.
 export const HOME_READY_MARKER = "All apps and places";
 // iOS Simulator's `openLink` (simctl openurl) raises a system
-// `Open in "Centraid"?` confirmation for custom-scheme links a moment AFTER
-// the openLink directive returns; Android fires the VIEW intent directly.
-// Then, because CI reinstalls the dev build every run, expo-dev-client shows
-// its one-time "This is the developer menu" explainer sheet over whatever the
-// app renders — both screenshots in the 05:42 home-loads run show
-// "Connect your gateway." fully painted BEHIND that sheet. `optional: true`
-// absorbs the no-dialog cases (Android, or an already-open session);
-// `^…$` anchors each tap so it cannot land on the dialog's own title text,
-// which also contains "Open", or on prose that contains "Continue".
+// `Open in "Centraid"?` confirmation for custom-scheme links a moment AFTER the
+// openLink directive returns; Android fires the VIEW intent directly. That half
+// applies to EVERY build type and is why this constant survives #890 W1: a
+// `centraid://` deep link is a product path, not dev-harness machinery.
+//
+// The second tap is the vestige. On a dev build, because CI reinstalled it every
+// run, expo-dev-client showed its one-time "This is the developer menu"
+// explainer sheet over whatever the app rendered — both screenshots in the 05:42
+// home-loads run show "Connect your gateway." fully painted BEHIND that sheet.
+// A release artifact has no developer menu, so on that path the tap matches
+// nothing; it is kept rather than gated because `optional: true` already makes a
+// non-match a no-op, and one constant that is correct on both build types beats
+// two that can drift apart.
+//
+// `optional: true` absorbs the no-dialog cases (Android, an already-open
+// session, or a release build); `^…$` anchors each tap so it cannot land on the
+// dialog's own title text, which also contains "Open", or on prose that
+// contains "Continue".
 export const CONFIRM_SYSTEM_OPEN = `# iOS system confirmation for a custom-scheme openLink, then the dev-client
 # first-run explainer — see CONFIRM_SYSTEM_OPEN.
 - tapOn:
@@ -102,6 +135,28 @@ export const CONFIRM_SYSTEM_OPEN = `# iOS system confirmation for a custom-schem
 // leaves ample network/render headroom while still terminating a wedged
 // accessibility driver before the workflow's outer timeout destroys evidence.
 const MAESTRO_CHUNK_TIMEOUT_MS = 12 * 60_000;
+
+// #890 W1 — the dev-launcher handoff, and the clearest example of what "the
+// device under test is not the product" meant. On a DEV build,
+// `launchApp: { clearState: true }` wipes expo-dev-client's stored "last opened"
+// URL along with app state, so the plain relaunch sits on the launcher's empty
+// server picker forever; every cleared-state launch therefore had to hand the
+// launcher the Metro bundle URL explicitly, and then tap away the iOS
+// `Open in "Centraid"?` confirmation and the one-time developer-menu explainer
+// sheet. A RELEASE artifact has no launcher, no custom-scheme round trip and no
+// developer menu — it just starts — so on that path this is the empty string
+// and the flow observes what the member observes.
+//
+// Every flow that clears state itself must interpolate THIS rather than
+// open-coding the openLink, or it will hang on the picker in dev and tap at
+// nothing in release.
+export const DEV_LAUNCHER_HANDOFF = IS_RELEASE_BUILD
+  ? ""
+  : `# clearState wiped the dev client's stored "last opened" URL, so the plain
+# launch lands on the launcher's empty server picker. Hand it the bundle URL
+# explicitly (DEV_LAUNCHER_LINK in lib/metro.mjs has the full story).
+- openLink: "${DEV_LAUNCHER_LINK}"
+${CONFIRM_SYSTEM_OPEN}`;
 
 function spawnText(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -240,19 +295,32 @@ export async function setup({ runId } = {}) {
         `Run \`bun run --filter=@centraid/mobile ${device.platform}\` first.`
     );
   }
-  if (device.platform === "android") {
-    // Must happen before waitForMetroReachable(): the dev client reaches Metro via
-    // the reverse forward, but the harness's own fetch goes directly.
-    await ensureMetroReverseForAndroid(device.udid);
+  // #890 W1 — a RELEASE artifact carries its own Hermes bundle, so there is no
+  // bundler to reach, no port to reverse-forward, and nothing to prewarm. This
+  // whole block is dev-harness machinery: the reverse forward exists so the dev
+  // client can fetch `localhost:8081`, the readiness wait exists because Expo can
+  // answer `/status` once and then briefly stop accepting requests while its file
+  // graph settles, and the prewarm exists because a `clearState: true` launch
+  // drops the dev build's cached bundle. None of the three describes the product,
+  // and running them against a release build would fail on a bundler nobody
+  // started. It stays for the local exploratory rig, which is what it is for.
+  if (!IS_RELEASE_BUILD) {
+    if (device.platform === "android") {
+      // Must happen before waitForMetroReachable(): the dev client reaches Metro via
+      // the reverse forward, but the harness's own fetch goes directly.
+      await ensureMetroReverseForAndroid(device.udid);
+    }
+    if (!(await waitForMetroReachable())) {
+      throw new Error(
+        `Metro bundler not reachable at ${METRO_ORIGIN} after the bounded readiness wait. ` +
+          "The dev build needs it to serve the JS bundle — start it with " +
+          "`cd apps/mobile && bun expo start --dev-client`. (A CI lane should not " +
+          "reach here at all: set CENTRAID_MOBILE_BUILD=release and drive the " +
+          "artifact members install.)"
+      );
+    }
+    await prewarmMetroBundle(device.platform, appId);
   }
-  if (!(await waitForMetroReachable())) {
-    throw new Error(
-      `Metro bundler not reachable at ${METRO_ORIGIN} after the bounded readiness wait. ` +
-        "The dev build needs it to serve the JS bundle — start it with " +
-        "`cd apps/mobile && bun expo start --dev-client`."
-    );
-  }
-  await prewarmMetroBundle(device.platform, appId);
   const id = runId ?? defaultRunId();
   const runDir = path.join(RUNS_DIR, id);
   const screenshotsDir = path.join(runDir, "screenshots");
@@ -268,6 +336,11 @@ export async function setup({ runId } = {}) {
     udid: device.udid,
     platform: device.platform,
     appId,
+    // Recorded in state.json and the run ledger: a duration or a failure from a
+    // dev-client run and one from the release artifact are not the same
+    // measurement, and a ledger that averaged them would produce a p95 nothing
+    // ever experienced.
+    buildType: BUILD_TYPE,
   };
   await fs.writeFile(
     path.join(runDir, "state.json"),
@@ -376,10 +449,18 @@ export async function runFlow(slug, fn) {
   };
 
   const notes = [];
+  // The honest bound on "did this flow observe anything before it failed"
+  // (#890). We can only know a chunk RAN, never which directive inside it was
+  // reached, so a chunk's assertions count once `maestro test` exits 0 and the
+  // chunk that threw contributes zero. That undercounts — a chunk failing on
+  // its last of six assertions reports none of them — and undercounting is the
+  // safe direction: it never inflates the evidence a failure claims to have.
+  let assertionsRun = 0;
   const run = async (yaml, hint, options = {}) => {
     const label = nextLabel(hint);
     console.log(`  run     : ${label}`);
     await runMaestroChunk(yaml, { state, label, ...options });
+    assertionsRun += countMaestroAssertions(yaml);
   };
   const ctx = {
     state,
@@ -499,11 +580,7 @@ export async function runFlow(slug, fn) {
 ---
 - launchApp:
     clearState: true
-# clearState wiped the dev client's stored "last opened" URL, so the plain
-# launch lands on the launcher's empty server picker. Hand it the bundle URL
-# explicitly (DEV_LAUNCHER_LINK in lib/metro.mjs has the full story).
-- openLink: "${DEV_LAUNCHER_LINK}"
-${CONFIRM_SYSTEM_OPEN}- extendedWaitUntil:
+${DEV_LAUNCHER_HANDOFF}- extendedWaitUntil:
     visible:
       text: "Connect your gateway."
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
@@ -672,6 +749,7 @@ ${retryableTapCommands("Enter Centraid")}
   let error;
   let result;
   const t0 = Date.now();
+  const startedAt = new Date(t0).toISOString();
   try {
     result = await fn(ctx);
   } catch (caughtError) {
@@ -679,6 +757,14 @@ ${retryableTapCommands("Enter Centraid")}
   }
   const elapsedMs = Date.now() - t0;
   const pass = !error && result?.pass !== false;
+
+  // Owner must be the flow FILE the matrix names, not the flow id — they
+  // differ for volume-proof.mjs (id "mobile-volume-proof"), and an id-derived
+  // path makes the evidence unmappable in the zero-grey report.
+  const owner = path
+    .relative(REPO_ROOT, path.resolve(process.argv[1] ?? ""))
+    .split(path.sep)
+    .join("/");
 
   await writeFlowVerdict({
     repoRoot: REPO_ROOT,
@@ -691,14 +777,34 @@ ${retryableTapCommands("Enter Centraid")}
     metadata: { platform: state.platform, udid: state.udid, app: state.appId },
     debug:
       "Maestro keeps per-step screenshots and ai-report.html under `~/.maestro/tests/<timestamp>/`; the newest directory belongs to this run.",
-    // Owner must be the flow FILE the matrix names, not the flow id — they
-    // differ for volume-proof.mjs (id "mobile-volume-proof"), and an id-derived
-    // path makes the evidence unmappable in the zero-grey report.
-    owner: path
-      .relative(REPO_ROOT, path.resolve(process.argv[1] ?? ""))
-      .split(path.sep)
-      .join("/"),
+    owner,
   });
+
+  // The ledger is EVIDENCE, never a gate: a flow that did its job and then
+  // could not be recorded still passed. Failing here would let a read-only
+  // checkout or a full disk red a green nightly, so the failure is a warning
+  // naming the path — the one fact needed to fix it (#890).
+  const failure = pass ? null : classifyFailure({ error, assertionsRun });
+  try {
+    await appendRunRecord({
+      flow: owner,
+      slug,
+      platform: state.platform,
+      device: state.udid,
+      startedAt,
+      durationMs: elapsedMs,
+      pass,
+      failureClass: failure?.class ?? null,
+      failureReason: failure ? `${failure.signal}: ${failure.reason}` : "",
+      lane: process.env.CENTRAID_MOBILE_LANE ?? "local",
+      runId: state.runId,
+      commit: process.env.GITHUB_SHA ?? "",
+    });
+  } catch (ledgerError) {
+    console.warn(
+      `  ledger  : could not append to ${ledgerPathFromEnv()} — ${ledgerError.message}`
+    );
+  }
 
   if (!pass) {
     if (error) console.error(error);

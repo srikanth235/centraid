@@ -43,7 +43,7 @@ const day = (key: string, succeeded: number, failed: number): BarDatum => ({
 });
 
 describe("bars lowering", () => {
-  it("gives each drawn segment the unit a native style takes", () => {
+  it("lowers each column to the percentage strings a style accepts", () => {
     expect(barColumn(day("1", 34, 8))).toStrictEqual({
       failedHeight: "8%",
       hasFailed: true,

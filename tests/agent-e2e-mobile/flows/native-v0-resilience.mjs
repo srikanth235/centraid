@@ -46,10 +46,11 @@ const DEMO_GROUP = "Tahoe Trip";
 
 // The shell is a springboard, not a tab bar (apps/mobile/src/navigation.ts:
 // "There is no bottom-tab navigator"). All eight blueprint apps are full-screen
-// covers opened from Home's launcher tiles; Settings is opened from the vault
-// drawer. Each destination is asserted on copy unique to the screen it opens,
-// never on the tile label that remains visible on Home (issue #483, enforced
-// by scripts/lint-e2e-flows.mjs).
+// covers opened from Home's launcher tiles; Settings is a PLACE, reached from
+// the band's More tab through the all-apps sheet (see the `settings` entry
+// below for what that replaced). Each destination is asserted on copy unique to
+// the screen it opens, never on the tile label that remains visible on Home
+// (issue #483, enforced by scripts/lint-e2e-flows.mjs).
 // Covers dismiss with a native swipe-down gesture that Maestro cannot drive
 // reliably, so each surface is entered from a fresh launch of the app rather
 // than by navigating back — React Navigation state is not persisted, so every
@@ -108,30 +109,52 @@ const SURFACES = [
     open: "Open Locker.*",
     name: "locker",
   },
-  // Settings is opened from the Vault drawer, not the dock. The dock sits at
-  // the very bottom of the screen, exactly where the dev build's LogBox toast
-  // ("Open debugger to view warnings.") parks itself — it reappears whenever
-  // Home's data load emits a warning, so a dock tap right after launch lands on
-  // the toast, reports COMPLETED, and navigates nowhere. The drawer handle is
-  // top-right and never covered. Its Settings row publishes ", Settings"
-  // (icon + label in one accessibility element), which the dock's plain
-  // "Settings" does not match.
+  // SETTINGS IS A PLACE NOW, AND THE PATH THIS FLOW USED IS GONE.
+  //
+  // Until #890 W2 this entry reached Settings through a vault drawer:
+  // `Open vault menu` → wait for `GO TO` → tap `.*Settings`. NONE of those three
+  // strings exists anywhere in `apps/mobile/src` any more — the v17 shell ships
+  // no drawer at all. `screens/home/AllAppsSheet.tsx` says so at the handle it
+  // replaced them with: "Settings is reached from HERE, not from a drawer".
+  // The failure was LOUD rather than silent — `retryableTapCommands` opens with
+  // a non-optional `tapOn`, and a `tapOn` whose selector matches nothing is an
+  // error, not a no-op — but it was still a step red for a reason unrelated to
+  // its claim, which is the other half of issue #483. DO NOT "RESTORE" THE
+  // DRAWER PATH: there is nothing to restore it to.
+  //
+  // The route now is the band's More tab → the all-apps sheet → the Settings
+  // place row, and all three carry handles (`home-band-more`, `home-all-apps`,
+  // `home-place-<place id>`), so none of the hops keys on copy. Settings is the
+  // LAST row of the sheet's places half, below all eight apps, so it is
+  // scrolled to at full visibility rather than tapped where it is only
+  // partially on screen — Maestro matches an element the sheet has clipped
+  // (README "A passing step is not a working step").
   //
   // "Desktop link" is three scroll pages down inside Settings; "APPEARANCE" is
   // the first section heading it publishes and nothing else in the app renders
   // it, so it proves arrival without a scroll.
   {
     marker: "APPEARANCE",
-    openCommands: [
-      retryableTapCommands("Open vault menu"),
-      // Wait for the drawer to finish opening before touching its rows.
-      '- extendedWaitUntil:\n    visible: "GO TO"\n    timeout: 15000',
-      // The row's accessible name is ", Settings" (icon + label collapsed into
-      // one element), but Maestro will not match a selector that starts with
-      // the comma — `.*Settings` is what actually resolves, and with the modal
-      // drawer open the dock underneath is not reachable anyway.
-      retryableTapCommands(".*Settings", "GO TO"),
-    ].join("\n"),
+    openCommands: `- tapOn:
+    id: "home-band-more"
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: "home-all-apps"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "home-place-settings"
+    direction: DOWN
+    visibilityPercentage: 100
+    timeout: 20000
+- tapOn:
+    id: "home-place-settings"
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: "settings-screen"
+    timeout: 20000`,
     name: "settings",
   },
 ];
@@ -175,9 +198,22 @@ ${openCommands}
 
   // Maestro's real airplane-mode control is Android-only. This is the device
   // journey for #738: the write goes through the mounted UI, the OS process is
-  // killed while disconnected, and the production reader must recover the
-  // SQLite outbox row after relaunch. The iOS lane retains the same store/read
-  // integration companion because iOS Simulator exposes no airplane control.
+  // killed while disconnected, the production reader must recover the SQLite
+  // outbox row after relaunch, AND — since #890 W4 — the radio comes back and
+  // the row has to leave the outbox on its own. The three halves are one claim:
+  // OFFLINE WRITE → SURVIVES PROCESS DEATH → RECONNECTS AND SETTLES. A flow
+  // that stopped at the middle step would prove durability while leaving the
+  // thing a member actually cares about — that the write eventually lands —
+  // entirely unobserved.
+  //
+  // iOS IS AN HONEST GAP HERE, not an oversight. `setAirplaneMode` is a Maestro
+  // Android command (it drives the emulator's radio); the iOS Simulator exposes
+  // no airplane control to any CLI Maestro can reach, so there is no way to take
+  // this device offline on that side at all. The same store/read contract is
+  // held on every platform by the integration companion named in the else-branch
+  // below, but the OS-level disconnect/reconnect is Android-only until the
+  // Simulator gains a switch a driver can throw. Nothing here may be "ported"
+  // to iOS by faking offline in JS — a faked radio proves the fake.
   //
   // WHAT THE REBUILT COVER CAN AND CANNOT SHOW OFFLINE, because it decides the
   // assertions here. Tally's WRITES are ordinary and queue in the durable
@@ -209,7 +245,16 @@ ${retryableTapCommands("Open Tally.*")}
 # between the group's own members, and those arrive with the group payload; a
 # member who opens the composer with no landed group has nobody to divide
 # between, which is a fact about the read plane and not about this flow.
-${retryableTapCommands("Groups", BALANCES_STATUS)}
+#
+# The band destination is taken by its KEY, not its label: tally-band-groups
+# is what tally-band.ts already keys on, while "Groups" is copy the shelf
+# table may re-word. A band tab stays on screen after it is tapped, so the
+# conditional-retry helper would never stop retrying — Maestro's own
+# retryTapIfNoChange plus the destination assertion is the right instrument,
+# exactly as in agenda-week.mjs and tasks-board.mjs.
+- tapOn:
+    id: "tally-band-groups"
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible: "${GROUPS_STATUS}"
     timeout: 20000
@@ -241,8 +286,11 @@ ${DISMISS_KEYBOARD_ONBOARDING}
     text: "Add expense"
     below: "Lands in ${DEMO_GROUP}.*"
 # Waiting is the band's fourth place and the one surface that reads the durable
-# outbox rather than the gateway.
-${retryableTapCommands("Waiting", GROUP_HERO_SUB)}
+# outbox rather than the gateway. Its key is contrib — the label "Waiting" is
+# copy shelves.ts owns, the key is the contract.
+- tapOn:
+    id: "tally-band-contrib"
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible: "${WAITING_STATUS}"
     timeout: 20000
@@ -259,7 +307,9 @@ ${retryableTapCommands("Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: 30000
-${retryableTapCommands("Waiting", BALANCES_STATUS)}
+- tapOn:
+    id: "tally-band-contrib"
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible: "${WAITING_STATUS}"
     timeout: 30000
@@ -276,6 +326,58 @@ ${retryableTapCommands("Waiting", BALANCES_STATUS)}
       ctx.note(
         "Android: a Tally expense recorded through the composer in airplane mode still drew its QUEUED row in Waiting after an OS process restart"
       );
+
+      // ─── The radio comes back (#890 W4) ───────────────────────────────────
+      // Restoring the network is its own chunk so the app is FOREGROUNDED and
+      // on Waiting when the radio returns — the state a member is in when a
+      // train leaves a tunnel. `native-session.ts` flushes the outbox on
+      // AppState changes and on every session open, so the relaunch below is
+      // what makes the drain deterministic rather than a race against backoff.
+      await ctx.run(
+        `appId: ${ctx.state.appId}
+---
+- setAirplaneMode: disabled
+`,
+        "airplane-reconnect"
+      );
+      await ctx.run(
+        `appId: ${ctx.state.appId}
+---
+- stopApp
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible: "${HOME_READY_MARKER}"
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+${retryableTapCommands("Open Tally.*")}
+- extendedWaitUntil:
+    visible: "${BALANCES_STATUS}"
+    timeout: 30000
+- tapOn:
+    id: "tally-band-contrib"
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: "${WAITING_STATUS}"
+    timeout: 30000
+# THE ROUND TRIP CLOSES, IN THE SURFACE'S OWN WORDS. contrib-model.ts drops an
+# EXECUTED intent from Waiting entirely — "it settled, and the ledger below is
+# where it now lives" — so the settled state of this device's outbox is the
+# in-flight section saying it is empty, not a row that turned green. The budget
+# is the gateway handshake plus one drain, not a render, so it is generous.
+- extendedWaitUntil:
+    visible: "Nothing in flight."
+    timeout: 180000
+# …and the empty sentence is not vacuous: this is still Waiting (its own scope
+# line is on screen) and the queued row's reason is gone from it.
+- assertVisible: "${WAITING_SCOPE}"
+- assertNotVisible: "${QUEUED_REASON}"
+- takeScreenshot: native-airplane-settled-after-reconnect
+`,
+        "airplane-settled-after-reconnect"
+      );
+      ctx.note(
+        "Android: with the radio restored the queued expense left the outbox on its own — Waiting drew its empty in-flight section and no queued reason"
+      );
     } finally {
       await ctx.run(
         `appId: ${ctx.state.appId}
@@ -287,7 +389,7 @@ ${retryableTapCommands("Waiting", BALANCES_STATUS)}
     }
   } else {
     ctx.note(
-      "iOS Simulator has no Maestro airplane control; the same contract is covered on iOS-compatible infrastructure by apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx"
+      "iOS Simulator has no Maestro airplane control, so the offline write → process death → reconnect → settled round trip is an honest iOS gap; the store/read half of the same contract is covered on every platform by apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx"
     );
   }
 
@@ -303,7 +405,7 @@ ${retryableTapCommands("Waiting", BALANCES_STATUS)}
     "after-force-kill"
   );
   ctx.note(
-    "All eight native blueprint covers and Settings survived navigation and a process restart; Android also completed the airplane-mode pending-write restart journey."
+    "All eight native blueprint covers and Settings survived navigation and a process restart; Android also completed the offline write → process restart → reconnect → settled round trip."
   );
 
   // UI-impact evidence for #799: with the WebView app cover retired, Home's
@@ -327,6 +429,6 @@ ${retryableTapCommands("Waiting", BALANCES_STATUS)}
   return {
     pass: true,
     notes:
-      "all eight native blueprint covers, Settings, and process-restart smoke passed",
+      "all eight native blueprint covers, Settings via the all-apps sheet, and process-restart smoke passed",
   };
 });

@@ -18,6 +18,7 @@ import type { BandOwner } from "../../kit/band/band-owner";
 import BandCapsuleControl from "../../kit/band/BandCapsule";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
 import { t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { resolveBand } from "./photos-band";
@@ -60,7 +61,10 @@ export default function PhotosBand({
   const { capsule } = band;
   return (
     // No `accessibilityRole` here: a tablist would nest the capsule in the group.
-    <View style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}>
+    <View
+      style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}
+      testID={TEST_IDS.photos.band}
+    >
       {/* A FRAME control on the frame's page colour, never Photos' mat. */}
       <BandCapsuleControl capsule={capsule} onPress={onHome} />
 
@@ -73,6 +77,10 @@ export default function PhotosBand({
               key={destination.key}
               accessibilityRole="tab"
               accessibilityLabel={destination.label}
+              // The DESTINATION KEY, never the label: the label is copy a v-next
+              // handoff may re-word, and a flow that tapped it would then tap
+              // nothing while still reporting COMPLETED (#890 W2).
+              testID={`${TEST_ID_PREFIXES.band.photos}${destination.key}`}
               accessibilityState={{ selected: active }}
               onPress={() => onSelect(destination.key)}
               style={styles.tab}

@@ -21,6 +21,7 @@ import Button from "../kit/components/Button";
 import Icon from "../kit/components/Icon";
 import { Text, TextInput } from "../kit/components/NativeText";
 import Tappable from "../kit/components/Tappable";
+import { TEST_IDS } from "../kit/test-ids";
 import { family, radii, spacing, t, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import {
@@ -250,7 +251,10 @@ export default function SettingsScreen({
     // (`PhotosHome.tsx`, `PhotosScreen.tsx`), and those render correctly, so
     // this is the form that is known to work under a cover rather than the one
     // that reads better.
-    <View style={[styles.safe, { paddingTop: insets.top }]}>
+    <View
+      style={[styles.safe, { paddingTop: insets.top }]}
+      testID={TEST_IDS.settings.screen}
+    >
       <View style={styles.header}>
         <Tappable
           accessibilityRole="button"
@@ -386,6 +390,9 @@ export default function SettingsScreen({
             onPress={() => navigation.navigate("Sharing")}
             style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
             accessibilityLabel="Sharing"
+            // The accessible name is the bare word "Sharing", which the section
+            // heading above it also carries — the id is the unambiguous target.
+            testID={TEST_IDS.settings.sharingRow}
           >
             <Icon name="Share" size={18} color={colors.textSoft} />
             <Text style={styles.rowLabel}>People, links and shared vaults</Text>

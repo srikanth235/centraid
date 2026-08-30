@@ -36,10 +36,22 @@ import {
   runFlow,
 } from "../lib/harness.mjs";
 
-/** The gate as Maestro sees it: the first-run heading, the floor it states, and
- *  the control that refuses while the field is empty. Asserted twice — once on
- *  arrival and once after the process restart — so the two chunks cannot drift. */
-const GATE_ASSERTIONS = `- assertVisible: "Twelve characters at least, the only way in that cannot be revoked.*"
+/** The gate as Maestro sees it: the wall itself, the floor it states, and the
+ *  control that refuses while the field is empty. Asserted twice — once on
+ *  arrival and once after the process restart — so the two chunks cannot drift.
+ *
+ *  THE HANDLE FINDS IT, THE SENTENCE IS THE CLAIM (#890 W2). `locker-gate` and
+ *  `locker-gate-submit` are how a flow reaches the wall and its one control;
+ *  the passphrase floor and the disabled state are what the seat PROMISES, so
+ *  both stay asserted as copy and as state beside their handles. Dropping
+ *  either half would leave a gate that is present but says nothing, or a
+ *  sentence with no control under it. */
+const GATE_ASSERTIONS = `- assertVisible:
+    id: "locker-gate"
+- assertVisible: "Twelve characters at least, the only way in that cannot be revoked.*"
+- assertVisible:
+    id: "locker-gate-submit"
+    enabled: false
 - assertVisible:
     text: "Create it"
     enabled: false`;
@@ -52,7 +64,11 @@ await runFlow("locker-gate", async (ctx) => {
     `appId: ${ctx.state.appId}
 ---
 # The withheld count, spoken. "Open Locker, 0 locked" would mean Home had begun
-# reading the one app it must not.
+# reading the one app it must not. The tile's handle is asserted first so the
+# sentence cannot pass on a Home that drew no Locker tile at all — the label is
+# the claim, the handle is what proves there is something carrying it.
+- assertVisible:
+    id: "home-tile-locker"
 - assertVisible: "Open Locker, locked"
 ${retryableTapCommands("Open Locker.*")}
 - extendedWaitUntil:

@@ -55,7 +55,9 @@ describe(RowsBlock, () => {
     dispose = undefined;
   });
 
-  it("gives every row the touch floor and every row but the first a rule", () => {
+  // Stub tier: the computed style OBJECT. A minHeight in a style is not a
+  // measured hit area on a device — that is a Maestro claim.
+  it("declares the 44pt touch-floor minHeight per row, and a rule on all but the first", () => {
     const container = render(
       <RowsBlock
         rows={[

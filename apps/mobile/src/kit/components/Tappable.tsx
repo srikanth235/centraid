@@ -22,6 +22,8 @@ export interface TappableProps {
   onPressIn?: () => void;
   onPressOut?: () => void;
   style?: StyleProp<ViewStyle>;
+  /** A handle from `kit/test-ids`, never a hand-spelled string (#890 W2). */
+  testID?: string;
   children?: React.ReactNode;
 }
 
@@ -35,6 +37,7 @@ export default function Tappable({
   onPressIn,
   onPressOut,
   style,
+  testID,
   children,
 }: TappableProps): React.JSX.Element {
   const ownPressTreatment = onPressIn !== undefined || onPressOut !== undefined;
@@ -49,6 +52,7 @@ export default function Tappable({
       onPress={disabled ? undefined : onPress}
       onPressIn={onPressIn}
       onPressOut={onPressOut}
+      testID={testID}
       style={({ pressed }) => [
         style,
         pressed && !disabled && !ownPressTreatment

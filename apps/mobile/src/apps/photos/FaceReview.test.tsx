@@ -306,7 +306,7 @@ async function renderScreen(): Promise<void> {
   });
 }
 
-describe("Face review (native)", () => {
+describe("Face review, on the phone seat", () => {
   beforeEach(() => {
     vi.resetModules();
     mocks.write.mockClear();

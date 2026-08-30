@@ -12,6 +12,12 @@
     "perf/**/*.ts",
     "scale/**/*.ts",
     "quality/**/*.ts",
-    "helpers/**/*.ts"
-  ]
+    "helpers/**/*.ts",
+    "integration-mobile/**/*.ts"
+  ],
+  // This program is compiled with `lib: DOM` (see above), so the DOM `URL` wins
+  // over `node:url`'s. `@centraid/test-kit/vitest` is written against the node
+  // one, and a vitest project config is the only file here that imports it —
+  // the runner type-checks it on its own terms.
+  "exclude": ["integration-mobile/vitest.config.ts"]
 }

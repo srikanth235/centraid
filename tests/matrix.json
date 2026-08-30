@@ -158,9 +158,9 @@
       "failure": "the first usable PWA assertion fails"
     },
     "U1-mobile": {
-      "command": "node tests/agent-e2e-mobile/flows/home-loads.mjs",
-      "seed": "run the documented broken native onboarding flows in the mobile nightly harness",
-      "failure": "G2/G8/G9/G13/G14 remain explicit red/blocked evidence rather than green"
+      "command": "node tests/agent-e2e-mobile/flows/pairing-canary.mjs",
+      "seed": "break ticket redemption in the onboarding screen and run the canary",
+      "failure": "the canary fails at redemption in under five minutes, before any suite fans out"
     },
     "U2": {
       "command": "bun run test:qualities -t 'U2:'",
@@ -606,14 +606,14 @@
         {
           "id": "U1-mobile",
           "name": "mobile first-run product journey",
-          "owner": "tests/agent-e2e-mobile/flows/home-loads.mjs",
-          "evidence": "mobile first-run complete",
+          "owner": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
+          "evidence": "ticket minted, redeemed, profile completed, Home band settled",
           "lane": "nightly",
           "wallClockCost": "high",
           "knob": "tests/suite-wall-clock.json",
           "governance": "tighten-only",
           "redLastDemonstrated": "2026-08-01",
-          "blockedBy": "Documented G2/G8/G9/G13/G14 onboarding failures; deliberately grey, never counted as covered."
+          "blockedBy": "#890 W0 re-owned this gate. It was owned by flows/home-loads.mjs, which deliberately never pairs and never reaches Home — the gate and its owner were about different journeys, so the cell could not have gone green for the right reason. flows/pairing-canary.mjs is the flow that actually carries the claim. It stays grey until the rebuilt lanes produce a green scheduled run; greenness is the lane's to earn, not this edit's to assert."
         },
         {
           "id": "U2",
@@ -869,6 +869,10 @@
     "872": {
       "url": "https://github.com/srikanth235/centraid/issues/872",
       "state": "open"
+    },
+    "890": {
+      "url": "https://github.com/srikanth235/centraid/issues/890",
+      "state": "open"
     }
   },
   "gaps": {
@@ -1064,7 +1068,7 @@
     "web.journey": "apps/web/tests/e2e/web-pwa.spec.ts is a single test shared with the security claim; the install-to-app journey has no separate owner. Tracked under #864 (originally #656).",
     "mobile.correctness": "apps/mobile has no coverage floor scope, so nothing gates the replica session code these unit owners exercise. Tracked under #864 (originally #656).",
     "mobile.durability": "apps/mobile/src/lib/upload/crash.test.ts proves upload crash recovery, but apps/mobile has no coverage floor gating the storage code around it. Tracked under #864 (originally #656).",
-    "mobile.journey": "tests/agent-e2e-mobile/flows/home-loads.mjs runs on iOS only, so the Android journey is unproven and the flow declares three checks. Tracked under #864 (originally #656).",
+    "mobile.journey": "Owned by tests/agent-e2e-mobile/flows/pairing-canary.mjs, which pairs and reaches Home; the previous owner (home-loads.mjs) renders ticket-only onboarding on a cleared client and does neither (#890 W0). Android is the gating platform (D1) and runs it on every mobile-touching PR, on every merge, and nightly; iOS runs it nightly as the first member of the depth roster. Remaining: three consecutive green scheduled runs on the rebuilt lanes, tracked under #890.",
     "app-admission": "The named claims an app satisfies to sit in the shell are docs/blueprint-seats.md#app-admission-contract; the appSeats, appStates and appEngines blocks here are that contract's ledger, and scripts/test-report/validate-app-axes.mjs is what refuses an app that goes quiet about one of them.",
     "appStates.offline-as-stale": "notes.offline and tasks.offline are owned by the reachability verdict deliberately surfacing as the app's STALE notice rather than a second offline banner, so the one reachability-driven sentence proves both the offline and the stale cell.",
     "appSeats.desktop-nightly-only": "The six custodian desktop e2e owners newly wired under #864 (agenda, notes, tasks, people and photos plus docs' pending-overlay reuse) are nightly-validated only, because the authoring container has neither an Electron binary nor a Secret Service to run them at PR time."
@@ -1502,7 +1506,7 @@
       "tier": "unit"
     },
     "mobile.journey": {
-      "owner": "tests/agent-e2e-mobile/flows/home-loads.mjs",
+      "owner": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
       "tier": "e2e"
     },
     "tunnel-pairing.correctness": {
@@ -2795,7 +2799,8 @@
             "owner": "packages/blueprints/src/docs-shelves.test.ts"
           },
           "stale": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "tests/integration-mobile/stale.integration.test.ts"
           },
           "conflict": {
             "status": "owned",
@@ -2889,13 +2894,16 @@
             "owner": "packages/blueprints/apps/people/states.test.tsx"
           },
           "offline": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "tests/integration-mobile/offline.integration.test.ts"
           },
           "stale": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "tests/integration-mobile/stale.integration.test.ts"
           },
           "conflict": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "tests/integration-mobile/conflict.integration.test.ts"
           },
           "parked": {
             "status": "owned",
@@ -2923,7 +2931,8 @@
             "owner": "packages/blueprints/src/photos-view-state.test.ts"
           },
           "stale": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "tests/integration-mobile/stale.integration.test.ts"
           },
           "conflict": {
             "status": "owned",
@@ -4260,11 +4269,11 @@
         ]
       },
       {
-        "id": "standalone",
-        "label": "Standalone journeys (no aggregate budget)",
-        "runner": null,
-        "budgetDoc": null,
-        "budgetMinutes": null,
+        "id": "probes",
+        "label": "Standalone probes",
+        "runner": "tests/agent-e2e-mobile/run-probes-suite.mjs",
+        "budgetDoc": "tests/agent-e2e-mobile/flows/probes-budget.md",
+        "budgetMinutes": 35,
         "flows": [
           {
             "id": "cold-start",
@@ -4285,12 +4294,6 @@
             "flow": "mobile-native-v0-resilience"
           },
           {
-            "id": "sharing-invite",
-            "label": "Sharing invite",
-            "owner": "tests/agent-e2e-mobile/flows/sharing-invite.mjs",
-            "flow": "mobile-sharing-invite"
-          },
-          {
             "id": "places-seat",
             "label": "Places seat",
             "owner": "tests/agent-e2e-mobile/flows/places-seat.mjs",
@@ -4307,6 +4310,27 @@
             "label": "Volume proof",
             "owner": "tests/agent-e2e-mobile/flows/volume-proof.mjs",
             "flow": "mobile-volume-proof"
+          }
+        ]
+      },
+      {
+        "id": "standalone",
+        "label": "Standalone journeys (each its own lane entry)",
+        "runner": null,
+        "budgetDoc": null,
+        "budgetMinutes": null,
+        "flows": [
+          {
+            "id": "pairing-canary",
+            "label": "Pairing canary",
+            "owner": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
+            "flow": "mobile-pairing-canary"
+          },
+          {
+            "id": "sharing-invite",
+            "label": "Sharing invite",
+            "owner": "tests/agent-e2e-mobile/flows/sharing-invite.mjs",
+            "flow": "mobile-sharing-invite"
           }
         ]
       }
@@ -4865,6 +4889,15 @@
       "dimension": "performance",
       "tier": "perf",
       "owner": "tests/perf/pwa-waterfall.perf.test.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "mobile-pairing-canary",
+      "name": "The shared prerequisite: the gateway mints a ticket, the phone redeems it, and pairing completes to Home",
+      "surface": "mobile",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
       "minimumTests": 1
     },
     {

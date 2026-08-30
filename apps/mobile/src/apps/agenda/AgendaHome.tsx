@@ -37,6 +37,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
+import { TEST_IDS } from "../../kit/test-ids";
 import { t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import {
@@ -301,6 +302,7 @@ export default function AgendaHome({
               accessibilityRole="button"
               accessibilityLabel="Go to today"
               onPress={() => setAnchor(new Date())}
+              testID={TEST_IDS.agenda.today}
             >
               <Icon name="Clock" size={21} color={colors.text} />
             </Tappable>
@@ -308,6 +310,7 @@ export default function AgendaHome({
               accessibilityRole="button"
               accessibilityLabel="New event"
               onPress={() => setCreateOpen(true)}
+              testID={TEST_IDS.agenda.newEvent}
             >
               <Icon name="Plus" size={24} color={colors.text} />
             </Tappable>

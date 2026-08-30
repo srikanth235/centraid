@@ -64,7 +64,14 @@ export function declaredTestTitles(source) {
  * @returns {string[] | null} Flow basenames, or null when no array is found.
  */
 export function runnerFlowList(source) {
-  const match = /const FLOWS = \[(?<body>[^\]]*)\]/u.exec(String(source ?? ""));
+  // LINE-ANCHORED (#890). The unanchored form matched a runner's own header
+  // comment where it explains that its `const FLOWS = [ … ]` array is what the
+  // registry derives from — taking the ellipsis as the body and reporting an
+  // empty flow list, so a suite would appear to have lost every member because
+  // somebody documented it. A declaration is at column zero; a mention is not.
+  const match = /^const FLOWS = \[(?<body>[^\]]*)\]/mu.exec(
+    String(source ?? "")
+  );
   if (!match) return null;
   return [...match.groups.body.matchAll(/"(?<file>[^"]+)"/gu)].map(
     (entry) => entry.groups.file

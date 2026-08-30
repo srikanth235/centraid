@@ -1,0 +1,31 @@
+{
+  "$comment": "#890 W0 — the pinned device matrix for every scheduled mobile lane. An unpinned device makes a screen-size or OS-behaviour regression indistinguishable from a runner-image roll. Each entry names the device, the OS, and — where the pin diverges from what a member actually holds — why that divergence is deliberate and recorded rather than accidental.",
+  "ios": {
+    "deviceName": "iPhone 17 Pro",
+    "osPrefix": "iOS-26",
+    "fallbackDeviceNames": ["iPhone 17", "iPhone 16 Pro", "iPhone 16"],
+    "why": "A current Pro is the reference phone: it carries the Dynamic Island inset the shell's safe-area math is written against, and macos-26 images ship it. fallbackDeviceNames is an ORDERED ladder, not a wildcard — a runner image that drops the pin still resolves to a named device the roster has seen, and the resolver prints which rung it landed on so the substitution is visible in the log rather than silent."
+  },
+  "android": {
+    "apiLevel": 34,
+    "arch": "x86_64",
+    "target": "google_apis",
+    "profile": "pixel_6",
+    "divergences": [
+      {
+        "axis": "arch",
+        "ci": "x86_64",
+        "member": "arm64-v8a",
+        "deliberate": true,
+        "why": "Only x86_64 is accelerated by /dev/kvm on the Linux runner; an arm64 image runs under full emulation and every journey times out. The divergence is real — JSC/Hermes codegen, NEON paths in the tunnel native module, and op-sqlite's compiled extensions all differ by ABI — so it is recorded here rather than assumed away. The arm64 evidence a member's phone actually produces is a release-cadence device-farm spend, deferred in #890's non-goals."
+      },
+      {
+        "axis": "api-level",
+        "ci": 34,
+        "member": "35+",
+        "deliberate": true,
+        "why": "The AVD snapshot cache key (avd-api34-…) is what makes this lane affordable; bumping the API level invalidates it and costs a cold boot on every run until it re-banks. Bump deliberately with the cache key's trailing -vN, never as a drive-by."
+      }
+    ]
+  }
+}

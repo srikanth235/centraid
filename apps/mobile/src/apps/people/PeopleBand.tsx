@@ -25,6 +25,7 @@ import type { BandOwner } from "../../kit/band/band-owner";
 import BandCapsuleControl from "../../kit/band/BandCapsule";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
 import { radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { resolvePeopleBand } from "./people-band";
@@ -67,7 +68,10 @@ export default function PeopleBand({
 
   const { capsule } = band;
   return (
-    <View style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}>
+    <View
+      style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}
+      testID={TEST_IDS.people.band}
+    >
       {/* Plate one: the frame's capsule, on the frame's page colour. */}
       <BandCapsuleControl capsule={capsule} onPress={onHome} />
 
@@ -80,6 +84,10 @@ export default function PeopleBand({
               key={destination.key}
               accessibilityRole="tab"
               accessibilityLabel={destination.label}
+              // The DESTINATION KEY, never the label: the label is copy a v-next
+              // handoff may re-word, and a flow that tapped it would then tap
+              // nothing while still reporting COMPLETED (#890 W2).
+              testID={`${TEST_ID_PREFIXES.band.people}${destination.key}`}
               accessibilityState={{ selected: active }}
               onPress={() => onSelect(destination.key)}
               style={styles.tab}

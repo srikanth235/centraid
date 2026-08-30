@@ -217,7 +217,7 @@ function buttonLabelled(prefix: string): HTMLButtonElement {
   return found!;
 }
 
-describe("the Places shelf (native)", () => {
+describe("the Places shelf, on the phone seat", () => {
   beforeEach(() => {
     container = document.createElement("div");
     document.body.appendChild(container);

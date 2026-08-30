@@ -214,11 +214,6 @@
   Harmless (the accurate statement is recorded in the `minimumTests` deviation
   pin next to the number), but the comment should be corrected by whoever next
   edits that file.
-- **Five `photos-*.mjs` Maestro flows are unlinted.** `scripts/lint-e2e-flows.mjs`
-  `FILES` omits all five photos flows (`photos-search.mjs` even carries a
-  marker for a nonexistent rule name, `input-observed`). Adding them may
-  surface latent findings in five flows at once, so it deserves its own pass
-  rather than a drive-by (#781 wave 3 added only the new `places-seat.mjs`).
 - **`google-calendar-invite-send` uses wall-clock `new Date()`** (DTSTAMP)
   and `Math.random()` (MIME boundary) inside the published handler —
   nondeterminism the connector lane's lint doesn't catch; its tests
@@ -258,7 +253,65 @@
   React flip; appearance-prefs, profile view-models, insights formatters, and
   near-duplicate `relativeTime` still need consolidation / floors — #545 D5/B8).
 
+- **Tasks' home screen cannot mount: its band names an icon the design package
+  does not ship.** `apps/mobile/src/apps/tasks/tasks-band.ts:42` names `"Inbox"`
+  for the third band destination (and again at `:92` as the More sheet's first
+  row), `@centraid/design` ships no `Inbox` icon, and
+  `apps/mobile/src/kit/components/icon-resolver.ts` carries no alias for it — so
+  `resolveIconName` **throws inside `TasksBand`'s render**, before any Tasks
+  content is drawn. Verified against the built design package:
+  `isIconName("Inbox") === false`. Nothing cheaper saw it, and the reason is
+  instructive: `tasks-band.test.ts` asserts the icon *table* and never that a
+  name in it resolves, and the DOM-stub tier never mounts the band at all. Found
+  by #890's RNTL promotion, and pinned there as a characterisation test in
+  `apps/mobile/src/apps/tasks/TasksHome.test.tsx` (first case, marked
+  DELETE-ON-FIX) per the A-pinned doctrine — #890 is chartered to rebuild the
+  test layer, not to change the product, and a lane that quietly fixed what it
+  found would leave no record that the gap in the cheaper tiers existed. The fix
+  is one of: add the glyph, alias it in `icon-resolver.ts`, or name a shipped
+  icon; whichever lands should delete the pin in the same change.
+
+- **Accessibility labels on plain `View`s are never published to the tree.**
+  `AgendaBand`'s tab group carries `accessibilityRole="tablist"` and
+  `AgendaHome`'s `NowLine` carries `accessibilityLabel="Now"`, but neither sets
+  `accessible`, so React Native never promotes them to accessibility elements —
+  the grouping role and the "Now" marker are absent from the tree a screen
+  reader walks, and on the Agenda that line is otherwise just a coloured rule.
+  The same shape appears in `DocsBand`, `TasksBand`, `TallyBand`, `LockerBand`
+  and `PeopleBand`. Invisible to the DOM-stub tier by construction: the stub
+  maps `accessibilityLabel` straight onto `aria-label`, so a stub test sees a
+  label that the device does not publish. Found and pinned by #890 in
+  `apps/mobile/src/apps/agenda/AgendaHome.test.tsx` (last case, DELETE-ON-FIX).
+
+- **`origin/main` was already red on `test:comment-density` before #890.**
+  Verified in a clean worktree at `3e555c8d`:
+  `node scripts/check-comment-density-ratchet.mjs` fails there on eighteen files
+  no branch had touched — `packages/vault/src/gateway/portable-export.ts`,
+  `packages/vault/src/{grant/fulfillment,schema/migrate}.test.ts`, six
+  `packages/blueprints/apps/*/pending-projection.ts`-shaped files, three
+  `apps/web/tests/e2e/*.spec.ts`, and `apps/mobile/src/kit/share/GrantSheet*`
+  among them — plus three unpinned files over the 15% cap. A down-only gate that
+  is red on the default branch cannot distinguish a regression from the standing
+  state, so every branch inherits the failure and every author must decide
+  whether to absorb it. #890 absorbed those eighteen into its pin raise, with the
+  reason stated at the number in `tests/comment-density-ratchet.json`, rather
+  than leave its own branch red for something it did not cause. That absorption
+  is a workaround, not the fix. Two things want settling on their own: how a pin
+  file drifts out of agreement with the tree on `main` at all (a `--write` that
+  was never run, or a merge that landed while red), and the separate open
+  observation above that the scanner under-measures trailing and JSX comments —
+  which makes every `.tsx` number in that file wrong in the same direction.
+
 ## Resolved
+
+- #890 — **The five `photos-*.mjs` Maestro flows are linted.** The observation
+  described `scripts/lint-e2e-flows.mjs`'s hand-written `FILES` list; #842 W0.4
+  replaced it with on-disk discovery over `flows/` and `lib/`, so every flow —
+  including the five photos ones, and any flow added later — is linted from the
+  moment its file exists. The nonexistent `input-observed` marker
+  `photos-search.mjs` carried went with it. #890 adds the second half the entry
+  implied: a flow that is linted but that no lane runs is now a hard failure of
+  `bun run lint:e2e-wiring`.
 
 - #883 — The #880 residuals register is closed, six of seven. The stored,
   indexed order column is **not** among them — the sort was pushed into SQLite,
