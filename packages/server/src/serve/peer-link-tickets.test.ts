@@ -1,13 +1,11 @@
 // The link-ticket store's sweep (#883 D4b): an abandoned pairing leaves a
 // public key and a secret hash on the row `hasPending` reads.
 
-import { setTimeout } from "node:timers";
-
 import { describe, expect, test } from "vitest";
 
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
-import { unrefTimer } from "../lib/unref-timer.js";
 import { GatewayDatabase } from "./gateway-db.js";
 import {
   DEFAULT_LINK_TICKET_TTL_MS,
@@ -75,6 +73,7 @@ describe("peer link tickets", () => {
   });
 
   test("mint, hasPending and claim each carry the sweep", async () => {
+    const clock = useFakeClock();
     const operations = ["mint", "hasPending", "claim"] as const;
     const cases = await Promise.all(
       operations.map(async (operation) => ({ operation, ...(await store()) }))
@@ -82,12 +81,7 @@ describe("peer link tickets", () => {
     for (const { operation, tickets, db, rows } of cases) {
       const expired = tickets.mint("vault-stale", "key", 1);
       expect(rows()).toBe(1);
-      // Past the TTL by construction: 1 ms expires by the next statement.
-      // oxlint-disable-next-line no-await-in-loop -- one settle per case, and the cases share no state
-      await new Promise((resolve) => {
-        const timer = setTimeout(resolve, 5);
-        unrefTimer(timer);
-      });
+      clock.advanceSync(2);
       if (operation === "mint") tickets.mint("vault-2", "key-2");
       if (operation === "hasPending") tickets.hasPending();
       if (operation === "claim") tickets.claim(expired.ticketId, "wrong");

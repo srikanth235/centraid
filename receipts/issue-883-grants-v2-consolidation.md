@@ -2168,6 +2168,11 @@ Round after `5924b7f82` (required CI red on that squash):
   `multi-vault-provenance.ts` collapseSources). Replaced with a typed
   min walk so an empty group cannot throw.
 
+- `test:sleep-inventory` then failed: two uninventoried 5ms
+  `setTimeout` sites. Replaced, not inventoried. Peer-link sweep uses
+  `useFakeClock()`; the photo-similarity sampler waits for the next
+  interval tick via `vi.waitFor`. Down-only budget unchanged.
+
 - Knip duplicate exports: pending-projection default+named, agenda
   `POINTER_VIEWS` aliasing `VIEWS`, photos `DEFAULT_ZOOM` aliasing
   `DEFAULT_RUNG`.
@@ -2188,6 +2193,13 @@ Round after `5924b7f82` (required CI red on that squash):
 bun run lint:quality-knobs
 bun run lint:schema-export
 bun run test:hygiene-ratchet
+bun run test:sleep-inventory
+bun run check:reachability
+bun run lint:engine-conformance
+bun run lint:law-registry
+bun run check:ui-receipt
+bun run test:quarantine
+bun run test:env-red
 bun run lint
 ./node_modules/.bin/tsc -p tests
 bash .governance/run.sh
@@ -2205,7 +2217,9 @@ web+desktop Vite production builds. Schema-export ratchet re-pinned
 after the entity-catalog extract; export walk unchanged. Hygiene
 `toHaveBeenCalled` 785 → 783; pin/download and camera-roll tests assert
 recorded outcomes. Sonar S6959: collapseSources min-rank is a typed
-walk, not a no-init `reduce`.
+walk, not a no-init `reduce`. Sleep inventory: two 5ms `setTimeout`
+sites replaced with a fake clock and `vi.waitFor`; budget unchanged.
+Local CI `gates` job (all 19 scripts) passed.
 
 ### Change-set paths
 

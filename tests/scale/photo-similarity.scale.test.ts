@@ -37,9 +37,9 @@
 //     unavailable. A vault search is synchronous SQLite, so this is the honest
 //     owner-facing cost: every other request on the gateway waits it out.
 
-import { setInterval, setTimeout } from "node:timers";
+import { setInterval } from "node:timers";
 
-import { describe, expect, onTestFinished, test } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { seededRandom } from "@centraid/test-kit/random";
@@ -114,7 +114,9 @@ async function whileWatchingTheLoop<T>(
 ): Promise<{ value: T; blockedMs: number; elapsedMs: number }> {
   let last = performance.now();
   let blockedMs = 0;
+  let ticks = 0;
   const timer = setInterval(() => {
+    ticks += 1;
     const now = performance.now();
     blockedMs = Math.max(blockedMs, now - last - 1);
     last = now;
@@ -124,12 +126,11 @@ async function whileWatchingTheLoop<T>(
   try {
     const value = await work();
     const elapsedMs = performance.now() - started;
-    // One more tick before the sampler is torn down: the block itself is the
-    // gap between the LAST callback before the synchronous work and the FIRST
-    // after it, so tearing down immediately would measure zero every time.
-    await new Promise((resolve) => {
-      const settle = setTimeout(resolve, 5);
-      unrefTimer(settle);
+    // Wait for the sampler's next tick: the block is the gap between the last
+    // callback before the synchronous work and the first after it.
+    const ticksAfterWork = ticks;
+    await vi.waitFor(() => {
+      expect(ticks).toBeGreaterThan(ticksAfterWork);
     });
     return { value, blockedMs, elapsedMs };
   } finally {
