@@ -61,6 +61,8 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
+import { wiringSelfTestCases } from "./lint-e2e-wiring.cases.mjs";
+
 const ROOT = path.resolve(import.meta.dirname, "..");
 const MOBILE_DIR = "tests/agent-e2e-mobile";
 const FLOWS_DIR = `${MOBILE_DIR}/flows`;
@@ -382,185 +384,12 @@ export function lintWiring({ roster, flows, runners, matrix, readFile }) {
 
 // ---- self-test: the rules, exercised on fixtures, before judging the repo.
 function selfTest() {
-  const files = {
-    "wf.yml": [
-      "jobs:",
-      "  gate:",
-      "    steps:",
-      "      - run: node tests/agent-e2e-mobile/run-x-suite.mjs",
-      "  other:",
-      "    steps:",
-      "      # node tests/agent-e2e-mobile/flows/ghost.mjs",
-      "      - run: node tests/agent-e2e-mobile/flows/b.mjs",
-    ].join("\n"),
-    // The header comment above the declaration is deliberate: the unanchored
-    // regex this replaced matched the PROSE, read its ellipsis as the body, and
-    // called the runner empty. A linter that a comment about itself can defeat
-    // is not a linter, so the fixture keeps the shape that defeated it.
-    "tests/agent-e2e-mobile/run-x-suite.mjs":
-      '// the wiring linter reads this runner\'s `const FLOWS = [ … ]` array\nconst FLOWS = ["a.mjs"];',
-  };
-  const readFile = (rel) => {
-    if (!(rel in files)) throw new Error(`missing fixture ${rel}`);
-    return files[rel];
-  };
-  const lanes = {
-    gate: { workflow: "wf.yml", job: "gate", blocking: true },
-    nightly: { workflow: "wf.yml", job: "other", blocking: false },
-  };
-  const claim = "a claim long enough to be judged";
-  const flows = [
-    `${FLOWS_DIR}/a.mjs`,
-    `${FLOWS_DIR}/b.mjs`,
-    `${FLOWS_DIR}/c.mjs`,
-  ];
-  const runners = [`${MOBILE_DIR}/run-x-suite.mjs`];
-
-  const cases = [
-    {
-      name: "a scheduled flow no lane runs is flagged",
-      roster: {
-        lanes,
-        flows: {
-          [`${FLOWS_DIR}/a.mjs`]: { status: "scheduled", claim },
-          [`${FLOWS_DIR}/b.mjs`]: { status: "scheduled", claim },
-          [`${FLOWS_DIR}/c.mjs`]: { status: "scheduled", claim },
-        },
-      },
-      matrix: {},
-      want: ["scheduled"],
-    },
-    {
-      name: "transitive reach through a runner counts as scheduled",
-      roster: {
-        lanes,
-        flows: {
-          [`${FLOWS_DIR}/a.mjs`]: { status: "scheduled", claim },
-          [`${FLOWS_DIR}/b.mjs`]: { status: "scheduled", claim },
-          [`${FLOWS_DIR}/c.mjs`]: { status: "exploratory", claim },
-        },
-      },
-      matrix: {},
-      want: [],
-    },
-    {
-      name: "a commented-out invocation does not schedule anything",
-      roster: {
-        lanes,
-        flows: {
-          [`${FLOWS_DIR}/a.mjs`]: { status: "scheduled", claim },
-          [`${FLOWS_DIR}/b.mjs`]: { status: "scheduled", claim },
-          [`${FLOWS_DIR}/c.mjs`]: { status: "exploratory", claim },
-          [`${FLOWS_DIR}/ghost.mjs`]: { status: "scheduled", claim },
-        },
-      },
-      flows: [...flows, `${FLOWS_DIR}/ghost.mjs`],
-      matrix: {},
-      want: ["scheduled"],
-    },
-    {
-      name: "an exploratory flow a lane runs is flagged",
-      roster: {
-        lanes,
-        flows: {
-          [`${FLOWS_DIR}/a.mjs`]: { status: "exploratory", claim },
-          [`${FLOWS_DIR}/b.mjs`]: { status: "scheduled", claim },
-          [`${FLOWS_DIR}/c.mjs`]: { status: "exploratory", claim },
-        },
-      },
-      matrix: {},
-      want: ["exploratory"],
-    },
-    {
-      name: "a promoting flow on a blocking lane is flagged",
-      roster: {
-        lanes,
-        flows: {
-          [`${FLOWS_DIR}/a.mjs`]: {
-            status: "promoting",
-            claim,
-            since: "2026-08-30",
-            nights: 5,
-          },
-          [`${FLOWS_DIR}/b.mjs`]: { status: "scheduled", claim },
-          [`${FLOWS_DIR}/c.mjs`]: { status: "exploratory", claim },
-        },
-      },
-      matrix: {},
-      want: ["promoting"],
-    },
-    {
-      name: "a promoting flow on a non-blocking lane is clean",
-      roster: {
-        lanes,
-        flows: {
-          [`${FLOWS_DIR}/a.mjs`]: { status: "scheduled", claim },
-          [`${FLOWS_DIR}/b.mjs`]: {
-            status: "promoting",
-            claim,
-            since: "2026-08-30",
-            nights: 5,
-          },
-          [`${FLOWS_DIR}/c.mjs`]: { status: "exploratory", claim },
-        },
-      },
-      matrix: {},
-      want: [],
-    },
-    {
-      name: "a matrix owner nothing schedules is a hard failure",
-      roster: {
-        lanes,
-        flows: {
-          [`${FLOWS_DIR}/a.mjs`]: { status: "scheduled", claim },
-          [`${FLOWS_DIR}/b.mjs`]: { status: "scheduled", claim },
-          [`${FLOWS_DIR}/c.mjs`]: { status: "exploratory", claim },
-        },
-      },
-      matrix: { flows: [{ owner: `${FLOWS_DIR}/c.mjs` }] },
-      want: ["matrix-owner"],
-    },
-    {
-      name: "an unrostered flow on disk is flagged",
-      roster: {
-        lanes,
-        flows: {
-          [`${FLOWS_DIR}/a.mjs`]: { status: "scheduled", claim },
-          [`${FLOWS_DIR}/b.mjs`]: { status: "scheduled", claim },
-        },
-      },
-      matrix: {},
-      want: ["rostered"],
-    },
-    {
-      name: "a roster row with no file is flagged",
-      roster: {
-        lanes,
-        flows: {
-          [`${FLOWS_DIR}/a.mjs`]: { status: "scheduled", claim },
-          [`${FLOWS_DIR}/b.mjs`]: { status: "scheduled", claim },
-          [`${FLOWS_DIR}/c.mjs`]: { status: "exploratory", claim },
-          [`${FLOWS_DIR}/gone.mjs`]: { status: "exploratory", claim },
-        },
-      },
-      matrix: {},
-      want: ["rostered"],
-    },
-    {
-      name: "a lane naming a job that does not exist is flagged",
-      roster: {
-        lanes: { bad: { workflow: "wf.yml", job: "nope", blocking: false } },
-        flows: {
-          [`${FLOWS_DIR}/a.mjs`]: { status: "exploratory", claim },
-          [`${FLOWS_DIR}/b.mjs`]: { status: "exploratory", claim },
-          [`${FLOWS_DIR}/c.mjs`]: { status: "exploratory", claim },
-        },
-      },
-      matrix: {},
-      want: ["lane"],
-    },
-  ];
-
+  // Cases live in the sibling module; the assertion stays HERE so running the
+  // linter directly still exercises them. See that file for why.
+  const { flows, runners, readFile, cases } = wiringSelfTestCases({
+    MOBILE_DIR,
+    FLOWS_DIR,
+  });
   for (const testCase of cases) {
     const got = [
       ...new Set(

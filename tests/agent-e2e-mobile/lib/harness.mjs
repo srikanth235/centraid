@@ -94,6 +94,23 @@ const appIdForPlatform = (platform) =>
  * wait, not a product-latency assertion, and nothing is proven by making it tight.
  */
 export const FIRST_LAUNCH_TIMEOUT_MS = 120_000;
+
+/**
+ * Quote one value for the DEVICE's shell, for use inside an `adb shell` argv.
+ *
+ * `adb shell` joins its arguments with spaces and passes the result to
+ * `/system/bin/sh` unescaped, so an interpolated payload is re-parsed there:
+ * spaces split it into words and an apostrophe opens an unterminated quote.
+ * Single quotes are the only fully literal form in `sh`, and the `'\\''` dance is
+ * how a single quote is embedded in a single-quoted string — close, escape one
+ * quote, reopen.
+ *
+ * @param {string} value Raw value to embed.
+ * @returns {string} The value as one shell-safe word.
+ */
+export function shQuote(value) {
+  return `'${String(value).replaceAll("'", `'\\''`)}'`;
+}
 // The Home band's accessibility label (apps/mobile/src/screens/home/
 // HomeBand.tsx). The previous marker, "Home ready", was HomeStatusLine's
 // settled-state label until #789 replaced that component's copy with the
@@ -424,6 +441,11 @@ async function runMaestroChunk(
  *   ctx.ensureDemo(appId)   seed a scenario before the initial replica clone, if absent
  *   ctx.purgeDemo(appId)    remove a scenario before an empty-vault journey
  *   ctx.note(msg)           record an observation; surfaces in verdict.md
+ *   ctx.device(argv, opts?) one `adb -s <udid> …` / `xcrun simctl … <udid> …`
+ *                           against THIS target — the escape for acts that
+ *                           originate outside the app (a biometric touch, a
+ *                           share intent, a pushed notification, a seeded
+ *                           library). argv array only, never a shell string.
  *
  * Failure model: throw OR return { pass: false, ... }. Either writes a FAIL
  * verdict, leaves the run dir in place, and exits non-zero.
@@ -462,6 +484,45 @@ export async function runFlow(slug, fn) {
     await runMaestroChunk(yaml, { state, label, ...options });
     assertionsRun += countMaestroAssertions(yaml);
   };
+  // THE DEVICE ESCAPE (#890 follow-up). Maestro drives ONE app's UI and nothing
+  // around it, which is why six W5 journeys were recorded as blocked on "tooling
+  // the harness does not wrap": a biometric touch, a share intent from another
+  // app, a pushed notification and a seeded photo library all originate OUTSIDE
+  // the app under test and have no Maestro directive at all. Each of them is one
+  // `adb` or `simctl` invocation, and the only thing missing was somewhere to
+  // put it.
+  //
+  // TARGETED AT state.udid, never at "the device". A flow that shells out to a
+  // bare `adb` hits whichever emulator answers first, which on a runner hosting
+  // two is a coin flip and produces the worst kind of failure: intermittent, and
+  // attributed to the app.
+  //
+  // ARGV, NOT A STRING — but read the next paragraph before trusting that.
+  // Nothing here interpolates a flow's data through the HOST's shell, because
+  // spawnText passes argv directly.
+  //
+  // `adb shell` IS STILL A SHELL, and this is the trap. adb joins its argv with
+  // spaces and WITHOUT escaping (its own source carries the comment "We don't
+  // escape here, just like ssh(1)"), then hands the result to `/system/bin/sh`
+  // on the device. So for `adb shell …` the flow's data is parsed by the
+  // DEVICE's shell even though the host never saw a shell: a payload containing
+  // spaces splits into separate words, and one containing an apostrophe opens a
+  // quote that is never closed. Use `shQuote` on every interpolated value in an
+  // `adb shell` argv. Not needed for plain `adb` verbs (`emu`, `install`) or for
+  // simctl, neither of which re-parses.
+  const device = async (args, { label } = {}) => {
+    const hint = label ?? args[0] ?? "device";
+    console.log(`  device  : ${hint}`);
+    if (state.platform === "android")
+      return spawnText("adb", ["-s", state.udid, ...args]);
+    return spawnText("xcrun", [
+      "simctl",
+      args[0],
+      state.udid,
+      ...args.slice(1),
+    ]);
+  };
+
   const ctx = {
     state,
     note(m) {
@@ -469,6 +530,7 @@ export async function runFlow(slug, fn) {
       console.log(`  note    : ${m}`);
     },
     run,
+    device,
   };
 
   // Mint the one-time pairing ticket the phone will redeem.

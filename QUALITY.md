@@ -2,6 +2,24 @@
 
 ## Open
 
+- **"Free up space" on mobile is a button that can never be pressed.**
+  `apps/mobile/src/screens/BackupHealth.custody.tsx` renders the `FREE_UP_ACTION`
+  Pressable with a hard-coded `disabled` and `accessibilityState={{ disabled: true }}`,
+  above a line reading "Release the copies from the app that holds them —
+  Photos re-hashes each device original before deleting it." So the surface
+  computes a real offer (`freeUpOffer` reports the releasable count and bytes),
+  states a real cause and consequence, renders an affordance for it — and then
+  refuses, permanently, pointing the member somewhere else. Not a bug in the
+  sense of broken code: the comment beside it (`this surface never deletes a
+  device original`) says the refusal is deliberate. It is a **product question**:
+  a disabled control with no path to becoming enabled reads as a defect to the
+  person looking at it, and the two candidate answers are opposite — either wire
+  it to the Photos eviction path it names, or stop drawing a button and make the
+  redirect the whole affordance. Found while trying to write #890 W5's
+  "device journey proving real eviction", which cannot exist while this holds:
+  there is no eviction on the phone to observe. Left unfixed because choosing
+  between those two answers is a design decision, not a test-layer one.
+
 - **The comment-density ratchet does not measure what its header claims.**
   `scripts/check-comment-density-ratchet.mjs` says its parser walk "catches
   trailing comments (they lead the NEXT token), JSX comments, and the file-end
@@ -303,6 +321,32 @@
   which makes every `.tsx` number in that file wrong in the same direction.
 
 ## Resolved
+
+- #890 — **The mobile upload allowlist accepted percent-encoded traversal,
+  backslash traversal, and embedded credentials.** Filed here rather than under
+  Open because all three are fixed; the shape of the miss is what is worth
+  keeping. `assertGatewayMintedUploadUrl` is the only thing standing between a
+  native background PUT and a destination the gateway never authorized, and it
+  checked scope with `target.pathname.startsWith(allowedUploadPrefix)`.
+  `new URL()` resolves a literal `../` before that test ever runs — which is
+  what made the existing traversal case pass and made the check look sound — but
+  it leaves `%2e%2e%2f` exactly as written, so
+  `…/tmp/blobs/%2e%2e%2f%2e%2e%2fblobs/sha256/<secret>` satisfied the prefix.
+  Separately, `URL.origin` omits userinfo, so
+  `https://evil:pw@provider.example/…` matched the provider origin and the
+  credentials would have ridden to it. **The first fix was itself incomplete**,
+  and that is the part most worth remembering: it split path segments on `/`
+  alone, so `..%5c..%5c` — which `URL` does not normalise, because it rewrites
+  only a *literal* backslash — walked straight through the check that had just
+  been written to stop exactly this. An independent audit found it; the tests
+  shipped alongside the fix did not. Scope is now checked at every decoding
+  depth, on both separators, with a bound on the decoding rounds and a
+  distinction between a malformed escape in the URL as minted (refused) and a
+  legitimately encoded `%` that simply cannot decode twice (accepted — the first
+  fix rejected valid uploads here). Two general lessons: **a normalization the
+  parser performs for you hides the cases it does not perform**, and **a fix
+  written from a failing case tends to cover that case and its siblings only** —
+  the sibling separator was one substitution away and nobody looked.
 
 - #890 — **The five `photos-*.mjs` Maestro flows are linted.** The observation
   described `scripts/lint-e2e-flows.mjs`'s hand-written `FILES` list; #842 W0.4

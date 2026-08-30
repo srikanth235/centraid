@@ -14,6 +14,12 @@ import { buildGateway } from "../../../packages/server/dist/serve/build-gateway.
 import { GatewayDatabase } from "../../../packages/server/dist/serve/gateway-db.js";
 import { kitlessHostIdentity } from "../../../packages/server/dist/serve/host-identity.js";
 import { KeyStore } from "../../../packages/vault/dist/index.js";
+import {
+  DEFAULT_FIRST_TOKEN_DELAY_MS,
+  FIRST_TOKEN_DELAY_ENV,
+  resolveDelayMs,
+  stubHarnessPrefs,
+} from "./fixed-delay-agent.mjs";
 
 const dataDir = path.resolve(process.argv[2] ?? "artifacts/mobile-ci-gateway");
 const port = Number(process.argv[3] ?? 18_789);
@@ -42,6 +48,40 @@ const devicePlane = makeDaemonDevicePlane({
   keyStore,
   loopbackEndpointId: hostEndpointId,
 });
+
+// THE ASSISTANT'S MODEL PROVIDER (#890 follow-up). Without this the CI gateway
+// has no provider at all: a turn cannot start, no token is ever produced, and
+// `sendToFirstToken` in tests/experience-budgets/mobile.json stays unmeasurable
+// by construction rather than by oversight.
+//
+// The `acp` registry kind is the one built for exactly this — "Custom ACP
+// agent", no npm adapter, no default binary, minVersion 0.0.0 — so pointing it
+// at a script needs no new harness kind and no change to shipped product
+// surface. `binPath` is the node binary rather than the script itself so the
+// script needs no executable bit, which a git checkout on a fresh runner does
+// not reliably carry.
+//
+// The stub answers after a KNOWN delay (fixed-delay-agent.mjs explains why a
+// constant beats an instant reply), and that constant is what a latency flow
+// subtracts to get the dead time this repo actually owns.
+//
+// The prefs come FROM the stub module rather than being spelled out here, so
+// the launch-plan test in tests/integration-mobile asserts the same three values
+// this gateway actually writes.
+for (const [key, value] of Object.entries(stubHarnessPrefs()))
+  database.setPref(key, value);
+
+// PIN THE DELAY EXPLICITLY rather than letting the agent fall back to its own
+// default. The agent inherits this process's environment (harnessSpawnEnv
+// spreads it), so setting it here makes the constant a latency flow subtracts
+// visible in the lane log instead of implicit in a module nobody reads while
+// diagnosing a number. A lane that exports its own value overrides this; an
+// empty or malformed one resolves back to the default rather than to zero.
+process.env[FIRST_TOKEN_DELAY_ENV] = String(resolveDelayMs());
+console.log(
+  `[mobile-ci-gateway] assistant stub: first token after ${process.env[FIRST_TOKEN_DELAY_ENV]}ms` +
+    ` (default ${DEFAULT_FIRST_TOKEN_DELAY_MS}ms; subtract it from any sendToFirstToken reading)`
+);
 
 const gateway = await buildGateway({
   paths: layout,

@@ -29,8 +29,8 @@
     },
     "sendToFirstToken": {
       "status": "unmeasured",
-      "volume": "n/a — the CI gateway has no model provider",
-      "probe": "NONE TODAY. Needs a fixed-delay stub turn from tests/agent-e2e-mobile/lib/ci-gateway.mjs. Recorded as a dated gap by #890 rather than left as a bare absence: the Assistant journey that would consume it is named in that issue's W5 checklist and is explicitly out of scope in receipts/issue-890-mobile-testing-rebuild.md."
+      "volume": "one stub turn against a fixed-delay ACP provider",
+      "probe": "RIG EXISTS, NO NUMBER YET — and the distinction is the point. The blocker named here until #890 was that the CI gateway had no model provider at all, so no turn could start and nothing could be timed. That is fixed: tests/agent-e2e-mobile/lib/fixed-delay-agent.mjs is a minimal ACP agent that streams its first token after a KNOWN delay, tests/agent-e2e-mobile/lib/ci-gateway.mjs configures it as the Assistant's provider through the registry's `acp` custom-agent kind, and tests/integration-mobile/assistant-provider.integration.test.ts proves that wiring resolves to a launch plan spawning it (importing the prefs the gateway writes rather than a copy, so the two cannot drift). What is still missing is a DEVICE RUN: the flow that taps send and waits for first paint, on hardware this change had none of. Until that runs, `status` stays `unmeasured` — a rig is not a measurement, and promoting this to `measured` on the strength of wiring is the exact move this budget file exists to prevent. When the flow lands, the number to record is `observed − CENTRAID_STUB_FIRST_TOKEN_DELAY_MS` (default 250), which is the dead time this repo owns: the app's send path, the Iroh hop, gateway turn dispatch and the renderer reaching first paint. The gateway-side lower bound on the same interval is already measured in tests/experience-budgets/gateway.json (#842) and excludes every one of those spans."
     },
     "reconnectToFresh": {
       "status": "measured",

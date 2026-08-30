@@ -29,5 +29,9 @@ node tests/agent-e2e-mobile/run-probes-suite.mjs || ec=$?
 node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
 node tests/agent-e2e-mobile/run-home-apps-suite.mjs || ec=$?
 node tests/agent-e2e-mobile/flows/sharing-invite.mjs || ec=$?
+# The D3 promotion pipeline. Runs LAST and only here: both non-blocking Android
+# lanes carry it, the PR gate never does, and that asymmetry is the rule
+# `scripts/lint-e2e-wiring.mjs` enforces for every `promoting` flow.
+node tests/agent-e2e-mobile/run-promoting-suite.mjs || ec=$?
 set -e
 exit "$ec"
