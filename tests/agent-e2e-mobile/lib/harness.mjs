@@ -22,6 +22,7 @@ import path from "node:path";
 
 import {
   defaultRunId,
+  redactSensitive,
   writeFlowVerdict,
 } from "../../agent-e2e-shared/harness.mjs";
 import {
@@ -374,6 +375,38 @@ export async function setup({ runId } = {}) {
 // `--udid` pins Maestro to the chosen device — without it Maestro picks any
 // connected target, which silently runs flows on the wrong platform when
 // both an iOS sim and an Android emulator are booted.
+const MAX_FAILURE_DETAIL_CHARS = 2_000;
+
+// Pull the `message="…"` of every <failure>/<error> plus any element body out
+// of a Maestro JUnit report. Everything is passed through `redactSensitive`,
+// which is the same boundary the retained verdicts use.
+export function extractJunitFailures(xml) {
+  const parts = [];
+  for (const match of xml.matchAll(
+    /<(?<tag>failure|error)(?<attrs>[^>]*)(?:\/>|>(?<body>[\s\S]*?)<\/\k<tag>>)/gu
+  )) {
+    const message = /message="(?<message>[^"]*)"/u.exec(
+      match.groups?.attrs ?? ""
+    )?.groups?.message;
+    const body = match.groups?.body;
+    const text = [message, body]
+      .filter((value) => (value ?? "").trim().length > 0)
+      .join(" — ");
+    if (text) parts.push(decodeXmlEntities(text).replace(/\s+/gu, " ").trim());
+  }
+  if (parts.length === 0) return "";
+  return redactSensitive(parts.join(" | ")).slice(0, MAX_FAILURE_DETAIL_CHARS);
+}
+
+function decodeXmlEntities(value) {
+  return value
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&amp;", "&");
+}
+
 async function readJunitSummary(reportFile, { required }) {
   let xml;
   try {
@@ -383,12 +416,18 @@ async function readJunitSummary(reportFile, { required }) {
       throw new Error(`Maestro emitted no JUnit report at ${reportFile}`, {
         cause: error,
       });
-    return { tests: 0, failures: 0, skipped: 0 };
+    return { tests: 0, failures: 0, skipped: 0, failureDetail: "" };
   }
   const summary = {
     tests: (xml.match(/<testcase(?:\s|>)/gu) ?? []).length,
     failures: (xml.match(/<(?:failure|error)(?:\s|>)/gu) ?? []).length,
     skipped: (xml.match(/<skipped(?:\s|>)/gu) ?? []).length,
+    // Which Maestro command actually failed. Without this a sensitive chunk
+    // reports "1 failure" and nothing else, and every shard that dies during
+    // pairing looks identical — the 2026-08-30 lane-B sweep was 14 opaque
+    // reds. The text is a command description ("Extended wait until … is
+    // visible"), never a capability, and it is redacted regardless.
+    failureDetail: extractJunitFailures(xml),
   };
   if (required && summary.tests === 0) {
     throw new Error(
@@ -397,7 +436,8 @@ async function readJunitSummary(reportFile, { required }) {
   }
   if (required && (summary.failures > 0 || summary.skipped > 0)) {
     throw new Error(
-      `Maestro JUnit report contains ${summary.failures} failure(s) and ${summary.skipped} skipped test(s): ${reportFile}`
+      `Maestro JUnit report contains ${summary.failures} failure(s) and ${summary.skipped} skipped test(s): ${reportFile}` +
+        (summary.failureDetail ? ` — ${summary.failureDetail}` : "")
     );
   }
   return summary;
@@ -429,7 +469,7 @@ async function runMaestroChunk(
     `${label}.sanitized.json`
   );
   let commandError;
-  let junitSummary = { tests: 0, failures: 0, skipped: 0 };
+  let junitSummary = { tests: 0, failures: 0, skipped: 0, failureDetail: "" };
   try {
     await run(
       "maestro",
@@ -464,6 +504,15 @@ async function runMaestroChunk(
   } catch (error) {
     commandError = error;
     junitSummary = await readJunitSummary(reportFile, { required: false });
+    // A sensitive chunk runs quiet and its debug dir is discarded below, so
+    // this redacted line is the only surviving account of WHICH command failed.
+    // Without it the failure reads "maestro sensitive flow exited 1" and the
+    // shard is undiagnosable from CI.
+    if (junitSummary.failureDetail) {
+      throw new Error(`${error.message} — ${junitSummary.failureDetail}`, {
+        cause: error,
+      });
+    }
     throw error;
   } finally {
     // A pairing ticket is a live enrollment capability. Sensitive flows use a
