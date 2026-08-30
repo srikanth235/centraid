@@ -1,3 +1,4 @@
+import { RELATIONS_SCHEME_URI } from "../_shared/concept-scheme-kit.ts";
 import type { VaultRow } from "./filing.ts";
 // THE CHAIN IS APPEND-ONLY: a restore appends a new head pointing at the body
 // it brings back and nothing between is rewritten, which is why `current` is a
@@ -5,7 +6,6 @@ import type { VaultRow } from "./filing.ts";
 import { decodeTextContent } from "./format.ts";
 import type { NoteVersion } from "./types.ts";
 
-const RELATIONS_SCHEME_URI = "urn:duaility:relations";
 const REVISES_NOTATION = "revises";
 const CONTENT_TYPE = "core.content_item";
 /** A cycle is possible (a restore points back at an older body). */

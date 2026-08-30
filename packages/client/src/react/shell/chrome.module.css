@@ -645,6 +645,10 @@
   flex: 1;
   align-items: stretch;
   min-inline-size: 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 .appBandGroup .launchItem {
   flex: 1;

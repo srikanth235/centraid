@@ -1,11 +1,9 @@
 // THE ROOM'S DATA PLANE: the five reads, the one write door, and the three
 // facts a screen is allowed to state about how fresh it is.
 //
-// Lifted out of `app-root.tsx` because it is one concern with one law, and the
-// law is easier to hold in a file that does nothing else: THE DASHBOARD IS THE
-// SPINE and every route reads it, while a route that needs a second payload —
-// a group's ledger, a friend's, the feed — asks for exactly that one and no
-// other. A refresh does both together, so a change event can never land the
+// THE DASHBOARD IS THE SPINE and every route reads it; a route that needs a
+// second payload — a group's ledger, a friend's, the feed — asks for exactly
+// that one. A refresh does both together, so a change event can never land the
 // spine and the route's own rows a render apart.
 //
 // NOTHING HERE FOLDS A FIGURE. Every net, share and total arrives derived from
@@ -41,7 +39,8 @@ import type { TallyWrite } from "./writes.ts";
 export const CHANGE_TABLES = [
   "tally.expense",
   "tally.expense_split",
-  "tally.expense_receipt",
+  // A receipt is a `core.attachment` with `role='receipt'` (#883, O-attach).
+  "core.attachment",
   "tally.expense_line_item",
   "tally.expense_line_allocation",
   "tally.recurring_expense",

@@ -25,6 +25,7 @@ import { figureTone, proportion } from "@centraid/blueprints/apps/tally/format";
 import type { FigureTone } from "@centraid/blueprints/apps/tally/format";
 
 import { Text } from "../../kit/components/NativeText";
+import Tappable from "../../kit/components/Tappable";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
@@ -104,14 +105,14 @@ export function Section({
         {meta ? <Text style={styles.sectionMeta}>{meta}</Text> : null}
         <View style={styles.spacer} />
         {act ? (
-          <Pressable
+          <Tappable
             accessibilityRole="button"
             accessibilityLabel={act.label}
             onPress={() => act.onPress()}
             hitSlop={8}
           >
             <Text style={styles.sectionAct}>{act.label}</Text>
-          </Pressable>
+          </Tappable>
         ) : null}
       </View>
       {filled ? (
@@ -336,14 +337,14 @@ export function WindowFoot({
     <View style={styles.foot}>
       <Text style={styles.footText}>{text}</Text>
       {onMore ? (
-        <Pressable
+        <Tappable
           accessibilityRole="button"
           accessibilityLabel={moreLabel}
           onPress={onMore}
           hitSlop={8}
         >
           <Text style={styles.sectionAct}>{moreLabel}</Text>
-        </Pressable>
+        </Tappable>
       ) : null}
     </View>
   );

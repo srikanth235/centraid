@@ -1,10 +1,7 @@
 // The band Tasks has claimed, rendered (Tasks spec §2; #834).
 //
-// Two plates in a transparent row — the frame's Home capsule on the frame's
-// neutral page colour, then the app's five destinations as one group on
-// `bgElev` — the same anatomy `PhotosBand.tsx` and `DocsBand.tsx` draw, from
-// the shared plate geometry in `kit/band-surface.ts`. This file renders
-// `tasks-band.ts` and adds nothing.
+// Anatomy and shared plate geometry: `PhotosBand.tsx` and
+// `kit/band-surface.ts`. This file renders `tasks-band.ts` and adds nothing.
 //
 // SIZED TO CONTENT WITH A 44px FLOOR, not six equal cells: all five labels
 // render in full at 390px because each tab takes the width its word needs.
@@ -28,11 +25,12 @@ import {
   BAND_TOP_GAP,
 } from "../../kit/band-surface";
 import type { BandOwner } from "../../kit/band/band-owner";
+import BandCapsuleControl from "../../kit/band/BandCapsule";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
-import { TASKS_BAND_CAPSULE, resolveTasksBand } from "./tasks-band";
+import { resolveTasksBand } from "./tasks-band";
 import type { TasksBandDestinationKey } from "./tasks-band";
 
 /** The group plate's inner gutter and the gap between the two plates. */
@@ -63,18 +61,7 @@ export default function TasksBand({
       <View
         style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={TASKS_BAND_CAPSULE.label}
-          onPress={onHome}
-          style={[styles.capsule, { width: TASKS_BAND_CAPSULE.size }]}
-        >
-          <Icon
-            name={TASKS_BAND_CAPSULE.icon}
-            size={19}
-            color={colors.textSoft}
-          />
-        </Pressable>
+        <BandCapsuleControl onPress={onHome} />
       </View>
     );
   }
@@ -82,14 +69,7 @@ export default function TasksBand({
   const { capsule } = band;
   return (
     <View style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={capsule.label}
-        onPress={onHome}
-        style={[styles.capsule, { width: capsule.size }]}
-      >
-        <Icon name={capsule.icon} size={19} color={colors.textSoft} />
-      </Pressable>
+      <BandCapsuleControl capsule={capsule} onPress={onHome} />
 
       <View style={styles.group} accessibilityRole="tablist">
         {band.destinations.map((destination) => {
@@ -146,14 +126,6 @@ const makeStyles = (colors: ThemeColors) =>
       minHeight: BAND_HEIGHT,
       paddingHorizontal: BAND_INSET,
       paddingTop: BAND_TOP_GAP,
-    },
-    capsule: {
-      alignItems: "center",
-      backgroundColor: colors.bg,
-      borderColor: colors.lineStrong,
-      borderRadius: BAND_RADIUS,
-      borderWidth: BAND_BORDER,
-      justifyContent: "center",
     },
     group: {
       alignItems: "stretch",

@@ -5,7 +5,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
   gap: var(--sp-3);
-  padding: var(--sp-2) var(--content-margin) 0;
+  padding: var(--sp-2) var(--page-margin) 0;
 }
 
 /* At the geometry of the card it stands in for. `kit-skeleton` carries the
@@ -20,7 +20,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  padding: var(--sp-5) var(--content-margin);
+  padding: var(--sp-5) var(--page-margin);
   max-width: 60ch;
 }
 
@@ -59,7 +59,7 @@
   gap: var(--sp-2);
   font: var(--t-annot-label);
   color: var(--text-faint);
-  padding: var(--sp-3) var(--content-margin);
+  padding: var(--sp-3) var(--page-margin);
   margin: 0;
 }
 

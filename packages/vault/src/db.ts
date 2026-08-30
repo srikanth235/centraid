@@ -21,7 +21,7 @@ import {
   storageClassForShaWrite,
 } from "./blob/store-routing.js";
 import { BlobTransferCoordinator } from "./blob/transfers.js";
-import { registerHammingFn } from "./enrich/similarity.js";
+import { registerCosineFn, registerHammingFn } from "./enrich/similarity.js";
 import { asVaultDiskFullError } from "./errors.js";
 import { initializeReplicaProtocol } from "./replica/change-log.js";
 import { repairReplicaInvocationCommits } from "./replica/invocation-commits.js";
@@ -187,6 +187,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   // Must exist before migrations (FTS triggers).
   registerContentTextFn(vault);
   registerHammingFn(vault);
+  registerCosineFn(vault);
   migrateVault(vault);
   migrate(journal, JOURNAL_MIGRATIONS);
   // Durable write choke (#406), after every fresh-schema open.

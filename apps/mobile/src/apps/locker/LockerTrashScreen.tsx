@@ -9,9 +9,12 @@
 // this screen — which is why the outcome is read from the write's own status
 // (`surfaceWriteOutcome` publishes the parked reason on the one status line)
 // rather than announced before the answer comes back.
+//
+// WINDOWED (#883 C4): trash has no cap.
 
 import React, { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { FlatList, StyleSheet, View } from "react-native";
+import type { ListRenderItemInfo } from "react-native";
 
 import { purgeCountdown } from "@centraid/blueprints/apps/locker/format";
 import {
@@ -62,34 +65,50 @@ export default function LockerTrashScreen({
     void loadLockerTrash();
   };
 
-  const body =
-    vault.reading && rows.length === 0 ? (
-      <SkeletonRows accessibilityLabel="Reading the trash" />
-    ) : rows.length === 0 ? (
-      <EmptyBlock body={TRASH_CONFIRM_BODY} routine title={TRASH_EMPTY} />
-    ) : (
-      rows.map((row: LockerRowData) => (
-        <View key={row.item_id} style={styles.row}>
-          <View style={styles.text}>
-            <Text numberOfLines={1} style={styles.title}>
-              {row.title}
-            </Text>
-            <Text style={styles.meta}>{purgeCountdown(row.purge_at)}</Text>
-          </View>
-          <Button
-            label={TRASH_RESTORE}
-            onPress={() => {
-              void restoreLockerItem(replica.session, row.item_id).then(after);
-            }}
-          />
-          <Button
-            label={TRASH_PURGE}
-            onPress={() => setConfirming(row.item_id)}
-            variant="destructive"
-          />
-        </View>
-      ))
-    );
+  const renderItem = ({
+    item,
+  }: ListRenderItemInfo<LockerRowData>): React.JSX.Element => (
+    <View style={styles.row}>
+      <View style={styles.text}>
+        <Text numberOfLines={1} style={styles.title}>
+          {item.title}
+        </Text>
+        <Text style={styles.meta}>{purgeCountdown(item.purge_at)}</Text>
+      </View>
+      <Button
+        label={TRASH_RESTORE}
+        onPress={() => {
+          void restoreLockerItem(replica.session, item.item_id).then(after);
+        }}
+      />
+      <Button
+        label={TRASH_PURGE}
+        onPress={() => setConfirming(item.item_id)}
+        variant="destructive"
+      />
+    </View>
+  );
+
+  const foot = confirming ? (
+    <View style={styles.confirm}>
+      <Text accessibilityRole="header" style={styles.confirmTitle}>
+        {PURGE_CONFIRM_TITLE}
+      </Text>
+      {/* Off-owner it PARKS, and the confirm says so before the act, not
+          after it appears to have happened. */}
+      <Text style={styles.meta}>{PURGE_PARKED_BODY}</Text>
+      <View style={styles.confirmActs}>
+        <Button label="Cancel" onPress={() => setConfirming(null)} />
+        <Button
+          label={PURGE_CONFIRM_LABEL}
+          onPress={() => {
+            void purgeLockerItem(replica.session, confirming).then(after);
+          }}
+          variant="destructive"
+        />
+      </View>
+    </View>
+  ) : null;
 
   return (
     <LockerScreen
@@ -98,31 +117,26 @@ export default function LockerTrashScreen({
       onBack={() => navigation.popTo("LockerHome", { destination: "items" })}
       route="trash"
     >
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <SectionBlock label={TRASH_HEAD} meta={TRASH_META} />
-        {body}
-
-        {confirming ? (
-          <View style={styles.confirm}>
-            <Text accessibilityRole="header" style={styles.confirmTitle}>
-              {PURGE_CONFIRM_TITLE}
-            </Text>
-            {/* Off-owner it PARKS, and the confirm says so before the act, not
-                after it appears to have happened. */}
-            <Text style={styles.meta}>{PURGE_PARKED_BODY}</Text>
-            <View style={styles.confirmActs}>
-              <Button label="Cancel" onPress={() => setConfirming(null)} />
-              <Button
-                label={PURGE_CONFIRM_LABEL}
-                onPress={() => {
-                  void purgeLockerItem(replica.session, confirming).then(after);
-                }}
-                variant="destructive"
-              />
-            </View>
-          </View>
-        ) : null}
-      </ScrollView>
+      <FlatList
+        contentContainerStyle={styles.scroll}
+        data={rows}
+        keyExtractor={(row: LockerRowData) => row.item_id}
+        ListEmptyComponent={
+          vault.reading ? (
+            <SkeletonRows accessibilityLabel="Reading the trash" />
+          ) : (
+            <EmptyBlock body={TRASH_CONFIRM_BODY} routine title={TRASH_EMPTY} />
+          )
+        }
+        ListFooterComponent={foot}
+        ListHeaderComponent={
+          <SectionBlock label={TRASH_HEAD} meta={TRASH_META} />
+        }
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        renderItem={renderItem}
+        windowSize={7}
+      />
     </LockerScreen>
   );
 }

@@ -256,8 +256,8 @@ describe(validateManifest, () => {
     expect(m.history.keep).toStrictEqual({ count: 100 });
   });
 
-  // Issue #659 L9: `keep: "all"` disabled retention entirely, so a per-minute
-  // automation grew the vault's journal without any bound at all.
+  // #659 L9: `keep: "all"` would disable retention entirely, letting a
+  // per-minute automation grow the journal unbounded.
   it('rejects history.keep "all" — run history may not be unbounded', () => {
     // Capture in the branch, assert outside it: every assertion below runs on
     // every execution, so a validator that stopped throwing fails loudly at
@@ -318,7 +318,7 @@ describe("condition triggers", () => {
     generated: { by: "test", at: "2026-07-03" },
     vault: {
       purpose: "dpv:Billing",
-      scopes: [{ schema: "business", verbs: "read" }],
+      scopes: [{ schema: "schedule", verbs: "read" }],
     },
   };
 
@@ -329,7 +329,7 @@ describe("condition triggers", () => {
         { kind: "cron", expr: "0 9 * * *" },
         {
           kind: "condition",
-          entity: "business.invoice",
+          entity: "schedule.task",
           where: [
             { column: "status", op: "eq", value: "sent" },
             { column: "due_at", op: "within-next-days", value: 3 },
@@ -340,7 +340,7 @@ describe("condition triggers", () => {
     });
     expect(m.triggers[1]).toStrictEqual({
       kind: "condition",
-      entity: "business.invoice",
+      entity: "schedule.task",
       where: [
         { column: "status", op: "eq", value: "sent" },
         { column: "due_at", op: "within-next-days", value: 3 },
@@ -355,7 +355,7 @@ describe("condition triggers", () => {
         name: "x",
         prompt: "y",
         generated: { by: "t", at: "now" },
-        triggers: [{ kind: "condition", entity: "business.invoice" }],
+        triggers: [{ kind: "condition", entity: "schedule.task" }],
       })
     ).toThrow(/vault block/u);
   });
@@ -369,7 +369,7 @@ describe("condition triggers", () => {
         triggers: [
           {
             kind: "condition",
-            entity: "business.invoice",
+            entity: "schedule.task",
             where: "not-an-array",
           },
         ],
@@ -390,7 +390,7 @@ describe("condition triggers", () => {
         triggers: [
           {
             kind: "condition",
-            entity: "business.invoice",
+            entity: "schedule.task",
             where: [{ column: "status", op: "like", value: "%x%" }],
           },
         ],
@@ -400,7 +400,7 @@ describe("condition triggers", () => {
       validateManifest({
         ...base,
         triggers: [
-          { kind: "condition", entity: "business.invoice", every: "often" },
+          { kind: "condition", entity: "schedule.task", every: "often" },
         ],
       })
     ).toThrow(/cron/u);

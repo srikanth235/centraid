@@ -24,7 +24,7 @@ import {
 } from "@centraid/blueprints/apps/notes/shelves";
 
 import {
-  NOTES_BAND_CAPSULE,
+  BAND_CAPSULE,
   NOTES_BAND_DESTINATIONS,
   NOTES_BAND_MAX_DESTINATIONS,
   NOTES_MORE_ROWS,
@@ -59,8 +59,8 @@ describe("the band Notes claims", () => {
   });
 
   it("keeps the capsule outside the tab group, always", () => {
-    expect(NOTES_BAND_CAPSULE.inTabGroup).toBe(false);
-    expect(NOTES_BAND_CAPSULE.edge).toBe("leading");
+    expect(BAND_CAPSULE.inTabGroup).toBe(false);
+    expect(BAND_CAPSULE.edge).toBe("leading");
   });
 
   it("resolves to the app's band by default and the host's on request", () => {

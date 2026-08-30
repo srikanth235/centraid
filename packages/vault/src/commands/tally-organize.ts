@@ -1,7 +1,7 @@
-// governance: allow-repo-hygiene file-size-limit one cohesive Tally fixed-point + recurring-materialization command contract whose idempotency and exception handling must stay reviewable together
-// Issue #630 Tally time/currency contract. Exchange rates are fixed-point
-// integers and recurring materialization is deterministic + idempotent, so two
-// offline devices may enqueue the same occurrence without minting duplicates.
+// governance: allow-repo-hygiene file-size-limit one Tally fixed-point + recurring-materialization contract whose idempotency must stay reviewable together
+// Tally time/currency contract (#630). Rates are fixed-point integers and
+// recurring materialization is deterministic and idempotent, so two offline
+// devices may enqueue one occurrence without duplicates.
 
 import { describeRecurrence, expandRecurrence } from "@centraid/core/time";
 
@@ -412,6 +412,13 @@ const MATERIALIZE: CommandDefinition = {
         String(override.rate_date ?? template.rate_date ?? spentOn),
         template.template_id
       );
+    // A template names ONE payer: the single-payer row (#883).
+    ctx.db
+      .prepare(
+        `INSERT INTO tally_expense_payer
+          (expense_id, party_id, paid_minor) VALUES (?, ?, ?)`
+      )
+      .run(expenseId, template.paid_by, amount);
     for (const split of allocatedSplits(
       amount,
       JSON.parse(template.splits_json) as WeightedSplit[]

@@ -1,10 +1,11 @@
 import React from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Modal, ScrollView, StyleSheet, View } from "react-native";
 
 import { formatRelativeTime } from "@centraid/design";
 
 import Icon from "../components/Icon";
 import { Text } from "../components/NativeText";
+import Tappable from "../components/Tappable";
 import { borders, family, radii, t, useTheme } from "../theme";
 import type { PendingChange } from "./pending-changes";
 import {
@@ -90,12 +91,12 @@ export default function PendingChangesSheet({
               Saved on this phone until each target accepts them
             </Text>
           </View>
-          <Pressable
+          <Tappable
             accessibilityLabel="Close pending changes"
             onPress={onClose}
           >
             <Icon name="x" size={24} color={colors.text} />
-          </Pressable>
+          </Tappable>
         </View>
         <ScrollView contentContainerStyle={styles.list}>
           {pending.length === 0 ? (
@@ -253,9 +254,9 @@ function SheetVerb({
   onPress: () => void;
 }): React.JSX.Element {
   return (
-    <Pressable accessibilityLabel={`${label} ${subject}`} onPress={onPress}>
+    <Tappable accessibilityLabel={`${label} ${subject}`} onPress={onPress}>
       <Text style={[styles.action, { color }]}>{label}</Text>
-    </Pressable>
+    </Tappable>
   );
 }
 

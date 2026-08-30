@@ -340,6 +340,7 @@ export interface Dump {
   group: Record<string, unknown> | null;
   expenses: Record<string, unknown>[];
   splits: Record<string, unknown>[];
+  payers: Record<string, unknown>[];
   members: Record<string, unknown>[];
 }
 
@@ -370,6 +371,15 @@ export function dumpGrant(db: VaultDb, groupId: string): Dump {
          JOIN tally_expense e ON e.expense_id = s.expense_id
         WHERE e.group_id = ? AND e.deleted_at IS NULL
         ORDER BY e.description, s.party_id`,
+      groupId
+    ),
+    // Splits alone scored a payer-less crossing identical; the fold reads both.
+    payers: rows(
+      `SELECT e.description, p.party_id, p.paid_minor
+         FROM tally_expense_payer p
+         JOIN tally_expense e ON e.expense_id = p.expense_id
+        WHERE e.group_id = ? AND e.deleted_at IS NULL
+        ORDER BY e.description, p.party_id`,
       groupId
     ),
     members: rows(

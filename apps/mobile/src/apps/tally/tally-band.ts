@@ -31,8 +31,14 @@ import {
 } from "@centraid/blueprints/apps/tally/shelves";
 import type { ShelfId } from "@centraid/blueprints/apps/tally/shelves";
 
+import { BAND_CAPSULE } from "../../kit/band/band-capsule";
+import type { BandCapsule } from "../../kit/band/band-capsule";
 import type { BandOwner } from "../../kit/band/band-owner";
 import type { TallyStackParamList } from "../../navigation";
+
+// The frame's capsule lives in `kit/band/band-capsule.ts` (#883 B5).
+export { BAND_CAPSULE } from "../../kit/band/band-capsule";
+export type { BandCapsule } from "../../kit/band/band-capsule";
 
 export type TallyBandDestinationKey =
   | "balances"
@@ -51,8 +57,6 @@ export interface TallyBandDestination {
 /** The frame band's cap, hence a claiming app's: five, the fifth being More. */
 export const TALLY_BAND_MAX_DESTINATIONS = 5;
 
-export const TALLY_BAND_CAPSULE_SIZE = 52;
-
 const MORE_ICON = "more-vertical";
 
 /** The four the blueprint declares, then the sheet. */
@@ -68,29 +72,11 @@ export const TALLY_BAND_DESTINATIONS: readonly TallyBandDestination[] = [
   { key: "more", label: "More", icon: MORE_ICON },
 ];
 
-/** The frame's capsule — a frame control, never a sixth tab of the app's. */
-export interface TallyBandCapsule {
-  label: "Home";
-  icon: "Home";
-  size: number;
-  edge: "leading";
-  /** `false` is the whole reason it is not a sixth tab. */
-  inTabGroup: false;
-}
-
-export const TALLY_BAND_CAPSULE: TallyBandCapsule = {
-  label: "Home",
-  icon: "Home",
-  size: TALLY_BAND_CAPSULE_SIZE,
-  edge: "leading",
-  inTabGroup: false,
-};
-
 export type ResolvedTallyBand =
   | {
       owner: "app";
       destinations: readonly TallyBandDestination[];
-      capsule: TallyBandCapsule;
+      capsule: BandCapsule;
     }
   | { owner: "host" };
 
@@ -104,7 +90,7 @@ export function resolveTallyBand(owner: BandOwner): ResolvedTallyBand {
   return {
     owner: "app",
     destinations: TALLY_BAND_DESTINATIONS,
-    capsule: TALLY_BAND_CAPSULE,
+    capsule: BAND_CAPSULE,
   };
 }
 

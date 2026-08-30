@@ -1,9 +1,10 @@
 // Blob egress resolution (#296). Byte-read authorization is DERIVED, never
-// granted: content serves iff some edge links it to a subject row, and trashed
-// edges still count (trash renders until purge).
+// granted: content serves iff some edge links it to a subject row, trashed
+// edges included.
 
 import type { DatabaseSync } from "node:sqlite";
 
+import { contentReferenceExists } from "../schema/content-references.js";
 import {
   BINARY_DERIVATIVE_SQL,
   isBinaryDerivative,
@@ -12,32 +13,30 @@ import {
 import type { BinaryDerivativeVariant } from "./derivatives.js";
 import { shaOfBlobUri } from "./store.js";
 
-// A literal, not an import: blob/ stays free of command-layer imports.
+// A literal: blob/ stays free of command-layer imports.
 const RELATIONS_SCHEME_URI = "urn:duaility:relations";
 
-/** The serve-side twin of media.ts CONTENT_REFERENCES, without its
- *  live-rows-only clamp: trash must render (#352). */
+/** The ONE content-reference list without its live-rows-only clamp: trash
+ *  renders until it purges (#352). A superseded page serves while some live
+ *  document's history names it — walked FROM THE REQUESTED PAGE toward newer
+ *  `revises` edges, since seeding from every head costs the whole closure. */
 const SERVE_REFERENCES: string[] = [
-  "SELECT 1 FROM core_attachment WHERE content_id = i.content_id",
-  "SELECT 1 FROM core_party WHERE avatar_content_id = i.content_id",
-  "SELECT 1 FROM knowledge_note WHERE body_content_id = i.content_id",
-  "SELECT 1 FROM social_message WHERE body_content_id = i.content_id",
-  "SELECT 1 FROM business_invoice WHERE pdf_content_id = i.content_id",
-  "SELECT 1 FROM home_warranty WHERE terms_content_id = i.content_id",
-  "SELECT 1 FROM home_maintenance_plan WHERE instructions_content_id = i.content_id",
-  "SELECT 1 FROM media_asset WHERE content_id = i.content_id",
-  "SELECT 1 FROM core_collection WHERE cover_content_id = i.content_id",
-  "SELECT 1 FROM core_document WHERE current_content_id = i.content_id",
+  ...contentReferenceExists({
+    idExpression: "i.content_id",
+    live: false,
+    includeDocumentHead: true,
+  }),
   `WITH RECURSIVE chain(content_id) AS (
-     SELECT current_content_id FROM core_document
+     SELECT i.content_id
      UNION
-     SELECT l.to_id FROM core_link l JOIN chain ON l.from_id = chain.content_id
+     SELECT l.from_id FROM core_link l JOIN chain ON l.to_id = chain.content_id
       WHERE l.from_type = 'core.content_item' AND l.to_type = 'core.content_item' AND l.valid_to IS NULL
         AND l.relation_concept_id = (SELECT c.concept_id FROM core_concept c
              JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
             WHERE s.uri = '${RELATIONS_SCHEME_URI}' AND c.notation = 'revises')
    )
-   SELECT 1 FROM chain WHERE chain.content_id = i.content_id`,
+   SELECT 1 FROM chain
+     JOIN core_document d ON d.current_content_id = chain.content_id`,
 ];
 
 export interface ServableBlob {
@@ -129,12 +128,10 @@ export interface DerivativeRef {
   byteSize: number;
 }
 
-/** A bounded IN list keeps the plan stable across large id sets. */
 const DERIVATIVE_IN_CHUNK = 500;
 
-/** One rung for MANY ids in one indexed sweep (#405); ids with no such rung
- *  are absent. Does NOT re-run serve-reachability, so CALLERS must filter ids
- *  to reachable ones before batching. */
+/** Many ids in one indexed sweep (#405). CALLERS filter to reachable ids
+ *  first: this does not re-run serve-reachability. */
 export function resolveDerivativeShas(
   vault: DatabaseSync,
   contentIds: readonly string[],
@@ -204,7 +201,7 @@ interface LiveShaMemo {
 const liveShaMemo = new WeakMap<DatabaseSync, LiveShaMemo>();
 
 /** `data_version` moves on another connection's commit, `total_changes` on
- *  this one's; together they cannot miss a mutation. */
+ *  this one's. */
 function vaultWriteKey(vault: DatabaseSync): string {
   const dataVersion = (
     vault.prepare("PRAGMA data_version").get() as { data_version: number }
@@ -215,8 +212,7 @@ function vaultWriteKey(vault: DatabaseSync): string {
   return `${dataVersion}:${totalChanges}`;
 }
 
-/** Computed once per write position (#659). The set is READ-ONLY because it is
- *  shared — for a mutable copy, call `liveBlobShas`. */
+/** Once per write position (#659). READ-ONLY: it is shared. */
 export function liveBlobShasCached(vault: DatabaseSync): ReadonlySet<string> {
   const writeKey = vaultWriteKey(vault);
   const memo = liveShaMemo.get(vault);

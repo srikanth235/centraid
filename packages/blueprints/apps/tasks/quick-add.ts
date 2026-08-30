@@ -1,3 +1,4 @@
+import { DAY_MS } from "../_shared/format-kit.ts";
 import { GROUPS, landsInFoot } from "./view-copy.ts";
 import type { QUICK_ADD_WHEN } from "./view-copy.ts";
 // Quick add, projected (spec §3). THE FIELD NEVER PARSES A SENTENCE: the
@@ -23,8 +24,6 @@ export const QUICK_ADD_EMPTY: QuickAddDraft = {
   priority: 0,
   scopeId: null,
 };
-
-const DAY_MS = 86_400_000;
 
 function shiftDay(day: string, days: number): string {
   const at = Date.parse(`${day}T00:00:00Z`);

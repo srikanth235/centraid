@@ -14,8 +14,6 @@
  *
  * This query does the read + group + join to content, nothing more — the
  * clustering itself already happened server-side.
- *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
 import { srcOf } from "./_shared.ts";
 

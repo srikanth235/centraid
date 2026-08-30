@@ -1,5 +1,5 @@
-// Gateway control plane (#555). Vault existence is absent: the filesystem
-// registry remains authoritative.
+// Gateway control plane (#555): vault existence lives in the filesystem
+// registry, never here.
 
 import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, statfsSync } from "node:fs";
@@ -8,7 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { SQLInputValue } from "node:sqlite";
 
 import { installGatewaySchema } from "./gateway-schema.js";
-import { retireDeadShareEffects } from "./share-effects-retire.js";
+import { retireDeadShareEffectsOnce } from "./share-effects-retire.js";
 
 export const GATEWAY_DB_FILE = "gateway.db";
 
@@ -69,6 +69,11 @@ export class GatewayDatabase {
     }
 
     try {
+      // DELIBERATELY not the vault engine's WAL + busy_timeout=10000 (#883 C2,
+      // ruled). busy_timeout = 0 is how a held lock is REPORTED: `isBusy` maps
+      // SQLITE_BUSY to `GatewayLockError` instead of stalling. DELETE mode is
+      // what lets the read-only probe (#568) compose — under WAL a reader hits
+      // -shm with a message `isBusy` misses — and avoids sidecar files.
       db.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 0;");
       if (lockMode !== "read-only") {
         db.exec("PRAGMA journal_mode = DELETE;");
@@ -76,8 +81,8 @@ export class GatewayDatabase {
         chmodSync(file, 0o600);
       }
       if (lockMode === "exclusive") acquireExclusiveLifetimeLock(db, file);
-      // read-only open against EXCLUSIVE succeeds until a page is touched —
-      // probe here so GatewayLockError wins over a raw locked SELECT (#568).
+      // A read-only open against EXCLUSIVE succeeds until a page is touched:
+      // probe, so GatewayLockError wins over a raw locked SELECT (#568).
       if (lockMode === "read-only")
         db.prepare("SELECT 1 FROM sqlite_schema LIMIT 1").get();
       const opened = new GatewayDatabase(
@@ -86,7 +91,8 @@ export class GatewayDatabase {
         lockMode,
         options.networkFileSystem ?? detectNetworkFileSystem(root)
       );
-      if (lockMode !== "read-only") retireDeadShareEffects(opened);
+      // Once per file, not per open (#883 C2).
+      if (lockMode !== "read-only") retireDeadShareEffectsOnce(opened);
       return opened;
     } catch (error) {
       db.close();
@@ -160,7 +166,7 @@ function acquireExclusiveLifetimeLock(db: DatabaseSync, file: string): void {
     if (row?.locking_mode?.toLowerCase() !== "exclusive") {
       throw new Error(`SQLite refused exclusive locking_mode for ${file}`);
     }
-    // One write transaction: EXCLUSIVE retains the OS lock until this handle closes.
+    // One write transaction: EXCLUSIVE holds the OS lock until close.
     db.exec(
       `BEGIN EXCLUSIVE;
        INSERT INTO gateway_meta (key, value) VALUES ('schema', '1')
@@ -187,8 +193,8 @@ const DARWIN_NETWORK_FS_TYPES = new Set([
   "ftpfs",
 ]);
 
-// Do not use `stat -f '%T'`: BSD `%T` is the ls -F marker, not a filesystem
-// type — it exits 0 and would make darwin detection a guaranteed false (#568).
+// Never `stat -f '%T'`: BSD `%T` is the ls -F marker, not a filesystem type,
+// and exits 0 — darwin detection would be a guaranteed false (#568).
 export function parseDarwinFileSystemType(
   mountOutput: string,
   root: string
@@ -235,11 +241,12 @@ function detectNetworkFileSystem(root: string): boolean {
   try {
     if (process.platform === "darwin") {
       const remote = darwinNetworkFileSystem(root);
-      // Unreadable mount table: fall through, never return false (missed remote).
+      // Unreadable mount table: fall through, never false (a missed remote).
       if (remote !== undefined) return remote;
     }
     const type = Number(statfsSync(root).type);
-    // Linux NFS, SMB/CIFS. ZFS is local — treating it remote disabled orphan collection.
+    // Linux NFS, SMB/CIFS. ZFS is local: calling it remote stops orphan
+    // collection.
     return new Set([0x6969, 0x517b, 0xff534d42]).has(type);
   } catch {
     return false;

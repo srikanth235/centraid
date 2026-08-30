@@ -1,24 +1,11 @@
-/**
- * Bring a document back from the trash through core.restore_document. The
- * folder tag never left, so the document returns to the folder it was filed
- * in. Risk low.
- */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
 export default async function restore({ body, ctx }: HandlerArgs) {
-  const input = (body ?? {}) as Record<string, unknown>;
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "core.restore_document",
-      input: {
-        document_id: String(input.document_id ?? ""),
-      },
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  const input = actionInput(body);
+  return runVaultAction(ctx, {
+    command: "core.restore_document",
+    input: {
+      document_id: String(input.document_id ?? ""),
+    },
+  });
 }

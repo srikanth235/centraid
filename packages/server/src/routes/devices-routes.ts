@@ -14,6 +14,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { AUTHED_DEVICE_HEADER } from "@centraid/server/engine";
 
+import { unrefTimer } from "../lib/unref-timer.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type {
   DeviceComputeCapabilities,
@@ -249,7 +250,7 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
         () => void deps.onEndpointRevoked?.(selfKey),
         1_000
       );
-      timer.unref();
+      unrefTimer(timer);
     }
     return sent;
   };

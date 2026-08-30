@@ -50,6 +50,22 @@
     '/apple-touch-icon-180.png',
   ];
   const IROH_PREFIX = '/__centraid_iroh__/';
+  // The ONE Iroh WASM binary (#883 C5). It used to ship twice — a hashed
+  // `/assets/` copy for the page's ESM bindings and this unhashed copy for the
+  // classic worker — so a visit that used both paid ~2 MB twice. The Vite
+  // config now rewrites the bindings' default to this same `?v=`-stamped path,
+  // which means the page fetches it too and it must be cacheable here.
+  const IROH_WASM_PATH = '/centraid-worker-iroh.wasm';
+  /**
+   * Content-addressed by construction, so a cache hit is FINAL: hashed
+   * `/assets/` names change when their bytes change, and `_headers` pins the
+   * worker WASM immutable behind the SW generation token in `?v=`. Stale is not
+   * a reachable state for either, which is what lets the fetch path skip the
+   * background revalidation it still owes every other shell entry.
+   */
+  const isImmutableAsset = (url) =>
+    url.origin === self.location.origin &&
+    (url.pathname.startsWith('/assets/') || url.pathname === IROH_WASM_PATH);
   const BLOB_MARKER = '/_vault/blobs/';
 
   // Per-entry buffering cap. Anything larger streams straight through uncached
@@ -98,38 +114,66 @@
   //      offline. Match `.css` as well; only `.js` is re-crawled (CSS imports no
   //      further chunks).
   // Bounded by a seen set + a hard ceiling; best-effort per entry so one 404 never
-  // aborts install.
+  // aborts the crawl.
+  //
+  // WHEN IT RUNS, AND WHY THAT MOVED (#883 C5). This used to run inside
+  // `install`'s waitUntil, so the worker was not INSTALLED — and the offline
+  // shell not durable — until the entire lazy chunk graph had been walked, one
+  // chunk at a time. On an UPDATE that is the worst possible place for it: the
+  // outgoing worker still controls a live page while the incoming one spends
+  // dozens of serial round trips on chunks nobody is waiting for. Install now
+  // caches the required shell and stops, so the offline guarantee lands in one
+  // `addAll`; the crawl moved to `activate`, where it is a top-up rather than a
+  // precondition. Offline behaviour is unchanged: the same chunk set lands in
+  // the same cache before the worker takes control (see the ordering note in
+  // the activate handler).
+  //
+  // HOW IT RUNS. Breadth-first in WAVES of at most CHUNK_CRAWL_FANOUT chunks
+  // fetched concurrently, recursing rather than looping so no await sits inside
+  // a loop. The fan-out cap is the resource contract: enough to fill a
+  // connection pool, low enough that the crawl cannot starve the page.
   const CHUNK_CRAWL_CEILING = 400;
+  const CHUNK_CRAWL_FANOUT = 8;
   async function crawlAssetChunks(seeds, cache) {
     const toAbs = (ref) => (ref[0] === '/' ? ref : `/${ref}`);
     const seen = new Set(seeds.map(toAbs));
-    const queue = seeds.filter((url) => url.endsWith('.js'));
     const chunkRe = /\/?assets\/[A-Za-z0-9_.-]+\.(?:js|css)/gu;
-    const crawlNextChunk = async () => {
-      if (queue.length === 0 || seen.size >= CHUNK_CRAWL_CEILING) return;
-      const url = queue.shift();
+    /** Caches one chunk; returns the further `.js` chunks it referenced. */
+    const fetchChunk = async (url) => {
+      const found = [];
       try {
         const res = await fetch(url);
-        if (!res.ok) return crawlNextChunk();
+        if (!res.ok) return found;
         const body = await res.clone().text();
         await cache.put(url, res);
         let match;
         const cssChunks = [];
-        while ((match = chunkRe.exec(body))) {
+        // A FRESH matcher per chunk: a shared /g/ regex carries `lastIndex`
+        // between the bodies now being read concurrently, which would silently
+        // skip references in every chunk after the first.
+        const refs = new RegExp(chunkRe.source, chunkRe.flags);
+        while ((match = refs.exec(body))) {
           const next = toAbs(match[0]);
           if (seen.has(next)) continue;
           seen.add(next);
           // JS may import further chunks → crawl it; CSS is a leaf → cache now.
-          if (next.endsWith('.js')) queue.push(next);
+          if (next.endsWith('.js')) found.push(next);
           else cssChunks.push(next);
         }
         await Promise.all(cssChunks.map(async (next) => cache.add(next).catch(() => undefined)));
       } catch {
-        /* a missing/opaque chunk is skipped — never abort the whole install */
+        /* a missing/opaque chunk is skipped — never abort the whole crawl */
       }
-      return crawlNextChunk();
+      return found;
     };
-    return crawlNextChunk();
+    const crawlWave = async (wave) => {
+      if (wave.length === 0 || seen.size >= CHUNK_CRAWL_CEILING) return;
+      const batch = wave.slice(0, CHUNK_CRAWL_FANOUT);
+      const deferred = wave.slice(CHUNK_CRAWL_FANOUT);
+      const found = await Promise.all(batch.map(fetchChunk));
+      return crawlWave([...deferred, ...found.flat()]);
+    };
+    return crawlWave(seeds.filter((url) => url.endsWith('.js')).map(toAbs));
   }
 
   self.addEventListener('install', (event) => {
@@ -138,9 +182,6 @@
         const cache = await caches.open(SHELL_CACHE);
         const assets = await assetUrlsFromIndex();
         await cache.addAll([...SHELL, ...assets]);
-        // After the required shell is cached, best-effort precache the lazy chunk
-        // graph (inline app chunks + their deps).
-        await crawlAssetChunks(assets, cache).catch(() => undefined);
       })(),
     );
     self.skipWaiting();
@@ -157,6 +198,24 @@
         if (self.registration.navigationPreload) {
           await self.registration.navigationPreload.enable().catch(() => undefined);
         }
+        // Best-effort top-up of the lazy chunk graph (inline app chunks + their
+        // deps) so an app opens offline even if it was never opened online.
+        // No seeds means no index to crawl from — do not open a shell bucket
+        // there is nothing to put in, so an offline activate leaves the cache
+        // set exactly as the sweep above left it.
+        const seeds = await assetUrlsFromIndex();
+        if (seeds.length > 0) {
+          const cache = await caches.open(SHELL_CACHE);
+          await crawlAssetChunks(seeds, cache).catch(() => undefined);
+        }
+        // LAST, and the order is a contract. `clients.claim()` is what sets
+        // `navigator.serviceWorker.controller`, and both the app-open budget in
+        // `tests/e2e/perf-budgets.ts` (appOpen.cold.maxTransferBytes: 8_000)
+        // and its probe treat a non-null controller as "every chunk is now
+        // answered from Cache Storage". Claiming before the crawl would let an
+        // app open against a half-filled cache and pull its chunks over the
+        // network. The crawl left `install` (#883 C5); it did not move ahead of
+        // this guarantee.
         await self.clients.claim();
       })(),
     );
@@ -958,9 +1017,15 @@
 
     if (noStore) return fromNetwork().catch(() => offlineFallback());
     if (cached) {
-      // Stale-while-revalidate: paint from cache now, refresh the entry (and
-      // consume any navigation preload) in the background.
-      event.waitUntil(fromNetwork().catch(() => undefined));
+      // Cache-first, FULL STOP, for content-addressed entries (#883 C5): a
+      // hashed chunk or the `?v=`-stamped WASM cannot have gone stale, so the
+      // revalidation below was one guaranteed-redundant network request per
+      // asset per load, competing with the page's own traffic. Everything else
+      // — navigations and unhashed entries, which CAN change under a stable
+      // URL — keeps stale-while-revalidate exactly as before: paint from cache
+      // now, refresh the entry (and consume any navigation preload) in the
+      // background.
+      if (!isImmutableAsset(url)) event.waitUntil(fromNetwork().catch(() => undefined));
       return cached;
     }
     return fromNetwork().catch(() => offlineFallback());
@@ -990,14 +1055,13 @@
         // A `fetch()` issued from JS has an EMPTY destination — which is how
         // the iroh WASM binary is loaded. That bailout meant the one asset big
         // enough to matter (~2 MB) was the only one the shell cache never held,
-        // so every visit re-downloaded it (issue #659 C3). Hashed `/assets/`
+        // so every visit re-downloaded it (issue #659 C3). Content-addressed
         // paths are immutable by construction, so serving them from the shell
         // cache is always safe; everything else with an empty destination is a
-        // data request and still passes straight through.
-        if (
-          event.request.destination === '' &&
-          !(url.origin === self.location.origin && url.pathname.startsWith('/assets/'))
-        )
+        // data request and still passes straight through. `isImmutableAsset`
+        // covers `/centraid-worker-iroh.wasm` as well as `/assets/`, because
+        // #883 C5 pointed the page's WASM load at the worker's single copy.
+        if (event.request.destination === '' && !isImmutableAsset(url))
           return fetch(event.request);
         return shell(event);
       })().catch(

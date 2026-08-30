@@ -84,12 +84,14 @@ describe("the group proposal", () => {
       paid_by: "ana",
       amount_minor: 900,
       splits: { ana: 300, ben: 300, cy: 300 },
+      payers: { ana: 900 },
     },
     {
       group_id: GROUP,
       paid_by: "ben",
       amount_minor: 600,
       splits: { ana: 200, ben: 200, cy: 200 },
+      payers: { ben: 600 },
     },
   ]);
 

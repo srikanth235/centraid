@@ -24,6 +24,7 @@ import {
 import Icon from "../kit/components/Icon";
 import { Text } from "../kit/components/NativeText";
 import { postStatus } from "../kit/components/status-line";
+import Tappable from "../kit/components/Tappable";
 import TopSafeArea from "../kit/components/TopSafeArea";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../kit/replica/ReplicaStatusBar";
@@ -175,13 +176,13 @@ export default function BackupHealth({
   return (
     <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
-        <Pressable
+        <Tappable
           accessibilityLabel="Back to Settings"
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
           <Icon name="chevron-left" size={26} color={colors.text} />
-        </Pressable>
+        </Tappable>
         <View style={styles.headerCopy}>
           <Text style={[styles.title, { color: colors.text }]}>
             Backup health

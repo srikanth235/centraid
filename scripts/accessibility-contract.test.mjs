@@ -66,15 +66,26 @@ test("blueprint dialogs, keyboard focus, and Photos focus restore stay wired", a
   // its subject is missing passes for the wrong reason. Agenda, Notes and
   // Tasks paid their dialog and their focus ring back with their rebuilds
   // (#834); Tally still owes both.
-  const [grantSheet, photos, dialogs, sheets] = await Promise.all([
+  const [
+    grantSheet,
+    kitModal,
+    modalKit,
+    peopleChrome,
+    photos,
+    dialogs,
+    sheets,
+  ] = await Promise.all([
     source("packages/blueprints/apps/_shared/GrantSheet.tsx"),
+    source("packages/blueprints/apps/_shared/KitModal.tsx"),
+    source("packages/blueprints/apps/_shared/modal-kit.ts"),
+    source("packages/blueprints/apps/people/Chrome.tsx"),
     source("packages/blueprints/apps/photos/lightbox.tsx"),
     Promise.all(
       [
-        // Every destructive confirm and every modal editor these three draw is
-        // a REAL `<dialog>` opened with `showModal()` — which is what makes
-        // Escape, the top layer and the focus trap the platform's rather than
-        // a div's imitation of them.
+        // Every destructive confirm and every modal editor these three draw
+        // is a REAL `<dialog>` opened with `showModal()` — which is what
+        // makes Escape, the top layer and the focus trap the platform's
+        // rather than a div's imitation of them.
         "packages/blueprints/apps/agenda/components/EventEditor.tsx",
         "packages/blueprints/apps/notes/components/Overlays.tsx",
         "packages/blueprints/apps/tasks/components/Confirm.tsx",
@@ -85,30 +96,41 @@ test("blueprint dialogs, keyboard focus, and Photos focus restore stay wired", a
         "packages/blueprints/apps/agenda/Chrome.module.css",
         "packages/blueprints/apps/locker/Chrome.module.css",
         "packages/blueprints/apps/notes/Chrome.module.css",
-        "packages/blueprints/apps/people/Chrome.module.css",
         "packages/blueprints/apps/photos/Chrome.module.css",
         "packages/blueprints/apps/tasks/Chrome.module.css",
+        // People stopped drawing its own row of tabs in #883 and took the
+        // shared strip, so its ring is pinned where the tabs now live. The
+        // `<ShelfStrip` pin below is what keeps that substitution honest.
+        "packages/blueprints/apps/_shared/ShelfStrip.module.css",
       ].map(async (file) => [file, await source(file)])
     ),
   ]);
-  assert.match(grantSheet, /<dialog/u);
-  assert.match(grantSheet, /showModal/u);
+  // The grant sheet's `<dialog>` moved into the shared `KitModal` (#883), so
+  // the pin follows it rather than relaxing: the sheet must reach the kit, the
+  // kit must draw a real `<dialog>`, and the kit's opener must be `showModal()`
+  // with a focus return. Grepping `GrantSheet.tsx` alone would now pass for a
+  // `<div role="dialog">` — the exact substitution this test exists to refuse.
+  assert.match(grantSheet, /<KitModal/u);
+  assert.match(kitModal, /<dialog/u);
+  assert.match(kitModal, /openOnTopLayer/u);
+  assert.match(modalKit, /dialog\.showModal/u);
+  assert.match(modalKit, /opener\.focus\(\)/u);
   assert.match(photos, /priorFocus\?\.focus/u);
   assert.match(photos, /button\[aria-label="Close"\]/u);
-  for (const [file, text] of dialogs) {
-    assert.match(text, /<dialog/u, `${file} lost its real dialog element`);
-    assert.match(text, /showModal/u, `${file} opens a dialog non-modally`);
-  }
-  // The two that MOVE focus on open — Agenda into the title field, Tasks onto
-  // the confirm — put it back on the opener themselves. Notes' overlays never
-  // take focus off what opened them, so the platform's own modal restore is
-  // the whole of their contract and there is nothing to pin.
-  for (const [file, text] of dialogs.filter(
-    ([name]) => !name.endsWith("Overlays.tsx")
-  ))
-    assert.match(text, /priorFocus/u, `${file} lost its focus restore`);
+  // These three hand-rolled the same `<dialog>` + `showModal()` + focus-return
+  // triple until #883 gave them one owner. The guarantee is unchanged and the
+  // chain above still proves it end to end; what a caller now owes is reaching
+  // the kit, because a caller that drops back to its own div is how the triple
+  // would be lost.
+  for (const [file, text] of dialogs)
+    assert.match(text, /<KitModal/u, `${file} left the shared modal kit`);
   for (const [file, css] of sheets)
     assert.match(css, /:focus-visible/u, `${file} lost its focus ring`);
+  assert.match(
+    peopleChrome,
+    /<ShelfStrip/u,
+    "people/Chrome.tsx left the shared strip without bringing back a focus ring"
+  );
 });
 
 test("every mobile Pressable screen names an accessibility contract and keeps Dynamic Type enabled", async () => {
@@ -148,10 +170,21 @@ test("long native surfaces remain virtualized and photo cells keep bounded image
   // Inbox, Upcoming, the Logbook), the project place and the project shelf,
   // search, catch up, reminders, and a task's subtask family. `TasksToolbar`'s
   // ScrollView is deliberately unnamed: four fixed lenses is a bounded row.
+  // Locker's four unbounded phone surfaces (#883 C4). The item window was
+  // already a FlatList; the receipts, the search answers, the trash and the
+  // items behind a verdict were a ScrollView over a `.map`, and the receipts
+  // are the worst of them — every reveal in the vault's life writes one, and
+  // the phone route asks for all of them. `LockerHome` is deliberately
+  // unnamed: like Tasks' cover it is a router that draws no list itself.
   const files = [
     ["apps/mobile/src/apps/photos/FaceReview.tsx", /<FlatList/u],
     ["apps/mobile/src/apps/assistant/Assistant.tsx", /<FlatList/u],
     ["apps/mobile/src/apps/agenda/AgendaHome.tsx", /<FlatList/u],
+    ["apps/mobile/src/apps/locker/LockerItemsView.tsx", /<FlatList/u],
+    ["apps/mobile/src/apps/locker/LockerAccessView.tsx", /<FlatList/u],
+    ["apps/mobile/src/apps/locker/LockerSearchView.tsx", /<FlatList/u],
+    ["apps/mobile/src/apps/locker/LockerTrashScreen.tsx", /<FlatList/u],
+    ["apps/mobile/src/apps/locker/LockerReviewView.tsx", /<FlatList/u],
     ["apps/mobile/src/apps/tasks/TasksRows.tsx", /<FlatList/u],
     ["apps/mobile/src/apps/tasks/TasksProject.tsx", /<FlatList/u],
     ["apps/mobile/src/apps/tasks/TasksProjects.tsx", /<FlatList/u],
@@ -205,6 +238,59 @@ test("long native surfaces remain virtualized and photo cells keep bounded image
       gridSources[index],
       /recyclingKey=/u,
       `${file} lost its image recycling key`
+    );
+  }
+});
+
+test("long browser surfaces stay windowed and keep their focus and set-size contract", async () => {
+  // The browser half of the same rule (#883 C4). It is in three parts, and
+  // all three are needed — a grep for one of them alone passes for the wrong
+  // reason once the machinery moves:
+  //
+  //   1. the chrome DECLARES its scroll pane. Without the attribute
+  //      `useScrollHost` resolves nothing, `measure()` returns early, and
+  //      every window silently freezes at its first-paint guess — rows that
+  //      never mount, with no error anywhere;
+  //   2. the mechanism keeps the two invariants a naive slice loses: the
+  //      focused block stays MOUNTED (unmounting it drops focus to `<body>`
+  //      and ends keyboard navigation), and each row states the TRUE size of
+  //      the set the DOM no longer holds; and
+  //   3. every unbounded list actually reaches it.
+  //
+  // Locker is named here because #883 C4 ticked it and it was not done: five
+  // lists, each served up to 2,000 rows by its own query. The registers on
+  // Review and the facts table on Access are deliberately absent — both are
+  // one row per enumerated check, which is a bounded set.
+  const [chrome, windowed, rowGrammar] = await Promise.all([
+    source("packages/blueprints/apps/_shared/AppChrome.tsx"),
+    source("packages/blueprints/apps/locker/components/Windowed.tsx"),
+    source("packages/blueprints/apps/locker/components/Rows.tsx"),
+  ]);
+  assert.match(
+    chrome,
+    /data-scroll-host=""/u,
+    "the shared chrome no longer declares its scroll pane"
+  );
+  assert.match(windowed, /useVirtualWindow\(/u);
+  assert.match(windowed, /VirtualSpacer/u);
+  assert.match(
+    rowGrammar,
+    /virtualItemAria\(/u,
+    "Locker's row no longer states the true size of its set"
+  );
+  const lists = [
+    "packages/blueprints/apps/locker/components/List.tsx",
+    "packages/blueprints/apps/locker/components/Search.tsx",
+    "packages/blueprints/apps/locker/components/Review.tsx",
+    "packages/blueprints/apps/locker/components/Trash.tsx",
+    "packages/blueprints/apps/locker/components/Access.tsx",
+  ];
+  const listSources = await Promise.all(lists.map((file) => source(file)));
+  for (const [index, file] of lists.entries()) {
+    assert.match(
+      listSources[index],
+      /<WindowedRows\b/u,
+      `${file} draws its rows unwindowed`
     );
   }
 });

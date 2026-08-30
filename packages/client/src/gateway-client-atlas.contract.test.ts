@@ -191,7 +191,7 @@ describe("atlas browse write seam", () => {
           error: "row has dependents",
           dependents: [
             {
-              table: "business_invoice",
+              table: "tally_expense_split",
               via: "party_id",
               count: 2,
               mechanism: "fk",
@@ -210,7 +210,7 @@ describe("atlas browse write seam", () => {
       error: "row has dependents",
       dependents: [
         {
-          table: "business_invoice",
+          table: "tally_expense_split",
           via: "party_id",
           count: 2,
           mechanism: "fk",

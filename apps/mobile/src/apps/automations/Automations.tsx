@@ -40,7 +40,7 @@ import {
   ERROR_TITLE,
   errorBody,
   filterChips,
-  matchesFilter,
+  automationMatchesFilter,
   runRowCopy,
   showingSentence,
   suggestionRowCopy,
@@ -182,7 +182,7 @@ function AutomationsBody({
 
   const full = state === "full";
   const shown = full
-    ? copies.filter((copy) => matchesFilter(copy.status, page.filter))
+    ? copies.filter((copy) => automationMatchesFilter(copy.status, page.filter))
     : copies;
   const automationRows: RowsBlockRow[] = shown.map((copy) => ({
     action: {

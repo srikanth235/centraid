@@ -165,13 +165,8 @@ export function deleteProjectedClosure(
     audience
       .prepare("DELETE FROM media_face_region WHERE asset_id = ?")
       .run(itemId);
-    // These rows belong to the receiver, not to the projection. Preserve
-    // them while severing only the reference to the departing shared photo.
-    audience
-      .prepare(
-        "UPDATE home_asset_item SET photo_asset_id = NULL, updated_at = ? WHERE photo_asset_id = ?"
-      )
-      .run(now, itemId);
+    // This row belongs to the receiver, not the projection: preserve it and
+    // sever only the reference to the departing shared photo.
     audience
       .prepare(
         "UPDATE media_asset SET source_asset_id = NULL WHERE source_asset_id = ?"
@@ -196,10 +191,10 @@ export function deleteProjectedClosure(
   return { removed: true, contentItemRemoved, shas: [...shas] };
 }
 
-/** Unshare is a privacy erasure, not the ordinary lifecycle purge: all local
- * enrichment requests (including drained history) for a departing projection
- * go away. `cleanupPolyRefs` owns the full polymorphic registry; the explicit
- * request delete tightens its normal "open only" lifecycle rule for unshare. */
+/** Unshare is a privacy erasure, not the ordinary lifecycle purge: every local
+ * enrichment request for a departing projection goes away, drained history
+ * included. The explicit delete tightens `cleanupPolyRefs`'s "open only"
+ * rule. */
 function scrubProjectedTarget(
   audience: DatabaseSync,
   targetType: string,

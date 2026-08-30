@@ -1,19 +1,9 @@
-/**
- * Favorite a person — the one canonical flags-scheme star, shared across your vault. Runs through people.star_person — consent-checked and receipted, risk low.
- */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
+/** One canonical flags-scheme star, shared vault-wide. */
 export default async function starPerson({ body, ctx }: HandlerArgs) {
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "people.star_person",
-      input: (body ?? {}) as Record<string, unknown>,
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  return runVaultAction(ctx, {
+    command: "people.star_person",
+    input: actionInput(body),
+  });
 }

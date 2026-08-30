@@ -173,8 +173,8 @@ export const POLY_REF_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
     "The container pair is durable Commons control truth, not an independently swept live pointer. Active root deletion is structurally refused by the actable registry; after revocation, the grant and its receipts intentionally survive container removal for restore/reconciliation and audit.",
   ],
   [
-    "share_grant",
-    "The subject pair is the same family as share_circle_grant's container pair (issue #825): durable share control truth, not an independently swept live pointer. A standing grant states what the owner decided about a subject; purging that subject ends the grant through revocation, which is a dated decision, not a silent row deletion — and the revoked row must survive as the record that the share once stood.",
+    "share_authority",
+    "The subject pair is the same family as share_circle_grant's container pair (issues #825, #883): durable authority truth, not an independently swept live pointer. A standing answer states what the owner decided about a subject; purging that subject ends the answer through revocation, which is a dated decision, not a silent row deletion — and the revoked row must survive as the record that the authority once stood. This covers the plane's own subjects too: `core.vault` for a device's reach and `enrich.scope` for an egress answer name a cascade level, not a purgeable row.",
   ],
   [
     "share_commons_invitation",

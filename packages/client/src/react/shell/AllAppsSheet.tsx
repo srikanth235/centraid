@@ -4,6 +4,7 @@ import type { CSSProperties, JSX } from "react";
 import { iconChipRadius } from "@centraid/design";
 
 import Icon from "../ui/Icon.js";
+import ShellModal from "../ui/ShellModal.js";
 import { CAPABILITIES_ON } from "./capabilities.js";
 import type { ShellCapabilities } from "./capabilities.js";
 import { isPinned, searchDestinations } from "./launcherModel.js";
@@ -27,7 +28,7 @@ import chrome from "./chrome.module.css";
 // contrast, so the recessive state is a colour token on the leaf.
 //
 // Desktop gets a centred dialog, compact gets a bottom sheet. One scrim, one
-// Esc handler, and the panel is a real `<dialog>` with a labelled title.
+// Esc handler, and the panel is the shared kit modal with a labelled title.
 
 const ROW_ICON = 28;
 const GLYPH_SIZE = 16;
@@ -86,10 +87,10 @@ export default function AllAppsSheet({
         aria-label="Close all apps"
         onClick={onClose}
       />
-      {/* A real `<dialog open>`, not a div wearing role="dialog": the element
-          carries the semantics natively, and the scrim beside it is what makes
-          it modal in practice. */}
-      <dialog className={chrome.sheetPanel} open aria-label="All apps">
+      {/* The kit's one modal, `inline`: the panel stands in the shell's own
+          flow under the scrim above it, which is what makes it modal in
+          practice — the element carries the dialog semantics natively. */}
+      <ShellModal layer="inline" className={chrome.sheetPanel} label="All apps">
         <div className={chrome.sheetHead}>
           <span className={chrome.sheetTitle}>All apps</span>
           <button
@@ -169,7 +170,7 @@ export default function AllAppsSheet({
         <p className={chrome.sheetFoot}>
           {pinnedCount} pinned · pinned apps stand in the stem
         </p>
-      </dialog>
+      </ShellModal>
     </div>
   );
 }

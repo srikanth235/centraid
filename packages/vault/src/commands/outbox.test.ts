@@ -428,8 +428,11 @@ describe("outbox", () => {
         .run();
       db.vault
         .prepare(
-          `INSERT INTO core_party_identifier (identifier_id, party_id, scheme, value, is_primary, valid_from)
-         VALUES ('pi-1', 'p-ravi', 'email', 'ravi@example.com', 1, 't')`
+          `INSERT INTO social_contact_channel
+           (channel_id, party_id, kind, value, normalized_value, is_preferred,
+            created_at, updated_at)
+         VALUES ('pc-1', 'p-ravi', 'email', 'ravi@example.com',
+                 'ravi@example.com', 1, 't', 't')`
         )
         .run();
       const staged = invoke(

@@ -256,7 +256,7 @@ export const CONDITION_DEFAULT_EVERY = "*/5 * * * *";
  */
 export type ConditionTrigger = {
   readonly kind: "condition";
-  /** Logical vault entity, e.g. `business.invoice`. */
+  /** Logical vault entity, e.g. `schedule.task`. */
   readonly entity: string;
   /** Filter ANDed into the consented read. */
   readonly where?: readonly ConditionWhereClause[];

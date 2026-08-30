@@ -1,8 +1,7 @@
 import { existsSync, promises as fs } from "node:fs";
-// governance: allow-repo-hygiene file-size-limit one lifecycle sweep, one spec — the purge matrix (content/note/document/asset/domain-trash × every polymorphic mechanism in poly-refs.ts) is a single table of invariants; splitting it would scatter the completeness argument the registry exists to make
-// Tests for the §10 responsibilities closed after the first pass: polymorphic
-// ref validation (S4), contract version check (S3), retention policy sweeps,
-// the view service, and file custody.
+// governance: allow-repo-hygiene file-size-limit one lifecycle sweep, one spec — the purge matrix is a single table of invariants; splitting it scatters the completeness argument
+// §10 responsibilities: polymorphic ref validation, contract version check,
+// retention sweeps, the view service, and file custody.
 import path from "node:path";
 
 import { afterEach, assert, beforeEach, describe, expect, test } from "vitest";
@@ -185,8 +184,8 @@ describe("duties", () => {
     const remaining = db.vault
       .prepare("SELECT message_id FROM social_message")
       .all();
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
+    // node:sqlite hands back null-prototype rows; spreading compares column
+    // data without asserting the driver's prototype.
     expect(remaining.map((row) => ({ ...row }))).toStrictEqual([
       { message_id: "m-new" },
     ]);
@@ -221,7 +220,7 @@ describe("duties", () => {
     expect(result.retentionRefused).toHaveLength(1);
     expect(result.retentionRefused[0]?.entity).toBe("media.asset");
     expect(result.retentionRefused[0]?.reason).toContain("trash lifecycle");
-    // The asset outlives the policy: retention never reaches this table.
+    // The asset outlives the policy: retention never reaches it.
     const kept = db.vault.prepare("SELECT asset_id FROM media_asset").all();
     expect(kept.map((row) => ({ ...row }))).toStrictEqual([
       { asset_id: "a-ret" },
@@ -290,6 +289,122 @@ describe("duties", () => {
     ).toBeTruthy();
   });
 
+  test("a purged subject ENDS its standing answers, dated and receipted (#883)", () => {
+    // Purging a subject or principal revokes as a dated, receipted decision,
+    // sweep-verified. `share_authority` is outside the poly-ref sweep: deleting
+    // an answer with its subject would erase that the authority ever stood.
+    const past = "2020-01-01T00:00:00Z";
+    const ravi = uuidv7();
+    db.vault
+      .prepare(
+        `INSERT INTO core_party
+           (party_id, kind, display_name, sort_name, created_at, updated_at,
+            ontology_version)
+         VALUES (?, 'person', 'Ravi', 'Ravi', ?, ?, '1.4')`
+      )
+      .run(ravi, past, past);
+    db.vault
+      .prepare(
+        `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
+         VALUES ('doc-body', 'text/plain', 'data:text/plain,z', 'sha-doc-body', 1, ?)`
+      )
+      .run(past);
+    db.vault
+      .prepare(
+        `INSERT INTO core_document (document_id, title, current_content_id, created_at, updated_at, deleted_at, purge_at)
+         VALUES ('doc-shared', 'Trip plan', 'doc-body', ?, ?, ?, ?)`
+      )
+      .run(past, past, past, past);
+    const authorityId = uuidv7();
+    db.vault
+      .prepare(
+        `INSERT INTO share_authority
+           (authority_id, principal_kind, principal_id, subject_type, subject_id,
+            verb, duration, expires_at, decision, granted_at, granted_by,
+            revoked_at, receipt_id)
+         VALUES (?, 'person', ?, 'core.document', 'doc-shared', 'view',
+                 'standing', NULL, 'granted', ?, ?, NULL, NULL)`
+      )
+      .run(authorityId, ravi, past, boot.ownerPartyId);
+
+    const result = gw.sweep(owner);
+    expect(result.documentsPurged).toBe(1);
+    // The answer SURVIVES, revoked on the sweep's date — not deleted with the
+    // document it was about.
+    expect(
+      db.vault
+        .prepare(
+          "SELECT decision, revoked_at FROM share_authority WHERE authority_id = ?"
+        )
+        .get(authorityId)
+    ).toMatchObject({ decision: "granted" });
+    const revokedAt = (
+      db.vault
+        .prepare(
+          "SELECT revoked_at FROM share_authority WHERE authority_id = ?"
+        )
+        .get(authorityId) as { revoked_at: string | null }
+    ).revoked_at;
+    expect(revokedAt).toBeTypeOf("string");
+    // …and it is a receipted decision, naming what it was about.
+    const receipt = db.journal
+      .prepare(
+        `SELECT action, object_type, detail_json FROM consent_receipt
+          WHERE grant_id = ? ORDER BY receipt_id DESC LIMIT 1`
+      )
+      .get(authorityId) as
+      | { action: string; object_type: string; detail_json: string }
+      | undefined;
+    expect(receipt).toMatchObject({
+      action: "act share.revoke",
+      object_type: "share.authority",
+    });
+    expect(JSON.parse(receipt!.detail_json)).toMatchObject({
+      cause: "subject purged",
+      subjectType: "core.document",
+      verb: "view",
+    });
+    // A non-zero count here means a purge site forgot its answers.
+    expect(result.authorityRevoked).toBe(0);
+  });
+
+  test("the sweep verifies the rule and repairs an answer that outlived its subject (#883)", () => {
+    const past = "2020-01-01T00:00:00Z";
+    const ravi = uuidv7();
+    db.vault
+      .prepare(
+        `INSERT INTO core_party
+           (party_id, kind, display_name, sort_name, created_at, updated_at,
+            ontology_version)
+         VALUES (?, 'person', 'Ravi', 'Ravi', ?, ?, '1.4')`
+      )
+      .run(ravi, past, past);
+    // The shape a purge path that forgot to revoke leaves behind.
+    const orphaned = uuidv7();
+    db.vault
+      .prepare(
+        `INSERT INTO share_authority
+           (authority_id, principal_kind, principal_id, subject_type, subject_id,
+            verb, duration, expires_at, decision, granted_at, granted_by,
+            revoked_at, receipt_id)
+         VALUES (?, 'person', ?, 'core.document', 'doc-gone', 'view',
+                 'standing', NULL, 'granted', ?, ?, NULL, NULL)`
+      )
+      .run(orphaned, ravi, past, boot.ownerPartyId);
+
+    const result = gw.sweep(owner);
+    expect(result.authorityRevoked).toBe(1);
+    expect(
+      db.vault
+        .prepare(
+          "SELECT revoked_at FROM share_authority WHERE authority_id = ?"
+        )
+        .get(orphaned)
+    ).not.toMatchObject({ revoked_at: null });
+    // Idempotent: the repaired answer is revoked, so nothing repeats it.
+    expect(gw.sweep(owner).authorityRevoked).toBe(0);
+  });
+
   test("lifecycle sweep purges a lapsed trashed document and its exclusively-owned content (issue #352)", () => {
     const now = new Date().toISOString();
     const past = "2020-01-01T00:00:00Z";
@@ -340,10 +455,8 @@ describe("duties", () => {
   });
 
   /**
-   * Seed one of every registered polymorphic dependent pointing at (type, id):
-   * a vector embedding, a sync-map row, a margin annotation, and an
-   * attachment. The attachment carries its OWN bytes (a second content
-   * item) so it never blocks the target's deletion. Returns the ids to assert on.
+   * One of every registered polymorphic dependent pointing at (type, id). The
+   * attachment carries its OWN bytes so it never blocks the target's deletion.
    */
   function seedPolyDependents(
     type: string,
@@ -362,7 +475,7 @@ describe("duties", () => {
        VALUES (?, ?, ?, 'test-model', 1, ?, ?)`
       )
       .run(embeddingId, type, id, new Uint8Array([1, 2, 3, 4]), now);
-    // A drained request stays (inert history); an open one must go.
+    // A drained request stays; an open one must go.
     db.vault
       .prepare(
         `INSERT INTO enrich_request (request_id, target_type, target_id, reason, requested_at)
@@ -468,9 +581,8 @@ describe("duties", () => {
   test("purge keeps derivative bytes another content item still claims (issue #750)", () => {
     const past = "2020-01-01T00:00:00Z";
     const now = new Date().toISOString();
-    // sha256 is UNIQUE on content items but NOT on derivatives: two items'
-    // thumbs may legally share one CAS entry. Purging the lapsed item must
-    // reclaim only its exclusively-owned bytes.
+    // sha256 is UNIQUE on content items but NOT derivatives, so two thumbs may
+    // share one CAS entry; only exclusively-owned bytes are reclaimed.
     const shared = db.blobs.ingestSync(Buffer.from("purge-shared-thumb"));
     const lapsedOriginal = db.blobs.ingestSync(Buffer.from("purge-lapsed-og"));
     const liveOriginal = db.blobs.ingestSync(Buffer.from("purge-live-og"));
@@ -544,8 +656,7 @@ describe("duties", () => {
   test("purge sweep cleans every polymorphic dependent of a purged media asset (issue #441 A1)", () => {
     const now = new Date().toISOString();
     const past = "2020-01-01T00:00:00Z";
-    // The asset's bytes are NOT purged here — asset meaning and byte custody have
-    // independent lifecycles; only the asset row lapses.
+    // Asset meaning and byte custody have independent lifecycles.
     db.vault
       .prepare(
         `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
@@ -613,10 +724,8 @@ describe("duties", () => {
   }
 
   /**
-   * A retention policy with exactly one row past its window. It is enforced
-   * near the END of the sweep, after every purge pass, so `retentionDeleted
-   * === 1` is the assertion that the pass did not abort halfway: a FOREIGN KEY
-   * error in a purge above takes this duty (and the receipt) down with it.
+   * One row past its window. Retention runs near the END of the sweep, so
+   * `retentionDeleted === 1` asserts the pass did not abort halfway.
    */
   function seedLaterDuty(): void {
     db.vault
@@ -683,6 +792,129 @@ describe("duties", () => {
       "trashing a photograph and its edit together empties both in one sweep"
     ).toBe(0);
     expect(result.retentionDeleted).toBe(1);
+  });
+
+  test("a deep lapsed lineage drains in one pass, without re-asking per generation (#883 C2)", () => {
+    // Re-querying "does anything still derive from this?" per blocked asset
+    // costs O(n^2) on an n-deep chain; the dependency is one column, read once
+    // and drained leaves-first.
+    const depth = 24;
+    for (let index = 0; index < depth; index += 1) {
+      seedAsset(
+        `chain-${index}`,
+        index === 0
+          ? { lapsed: true }
+          : { lapsed: true, sourceAssetId: `chain-${index - 1}` }
+      );
+    }
+    seedLaterDuty();
+
+    let statements = 0;
+    const original = db.vault.prepare.bind(db.vault);
+    Object.defineProperty(db.vault, "prepare", {
+      configurable: true,
+      value: ((sql: string) => {
+        if (/FROM media_asset WHERE source_asset_id/u.test(sql))
+          statements += 1;
+        return original(sql);
+      }) as typeof db.vault.prepare,
+    });
+    let result;
+    try {
+      result = gw.sweep(owner);
+    } finally {
+      Object.defineProperty(db.vault, "prepare", {
+        configurable: true,
+        value: original,
+      });
+    }
+
+    expect(result.assetsPurged).toBe(depth);
+    expect(result.assetsBlockedByLineage).toStrictEqual([]);
+    expect(
+      (
+        db.vault.prepare("SELECT count(*) AS n FROM media_asset").get() as {
+          n: number;
+        }
+      ).n
+    ).toBe(0);
+    // Asked by the CONTENT pass per lapsed asset, never again per generation:
+    // without the topological drain a 24-deep chain asks it hundreds of times.
+    expect(
+      statements,
+      "the asset purge re-asked SQLite about lineage per generation"
+    ).toBeLessThanOrEqual(depth + 1);
+    expect(result.retentionDeleted).toBe(1);
+  });
+
+  test("a lapsed asset whose derived copy is NOT lapsed still blocks, one pass or many (#883 C2)", () => {
+    // A child outside the lapsed set never leaves, so its parent stays
+    // blocked — the counting drain must agree.
+    seedAsset("keep-source", { lapsed: true });
+    seedAsset("keep-edit", { lapsed: false, sourceAssetId: "keep-source" });
+    seedAsset("free-standing", { lapsed: true });
+    seedLaterDuty();
+
+    const result = gw.sweep(owner);
+
+    expect(result.assetsPurged).toBe(1);
+    expect(result.assetsBlockedByLineage).toStrictEqual(["keep-source"]);
+    expect(result.retentionDeleted).toBe(1);
+  });
+
+  test("the thread projection heals what drifted and rewrites nothing else (#883 C2)", () => {
+    // Unqualified, this UPDATE dirties every thread row every tick — WAL
+    // pages, replica rows, woken devices — for rows that had not moved.
+    db.vault
+      .prepare(
+        `INSERT INTO social_thread (thread_id, channel, created_at, last_message_at)
+         VALUES ('th-fresh', 'sms', ?, ?)`
+      )
+      .run(PAST, PAST);
+    seedContent("msg-1-body", false);
+    db.vault
+      .prepare(
+        `INSERT INTO social_message
+           (message_id, thread_id, sender_handle, sent_at, body_content_id, delivery)
+         VALUES ('msg-1', 'th-fresh', '+15550100', ?, 'msg-1-body', 'delivered')`
+      )
+      .run(PAST);
+    // A thread with no messages at all: both sides NULL, and `IS NOT` is what
+    // stops it being rewritten forever.
+    db.vault
+      .prepare(
+        `INSERT INTO social_thread (thread_id, channel, created_at) VALUES ('th-empty', 'sms', ?)`
+      )
+      .run(PAST);
+    gw.sweep(owner);
+
+    const changesBefore = (
+      db.vault.prepare("SELECT total_changes() AS n").get() as { n: number }
+    ).n;
+    gw.sweep(owner);
+    const settled = (
+      db.vault.prepare("SELECT total_changes() AS n").get() as { n: number }
+    ).n;
+
+    // Now drift one row by hand and prove the heal still fires for it.
+    db.vault
+      .prepare(
+        "UPDATE social_thread SET last_message_at = NULL WHERE thread_id = 'th-fresh'"
+      )
+      .run();
+    gw.sweep(owner);
+    expect(
+      (
+        db.vault
+          .prepare(
+            "SELECT last_message_at AS at FROM social_thread WHERE thread_id = 'th-fresh'"
+          )
+          .get() as { at: string | null }
+      ).at,
+      "a thread whose projection drifted is repaired"
+    ).toBe(PAST);
+    // Neither settled thread was rewritten by the idle tick in between.
+    expect(settled - changesBefore).toBeLessThan(2);
   });
 
   test("lifecycle sweep declines a lapsed content item whose asset is a lineage source (issue #711 S8)", () => {
@@ -781,7 +1013,7 @@ describe("duties", () => {
       .prepare(
         `INSERT INTO core_party_identifier
          (identifier_id, party_id, scheme, value, is_primary, valid_from)
-       VALUES ('erase-ident', 'erase-friend', 'email', 'erase-friend@example.com', 1, ?)`
+       VALUES ('erase-ident', 'erase-friend', 'url', 'https://erase-friend.example', 1, ?)`
       )
       .run(now);
     db.vault

@@ -14,6 +14,7 @@ import { createGateway } from "../gateway/gateway.js";
 import type { Credential, InvokeOutcome } from "../gateway/types.js";
 import { uuidv7 } from "../ids.js";
 import { registerLinkCommands } from "./links.js";
+import { registerPeopleCommands } from "./people.js";
 import { registerSocialCommands } from "./social.js";
 
 let db: VaultDb;
@@ -28,6 +29,7 @@ describe("social", () => {
     boot = bootstrapVault(db, { ownerName: "Priya" });
     gw = createGateway(db);
     registerSocialCommands(gw);
+    registerPeopleCommands(gw);
     owner = {
       kind: "device",
       deviceId: boot.deviceId,
@@ -41,6 +43,13 @@ describe("social", () => {
        VALUES (?, 'person', 'Ravi Kumar', ?, ?, '1.1')`
       )
       .run(raviId, now, now);
+    db.vault
+      .prepare(
+        `INSERT INTO people_profile
+           (profile_id, party_id, cadence_days, created_at, updated_at)
+         VALUES (?, ?, 30, ?, ?)`
+      )
+      .run(uuidv7(), raviId, now, now);
   });
 
   function draft(body = "Invoice attached — due in 14 days."): {
@@ -84,7 +93,6 @@ describe("social", () => {
 
   test("identical draft bodies dedupe onto one content_item (P2: sha256 identity)", () => {
     const first = draft("same words");
-    // New thread, same body text.
     const second = draft("same words");
     const firstBody = db.vault
       .prepare(
@@ -157,7 +165,6 @@ describe("social", () => {
     });
     expect(parked.status).toBe("parked");
     if (parked.status !== "parked") return;
-    // The pause between draft and send is gateway state (§10).
     const still = db.vault
       .prepare("SELECT delivery FROM social_message WHERE message_id = ?")
       .get(messageId);
@@ -171,7 +178,6 @@ describe("social", () => {
   });
 
   test("resolve_identity binds a handle and backfills unresolved participants and senders", () => {
-    // An imported thread where Ravi is only a raw address.
     const threadId = uuidv7();
     const now = new Date().toISOString();
     db.vault
@@ -215,7 +221,7 @@ describe("social", () => {
         "SELECT sender_party_id, sender_handle FROM social_message WHERE thread_id = ?"
       )
       .get(threadId);
-    // Identity backfilled; the raw handle stays for audit.
+    // The raw handle stays for audit.
     expect(message).toMatchObject({
       sender_party_id: raviId,
       sender_handle: "ravi@example.com",
@@ -246,7 +252,7 @@ describe("social", () => {
     expect(outcome.predicate).toContain("handle_not_claimed_elsewhere");
   });
 
-  /** The starred flags-scheme tag rows on a target (#274). */
+  /** Starred flags-scheme tag rows on a target (#274). */
   function starredTags(targetType: string, targetId: string) {
     return db.vault
       .prepare(
@@ -259,24 +265,34 @@ describe("social", () => {
       .all(targetType, targetId) as { tagged_by_party_id: string | null }[];
   }
 
-  test("update_card upserts decoration without touching identity", () => {
-    const first = gw.invoke(owner, {
-      command: "social.update_card",
-      input: { party_id: raviId, nickname: "Rav", favorite: 1 },
+  test("the card's display facts are the profile's, and identity is untouched", () => {
+    const edit = gw.invoke(owner, {
+      command: "people.edit_person",
+      input: { party_id: raviId, nickname: "Rav" },
       purpose: "dpv:ServiceProvision",
     });
-    expect(first.status).toBe("executed");
-    const second = gw.invoke(owner, {
-      command: "social.update_card",
-      input: { party_id: raviId, note: "met at the wedding" },
-      purpose: "dpv:ServiceProvision",
-    });
-    expect(second.status).toBe("executed");
-    const card = db.vault
-      .prepare("SELECT nickname FROM social_contact_card WHERE party_id = ?")
-      .get(raviId);
-    expect(card).toMatchObject({ nickname: "Rav" });
-    // The note landed as the caller's memo annotation on the canonical party…
+    expect(edit.status).toBe("executed");
+    expect(
+      gw.invoke(owner, {
+        command: "people.star_person",
+        input: { party_id: raviId },
+        purpose: "dpv:ServiceProvision",
+      }).status
+    ).toBe("executed");
+    expect(
+      gw.invoke(owner, {
+        command: "people.add_note",
+        input: { party_id: raviId, text: "met at the wedding" },
+        purpose: "dpv:ServiceProvision",
+      }).status
+    ).toBe("executed");
+    // The nickname is a `people_profile` column.
+    expect(
+      db.vault
+        .prepare("SELECT nickname FROM people_profile WHERE party_id = ?")
+        .get(raviId)
+    ).toMatchObject({ nickname: "Rav" });
+    // The note is a memo annotation on the canonical party…
     const memo = db.vault
       .prepare(
         `SELECT body_text, author_party_id FROM knowledge_annotation
@@ -287,29 +303,27 @@ describe("social", () => {
       body_text: "met at the wedding",
       author_party_id: boot.ownerPartyId,
     });
-    // …and the favorite input as a starred tag — the untouched second call
-    // left the star alone.
+    // …and the favourite a starred tag.
     expect(starredTags("core.party", raviId)).toHaveLength(1);
-    const cards = db.vault
-      .prepare("SELECT count(*) AS n FROM social_contact_card")
-      .get() as {
-      n: number;
-    };
-    expect(cards.n).toBe(1);
+    expect(
+      db.vault
+        .prepare("SELECT display_name FROM core_party WHERE party_id = ?")
+        .get(raviId)
+    ).toMatchObject({ display_name: "Ravi Kumar" });
   });
 
   test("favorite is one starred tag on the party: re-star stays single, unstar removes it", () => {
     const setFavorite = (favorite: number) =>
       gw.invoke(owner, {
-        command: "social.update_card",
-        input: { party_id: raviId, favorite },
+        command: favorite === 1 ? "people.star_person" : "people.unstar_person",
+        input: { party_id: raviId },
         purpose: "dpv:ServiceProvision",
       });
     expect(setFavorite(1).status).toBe("executed");
     expect(setFavorite(1).status).toBe("executed");
     const tags = starredTags("core.party", raviId);
     expect(tags).toHaveLength(1);
-    // Provenance a boolean column never carried: who starred.
+    // Provenance a boolean column never carried.
     expect(tags[0]?.tagged_by_party_id).toBe(boot.ownerPartyId);
     expect(setFavorite(0).status).toBe("executed");
     expect(starredTags("core.party", raviId)).toHaveLength(0);
@@ -329,14 +343,12 @@ describe("social", () => {
     const output = (
       outcome as { output: { message_id: string; thread_id: string } }
     ).output;
-    // The owner appears once — not a UNIQUE(thread_id, party_id) collision.
+    // The owner appears once, not a UNIQUE collision.
     const participants = db.vault
       .prepare(
         "SELECT party_id FROM social_thread_participant WHERE thread_id = ?"
       )
       .all(output.thread_id) as { party_id: string }[];
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect(participants.map((row) => ({ ...row }))).toStrictEqual([
       { party_id: boot.ownerPartyId },
     ]);
@@ -397,17 +409,17 @@ describe("social", () => {
       )
       .run(orgId, now, now);
     registerLinkCommands(gw);
-    // The display label rides the card…
+    // The display label rides the People profile's role line (#883)…
     const card = gw.invoke(owner, {
-      command: "social.update_card",
-      input: { party_id: raviId, org_title: "Design lead, Acme Studio" },
+      command: "people.edit_person",
+      input: { party_id: raviId, role: "Design lead, Acme Studio" },
       purpose: "dpv:ServiceProvision",
     });
     expect(card.status).toBe("executed");
     const row = db.vault
-      .prepare("SELECT org_title FROM social_contact_card WHERE party_id = ?")
-      .get(raviId) as { org_title: string };
-    expect(row.org_title).toBe("Design lead, Acme Studio");
+      .prepare("SELECT role FROM people_profile WHERE party_id = ?")
+      .get(raviId) as { role: string };
+    expect(row.role).toBe("Design lead, Acme Studio");
     // …while the claim itself is a typed, temporal core.link.
     const link = gw.invoke(owner, {
       command: "core.link_entities",
@@ -431,31 +443,5 @@ describe("social", () => {
     expect(stored).toMatchObject({ asserted_by: "owner", valid_to: null });
   });
 
-  test("the running memo replaces on edit and clears on empty — one memo per author per entity", () => {
-    const setNote = (note: string) =>
-      gw.invoke(owner, {
-        command: "social.update_card",
-        input: { party_id: raviId, note },
-        purpose: "dpv:ServiceProvision",
-      });
-    expect(setNote("met at the wedding").status).toBe("executed");
-    expect(setNote("now works at Acme").status).toBe("executed");
-    const memos = db.vault
-      .prepare(
-        `SELECT body_text FROM knowledge_annotation
-        WHERE target_type = 'core.party' AND target_id = ?`
-      )
-      .all(raviId) as { body_text: string }[];
-    expect(memos.map((row) => ({ ...row }))).toStrictEqual([
-      { body_text: "now works at Acme" },
-    ]);
-    expect(setNote("").status).toBe("executed");
-    const cleared = db.vault
-      .prepare(
-        `SELECT count(*) AS n FROM knowledge_annotation
-        WHERE target_type = 'core.party' AND target_id = ?`
-      )
-      .get(raviId) as { n: number };
-    expect(cleared.n).toBe(0);
-  });
+  // `people.add_note` keeps a LIST of notes, not one running memo.
 });

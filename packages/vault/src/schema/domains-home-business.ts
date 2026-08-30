@@ -1,4 +1,4 @@
-// Domain DDL — schemas `home`, `business` from duaility-ontology.html §03.
+// `home`, `business`: RETIRED (#883); rung seven drops these tables.
 
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 

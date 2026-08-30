@@ -3,10 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { buildCreateAutomationEditorData } from "./automationEditorCreateData.js";
 import { buildAutomationHarnessEditorData } from "./automationEditorHarnessData.js";
 
-// The route module transitively imports the whole gateway-client surface; we
-// only exercise the pure create-mode DTO builder, so stub the client so
-// importing the route needs no live gateway. (`vi.mock` is hoisted above the
-// imports at transform time — the same seam automationEditorVault.test.ts uses.)
+// The route module transitively imports the whole gateway-client surface; only
+// the pure create-mode DTO builder is under test, so stub the client and the
+// import needs no live gateway. `vi.mock` is hoisted above the imports.
 vi.mock(import("../../../gateway-client.js"), () => ({}));
 vi.mock(import("../../../assist-oauth-handoff.js"), () => ({}));
 
@@ -69,12 +68,12 @@ describe(buildCreateAutomationEditorData, () => {
   it("falls back to watchEntity when a template carries no trigger kind", () => {
     const data = buildCreateAutomationEditorData({
       template: { name: "Blank", desc: "No trigger" },
-      watchEntity: "business.invoice",
+      watchEntity: "schedule.task",
       instructions: "x",
       name: "x",
     });
     expect(data.triggers).toStrictEqual([
-      { entities: ["business.invoice"], kind: "data" },
+      { entities: ["schedule.task"], kind: "data" },
     ]);
   });
 });

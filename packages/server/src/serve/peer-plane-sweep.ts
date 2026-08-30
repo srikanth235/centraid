@@ -16,6 +16,7 @@ import type {
   VaultDb,
 } from "@centraid/vault";
 
+import { unrefTimer } from "../lib/unref-timer.js";
 import type { GatewayDatabase } from "./gateway-db.js";
 import { sweepPeerCommons } from "./peer-commons-sweep.js";
 import type { PeerDial } from "./peer-link-client.js";
@@ -66,14 +67,14 @@ export function createPeerPlaneSweep(
   const idleMs = options.idleIntervalMs ?? DEFAULT_IDLE_MS;
   const activeMs = options.activeIntervalMs ?? DEFAULT_ACTIVE_MS;
   const rowLimit = options.rowLimit ?? DEFAULT_ROW_LIMIT;
-  let timer: NodeJS.Timeout | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   let running = false;
 
   const schedule = (delayMs: number): void => {
     if (!running) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => void tick(), delayMs);
-    timer.unref?.();
+    unrefTimer(timer);
   };
 
   const tick = async (): Promise<void> => {

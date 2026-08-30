@@ -1,7 +1,8 @@
 /*
- * Per-app change bus. No table-level changeset: the event means "this app's
- * data may have moved; re-derive". Delivery is sync, fire-and-forget.
- * Listener errors are caught so one bad subscriber cannot stall a write.
+ * Per-app change bus. An event carries the action's DECLARED tables so
+ * consumers invalidate per-table; without tables it is the wildcard (#883 D2).
+ * Delivery is sync and fire-and-forget, with listener errors caught so one bad
+ * subscriber cannot stall a write.
  */
 
 import type { RuntimeLogger } from "../runtime.js";
@@ -53,11 +54,8 @@ export class ChangeBus {
     };
   }
 
-  /**
-   * An EMPTY table list is meaningful post-#286: handler writes ride
-   * ctx.vault, so there is no table-level changeset — the event says "this
-   * app acted; re-derive what you render".
-   */
+  /** An EMPTY table list is meaningful: writes ride ctx.vault, so the event
+   *  says "this app acted; re-derive what you render" (#286). */
   emit(change: AppChange): void {
     const set = this.listeners.get(change.appId);
     if (!set || set.size === 0) return;

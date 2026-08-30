@@ -1,16 +1,13 @@
 /**
  * COPY BOTH CLIENTS PRINT, for the shared app machinery (#805).
  *
- * The same shape and the same reason as `apps/photos/shared-copy.ts`:
- * deliberately IMPORT-FREE, because native bundles this file straight out of
- * the blueprints package and the mobile TypeScript project neither enables
- * `allowImportingTsExtensions` nor declares CSS modules. A leaf with no
- * imports is the only shape both worlds can read.
+ * Deliberately IMPORT-FREE, like `apps/photos/shared-copy.ts`: native bundles
+ * this file straight out of the blueprints package, and the mobile TypeScript
+ * project neither enables `allowImportingTsExtensions` nor declares CSS
+ * modules. A leaf with no imports is the only shape both worlds can read.
  *
- * What lives here is the copy the `_shared` components say and the mobile kit
- * re-implements verbatim — the share sheet's outcomes, the save-to-vault
- * outcome Photos and Docs both post, the rate-limit line. ONLY strings both
- * surfaces render: this is not a second home for component copy.
+ * ONLY strings both the `_shared` components and the mobile kit render: not a
+ * second home for component copy.
  */
 
 /**
@@ -18,8 +15,7 @@
  *
  * A toast is a fragment (DESIGN.md → Copy) — never "Saved to my vault. This
  * copy survives if the share ends.", a sentence about custody arriving after
- * the decision, where it cannot change one. One home for the string is what
- * stops Docs' viewer and the share sheet drifting to two wordings of it.
+ * the decision, where it cannot change one.
  */
 export const SAVED_TO_MY_VAULT = "Saved to my vault";
 
@@ -34,6 +30,15 @@ export function sharedWithOutcome(count: number, invited: number): string {
 /** The share sheet's failure. What happened; the sheet is still open, which is
  *  what to do. */
 export const SHARE_FAILED = "Could not share with the selected people.";
+
+/**
+ * The denied-vault banner's title, said the same way by every app's chrome.
+ *
+ * A banner is one sentence: the state, plus one action (DESIGN.md → Copy). The
+ * state is this line, the action is the grant button beside it, and nothing
+ * else belongs. One home, so app chromes cannot drift (#883).
+ */
+export const VAULT_DENIED_TITLE = "No vault access yet.";
 
 /** A rate-limited retry, in seconds. */
 export function retryInSeconds(seconds: number): string {

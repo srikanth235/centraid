@@ -1,11 +1,8 @@
-// The portable bundle's human-readable adapters (#630): the same vault
-// truths re-spelled in formats other software already reads — ICS for events,
-// vCard for people, CSV for transactions, a Markdown directory for notes.
-// Adapters are CONVENIENCE COPIES, never the restore source: the canonical
-// JSON-LD in `portable-export.ts` is the artifact a restore reads, so an
-// adapter may flatten or omit (and these do) without costing the owner data.
-// Kept out of `portable-export.ts` so that file stays the completeness owner —
-// the canonical walk, the manifest, and the schema/export audit ledger.
+// The portable bundle's human-readable adapters (#630): vault truths re-spelled
+// in formats other software reads. Adapters are CONVENIENCE COPIES, never the
+// restore source — a restore reads the canonical JSON-LD in
+// `portable-export.ts`, so an adapter may flatten or omit. Kept out of that
+// file so it stays the completeness owner.
 
 import type { VaultDb } from "../db.js";
 import { serializeMarkdownNote } from "../ingest/markdown.js";
@@ -94,9 +91,12 @@ export function exportVcards(db: VaultDb): string {
     sort_name: string | null;
     birth_date: string | null;
   }[];
-  const identifiers = db.vault.prepare(
-    `SELECT scheme, value, label FROM core_party_identifier
-      WHERE party_id = ? AND valid_to IS NULL ORDER BY scheme, is_primary DESC, identifier_id`
+  // EMAIL and TEL are the reach half of a vCard, and reach lives on
+  // `social_contact_channel` (#883): the register would export an empty card.
+  const channels = db.vault.prepare(
+    `SELECT kind, value, label FROM social_contact_channel
+      WHERE party_id = ? AND kind IN ('email','phone')
+      ORDER BY kind, is_preferred DESC, channel_id`
   );
   const lines: string[] = [];
   for (const party of parties) {
@@ -107,16 +107,17 @@ export function exportVcards(db: VaultDb): string {
     );
     if (party.sort_name) lines.push(`N:${escapeVcard(party.sort_name)}`);
     if (party.birth_date) lines.push(`BDAY:${party.birth_date}`);
-    for (const id of identifiers.all(party.party_id) as {
-      scheme: string;
+    for (const channel of channels.all(party.party_id) as {
+      kind: string;
       value: string;
       label: string | null;
     }[]) {
-      if (id.scheme !== "email" && id.scheme !== "tel") continue;
-      const params = id.label ? `;TYPE=${id.label.toUpperCase()}` : "";
-      lines.push(
-        `${id.scheme.toUpperCase()}${params}:${escapeVcard(id.value)}`
-      );
+      const params = channel.label
+        ? `;TYPE=${channel.label.toUpperCase()}`
+        : "";
+      // vCard says TEL; the channel axis says `phone`.
+      const property = channel.kind === "phone" ? "TEL" : "EMAIL";
+      lines.push(`${property}${params}:${escapeVcard(channel.value)}`);
     }
     lines.push("END:VCARD");
   }

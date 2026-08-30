@@ -12,6 +12,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import Tappable from "../../kit/components/Tappable";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -115,13 +116,13 @@ export default function PhotoPicker({
     // No `selection` to the shell — this picked set is its own (proto:3963).
     <PhotosScreen current="collections">
       <View style={styles.header}>
-        <Pressable
+        <Tappable
           accessibilityLabel="Cancel"
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
           <Icon name="x" size={22} color={colors.text} />
-        </Pressable>
+        </Tappable>
         <View style={styles.copy}>
           <Text style={styles.title} numberOfLines={1}>
             {`Add to “${albumTitle}”`}

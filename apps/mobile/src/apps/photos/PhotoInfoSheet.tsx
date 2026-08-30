@@ -24,6 +24,7 @@ import {
 import Grabber from "../../kit/components/Grabber";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
+import Tappable from "../../kit/components/Tappable";
 import { spacing, useTheme } from "../../kit/theme";
 import { styles } from "./PhotoLightbox.styles";
 import type { PhotoAsset } from "./timeline-model";
@@ -212,7 +213,7 @@ export function PhotoInfoSheet(
                 <Text style={[styles.infoMeaning, { color: colors.textSoft }]}>
                   {props.placeSetByYou ? "set by you" : "from the camera"}
                 </Text>
-                <Pressable
+                <Tappable
                   accessibilityLabel="Remove place"
                   accessibilityRole="button"
                   hitSlop={8}
@@ -221,14 +222,14 @@ export function PhotoInfoSheet(
                   <Text style={[styles.chipText, { color: colors.link }]}>
                     remove
                   </Text>
-                </Pressable>
+                </Tappable>
               </View>
             ) : null}
             {/* Spells the coordinate out only because the member asked; the
                 label carries no digits — printing it would be handing it over. */}
             {exact === null ? null : (
               <View style={styles.chipRow}>
-                <Pressable
+                <Tappable
                   accessibilityLabel="Copy exact location"
                   accessibilityRole="button"
                   hitSlop={8}
@@ -241,7 +242,7 @@ export function PhotoInfoSheet(
                   <Text style={[styles.chipText, { color: colors.link }]}>
                     Copy exact location
                   </Text>
-                </Pressable>
+                </Tappable>
                 {copiedLocation ? (
                   <Text
                     style={[styles.infoMeaning, { color: colors.textSoft }]}

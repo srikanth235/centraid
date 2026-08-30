@@ -1,35 +1,23 @@
-/**
- * Pin a file to a task through core.attach. Bytes arrive either STAGED
- * (#296: the app streamed them to /_vault/blobs and claims the sha
- * here — big files) or as a small inline data: URI; the vault dedupes the
- * bytes into a canonical content item and links it. The same handler shape is
- * copied across every app — only the subject_type differs.
- */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
+/** Bytes arrive either STAGED (#296: streamed to /_vault/blobs, sha claimed
+ *  here) or as a small inline data: URI; the vault dedupes them into one
+ *  canonical content item. */
 export default async function attachHandler({
   body,
   ctx,
 }: HandlerArgs): Promise<ActionResult> {
-  const input = (body ?? {}) as Record<string, unknown>;
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "core.attach",
-      input: {
-        subject_type: "schedule.task",
-        subject_id: String(input.subject_id ?? ""),
-        ...(input.staged_sha == null
-          ? { data_uri: String(input.data_uri ?? "") }
-          : { staged_sha: String(input.staged_sha) }),
-        ...(input.title == null ? {} : { title: String(input.title) }),
-        ...(input.role == null ? {} : { role: String(input.role) }),
-      },
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  const input = actionInput(body);
+  return runVaultAction(ctx, {
+    command: "core.attach",
+    input: {
+      subject_type: "schedule.task",
+      subject_id: String(input.subject_id ?? ""),
+      ...(input.staged_sha == null
+        ? { data_uri: String(input.data_uri ?? "") }
+        : { staged_sha: String(input.staged_sha) }),
+      ...(input.title == null ? {} : { title: String(input.title) }),
+      ...(input.role == null ? {} : { role: String(input.role) }),
+    },
+  });
 }

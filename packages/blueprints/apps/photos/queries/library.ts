@@ -1,3 +1,4 @@
+import { DAY_MS } from "../../_shared/format-kit.ts";
 /**
  * The library projection as bounded windows: newest live assets by captured_at
  * plus the newest 200 trashed. Never read core.content_item whole — bytes ride
@@ -205,7 +206,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         purge_at: purgeAt,
         purge_in_days: Number.isNaN(ms)
           ? null
-          : Math.max(0, Math.ceil(ms / 86400000)),
+          : Math.max(0, Math.ceil(ms / DAY_MS)),
       };
     });
     trash.sort((a, b) =>

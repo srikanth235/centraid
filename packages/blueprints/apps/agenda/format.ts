@@ -1,12 +1,14 @@
 // Pure, JSX-free projections. Numeric strings are painted inside `.num`;
 // `unicode-bidi: isolate` is a property of the box, not the string.
 
-import { identityColor, localDayKey } from "@centraid/design";
+import { identityColor } from "@centraid/design";
 
+import { fmtDay as sharedFmtDay } from "../_shared/format-kit.ts";
 import type { AgEvent, Calendar } from "./types.ts";
 import { UNTITLED } from "./view-copy.ts";
 
-export const DAY_MS = 24 * 60 * 60 * 1000;
+// One day is the format kit's constant (#883 B4).
+export { DAY_MS } from "../_shared/format-kit.ts";
 export const HOUR_MS = 60 * 60 * 1000;
 
 export function toIsoUtc(local: string): string {
@@ -16,7 +18,6 @@ export function toIsoUtc(local: string): string {
 
 const CIVIL_DATE = /^(?<day>\d{4}-\d{2}-\d{2})/u;
 
-/** The named civil date prefix, or null when the value is not a date. */
 export function namedDay(iso: string): string | null {
   return CIVIL_DATE.exec(iso)?.groups?.day ?? null;
 }
@@ -74,7 +75,7 @@ export function toLocalInput(dateish: string | number | Date): string {
 }
 
 // `locale` is an optional last argument so option bags can be pinned against a
-// NAMED locale in tests, not the machine's ICU default (`format-locale.test.ts`, #839).
+// named locale in tests, not the machine's ICU default (#839).
 
 export function fmtTime(
   iso: string | number | Date,
@@ -96,17 +97,14 @@ export function fmtHour(hour: number, locale?: Intl.LocalesArgument): string {
   });
 }
 
+/** The relative words are the kit's, so two apps cannot disagree about
+ *  "Today" (#883). What stays here is the ABSOLUTE spelling. */
 export function fmtDay(key: string, locale?: Intl.LocalesArgument): string {
-  if (key === localDayKey(new Date())) return "Today";
-  try {
-    return new Date(`${key}T00:00:00`).toLocaleDateString(locale, {
-      weekday: "long",
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return key;
-  }
+  return sharedFmtDay(key, {
+    absolute: { day: "numeric", month: "short", weekday: "long" },
+    locale,
+    undated: key,
+  });
 }
 
 export function rangeLabel(
@@ -147,12 +145,9 @@ export function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-/**
- * Every local civil day an interval occupies. End is exclusive at a civil
- * midnight and inclusive otherwise — Friday 22:00–Sunday 09:00 occupies
- * Friday, Saturday and Sunday. Web grids and the phone list both walk this
- * so a multi-day run cannot vanish from the days in the middle.
- */
+/** Every local civil day an interval occupies; end is exclusive at a civil
+ *  midnight and inclusive otherwise, so a multi-day run cannot vanish from the
+ *  days in the middle. */
 export function spanLocalDays(start: Date, end: Date): Date[] {
   if (Number.isNaN(start.getTime())) return [];
   let finish = end;

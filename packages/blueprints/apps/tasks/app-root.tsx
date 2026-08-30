@@ -1,8 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit — this file holds the room's whole orchestration as one React tree by design (#834); splitting it belongs to the app's own code evolution, not this rebuild.
-// Tasks — the commitments room, query-free React tree (#505, rebuilt for
-// #834). Holds `Root` plus every constant and helper it needs that does NOT
-// depend on the node-side `./queries/*` handler modules; `app-inline.tsx` pairs
-// it with those and with the pending projection.
+// Tasks — the commitments room, query-free React tree (#505). Holds `Root`
+// plus every helper that does NOT depend on the node-side `./queries/*`
+// modules; `app-inline.tsx` pairs it with those and the pending projection.
 //
 // THE STATE IDIOM IS DOCS'. A mutable bag in a ref plus a bump reducer, because
 // the room is one tree with a dozen routes over one read: putting twenty
@@ -32,6 +31,7 @@ import {
 } from "@centraid/design/elements";
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
+import { MoreSheet } from "../_shared/MoreSheet.tsx";
 import { readPendingOverlay } from "../_shared/pending-overlay.ts";
 import {
   canWriteScope,
@@ -46,7 +46,7 @@ import { Board } from "./components/Board.tsx";
 import type { RowContext } from "./components/Board.tsx";
 import { Confirm } from "./components/Confirm.tsx";
 import { Editor } from "./components/Editor.tsx";
-import { MoreSheet, QuickAdd, Shortcuts } from "./components/Panels.tsx";
+import { QuickAdd, Shortcuts } from "./components/Panels.tsx";
 import { Rail } from "./components/Rail.tsx";
 import {
   ConsentGate,
@@ -96,8 +96,10 @@ import {
 import type { ShelfId } from "./shelves.ts";
 import type { AppState, BoardData, Overlay, Task } from "./types.ts";
 import {
+  CANCEL,
   DONE,
   GROUPS,
+  MORE_ROWS,
   REENTRY_BUCKETS,
   REMINDER_NOTE_B,
   SEARCH_COPY,
@@ -1102,7 +1104,18 @@ export function Root({
           overlays,
           moreSheet:
             overlay?.kind === "more" ? (
-              <MoreSheet onSelect={go} onClose={closeOverlay} />
+              // The band's sixth slot, drawn by the ONE shared sheet (#883 B9).
+              <MoreSheet
+                label="More"
+                rows={MORE_ROWS.map((row) => ({
+                  key: String(row.shelf),
+                  label: row.label,
+                  ...(row.meta === undefined ? {} : { note: row.meta }),
+                  select: () => go(row.shelf),
+                }))}
+                closeLabel={CANCEL}
+                onClose={closeOverlay}
+              />
             ) : null,
         }}
       />

@@ -34,12 +34,29 @@ export const VAULT_LADDER_LENGTH = VAULT_MIGRATIONS.length;
 /** Production vaults open at 8192 (`packages/vault/src/db.ts#openFile`); mirror it. */
 const PAGE_SIZE = 8192;
 
-/** The census a fully-seeded pair must show — the semantic invariant both lanes assert. */
+/**
+ * The census a fully-seeded pair must show — the semantic invariant both lanes
+ * assert.
+ *
+ * IT COUNTS CONCEPTS, NOT TABLES (#883 rungs six and seven). Four of these are
+ * spine rows that live in one table at every epoch. The last two are answers
+ * whose STORE moves as the ladder climbs: an authority answer is a `share_grant`
+ * row below rung six and a `share_authority` row above it, and a way to reach a
+ * party is a `core_party_identifier` row below rung seven and a
+ * `social_contact_channel` row above it. Counting the table would make the
+ * invariant "the census survives the migration" untestable across exactly the
+ * rungs that move data; counting the concept, over whichever stores the file's
+ * schema has, is what makes a lossy fold fail here.
+ */
 export interface VaultCensus {
   party: number;
   content: number;
   media: number;
   receipt: number;
+  /** Authority answers: `share_grant` below rung six, `share_authority` above. */
+  authority: number;
+  /** Ways to reach a party: reachability identifiers below rung seven, contact channels above. */
+  reach: number;
 }
 
 /** The deterministic seed's expected census. A change here is a corpus change. */
@@ -48,9 +65,13 @@ export const EXPECTED_CENSUS: VaultCensus = {
   content: 2,
   media: 2,
   receipt: 2,
+  authority: 3,
+  reach: 2,
 };
 
 const FIXED_TS = "2024-01-01T00:00:00.000Z";
+/** A second fixed instant, so a revoked row is distinguishable from a live one. */
+const REVOKED_TS = "2024-06-01T00:00:00.000Z";
 
 function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -75,7 +96,18 @@ function openJournalHandle(file: string): DatabaseSync {
   return db;
 }
 
-/** Seed the deterministic vault rows. Only baseline (rung-1) tables — epoch-flat. */
+/**
+ * Seed the deterministic vault rows in the BASELINE (rung-1) shape.
+ *
+ * Every row here is written against rung one's tables and nothing else, which
+ * is what lets one seed serve every epoch: `buildEpochPair` seeds at rung one
+ * and then walks the ladder to the member's epoch, so the rungs THEMSELVES
+ * produce each epoch's shape. Rung six reads the `share_grant` rows below and
+ * folds them into `share_authority`; rung seven reads the `tel`/`email`
+ * identifiers and folds them into `social_contact_channel`. Seeding the landed
+ * shape by hand at the later epochs would have made those two rungs run over
+ * empty tables in the one lane whose job is to migrate real rows forward.
+ */
 function seedVault(db: DatabaseSync): void {
   db.exec("BEGIN");
   const party = db.prepare(
@@ -101,6 +133,81 @@ function seedVault(db: DatabaseSync): void {
     );
     media.run(`corpus-media-${i}`, contentId, FIXED_TS);
   }
+
+  /*
+   * The authority answers rung six folds (`schema/authority.ts`). One live
+   * party grant with a ceiling, one live circle grant without, and one revoked
+   * grant — history the fold must keep, not a row to skip. No `consent_device`
+   * and no `enrich_consent` rows: the device leg of rung six mints its ids with
+   * `randomblob`, and a corpus member has to be byte-reproducible.
+   */
+  const grant = db.prepare(
+    `INSERT INTO share_grant
+       (grant_id, audience_kind, audience_id, subject_type, subject_id,
+        capability, granted_at, revoked_at, granted_by, max_size_bytes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'corpus-party-0', ?)`
+  );
+  grant.run(
+    "corpus-grant-live-party",
+    "party",
+    "corpus-party-1",
+    "core.content_item",
+    "corpus-content-0",
+    "view",
+    FIXED_TS,
+    null,
+    4096
+  );
+  grant.run(
+    "corpus-grant-live-circle",
+    "circle",
+    "corpus-circle-0",
+    "media.asset",
+    "corpus-media-0",
+    "edit",
+    FIXED_TS,
+    null,
+    null
+  );
+  grant.run(
+    "corpus-grant-revoked",
+    "party",
+    "corpus-party-2",
+    "core.content_item",
+    "corpus-content-1",
+    "view",
+    FIXED_TS,
+    REVOKED_TS,
+    null
+  );
+
+  /*
+   * The reachability claims rung seven folds (`schema/reconcile.ts`). One
+   * `email` and one `tel`, so both normalization branches run; the email is the
+   * party's primary, so the rung's preferred-channel pass has a flag to carry.
+   */
+  const identifier = db.prepare(
+    `INSERT INTO core_party_identifier
+       (identifier_id, party_id, scheme, value, label, is_primary, verified_at,
+        valid_from, valid_to)
+     VALUES (?, ?, ?, ?, NULL, ?, NULL, ?, NULL)`
+  );
+  identifier.run(
+    "corpus-identifier-email",
+    "corpus-party-1",
+    "email",
+    "Corpus.Person@example.test",
+    1,
+    FIXED_TS
+  );
+  identifier.run(
+    "corpus-identifier-tel",
+    "corpus-party-2",
+    "tel",
+    "+1 (555) 010-0100",
+    0,
+    FIXED_TS
+  );
   db.exec("COMMIT");
 }
 
@@ -126,12 +233,18 @@ function seedJournal(db: DatabaseSync): void {
 }
 
 /**
- * The one baseline row the product schema mints nondeterministically:
- * `replica_meta` is INSERTed by REPLICA_DDL with a random `epoch` UUID and
- * `strftime('now')` timestamps (packages/vault/src/schema/replica.ts). A vault
- * fixture that must be byte-reproducible pins those three fields to constants.
- * This touches only the local replication-epoch marker of a THROWAWAY test
- * vault — production vaults keep their real random epoch.
+ * The fields the product schema mints nondeterministically, pinned to
+ * constants so a member is byte-reproducible. Both touch a THROWAWAY test
+ * vault only — production vaults keep the real values.
+ *
+ *   - `replica_meta` is INSERTed by REPLICA_DDL with a random `epoch` UUID and
+ *     `strftime('now')` timestamps (packages/vault/src/schema/replica.ts).
+ *   - a channel the rung-seven fold wrote carries a WALL-CLOCK `updated_at`:
+ *     the rung's preferred-channel pass is an UPDATE, and
+ *     `touchUpdatedAt`'s trigger (schema/updated-at.ts) stamps `now` on any
+ *     update that does not set the column itself. Writing an explicitly
+ *     different value here does not re-fire it — the trigger's `WHEN
+ *     NEW.updated_at = OLD.updated_at` guard is exactly what that is for.
  */
 function canonicalizeVault(db: DatabaseSync): void {
   db.exec(
@@ -139,7 +252,10 @@ function canonicalizeVault(db: DatabaseSync): void {
        SET epoch = '00000000-0000-0000-0000-000000000000',
            epoch_started_at = '${FIXED_TS}',
            updated_at = '${FIXED_TS}'
-     WHERE singleton = 1`
+     WHERE singleton = 1;
+     UPDATE social_contact_channel
+        SET updated_at = '${FIXED_TS}'
+      WHERE updated_at <> '${FIXED_TS}';`
   );
 }
 
@@ -160,10 +276,16 @@ function pairPaths(dir: string): EpochPairPaths {
 /**
  * Build a seeded vault/journal pair whose vault is migrated to EXACTLY `epoch`
  * (`user_version === epoch`, `1..VAULT_LADDER_LENGTH`) and journal to its full
- * ladder. The rows only touch baseline tables, so the same seed is valid at
- * every epoch — which is what lets the forward-migration lane assert the census
- * is preserved across the rungs. WAL is TRUNCATE-checkpointed so the base files
- * are WAL-quiet on disk (docs/traps/wal-checkpoint.md).
+ * ladder.
+ *
+ * SEED AT RUNG ONE, THEN CLIMB. The rows only touch baseline tables, and the
+ * remaining rungs are walked OVER them — `migrate` resumes from the file's own
+ * `user_version`, so `slice(0, epoch)` runs rungs two through `epoch` on a
+ * populated file. That ordering is the whole point once rungs move data:
+ * seeding after the walk would hand rung six an empty `share_grant` and rung
+ * seven an empty identifier register, and the corpus would cover the two folds
+ * by name only. WAL is TRUNCATE-checkpointed so the base files are WAL-quiet on
+ * disk (docs/traps/wal-checkpoint.md).
  */
 export function buildEpochPair(dir: string, epoch: number): EpochPairPaths {
   if (!Number.isInteger(epoch) || epoch < 1 || epoch > VAULT_LADDER_LENGTH) {
@@ -175,10 +297,11 @@ export function buildEpochPair(dir: string, epoch: number): EpochPairPaths {
   const vault = openVaultHandle(paths.vaultFile);
   const journal = openJournalHandle(paths.journalFile);
   try {
-    migrate(vault, VAULT_MIGRATIONS.slice(0, epoch));
+    migrate(vault, VAULT_MIGRATIONS.slice(0, 1));
     migrate(journal, JOURNAL_MIGRATIONS);
     seedVault(vault);
     seedJournal(journal);
+    migrate(vault, VAULT_MIGRATIONS.slice(0, epoch));
     canonicalizeVault(vault);
     vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
     journal.exec("PRAGMA wal_checkpoint(TRUNCATE)");
@@ -240,11 +363,50 @@ export function censusPair(dir: string): VaultCensus {
     const count = (db: DatabaseSync, table: string): number =>
       (db.prepare(`SELECT count(*) AS c FROM ${table}`).get() as { c: number })
         .c;
+    const has = (db: DatabaseSync, table: string): boolean =>
+      db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?")
+        .get(table) !== undefined;
+    /*
+     * SUM OVER WHICHEVER STORES THE FILE HAS. A rung that moves rows retires
+     * the old table in the same pass, so at most one side of each pair exists
+     * at a time and the sum is the concept's count at every epoch — while a
+     * fold that dropped a row, or double-counted one, moves the total.
+     */
+    const acrossStores = (
+      db: DatabaseSync,
+      sources: ReadonlyArray<{ table: string; where?: string }>
+    ): number =>
+      sources.reduce(
+        (total, source) =>
+          total +
+          (has(db, source.table)
+            ? (
+                db
+                  .prepare(
+                    `SELECT count(*) AS c FROM ${source.table}${source.where ? ` WHERE ${source.where}` : ""}`
+                  )
+                  .get() as { c: number }
+              ).c
+            : 0),
+        0
+      );
     return {
       party: count(vault, "core_party"),
       content: count(vault, "core_content_item"),
       media: count(vault, "media_asset"),
       receipt: count(journal, "consent_receipt"),
+      authority: acrossStores(vault, [
+        { table: "share_grant" },
+        { table: "share_authority" },
+      ]),
+      reach: acrossStores(vault, [
+        {
+          table: "core_party_identifier",
+          where: "scheme IN ('tel','email')",
+        },
+        { table: "social_contact_channel" },
+      ]),
     };
   } finally {
     vault.close();

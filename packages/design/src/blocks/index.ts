@@ -14,13 +14,35 @@ export type {
 export { DISTRIBUTION_SHARE_FLOOR, distributionRows } from "./distribution";
 export type { DistributionRow } from "./distribution";
 
-export { insightBreakdown, insightSourceRollups } from "./insights";
+export {
+  insightAxisMarks,
+  insightBreakdown,
+  insightBreakdowns,
+  insightColumnCount,
+  insightColumns,
+  insightCsvFilename,
+  insightPeakNote,
+  insightPricingLine,
+  insightRollupCsv,
+  insightRunWord,
+  insightSourceFacts,
+  insightSourceRollups,
+  insightSpendFacts,
+  insightSpendFigure,
+} from "./insights";
 export type {
   InsightBreakdown,
+  InsightBreakdowns,
+  InsightColumn,
+  InsightColumnOptions,
+  InsightDayRow,
   InsightMeasuredDatum,
+  InsightRollup,
+  InsightRollupKpis,
   InsightSourceBucket,
   InsightSourceDatum,
   InsightSourceRollup,
+  InsightWords,
 } from "./insights";
 
 // Data half of the block props — types only; see contracts.ts for why.

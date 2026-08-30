@@ -58,12 +58,12 @@ import type { StoreGroup, StoreHolderDTO } from "./privacyStores.js";
 
 import styles from "./ApprovalsScreen.module.css";
 
-// The desktop UI for the vault's consent surface (#815 v11). TWO REGISTERS:
+// The desktop UI for the vault's consent surface (#815). TWO REGISTERS:
 // everything blocking is a decision CARD, everything decided is reference
 // material below. Two rules that shape keeps — an irreversible verb confirms IN
 // PLACE, and a background refresh never takes work out of a member's hands, so
 // arrivals wait in a held tray while anything is mid-edit, ticked or confirming.
-// Identity is the FRAME's; this screen is purely presentational.
+// Identity is the FRAME's; this screen is presentational.
 
 export interface ApprovalsOutboxRowDTO {
   itemId: string;
@@ -156,7 +156,9 @@ export interface NoticeRowDTO {
   detailText: string | null;
   sourceLabel: string | null;
   severity: "info" | "warning" | "high";
-  sourceType: "automation" | "agent" | "app";
+  /** `share`: somebody's answer about the member's access, not an app's own
+   *  report about itself (#883). */
+  sourceType: "automation" | "agent" | "app" | "share";
   count: number;
   firstAt: string;
   lastAt: string;
@@ -170,7 +172,7 @@ export interface ApprovalsScreenProps {
   parked: readonly ApprovalsParkedRowDTO[];
   scopeRequests: readonly ApprovalsScopeRequestRowDTO[];
   grants: readonly ApprovalsGrantRowDTO[];
-  /** Every declared store is present, even with zero holders. */
+  /** Every declared store is present, even with no holders. */
   storeGrants: readonly StoreGroup[];
   enrichConsent?: readonly ApprovalsEnrichConsentRowDTO[];
   /** An empty section would claim nothing was ever answered — a different fact. */
@@ -179,7 +181,7 @@ export interface ApprovalsScreenProps {
   notices?: readonly NoticeRowDTO[];
   activityTruncated?: boolean;
   busyId: string | null;
-  /** In the words of the route that performs it, stated where the decision is made. */
+  /** In the words of the route that performs it, where the decision is made. */
   discardConsequence?: string;
   /** The item returns with the member's edit; `nonce` makes a repeat a fresh event. */
   refusal?: { itemId: string | null; message: string; nonce: number } | null;
@@ -272,8 +274,8 @@ export default function ApprovalsScreen(
     const open = pointerDefaultOpen();
     return { activity: open, egress: open, grants: open, ledger: open };
   });
-  // Revoke deletes the grant row, so the next fetch would drop it. Keeping the
-  // row as it looked at revoke is what keeps it visible, struck through (#708).
+  // Revoke deletes the grant row, so keeping the row as it looked at revoke is
+  // what keeps it visible, struck through (#708).
   const [revokedStoreHolders, setRevokedStoreHolders] = useState<
     ReadonlyMap<string, StoreHolderDTO>
   >(new Map());
@@ -283,8 +285,8 @@ export default function ApprovalsScreen(
   const focusRef = useRef<HTMLDivElement | null>(null);
   const grantsRef = useRef<HTMLDivElement | null>(null);
 
-  // State is adjusted while rendering, not in an effect: the move must be part of
-  // the same paint as the tap, and a nonce-keyed effect cascades a render.
+  // Adjusted while rendering, not in an effect: the move must share the paint
+  // with the tap, and a nonce-keyed effect cascades a render.
   if (focusOutbox && focusOutbox.nonce !== seenFocusNonce) {
     const { itemId } = focusOutbox;
     const stillOpen =
@@ -321,8 +323,8 @@ export default function ApprovalsScreen(
     (expandedId !== null && drafts[expandedId] !== undefined);
 
   const incoming: Blocking = { needsAuth, outbox, parked, scopeRequests };
-  // `held` is the queue as it was when the member started working in it, released
-  // the moment they finish, so nothing is swapped out from under them.
+  // `held` is the queue as the member found it, released the moment they
+  // finish, so nothing is swapped out from under them.
   if (held === null && partWay) setHeld(incoming);
   if (held !== null && !partWay) setHeld(null);
   const shown = held ?? incoming;
@@ -330,7 +332,7 @@ export default function ApprovalsScreen(
 
   useEffect(() => {
     const el = focusRef.current;
-    // `scrollIntoView` is absent under jsdom; opening the card is the assertable half.
+    // `scrollIntoView` is absent under jsdom; opening the card is assertable.
     if (el && typeof el.scrollIntoView === "function") {
       el.scrollIntoView({ block: "nearest" });
     }
@@ -340,7 +342,7 @@ export default function ApprovalsScreen(
   const archivedNotices = notices.filter(
     (notice) => notice.archivedAt !== null
   );
-  // "Waiting" means it requires a decision: an info-severity notice is news, not a
+  // "Waiting" means it requires a decision: an info notice is news, not a
   // demand, so it sits in Notices rather than the queue (#665).
   const attentionNotices = activeNotices.filter(
     (notice) => notice.severity !== "info"

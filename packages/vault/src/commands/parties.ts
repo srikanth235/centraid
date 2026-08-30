@@ -1,15 +1,13 @@
-// Core party commands (§03): the missing "new contact" path. Every projection
-// that anchors on core_party — leads, people, studio — could until now only
-// pick from parties that arrived by owner-side import (vCard, ICS) or
-// bootstrap. add_party lets a consent-granted app mint the identity row
-// itself, identifiers included, so "add a lead I met today" is one flow, not
-// an import errand. Identifier binding reuses social.resolve_identity's
-// invariant: a (scheme, value) pair claimed by a different party is an
-// identity fork and is refused, never merged silently.
+// Core party commands (§03): the "new contact" path, letting a consent-granted
+// app mint the identity row and its identifiers rather than wait for an
+// owner-side import. Identifier binding reuses `social.resolve_identity`'s
+// invariant: a (scheme, value) pair claimed by a different party is an identity
+// fork, refused and never merged silently.
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { ONTOLOGY_VERSION } from "../schema/migrate.js";
+import { bindContactReach, partyForReach } from "./contact-reach.js";
 import { registerMergeCommands } from "./merge.js";
 
 const IDENTIFIER_SCHEMES = ["email", "tel", "url", "handle", "other"] as const;
@@ -51,8 +49,8 @@ const ADD_PARTY: CommandDefinition = {
       identifiers_bound: { type: "integer" },
     },
   },
-  // Identifier conflicts can't ride templated precondition SQL (array
-  // input); the handler validates and throws, landing as a receipted deny.
+  // Array input cannot ride templated precondition SQL; the handler throws,
+  // landing as a receipted deny.
   preconditions: [],
   postconditions: [
     {
@@ -78,20 +76,17 @@ function addParty(ctx: HandlerCtx): Record<string, unknown> {
   };
   const identifiers = input.identifiers ?? [];
   // An identifier already bound to any party is a fork, not a new contact —
-  // surface who owns it so the app can offer that party instead.
+  // surface who owns it so the app can offer that party instead. Asked of
+  // the reach store as well as the register (#883): an email is a channel,
+  // and a register-only check would mint a second person.
   for (const id of identifiers) {
-    const claimed = ctx.db
-      .prepare(
-        `SELECT i.party_id, p.display_name FROM core_party_identifier i
-           JOIN core_party p ON p.party_id = i.party_id
-          WHERE i.scheme = ? AND i.value = ?`
-      )
-      .get(id.scheme, id.value) as
-      | { party_id: string; display_name: string }
-      | undefined;
-    if (claimed) {
+    const claimedBy = partyForReach(ctx.db, id.scheme, id.value, ctx.now);
+    if (claimedBy !== null) {
+      const claimed = ctx.db
+        .prepare("SELECT display_name FROM core_party WHERE party_id = ?")
+        .get(claimedBy) as { display_name: string } | undefined;
       throw new Error(
-        `${id.scheme}:${id.value} already identifies "${claimed.display_name}" (${claimed.party_id})`
+        `${id.scheme}:${id.value} already identifies "${claimed?.display_name ?? claimedBy}" (${claimedBy})`
       );
     }
   }
@@ -114,6 +109,20 @@ function addParty(ctx: HandlerCtx): Record<string, unknown> {
   ctx.wrote("core.party", partyId);
   const seenSchemes = new Set<string>();
   for (const id of identifiers) {
+    // Reach binds as a channel, an identity key as a register row (#883). The
+    // command's INPUT vocabulary is unchanged.
+    const channelId = bindContactReach(ctx.db, {
+      channelId: ctx.newId(),
+      partyId,
+      scheme: id.scheme,
+      value: id.value,
+      label: id.label ?? null,
+      now: ctx.now,
+    });
+    if (channelId !== null) {
+      ctx.wrote("social.contact_channel", channelId);
+      continue;
+    }
     const identifierId = ctx.newId();
     ctx.db
       .prepare(
@@ -214,10 +223,9 @@ function updateParty(ctx: HandlerCtx): Record<string, unknown> {
       .prepare(`UPDATE core_party SET ${sets.join(", ")} WHERE party_id = ?`)
       .run(...values, input.party_id);
   }
-  // Birthday is one logical fact with two surfaces (#441): the
-  // party's birth_date and any People "Birthday" important-date row. When the
-  // birth_date moves, reconcile the matching People row's MM-DD so the two can
-  // never disagree. (add_important_date reconciles the other direction.)
+  // One logical fact with two surfaces (#441): `birth_date` and any People
+  // "Birthday" row. Reconcile the MM-DD so they cannot disagree;
+  // `add_important_date` reconciles the other direction.
   if (input.birth_date !== undefined) {
     const md =
       /(?<monthDay>\d{2}-\d{2})$/u.exec(input.birth_date)?.groups?.monthDay ??

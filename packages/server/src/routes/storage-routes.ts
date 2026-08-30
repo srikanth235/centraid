@@ -32,6 +32,7 @@ import {
   fetchProviderProfileStatus,
 } from "../backup/storage-credentials.js";
 import type { StorageUsagePoller } from "../backup/storage-usage.js";
+import { unrefTimer } from "../lib/unref-timer.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
 import { readJson, sendError, sendJson } from "./route-helpers.js";
@@ -243,7 +244,7 @@ function streamStorageStatus(
   const heartbeat = setInterval(() => {
     if (!res.writableEnded) res.write(": ping\n\n");
   }, 30_000);
-  heartbeat.unref();
+  unrefTimer(heartbeat);
   let closed = false;
   const cleanup = (): void => {
     if (closed) return;

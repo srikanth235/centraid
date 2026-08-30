@@ -2,10 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { vaultForTriggers } from "./AutomationEditorRoute.js";
 
-// The route module pulls the whole gateway-client surface in transitively; we
-// only exercise the pure `vaultForTriggers` derivation, so stub the client so
-// importing the route doesn't need a live gateway. (`vi.mock` is hoisted above
-// the imports at transform time — same mock seam every other route test uses.)
+// The route module transitively imports the whole gateway-client surface; only
+// the pure `vaultForTriggers` derivation is under test, so stub the client and
+// the import needs no live gateway. `vi.mock` is hoisted above the imports.
 vi.mock(import("../../../gateway-client.js"), () => ({}));
 vi.mock(import("../../../assist-oauth-handoff.js"), () => ({}));
 
@@ -20,14 +19,14 @@ describe(vaultForTriggers, () => {
 
   it("derives read scopes from condition + data triggers, splitting schema.table", () => {
     const vault = vaultForTriggers([
-      { kind: "condition", entity: "business.invoice" },
+      { kind: "condition", entity: "schedule.task" },
       { kind: "data", entities: ["core.transaction", "core.party"] },
     ]);
     expect(vault).toStrictEqual({
       purpose: "dpv:ServiceProvision",
       why: "Evaluate automation triggers.",
       scopes: [
-        { schema: "business", table: "invoice", verbs: "read" },
+        { schema: "schedule", table: "task", verbs: "read" },
         { schema: "core", table: "transaction", verbs: "read" },
         { schema: "core", table: "party", verbs: "read" },
       ],

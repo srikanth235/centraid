@@ -108,6 +108,15 @@ describe("shared blueprint CSS", () => {
   });
 });
 
+describe("shared blueprint chrome", () => {
+  // #883 pins the shared frame chrome across all eight bundled apps.
+  it.each(systemApps)("apps/%s draws its chrome from the shared kit", (app) => {
+    const source = readFileSync(path.join(appDir, app, "Chrome.tsx"), "utf8");
+    expect(source).toContain('from "../_shared/AppChrome.tsx"');
+    expect(source).toContain('from "../_shared/chrome-kit.ts"');
+  });
+});
+
 /** Every CSS and component source under one app, concatenated. */
 function appSource(root: string): string {
   return readdirSync(root, { withFileTypes: true })

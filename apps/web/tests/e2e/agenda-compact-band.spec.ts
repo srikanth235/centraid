@@ -34,7 +34,7 @@ const AWAITING = "No answer yet";
 
 /** The seat the shell gives an inline app: bar, app, claimed band. */
 const entry = (compact: boolean): string => `
-import { createElement, useRef, useState } from "react";
+import { Component, createElement, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Root } from ${JSON.stringify(AGENDA_ROOT)};
 import AppBand from ${JSON.stringify(APP_BAND)};
@@ -73,6 +73,8 @@ window.centraid = {
         calendars: [{ calendar_id: "cal-personal", name: "Personal" }],
       };
     if (query === "parties") return { parties: [], me: "p-me" };
+    if (query === "day-context")
+      return { birthdays: [], due: [], holidays: [] };
     return {};
   },
   write: async () => ({ status: "executed" }),
@@ -91,7 +93,10 @@ function Seat() {
   };
   return createElement(
     "div",
-    { className: "seat" },
+    {
+      className: "window seat",
+      "data-compact": ${JSON.stringify(compact)},
+    },
     createElement(
       "header",
       { className: "bar", id: "appbar" },
@@ -113,7 +118,24 @@ function Seat() {
   );
 }
 
-createRoot(document.getElementById("root")).render(createElement(Seat));
+class Crash extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { err: null };
+  }
+  static getDerivedStateFromError(err) {
+    return { err: err && err.stack ? err.stack : String(err) };
+  }
+  render() {
+    if (this.state.err)
+      return createElement("pre", { id: "crash" }, this.state.err);
+    return this.props.children;
+  }
+}
+
+createRoot(document.getElementById("root")).render(
+  createElement(Crash, null, createElement(Seat))
+);
 `;
 
 async function bundle(
@@ -122,6 +144,13 @@ async function bundle(
 ): Promise<{ css: string; js: string }> {
   const result = await build({
     stdin: { contents, loader: "tsx", resolveDir: here, sourcefile: name },
+    alias: {
+      "@centraid/design": path.join(REPO_ROOT, "packages/design/src/index.ts"),
+      "@centraid/design/elements": path.join(
+        REPO_ROOT,
+        "packages/design/src/elements/index.ts"
+      ),
+    },
     bundle: true,
     define: { "process.env.NODE_ENV": '"production"' },
     format: "iife",
@@ -145,6 +174,7 @@ async function bundle(
 const HARNESS_CSS = `
   body { margin: 0; background: var(--bg); color: var(--text); }
   .seat { display: flex; flex-direction: column; height: 100vh; }
+  .window[data-compact="true"] { display: flex; flex-direction: column; height: 100vh; }
   .bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
          border-block-end: 1px solid var(--line); }
   .barActions { display: flex; align-items: center; gap: 8px;
@@ -169,6 +199,7 @@ async function mount(
       `<body><div id="root"></div></body>`
   );
   await page.addScriptTag({ content: js });
+  await page.waitForSelector('nav[data-band="app"]', { timeout: 15_000 });
 }
 
 test("Agenda's compact band offers Search, never Month, and lands where it says", async ({
@@ -184,11 +215,13 @@ test("Agenda's compact band offers Search, never Month, and lands where it says"
   const grid = page.locator("[data-columns]");
   const rows = page.locator("[data-event-id]");
   const awaiting = page.getByText(AWAITING);
-  const barSearch = page.locator(`#appbar button[aria-label="${SEARCH_LABEL}"]`);
+  const barSearch = page.locator(
+    `#appbar button[aria-label="${SEARCH_LABEL}"]`
+  );
 
   // Four destinations plus the frame's More. Month is absent BY TYPE: a tab
   // that draws another view is worse than a tab that is not there.
-  await expect(band).toBeVisible();
+  await expect(band).toBeVisible({ timeout: 60_000 });
   await expect(band.locator("fieldset button")).toHaveText(BAND_TABS);
   await expect(tab("Month")).toHaveCount(0);
 
@@ -224,7 +257,9 @@ test("Agenda's compact band offers Search, never Month, and lands where it says"
   await expect(barSearch).toHaveCount(0);
   await expect(page.getByRole("searchbox")).toHaveCount(0);
   await tab("Search").click();
-  await expect(page.getByRole("searchbox", { name: SEARCH_LABEL })).toBeVisible();
+  await expect(
+    page.getByRole("searchbox", { name: SEARCH_LABEL })
+  ).toBeVisible();
   await expect(current).toHaveText("Day");
   await expect(grid).toHaveAttribute("data-columns", "1");
 

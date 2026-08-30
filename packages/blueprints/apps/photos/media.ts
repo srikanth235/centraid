@@ -1,6 +1,6 @@
 import { scopeAttr } from "../_shared/scope-kit.ts";
 import { safeMediaUrl, VAULT_BLOB_PATH } from "../_shared/untrusted.ts";
-import { isAudioAsset, isVideoAsset } from "./format.ts";
+import { clock, isAudioAsset, isVideoAsset } from "./format.ts";
 import {
   BLOB_PENDING_ATTR,
   observeNextScreen,
@@ -13,8 +13,8 @@ export function isRenderableUri(uri: unknown): boolean {
 }
 
 // Grid never fetches a full original: server thumb (#296) or inline `data:`; else placeholder.
-// THUMB_EDGE is the SERVE ceiling (must stay 360): client tiny edge is 256 (#405), but older
-// uploads must not probe `?variant=thumb`, 404, and flip to a placeholder. v0 never migrates old thumbs.
+// THUMB_EDGE is the SERVE ceiling and must stay 360 (client tiny edge is 256, #405):
+// v0 never migrates old thumbs, so probing `?variant=thumb` 404s to a placeholder.
 export const THUMB_EDGE = 360;
 
 export function gridSrc(asset: Asset): string | null | undefined {
@@ -28,7 +28,7 @@ export function gridSrc(asset: Asset): string | null | undefined {
       Math.max(asset.width, asset.height) <= THUMB_EDGE;
     return safeMediaUrl(knownSmall ? asset.content_uri : asset.thumb_uri);
   }
-  // No thumb yet (#708): paint inline `data:` or a vault blob path (Home mosaic does the same).
+  // No thumb yet (#708): paint inline `data:` or a vault blob path (as Home mosaic).
   // Bare remote URL stays a placeholder — returning null means no `<img>` is built, so the retry cannot cover it.
   const inline = typeof asset.content_uri === "string" ? asset.content_uri : "";
   if (inline.startsWith("data:") || inline.startsWith(VAULT_BLOB_PATH)) {
@@ -43,13 +43,7 @@ export function durationLabel(
   const value = Number(seconds);
   // `duration_s` of 0 is a still — "0:00" reads as a broken video.
   if (!Number.isFinite(value) || value <= 0) return null;
-  const total = Math.round(value);
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const secs = total % 60;
-  return hours > 0
-    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
-    : `${minutes}:${String(secs).padStart(2, "0")}`;
+  return clock(value);
 }
 
 function renderPlaceholder(tile: HTMLElement, asset: Asset): void {
@@ -57,7 +51,7 @@ function renderPlaceholder(tile: HTMLElement, asset: Asset): void {
   const shimmer = document.createElement("span");
   shimmer.className = "ph-tile-ph";
   shimmer.setAttribute("aria-hidden", "true");
-  // `--skel`, never `--bg-elev`/`--bg-sunken` (those read as a card; v4 §2.2). Inline so non-React callers match Tile.
+  // `--skel`, never `--bg-elev`/`--bg-sunken` (those read as a card; v4 §2.2). Inline so non-React callers match.
   shimmer.style.background = "var(--skel, var(--bg-sunken))";
   tile.appendChild(shimmer);
   if (isVideoAsset(asset)) {
@@ -101,7 +95,7 @@ export function fillTileMedia(
   if (scope) tile.dataset.scope = scope;
   const src = gridSrc(asset);
   if (src == null) {
-    // Offline/offloaded (§14), not a failure — keep geometry.
+    // Offline/offloaded (§14), not a failure: keep geometry.
     renderPlaceholder(tile, asset);
     renderDuration(tile, asset);
     report?.("gateway");
@@ -116,7 +110,7 @@ export function fillTileMedia(
     img.width = asset.width;
     img.height = asset.height;
   }
-  // One retry against the original (#708): missing derivative, or `blob:` revoked mid-decode (relative path re-enters the authorizer).
+  // One retry against the original (#708): missing derivative, or `blob:` revoked mid-decode.
   const original = safeMediaUrl(asset.content_uri);
   img.addEventListener("error", () => {
     // Authorizer mid-flight: off-origin this path is the SPA `index.html`. Wait; do not tear the tile down.

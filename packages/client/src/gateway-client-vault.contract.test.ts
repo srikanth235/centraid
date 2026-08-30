@@ -1,8 +1,8 @@
 // Owner-plane contracts: vault status/registry, CSV import staging, the
 // outbox / grant / scope-request decision surface, and the gateway log
 // transports (paged read + SSE). The app / automation / turn surfaces stay in
-// gateway-client-automations.contract.test.ts. Split from that file (500-line
-// repo-hygiene cap); shared harness in gateway-client-contract-fixtures.ts.
+// gateway-client-automations.contract.test.ts; shared harness in
+// gateway-client-contract-fixtures.ts.
 
 import { describe, expect, it } from "vitest";
 
@@ -37,7 +37,7 @@ describe("renderer gateway owner-plane contracts", () => {
     await vault.approveVaultGrant({
       appId: "daily",
       purpose: "dpv:ServiceProvision",
-      scopes: [{ schema: "business", table: "invoice", verbs: "read" }],
+      scopes: [{ schema: "schedule", table: "task", verbs: "read" }],
       expiresAt: "2026-08-01T00:00:00.000Z",
     });
     await vault.revokeVaultGrant({ grantId: "grant-1" });

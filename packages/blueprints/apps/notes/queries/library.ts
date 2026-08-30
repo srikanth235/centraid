@@ -8,6 +8,7 @@
  */
 
 import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
+import { decodeNoteBody } from "../note-body.ts";
 
 interface NoteRow {
   note_id: string;
@@ -76,26 +77,6 @@ interface ContentRow {
 interface CardRow extends Record<string, unknown> {
   type: string;
   id: string;
-}
-
-/** Canonical bodies are inline data: URIs; anything else is opaque here. */
-function decodeBody(uri: unknown): string {
-  if (typeof uri !== "string" || !uri.startsWith("data:"))
-    return "(external content)";
-  const comma = uri.indexOf(",");
-  if (comma === -1) return "(external content)";
-  const meta = uri.slice(0, comma);
-  const payload = uri.slice(comma + 1);
-  try {
-    if (meta.includes(";base64")) {
-      return typeof Buffer === "undefined"
-        ? atob(payload)
-        : Buffer.from(payload, "base64").toString("utf8");
-    }
-    return decodeURIComponent(payload);
-  } catch {
-    return "(external content)";
-  }
 }
 
 // A short preview + checklist tally, never the whole body (#404). Mirrors
@@ -453,7 +434,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     const rows = windowed
       .map((n) => {
         const notebookIds = notebooksByNote.get(n.note_id) ?? [];
-        const decoded = decodeBody(
+        const decoded = decodeNoteBody(
           contentById.get(n.body_content_id ?? "")?.content_uri
         );
         return {

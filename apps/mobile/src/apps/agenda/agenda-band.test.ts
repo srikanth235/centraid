@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { BAND_DESTINATIONS } from "@centraid/blueprints/apps/agenda/views";
 
 import {
-  AGENDA_BAND_CAPSULE,
+  BAND_CAPSULE,
   AGENDA_BAND_DESTINATIONS,
   AGENDA_BAND_MAX_DESTINATIONS,
   resolveAgendaBand,
@@ -52,7 +52,7 @@ describe("the band Agenda claims", () => {
     expect(app.owner).toBe("app");
     expect(resolveAgendaBand("host")).toStrictEqual({
       owner: "host",
-      capsule: AGENDA_BAND_CAPSULE,
+      capsule: BAND_CAPSULE,
     });
   });
 });

@@ -3,10 +3,11 @@
 // card's count and this screen's count cannot disagree.
 
 import React, { useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
+import Tappable from "../../kit/components/Tappable";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -86,13 +87,13 @@ export default function PlaceDetail({
     // is this screen's genuine parent.
     <PhotosScreen current="more">
       <View style={styles.header}>
-        <Pressable
+        <Tappable
           accessibilityLabel="Back to Places"
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
           <Icon name="chevron-left" size={26} color={colors.text} />
-        </Pressable>
+        </Tappable>
         <View style={styles.copy}>
           <Text
             style={[styles.title, { color: colors.text }]}
@@ -128,7 +129,7 @@ export default function PlaceDetail({
                 ]}
                 value={typed}
               />
-              <Pressable
+              <Tappable
                 accessibilityLabel="Save place name"
                 accessibilityRole="button"
                 onPress={() => void namePlace(typed)}
@@ -136,11 +137,11 @@ export default function PlaceDetail({
                 <Text style={[styles.ask, { color: colors.accentText }]}>
                   Save
                 </Text>
-              </Pressable>
+              </Tappable>
             </>
           ) : (
             <>
-              <Pressable
+              <Tappable
                 accessibilityLabel="Name this place"
                 accessibilityRole="button"
                 onPress={() => setNaming(true)}
@@ -148,8 +149,8 @@ export default function PlaceDetail({
                 <Text style={[styles.ask, { color: colors.accentText }]}>
                   Name this place?
                 </Text>
-              </Pressable>
-              <Pressable
+              </Tappable>
+              <Tappable
                 accessibilityLabel="This is home"
                 accessibilityRole="button"
                 onPress={() => void namePlace("Home", "home")}
@@ -157,7 +158,7 @@ export default function PlaceDetail({
                 <Text style={[styles.ask, { color: colors.accentText }]}>
                   This is home
                 </Text>
-              </Pressable>
+              </Tappable>
             </>
           )}
         </View>

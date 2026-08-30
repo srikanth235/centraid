@@ -10,29 +10,24 @@
 //   dayone   — a RENDER state. `RosterRoute` decides between the skeleton, the
 //              whole-app first run and the filter's own sentence, so the claim
 //              is made against the rendered tree.
-//   pending  — a STATUS-LINE state. Nothing in People paints a per-row pending
-//              overlay; a queued write is narrated by `settle()` on the frame's
-//              one status line and nowhere else, so that sentence IS the cell.
+//   pending  — a STATUS-LINE state AND a per-row one. A queued write is
+//              narrated by `settle()` on the frame's one status line, and the
+//              row the outbox projected wears the shared pending chip, so the
+//              cell is both sentences together.
 //   parked   — the same status line, one status along. A park, a queue, a
 //              denial and a failure are four different facts about the
 //              member's data and `refusal()` keeps four sentences; the cell is
 //              worth owning only if all four are distinguishable, so all four
 //              are asserted here together.
 //
-// WHAT THIS FILE DELIBERATELY DOES NOT OWN. `people.offline`, `people.stale`
-// and `people.conflict` have no product surface to assert:
+// WHAT THIS FILE DELIBERATELY DOES NOT OWN. `people.offline` and
+// `people.stale` have no product surface to assert:
 //   * `RouteBase.offline` is threaded into every People route's props and read
 //     by NONE of them — no route branches on it.
 //   * `REFUSALS.readFailed` ("The vault is out of reach.") is referenced by no
 //     module in the app.
-//   * People DECLARES a pending projection (`pending-projection.ts`), so an
-//     unsettled write does reach the rows optimistically — but no People
-//     component renders `_shared/PendingWriteActions.tsx` the way Docs' list
-//     does (`apps/docs/components/List.tsx:197`), and nothing reads
-//     `PENDING_OVERLAY_FIELDS`. There is no pending chip, no conflict
-//     affordance and no stale-row decoration to assert against.
-// A test written against any of the three would be asserting a prop nobody
-// reads. They stay gaps against #864 until the surface exists.
+// A test written against either would be asserting a prop nobody reads. They
+// stay gaps against #864 until the surface exists.
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -241,7 +236,7 @@ describe("people.pending / people.parked — the frame's one status line", () =>
     (window as unknown as { centraid?: unknown }).centraid = undefined;
   });
 
-  test("a queued write says so, and does NOT re-read the roster", async () => {
+  test("a queued write says so, and re-reads the roster it projected into", async () => {
     const drive = await driveStar({ status: "queued" });
     expect(drive.sent).toStrictEqual([
       { action: "star-person", input: { party_id: "party-priya" } },
@@ -252,10 +247,10 @@ describe("people.pending / people.parked — the frame's one status line", () =>
     // `hold()` is what keeps the route's ambient sentence from overwriting the
     // queue notice on the next render, so it runs before the branch.
     expect(drive.held).toBe(1);
-    // NOTHING LANDED, SO NOTHING IS RE-READ. This is also why People has no
-    // pending-overlay cell to own: `settle()` refreshes only on `executed`, so
-    // a queued write is visible on the status line and nowhere in the rows.
-    expect(drive.refreshed).toBe(0);
+    // A QUEUED WRITE IS DURABLE, so the roster is re-read: the row comes back
+    // carrying `pending-projection.ts`'s optimistic values and its chip. What
+    // it does NOT earn is the outcome sentence or an Undo.
+    expect(drive.refreshed).toBe(1);
   });
 
   test("an in-flight write is the same fact as a queued one", async () => {
@@ -263,7 +258,7 @@ describe("people.pending / people.parked — the frame's one status line", () =>
     expect(drive.status).toStrictEqual([
       { text: REFUSALS.queued, hasUndo: false },
     ]);
-    expect(drive.refreshed).toBe(0);
+    expect(drive.refreshed).toBe(1);
   });
 
   test("a parked write waits for approval, in its own words", async () => {
@@ -299,6 +294,33 @@ describe("people.pending / people.parked — the frame's one status line", () =>
       REFUSALS.failed,
     ]);
     expect(new Set(said).size).toBe(4);
+  });
+
+  test("the row a queued add projected wears the shared pending chip", async () => {
+    // The status line is one sentence for the whole app; the chip is what says
+    // WHICH person is still on this device. `queries/people.ts` forwards the
+    // outbox stamps onto the row so the shared component can read them.
+    const container = await mountRoster({
+      people: [
+        person({
+          party_id: "pending:add:party",
+          name: "Ravi",
+          ...({
+            __centraid_pending_key: "intent-1",
+            __centraid_pending_status: "queued",
+            __centraid_pending_action: "add-person",
+          } as unknown as Partial<PersonRow>),
+        }),
+        person(),
+      ],
+    });
+    const chips = [...container.querySelectorAll(".kit-pending-chip")];
+    expect(chips.map((chip) => chip.textContent)).toStrictEqual(["queued"]);
+    // The settled row is not decorated: a chip on every row says nothing.
+    expect(container.textContent).toContain("Priya");
+    act(() => root?.unmount());
+    root = undefined;
+    document.body.replaceChildren();
   });
 
   test("only a landed write earns the outcome sentence and its Undo", async () => {

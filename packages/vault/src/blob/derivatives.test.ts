@@ -245,7 +245,9 @@ describe("derivatives", () => {
       { variant: "phash", sha256: null, text_content: "0123456789abcdef" },
       { variant: "poster", sha256: poster.sha256, text_content: null },
     ]);
-    const semantic = scanEmbeddings(db.vault, "edge-v1", [1, 0, 0.25]);
+    const semantic = scanEmbeddings(db.vault, "edge-v1", [1, 0, 0.25], {
+      limit: 20,
+    });
     expect(semantic[0]).toMatchObject({
       entityType: "core.content_item",
       entityId: asset.content_id,

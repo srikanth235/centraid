@@ -6,6 +6,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import { unrefTimer } from "../../lib/unref-timer.js";
 import type { ChangeBus } from "../changes/change-bus.js";
 import { sendJson } from "./http-utils.js";
 import { SseStream } from "./sse-stream.js";
@@ -94,7 +95,7 @@ export async function handleAppChanges(
     stream.comment("ping");
   }, HEARTBEAT_MS);
   // The SSE socket owns the lifetime; don't block process exit.
-  heartbeat.unref?.();
+  unrefTimer(heartbeat);
 
   // Resolve only on disconnect, so the HTTP server keeps the socket open, and
   // listen on the request socket: some proxies half-close oddly. Events race.

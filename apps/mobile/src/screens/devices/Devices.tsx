@@ -1,8 +1,6 @@
-// DEVICES — machines holding a copy (#765, spec §7). Pairs itself via
-// Settings' "Desktop link"; reads `GET /_gateway/devices`; mints, renames,
-// revokes. Absent (no wire serves them): inbound gateway links, shared
-// recovery nominations, per-device compute writes. Pairing from this phone
-// into a gateway lives in Settings.
+// DEVICES — machines holding a copy (#765, spec §7). Deliberately absent, for
+// want of a wire: inbound gateway links, shared recovery nominations,
+// per-device compute writes. Pairing from this phone lives in Settings.
 
 import * as Clipboard from "expo-clipboard";
 import React, { useMemo, useState } from "react";
@@ -41,6 +39,7 @@ import {
   vaultRowCopy,
 } from "./devices-model";
 import { makeStyles } from "./Devices.styles";
+import { useDeviceBoundaryPromise } from "./useDeviceBoundaryPromise";
 import { useDevices } from "./useDevices";
 
 const OTHER_PEOPLE_NOTE =
@@ -66,6 +65,9 @@ export default function DevicesScreen({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const devices = useDevices();
+  /* What revoking a device can promise is derived in the vault from the
+     principal kind and printed verbatim; unread, it is not said (#883). */
+  const boundaryPromise = useDeviceBoundaryPromise();
   // The row whose trailing verb is open — the sheet is modal, one at a time.
   const [acting, setActing] = useState<DeviceRow | undefined>(undefined);
 
@@ -82,7 +84,7 @@ export default function DevicesScreen({
   const rowsFor = (group: (typeof groups)[number]): readonly RowsBlockRow[] =>
     group.rows.map((row, index) => {
       const device = group.devices[index];
-      // A tombstone answers to nothing; present so past writes still resolve.
+      // A tombstone answers to nothing; kept so past writes resolve.
       if (!device || row.off) return row;
       return {
         ...row,
@@ -190,6 +192,7 @@ export default function DevicesScreen({
               {hasOtherPeople(groups) ? (
                 <NoteBlock text={OTHER_PEOPLE_NOTE} />
               ) : null}
+              {boundaryPromise ? <NoteBlock text={boundaryPromise} /> : null}
               {/* Omitted on gateways mounting no vault plane: `undefined` is
                   "no such plane", not "you own none". */}
               {devices.vaults ? (

@@ -9,6 +9,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { BearerAuthorization } from "@centraid/server/engine";
 
+import { unrefTimer } from "../lib/unref-timer.js";
 import { sendJson } from "../routes/route-helpers.js";
 import type { RouteHandler } from "./build-gateway.js";
 import { vaultContext, VAULT_HEADER } from "./vault-context.js";
@@ -200,7 +201,7 @@ export class WebControlSessions {
   startSweeping(intervalMs = SWEEP_INTERVAL_MS): void {
     if (this.sweepTimer) return;
     this.sweepTimer = setInterval(() => this.sweep(), intervalMs);
-    this.sweepTimer.unref?.();
+    unrefTimer(this.sweepTimer);
   }
 
   stopSweeping(): void {

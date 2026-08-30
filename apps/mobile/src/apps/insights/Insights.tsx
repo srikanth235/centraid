@@ -7,12 +7,11 @@
 // not a filter over rows — it is the question the page is answering, and a
 // member who lands on an empty 7 days has to be able to ask about 90.
 //
-// THREE GAPS ARE VISIBLE HERE RATHER THAN PAPERED OVER, and they are the same
-// three the desktop leg carries (`insights-model.ts` states each one where it
-// bites): the daily rollup has no per-day failure split, so the chart's
-// columns carry one segment and no failed legend key; no run duration is
-// recorded, so the reference's `median duration` fact is absent; and the
-// Origin never presents machine health here. That belongs to System on the
+// WHAT IS ABSENT IS VISIBLE HERE RATHER THAN PAPERED OVER, on the same terms
+// the desktop leg carries (`insights-model.ts` states each one where it bites):
+// a day with no failure gets no failed segment and no legend key, and a window
+// with no finished run gets no `typical run` fact — withheld, never zeroed. The
+// Origin also never presents machine health here: that belongs to System on the
 // Custodian seat; Activity on this phone is only the member's run history.
 
 import React, { useMemo } from "react";
@@ -26,6 +25,15 @@ import {
   INSIGHTS_SPEND_NOTE,
 } from "@centraid/client/insights-copy";
 import { RETRY_ACTION, SKELETON_NOTE } from "@centraid/client/surface-copy";
+import {
+  insightAxisMarks,
+  insightBreakdowns,
+  insightPeakNote,
+  insightSourceFacts,
+  insightSpendFacts,
+  insightSpendFigure,
+} from "@centraid/design/blocks";
+import type { InsightBreakdown } from "@centraid/design/blocks";
 
 import BarsBlock from "../../kit/components/BarsBlock";
 import { MAX_COLUMNS } from "../../kit/components/BarsBlock.styles";
@@ -49,24 +57,15 @@ import { useTheme } from "../../kit/theme";
 import type { InsightsScreenProps } from "../../navigation";
 import GatewayAlerts from "./GatewayAlerts";
 import {
-  axisLabels,
-  buildBars,
-  columnCount,
-  effortBreakdown,
-  harnessBreakdown,
+  failedLegendKey,
   originActivityHealth,
-  modelBreakdown,
-  peakNote,
+  phoneBars,
+  PHONE_INSIGHT_WORDS,
   recentRows,
   runsMeta,
-  sourceBreakdown,
-  sourceFacts,
   sourceMeta,
-  spendFacts,
-  spendFigure,
   windowChips,
 } from "./insights-model";
-import type { Breakdown } from "./insights-model";
 import { styles } from "./Insights.styles";
 import { useInsights } from "./useInsights";
 import type { InsightsController } from "./useInsights";
@@ -87,12 +86,11 @@ const EMPTY_BODY = INSIGHTS_EMPTY_BODY;
 /** Why a skeleton, said once, under the skeleton. */
 const LOADING_NOTE = SKELETON_NOTE;
 
-/** The chart's colour key. The `succeeded` word is the ink actually drawn;
- *  the failed key is EMPTY because the rollup carries no per-day outcome split
- *  (gap 1), so no column can ever show that segment. A legend naming a colour
- *  the chart cannot draw would be the page's one dishonest sentence. */
+/** The chart's colour key. The failed word is supplied by the model and comes
+ *  back EMPTY for a window whose days hold no failure, which drops the whole
+ *  legend row: a legend naming a colour the chart cannot draw would be the
+ *  page's one dishonest sentence. */
 const LEGEND_RUNS = "runs";
-const LEGEND_FAILED = "";
 
 /** A breakdown, or nothing at all: an empty distribution is an absence, and a
  *  section head over no rows reads as a failed load. */
@@ -102,7 +100,7 @@ function Distribution({
   accessibilityLabel,
 }: {
   label?: string;
-  breakdown: Breakdown;
+  breakdown: InsightBreakdown;
   accessibilityLabel: string;
 }): React.JSX.Element | null {
   if (breakdown.rows.length === 0) return null;
@@ -191,14 +189,16 @@ function AnalyticsBody({
     );
 
   const recent = recentRows(summary);
-  const peak = peakNote(summary);
+  const peak = insightPeakNote(summary, PHONE_INSIGHT_WORDS);
+  const breakdowns = insightBreakdowns(summary, PHONE_INSIGHT_WORDS);
+  const sourceFacts = insightSourceFacts(summary, PHONE_INSIGHT_WORDS);
   return (
     <>
       {chips}
       <PanelBlock
         body={INSIGHTS_SPEND_NOTE}
-        facts={spendFacts(summary)}
-        figure={spendFigure(summary, windowDays)}
+        facts={insightSpendFacts(summary, PHONE_INSIGHT_WORDS)}
+        figure={insightSpendFigure(summary, windowDays, PHONE_INSIGHT_WORDS)}
       />
 
       <SectionBlock
@@ -207,14 +207,9 @@ function AnalyticsBody({
       />
       <BarsBlock
         accessibilityLabel={`Spend per day over the last ${String(windowDays)} days`}
-        axis={axisLabels(summary, windowDays, page.now)}
-        data={buildBars(
-          summary,
-          windowDays,
-          page.now,
-          columnCount(windowDays, MAX_COLUMNS)
-        )}
-        legendFailed={LEGEND_FAILED}
+        axis={insightAxisMarks(summary, windowDays, page.now)}
+        data={phoneBars(summary, windowDays, page.now, MAX_COLUMNS)}
+        legendFailed={failedLegendKey(summary)}
         legendSucceeded={LEGEND_RUNS}
         {...(peak ? { note: peak } : {})}
       />
@@ -225,25 +220,23 @@ function AnalyticsBody({
       />
       <Distribution
         accessibilityLabel="Spend per source"
-        breakdown={sourceBreakdown(summary)}
+        breakdown={breakdowns.source}
       />
-      {sourceFacts(summary).length > 0 ? (
-        <PanelBlock facts={sourceFacts(summary)} />
-      ) : null}
+      {sourceFacts.length > 0 ? <PanelBlock facts={sourceFacts} /> : null}
 
       <Distribution
         accessibilityLabel="Spend by harness"
-        breakdown={harnessBreakdown(summary)}
+        breakdown={breakdowns.harness}
         label={ACTIVITY_SECTION_ORDER[2]}
       />
       <Distribution
         accessibilityLabel="Spend by model"
-        breakdown={modelBreakdown(summary)}
+        breakdown={breakdowns.model}
         label={ACTIVITY_SECTION_ORDER[3]}
       />
       <Distribution
         accessibilityLabel="Spend by effort"
-        breakdown={effortBreakdown(summary)}
+        breakdown={breakdowns.effort}
         label={ACTIVITY_SECTION_ORDER[4]}
       />
 

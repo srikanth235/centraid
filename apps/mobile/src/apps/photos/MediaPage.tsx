@@ -13,6 +13,7 @@ import Animated, {
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import Tappable from "../../kit/components/Tappable";
 import { fetchAccess, FetchChoicePlaceholder } from "../../kit/fetch-gate";
 import { imageSource, videoSource } from "../../kit/media/media-source";
 import { useTheme } from "../../kit/theme";
@@ -128,14 +129,14 @@ function Transport({
         </View>
       ) : null}
       <View style={[styles.transport, { borderTopColor: colors.stageLine }]}>
-        <Pressable
+        <Tappable
           accessibilityLabel="Play"
           accessibilityRole="button"
           hitSlop={12}
           onPress={onPlay}
         >
           <Icon name="play" size={20} color={colors.onStage} />
-        </Pressable>
+        </Tappable>
         <Text style={[styles.transportClock, { color: colors.onStage }]}>
           {formatMediaClock(elapsed)}
         </Text>

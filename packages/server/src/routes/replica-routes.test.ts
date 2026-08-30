@@ -173,7 +173,7 @@ describe("replica-routes", () => {
   test("bootstrap at N, filtered pull, checkpoint, and the single resumable SSE tail agree", async () => {
     const { plane, enrollments, handler } = await fixture();
     const deviceKey = "device-1";
-    // Another device of the vault's one owner (#726) — never a second owner.
+    // Another device of the one owner (#726), never a second owner.
     enrollments.enroll({
       endpointId: deviceKey,
       ownerId: enrollments.owners.ownerOf(plane.boot.vaultId)!,
@@ -214,8 +214,8 @@ describe("replica-routes", () => {
         values: expect.objectContaining({ title: "Already present" }),
       })
     );
-    // Merely receiving a snapshot is not an acknowledgement; the client stamps
-    // its checkpoint only after the local SQLite bootstrap commits.
+    // Receiving a snapshot is not an acknowledgement: the client stamps its
+    // checkpoint only after the local SQLite bootstrap commits.
     expect(
       enrollments.get(deviceKey, plane.boot.vaultId)?.checkpoint
     ).toBeUndefined();
@@ -316,7 +316,7 @@ describe("replica-routes", () => {
   test("windowed bootstrap pages through every row, shapes only on page 1, then converges", async () => {
     const { plane, enrollments, handler } = await fixture();
     const deviceKey = "device-window";
-    // Another device of the vault's one owner (#726) — never a second owner.
+    // Another device of the one owner (#726), never a second owner.
     enrollments.enroll({
       endpointId: deviceKey,
       ownerId: enrollments.owners.ownerOf(plane.boot.vaultId)!,
@@ -327,7 +327,7 @@ describe("replica-routes", () => {
     const ids = ["task-01", "task-02", "task-03", "task-04", "task-05"];
     for (const id of ids) task(plane, id, `Title ${id}`);
 
-    // Page 1 carries the full envelope + the first window + a continuation token.
+    // Page 1: the full envelope, the first window, a continuation token.
     const first = await bootstrapPage(
       handler,
       plane.boot.vaultId,
@@ -340,7 +340,7 @@ describe("replica-routes", () => {
     expect(first.page.next).toBeTruthy();
     expect(first.page.rows).toHaveLength(2);
 
-    // Follow the continuation until complete; each page after the first is lean.
+    // Follow the continuation until complete; later pages are lean.
     const collected = [...first.page.rows];
     let next = first.page.next;
     const cursors = [first.page.cursor];
@@ -366,7 +366,7 @@ describe("replica-routes", () => {
       .map((row) => row.rowId)
       .sort();
     expect(seen).toStrictEqual(ids);
-    // The delta floor the client replays from is page 1's cursor (the minimum).
+    // The delta floor the client replays from is page 1's cursor.
     expect(cursors[0]!.seq).toBe(Math.min(...cursors.map((c) => c.seq)));
   });
 
@@ -407,7 +407,7 @@ describe("replica-routes", () => {
     for (const id of ["task-01", "task-02", "task-03"]) task(plane, id, id);
     const first = await bootstrapDirect(handler, "?window=1");
     expect(first.page.next).toBeTruthy();
-    // Forge a continuation whose pinned schemaEpoch no longer matches the vault.
+    // A continuation whose pinned schemaEpoch no longer matches the vault.
     const decoded = JSON.parse(
       Buffer.from(first.page.next!, "base64url").toString("utf8")
     );
@@ -440,22 +440,26 @@ describe("replica-routes", () => {
     expect(conflicted.page.reason).toBe("shape-changed");
   });
 
-  test("compaction past the pinned page-1 cursor forces a 409 snapshot-retention, and a fresh walk recovers", async () => {
+  test("retention past the pinned page-1 cursor forces a 409 snapshot-retention, and a fresh walk recovers", async () => {
     const { plane, handler } = await fixture();
     for (const id of ["task-01", "task-02", "task-03"]) task(plane, id, id);
     const first = await bootstrapDirect(handler, "?window=1");
     expect(first.status).toBe(200);
     expect(first.page.next).toBeTruthy();
 
-    // High churn after page 1 — the change-log entries the token's pinned
-    // delta floor would need are then compacted away by retention pressure,
-    // exactly the long-lived lagging-device shape.
+    // A lagging walk: churn after page 1, then a retention sweep collecting
+    // the entries the token's pinned cursor needs. AGE is the lever — count
+    // pressure folds hot-row churn into survivors (#883 C6), so churn alone
+    // no longer strand this token.
     const update = plane.db.vault.prepare(
       "UPDATE schedule_task SET title = ? WHERE task_id = ?"
     );
     for (let index = 0; index < 40; index += 1)
       update.run(`churn-${index}`, "task-01");
-    const pruned = pruneReplicaChanges(plane.db.vault, { maxEntries: 4 });
+    const pruned = pruneReplicaChanges(plane.db.vault, {
+      maxAgeMs: 0,
+      now: new Date(Date.now() + 60_000),
+    });
     expect(pruned.floor.seq).toBeGreaterThan(first.page.cursor.seq);
 
     const lagging = await bootstrapDirect(
@@ -689,7 +693,7 @@ describe("replica-routes", () => {
   test("reconciles only explicitly pending, device-scoped outcomes through the snapshot cursor", async () => {
     const { plane, enrollments, handler } = await fixture();
     const deviceKey = "device-outcomes";
-    // Another device of the vault's one owner (#726) — never a second owner.
+    // Another device of the one owner (#726), never a second owner.
     enrollments.enroll({
       endpointId: deviceKey,
       ownerId: enrollments.owners.ownerOf(plane.boot.vaultId)!,

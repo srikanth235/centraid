@@ -88,7 +88,7 @@ export function PickerView({
         onChange={(e) => setQuery(e.currentTarget.value)}
       />
 
-      <div className={styles.grid} ref={gridRef}>
+      <div className={styles.grid} ref={gridRef} data-media-root="">
         {candidates.length === 0 ? (
           <p className={styles.empty}>
             Everything in your library is already in this album.

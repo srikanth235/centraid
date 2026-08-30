@@ -1,28 +1,13 @@
+import { DAY_MS, MONTHS } from "../_shared/format-kit.ts";
+
 // Shared overdue arithmetic. Match `queries/dashboard.ts`:
 // `daysSince(last_contacted_at ?? created_at) > cadence_days` — overdue
 // only after the cadence day, not on it. Do not re-derive in a view.
 
-const DAY = 86_400_000;
-
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-] as const;
-
 export function daysSince(iso: string | null | undefined, now = Date.now()) {
   if (!iso) return 0;
   const at = new Date(iso).getTime();
-  return Number.isNaN(at) ? 0 : Math.max(0, Math.floor((now - at) / DAY));
+  return Number.isNaN(at) ? 0 : Math.max(0, Math.floor((now - at) / DAY_MS));
 }
 
 export function daysSinceContact(
@@ -32,7 +17,7 @@ export function daysSinceContact(
   return daysSince(person.last_contacted_at ?? person.created_at, now);
 }
 
-/** Zero cadence is `Never` and is never overdue — same exemption as the dashboard. */
+/** Zero cadence is `Never`, never overdue. */
 export function isOverdue(
   person: {
     cadence_days?: number | null;
@@ -63,8 +48,8 @@ export function monthDayLabel(monthDay: string): string {
   return name && day ? `${day} ${name}` : String(monthDay);
 }
 
-/** Days to the next annual occurrence of an `MM-DD` (0 = today). February 29
- *  clamps to 28 Feb in common years so a leap-day birthday still fires. */
+/** Days to the next annual `MM-DD` (0 = today). February 29 clamps to 28 Feb
+ *  in common years so a leap-day birthday still fires. */
 export function daysUntilMonthDay(monthDay: string, now = Date.now()): number {
   const [month, day] = String(monthDay).split("-").map(Number);
   if (!month || !day) return Number.MAX_SAFE_INTEGER;
@@ -82,7 +67,7 @@ export function daysUntilMonthDay(monthDay: string, now = Date.now()): number {
   };
   let next = occurrence(today.getFullYear());
   if (next < midnight) next = occurrence(today.getFullYear() + 1);
-  return Math.round((next.getTime() - midnight.getTime()) / DAY);
+  return Math.round((next.getTime() - midnight.getTime()) / DAY_MS);
 }
 
 export function inDaysLabel(days: number): string {
@@ -112,7 +97,7 @@ export function cadenceLineLabel(
   return `${every} · last ${ago}`;
 }
 
-/** `null` and `undefined` are both unknown (draw nothing); do not collapse true/false. */
+/** `null` and `undefined` are both unknown; do not collapse true/false. */
 export function linkState(person: {
   linked?: boolean | null;
 }): "linked" | "unlinked" | "unknown" {
@@ -121,8 +106,13 @@ export function linkState(person: {
   return "unknown";
 }
 
+/** Absent, never zero: a null `linked` keeps the pair null. */
+export function toLinkCount(all: number, linked: number | null): number | null {
+  return linked === null ? null : all - linked;
+}
+
 export function daysUntil(iso: string | null | undefined, now = Date.now()) {
   if (!iso) return 0;
   const at = new Date(iso).getTime();
-  return Number.isNaN(at) ? 0 : Math.max(0, Math.ceil((at - now) / DAY));
+  return Number.isNaN(at) ? 0 : Math.max(0, Math.ceil((at - now) / DAY_MS));
 }

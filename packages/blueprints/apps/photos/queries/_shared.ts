@@ -4,6 +4,12 @@
  * NOT a query — the dispatcher resolves names straight to `queries/<name>.js`.
  */
 
+import {
+  TAGS_SCHEME_URI,
+  conceptsInScheme,
+  findScheme,
+} from "../../_shared/concept-scheme-kit.ts";
+
 interface SrcContent {
   content_id?: string;
   content_uri?: unknown;
@@ -59,7 +65,6 @@ interface CustodyRow {
 }
 
 export const BLOB_ROUTE = "/centraid/_vault/blobs";
-const TAGS_SCHEME_URI = "centraid:tags:v1";
 
 /** Blob bytes become same-origin serve URLs; `data:` URIs pass through. */
 export function srcOf(content: SrcContent | undefined) {
@@ -126,13 +131,11 @@ export async function readAssetJoins({
   const schemeRows = (schemes.rows ?? []) as unknown as SchemeRow[];
   const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
   const custodyRows = (custody.rows ?? []) as unknown as CustodyRow[];
-  const tagsScheme = schemeRows.find((s) => s.uri === TAGS_SCHEME_URI);
+  const tagsScheme = findScheme(schemeRows, TAGS_SCHEME_URI);
   const labelConceptById = new Map<string, string | null | undefined>(
-    tagsScheme
-      ? conceptRows
-          .filter((c) => c.scheme_id === tagsScheme.scheme_id)
-          .map((c) => [c.concept_id, c.pref_label ?? c.notation] as const)
-      : []
+    conceptsInScheme(conceptRows, tagsScheme).map(
+      (c) => [c.concept_id, c.pref_label ?? c.notation] as const
+    )
   );
   const tagsByAsset = new Map<
     string,

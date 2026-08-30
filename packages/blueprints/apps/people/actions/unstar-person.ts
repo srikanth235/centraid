@@ -1,19 +1,8 @@
-/**
- * Remove a person's favorite star. Runs through people.unstar_person — consent-checked and receipted, risk low.
- */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
 export default async function unstarPerson({ body, ctx }: HandlerArgs) {
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "people.unstar_person",
-      input: (body ?? {}) as Record<string, unknown>,
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  return runVaultAction(ctx, {
+    command: "people.unstar_person",
+    input: actionInput(body),
+  });
 }

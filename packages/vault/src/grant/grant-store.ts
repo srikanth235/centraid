@@ -1,155 +1,38 @@
 /*
- * The grant plane's store (#825). `share_grant` holds MEANING,
- * `share_fulfillment` MECHANISM: one row per audience vault, recording where
- * the delivering strategy stands. Nothing here delivers. ONE live grant per
- * audience × subject, and audience rows are read LITERALLY — a party grant and
- * a circle grant containing that party are different decisions.
+ * The grant plane's store (#825): a lens over the `person`/`circle` rows of
+ * the one authority table, translating to `principal_kind`/`verb` here alone.
+ * `share_authority` holds MEANING, `share_fulfillment` MECHANISM — where the
+ * delivering strategy stands, one row per audience vault. Nothing here
+ * delivers. Audience rows read LITERALLY: a party grant and a circle grant
+ * containing that party differ.
  */
 
 import type { DatabaseSync } from "node:sqlite";
 
 import { uuidv7 } from "../ids.js";
 import type { ShareableItemType } from "../share/closure.js";
+import { listFulfillment } from "./grant-fulfillment-rows.js";
+import {
+  GRANT_SELECT,
+  PRINCIPAL_OF_AUDIENCE,
+  toGrant,
+  UnofferableSubjectError,
+} from "./grant-records.js";
+import type {
+  CreateShareGrantInput,
+  CreateShareGrantResult,
+  RevokeShareGrantResult,
+  ShareGrantAudience,
+  ShareGrantCapability,
+  ShareGrantRecord,
+  ShareGrantRow,
+} from "./grant-records.js";
+import { prepared } from "./prepared.js";
 import { fulfillmentAnswerFor } from "./subject-registry.js";
 
-export type ShareGrantCapability = "view" | "edit";
-
-export type ShareGrantAudienceKind = "party" | "circle";
-
-export interface ShareGrantAudience {
-  kind: ShareGrantAudienceKind;
-  /** Polymorphic by kind, so the column carries no FK. */
-  id: string;
-}
-
-/** `awaiting_channel` has no live binding; `remove_sent` is revocation in flight. */
-export type ShareFulfillmentState =
-  | "awaiting_channel"
-  | "syncing"
-  | "delivered"
-  | "remove_sent"
-  | "removed";
-
-export interface ShareGrantRecord {
-  grantId: string;
-  audience: ShareGrantAudience;
-  subjectType: ShareableItemType;
-  subjectId: string;
-  capability: ShareGrantCapability;
-  grantedAt: string;
-  revokedAt: string | null;
-  grantedBy: string;
-  maxSizeBytes: number | null;
-}
-
-export interface ShareFulfillmentRecord {
-  grantId: string;
-  peerVaultId: string;
-  state: ShareFulfillmentState;
-  updatedAt: string;
-  detail: string | null;
-  /**
-   * When the subject FIRST reached this peer. Not derivable from `state`
-   * (#846), which degrades to `syncing` on an unreachable pass: revocation
-   * needs the durable fact or a degraded grant has "nothing to remove".
-   */
-  deliveredAt: string | null;
-}
-
-export interface CreateShareGrantInput {
-  audience: ShareGrantAudience;
-  subjectType: ShareableItemType;
-  subjectId: string;
-  capability: ShareGrantCapability;
-  grantedAt: string;
-  grantedBy: string;
-  maxSizeBytes?: number | null;
-}
-
-export type CreateShareGrantResult =
-  | { outcome: "created"; grantId: string; grant: ShareGrantRecord }
-  | { outcome: "exists"; grantId: string; grant: ShareGrantRecord };
-
-/**
- * No strategy answers this subject × capability, so the grant would accept a
- * gesture the vault cannot keep (#750). Surfaces consult the registry BEFORE
- * drawing the verb; arriving here is an upstream bug.
- */
-export class UnofferableSubjectError extends Error {
-  readonly subjectType: string;
-  readonly capability: ShareGrantCapability;
-  constructor(subjectType: string, capability: ShareGrantCapability) {
-    super(
-      `no fulfillment strategy answers ${subjectType} x ${capability}; the grant cannot be offered`
-    );
-    this.name = "UnofferableSubjectError";
-    this.subjectType = subjectType;
-    this.capability = capability;
-  }
-}
-
-export interface RevokeShareGrantResult {
-  outcome: "revoked" | "already-revoked" | "absent";
-  /** Propagating removal over these is the strategy's job. */
-  fulfillment: ShareFulfillmentRecord[];
-}
-
-type ShareGrantRow = {
-  grant_id: string;
-  audience_kind: string;
-  audience_id: string;
-  subject_type: string;
-  subject_id: string;
-  capability: string;
-  granted_at: string;
-  revoked_at: string | null;
-  granted_by: string;
-  max_size_bytes: number | null;
-};
-
-type ShareFulfillmentRow = {
-  grant_id: string;
-  peer_vault_id: string;
-  state: string;
-  updated_at: string;
-  detail: string | null;
-  delivered_at: string | null;
-};
-
-// CHECK constraints make the narrowing casts below sound.
-function toGrant(row: ShareGrantRow): ShareGrantRecord {
-  return {
-    grantId: row.grant_id,
-    audience: {
-      kind: row.audience_kind as ShareGrantAudienceKind,
-      id: row.audience_id,
-    },
-    subjectType: row.subject_type as ShareableItemType,
-    subjectId: row.subject_id,
-    capability: row.capability as ShareGrantCapability,
-    grantedAt: row.granted_at,
-    revokedAt: row.revoked_at,
-    grantedBy: row.granted_by,
-    maxSizeBytes: row.max_size_bytes,
-  };
-}
-
-function toFulfillment(row: ShareFulfillmentRow): ShareFulfillmentRecord {
-  return {
-    grantId: row.grant_id,
-    peerVaultId: row.peer_vault_id,
-    state: row.state as ShareFulfillmentState,
-    updatedAt: row.updated_at,
-    detail: row.detail,
-    deliveredAt: row.delivered_at,
-  };
-}
-
-const FULFILLMENT_COLUMNS = `grant_id, peer_vault_id, state, updated_at,
-  detail, delivered_at`;
-
-const GRANT_COLUMNS = `grant_id, audience_kind, audience_id, subject_type,
-  subject_id, capability, granted_at, revoked_at, granted_by, max_size_bytes`;
+export * from "./grant-records.js";
+export * from "./grant-authority.js";
+export * from "./grant-fulfillment-rows.js";
 
 export function readLiveShareGrant(
   db: DatabaseSync,
@@ -157,19 +40,50 @@ export function readLiveShareGrant(
   subjectType: ShareableItemType,
   subjectId: string
 ): ShareGrantRecord | undefined {
-  const row = db
-    .prepare(
-      `SELECT ${GRANT_COLUMNS} FROM share_grant
-        WHERE audience_kind = ? AND audience_id = ?
-          AND subject_type = ? AND subject_id = ? AND revoked_at IS NULL`
-    )
-    .get(audience.kind, audience.id, subjectType, subjectId) as
-    | ShareGrantRow
-    | undefined;
+  const row = prepared(
+    db,
+    `${GRANT_SELECT}
+        AND a.principal_kind = ? AND a.principal_id = ?
+        AND a.subject_type = ? AND a.subject_id = ? AND a.revoked_at IS NULL`
+  ).get(
+    PRINCIPAL_OF_AUDIENCE[audience.kind],
+    audience.id,
+    subjectType,
+    subjectId
+  ) as ShareGrantRow | undefined;
   return row ? toGrant(row) : undefined;
 }
 
-/** Idempotent: a repeat reports the standing grant, never mints a rival. */
+/**
+ * A refusal is an answer, not an absent grant, and stays LIVE: that masks
+ * fulfillment, and forces a later grant to revoke it first (#883).
+ */
+export function readLiveShareRefusal(
+  db: DatabaseSync,
+  input: {
+    audience: ShareGrantAudience;
+    subjectType: string;
+    subjectId: string;
+    capability: ShareGrantCapability;
+  }
+): string | undefined {
+  const row = prepared(
+    db,
+    `SELECT authority_id FROM share_authority
+      WHERE principal_kind = ? AND principal_id = ? AND subject_type = ?
+        AND subject_id = ? AND verb = ? AND duration = 'standing'
+        AND decision = 'declined' AND revoked_at IS NULL`
+  ).get(
+    PRINCIPAL_OF_AUDIENCE[input.audience.kind],
+    input.audience.id,
+    input.subjectType,
+    input.subjectId,
+    input.capability
+  ) as { authority_id: string } | undefined;
+  return row?.authority_id;
+}
+
+/** Idempotent: a repeat reports the standing grant, never a rival. */
 export function createShareGrant(
   db: DatabaseSync,
   input: CreateShareGrantInput
@@ -184,25 +98,42 @@ export function createShareGrant(
     input.subjectId
   );
   if (standing) {
-    return { outcome: "exists", grantId: standing.grantId, grant: standing };
+    return standing.capability === input.capability
+      ? { outcome: "exists", grantId: standing.grantId, grant: standing }
+      : { outcome: "conflict", grantId: standing.grantId, grant: standing };
   }
+  // Revoked, never deleted: "told no, then said yes" stays readable.
+  revokeShareRefusal(db, {
+    audience: input.audience,
+    subjectType: input.subjectType,
+    subjectId: input.subjectId,
+    capability: input.capability,
+    revokedAt: input.grantedAt,
+  });
   const grantId = uuidv7();
   db.prepare(
-    `INSERT INTO share_grant
-       (grant_id, audience_kind, audience_id, subject_type, subject_id,
-        capability, granted_at, revoked_at, granted_by, max_size_bytes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`
+    `INSERT INTO share_authority
+       (authority_id, principal_kind, principal_id, subject_type, subject_id,
+        verb, duration, expires_at, decision, granted_at, granted_by,
+        revoked_at, receipt_id)
+     VALUES (?, ?, ?, ?, ?, ?, 'standing', NULL, 'granted', ?, ?, NULL, NULL)`
   ).run(
     grantId,
-    input.audience.kind,
+    PRINCIPAL_OF_AUDIENCE[input.audience.kind],
     input.audience.id,
     input.subjectType,
     input.subjectId,
     input.capability,
     input.grantedAt,
-    input.grantedBy,
-    input.maxSizeBytes ?? null
+    input.grantedBy
   );
+  // Only a real ceiling gets a row: absence IS the default.
+  if (input.maxSizeBytes !== undefined && input.maxSizeBytes !== null) {
+    db.prepare(
+      `INSERT INTO share_delivery_config (grant_id, max_size_bytes)
+       VALUES (?, ?)`
+    ).run(grantId, input.maxSizeBytes);
+  }
   const grant = readShareGrant(db, grantId);
   if (!grant) throw new Error(`share grant ${grantId} vanished after insert`);
   return { outcome: "created", grantId, grant };
@@ -212,13 +143,13 @@ export function readShareGrant(
   db: DatabaseSync,
   grantId: string
 ): ShareGrantRecord | undefined {
-  const row = db
-    .prepare(`SELECT ${GRANT_COLUMNS} FROM share_grant WHERE grant_id = ?`)
-    .get(grantId) as ShareGrantRow | undefined;
+  const row = prepared(db, `${GRANT_SELECT} AND a.authority_id = ?`).get(
+    grantId
+  ) as ShareGrantRow | undefined;
   return row ? toGrant(row) : undefined;
 }
 
-/** The row survives revoked; fulfillment rows come back untouched. */
+/** The row survives revoked; fulfillment comes back untouched. */
 export function revokeShareGrant(
   db: DatabaseSync,
   input: { grantId: string; revokedAt: string }
@@ -229,11 +160,124 @@ export function revokeShareGrant(
   if (existing.revokedAt !== null) {
     return { outcome: "already-revoked", fulfillment };
   }
+  // `revoked_at` is the ONE updatable column; the rest is immutable.
   db.prepare(
-    `UPDATE share_grant SET revoked_at = ?
-      WHERE grant_id = ? AND revoked_at IS NULL`
+    `UPDATE share_authority SET revoked_at = ?
+      WHERE authority_id = ? AND revoked_at IS NULL`
   ).run(input.revokedAt, input.grantId);
   return { outcome: "revoked", fulfillment };
+}
+
+export interface DeclineShareInput {
+  audience: ShareGrantAudience;
+  subjectType: ShareableItemType;
+  subjectId: string;
+  capability: ShareGrantCapability;
+  decidedAt: string;
+  decidedBy: string;
+}
+
+export type DeclineShareResult =
+  | { outcome: "declined"; authorityId: string }
+  | { outcome: "exists"; authorityId: string };
+
+/**
+ * The NO is a row, which makes it a REFUSAL MASK over circle membership:
+ * refusing one person inside a granted circle keeps the circle (#883).
+ */
+export function declineShare(
+  db: DatabaseSync,
+  input: DeclineShareInput
+): DeclineShareResult {
+  const standing = readLiveShareRefusal(db, input);
+  if (standing) return { outcome: "exists", authorityId: standing };
+  // Saying no to what you granted ends the grant.
+  const granted = readLiveShareGrant(
+    db,
+    input.audience,
+    input.subjectType,
+    input.subjectId
+  );
+  if (granted?.capability === input.capability)
+    revokeShareGrant(db, {
+      grantId: granted.grantId,
+      revokedAt: input.decidedAt,
+    });
+  const authorityId = uuidv7();
+  db.prepare(
+    `INSERT INTO share_authority
+       (authority_id, principal_kind, principal_id, subject_type, subject_id,
+        verb, duration, expires_at, decision, granted_at, granted_by,
+        revoked_at, receipt_id)
+     VALUES (?, ?, ?, ?, ?, ?, 'standing', NULL, 'declined', ?, ?, NULL, NULL)`
+  ).run(
+    authorityId,
+    PRINCIPAL_OF_AUDIENCE[input.audience.kind],
+    input.audience.id,
+    input.subjectType,
+    input.subjectId,
+    input.capability,
+    input.decidedAt,
+    input.decidedBy
+  );
+  return { outcome: "declined", authorityId };
+}
+
+/** Revoked, never deleted: the NO stays history. */
+export function revokeShareRefusal(
+  db: DatabaseSync,
+  input: {
+    audience: ShareGrantAudience;
+    subjectType: string;
+    subjectId: string;
+    capability: ShareGrantCapability;
+    revokedAt: string;
+  }
+): string | undefined {
+  const standing = readLiveShareRefusal(db, input);
+  if (!standing) return undefined;
+  db.prepare(
+    "UPDATE share_authority SET revoked_at = ? WHERE authority_id = ?"
+  ).run(input.revokedAt, standing);
+  return standing;
+}
+
+export function maskedPartiesForSubject(
+  db: DatabaseSync,
+  subjectType: string,
+  subjectId: string
+): Set<string> {
+  return new Set(
+    (
+      prepared(
+        db,
+        `SELECT principal_id FROM share_authority
+          WHERE principal_kind = 'person' AND decision = 'declined'
+            AND subject_type = ? AND subject_id = ? AND revoked_at IS NULL`
+      ).all(subjectType, subjectId) as { principal_id: string }[]
+    ).map((row) => row.principal_id)
+  );
+}
+
+/**
+ * Roster less anyone refused here. `resolveAudienceParties` stays the LITERAL
+ * read, which is what the gateway's edit-refusal check asks.
+ */
+export function resolveGrantAudienceParties(
+  db: DatabaseSync,
+  grant: Pick<ShareGrantRecord, "audience" | "subjectType" | "subjectId">
+): { parties: string[]; masked: string[] } {
+  const roster = resolveAudienceParties(db, grant.audience);
+  const masked = maskedPartiesForSubject(
+    db,
+    grant.subjectType,
+    grant.subjectId
+  );
+  if (masked.size === 0) return { parties: roster, masked: [] };
+  return {
+    parties: roster.filter((partyId) => !masked.has(partyId)),
+    masked: roster.filter((partyId) => masked.has(partyId)),
+  };
 }
 
 /** EXACTLY this audience; `listLiveGrantsReachingParty` unions kinds. */
@@ -242,15 +286,16 @@ export function listShareGrantsForAudience(
   audience: ShareGrantAudience,
   options: { includeRevoked?: boolean } = {}
 ): ShareGrantRecord[] {
-  const live = options.includeRevoked === true ? "" : " AND revoked_at IS NULL";
+  const live =
+    options.includeRevoked === true ? "" : " AND a.revoked_at IS NULL";
   return (
     db
       .prepare(
-        `SELECT ${GRANT_COLUMNS} FROM share_grant
-          WHERE audience_kind = ? AND audience_id = ?${live}
-          ORDER BY granted_at, grant_id`
+        `${GRANT_SELECT}
+          AND a.principal_kind = ? AND a.principal_id = ?${live}
+          ORDER BY a.granted_at, a.authority_id`
       )
-      .all(audience.kind, audience.id) as ShareGrantRow[]
+      .all(PRINCIPAL_OF_AUDIENCE[audience.kind], audience.id) as ShareGrantRow[]
   ).map(toGrant);
 }
 
@@ -260,22 +305,20 @@ export function listShareGrantsForSubject(
   subjectId: string,
   options: { includeRevoked?: boolean } = {}
 ): ShareGrantRecord[] {
-  const live = options.includeRevoked === true ? "" : " AND revoked_at IS NULL";
+  const live =
+    options.includeRevoked === true ? "" : " AND a.revoked_at IS NULL";
   return (
     db
       .prepare(
-        `SELECT ${GRANT_COLUMNS} FROM share_grant
-          WHERE subject_type = ? AND subject_id = ?${live}
-          ORDER BY granted_at, grant_id`
+        `${GRANT_SELECT}
+          AND a.subject_type = ? AND a.subject_id = ?${live}
+          ORDER BY a.granted_at, a.authority_id`
       )
       .all(subjectType, subjectId) as ShareGrantRow[]
   ).map(toGrant);
 }
 
-/**
- * Absent-never-empty needs this: "never heard of them" and "nothing shared
- * with them" both answer `grants: []` otherwise.
- */
+/** Absent-never-empty: both cases would answer `grants: []` otherwise. */
 export function audienceExists(
   db: DatabaseSync,
   audience: ShareGrantAudience
@@ -291,23 +334,21 @@ export function audienceExists(
   );
 }
 
-/** An empty circle resolves to nobody: the grant stands, reaching no one. */
+/** An empty circle resolves to nobody; the grant still stands. */
 export function resolveAudienceParties(
   db: DatabaseSync,
   audience: ShareGrantAudience
 ): string[] {
   if (audience.kind === "party") return [audience.id];
   return (
-    db
-      .prepare(
-        `SELECT party_id FROM social_circle_member
+    prepared(
+      db,
+      `SELECT party_id FROM social_circle_member
           WHERE circle_id = ? ORDER BY party_id`
-      )
-      .all(audience.id) as { party_id: string }[]
+    ).all(audience.id) as { party_id: string }[]
   ).map((row) => row.party_id);
 }
 
-/** The ONLY reader crossing audience kinds. */
 export function listLiveGrantsReachingParty(
   db: DatabaseSync,
   partyId: string
@@ -315,122 +356,16 @@ export function listLiveGrantsReachingParty(
   return (
     db
       .prepare(
-        `SELECT ${GRANT_COLUMNS} FROM share_grant
-          WHERE revoked_at IS NULL
-            AND (
-              (audience_kind = 'party' AND audience_id = ?)
-              OR (audience_kind = 'circle' AND audience_id IN (
-                    SELECT circle_id FROM social_circle_member WHERE party_id = ?
-                 ))
-            )
-          ORDER BY granted_at, grant_id`
+        `${GRANT_SELECT}
+          AND a.revoked_at IS NULL
+          AND (
+            (a.principal_kind = 'person' AND a.principal_id = ?)
+            OR (a.principal_kind = 'circle' AND a.principal_id IN (
+                  SELECT circle_id FROM social_circle_member WHERE party_id = ?
+               ))
+          )
+          ORDER BY a.granted_at, a.authority_id`
       )
       .all(partyId, partyId) as ShareGrantRow[]
   ).map(toGrant);
-}
-
-export function ensureFulfillment(
-  db: DatabaseSync,
-  input: {
-    grantId: string;
-    peerVaultId: string;
-    state: ShareFulfillmentState;
-    updatedAt: string;
-  }
-): ShareFulfillmentRecord {
-  // A row opened AT `delivered` carries the memory from birth (#846).
-  db.prepare(
-    `INSERT INTO share_fulfillment
-       (grant_id, peer_vault_id, state, updated_at, detail, delivered_at)
-     VALUES (?, ?, ?, ?, NULL, ?)
-     ON CONFLICT (grant_id, peer_vault_id) DO NOTHING`
-  ).run(
-    input.grantId,
-    input.peerVaultId,
-    input.state,
-    input.updatedAt,
-    input.state === "delivered" ? input.updatedAt : null
-  );
-  const row = readFulfillment(db, input.grantId, input.peerVaultId);
-  if (!row) {
-    throw new Error(
-      `share fulfillment ${input.grantId}/${input.peerVaultId} vanished after insert`
-    );
-  }
-  return row;
-}
-
-/**
- * `delivered_at` is maintained HERE, never by callers (#846): `delivered`
- * stamps the FIRST instant, `removed` clears it, every other transition —
- * `syncing` included — leaves it alone, so a blip cannot erase a delivery.
- */
-export function setFulfillmentState(
-  db: DatabaseSync,
-  input: {
-    grantId: string;
-    peerVaultId: string;
-    state: ShareFulfillmentState;
-    updatedAt: string;
-    detail?: string | null;
-  }
-): ShareFulfillmentRecord {
-  const detail = input.detail === undefined ? null : input.detail;
-  const clearDelivered = input.state === "removed";
-  const deliveredAt = input.state === "delivered" ? input.updatedAt : null;
-  db.prepare(
-    `INSERT INTO share_fulfillment
-       (grant_id, peer_vault_id, state, updated_at, detail, delivered_at)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT (grant_id, peer_vault_id) DO UPDATE SET
-       state = excluded.state,
-       updated_at = excluded.updated_at,
-       detail = excluded.detail,
-       delivered_at = CASE
-         WHEN ${clearDelivered ? 1 : 0} = 1 THEN NULL
-         ELSE COALESCE(share_fulfillment.delivered_at, excluded.delivered_at)
-       END`
-  ).run(
-    input.grantId,
-    input.peerVaultId,
-    input.state,
-    input.updatedAt,
-    detail,
-    deliveredAt
-  );
-  const row = readFulfillment(db, input.grantId, input.peerVaultId);
-  if (!row) {
-    throw new Error(
-      `share fulfillment ${input.grantId}/${input.peerVaultId} vanished after write`
-    );
-  }
-  return row;
-}
-
-export function readFulfillment(
-  db: DatabaseSync,
-  grantId: string,
-  peerVaultId: string
-): ShareFulfillmentRecord | undefined {
-  const row = db
-    .prepare(
-      `SELECT ${FULFILLMENT_COLUMNS}
-         FROM share_fulfillment WHERE grant_id = ? AND peer_vault_id = ?`
-    )
-    .get(grantId, peerVaultId) as ShareFulfillmentRow | undefined;
-  return row ? toFulfillment(row) : undefined;
-}
-
-export function listFulfillment(
-  db: DatabaseSync,
-  grantId: string
-): ShareFulfillmentRecord[] {
-  return (
-    db
-      .prepare(
-        `SELECT ${FULFILLMENT_COLUMNS}
-           FROM share_fulfillment WHERE grant_id = ? ORDER BY peer_vault_id`
-      )
-      .all(grantId) as ShareFulfillmentRow[]
-  ).map(toFulfillment);
 }

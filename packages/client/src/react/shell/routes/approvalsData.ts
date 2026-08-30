@@ -1,3 +1,5 @@
+import { plural } from "@centraid/blueprints/apps/_shared/format-kit";
+
 import { relativeTime } from "../../../app-format.js";
 import { APPROVALS_HEALTH_DETAIL } from "../../../approvals-copy.js";
 import type { EnrichConsentRecord } from "../../../enrich-policy.js";
@@ -37,10 +39,6 @@ export function approvalsState(
 ): "ready" | "full" | "empty" {
   if (tally.waiting === 0) return "empty";
   return tally.waiting > APPROVALS_FULL_AT ? "full" : "ready";
-}
-
-function plural(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`;
 }
 
 /** The app bar's count line; empty says "nothing waiting", never a zero. */
@@ -83,7 +81,6 @@ function recipientFrom(
   return fallbackTarget;
 }
 
-/** Map one wire `OutboxItem` to the screen's row DTO. */
 export function buildOutboxRow(item: OutboxItem): ApprovalsOutboxRowDTO {
   const artifact = item.artifact ?? {};
   const subject =
@@ -304,7 +301,6 @@ export function enrichCapabilityLabel(capability: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
-/** Map one wire `EnrichConsentRecord` to the screen's row DTO. */
 export function buildEnrichConsentRow(
   record: EnrichConsentRecord
 ): ApprovalsEnrichConsentRowDTO {

@@ -11,7 +11,13 @@ import {
 import type { ShelfId } from "@centraid/blueprints/apps/tasks/shelves";
 import { MORE_ROWS } from "@centraid/blueprints/apps/tasks/view-copy";
 
+import { BAND_CAPSULE } from "../../kit/band/band-capsule";
+import type { BandCapsule } from "../../kit/band/band-capsule";
 import type { BandOwner } from "../../kit/band/band-owner";
+
+// The frame's capsule lives in `kit/band/band-capsule.ts` (#883 B5).
+export { BAND_CAPSULE } from "../../kit/band/band-capsule";
+export type { BandCapsule } from "../../kit/band/band-capsule";
 
 export type TasksBandDestinationKey =
   | "today"
@@ -29,8 +35,6 @@ export interface TasksBandDestination {
 
 /** Frame band's cap, hence a claiming app's: five destinations, fifth = More. */
 export const TASKS_BAND_MAX_DESTINATIONS = 5;
-
-export const TASKS_BAND_CAPSULE_SIZE = 52;
 
 const BAND_ICONS: Readonly<Record<TasksBandDestinationKey, string>> = {
   today: "Check",
@@ -52,30 +56,12 @@ export const TASKS_BAND_DESTINATIONS: readonly TasksBandDestination[] = [
   { key: "more", label: TASKS_MORE_LABEL, icon: BAND_ICONS.more },
 ];
 
-/** The frame's capsule — a frame control, never one of the app's tabs. */
-export interface TasksBandCapsule {
-  label: "Home";
-  icon: "Home";
-  size: number;
-  edge: "leading";
-  /** The seam. `false` is the whole reason it is not a sixth tab. */
-  inTabGroup: false;
-}
-
-export const TASKS_BAND_CAPSULE: TasksBandCapsule = {
-  label: "Home",
-  icon: "Home",
-  size: TASKS_BAND_CAPSULE_SIZE,
-  edge: "leading",
-  inTabGroup: false,
-};
-
 /** Exactly one band exists at any moment — the frame's latch. */
 export type ResolvedTasksBand =
   | {
       owner: "app";
       destinations: readonly TasksBandDestination[];
-      capsule: TasksBandCapsule;
+      capsule: BandCapsule;
     }
   | { owner: "host" };
 
@@ -89,7 +75,7 @@ export function resolveTasksBand(owner: BandOwner): ResolvedTasksBand {
   return {
     owner: "app",
     destinations: TASKS_BAND_DESTINATIONS,
-    capsule: TASKS_BAND_CAPSULE,
+    capsule: BAND_CAPSULE,
   };
 }
 

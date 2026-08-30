@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 //
-// Grant sheet claims that are not the write-door walk (#825): reach honesty,
-// revoke confirm, and the object-first entry.
+// Grant sheet claims outside the write-door walk (#825).
 import { act } from "react";
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -36,6 +35,11 @@ describe("the grant sheet, web seat — claims", () => {
               channel: { state: "invited" as const },
               grants: [
                 standingGrant({
+                  // The vault's own phrase and reason for a grant with no
+                  // channel to carry it (ruling V-phrases).
+                  phrase: "on its way",
+                  reason:
+                    "there is no way to reach them yet; the ask is recorded",
                   fulfillment: [
                     {
                       peerVaultId: "vault-priya",
@@ -49,9 +53,13 @@ describe("the grant sheet, web seat — claims", () => {
             }),
         }),
       });
-      expect(container.textContent).toContain("Invitation pending");
+      expect(container.textContent).toContain("On its way");
+      expect(container.textContent).toContain(
+        "there is no way to reach them yet; the ask is recorded"
+      );
+      // The seam rung, not the error rung, and keyed on the WIRE's word.
       expect(
-        container.querySelector('[data-delivery="awaiting_channel"]')
+        container.querySelector('[data-phrase="on its way"]')
       ).not.toBeNull();
     });
 
@@ -110,7 +118,7 @@ describe("the grant sheet, web seat — claims", () => {
       expect(container.textContent).toContain(
         "This vault has no record of Priya."
       );
-      // Three sentences this one is NOT allowed to arrive wearing.
+      // This one may not arrive wearing any of these.
       expect(container.textContent).not.toContain(
         "Nothing shared with Priya yet."
       );
@@ -142,11 +150,21 @@ describe("the grant sheet, web seat — claims", () => {
             Promise.resolve({
               known: true,
               channel: { state: "live" as const },
-              grants: [standingGrant({ fulfillment: [] })],
+              grants: [
+                standingGrant({
+                  fulfillment: [],
+                  phrase: "on its way",
+                  reason: "no vault has been addressed for it yet",
+                }),
+              ],
             }),
         }),
       });
-      expect(container.textContent).toContain("Not sent yet");
+      expect(container.textContent).toContain("On its way");
+      expect(container.textContent).toContain(
+        "no vault has been addressed for it yet"
+      );
+      expect(container.textContent).not.toContain("Shared");
     });
   });
 
@@ -240,8 +258,7 @@ describe("the grant sheet, web seat — claims", () => {
 
     test("the person's reach is read here too, never invented from the object read", async () => {
       // `forSubject` cannot answer reach, so the object-first sheet asks the
-      // person side for it. Without that read a live-channel person was told
-      // sharing would send her an invitation first.
+      // person side; without it a live channel reads as needing an invitation.
       const { container } = await mount({
         subject: {
           subjectType: "core.document",

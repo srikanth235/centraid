@@ -129,13 +129,6 @@ describe("Commons derived-state scrub", () => {
       )
       .run(uuidv7(), shared.contentId, now);
     audience.vault
-      .prepare(
-        `INSERT INTO home_asset_item
-           (item_id, owner_party_id, name, photo_asset_id, updated_at)
-         VALUES ('owner-item', ?, 'Owner item', ?, ?)`
-      )
-      .run(audienceBoot.ownerPartyId, shared.assetId, now);
-    audience.vault
       .prepare("UPDATE media_asset SET source_asset_id = ? WHERE asset_id = ?")
       .run(shared.assetId, ownerPhoto.assetId);
     expect(
@@ -189,13 +182,6 @@ describe("Commons derived-state scrub", () => {
         )
         .get()
     ).toMatchObject({ n: 0 });
-    expect(
-      audience.vault
-        .prepare(
-          "SELECT photo_asset_id FROM home_asset_item WHERE item_id = 'owner-item'"
-        )
-        .get()
-    ).toMatchObject({ photo_asset_id: null });
     expect(
       audience.vault
         .prepare("SELECT source_asset_id FROM media_asset WHERE asset_id = ?")

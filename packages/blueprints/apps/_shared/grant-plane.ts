@@ -1,16 +1,29 @@
 /**
- * The grant plane as a surface reads it (#825). Three rules live here, not in
- * components: ABSENT IS NEVER EMPTY — `fulfillment: []`, `channel: null`, a
- * severed channel and `undefined` are four facts with four tokens, and unknown
- * is never a claim; THE REGISTRY DECIDES WHICH VERBS EXIST, never a hardcoded
- * list; THE WIRE IS UNTRUSTED, so every parser is total and drops a drifted row.
+ * The grant plane as a surface reads it (#825). ABSENT IS NEVER EMPTY: the
+ * types keep empty, null, severed and unknown apart, and unknown is never a
+ * claim. THE REGISTRY DECIDES WHICH VERBS EXIST. THE WIRE IS UNTRUSTED — every
+ * parser is total and drops a drifted row. THE VAULT
+ * SAYS WHERE A GRANT STANDS (#883, ruling V-phrases): `phrase`, `reason` and
+ * `confirmed` ride the wire, derived once in the vault.
  */
 
-import type { PlaceableItemType } from "./placement-registry.ts";
+import { GRANT_LOCI } from "./grant-transport.ts";
+import type {
+  GrantAudienceKind,
+  GrantCapability,
+  GrantLocus,
+  GrantRequest,
+} from "./grant-transport.ts";
 import { placementEntity } from "./placement-registry.ts";
+import type { PlaceableItemType } from "./placement-registry.ts";
 
-export type GrantCapability = "view" | "edit";
-export type GrantAudienceKind = "party" | "circle";
+export { GRANT_LOCI } from "./grant-transport.ts";
+export type {
+  GrantAudienceKind,
+  GrantCapability,
+  GrantLocus,
+  GrantRequest,
+} from "./grant-transport.ts";
 
 export interface GrantAudience {
   kind: GrantAudienceKind;
@@ -31,6 +44,15 @@ export interface GrantFulfillmentRow {
   detail: string | null;
 }
 
+/** Mirror of the vault's `GRANT_PHRASES`; `grant-plane.test.ts` source-scans
+ *  it. `@centraid/vault` is Node-only. */
+export const GRANT_PHRASES = ["on its way", "shared", "withdrawn"] as const;
+export type GrantPhrase = (typeof GRANT_PHRASES)[number];
+
+export function parseLocus(value: unknown): GrantLocus | undefined {
+  return GRANT_LOCI.find((candidate) => candidate === value);
+}
+
 export interface GrantRecord {
   grantId: string;
   audience: GrantAudience;
@@ -42,6 +64,12 @@ export interface GrantRecord {
   grantedBy: string;
   maxSizeBytes: number | null;
   fulfillment: GrantFulfillmentRow[];
+  phrase?: GrantPhrase;
+  reason: string | null;
+  /** `withdrawn` only: false until the audience acknowledged the removal. */
+  confirmed?: boolean;
+  locus?: GrantLocus;
+  promise?: string;
 }
 
 export interface GrantSubjectOffer {
@@ -129,6 +157,11 @@ export function parseGrant(value: unknown): GrantRecord | undefined {
         return parsed ? [parsed] : [];
       })
     : [];
+  // Drift drops to `undefined`, never a neighbouring word: a guess would print
+  // a claim the vault did not make.
+  const phrase = GRANT_PHRASES.find((candidate) => candidate === row.phrase);
+  const locus = parseLocus(row.locus);
+  const promise = text(row, "promise");
   return {
     grantId,
     audience: { kind, id: audienceId },
@@ -141,6 +174,11 @@ export function parseGrant(value: unknown): GrantRecord | undefined {
     maxSizeBytes:
       typeof row.maxSizeBytes === "number" ? row.maxSizeBytes : null,
     fulfillment,
+    ...(phrase ? { phrase } : {}),
+    reason: text(row, "reason") ?? null,
+    ...(typeof row.confirmed === "boolean" ? { confirmed: row.confirmed } : {}),
+    ...(locus ? { locus } : {}),
+    ...(promise ? { promise } : {}),
   };
 }
 
@@ -150,6 +188,17 @@ export function parseGrants(value: unknown): GrantRecord[] {
     const grant = parseGrant(entry);
     return grant ? [grant] : [];
   });
+}
+
+export function parseLoci(value: unknown): Partial<Record<GrantLocus, string>> {
+  const row = record(value);
+  if (!row) return {};
+  const loci: Partial<Record<GrantLocus, string>> = {};
+  for (const locus of GRANT_LOCI) {
+    const copy = text(row, locus);
+    if (copy) loci[locus] = copy;
+  }
+  return loci;
 }
 
 export function parseSubjectOffers(value: unknown): GrantSubjectOffer[] {
@@ -168,8 +217,7 @@ export function parseSubjectOffers(value: unknown): GrantSubjectOffer[] {
   });
 }
 
-/** Only an explicit `null` is "never reached"; drift answers `undefined`, so no
- * surface paints it over a person the vault may be reaching. */
+/** Only an explicit `null` is "never reached"; drift answers `undefined`. */
 export function parseChannel(value: unknown): GrantChannel {
   if (value === null) return null;
   const row = record(value);
@@ -192,31 +240,12 @@ export function capabilitiesFor(
   );
 }
 
-export function offersCapability(
-  offers: readonly GrantSubjectOffer[],
-  subjectType: string,
-  capability: GrantCapability
-): boolean {
-  return capabilitiesFor(offers, subjectType).includes(capability);
-}
-
 export function subjectNoun(subjectType: string): string {
   return (
     placementEntity(subjectType as PlaceableItemType)?.label ?? "shared item"
   );
 }
 
-export type GrantDelivery = GrantFulfillmentState | "none";
-
-/** Worst-standing state: half delivered, half waiting reads as waiting. */
-export function grantDelivery(grant: GrantRecord): GrantDelivery {
-  if (!grant.fulfillment.length) return "none";
-  for (const state of FULFILLMENT_STATES)
-    if (grant.fulfillment.some((row) => row.state === state)) return state;
-  return "none";
-}
-
-/** `unknown` is an unanswered read, not a reach state; it owes a checking line. */
 export type GrantReach =
   | "unknown"
   | "never-reached"
@@ -229,7 +258,6 @@ export function channelReach(channel: GrantChannel): GrantReach {
   return channel === null ? "never-reached" : channel.state;
 }
 
-/** A revoked grant is history, not access. */
 export function liveGrants(
   grants: readonly GrantRecord[]
 ): readonly GrantRecord[] {
@@ -267,15 +295,6 @@ export function drawableCapability(
 ): GrantCapability {
   if (capabilities.includes(wanted)) return wanted;
   return capabilities[0] ?? "view";
-}
-
-export interface GrantRequest {
-  audienceKind: GrantAudienceKind;
-  audienceId: string;
-  subjectType: string;
-  subjectId: string;
-  capability: GrantCapability;
-  subjectLabel?: string;
 }
 
 export function grantRequestFor(

@@ -1,13 +1,21 @@
-// governance: allow-repo-hygiene file-size-limit standing duties are one cohesive sweep pipeline (revocation, lifecycle purge incl. the document-chain purge, retention, ingest); splitting mid-sweep would scatter one transaction's worth of reasoning across files.
-// Standing duties (§10): revocation, lifecycle, ingest. Not request-shaped; still writes receipts.
+// governance: allow-repo-hygiene file-size-limit one sweep pipeline; splitting it scatters a single transaction's reasoning across files.
+// Standing duties (§10). Not request-shaped; still writes receipts.
 
 import { liveBlobShas } from "../blob/read.js";
 import { sweepBlobStaging } from "../blob/staging.js";
 import { shaOfBlobUri } from "../blob/store.js";
+import { partyForReach } from "../commands/contact-reach.js";
 import { RELATIONS_SCHEME_URI } from "../commands/links.js";
 import type { VaultDb } from "../db.js";
+import { subjectRowExists } from "../grant/authority-registry.js";
+import {
+  listStandingShareAuthority,
+  revokeAuthorityForPrincipal,
+  revokeAuthorityOverSubject,
+} from "../grant/grant-store.js";
 import { nowIso } from "../ids.js";
 import { writeScopeTombstones } from "../install-memory.js";
+import { contentReferenceExists } from "../schema/content-references.js";
 import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import { listVaultEntities, resolveEntity } from "../schema/tables.js";
 import { writeProvenance, writeReceipt } from "./evidence.js";
@@ -17,16 +25,16 @@ import type { FilterClause, Identity } from "./types.js";
 
 export interface RevocationResult {
   grantId: string;
-  /** The grantee app's Centraid id (consent_app.name), when app-shaped. */
+  /** The grantee app's Centraid id, when app-shaped. */
   appId: string | null;
   viewsRevoked: number;
   parkedDropped: number;
-  /** Live ext tables marked `retained` because the app's last grant died. */
+  /** Ext tables marked `retained` because the app's last grant died. */
   extRetained: string[];
   receiptId: string;
 }
 
-/** Revoke is instant; ext band is RETAINED when the last grant dies (#286). Model/history/receipts always survive. */
+/** Revoke is instant; the ext band is RETAINED when the last grant dies (#286). Model, history and receipts survive. */
 export function revokeGrantCascade(
   db: VaultDb,
   owner: Identity,
@@ -52,7 +60,7 @@ export function revokeGrantCascade(
     )
     .run(now, grantId);
   // The owner's "no" outlives the grant row (#308): tombstone each revoked
-  // scope so a top-up cannot silently re-mint it. Uninstall clears them.
+  // scope so a top-up cannot re-mint it. Uninstall clears them.
   const revokedScopes = db.vault
     .prepare(
       `SELECT schema_name, table_name, verbs, row_filter_json, field_mask_json
@@ -89,8 +97,8 @@ export function revokeGrantCascade(
   let extRetained: string[] = [];
   let centraidAppId: string | null = null;
   if (grant.app_id !== null) {
-    // consent_app.app_id is a row uuid; the ext band keys on the Centraid app
-    // id, which enrollment carries as `name`.
+    // `consent_app.app_id` is a row uuid; the ext band keys on the Centraid
+    // app id, carried as `name`.
     const appRow = db.vault
       .prepare("SELECT name FROM consent_app WHERE app_id = ?")
       .get(grant.app_id) as { name: string } | undefined;
@@ -152,14 +160,18 @@ export interface SweepResult {
   documentsPurged: number;
   domainRowsPurged: number;
   retentionDeleted: number;
-  /** Recorded refusals, never a silent skip (#712). */
   retentionRefused: RetentionRefusal[];
-  /** Lineage-blocked (#711 S8): keep lapsed `purge_at`, retry next sweep. */
+  /** Lineage-blocked (#711): `purge_at` stays lapsed, retried next sweep. */
   contentBlockedByLineage: string[];
   assetsBlockedByLineage: string[];
   blobsReclaimed: number;
-  /** Unclaimed blob_staging rows past the TTL, dropped with their bytes. */
+  /** Unclaimed `blob_staging` rows past the TTL, dropped with their bytes. */
   stagingExpired: number;
+  /**
+   * Answers the sweep ended because their subject was gone (#883). Non-zero is
+   * a REPAIR: a purge through `purgedSubject` already ended its own.
+   */
+  authorityRevoked: number;
   receiptId: string;
 }
 
@@ -168,7 +180,7 @@ export interface RetentionRefusal {
   reason: string;
 }
 
-/** Recorded refusals (#712): `media.asset` has no `created_at` and lineage FKs without ON DELETE. */
+/** Recorded refusals (#712): `media.asset` has no `created_at`, and lineage FKs lack ON DELETE. */
 const RETENTION_REFUSALS: ReadonlyMap<string, string> = new Map([
   [
     "media.asset",
@@ -176,7 +188,7 @@ const RETENTION_REFUSALS: ReadonlyMap<string, string> = new Map([
   ],
 ]);
 
-/** Timestamp from `rule_json.timestamp_column`. Unserved policy is a recorded refusal, never a silent continue (#712). */
+/** Timestamp from `rule_json.timestamp_column`; an unserved policy is a recorded refusal (#712). */
 function enforceRetention(
   db: VaultDb,
   now: string
@@ -198,8 +210,8 @@ function enforceRetention(
   const refused: RetentionRefusal[] = [];
   for (const policy of policies) {
     const requestedEntity = `${policy.applies_schema}.${policy.applies_table}`;
-    // Imported rows may carry the PHYSICAL table where policies normally store
-    // the logical one; normalize before applying standing decisions.
+    // Imported rows may carry the PHYSICAL table where the logical one
+    // belongs; normalize before applying standing decisions.
     const entity = resolveEntity(requestedEntity, db.vault)
       ? requestedEntity
       : (listVaultEntities(db.vault).find(
@@ -244,7 +256,7 @@ function revisesConceptId(db: VaultDb): string | null {
   return row?.concept_id ?? null;
 }
 
-/** Full BFS over live `revises` (R3 restore can cycle). Seen-set is load-bearing. */
+/** Full BFS over live `revises`: R3 restore can cycle, so the seen-set is load-bearing. */
 function documentChain(
   db: VaultDb,
   headContentId: string,
@@ -271,37 +283,31 @@ function documentChain(
   return [...seen];
 }
 
-/** Serve-side twin of media CONTENT_REFERENCES, minus `core_document`. */
+/**
+ * The ONE content-reference list minus `core_document`: "still in a live
+ * document's HISTORY" is the chain walk above. Generated, never hand-written —
+ * a twin falls behind the list it mirrors (#883).
+ */
+const CONTENT_RENTED_ELSEWHERE_SQL = `SELECT (
+  ${contentReferenceExists({
+    idExpression: ":content_id",
+    live: true,
+    includeDocumentHead: false,
+  })
+    .map((clause) => `EXISTS(${clause})`)
+    .join("\n  OR ")}
+) AS n`;
+
 function contentRentedElsewhere(db: VaultDb, contentId: string): boolean {
-  const row = db.vault
-    .prepare(
-      `SELECT (
-         EXISTS(SELECT 1 FROM core_attachment WHERE content_id = ?)
-         OR EXISTS(SELECT 1 FROM core_party WHERE avatar_content_id = ?)
-         OR EXISTS(SELECT 1 FROM knowledge_note WHERE body_content_id = ? AND deleted_at IS NULL)
-         OR EXISTS(SELECT 1 FROM social_message WHERE body_content_id = ?)
-         OR EXISTS(SELECT 1 FROM business_invoice WHERE pdf_content_id = ?)
-         OR EXISTS(SELECT 1 FROM home_warranty WHERE terms_content_id = ?)
-         OR EXISTS(SELECT 1 FROM home_maintenance_plan WHERE instructions_content_id = ?)
-         OR EXISTS(SELECT 1 FROM media_asset WHERE content_id = ? AND deleted_at IS NULL)
-       ) AS n`
-    )
-    .get(
-      contentId,
-      contentId,
-      contentId,
-      contentId,
-      contentId,
-      contentId,
-      contentId,
-      contentId
-    ) as {
+  const row = db.vault.prepare(CONTENT_RENTED_ELSEWHERE_SQL).get({
+    content_id: contentId,
+  }) as {
     n: number;
   };
   return row.n > 0;
 }
 
-/** sha256 dedup: a superseded revision can coincide with another live page. */
+/** sha256 dedup: a superseded revision can coincide with a live page. */
 function ownedByAnotherLiveDocument(
   db: VaultDb,
   contentId: string,
@@ -318,7 +324,7 @@ function ownedByAnotherLiveDocument(
   );
 }
 
-/** Edit-lineage self-FK (#711 S8). Trashed children count — FK has no ON DELETE. */
+/** Edit-lineage self-FK (#711): trashed children count, the FK has no ON DELETE. */
 function isLineageSource(db: VaultDb, assetId: string): boolean {
   const row = db.vault
     .prepare(
@@ -328,7 +334,7 @@ function isLineageSource(db: VaultDb, assetId: string): boolean {
   return row !== undefined;
 }
 
-/** Face regions have no CASCADE — delete by hand before poly-refs. Caller must already know this is not a lineage source. */
+/** Face regions have no CASCADE: delete by hand before poly-refs. Callers must already know this is not a lineage source. */
 function deleteAssetRow(
   db: VaultDb,
   owner: Identity,
@@ -336,8 +342,8 @@ function deleteAssetRow(
   assetId: string
 ): void {
   writeProvenance(db.journal, owner, "media.asset", assetId, "sweep.purge");
-  // A face region is itself a polymorphic TARGET (#724); deleting it without
-  // sweeping enrich_* leaves an orphan FACE vector matchable to new photos.
+  // A face region is itself a polymorphic TARGET (#724): deleting it without
+  // sweeping enrich_* orphans a FACE vector.
   const regions = db.vault
     .prepare("SELECT region_id FROM media_face_region WHERE asset_id = ?")
     .all(assetId) as { region_id: string }[];
@@ -347,17 +353,15 @@ function deleteAssetRow(
     .prepare("DELETE FROM media_face_region WHERE asset_id = ?")
     .run(assetId);
   db.vault.prepare("DELETE FROM media_asset WHERE asset_id = ?").run(assetId);
-  cleanupPolyRefs(db.vault, now, "media.asset", assetId);
+  purgedSubject(db, owner, now, "media.asset", assetId);
 }
 
 interface ContentPurgeResult {
-  /** Zero when the purge was declined. */
   reclaimed: number;
-  /** The asset whose edit lineage blocked this pass, else null. */
   blockedByAssetId: string | null;
 }
 
-/** Derivatives + CAS first (FK), then the row, then poly-refs (#296/#272/#274). */
+/** Derivatives and CAS first (FK), then the row, then poly-refs (#296). */
 function purgeContentItem(
   db: VaultDb,
   owner: Identity,
@@ -365,17 +369,15 @@ function purgeContentItem(
   contentId: string
 ): ContentPurgeResult {
   let reclaimed = 0;
-  // The asset row references the content NOT NULL, so purging one purges both.
+  // The asset references the content NOT NULL: purging one purges both.
   const asset = db.vault
     .prepare("SELECT asset_id FROM media_asset WHERE content_id = ?")
     .get(contentId) as { asset_id: string } | undefined;
   if (asset) {
-    // Edit lineage (#711): NULLing the child's column forges "camera original";
-    // cascading destroys an untrashed photograph — media.purge_asset refuses
-    // interactively for the same reason, and the sweep makes the SAME refusal,
-    // keeping going rather than dying on the FK. The whole content item is
-    // declined (content_id FK NOT NULL); purge_at stays lapsed for retry and
-    // the skip is named in the receipt — never silent.
+    // Edit lineage (#711): NULLing the child's column forges "camera
+    // original", cascading destroys an untrashed photograph. Decline the whole
+    // content item (content_id FK NOT NULL), as `media.purge_asset` does;
+    // `purge_at` stays lapsed and the skip is named in the receipt.
     if (isLineageSource(db, asset.asset_id))
       return { reclaimed: 0, blockedByAssetId: asset.asset_id };
     deleteAssetRow(db, owner, now, asset.asset_id);
@@ -387,13 +389,13 @@ function purgeContentItem(
     contentId,
     "sweep.purge"
   );
-  // A cover pointing at these bytes goes dark; the FK would refuse otherwise.
+  // A cover pointing at these bytes goes dark, or the FK refuses.
   db.vault
     .prepare(
       "UPDATE core_collection SET cover_content_id = NULL WHERE cover_content_id = ?"
     )
     .run(contentId);
-  // Derivatives go with their parent (#296), registry rows first for the FK.
+  // Derivatives go with their parent (#296), registry rows first for the FK;
   // sha256 is UNIQUE on content items, so nothing else claims the original.
   const variants = db.vault
     .prepare(
@@ -409,9 +411,9 @@ function purgeContentItem(
   db.vault
     .prepare("DELETE FROM core_content_item WHERE content_id = ?")
     .run(contentId);
-  // Bytes go only when their FINAL claim disappears (#750). sha256 is UNIQUE
-  // on content items but NOT derivatives, so re-derive the live set AFTER the
-  // deletes; a skipped sha falls to the orphan sweep once its last claim drops.
+  // Bytes go only when their FINAL claim disappears (#750). sha256 is not
+  // unique across derivatives, so re-derive the live set AFTER the deletes; a
+  // skipped sha falls to the orphan sweep.
   const live = liveBlobShas(db.vault);
   for (const v of variants) {
     if (live.has(v.sha256)) continue;
@@ -423,17 +425,20 @@ function purgeContentItem(
     db.blobs.deleteLocalSync(originalSha);
     reclaimed += 1;
   }
-  // Every polymorphic pointer at the content item (#441). cover_content_id
-  // above is a plain FK, not a poly ref.
-  cleanupPolyRefs(db.vault, now, "core.content_item", contentId);
+  // Every polymorphic pointer at the item (#441); `cover_content_id` above is
+  // a plain FK.
+  purgedSubject(db, owner, now, "core.content_item", contentId);
   return { reclaimed, blockedByAssetId: null };
 }
 
-/** Soft-delete tables with no bespoke purge (#441 A4). Next domain is one entry here. `entity` is the logical poly-ref name. */
+/** Soft-delete tables with no bespoke purge (#441): the next domain is one entry here. */
 const DOMAIN_TRASH_TABLES: readonly {
   physical: string;
   idCol: string;
   entity: string;
+  /** Engine FKs with no `ON DELETE CASCADE`: ignoring them aborts the sweep. */
+  dependents?: readonly { table: string; column: string }[];
+  orderBy?: string;
 }[] = [
   {
     physical: "people_important_date",
@@ -456,25 +461,137 @@ const DOMAIN_TRASH_TABLES: readonly {
     idCol: "obligation_id",
     entity: "tally.obligation",
   },
+  // Tasks and Agenda (#883). `schedule_task` first: a purged parent must not
+  // strand a sub-task referencing it.
+  {
+    physical: "schedule_task",
+    idCol: "task_id",
+    entity: "schedule.task",
+    // Sub-tasks before parents: `parent_task_id` self-references with no
+    // cascade.
+    orderBy: "parent_task_id IS NULL, task_id",
+  },
+  {
+    physical: "core_event",
+    idCol: "event_id",
+    entity: "core.event",
+    dependents: [
+      { table: "schedule_attendee", column: "event_id" },
+      { table: "schedule_event_ext", column: "event_id" },
+    ],
+  },
 ];
 
-/** `sweep.purge` stamp + `cleanupPolyRefs` so nothing points at a gone row (#441). */
-function purgeDomainTrash(db: VaultDb, owner: Identity, now: string): number {
+/**
+ * A purged subject ENDS the standing answers about it, dated and receipted
+ * (#883). `share_authority` sits outside the poly-ref sweep: deleting an
+ * answer with its subject would erase that it ever stood.
+ */
+function revokeAuthorityForPurgedSubject(
+  db: VaultDb,
+  owner: Identity,
+  now: string,
+  entityType: string,
+  entityId: string
+): number {
+  const ended = revokeAuthorityOverSubject(db.vault, {
+    subjectType: entityType,
+    subjectId: entityId,
+    revokedAt: now,
+  });
+  for (const row of ended)
+    writeReceipt(db.journal, {
+      grantId: row.authorityId,
+      invocationId: null,
+      action: "act share.revoke",
+      objectType: "share.authority",
+      objectId: row.authorityId,
+      purpose: null,
+      decision: "allow",
+      detail: {
+        cause: "subject purged",
+        subjectType: row.subjectType,
+        subjectId: row.subjectId,
+        principalKind: row.principalKind,
+        principalId: row.principalId,
+        verb: row.verb,
+        answered: row.decision,
+        revokedBy: owner.partyId,
+      },
+    });
+  return ended.length;
+}
+
+function purgedSubject(
+  db: VaultDb,
+  owner: Identity,
+  now: string,
+  entityType: string,
+  entityId: string
+): void {
+  cleanupPolyRefs(db.vault, now, entityType, entityId);
+  revokeAuthorityForPurgedSubject(db, owner, now, entityType, entityId);
+}
+
+/**
+ * VERIFICATION of the rule above (#883): an answer whose subject row is gone
+ * outlived its purge, so the sweep ends it on the same terms. It repairs, not
+ * reports — nobody can revoke by hand an authority whose subject is invisible.
+ */
+function verifyPurgedSubjectsRevoked(
+  db: VaultDb,
+  owner: Identity,
+  now: string
+): number {
+  let repaired = 0;
+  const checked = new Set<string>();
+  for (const row of listStandingShareAuthority(db.vault)) {
+    const key = `${row.subjectType} ${row.subjectId}`;
+    if (checked.has(key)) continue;
+    checked.add(key);
+    // `undefined` is "cannot tell", never "gone".
+    if (subjectRowExists(db.vault, row.subjectType, row.subjectId) !== false)
+      continue;
+    repaired += revokeAuthorityForPurgedSubject(
+      db,
+      owner,
+      now,
+      row.subjectType,
+      row.subjectId
+    );
+  }
+  return repaired;
+}
+
+/** `sweep.purge` stamp + `cleanupPolyRefs` (#441). */
+function purgeDomainTrash(
+  db: VaultDb,
+  owner: Identity,
+  now: string,
+  limit: number
+): number {
   let purged = 0;
   for (const t of DOMAIN_TRASH_TABLES) {
+    const order = t.orderBy ? ` ORDER BY ${t.orderBy}` : " ORDER BY purge_at";
     const lapsed = db.vault
       .prepare(
         t.physical === "people_profile"
-          ? `SELECT "${t.idCol}" AS id, party_id AS party_id FROM "${t.physical}" WHERE purge_at IS NOT NULL AND purge_at <= ?`
-          : `SELECT "${t.idCol}" AS id FROM "${t.physical}" WHERE purge_at IS NOT NULL AND purge_at <= ?`
+          ? `SELECT "${t.idCol}" AS id, party_id AS party_id FROM "${t.physical}" WHERE purge_at IS NOT NULL AND purge_at <= ?${order} LIMIT ?`
+          : `SELECT "${t.idCol}" AS id FROM "${t.physical}" WHERE purge_at IS NOT NULL AND purge_at <= ?${order} LIMIT ?`
       )
-      .all(now) as { id: string; party_id?: string }[];
+      .all(now, limit) as { id: string; party_id?: string }[];
     for (const row of lapsed) {
       writeProvenance(db.journal, owner, t.entity, row.id, "sweep.purge");
+      for (const dependent of t.dependents ?? [])
+        db.vault
+          .prepare(
+            `DELETE FROM "${dependent.table}" WHERE "${dependent.column}" = ?`
+          )
+          .run(row.id);
       db.vault
         .prepare(`DELETE FROM "${t.physical}" WHERE "${t.idCol}" = ?`)
         .run(row.id);
-      cleanupPolyRefs(db.vault, now, t.entity, row.id);
+      purgedSubject(db, owner, now, t.entity, row.id);
       if (t.physical === "people_profile" && row.party_id)
         erasePurgedPerson(db, owner, now, row.party_id);
       purged += 1;
@@ -483,7 +600,7 @@ function purgeDomainTrash(db: VaultDb, owner: Identity, now: string): number {
   return purged;
 }
 
-/** Engine FKs onto `core_party`, discovered live — same method merge uses. */
+/** Engine FKs onto `core_party`, discovered live, as merge does. */
 function partyFkColumns(db: VaultDb): {
   table: string;
   column: string;
@@ -516,8 +633,8 @@ function partyFkColumns(db: VaultDb): {
   return refs;
 }
 
-/** After a People profile's grace window lapses: hard-erase the person —
- * party, identifiers, tags, channels — not a hide that keeps notifying (#864). */
+/** Grace window lapsed: hard-erase the person — party, identifiers, tags,
+ * channels — not a hide that keeps notifying (#864). */
 function erasePurgedPerson(
   db: VaultDb,
   owner: Identity,
@@ -534,6 +651,32 @@ function erasePurgedPerson(
   if (!party || party.kind !== "person") return;
 
   writeProvenance(db.journal, owner, "core.party", partyId, "sweep.purge");
+  // The principal goes, so the answers about it end — dated and receipted,
+  // before the FK pass below (#883).
+  for (const row of revokeAuthorityForPrincipal(db.vault, {
+    principalKind: "person",
+    principalId: partyId,
+    revokedAt: now,
+  }))
+    writeReceipt(db.journal, {
+      grantId: row.authorityId,
+      invocationId: null,
+      action: "act share.revoke",
+      objectType: "share.authority",
+      objectId: row.authorityId,
+      purpose: null,
+      decision: "allow",
+      detail: {
+        cause: "principal purged",
+        principalKind: row.principalKind,
+        principalId: row.principalId,
+        subjectType: row.subjectType,
+        subjectId: row.subjectId,
+        verb: row.verb,
+        answered: row.decision,
+        revokedBy: owner.partyId,
+      },
+    });
   db.vault
     .prepare("DELETE FROM core_party_identifier WHERE party_id = ?")
     .run(partyId);
@@ -549,8 +692,7 @@ function erasePurgedPerson(
           .prepare(`DELETE FROM "${ref.table}" WHERE "${ref.column}" = ?`)
           .run(partyId);
       } catch {
-        // Nested FKs can refuse one child; remaining refs are cleared below
-        // or the party delete is the last gate for this pass.
+        // Nested FKs can refuse one child; the party delete is the last gate.
       }
     } else {
       db.vault
@@ -563,37 +705,76 @@ function erasePurgedPerson(
   db.vault.prepare("DELETE FROM core_party WHERE party_id = ?").run(partyId);
 }
 
-/** Derived copies first (#711). Self-FK: never hand SQLite a delete it will refuse. Skip a lapsed source whose child is not lapsed. */
+/**
+ * Derived copies first (#711). Self-FK: never hand SQLite a delete it will
+ * refuse; skip a lapsed source whose child is not lapsed. ONE PASS OVER THE
+ * LINEAGE, NOT ONE PER GENERATION (#883): the dependency is a DAG in
+ * `media_asset.source_asset_id`, read ONCE and drained leaves-first in Kahn's
+ * order, because re-asking SQLite per blocked asset costs O(n^2) per tick.
+ */
 function purgeLapsedAssets(
   db: VaultDb,
   owner: Identity,
-  now: string
+  now: string,
+  limit: number
 ): { purged: number; blocked: string[] } {
   const pending = new Set(
     (
       db.vault
         .prepare(
-          "SELECT asset_id FROM media_asset WHERE purge_at IS NOT NULL AND purge_at <= ?"
+          `SELECT asset_id FROM media_asset
+            WHERE purge_at IS NOT NULL AND purge_at <= ?
+            ORDER BY purge_at LIMIT ?`
         )
-        .all(now) as { asset_id: string }[]
+        .all(now, limit) as { asset_id: string }[]
     ).map((row) => row.asset_id)
   );
+  // Children of the pending set, one indexed sweep. A child OUTSIDE it never
+  // leaves, so its parent stays blocked — the "lapsed source, unlapsed child"
+  // rule, decided by counting.
+  const children = new Map<string, string[]>();
+  const parentOf = new Map<string, string>();
+  for (const row of db.vault
+    .prepare(
+      `SELECT asset_id, source_asset_id FROM media_asset
+        WHERE source_asset_id IS NOT NULL`
+    )
+    .all() as { asset_id: string; source_asset_id: string }[]) {
+    if (!pending.has(row.source_asset_id)) continue;
+    children.set(row.source_asset_id, [
+      ...(children.get(row.source_asset_id) ?? []),
+      row.asset_id,
+    ]);
+    parentOf.set(row.asset_id, row.source_asset_id);
+  }
+  const blocking = new Map<string, number>();
+  for (const assetId of pending)
+    blocking.set(assetId, children.get(assetId)?.length ?? 0);
+  const ready = [...pending].filter((assetId) => blocking.get(assetId) === 0);
   let purged = 0;
-  let progressed = true;
-  while (progressed) {
-    progressed = false;
-    for (const assetId of pending) {
-      if (isLineageSource(db, assetId)) continue;
-      deleteAssetRow(db, owner, now, assetId);
-      pending.delete(assetId);
-      purged += 1;
-      progressed = true;
-    }
+  while (ready.length > 0) {
+    const assetId = ready.pop()!;
+    deleteAssetRow(db, owner, now, assetId);
+    pending.delete(assetId);
+    purged += 1;
+    const parent = parentOf.get(assetId);
+    if (parent === undefined || !pending.has(parent)) continue;
+    const remaining = (blocking.get(parent) ?? 1) - 1;
+    blocking.set(parent, remaining);
+    if (remaining === 0) ready.push(parent);
   }
   return { purged, blocked: [...pending] };
 }
 
-/** Lapse grants, execute purge_at deletions (GDPR), enforce retention. */
+/**
+ * Rows one lifecycle sweep purges from any ONE lapsed set (#883). Every purge
+ * SELECT stays bounded: the gateway is one process with one vault handle, so
+ * an unbounded pass over an emptied year-3 trash IS the gateway. The GDPR
+ * promise holds — rows go oldest-first, and the next tick takes the rest.
+ */
+const PURGE_BATCH = 5_000;
+
+/** Lapse grants, execute `purge_at` deletions, enforce retention. */
 export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   const now = nowIso();
   let blobsReclaimed = 0;
@@ -606,20 +787,21 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     .run(now);
   const purgeable = db.vault
     .prepare(
-      `SELECT content_id FROM core_content_item WHERE purge_at IS NOT NULL AND purge_at <= ?`
+      `SELECT content_id FROM core_content_item
+        WHERE purge_at IS NOT NULL AND purge_at <= ?
+        ORDER BY purge_at LIMIT ?`
     )
-    .all(now) as { content_id: string }[];
+    .all(now, PURGE_BATCH) as { content_id: string }[];
   // Purges are the one hard delete outside the command pipeline, so poly-ref
-  // cleanup runs here too — schema/poly-refs.ts is the complete enumeration;
-  // never re-derive a partial list by hand.
-  //
-  // Notes FIRST (#308): note rents its body NOT NULL; row must go before this
-  // pass can free the bytes.
+  // cleanup runs here too. Notes FIRST (#308): note rents its body NOT NULL,
+  // so the row goes before this pass frees the bytes.
   const lapsedNotes = db.vault
     .prepare(
-      "SELECT note_id FROM knowledge_note WHERE purge_at IS NOT NULL AND purge_at <= ?"
+      `SELECT note_id FROM knowledge_note
+        WHERE purge_at IS NOT NULL AND purge_at <= ?
+        ORDER BY purge_at LIMIT ?`
     )
-    .all(now) as { note_id: string }[];
+    .all(now, PURGE_BATCH) as { note_id: string }[];
   for (const n of lapsedNotes) {
     writeProvenance(
       db.journal,
@@ -631,16 +813,21 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     db.vault
       .prepare("DELETE FROM knowledge_note WHERE note_id = ?")
       .run(n.note_id);
-    cleanupPolyRefs(db.vault, now, "knowledge.note", n.note_id);
+    purgedSubject(db, owner, now, "knowledge.note", n.note_id);
   }
-  // Documents next (#352), same NOT NULL reason. Superseded bodies are durable
-  // while the document lives; only at purge time is each chain item judged.
+  // Documents next (#352), same NOT NULL reason; each chain item is judged at
+  // purge, not while the document lives.
   const revisesId = revisesConceptId(db);
   const lapsedDocuments = db.vault
     .prepare(
-      "SELECT document_id, current_content_id FROM core_document WHERE purge_at IS NOT NULL AND purge_at <= ?"
+      `SELECT document_id, current_content_id FROM core_document
+        WHERE purge_at IS NOT NULL AND purge_at <= ?
+        ORDER BY purge_at LIMIT ?`
     )
-    .all(now) as { document_id: string; current_content_id: string }[];
+    .all(now, PURGE_BATCH) as {
+    document_id: string;
+    current_content_id: string;
+  }[];
   for (const doc of lapsedDocuments) {
     const chain = revisesId
       ? documentChain(db, doc.current_content_id, revisesId)
@@ -655,7 +842,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     db.vault
       .prepare("DELETE FROM core_document WHERE document_id = ?")
       .run(doc.document_id);
-    cleanupPolyRefs(db.vault, now, "core.document", doc.document_id);
+    purgedSubject(db, owner, now, "core.document", doc.document_id);
     for (const contentId of chain) {
       if (contentRentedElsewhere(db, contentId)) continue;
       if (
@@ -676,26 +863,28 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     if (purge.blockedByAssetId === null) contentPurged += 1;
     else contentBlockedByLineage.push(row.content_id);
   }
-  // A lapsed trashed asset purges even while its bytes stay rented elsewhere
-  // (#274): asset meaning and byte custody have independent lifecycles. After
-  // the content purge, so a same-sweep derived-copy lapse frees the asset now
-  // and waits one more sweep for its content.
-  const lapsedAssets = purgeLapsedAssets(db, owner, now);
-  // Runs after the content/asset passes so a row referencing now-purged bytes
-  // is judged last (#441).
-  const domainRowsPurged = purgeDomainTrash(db, owner, now);
-  // Heal the rebuildable projection wholesale (#441 A3), so import corrections
-  // and the purges above can never leave it drifted.
+  // A lapsed trashed asset purges while its bytes stay rented elsewhere
+  // (#274): meaning and byte custody have independent lifecycles.
+  const lapsedAssets = purgeLapsedAssets(db, owner, now, PURGE_BATCH);
+  // After the content/asset passes: a row referencing purged bytes goes last.
+  const domainRowsPurged = purgeDomainTrash(db, owner, now, PURGE_BATCH);
+  // Checks the whole plane rather than trusting each purge above (#883).
+  const authorityRevoked = verifyPurgedSubjectsRevoked(db, owner, now);
+  // Heal the rebuildable projection (#441 A3). KEEP THE PREDICATE (#883):
+  // unqualified, this dirties every thread row every tick — WAL pages, replica
+  // rows, woken devices — to fix the few that drifted. `IS NOT`, not `<>`, so
+  // a thread whose last message was deleted is left alone.
   db.vault
     .prepare(
       `UPDATE social_thread SET last_message_at =
+         (SELECT MAX(sent_at) FROM social_message WHERE social_message.thread_id = social_thread.thread_id)
+        WHERE last_message_at IS NOT
          (SELECT MAX(sent_at) FROM social_message WHERE social_message.thread_id = social_thread.thread_id)`
     )
     .run();
   const retention = enforceRetention(db, now);
   const retentionDeleted = retention.deleted;
-  // Staging TTL (#296): unclaimed bytes leave with their rows; a batch hold
-  // pins past the TTL.
+  // Staging TTL (#296): a batch hold pins past it.
   const staging = sweepBlobStaging(db, { now });
   const receiptId = writeReceipt(db.journal, {
     grantId: null,
@@ -714,11 +903,12 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
       domainRowsPurged,
       retentionDeleted,
       retentionRefused: retention.refused,
-      // Declined, not died on (#711): empty on an ordinary sweep.
+      // Declined, not died on (#711).
       contentBlockedByLineage,
       assetsBlockedByLineage: lapsedAssets.blocked,
       blobsReclaimed,
       stagingExpired: staging.expired.length,
+      authorityRevoked,
     },
   });
   return {
@@ -734,11 +924,12 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     assetsBlockedByLineage: lapsedAssets.blocked,
     blobsReclaimed,
     stagingExpired: staging.expired.length,
+    authorityRevoked,
     receiptId,
   };
 }
 
-/** Import-batch dedupe on external_id. Null = already imported. */
+/** Import-batch dedupe on `external_id`; null means already imported. */
 export function admitImportedRow(
   db: VaultDb,
   importer: Identity,
@@ -773,12 +964,7 @@ export function resolveHandle(
   scheme: string,
   value: string
 ): string | null {
-  const row = db.vault
-    .prepare(
-      `SELECT party_id FROM core_party_identifier
-        WHERE scheme = ? AND value = ? AND (valid_to IS NULL OR valid_to > ?)
-        ORDER BY is_primary DESC LIMIT 1`
-    )
-    .get(scheme, value, nowIso()) as { party_id: string } | undefined;
-  return row?.party_id ?? null;
+  // Reach schemes resolve through `social_contact_channel`, identity keys
+  // through the register: one call over two stores.
+  return partyForReach(db.vault, scheme, value, nowIso());
 }

@@ -1,9 +1,4 @@
-/**
- * Save a new item through locker.add_item. Forwards the type, title, tags and
- * whichever secret/plain fields the caller supplied; the vault command drops
- * any field that does not belong to the chosen type, so nothing is smuggled
- * in. Risk low.
- */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
 const FIELDS = [
   "username",
@@ -22,14 +17,13 @@ const FIELDS = [
   "phone",
   "address",
   "network",
-  // The connector alias (issue #298 item 4, GAPS #15): a non-empty value binds
-  // `locker:@<alias>:<column>` to this item. Blank is dropped by the guard
-  // below, matching the command, which only sets an alias when one is given.
+  // Connector alias (#298): a non-empty value binds `locker:@<alias>:<column>`
+  // to this item; blank is dropped, matching the command.
   "alias",
 ] as const;
 
 export default async function addItem({ body, ctx }: HandlerArgs) {
-  const input = (body ?? {}) as Record<string, unknown>;
+  const input = actionInput(body);
   const cmdInput: Record<string, unknown> = {
     type: String(input.type ?? ""),
     title: String(input.title ?? ""),
@@ -39,18 +33,8 @@ export default async function addItem({ body, ctx }: HandlerArgs) {
     cmdInput.url_match_policy = String(input.url_match_policy);
   for (const f of FIELDS)
     if (input[f] != null && input[f] !== "") cmdInput[f] = String(input[f]);
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "locker.add_item",
-      input: cmdInput,
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  return runVaultAction(ctx, {
+    command: "locker.add_item",
+    input: cmdInput,
+  });
 }

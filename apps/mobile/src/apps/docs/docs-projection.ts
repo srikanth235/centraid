@@ -4,6 +4,7 @@
 // replica cannot say ("unknown" ≠ "shared with nobody"). No react-native or
 // replica imports beyond the provenance readers (docs-projection.test.ts).
 
+import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
 import { canRender, typeMeta } from "@centraid/blueprints/apps/docs/format";
 import type {
   DocTag,
@@ -403,8 +404,6 @@ export function sharesByDocument(
 }
 
 // The row's one state slot (§4.1) — the shared ladder, fed with phone facts.
-
-const DAY_MS = 86_400_000;
 
 /** Days until purge, or `null` when the vault never asserted one — the slot
  *  stays blank rather than printing a number nobody computed. */

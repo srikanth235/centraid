@@ -1,19 +1,8 @@
-/**
- * Flip a gift between idea and given. Runs through people.toggle_gift — consent-checked and receipted, risk low.
- */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
 export default async function toggleGift({ body, ctx }: HandlerArgs) {
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "people.toggle_gift",
-      input: (body ?? {}) as Record<string, unknown>,
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  return runVaultAction(ctx, {
+    command: "people.toggle_gift",
+    input: actionInput(body),
+  });
 }

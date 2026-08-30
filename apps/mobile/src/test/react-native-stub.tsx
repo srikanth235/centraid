@@ -162,6 +162,38 @@ export function asyncStorageStub(): { default: Record<string, unknown> } {
   };
 }
 
+/** `FlatList`, for a screen that windows (#883); spread it BESIDE
+ *  `reactNativeStub()`. */
+export function flatListStub(): Record<string, unknown> {
+  return {
+    FlatList: (props: Props & { data?: unknown[] }) => {
+      const data = props.data ?? [];
+      const render = props.renderItem as (info: {
+        item: unknown;
+        index: number;
+      }) => React.ReactNode;
+      const keyOf = props.keyExtractor as
+        | ((item: unknown, index: number) => string)
+        | undefined;
+      return React.createElement(
+        "div",
+        {},
+        props.ListHeaderComponent as React.ReactNode,
+        data.length === 0
+          ? (props.ListEmptyComponent as React.ReactNode)
+          : data.map((item, index) =>
+              React.createElement(
+                React.Fragment,
+                { key: keyOf?.(item, index) ?? String(index) },
+                render({ index, item })
+              )
+            ),
+        props.ListFooterComponent as React.ReactNode
+      );
+    },
+  };
+}
+
 /** `react-native-svg`, for blocks reaching the icon set. */
 export function svgStub(): Record<string, unknown> {
   const glyph = (props: Props) =>

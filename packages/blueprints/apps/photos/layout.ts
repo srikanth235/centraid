@@ -1,7 +1,9 @@
 // Justified-row timeline layout: pure, DOM-free.
 import type { Asset } from "./types.ts";
 
-const GAP = 2;
+/** The 2px seam, both axes. Packer and stylesheet must spend the same number
+ *  (`--sp-gutter`) or the scrollbar drifts from the rows. */
+export const TIMELINE_GUTTER = 2;
 
 export const RUNG_LABELS = ["XS", "S", "M", "L"] as const;
 export type Rung = 0 | 1 | 2 | 3;
@@ -57,7 +59,6 @@ export interface JustifiedTile {
   height: number;
 }
 
-// Rounding error folds into the last tile so full rows fill exactly.
 function emitRow(
   items: { asset: Asset; ar: number }[],
   containerWidth: number,
@@ -76,12 +77,11 @@ function emitRow(
   }));
 }
 
-// The trailing partial row keeps its natural height and is never stretched.
 export function justify(
   list: Asset[],
   containerWidth: number,
   targetHeight: number,
-  gap: number = GAP
+  gap: number = TIMELINE_GUTTER
 ): JustifiedTile[][] {
   const rows: JustifiedTile[][] = [];
   let row: { asset: Asset; ar: number }[] = [];

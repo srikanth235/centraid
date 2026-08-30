@@ -4,6 +4,8 @@
 // Predicate is `rememberDevice` — the bit the "Keep an offline copy" switch
 // writes (`offlineCopy` in `settingsAccountData.ts`).
 
+import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
+
 import type { GroupedDevice } from "./device-groups.js";
 
 export function holdsReplica(device: GroupedDevice): boolean {
@@ -46,7 +48,6 @@ export function custodyLine(
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
 
 /**
  * Bare age for a roster ("just now", "an hour ago"), not `formatDuration`'s

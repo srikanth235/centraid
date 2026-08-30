@@ -208,8 +208,6 @@ describe("AutomationEditorTriggers", () => {
     });
 
     it("serializes a loaded condition trigger with per-op coerced where values + every", async () => {
-      // Condition is no longer addable from the form; authoring still works for
-      // automations that already carry a condition trigger.
       const props = makeProps({
         loadData: vi
           .fn<AutomationEditorBridgeProps["loadData"]>()
@@ -220,7 +218,7 @@ describe("AutomationEditorTriggers", () => {
               name: "A",
               rowId: "r1",
               triggers: [
-                { entity: "business.invoice", kind: "condition", where: [] },
+                { entity: "schedule.task", kind: "condition", where: [] },
               ],
             })
           ),
@@ -283,7 +281,7 @@ describe("AutomationEditorTriggers", () => {
         name: "A",
         triggers: [
           {
-            entity: "business.invoice",
+            entity: "schedule.task",
             every: "*/10 * * * *",
             kind: "condition",
             where: [
@@ -409,7 +407,7 @@ describe("AutomationEditorTriggers", () => {
         await Promise.resolve();
       });
       const input = el.querySelector(
-        'input[placeholder="business.invoice"]'
+        'input[placeholder="schedule.task"]'
       ) as HTMLInputElement;
       setValue(input, "invoice");
       await act(async () => {

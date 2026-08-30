@@ -10,7 +10,7 @@ const read = (relative: string): string =>
 
 describe("blueprint state honesty", () => {
   // Requirements on an interface, never exemptions for an app: an app with no
-  // interface is absent because a row naming a missing file asserts nothing.
+  // interface asserts nothing.
   test.each(["locker", "tasks"])(
     "%s paints a skeleton until its first read settles",
     (app) => {
@@ -57,17 +57,28 @@ describe("blueprint state honesty", () => {
     expect(read(`${app}/Chrome.tsx`)).not.toContain("LoadingSkeleton");
   });
 
-  // A denied read always offers a way to the grant, never a dead end.
+  // A denied read always offers a way to the grant, never a dead end: the
+  // chrome must draw `ConsentBanner` and the banner must carry the button.
   test.each([
     ["locker", "locker/Chrome.tsx"],
     ["docs", "docs/Chrome.tsx"],
-    ["photos", "photos/components/Permission.tsx"],
     ["people", "people/Chrome.tsx"],
     ["agenda", "agenda/Chrome.tsx"],
     ["notes", "notes/Chrome.tsx"],
     ["tasks", "tasks/Chrome.tsx"],
   ])("%s gives denied reads a direct vault-access action", (_app, file) => {
-    expect(read(file)).toContain("VaultAccessButton");
+    expect(read(file)).toContain("<ConsentBanner");
+  });
+
+  test("the shared consent banner IS the way to the grant", () => {
+    expect(read("_shared/AppChrome.tsx")).toContain("<VaultAccessButton />");
+  });
+
+  // Photos' denial is a SCREEN, not a banner (v4 §13).
+  test("photos' permission screen offers the grant directly", () => {
+    expect(read("photos/components/Permission.tsx")).toContain(
+      "VaultAccessButton"
+    );
   });
 
   test.each([
@@ -87,8 +98,7 @@ describe("blueprint state honesty", () => {
     expect(source).toContain("kit-btn");
   });
 
-  // Docs draws its own block (§4.6). Every variant names its reason and
-  // offers a way forward only where the app can perform it.
+  // Docs draws its own block (§4.6), naming its reason.
   test("docs draws the five empty states, only one with a display serif", () => {
     const block = read("docs/components/EmptyState.tsx");
     expect(block).toContain("kit-btn");

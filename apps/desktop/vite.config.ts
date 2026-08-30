@@ -15,6 +15,12 @@ export default defineConfig({
     // Array form, every pattern anchored: `@centraid/design` must not swallow its own subpaths.
     alias: [
       {
+        find: /^@centraid\/blueprints\/apps\/_shared\/format-kit$/u,
+        replacement: fromHere(
+          "../../packages/blueprints/apps/_shared/format-kit.ts"
+        ),
+      },
+      {
         // Subpath, never the barrel: the design root export is reachable from Expo and must stay DOM-free.
         find: /^@centraid\/design\/elements$/u,
         replacement: fromHere("../../packages/design/src/elements/index.ts"),

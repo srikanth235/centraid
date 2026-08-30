@@ -47,12 +47,12 @@ vi.mock(
 // The default door would pull the Expo module runtime into plain jsdom;
 // every test injects its own door.
 vi.mock(
-  import("../../kit/share/grants-transport"),
+  import("../../kit/share/grant-seat"),
   () => ({ nativeGrantDoor: () => undefined }) as never
 );
 
-// The sheet has its own suite (`kit/share/GrantSheet.test.tsx`); here it is a
-// recorder, so what this screen HANDS it is observable without native imports.
+// The sheet has its own suite; here it is a recorder, so what this screen
+// HANDS it is observable.
 const sheetProps = vi.hoisted(() => [] as Record<string, unknown>[]);
 vi.mock(
   import("../../kit/share/GrantSheet"),
@@ -89,6 +89,9 @@ function standingGrant(overrides: Partial<GrantRecord> = {}): GrantRecord {
     grantedBy: "party-owner",
     maxSizeBytes: null,
     fulfillment: [],
+    // The vault's own words for where it stands (ruling V-phrases).
+    phrase: "on its way",
+    reason: "no vault has been addressed for it yet",
     ...overrides,
   };
 }
@@ -101,6 +104,8 @@ function stubDoor(overrides: Partial<GrantDoor> = {}): GrantDoor {
     forSubject: () => Promise.resolve([]),
     create: () => Promise.resolve({ ok: true, outcome: "created" as const }),
     revoke: () => Promise.resolve({ ok: true, message: "no longer shared" }),
+    changeCapability: () =>
+      Promise.resolve({ ok: true, outcome: "created" as const }),
     ...overrides,
   };
 }

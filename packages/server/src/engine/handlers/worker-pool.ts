@@ -1,16 +1,16 @@
 /*
  * Warm-spare pool for app-handler dispatch (#404). ISOLATION FIRST: handler
- * code arrives by dynamic `import()`, so a worker's module registry keeps every
- * handler it ran. NEVER reuse a worker across handlers — pooling pre-boots
- * single-use spares and must never widen that boundary.
+ * code arrives by dynamic `import()`, so a worker's module registry keeps
+ * every handler it ran. NEVER reuse a worker across handlers — these are
+ * pre-booted SINGLE-USE spares.
  */
 
 import { Worker } from "node:worker_threads";
 
+import { unrefTimer } from "../../lib/unref-timer.js";
 import { isConstrainedWorkerHost } from "./worker-admission.js";
 import type { WorkerHostCapacity } from "./worker-admission.js";
 
-/** Keep in step with `handler-runner.ts`'s spawn. */
 export interface WorkerResourceLimits {
   maxOldGenerationSizeMb: number;
   maxYoungGenerationSizeMb: number;
@@ -61,10 +61,10 @@ export function workerResourceLimitsFromEnv(
 
 export const DEFAULT_WORKER_POOL_SIZE = 2;
 
-/** Not zero (#659): the constrained host is where a cold boot hurts most. */
+/** Not zero (#659): a constrained host is where a cold boot hurts most. */
 export const CONSTRAINED_WORKER_POOL_SIZE = 1;
 
-/** `CENTRAID_WORKER_POOL_SIZE=0` disables warming; every acquire spawns cold. */
+/** `CENTRAID_WORKER_POOL_SIZE=0` disables warming: every acquire is cold. */
 export function workerPoolSizeFromEnv(
   env: NodeJS.ProcessEnv = process.env
 ): number {
@@ -85,6 +85,7 @@ export function workerPoolSizeFromEnv(
 export class WorkerPool {
   private readonly idle: Worker[] = [];
   private disposed = false;
+  private refilling: ReturnType<typeof setImmediate> | undefined;
 
   constructor(
     private readonly workerFile: string,
@@ -97,34 +98,46 @@ export class WorkerPool {
   }
 
   prewarm(): void {
-    this.refill();
+    this.scheduleRefill();
   }
 
-  /** No pool listeners survive: the caller owns the worker's lifecycle. */
+  /** No pool listeners survive: the caller owns the lifecycle. */
   acquire(): Worker {
     const spare = this.idle.shift();
     const worker = spare ?? this.spawn();
     worker.removeAllListeners();
-    // Spares park unref'd; a working worker must hold the loop open.
+    // Spares park unref'd; a working worker holds the loop open.
     worker.ref();
-    // Replenish off the hot path so bursts keep finding spares.
-    queueMicrotask(() => this.refill());
+    // Replenish off the hot path.
+    this.scheduleRefill();
     return worker;
   }
 
   dispose(): void {
     this.disposed = true;
+    if (this.refilling) clearImmediate(this.refilling);
+    this.refilling = undefined;
     for (const worker of this.idle.splice(0)) {
       worker.removeAllListeners();
       void worker.terminate();
     }
   }
 
-  private refill(): void {
-    if (this.disposed) return;
-    while (this.idle.length < this.size) {
-      this.idle.push(this.spawn());
-    }
+  /**
+   * REFILL YIELDS BETWEEN SPAWNS (#883 C2). `new Worker()` is main-thread work
+   * and a microtask is NOT off the main thread, so batching the top-up blocks
+   * every pending request. One spare per `setImmediate`, one in flight.
+   */
+  private scheduleRefill(): void {
+    if (this.disposed || this.refilling) return;
+    if (this.idle.length >= this.size) return;
+    this.refilling = setImmediate(() => {
+      this.refilling = undefined;
+      if (this.disposed) return;
+      if (this.idle.length < this.size) this.idle.push(this.spawn());
+      this.scheduleRefill();
+    });
+    unrefTimer(this.refilling);
   }
 
   private spawn(): Worker {
@@ -133,8 +146,8 @@ export class WorkerPool {
       resourceLimits: this.resourceLimits,
     });
     worker.unref();
-    // Evict on death, but never auto-refill here: a boot crash would spin a
-    // respawn loop. The next acquire/prewarm re-tops the set.
+    // Evict on death, never auto-refill here: a boot crash would spin a
+    // respawn loop. The next acquire re-tops the set.
     const drop = (): void => {
       const i = this.idle.indexOf(worker);
       if (i >= 0) this.idle.splice(i, 1);

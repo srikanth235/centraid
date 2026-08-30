@@ -5,7 +5,7 @@
 
 import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -18,6 +18,7 @@ import { radii } from "@centraid/design";
 
 import AppMark from "../../kit/components/AppMark";
 import { Text } from "../../kit/components/NativeText";
+import Tappable from "../../kit/components/Tappable";
 import { borders, durations, t, useTheme } from "../../kit/theme";
 import type { Scheme, ThemeColors } from "../../kit/theme";
 import type { LauncherItem } from "./catalog";
@@ -125,7 +126,7 @@ function ContentTile({
 
   return (
     <View style={[styles.slot, isWideTile(meta.id) && styles.slotWide]}>
-      <Pressable
+      <Tappable
         accessibilityRole="button"
         accessibilityLabel={label}
         onPress={onPress}
@@ -158,7 +159,7 @@ function ContentTile({
             </View>
           )}
         </Animated.View>
-      </Pressable>
+      </Tappable>
     </View>
   );
 }

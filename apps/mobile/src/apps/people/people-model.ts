@@ -11,6 +11,7 @@ import {
   daysSinceContact,
   daysUntilMonthDay,
   isOverdue,
+  toLinkCount,
 } from "@centraid/blueprints/apps/people/format";
 import { LINK } from "@centraid/blueprints/apps/people/people-copy";
 import type {
@@ -26,7 +27,7 @@ import type {
   TrashedPerson,
   UpcomingCard,
 } from "@centraid/blueprints/apps/people/types";
-import { IDENTITY_HUE_KEYS, identityHueKey } from "@centraid/design";
+import { IDENTITY_HUE_KEYS, partyHueKey } from "@centraid/design";
 import type { ColorKey } from "@centraid/design";
 
 import { rowCanWrite, rowScopeLabels } from "../../kit/replica/row-provenance";
@@ -59,9 +60,8 @@ const truthy = (row: Row, key: string): boolean => Boolean(row[key]);
 const LIST_SCHEME_URI = "https://centraid.dev/schemes/lists";
 const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
 
-/** The spelling the web editor writes for a hue: a CSS custom-property
- *  expression the phone RESOLVES through `colors.c<Key>`. Built in halves so
- *  the mobile design gate does not read it as a style consumption. */
+/** The web editor's spelling, RESOLVED through `colors.c<Key>`. Built in
+ *  halves so the design gate does not read it as a style consumption. */
 const CSS_VAR_OPEN = "var(";
 
 export function storedHueValue(key: ColorKey): string {
@@ -79,16 +79,16 @@ export function storedHueKey(
 }
 
 /** Stored hue → theme ring; stored hex → verbatim; nothing stored → a wheel
- *  place keyed by `party_id`, so a rename never moves them. */
+ *  place keyed by `party_id`, so a rename never moves them. The DECISION is
+ *  `partyHueKey`'s (#883, ruling O-identity); only the LOWERING to a native
+ *  theme ring is this file's. */
 export function avatarFill(
   person: { party_id: string; avatar_color?: string | null },
   ringFor: (key: ColorKey) => string
 ): string {
-  const stored = person.avatar_color ?? null;
-  const key = storedHueKey(stored);
+  const key = partyHueKey(person.party_id, person.avatar_color);
   if (key) return ringFor(key);
-  if (stored) return stored;
-  return ringFor(identityHueKey(person.party_id));
+  return person.avatar_color ?? "";
 }
 
 // Mirrors `queries/people.ts` and `queries/trash.ts`.
@@ -256,9 +256,8 @@ export function rosterSub(person: PersonRow): string {
   return person.role ? `${LINK.linked} · ${person.role}` : LINK.linked;
 }
 
-/** Name + role + notes, case-insensitive substring. The replica exposes no
- *  People search shape, so the window in hand is the whole corpus — a
- *  departure from the web FTS5 shelf, logged in `INTEGRATION-NOTES.md`. */
+/** The replica exposes no People search shape, so the window in hand is the
+ *  whole corpus — a divergence logged in `INTEGRATION-NOTES.md`. */
 export function searchRoster<T extends PersonRow>(
   people: readonly T[],
   notesByParty: ReadonlyMap<string, readonly string[]>,
@@ -384,7 +383,7 @@ export function projectDashboard(input: DashboardInput): DashboardData {
       upcoming: upcoming.length,
       starred: input.people.filter((person) => person.starred).length,
       linked,
-      to_link: linked === null ? null : input.people.length - linked,
+      to_link: toLinkCount(input.people.length, linked),
     },
   };
 }

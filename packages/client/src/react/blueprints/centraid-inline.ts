@@ -38,7 +38,7 @@ import type { ReplicaShellSession } from "../../replica/shell-session.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
 import { authorizeBlobText, authorizeBlobUrl } from "./blob-auth.js";
 import { stageBlob, stageDerivative } from "./blob-staging.js";
-import type { GrantBridge } from "./grant-wire.js";
+import type { GrantBridge } from "./grant-seat.js";
 import { runInlineQuery } from "./inlineQueryCtx.js";
 import { placementWireFromEdge } from "./placement-wire.js";
 import {
@@ -200,21 +200,19 @@ export interface InlineCentraidClient {
     scope?: string;
     signal?: AbortSignal;
   }) => Promise<InlineCommonsIntent[]>;
-  /** Idempotent and racy-safe: the vault-side guard only moves a still-open intent, so read the real outcome off the result rather than assuming the cancel won. */
+  /** Idempotent: the guard only moves a still-open intent, so read the outcome off the result rather than assuming the cancel won. */
   cancelCommonsIntent: (opts: {
     intentId: string;
     scope?: string;
   }) => Promise<{ status: string; cancelled: boolean }>;
   /**
    * The STEWARD's answer to one member request (#872). Optional so an older
-   * host parses this shape unchanged and a surface that cannot find the door
-   * draws no Approve/Decline at all — feature detection, never a fallback path.
+   * host parses this shape unchanged and a surface without the door draws no
+   * Approve/Decline — feature detection, never a fallback path.
    *
-   * `scope` names the seat the answer is given FROM and must be a vault this
-   * caller owns; the gateway resolves the intent's own seat and refuses anyone
+   * `scope` names the seat the answer is given FROM; the gateway refuses anyone
    * who is not that grant's steward. Approving re-enters the signed rail, so a
-   * refusal there comes back as `decided: true` with the rail's reason rather
-   * than as a transport error.
+   * refusal there returns `decided: true` with the rail's reason, not an error.
    */
   decideCommonsIntent?: (opts: {
     intentId: string;
@@ -224,20 +222,16 @@ export interface InlineCentraidClient {
     scope?: string;
   }) => Promise<InlineCommonsIntentDecision>;
   /**
-   * THE STAGED-IMPORT WORKFLOW (#290), as five doors on the app client.
-   * First contact with a dropped file is always a DRAFT: stage, review the
-   * rows, then publish or discard.
+   * THE STAGED-IMPORT WORKFLOW (#290), as five doors. First contact with a
+   * dropped file is always a DRAFT: stage, review the rows, publish or discard.
    *
-   * ONLINE-ONLY BY CONSTRUCTION. These never enter a replica session or the
-   * pending-write outbox — an import payload is the raw file, secrets and all,
-   * and a durable offline queue is exactly where it must not sit.
+   * ONLINE-ONLY BY CONSTRUCTION — never a replica session or the pending-write
+   * outbox: the payload is the raw file, secrets and all.
    *
-   * ACTIVE-VAULT SCOPED, so they take NO `scope` argument: the import plane is
-   * owner-tier and answers for whichever vault the gateway currently has
-   * mounted (`ROUTE_SECURITY_REGISTRY`, `/centraid/_vault/imports`), which is
-   * not the same axis as an app's mounted scopes. A multi-scope app cannot
-   * stage into a secondary audience, and the absence of the argument says so
-   * rather than accepting one and quietly ignoring it.
+   * ACTIVE-VAULT SCOPED, so they take NO `scope`: the import plane is
+   * owner-tier and answers for whichever vault the gateway has mounted, which
+   * is not an app's scope axis. A multi-scope app cannot stage into a secondary
+   * audience, and the missing argument says so.
    */
   stageImport?: (file: File) => Promise<InlineImportStaged>;
   importBatches?: () => Promise<VaultImportBatch[]>;
@@ -312,7 +306,7 @@ function canFallbackOnline(error: unknown): boolean {
   return typeof code === "string" && FALLBACK_CODES.has(code);
 }
 
-/** Names the scope explicitly, or the gateway answers for whichever vault is FOCUSED and a secondary scope renders the primary's rows. */
+/** Name the scope explicitly, or the gateway answers for whichever vault is FOCUSED and a secondary scope renders the primary's rows. */
 async function gatewayRead(
   appId: string,
   query: string,
@@ -331,7 +325,7 @@ async function gatewayRead(
   return readJson<unknown>(res, `read ${query}`);
 }
 
-/** Never presents its payload to a replica session: the inline seat must not durably queue sealed input. */
+/** Never hands its payload to a replica session: sealed input must not queue. */
 async function gatewayAction(
   appId: string,
   action: string,
@@ -352,12 +346,26 @@ async function gatewayAction(
   return readJson(response, `write ${action}`);
 }
 
+/** Wildcard the coordinator emits for bootstrap, commit, purge or scope
+ *  teardown: "everything here may have moved". Never a table name. */
+const EVERYTHING = "*";
+
+/**
+ * One invalidation as the page-side change event. `tables` carries the actual
+ * entity, so an app whose declared list omits it does not re-derive; the
+ * wildcard must collapse to the EMPTY list, which `onDataChange` fires on
+ * unconditionally, because `["*"]` would match nobody (#883).
+ */
 function toChangeDetail(
   invalidation: ReplicaInvalidation,
   scope: string
 ): InlineChangeDetail {
+  const named =
+    invalidation.entity && invalidation.entity !== EVERYTHING
+      ? [invalidation.entity]
+      : [];
   return {
-    tables: invalidation.entity ? [invalidation.entity] : [],
+    tables: named,
     source: invalidation.source,
     ...(invalidation.intentId ? { intentId: invalidation.intentId } : {}),
     ...(invalidation.intentState
@@ -552,18 +560,18 @@ function bindingsOf(
   throw new Error("An inline client needs at least one mounted scope");
 }
 
-/** Kept OFF the client object so an app can never reach them. Secondary scopes hydrate after first paint; only the primary blocks the first render. */
+/** Kept OFF the client object so an app can never reach them. Secondary scopes hydrate after first paint; only the primary blocks first render. */
 interface InlineClientControls {
   add: (binding: InlineScopeBinding) => void;
 }
 const controls = new WeakMap<object, InlineClientControls>();
 
-/** Grant-plane transport stays off the eager shell graph: methods `import()` it on first call so Tasks/Home never pay for it. */
+/** Grant-plane transport stays off the eager shell graph: methods `import()` it on first call so Tasks/Home never pay for it. Queued (#883): an offline grant is held durably until the gateway is reachable, else the plain wire. */
 function lazyGrantBridge(getAuth: () => Promise<GatewayAuth>): GrantBridge {
   let pending: Promise<GrantBridge> | undefined;
   const loaded = (): Promise<GrantBridge> =>
-    (pending ??= import("./grant-wire.js").then((mod) =>
-      mod.grantBridge(getAuth)
+    (pending ??= import("./grant-seat.js").then((mod) =>
+      mod.queuedGrantBridge(getAuth)
     ));
   return {
     subjects: async () => (await loaded()).subjects(),
@@ -718,7 +726,7 @@ export function createInlineCentraidClient(
     // The SAME array the app holds, so a hydrated scope appears to a captured ref.
     scopes: bindings.map((binding) => binding.scope),
 
-    // `async` deliberately: an unmounted-scope refusal must REJECT like any other read failure, not throw synchronously.
+    // `async` deliberately: an unmounted-scope refusal must REJECT, not throw.
     async read<T>(opts: {
       query: string;
       input?: Record<string, unknown>;
@@ -1107,7 +1115,7 @@ export interface InstallInlineCentraidOptions extends CreateInlineCentraidOption
   onInstalled?: (client: InlineCentraidClient) => void;
 }
 
-/** Restoring one on teardown is the goHome hang: Home painted, `window.centraid` still naming a client. */
+/** Restoring one on teardown is the goHome hang: Home painted, `window.centraid` still bound. */
 const publishedClients = new WeakSet<object>();
 
 function isPublishedClient(value: unknown): boolean {
@@ -1128,7 +1136,7 @@ export function installInlineCentraid(
   target.centraid = client;
   options.onInstalled?.(client);
   return () => {
-    // A successor may install while this client is still published, so only the live client may clear the slot — never restore one this module published.
+    // A successor may install while this client is still published: only the live client may clear the slot.
     if (target.centraid !== client) return;
     target.centraid = isPublishedClient(previous) ? undefined : previous;
   };

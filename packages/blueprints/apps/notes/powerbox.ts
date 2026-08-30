@@ -1,15 +1,13 @@
-// `[[` powerbox (Notes spec §3, §5). SEVEN KINDS; LOCKER IS NOT ONE — `queries/link-targets.ts` never probes it, and `view-copy.ts` states the absence on the sheet's foot.
+// `[[` powerbox (Notes spec §3, §5). LOCKER IS NOT A LINK KIND — the kinds
+// table omits it and the sheet's foot states the absence.
+import { LINK_TARGET_KINDS, linkTargetAppLabel } from "./link-targets-table.ts";
 import type { LinkTarget } from "./types.ts";
 
-export const KIND_ORDER: readonly string[] = [
-  "Notes",
-  "People",
-  "Agenda",
-  "Tasks",
-  "Tally",
-  "Photos",
-  "Docs",
-];
+// Group order DERIVED from the kinds table (#883, ruling O-label), never a
+// second list that can disagree about order or naming.
+export const KIND_ORDER: readonly string[] = LINK_TARGET_KINDS.map((kind) =>
+  linkTargetAppLabel(kind.appId)
+);
 
 export interface TargetGroup {
   app: string;
@@ -27,7 +25,7 @@ export function groupTargets(targets: readonly LinkTarget[]): TargetGroup[] {
     app,
     targets: byApp.get(app)!,
   }));
-  // A kind the order does not name still lists after the seven: the query is the authority on what is linkable.
+  // The query, not this order, is the authority on what is linkable.
   const extra = [...byApp.keys()]
     .filter((app) => !KIND_ORDER.includes(app))
     .toSorted((a, b) => a.localeCompare(b))
@@ -45,7 +43,8 @@ export function probeAt(body: string, caret: number): WikiProbe | null {
   const open = head.lastIndexOf("[[");
   if (open === -1) return null;
   const term = head.slice(open + 2);
-  // A closing pair or line break ends the probe — `[[` from two paragraphs ago is not the current type-in.
+  // A closing pair or line break ends the probe: `[[` from a paragraph ago is
+  // not the current type-in.
   if (term.includes("]]") || term.includes("\n")) return null;
   return { start: open, term };
 }
@@ -57,10 +56,10 @@ export interface PassageAnchor {
   start: number;
 }
 
-/** Surrounding chars an anchor carries each side — enough to re-find after a nearby edit, not a second copy of the note. */
+/** Enough to re-find after a nearby edit, not a second copy of the note. */
 const CONTEXT = 32;
 
-/** Empty selection → null (link the note as a whole; do not invent a standoff over nothing). */
+/** Empty selection → null: link the note whole, never a standoff over nothing. */
 export function anchorFrom(
   body: string,
   selectionStart: number,
@@ -78,7 +77,7 @@ export function anchorFrom(
   };
 }
 
-/** Where the passage sits NOW, or null if edited away — do not pretend a lost position. */
+/** Where the passage sits NOW, or null — never a pretended position. */
 export function resolveAnchor(
   body: string,
   anchor: { exact?: string; prefix?: string; start?: number } | null | undefined
@@ -86,7 +85,8 @@ export function resolveAnchor(
   const exact = anchor?.exact;
   if (typeof exact !== "string" || exact === "") return null;
   const hinted = typeof anchor?.start === "number" ? anchor.start : 0;
-  // Remembered offset, then prefix, then the text anywhere — first hit wins; each later fallback is weaker.
+  // Remembered offset, then prefix, then bare text: first hit wins, each
+  // fallback weaker.
   if (body.slice(hinted, hinted + exact.length) === exact)
     return { start: hinted, end: hinted + exact.length };
   const prefix = anchor?.prefix;

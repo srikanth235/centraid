@@ -1,19 +1,9 @@
-/**
- * Create a list (a SKOS concept in your lists scheme), like a Docs folder. Runs through people.create_list — consent-checked and receipted, risk low.
- */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
+/** A list is a SKOS concept in the lists scheme. */
 export default async function createList({ body, ctx }: HandlerArgs) {
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "people.create_list",
-      input: (body ?? {}) as Record<string, unknown>,
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  return runVaultAction(ctx, {
+    command: "people.create_list",
+    input: actionInput(body),
+  });
 }

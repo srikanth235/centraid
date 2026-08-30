@@ -167,9 +167,9 @@ describe(retentionKeysFor, () => {
 describe("scheduleExpr and cursorIdentity", () => {
   it("gates each kind on its declared cadence and keys events by account shape", () => {
     expect(scheduleExpr({ kind: "cron", expr: "0 8 * * *" })).toBe("0 8 * * *");
-    expect(
-      scheduleExpr({ kind: "condition", entity: "business.invoice" })
-    ).toBe("*/5 * * * *");
+    expect(scheduleExpr({ kind: "condition", entity: "schedule.task" })).toBe(
+      "*/5 * * * *"
+    );
     expect(scheduleExpr({ kind: "data", entities: ["core.party"] })).toBe(
       "* * * * *"
     );
@@ -180,7 +180,7 @@ describe("scheduleExpr and cursorIdentity", () => {
         event: "new-message",
       })
     ).toBe("*/5 * * * *");
-    // A webhook has no cadence — it is doorbell-driven only.
+    // A webhook has no cadence: it is doorbell-driven.
     expect(
       scheduleExpr({ kind: "webhook", id: "h", secretHash: "a".repeat(64) })
     ).toBeUndefined();

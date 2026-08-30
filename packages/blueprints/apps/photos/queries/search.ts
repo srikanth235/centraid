@@ -6,8 +6,6 @@
  * Row shape mirrors queries/library.js's `join()` output row-for-row so hits
  * render straight into the existing grid; album-name matching stays
  * client-side. Consent denial is a first-class outcome.
- *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
 import { readAssetJoins, readPlaces, srcOf } from "./_shared.ts";
 

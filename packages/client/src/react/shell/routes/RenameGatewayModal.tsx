@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import { cx } from "../../ui/cx.js";
+import ShellModal from "../../ui/ShellModal.js";
 import { iconSvg } from "../iconSvg.js";
 
 import controlsCss from "../../styles/controls.module.css";
@@ -57,7 +58,11 @@ export default function RenameGatewayModal({
         tabIndex={-1}
         onClick={onCancel}
       />
-      <dialog open className={vaultModalStyles.profModal} aria-modal="true">
+      <ShellModal
+        layer="inline"
+        className={vaultModalStyles.profModal}
+        ariaModal
+      >
         <div className={vaultModalStyles.profModalHead}>
           <span
             className={vaultModalStyles.profModalHeadIcon}
@@ -108,7 +113,7 @@ export default function RenameGatewayModal({
             Save
           </button>
         </div>
-      </dialog>
+      </ShellModal>
     </div>
   );
 }

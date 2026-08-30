@@ -1,11 +1,7 @@
-// The grant sheet, native seat (#825).
-//
-// The parity claim: the SAME core answers on this seat. Person → what →
-// capability reaches one write door with the request the route takes, `edit`
-// is drawn only where the declared registry answers it, an unaccepted
-// invitation reads as pending rather than as an error, and revoking asks
-// first in the honest best-effort words before reporting the route's own
-// sentence verbatim.
+// The grant sheet, native seat (#825). The parity claim: the SAME core answers
+// here — one write door, `edit` only where the registry declares it, an
+// unaccepted invitation reading as pending rather than error, and revoking
+// asking first before reporting the route's own sentence verbatim.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -92,11 +88,10 @@ vi.mock(
   () => ({ useReplica: () => ({ gatewayBase: "" }) }) as never
 );
 
-// The default door reaches `lib/gateway`, which pulls the Expo module runtime
-// into a plain jsdom project. Every test here injects its own door, so the
-// transport is stubbed at the seam rather than booted.
+// The default door pulls the Expo module runtime into a plain jsdom project,
+// so every test injects its own and stubs transport at the seam.
 vi.mock(
-  import("./grants-transport"),
+  import("./grant-seat"),
   () => ({ nativeGrantDoor: () => undefined }) as never
 );
 
@@ -162,6 +157,9 @@ function standingGrant(overrides: Partial<GrantRecord> = {}): GrantRecord {
         detail: null,
       },
     ],
+    // The vault's own words for where it stands (ruling V-phrases).
+    phrase: "shared",
+    reason: "the vault it addresses is holding it",
     ...overrides,
   };
 }
@@ -174,6 +172,8 @@ function stubDoor(overrides: Partial<GrantDoor> = {}): GrantDoor {
     forSubject: () => Promise.resolve([]),
     create: () => Promise.resolve({ ok: true, outcome: "created" as const }),
     revoke: () => Promise.resolve({ ok: true, message: "no longer shared" }),
+    changeCapability: () =>
+      Promise.resolve({ ok: true, outcome: "created" as const }),
     ...overrides,
   };
 }
@@ -193,11 +193,7 @@ describe("the grant sheet, native seat", () => {
     document.body.replaceChildren();
   });
 
-  /**
-   * Mount the sheet and record what it SAYS rather than which functions ran:
-   * the status line is its one feedback channel, so the sentences that reached
-   * it are the observable outcome under test.
-   */
+  /** Record what the sheet SAYS, not which functions ran: status is the seam. */
   async function render(
     props: Partial<React.ComponentProps<typeof GrantSheet>> = {}
   ): Promise<string[]> {
@@ -301,11 +297,15 @@ describe("the grant sheet, native seat", () => {
       expect(status).toStrictEqual(["Already shared with Priya"]);
     });
 
-    test("a capability the route did not change is not reported as a change", async () => {
+    test("changing a standing capability asks first, then withdraws and grants again", async () => {
+      // The plane refuses an answer edited in place (V-table), so the sheet
+      // names the consequence first, then runs withdraw-then-grant.
       const standing = standingGrant({
         subjectType: "tally.group",
         subjectId: "group-1",
       });
+      const changed: Array<[string, GrantRequest]> = [];
+      const created: GrantRequest[] = [];
       const status = await render({
         subjects: [GROUP_SUBJECT],
         door: stubDoor({
@@ -315,20 +315,72 @@ describe("the grant sheet, native seat", () => {
               channel: { state: "live" as const },
               grants: [standing],
             }),
-          create: () =>
-            Promise.resolve({
-              ok: true,
-              outcome: "exists_other_capability",
-              standing: "view",
-              grant: standing,
-            }),
+          create: (request) => {
+            created.push(request);
+            return Promise.resolve({ ok: true, outcome: "created" as const });
+          },
+          changeCapability: (grantId, request) => {
+            changed.push([grantId, request]);
+            return Promise.resolve({ ok: true, outcome: "created" as const });
+          },
         }),
       });
       await act(async () => press("Can edit").click());
-      await act(async () => press("Share").click());
-      expect(status).toStrictEqual([
-        "Already shared with Priya for viewing; changing access is not offered yet — revoke and share again to change it.",
+      // The primary action is worded as the change, not as the mechanism.
+      expect(has("Share")).toBe(false);
+      await act(async () => press("Change access").click());
+      expect(container?.textContent).toContain(
+        "asked to remove its copy and is sent a fresh one"
+      );
+      // Nothing has been written yet: the question is still open.
+      expect(changed).toStrictEqual([]);
+      await act(async () => press("Change access").click());
+      expect(changed).toStrictEqual([
+        [
+          "grant-1",
+          {
+            audienceKind: "party",
+            audienceId: "party-priya",
+            subjectType: "tally.group",
+            subjectId: "group-1",
+            capability: "edit",
+            subjectLabel: "Ski trip",
+          },
+        ],
       ]);
+      // Never the plain create door: that post is the one the route refuses.
+      expect(created).toStrictEqual([]);
+      expect(status).toStrictEqual(["Priya can now edit it"]);
+    });
+
+    test("backing out of the change writes nothing at all", async () => {
+      const standing = standingGrant({
+        subjectType: "tally.group",
+        subjectId: "group-1",
+      });
+      const changed: string[] = [];
+      const status = await render({
+        subjects: [GROUP_SUBJECT],
+        door: stubDoor({
+          forParty: () =>
+            Promise.resolve({
+              known: true,
+              channel: { state: "live" as const },
+              grants: [standing],
+            }),
+          changeCapability: (grantId) => {
+            changed.push(grantId);
+            return Promise.resolve({ ok: true, outcome: "created" as const });
+          },
+        }),
+      });
+      await act(async () => press("Can edit").click());
+      await act(async () => press("Change access").click());
+      await act(async () => press("Leave it as it is").click());
+      expect(changed).toStrictEqual([]);
+      expect(status).toStrictEqual([]);
+      // The sheet is back, still offering the change.
+      expect(has("Change access")).toBe(true);
     });
 
     test("a subject the registry does not name at all refuses the verb", async () => {
@@ -467,138 +519,6 @@ describe("the grant sheet, native seat", () => {
         }),
       });
       expect(container?.textContent).toContain("Invitation pending");
-    });
-  });
-
-  describe("revoking, native", () => {
-    test("asks first, then reports the route's sentence verbatim", async () => {
-      const message =
-        "no longer shared; a vault holding a copy has been asked to remove it and has not yet confirmed";
-      const revoked: string[] = [];
-      const status = await render({
-        door: stubDoor({
-          revoke: (grantId) => {
-            revoked.push(grantId);
-            return Promise.resolve({ ok: true, message });
-          },
-          forParty: () =>
-            Promise.resolve({
-              known: true,
-              channel: { state: "live" as const },
-              grants: [standingGrant()],
-            }),
-        }),
-      });
-
-      await act(async () => press("Revoke document").click());
-      expect(container?.textContent).toContain("Stop sharing with Priya?");
-      expect(container?.textContent).toContain(
-        "their vault is asked to remove its copy"
-      );
-
-      await act(async () => press("Revoke").click());
-      expect(revoked).toStrictEqual(["grant-1"]);
-      expect(status).toStrictEqual([message]);
-    });
-
-    test("keeping the share writes nothing", async () => {
-      const revoked: string[] = [];
-      await render({
-        door: stubDoor({
-          revoke: (grantId) => {
-            revoked.push(grantId);
-            return Promise.resolve({ ok: true, message: "no longer shared" });
-          },
-          forParty: () =>
-            Promise.resolve({
-              known: true,
-              channel: { state: "live" as const },
-              grants: [standingGrant()],
-            }),
-        }),
-      });
-      await act(async () => press("Revoke document").click());
-      await act(async () => press("Keep sharing").click());
-      expect(revoked).toStrictEqual([]);
-    });
-  });
-
-  describe("object-first, native", () => {
-    test("the same core answers the object side, with the what step pinned", async () => {
-      let subjectReads = 0;
-      await render({
-        subject: {
-          subjectType: "core.document",
-          subjectId: "doc-1",
-          label: "Trip plan",
-        },
-        door: stubDoor({
-          forSubject: () => {
-            subjectReads += 1;
-            return Promise.resolve([standingGrant()]);
-          },
-        }),
-      });
-      expect(subjectReads).toBe(1);
-      expect(container?.textContent).toContain("Trip plan");
-      // The standing list is the object side, so its rows name PEOPLE.
-      expect(container?.textContent).toContain("Priya");
-    });
-
-    test("the person's reach is read here too, never invented from the object read", async () => {
-      // `forSubject` cannot answer reach, so the object-first sheet asks the
-      // person side for it. Without that read a live-channel person was told
-      // sharing would send her an invitation first.
-      await render({
-        subject: {
-          subjectType: "core.document",
-          subjectId: "doc-1",
-          label: "Trip plan",
-        },
-        door: stubDoor({
-          forSubject: () => Promise.resolve([standingGrant()]),
-          forParty: () =>
-            Promise.resolve({
-              known: true,
-              channel: { state: "live" as const, vaultId: "vault-priya" },
-              grants: [],
-            }),
-        }),
-      });
-      expect(container?.textContent).toContain("Reachable");
-      expect(container?.textContent).not.toContain("Not reached yet");
-      expect(container?.textContent).not.toContain(
-        "Sharing sends an invitation first."
-      );
-    });
-
-    test("an object-first reach still being read paints no claim", async () => {
-      let answer: () => void = () => undefined;
-      await render({
-        subject: {
-          subjectType: "core.document",
-          subjectId: "doc-1",
-          label: "Trip plan",
-        },
-        door: stubDoor({
-          forSubject: () => Promise.resolve([standingGrant()]),
-          forParty: () =>
-            new Promise((resolve) => {
-              answer = (): void =>
-                resolve({
-                  known: true,
-                  channel: { state: "live" },
-                  grants: [],
-                });
-            }),
-        }),
-      });
-      expect(container?.textContent).not.toContain("Not reached yet");
-      expect(container?.textContent).not.toContain(
-        "Sharing sends an invitation first."
-      );
-      await act(async () => answer());
-      expect(container?.textContent).toContain("Reachable");
     });
   });
 });

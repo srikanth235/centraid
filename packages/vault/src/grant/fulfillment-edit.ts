@@ -1,10 +1,9 @@
 /*
- * EDIT fulfillment (#825, ruling G-edit). NOTHING HERE AUTHORIZES ANYTHING:
- * routing only, over the DECLARED table (commons-routing.ts, #750) and never
- * the command's name. Two v1 REFUSALS, never silent successes —
- * co-contribution ships for `tally.group` alone, and an edit grant with no
- * commons rail is refused, since a write off the rail is a local mutation the
- * next compile reverts.
+ * EDIT fulfillment (#825). NOTHING HERE AUTHORIZES ANYTHING: routing only, over
+ * the DECLARED table (commons-routing.ts) and never the command's name. Two v1
+ * REFUSALS, never silent successes — co-contribution ships for `tally.group`
+ * alone, and an edit grant with no commons rail is refused, because a write off
+ * the rail is a local mutation the next compile reverts.
  */
 
 import type { DatabaseSync } from "node:sqlite";
@@ -18,9 +17,9 @@ import type { CommonsCommandRoute } from "../share/commons-routing.js";
 import { commonsGrantForCommand } from "../share/commons.js";
 import type { ShareGrantRecord } from "./grant-store.js";
 import { listShareGrantsForSubject } from "./grant-store.js";
+import { SHARE_SUBJECT_REGISTRY } from "./subject-registry.js";
 
-/** Commands that INTRODUCE an item rather than edit one inside. Declared,
- *  never inferred (#750). */
+/** Commands that INTRODUCE an item. Declared, never inferred (#750). */
 export const SHARE_GRANT_CO_CONTRIBUTION_COMMANDS: readonly string[] = [
   "core.add_document",
   "core.create_folder",
@@ -28,10 +27,15 @@ export const SHARE_GRANT_CO_CONTRIBUTION_COMMANDS: readonly string[] = [
   "tally.add_expense",
 ];
 
-/** Container types whose audience may co-contribute in v1. */
-export const SHARE_GRANT_CO_CONTRIBUTION_TYPES: readonly ShareableItemType[] = [
-  "tally.group",
-];
+/**
+ * Container types whose audience may co-contribute, DERIVED from the registry
+ * rather than listed again (#883): a hand-kept second list can disagree with
+ * the subject registry's `edit` declaration, a derivation cannot.
+ */
+export const SHARE_GRANT_CO_CONTRIBUTION_TYPES: readonly ShareableItemType[] =
+  SHARE_SUBJECT_REGISTRY.filter(
+    (subject) => subject.fulfillment.edit === "commons-routing"
+  ).map((subject) => subject.subjectType);
 
 export interface ShareGrantEditRoute {
   command: string;
@@ -46,7 +50,7 @@ export interface ShareGrantEditRoute {
   refusal?: string;
 }
 
-/** NEAREST FIRST: the closest enclosing folder keeps a subtree one share. */
+/** NEAREST FIRST: the closest folder keeps a subtree one share. */
 function candidateContainers(
   db: DatabaseSync,
   route: CommonsCommandRoute,
@@ -114,8 +118,8 @@ function refusalFor(input: {
   return undefined;
 }
 
-/** Against only the grants that reach the WRITER: the route's own `refusal`
- *  folds the whole container, so one edit grant would silence "view only" for
+/** Against only the grants reaching the WRITER: the route's `refusal` folds
+ *  the whole container, so one edit grant would silence "view only" for
  *  everyone. Per audience, never per container. */
 export function shareGrantEditRefusal(
   route: ShareGrantEditRoute,
@@ -133,8 +137,7 @@ export function shareGrantEditRefusal(
   });
 }
 
-/** `undefined` when nothing shared is addressed — indistinguishable from the
- *  world before grants. */
+/** `undefined` when nothing shared is addressed. */
 export function routeShareGrantEdit(
   db: DatabaseSync,
   input: { command: string; commandInput: Record<string, unknown> }

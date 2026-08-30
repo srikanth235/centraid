@@ -2,6 +2,7 @@
 // Rules live in `rowStateMark`; this renders its verdict.
 import type { ReactNode } from "react";
 
+import { DAY_MS } from "../../_shared/format-kit.ts";
 import { canRender } from "../format.ts";
 import type { DriveDoc } from "../types.ts";
 import { rowStateMark } from "../view-copy.ts";
@@ -17,7 +18,7 @@ export function rowStateFor(
   const purgeAt = doc.purge_at ? Date.parse(doc.purge_at) : Number.NaN;
   const purgeInDays = Number.isNaN(purgeAt)
     ? null
-    : Math.max(0, Math.ceil((purgeAt - Date.now()) / 86_400_000));
+    : Math.max(0, Math.ceil((purgeAt - Date.now()) / DAY_MS));
   return {
     cannotRender: !canRender(doc),
     inTrash: trashed,

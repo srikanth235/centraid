@@ -4,6 +4,8 @@
 import { Component } from "react";
 import type { ErrorInfo, JSX, ReactNode } from "react";
 
+import Button from "../ui/Button.js";
+
 export interface ErrorBoundaryProps {
   children: ReactNode;
   /** Optional title shown above the message. */
@@ -76,23 +78,18 @@ export default class ErrorBoundary extends Component<
         >
           {error.message || "An unexpected error stopped this view."}
         </p>
-        <button
-          type="button"
+        {/* The wall paints its own frame inline — it must read even if the
+            module stylesheet is what failed — but the one control on it is
+            the kit's, so the ink fill, the target size and the focus ring
+            follow the product. `commit={false}`: retrying a crashed view
+            writes nothing, and a wall whose only way out disabled itself
+            while the gateway was down would be a dead end (#883 B9). */}
+        <Button
+          variant="primary"
+          commit={false}
+          label="Try again"
           onClick={this.handleReset}
-          style={{
-            marginTop: 4,
-            padding: "8px 14px",
-            fontSize: 13,
-            fontWeight: 500,
-            color: "var(--text-inv)",
-            background: "var(--accent-fill)",
-            border: "none",
-            borderRadius: 8,
-            cursor: "pointer",
-          }}
-        >
-          Try again
-        </button>
+        />
       </div>
     );
   }

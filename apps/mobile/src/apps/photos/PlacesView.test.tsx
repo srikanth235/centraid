@@ -262,6 +262,21 @@ describe("the Places shelf (native)", () => {
     });
   });
 
+  // A coordinate pair is not a name (#816) — on the card OR in the label the
+  // card publishes to the screen it opens.
+  it("prints a place named only by its coordinates as unnamed, on the card and in its label", () => {
+    mocks.places = [
+      { ...PLACE_ROWS[0], name: "39.0968, -120.0324" },
+      PLACE_ROWS[1],
+    ];
+    renderShelf();
+    expect(container!.textContent).toContain("A place with no name yet");
+    expect(container!.textContent).not.toContain("39.0968, -120.0324");
+    expect(
+      buttonLabelled("A place with no name yet").getAttribute("aria-label")
+    ).toBe("A place with no name yet, 2 photographs");
+  });
+
   it("opens the map from the head chip, never a place", () => {
     renderShelf();
     act(() =>

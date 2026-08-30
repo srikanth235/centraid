@@ -15,6 +15,7 @@ import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
+import Tappable from "../../kit/components/Tappable";
 import { radii, t, useTheme } from "../../kit/theme";
 
 /** The `propose` payload, in the shape the native write path takes. The
@@ -76,25 +77,24 @@ export default function AgendaCreateModal({
     >
       <View style={[styles.safe, { backgroundColor: colors.bg }]}>
         <View style={styles.header}>
-          <Pressable
+          <Tappable
             accessibilityRole="button"
             accessibilityLabel="Close the composer"
             onPress={onClose}
           >
             <Icon name="X" size={23} color={colors.text} />
-          </Pressable>
+          </Tappable>
           <Text style={[styles.title, { color: colors.text }]}>New event</Text>
-          <Pressable
+          <Tappable
             accessibilityRole="button"
             accessibilityLabel="Save this event"
-            accessibilityState={{ disabled: saving }}
             disabled={saving}
             onPress={() => void submit()}
           >
             <Text style={[styles.save, { color: colors.text }]}>
               {saving ? "Saving…" : "Save"}
             </Text>
-          </Pressable>
+          </Tappable>
         </View>
 
         <ScrollView contentContainerStyle={styles.content}>

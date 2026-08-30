@@ -6,13 +6,17 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
   gap: var(--sp-3);
-  padding: var(--sp-2) var(--content-margin) 0;
+  padding: var(--sp-2) var(--page-margin) 0;
 }
 
+/* The row arrangement is a WINDOWED `<ul>` (`_shared/VirtualWindow.tsx`), so
+   the browser's own marker and indent come off it; the rows keep the rhythm. */
 .rows {
   display: flex;
   flex-direction: column;
-  padding: var(--sp-2) var(--content-margin) 0;
+  padding: var(--sp-2) var(--page-margin) 0;
+  list-style: none;
+  margin: 0;
 }
 
 /* ---------- The card ---------- */

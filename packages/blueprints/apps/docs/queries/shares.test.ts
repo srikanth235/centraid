@@ -15,6 +15,10 @@
 //     is a machine string nobody chose.
 import { describe, expect, it, vi } from "vitest";
 
+import {
+  FOLDER_SCHEME_URI,
+  ROOT_FOLDER_NOTATION,
+} from "../../_shared/concept-scheme-kit.ts";
 import driveHandler from "./drive.ts";
 import searchHandler from "./search.ts";
 
@@ -29,11 +33,13 @@ const SHARE_ENTITIES = new Set([
 // One folders scheme: root › Property › Leases. `doc-lease` sits two levels
 // down, `doc-loose` sits at the top level.
 const ROWS: Record<string, Array<Record<string, unknown>>> = {
-  "core.concept_scheme": [
-    { scheme_id: "s-folders", uri: "https://centraid.dev/schemes/folders" },
-  ],
+  "core.concept_scheme": [{ scheme_id: "s-folders", uri: FOLDER_SCHEME_URI }],
   "core.concept": [
-    { concept_id: "c-root", scheme_id: "s-folders", notation: "root" },
+    {
+      concept_id: "c-root",
+      scheme_id: "s-folders",
+      notation: ROOT_FOLDER_NOTATION,
+    },
     {
       concept_id: "c-property",
       scheme_id: "s-folders",

@@ -22,6 +22,8 @@ import {
   propagateGrantRemoval,
   refreshGrantsAfterCommit,
 } from "./grant-fulfillment.js";
+import { NoticeStore } from "./notices.js";
+import { SHARE_RECEIVED_NOTICE_KIND } from "./share-notices.js";
 
 const ORIGIN_VAULT = "vlt_priya";
 const AUDIENCE_VAULT = "vlt_ravi";
@@ -41,7 +43,6 @@ function makeVault(root: string, name: string, vaultId: string): Side {
   return { vault, boot: bootstrapVault(vault, { ownerName: name, vaultId }) };
 }
 
-/** One document, the smallest whole subject a grant can carry. */
 function seedDocument(side: Side, title: string, body: string): string {
   const now = nowIso();
   const blob = side.vault.blobs.ingestSync(Buffer.from(body));
@@ -144,7 +145,6 @@ describe("serve/grant-fulfillment", () => {
       { peerVaultId: AUDIENCE_VAULT, state: "delivered" },
     ]);
 
-    // The subject moves on; the audience replica follows on the next pass.
     const later = "2026-08-19T15:00:00.000Z";
     priya.vault.vault
       .prepare("UPDATE core_document SET title = ? WHERE document_id = ?")
@@ -206,7 +206,7 @@ describe("serve/grant-fulfillment", () => {
       logger: { warn: (message: string) => warnings.push(message) },
     };
 
-    // Nila's grant is over its ceiling; Ravi's is not. Nila's failure is hers.
+    // Nila's grant is over its ceiling, Ravi's is not.
     const overCeiling = createShareGrant(priya.vault.vault, {
       audience: { kind: "party", id: nilaParty },
       subjectType: "core.document",
@@ -280,17 +280,15 @@ describe("serve/grant-fulfillment", () => {
       grantedBy: priya.boot.ownerPartyId,
     });
 
-    // The doorbell carries a vault id and nothing else — exactly what the
-    // gateway's post-commit hint has — and the audience still follows.
+    // A vault id and nothing else, exactly as the post-commit hint carries.
     const doorbell = createGrantRefreshDoorbell({ host });
     doorbell.ring(ORIGIN_VAULT);
     expect(audienceTitles(ravi)).toStrictEqual(["Trip plan"]);
     priya.vault.vault
       .prepare("UPDATE core_document SET title = ? WHERE document_id = ?")
       .run("Trip plan (final)", documentId);
-    // Inside the coalescing window the ring only marks work pending, so the
-    // direct pass is what proves the edit follows; the window's trailing pass
-    // is the same call on a timer.
+    // Inside the coalescing window a ring only marks work pending, so the
+    // direct pass is what proves the edit follows.
     expect(
       refreshGrantsAfterCommit({ host, originVaultId: ORIGIN_VAULT, now })
         .origin
@@ -301,9 +299,7 @@ describe("serve/grant-fulfillment", () => {
 
   test("an unmounted origin vault is a fact about the host, never an empty pass", () => {
     const host = { vaultFor: () => undefined };
-    // The distinction this asserts is the whole point: `unmounted` must never
-    // arrive as "no grants over this subject", which is what an empty list
-    // would say.
+    // `unmounted` must never arrive as "no grants here" — an empty list.
     expect(
       fulfillGrantsForSubject({
         host,
@@ -331,5 +327,184 @@ describe("serve/grant-fulfillment", () => {
         now: nowIso(),
       })
     ).toMatchObject({ outcome: "failed" });
+  });
+
+  /** Priya, Ravi, one shared document, this host holding both vaults. */
+  function sharedWorld(): {
+    priya: Side;
+    ravi: Side;
+    raviParty: string;
+    documentId: string;
+    grantId: string;
+    host: { vaultFor: (vaultId: string) => VaultDb | undefined };
+    now: string;
+  } {
+    const root = tempDirSync("centraid-grant-delivery-");
+    const priya = makeVault(root, "priya", ORIGIN_VAULT);
+    const ravi = makeVault(root, "ravi", AUDIENCE_VAULT);
+    const now = nowIso();
+    const raviParty = uuidv7();
+    priya.vault.vault
+      .prepare(
+        `INSERT INTO core_party
+           (party_id, kind, display_name, sort_name, created_at, updated_at,
+            ontology_version)
+         VALUES (?, 'person', 'Ravi', 'Ravi', ?, ?, '1.4')`
+      )
+      .run(raviParty, now, now);
+    priya.vault.vault
+      .prepare(
+        `INSERT INTO share_party_vault_binding
+           (binding_id, party_id, vault_id, vault_public_key, linked_at, revoked_at)
+         VALUES (?, ?, ?, NULL, ?, NULL)`
+      )
+      .run(uuidv7(), raviParty, AUDIENCE_VAULT, now);
+    const documentId = seedDocument(priya, "Trip plan", "day one");
+    const mounted = new Map<string, VaultDb>([
+      [ORIGIN_VAULT, priya.vault],
+      [AUDIENCE_VAULT, ravi.vault],
+    ]);
+    const grant = createShareGrant(priya.vault.vault, {
+      audience: { kind: "party", id: raviParty },
+      subjectType: "core.document",
+      subjectId: documentId,
+      capability: "view",
+      grantedAt: now,
+      grantedBy: priya.boot.ownerPartyId,
+    });
+    return {
+      priya,
+      ravi,
+      raviParty,
+      documentId,
+      grantId: grant.grantId,
+      host: { vaultFor: (vaultId: string) => mounted.get(vaultId) },
+      now,
+    };
+  }
+
+  /** Every statement the loop compiles against the ORIGIN vault. */
+  function countStatements(db: VaultDb): {
+    value: () => number;
+    restore: () => void;
+  } {
+    let count = 0;
+    const original = db.vault.prepare.bind(db.vault);
+    Object.defineProperty(db.vault, "prepare", {
+      configurable: true,
+      value: ((sql: string) => {
+        count += 1;
+        return original(sql);
+      }) as VaultDb["vault"]["prepare"],
+    });
+    return {
+      value: () => count,
+      restore: () =>
+        Object.defineProperty(db.vault, "prepare", {
+          configurable: true,
+          value: original,
+        }),
+    };
+  }
+
+  test("a commit that touches no granted subject costs the delivery loop nothing", () => {
+    // Ruling V-delivery: the loop is doorbell-FILTERED. Delete the `touched`
+    // hint below (or pass `undefined`) and this fails with a non-zero count —
+    // the demonstrated red for the filter.
+    const world = sharedWorld();
+    refreshGrantsAfterCommit({
+      host: world.host,
+      originVaultId: ORIGIN_VAULT,
+      now: world.now,
+      touched: ["share.authority"],
+    });
+    expect(audienceTitles(world.ravi)).toStrictEqual(["Trip plan"]);
+
+    const counter = countStatements(world.priya.vault);
+    try {
+      const pass = refreshGrantsAfterCommit({
+        host: world.host,
+        originVaultId: ORIGIN_VAULT,
+        now: world.now,
+        // A task is in no share closure, so no grant can have moved.
+        touched: ["schedule.task"],
+      });
+      expect(pass).toStrictEqual({ origin: "mounted", reports: [] });
+      expect(counter.value()).toBe(0);
+    } finally {
+      counter.restore();
+    }
+
+    // The filter is a skip, never a stop.
+    world.priya.vault.vault
+      .prepare("UPDATE core_document SET title = ? WHERE document_id = ?")
+      .run("Trip plan (final)", world.documentId);
+    refreshGrantsAfterCommit({
+      host: world.host,
+      originVaultId: ORIGIN_VAULT,
+      now: world.now,
+      touched: ["core.document"],
+    });
+    expect(audienceTitles(world.ravi)).toStrictEqual(["Trip plan (final)"]);
+  });
+
+  test("an unchanged pass re-projects nothing, and the audience is told once", () => {
+    const world = sharedWorld();
+    const pass = () =>
+      refreshGrantsAfterCommit({
+        host: world.host,
+        originVaultId: ORIGIN_VAULT,
+        now: world.now,
+        touched: ["share.authority"],
+      });
+    pass();
+
+    // Ruling V-notice: fires ONCE per grant, at its first delivery — never per
+    // item, never as membership grows.
+    const notices = new NoticeStore(world.ravi.vault.vault);
+    const card = notices.getBySource(SHARE_RECEIVED_NOTICE_KIND, world.grantId);
+    expect(card).toMatchObject({
+      headline: "priya shared a document with you",
+      count: 1,
+      readAt: null,
+    });
+    notices.markRead(card!.noticeId);
+
+    pass();
+    pass();
+    const after = notices.getBySource(
+      SHARE_RECEIVED_NOTICE_KIND,
+      world.grantId
+    );
+    // A second put bumps `count` and clears `read_at`, resurfacing a read card.
+    expect(after).toMatchObject({ count: 1 });
+    expect(after?.readAt).toBeTypeOf("string");
+  });
+
+  test("a revoked answer's removal is carried by the loop, not by the gesture", () => {
+    const world = sharedWorld();
+    refreshGrantsAfterCommit({
+      host: world.host,
+      originVaultId: ORIGIN_VAULT,
+      now: world.now,
+      touched: ["share.authority"],
+    });
+    expect(audienceTitles(world.ravi)).toStrictEqual(["Trip plan"]);
+
+    revokeShareGrant(world.priya.vault.vault, {
+      grantId: world.grantId,
+      revokedAt: "2031-01-01T00:00:00.000Z",
+    });
+    // Nothing else asked: the plane moved, and the loop owns removal.
+    refreshGrantsAfterCommit({
+      host: world.host,
+      originVaultId: ORIGIN_VAULT,
+      now: "2031-01-01T00:00:00.000Z",
+      touched: ["share.authority"],
+    });
+    expect(audienceTitles(world.ravi)).toStrictEqual([]);
+    expect(
+      listFulfillment(world.priya.vault.vault, world.grantId)
+    ).toMatchObject([{ state: "removed" }]);
   });
 });

@@ -1,13 +1,8 @@
-/*
- * Prepared-statement builders for InsightsStore (#514).
- */
-
 import type { DatabaseSync, StatementSync } from "node:sqlite";
 
 const TOKEN_SUM = `(COALESCE(total_input_tokens,0)+COALESCE(total_output_tokens,0)
   +COALESCE(total_cache_read_tokens,0)+COALESCE(total_cache_write_tokens,0))`;
 
-/** Finished run with no token fields reported (all NULL/0). */
 const UNREPORTED_PRED = `${TOKEN_SUM} = 0`;
 
 export { TOKEN_SUM };
@@ -23,6 +18,7 @@ export interface InsightsPreparedStatements {
   byEffort: StatementSync;
   recent: StatementSync;
   daySources: StatementSync;
+  runDurationMedian: StatementSync;
   kpisDigest: StatementSync;
   appsTouchedDigest: StatementSync;
   dailyDigest: StatementSync;
@@ -72,7 +68,11 @@ export function prepareInsightsStatements(
           date(started_at / 1000, 'unixepoch') AS day,
           SUM(${TOKEN_SUM}) AS tokens,
           SUM(COALESCE(total_cost_usd, 0)) AS cost,
-          COUNT(*) AS runs
+          COUNT(*) AS runs,
+          -- Same failure predicate as the KPI and per-source rollups: one
+          -- definition of "failed" across the payload, or two panels disagree.
+          SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS failed_runs,
+          SUM(CASE WHEN ok = 0 THEN COALESCE(total_cost_usd, 0) ELSE 0 END) AS failed_cost
         FROM run_summary
         WHERE started_at >= ?
         GROUP BY day ORDER BY day ASC
@@ -152,6 +152,24 @@ export function prepareInsightsStatements(
         ORDER BY cost DESC, tokens DESC
         LIMIT 5
       `),
+    // `ended_at >= started_at` drops clock-skew rows the subtraction would
+    // otherwise report as negative runs.
+    runDurationMedian: db.prepare(`
+        SELECT AVG(duration_ms) AS median_ms FROM (
+          SELECT
+            duration_ms,
+            ROW_NUMBER() OVER (ORDER BY duration_ms) AS rn,
+            COUNT(*) OVER () AS n
+          FROM (
+            SELECT (ended_at - started_at) AS duration_ms
+            FROM run_summary
+            WHERE started_at >= ?
+              AND ended_at IS NOT NULL
+              AND ended_at >= started_at
+          )
+        )
+        WHERE rn IN ((n + 1) / 2, (n + 2) / 2)
+      `),
     kpisDigest: db.prepare(`
         SELECT
           COALESCE(SUM(run_count), 0) AS generations,
@@ -172,7 +190,8 @@ export function prepareInsightsStatements(
           date(last_ended_at / 1000, 'unixepoch') AS day,
           ${TOKEN_SUM} AS tokens,
           COALESCE(total_cost_usd, 0) AS cost,
-          run_count AS runs
+          run_count AS runs,
+          err_count AS failed_runs
         FROM conversation_digest
         WHERE last_ended_at IS NOT NULL AND last_ended_at >= ?
       `),

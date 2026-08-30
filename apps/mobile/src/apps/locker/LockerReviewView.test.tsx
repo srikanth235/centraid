@@ -30,7 +30,10 @@ import LockerReviewView from "./LockerReviewView";
 
 vi.mock(import("react-native"), async () => {
   const stub = await import("../../test/react-native-stub");
-  return stub.reactNativeStub() as unknown as typeof import("react-native");
+  return {
+    ...stub.reactNativeStub(),
+    ...stub.flatListStub(),
+  } as unknown as typeof import("react-native");
 });
 vi.mock(import("@react-native-async-storage/async-storage"), async () => {
   const stub = await import("../../test/react-native-stub");

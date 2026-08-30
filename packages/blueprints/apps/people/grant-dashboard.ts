@@ -2,22 +2,20 @@
 // G-audience). Both seats import it; neither may re-read the one answer.
 //
 // INVENT NOTHING HERE: never flatten "no such person" or `GRANTS_UNREADABLE`
-// into "nothing is shared"; take nouns from `subjectNoun`, not a second table;
-// give subjects no labels, since a grant carries only an id. Offer only
-// subjects a standing grant already names — People holds no container and the
-// grant plane has no catalog read.
+// into "nothing is shared"; take nouns from `subjectNoun`, not a second table.
+// Offer only subjects a standing grant already names — People holds no
+// container and the grant plane has no catalog read.
 
 import {
   capabilityLabel,
-  deliveryLabel,
   GRANTS_UNREACHABLE,
   GRANTS_UNREADABLE,
+  grantStandingLabel,
 } from "../_shared/grant-copy.ts";
 import { isGrantUnreachable } from "../_shared/grant-door.ts";
 import type { GrantDoor } from "../_shared/grant-door.ts";
 import {
   channelReach,
-  grantDelivery,
   liveGrants,
   subjectNoun,
 } from "../_shared/grant-plane.ts";
@@ -30,7 +28,6 @@ import type {
 import { whenLabel } from "./format.ts";
 import { LINK } from "./people-copy.ts";
 
-/** Every variant is a distinct fact with its own rendering. */
 export type PartyGrantsState =
   | { kind: "loading" }
   | { kind: "unavailable"; message: string }
@@ -39,14 +36,14 @@ export type PartyGrantsState =
   | { kind: "unknown-party" }
   | { kind: "read"; reach: GrantReach; grants: readonly GrantRecord[] };
 
-/** Live grants only: a revoked grant is history, not access. */
+/** Live grants only: a revoked grant is history. */
 export async function readPartyGrants(
   door: GrantDoor,
   partyId: string
 ): Promise<PartyGrantsState> {
   try {
     const answer = await door.forParty(partyId);
-    // The 404. Never read it as "nothing is shared with them".
+    // The 404 — never "nothing is shared".
     if (!answer.known) return { kind: "unknown-party" };
     return {
       kind: "read",
@@ -78,12 +75,16 @@ export function grantRowSub(grant: GrantRecord, now = Date.now()): string {
   );
 }
 
-/** `awaiting_channel` is waiting, not failing; never paint it as an error. */
+/**
+ * The vault's word for where this grant stands (ruling V-phrases), never one
+ * worked out from the rows. "On its way" is waiting, not failing; an
+ * unanswered wire prints nothing rather than an unstated standing.
+ */
 export function grantRowMeta(grant: GrantRecord): string {
-  return deliveryLabel(grantDelivery(grant));
+  return grantStandingLabel(grant) ?? "";
 }
 
-/** No labels: an id is not a name (see the module head). */
+/** No labels: a grant carries only an id, and an id is not a name. */
 export function grantSubjects(
   grants: readonly GrantRecord[]
 ): readonly GrantSubject[] {
@@ -101,7 +102,7 @@ export function grantSubjects(
   return subjects;
 }
 
-/** A nameless row is left out rather than offered as an id. */
+/** A nameless row is left out, never offered as an id. */
 export function partyAudiences(
   people: readonly { party_id: string; name: string }[]
 ): readonly GrantAudienceOption[] {

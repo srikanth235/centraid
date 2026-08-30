@@ -36,29 +36,7 @@ vi.mock(import("react-native"), async () => {
   const stub = await import("../../test/react-native-stub");
   return {
     ...stub.reactNativeStub(),
-    // A `FlatList` is a virtualising host with nothing of its own to draw;
-    // rendering head, rows and foot directly keeps the assertions on copy.
-    FlatList: (props: Record<string, unknown>) => {
-      const data = (props.data ?? []) as LockerRow[];
-      const render = props.renderItem as (info: {
-        item: LockerRow;
-      }) => React.ReactNode;
-      return React.createElement(
-        "div",
-        {},
-        props.ListHeaderComponent as React.ReactNode,
-        data.length === 0
-          ? (props.ListEmptyComponent as React.ReactNode)
-          : data.map((item) =>
-              React.createElement(
-                React.Fragment,
-                { key: item.item_id },
-                render({ item })
-              )
-            ),
-        props.ListFooterComponent as React.ReactNode
-      );
-    },
+    ...stub.flatListStub(),
   } as unknown as typeof import("react-native");
 });
 vi.mock(import("@react-native-async-storage/async-storage"), async () => {

@@ -1,9 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit ctx.vault bridge threading (duaility §12); validation/envelope split tracked separately
 /**
  * Declared-handler dispatcher (#107, #286): validate `input` against `app.json`
- * with Ajv, hand off to `handler-runner`. That is ALL it routes — no `_sql`
- * built-ins; handlers reach data via `ctx.vault`. Errors stay MCP-shaped so the
- * HTTP shim can map `structuredContent.code` to a status.
+ * with Ajv, hand off to `handler-runner`. No `_sql` built-ins — handlers reach
+ * data via `ctx.vault`. Errors stay MCP-shaped for the HTTP shim.
  */
 
 import { createHash } from "node:crypto";
@@ -120,7 +119,7 @@ export interface DispatcherOptions {
   readonly timeModuleUrl?: string;
 }
 
-/** Keyed by code dir + mtime so a version swap or dev-watch rewrite drops it. */
+/** Keyed by code dir + mtime, so a version swap drops it. */
 interface ManifestCacheEntry {
   readonly codeDir: string;
   readonly mtimeMs: number;
@@ -349,6 +348,9 @@ export class Dispatcher {
       handlerKind: "action",
       args: { params: {}, body: handlerInput },
       timeoutMs: 30_000,
+      // The one place that knows which action ran, so `_changes` names tables
+      // instead of making every listener re-derive the app (#883 D2).
+      declaredWrites: entryDef.writes ?? [],
       ...(this.onWriteFor ? { onWrite: this.onWriteFor(appId) } : {}),
       ...(this.vaultFor
         ? {
@@ -495,10 +497,8 @@ export class Dispatcher {
   }
 }
 
-/**
- * Ids derive from intent + call ordinal so they stay stable across offline
- * retries: a crash after canonical commit must not re-execute the command.
- */
+/** Intent + call ordinal, so a crash after canonical commit cannot
+ *  re-execute the command on retry. */
 function bindIntentToVaultBridge(
   bridge: VaultBridge,
   intentId: string
@@ -506,7 +506,8 @@ function bindIntentToVaultBridge(
   let invocationIndex = 0;
   return (call) => {
     if (call.op !== "invoke") return bridge(call);
-    // JSON framing keeps [intent, ordinal] injective; the prefix keeps the lane disjoint.
+    // JSON framing keeps [intent, ordinal] injective; the prefix keeps the
+    // lane disjoint.
     const generatedInvocationId = `replica:v1:${createHash("sha256")
       .update(
         JSON.stringify([

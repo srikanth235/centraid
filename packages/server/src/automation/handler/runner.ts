@@ -656,7 +656,7 @@ export async function runHandler(
       : {}),
   };
 
-  let timeoutHandle: NodeJS.Timeout | undefined;
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   if (timeoutMs > 0) {
     timeoutHandle = setTimeout(() => {
       abortController.abort("timeout");

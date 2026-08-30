@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import type { JSX } from "react";
 
+import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
+import { insightCsvFilename, insightRollupCsv } from "@centraid/design/blocks";
+
 import {
   getGatewayHealth,
   getInsightsSummary,
@@ -9,14 +12,15 @@ import {
   saveUserPrefs,
 } from "../../../gateway-client.js";
 import {
+  INSIGHTS_DEFAULT_WINDOW_DAYS,
   INSIGHTS_ERROR_BODY,
   INSIGHTS_ERROR_TITLE,
+  INSIGHTS_WINDOW_PREF_KEY,
+  isInsightsWindow,
 } from "../../../insights-copy.js";
 import { SKELETON_NOTE } from "../../../surface-copy.js";
 import type { InsightsSummary } from "../../screen-contracts.js";
-import InsightsScreen, {
-  WINDOW_OPTIONS,
-} from "../../screens/InsightsScreen.js";
+import InsightsScreen from "../../screens/InsightsScreen.js";
 import NoteBlock from "../../ui/NoteBlock.js";
 import PanelBlock from "../../ui/PanelBlock.js";
 import { useShellActions } from "../actions.js";
@@ -32,21 +36,6 @@ import { useAsyncData } from "../useAsyncData.js";
 // Analytics route (#514, revamped for v9 in #765): reads the run rollup for a
 // chosen window, resolves automation display names, deep-links a run. No
 // commit — counting what already happened has nothing to write.
-
-const DAY_MS = 86_400_000;
-
-/** The window survives the session on the member's prefs record, shared with
- *  the assistant's starters. */
-export const WINDOW_PREF_KEY = "insights.windowDays";
-
-const DEFAULT_WINDOW_DAYS = 30;
-
-function isWindow(value: unknown): value is number {
-  return (
-    typeof value === "number" &&
-    (WINDOW_OPTIONS as readonly number[]).includes(value)
-  );
-}
 
 export function uptimeLine(uptimeMs: number | undefined): string {
   if (uptimeMs === undefined || !Number.isFinite(uptimeMs) || uptimeMs < 0)
@@ -64,7 +53,7 @@ export function countLine(summary: InsightsSummary, days: number): string {
   return `${generations.toLocaleString()} runs in ${days} days · ${failedRuns} failed`;
 }
 
-/** Success share + host uptime; no median duration is recorded. */
+/** Success share + host uptime; the typical run duration is a spend fact. */
 export function healthLine(
   summary: InsightsSummary,
   uptimeMs: number | undefined
@@ -79,24 +68,15 @@ export function healthLine(
   };
 }
 
-const CSV_HEADER = "date,runs,tokens,cost_usd";
-
-/** The daily rollup as CSV, in the order the chart draws it. */
-export function insightsCsv(summary: InsightsSummary): string {
-  const rows = summary.daily.map(
-    (day) => `${day.date},${day.runs},${day.tokens},${day.costUsd.toFixed(4)}`
-  );
-  return [CSV_HEADER, ...rows].join("\n");
-}
-
+/** The same rollup file the phone shares, straight to downloads. */
 function downloadCsv(summary: InsightsSummary, days: number): void {
-  const blob = new Blob([insightsCsv(summary)], {
+  const blob = new Blob([insightRollupCsv(summary)], {
     type: "text/csv;charset=utf-8",
   });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `centraid-analytics-${days}d.csv`;
+  anchor.download = insightCsvFilename(days);
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
@@ -105,7 +85,7 @@ function downloadCsv(summary: InsightsSummary, days: number): void {
 
 export default function InsightsRoute(): JSX.Element {
   const { navigate } = useShellActions();
-  const [windowDays, setWindowDays] = useState(DEFAULT_WINDOW_DAYS);
+  const [windowDays, setWindowDays] = useState(INSIGHTS_DEFAULT_WINDOW_DAYS);
   const [retry, setRetry] = useState(0);
 
   // The persisted window arrives after the first paint; fetching before it
@@ -114,8 +94,8 @@ export default function InsightsRoute(): JSX.Element {
     let cancelled = false;
     void getUserPrefs()
       .then((prefs) => {
-        const saved = prefs[WINDOW_PREF_KEY];
-        if (!cancelled && isWindow(saved)) setWindowDays(saved);
+        const saved = prefs[INSIGHTS_WINDOW_PREF_KEY];
+        if (!cancelled && isInsightsWindow(saved)) setWindowDays(saved);
       })
       .catch(() => undefined);
     return () => {
@@ -126,7 +106,9 @@ export default function InsightsRoute(): JSX.Element {
   const pickWindow = useCallback((days: number): void => {
     setWindowDays(days);
     // Fire-and-forget: a preference write must never block the view.
-    void saveUserPrefs({ [WINDOW_PREF_KEY]: days }).catch(() => undefined);
+    void saveUserPrefs({ [INSIGHTS_WINDOW_PREF_KEY]: days }).catch(
+      () => undefined
+    );
   }, []);
 
   const state = useAsyncData(async () => {

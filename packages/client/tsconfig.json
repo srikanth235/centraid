@@ -9,6 +9,9 @@
     "types": ["vitest/globals"],
     "paths": {
       "@centraid/design": ["../design/src/index.ts"],
+      "@centraid/blueprints/apps/_shared/format-kit": [
+        "../blueprints/apps/_shared/format-kit.ts"
+      ],
       // Blueprint inline-app entries resolve to a contract stub so tsc never
       // type-checks their .tsx sources under the client program (issue #505).
       "@centraid/blueprints/apps/*/app-inline": [

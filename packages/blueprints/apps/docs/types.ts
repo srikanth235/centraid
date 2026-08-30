@@ -78,9 +78,7 @@ export type SortKey = "changed" | "kind" | "name" | "owner" | "size";
 export interface SortOption {
   key: SortKey;
   dir: 1 | -1;
-  /** e.g. "Date changed". */
   name: string;
-  /** e.g. "newest first". */
   sub: string;
 }
 
@@ -121,19 +119,16 @@ export interface ActivityEvent {
   occurred_at: string;
 }
 
-/** The minimal projection the pure format helpers read. */
 export interface DocFields {
   media_type?: string | null;
   content_uri?: string | null;
   title?: string | null;
 }
 
-/** Custody in owner-facing words + the CSS tone it keys. */
-export type CustodyTone = "ok" | "warn" | "danger";
-export interface CustodyInfo {
-  label: string;
-  tone: CustodyTone;
-}
+/** Custody in owner-facing words plus the CSS tone it keys. One declaration
+ *  site (`_shared/format-kit.ts`), two spellings. */
+export type { CustodyTone } from "../_shared/format-kit.ts";
+export type { CustodyMeta as CustodyInfo } from "../_shared/format-kit.ts";
 
 /** What a media_type maps to: label, name, filter cat, tint var. */
 export interface TypeMeta {

@@ -4,6 +4,7 @@
  * the stored title is still the exact `deriveTitle` output).
  */
 
+import { unrefTimer } from "../../lib/unref-timer.js";
 import type { TurnStreamEvent } from "./runner.js";
 import { TurnPlane } from "./turn-plane.js";
 import type { RunTurnFn, HarnessPrefs, TurnInput } from "./turn.js";
@@ -75,7 +76,7 @@ export async function generateConversationTitle(
   const timer = deps.timeoutMs
     ? setTimeout(() => controller.abort(), deps.timeoutMs)
     : undefined;
-  timer?.unref?.();
+  unrefTimer(timer);
 
   let text = "";
   const onEvent = (event: TurnStreamEvent): void => {

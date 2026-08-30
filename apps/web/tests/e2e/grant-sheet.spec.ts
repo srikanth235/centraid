@@ -27,16 +27,20 @@ const SHEET = path.join(
 const EVIDENCE_DIR = path.join(REPO_ROOT, "artifacts/e2e/ui-impact");
 const EVIDENCE_PNG = "issue-825-grant-sheet.png";
 
-/**
- * The harness entry: imports the SHIPPED sheet, with a door covering the
- * three delivery states.
- */
+/** Harness entry: the SHIPPED sheet, with a door covering the three
+ *  delivery states. */
 const ENTRY = `
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { GrantSheet } from ${JSON.stringify(SHEET)};
 
-const grant = (id, subjectType, capability, fulfillment) => ({
+// The phrase and the reason ride the WIRE now (#883, ruling V-phrases): the
+// vault derives both from the fulfillment rows and the sheet prints them
+// verbatim, where the sheet used to read the rows and write its own label. The
+// values below are the ones grantPhrase (packages/vault/src/grant/phrases.ts)
+// yields for each row set here, so a door stub cannot narrate a state the vault
+// would have described differently.
+const grant = (id, subjectType, capability, fulfillment, phrase, reason) => ({
   grantId: id,
   audience: { kind: "party", id: "party-priya" },
   subjectType,
@@ -47,6 +51,8 @@ const grant = (id, subjectType, capability, fulfillment) => ({
   grantedBy: "party-owner",
   maxSizeBytes: null,
   fulfillment,
+  phrase,
+  reason,
 });
 
 const door = {
@@ -63,18 +69,43 @@ const door = {
       known: true,
       channel: { state: "live" },
       grants: [
-        grant("doc-1", "core.document", "edit", [
-          { peerVaultId: "vault-priya", state: "delivered", updatedAt: "", detail: null },
-        ]),
-        grant("photo-1", "media.asset", "view", [
-          { peerVaultId: "vault-priya", state: "awaiting_channel", updatedAt: "", detail: null },
-        ]),
-        grant("album-1", "core.collection", "view", []),
+        grant(
+          "doc-1",
+          "core.document",
+          "edit",
+          [
+            { peerVaultId: "vault-priya", state: "delivered", updatedAt: "", detail: null },
+          ],
+          "shared",
+          "the vault it addresses is holding it"
+        ),
+        grant(
+          "photo-1",
+          "media.asset",
+          "view",
+          [
+            { peerVaultId: "vault-priya", state: "awaiting_channel", updatedAt: "", detail: null },
+          ],
+          "on its way",
+          "there is no way to reach them yet; the ask is recorded"
+        ),
+        grant(
+          "album-1",
+          "core.collection",
+          "view",
+          [],
+          "on its way",
+          "no vault has been addressed for it yet"
+        ),
       ],
     }),
   forAudience: () => Promise.resolve({ known: true, grants: [] }),
   forSubject: () => Promise.resolve([]),
   create: () => Promise.resolve({ ok: true, outcome: "created" }),
+  // Withdraw-then-grant is the only way the plane changes a standing answer
+  // (ruling V-table); the door carries it, so the stub has to as well or the
+  // sheet is handed a door the shipped one is not.
+  changeCapability: () => Promise.resolve({ ok: true, outcome: "created" }),
   revoke: () =>
     Promise.resolve({
       ok: true,
@@ -115,7 +146,7 @@ async function bundleSheet(): Promise<{ js: string; css: string }> {
     },
     bundle: true,
     write: false,
-    // Never written, but esbuild needs a path to name the CSS-module output against.
+    // Never written; esbuild needs a path to name the CSS-module output.
     outdir: path.join(here, ".grant-sheet-bundle"),
     format: "iife",
     jsx: "automatic",
@@ -155,10 +186,28 @@ test("the grant sheet draws audience-first over the shipped tokens", async ({
 
   await expect(page.getByRole("button", { name: "Can edit" })).toBeVisible();
 
-  // Three delivery states, three sentences — absent is never empty.
-  await expect(page.getByText("Delivered")).toBeVisible();
-  await expect(page.getByText("Invitation pending")).toBeVisible();
-  await expect(page.getByText("Not sent yet")).toBeVisible();
+  // Phrase and reason are printed VERBATIM (V-phrases), so this asserts the
+  // rendering of a wire phrase, not a label table the sheet owns: two rows
+  // share `on its way` and are told apart only by their reasons.
+  await expect(page.locator('[data-phrase="shared"]')).toHaveText(
+    "Can edit · Shared"
+  );
+  await expect(page.locator('[data-phrase="on its way"]')).toHaveCount(2);
+  await expect(page.locator('[data-phrase="on its way"]').first()).toHaveText(
+    "Can view · On its way"
+  );
+  await expect(
+    page.getByText("the vault it addresses is holding it")
+  ).toBeVisible();
+  await expect(
+    page.getByText("there is no way to reach them yet; the ask is recorded")
+  ).toBeVisible();
+  await expect(
+    page.getByText("no vault has been addressed for it yet")
+  ).toBeVisible();
+  // A row whose phrase the wire did not carry prints the capability alone, so
+  // an unstated one here is a dropped field.
+  await expect(page.locator('[data-phrase="unstated"]')).toHaveCount(0);
   await expect(page.locator('[data-reach="live"]')).toBeVisible();
   await expect(page.getByText("Not reached yet")).toHaveCount(0);
 
@@ -168,14 +217,14 @@ test("the grant sheet draws audience-first over the shipped tokens", async ({
     fullPage: true,
   });
 
-  // Revoking asks first: a cross-vault removal is REQUESTED, never guaranteed.
+  // Revoking asks first: a cross-vault removal is REQUESTED, not guaranteed.
   await page.getByRole("button", { name: "Revoke" }).first().click();
   await expect(page.getByText("Stop sharing with Priya?")).toBeVisible();
   await expect(
     page.getByText("their vault is asked to remove its copy", { exact: false })
   ).toBeVisible();
 
-  // Destructive is OUTLINED in `--net`; nothing filled competes with it here.
+  // Destructive is OUTLINED in `--net`; nothing filled competes.
   const confirm = page.getByRole("button", { name: "Revoke", exact: true });
   await expect(confirm).toHaveClass(/destructive/u);
   await expect(page.locator("button.kit-btn.primary")).toHaveCount(0);

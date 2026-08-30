@@ -59,8 +59,8 @@ export {
   type BlobLinkOutcome,
   type LocalBlobStore,
 } from "./blob/local.js";
-// Issue #599 decision 11: share-by-placement. The gateway's cross-vault share
-// plane calls these; they sit outside the per-vault handler path by design.
+// Share-by-placement (#599): the cross-vault share plane calls these, and
+// they sit outside the per-vault handler path by design.
 export {
   shareItemsToVault,
   unshareFromVault,
@@ -74,10 +74,9 @@ export {
   type MoveOutOfVaultInput,
   type ShareOriginRecord,
 } from "./share/placement.js";
-// The two halves of a share (#726). `readShareClosure` is origin-side
-// and read-only; `projectShareClosure` is audience-side and opens the single
-// transaction. `WireClosure` between them is plain JSON — the shape P3 puts a
-// tunnel under.
+// The two halves of a share (#726): `readShareClosure` is origin-side and
+// read-only, `projectShareClosure` audience-side and opens the single
+// transaction. `WireClosure` between them is plain JSON.
 export {
   isShareableItemType,
   CLOSURE_FORMAT_VERSION,
@@ -239,16 +238,23 @@ export {
   type CommonsRecoveryResult,
   type RecoverCommonsFromReplicaInput,
 } from "./share/commons-recovery.js";
-// The GRANT PLANE (#825): a share is a standing grant (who may see/edit what),
-// fulfillment is per-audience-vault delivery state, and the channel is the
-// existing party↔vault binding read as one state. Commons above stays the
-// edit-fulfillment strategy underneath it.
+// The GRANT PLANE (#825): a share is a standing grant, fulfillment is
+// per-audience-vault delivery state, and the channel is the party↔vault
+// binding read as one state. Commons stays the edit-fulfillment strategy.
 export {
   audienceExists,
   createShareGrant,
+  declineShare,
+  listStandingShareAuthority,
+  maskedPartiesForSubject,
   readShareGrant,
   readLiveShareGrant,
+  readLiveShareRefusal,
+  resolveGrantAudienceParties,
+  revokeAuthorityForPrincipal,
+  revokeAuthorityOverSubject,
   revokeShareGrant,
+  revokeShareRefusal,
   listShareGrantsForAudience,
   listShareGrantsForSubject,
   listLiveGrantsReachingParty,
@@ -267,7 +273,34 @@ export {
   type ShareGrantAudienceKind,
   type ShareGrantCapability,
   type ShareGrantRecord,
+  type DeclineShareInput,
+  type DeclineShareResult,
+  type RevokedAuthorityRow,
 } from "./grant/grant-store.js";
+// The closed declaration of what the plane may be asked (#883).
+export {
+  AUTHORITY_REGISTRY,
+  authorityStrategyFor,
+  authorityTriple,
+  enforcementLocus,
+  isRegisteredAuthority,
+  registeredVerbs,
+  subjectRowExists,
+  subjectWokenBy,
+  wakeTypesForSubjectTypes,
+  type AuthorityPrincipalKind,
+  type AuthorityStrategy,
+  type AuthorityTriple,
+  type EnforcementLocus,
+} from "./grant/authority-registry.js";
+export {
+  grantPhrase,
+  revokePromiseCopy,
+  unregisteredVerbCopy,
+  verbConflictCopy,
+  type GrantPhrase,
+  type GrantPhraseName,
+} from "./grant/phrases.js";
 export {
   isOfferableSubjectType,
   fulfillmentAnswerFor,
@@ -285,9 +318,11 @@ export {
 // over the closure transport, edit routes back through the commons rail, and
 // revoke propagates a removal instead of pretending it reached the peer.
 export {
+  createGrantProjectionMemory,
   fulfillShareGrant,
   propagateShareGrantRevocation,
   ShareGrantMaxSizeError,
+  type GrantProjectionMemory,
   type FulfillShareGrantInput,
   type GrantFulfillmentResult,
   type GrantFulfillmentStep,
@@ -355,10 +390,9 @@ export {
   type BlobSweepStatus,
   type RemoteTier,
 } from "./blob/custody.js";
-// The custody ROLLUP projection (#711) — the aggregate every owner-facing
-// storage surface reads. Exported so the gateway's `storage/status` route can
-// answer with the same buckets an app reads through `blob.custody_rollup`,
-// rather than each client deriving its own idea of "freeable" (#712).
+// The custody ROLLUP projection (#711): exported so `storage/status` answers
+// with the same buckets `blob.custody_rollup` gives an app, rather than each
+// client deriving its own idea of "freeable" (#712).
 export {
   custodyRollup,
   refreshCustodyRollup,
@@ -444,11 +478,17 @@ export {
 export {
   resolveEntity,
   listVaultEntities,
+  entityDeclaration,
+  assertRegistryLabels,
+  assertVaultRegistryLabels,
+  VAULT_ENTITIES,
+  JOURNAL_ENTITIES,
   VAULT_TABLES,
   JOURNAL_TABLES,
   type EntityRef,
+  type VaultEntityDeclaration,
 } from "./schema/tables.js";
-// Issue #441 Part B: the Vault Atlas mapping (table → kind → pack).
+// The Vault Atlas mapping: table → kind → pack (#441).
 export {
   ONTOLOGY_PACKS,
   MACHINERY_BANDS,
@@ -461,7 +501,7 @@ export {
   type AtlasPackKind,
   type AtlasTableEntry,
 } from "./schema/atlas.js";
-// Issue #441 Part B: the Atlas census/graph/pulse payload builders.
+// The Atlas census/graph/pulse payload builders (#441).
 export {
   atlasCensus,
   atlasGraph,
@@ -479,8 +519,8 @@ export {
   type AtlasPulseSeries,
   type AtlasPulseDay,
 } from "./schema/atlas-census.js";
-// Issue #441 Part B (B3): the Browse read side — table picker, keyset row
-// grid, column metadata, FK reference search, and dependent preview.
+// The Browse read side (#441): table picker, keyset row grid, column
+// metadata, FK reference search, dependent preview.
 export {
   browseTableList,
   browseColumns,
@@ -517,6 +557,7 @@ export {
   type ReplicaCursorInput,
 } from "./replica/cursor.js";
 export {
+  REPLICA_COMPACTION_HELD_ENTITIES,
   REPLICA_RETENTION_DAYS,
   REPLICA_RETENTION_MAX_ENTRIES,
   ReplicaRebootstrapRequiredError,
@@ -539,6 +580,9 @@ export {
   type ReplicaRebootstrapReason,
 } from "./replica/change-log.js";
 export { REPLICA_SCHEMA_EPOCH } from "./schema/replica.js";
+// The engine-computed cascade every purge runs, exported so the
+// declared-writes gate unions it rather than have a manifest restate it.
+export { POLY_REF_REGISTRY, type PolyRefEntry } from "./schema/poly-refs.js";
 export {
   DEFAULT_REPLICA_MAX_VALUE_BYTES,
   readReplicaRow,
@@ -762,7 +806,6 @@ export { registerSocialCommands } from "./commands/social.js";
 export { registerFinanceCommands } from "./commands/finance.js";
 export { registerHealthCommands } from "./commands/health.js";
 export { registerKnowledgeCommands } from "./commands/knowledge.js";
-export { registerBusinessCommands } from "./commands/business.js";
 export {
   registerAttachmentCommands,
   ATTACHABLE_SUBJECTS,
@@ -780,15 +823,16 @@ export {
   FOLDER_SCHEME_URI,
 } from "./commands/documents.js";
 export { FLAGS_SCHEME_URI, STARRED_NOTATION } from "./commands/flags.js";
-export { registerHomeCommands } from "./commands/home.js";
 export { registerPeopleCommands, LIST_SCHEME_URI } from "./commands/people.js";
 export { registerLockerCommands, LOCKER_ITEM_TYPE } from "./commands/locker.js";
 export { registerTallyCommands } from "./commands/tally.js";
 export { registerSyncCommands } from "./commands/sync.js";
 export { registerEnrichCommands } from "./commands/enrich.js";
 export { registerOutboxCommands } from "./commands/outbox.js";
+// The ONE writer of the share half of the authority plane (#883).
+export { registerShareCommands, SHARE_COMMANDS } from "./commands/share.js";
 export { registerJudgmentCommands } from "./commands/judgment.js";
-// Issue #441 Part B (B3): the Browse write trio — journalled row CRUD.
+// The Browse write trio: journalled row CRUD (#441).
 export {
   registerAtlasCommands,
   ATLAS_OWNER_SCHEMA,
@@ -880,6 +924,7 @@ export {
 } from "./enrich/model-id.js";
 export {
   hexHamming,
+  registerCosineFn,
   registerHammingFn,
   encodeVector,
   decodeVector,

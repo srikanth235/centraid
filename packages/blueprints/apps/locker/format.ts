@@ -1,11 +1,10 @@
 // PURE PROJECTIONS OF A ROW (README-Locker §5, "Item row").
 //
-// No app state, no vault IO, no JSX: every function here is a plain function
-// of its arguments, so the list, the review, the search results and the trash
-// all compose the SAME row out of the same three derivations — a title, a meta
-// sentence, and at most one verdict. A row that read differently in one list
-// than in another is the class of drift this file exists to close.
+// No app state, no vault IO, no JSX: every function is a plain function of its
+// arguments, so every list composes the SAME row from the same three
+// derivations — a title, a meta sentence, and at most one verdict.
 
+import { DAY_MS } from "../_shared/format-kit.ts";
 import { readPendingOverlay } from "../_shared/pending-overlay.ts";
 import { displayText } from "../_shared/untrusted.ts";
 import type {
@@ -111,7 +110,7 @@ export function daysUntilExpiry(
   // The first instant of the month AFTER the one printed on the card — a card
   // is good through the last day of its stated month.
   const end = Date.UTC(year, month, 1);
-  return Math.ceil((end - now) / 86_400_000);
+  return Math.ceil((end - now) / DAY_MS);
 }
 
 export function isExpiringSoon(row: LockerRow, now: number): boolean {
@@ -132,7 +131,7 @@ export function isPasswordStale(row: LockerRow, now: number): boolean {
   if (!row.password_set_at) return false;
   const set = new Date(row.password_set_at).getTime();
   if (Number.isNaN(set)) return false;
-  return (now - set) / 86_400_000 > PASSWORD_AGE_HORIZON_DAYS;
+  return (now - set) / DAY_MS > PASSWORD_AGE_HORIZON_DAYS;
 }
 
 /** Does this row hold THIS verdict? The one derivation Review's registers and
@@ -237,24 +236,12 @@ export function clockAt(iso: string): string {
   return iso.slice(11, 16);
 }
 
-/**
- * THE TRASH ROW'S OWN CLOCK — thirty days, counted down rather than stated as
- * a date nobody can subtract in their head. The same sentence Docs' drive
- * puts on a trashed document (`apps/docs/format.ts`), because a member should
- * not have to learn two ways of reading "how long have I got".
- *
- * An unreadable or absent date says NOTHING rather than guessing: a row with
- * no purge date is a row the vault has not scheduled, and inventing "purges
- * today" for it would be the worst possible error in this direction.
- */
-export function purgeCountdown(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const days = Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
-  if (Number.isNaN(days)) return "";
-  if (days <= 0) return "purges today";
-  if (days === 1) return "purges tomorrow";
-  return `purges in ${days} days`;
-}
+// THE TRASH ROW'S OWN CLOCK is the format kit's (#883 B4): Docs' drive and
+// Locker's trash printed the same sentence character for character, because a
+// member should not have to learn two ways of reading "how long have I got".
+// Re-exported here because Locker's Trash component and the phone's Locker
+// trash screen both reach for it through this module's path.
+export { purgeCountdown } from "../_shared/format-kit.ts";
 
 // ---------------------------------------------------------------------------
 // What a held write on a row means

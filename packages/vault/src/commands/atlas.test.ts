@@ -342,7 +342,7 @@ describe("atlas", () => {
     db.vault
       .prepare(
         `INSERT INTO core_party_identifier (identifier_id, party_id, scheme, value, is_primary, valid_from)
-       VALUES ('id1','p2','email','asha@example.com',1,?)`
+       VALUES ('id1','p2','url','https://asha.example',1,?)`
       )
       .run(now);
 

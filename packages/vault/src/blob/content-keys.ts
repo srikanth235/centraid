@@ -1,7 +1,7 @@
 // Per-blob content-key registry for edge-sealed CAS objects (#414). A random
 // content key encrypts one CBSF object; the registry wraps it under the vault
-// DEK and grants it independently to paired devices. Revoking a device drops
-// its grants without rotating/re-uploading every blob.
+// DEK and grants it per device, so a revocation drops grants without rotating
+// or re-uploading every blob.
 
 import {
   createCipheriv,
@@ -12,6 +12,7 @@ import {
 import type { DatabaseSync } from "node:sqlite";
 
 import { VaultBlobAuthorizationError } from "../errors.js";
+import { readDeviceTrust, setDeviceTrust } from "../grant/device-trust.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import { assertSha } from "./store.js";
 
@@ -46,9 +47,9 @@ function open(
 
 export interface DeviceWrappedContentKey {
   algorithm: "AES-256-GCM";
-  /** Per-device wrapping epoch; rotates on any device revocation. */
+  /** Per-device wrapping epoch; rotates on a device revocation. */
   keyEpoch: number;
-  /** Vault-root wrapping epoch for the stable per-blob content key. */
+  /** Vault-root wrapping epoch for the per-blob content key. */
   contentKeyEpoch: number;
   wrapSaltBase64: string;
   nonceBase64: string;
@@ -68,18 +69,18 @@ export class BlobContentKeyRegistry {
     this.wrappingKey = Buffer.from(wrappingKey);
   }
 
-  /** Resolve only a live vault-enrolled device, by row id or authenticated key. */
+  /** Only a live vault-enrolled device, by row id or authenticated key. */
   resolvePairedDevice(identity: string): string {
     const row = this.db
       .prepare(
-        `SELECT device_id, trust FROM consent_device
+        `SELECT device_id FROM consent_device
           WHERE device_id = ? OR public_key = ?
           LIMIT 1`
       )
-      .get(identity, identity) as
-      | { device_id: string; trust: string }
-      | undefined;
-    if (!row || row.trust === "revoked") {
+      .get(identity, identity) as { device_id: string } | undefined;
+    // Unknown and revoked are different facts, read separately so neither is
+    // inferred from the other (#883).
+    if (!row || readDeviceTrust(this.db, row.device_id) === "revoked") {
       throw new VaultBlobAuthorizationError(
         `unknown or revoked paired device ${identity}`
       );
@@ -87,7 +88,7 @@ export class BlobContentKeyRegistry {
     return row.device_id;
   }
 
-  /** Mirror an explicitly paired transport identity into the vault key roster. */
+  /** Mirror a paired transport identity into the vault key roster. */
   enrollPairedDevice(input: {
     identity: string;
     ownerPartyId: string;
@@ -98,26 +99,28 @@ export class BlobContentKeyRegistry {
     const existing = this.db
       .prepare("SELECT device_id FROM consent_device WHERE public_key = ?")
       .get(input.identity) as { device_id: string } | undefined;
+    const now = nowIso();
     if (existing) {
       this.db
         .prepare(
-          `UPDATE consent_device SET name = ?, platform = ?, trust = ?
+          `UPDATE consent_device SET name = ?, platform = ?
             WHERE device_id = ?`
         )
-        .run(
-          input.name,
-          input.platform ?? null,
-          input.trust,
-          existing.device_id
-        );
+        .run(input.name, input.platform ?? null, existing.device_id);
+      setDeviceTrust(this.db, {
+        deviceId: existing.device_id,
+        ownerPartyId: input.ownerPartyId,
+        trust: input.trust,
+        now,
+      });
       return existing.device_id;
     }
     const deviceId = uuidv7();
     this.db
       .prepare(
         `INSERT INTO consent_device
-           (device_id, owner_party_id, name, platform, public_key, trust, enrolled_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+           (device_id, owner_party_id, name, platform, public_key, enrolled_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
       )
       .run(
         deviceId,
@@ -125,9 +128,14 @@ export class BlobContentKeyRegistry {
         input.name,
         input.platform ?? null,
         input.identity,
-        input.trust,
-        nowIso()
+        now
       );
+    setDeviceTrust(this.db, {
+      deviceId,
+      ownerPartyId: input.ownerPartyId,
+      trust: input.trust,
+      now,
+    });
     return deviceId;
   }
 
@@ -216,9 +224,11 @@ export class BlobContentKeyRegistry {
   revokeDevice(deviceId: string): number {
     const row = this.db
       .prepare(
-        "SELECT device_id FROM consent_device WHERE device_id = ? OR public_key = ? LIMIT 1"
+        "SELECT device_id, owner_party_id FROM consent_device WHERE device_id = ? OR public_key = ? LIMIT 1"
       )
-      .get(deviceId, deviceId) as { device_id: string } | undefined;
+      .get(deviceId, deviceId) as
+      | { device_id: string; owner_party_id: string }
+      | undefined;
     if (!row) return 0;
     const devices = this.db
       .prepare(
@@ -229,11 +239,12 @@ export class BlobContentKeyRegistry {
     let revoked = 0;
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      this.db
-        .prepare(
-          "UPDATE consent_device SET trust = 'revoked' WHERE device_id = ?"
-        )
-        .run(row.device_id);
+      setDeviceTrust(this.db, {
+        deviceId: row.device_id,
+        ownerPartyId: row.owner_party_id,
+        trust: "revoked",
+        now: nowIso(),
+      });
       for (const device of devices) {
         const current = this.deviceWrapState(device.device_id);
         const next = {
@@ -329,7 +340,7 @@ export class BlobContentKeyRegistry {
       .digest();
   }
 
-  /** Re-wrap registry rows after a vault wrapping-key rotation; blob bytes stay put. */
+  /** Re-wrap after a vault key rotation; blob bytes stay put. */
   rewrapAll(nextWrappingKey: Buffer): number {
     if (nextWrappingKey.length !== KEY_BYTES)
       throw new Error("next wrapping key must be 32 bytes");

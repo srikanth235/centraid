@@ -159,43 +159,34 @@ function extSealedColumns(
   }
 }
 
+/** `card_number` -> `cardNumber`. Identity for a key that has no underscore. */
+function camelCase(column: string): string {
+  return column.replace(/_(?<letter>[a-z])/gu, (_match, letter: string) =>
+    letter.toUpperCase()
+  );
+}
+
 /**
  * Staged-payload keys carrying secret material, per entity type (#293
- * decision 6): the import draft band deserves the same protection as the
- * live band, so these seal at stage time and unseal just-in-time for the
- * publisher. Keys are payload-shaped (camelCase), not column names.
+ * decision 6): the import draft band deserves the same protection as the live
+ * band, so these seal at stage time and unseal just-in-time for the publisher.
+ * Keys are payload-shaped, and BOTH shapes are accepted — importers speak
+ * camelCase, the canonical columns are snake_case, and staging is a generic
+ * persistence boundary that must not depend on which dialect a publisher that
+ * does not exist yet will use.
+ *
+ * DERIVED from `SEALED_COLUMNS` rather than hand-listed beside it (#883): a
+ * second hand list makes a column sealed at rest and NOT sealed in a draft row
+ * available. A newly sealed column is one entry in `SEALED_COLUMNS`.
  */
 export const SEALED_PAYLOAD_FIELDS: Readonly<
   Record<string, readonly string[]>
-> = {
-  // Accept both importer-shaped camelCase and canonical column-shaped keys.
-  // Staging is a generic persistence boundary: even a publisher which is
-  // registered later must never leave a declared secret in a draft row.
-  "locker.item": [
-    "password",
-    "otpSeed",
-    "otp_seed",
-    "card_number",
-    "cvv",
-    "content",
-  ],
-  // Locker's sealed sidecars (#872) stage like the item does. A sidecar has
-  // no publisher registered today, which is exactly why it is listed: the
-  // draft band is a generic persistence boundary, so an importer that learns
-  // to carry custom fields, password history or passkey material must find
-  // the seal already in front of it rather than leave the secret in a draft
-  // row until a publisher shows up.
-  "locker.item_field": ["value_sealed", "valueSealed"],
-  "locker.item_history": ["password"],
-  "locker.item_passkey": ["private_key", "privateKey"],
-  "sync.connection_credential": [
-    "client_secret",
-    "access_token",
-    "refresh_token",
-    "refresh_capability",
-    "api_key",
-  ],
-};
+> = Object.fromEntries(
+  Object.entries(SEALED_COLUMNS).map(([entity, columns]) => [
+    entity,
+    [...new Set(columns.flatMap((column) => [column, camelCase(column)]))],
+  ])
+);
 
 export function sealedPayloadFieldsOf(entityType: string): readonly string[] {
   return SEALED_PAYLOAD_FIELDS[entityType] ?? [];

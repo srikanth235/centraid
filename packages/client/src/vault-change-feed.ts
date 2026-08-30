@@ -1,4 +1,9 @@
-import { auth, authHeaders, doFetch } from "./gateway-client-core.js";
+import {
+  auth,
+  authHeaders,
+  doFetch,
+  ensureGatewayAuthInvalidation,
+} from "./gateway-client-core.js";
 import type { GatewayAuth } from "./gateway-client-core.js";
 import {
   consumeVaultChangeSse,
@@ -27,12 +32,9 @@ type Subscriber = {
   attachVersion: number;
   feed?: VaultFeed;
   listener: (message: VaultChangeMessage) => void;
-  /**
-   * The scope this subscriber is PINNED to. A multi-scope mount (#599)
-   * holds one replica session per scope, and each session's feed must follow
-   * that session — not the shell's ambient "focused vault" pointer. Only an
-   * unpinned (ambient) subscriber is re-bound when the pointer moves.
-   */
+  /** The scope this subscriber is PINNED to. Each replica session's feed must
+   *  follow that session, not the shell's ambient focused-vault pointer; only
+   *  an unpinned subscriber is re-bound when the pointer moves (#599). */
   scope?: GatewayAuth;
 };
 
@@ -270,8 +272,8 @@ class VaultFeed {
             detail = await response.json();
           } catch {
             // Chromium `setOffline` and captive portals surface as empty/HTML
-            // 4xx rather than a thrown fetch. That is a disconnect, not a
-            // lost replica: retry the stream instead of wiping durable state.
+            // 4xx, not a thrown fetch: a disconnect, not a lost replica, so
+            // retry the stream instead of wiping durable state.
             throw new Error(
               `vault change stream failed (HTTP ${response.status})`
             );
@@ -378,10 +380,9 @@ function detach(subscriber: Subscriber): void {
 }
 
 /**
- * The focused-scope pointer moved. Only AMBIENT subscribers follow it: a
- * subscriber pinned to an explicit scope belongs to a replica session that is
- * still mounted, and tearing its stream down would silently stop delivering
- * changes for every scope but the focused one (#599).
+ * The focused-scope pointer moved. Only AMBIENT subscribers follow it: a pinned
+ * subscriber belongs to a session that is still mounted, and tearing its stream
+ * down would stop delivering changes for every scope but the focused one (#599).
  */
 function rescopeSubscribers(): void {
   for (const subscriber of subscribers) {
@@ -400,6 +401,7 @@ export function subscribeVaultChanges(
   listener: (message: VaultChangeMessage) => void,
   scope?: GatewayAuth
 ): () => void {
+  ensureScopeSwitchSubscribed();
   const subscriber: Subscriber = {
     active: true,
     attachVersion: 0,
@@ -443,9 +445,21 @@ export async function setVaultChangeShapeIds(
   feeds.get(key)?.setShapeIds(shapeIds);
 }
 
-// Scope switches keep mounted app routes alive. Re-bind their
-// subscriptions so the old vault/gateway stream is closed and the new scope
-// gets exactly one stream as well. gateway-client-core registered its auth
-// cache reset handlers before these listeners because it is imported above.
-window.CentraidApi.onGatewayChanged?.(rescopeSubscribers);
-window.CentraidApi.onVaultChanged?.(rescopeSubscribers);
+let scopeSwitchInstalled = false;
+
+/**
+ * Scope switches keep mounted app routes alive, so re-bind their subscriptions:
+ * the old vault/gateway stream closes and the new scope gets exactly one.
+ *
+ * LAZY, not module-eval, and THE ORDER IS LOAD-BEARING (#883): the auth-cache
+ * reset must be installed first, so a scope switch drops the stale auth before
+ * `rescopeSubscribers` re-attaches and asks for it. Installing both from one
+ * function states that dependency instead of leaving it to import order.
+ */
+function ensureScopeSwitchSubscribed(): void {
+  if (scopeSwitchInstalled) return;
+  scopeSwitchInstalled = true;
+  ensureGatewayAuthInvalidation();
+  window.CentraidApi.onGatewayChanged?.(rescopeSubscribers);
+  window.CentraidApi.onVaultChanged?.(rescopeSubscribers);
+}

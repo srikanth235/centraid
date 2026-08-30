@@ -1,8 +1,25 @@
-// Insights' cross-surface copy (#805).
+// Insights' cross-surface copy and window parameters (#805, #883).
 //
 // `react/screens/InsightsScreen.tsx` + `react/shell/routes/InsightsRoute.tsx`
 // and mobile's `apps/insights/*` render the same rollup and had four copies of
 // its four sentences between them.
+
+/** The page's ONE parameter, and its whole state. */
+export const INSIGHTS_WINDOW_OPTIONS = [7, 30, 90] as const;
+
+export const INSIGHTS_DEFAULT_WINDOW_DAYS = 30;
+
+/** A MEMBER preference on the gateway: changing this key forks the seats. */
+export const INSIGHTS_WINDOW_PREF_KEY = "insights.windowDays";
+
+/** Guards the stored pref: a foreign value must not strand the page in a state
+ *  its own chips cannot leave. */
+export function isInsightsWindow(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    (INSIGHTS_WINDOW_OPTIONS as readonly number[]).includes(value)
+  );
+}
 
 export const INSIGHTS_EMPTY_TITLE = "Nothing has run yet";
 
@@ -31,3 +48,25 @@ export const INSIGHTS_SPEND_NOTE =
 /** The forecast fact's note. A rate, said to be a rate. */
 export const INSIGHTS_FORECAST_NOTE =
   "A 30-day run rate at this window's pace, not a bill.";
+
+/**
+ * A run's wall clock in the coarsest unit that is still true — 400 → "400 ms",
+ * 95_000 → "1m 35s". A sub-second run keeps milliseconds rather than rounding
+ * to the "0s" that reads as nothing having happened. One declaration for both
+ * seats (#883): web's `react/format.ts` and mobile's `lib/insights.ts` re-export
+ * it, so the labels agree word for word.
+ */
+export function insDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return "—";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    const rest = seconds % 60;
+    return rest === 0 ? `${minutes}m` : `${minutes}m ${rest}s`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+}

@@ -6,6 +6,8 @@
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import type { ChannelKind } from "./contact-reach.js";
+import { duplicatePartyIds, normalizeContactChannel } from "./contact-reach.js";
 import {
   loadEntityRevision,
   markEntityRevisionUndone,
@@ -13,7 +15,9 @@ import {
 } from "./entity-revisions.js";
 import { queueProviderWriteback } from "./provider-writeback.js";
 
-type ChannelKind = "phone" | "email" | "address" | "handle";
+const STRING = { type: "string", minLength: 1 } as const;
+const PERSON_LIVE_SQL = `SELECT count(*) AS n FROM people_profile
+  WHERE party_id = :party_id AND deleted_at IS NULL`;
 
 interface ChannelRow {
   channel_id: string;
@@ -28,76 +32,12 @@ interface ChannelRow {
   updated_at: string;
 }
 
-const STRING = { type: "string", minLength: 1 } as const;
-const PERSON_LIVE_SQL = `SELECT count(*) AS n FROM people_profile
-  WHERE party_id = :party_id AND deleted_at IS NULL`;
-
-export function normalizeContactChannel(
-  kind: ChannelKind,
-  rawValue: string
-): string {
-  const value = rawValue.trim();
-  if (kind === "email") {
-    const normalized = value.toLocaleLowerCase("en-US");
-    if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(normalized) ||
-      normalized.length > 320
-    )
-      throw new Error("enter a valid email address");
-    return normalized;
-  }
-  if (kind === "phone") {
-    // Align with normalizeHandle("tel"): keep a leading + and strip every
-    // separator (spaces, parens, dots, dashes) without inventing a second
-    // digit-only dialect that disagreed on international prefixes.
-    const prefix = value.startsWith("+") ? "+" : "";
-    const digits = value.replace(/[\s().-]/gu, "").replace(/^\+/u, "");
-    if (!/^\d{7,15}$/u.test(digits))
-      throw new Error("enter a phone number with 7 to 15 digits");
-    return `${prefix}${digits}`;
-  }
-  if (kind === "handle") {
-    const normalized = value.replace(/^@/u, "").toLocaleLowerCase("en-US");
-    if (
-      normalized.length < 2 ||
-      normalized.length > 100 ||
-      !/^[\p{L}\p{N}._:@/-]+$/u.test(normalized)
-    )
-      throw new Error("enter a valid handle");
-    return normalized;
-  }
-  const normalized = value
-    .normalize("NFKC")
-    .replace(/\s+/gu, " ")
-    .toLocaleLowerCase("en-US");
-  if (normalized.length < 3 || normalized.length > 500)
-    throw new Error("enter a complete address");
-  return normalized;
-}
-
 function channelById(ctx: HandlerCtx, channelId: string): ChannelRow {
   const row = ctx.db
     .prepare("SELECT * FROM social_contact_channel WHERE channel_id = ?")
     .get(channelId) as ChannelRow | undefined;
   if (!row) throw new Error("contact channel not found");
   return row;
-}
-
-function duplicatePartyIds(
-  ctx: HandlerCtx,
-  partyId: string,
-  kind: ChannelKind,
-  normalized: string
-): string[] {
-  return (
-    ctx.db
-      .prepare(
-        `SELECT DISTINCT party_id FROM social_contact_channel
-          WHERE kind = ? AND normalized_value = ? AND party_id <> ?
-          ORDER BY party_id`
-      )
-      .all(kind, normalized, partyId) as Array<{ party_id: string }>
-  ).map((row) => row.party_id);
 }
 
 function recordChannelRevision(ctx: HandlerCtx, row: ChannelRow) {
@@ -220,7 +160,7 @@ const SAVE_CHANNEL: CommandDefinition = {
       channel_id: channelId,
       normalized_value: normalized,
       duplicate_party_ids: duplicatePartyIds(
-        ctx,
+        ctx.db,
         input.party_id,
         input.kind,
         normalized

@@ -3,9 +3,12 @@
 // seat, so they are asserted here rather than in each surface.
 import { describe, expect, test } from "vitest";
 
+import { apps } from "@centraid/design";
+
 import {
   LINK_TARGET_KINDS,
   NOTE_TARGET_ENTITY,
+  linkTargetAppLabel,
   linkTargetsFrom,
 } from "./link-targets-table.ts";
 import { KIND_ORDER } from "./powerbox.ts";
@@ -16,14 +19,34 @@ const notes = LINK_TARGET_KINDS.find(
 
 describe("what `[[` may point at", () => {
   test("is the seven kinds the powerbox orders, and no more", () => {
-    expect(LINK_TARGET_KINDS.map((kind) => kind.app)).toStrictEqual([
-      ...KIND_ORDER,
+    expect(
+      LINK_TARGET_KINDS.map((kind) => linkTargetAppLabel(kind.appId))
+    ).toStrictEqual([...KIND_ORDER]);
+    expect(KIND_ORDER).toStrictEqual([
+      "Notes",
+      "People",
+      "Agenda",
+      "Tasks",
+      "Tally",
+      "Photos",
+      "Docs",
     ]);
+  });
+
+  test("every kind names an app the catalog knows — no invented labels", () => {
+    // The names are the product catalog's (#883, ruling O-label): an app id
+    // this table gets wrong falls through to the id, which this would catch.
+    for (const kind of LINK_TARGET_KINDS) {
+      expect(
+        apps.some((app) => app.id === kind.appId),
+        `${kind.appId} is not a catalog app`
+      ).toBe(true);
+    }
   });
 
   test("never probes Locker — a secret is not a link target", () => {
     for (const kind of LINK_TARGET_KINDS) {
-      expect(kind.app).not.toBe("Locker");
+      expect(kind.appId).not.toBe("locker");
       expect(kind.entity.startsWith("locker.")).toBe(false);
     }
   });

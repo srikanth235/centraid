@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit the second half of Tally's write surface — receipt re-allocation, group life (leave / archive / simplification opt-in) and prepared reminders — registered as one unit with tally.ts and read wholesale beside it.
+// governance: allow-repo-hygiene file-size-limit the second half of Tally's write surface, registered as one unit with tally.ts and read wholesale beside it.
 // Tally's group-life and re-allocation commands. No balance is stored or
 // transmitted — `simplify_opt_in` is a FLAG and the minimal-transfer set is
 // derived at read time. Nothing is ever sent: `tally.nudge` records a PREPARED
@@ -10,6 +10,7 @@ import { recordEntityRevision } from "./entity-revisions.js";
 import type { LineInput, SplitInput } from "./tally-splits.js";
 import {
   LINE_ITEM_SCHEMA,
+  RECEIPT_ATTACHMENT_SQL,
   SPLIT_SCHEMA,
   expenseGroupId,
   expenseLineSnapshot,
@@ -70,8 +71,7 @@ const REALLOCATE_RECEIPT: CommandDefinition = {
     const row = ctx.db
       .prepare(
         `SELECT e.amount_minor,
-                (SELECT r.receipt_id FROM tally_expense_receipt r
-                  WHERE r.expense_id = e.expense_id) AS receipt_id
+                (${RECEIPT_ATTACHMENT_SQL}) AS receipt_id
            FROM tally_expense e WHERE e.expense_id = ?`
       )
       .get(input.expense_id) as

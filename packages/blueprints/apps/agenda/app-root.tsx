@@ -26,12 +26,12 @@ import { readPendingOverlay } from "../_shared/pending-overlay.ts";
 import { libraryReachability } from "../_shared/view-state-kit.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
+import { CalendarSheet } from "./components/CalendarSheet.tsx";
 import { DayRibbon, DayShelf, LayerToggles } from "./components/DayContext.tsx";
 import { EventDetail } from "./components/EventDetail.tsx";
 import { EventEditor } from "./components/EventEditor.tsx";
 import { MonthGrid, TimeGrid } from "./components/Grid.tsx";
 import { ListView } from "./components/ListViews.tsx";
-import { MoreSheet } from "./components/MoreSheet.tsx";
 import { QuickAdd } from "./components/QuickAdd.tsx";
 import { CalendarList, MiniMonth } from "./components/Rail.tsx";
 import { EmptyState, SearchField } from "./components/Shared.tsx";
@@ -165,6 +165,8 @@ export function Root({
   const [layersReady, setLayersReady] = useState(false);
   const prefsRef = useRef<ReturnType<typeof createMemberPrefs> | null>(null);
   prefsRef.current ??= createMemberPrefs(() => bump());
+  /** The host default-view knob applies once at mount, never after a band tap. */
+  const appliedDefaultView = useRef(false);
   const layers = prefsRef.current.read().layers;
 
   const state = stateRef.current;
@@ -297,7 +299,8 @@ export function Root({
     (el: HTMLDivElement | null) => {
       rootElRef.current = el;
       rootRef(el);
-      if (el) {
+      if (el && !appliedDefaultView.current) {
+        appliedDefaultView.current = true;
         const knob =
           el.dataset.appDefaultView ??
           document.documentElement.dataset.appDefaultView;
@@ -318,6 +321,8 @@ export function Root({
     (next: ViewKind) => {
       if (stateRef.current.view === next) return;
       stateRef.current.view = next;
+      // Light the band destination immediately; load() is the rows, not the tab.
+      bump();
       void load();
     },
     [load]
@@ -815,7 +820,7 @@ export function Root({
           overlays,
           // The rail's filters where there is no rail — never a second Search.
           moreSheet: moreOpen ? (
-            <MoreSheet
+            <CalendarSheet
               calendars={data.calendars}
               hidden={state.hiddenCals}
               hueFor={hueFor}

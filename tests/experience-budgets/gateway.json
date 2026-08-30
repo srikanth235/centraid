@@ -19,37 +19,74 @@
       }
     },
     "reconnectToFresh": {
-      "status": "unmeasured",
-      "volume": "50,000 replica rows",
-      "probe": "NONE TODAY. tests/scale/replica-bootstrap.scale.test.ts measures a windowed bootstrap with an in-flight deletion, which is the closest existing signal; the perceived number needs the change-stream resume path timed from disconnect to first correct frame.",
-      "_blockedOn": "BLOCKED-EXTERNAL (#842 register): no harness times the change-stream resume path from disconnect to first correct frame at the 50,000-replica-row volume; the existing replica-bootstrap scale rig measures a windowed bootstrap, not reconnect staleness. Per tests/experience-budgets/README.md, `unmeasured` with this loud probe is the sanctioned honest state — it carries NO ceiling and gates nothing by design, and no number is invented here. Unblocking is a harness slice: time the resume path, then seed `ceilingMs` and flip status to `measured`."
+      "status": "measured",
+      "volume": "YEAR-3: 50,000 replica rows (schedule.task) walked through the windowed bootstrap route in 3 pages of 20,000, then 25 commits written while the client is disconnected and replayed against its stale cursor",
+      "probe": "tests/scale/replica-reconnect.scale.test.ts — times the reconnect REQUEST to the frame that carries every missed change. IN the span: connection setup, cursor parse, shape rebuild, and the projection of the missed delta. OUT of it: how long the owner was away, which is unbounded and is not the gateway's to own. Page ONE's watermark is used as the resume cursor because that is what the bootstrap continuation token pins the client's later delta to.",
+      "ceilingMs": 250,
+      "_provenance": {
+        "at": "2026-08-28",
+        "host": "linux x64, 4 vCPU, 15.7 GiB RAM, shared dev container; node v22.22.2; in-process serve() gateway over loopback HTTP",
+        "runs": 3,
+        "observedReconnectToFreshMs": [60.3, 58.3, 68.7],
+        "observedBootstrapWalkMs": [1355, 1608, 2679],
+        "observedSeedMs": [2920, 2885, 3168],
+        "note": "MEASURED, and what it replaces is NO NUMBER AT ALL — this entry was `unmeasured` with `probe: \"NONE TODAY\"` because nothing in the repo timed the change-stream resume path. It does now: at the declared year-3 volume a returning device is fresh again in ~60 ms. The first `change` frame WAS the fresh frame in all three runs — 25 missed commits fit inside one page (the route's default limit is 1,000 changes), so first-frame and fully-caught-up are the same instant here and the rig publishes both. THE HONEST CAVEAT: 25 offline commits is a realistic phone-in-a-pocket gap, not a fortnight away; a client whose backlog exceeds one page walks several pages and pays per page. The rig fences the common case and would catch the regression that matters — a resume that starts scanning the vault instead of the change log.",
+        "headroom": "~3.6x the worst observed (68.7 ms). Sized against the shared-container measurement on purpose, in the same grammar as the other entries here; tighten-only, so re-seed it downward once the nightly scale lane has a real distribution."
+      }
     },
     "requestToFirstByte": {
       "status": "measured",
-      "volume": "empty vault, 60 serial GETs of /centraid/_apps",
-      "probe": "tests/perf/gateway-request.perf.test.ts",
+      "volume": "TWO LANES against one ceiling. FLOOR: empty vault, 60 serial GETs of /centraid/_apps in a forked child. VOLUME: a year-3-shaped vault — 25,007 domain rows (5,000 core_party, 10,000 photos as content+asset pairs) plus 200 conversations x 12 journal turns and the replica change log those inserts produced — 30 serial GETs of the same route in-process (#883 C1).",
+      "probe": "tests/perf/gateway-request.perf.test.ts (empty-vault floor) + tests/perf/gateway-request-volume.perf.test.ts (year-3-shaped vault). Both assert this ceiling, so one number now fences the transport regression AND the scale regression.",
       "ceilingP95Ms": 120,
       "_provenance": {
         "at": "2026-07-19",
         "host": "darwin arm64, gateway in a forked child (tests/perf/fixtures/gateway-idle-server.mjs)",
         "observedP95Ms": 40,
-        "note": "Pre-existing measurement, restated here in owner terms and NOT re-derived. Ceiling is ~3x observed. The volume is EMPTY — this number says nothing about a year-3 vault, and the honest reading is that it fences a transport regression, not a scale one. packages/server/benchmarks/low-end-budgets.json holds the matching machine-cost ceiling (requestP99Ms 250) for the low-end host profile.",
+        "note": "Pre-existing measurement, restated here in owner terms and NOT re-derived. Ceiling is ~3x observed. The volume is EMPTY — this number says nothing about a year-3 vault, and the honest reading is that it fences a transport regression, not a scale one. packages/server/benchmarks/low-end-budgets.json holds the matching machine-cost ceiling (requestP99Ms 250) for the low-end host profile. `_provenanceAtVolume` below is the half this note said was missing.",
         "headroom": "~3x observed"
+      },
+      "_provenanceAtVolume": {
+        "at": "2026-08-28",
+        "host": "linux x64, 4 vCPU, 15.7 GiB RAM, shared dev container; node v22.22.2; gateway IN PROCESS (the seed has to reach the vault it serves), so these are a floor relative to the forked-child lane",
+        "runs": 3,
+        "observedAppsP95Ms": [33.9, 26.2, 29.2],
+        "observedSeededDomainRows": 25007,
+        "note": "MEASURED at volume, and the finding is that the CORE ROUTES ARE VOLUME-INSENSITIVE: /centraid/_apps answers in 26-34 ms p95 over a 25,007-row vault, against 40 ms p95 on an empty vault in the older forked-child lane — inside the run-to-run spread of the two hosts, not a scale signal. That is the honest, and mildly boring, answer to the question the empty-vault caveat kept parked: this route does not read domain rows, so it cannot degrade with them. What the same rig also publishes, UNGATED, is the lane that does: one windowed replica bootstrap page (window=200) over the same vault costs 152-185 ms p95. Volume shows up on the routes that read rows, and the budget now says which is which instead of implying the whole surface was fenced.",
+        "headroom": "none added — the ceiling stays at ~3x the WORST of the two lanes (the 40 ms empty-vault observation). Tightening it to ~3x the volume observation would fence the forked-child lane's own host noise rather than a regression, and this file is tighten-only, so a ceiling that has to come back up is a ceiling that needs an approvedDeviation."
       }
     },
     "coreRouteP95Ms": {
       "status": "measured",
-      "volume": "empty vault, 30 serial requests per core route identity",
-      "probe": "tests/perf/gateway-request.perf.test.ts",
+      "volume": "TWO LANES against one ceiling, 30 serial requests per core route identity in each: an EMPTY vault in a forked child, and a year-3-shaped vault (25,007 domain rows + 2,400 journal turns) in process (#883 C1)",
+      "probe": "tests/perf/gateway-request.perf.test.ts (empty-vault floor) + tests/perf/gateway-request-volume.perf.test.ts (year-3-shaped vault)",
       "gatewayInfo": 120,
       "apps": 120,
-      "health": 120
+      "health": 120,
+      "_provenance": {
+        "at": "2026-08-28",
+        "host": "linux x64, 4 vCPU, 15.7 GiB RAM, shared dev container; node v22.22.2; in-process gateway over a 25,007-row vault",
+        "runs": 3,
+        "observedGatewayInfoP95Ms": [8.7, 22.1, 34.1],
+        "observedAppsP95Ms": [33.9, 26.2, 29.2],
+        "observedHealthP95Ms": [13.1, 9.9, 8.5],
+        "note": "MEASURED at volume — before this the entry carried three ceilings and no provenance at all, derived from an empty-vault run on another host. All three routes stay under 35 ms p95 on a year-3-shaped vault; the spread between runs (8.7-34.1 ms on the same route) is container contention, which is why the ceilings are not tightened toward the observation. Keeping one ceiling per identity rather than three different ones is deliberate: these are the three routes a client hits before it can show anything, and a differentiated ceiling would encode today's implementation rather than the owner's experience.",
+        "headroom": "~3.5x the worst observed at volume (34.1 ms) and ~3x the empty-vault observation (40 ms) the older lane still asserts against. Tighten-only."
+      }
     },
     "gatewayColdStartMs": {
       "status": "measured",
-      "volume": "fork to authenticated ready message, empty vault",
-      "probe": "tests/perf/gateway-request.perf.test.ts",
-      "ceilingMs": 5000
+      "volume": "TWO LANES against one ceiling: fork to authenticated ready message on an EMPTY vault, and an in-process reopen of a SEEDED year-3-shaped vault directory (25,007 domain rows) from disk (#883 C1)",
+      "probe": "tests/perf/gateway-request.perf.test.ts (empty-vault fork) + tests/perf/gateway-request-volume.perf.test.ts (reopen of the seeded directory)",
+      "ceilingMs": 5000,
+      "_provenance": {
+        "at": "2026-08-28",
+        "host": "linux x64, 4 vCPU, 15.7 GiB RAM, shared dev container; node v22.22.2",
+        "runs": 3,
+        "observedSeededReopenMs": [809, 548, 805],
+        "note": "MEASURED on a SEEDED vault, which is the question this key exists to answer: does a full vault make the gateway slower to open? Reopening a 25,007-row vault from disk — mounting the plane, installing the bundled apps, re-arming the services — takes 0.55-0.81 s. The empty-vault fork lane measures process spawn plus the same boot and carries the same ceiling; neither observation is close to it, and the ceiling is deliberately left generous because a cold start also pays for whatever the host's page cache does not have. Tighten-only.",
+        "headroom": "~6x the worst seeded reopen (809 ms). The in-process reopen skips node process spawn, which the forked-child lane pays for; the ceiling covers both."
+      }
     },
     "year3RestoreSeconds": {
       "status": "measured",
@@ -115,6 +152,21 @@
         "headroom": "ceilingThroughputFactor ~1.9x the worst observed (1.05); ceilingWorstLaneP95Ms ~3x the worst observed (1147.5 ms). Both sized against the CONTENDED measurements on purpose — a shared CI runner IS the contended case. Tighten-only: re-seed from a real distribution once the nightly lane has one."
       }
     },
+    "refSearchUnderComposition": {
+      "status": "measured",
+      "volume": "the Atlas `ref-search` lane of the composite rig — 20 GETs of /centraid/_vault/atlas/browse/ref-search at 2 in flight, run WHILE the four other HTTP lanes, 128 harness turn dispatches and a 200-automation missed-window scan are in flight against the same gateway",
+      "probe": "tests/scale/composite-load.scale.test.ts — the `browse` lane's composite p95, asserted in the rig body. Named separately from `compositeLoadFactor.ceilingWorstLaneP95Ms` because that ceiling only ever fences whichever lane happens to be slowest (the write lane, today), so a ref-search regression could double before the worst-lane gate noticed.",
+      "ceilingP95Ms": 1000,
+      "_provenance": {
+        "at": "2026-08-28",
+        "host": "linux x64, 4 vCPU, 15.7 GiB RAM, shared dev container; node v22.22.2; in-process serve() gateway, empty vault, eight bundled apps",
+        "runs": 3,
+        "observedBrowseP95CompositeMs": [228.4, 282.0, 333.4],
+        "observedBrowseP95SoloMs": [4.9, 19.9, 21.5],
+        "note": "MEASURED after #883 C2 correlated the blob egress reference CTE (packages/vault/src/blob/read.ts): the revision-chain predicate used to seed its recursive walk from `SELECT current_content_id FROM core_document` — the whole library — on every byte request, and now walks from the requested page toward the document head through rung 7's core_link endpoint indexes. This entry is the ref-search half of that composition asked for by #883 C2 item 4; the read lane is fenced here rather than only through the worst-lane ceiling.",
+        "headroom": "~3x the worst of three observations on a contended shared container, the convention the neighbouring entries use. Tighten-only."
+      }
+    },
     "soakDegradation": {
       "status": "measured",
       "volume": "one long-lived serve() gateway driven in a loop; each cycle is 3 ops on each of five lanes (windowed replica bootstrap, Notes search, Notes create-note, 64 KiB blob staging, Atlas ref-search) at 2 in flight per lane. A 10-minute run is 483 cycles / 7,245 ops / ~1,450 notes and ~1,450 CAS objects accumulated. The first 3 cycles are discarded as warm-up.",
@@ -168,6 +220,24 @@
         "observedIdleSweepMs": 145,
         "note": "MEASURED by the #659 vault agent on a real run; cited, not re-derived. This is the audit's worst find (an hourly O(n^2) clustering pass) now bounded at the declared year-3 photo volume. It is a background sweep, so the owner-facing symptom is battery and a hot fan rather than a stalled screen — but at O(n^2) it was a stalled gateway."
       }
+    },
+    "photoSemanticSearchAtYear3": {
+      "status": "measured",
+      "volume": "90,000 media assets each carrying one 512-float `embed-image` embedding (184 MB of float32), 8 planted near-matches in the middle of the insert order",
+      "probe": "tests/scale/photo-similarity.scale.test.ts — ranks the SAME library through BOTH shipping engines (sqlite-vec's vec_distance_cosine and the vault's vault_cosine scalar) and asserts they agree on the top hit before it consults a ceiling. IN the span: the embedding scan, the ranking, the trashed-asset filter over the candidate window, and the wire mapping. OUT of it: embedding the owner's QUERY text, which is the `embed-text` automation's time and not the search's.",
+      "ceilingMs": 750,
+      "ceilingRssDeltaBytes": 134217728,
+      "ceilingEventLoopBlockMs": 750,
+      "_ruling": "docs/decisions.md Q12 — the vector engine for photo similarity is decided by this rig's numbers, not by a preference. The SQL sqlite-vec floor ranks 90,000 embeddings in 166-243 ms, comfortably inside an interactive ceiling, so a `vec0` ANN index is NOT adopted: it has not been earned. The day either engine goes red here, it has been.",
+      "_provenance": {
+        "at": "2026-08-28",
+        "host": "linux x64, 4 vCPU, 15.7 GiB RAM, shared dev container; node v22.22.2; sqlite-vec v0.1.9 loaded through the gateway's loadExtensions seam",
+        "note": "MEASURED, four implementations against one 90,000 x 512 fixture, isolated from the searchPhotosByText wrapper so the numbers compare like with like. BEFORE — one-stage vec ranking that JOINed media_asset for every embedding: 204.1 / 204.7 ms. AFTER — two-stage vec ranking that joins only the 500-candidate window: 175.3 / 166.6 ms. BEFORE — the unbounded JS scan this wave deleted (every row read into JS, one object each, a 90,000-element Array.sort, then slice 20): 1,059.2 / 1,037.7 ms at +57.5 MiB RSS on the pass that paid for it. AFTER — the same exact cosine computed inside SQLite through vault_cosine with ORDER BY ... LIMIT: 1,010.4 / 934.4 ms at +2.6 / +4.3 MiB, while returning 500 candidates rather than 20. The fallback's TIME is unchanged within noise and this record says so rather than claiming a speedup: both are dominated by 90,000 x 512 float multiplications, which is the work an exact cosine is. What changed is what gets MATERIALISED. Through the full searchPhotosByText wrapper the rig measures 229-243 ms (vec) and 1,204-1,208 ms (fallback); the wrapper adds an index-count and, on the fallback, the per-candidate trashed-asset probes.",
+        "headroom": "~3x the worst observed for each engine, the same convention the neighbouring entries use for a single contended-host measurement. Tighten-only.",
+        "rssCaveat": "ceilingRssDeltaBytes is COARSE ON PURPOSE. RSS delta across one synchronous call measures GC scheduling as much as allocation — the same fallback search measured +2.6 MiB, +4.3 MiB and +66 MiB on different runs, and the vec engine measures +0 MiB because it allocates nothing in JS. 128 MiB is a `does not materialise the library` bound (the 90,000 x 2 KiB vectors are 184 MiB), not a tight budget. Read the wall clock for cost."
+      },
+      "ceilingFallbackMs": 3600,
+      "ceilingFallbackEventLoopBlockMs": 3600
     }
   }
 }

@@ -1,6 +1,5 @@
-// The plaintext export file (README-Locker §6). The `export` action is the
-// data door: it unseals in the vault and receipts the unseal. Nothing here is
-// kept — the plaintext never enters the app's bag.
+// The plaintext export file (README-Locker §6): the `export` action unseals in
+// the vault and receipts it. The plaintext never enters the app's bag.
 
 export interface ExportItem {
   item_id?: string;
@@ -57,7 +56,7 @@ function cell(value: unknown): string {
   return /["\n,]/u.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
-/** Named lines rather than JSON — the file stays readable without a parser. */
+/** Named lines, not JSON — readable without a parser. */
 function extras(item: ExportItem): string[] {
   const lines: string[] = [];
   if (item.notes) lines.push(String(item.notes));
@@ -107,14 +106,6 @@ export function exportFileName(payload: ExportPayload): string {
   return stamp ? `locker-${stamp}.csv` : "locker.csv";
 }
 
-/** `<a download>` over an object URL is the one path every seat has (PWA
- *  tunnel, desktop `file://`). Revoked at once — it points at the plaintext. */
-export function saveExportFile(name: string, text: string): void {
-  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = name;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
+// Handing the file over is the format kit's (#883 B4): `{ name, type, text }`
+// carries the media type beside the name, where a file's type belongs.
+export { saveExportFile } from "../_shared/format-kit.ts";

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { JSX } from "react";
 
+import ShellModal from "../ui/ShellModal.js";
 import type {
   ResourceKnobPrefs,
   ResourceProfileDTO,
@@ -79,12 +80,12 @@ export default function ResourceDetailsDialog({
   return (
     <>
       <div className={styles.backdrop} role="presentation" onClick={onClose} />
-      <dialog
-        open
+      <ShellModal
+        layer="inline"
         className={styles.dialog}
-        aria-modal="true"
-        aria-label="How we sized this"
-        data-testid="resource-details-dialog"
+        ariaModal
+        label="How we sized this"
+        data={{ "data-testid": "resource-details-dialog" }}
       >
         <div className={styles.head}>
           <div className={styles.headText}>
@@ -115,7 +116,7 @@ export default function ResourceDetailsDialog({
             />
           ) : null}
         </div>
-      </dialog>
+      </ShellModal>
     </>
   );
 }

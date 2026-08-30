@@ -1,9 +1,7 @@
-// Placement registry (#712): the one `itemType` union every placement
-// control reads. A7 — `locker.item` is unrepresentable here (vault
-// `ShareableItemType` still has it). A secret cannot be placed.
-// Hand-maintained mirror of that union minus locker — never import
-// `@centraid/vault` (Node-only). `placement-registry.test.ts` source-scans
-// `closure.ts`.
+// Placement registry (#712): the one `itemType` union every placement control
+// reads. A hand-maintained mirror of the vault's `ShareableItemType` minus
+// `locker.item` — a secret cannot be placed — because `@centraid/vault` is
+// Node-only and must never be imported here.
 export type PlaceableItemType =
   | "core.collection"
   | "core.content_item"
@@ -26,9 +24,6 @@ export const PLACEMENT_REGISTRY: readonly PlacementEntity[] = [
   { itemType: "media.asset", appId: "photos", label: "photo" },
   { itemType: "tally.group", appId: "tally", label: "group" },
 ];
-
-export const PLACEABLE_ITEM_TYPES: readonly PlaceableItemType[] =
-  PLACEMENT_REGISTRY.map((entity) => entity.itemType);
 
 export function placementEntity(
   itemType: PlaceableItemType

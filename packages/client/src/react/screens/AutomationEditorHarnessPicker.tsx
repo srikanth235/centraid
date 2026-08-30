@@ -3,6 +3,7 @@ import type { JSX } from "react";
 
 import type { AutomationEditorData } from "../screen-contracts.js";
 import { Icon } from "../ui/index.js";
+import ShellModal from "../ui/ShellModal.js";
 
 import styles from "./AutomationEditorScreen.module.css";
 
@@ -68,10 +69,10 @@ export function AutomationEditorHarnessPicker({
         <Icon name="ChevronDown" size={12} />
       </button>
       {open ? (
-        <dialog
-          open
+        <ShellModal
+          layer="inline"
           className={styles.harnessPicker}
-          aria-label="Automation agent"
+          label="Automation agent"
         >
           <div>
             <strong className={styles.harnessPickerTitle}>Agent</strong>
@@ -125,7 +126,7 @@ export function AutomationEditorHarnessPicker({
               ))}
             </select>
           </label>
-        </dialog>
+        </ShellModal>
       ) : null}
     </div>
   );

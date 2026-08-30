@@ -18,7 +18,7 @@ export interface RefRequest {
 export interface RefCard {
   type: string;
   id: string;
-  /** `live` renders; `trashed` soft-deleted; `missing` tombstone; `denied` consent gap; `unknown` type. */
+  /** `missing` is a tombstone, `denied` a consent gap, `unknown` a bad type. */
   status: "live" | "trashed" | "missing" | "denied" | "unknown";
   title: string | null;
   subtitle: string | null;
@@ -31,7 +31,7 @@ export interface ResolveResult {
   receiptId: string;
 }
 
-/** Hard cap per call — refs render in lists, not bulk exports. */
+/** Refs render in lists, not bulk exports. */
 const MAX_REFS = 100;
 
 /** One SELECT per carded entity; uncurated resolve existence + status only. */
@@ -70,21 +70,12 @@ const CARD_SQL: Record<string, string> = {
                           FROM media_asset a
                           JOIN core_content_item ci ON ci.content_id = a.content_id
                          WHERE a.asset_id = ?`,
-  "home.asset_item": `SELECT name AS title, serial_no AS subtitle, NULL AS thumb, 0 AS trashed
-                        FROM home_asset_item WHERE item_id = ?`,
-  "business.client": `SELECT p.display_name AS title, c.status AS subtitle, NULL AS thumb, 0 AS trashed
-                        FROM business_client c JOIN core_party p ON p.party_id = c.party_id
-                       WHERE c.client_id = ?`,
-  "business.project": `SELECT name AS title, status AS subtitle, NULL AS thumb, 0 AS trashed
-                         FROM business_project WHERE project_id = ?`,
-  "business.invoice": `SELECT number AS title, status AS subtitle, NULL AS thumb, 0 AS trashed
-                         FROM business_invoice WHERE invoice_id = ?`,
 };
 
-/** Entity types with a curated card — the picker's default kind set. */
+/** Entity types with a curated card: the picker's default kinds. */
 export const CARDED_ENTITIES: readonly string[] = Object.keys(CARD_SQL);
 
-/** PKs are UUIDv7, so `ORDER BY pk DESC` IS recent-first — picker no-term browse (#262). */
+/** PKs are UUIDv7, so `ORDER BY pk DESC` IS recent-first (#262). */
 export const CARD_PK: Readonly<Record<string, string>> = {
   "core.party": "party_id",
   "core.place": "place_id",
@@ -97,10 +88,6 @@ export const CARD_PK: Readonly<Record<string, string>> = {
   "core.collection": "collection_id",
   "social.thread": "thread_id",
   "media.asset": "asset_id",
-  "home.asset_item": "item_id",
-  "business.client": "client_id",
-  "business.project": "project_id",
-  "business.invoice": "invoice_id",
 };
 
 function pkColumn(vault: DatabaseSync, physical: string): string {
@@ -113,8 +100,8 @@ function pkColumn(vault: DatabaseSync, physical: string): string {
   return rows.find((r) => r.pk === 1)?.name ?? "rowid";
 }
 
-/** LIVE link touches this ref AND caller reads the far endpoint. Entity-level in v0 —
- * the far-row filter is not re-evaluated per row; resolutions are receipted. */
+/** A LIVE link touches this ref AND the caller reads the far endpoint.
+ * Entity-level: the far-row filter is not re-evaluated per row. */
 function linkedAndVisible(
   vault: DatabaseSync,
   identity: Identity,
@@ -203,7 +190,7 @@ function cardFor(vault: DatabaseSync, type: string, id: string): RefCard {
   };
 }
 
-/** Up to MAX_REFS refs → cards, one receipt per batch; never throws for a bad ref. */
+/** One receipt per batch; a bad ref is denied, never thrown. */
 export function resolveRefCards(
   vault: DatabaseSync,
   journal: DatabaseSync,

@@ -92,7 +92,7 @@ export function clockLabel(at: number): string {
 }
 
 /** Day and month only — a year reads as an archive entry. */
-export function dayLabel(at: number): string {
+export function automationDayLabel(at: number): string {
   return new Date(at).toLocaleDateString(undefined, {
     day: "numeric",
     month: "long",
@@ -107,7 +107,7 @@ export function whenLabel(at: number, now: number): string {
   if (ago < 2 * DAY) return "yesterday";
   if (ago < WEEK)
     return new Date(at).toLocaleDateString(undefined, { weekday: "long" });
-  return dayLabel(at);
+  return automationDayLabel(at);
 }
 
 function capitalized(phrase: string): string {
@@ -159,7 +159,7 @@ export function automationSub(row: AutomationRow, context: RunContext): string {
   const streak = failureStreak(row.ref, context.runs);
   const newest = newestRunOf(row.ref, context.runs);
   const tail = streak
-    ? `failed ${countWord(streak.count, "run")} in a row, since ${dayLabel(streak.startedAt)}`
+    ? `failed ${countWord(streak.count, "run")} in a row, since ${automationDayLabel(streak.startedAt)}`
     : newest
       ? `last run ${whenLabel(newest.startedAt, context.now)}`
       : context.known.has(row.ref)
@@ -213,7 +213,7 @@ export function suggestionRowCopy(
   };
 }
 
-export function matchesFilter(
+export function automationMatchesFilter(
   status: AutomationStatus,
   filter: AutomationFilter
 ): boolean {
@@ -306,7 +306,7 @@ export function automationsHealth(
       ...generic,
       action: "Open the failure",
       detail: streak
-        ? `${worst.title} has failed its last ${countWord(streak.count, "run")}, since ${dayLabel(streak.startedAt)}.`
+        ? `${worst.title} has failed its last ${countWord(streak.count, "run")}, since ${automationDayLabel(streak.startedAt)}.`
         : `${worst.title} failed its last run.`,
       label:
         failing.length === 1

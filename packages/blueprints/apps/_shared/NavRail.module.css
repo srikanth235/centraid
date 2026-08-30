@@ -32,12 +32,10 @@
      the divider is the thing the rows stop against and 12px is the distance
      the rest of this chrome puts between content and a rule. */
   padding-block: var(--sp-2) var(--sp-5);
-  /* `--content-margin` is each app's own re-declaration of the page margin on
-     its shell element (Photos sets it to `var(--page-margin)` outright, Docs
-     pins a compact rung), and this module is not that element's owner — so the
-     system token it derives from is the fallback rather than a hardcoded
-     number. A shared component may not assume an app-scoped property exists. */
-  padding-inline: var(--content-margin, var(--page-margin)) var(--sp-3);
+  /* The page margin is the SYSTEM'S one number (#883), read straight off
+     `--page-margin`. There is no app-scoped re-declaration to defer to any
+     more, so there is nothing for a fallback to stand in for. */
+  padding-inline: var(--page-margin) var(--sp-3);
   border-inline-end: 1px solid var(--line);
 }
 

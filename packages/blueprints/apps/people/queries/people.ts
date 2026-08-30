@@ -5,7 +5,7 @@
  * display name, its list (one lists-scheme tag, the same mechanism Docs
  * folders use), its canonical favorite star (the flags-scheme tag on the
  * party, #274), and its active reminder dates so the sidebar can derive
- * Reconnect / Upcoming / Favorites client-side exactly like the prototype.
+ * Reconnect / Upcoming / Favorites client-side.
  * `truncated` means older people exist beyond the window and is named on the
  * status line — never a silent drop.
  *
@@ -21,7 +21,27 @@
  * "ask the owner for access" state.
  */
 
+import {
+  FLAGS_SCHEME_URI,
+  LIST_SCHEME_URI,
+  STARRED_NOTATION,
+  conceptsInScheme,
+  findScheme,
+  findSchemeConcept,
+} from "../../_shared/concept-scheme-kit.ts";
+import { PENDING_OVERLAY_FIELDS } from "../../_shared/pending-overlay.ts";
 import { readLiveBindings } from "./_shared.ts";
+
+/** Forwarded verbatim, so the roster can draw the pending chip (#864). */
+function pendingStamps(
+  row: Readonly<Record<string, unknown>>
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.values(PENDING_OVERLAY_FIELDS).flatMap((field) =>
+      field in row ? [[field, row[field]]] : []
+    )
+  );
+}
 
 interface RawProfile {
   party_id: string;
@@ -68,8 +88,6 @@ interface Reminder {
   month_day: string;
 }
 
-const LIST_SCHEME_URI = "https://centraid.dev/schemes/lists";
-const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
 /** Gateway read max is 10_000; look-ahead needs one spare row. */
 const ROSTER_MAX = 9_999;
 
@@ -96,9 +114,9 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
     const schemeRows = (schemes.rows ?? []) as unknown as RawScheme[];
 
     // Lists are owner-curated SKOS concepts — small and unbounded.
-    const listScheme = schemeRows.find((s) => s.uri === LIST_SCHEME_URI);
-    const listConcepts = conceptRows.filter(
-      (c) => listScheme && c.scheme_id === listScheme.scheme_id
+    const listConcepts = conceptsInScheme(
+      conceptRows,
+      findScheme(schemeRows, LIST_SCHEME_URI)
     );
     const lists = listConcepts
       .map((c) => ({ list_id: c.concept_id, name: c.pref_label }))
@@ -106,13 +124,13 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
     const listConceptIds = new Set<string>(
       listConcepts.map((c) => c.concept_id)
     );
-    const flagsScheme = schemeRows.find((s) => s.uri === FLAGS_SCHEME_URI);
-    const starredConceptId = flagsScheme
-      ? (conceptRows.find(
-          (c) =>
-            c.scheme_id === flagsScheme.scheme_id && c.notation === "starred"
-        )?.concept_id ?? null)
-      : null;
+    const starredConceptId =
+      findSchemeConcept(
+        schemeRows,
+        conceptRows,
+        FLAGS_SCHEME_URI,
+        STARRED_NOTATION
+      )?.concept_id ?? null;
 
     const fetched = (profiles.rows ?? []) as unknown as RawProfile[];
     const truncated = fetched.length > window;
@@ -197,6 +215,7 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
       reminders: remindersByParty.get(pr.party_id) ?? [],
       linked: linksAvailable ? vaultCountByParty.has(pr.party_id) : null,
       vault_count: vaultCountByParty.get(pr.party_id) ?? 0,
+      ...pendingStamps(pr as unknown as Record<string, unknown>),
     }));
     return {
       people,

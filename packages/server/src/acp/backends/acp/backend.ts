@@ -31,6 +31,7 @@ import type {
 
 import type { TurnStreamEvent } from "@centraid/server/engine";
 
+import { unrefTimer } from "../../../lib/unref-timer.js";
 import { lowPriorityCommand } from "../../low-priority.js";
 import { acpAttachmentBlocks } from "../../multimodal.js";
 import type { ContentBlock, PromptCapabilities } from "../../multimodal.js";
@@ -88,7 +89,7 @@ function requestWithTimeout<T>(
       () => reject(new Error(`ACP ${stage} timed out after ${timeoutMs}ms`)),
       timeoutMs
     );
-    timer.unref?.();
+    unrefTimer(timer);
   });
   return Promise.race([request, timeout]).finally(() => {
     if (timer) clearTimeout(timer);
@@ -160,7 +161,7 @@ export async function runAcpTurn(
         )
       );
     }, promptIdleTimeoutMs);
-    promptIdleTimer.unref?.();
+    unrefTimer(promptIdleTimer);
   };
 
   const emit = (event: TurnStreamEvent): void => {
@@ -695,7 +696,7 @@ export async function runAcpTurn(
           conn.exited,
           new Promise<void>((resolve) => {
             const timer = setTimeout(resolve, EXIT_CLASSIFICATION_GRACE_MS);
-            timer.unref?.();
+            unrefTimer(timer);
           }),
         ]);
       }

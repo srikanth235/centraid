@@ -28,6 +28,11 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
+import {
+  RAW_DIALOG_LEDGER,
+  UNSTYLED_BUTTON_LEDGER,
+  UNSTYLED_PRESSABLE_LEDGER,
+} from "./component-existence-ledger.mjs";
 import { blankComments, scanRefusalGrammar } from "./lib/disabled-controls.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -569,10 +574,21 @@ export function scanPendingOverlayFiles(files) {
           `optimistic mutation — pending-projection.ts is the one declaration door`
       );
     for (const reachPast of PENDING_ENGINE_REACH_PAST) {
-      const index = code.indexOf(reachPast);
-      if (index === -1) continue;
+      // A WHOLE NAME, not a substring. `GrantIntentQueue` is the grant plane's
+      // own durable store — declared frame-level in `_shared` because the
+      // authority plane is app-agnostic infrastructure (ruling V-replica),
+      // which is exactly where this lane wants a shared declaration to be —
+      // and a substring match read it as a reach into the outbox engine's
+      // `IntentQueue`. An import clause still spells the bare name, so
+      // aliasing cannot dodge the rule; only a DIFFERENT name passes, which is
+      // what a different thing having a different name is for.
+      const match = new RegExp(
+        `\\b${escapeRegularExpression(reachPast)}\\b`,
+        "u"
+      ).exec(code);
+      if (!match) continue;
       findings.push(
-        `${label}:${lineOf(code, index)}: reaches into pending engine internal ` +
+        `${label}:${lineOf(code, match.index)}: reaches into pending engine internal ` +
           `\`${reachPast}\` — pending-projection.ts is the app declaration door`
       );
     }
@@ -597,6 +613,823 @@ function checkPendingOverlay(root, files) {
   return findings;
 }
 
+// ─── ENGINE S — search status ────────────────────────────────────────────────
+//
+// `apps/_shared/search-scaffold.ts` owns the honest search states: resting /
+// searching / ready / unreachable. The union is the WHOLE point of the engine —
+// "unreachable" exists so a scope that could not be asked is never passed off
+// as "no results" — and a second copy of it is a second answer to that
+// question. `deriveSearchStatus` is the only thing allowed to produce one.
+//
+// TWO SHAPES OF FORK, AND THE HONEST LINE BETWEEN THEM:
+//
+//   * RE-DECLARING the union (a `type`/`const` naming all four states) outside
+//     the scaffold. Always a fork, wherever it is.
+//   * IMPORTING `SearchStatus` from something other than the scaffold. This one
+//     is NOT automatically wrong: a module may RE-EXPORT the scaffold's type as
+//     a local convenience (`apps/people/types.ts` does, and that is still one
+//     owner — the type has a single declaration site). What the check forbids
+//     is importing the name from a module that DECLARES its own. So the rule
+//     resolves the specifier and asks which of the two it is.
+//
+// The consequence of drawing the line there: the three photos entries below
+// clear together the moment `apps/photos/search.ts` re-exports instead of
+// re-declaring. That is one edit, and it is the fix.
+
+const SEARCH_SCAFFOLD_PATH = path.join(
+  "packages",
+  "blueprints",
+  "apps",
+  "_shared",
+  "search-scaffold.ts"
+);
+const SEARCH_SCAFFOLD_SPECIFIER = /_shared\/search-scaffold(?:\.tsx?)?$/u;
+const SEARCH_STATUS_STATES = ["resting", "searching", "ready", "unreachable"];
+
+/** Ratchet — may shrink, never grow. Each entry states WHY it is still here.
+ *  EMPTY since #883 B6: `apps/photos/search.ts` re-exports the scaffold's type
+ *  instead of re-declaring it, which cleared its two importers with it — the
+ *  one edit this lane's header said was the fix. */
+const SEARCH_STATUS_RATCHET = new Map();
+
+/** True when `file` re-exports the scaffold's `SearchStatus` rather than owning one. */
+function reExportsSearchStatus(code) {
+  return [
+    ...code.matchAll(
+      /export\s+(?:type\s+)?\{(?<clause>[^}]*)\}\s*from\s*["'](?<spec>[^"']+)["']/gu
+    ),
+  ].some(
+    (m) =>
+      /\bSearchStatus\b/u.test(m.groups.clause) &&
+      SEARCH_SCAFFOLD_SPECIFIER.test(m.groups.spec.replace(/\.tsx?$/u, ""))
+  );
+}
+
+/** Every search-status fork in `files`, before the ratchet is applied. */
+export function scanSearchStatusFiles(files) {
+  const byLabel = new Map(files.map((file) => [file.label, file]));
+  const findings = [];
+  const report = (label, line, message) =>
+    findings.push(`${label}:${line}: ${message}`);
+  for (const { label, code } of files) {
+    if (label === SEARCH_SCAFFOLD_PATH || /\.(?:test|spec)\./u.test(label))
+      continue;
+    // (a) a second declaration of the union.
+    for (const m of code.matchAll(
+      /\b(?:type|const|enum)\s+(?<name>[A-Za-z_$][\w$]*)\b[^;]{0,400}/gu
+    )) {
+      if (!SEARCH_STATUS_STATES.every((s) => m[0].includes(`"${s}"`))) continue;
+      report(
+        label,
+        lineOf(code, m.index),
+        `re-declares the search-status union as \`${m.groups.name}\` — ` +
+          `${SEARCH_SCAFFOLD_PATH} owns the four honest states, and a second copy ` +
+          `is a second answer to "could this scope be asked at all"; import the ` +
+          `type and call \`deriveSearchStatus\` instead`
+      );
+    }
+    // (b) importing the name from a module that owns its own declaration.
+    for (const m of code.matchAll(
+      /import\s+(?:type\s+)?\{(?<clause>[^}]*)\}\s*from\s*["'](?<spec>[^"']+)["']/gu
+    )) {
+      if (!/\bSearchStatus\b/u.test(m.groups.clause)) continue;
+      const spec = m.groups.spec;
+      if (SEARCH_SCAFFOLD_SPECIFIER.test(spec.replace(/\.tsx?$/u, "")))
+        continue;
+      if (!spec.startsWith(".")) continue; // a package specifier: not ours to resolve
+      const resolvedBase = path.join(path.dirname(label), spec);
+      const candidates = [
+        resolvedBase,
+        `${resolvedBase}.ts`,
+        `${resolvedBase}.tsx`,
+        path.join(resolvedBase, "index.ts"),
+      ];
+      // A sibling import inside `_shared` spells the owner `./search-scaffold.ts`,
+      // which no specifier pattern can recognise — resolve and compare instead.
+      if (candidates.includes(SEARCH_SCAFFOLD_PATH)) continue;
+      const resolved = candidates
+        .map((candidate) => byLabel.get(candidate))
+        .find(Boolean);
+      if (resolved && reExportsSearchStatus(resolved.code)) continue;
+      report(
+        label,
+        lineOf(code, m.index),
+        `imports \`SearchStatus\` from \`${spec}\`, which is not ` +
+          `${SEARCH_SCAFFOLD_PATH} and does not re-export it — the type has one ` +
+          `declaration site; import it from the scaffold, or make that module ` +
+          `re-export the scaffold's type instead of owning a copy`
+      );
+    }
+  }
+  return findings;
+}
+
+function checkSearchStatus(_root, files) {
+  const byLabel = new Map(files.map((file) => [file.label, file]));
+  const findings = [];
+  const owner = byLabel.get(SEARCH_SCAFFOLD_PATH);
+  // Anti-vacuity: every rule above is anchored on the scaffold still declaring
+  // the union. If that file moves or is emptied, the whole gate passes silently.
+  if (
+    !owner ||
+    !SEARCH_STATUS_STATES.every((state) => owner.code.includes(`"${state}"`))
+  )
+    findings.push(
+      `${SEARCH_SCAFFOLD_PATH}: no longer declares the four search states — ` +
+        `the search-status gate is anchored on this file and has gone vacuous`
+    );
+  const offenders = new Set();
+  for (const finding of scanSearchStatusFiles(files)) {
+    const ratcheted = [...SEARCH_STATUS_RATCHET.keys()].find((label) =>
+      finding.startsWith(`${label}:`)
+    );
+    if (ratcheted) offenders.add(ratcheted);
+    else findings.push(finding);
+  }
+  for (const [label, reason] of SEARCH_STATUS_RATCHET) {
+    if (!byLabel.has(label))
+      findings.push(
+        `${label}: ratcheted as a search-status offender (${reason}) but the file is gone — drop the entry`
+      );
+    else if (!offenders.has(label))
+      findings.push(
+        `${label}: no longer forks the search-status union — remove it from ` +
+          `SEARCH_STATUS_RATCHET so the gate closes behind you`
+      );
+  }
+  return findings;
+}
+
+// ─── ENGINE E — selection ────────────────────────────────────────────────────
+//
+// `apps/_shared/selection-engine.ts` owns what a multi-select DOES: toggle one,
+// extend a range from the anchor, select all, drop keys that no longer exist,
+// and run a batch collecting per-target failures. Every one of those has a
+// wrong version that looks right — a range that forgets the anchor after a
+// filter change, a select-all that includes rows the member cannot see, a batch
+// that stops at the first error and leaves the shelf half applied.
+//
+// So the rule is not "prefer the engine", it is: an APP TREE may not declare
+// this machinery at all. Calling the engine's verbs is adoption and is fine;
+// declaring or assigning one of those names locally is a second implementation.
+// Both app trees are covered — the web blueprint and its mobile twin.
+
+const SELECTION_ENGINE_PATH = path.join(
+  "packages",
+  "blueprints",
+  "apps",
+  "_shared",
+  "selection-engine.ts"
+);
+const SELECTION_ENGINE_VERBS = [
+  "buildSelectionActions",
+  "toggleSelectionKey",
+  "toggleSelectionRange",
+  "toggleAllSelection",
+  "pruneSelection",
+  "runSelectionBatch",
+];
+
+/** Ratchet — may shrink, never grow. Each entry states WHY it is still here.
+ *  EMPTY since #883 B6: Photos' adapter is `buildPhotoSelectionActions` and
+ *  imports the engine's verb under the engine's own name, so the call site
+ *  names which table of actions it is looking at. */
+const SELECTION_RATCHET = new Map();
+
+const APP_TREE_PREFIXES = [
+  `${path.join("packages", "blueprints", "apps")}${path.sep}`,
+  `${path.join("apps", "mobile", "src", "apps")}${path.sep}`,
+];
+
+/** Every app-local selection implementation in `files`, before the ratchet. */
+export function scanSelectionFiles(files) {
+  const findings = [];
+  for (const { label, code } of files) {
+    if (
+      !APP_TREE_PREFIXES.some((prefix) => label.startsWith(prefix)) ||
+      /\.(?:test|spec)\./u.test(label) ||
+      label.includes(`${path.sep}_shared${path.sep}`)
+    )
+      continue;
+    const body = maskStaticImports(code);
+    for (const verb of SELECTION_ENGINE_VERBS) {
+      // A declaration (`function f`, `const f =`) or a property/method bearing
+      // the verb's name. A CALL — `runSelectionBatch(keys, …)` — matches
+      // neither, which is exactly the adoption this gate wants to see.
+      const declaration = new RegExp(
+        `(?:function|const|let|var)\\s+${verb}\\b|\\b${verb}\\s*[:=]\\s*(?:async\\s+)?(?:function\\b|\\()`,
+        "gu"
+      );
+      for (const m of body.matchAll(declaration))
+        findings.push(
+          `${label}:${lineOf(code, m.index)}: declares its own \`${verb}\` — ` +
+            `${SELECTION_ENGINE_PATH} is the one selection engine; an app-local ` +
+            `range toggle or select-all is a second answer to what the member ` +
+            `just selected. Import the verb instead.`
+        );
+    }
+  }
+  return findings;
+}
+
+function checkSelection(_root, files) {
+  const findings = [];
+  const owner = files.find((file) => file.label === SELECTION_ENGINE_PATH);
+  // Anti-vacuity: forbidding an app-local copy only means something while the
+  // one shared implementation still exists and still exports every verb.
+  if (owner) {
+    for (const verb of SELECTION_ENGINE_VERBS) {
+      if (
+        !new RegExp(`export\\s+(?:async\\s+)?function\\s+${verb}\\b`, "u").test(
+          owner.code
+        )
+      )
+        findings.push(
+          `${SELECTION_ENGINE_PATH}: no longer exports \`${verb}\` — either the ` +
+            `engine lost a verb the apps depend on, or SELECTION_ENGINE_VERBS is stale`
+        );
+    }
+  } else {
+    findings.push(
+      `${SELECTION_ENGINE_PATH}: missing — the selection gate forbids app-local ` +
+        `copies of verbs that would then have no home`
+    );
+  }
+  const offenders = new Set();
+  for (const finding of scanSelectionFiles(files)) {
+    const ratcheted = [...SELECTION_RATCHET.keys()].find((label) =>
+      finding.startsWith(`${label}:`)
+    );
+    if (ratcheted) offenders.add(ratcheted);
+    else findings.push(finding);
+  }
+  for (const [label] of SELECTION_RATCHET) {
+    if (!offenders.has(label))
+      findings.push(
+        `${label}: no longer declares selection machinery — remove it from ` +
+          `SELECTION_RATCHET so the gate closes behind you`
+      );
+  }
+  return findings;
+}
+
+// ─── COMPONENT EXISTENCE ─────────────────────────────────────────────────────
+//
+// The kit already has the primitive. A raw `<dialog>`, a class-less `<button>`
+// or a style-less `<Pressable>` is a second one that will not move when the kit
+// does. This is a DEBT LEDGER, not a ban: the counts in
+// `scripts/component-existence-ledger.mjs` are what the tree carries today,
+// asserted as EQUAL so a new instance and an uncounted cleanup both fail.
+// Nothing may be added; wave 5 shrinks it.
+
+const COMPONENT_LEDGER_PATH = "scripts/component-existence-ledger.mjs";
+
+/** Repo-relative label with `/` separators, so ledger keys are platform-stable. */
+const posix = (label) => label.split(path.sep).join("/");
+
+/**
+ * The full text of the opening tag beginning at `start`, read across lines and
+ * ignoring `>` inside strings or JSX expression braces (`onClick={() => …}`),
+ * so an attribute three lines down still counts as being on the tag.
+ */
+function openingTagText(code, start) {
+  let braces = 0;
+  let quote = null;
+  for (let i = start; i < code.length; i++) {
+    const char = code[i];
+    if (quote) {
+      if (char === "\\") i++;
+      else if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === "`") quote = char;
+    else if (char === "{") braces++;
+    else if (char === "}") braces--;
+    else if (char === ">" && braces === 0) return code.slice(start, i + 1);
+  }
+  return code.slice(start);
+}
+
+/** Per-file count of `<tag` openings whose full opening tag lacks `attribute`. */
+export function countBareTags(code, tag, attribute) {
+  let count = 0;
+  for (const m of code.matchAll(new RegExp(`<${tag}[\\s>/]`, "gu"))) {
+    if (attribute && attribute.test(openingTagText(code, m.index))) continue;
+    count++;
+  }
+  return count;
+}
+
+const WEB_SURFACE_PREFIXES = [
+  "packages/client/src/",
+  "packages/blueprints/apps/",
+  "apps/web/src/",
+];
+
+/**
+ * THE KIT MODALS THEMSELVES. The ledger counts SECOND primitives — a raw
+ * `<dialog>` that will not move when the kit does — so the file that IS a kit
+ * modal is not debt, and ledgering it would be a line the burn-down could
+ * never remove. They are named here rather than budgeted, so an unnamed one
+ * still fails (#883 B9).
+ *
+ * THERE ARE TWO, ONE PER PROGRAM, AND THE WALL BETWEEN THEM IS DELIBERATE.
+ * Blueprint app sources are authored against the blueprints ambients and spell
+ * their sibling imports with `.ts` extensions; the client program does not
+ * enable `allowImportingTsExtensions` — which is why
+ * `apps/_shared/grant-transport.ts` takes no relative import at all and why
+ * `inline-app-module-stub.d.ts` exists. `KitModal.tsx` imports
+ * `./modal-kit.ts`, so the shell cannot compile it. What is genuinely one
+ * computation is shared and is NOT duplicated: `apps/_shared/modal-kit.ts` —
+ * the platform trap, the platform's own dismissal, and the return of focus —
+ * is an import-free leaf that BOTH wrappers call. Each entry is prop plumbing
+ * over that one law (#883 B9, wave 5).
+ */
+const KIT_MODAL_OWNERS = new Set([
+  "packages/blueprints/apps/_shared/KitModal.tsx",
+  "packages/client/src/react/ui/ShellModal.tsx",
+]);
+
+/** One ledger lane: how to count it, where, and what the kit offers instead. */
+const COMPONENT_LEDGERS = [
+  {
+    name: "raw <dialog>",
+    ledger: RAW_DIALOG_LEDGER,
+    scope: (label) =>
+      !KIT_MODAL_OWNERS.has(label) &&
+      WEB_SURFACE_PREFIXES.some((p) => label.startsWith(p)),
+    count: (code) => countBareTags(code, "dialog", null),
+    fix: "a kit modal owns focus trapping, the backdrop and the return of focus",
+  },
+  {
+    name: "class-less <button>",
+    ledger: UNSTYLED_BUTTON_LEDGER,
+    scope: (label) => WEB_SURFACE_PREFIXES.some((p) => label.startsWith(p)),
+    count: (code) =>
+      countBareTags(code, "button", /\b(?:className|class)\s*=/u),
+    fix: "kit Button already carries the target size, the token styling and the focus ring",
+  },
+  {
+    name: "style-less <Pressable>",
+    ledger: UNSTYLED_PRESSABLE_LEDGER,
+    scope: (label) => label.startsWith("apps/mobile/src/"),
+    count: (code) => countBareTags(code, "Pressable", /\bstyle\s*=/u),
+    fix: "apps/mobile/src/kit/components/Tappable.tsx already carries the role, the hit slop that buys the touch floor, the press step and the disabled wiring",
+  },
+];
+
+export function scanComponentExistence(files, lanes = COMPONENT_LEDGERS) {
+  const findings = [];
+  for (const { name, ledger, scope, count, fix } of lanes) {
+    const seen = new Set();
+    for (const { label, code } of files) {
+      const key = posix(label);
+      if (!scope(key) || /\.(?:test|spec)\./u.test(key)) continue;
+      const actual = count(code);
+      const budget = ledger[key] ?? 0;
+      if (actual === budget) {
+        if (actual > 0) seen.add(key);
+        continue;
+      }
+      if (actual > budget) {
+        seen.add(key);
+        findings.push(
+          `${key}: ${actual} ${name} where the ledger allows ${budget} — ${fix}. ` +
+            `${COMPONENT_LEDGER_PATH} is tighten-only: raising a count is not the fix.`
+        );
+        continue;
+      }
+      seen.add(key);
+      findings.push(
+        `${key}: ${actual} ${name} but the ledger still claims ${budget} — ` +
+          `lower the count in ${COMPONENT_LEDGER_PATH} (or drop the entry) in this PR`
+      );
+    }
+    for (const key of Object.keys(ledger)) {
+      if (!seen.has(key))
+        findings.push(
+          `${key}: listed in the ${name} ledger but carries none (or is gone) — ` +
+            `remove the entry from ${COMPONENT_LEDGER_PATH}`
+        );
+    }
+  }
+  return findings;
+}
+
+// ─── ENGINE K — the action kit ───────────────────────────────────────────────
+//
+// `apps/_shared/action-kit.ts` owns what a bundled action DOES: hand one typed
+// command to `ctx.vault`, pass the outcome back verbatim, and turn a thrown
+// refusal into `{status: "denied", reason, code}` at HTTP 200. Before #883 the
+// third move was copied byte-for-byte into 128 of the 131 handlers and
+// paraphrased in three more — so "every app answers a denial the same way" was
+// true only for as long as nobody wrote a 132nd handler by copying the wrong
+// one. This lane is what makes it structural.
+//
+// SCOPED TO THE BUNDLED WEB HANDLERS, deliberately. `automations/**` handlers
+// are cloned into the member's own `code/` store and edited there, so a rule
+// that bound them would be a rule about the member's code, not ours.
+//
+// THREE FINDINGS, ONE RULE. A handler must IMPORT the kit; it must not carry a
+// `catch` statement of its own (`.catch(…)` on a best-effort promise is not
+// one, and Notes' send-to-tasks needs it); and it must not spell the string
+// `"denied"`, which is the taxonomy's own word.
+
+const ACTION_KIT_PATH = path.join(
+  "packages",
+  "blueprints",
+  "apps",
+  "_shared",
+  "action-kit.ts"
+);
+const ACTION_KIT_VERBS = [
+  "ACTION_PURPOSE",
+  "actionInput",
+  "deniedResult",
+  "runVaultAction",
+];
+const ACTION_KIT_SPECIFIER = /_shared\/action-kit(?:\.tsx?)?["']/u;
+const BLUEPRINT_ACTION =
+  /^packages[\\/]blueprints[\\/]apps[\\/][^\\/]+[\\/]actions[\\/][^\\/]+\.ts$/u;
+
+/** Ratchet — may shrink, never grow. Each entry states WHY it is still here.
+ *  Seeded EMPTY: every one of the 131 handlers is on the kit. */
+const ACTION_KIT_RATCHET = new Map();
+
+/** Every action handler that has not adopted the kit, before the ratchet. */
+export function scanActionKitFiles(files) {
+  const findings = [];
+  for (const { label, code } of files) {
+    if (!BLUEPRINT_ACTION.test(label) || /\.(?:test|spec)\./u.test(label))
+      continue;
+    if (!ACTION_KIT_SPECIFIER.test(code))
+      findings.push(
+        `${label}:1: does not import ${ACTION_KIT_PATH} — every bundled action ` +
+          `dispatches through \`runVaultAction\`, which is the one place a thrown ` +
+          `refusal becomes an outcome the surface can narrate`
+      );
+    // `}` first, so `.catch(() => undefined)` on a best-effort promise passes.
+    const statement = code.match(/\}\s*catch\s*\(/u);
+    if (statement?.index !== undefined)
+      findings.push(
+        `${label}:${lineOf(code, statement.index)}: catches its own vault error — ` +
+          `the error taxonomy has ONE implementation (${ACTION_KIT_PATH}); a ` +
+          `second catch is a second answer to "what does a denial look like"`
+      );
+    const denial = code.match(/"denied"/u);
+    if (denial?.index !== undefined)
+      findings.push(
+        `${label}:${lineOf(code, denial.index)}: spells the outcome \`"denied"\` ` +
+          `itself — call \`deniedResult(reason)\` so every refusal, reached here ` +
+          `or thrown by the vault, lands in the same shape`
+      );
+  }
+  return findings;
+}
+
+function checkActionKit(_root, files) {
+  const findings = [];
+  const owner = files.find((file) => file.label === ACTION_KIT_PATH);
+  // Anti-vacuity: forbidding a hand-rolled taxonomy means nothing once the one
+  // shared implementation stops exporting the verbs the handlers call.
+  if (owner) {
+    for (const verb of ACTION_KIT_VERBS) {
+      if (
+        !new RegExp(
+          `export\\s+(?:async\\s+)?(?:function|const)\\s+${verb}\\b`,
+          "u"
+        ).test(owner.code)
+      )
+        findings.push(
+          `${ACTION_KIT_PATH}: no longer exports \`${verb}\` — either the kit ` +
+            `lost a verb the handlers depend on, or ACTION_KIT_VERBS is stale`
+        );
+    }
+  } else {
+    findings.push(
+      `${ACTION_KIT_PATH}: missing — the action-kit gate forbids hand-rolled ` +
+        `error taxonomies that would then have no home`
+    );
+  }
+  const adopters = files.filter(
+    (file) => BLUEPRINT_ACTION.test(file.label) && !/\.test\./u.test(file.label)
+  );
+  if (adopters.length < 100)
+    findings.push(
+      `only ${adopters.length} bundled action handlers found — the action-kit ` +
+        `lane's path pattern drifted from the layout`
+    );
+  const offenders = new Set();
+  for (const finding of scanActionKitFiles(files)) {
+    const ratcheted = [...ACTION_KIT_RATCHET.keys()].find((label) =>
+      finding.startsWith(`${label}:`)
+    );
+    if (ratcheted) offenders.add(ratcheted);
+    else findings.push(finding);
+  }
+  for (const [label, reason] of ACTION_KIT_RATCHET) {
+    if (!offenders.has(label))
+      findings.push(
+        `${label}: ratcheted off the action kit (${reason}) but no longer is — ` +
+          `remove it from ACTION_KIT_RATCHET so the gate closes behind you`
+      );
+  }
+  return findings;
+}
+
+// ─── ENGINE V — concept-scheme vocabulary ────────────────────────────────────
+//
+// A blueprint cannot ask the vault for a scheme BY NAME: it reads
+// `core.concept_scheme` and matches the URI. So every surface that wanted a
+// star, a folder, a list or a free-form label carried its own copy of the
+// string — twenty declarations across seven files for seven schemes. A typo in
+// one is not a crash, it is a silently empty shelf, which is the worst failure
+// a projection has. `apps/_shared/concept-scheme-kit.ts` is the one owner now.
+//
+// TWO FINDINGS. (a) any of the kit's own URIs spelled outside it — the copies
+// that existed. (b) any `https://centraid.dev/schemes/…` literal outside it —
+// the copy that has not been written yet, of a scheme the kit does not name.
+//
+// SCOPED TO THE BLUEPRINT TREE. `apps/mobile/src/apps/**` carries its own
+// copies of three of these URIs and cannot import a `.ts` source module from
+// this package under every one of its build modes; folding the native seat in
+// is its own change, not a string swap.
+//
+// TEST FILES ARE IN SCOPE — a stale copy in a fixture is how a suite goes on
+// passing against a scheme the vault no longer mints. The kit's OWN co-located
+// test is the one exemption: its literals are the mirror assertion against the
+// vault commands, which is the whole reason the kit may carry them at all.
+
+const BUNDLED_APPS_DIR_NAME = path.join("packages", "blueprints", "apps");
+
+const SCHEME_KIT_PATH = path.join(
+  "packages",
+  "blueprints",
+  "apps",
+  "_shared",
+  "concept-scheme-kit.ts"
+);
+const SCHEME_KIT_TEST_PATH = path.join(
+  "packages",
+  "blueprints",
+  "apps",
+  "_shared",
+  "concept-scheme-kit.test.ts"
+);
+const BLUEPRINT_APPS_PREFIX = `${path.join("packages", "blueprints", "apps")}${path.sep}`;
+/** `export const <NAME>_SCHEME_URI = "…"` in the kit — the vocabulary itself. */
+const SCHEME_URI_DECLARATION = /_SCHEME_URI\s*=\s*(?<uri>"[^"]+")/gu;
+const SCHEME_URI_SHAPE =
+  /["'](?<uri>https:\/\/centraid\.dev\/schemes\/[^"']+)["']/gu;
+
+/**
+ * RAW text, not `surfaceFiles`' comment-blanked copy. `blankComments` is
+ * string-unaware, so the `//` inside `"https://centraid.dev/schemes/flags"`
+ * reads as a line comment and blanks the rest of the line — which would make
+ * this lane pass over the exact literal it exists to find. The other engines
+ * read attribute values and identifiers, where blanking is what they want.
+ */
+function blueprintAppFiles(root) {
+  const dir = path.join(root, BUNDLED_APPS_DIR_NAME);
+  return walk(dir).map((absolute) => ({
+    label: path.relative(root, absolute),
+    code: readFileSync(absolute, "utf8"),
+  }));
+}
+
+/** Ratchet — may shrink, never grow. Seeded EMPTY: no copy is left. */
+const SCHEME_URI_RATCHET = new Map();
+
+/** Every scheme URI spelled outside the kit, before the ratchet. */
+export function scanConceptSchemeFiles(files, kitLabel = SCHEME_KIT_PATH) {
+  const kit = files.find((file) => file.label === kitLabel);
+  const owned = kit
+    ? [...kit.code.matchAll(SCHEME_URI_DECLARATION)].map((m) =>
+        m.groups.uri.slice(1, -1)
+      )
+    : [];
+  const findings = [];
+  for (const { label, code } of files) {
+    if (
+      label === kitLabel ||
+      label === SCHEME_KIT_TEST_PATH ||
+      !label.startsWith(BLUEPRINT_APPS_PREFIX)
+    )
+      continue;
+    const reported = new Set();
+    for (const uri of owned) {
+      const index = code.indexOf(`"${uri}"`);
+      if (index === -1) continue;
+      reported.add(uri);
+      findings.push(
+        `${label}:${lineOf(code, index)}: spells the concept-scheme URI ` +
+          `\`${uri}\` — ${kitLabel} is the one owner; import the constant so a ` +
+          `renamed scheme is one edit rather than an empty shelf`
+      );
+    }
+    for (const m of code.matchAll(SCHEME_URI_SHAPE)) {
+      if (reported.has(m.groups.uri)) continue;
+      findings.push(
+        `${label}:${lineOf(code, m.index)}: names the concept scheme ` +
+          `\`${m.groups.uri}\`, which ${kitLabel} does not carry — add it there and ` +
+          `import it, rather than starting a second copy of the vocabulary`
+      );
+    }
+  }
+  return findings;
+}
+
+function checkConceptSchemes(root) {
+  const files = blueprintAppFiles(root);
+  const findings = [];
+  const kit = files.find((file) => file.label === SCHEME_KIT_PATH);
+  // Anti-vacuity: the whole lane is anchored on the kit still naming schemes.
+  const owned = kit ? [...kit.code.matchAll(SCHEME_URI_DECLARATION)] : [];
+  if (owned.length < 5)
+    findings.push(
+      `${SCHEME_KIT_PATH}: names ${owned.length} concept schemes — the ` +
+        `vocabulary gate is anchored on this file and has gone vacuous`
+    );
+  const offenders = new Set();
+  for (const finding of scanConceptSchemeFiles(files)) {
+    const ratcheted = [...SCHEME_URI_RATCHET.keys()].find((label) =>
+      finding.startsWith(`${label}:`)
+    );
+    if (ratcheted) offenders.add(ratcheted);
+    else findings.push(finding);
+  }
+  for (const [label, reason] of SCHEME_URI_RATCHET) {
+    if (!offenders.has(label))
+      findings.push(
+        `${label}: ratcheted as a scheme-URI copy (${reason}) but no longer is — ` +
+          `remove it from SCHEME_URI_RATCHET so the gate closes behind you`
+      );
+  }
+  return findings;
+}
+
+// ─── ENGINE W — declared writes ──────────────────────────────────────────────
+//
+// `app.json`'s `writes:` is the action's claim about which vault tables its
+// command touches, and every one of the 131 was an empty array — a claim of
+// nothing, which is neither true nor checkable. #883 filled them from the
+// commands themselves; this lane keeps them honest in the two ways a text file
+// goes wrong: a name that is not a vault entity at all (a typo, or a table
+// dropped from the ontology — `tally.expense_receipt` and the `home.*` /
+// `business.*` domains went this wave), and an action that quietly goes back
+// to declaring nothing.
+//
+// NOT CHECKED HERE: declared ⊇ observed. That comparison needs the running
+// vault, so it belongs to a server-side gate over receipts, not to a text
+// scanner. What this lane guarantees that gate is a well-formed left-hand side.
+//
+// The vault's own registry is the vocabulary; it is read by source scan for the
+// same reason `placement-registry.test.ts` reads vault's `ShareableItemType`
+// that way — a blueprint may not import vault, and the alternative is a third
+// copy of the table list.
+
+const VAULT_TABLES_PATH = path.join(
+  "packages",
+  "vault",
+  "src",
+  "schema",
+  "entity-catalog.ts"
+);
+/**
+ * An action whose command writes NO vault row, with the reason. Ledger, not
+ * exemption: an entry whose action starts writing something fails, and so does
+ * an empty `writes:` that is not listed.
+ */
+const WRITES_NONE_LEDGER = new Map([
+  [
+    "locker/export",
+    "`locker.export` unseals and hands back a payload; the only durable trace " +
+      "it leaves is the reveal receipt, which is the journal's row, not a vault one",
+  ],
+]);
+
+/**
+ * Every `schema.table` in vault's canonical registry, by source scan.
+ *
+ * READS THE DECLARATIONS, NOT THE DERIVED VIEWS. `VAULT_TABLES` and
+ * `JOURNAL_TABLES` are `tableNamesOf(VAULT_ENTITIES)` since #883's O-label
+ * rung — the registry grew a per-entity label and the bare-name views became
+ * a projection of it — so a scan looking for `schema: ["a", "b"]` literals
+ * found nothing and this whole lane went vacuous behind its own anti-vacuity
+ * guard. The entity registries are the one place a table is added or removed,
+ * which is what a text scanner has to read.
+ *
+ * The shape is `schema: { table: { label, blurb? }, … }`, so the walk is one
+ * brace level deeper than the old one: schema keys at depth 1, table keys at
+ * depth 2, and nothing below that (a label is a string, not a nested object).
+ */
+export function vaultEntityNames(root = ROOT) {
+  const source = blankComments(
+    readFileSync(path.join(root, VAULT_TABLES_PATH), "utf8")
+  );
+  const names = new Set();
+  for (const constant of ["VAULT_ENTITIES", "JOURNAL_ENTITIES"]) {
+    const start = source.indexOf(`export const ${constant}`);
+    if (start === -1) continue;
+    const open = source.indexOf("{", start);
+    let depth = 0;
+    let schema = null;
+    for (let i = open; i < source.length; i++) {
+      const char = source[i];
+      if (char === '"' || char === "'" || char === "`") {
+        // A label's own braces would otherwise be counted as structure.
+        const quote = char;
+        for (i++; i < source.length; i++) {
+          if (source[i] === "\\") i++;
+          else if (source[i] === quote) break;
+        }
+        continue;
+      }
+      if (char === "{") {
+        depth++;
+        continue;
+      }
+      if (char === "}") {
+        if (--depth === 0) break;
+        if (depth === 1) schema = null;
+        continue;
+      }
+      // A key sits immediately before its `:` at the depth it belongs to.
+      const key = /^(?<name>[A-Za-z_][\w]*)\s*:/u.exec(source.slice(i));
+      if (!key) continue;
+      if (depth === 1) schema = key.groups.name;
+      else if (depth === 2 && schema) names.add(`${schema}.${key.groups.name}`);
+      i += key[0].length - 1;
+    }
+  }
+  return names;
+}
+
+function checkDeclaredWrites(root) {
+  const findings = [];
+  const entities = vaultEntityNames(root);
+  // Anti-vacuity: an empty or tiny vocabulary would pass every declaration.
+  if (entities.size < 100 || !entities.has("core.content_item"))
+    return [
+      `${VAULT_TABLES_PATH}: read ${entities.size} entity names — the declared-writes ` +
+        `gate is anchored on this registry and has gone vacuous`,
+    ];
+  const appsDir = path.join(root, BUNDLED_APPS_DIR_NAME);
+  const seen = new Set();
+  const apps = existsSync(appsDir)
+    ? readdirSync(appsDir).filter(
+        (name) =>
+          !name.startsWith("_") &&
+          existsSync(path.join(appsDir, name, "app.json"))
+      )
+    : [];
+  if (apps.length < 8)
+    findings.push(
+      `${BUNDLED_APPS_DIR_NAME}: found ${apps.length} bundled manifests — the ` +
+        `declared-writes lane's walk drifted from the layout`
+    );
+  for (const app of apps.toSorted()) {
+    const rel = path.join(BUNDLED_APPS_DIR_NAME, app, "app.json");
+    const manifest = JSON.parse(readFileSync(path.join(root, rel), "utf8"));
+    for (const action of manifest.actions ?? []) {
+      const key = `${app}/${action.name}`;
+      const writes = action.writes;
+      if (!Array.isArray(writes)) {
+        findings.push(
+          `${rel}: action \`${action.name}\` declares no \`writes\` array — ` +
+            `every action names the vault tables its command writes`
+        );
+        continue;
+      }
+      for (const table of writes) {
+        if (entities.has(table)) continue;
+        findings.push(
+          `${rel}: action \`${action.name}\` declares \`${table}\`, which is not ` +
+            `a vault entity (${VAULT_TABLES_PATH}) — a dropped table or a typo ` +
+            `reads as a write that can never happen`
+        );
+      }
+      if (writes.length > 0) continue;
+      seen.add(key);
+      const reason = WRITES_NONE_LEDGER.get(key);
+      if (!reason)
+        findings.push(
+          `${rel}: action \`${action.name}\` declares \`writes: []\` — trace the ` +
+            `command it dispatches and name the tables, or add it to ` +
+            `WRITES_NONE_LEDGER with the reason it writes nothing`
+        );
+    }
+  }
+  for (const [key, reason] of WRITES_NONE_LEDGER) {
+    if (!seen.has(key))
+      findings.push(
+        `${key}: ledgered as writing nothing (${reason}) but it now declares ` +
+          `writes, or the action is gone — drop the WRITES_NONE_LEDGER entry`
+      );
+  }
+  return findings;
+}
+
 // ─── driver ──────────────────────────────────────────────────────────────────
 
 /** Every engine's findings, keyed by engine. Exported for the test. */
@@ -613,6 +1446,12 @@ export function scanEngineConformance(root = ROOT) {
     "C consent": checkConsent(root, files),
     "D triage": checkTriage(root, files),
     "H pending overlay": checkPendingOverlay(root, files),
+    "S search status": checkSearchStatus(root, files),
+    "E selection": checkSelection(root, files),
+    "K action kit": checkActionKit(root, files),
+    "V concept schemes": checkConceptSchemes(root),
+    "W declared writes": checkDeclaredWrites(root),
+    "component existence": scanComponentExistence(files),
     "refusal grammar": checkRefusalGrammar(root),
   };
 }
@@ -630,8 +1469,10 @@ function main() {
     return;
   }
   console.log(
-    "ok   engine conformance — placement, custody, consent, triage and pending overlay each " +
-      "have exactly one door, and the engine surfaces explain every refusal"
+    "ok   engine conformance — placement, custody, consent, triage, pending overlay, " +
+      "search status, selection, the action kit and the concept-scheme vocabulary each " +
+      "have exactly one door, every bundled action names the vault tables it writes, the " +
+      "component-existence ledger has not grown, and the engine surfaces explain every refusal"
   );
 }
 

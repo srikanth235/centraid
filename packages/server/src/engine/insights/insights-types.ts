@@ -1,16 +1,9 @@
-/*
- * Insights payload types for InsightsStore (#514).
- */
-
 export interface InsightsKpis {
-  /** input + output + cache read + cache write over the window. */
+  /** input + output + cache read + cache write. */
   totalTokens: number;
-  /** Estimated handoff prompt tokens, a subset marker separate from usage. */
+  /** Handoff prompt tokens — a subset marker, separate from usage. */
   hydrationTokens: number;
-  /**
-   * Sum of known costs — a floor when unpricedRuns > 0.
-   * harnessReportedCostUsd + estimatedCostUsd (+ digest totals).
-   */
+  /** Sum of known costs — a floor when unpricedRuns > 0. */
   totalCostUsd: number;
   /** USD from items with cost_source = 'harness' (live). */
   harnessReportedCostUsd: number;
@@ -21,13 +14,18 @@ export interface InsightsKpis {
   generations: number;
   retries: number;
   failedRuns: number;
-  /** Spend on failed runs (floor of known failed cost). */
+  /** Floor of known failed spend. */
   failedCostUsd: number;
   appsTouched: number;
   /** Finished LIVE runs with total_cost_usd IS NULL. */
   unpricedRuns: number;
   /** Finished LIVE runs with zero/NULL token totals. */
   unreportedRuns: number;
+  /**
+   * p50 wall clock of finished LIVE runs, in ms. ABSENT when nothing
+   * finished — unknown, not zero. Digests keep no per-run timings.
+   */
+  medianRunMs?: number;
 }
 
 export interface InsightsDailyPoint {
@@ -36,6 +34,10 @@ export interface InsightsDailyPoint {
   tokens: number;
   costUsd: number;
   runs: number;
+  /** Same predicate as `InsightsKpis`. */
+  failedRuns: number;
+  /** A FLOOR: digests carry a failure count but no failure-cost split. */
+  failedCostUsd: number;
 }
 
 export interface InsightsSourceRow {
@@ -65,7 +67,7 @@ export interface InsightsModelRow {
 }
 
 export interface InsightsEffortRow {
-  /** ACP semantic thought_level confirmed by the harness. */
+  /** ACP thought_level. */
   effort: string;
   runs: number;
   tokens: number;
@@ -81,7 +83,7 @@ export interface InsightsActivityRow {
   ok: boolean;
   startedAt: number;
   tokens: number;
-  /** Estimated canonical-ledger prompt tokens injected for this run. */
+  /** Canonical-ledger prompt tokens injected for this run. */
   hydrationTokens: number;
   costUsd: number;
   harness?: string;

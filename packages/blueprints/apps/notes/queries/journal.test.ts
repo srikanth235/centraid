@@ -5,6 +5,7 @@
 // instead of re-narrowing in memory fails here.
 import { describe, expect, test } from "vitest";
 
+import { FLAGS_SCHEME_URI } from "../../_shared/concept-scheme-kit.ts";
 import {
   JOURNAL_ENTRY_NOTATION,
   JOURNAL_SCHEME_URI,
@@ -44,7 +45,7 @@ function vaultRows() {
   return {
     "core.concept_scheme": [
       { scheme_id: "scheme-journal", uri: JOURNAL_SCHEME_URI },
-      { scheme_id: "scheme-other", uri: "https://centraid.dev/schemes/flags" },
+      { scheme_id: "scheme-other", uri: FLAGS_SCHEME_URI },
     ],
     "core.concept": [
       {

@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit — the app's orchestration is one React tree by design (#505). The v4 frame rewrite pulled the shelf model (shelves.ts), the filters (filters.ts), the copy (view-copy.ts), the member preferences (member-prefs.ts) and the frame contribution (frame.tsx) out of it; what is left is the wiring those five modules are wired BY, and splitting it further would split one closure across files.
+// governance: allow-repo-hygiene file-size-limit — the app's orchestration is one React tree by design (#505); splitting it further would split one closure across files.
 // Photos — query-free React tree (#505), a route inside the frame (v4 §3).
 // Multi-scope (#599, §H): N scopes as one timeline; albums/places/trash stay
 // own-scope (ids collide). Timeline merges, then filters by `vaultsOn`.
@@ -16,6 +16,8 @@ import { debounce, observeWidth } from "@centraid/design/elements";
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
 import { Skeleton } from "../_shared/LoadingSkeleton.tsx";
+import { MoreSheet } from "../_shared/MoreSheet.tsx";
+import type { MoreSheetRow } from "../_shared/MoreSheet.tsx";
 import { navSeat } from "../_shared/nav-seat.ts";
 import { NavRail } from "../_shared/NavRail.tsx";
 import {
@@ -23,6 +25,7 @@ import {
   ownScopeId,
   photoWriteTarget,
 } from "../_shared/scope-kit.ts";
+import { ShelfStrip } from "../_shared/ShelfStrip.tsx";
 import type { WriteTarget } from "../_shared/write-target.ts";
 import type { InlineScope, InlineAppProps } from "../inline-types.ts";
 import {
@@ -42,7 +45,6 @@ import type { ImportResult } from "./components/Import.tsx";
 import { InlineInput } from "./components/InlineInput.tsx";
 import { LoadingGrid } from "./components/LoadingGrid.tsx";
 import { MemoriesStrip } from "./components/Memories.tsx";
-import { MoreSheet } from "./components/MoreSheet.tsx";
 import { OfflineBanner } from "./components/OfflineBanner.tsx";
 import { PeopleShelf } from "./components/People.tsx";
 import { PermissionScreen } from "./components/Permission.tsx";
@@ -52,7 +54,6 @@ import {
 } from "./components/Places.tsx";
 import type { placeSections } from "./components/Places.tsx";
 import { SearchShelf } from "./components/SearchShelf.tsx";
-import { ShelfStrip } from "./components/ShelfStrip.tsx";
 import { StorageView, storageFacts } from "./components/Storage.tsx";
 import { MEMORIES_MAX_RUNG, TimelineBody } from "./components/Timeline.tsx";
 import { ToolbarView } from "./components/Toolbar.tsx";
@@ -72,6 +73,7 @@ import {
 } from "./library-reads.ts";
 import { createLibraryStore } from "./library-store.ts";
 import { createLightbox, viewerKeyAction } from "./lightbox.tsx";
+import { stopMediaObservation } from "./media-observer.ts";
 import { createMemberPrefs, stepTileSize } from "./member-prefs.ts";
 import { buildMemories, enrichAlbums } from "./memories.ts";
 import { photosNavRail, railDrawnOn } from "./nav-rail.ts";
@@ -86,6 +88,7 @@ import { createSelection } from "./selection.tsx";
 import {
   allowsSelection,
   countKey,
+  MORE_DESTINATIONS,
   PEOPLE,
   personIdFrom,
   personShelf,
@@ -93,6 +96,7 @@ import {
   SEARCH,
   shelfFromSegment,
   shelfKindFor,
+  SHELVES,
   showsTileSize,
   STORAGE,
 } from "./shelves.ts";
@@ -196,7 +200,6 @@ export function Root({
       render: (node: ReactNode) => setSlot(key, node),
     });
     const shelfStripRoot = mk("shelfStrip");
-    // Its own slot: the strip stands above the scroll pane, the rail beside it (v16).
     const navRailRoot = mk("navRail");
     const toolbarRoot = mk("toolbar");
     const bannerRoot = mk("banner");
@@ -220,6 +223,8 @@ export function Root({
     let readFailed = false;
     let offlineShown = false;
     let searchQuery = "";
+    /** The uncontrolled search field; `Clear` is the only thing that writes it. */
+    let searchInput: HTMLInputElement | null = null;
     let searchResults: Asset[] | null = null;
     let searchStatus: SearchStatus = "resting";
     /** Per-scope miss, named beside hits other scopes still have (#726 D10/D11). */
@@ -442,7 +447,6 @@ export function Root({
       return ownAssets.filter((a) => a.album_ids?.includes(shelf!));
     }
 
-    /** Own-scope, for the same reason albums are. */
     function sections(): ReturnType<typeof placeSections> {
       // The shelf as DRAWN (#816): search and lightbox walk the same list.
       return placeSectionsWithNoLocation(ownAssets);
@@ -607,7 +611,6 @@ export function Root({
               (duplicates.count() ?? 0) > 0
             ? {
                 ...contribution,
-                // Offered only after `count()` answers positively.
                 actions: (
                   <>
                     {contribution.actions}
@@ -733,7 +736,8 @@ export function Root({
       }
       shelfStripRoot.render(
         <ShelfStrip
-          shelf={shelf}
+          shelves={SHELVES}
+          current={shelf}
           narrow={narrowRef.current}
           onSelect={navigateTo}
         />
@@ -824,7 +828,6 @@ export function Root({
           );
           return;
         }
-        // Lazy: the roster walks every confirmed face region.
         void people.ensureLoaded();
         const roster = people.list();
         const proposalRoster = people.proposalList() ?? [];
@@ -1064,7 +1067,6 @@ export function Root({
     ): void {
       const phone = narrowRef.current;
       const rung = prefs.read().tileSize;
-      // Named for jsx-handler-names, exactly as `timeline()` does.
       const handleToggleSelect = selection.toggle;
       const handleEnterSelect = selection.enter;
       mainRoot.render(
@@ -1118,6 +1120,9 @@ export function Root({
           onRetry={runSearch}
           onOpenGroup={navigateTo}
           reachFacts={searchReachFacts}
+          inputRef={(el) => {
+            searchInput = el;
+          }}
         >
           {timeline(hits, {
             truncated: false,
@@ -1150,7 +1155,10 @@ export function Root({
       // `searching` is DETERMINATE, never a spinner (§14): local matches are
       // on screen, counted by the shelf.
       searchStatus = searchQuery === "" ? "resting" : "searching";
-      renderMain();
+      // NO SYNCHRONOUS `renderMain()` HERE (#883): this shelf's children are
+      // the whole justified timeline, so a render per keystroke rebuilds the
+      // grid once per letter. The field is uncontrolled, so the typed
+      // character is already on screen.
       debouncedLocalRender();
       runSearch();
     }
@@ -1162,8 +1170,28 @@ export function Root({
         searchResults = null;
       }
       searchReachFacts = [];
+      // The field is uncontrolled, so the DOM holds the query and only this
+      // can empty it.
+      if (searchInput) searchInput.value = "";
       renderMain();
       contributeAppBar();
+    }
+
+    /** Photos' own rows for the ONE shared sheet (#883 B9): the destinations
+     *  the band could not seat, each with its count where there is one. */
+    function moreSheetRows(): readonly MoreSheetRow[] {
+      const counts = shelfCounts();
+      return MORE_DESTINATIONS.map((destination) => {
+        const count =
+          destination.id === null ? undefined : counts.get(destination.id);
+        return {
+          key: destination.segment,
+          label: destination.label,
+          ...(count === undefined ? {} : { meta: String(count) }),
+          ...(destination.id === shelf ? { current: true } : {}),
+          select: () => navigateTo(destination.id),
+        };
+      });
     }
 
     // Band overflow sheet (§3.1): dismisses on Esc/Close/navigating — never by itself.
@@ -1171,9 +1199,8 @@ export function Root({
       moreSheetRoot.render(
         moreOpen ? (
           <MoreSheet
-            shelf={shelf}
-            counts={shelfCounts()}
-            onSelect={navigateTo}
+            label="More in Photos"
+            rows={moreSheetRows()}
             onClose={closeMore}
           />
         ) : null
@@ -1223,7 +1250,6 @@ export function Root({
       isNarrow: () => narrowRef.current,
     });
 
-    // Own-scope and lazy, like the duplicate clusters.
     const people = createPeople({
       onData: () => {
         if (disposed) return;
@@ -1240,7 +1266,6 @@ export function Root({
       },
     });
 
-    // Lazy and multi-scope, like the People roster.
     const custody = createCustody({
       onData: () => {
         if (disposed) return;
@@ -1277,7 +1302,9 @@ export function Root({
       refresh,
     });
 
-    wireUpload({
+    // Hold the disposer and unwind it below, or the closed app stays reachable
+    // through its `window` listeners (#883).
+    const stopUpload = wireUpload({
       uploadFiles,
       isAlbumSelected: () => Boolean(currentAlbum()),
       openPicker,
@@ -1291,8 +1318,10 @@ export function Root({
       input.value = "";
       await uploadFiles(files);
     };
-    $("emptyCamera").addEventListener("click", onCameraClick);
-    $("cameraInput").addEventListener("change", onCameraChange);
+    const emptyCamera = $("emptyCamera");
+    const cameraInput = $("cameraInput");
+    emptyCamera.addEventListener("click", onCameraClick);
+    cameraInput.addEventListener("change", onCameraChange);
 
     const onKeydown = (e: globalThis.KeyboardEvent): void => {
       if (e.key === "Escape" && moreOpen) {
@@ -1395,6 +1424,12 @@ export function Root({
       window.removeEventListener("keydown", onKeydown);
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("resize", measurePane);
+      emptyCamera.removeEventListener("click", onCameraClick);
+      cameraInput.removeEventListener("change", onCameraChange);
+      stopUpload();
+      // The lookahead's singleton observers hold every staged `<img>`; a close
+      // that leaves them running keeps the whole detached grid reachable.
+      stopMediaObservation();
       selection.dispose();
       stopChange?.();
       stopWidth();

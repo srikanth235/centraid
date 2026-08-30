@@ -68,8 +68,7 @@ export const SPLIT_METHOD_SCHEMA = {
   enum: [...SPLIT_METHODS],
 };
 
-/** Free-form: each division parameterises differently. Stored verbatim under
- *  a `json_valid` CHECK and never read back as arithmetic. */
+/** Stored verbatim under a `json_valid` CHECK, never read as arithmetic. */
 export const SPLIT_PARAMS_SCHEMA = { type: "object" };
 
 export const LINE_ITEM_SCHEMA = {
@@ -97,9 +96,8 @@ export function tallyOwnerPartyId(ctx: HandlerCtx): string {
   return owner.owner_party_id;
 }
 
-/** In a group, the group's circle (#310); group-less, the friend roster —
- *  owner plus enrolled `tally_friend` — so a 1:1 cannot mint a participant
- *  nobody added. */
+/** In a group, the group's circle (#310); group-less, the friend roster, so a
+ *  1:1 cannot mint a participant nobody added. */
 export function participantScope(
   ctx: HandlerCtx,
   groupId: string | null
@@ -190,6 +188,16 @@ export function resolvePayers(
   return { payers: resolved, principal: paidBy ?? largest.party_id };
 }
 
+/**
+ * The expense's receipt: the `role='receipt'` attachment (#883). Deterministic
+ * on the id, because nothing stops a member attaching two receipt photos.
+ */
+export const RECEIPT_ATTACHMENT_SQL = `SELECT a.attachment_id
+       FROM core_attachment a
+      WHERE a.target_type = 'tally.expense' AND a.target_id = e.expense_id
+        AND a.role = 'receipt'
+      ORDER BY a.attachment_id LIMIT 1`;
+
 export function writePayers(
   ctx: HandlerCtx,
   expenseId: string,
@@ -241,9 +249,8 @@ export function writeSplits(
     );
 }
 
-/** Replaces the whole line set. Two totals are re-checked — lines sum to the
- *  expense, each line's allocations sum to that line — because either wrong
- *  makes the reconciliation a lie. */
+/** Replaces the whole line set. Both totals are re-checked — lines sum to the
+ *  expense, allocations sum to their line — or the reconciliation is a lie. */
 export function writeLineItems(
   ctx: HandlerCtx,
   expenseId: string,

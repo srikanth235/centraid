@@ -23,6 +23,7 @@ import {
   SHOW_MORE,
 } from "../view-copy.ts";
 import { ItemRow } from "./Rows.tsx";
+import { WindowedRows } from "./Windowed.tsx";
 
 import styles from "./Rows.module.css";
 
@@ -100,10 +101,13 @@ export function LockerList(props: LockerListProps): ReactNode {
 
   return (
     <div className={styles.sections}>
-      <div className={styles.section}>
-        {props.rows.map((row) => (
+      {/* Windowed (#883 C4): the ask is capped at 2,000, so the screen costs a
+          viewport rather than the whole window. */}
+      <WindowedRows className={styles.list} rows={props.rows}>
+        {(row, position) => (
           <ItemRow
             key={row.item_id}
+            position={position}
             row={row}
             onOpen={props.onOpen}
             {...(row.subtitle && row.type === "login"
@@ -115,8 +119,8 @@ export function LockerList(props: LockerListProps): ReactNode {
                 }
               : {})}
           />
-        ))}
-      </div>
+        )}
+      </WindowedRows>
 
       {showsWindowEnd(props.loaded, props.rows.length) ? (
         <div className={styles.windowEnd}>

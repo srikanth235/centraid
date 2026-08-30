@@ -1,9 +1,19 @@
 import type { JSX } from "react";
 
 import {
+  insightBreakdowns,
+  insightPeakNote,
+  insightSourceFacts,
+  insightSpendFacts,
+  insightSpendFigure,
+} from "@centraid/design/blocks";
+import type { InsightBreakdown } from "@centraid/design/blocks";
+
+import {
   INSIGHTS_EMPTY_BODY,
   INSIGHTS_EMPTY_TITLE,
   INSIGHTS_SPEND_NOTE,
+  INSIGHTS_WINDOW_OPTIONS,
 } from "../../insights-copy.js";
 import { insK, insKindLabel, insUsd, relativeTime } from "../format.js";
 import type {
@@ -21,34 +31,20 @@ import RowsBlock from "../ui/RowsBlock.js";
 import type { RowDef } from "../ui/RowsBlock.js";
 import SectionBlock from "../ui/SectionBlock.js";
 import {
-  axisMarks,
-  buildBars,
-  effortBreakdown,
-  gatewayFacts,
+  barLegend,
+  webGatewayFacts,
   gatewaySince,
-  harnessBreakdown,
-  modelBreakdown,
-  peakNote,
-  sourceBreakdown,
-  sourceFacts,
-  spendFacts,
-  spendFigure,
-  WINDOW_OPTIONS,
+  monoFacts,
+  webAxis,
+  webBars,
+  WEB_INSIGHT_WORDS,
 } from "./insights-model.js";
-import type { Breakdown } from "./insights-model.js";
 
 import styles from "./InsightsScreen.module.css";
 
-// Analytics (v9, issues #765 + #775) — one column of blocks over the run
-// rollup.
-//
-// The page has ONE parameter (the window) and no commit: it counts what already
-// happened. Its shape is the block vocabulary — a promoted figure, one chart,
-// four distributions, a row list, and the gateway's own receipt — and the words
-// are all in `insights-model.ts`, which is where the two honest gaps in the
-// rollup are stated too.
-
-export { WINDOW_OPTIONS } from "./insights-model.js";
+// Analytics (#765, #775) — one column of blocks over the run rollup. ONE
+// parameter (the window), no commit: it counts what already happened. Every
+// word it says lives in `insights-model.ts`.
 
 function recentRow(
   run: InsightsActivityRow,
@@ -81,15 +77,14 @@ function recentRow(
   };
 }
 
-/** A breakdown, or nothing at all: an empty distribution is an absence, and a
- *  section head over no rows reads as a failed load. */
+/** Nothing at all where there are no rows: a bare head reads as a failure. */
 function Distribution({
   label,
   breakdown,
   ariaLabel,
 }: {
   label: string;
-  breakdown: Breakdown;
+  breakdown: InsightBreakdown;
   ariaLabel: string;
 }): JSX.Element | null {
   if (breakdown.rows.length === 0) return null;
@@ -105,11 +100,6 @@ function Distribution({
   );
 }
 
-/**
- * Analytics — the run rollup as blocks. The window picker, the spend figure,
- * the daily chart, the four breakdowns, the recent runs, and the gateway's own
- * receipt.
- */
 export default function InsightsScreen({
   summary,
   windowDays,
@@ -120,12 +110,16 @@ export default function InsightsScreen({
   const compact = useCompactLayout();
   const { kpis } = summary;
   const nothingRan = kpis.generations === 0 && summary.recent.length === 0;
-  const peak = peakNote(summary);
+  const peak = insightPeakNote(summary, WEB_INSIGHT_WORDS);
+  const breakdowns = insightBreakdowns(summary, WEB_INSIGHT_WORDS);
+  const sourceFacts = monoFacts(insightSourceFacts(summary, WEB_INSIGHT_WORDS));
+  /** A colour key only where a column carries that colour. */
+  const legend = barLegend(summary);
 
   const chips = (
     <ChipsBlock
       ariaLabel="Time window"
-      chips={WINDOW_OPTIONS.map((days) => ({
+      chips={INSIGHTS_WINDOW_OPTIONS.map((days) => ({
         id: String(days),
         label: `${days} days`,
         on: days === windowDays,
@@ -154,8 +148,8 @@ export default function InsightsScreen({
 
       <PanelBlock
         body={INSIGHTS_SPEND_NOTE}
-        facts={spendFacts(summary)}
-        figure={spendFigure(summary, windowDays)}
+        facts={monoFacts(insightSpendFacts(summary, WEB_INSIGHT_WORDS))}
+        figure={insightSpendFigure(summary, windowDays, WEB_INSIGHT_WORDS)}
       />
 
       <SectionBlock
@@ -164,34 +158,33 @@ export default function InsightsScreen({
       />
       <BarsBlock
         ariaLabel={`Spend per day over the last ${windowDays} days`}
-        axis={axisMarks(summary, windowDays)}
-        bars={buildBars(summary, windowDays, compact)}
+        axis={webAxis(summary, windowDays)}
+        bars={webBars(summary, windowDays, compact)}
         {...(compact ? { compact: true } : {})}
+        {...(legend ? { legend } : {})}
         {...(peak ? { note: peak } : {})}
       />
 
       <Distribution
         ariaLabel="Spend per source"
-        breakdown={sourceBreakdown(summary)}
+        breakdown={breakdowns.source}
         label="By source"
       />
-      {sourceFacts(summary).length > 0 ? (
-        <PanelBlock facts={sourceFacts(summary)} />
-      ) : null}
+      {sourceFacts.length > 0 ? <PanelBlock facts={sourceFacts} /> : null}
 
       <Distribution
         ariaLabel="Spend by harness"
-        breakdown={harnessBreakdown(summary)}
+        breakdown={breakdowns.harness}
         label="By harness"
       />
       <Distribution
         ariaLabel="Spend by model"
-        breakdown={modelBreakdown(summary)}
+        breakdown={breakdowns.model}
         label="By model"
       />
       <Distribution
         ariaLabel="Spend by effort"
-        breakdown={effortBreakdown(summary)}
+        breakdown={breakdowns.effort}
         label="By effort"
       />
 
@@ -211,7 +204,7 @@ export default function InsightsScreen({
       {resourceUsage ? (
         <PanelBlock
           body="What this vault’s host actually used — measured, not the browser or phone you’re reading this on."
-          facts={gatewayFacts(resourceUsage)}
+          facts={webGatewayFacts(resourceUsage)}
         />
       ) : (
         <PanelBlock body="Not available from this vault host — update it to see." />

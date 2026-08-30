@@ -1,228 +1,114 @@
-// Logical ↔ physical name registry. The ontology speaks schema-qualified
-// logical names (`core.party`) — grants, receipts, links and polymorphic refs
-// all store them. SQLite has no namespaces, so physical tables are
-// underscore-joined (`core_party`). The gateway translates through this
-// registry only, which doubles as an allow-list: unknown entity names never
-// reach SQL.
-//
-// The registry has a static half (the canonical ontology below) and a
-// dynamic half (#286): app-declared ext-band tables recorded
-// in `consent_app_ext`. Callers that pass their vault handle resolve both;
-// without a handle only the canonical model resolves.
+// Logical ↔ physical name resolution over the entity catalog.
+// The declarations themselves live in `entity-catalog.ts`.
 
 import type { DatabaseSync } from "node:sqlite";
 
+import {
+  JOURNAL_ENTITIES,
+  VAULT_ENTITIES,
+  VAULT_TABLES,
+} from "./entity-catalog.js";
+import type {
+  EntityRegistry,
+  VaultEntityDeclaration,
+} from "./entity-catalog.js";
 import { parseExtLogical } from "./ext.js";
 
-export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
-  core: [
-    "vault",
-    "party",
-    "party_identifier",
-    "place",
-    "event",
-    "account",
-    "transaction",
-    "content_item",
-    "content_derivative",
-    "document",
-    "attachment",
-    "activity",
-    "observation",
-    "observation_component",
-    "link",
-    "link_anchor",
-    "concept_scheme",
-    "concept",
-    "tag",
-    "collection",
-    "collection_entry",
-    // P5 pre-mutation snapshots. Grants row-filter this by entity_type.
-    "entity_revision",
-    // Share-by-placement provenance (#599). Registered so a merged
-    // multi-scope app view can read the audience + who-placed-it badge for a
-    // projected row like any other table.
-    "share_origin",
-  ],
-  consent: [
-    "app",
-    "agent",
-    "app_ext",
-    "app_view",
-    "access_grant",
-    "grant_scope",
-    "scope_tombstone",
-    "scope_request",
-    "policy",
-    "device",
-    "export_job",
-    "seed_row",
-  ],
-  agent: ["command", "capability", "correction", "judgment"],
-  health: [
-    "vital",
-    "workout",
-    "sleep_session",
-    "medication_course",
-    "condition",
-  ],
-  finance: ["txn_split", "budget", "holding", "recurring_series", "fx_rate"],
-  schedule: [
-    "calendar",
-    "event_ext",
-    "attendee",
-    "task",
-    "project",
-    "section",
-    "recurrence_exception",
-    "availability_rule",
-  ],
-  social: [
-    "contact_card",
-    "contact_channel",
-    "circle",
-    "circle_member",
-    "thread",
-    "thread_participant",
-    "message",
-  ],
-  knowledge: ["note", "annotation"],
-  media: [
-    "asset",
-    "face_region",
-    "asset_phash",
-    // Memories v0 (#724): a rebuildable projection over signals the
-    // vault already carries — see schema/enrich.ts's header for the shape and
-    // enrich/memories.ts for the sweep that (re)derives it. Registered here
-    // (not a new column on media_asset) for the same reason
-    // media_asset_phash is a sidecar: this is app-reachable derived data, and
-    // registering it under the existing `{schema:'media', verbs:'read'}`
-    // grant scope (packages/blueprints/apps/photos/app.json) means no app
-    // manifest or mobile consent change is needed to read it.
-    "memory",
-    "memory_member",
-    // Faces (#724): the unnamed-face grouping projection — see
-    // schema/enrich.ts's header for why identity is NOT in it. Registered for
-    // the same two reasons `memory` is: it is app-reachable derived data, so
-    // the existing `{schema:'media', verbs:'read'}` grant scope covers it with
-    // no manifest change, and registration is what installs the replica
-    // change-log triggers, so a rebuild (or a person-forget cascade) reaches an
-    // offline phone like any other row change.
-    "face_cluster",
-  ],
-  home: [
-    "asset_item",
-    "warranty",
-    "maintenance_plan",
-    "utility_meter",
-    "meter_reading",
-  ],
-  business: ["client", "project", "time_entry", "invoice", "invoice_line"],
-  people: ["profile", "important_date"],
-  // `item_alias` was DDL-only until #872: the connector alias existed, was
-  // written and was resolvable at reveal time, but an unregistered table is
-  // outside the canonical walk — so it never exported, never got a replica
-  // change-log trigger, and no app could read it back (README-Locker §8's
-  // first paper cut). The sidecars that follow are registered for the same
-  // reasons: `item_field` is the member's own sections and fields (and the
-  // storage every new item type is built from), `item_address` the extra
-  // addresses a login answers to, `item_passkey` the passkey slot, and
-  // `item_history` the durable item/password history. Each is either a fact
-  // the owner entered or a record only this vault holds; a restore that
-  // dropped one would hand back a locker that had forgotten it.
-  locker: [
-    "item",
-    "item_address",
-    "item_alias",
-    "item_field",
-    "item_history",
-    "item_passkey",
-  ],
-  sync: [
-    "connection",
-    "external_entity",
-    "import_batch",
-    "import_row",
-    "connection_cursor",
-    "connection_run",
-    "connection_credential",
-    "connection_health",
-  ],
-  tally: [
-    "friend",
-    "group",
-    "expense",
-    "expense_split",
-    "expense_payer",
-    "expense_receipt",
-    "expense_line_item",
-    "expense_line_allocation",
-    "recurring_expense",
-    "settlement",
-    "obligation",
-    "nudge",
-  ],
-  // `derivation` (#724 W2's provenance stamp) is registered here for the
-  // reason `portable-export.ts`'s own audit note already assumes it is: the
-  // canonical table walk IS this list, so an unregistered table is silently
-  // absent from every export AND gets no replica change-log trigger. Both
-  // matter for the face-delete gate (#724): a stamp left behind after
-  // `media.forget_person` would survive a restore and would never reach an
-  // offline phone, and it is the row that tells the next sweep those faces
-  // are current.
-  // `policy_rule` and `consent` (#807) are registered for the same two
-  // reasons: both are OWNER DECISIONS, so a portable restore that dropped them
-  // would hand back a vault that had forgotten which scopes enrich with what
-  // and which egress the owner ever agreed to — the second silently re-asking
-  // for consent already given, or losing a recorded refusal. Registration also
-  // installs the replica change-log triggers, which is what lets a phone show
-  // the effective policy it is governed by.
-  enrich: [
-    "embedding",
-    "request",
-    "policy",
-    "derivation",
-    "policy_rule",
-    "consent",
-  ],
-  outbox: ["item", "grant"],
-  // Commons control truth and local mechanics (#731). These must stay in the
-  // canonical walk: a portable restore without the grant/roster bindings,
-  // ordered op log, cursors, intent overlay, or pending invitations would
-  // silently turn shared content into an unrelated local copy.
-  share: [
-    "party_vault_binding",
-    "circle_grant",
-    "commons_member_state",
-    "commons_op",
-    "commons_replay",
-    "commons_receipt",
-    "commons_cursor",
-    "commons_lineage",
-    "commons_retained",
-    "commons_intent",
-    "commons_invitation",
-    // The grant plane (#825). `grant` is the standing permission itself and
-    // `fulfillment` its per-audience-vault delivery state; both must ride the
-    // canonical walk, or a restore would hand back a vault that had forgotten
-    // who it shares with and would re-deliver everything it had already sent.
-    "grant",
-    "fulfillment",
-  ],
-  notifications: ["notice"],
-  // Read-only custody projections, both rebuilt on the standing sweep:
-  // `custody_state` (#352) is local-vs-replicated state per content item;
-  // `custody_rollup` (#711) is its aggregate — per-bucket counts and
-  // bytes, including how much of the local tier is provably safe to release.
-  // See blob/custody.ts and blob/custody-rollup.ts.
-  blob: ["custody_state", "custody_rollup"],
-};
+export {
+  JOURNAL_ENTITIES,
+  JOURNAL_TABLES,
+  VAULT_ENTITIES,
+  VAULT_TABLES,
+  type VaultEntityDeclaration,
+} from "./entity-catalog.js";
 
-/** journal.db tables — the append-only audit stream. */
-export const JOURNAL_TABLES: Readonly<Record<string, readonly string[]>> = {
-  consent: ["provenance", "receipt"],
-  agent: ["command_invocation", "invocation_check", "evidence", "explanation"],
-};
+/**
+ * The member-facing name (and, for ontology kinds, the blurb) of a registered
+ * entity. `undefined` for anything the registry does not carry — including an
+ * ext-band table, which is an app's own and never named by this file.
+ */
+export function entityDeclaration(
+  logical: string
+): VaultEntityDeclaration | undefined {
+  const dot = logical.indexOf(".");
+  if (dot <= 0) return undefined;
+  const schema = logical.slice(0, dot);
+  const table = logical.slice(dot + 1);
+  return (
+    declaredIn(VAULT_ENTITIES, schema, table) ??
+    declaredIn(JOURNAL_ENTITIES, schema, table)
+  );
+}
+
+/**
+ * OWN keys only. The registry is an allow-list before it is a name table, and
+ * a plain object inherits `constructor` and `toString` from its prototype — so
+ * a `[schema]?.[table]` probe would answer truthy for `core.constructor` and
+ * hand a caller a physical table name the registry never declared.
+ */
+function declaredIn(
+  registry: EntityRegistry,
+  schema: string,
+  table: string
+): VaultEntityDeclaration | undefined {
+  if (!Object.hasOwn(registry, schema)) return undefined;
+  const entities = registry[schema]!;
+  return Object.hasOwn(entities, table) ? entities[table] : undefined;
+}
+
+/**
+ * THE LABEL GATE (#883, ruling O-label). An entity with no label declaration
+ * fails here rather than reaching a surface that has to invent one — which is
+ * how the same table came to be named in four maps by hand. Takes the registry
+ * so the gate can be demonstrated red against a scratch one.
+ *
+ * Names are unique within a pack: two rows called "Tasks" in one section of the
+ * Atlas is not a display bug to fix downstream, it is two entities the member
+ * cannot tell apart.
+ */
+export function assertRegistryLabels(
+  registry: EntityRegistry,
+  file: "vault" | "journal"
+): void {
+  for (const [schema, entities] of Object.entries(registry)) {
+    const seen = new Map<string, string>();
+    for (const [table, declaration] of Object.entries(entities)) {
+      const label = declaration.label;
+      if (typeof label !== "string" || label.trim().length === 0) {
+        throw new Error(
+          `${file} registry: ${schema}.${table} has no label — every entity declares the one name every surface shows (issue #883, ruling O-label)`
+        );
+      }
+      const clash = seen.get(label);
+      if (clash !== undefined) {
+        throw new Error(
+          `${file} registry: ${schema}.${table} and ${schema}.${clash} are both called "${label}" — one name per entity (issue #883, ruling O-label)`
+        );
+      }
+      seen.set(label, table);
+      const blurb = declaration.blurb;
+      if (blurb !== undefined && blurb.trim().length === 0) {
+        throw new Error(
+          `${file} registry: ${schema}.${table} declares an empty blurb — leave it out rather than fabricating one`
+        );
+      }
+    }
+  }
+}
+
+let labelsChecked = false;
+
+/**
+ * The gate, once per process. Called by the schema build (`migrateVault`), so
+ * an unlabelled entity fails when the vault is opened rather than when a
+ * surface tries to draw it.
+ */
+export function assertVaultRegistryLabels(): void {
+  if (labelsChecked) return;
+  assertRegistryLabels(VAULT_ENTITIES, "vault");
+  assertRegistryLabels(JOURNAL_ENTITIES, "journal");
+  labelsChecked = true;
+}
 
 export interface EntityRef {
   schema: string;
@@ -250,10 +136,10 @@ export function resolveEntity(
   if (dot <= 0) return undefined;
   const schema = logical.slice(0, dot);
   const table = logical.slice(dot + 1);
-  if (VAULT_TABLES[schema]?.includes(table)) {
+  if (declaredIn(VAULT_ENTITIES, schema, table)) {
     return { schema, table, physical: `${schema}_${table}`, file: "vault" };
   }
-  if (JOURNAL_TABLES[schema]?.includes(table)) {
+  if (declaredIn(JOURNAL_ENTITIES, schema, table)) {
     return { schema, table, physical: `${schema}_${table}`, file: "journal" };
   }
   const ext = parseExtLogical(logical);

@@ -3,8 +3,9 @@
   "compilerOptions": {
     "noEmit": true,
     "types": ["node"],
-    // #496 PD2 — replica-sync-io.perf imports IndexedDB-backed client stores;
-    // the nightly perf/scale project is node-only but needs DOM IDB names for tsc.
+    // replica-sync-io.perf and the phone reconnect scale rig import
+    // IndexedDB-backed client stores. Timer.unref is `unrefTimer` because
+    // DOM `setTimeout` returns `number`.
     "lib": ["ES2023", "DOM"]
   },
   "include": [

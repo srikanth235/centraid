@@ -51,7 +51,7 @@ Every ceiling in this directory is stated **at a volume**. A ceiling with no vol
 | Ontology entities | 10,000 | `tests/scale/ontology.scale.test.ts` |
 | CAS objects | 100,000 | `tests/scale/blob-gc.scale.test.ts` |
 | Automations | 200 | `tests/scale/automations-fire.scale.test.ts` |
-| Replica rows on a phone | 50,000 | `tests/scale/replica-bootstrap.scale.test.ts` |
+| Replica rows on a phone | 50,000 | `tests/scale/replica-bootstrap.scale.test.ts` (first sync) · `tests/scale/replica-reconnect.scale.test.ts` (resume after a disconnect) |
 | Vault on disk | 10 GiB | `tests/scale/restore-10gib.scale.test.ts` |
 | Paired devices | 200 | `tests/scale/tunnel-pairs.scale.test.ts` |
 | Mounted vaults on one gateway | 5 | `tests/scale/multi-vault-footprint.scale.test.ts` |
@@ -78,6 +78,9 @@ Numbers other #659 agents produced on real runs, cited rather than re-derived:
 | …RSS per additional mounted vault, idle | 10.1 MB | same rig, same run |
 | Mobile `expo export` shipped weight | 11.60 MB iOS / 11.60 MB Android (Hermes bundle 6.36 MB) | `scripts/perf/app-weight.mjs --surface mobile` (2026-07-31) |
 | **Gateway send → first token, dead time only** | **p95 123 ms** contended / 53 ms idle (median 48–70 ms) | `scripts/perf/send-to-first-token.mjs` (2026-08-21, linux x64) — spawn + ACP handshake + prompt dispatch only; excludes the HTTP/SSE route, every client, and the provider's own time. A **lower bound** on the owner's interval, not the whole of it |
+| **Replica reconnect → fresh, 50,000 rows** | **60 ms** (58–69 ms over three runs) | `tests/scale/replica-reconnect.scale.test.ts` (2026-08-28, linux x64) — reconnect request to the frame carrying every missed change; replaces the `unmeasured` / "NONE TODAY" state `gateway.json#reconnectToFresh` held |
+| Core gateway routes on a 25,007-row vault | p95 26–34 ms (vs 40 ms empty-vault) | `tests/perf/gateway-request-volume.perf.test.ts` (2026-08-28, linux x64) — the core routes do not read domain rows, so they do not degrade with them; one windowed replica bootstrap page over the same vault costs 152–185 ms p95 |
+| Replica SSE fan-out, 16 subscribers × 50 commits | 16.8–17.0 s (per-commit median ~330 ms, ~11,900 vault statements **per commit**) | `tests/scale/replica-sse-fanout.scale.test.ts` (2026-08-28, linux x64) — the BEFORE-instrument for shared projection + subscriber cap: every subscriber re-derives the same page, so per-commit cost is O(subscribers) |
 
 ## Changing a number
 

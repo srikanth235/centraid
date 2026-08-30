@@ -41,7 +41,18 @@
       "types": "./dist/acp/index.d.ts",
       "import": "./dist/acp/index.js",
       "default": "./dist/acp/index.js"
-    }
+    },
+    "./data-dir": {
+      "types": "./dist/cli/data-dir.d.ts",
+      "import": "./dist/cli/data-dir.js",
+      "default": "./dist/cli/data-dir.js"
+    },
+    "./landlord-auth": {
+      "types": "./dist/cli/landlord-auth.d.ts",
+      "import": "./dist/cli/landlord-auth.js",
+      "default": "./dist/cli/landlord-auth.js"
+    },
+    "./package.json": "./package.json"
   },
   "publishConfig": {
     "access": "public"

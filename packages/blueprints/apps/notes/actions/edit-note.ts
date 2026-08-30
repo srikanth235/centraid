@@ -1,33 +1,23 @@
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 import { normalizeCommonMark } from "../commonmark.ts";
 
 /**
- * Edit a note through the vault's typed command — partial update: only the
- * fields sent change, and a body edit re-points the note at a new (or
- * deduped) content item rather than mutating canonical bytes. Pinning is a
- * field here, not a separate command: it's a flag with no lifecycle.
+ * Partial update: only the fields sent change, and a body edit re-points the
+ * note at another content item rather than mutating canonical bytes. Pinning
+ * is a field, not its own command — a flag with no lifecycle.
  */
 export default async function editNote({ body, ctx }: HandlerArgs) {
-  const input = (body ?? {}) as Record<string, unknown>;
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "knowledge.edit_note",
-      input: {
-        note_id: String(input.note_id ?? ""),
-        ...(input.title == null ? {} : { title: String(input.title) }),
-        ...(input.body_text == null
-          ? {}
-          : { body_text: normalizeCommonMark(input.body_text) }),
-        ...(input.format == null ? {} : { format: String(input.format) }),
-        ...(input.pinned == null ? {} : { pinned: Number(input.pinned) }),
-      },
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  const input = actionInput(body);
+  return runVaultAction(ctx, {
+    command: "knowledge.edit_note",
+    input: {
+      note_id: String(input.note_id ?? ""),
+      ...(input.title == null ? {} : { title: String(input.title) }),
+      ...(input.body_text == null
+        ? {}
+        : { body_text: normalizeCommonMark(input.body_text) }),
+      ...(input.format == null ? {} : { format: String(input.format) }),
+      ...(input.pinned == null ? {} : { pinned: Number(input.pinned) }),
+    },
+  });
 }

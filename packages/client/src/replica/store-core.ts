@@ -6,7 +6,17 @@ import {
   ReplicaSearchRefusedError,
 } from "./errors.js";
 import type { RebootstrapReason } from "./errors.js";
-import { applyOptimisticMutations, evaluateReplicaRead } from "./query.js";
+import { applyOptimisticMutations } from "./query.js";
+import {
+  assertReplicaPage,
+  assertReplicaTieCensus,
+  planReplicaRead,
+} from "./read-plan.js";
+import type {
+  ReplicaOverlayBinding,
+  ReplicaPlannedRow,
+  ReplicaTieCensusRow,
+} from "./read-plan.js";
 import {
   REPLICA_LOCAL_SEARCH,
   replicaFtsMatchExpression,
@@ -180,16 +190,14 @@ const LARGE_DELETION_BATCH = 1_000;
  * search-index maintenance logarithmic (#880).
  *
  * FTS5 leaves `shape_id`/`entity`/`row_id` UNINDEXED, so addressing an entry by
- * that triple is a full table scan of the index; at 21,000 rows the scan-per-row
- * delete every `indexRow`/`deleteRow` issues cost 125s of a bootstrap that now
- * costs 0.7s. Addressing by rowid instead turns each one into a b-tree lookup.
+ * that triple is a full index scan on every `indexRow`/`deleteRow` — two orders
+ * of magnitude on a bootstrap. Addressing by rowid makes each a b-tree lookup.
  *
  * Explicit, not implicit: VACUUM (which {@link ReplicaSqliteStore.reclaimFreePages}
  * runs) renumbers the rowids of a table WITHOUT an INTEGER PRIMARY KEY, which
  * would silently desynchronize the two tables. Declaring `row_key` pins the
  * value for the life of the row. The `(shape_id, entity, row_id)` UNIQUE index
- * that replaces the old primary key serves every lookup the old one did,
- * including the prefix scan the dropped `replica_row_entity` index used to.
+ * serves every lookup, prefix scans included.
  *
  * Rejected alternatives: an external-content FTS5 table (`content=`) is the
  * textbook fix, but its delete protocol requires replaying each entry's original
@@ -263,10 +271,9 @@ const DDL = `
 /**
  * Resolves a row's search-index rowid inside the statement that needs it — see
  * the note on {@link DDL}. Keeping the lookup in SQL is what makes the rowid
- * discipline free: index maintenance issues exactly the statements it always
- * did, with a covering-index probe where a whole-index scan used to be. A row
- * this replica does not hold resolves to NULL, which matches nothing — the same
- * no-op the scan performed.
+ * discipline free: index maintenance issues the same statements, resolving the
+ * rowid through a covering-index probe rather than a whole-index scan. A row
+ * this replica does not hold resolves to NULL, which matches nothing.
  */
 const SEARCH_ROWID = `(SELECT row_key FROM replica_row
      WHERE shape_id = ? AND entity = ? AND row_id = ?)`;
@@ -584,21 +591,95 @@ export class ReplicaSqliteStore {
         `Shape does not contain entity ${request.shapeId}/${request.entity}`
       );
     }
-    const canonical = this.scan(
-      request.shapeId,
-      request.entity,
-      schema.hasUnavailableFields === true
-    );
     const relevant = mutations.filter(
       (mutation) =>
         mutation.shapeId === request.shapeId &&
         mutation.entity === request.entity
     );
+    // ONE statement filters, orders and limits, and only the returned page is
+    // parsed. No scan-the-entity fallback: a plan the grammar cannot express
+    // escalates online (#883).
+    const plan = planReplicaRead(
+      schema,
+      request,
+      now,
+      this.overlay(request, schema, relevant)
+    );
+    const planned = this.all<ReplicaPlannedRow>(plan.sql, plan.binds);
+    assertReplicaPage(planned, plan);
+    if (plan.tieCensus) {
+      const census = this.one<ReplicaTieCensusRow>(
+        plan.tieCensus.sql,
+        plan.tieCensus.binds
+      );
+      if (census) assertReplicaTieCensus(census);
+    }
+    // Confined only when a pk-eq read found its row; anything wider, or a miss,
+    // stays entity-wide — which is what an absent rowId means (#883).
+    const confinedRowId =
+      request.where?.length === 1 &&
+      request.where[0]?.op === "eq" &&
+      request.where[0]?.column === schema.primaryKey &&
+      planned.length === 1
+        ? planned[0]?.row_id
+        : undefined;
     return {
-      rows: evaluateReplicaRead(canonical, schema, request, relevant, now),
+      rows: planned.map((row) => this.envelope(row, schema)),
       cursor: { epoch: meta.cursor_epoch, seq: meta.cursor_seq },
-      dependency: { shapeId: request.shapeId, entity: request.entity },
+      dependency: {
+        shapeId: request.shapeId,
+        entity: request.entity,
+        ...(confinedRowId === undefined ? {} : { rowId: confinedRowId }),
+      },
       coverage: completeMeta ? "complete" : "partial",
+    };
+  }
+
+  /**
+   * Compose the outbox's optimistic effects for the rows they address, so the
+   * plan reads the overlaid set rather than the stored one. Bounded by the
+   * MUTATIONS, not the entity: three pending edits cost three rows however
+   * large the library.
+   */
+  private overlay(
+    request: ReplicaReadRequest,
+    schema: ReplicaEntitySchema,
+    relevant: readonly OptimisticMutation[]
+  ): ReplicaOverlayBinding | undefined {
+    if (relevant.length === 0) return undefined;
+    const rowIds = [...new Set(relevant.map((mutation) => mutation.rowId))];
+    const addressed = this.all<StoredRow>(
+      `SELECT row_id, payload_json, oversized_json, server_version
+         FROM replica_row
+        WHERE shape_id = ? AND entity = ?
+          AND row_id IN (SELECT value FROM json_each(?))`,
+      [request.shapeId, request.entity, JSON.stringify(rowIds)]
+    ).map((row) => this.envelope(row, schema));
+    return {
+      rowIds: JSON.stringify(rowIds),
+      rows: JSON.stringify(
+        applyOptimisticMutations([...addressed], [...relevant], schema).map(
+          (row) => ({
+            i: row.rowId,
+            p: JSON.stringify(row.values),
+            o: JSON.stringify(row.oversizedFields),
+            v: row.rowVersion ?? 0,
+          })
+        )
+      ),
+    };
+  }
+
+  private envelope(
+    row: StoredRow,
+    schema: ReplicaEntitySchema
+  ): ReplicaRowEnvelope {
+    return {
+      rowId: row.row_id,
+      values: JSON.parse(row.payload_json) as ReplicaRow,
+      oversizedFields: parseStringArray(row.oversized_json, "oversized fields"),
+      hasUnavailableFields: schema.hasUnavailableFields === true,
+      ...(row.server_version > 0 ? { rowVersion: row.server_version } : {}),
     };
   }
 
@@ -724,16 +805,7 @@ export class ReplicaSqliteStore {
     }
     const candidates = [
       ...rows,
-      ...addressed.map((row) => ({
-        rowId: row.row_id,
-        values: JSON.parse(row.payload_json) as ReplicaRow,
-        oversizedFields: parseStringArray(
-          row.oversized_json,
-          "oversized fields"
-        ),
-        hasUnavailableFields: schema.hasUnavailableFields === true,
-        ...(row.server_version > 0 ? { rowVersion: row.server_version } : {}),
-      })),
+      ...addressed.map((row) => this.envelope(row, schema)),
     ];
     const overlaid = applyOptimisticMutations(candidates, relevant, schema)
       .flatMap((row, index) => {
@@ -932,9 +1004,8 @@ export class ReplicaSqliteStore {
    *
    * Best effort by design. VACUUM needs an exclusive lock and this file is read
    * through a second op-sqlite handle under `journal_mode=DELETE`; a busy
-   * database leaves the mode at NONE, which is exactly today's behavior — never
-   * a store that fails to open. Journal mode is NOT touched here (see
-   * `apps/mobile/src/lib/replica/op-sqlite-driver.ts`).
+   * database leaves the mode at NONE rather than failing to open. Journal mode
+   * is NOT touched here (see `op-sqlite-driver.ts`).
    */
   private enableIncrementalVacuum(): void {
     try {
@@ -1025,25 +1096,6 @@ export class ReplicaSqliteStore {
         ? { hasUnavailableFields: true }
         : {}),
     };
-  }
-
-  private scan(
-    shapeId: string,
-    entity: string,
-    hasUnavailableFields: boolean
-  ): ReplicaRowEnvelope[] {
-    const rows = this.all<StoredRow>(
-      `SELECT row_id, payload_json, oversized_json, server_version FROM replica_row
-         WHERE shape_id = ? AND entity = ?`,
-      [shapeId, entity]
-    );
-    return rows.map((row) => ({
-      rowId: row.row_id,
-      values: JSON.parse(row.payload_json) as ReplicaRow,
-      oversizedFields: parseStringArray(row.oversized_json, "oversized fields"),
-      hasUnavailableFields,
-      ...(row.server_version > 0 ? { rowVersion: row.server_version } : {}),
-    }));
   }
 
   private upsert(

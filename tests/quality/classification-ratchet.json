@@ -1,13 +1,13 @@
 {
-  "approvedDeviation": "#880 re-pins two fingerprints and moves the governed qualities payload once. tests/matrix.json changes three times: the appScenarios ledger gains the three Tally origin-seat rows this wave delivered (origin-pending-restart, owned by apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx — the re-authored process-restart journey #842 left owing; origin-share-group, owned by TallyShareGroup.test.tsx; and origin-sharing, owned by tests/agent-e2e-mobile/flows/sharing-invite.mjs, the first mobile sharing journey), the laws registry gains the two People rows W4.9 and W4.10 left unregistered (people-readonly-star and people-row-pending, both owned by apps/mobile/src/apps/people/PeopleKit.test.tsx, which already owns three People laws), and the P3 scale-honest SQL gate's redLastDemonstrated moves 2026-08-01 -> 2026-08-27 because W0.1 demonstrated it red again when the gate was extended over apps/mobile/src (five unwaived mobile reads) before the reasoned waivers were seeded. That date is the only governed-payload move: no quality lost a gate, no gate lost its evidence, no classification was weakened, and no waiver, budget or allowlist was widened to make anything green.",
-  "matrixGovernanceFingerprint": "940e452bd99dcc4300a53e2429443b2b1dd53d69d8a583c494a90da1a6e81592",
+  "approvedDeviation": "#883 re-pins governed fingerprints after Grants v2 + ontology consolidation. `packages/vault/src/schema/sealed.ts`: ruling D4c makes `SEALED_PAYLOAD_FIELDS` DERIVE from `SEALED_COLUMNS` instead of restating it by hand — the derived set is a strict SUPERSET of the hand list, so no staged key lost protection. `packages/server/src/automation/manifest/manifest.ts`: a JSDoc example named `business.invoice` becomes `schedule.task` after ruling O-domains. `tests/matrix.json` whole-file fingerprint moves because the ledger gained the select-all law, action-kit and concept-scheme engine rows, and L3/R2 demonstrated-red seeds now name rung-7 epoch sweeps and compacted replica sabotage; no quality lost a gate, the vault-search floor drop of 19→18 is the one retired `home.asset_item` surface with its own `approvedMinimumTestsDeviation`, and no waiver, budget or allowlist was widened to make anything green.",
+  "matrixGovernanceFingerprint": "65e89fed6e2a8d3dbdd81710b883b648820b877f9a718034b668fd8cde6e3746",
   "fingerprints": {
     "packages/server/src/acp/backends/acp/vault-mcp-server.ts": "e7c3fcc3cbbafa3c0e5e36dd10a0e82aa088629fd9d790f00c276d8d630ce3ed",
-    "packages/server/src/automation/manifest/manifest.ts": "0d6659e9e823fcea0a0852dc653320a8b73dea559cc3a08a40277dbb7cb2a677",
+    "packages/server/src/automation/manifest/manifest.ts": "9f946d923d0f6875e0623de01d1104d35b277cdd3a6d708f141e901bfc388b1f",
     "packages/server/src/routes/route-security.ts": "c2fd8dcb6a9687552e4550e3496085b28c1498034472eb6f1173027b4300d82c",
     "packages/server/src/serve/health-registry.ts": "14ad4979e4b0adda60f16478522b8edda3606e87caa26a71d389aeaa94b7d4e0",
-    "packages/vault/src/schema/sealed.ts": "9ed864ff8c61cbca86614684de538d2c894f7805ce36a0bc3203aec0ae9b5c68",
+    "packages/vault/src/schema/sealed.ts": "2595ae8fb01e4e91255c266ee478dc72eae178233a79135a38db44a9cd013401",
     "tests/quality/fault-points.ts": "2b667efd1354071ab91043ab33f5ebd29cd79a11fcc4716edbe00aeada60f4bd",
-    "tests/matrix.json": "5b2e3e9d0fa0cbf537649483617100602ac06b632b6b109a8ce88940c2070896"
+    "tests/matrix.json": "9e52e2122e65b9ee3e4cabaa60e5182bb64dd9204b3df20ad7213a2dd2df528f"
   }
 }

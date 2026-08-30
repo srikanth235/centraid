@@ -21,7 +21,7 @@ import type {
   ThreadRunDTO,
 } from "../screen-contracts.js";
 import { cx } from "../ui/cx.js";
-import { Icon } from "../ui/index.js";
+import { Button, Icon } from "../ui/index.js";
 import Message from "./AssistantMessage.js";
 import type { MessageCallbacks } from "./AssistantMessage.js";
 import { EffortPicker, ModelPicker, HarnessPicker } from "./AssistantScreen.js";
@@ -996,9 +996,10 @@ function Composer({
                       ? "…"
                       : formatBytes(attachment.sizeBytes)}
                   </span>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${attachment.filename}`}
+                  <Button
+                    variant="quiet"
+                    size="chrome"
+                    ariaLabel={`Remove ${attachment.filename}`}
                     onClick={() =>
                       setPending((current) =>
                         current.filter(
@@ -1008,7 +1009,7 @@ function Composer({
                     }
                   >
                     <Icon name="X" size={10} />
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>
@@ -1270,9 +1271,12 @@ export default function AutomationThreadScreen({
     return (
       <div className={au.auLoading}>
         <div className={au.auCrumb}>
-          <button type="button" onClick={onBack}>
-            Automations
-          </button>
+          <Button
+            variant="quiet"
+            size="chrome"
+            label="Automations"
+            onClick={onBack}
+          />
           <span className={au.auCrumbSep} aria-hidden="true">
             <Icon name="ArrowRight" size={12} />
           </span>

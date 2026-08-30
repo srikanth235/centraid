@@ -36,6 +36,7 @@ import {
   SYSTEM_RECOGNITION_REFS,
 } from "../enrich/system-recognition.js";
 import { journalConversationStore } from "../journal-stores.js";
+import { unrefTimer } from "../lib/unref-timer.js";
 import type { WorktreeStore } from "../worktree-store/index.js";
 import {
   parseProviderConsent,
@@ -193,7 +194,7 @@ export function makeAutomationsRouteHandler(
     const heartbeat = setInterval(() => {
       stream.comment("ping");
     }, 30_000);
-    heartbeat.unref?.();
+    unrefTimer(heartbeat);
 
     let closed = false;
     let unsub = (): void => undefined;
@@ -543,7 +544,7 @@ export function makeAutomationsRouteHandler(
         const heartbeat = setInterval(() => {
           stream.comment("ping");
         }, 30_000);
-        heartbeat.unref?.();
+        unrefTimer(heartbeat);
         const onEvent = (event: TurnStreamEvent): void => {
           stream.event(event.type, JSON.stringify(event));
         };

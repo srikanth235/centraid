@@ -1,14 +1,11 @@
-// The session's durable local write rail: the injected-crypto payload hash a
-// device swap has to reproduce, first-open offline queueing, the paused-network
-// policy, cancellation, and the attention a crash-interrupted replacement owes.
-// The online rails — bootstrap paging, the change feed, delta pull and the 409
-// rebootstrap — are `native-session.test.ts`; the doubles both suites share are
-// in `native-session.test-fixtures.ts`.
+// The session's durable local write rail. The online rails are
+// `native-session.test.ts`; shared doubles are in
+// `native-session.test-fixtures.ts`.
 import { describe, expect, test, vi } from "vitest";
 
 import { IntentQueue } from "@centraid/client/replica/native";
 
-import { createNativeReplicaSession } from "./native-session";
+import { createNativeReplicaSession, NOT_YET_SYNCED } from "./native-session";
 import {
   createFeed,
   createGateway,
@@ -83,10 +80,15 @@ describe(createNativeReplicaSession, () => {
           action: "photos.favorite",
           input: { assetId: "asset-1", favorite: true },
         })
+        // NOT "waiting for a connection": that row is on screen and unsent,
+        // while this one has no projection to draw at all until bootstrap
+        // supplies the shape catalog (#883 D1). The distinction, the durable
+        // stand-in reason and the backfill are pinned by
+        // `pending-write-visibility.test.ts`.
       ).resolves.toStrictEqual({
         intentId: "intent-1",
         status: "queued",
-        reason: "waiting for a connection",
+        reason: NOT_YET_SYNCED,
       });
 
       await expect(session.coordinator.intents.list()).resolves.toMatchObject([
@@ -95,6 +97,7 @@ describe(createNativeReplicaSession, () => {
           state: "queued",
           input: { assetId: "asset-1", favorite: true },
           optimistic: [],
+          reason: NOT_YET_SYNCED,
         },
       ]);
       expect(gateway.pathnames).toStrictEqual([]);

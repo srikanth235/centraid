@@ -2,6 +2,14 @@
  *  here must stay in Agenda's `CHANGE_TABLES`. THIS vault only; a denial
  *  returns the same shape with `vaultDenied`. */
 
+import {
+  FLAGS_SCHEME_URI,
+  STARRED_NOTATION,
+  findConcept,
+  findScheme,
+} from "../../_shared/concept-scheme-kit.ts";
+import { DAY_MS } from "../../_shared/format-kit.ts";
+
 interface RawParty {
   party_id: string;
   kind?: string;
@@ -51,7 +59,7 @@ interface DueTask {
 interface DueFact {
   day: string;
   count: number;
-  /** First `SHELF_CAP`, in due order. A shelf lists; it never pages. */
+  /** In due order. A shelf lists; it never pages. */
   tasks: DueTask[];
 }
 
@@ -68,10 +76,7 @@ interface DayContextResult {
 }
 
 // No `relationship_tier` column exists: `inner` means starred.
-const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
-const STARRED_NOTATION = "starred";
 
-const DAY_MS = 86_400_000;
 const MAX_RANGE_DAYS = 400;
 const DEFAULT_RANGE_DAYS = 45;
 /** A vault has no upper bound; reads are row-capped. */
@@ -172,8 +177,9 @@ export default async function dayContext({
     ]);
 
     // No marker means nobody is starred: an honest `outer`.
-    const flagsScheme = ((schemes.rows ?? []) as unknown as RawScheme[]).find(
-      (scheme) => scheme.uri === FLAGS_SCHEME_URI
+    const flagsScheme = findScheme(
+      (schemes.rows ?? []) as unknown as RawScheme[],
+      FLAGS_SCHEME_URI
     );
     const concepts = flagsScheme
       ? await ctx.vault.read({
@@ -184,9 +190,11 @@ export default async function dayContext({
           purpose,
         })
       : { rows: [] };
-    const starredConceptId = ((concepts.rows ?? []) as unknown as RawConcept[])
-      .filter((concept) => concept.scheme_id === flagsScheme?.scheme_id)
-      .find((concept) => concept.notation === STARRED_NOTATION)?.concept_id;
+    const starredConceptId = findConcept(
+      (concepts.rows ?? []) as unknown as RawConcept[],
+      flagsScheme,
+      STARRED_NOTATION
+    )?.concept_id;
     const starTags = starredConceptId
       ? await ctx.vault.read({
           entity: "core.tag",

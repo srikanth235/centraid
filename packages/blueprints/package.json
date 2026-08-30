@@ -20,6 +20,24 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./apps/_shared/format-kit": "./apps/_shared/format-kit.ts",
+    "./apps/*": "./apps/*.ts",
+    "./apps/_shared/*": "./apps/_shared/*.ts",
+    "./apps/agenda/*": "./apps/agenda/*.ts",
+    "./apps/docs/*": "./apps/docs/*.ts",
+    "./apps/locker/*": "./apps/locker/*.ts",
+    "./apps/notes/*": "./apps/notes/*.ts",
+    "./apps/people/*": "./apps/people/*.ts",
+    "./apps/photos/*": "./apps/photos/*.ts",
+    "./apps/tally/*": "./apps/tally/*.ts",
+    "./apps/tasks/*": "./apps/tasks/*.ts",
+    "./package.json": "./package.json"
+  },
   "publishConfig": {
     "access": "public"
   },

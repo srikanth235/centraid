@@ -140,7 +140,7 @@ describe("vault-routes.browse", () => {
     plane.db.vault
       .prepare(
         `INSERT INTO core_party_identifier (identifier_id, party_id, scheme, value, is_primary, valid_from)
-       VALUES ('idx','px','email','ravi@example.com',1,?)`
+       VALUES ('idx','px','url','https://ravi.example',1,?)`
       )
       .run(now);
     // A polymorphic pointer too, to prove the payload carries BOTH mechanisms.

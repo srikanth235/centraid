@@ -63,22 +63,29 @@ export function Segmented<T extends string>({
   onSelect,
   ariaLabel,
   labels,
+  className,
 }: {
   options: readonly T[];
   selected: T;
   onSelect: (v: T) => void;
   ariaLabel?: string;
-  /** Display text per option. Defaults to the option value itself, which the
-   *  seg styles capitalize — supply this when the stored value is not the
+  /** Display content per option. Defaults to the option value itself, which
+   *  the seg styles capitalize — supply this when the stored value is not the
    *  words to show (`system` → `Match system`). */
-  labels?: Partial<Record<T, string>>;
+  labels?: Partial<Record<T, ReactNode>>;
+  className?: string;
 }): JSX.Element {
   return (
-    <div className={segCss.seg} role="tablist" aria-label={ariaLabel}>
+    <div
+      className={cx(segCss.seg, className)}
+      role="tablist"
+      aria-label={ariaLabel}
+    >
       {options.map((opt) => (
         <button
           key={opt}
           type="button"
+          className={segCss.segOption}
           role="tab"
           aria-selected={opt === selected}
           data-active={String(opt === selected)}

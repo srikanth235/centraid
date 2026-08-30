@@ -1,10 +1,7 @@
 // The band Locker has claimed, rendered (README-Locker §1, "Phone band").
 //
-// Two plates in a transparent row — the frame's Home capsule on the page
-// colour, then the app's five destinations as one group on `bgElev` — the same
-// anatomy `TasksBand.tsx` and `DocsBand.tsx` draw, from the shared plate
-// geometry in `kit/band-surface.ts`. This file renders `locker-band.ts` and
-// adds nothing.
+// Anatomy and shared plate geometry: `PhotosBand.tsx` and
+// `kit/band-surface.ts`. This file renders `locker-band.ts` and adds nothing.
 //
 // WHEN THE VAULT IS LOCKED THIS COMPONENT IS NOT RENDERED AT ALL. That is
 // `LockerScreen.tsx`'s decision, not a prop here: the band is WITHDRAWN while
@@ -27,11 +24,12 @@ import {
   BAND_TOP_GAP,
 } from "../../kit/band-surface";
 import type { BandOwner } from "../../kit/band/band-owner";
+import BandCapsuleControl from "../../kit/band/BandCapsule";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
-import { LOCKER_BAND_CAPSULE, resolveLockerBand } from "./locker-band";
+import { resolveLockerBand } from "./locker-band";
 import type { LockerBandDestinationKey } from "./locker-band";
 
 /** The group plate's inner gutter and the gap between the two plates. */
@@ -62,18 +60,7 @@ export default function LockerBand({
       <View
         style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={LOCKER_BAND_CAPSULE.label}
-          onPress={onHome}
-          style={[styles.capsule, { width: LOCKER_BAND_CAPSULE.size }]}
-        >
-          <Icon
-            name={LOCKER_BAND_CAPSULE.icon}
-            size={19}
-            color={colors.textSoft}
-          />
-        </Pressable>
+        <BandCapsuleControl onPress={onHome} />
       </View>
     );
   }
@@ -81,14 +68,7 @@ export default function LockerBand({
   const { capsule } = band;
   return (
     <View style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={capsule.label}
-        onPress={onHome}
-        style={[styles.capsule, { width: capsule.size }]}
-      >
-        <Icon name={capsule.icon} size={19} color={colors.textSoft} />
-      </Pressable>
+      <BandCapsuleControl capsule={capsule} onPress={onHome} />
 
       <View style={styles.group} accessibilityRole="tablist">
         {band.destinations.map((destination) => {
@@ -145,14 +125,6 @@ const makeStyles = (colors: ThemeColors) =>
       minHeight: BAND_HEIGHT,
       paddingHorizontal: BAND_INSET,
       paddingTop: BAND_TOP_GAP,
-    },
-    capsule: {
-      alignItems: "center",
-      backgroundColor: colors.bg,
-      borderColor: colors.lineStrong,
-      borderRadius: BAND_RADIUS,
-      borderWidth: BAND_BORDER,
-      justifyContent: "center",
     },
     group: {
       alignItems: "stretch",

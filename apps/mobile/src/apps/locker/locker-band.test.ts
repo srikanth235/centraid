@@ -12,7 +12,7 @@ import {
 import { BAND_DESTINATIONS } from "@centraid/blueprints/apps/locker/shelves";
 
 import {
-  LOCKER_BAND_CAPSULE,
+  BAND_CAPSULE,
   LOCKER_BAND_DESTINATIONS,
   LOCKER_BAND_MAX_DESTINATIONS,
   LOCKER_MORE_ROWS,
@@ -49,7 +49,7 @@ describe("locker band", () => {
     const claimed = resolveLockerBand("app");
     expect(claimed.owner).toBe("app");
     if (claimed.owner !== "app") throw new Error("band was not claimed");
-    expect(claimed.capsule).toStrictEqual(LOCKER_BAND_CAPSULE);
+    expect(claimed.capsule).toStrictEqual(BAND_CAPSULE);
     expect(claimed.capsule.inTabGroup).toBe(false);
   });
 });

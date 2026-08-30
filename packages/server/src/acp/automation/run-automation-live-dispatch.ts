@@ -27,6 +27,8 @@ import {
   TurnPlane,
 } from "@centraid/server/engine";
 
+import { unrefTimer } from "../../lib/unref-timer.js";
+
 export interface LiveDispatchOptions {
   /** The automation app directory — also the harness's cwd. */
   workdir: string;
@@ -129,7 +131,7 @@ export async function startLiveDispatch(
     () => runsStore.refreshTurnLock(opts.automationRef, lockToken),
     60_000
   );
-  lockLeaseHeartbeat.unref?.();
+  unrefTimer(lockLeaseHeartbeat);
   const harnessSessions = new HarnessSessions({
     binding: (kind) => {
       const binding = runsStore.getHarnessBinding(opts.automationRef, kind);

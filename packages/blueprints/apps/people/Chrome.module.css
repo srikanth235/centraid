@@ -6,9 +6,9 @@
    sanctioned per-app identity surface (#686); People's rose is its identity,
    not one of its screens, so the launcher tile, the frame's app bar and this
    route all read the same pair. The budget in `src/token-purity-allowlist.ts`
-   is EXACT — a third reserved custom property here fails that gate, which is
-   why the page margin below is `--pe-content-margin` (an app-local name that
-   only ever READS tokens) rather than an alias of a `--sp-*`.
+   is EXACT — a third reserved custom property here fails that gate. The page
+   margin is no longer among them either way: it is `--page-margin`, read
+   straight from the system (#883).
 
    Precedence note: the identity rule doubles the class (`.appRoot.appRoot` →
    0,2,0) to beat the shell's injected `.centraid-inline-scope` block (0,1,0),
@@ -16,13 +16,11 @@
 
 .appRoot {
   composes: kit-app-shell from global;
-  /* THE PAGE MARGIN IS DECLARED ONCE AND INHERITED (the fix Photos and Docs
-     both made). The handoff's rhythm is 32px desktop / 18px mobile; the
-     product's own `--page-margin` carries that pair, so this reads it rather
-     than restating the numbers. Every row that spans the pane takes it from
-     here, so the strip, the banners and the rows below cannot land their text
-     at three different insets. */
-  --pe-content-margin: var(--page-margin);
+  /* THE PAGE MARGIN IS THE SYSTEM'S (#883). The handoff's rhythm is 32px
+     desktop / 18px mobile and `--page-margin` already carries that pair, so
+     every row that spans the pane reads the token itself — the strip, the
+     banners and the rows below cannot land their text at three different
+     insets, and the alias this file used to hold is gone with the rest. */
   /* The handoff's desktop column: 760px of content between the margins. A
      44px row 1,100px wide puts the name and its verb in different counties. */
   --pe-content-width: 760px;
@@ -41,74 +39,13 @@
   composes: kit-app-main from global;
 }
 
-/* The destination strip — People · Touch · Search — on POINTER SURFACES ONLY.
-   The compact band claims the same three, and drawing both would say the same
-   thing twice; `Chrome.tsx` passes null there rather than hiding it in CSS,
-   so the region does not exist instead of existing invisibly.
-
-   The current tab is a 2px INK rule plus the strong rung of the same size —
-   size holds, weight moves — so choosing a tab cannot reflow the strip under
-   the pointer, and the app's rose never lands on a control. */
-.strip {
-  display: flex;
-  align-items: stretch;
-  gap: var(--sp-1);
-  /* Insets by the margin LESS the tab's own padding, so what lands on the
-     margin is the first tab's LABEL rather than its hit area. */
-  padding-inline: calc(var(--pe-content-margin) - var(--sp-3));
-  border-block-end: 1px solid var(--line);
-  flex-shrink: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.strip::-webkit-scrollbar {
-  display: none;
-}
-
-.tab {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  block-size: var(--h-control);
-  padding-inline: var(--sp-3);
-  border: none;
-  background: none;
-  color: var(--text-soft);
-  font: var(--t-body);
-  white-space: nowrap;
-  flex-shrink: 0;
-  cursor: pointer;
-  transition: color var(--dur-1) var(--ease);
-}
-.tab:hover {
-  color: var(--text);
-}
-.tab:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-  border-radius: var(--r-sm);
-}
-.tab[data-current="true"] {
-  color: var(--text);
-  font: var(--t-label-on);
-}
-.tab[data-current="true"]::after {
-  content: "";
-  position: absolute;
-  inset-inline: var(--sp-2);
-  inset-block-end: -1px;
-  block-size: 2px;
-  background: var(--text);
-}
-
 /* Trust banners: kit.css `.kit-banner` owns the shape; this is only the
    layout hook aligning them with the rest of the padded chrome. */
 .banner {
   /* The notice banner is an `<output>` — inline by default, and the banner
      shape needs a block box. */
   display: block;
-  margin: var(--sp-3) var(--pe-content-margin) 0;
+  margin: var(--sp-3) var(--page-margin) 0;
 }
 
 /* The scroll host. ONE scroller for the whole app: a screen that scrolled
@@ -129,7 +66,7 @@
   inline-size: 100%;
   max-inline-size: var(--pe-content-width);
   margin-inline: auto;
-  padding: var(--sp-3) var(--pe-content-margin) var(--sp-6);
+  padding: var(--sp-3) var(--page-margin) var(--sp-6);
 }
 
 /* Compact: the pane's own width, never the viewport (#505 trap 1). The
@@ -140,8 +77,9 @@
 }
 
 /* Consent-denied: no grant yet, so the app collapses to the banner that
-   explains it rather than drawing a chrome around nothing. */
-.appRoot.denied .strip,
+   explains it rather than drawing a chrome around nothing. The strip is not
+   listed here any more — `Chrome.tsx` does not render one on a denied seat, so
+   there is nothing to hide (#883). */
 .appRoot.denied .scroll {
   display: none;
 }

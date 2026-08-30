@@ -7,7 +7,12 @@
   border-radius: var(--r-md);
   background: var(--bg-sunken);
 }
-.seg button {
+/* The option carries the look on its own class, not on `.seg button`: the
+   strip's markup has ONE owner (`Segmented` in screens/settings-controls.tsx),
+   and a class is what lets that owner be the only `<button>` this look ever
+   reaches — the shell's half of the kit option the blueprints spell
+   `kit-seg-option` (#883 B9). */
+.segOption {
   border: 0;
   padding: 6px 8px;
   border-radius: var(--r-md);
@@ -18,7 +23,7 @@
   text-transform: capitalize;
   min-width: 0;
 }
-.seg button[data-active="true"] {
+.segOption[data-active="true"] {
   background: var(--bg-elev);
   color: var(--text);
   box-shadow: var(--shadow-sm);

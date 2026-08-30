@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 
 import type { VaultDb } from "./db.js";
 import type { FilterClause, Risk } from "./gateway/types.js";
+import { setDeviceTrust } from "./grant/device-trust.js";
 import { nowIso, uuidv7 } from "./ids.js";
 import { ONTOLOGY_VERSION } from "./schema/migrate.js";
 
@@ -60,13 +61,12 @@ const SEED_CONCEPTS: SeedConcept[] = [
   { scheme: "relations", notation: "about", label: "About" },
   { scheme: "relations", notation: "works-for", label: "Works for" },
   { scheme: "relations", notation: "duplicate-of", label: "Duplicate of" },
-  // Cross-referencing relations (#272) — also seeded by the v3 migration;
-  // keep in step.
+  // Cross-referencing relations (#272), also seeded by migration: keep in
+  // step.
   { scheme: "relations", notation: "references", label: "References" },
   { scheme: "relations", notation: "attachment-of", label: "Attachment of" },
-  // Version lineage (#352): newer content revises older — asserted by
-  // core.edit_document, core.replace_document_content,
-  // core.restore_document_version, knowledge.edit_note.
+  // Version lineage (#352): newer content revises older, asserted by the
+  // document and note edit commands.
   { scheme: "relations", notation: "revises", label: "Revises" },
   { scheme: "activity-kinds", notation: "meeting", label: "Meeting" },
   { scheme: "activity-kinds", notation: "run", label: "Run" },
@@ -138,10 +138,9 @@ export function bootstrapVault(
       options.baseCurrency ?? "USD",
       now
     );
-  // Enrichment-policy mirror (#352 phase 3/4, host.ts read/updateEnrichSettings):
-  // `gateway` is the default on both domains (#712 C5), same as the settings-bag
-  // default this table shadows; a THIRD-PARTY PROVIDER seeing bytes stays gated
-  // separately per call (#567) and capability (decision S9).
+  // Enrichment-policy mirror (#352): `gateway` is the default on both domains,
+  // same as the settings bag this table shadows. A third-party provider seeing
+  // bytes stays gated separately per call and capability (#567).
   for (const domain of ["photos", "docs"] as const) {
     db.vault
       .prepare(
@@ -189,12 +188,16 @@ export function enrollDevice(
 ): { deviceId: string; deviceKey: string } {
   const deviceId = uuidv7();
   const deviceKey = randomBytes(32).toString("hex");
+  const now = nowIso();
+  // Identity here, authority next door: `consent_device` says who the device
+  // is, `share_authority` what the member let it do (#883).
   db.vault
     .prepare(
-      `INSERT INTO consent_device (device_id, owner_party_id, name, platform, public_key, trust, enrolled_at, last_seen_at, sync_cursor)
-       VALUES (?, ?, ?, NULL, ?, ?, ?, NULL, NULL)`
+      `INSERT INTO consent_device (device_id, owner_party_id, name, platform, public_key, enrolled_at, last_seen_at, sync_cursor)
+       VALUES (?, ?, ?, NULL, ?, ?, NULL, NULL)`
     )
-    .run(deviceId, ownerPartyId, name, deviceKey, trust, nowIso());
+    .run(deviceId, ownerPartyId, name, deviceKey, now);
+  setDeviceTrust(db.vault, { deviceId, ownerPartyId, trust, now });
   return { deviceId, deviceKey };
 }
 
