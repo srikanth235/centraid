@@ -184,11 +184,15 @@ async function installFakeBridge(page: TypeImport_11i4z7t.Page): Promise<void> {
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
   // The shell registers the worker lazily on first app use; register it up
-  // front so these worker-focused tests have a controller to talk to.
-  await page.evaluate(async () => {
-    await navigator.serviceWorker.register("/sw.js");
+  // front so these worker-focused tests have a controller to talk to. Register
+  // the SAME script URL the shell itself uses (`iroh-transport.ts` stamps the
+  // generation token): a bare `/sw.js` is a DIFFERENT script URL for the same
+  // scope, so the shell's own lazy registration would replace this worker mid
+  // test — and a registration swapped under an in-flight navigation aborts it.
+  await page.evaluate(async (url) => {
+    await navigator.serviceWorker.register(url);
     await navigator.serviceWorker.ready;
-  });
+  }, `/sw.js?v=${SERVICE_WORKER_VERSION}`);
   await expect
     .poll(() =>
       page.evaluate(() => navigator.serviceWorker.controller !== null)
