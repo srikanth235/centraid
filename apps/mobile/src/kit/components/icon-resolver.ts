@@ -16,6 +16,18 @@ const ALIASES: Record<string, IconName> = {
   bell: "Bell",
   "book-open": "Book",
   bookmark: "Bookmark",
+  // The blueprint shelves' semantic names (drive-copy, view-copy). Each maps
+  // to the registry glyph the same row already draws on the web, not to a
+  // lookalike: an alias that guessed would be the silent substitution this
+  // resolver's loud failure exists to prevent.
+  capabilities: "Sliders",
+  filing: "FolderPlus",
+  Inbox: "Archive",
+  locker: "Lock",
+  names: "AddressBook",
+  newdoc: "FileEdit",
+  scan: "Camera",
+  storage: "Database",
   check: "Check",
   "check-circle": "CheckCircle",
   "chevron-down": "ChevronDown",

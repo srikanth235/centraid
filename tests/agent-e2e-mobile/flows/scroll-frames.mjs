@@ -78,10 +78,12 @@ const FLINGS = 8;
 const SAMPLE_WINDOW_MS = 6_000;
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 
-// A durable accessibilityLabel published by PhotosHome's search control
-// (apps/mobile/src/apps/photos/PhotosHome.tsx). Deliberately NOT the "Photos"
-// tab label, which the tab bar draws on every screen.
-const PHOTOS_MARKER = "Search photos and moments";
+// A durable accessibilityLabel published by the Library header's Select
+// control (PhotosHome's timeline header). The probe flings the Library GRID,
+// which is one band tap off the Collections landing ("COLLECTIONS IS THE
+// LANDING", PhotosHome.tsx) — the old "Search photos and moments" marker no
+// longer exists anywhere in the app.
+const PHOTOS_MARKER = "Select";
 
 /** Arm the sampler, fling the surface under test, and read the report back. */
 function flingYaml(appId, marker, markerKind, surface) {
@@ -128,7 +130,10 @@ ${CONFIRM_SYSTEM_OPEN}# Prove the arm took BEFORE flinging — a fling against a
 }
 
 await runFlow("mobile-scroll-frames", async (ctx) => {
-  await ctx.configureGateway();
+  // The probe flings the Photos grid, so the pairing must end with content in
+  // the vault — fill day-one sample content if Home settled on the first-run
+  // hero.
+  await ctx.configureGateway({ fillSampleContent: true });
 
   const budgets = JSON.parse(
     await fs.readFile(
@@ -144,6 +149,13 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
     `appId: ${ctx.state.appId}
 ---
 - tapOn: "Photos"
+- extendedWaitUntil:
+    visible: "Collections"
+    timeout: 60000
+# The grid lives in the Library destination, one band tap off the landing.
+- tapOn:
+    text: "^Library$"
+    retryTapIfNoChange: true
 `,
     "open-photos"
   );

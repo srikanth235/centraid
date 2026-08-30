@@ -57,6 +57,30 @@ export function replicaQueryConnection(input: {
   return "current";
 }
 
+/** True while a progressive bootstrap still has pages to commit. */
+export function replicaBootstrapActive(
+  progress: readonly unknown[] | undefined
+): boolean {
+  return (progress?.length ?? 0) > 0;
+}
+
+/**
+ * A first-page preview is loading, never an empty vault — Home's Day One
+ * offer must not fire against a walk that has not finished.
+ */
+export function replicaQueryLoading(input: {
+  connection: ReplicaQueryConnection;
+  bootstrapActive: boolean;
+  hasSession: boolean;
+  loading: boolean;
+}): boolean {
+  return (
+    input.connection === "loading" ||
+    input.bootstrapActive ||
+    (input.hasSession && input.loading)
+  );
+}
+
 const CONNECTION_PRIORITY: Record<ReplicaQueryConnection, number> = {
   unavailable: 5,
   loading: 4,

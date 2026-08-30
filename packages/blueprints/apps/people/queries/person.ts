@@ -413,7 +413,8 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       duplicatePartyRows.map((row) => [row.party_id, row.display_name])
     );
     const contact: ContactEntry[] = channelRows
-      .toSorted(
+      .slice()
+      .sort(
         (a, b) =>
           b.is_preferred - a.is_preferred ||
           a.kind.localeCompare(b.kind) ||

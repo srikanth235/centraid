@@ -33,10 +33,17 @@ After step 4, Claude Code gains MCP tools: `list_devices`, `inspect_view_hierarc
 
 ## Running flows
 
-Metro must be running before any flow:
+For the normal local development build, Metro must be running before any flow:
 
 ```sh
 cd apps/mobile && bunx expo start --dev-client
+```
+
+To exercise the same deterministic, packager-free mode as CI, build and install the Release app on a booted simulator, then set `MOBILE_E2E_EMBEDDED=1` when running a flow:
+
+```sh
+cd apps/mobile && bunx expo run:ios --configuration Release --device <simulator-udid> --no-bundler
+MOBILE_E2E_EMBEDDED=1 MAESTRO_PLATFORM=ios node tests/agent-e2e-mobile/flows/home-loads.mjs
 ```
 
 Then drive a flow:
@@ -239,6 +246,6 @@ The harness automatically runs `adb reverse tcp:8081 tcp:8081` during `setup()` 
   - _The keyboard covers the bottom of the screen._ `hideKeyboard` before tapping anything below an input (e.g. Save).
   - _The first `inputText` on a clean simulator raises iOS's keyboard onboarding sheet_ ("Type English and Dutch … Continue"), which covers the tab bar and swallows later taps. CI boots a fresh simulator every run, so it hits this every time — use `DISMISS_KEYBOARD_ONBOARDING` from `lib/first-run.mjs` after typing.
 - **`RN accessibilityLabel` on `TextInput` does not reach the iOS a11y tree** — the node keeps the placeholder as its `hintText` and gains no `accessibilityText`. Adding one to make a field selectable does not work; use a relative anchor instead.
-- **Budget for a cold JS bundle.** `clearState: true` drops the dev build's cached bundle, so the first launch refetches it from Metro. On a cold transform cache that dominates the flow: `home-loads` measured ~19s end-to-end against a warm Metro and ~43s against a cold one on an M-series Mac, and the nightly runner is slower still. `setup()` first waits through Metro's bounded startup/reload window, then prewarms the bundle; flows use `FIRST_LAUNCH_TIMEOUT_MS` rather than a hand-picked 30s. This matters because Expo can answer `/status` once and briefly stop accepting requests while its file graph settles. A 30s launch budget or a one-shot readiness probe here makes the nightly `mobile-e2e` lane fail against copy that is entirely correct.
-- **`launchApp: { clearState: true }`** wipes the dev client's stored "last opened" URL along with app state, so a plain relaunch sits on the launcher's empty server picker forever (`expo-dev-client`, shipped by #723). Every cleared-state launch MUST be followed by `- openLink: "${DEV_LAUNCHER_LINK}"` (exported from `lib/metro.mjs`) to hand the launcher the Metro bundle URL explicitly; `ctx.configureGateway()` and `home-loads.mjs` already do this. Non-cleared launches auto-resume the last session and need nothing.
+- **Budget for a cold JS bundle in development builds.** `clearState: true` drops the dev build's cached bundle, so the first launch refetches it from Metro. On a cold transform cache that can dominate the flow, which is why the local harness prewarms Metro and uses `FIRST_LAUNCH_TIMEOUT_MS` rather than a hand-picked 30s. The CI iOS lane builds a Release app with `main.jsbundle` embedded, so this packager budget and readiness path are not part of that run.
+- **`launchApp: { clearState: true }` in development builds** wipes the dev client's stored "last opened" URL along with app state, so a plain relaunch sits on the launcher's empty server picker forever (`expo-dev-client`, shipped by #723). Every cleared-state development launch MUST be followed by `- openLink: "${DEV_LAUNCHER_LINK}"` (exported from `lib/metro.mjs`) to hand the launcher the Metro bundle URL explicitly; `ctx.configureGateway()` and `home-loads.mjs` already do this. The CI Release app embeds `main.jsbundle`, so `MOBILE_E2E_EMBEDDED=1` skips the launcher recovery and launches directly.
 - **Metro starts from `apps/mobile/` cwd.** Running it from the repo root resolves to an empty project root and fails with `Unable to resolve module expo`. Use `bunx expo start` from `apps/mobile/`, not `bun run` from root.

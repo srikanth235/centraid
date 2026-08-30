@@ -35,7 +35,8 @@ export default async function partiesHandler({ ctx }: HandlerArgs) {
         name: p.display_name ?? "Guest",
         is_you: p.party_id === me,
       }))
-      .toSorted(
+      .slice()
+      .sort(
         (a, b) =>
           (b.is_you ? 1 : 0) - (a.is_you ? 1 : 0) ||
           String(a.name).localeCompare(String(b.name))

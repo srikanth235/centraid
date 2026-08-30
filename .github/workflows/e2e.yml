@@ -180,30 +180,20 @@ jobs:
           path: apps/web/test-results/
           retention-days: 7
 
-  mobile-e2e-ios:
+  # Build once on one macOS runner and hand the exact Release .app to both
+  # Maestro lanes. Release uses AppDelegate's embedded main.jsbundle, so the
+  # test runners have no Metro process or per-launch bundle fetch to race.
+  mobile-e2e-ios-build:
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile'
-    # macos-15 defaults to Xcode 16.4 and only ships up to 26.3. Expo SDK 57's
-    # expo-modules-jsi needs Swift tools 6.2 / Xcode 26.4+ (#620); on 16.4 the
-    # JSI xcframework step exits 65 with an empty "Could not resolve package
-    # dependencies" footer (run 30417451436). macos-26 defaults to 26.5+.
     runs-on: macos-26
-    # Cold macOS native build + serialized journeys exceed 60 on a cache miss;
-    # cancelled counts as red (#557), so the backstop must sit above the
-    # budget. Raised from 60 under #781 after the 08-03/04/06/13 nightlies
-    # were cancelled at exactly this ceiling. Raised again to 105 under #839
-    # when the home-apps suite (10-minute aggregate ceiling) joined the run.
-    timeout-minutes: 105
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
-        # #637 — deliberately no turbo-cache: macOS is 1-of-1 and must not
-        # restore a Linux-built native/*.node even with RUNNER_OS in the hash.
       - name: Select Xcode 26.4 or newer
         run: |
           set -euo pipefail
-          # Prefer the newest installed ≥26.4 so image rolls stay green without
-          # pinning a patch. Fail loud if the image dropped below Expo's floor.
           selected=""
           for app in $(ls -d /Applications/Xcode_26.*.app 2>/dev/null | sort -V -r); do
             version="${app#/Applications/Xcode_}"
@@ -221,94 +211,142 @@ jobs:
             ls -d /Applications/Xcode*.app || true
             exit 1
           }
-          echo "selecting $selected"
           sudo xcode-select -s "$selected"
           xcodebuild -version
           swift --version
-      # The iOS dev build is cached and reused whenever nothing that changes the
-      # *native binary* changed. A JS/TS commit is served live by Metro, so it
-      # must not pay the ~32-minute compile; a config-plugin, native-module,
-      # bundle-id, or autolinked-pod change must. The cache key (built below) has
-      # two independent parts:
-      #
-      #   fp<hash>  @expo/fingerprint over the native inputs ONLY — config
-      #             plugins, autolinked native modules (read from node_modules,
-      #             so the install MUST run first), the bare apps/mobile/ios
-      #             project, the resolved Expo config, and the RN version. It
-      #             deliberately ignores apps/mobile/src/** (Metro-served JS) and
-      #             THIS workflow file, so editing either no longer forces a
-      #             rebuild — the exact over-hashing the old hand-rolled
-      #             `git ls-files | shasum` key suffered (it mixed in the whole
-      #             e2e.yml and all of ios/, including gitignored build products,
-      #             so any workflow edit or leftover build dir busted the cache).
-      #             The hashing lives in apps/mobile/scripts/native-fingerprint.mjs.
-      #   xc<hash>  the host toolchain (Xcode build + iphonesimulator SDK).
-      #             @expo/fingerprint hashes the PROJECT, not the MACHINE — so a
-      #             binary built by a newer Xcode after a macos image roll must
-      #             still not be reused; this component forces that rebuild. It
-      #             subsumes the old key's raw ImageOS (the Xcode/SDK version is
-      #             the part of the image that actually matters here).
-      #
-      # Deliberately NOT caching turbo here. A per-sha key never hits, so every
-      # run would SAVE a fresh multi-hundred-MB blob; against GitHub's 10 GB
-      # per-repo budget with LRU eviction, the natural victim is the .app entry
-      # below — which is only ever read, never re-saved on a hit.
-      - name: Fingerprint the iOS native build inputs
-        id: native
-        working-directory: apps/mobile
-        run: |
-          set -euo pipefail
-          # @expo/fingerprint reads node_modules for the autolinked native tree,
-          # so this runs after `bun install` above. The script prints the bare
-          # hash and hard-fails on an empty digest (no constant false-hit key).
-          fp="$(node scripts/native-fingerprint.mjs ios)"
-          test -n "$fp" || { echo "::error::empty iOS fingerprint"; exit 1; }
-          # Toolchain captured separately: `a="$(cmd1; cmd2)"` keeps only cmd2's
-          # exit status, so a broken xcodebuild would silently weaken the key
-          # instead of failing the step.
-          xcode="$(xcodebuild -version)"
-          sdk="$(xcrun --show-sdk-version --sdk iphonesimulator)"
-          xc="$(printf '%s\n%s\n' "$xcode" "$sdk" | shasum -a 256 | cut -d' ' -f1)"
-          echo "hash=xc${xc:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
-          echo "iOS native fingerprint: fp=$fp toolchain(xc)=$xc"
       - name: Assert runner Xcode satisfies React Native and ExpoModulesJSI
         working-directory: apps/mobile
         run: bun run ci:xcode
-      - name: Build and start the tokenless mobile test gateway
-        # Scoped to the gateway's dependency subgraph instead of a full
-        # `bun run build`. tests/agent-e2e-mobile/lib/ci-gateway.mjs imports only
-        # packages/server/dist, and turbo pulls every workspace dependency
-        # (vault, app-engine, agent-runtime, automation, backup, blueprints,
-        # tunnel, client, web, design) in transitively — nothing
-        # the mobile job needs is dropped. The saving is narrow but real, and
-        # comes almost entirely from dropping @centraid/desktop (skills and
-        # data-plane folded into gateway/tunnel in #495).
+      - name: Fingerprint the embedded iOS build inputs
+        id: ios_build
         run: |
+          set -euo pipefail
+          xcode_hash="$(xcodebuild -version | shasum -a 256 | cut -c1-16)"
+          source_hash="$(git ls-files \
+            apps/mobile \
+            packages/client \
+            packages/blueprints \
+            packages/core \
+            packages/design \
+            package.json \
+            bun.lock | xargs shasum -a 256 | shasum -a 256 | cut -c1-16)"
+          test -n "$source_hash" || { echo "::error::empty iOS source fingerprint"; exit 1; }
+          echo "cache_key=xcode${xcode_hash}-src${source_hash}" >> "$GITHUB_OUTPUT"
+          echo "Embedded iOS build key: xcode${xcode_hash}-src${source_hash}"
+      - name: Restore the embedded iOS E2E app
+        id: ios_app
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/centraid-mobile-e2e-ios-cache
+          key: ios-app-${{ runner.os }}-${{ steps.ios_build.outputs.cache_key }}
+      - name: Build the embedded iOS E2E app
+        id: build_ios_app
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          app_cache="$RUNNER_TEMP/centraid-mobile-e2e-ios-cache/centraid-ios-e2e-app.tar.gz"
+          if [ -s "$app_cache" ]; then
+            echo "iOS app cache hit - skipping Release native build"
+          else
+            output="$RUNNER_TEMP/centraid-ios-e2e-build"
+            rm -rf "$output"
+            bunx expo run:ios --configuration Release --device generic --no-bundler --output "$output"
+            app="$(find "$output" -type d -name 'Centraid.app' -print -quit 2>/dev/null || true)"
+            test -n "$app" || { echo "::error::Release Centraid.app not found in $output"; exit 1; }
+            test -s "$app/main.jsbundle" || {
+              echo "::error::Release app has no embedded main.jsbundle"
+              exit 1
+            }
+            bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+            test "$bundle_id" = 'dev.centraid.mobile' || {
+              echo "::error::built app bundle id is '$bundle_id', expected dev.centraid.mobile"
+              exit 1
+            }
+            mkdir -p "$(dirname "$app_cache")"
+            tar -czf "$app_cache" -C "$(dirname "$app")" "$(basename "$app")"
+            echo "Embedded JS bundle: $(wc -c < "$app/main.jsbundle") bytes"
+            echo "built=true" >> "$GITHUB_OUTPUT"
+          fi
+          test -s "$app_cache" || { echo "::error::embedded iOS app cache is empty"; exit 1; }
+      # Cache writes are acceleration only. A transient Actions cache outage
+      # must not turn a valid native build into a failed E2E run.
+      - name: Save the embedded iOS E2E app
+        if: steps.build_ios_app.outputs.built == 'true'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/centraid-mobile-e2e-ios-cache
+          key: ios-app-${{ runner.os }}-${{ steps.ios_build.outputs.cache_key }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mobile-e2e-ios-app
+          path: ${{ runner.temp }}/centraid-mobile-e2e-ios-cache/centraid-ios-e2e-app.tar.gz
+          retention-days: 7
+
+  # Build the gateway runtime once, in parallel with the native iOS build.
+  # This stays on macOS because the runtime graph includes platform-specific
+  # native modules; lanes receive compiled output, not a Linux Docker image.
+  mobile-e2e-ios-gateway-build:
+    if: >
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile'
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+      - name: Build the mobile gateway runtime
+        run: |
+          set -euo pipefail
           bun run turbo run build --filter=@centraid/server
-          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
-          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
-          echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
-          echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
-          for attempt in {1..90}; do
-            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
-            sleep 2
-          done
-          cat /tmp/centraid-mobile-gateway.log
-          exit 1
+          artifact_dir="$RUNNER_TEMP/centraid-mobile-gateway-artifact"
+          mkdir -p "$artifact_dir"
+          tar -czf "$artifact_dir/centraid-mobile-gateway-dist.tar.gz" \
+            packages/backup/dist \
+            packages/blueprints/dist \
+            packages/core/dist \
+            packages/design/dist \
+            packages/server/dist \
+            packages/tunnel/dist \
+            packages/tunnel/native \
+            packages/vault/dist
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mobile-e2e-ios-gateway
+          path: ${{ runner.temp }}/centraid-mobile-gateway-artifact/centraid-mobile-gateway-dist.tar.gz
+          retention-days: 7
+
+  mobile-e2e-ios-lanes:
+    needs: [mobile-e2e-ios-build, mobile-e2e-ios-gateway-build]
+    if: >
+      always() && needs.mobile-e2e-ios-build.result == 'success' && needs.mobile-e2e-ios-gateway-build.result == 'success' && (github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile')
+    runs-on: macos-26
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [a, b]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+      - name: Download the embedded iOS E2E app
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: mobile-e2e-ios-app
+          path: ${{ runner.temp }}/centraid-ios-e2e-artifact
+      - name: Download the mobile gateway runtime
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: mobile-e2e-ios-gateway
+          path: ${{ runner.temp }}/centraid-mobile-gateway-artifact
       - name: Install Maestro CLI
-        # The mobile agent-e2e flows drive the installed app through Maestro
-        # (tests/agent-e2e-mobile/lib/harness.mjs → `maestro --udid … test`).
-        # Pin the CLI: the install script honors MAESTRO_VERSION and otherwise
-        # pulls whatever is at `releases/latest`, so an upstream release could
-        # silently change device-driving behavior mid-nightly. cli-2.6.1 is the
-        # current stable release (github.com/mobile-dev-inc/maestro/releases).
         env:
           MAESTRO_VERSION: 2.6.1
         run: |
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
-      - name: Boot an iOS simulator
+      - name: Boot an iOS simulator and install the app
         run: |
+          set -euo pipefail
           udid="$(xcrun simctl list devices available --json | node -e '
             let input="";
             process.stdin.on("data", chunk => input += chunk);
@@ -322,117 +360,48 @@ jobs:
           echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
           xcrun simctl boot "$udid" || true
           xcrun simctl bootstatus "$udid" -b
-      # The built .app for the simulator. This is the single biggest win in the
-      # job (~32m of the 51m). Keyed on the native fingerprint above, so a commit
-      # that touches only JS reuses the binary while ANY native-input or Xcode
-      # change forces a rebuild. No `restore-keys`: a partial-match fallback is
-      # exactly the stale-binary false-pass this must never allow — the key is
-      # all-or-nothing.
-      #
-      # restore + save are SPLIT rather than the one-step `actions/cache`, because
-      # that action declares `post-if: success()` — it saves only when the whole
-      # job succeeded. On a lane that is currently red that means the cache never
-      # populates, so the 32-minute build is paid on every run and the warm path
-      # is unreachable until the very greenness the cache is meant to help
-      # deliver. Observed exactly that in runs 29762312605 and 29765712825: the
-      # post step reported `skipped` and the native build ran full-length both
-      # times. The save below runs `if: always()`, so a red run still banks the
-      # binary it built. That is safe because the key is content-addressed: the
-      # artifact is the product of those inputs whether or not a later Maestro
-      # flow passed.
-      - name: Restore the built iOS app
-        id: ios_app
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/centraid-mobile-e2e
-          key: ios-app-${{ runner.os }}-${{ steps.native.outputs.hash }}
-      # Deliberately NOT caching CocoaPods. A Pods cache hit leaves
-      # ios/Pods/Manifest.lock matching Podfile.lock, so Expo CLI skips
-      # `pod install` entirely — and `pod install` is the ONLY thing that runs
-      # the centraid-tunnel podspec's prepare_command, which downloads the
-      # git-ignored Iroh.xcframework and IrohLib.swift. Those are a vendored
-      # framework and a compiled source of that pod, so skipping the fetch breaks
-      # the native build outright. It would not even fail on the first run: the
-      # cache is empty then. It would fail on the second native change, which is
-      # exactly the path a pods cache exists to serve.
-      - name: Build and install the mobile development app
-        id: ios_build
-        if: steps.ios_app.outputs.cache-hit != 'true'
-        working-directory: apps/mobile
+          app_root="$RUNNER_TEMP/centraid-ios-e2e-app"
+          rm -rf "$app_root"
+          mkdir -p "$app_root"
+          tar -xzf "$RUNNER_TEMP/centraid-ios-e2e-artifact/centraid-ios-e2e-app.tar.gz" -C "$app_root"
+          app="$app_root/Centraid.app"
+          test -s "$app/main.jsbundle" || { echo "::error::downloaded app has no embedded JS bundle"; exit 1; }
+          test -x "$app/Centraid" || { echo "::error::downloaded app has no executable"; exit 1; }
+          xcrun simctl install "$udid" "$app"
+          xcrun simctl get_app_container "$udid" dev.centraid.mobile
+      - name: Start the tokenless mobile test gateway
         run: |
           set -euo pipefail
-          bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler
-          # Copy the product out of derived data into the cached location. Fail
-          # hard if it cannot be found: caching an empty directory would turn
-          # every later run into a silent no-install.
-          app="$(find ios/build ~/Library/Developer/Xcode/DerivedData \
-            -maxdepth 8 -type d -name 'Centraid.app' -path '*-iphonesimulator*' -print -quit 2>/dev/null || true)"
-          test -n "$app" || { echo "::error::built Centraid.app not found"; exit 1; }
-          rm -rf ~/.cache/centraid-mobile-e2e
-          mkdir -p ~/.cache/centraid-mobile-e2e
-          # -R preserves the bundle's symlinks/permissions.
-          cp -R "$app" ~/.cache/centraid-mobile-e2e/Centraid.app
-          # Signals the save step below that there is a real bundle to bank.
-          echo 'built=true' >> "$GITHUB_OUTPUT"
-      # Banked even when a later step fails — see the note on the restore step.
-      # Guarded on the build having actually run and produced a bundle, so a
-      # cache-hit run does not re-save what it just restored, and a run that
-      # died before the build cannot cache an empty directory.
-      - name: Save the built iOS app
-        if: always() && steps.ios_build.outputs.built == 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/centraid-mobile-e2e
-          key: ios-app-${{ runner.os }}-${{ steps.native.outputs.hash }}
-      - name: Install the cached mobile development app
-        if: steps.ios_app.outputs.cache-hit == 'true'
-        run: |
-          set -euo pipefail
-          app="$HOME/.cache/centraid-mobile-e2e/Centraid.app"
-          test -d "$app" || { echo "::error::cached Centraid.app missing"; exit 1; }
-          # Prove the cached bundle is the app the flows actually drive. The
-          # Maestro harness launches by bundle id, so a mismatch here would fail
-          # obscurely at flow time instead of loudly right now.
-          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
-          test "$bundle_id" = 'dev.centraid.mobile' \
-            || { echo "::error::cached app bundle id is '$bundle_id', expected dev.centraid.mobile"; exit 1; }
-          test -x "$app/Centraid" || { echo "::error::cached app has no executable"; exit 1; }
-          xcrun simctl install "$SIMULATOR_UDID" "$app"
-          # Confirm the simulator agrees the app is installed and resolvable.
-          xcrun simctl get_app_container "$SIMULATOR_UDID" dev.centraid.mobile
-      - name: Start Metro
-        run: |
-          CI=1 nohup bunx expo start --dev-client > /tmp/centraid-metro.log 2>&1 &
+          tar -xzf "$RUNNER_TEMP/centraid-mobile-gateway-artifact/centraid-mobile-gateway-dist.tar.gz" -C "$GITHUB_WORKSPACE"
+          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway-${{ matrix.lane }}"
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > "/tmp/centraid-mobile-gateway-${{ matrix.lane }}.log" 2>&1 &
+          echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
+          echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
           for attempt in {1..90}; do
-            if curl -fsS http://127.0.0.1:8081/status; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
             sleep 2
           done
-          cat /tmp/centraid-metro.log
+          cat "/tmp/centraid-mobile-gateway-${{ matrix.lane }}.log"
           exit 1
-        working-directory: apps/mobile
       - run: node scripts/test-report/prepare.mjs
-      # Non-short-circuit: each flow always runs and writes evidence; aggregate
-      # exit afterward so a mid-run fail cannot grey later cells (#535 F4).
-      - name: Run all committed mobile journeys
+      - name: Run iOS Maestro lane ${{ matrix.lane }}
         env:
           MAESTRO_PLATFORM: ios
+          MOBILE_E2E_EMBEDDED: "1"
         run: |
           set +e
           ec=0
-          node tests/agent-e2e-mobile/flows/home-loads.mjs || ec=$?
-          node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
-          node tests/agent-e2e-mobile/flows/volume-proof.mjs || ec=$?
-          # #659 R3c — per-launch cold start (volume-proof times 20 launches as
-          # one sum, which is unreadable as an experience) and the Photos
-          # scroll-settle proxy.
-          node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?
-          node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
-          node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
-          node tests/agent-e2e-mobile/flows/places-seat.mjs || ec=$?
-          # #839 G8 — the five home-app journeys that are not Photos. One
-          # fresh pairing, four reuses; budget in flows/home-apps-budget.md.
-          # Tally has no journey (held under #831).
-          node tests/agent-e2e-mobile/run-home-apps-suite.mjs || ec=$?
+          if [ "${{ matrix.lane }}" = a ]; then
+            node tests/agent-e2e-mobile/flows/home-loads.mjs || ec=$?
+            node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
+            node tests/agent-e2e-mobile/flows/volume-proof.mjs || ec=$?
+            node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?
+          else
+            node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
+            node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
+            node tests/agent-e2e-mobile/flows/places-seat.mjs || ec=$?
+            node tests/agent-e2e-mobile/run-home-apps-suite.mjs || ec=$?
+          fi
           exit "$ec"
       - name: Remove sensitive pairing diagnostics
         if: always()
@@ -442,23 +411,35 @@ jobs:
               -path '*/maestro-debug/*-configure-gateway' \
               -prune -exec rm -rf {} +
           fi
-      # Single-root evidence upload only — dual path (artifacts/ + runs/) made
-      # upload-artifact v4 LCA-nest as artifacts/artifacts/e2e after merge-multiple
-      # download, which generate.mjs never reads (#535 F1).
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: nightly-evidence-mobile
+          name: nightly-evidence-mobile-ios-${{ matrix.lane }}
           path: artifacts/
           retention-days: 7
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: nightly-debug-mobile-runs
+          name: nightly-debug-mobile-runs-ios-${{ matrix.lane }}
           path: tests/agent-e2e-mobile/runs/
           retention-days: 7
           if-no-files-found: ignore
 
+  # Keep the historical required check name stable while the real work runs in
+  # two independent simulators. A failed build or either lane remains red.
+  mobile-e2e-ios:
+    needs:
+      [mobile-e2e-ios-build, mobile-e2e-ios-gateway-build, mobile-e2e-ios-lanes]
+    if: >
+      always() && (github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Aggregate iOS build and Maestro lanes
+        run: |
+          test "${{ needs.mobile-e2e-ios-build.result }}" = success
+          test "${{ needs.mobile-e2e-ios-lanes.result }}" = success
   # #496 PC1 / #630 — Android runs the same eight native blueprint covers as
   # iOS. Flake budget:
   # one retry at the flow harness; job failure still reds nightly. Metro and the

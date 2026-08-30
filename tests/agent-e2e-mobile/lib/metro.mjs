@@ -21,6 +21,10 @@
 // port is chosen back to the emulator's `localhost:<port>`.
 export const METRO_PORT = Number(process.env.METRO_PORT ?? 8081);
 export const METRO_ORIGIN = `http://127.0.0.1:${METRO_PORT}`;
+// CI's embedded-bundle lane builds the JS bundle into the Release .app. It
+// deliberately has no Metro dependency; keeping the mode in this module lets
+// the flow snippets and harness share one explicit switch.
+export const MOBILE_E2E_EMBEDDED = process.env.MOBILE_E2E_EMBEDDED === "1";
 
 /**
  * Deep link that tells the Expo dev client WHICH experience to load.

@@ -340,7 +340,8 @@ export async function readSharesByDocument({
             "invited",
         }))
         .filter((m) => m.status !== "refused")
-        .toSorted((a, b) => a.label.localeCompare(b.label)) as SharedMember[];
+        .slice()
+        .sort((a, b) => a.label.localeCompare(b.label)) as SharedMember[];
       entryByGrant.set(grant.grant_id, {
         grant_id: grant.grant_id,
         circle_id: grant.circle_id,
@@ -371,7 +372,8 @@ export async function readSharesByDocument({
         )
         .map((g) => entryByGrant.get(g.grant_id))
         .filter((e): e is SharedWithEntry => e !== undefined)
-        .toSorted(
+        // The document's own grant leads: it is the fact the member acted on.
+        .sort(
           (a, b) =>
             (a.via === "document" ? 0 : 1) - (b.via === "document" ? 0 : 1) ||
             a.label.localeCompare(b.label)

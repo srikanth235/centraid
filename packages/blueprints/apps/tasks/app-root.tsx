@@ -665,7 +665,8 @@ export function Root({
     .filter((task) => isOpen(task) && !landsToday(task, now))
     .map((task) => task.next_due ?? task.due_at ?? "")
     .filter(Boolean)
-    .toSorted()[0];
+    .slice()
+    .sort()[0];
 
   const emptyBlock = (
     <EmptyState

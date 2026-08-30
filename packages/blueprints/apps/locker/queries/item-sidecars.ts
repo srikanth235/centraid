@@ -117,7 +117,7 @@ export async function readFields(
     purpose
   );
   return rows
-    .toSorted(
+    .sort(
       (a, b) =>
         a.section.localeCompare(b.section) ||
         (a.position ?? 0) - (b.position ?? 0) ||
@@ -150,7 +150,7 @@ export async function readAddresses(
     purpose
   );
   return rows
-    .toSorted((a, b) => (a.position ?? 0) - (b.position ?? 0))
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
     .map((row) => ({
       address_id: row.address_id,
       url: row.url,
@@ -196,7 +196,7 @@ export async function readHistory(
     purpose
   );
   return rows
-    .toSorted((a, b) => b.recorded_at.localeCompare(a.recorded_at))
+    .sort((a, b) => b.recorded_at.localeCompare(a.recorded_at))
     .slice(0, limit)
     .map((row) => {
       let changed: Record<string, unknown> = {};

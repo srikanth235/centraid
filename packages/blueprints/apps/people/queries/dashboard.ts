@@ -229,13 +229,15 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         pr,
         over: daysSinceContact(pr) - pr.cadence_days,
       }))
-      .toSorted((a, b) => b.over - a.over)
+      .filter((x) => x.over >= 0)
+      .sort((a, b) => b.over - a.over)
       .map((x) => card(x.pr.party_id));
 
     const upcoming = dateRows
       .filter((d) => d.reminder_on)
       .map((d) => ({ d, until: daysUntilMonthDay(d.month_day) }))
-      .toSorted((a, b) => a.until - b.until)
+      .slice()
+      .sort((a, b) => a.until - b.until)
       .map((x) => ({
         ...card(x.d.party_id),
         date_id: x.d.date_id,

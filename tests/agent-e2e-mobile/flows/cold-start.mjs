@@ -4,6 +4,7 @@ import {
   recordQualityResult,
   rigDriftBudget,
 } from "../../agent-e2e-shared/harness.mjs";
+import { LAUNCHER_RECOVERY } from "../lib/first-run.mjs";
 import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
 
 /**
@@ -62,6 +63,7 @@ await runFlow("mobile-cold-start", async (ctx) => {
 ---
 - stopApp
 - launchApp
+${LAUNCHER_RECOVERY}
 - extendedWaitUntil:
     visible:
       text: "${HOME_READY_MARKER}"

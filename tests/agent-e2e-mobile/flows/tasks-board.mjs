@@ -26,7 +26,7 @@ import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 await runFlow("tasks-board", async (ctx) => {
   await ctx.ensureDemo("tasks");
-  await ctx.configureGateway();
+  await ctx.configureGateway({ fillSampleContent: true });
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---

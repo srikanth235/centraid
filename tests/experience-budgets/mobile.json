@@ -1,5 +1,5 @@
 {
-  "approvedDeviation": "#821 restores native People and Docs on the phone, so the Hermes index chunk grows 6.36 MB → 7.14 MB. Ceiling maxLargestChunkBytes 7000000 → 7750000 (observed 7142105 + ~8% headroom). maxTotalBytes is unchanged. Prior: #659.",
+  "approvedDeviation": "#882 + #676: first-party phone surfaces from the handoff close, plus Home's post-seed replica rebuild, grow the Hermes index chunk past the #821 7.75 MB ceiling (CI mobile-smoke 33251048657: iOS 7871015 B, Android 7891687 B). Ceiling maxLargestChunkBytes 7750000 → 8220000 (observed 7891687 + ~4% headroom). maxTotalBytes is unchanged. Prior: #821.",
   "_comment": "Experience budgets for the Expo iOS/Android app (apps/mobile). Perceived latency only. See README.md in this directory for the status vocabulary and the year-3 volume table. Ratcheted tighten-only via PERF_BUDGET_SOURCES.",
   "surface": "mobile",
   "metrics": {
@@ -58,7 +58,7 @@
       "volume": "n/a — build artifact, independent of vault size",
       "probe": "scripts/perf/app-weight.mjs --surface mobile (weighs dist/mobile-bundle-smoke/ios and .../android, both produced by the existing `bun run --cwd apps/mobile ci:bundle` in the ci.yml mobile-smoke job)",
       "maxTotalBytes": 12582912,
-      "maxLargestChunkBytes": 7750000,
+      "maxLargestChunkBytes": 8220000,
       "_provenance": {
         "at": "2026-07-31",
         "host": "darwin arm64, `bun run --cwd apps/mobile ci:bundle` (expo export, both platforms) in this worktree",

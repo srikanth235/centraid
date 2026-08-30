@@ -25,11 +25,15 @@ import {
   writeFlowVerdict,
 } from "../../agent-e2e-shared/harness.mjs";
 import {
+  COMPLETE_PROFILE_NAME,
   DISMISS_KEYBOARD_ONBOARDING,
+  FILL_SAMPLE_IF_DAYONE,
+  LAUNCHER_RECOVERY,
   retryableTapCommands,
 } from "./first-run.mjs";
 import {
   DEV_LAUNCHER_LINK,
+  MOBILE_E2E_EMBEDDED,
   METRO_ORIGIN,
   METRO_PORT,
   prewarmMetroBundle,
@@ -68,8 +72,10 @@ const appIdForPlatform = (platform) =>
  * `setup()` prewarms the bundle so this budget covers app start plus render
  * rather than a cold Metro build, but keep it generous: it is a bundle-fetch
  * wait, not a product-latency assertion, and nothing is proven by making it tight.
+ * 240s: the nightly macOS runner's cold bundle load is minutes, not seconds —
+ * dispatch 32933893665's reuse launches exceeded 120s before Home mounted.
  */
-export const FIRST_LAUNCH_TIMEOUT_MS = 120_000;
+export const FIRST_LAUNCH_TIMEOUT_MS = 240_000;
 // The Home band's accessibility label (apps/mobile/src/screens/home/
 // HomeBand.tsx). The previous marker, "Home ready", was HomeStatusLine's
 // settled-state label until #789 replaced that component's copy with the
@@ -81,20 +87,25 @@ export const HOME_READY_MARKER = "All apps and places";
 // iOS Simulator's `openLink` (simctl openurl) raises a system
 // `Open in "Centraid"?` confirmation for custom-scheme links a moment AFTER
 // the openLink directive returns; Android fires the VIEW intent directly.
-// Then, because CI reinstalls the dev build every run, expo-dev-client shows
-// its one-time "This is the developer menu" explainer sheet over whatever the
-// app renders — both screenshots in the 05:42 home-loads run show
-// "Connect your gateway." fully painted BEHIND that sheet. `optional: true`
-// absorbs the no-dialog cases (Android, or an already-open session);
-// `^…$` anchors each tap so it cannot land on the dialog's own title text,
-// which also contains "Open", or on prose that contains "Continue".
+// Then expo-dev-client layers two more first-run interruptions on top of the
+// rendered app (CI reinstalls the dev build every run, so they always hit):
+// its one-time "This is the developer menu" explainer, and — observed in the
+// 16:39 local run — the dev menu sheet itself, open over the fully painted
+// "Connect your gateway." screen. `optional: true` absorbs every no-dialog
+// case (Android, or an already-open session); `waitUntilVisible` absorbs the
+// iOS sheet's delayed presentation; `^…$` anchors each tap so it cannot land
+// on prose that merely contains the word.
 export const CONFIRM_SYSTEM_OPEN = `# iOS system confirmation for a custom-scheme openLink, then the dev-client
-# first-run explainer — see CONFIRM_SYSTEM_OPEN.
+# explainer and dev-menu sheets — see CONFIRM_SYSTEM_OPEN.
 - tapOn:
     text: "^Open$"
     optional: true
+    waitUntilVisible: true
 - tapOn:
     text: "^Continue$"
+    optional: true
+- tapOn:
+    text: "^Close$"
     optional: true
 `;
 // An individual chunk owns one coherent user interaction. Fresh pairing is the
@@ -240,19 +251,21 @@ export async function setup({ runId } = {}) {
         `Run \`bun run --filter=@centraid/mobile ${device.platform}\` first.`
     );
   }
-  if (device.platform === "android") {
-    // Must happen before waitForMetroReachable(): the dev client reaches Metro via
-    // the reverse forward, but the harness's own fetch goes directly.
-    await ensureMetroReverseForAndroid(device.udid);
+  if (!MOBILE_E2E_EMBEDDED) {
+    if (device.platform === "android") {
+      // Must happen before waitForMetroReachable(): the dev client reaches Metro via
+      // the reverse forward, but the harness's own fetch goes directly.
+      await ensureMetroReverseForAndroid(device.udid);
+    }
+    if (!(await waitForMetroReachable())) {
+      throw new Error(
+        `Metro bundler not reachable at ${METRO_ORIGIN} after the bounded readiness wait. ` +
+          "The dev build needs it to serve the JS bundle — start it with " +
+          "`cd apps/mobile && bun expo start --dev-client`."
+      );
+    }
+    await prewarmMetroBundle(device.platform, appId);
   }
-  if (!(await waitForMetroReachable())) {
-    throw new Error(
-      `Metro bundler not reachable at ${METRO_ORIGIN} after the bounded readiness wait. ` +
-        "The dev build needs it to serve the JS bundle — start it with " +
-        "`cd apps/mobile && bun expo start --dev-client`."
-    );
-  }
-  await prewarmMetroBundle(device.platform, appId);
   const id = runId ?? defaultRunId();
   const runDir = path.join(RUNS_DIR, id);
   const screenshotsDir = path.join(runDir, "screenshots");
@@ -462,10 +475,16 @@ export async function runFlow(slug, fn) {
     return ticketResult.ticket;
   };
 
-  ctx.configureGateway = async (
+  ctx.configureGateway = async ({
     gatewayUrl = process.env.MAESTRO_GATEWAY_URL,
-    gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? ""
-  ) => {
+    gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? "",
+    // Tile-driven journeys opt in: a fresh pairing can settle Home on the
+    // first-run hero (every tile empty), which leaves no tile to tap. The
+    // default stays false for journeys whose premise IS the empty vault
+    // (photos-permissions) or that only wait on the band label (cold-start,
+    // volume-proof).
+    fillSampleContent = false,
+  } = {}) => {
     if (!gatewayUrl) {
       throw new Error(
         "MAESTRO_GATEWAY_URL is required for this mobile journey"
@@ -477,10 +496,10 @@ export async function runFlow(slug, fn) {
 ---
 - launchApp:
     clearState: false
-- extendedWaitUntil:
+${LAUNCHER_RECOVERY}- extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-`,
+${fillSampleContent ? FILL_SAMPLE_IF_DAYONE : ""}`,
         "reuse-paired-gateway"
       );
       ctx.note(`reused the paired nightly profile for ${gatewayUrl}`);
@@ -494,16 +513,21 @@ export async function runFlow(slug, fn) {
     // carrying the placeholder label is asked for a profile. The gateway URL
     // is used only by the host-side harness to mint that ticket; the phone
     // reaches the gateway through the ticket's iroh endpoint.
-    await ctx.run(
-      `appId: ${state.appId}
----
-- launchApp:
+    const freshLaunch = MOBILE_E2E_EMBEDDED
+      ? `- launchApp:
+    clearState: true
+`
+      : `- launchApp:
     clearState: true
 # clearState wiped the dev client's stored "last opened" URL, so the plain
 # launch lands on the launcher's empty server picker. Hand it the bundle URL
 # explicitly (DEV_LAUNCHER_LINK in lib/metro.mjs has the full story).
 - openLink: "${DEV_LAUNCHER_LINK}"
-${CONFIRM_SYSTEM_OPEN}- extendedWaitUntil:
+${CONFIRM_SYSTEM_OPEN}`;
+    await ctx.run(
+      `appId: ${state.appId}
+---
+${freshLaunch}- extendedWaitUntil:
     visible:
       text: "Connect your gateway."
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
@@ -547,22 +571,12 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
     // shows the form. A later flow that reuses the same nightly gateway
     // process finds that owner already renamed "Nightly" by the run below
     // and skips straight to Done — both are real product paths, so the
-    // pattern above accepts either.
+    // pattern above accepts either. COMPLETE_PROFILE_NAME carries the
+    // bounded recovery for the lost-keystroke flake (see first-run.mjs).
     await ctx.run(
       `appId: ${state.appId}
 ---
-- runFlow:
-    when:
-      visible: "Who's using this phone[?]"
-    commands:
-      - tapOn: "Your name"
-# e2e-lint-allow: unasserted-input — React Native TextInput values are not
-# reliably Maestro-matchable; the personalized done heading below proves the
-# submitted profile name end to end.
-      - inputText: "Nightly"
-      - hideKeyboard
-      - tapOn: "Continue"
-- extendedWaitUntil:
+${COMPLETE_PROFILE_NAME}- extendedWaitUntil:
     visible: "You're all set, [^.]+[.]"
     timeout: 60000
 # iOS can acknowledge an accessibility tap before the RN Pressable is ready.
@@ -576,7 +590,7 @@ ${retryableTapCommands("Enter Centraid")}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: 30000
-`,
+${fillSampleContent ? FILL_SAMPLE_IF_DAYONE : ""}`,
       "complete-onboarding"
     );
     ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
@@ -626,6 +640,38 @@ ${retryableTapCommands("Enter Centraid")}
     ctx.note(`${appId} demo seeded (${seeded.rows ?? "unknown"} rows)`);
   };
 
+  /**
+   * Seed every shipped scenario explicitly when a journey needs a populated
+   * replica without using the product's Home action. Demo rows are outside
+   * the change feed, so host-side seeding is not a substitute for the phone's
+   * own fill-and-rebootstrap path after pairing.
+   */
+  ctx.ensureAllDemos = async (
+    gatewayUrlForDemos = process.env.MAESTRO_GATEWAY_URL,
+    gatewayTokenForDemos = process.env.MAESTRO_GATEWAY_TOKEN ?? ""
+  ) => {
+    if (!gatewayUrlForDemos)
+      throw new Error("MAESTRO_GATEWAY_URL is required to seed demo data");
+    const base = gatewayUrlForDemos.replace(/\/+$/u, "");
+    const headers = gatewayTokenForDemos
+      ? { authorization: `Bearer ${gatewayTokenForDemos}` }
+      : {};
+    const seededResponse = await fetch(`${base}/centraid/_vault/demo`, {
+      headers,
+      method: "POST",
+    });
+    const result = await seededResponse.json().catch(() => ({}));
+    if (!seededResponse.ok || result?.ok !== true)
+      throw new Error(
+        `gateway refused mobile demo fixture (${result?.error ?? seededResponse.status})`
+      );
+    ctx.note(
+      result.seeded?.length
+        ? `host-seeded demo scenarios: ${result.seeded.join(", ")}`
+        : `demo scenarios already seeded (${result.skipped?.join(", ") ?? "none"})`
+    );
+  };
+
   ctx.purgeDemo = async (
     appId,
     gatewayUrl = process.env.MAESTRO_GATEWAY_URL,
@@ -664,7 +710,7 @@ ${retryableTapCommands("Enter Centraid")}
 - stopApp
 - launchApp:
     clearState: false
-`,
+${LAUNCHER_RECOVERY}`,
       "restart"
     );
   };

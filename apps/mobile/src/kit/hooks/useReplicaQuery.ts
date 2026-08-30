@@ -9,7 +9,11 @@ import { coalesceWork } from "../../lib/coalesce";
 import type { NativeReadRequest } from "../../lib/replica/native-session";
 import { useReplica } from "../replica/ReplicaProvider";
 import type { ReplicaContextValue } from "../replica/ReplicaProvider";
-import { replicaQueryConnection } from "./replica-query-state";
+import {
+  replicaBootstrapActive,
+  replicaQueryConnection,
+  replicaQueryLoading,
+} from "./replica-query-state";
 import type { ReplicaQueryState } from "./replica-query-state";
 
 export { combineReplicaQueryStates } from "./replica-query-state";
@@ -53,6 +57,12 @@ export function useReplicaQuery(
 ): ReplicaQueryState {
   const replica = useReplica();
   const { session } = replica;
+  // Progressive bootstrap publishes its first page before the remaining
+  // pages are committed. A query mounted in that preview must refresh when
+  // the walk retires; otherwise it keeps the empty first-page result forever
+  // even though the rows are already in SQLite. The boolean is deliberately
+  // coarse so backfill page progress does not trigger one read per page.
+  const bootstrapActive = replicaBootstrapActive(replica.bootstrapProgress);
   const [result, setResult] = useState<ReplicaReadWireResult>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -104,7 +114,7 @@ export function useReplicaQuery(
       coalesced.cancel();
       unsubscribe();
     };
-  }, [appId, refresh, session]);
+  }, [appId, bootstrapActive, refresh, session]);
 
   // Map once per underlying result — a fresh array identity every render would
   // defeat every downstream memo (a 50k merge/re-sort on each selection tap).
@@ -123,7 +133,16 @@ export function useReplicaQuery(
 
   return {
     rows,
-    loading: connection === "loading" || (session !== undefined && loading),
+    // A progressive bootstrap may expose an empty first-page preview before
+    // later pages land. Treat that preview as loading so screens such as Home
+    // cannot mistake it for a genuinely empty vault and trigger Day One while
+    // the initial replica is still being assembled.
+    loading: replicaQueryLoading({
+      connection,
+      bootstrapActive,
+      hasSession: session !== undefined,
+      loading,
+    }),
     connection,
     ...(!session && replica.error ? { unavailableReason: replica.error } : {}),
     ...(lastSyncedAt ? { lastSyncedAt } : {}),

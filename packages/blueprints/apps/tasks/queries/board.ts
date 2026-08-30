@@ -282,7 +282,8 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
     }
     const allTags = [...tagLabelByConcept.entries()]
       .map(([concept_id, label]) => ({ concept_id, label }))
-      .toSorted((a, b) => a.label.localeCompare(b.label));
+      .slice()
+      .sort((a, b) => a.label.localeCompare(b.label));
 
     const linkRows = (links.rows ?? []) as unknown as RawLink[];
     const uniqueRefs = [
@@ -398,7 +399,7 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
     });
 
     const withChildren = (task: RawTask, children: RawTask[]) => {
-      const nested = children.toSorted(byUrgency).map(withAttachments);
+      const nested = [...children].sort(byUrgency).map(withAttachments);
       return {
         ...withAttachments(task),
         children: nested,
@@ -407,9 +408,9 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
     };
 
     const families = nestTaskFamilies(rows, withChildren);
-    const open = families.open.toSorted(byUrgency);
+    const open = [...families.open].sort(byUrgency);
     const logbook = families.logbook
-      .toSorted((a, b) =>
+      .sort((a, b) =>
         String(b.completed_at ?? "").localeCompare(String(a.completed_at ?? ""))
       )
       .slice(0, 50);

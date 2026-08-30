@@ -109,6 +109,8 @@ export interface MobileReplicaSession {
     listener: (invalidations: readonly ReplicaInvalidation[]) => void
   ) => () => void;
   pullNow: () => Promise<void | boolean>;
+  /** Rebuild the local replica from the gateway's current snapshot. */
+  rebootstrap?: () => Promise<void>;
 }
 
 /** AppState-shaped foreground signal; RN's `AppState` satisfies it. */
@@ -697,6 +699,25 @@ export class NativeReplicaSession implements MobileReplicaSession {
   requireBootstrap(): void {
     this.#hasCursor = false;
     if (!this.#closed) void this.bootstrapWhenReachable();
+  }
+
+  /** Force a full snapshot when a write is intentionally outside the feed. */
+  async rebootstrap(): Promise<void> {
+    if (this.#closed || !this.#isConnected()) return;
+    this.#hasCursor = false;
+    // Progressive bootstrap resolves after page one while its backfill can
+    // still be running. A refresh requested from that preview supersedes the
+    // stale pre-write walk: cancel it, wait for its store cleanup, then start
+    // the new snapshot. Waiting for a large stale walk here can otherwise keep
+    // an intentional out-of-feed write invisible for minutes on mobile.
+    const inFlight = this.#bootstrapPromise;
+    if (inFlight) {
+      this.#bootstrapAbort?.abort();
+      await inFlight.catch(() => undefined);
+    }
+    if (this.#closed || !this.#isConnected()) return;
+    this.#hasCursor = false;
+    await this.bootstrapWhenReachable();
   }
 
   async close(): Promise<void> {

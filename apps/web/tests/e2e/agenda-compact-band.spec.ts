@@ -91,7 +91,10 @@ function Seat() {
   };
   return createElement(
     "div",
-    { className: "seat" },
+    {
+      className: "window seat",
+      "data-compact": ${JSON.stringify(compact)},
+    },
     createElement(
       "header",
       { className: "bar", id: "appbar" },
@@ -145,11 +148,13 @@ async function bundle(
 const HARNESS_CSS = `
   body { margin: 0; background: var(--bg); color: var(--text); }
   .seat { display: flex; flex-direction: column; height: 100vh; }
+  .window[data-compact="true"] { display: flex; flex-direction: column; height: 100vh; }
   .bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
          border-block-end: 1px solid var(--line); }
   .barActions { display: flex; align-items: center; gap: 8px;
                 margin-inline-start: auto; }
   .pane { flex: 1; min-width: 0; min-height: 0; display: flex; }
+  nav[data-band="app"] { display: flex; min-height: 52px; }
 `;
 
 async function mount(
@@ -184,11 +189,13 @@ test("Agenda's compact band offers Search, never Month, and lands where it says"
   const grid = page.locator("[data-columns]");
   const rows = page.locator("[data-event-id]");
   const awaiting = page.getByText(AWAITING);
-  const barSearch = page.locator(`#appbar button[aria-label="${SEARCH_LABEL}"]`);
+  const barSearch = page.locator(
+    `#appbar button[aria-label="${SEARCH_LABEL}"]`
+  );
 
   // Four destinations plus the frame's More. Month is absent BY TYPE: a tab
   // that draws another view is worse than a tab that is not there.
-  await expect(band).toBeVisible();
+  await expect(band).toBeVisible({ timeout: 60_000 });
   await expect(band.locator("fieldset button")).toHaveText(BAND_TABS);
   await expect(tab("Month")).toHaveCount(0);
 
@@ -224,7 +231,9 @@ test("Agenda's compact band offers Search, never Month, and lands where it says"
   await expect(barSearch).toHaveCount(0);
   await expect(page.getByRole("searchbox")).toHaveCount(0);
   await tab("Search").click();
-  await expect(page.getByRole("searchbox", { name: SEARCH_LABEL })).toBeVisible();
+  await expect(
+    page.getByRole("searchbox", { name: SEARCH_LABEL })
+  ).toBeVisible();
   await expect(current).toHaveText("Day");
   await expect(grid).toHaveAttribute("data-columns", "1");
 

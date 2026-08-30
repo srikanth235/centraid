@@ -126,6 +126,11 @@ const HERMES_ARRAY_PROPERTIES = [
       "The reviewed Hermes runtime does not implement Array.prototype.toSorted; sort a fresh array with .sort instead.",
   },
   {
+    property: "toReversed",
+    message:
+      "The reviewed Hermes runtime does not implement Array.prototype.toReversed; reverse a fresh array with .slice().reverse() instead.",
+  },
+  {
     property: "findLast",
     message:
       "Keep the mobile/time-engine bundle on the reviewed Hermes Array surface; use an explicit forward scan instead.",
@@ -508,11 +513,22 @@ export default defineConfig({
       // 0.86 runtime used by the reviewed iOS build does not implement these
       // ES2023 Array helpers: `toSorted` caused the native Photos cover to
       // redbox in the exact-HEAD journey, and time-engine is bundled into
-      // native Agenda/Tally. Keep compatibility mechanical rather than relying
-      // on Node-based unit tests, whose newer Array prototype masks the bug.
-      files: ["apps/mobile/src/**", "packages/core/src/time/**"],
+      // native Agenda/Tally. packages/blueprints is in the same bundle — the
+      // blueprints ARE the native covers — and shipped ~40 toSorted/toReversed
+      // call sites that crashed the Docs and Tasks covers on device (#676
+      // nightly). Keep compatibility mechanical rather than relying on
+      // Node-based unit tests, whose newer Array prototype masks the bug.
+      // unicorn/no-array-reverse is silenced here because its one remedy,
+      // `toReversed`, is the banned method; reverse a fresh array with
+      // .slice().reverse() instead.
+      files: [
+        "apps/mobile/src/**",
+        "packages/core/src/time/**",
+        "packages/blueprints/apps/**",
+      ],
       rules: {
         "no-restricted-properties": ["error", ...HERMES_ARRAY_PROPERTIES],
+        "unicorn/no-array-reverse": "off",
       },
     },
     {

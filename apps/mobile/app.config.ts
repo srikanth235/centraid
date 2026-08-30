@@ -51,9 +51,18 @@ export default function createExpoConfig({
     orientation: "portrait",
     scheme: "centraid",
     userInterfaceStyle: "automatic",
-    icon: "../../assets/icon.png",
+    // These three MUST live inside the app dir. Expo serves them to the dev
+    // client through Metro as manifest asset URLs, and an HTTP URL cannot
+    // climb out of the project root: "../../assets/icon.png" normalized to
+    // /assets/icon.png under apps/mobile, Metro 500'd with "Asset not found",
+    // and expo-dev-client aborted the whole load ("There was a problem
+    // loading the project") — the nightly mobile lanes' red since the dev
+    // client shipped (#723). Prebuild reads the same paths, so the checked-in
+    // native projects are unaffected. Copies of the root brand assets; keep
+    // them in sync when the brand changes.
+    icon: "./assets/icon.png",
     splash: {
-      image: "../../assets/splash.png",
+      image: "./assets/splash.png",
       backgroundColor: "#3EC8B4",
       resizeMode: "contain",
     },
@@ -87,7 +96,7 @@ export default function createExpoConfig({
       // regenerating the manifest without it.
       allowBackup: false,
       adaptiveIcon: {
-        foregroundImage: "../../assets/adaptive-icon.png",
+        foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#3EC8B4",
       },
     },

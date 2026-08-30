@@ -30,7 +30,8 @@ export function groupTargets(targets: readonly LinkTarget[]): TargetGroup[] {
   // A kind the order does not name still lists after the seven: the query is the authority on what is linkable.
   const extra = [...byApp.keys()]
     .filter((app) => !KIND_ORDER.includes(app))
-    .toSorted((a, b) => a.localeCompare(b))
+    .slice()
+    .sort((a, b) => a.localeCompare(b))
     .map((app) => ({ app, targets: byApp.get(app)! }));
   return [...known, ...extra];
 }

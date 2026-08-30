@@ -4,6 +4,7 @@ import {
   qualityRegressionBudget,
   recordQualityResult,
 } from "../../agent-e2e-shared/harness.mjs";
+import { LAUNCHER_RECOVERY } from "../lib/first-run.mjs";
 import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
 
 const OWNER = "tests/agent-e2e-mobile/flows/volume-proof.mjs";
@@ -26,6 +27,7 @@ await runFlow("mobile-volume-proof", async (ctx) => {
     commands:
       - stopApp
       - launchApp
+${LAUNCHER_RECOVERY}
       - extendedWaitUntil:
           visible:
             text: "${HOME_READY_MARKER}"

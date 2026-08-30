@@ -61,7 +61,8 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
             ? null
             : c.broader_concept_id,
       }))
-      .toSorted((a, b) => String(a.name).localeCompare(String(b.name)));
+      .slice()
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
     // An `in` filter with an empty array throws; no scheme, empty drive.
     const folderConceptIds = schemeConcepts.map((c) => c.concept_id);
@@ -211,9 +212,8 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
               : (sharesByDoc.get(d.document_id) ?? []),
         };
       })
-      .toSorted((a, b) =>
-        String(b.created_at).localeCompare(String(a.created_at))
-      );
+      .slice()
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
 
     // A full window means older documents may lie beyond.
     const truncated = tagRows.length >= window;

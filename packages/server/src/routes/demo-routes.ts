@@ -13,6 +13,10 @@ import { sendJson } from "./route-helpers.js";
 
 const PREFIX = "/centraid/_vault/demo";
 const TIME_ENGINE_MODULE_URL = import.meta.resolve("@centraid/core/time");
+// Photos' deterministic roll is intentionally larger than the other demos.
+// Keep the route bounded, but do not turn a valid seed into a false 500 while
+// the worker is still committing its media rows.
+const DEMO_SEED_TIMEOUT_MS = 180_000;
 
 export interface DemoRouteDeps {
   codeAppsDir: () => string;
@@ -41,6 +45,28 @@ function seedableApps(deps: DemoRouteDeps): Map<string, string> {
     if (existsSync(seedFile)) seedable.set(appId, seedFile);
   }
   return seedable;
+}
+
+async function runSeed(input: {
+  appId: string;
+  seedFile: string;
+  vaults: VaultRegistry;
+  now: string;
+}): Promise<Awaited<ReturnType<typeof runHandler>>> {
+  return runHandler({
+    app: {
+      id: input.appId,
+      dir: path.join(input.vaults.currentWorkspace().appsDir, input.appId),
+    },
+    handlerFile: input.seedFile,
+    handlerKind: "action",
+    // One fixture operation shares a clock value across every app. Generators
+    // derive randomness from `input.seed` and dates from `input.now`.
+    args: { input: { seed: 1, now: input.now } },
+    timeoutMs: DEMO_SEED_TIMEOUT_MS,
+    vault: input.vaults.demoBridgeFor(input.appId),
+    timeModuleUrl: TIME_ENGINE_MODULE_URL,
+  });
 }
 
 export function makeDemoRouteHandler(
@@ -83,18 +109,11 @@ export function makeDemoRouteHandler(
         });
         return true;
       }
-      const outcome = await runHandler({
-        app: {
-          id: appId,
-          dir: path.join(vaults.currentWorkspace().appsDir, appId),
-        },
-        handlerFile: seedFile,
-        handlerKind: "action",
-        // Generators derive randomness from `input.seed` and dates from `input.now`.
-        args: { input: { seed: 1, now: new Date().toISOString() } },
-        timeoutMs: 60_000,
-        vault: vaults.demoBridgeFor(appId),
-        timeModuleUrl: TIME_ENGINE_MODULE_URL,
+      const outcome = await runSeed({
+        appId,
+        seedFile,
+        vaults,
+        now: new Date().toISOString(),
       });
       if (!outcome.ok) {
         sendJson(res, 500, {
@@ -108,6 +127,52 @@ export function makeDemoRouteHandler(
         ok: true,
         result: outcome.value ?? null,
         rows: status?.rows ?? 0,
+      });
+      return true;
+    }
+
+    if (method === "POST" && appId === null) {
+      const seedable = seedableApps(deps);
+      const status = plane.demoStatus();
+      const rowsByApp = new Map(
+        status.map((entry) => [entry.appId, entry.rows])
+      );
+      const seeded: string[] = [];
+      const skipped: string[] = [];
+      const now = new Date().toISOString();
+
+      for (const [id, seedFile] of seedable) {
+        if ((rowsByApp.get(id) ?? 0) > 0) {
+          skipped.push(id);
+          continue;
+        }
+        // Deliberately ordered: generators share the same vault and some
+        // scenarios create rows other scenarios reference.
+        // oxlint-disable-next-line no-await-in-loop -- vault seed order is part of the fixture contract
+        const outcome = await runSeed({
+          appId: id,
+          seedFile,
+          vaults,
+          now,
+        });
+        if (!outcome.ok) {
+          sendJson(res, 500, {
+            error: outcome.error ?? "seed generator failed",
+            appId: id,
+            seeded,
+            skipped,
+            logs: outcome.logs,
+          });
+          return true;
+        }
+        seeded.push(id);
+      }
+
+      sendJson(res, 200, {
+        ok: true,
+        seeded,
+        skipped,
+        apps: plane.demoStatus(),
       });
       return true;
     }

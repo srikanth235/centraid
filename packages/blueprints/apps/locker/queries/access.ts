@@ -88,7 +88,7 @@ export default async function accessHandler({
     });
     const rows = (result.rows ?? []) as unknown as ReceiptRow[];
     const entries = rows
-      .toSorted((a, b) =>
+      .sort((a, b) =>
         String(b.occurred_at ?? "").localeCompare(String(a.occurred_at ?? ""))
       )
       .map((row) => {

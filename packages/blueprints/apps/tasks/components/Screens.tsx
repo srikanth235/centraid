@@ -47,7 +47,8 @@ export function ProjectsRoute({
   return (
     <div className={styles.board}>
       {[...areas.entries()]
-        .toSorted(([a], [b]) => a.localeCompare(b))
+        .slice()
+        .sort(([a], [b]) => a.localeCompare(b))
         .map(([area, list]) => (
           <section key={area || "unfiled"} className={styles.group}>
             <div className={styles.groupHead}>

@@ -126,7 +126,7 @@ describe("demo routes", () => {
       args: { input: { seed: 1 } },
       handlerFile: path.join(codeAppsDir, "alpha", "seed.js"),
       handlerKind: "action",
-      timeoutMs: 60_000,
+      timeoutMs: 180_000,
       vault: bridge,
     });
     const args = call?.args as
@@ -150,6 +150,54 @@ describe("demo routes", () => {
     expect(failed.status).toBe(500);
     await expect(failed.json()).resolves.toStrictEqual({
       error: "seed exploded",
+      logs: [{ level: "error", msg: "safe diagnostic" }],
+    });
+  });
+
+  test("seeds the complete fixture once, skips present apps, and reports the failing app", async () => {
+    const codeAppsDir = await tempDir("demo-routes-bulk-");
+    await writeSeed(codeAppsDir, "alpha");
+    await writeSeed(codeAppsDir, "beta");
+    let rows = [{ appId: "alpha", rows: 4 }];
+    const handler = makeDemoRouteHandler(
+      fakeVaults({
+        demoStatus: () => rows,
+      }),
+      { bundledAppDirs: () => new Map(), codeAppsDir: () => codeAppsDir }
+    );
+    const base = await serve(handler);
+
+    mocks.runHandler.mockResolvedValueOnce({
+      ok: true,
+      value: { seeded: 3 },
+      logs: [],
+    });
+    const loaded = await fetch(`${base}/centraid/_vault/demo`, {
+      method: "POST",
+    });
+    expect(loaded.status).toBe(200);
+    await expect(loaded.json()).resolves.toMatchObject({
+      ok: true,
+      seeded: ["beta"],
+      skipped: ["alpha"],
+    });
+    expect(mocks.runHandler).toHaveBeenCalledOnce();
+
+    rows = [{ appId: "alpha", rows: 4 }];
+    mocks.runHandler.mockResolvedValueOnce({
+      ok: false,
+      error: "beta exploded",
+      logs: [{ level: "error", msg: "safe diagnostic" }],
+    });
+    const failed = await fetch(`${base}/centraid/_vault/demo`, {
+      method: "POST",
+    });
+    expect(failed.status).toBe(500);
+    await expect(failed.json()).resolves.toStrictEqual({
+      error: "beta exploded",
+      appId: "beta",
+      seeded: [],
+      skipped: ["alpha"],
       logs: [{ level: "error", msg: "safe diagnostic" }],
     });
   });

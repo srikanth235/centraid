@@ -287,7 +287,8 @@ function expandRecurringEvents(
           const override = overrides.get(exception.original_start);
           return override?.scope === "future";
         })
-        .toSorted((left, right) =>
+        .slice()
+        .sort((left, right) =>
           right.original_start.localeCompare(left.original_start)
         )[0];
       const override =
@@ -535,7 +536,8 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
         const endMs = new Date(e.dtend ?? e.dtstart).getTime();
         return Number.isNaN(endMs) || Number.isNaN(fromMs) || endMs >= fromMs;
       })
-      .toSorted((a, b) => String(a.dtstart).localeCompare(String(b.dtstart)));
+      .slice()
+      .sort((a, b) => String(a.dtstart).localeCompare(String(b.dtstart)));
     return {
       events: rows,
       calendars: calendars.rows ?? [],

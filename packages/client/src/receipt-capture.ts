@@ -66,7 +66,16 @@ export function parseReceiptText(raw: string): ReceiptDraft {
         money: NonNullable<ReturnType<typeof parseAmount>>;
       } => value.money !== null
     );
-  const total = parsed.toReversed().find(({ row }) => TOTAL.test(row));
+  // The LAST total-looking row wins. An explicit forward scan, because the
+  // direct formulations are both wrong here: `find` takes the first match and
+  // `toReversed`/`reverse` are respectively unavailable in Hermes (this
+  // module is mobile-reachable — see apps/mobile/src/kit/hooks/
+  // useReplicaQuery.ts) and mutating to `parsed`, which the item mapping
+  // below still reads in order.
+  let total;
+  for (const entry of parsed) {
+    if (TOTAL.test(entry.row)) total = entry;
+  }
   const currency =
     parsed
       .map(({ money }) => money.symbol)

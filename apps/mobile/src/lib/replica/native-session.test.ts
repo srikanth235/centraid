@@ -337,6 +337,94 @@ describe(createNativeReplicaSession, () => {
     }
   });
 
+  test("rebootstrap aborts an in-flight walk so a post-write snapshot is not stuck behind it", async () => {
+    const seeded = {
+      shapeId: "shape-photos",
+      entity: "core.content_item",
+      rowId: "photo-seeded",
+      values: {
+        content_id: "photo-seeded",
+        title: "Seeded after Home ready",
+        deleted_at: null,
+        created_at: "2026-08-29T10:00:00.000Z",
+      },
+    };
+    const gateway = createGateway()
+      .on("/replica/bootstrap", () =>
+        json(page({ epoch: "replica-1", seq: 1 }))
+      )
+      .on("/changes", () => json(noChanges({ epoch: "replica-1", seq: 1 })))
+      .on("/replica/bootstrap", async () => {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 40);
+        });
+        throw new Error("stale walk superseded");
+      })
+      .on("/replica/bootstrap", () =>
+        json(page({ epoch: "replica-1", seq: 4 }, { rows: [seeded] }))
+      )
+      .on("/changes", () => json(noChanges({ epoch: "replica-1", seq: 4 })));
+    const feed = createFeed();
+    const session = await createNativeReplicaSession({
+      gatewayAuth,
+      fetcher: gateway.fetcher,
+      changeFeed: feed,
+      driver: new NodeSqliteDriver(),
+      digest: nodeDigest,
+      idFactory: sequentialIds(),
+      isConnected: () => true,
+    });
+    try {
+      expect((await session.status()).cursor).toStrictEqual({
+        epoch: "replica-1",
+        seq: 1,
+      });
+      session.requireBootstrap();
+      await session.rebootstrap();
+      expect((await session.status()).cursor).toStrictEqual({
+        epoch: "replica-1",
+        seq: 4,
+      });
+      const read = await session.read("photos", {
+        entity: "core.content_item",
+      });
+      expect(read.rows.some((row) => row.rowId === "photo-seeded")).toBe(true);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("rebootstrap is a no-op when the gateway is not connected", async () => {
+    let connected = true;
+    const gateway = createGateway()
+      .on("/replica/bootstrap", () =>
+        json(page({ epoch: "replica-1", seq: 1 }))
+      )
+      .on("/changes", () => json(noChanges({ epoch: "replica-1", seq: 1 })));
+    const session = await createNativeReplicaSession({
+      gatewayAuth,
+      fetcher: gateway.fetcher,
+      changeFeed: createFeed(),
+      driver: new NodeSqliteDriver(),
+      digest: nodeDigest,
+      idFactory: sequentialIds(),
+      isConnected: () => connected,
+    });
+    try {
+      const boots = gateway.pathnames.filter((path) =>
+        path.includes("/replica/bootstrap")
+      ).length;
+      expect(boots).toBeGreaterThan(0);
+      connected = false;
+      await session.rebootstrap();
+      expect(
+        gateway.pathnames.filter((path) => path.includes("/replica/bootstrap"))
+      ).toHaveLength(boots);
+    } finally {
+      await session.close();
+    }
+  });
+
   test("a 409 pull rebootstraps without dropping a queued intent", async () => {
     const gateway = createGateway()
       .on("/replica/bootstrap", () =>

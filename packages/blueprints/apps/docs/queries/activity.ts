@@ -29,7 +29,8 @@ export default async function activityHandler({ input, ctx }: HandlerArgs) {
         agent_kind: r.agent_kind,
         occurred_at: r.occurred_at,
       }))
-      .toSorted((a, b) =>
+      .slice()
+      .sort((a, b) =>
         String(b.occurred_at ?? "").localeCompare(String(a.occurred_at ?? ""))
       );
     return { events };

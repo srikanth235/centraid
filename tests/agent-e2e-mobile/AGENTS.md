@@ -4,7 +4,7 @@ Notes for any agent (or human) writing or running flows in this folder. Pair wit
 
 ## What this layer is for
 
-The single mobile journey layer for both exploratory work and committed native regression. The harness ([`lib/harness.mjs`](lib/harness.mjs)) discovers a booted iOS Simulator **or Android emulator**, checks `dev.centraid.mobile` is installed and Metro is reachable, allocates a run dir, and exposes a `ctx` surface (`run`, `restart`, `ensureDemo`, `configureGateway`, `note`) to the flow body via `runFlow(slug, fn)`. Each `ctx.run(yaml)` spawns `maestro test` once with cwd set to the run's `screenshots/` dir, so `takeScreenshot:` directives land there.
+The single mobile journey layer for both exploratory work and committed native regression. The harness ([`lib/harness.mjs`](lib/harness.mjs)) discovers a booted iOS Simulator **or Android emulator**, checks `dev.centraid.mobile` is installed, allocates a run dir, and exposes a `ctx` surface (`run`, `restart`, `ensureDemo`, `configureGateway`, `note`) to the flow body via `runFlow(slug, fn)`. Local development builds use Metro; CI's iOS lane uses a Release `.app` with `main.jsbundle` embedded and sets `MOBILE_E2E_EMBEDDED=1`, so it has no packager dependency. Each `ctx.run(yaml)` spawns `maestro test` once with cwd set to the run's `screenshots/` dir, so `takeScreenshot:` directives land there.
 
 `MAESTRO_PLATFORM=ios|android` forces a target when both are running; otherwise iOS is preferred. `state.json` and `verdict.md` record the chosen platform alongside the udid.
 
@@ -73,7 +73,7 @@ Getting `mobile-e2e` green (#474/#478) surfaced six flows that were green while 
 - **Pairing has two valid identity exits.** A ticket can enroll an owner whose name is already known (e.g. an earlier flow already named them); onboarding then skips the profile form and goes directly to the personalized Done screen. An owner still carrying the placeholder label sees the profile form instead — which is what every FIRST pairing against a fresh gateway gets, since minting can no longer preset a name (#726). Shared pairing helpers must accept and prove both branches instead of waiting unconditionally for "Who's using this phone?".
 - **Selectors prefer accessibility text over coordinates.** RN components expose `accessibilityLabel` as the iOS-level accessibility text — Maestro's `tapOn: { text: "..." }` matches that. Coordinates rot the moment a layout changes.
 - **Anchor with regex when you need exact text.** `tapOn: "Settings"` matches both the Home header gear icon (accessibility text "Settings") AND the "Check settings" body button. Use `tapOn: { text: "^Settings$" }` to isolate the gear.
-- **Pre-flight checks are part of `setup()`.** The harness already fails loudly when no sim is booted, Centraid.app isn't installed, or Metro isn't reachable. Don't paper over those in a flow — fix the environment.
+- **Pre-flight checks are part of `setup()`.** The harness already fails loudly when no sim is booted or Centraid.app isn't installed; development-mode runs also require reachable Metro. Embedded Release CI runs intentionally skip the Metro check because the `.app` contains `main.jsbundle`. Don't paper over a missing dependency in a flow — fix the environment.
 
 ## When a flow fails
 

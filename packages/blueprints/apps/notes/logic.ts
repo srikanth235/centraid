@@ -551,8 +551,10 @@ export function rowsFor(
       (note.tags ?? []).some((tag) => tag.concept_id === conceptId)
     );
   }
+  // PINNED FIRST, THEN NEWEST EDITED. Nothing else reorders the reading
+  // room: no relevance weighting on a browse, no manual order, no streak.
   // PINNED FIRST, THEN NEWEST EDITED; nothing else reorders.
-  return rows.toSorted(
+  return [...rows].sort(
     (a, b) =>
       (b.pinned ?? 0) - (a.pinned ?? 0) ||
       String(b.updated_at).localeCompare(String(a.updated_at))

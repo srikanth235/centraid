@@ -102,7 +102,8 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
     );
     const lists = listConcepts
       .map((c) => ({ list_id: c.concept_id, name: c.pref_label }))
-      .toSorted((a, b) => String(a.name).localeCompare(String(b.name)));
+      .slice()
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
     const listConceptIds = new Set<string>(
       listConcepts.map((c) => c.concept_id)
     );

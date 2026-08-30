@@ -47,7 +47,7 @@ const GATE_ASSERTIONS = `- assertVisible: "Twelve characters at least, the only 
 await runFlow("locker-gate", async (ctx) => {
   // Not locker's own scenario — locker has none. See the header.
   await ctx.ensureDemo("docs");
-  await ctx.configureGateway();
+  await ctx.configureGateway({ fillSampleContent: true });
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---

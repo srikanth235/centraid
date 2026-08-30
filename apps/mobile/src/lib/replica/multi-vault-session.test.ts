@@ -29,6 +29,7 @@ interface FakeSession {
   session: NativeReplicaSession;
   pullNow: ReturnType<typeof vi.fn>;
   purge: ReturnType<typeof vi.fn>;
+  rebootstrap: ReturnType<typeof vi.fn>;
 }
 
 function fakeSession(input: {
@@ -42,6 +43,7 @@ function fakeSession(input: {
   const pullNow = vi.fn<() => Promise<boolean>>(() =>
     Promise.resolve(input.pulls ?? true)
   );
+  const rebootstrap = vi.fn<() => Promise<void>>(() => Promise.resolve());
   const purge = vi.fn<() => Promise<void>>(() => {
     input.onPurge?.();
     return Promise.resolve();
@@ -58,6 +60,7 @@ function fakeSession(input: {
       return parked.storageFull;
     },
     pendingChanges: () => Promise.resolve(input.pending ?? []),
+    rebootstrap,
     status: () =>
       Promise.resolve({
         mode: "native",
@@ -67,7 +70,7 @@ function fakeSession(input: {
       } satisfies ReplicaStatus),
     close: () => Promise.resolve(),
   } as unknown as NativeReplicaSession;
-  return { session, pullNow, purge };
+  return { session, pullNow, purge, rebootstrap };
 }
 
 function fakeReader(): MultiVaultReplicaReader & {
@@ -234,6 +237,30 @@ describe("what the mounted plane says about its own coverage", () => {
       coverage: "partial",
       scopes: [{ vaultId: "home", coverage: "partial" }],
     });
+  });
+});
+
+describe("rebootstrap after writes that are absent from the feed", () => {
+  test("rebuilds every mounted scope and stamps each as pulled", async () => {
+    const home = fakeSession({ coverage: "complete" });
+    const family = fakeSession({ coverage: "complete" });
+    const pulled: string[] = [];
+    const { facade } = build({
+      sessions: new Map([
+        ["home", home.session],
+        ["family", family.session],
+      ]),
+      scopes: [scope("home"), scope("family")],
+      onScopePulled: (vaultId) => {
+        pulled.push(vaultId);
+      },
+    });
+
+    await facade.rebootstrap();
+
+    expect(home.rebootstrap).toHaveBeenCalledOnce();
+    expect(family.rebootstrap).toHaveBeenCalledOnce();
+    expect(pulled.sort()).toStrictEqual(["family", "home"]);
   });
 });
 

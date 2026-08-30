@@ -214,9 +214,9 @@ export default async function journalHandler({ ctx }: HandlerArgs) {
     );
 
     return {
-      entries: [...owner, ...auto].toSorted((a, b) =>
-        String(b.sort_at).localeCompare(String(a.sort_at))
-      ),
+      entries: [...owner, ...auto]
+        .slice()
+        .sort((a, b) => String(b.sort_at).localeCompare(String(a.sort_at))),
     };
   } catch (error) {
     const e = error as { code?: string; message?: string };

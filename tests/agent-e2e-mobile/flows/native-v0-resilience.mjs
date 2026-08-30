@@ -3,6 +3,7 @@ import path from "node:path";
 
 import {
   DISMISS_KEYBOARD_ONBOARDING,
+  LAUNCHER_RECOVERY,
   retryableTapCommands,
 } from "../lib/first-run.mjs";
 import {
@@ -45,7 +46,7 @@ const AMOUNT_PLACEHOLDER = "0.00";
 const DEMO_GROUP = "Tahoe Trip";
 
 // The shell is a springboard, not a tab bar (apps/mobile/src/navigation.ts:
-// "There is no bottom-tab navigator"). All eight blueprint apps are full-screen
+// "There is no bottom-tab navigator"). The blueprint apps are full-screen
 // covers opened from Home's launcher tiles; Settings is opened from the vault
 // drawer. Each destination is asserted on copy unique to the screen it opens,
 // never on the tile label that remains visible on Home (issue #483, enforced
@@ -119,7 +120,9 @@ const SURFACES = [
   //
   // "Desktop link" is three scroll pages down inside Settings; "APPEARANCE" is
   // the first section heading it publishes and nothing else in the app renders
-  // it, so it proves arrival without a scroll.
+  // it, so it proves arrival without a scroll. YouSection now sits above the
+  // Appearance section (Settings.tsx), so the heading may be below the fold —
+  // scroll to it instead of assuming the first viewport.
   {
     marker: "APPEARANCE",
     openCommands: [
@@ -131,6 +134,7 @@ const SURFACES = [
       // the comma — `.*Settings` is what actually resolves, and with the modal
       // drawer open the dock underneath is not reachable anyway.
       retryableTapCommands(".*Settings", "GO TO"),
+      '- scrollUntilVisible:\n    element:\n      text: "APPEARANCE"\n    direction: DOWN',
     ].join("\n"),
     name: "settings",
   },
@@ -140,15 +144,23 @@ await runFlow("native-v0-resilience", async (ctx) => {
   // The airplane journey below opens ONE GROUP'S LEDGER before it disconnects,
   // because that is the only path to the composer on a vault that is not on
   // day one, and because the group's payload has to be in memory for the
-  // composer to know who the expense divides between. Seeded before pairing so
-  // the corpus arrives in the first replica clone; the GET guard makes it a
-  // no-op when another flow in the suite already seeded it.
-  await ctx.ensureDemo("tally");
-  await ctx.configureGateway();
+  // composer to know who the expense divides between. The Home fill below
+  // seeds the phone's replica after pairing.
+  await ctx.configureGateway({ fillSampleContent: true });
 
   const visitNext = async (index) => {
     const surface = SURFACES[index];
     if (surface === undefined) return;
+    // The graded grid holds every seeded app, which on a phone is more rows
+    // than one viewport — scroll the tile into view before tapping it.
+    // scrollUntilVisible completes immediately when the tile is already up.
+    const scrollToTile = surface.open
+      ? `- scrollUntilVisible:
+    element:
+      text: "${surface.open}"
+    direction: DOWN
+`
+      : "";
     const openCommands =
       surface.openCommands ?? retryableTapCommands(surface.open);
     await ctx.run(
@@ -157,10 +169,10 @@ await runFlow("native-v0-resilience", async (ctx) => {
 - stopApp
 - launchApp:
     clearState: false
-- extendedWaitUntil:
+${LAUNCHER_RECOVERY}- extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${openCommands}
+${scrollToTile}${openCommands}
 - extendedWaitUntil:
     visible: "${surface.marker}"
     timeout: 20000
@@ -198,7 +210,7 @@ ${openCommands}
 - stopApp
 - launchApp:
     clearState: false
-- extendedWaitUntil:
+${LAUNCHER_RECOVERY}- extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 ${retryableTapCommands("Open Tally.*")}
@@ -252,7 +264,7 @@ ${retryableTapCommands("Waiting", GROUP_HERO_SUB)}
 - stopApp
 - launchApp:
     clearState: false
-- extendedWaitUntil:
+${LAUNCHER_RECOVERY}- extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 ${retryableTapCommands("Open Tally.*")}
@@ -303,7 +315,7 @@ ${retryableTapCommands("Waiting", BALANCES_STATUS)}
     "after-force-kill"
   );
   ctx.note(
-    "All eight native blueprint covers and Settings survived navigation and a process restart; Android also completed the airplane-mode pending-write restart journey."
+    "Seven native blueprint covers (Tally excised: its cover is deliberately empty pending redesign) and Settings survived navigation and a process restart; Android also completed the airplane-mode pending-write restart journey."
   );
 
   // UI-impact evidence for #799: with the WebView app cover retired, Home's
@@ -322,11 +334,15 @@ ${retryableTapCommands("Waiting", BALANCES_STATUS)}
       path.join(ctx.state.screenshotsDir, home),
       path.join(uiImpactDir, "issue-799-mobile-native-home.png")
     );
+    await copyFile(
+      path.join(ctx.state.screenshotsDir, home),
+      path.join(uiImpactDir, "issue-676-home-ready-seed.png")
+    );
   };
   await screenshot();
   return {
     pass: true,
     notes:
-      "all eight native blueprint covers, Settings, and process-restart smoke passed",
+      "seven native blueprint covers (Tally excised: empty cover pending redesign), Settings, and process-restart smoke passed",
   };
 });

@@ -247,18 +247,28 @@ export default function PhotosCollectionsView({
     return buildCollectionSections({
       assets,
       albums,
-      places: places.rows.flatMap((row) => {
-        const key = placeCardKey(row);
-        return key === null
-          ? []
-          : [
-              {
-                placeId: String(row.place_id),
-                key,
-                name: String(row.name ?? "Place"),
-              },
-            ];
-      }),
+      places: (() => {
+        // One tile per `placeCardKey` cell — the same grouping the Places
+        // shelf itself renders (places-model's `placeCards`). Two
+        // `core_place` rows can round into one 0.1° cell (the demo seed
+        // mints several within a kilometre of each other), and the rail
+        // keys its tiles by the cell, so an ungrouped map rendered duplicate
+        // React keys — a full-screen LogBox in dev that covered the screen
+        // and took out any journey asserting on what is underneath (#676).
+        const seenPlaceKeys = new Set<string>();
+        return places.rows.flatMap((row) => {
+          const key = placeCardKey(row);
+          if (key === null || seenPlaceKeys.has(key)) return [];
+          seenPlaceKeys.add(key);
+          return [
+            {
+              placeId: String(row.place_id),
+              key,
+              name: String(row.name ?? "Place"),
+            },
+          ];
+        });
+      })(),
       people: [...byParty.entries()].map(([partyId, entry]) => ({
         partyId,
         ...entry,

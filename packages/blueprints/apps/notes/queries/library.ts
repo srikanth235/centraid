@@ -231,8 +231,11 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         name: c.name,
         sort_order: c.sort_order,
       }))
-      .toSorted((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-    // Journal ids must never reach the joins below (#834 R-journal).
+      // Journal entries leave BEFORE anything is derived from the rows: their
+      // ids never reach the placement/attachment/link/tag joins, so no
+      // journal-only concept can surface as a library filter chip and no
+      // journal body is ever previewed or check-tallied here (#834 R-journal).
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
     const windowed = [...byId.values()].filter(
       (note) => !journalNoteIds.has(note.note_id)
     );
@@ -333,7 +336,8 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       ).entries(),
     ]
       .map(([concept_id, label]) => ({ concept_id, label }))
-      .toSorted((a, b) => a.label.localeCompare(b.label));
+      .slice()
+      .sort((a, b) => a.label.localeCompare(b.label));
 
     // Resolvable-if-linked: no media/finance read scopes are needed here.
     const linkRows = (links.rows ?? []) as unknown as LinkRow[];
@@ -477,7 +481,8 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           tags: tagsByNote.get(n.note_id) ?? [],
         };
       })
-      .toSorted(
+      .slice()
+      .sort(
         (a, b) =>
           (b.pinned ?? 0) - (a.pinned ?? 0) ||
           String(b.updated_at).localeCompare(String(a.updated_at))

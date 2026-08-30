@@ -20,16 +20,16 @@
 // screen publishes (issue #483's non-vacuous rules; this file is listed in
 // scripts/lint-e2e-flows.mjs).
 
-import { retryableTapCommands } from "../lib/first-run.mjs";
+import { settledRetryableTapCommands } from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 await runFlow("places-seat", async (ctx) => {
   await ctx.ensureDemo("photos");
-  await ctx.configureGateway();
+  await ctx.configureGateway({ fillSampleContent: true });
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${retryableTapCommands("Open Photos.*")}
+${settledRetryableTapCommands("Open Photos.*")}
 - extendedWaitUntil:
     visible: "Collections"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
@@ -39,7 +39,7 @@ ${retryableTapCommands("Open Photos.*")}
     element:
       text: "Open Places.*"
     direction: DOWN
-${retryableTapCommands("Open Places.*")}
+${settledRetryableTapCommands("Open Places.*")}
 # The shelf's own header — "Places · N" is published by PlacesView alone, and
 # a seeded vault must count at least one place. A zero here is the #787
 # defect shape (map full, shelf empty), so the digit is the assertion.
@@ -49,13 +49,28 @@ ${retryableTapCommands("Open Places.*")}
 # At least one card, by the label every card publishes.
 - assertVisible: ".*, [0-9]+ photographs"
 - takeScreenshot: places-shelf
-${retryableTapCommands("Open map")}
+${settledRetryableTapCommands("Open map")}
 # The map's resting sentence — the privacy claim the screen makes about
 # itself — plus its own "drawn of held" count, both map-only copy.
 - extendedWaitUntil:
     visible: "Plotted from your own photographs."
     timeout: 30000
 - assertVisible: "[1-9][0-9]* of [1-9][0-9]*"
+# The pin press happens on the SKETCH ground. The real ground's pins are
+# native on iOS — MapKit annotations publishing only the count numeral, with
+# no accessible name a selector or a screen reader can land on
+# (places-map-apple.tsx; Android's MapLibre markers wrap the accessible
+# PlacePin). The mode chip is the product's own switch between grounds, and
+# the sketch's note copy proves the switch took before any pin is pressed.
+- tapOn:
+    text: "^Map mode$"
+    retryTapIfNoChange: true
+- tapOn:
+    text: "Private sketch"
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: "Nothing is fetched.*"
+    timeout: 15000
 # Press a pin (each is a Pressable labelled "<where>, N photographs?") and
 # the readout replaces the resting sentence with "<where> · N".
 - tapOn:

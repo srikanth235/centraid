@@ -101,7 +101,8 @@ export function Rail(props: RailProps): ReactNode {
 
       <div className={styles.railHead}>{RAIL_HEADS.projects}</div>
       {[...areas.entries()]
-        .toSorted(([a], [b]) => a.localeCompare(b))
+        .slice()
+        .sort(([a], [b]) => a.localeCompare(b))
         .map(([area, list]) => (
           <div key={area || "unfiled"}>
             {area ? (

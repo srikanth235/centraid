@@ -2,7 +2,9 @@ import { describe, expect, test } from "vitest";
 
 import {
   combineReplicaQueryStates,
+  replicaBootstrapActive,
   replicaQueryConnection,
+  replicaQueryLoading,
 } from "./replica-query-state";
 
 describe("replica query connection state", () => {
@@ -129,5 +131,54 @@ describe("how much of the library a query is speaking for", () => {
         },
       ]).coverage
     ).toBeUndefined();
+  });
+});
+
+describe(replicaBootstrapActive, () => {
+  test("a first-page preview is an active walk, an absent list is not", () => {
+    expect(replicaBootstrapActive(undefined)).toBe(false);
+    expect(replicaBootstrapActive([])).toBe(false);
+    expect(
+      replicaBootstrapActive([
+        {
+          vaultId: "home",
+          vaultLabel: "Home",
+          phase: "first-page",
+          pages: 1,
+        },
+      ])
+    ).toBe(true);
+  });
+});
+
+describe(replicaQueryLoading, () => {
+  test("treats a progressive first-page preview as loading, not an empty vault", () => {
+    expect(
+      replicaQueryLoading({
+        connection: replicaQueryConnection({
+          ready: true,
+          hasSession: true,
+          reachability: "current",
+        }),
+        bootstrapActive: true,
+        hasSession: true,
+        loading: false,
+      })
+    ).toBe(true);
+  });
+
+  test("drops the preview-as-loading once the walk retires and a read settled", () => {
+    expect(
+      replicaQueryLoading({
+        connection: replicaQueryConnection({
+          ready: true,
+          hasSession: true,
+          reachability: "current",
+        }),
+        bootstrapActive: false,
+        hasSession: true,
+        loading: false,
+      })
+    ).toBe(false);
   });
 });

@@ -10,7 +10,7 @@ const currentMonth = new Intl.DateTimeFormat("en-US", {
 
 await runFlow("photos-library", async (ctx) => {
   await ctx.ensureDemo("photos");
-  await ctx.configureGateway();
+  await ctx.configureGateway({ fillSampleContent: true });
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---

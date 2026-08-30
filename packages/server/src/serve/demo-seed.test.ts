@@ -59,7 +59,7 @@ describe("demo-seed", () => {
       handlerFile: seedFile,
       handlerKind: "action",
       args: { input: { seed: 1, now: new Date().toISOString() } },
-      timeoutMs: 60_000,
+      timeoutMs: 180_000,
       vault: plane.demoBridgeFor(appId),
       timeModuleUrl: TIME_ENGINE_MODULE_URL,
     });

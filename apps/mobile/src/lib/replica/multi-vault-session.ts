@@ -260,6 +260,16 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     };
   }
 
+  /** Rebuild every mounted scope after writes that are absent from the feed. */
+  async rebootstrap(): Promise<void> {
+    await Promise.all(
+      [...this.#sessions].map(async ([vaultId, session]) => {
+        await session.rebootstrap();
+        this.#onScopePulled?.(vaultId);
+      })
+    );
+  }
+
   async revokeScope(vaultId: string): Promise<void> {
     const session = this.#sessions.get(vaultId);
     const scope = this.#scopes.find(
@@ -457,7 +467,8 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
             record.status === "parked" ||
             record.status === "in-flight"
         )
-        .toReversed();
+        .slice()
+        .reverse();
       await Promise.all(
         pending.map(async (record) => {
           this.#reader.updatePlacement({ ...record, status: "in-flight" });

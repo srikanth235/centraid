@@ -241,7 +241,8 @@ export default async function dayContext({
     }
     const due: DueFact[] = [...counts.entries()]
       .map(([day, count]) => ({ day, count, tasks: listed.get(day) ?? [] }))
-      .toSorted((left, right) => left.day.localeCompare(right.day));
+      .slice()
+      .sort((left, right) => left.day.localeCompare(right.day));
 
     // No holiday source exists in the vault; the field holds the shape open.
     const holidays: HolidayFact[] = [];

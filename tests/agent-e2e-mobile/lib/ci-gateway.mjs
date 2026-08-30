@@ -83,6 +83,23 @@ const server = http.createServer((request, response) => {
 await new Promise((resolve) => {
   server.listen(port, "127.0.0.1", resolve);
 });
+
+// Seed before any pairing ticket is minted. Demo rows intentionally sit outside
+// the change feed, so a fresh phone must see the complete corpus in its first
+// replica snapshot instead of racing a post-pairing fill/rebootstrap.
+const fixture = await fetch(`http://127.0.0.1:${port}/centraid/_vault/demo`, {
+  method: "POST",
+});
+const fixtureBody = await fixture.json().catch(() => ({}));
+if (!fixture.ok || fixtureBody?.ok !== true) {
+  throw new Error(
+    `mobile CI fixture failed at ${fixtureBody?.appId ?? "unknown app"}: ${fixtureBody?.error ?? fixture.status}`
+  );
+}
+console.log(
+  `mobile CI fixture ready (seeded ${fixtureBody.seeded?.join(", ") ?? "none"})`
+);
+
 const endpoint = await devicePlane.startEndpoint({
   baseUrl: `http://127.0.0.1:${port}`,
   // The CI HTTP listener deliberately has no bearer. Iroh still proves and

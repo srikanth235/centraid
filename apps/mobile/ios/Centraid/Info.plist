@@ -44,6 +44,30 @@
     <string>12.0</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <!-- expo-dev-menu reads this via Bundle.main.object(forInfoDictionaryKey:)
+         and registers it as the default for its onboarding flag. Without it the
+         one-time "This is the developer menu" explainer opens over the app on
+         every cleared-state launch — and CI reinstalls the dev build every run,
+         so "one-time" means "every time", hiding whatever the flow asserts
+         behind the sheet (#676). -->
+    <key>EXDevMenuIsOnboardingFinished</key>
+    <true/>
+    <!-- expo-dev-menu's DevMenuManager.updateAutoLaunchObserver opens the menu
+         on RCTContentDidAppear when showsAtLaunch || shouldShowOnboarding()
+         (DevMenuPreferences registers showsAtLaunch's Info.plist default, true
+         on iOS). The onboarding key above only kills the second disjunct —
+         dispatch 32803482770 still showed the bare menu auto-opened over the
+         rendered app. This key kills the first, so the menu never auto-opens
+         on a fresh install; it stays reachable by gesture (#676). -->
+    <key>EXDevMenuShowsAtLaunch</key>
+    <false/>
+    <!-- The FAB is its own UIWindow floating above the app with a hit area
+         inset-expanded 10pt past its frame (DevMenuFABWindow.swift), so a
+         Maestro tap near a screen's top-right control can land on it and open
+         the dev menu mid-journey (places-seat's "Open map" tap, local run
+         05-49-50). The menu stays reachable via keyboard/shake. -->
+    <key>EXDevMenuShowFloatingActionButton</key>
+    <false/>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>NSAppTransportSecurity</key>
