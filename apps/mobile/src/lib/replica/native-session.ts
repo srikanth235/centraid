@@ -703,7 +703,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
 
   /** Force a full snapshot when a write is intentionally outside the feed. */
   async rebootstrap(): Promise<void> {
-    if (this.#closed || !this.#isConnected()) return;
+    if (this.#closed) return;
     this.#hasCursor = false;
     // Progressive bootstrap resolves after page one while its backfill can
     // still be running. A refresh requested from that preview supersedes the
@@ -715,9 +715,20 @@ export class NativeReplicaSession implements MobileReplicaSession {
       this.#bootstrapAbort?.abort();
       await inFlight.catch(() => undefined);
     }
-    if (this.#closed || !this.#isConnected()) return;
+    if (this.#closed) return;
+    // This is an explicit rebuild requested after an online operation. The
+    // reachability flag is deliberately advisory and can lag the tunnel that
+    // just accepted that operation; the fetcher is the authority here. Keep
+    // the transfer-policy gate in bootstrapWhenReachable(), but do not drop a
+    // successful seed merely because the provider has not published `online`
+    // yet.
     this.#hasCursor = false;
-    await this.bootstrapWhenReachable();
+    if (!(await this.#isNetworkWorkAllowed())) return;
+    if (this.#bootstrapPromise) return this.#bootstrapPromise;
+    this.#bootstrapPromise = this.bootstrap().finally(() => {
+      this.#bootstrapPromise = undefined;
+    });
+    await this.#bootstrapPromise;
   }
 
   async close(): Promise<void> {

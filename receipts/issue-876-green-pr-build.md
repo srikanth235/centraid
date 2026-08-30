@@ -183,6 +183,7 @@ sequence is removed.
 | date | harness | session |
 | --- | --- | --- |
 | 2026-08-29 | grok | - |
+| 2026-08-30 | codex | 01a04413-e091-7563-9c88-25bd90ba9192 |
 
 ### Changed paths
 

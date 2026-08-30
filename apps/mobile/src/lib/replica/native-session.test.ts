@@ -195,6 +195,34 @@ describe(createNativeReplicaSession, () => {
     }
   });
 
+  test("explicitly rebootstraps when reachability has not published yet", async () => {
+    const gateway = createGateway()
+      .on("/replica/bootstrap", () =>
+        json(page({ epoch: "replica-1", seq: 1 }))
+      )
+      .on("/changes", () => json(noChanges({ epoch: "replica-1", seq: 1 })));
+    const feed = createFeed();
+    const session = await createNativeReplicaSession({
+      gatewayAuth,
+      fetcher: gateway.fetcher,
+      changeFeed: feed,
+      driver: new NodeSqliteDriver(),
+      digest: nodeDigest,
+      idFactory: sequentialIds(),
+      isConnected: () => false,
+    });
+    try {
+      expect((await session.status()).cursor).toBeNull();
+      await session.rebootstrap();
+      expect((await session.status()).cursor).toStrictEqual({
+        epoch: "replica-1",
+        seq: 1,
+      });
+    } finally {
+      await session.close();
+    }
+  });
+
   test("bootstraps a multi-page window and converges from the page-1 cursor", async () => {
     const rows = (id: string): ReplicaSnapshotRow[] => [
       {
