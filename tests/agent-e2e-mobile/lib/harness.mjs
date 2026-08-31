@@ -442,6 +442,10 @@ async function runMaestroChunk(
       {
         cwd: state.screenshotsDir,
         env: { ...process.env, ...maestroEnv },
+        // The chunk's own capabilities, so a failure can print its step lines
+        // with every one of them replaced by exact match. `spawnLive` ignores
+        // this; only the sensitive path reads it.
+        secrets: Object.values(maestroEnv),
         timeoutMs: maestroChunkTimeoutMs(),
       }
     );

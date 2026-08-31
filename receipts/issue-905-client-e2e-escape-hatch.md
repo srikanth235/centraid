@@ -30,6 +30,10 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Seed the demo corpus once per LANE, before anything pairs, rather than per flow after the first pairing
 - [x] Give `lint:e2e-wiring` a `corpus` rule holding both halves: no tile tap for an app that cannot earn the grid, and no seeding after the lane's handoff to Maestro
 
+### F — the PR gate's short-circuiting prerequisite failed twice and named nothing
+
+- [x] Let a sensitive chunk print its failing directive on failure, without ever letting its capability reach the log
+
 ## What changed
 
 Where each checked item lands, then the reasoning behind it:
@@ -45,6 +49,7 @@ Where each checked item lands, then the reasoning behind it:
 - Establish whether `desktop-e2e-macos` is a gap or a decision, and change nothing if it is a decision — "D — `desktop-e2e-macos` is a decision, not a gap"; no file changed.
 - Seed the demo corpus once per LANE, before anything pairs, rather than per flow after the first pairing — "E — the corpus arrived after the clone"; `tests/agent-e2e-mobile/seed-demo-corpus.mjs`, `tests/agent-e2e-mobile/lib/demo-corpus.mjs`, `tests/agent-e2e-mobile/lib/harness.mjs`, `apps/mobile/scripts/android-emulator-install.sh`.
 - Give `lint:e2e-wiring` a `corpus` rule holding both halves: no tile tap for an app that cannot earn the grid, and no seeding after the lane's handoff to Maestro — "E — the corpus arrived after the clone", final paragraphs; `scripts/lint-e2e-wiring.mjs`, `scripts/lint-e2e-wiring.cases.mjs`, and `tests/agent-e2e-mobile/README.md`, whose `ctx.ensureDemo` entry described the per-flow contract without saying that a CI lane makes it a no-op.
+- Let a sensitive chunk print its failing directive on failure, without ever letting its capability reach the log — "F — a prerequisite that fails without saying how"; `tests/agent-e2e-mobile/lib/spawn.mjs`, `tests/agent-e2e-mobile/lib/harness.mjs`, `tests/agent-e2e-mobile/lib/spawn-redaction.test.mjs`, `package.json`.
 
 ### The defect
 
@@ -124,6 +129,27 @@ The fix is one line of ordering. `tests/agent-e2e-mobile/seed-demo-corpus.mjs` s
 
 `lint:e2e-wiring` gains RULE `corpus`, in two halves, because the two ways to get this wrong are different. (a) A flow may only tap `Open <App>` for an app that ships a scenario or is one the springboard promotes on an empty vault — `locker` is the sole exemption, and it is an exemption rather than an oversight because its tile body is a *state* rather than a query result. (b) The lane preamble must run the seeder, and must do it **before** `export MAESTRO_PLATFORM`: ordering it after the handoff restores the defect while looking like the fix, so the rule checks position, not presence. The app table is read from `packages/blueprints/apps/` rather than listed, on the linter's existing principle that a hand-kept list is the thing that drifts.
 
+### F — a prerequisite that fails without saying how
+
+The corpus fix landed exactly as designed — `seed-demo-corpus: 7 scenario(s) ready before first pairing`, ahead of the first `[runFlow]` line — and the lane was still red, because `pairing-canary` failed before any tile could be tapped. That is the fourth data point on one chunk:
+
+| head | corpus | `pairing-canary` |
+| --- | --- | --- |
+| `42c66389` | empty | **FAIL** 73s |
+| `36bad90e` | empty | PASS 183s |
+| `277e054c` | empty | PASS 174s |
+| `f221b862` | seeded | **FAIL** 125s |
+
+Failing under both corpus states rules out the seeding as its cause, which is worth stating because the ordering invited the opposite conclusion: the failure arrived in the same push as the change, and reading it as a regression would have been the obvious mistake. Both durations are *shorter* than a pass, so neither is the flow running long; each is a wait inside `01-configure-gateway` expiring — a different one each time, 73s against the 45s first-launch wait and 125s against the 90s redemption wait.
+
+Neither could be diagnosed, and that is the defect this section fixes. The chunk runs `sensitive: true`, which kept its capability out of the log by keeping *everything* out of it: `stdio: "ignore"`, and the `maestro-debug` directory deleted before upload. Two failures of the PR gate's short-circuiting prerequisite — the one whose failure takes the other four journeys with it — reported `maestro sensitive flow exited 1` and nothing else, twice.
+
+The output is now captured and, **on failure only**, the redacted step lines are printed; a green run stays silent. The capability is no more printable than before, held by two independent controls so that neither one being wrong is enough: only lines in Maestro's step shape survive the filter (a directive name and a verb, never a value — `inputText` renders as the `${MAESTRO_*}` placeholder, which is literally what the retained YAML holds), and every secret is replaced by exact-string match regardless. `spawn-redaction.test.mjs` drives each control alone, including the case where a secret reaches a step line anyway.
+
+This does not fix the flake. It makes the next occurrence name the directive it died on, which is the thing four runs could not say — the same trade as the `--stacktrace` under C, and the honest extent of what one more red run can buy without a diagnosis.
+
+The spec is wired into `scripts:test` rather than left beside the harness, because `tests/agent-e2e-mobile/lib/sh-quote.test.mjs` sits there today and **nothing runs it** — no config includes that directory and no script names the file. That orphan is recorded in Out of scope rather than fixed here.
+
 ### Docs
 
 `docs/decisions.md` gains **G-filter-escape-hatch** beside the existing G-filter-inverse. `TESTING.md`'s path-filter row records both the narrowed `client-e2e` gate and the new fallback requirement.
@@ -145,6 +171,8 @@ The fix is one line of ordering. `tests/agent-e2e-mobile/seed-demo-corpus.mjs` s
 
   **It did not recur, and the reason narrows the search.** The branch dispatch (run 33374941598, 08:52) restored the apk cache on key `android-release-Linux-jdk6ea3257c17f4-fp…-js0601c949dd337c83` — 147 MB, a hit — so the installer took its warm path (`Android cache hit … skipping gradle`) and no gradle ran at all. Two things follow. The 34m55s failure was reached only through the cold path, which supports the cold-cache-window bullet below as its precondition rather than a coincidence; and it is not deterministic on this tree, so the `--stacktrace` may have to wait for the next cold miss to pay out. Neither observation is a diagnosis, and the bullet stands.
 - **`mobile-device-gate` is still red, now for an unrelated reason in the product.** With the build skipped, the suite ran and `pairing-canary` failed at its first chunk `01-configure-gateway` after 73s with **0 completed assertions**, classified `product`; the four journeys behind that shared prerequisite never started. The chunk's own diagnostics are deliberately unreadable — it is a `sensitive: true` flow whose stdout is suppressed and whose `maestro-debug/*-configure-gateway` directory the `Remove sensitive pairing diagnostics` step deletes before upload, because it would otherwise ship a live enrollment capability. That control is correct and is not to be weakened to make this easier to read. The 73s is consistent with the flow's first `extendedWaitUntil` (`FIRST_LAUNCH_TIMEOUT_MS`, 45s on a release build) plus install and `clearState`, i.e. the app never reached "Connect your gateway." — consistent, not established, because the verdict could not be read from here (the artifact host is off this container's egress allowlist).
+- **`tests/agent-e2e-mobile/lib/sh-quote.test.mjs` is an orphan.** Nothing runs it: no vitest config includes `tests/agent-e2e-mobile/lib/`, and no package script names the file. It is a real spec guarding a real hazard (device-side shell quoting) that has never executed in CI. Found while looking for the right home for F's spec, which is why F's went into `scripts:test` instead of beside it. Fixing the orphan is a separate change — either wiring that directory into a vitest project or converting the file — and it is not this issue's.
+- **The `01-configure-gateway` flake itself.** F makes the next failure name its directive; it does not make the chunk stable. Two failures in four runs on the PR gate's short-circuiting prerequisite is a real reliability problem, and the two expiries were different waits, so there is probably more than one cause. Diagnosing it needs the step lines F now emits.
 - **The Android roster's remaining red, after E.** E fixes the cause of every `Element not found` tile tap. It does NOT re-verify the journeys behind those taps: `photos-permissions` also failed its own `photos-collections` assertion after warnings about `^Open$` and `^Continue$`, which is a permission-dialog path this change does not touch, and no lane has run past the tile tap yet to say what else is behind it. #904 and #870 stay open until a green roster closes them.
 - **The Android roster is broadly red on `main` itself, and is already tracked.** The `mobile-canary` run on main tip `f5ca34fb` (33370541215) paired and onboarded fine — `mobile-cold-start`, `home-loads` and `volume-proof` all PASS, and "All apps and places" asserts visible — then failed nearly every remaining journey at the tile tap: `Open Photos.*`, `Open Docs.*`, `Open Agenda.*`, `Open Notes.*`, `Open Tasks.*`, `Open People.*` and `id: home-tile-photos` are all `Element not found`. One shared symptom, a home screen rendering its heading without its tiles. The canary's own `File a tracking issue on a red canary` step filed **#904** for it, and **#870** is the older sibling ("home-app journeys never see home"). Nothing here changes app code; it is recorded because it is the actual reason the mobile lanes are red on main, and it is not the CI wiring this issue is about.
 - **The window in which the canary has not yet warmed the apk and gradle caches.** `mobile-canary.yml` saves them `if: always()`, which is already right, but it saves *after* the full roster — roughly 55 minutes after the build finishes. So for about an hour after each merge to `main`, a device-gate run on that content is cold by construction. Splitting the build out of the emulator-runner step would fix it and is a restructure of the mobile lanes, not a line change; out of scope for a PR that is otherwise about gate wiring.
