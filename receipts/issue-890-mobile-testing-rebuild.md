@@ -82,6 +82,8 @@ Worked by root-agent orchestration per [docs/multi-agent.md](../docs/multi-agent
 
 This section covers work added after the first push, when the deferred items were re-examined instead of accepted.
 
+The CI repair also touches `apps/mobile/android/app/build.gradle` (let the locked React Native Gradle plugin resolve the Hermes compiler), `apps/mobile/native-fingerprints.json` (record the reviewed Android native identity), and `packages/server/src/acp/backends/acp/turn-vault-tools.ts` (make the proxy URL conversion type-safe).
+
 **The overloaded owners were split, and the deferral was wrong.** `mobile.contracts` and `mobile.compat` named the same file, so the matrix reported two green cells over one body of evidence. Compat moved to `apps/mobile/src/lib/replica/mobile-gateway-skew.test.ts`, which states skew as what it actually is — an overlap test between the app's protocol range and the gateway's — and covers both directions plus each boundary. One residue is recorded rather than hidden: while `GATEWAY_MIN_PROTOCOL_VERSION` equals `GATEWAY_PROTOCOL_VERSION` the app's window is a single point, so the judge's lower-bound comparison has **no input that distinguishes `<` from `<=`**. That was established by mutating the operator and failing to find a failing case, not assumed, and it becomes reachable the moment the window widens.
 
 **Hostile input found two live holes in the upload allowlist, and they are fixed rather than pinned.** `assertGatewayMintedUploadUrl` is the only thing standing between a native background PUT and a destination the gateway never authorized, and it tested scope with `pathname.startsWith(allowedUploadPrefix)`:
@@ -395,6 +397,12 @@ bash .governance/run.sh
 
 #890 W0 re-pins the two tests/matrix.json fingerprints after correcting one quality gate whose owner did not carry its claim. `U1-mobile` ("mobile first-run product journey") was owned by flows/home-loads.mjs, a flow that deliberately never pairs and never reaches Home — the gate and its owner were about different journeys, so the cell could not have gone green for the right reason. It is re-owned to flows/pairing-canary.mjs, which mints a ticket, redeems it, completes the profile and waits for the Home band, with its demonstrated-red seed and failure signature rewritten to match. The gate stays BLOCKED: greenness is the rebuilt lanes' to earn, not this edit's to assert. No quality lost a gate, no gate lost its blocker, and no waiver, budget or allowlist was widened. The whole-file fingerprint also moves because the journeys registry gained the `probes` suite (the six standalone journeys, previously unbudgeted, now behind run-probes-suite.mjs with a 35-minute ceiling) and the canonical flow record for the canary. Prior: #883. The whole-file fingerprint moves once more in the same change: the five app-state cells that were literal `gap`s — docs.stale, people.offline, people.stale, people.conflict, photos.stale — gained owners in tests/integration-mobile/, the new boot-condition tier that arranges each state against a real gateway and a real replica session and asserts what the SESSION reports. Five gaps closed, no cell demoted, no skip added.
 
+The CI repair re-pins the five mobile replica/upload files whose measured comment shares were not carried into the initial #890 ratchet, including the new bidirectional gateway-skew owner. These are exact current measurements of the load-bearing test rationale; the 15% cap and allowlist are unchanged.
+
+## User impact
+
+No deliberate visual product change is claimed: this work makes the mobile test layer exercise the existing first-run/native surfaces and adds accessibility/testID contracts used by those journeys. First-run: the existing Home/Sharing surface remains the user-visible baseline; the changed sharing journey emits the visual evidence at `artifacts/e2e/ui-impact/issue-880-mobile-share-group-sheet.png` when the device lane runs.
+
 ## Audit
 
 A fresh-context sub-agent was handed only the diff, this receipt, and `gh issue view 890`, and asked adversarially whether (a) `## What changed` faithfully describes the diff, (b) each `- [x]` item is realized in the diff, and (c) the `## Checklist` mirrors the issue's — defaulting to REFUTED when uncertain.
@@ -426,3 +434,13 @@ The rest were prose defects of one family — counts and mechanisms stated more 
 **One finding is worth separating from the rest**, because it is the most uncomfortable and the most useful: the *second* miscount in the out-of-scope register, in a pass whose own commit message said "a miscount in the register of what is NOT done is where it does the most damage". Writing that sentence did not stop it happening again. What stopped it was an adversarial reader with a shell.
 
 VERDICT: REFUTED. Left as recorded rather than re-run to a PASS: a second pass by the same auditor over a diff it has now seen is no longer a fresh context, and the honest artifact is the one that shows what the audit caught.
+
+## Session
+
+<!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
+
+### Identifiers
+
+| date | harness | session |
+| --- | --- | --- |
+| 2026-08-31 | codex | 01a055ad-d75d-7740-87e1-b82d8a367034 |

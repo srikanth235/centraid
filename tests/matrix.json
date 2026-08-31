@@ -4333,6 +4333,27 @@
             "flow": "mobile-sharing-invite"
           }
         ]
+      },
+      {
+        "id": "promoting",
+        "label": "Promoting journeys",
+        "runner": "tests/agent-e2e-mobile/run-promoting-suite.mjs",
+        "budgetDoc": "tests/agent-e2e-mobile/flows/promoting-budget.md",
+        "budgetMinutes": 16,
+        "flows": [
+          {
+            "id": "op-sqlite-probe",
+            "label": "op-sqlite probe",
+            "owner": "tests/agent-e2e-mobile/flows/op-sqlite-probe.mjs",
+            "flow": null
+          },
+          {
+            "id": "share-intent-in",
+            "label": "Share intent in",
+            "owner": "tests/agent-e2e-mobile/flows/share-intent-in.mjs",
+            "flow": null
+          }
+        ]
       }
     ]
   },
