@@ -25,10 +25,7 @@ import {
   writeFlowVerdict,
 } from "../../agent-e2e-shared/harness.mjs";
 import { classifyFailure, countMaestroAssertions } from "./failure-class.mjs";
-import {
-  DISMISS_KEYBOARD_ONBOARDING,
-  retryableTapCommands,
-} from "./first-run.mjs";
+import { DISMISS_KEYBOARD_ONBOARDING, retryableTapCommands } from "./first-run.mjs";
 import {
   DEV_LAUNCHER_LINK,
   METRO_ORIGIN,
@@ -592,7 +589,8 @@ export function pairingTransitionMs(reports) {
  *   ctx.run(yaml, label?, options?) execute a YAML chunk; screenshots land under runs/.../screenshots/
  *   ctx.restart()           stopApp + launchApp without clearing state — mirrors desktop's ctx.restart()
  *   ctx.configureGateway(options?) pair cleanly, or reuse the paired nightly profile when requested;
- *     `{ session: true }` keeps fresh pairing phases in one Maestro process
+ *     `{ session: true }` keeps fresh pairing phases in one Maestro process;
+ *     `permissionCommands` is an opt-in system-permission boundary before Home
  *   ctx.ensureDemo(appId)   seed a scenario before the initial replica clone, if absent
  *   ctx.purgeDemo(appId)    remove a scenario before an empty-vault journey
  *   ctx.note(msg)           record an observation; surfaces in verdict.md
@@ -783,6 +781,7 @@ export async function runFlow(slug, fn) {
     gatewayUrl = process.env.MAESTRO_GATEWAY_URL,
     gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? "",
     homeCommands = "",
+    permissionCommands = "",
     session = false,
     fresh = false,
   } = {}) => {
@@ -793,6 +792,8 @@ export async function runFlow(slug, fn) {
     }
     if (typeof homeCommands !== "string")
       throw new Error("homeCommands must be a Maestro YAML string");
+    if (typeof permissionCommands !== "string")
+      throw new Error("permissionCommands must be a Maestro YAML string");
     // A suite may deliberately establish a second clean replica after a
     // prerequisite journey mutates gateway fixtures. Reuse is the default;
     // `fresh` is the explicit lifecycle boundary that makes the new replica
@@ -886,6 +887,7 @@ ${retryableTapCommands("Enter Centraid")}
 # The rail remains visible while Home loads, and the async Daily Brief can move
 # every tile when it arrives. Wait for its explicit settled accessibility label
 # so the next tap never uses coordinates captured before that layout shift.
+${permissionCommands}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: 30000

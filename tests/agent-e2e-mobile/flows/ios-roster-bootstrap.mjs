@@ -7,6 +7,7 @@
 // all later app journeys observe the same complete corpus while reusing one
 // profile. The canary and the permission journey remain separate claims.
 
+import { ALLOW_PHOTOS_FULL_ACCESS } from "../lib/first-run.mjs";
 import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
 
 const SEEDED_APPS = [
@@ -26,7 +27,10 @@ await runFlow("ios-roster-bootstrap", async (ctx) => {
     await ctx.ensureDemo(appId);
   }
 
-  await ctx.configureGateway({ fresh: true });
+  await ctx.configureGateway({
+    fresh: true,
+    permissionCommands: ALLOW_PHOTOS_FULL_ACCESS,
+  });
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---

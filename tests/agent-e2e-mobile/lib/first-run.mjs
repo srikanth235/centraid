@@ -22,6 +22,18 @@ export const DISMISS_KEYBOARD_ONBOARDING = `- runFlow:
 `;
 
 /**
+ * iOS may present the Photos full-access sheet immediately after pairing,
+ * before Home can become visible. Only flows that claim a fully authorized
+ * seeded profile opt into this boundary; the Photos-denial journey does not.
+ */
+export const ALLOW_PHOTOS_FULL_ACCESS = `- runFlow:
+    when:
+      visible: "^Allow Full Access$"
+    commands:
+      - tapOn: "^Allow Full Access$"
+`;
+
+/**
  * Tap an animated React Native control without treating its press animation as
  * proof that navigation happened.
  *

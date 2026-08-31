@@ -20,6 +20,7 @@
 import { copyFile, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 
+import { ALLOW_PHOTOS_FULL_ACCESS } from "../lib/first-run.mjs";
 import { findScreenshot, HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
 
 // The claim: the product's pairing transition completes in five minutes, not
@@ -39,6 +40,7 @@ await runFlow("pairing-canary", async (ctx) => {
   // product failures.
   const pairing = await ctx.configureGateway({
     session: true,
+    permissionCommands: ALLOW_PHOTOS_FULL_ACCESS,
     // Keep the canary's claim in this flow while executing it in the helper's
     // final phase. The helper reaches this extension point only after its own
     // mandatory Home wait; the retained screenshot is taken after the ticket
