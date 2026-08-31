@@ -90,7 +90,7 @@ else
   # flag has to be on THIS process, not on the Maestro run below. A store build
   # never sets it, so the probe stays absent from what members install.
   ( cd apps/mobile/android \
-    && EXPO_PUBLIC_CENTRAID_FRAME_PROBE=1 ./gradlew "$gradle_task" --console=plain )
+    && EXPO_PUBLIC_CENTRAID_FRAME_PROBE=1 ./gradlew "$gradle_task" --console=plain --max-workers=1 )
   # Bank the apk under the content-addressed cache path. Fail hard if it is
   # missing rather than caching nothing (a later hit would install nothing and
   # fail obscurely at flow time).

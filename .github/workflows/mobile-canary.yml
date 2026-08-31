@@ -205,6 +205,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          cat > /tmp/mobile-canary-red.md <<EOF
+          The per-merge mobile canary failed on ${{ github.sha }}. The regression is attributable to that one commit, which is the whole reason this lane exists — do not wait for the nightly to re-observe it. Evidence: the mobile-canary-runs artifact on run ${{ github.run_id }}. Fix or revert within 24 hours or before the next scheduled run.
+          EOF
           node scripts/ci/file-tracking-issue.mjs \
             --title "[mobile-canary] the Android roster went red on main" \
-            --body "The per-merge mobile canary failed on ${{ github.sha }}. The regression is attributable to that one commit, which is the whole reason this lane exists — do not wait for the nightly to re-observe it. Evidence: the mobile-canary-runs artifact on run ${{ github.run_id }}. Fix or revert within 24 hours or before the next scheduled run."
+            --search "[mobile-canary] the Android roster went red on main" \
+            --body-file /tmp/mobile-canary-red.md \
+            --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

@@ -180,9 +180,16 @@ async function runInternal() {
     await insert("core.party", "Gateway benchmark warmup party");
     await insert("core.place", "Gateway benchmark warmup place");
 
+    // Let any asynchronous work released by the warmup writes drain before
+    // opening the measured epoch. Without this quiet interval, a post-write
+    // change-feed or checkpoint callback can land in the first rolling window
+    // and make the gateway appear to block while it is still finishing setup.
+    await new Promise((resolve) => {
+      setTimeout(resolve, 1_100);
+    });
     // Boot/install prewarming has its own latency metrics. Start the CI lag
     // epoch here so peak p99 describes the authenticated write workload, not
-    // one-time esbuild/module initialization that completed before readiness.
+    // one-time esbuild/module initialization or warmup callbacks.
     handle.health.resetPerformanceMetrics();
 
     const resourcesBeforeWrites = resourceCounters();
