@@ -490,6 +490,35 @@ jobs:
       # collection error is a "do not merge" answer, not a coverage observation.
       - name: No test file failed to collect
         run: bun run test:collection-tripwire -- --require-report
+      # #656 Layer 5 / #842 W0.1 — the PR lane's total wall clock against the
+      # tighten-only ceiling in tests/suite-wall-clock.json. It rides HERE, on the
+      # single-job uninstrumented suite, because that is the lane the ceiling was
+      # measured from ("Reseeded 2026-08-29 from CI verify") and the only one
+      # whose number means what the budget file says it means.
+      #
+      # It used to ride on `coverage`, and that was wrong for a reason worth
+      # stating so it is not undone: the metric sums per-file WALL SPANS, and the
+      # files inside a shard run CONCURRENTLY, so the sum inflates when workers
+      # timeshare a slow runner. #905 measured it — the same 1508 files scored
+      # 2370.5s uninstrumented and 2427.0s instrumented on one host (+2.4%, so
+      # instrumentation is not the variable), while the four-way sharded lane
+      # reported 3824.0s on a run whose shard 1 took 545s against main's 383s.
+      # Main passing the identical gate on the identical suite is the same fact
+      # from the other side. A budget that a slow runner can breach is a flake
+      # with a number, and it fails the lane that adds tests rather than the
+      # change that added them.
+      #
+      # The existence check is load-bearing: the script exits 0 with "not
+      # measured" when the artifact is absent, which is right on a laptop and
+      # wrong in the lane that enforces it.
+      - name: Suite wall-clock ceiling
+        run: |
+          set -euo pipefail
+          if [ ! -f artifacts/test-results/vitest.json ]; then
+            echo "::error title=Suite wall-clock unmeasured::artifacts/test-results/vitest.json is missing after test:suite; the wall-clock ceiling cannot be enforced, so this lane fails rather than passing silently."
+            exit 1
+          fi
+          bun run test:suite-wall-clock
 
   # #892 Phase 1 — the instrumented half, fanned out. `bun run coverage` on one
   # runner was 20m15s; four shards each score a quarter of the test files and the
@@ -569,23 +598,11 @@ jobs:
         env:
           CENTRAID_COVERAGE_SHARDS: "4"
         run: bun run coverage:merge
-      # #656 Layer 5 / #842 W0.1 — the PR lane's total wall clock against the
-      # tighten-only ceiling in tests/suite-wall-clock.json. The ceiling shipped
-      # with #656 but no lane ever ran the gate, so the one budget that pushes
-      # BACK on test-flooding had never fenced a PR. It sums PER-FILE durations,
-      # not the run's elapsed time, so sharding does not move it: the ceiling
-      # still prices the work the suite asks for, which is the thing an added test
-      # increases. The existence check is load-bearing: the script exits 0 with
-      # "not measured" when the artifact is absent, which is right on a laptop and
-      # wrong in the lane that enforces it.
-      - name: Suite wall-clock ceiling
-        run: |
-          set -euo pipefail
-          if [ ! -f artifacts/test-results/vitest.json ]; then
-            echo "::error title=Suite wall-clock unmeasured::artifacts/test-results/vitest.json is missing after the shard merge; the wall-clock ceiling cannot be enforced, so this lane fails rather than passing silently."
-            exit 1
-          fi
-          bun run test:suite-wall-clock
+      # The suite wall-clock ceiling used to ride here and now rides on `verify`
+      # — see the comment above that step. Short version: sharding DOES move the
+      # metric, because it sums per-file wall spans and a shard's files run
+      # concurrently, so this lane scored the runner rather than the suite.
+      #
       # Scored on the merged report as well as on `verify`'s own run: `verify`
       # sees the uninstrumented suite and this sees the world the floors were
       # measured against, and a collection error that appears only under
