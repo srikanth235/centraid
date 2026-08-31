@@ -16,6 +16,15 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Make `test:suite` emit the report, matching `coverage`'s shape minus `--coverage`
 - [x] Add a wiring guard so a lane cannot again demand `--require-report` without running a script that writes the report
 
+### C — the AVD snapshot never saved on a red lane
+
+- [x] Convert the AVD cache to restore-then-save in all four mobile workflows, the arrangement the apk and gradle caches beside it already use
+- [x] Give the Android release build `--stacktrace`, so a 35-minute build failure names its cause
+
+### D — `desktop-e2e-macos`'s non-required status, investigated
+
+- [x] Establish whether `desktop-e2e-macos` is a gap or a decision, and change nothing if it is a decision
+
 ## What changed
 
 Where each checked item lands, then the reasoning behind it:
@@ -26,6 +35,9 @@ Where each checked item lands, then the reasoning behind it:
 - Correct the comment on the `changes` job that promised the property for "every lane `if:`" — "The lint that makes it the last time", final paragraph; `.github/workflows/ci.yml`.
 - Make `test:suite` emit the report, matching `coverage`'s shape minus `--coverage` — "B — verify's tripwire"; `package.json`.
 - Add a wiring guard so a lane cannot again demand `--require-report` without running a script that writes the report — "B — verify's tripwire", second half; `scripts/ci/collection-tripwire.test.mjs`.
+- Convert the AVD cache to restore-then-save in all four mobile workflows, the arrangement the apk and gradle caches beside it already use — "C — the AVD snapshot"; `.github/workflows/ci.yml`, `.github/workflows/mobile-canary.yml`, `.github/workflows/mobile-alarm-test.yml`, `.github/workflows/e2e.yml`.
+- Give the Android release build `--stacktrace`, so a 35-minute build failure names its cause — "C — the AVD snapshot", final paragraph; `apps/mobile/scripts/android-emulator-install.sh`.
+- Establish whether `desktop-e2e-macos` is a gap or a decision, and change nothing if it is a decision — "D — `desktop-e2e-macos`"; no file changed, and that is the finding.
 
 ### The defect
 
@@ -59,6 +71,24 @@ The comment on the `changes` job in `.github/workflows/ci.yml` promised this pro
 
 That assertion's first draft **passed against the very defect it was written for**. It joined each job's raw lines, and `verify`'s header comment contains the words "`bun run coverage` alone at 20m15s" — so a check looking for a producer invocation found one in prose. A wiring check that reads commentary is the same class of mistake as the wiring it checks. Comment lines are stripped now, and the correction was verified by reverting `test:suite` and watching the assertion fail with the job named.
 
+### C — the AVD snapshot never saved on a red lane
+
+`mobile-device-gate` failed on the main-tip dispatch after 34m55s, and it failed in the **build**, not the suite: `:app:packageRelease FAILED` inside `PackageAndroidArtifact$IncrementalSplitterRunnable`, with `1414 actionable tasks: 1414 executed` — nothing cached, a fully cold compile. The emulator suite never started, `tests/agent-e2e-mobile/runs/` was empty, no evidence was uploaded, and the twelve-minute suite budget never engaged because there was no suite.
+
+Two things are fixed here. **Neither is the `packageRelease` failure itself**, whose cause is still unknown — see Out of scope.
+
+The AVD cache was the one-step `actions/cache` in all four mobile workflows, while the apk and gradle caches beside it are `restore` + `save`. The comment explaining why sits three lines above it in `mobile-canary.yml`: "`actions/cache` declares `post-if: success()`, so on a lane that is currently red the cache never populates and the expensive build is paid on every run — the warm path stays unreachable until the greenness the cache exists to help deliver." The reasoning was written, applied to two caches, and not to the third. The logs state it twice: `Post AVD cache` reported `skipped` on every red run, and `Create AVD + snapshot (cache miss only)` ran on every run — ~2 minutes each time, forever, on lanes that are red.
+
+`ci.yml`, `mobile-canary.yml`, `mobile-alarm-test.yml` and `e2e.yml` now restore with `actions/cache/restore` and save with a `Save the AVD snapshot` step placed immediately after the create. Immediately after, not at job end: it banks the snapshot **before** the long emulator step can fail, and it inherits `success()` so a failed create never banks a broken AVD. The key is a pure description of the AVD's shape and the test step runs `-no-snapshot-save`, so nothing a suite does can poison what is stored.
+
+`apps/mobile/scripts/android-emulator-install.sh` gains `--stacktrace` on the release build. That build reported its failure as a bare `IncrementalSplitterRunnable` line with no cause, because gradle prints one only when asked — so the 34m55s produced a red lane and no diagnosis, and the next person pays another 35 minutes to learn what this run already knew. Stack traces are emitted on failure only, so a green build's output is unchanged.
+
+### D — `desktop-e2e-macos` is a decision, not a gap
+
+It is absent from `check`'s `needs:` while every other path-gated lane is present, and this receipt's earlier draft called that a gap. It is not, and no code changed. `ci.yml` states the ruling directly above the job: "`desktop-e2e-macos` stays, and stays NON-REQUIRED. #892 asked whether a 10x-multiplier runner belongs on the PR loop at all; the answer recorded here is that it does while it is advisory, because the twice-burned promotion rule in `lane-client-e2e.yml` is the thing that would move it, and demoting it to nightly would delete the only darwin signal that rule could ever read."
+
+The reason to record it rather than drop it is that "advisory" is exactly the state #892 Phase 3 spent an issue bounding, so the question worth asking is whether *this* advisory lane is bounded by anything. It is: `scripts/ci/lane-health.mjs` tallies every job name from main's runs with no allowlist, so a `desktop-e2e-macos` that stays red on main for more than three days fails the nightly health lane unless it carries an unexpired entry in `tests/lane-quarantine.json`. Non-required is not unwatched. Nothing to fix.
+
 ### Docs
 
 `docs/decisions.md` gains **G-filter-escape-hatch** beside the existing G-filter-inverse. `TESTING.md`'s path-filter row records both the narrowed `client-e2e` gate and the new fallback requirement.
@@ -68,7 +98,7 @@ That assertion's first draft **passed against the very defect it was written for
 1. **The gate narrows to `web || desktop` rather than staying at `client` with the inputs fixed.** Fixing only the inputs would have left a caller that starts for `packages/server`-only PRs and runs nothing — the same empty shell, still reporting satisfied, just on a different trigger. The `client` filter itself is not deleted: `verify` is unfiltered and `boot-smoke` rides it, so the coverage `client` used to buy is already paid for elsewhere.
 2. **The lint checks reads, not `if:`s.** Scoping it to `if:` would have reproduced the exact assumption that produced the bug. The rule is "a read of a filter output carries the fallback", and it does not care whether the read is in an `if:`, a `with:`, an `env:`, or something not yet written.
 3. **Block scalars are folded, not banned.** The first draft refused any multi-line `if:` so the per-line scan stayed sound; `publish-report`'s folded `if:` — long for length, no filter output in it — failed immediately, which is the check inventing work rather than finding it. Joining the block is a dozen lines and refuses nothing that is fine.
-4. **No new GitHub issue was filed for `desktop-e2e-macos`.** It is absent from `check`'s `needs:` list while every other path-gated lane is present, so it can go red without `check` noticing. Named in this issue's "Out of scope" and left there: it is a different level of the same family, and folding it in would widen a fix that is currently four files.
+4. **`desktop-e2e-macos` is left exactly as it is, and the earlier claim that it was a gap is withdrawn.** See "D" above. It is a ruling recorded in `ci.yml` and bounded by `lane-health.mjs`'s chronic-red rule, which has no lane allowlist. Changing it would have overturned a decision on the strength of a pattern ("every other path-gated lane is in `needs:`") without reading the paragraph that explains the exception.
 5. **Two local-environment findings are recorded but produced no code change.** They cost most of the time spent and would cost the next reader the same. See Verification.
 6. **Both defects ride one issue and one receipt.** They are separate bugs, and a second issue was briefly opened for B (#906, closed as a duplicate onto this one). Keeping them together is the deliberate call: they were found in the same dispatch run, they are the same failure shape — a lane in `check`'s needs reporting a verdict it had not earned — and splitting them would put two halves of one "is main actually green" answer in two places. The file slug still names A alone; the `## Checklist` is split A/B so neither is buried.
 7. **B's producer set is derived, not listed.** The wiring assertion finds every script whose body contains `--outputFile=artifacts/test-results/vitest.json` and requires one per demanding job. Hard-coding `coverage`/`test:suite` would have to be edited by exactly the person who would forget the reporter.
@@ -76,10 +106,10 @@ That assertion's first draft **passed against the very defect it was written for
 
 ## Out of scope
 
-- **`desktop-e2e-macos`'s absence from `check`'s `needs:` list.** Real, adjacent, and not this fix. See Decisions 4.
+- **`:app:packageRelease`'s actual failure.** NOT fixed here, and not diagnosed. Gradle reported only `A failure occurred while executing PackageAndroidArtifact$IncrementalSplitterRunnable` with no cause, on a build with no `--stacktrace`. The canary built and packaged the same tree successfully at 08:37, so packaging is not systematically broken and a guess would be a guess. The `--stacktrace` added under C is what makes the next occurrence diagnosable; that is the honest extent of it. Whoever picks it up should start from the daemon's 2 GiB max heap and a fully cold 1414-task build on a shared runner.
+- **The window in which the canary has not yet warmed the apk and gradle caches.** `mobile-canary.yml` saves them `if: always()`, which is already right, but it saves *after* the full roster — roughly 55 minutes after the build finishes. So for about an hour after each merge to `main`, a device-gate run on that content is cold by construction. Splitting the build out of the emulator-runner step would fix it and is a restructure of the mobile lanes, not a line change; out of scope for a PR that is otherwise about gate wiring.
 - **The other ten path-gated lanes.** All were verified to wake correctly on a `workflow_dispatch` run of main tip; none needed a change.
 - **`mutation-pr` and `dependency-review` reporting `skipped` on a main push.** Both are gated on `github.event_name` by design (PR-only / non-main-push), not by a path filter, and neither is a defect.
-- **`mobile-device-gate` failing on the same run.** `:app:packageRelease` failed after 34m55s on a fully cold build (`1414 actionable tasks: 1414 executed`), so the emulator suite never started, no run ledger was written, and the 12-minute suite budget never engaged. Gradle printed no root cause because the invocation carries no `--stacktrace`/`--info`. The build-once-run-many contract is unfunded here: both the apk and gradle caches are populated by `mobile-canary.yml`, whose first successful save landed at 08:37–08:38, sixteen minutes *after* this gate tried to restore them at 08:21:40. A separate defect with a separate diagnosis; folding an Android build investigation into this change would widen it past recognition.
 - **The wall-clock ceiling's own report dependency.** `coverage`'s "Suite wall-clock ceiling" step guards the same artifact with its own explicit existence check and is unaffected by B.
 
 ## Verification
@@ -114,6 +144,30 @@ B's failure itself reproduces with no report on disk:
 ```sh
 node scripts/ci/collection-tripwire.mjs --require-report
 # collection-tripwire: artifacts/test-results/vitest.json is missing, so no file could be scored.
+```
+
+C's four rewired workflows parse, and each carries exactly one restore and one save:
+
+```sh
+node -e "const {parse}=require('yaml');const fs=require('fs');
+for(const f of ['ci.yml','mobile-canary.yml','mobile-alarm-test.yml','e2e.yml']){
+  const d=parse(fs.readFileSync('.github/workflows/'+f,'utf8'));
+  let r=0,s=0;
+  for(const j of Object.values(d.jobs)) for(const st of (j.steps||[])){
+    if(st.name==='AVD cache'&&String(st.uses).includes('cache/restore'))r++;
+    if(st.name==='Save the AVD snapshot'&&String(st.uses).includes('cache/save'))s++;}
+  console.log(f,r,s);}"
+# ci.yml 1 1 / mobile-canary.yml 1 1 / mobile-alarm-test.yml 1 1 / e2e.yml 1 1
+bun run lint:workflow-pins
+bun run test:matrix          # includes validate-nightly-wiring
+bun run test:governance-shell
+```
+
+D changed no file; the evidence is a read, reproducible as:
+
+```sh
+grep -n -B12 '^  desktop-e2e-macos:' .github/workflows/ci.yml   # the NON-REQUIRED ruling
+grep -n 'job.name' scripts/ci/lane-health.mjs                   # no lane allowlist
 ```
 
 Gates touching the changed files:
