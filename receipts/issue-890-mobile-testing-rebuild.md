@@ -82,7 +82,7 @@ Worked by root-agent orchestration per [docs/multi-agent.md](../docs/multi-agent
 
 This section covers work added after the first push, when the deferred items were re-examined instead of accepted.
 
-The CI repair also touches `apps/mobile/android/app/build.gradle` (let the locked React Native Gradle plugin resolve the Hermes compiler), `apps/mobile/native-fingerprints.json` (record the reviewed Android native identity), and `packages/server/src/acp/backends/acp/turn-vault-tools.ts` (make the proxy URL conversion type-safe).
+The CI repair also touches `apps/mobile/android/app/build.gradle` (point the release bundle at the locked `hermes-compiler` package), `apps/mobile/native-fingerprints.json` (record the reviewed Android native identity), and `packages/server/src/acp/backends/acp/turn-vault-tools.ts` (make the proxy URL conversion type-safe).
 
 **The overloaded owners were split, and the deferral was wrong.** `mobile.contracts` and `mobile.compat` named the same file, so the matrix reported two green cells over one body of evidence. Compat moved to `apps/mobile/src/lib/replica/mobile-gateway-skew.test.ts`, which states skew as what it actually is — an overlap test between the app's protocol range and the gateway's — and covers both directions plus each boundary. One residue is recorded rather than hidden: while `GATEWAY_MIN_PROTOCOL_VERSION` equals `GATEWAY_PROTOCOL_VERSION` the app's window is a single point, so the judge's lower-bound comparison has **no input that distinguishes `<` from `<=`**. That was established by mutating the operator and failing to find a failing case, not assumed, and it becomes reachable the moment the window widens.
 
