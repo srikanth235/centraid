@@ -41,6 +41,7 @@ import path from "node:path";
 import { retryableTapCommands } from "../lib/first-run.mjs";
 import {
   FIRST_LAUNCH_TIMEOUT_MS,
+  findScreenshot,
   HOME_READY_MARKER,
   runFlow,
 } from "../lib/harness.mjs";
@@ -239,7 +240,7 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
   const uiImpactDir = "artifacts/e2e/ui-impact";
   const screenshot = async (suffix, published) => {
     const frames = await readdir(ctx.state.screenshotsDir);
-    const frame = frames.find((name) => name.endsWith(`-${suffix}.png`));
+    const frame = findScreenshot(frames, suffix);
     if (frame === undefined)
       throw new Error(`${suffix} frame was not captured`);
     await mkdir(uiImpactDir, { recursive: true });

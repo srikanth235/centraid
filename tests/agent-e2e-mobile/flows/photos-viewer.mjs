@@ -23,7 +23,11 @@ import { copyFile, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import {
+  findScreenshot,
+  FIRST_LAUNCH_TIMEOUT_MS,
+  runFlow,
+} from "../lib/harness.mjs";
 
 await runFlow("photos-viewer", async (ctx) => {
   await ctx.ensureDemo("photos");
@@ -139,9 +143,7 @@ ${retryableTapCommands("Open Photos.*")}
   const uiImpactDir = "artifacts/e2e/ui-impact";
   const screenshot = async () => {
     const frames = await readdir(ctx.state.screenshotsDir);
-    const infoFrame = frames.find((frame) =>
-      frame.endsWith("-place-phrase-info.png")
-    );
+    const infoFrame = findScreenshot(frames, "place-phrase-info");
     if (infoFrame === undefined)
       throw new Error("place-phrase-info frame was not captured");
     await mkdir(uiImpactDir, { recursive: true });

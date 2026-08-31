@@ -24,6 +24,14 @@ Drive profile entry through stable handles and read the value back before submis
 Its already-asserted paired Home frame is copied to
 `artifacts/e2e/ui-impact/issue-908-ios-paired-home.png`.
 
+The shared screenshot resolver in `tests/agent-e2e-mobile/lib/harness.mjs`
+accepts both direct and prefixed Maestro filenames; the same resolver is used
+by `tests/agent-e2e-mobile/flows/pairing-canary.mjs`,
+`tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`,
+`tests/agent-e2e-mobile/flows/photos-viewer.mjs`, and
+`tests/agent-e2e-mobile/flows/sharing-invite.mjs` so evidence assertions match
+the filenames emitted by the CI runner.
+
 The implementation surface is explicit:
 
 - `.github/workflows/e2e.yml` selects the Release-only native graph.

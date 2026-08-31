@@ -7,6 +7,7 @@ import {
 } from "../lib/first-run.mjs";
 import {
   FIRST_LAUNCH_TIMEOUT_MS,
+  findScreenshot,
   HOME_READY_MARKER,
   runFlow,
 } from "../lib/harness.mjs";
@@ -414,9 +415,7 @@ ${retryableTapCommands("Open Tally.*")}
   const uiImpactDir = "artifacts/e2e/ui-impact";
   const screenshot = async () => {
     const frames = await readdir(ctx.state.screenshotsDir);
-    const home = frames.find((frame) =>
-      frame.endsWith("-after-force-kill.png")
-    );
+    const home = findScreenshot(frames, "after-force-kill");
     if (home === undefined)
       throw new Error("after-force-kill Home frame was not captured");
     await mkdir(uiImpactDir, { recursive: true });

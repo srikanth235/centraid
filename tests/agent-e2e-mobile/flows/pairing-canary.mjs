@@ -20,7 +20,7 @@
 import { copyFile, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 
-import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
+import { findScreenshot, HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
 
 // The claim: a broken prerequisite is known in single-digit minutes, not after
 // the fan-out. This is asserted on the flow's own wall clock AFTER the fact —
@@ -55,9 +55,7 @@ await runFlow("pairing-canary", async (ctx) => {
   const uiImpactDir = "artifacts/e2e/ui-impact";
   const screenshot = async () => {
     const frames = await readdir(ctx.state.screenshotsDir);
-    const pairedHome = frames.find((frame) =>
-      frame.endsWith("-paired-home.png")
-    );
+    const pairedHome = findScreenshot(frames, "paired-home");
     if (pairedHome === undefined)
       throw new Error("paired Home frame was not captured");
     await mkdir(uiImpactDir, { recursive: true });

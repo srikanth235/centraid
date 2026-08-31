@@ -129,6 +129,17 @@ export function shQuote(value) {
 // stable, but it is a render signal, not a settled signal: it appears when
 // the band mounts, which may precede tile settlement.
 export const HOME_READY_MARKER = "All apps and places";
+
+/**
+ * Resolve a Maestro screenshot name from either its direct output filename or
+ * the prefixed filename used by some Maestro versions.
+ */
+export function findScreenshot(frames, name) {
+  const filename = `${name}.png`;
+  return frames.find(
+    (frame) => frame === filename || frame.endsWith(`-${filename}`)
+  );
+}
 // iOS Simulator's `openLink` (simctl openurl) raises a system
 // `Open in "Centraid"?` confirmation for custom-scheme links a moment AFTER the
 // openLink directive returns; Android fires the VIEW intent directly. That half
