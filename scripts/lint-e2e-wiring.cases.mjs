@@ -22,13 +22,19 @@
  * uses, which is the failure a fixture corpus is least able to notice about
  * itself.
  *
- * @param {{ MOBILE_DIR: string, FLOWS_DIR: string }} dirs The linter's own paths.
+ * @param {{ MOBILE_DIR: string, FLOWS_DIR: string, LANE_PREAMBLE: string,
+ *   SEEDER: string }} dirs The linter's own paths.
  * @returns {{ files: Record<string,string>, flows: string[], runners: string[],
  *   readFile: (rel: string) => string, cases: object[] }} The fixture tree, the
  *   discovered flow/runner lists it implies, a reader over it, and the rule
  *   cases the linter asserts against them.
  */
-export function wiringSelfTestCases({ MOBILE_DIR, FLOWS_DIR }) {
+export function wiringSelfTestCases({
+  FLOWS_DIR,
+  LANE_PREAMBLE,
+  MOBILE_DIR,
+  SEEDER,
+}) {
   const files = {
     "wf.yml": [
       "jobs:",
@@ -46,11 +52,32 @@ export function wiringSelfTestCases({ MOBILE_DIR, FLOWS_DIR }) {
     // is not a linter, so the fixture keeps the shape that defeated it.
     "tests/agent-e2e-mobile/run-x-suite.mjs":
       '// the wiring linter reads this runner\'s `const FLOWS = [ … ]` array\nconst FLOWS = ["a.mjs"];',
+    // Flow bodies exist so RULE corpus has covers to read. `a.mjs` taps a
+    // seedable app's tile and `b.mjs` taps Locker, which the springboard
+    // promotes on an empty vault — both legal, so the non-corpus cases below
+    // stay single-rule.
+    [`${FLOWS_DIR}/a.mjs`]: 'retryableTapCommands("Open Photos.*")',
+    [`${FLOWS_DIR}/b.mjs`]: 'retryableTapCommands("Open Locker.*")',
+    [`${FLOWS_DIR}/c.mjs`]: "// no cover taps here",
+    // The #905 pin: seeding BEFORE the handoff. A comment mentioning the
+    // seeder must not count, which is why the linter strips comments first.
+    [LANE_PREAMBLE]: [
+      "adb install -r app.apk",
+      `node ${SEEDER}`,
+      "export MAESTRO_PLATFORM=android",
+    ].join("\n"),
   };
-  const readFile = (rel) => {
-    if (!(rel in files)) throw new Error(`missing fixture ${rel}`);
-    return files[rel];
+  const readFile = (rel, tree = files) => {
+    if (!(rel in tree)) throw new Error(`missing fixture ${rel}`);
+    return tree[rel];
   };
+  // `assistant` is the fixture's non-seedable, non-Locker app: the one shape
+  // RULE corpus (a) exists to reject.
+  const apps = [
+    { id: "photos", seedable: true },
+    { id: "locker", seedable: false },
+    { id: "assistant", seedable: false },
+  ];
   const lanes = {
     gate: { workflow: "wf.yml", job: "gate", blocking: true },
     nightly: { workflow: "wf.yml", job: "other", blocking: false },
@@ -62,6 +89,15 @@ export function wiringSelfTestCases({ MOBILE_DIR, FLOWS_DIR }) {
     `${FLOWS_DIR}/c.mjs`,
   ];
   const runners = [`${MOBILE_DIR}/run-x-suite.mjs`];
+
+  // A roster that is CLEAN against every other rule, so a corpus case reports
+  // the corpus rule alone: `a` is reached by the gate lane through the runner,
+  // `b` directly by the nightly lane, and `c` by nothing (hence exploratory).
+  const cleanRoster = {
+    [`${FLOWS_DIR}/a.mjs`]: { status: "scheduled", claim },
+    [`${FLOWS_DIR}/b.mjs`]: { status: "scheduled", claim },
+    [`${FLOWS_DIR}/c.mjs`]: { status: "exploratory", claim },
+  };
 
   const cases = [
     {
@@ -206,7 +242,72 @@ export function wiringSelfTestCases({ MOBILE_DIR, FLOWS_DIR }) {
       matrix: {},
       want: ["lane"],
     },
+    // ---- RULE corpus (#905). Both halves, and a clean tree that proves the
+    // rule is not simply always-on.
+    {
+      name: "a flow tapping a tile for an app with no corpus is flagged",
+      roster: { lanes, flows: cleanRoster },
+      matrix: {},
+      files: {
+        [`${FLOWS_DIR}/c.mjs`]: 'retryableTapCommands("Open Assistant.*")',
+      },
+      want: ["corpus"],
+    },
+    {
+      name: "Locker needs no corpus — its tile is promoted on an empty vault",
+      roster: { lanes, flows: cleanRoster },
+      matrix: {},
+      files: {
+        [`${FLOWS_DIR}/c.mjs`]: 'retryableTapCommands("Open Locker.*")',
+      },
+      want: [],
+    },
+    {
+      name: "a cover-shaped string that is not an app id is not a cover",
+      roster: { lanes, flows: cleanRoster },
+      matrix: {},
+      // A note's own name. Reading this as a launcher tile would make the rule
+      // fire on the vault's content, which is not wiring.
+      files: {
+        [`${FLOWS_DIR}/c.mjs`]: 'tapOn("Open Mom\'s chili, written down")',
+      },
+      want: [],
+    },
+    {
+      name: "a lane preamble that never seeds the corpus is flagged",
+      roster: { lanes, flows: cleanRoster },
+      matrix: {},
+      files: {
+        [LANE_PREAMBLE]:
+          "adb install -r app.apk\nexport MAESTRO_PLATFORM=android",
+      },
+      want: ["corpus"],
+    },
+    {
+      name: "seeding AFTER the handoff is flagged, not accepted as present",
+      roster: { lanes, flows: cleanRoster },
+      matrix: {},
+      files: {
+        [LANE_PREAMBLE]: [
+          "export MAESTRO_PLATFORM=android",
+          `node ${SEEDER}`,
+        ].join("\n"),
+      },
+      want: ["corpus"],
+    },
+    {
+      name: "a commented-out seeder does not satisfy the rule",
+      roster: { lanes, flows: cleanRoster },
+      matrix: {},
+      files: {
+        [LANE_PREAMBLE]: [
+          `# node ${SEEDER} — removed while debugging`,
+          "export MAESTRO_PLATFORM=android",
+        ].join("\n"),
+      },
+      want: ["corpus"],
+    },
   ];
 
-  return { files, flows, runners, readFile, cases };
+  return { apps, cases, files, flows, readFile, runners };
 }

@@ -160,6 +160,22 @@ adb shell settings put global hide_error_dialogs 1 || true
 
 node scripts/test-report/prepare.mjs
 
+# #905 — THE CORPUS GOES IN BEFORE ANYTHING PAIRS.
+#
+# A lane is many flows sharing ONE pairing: the pr-gate pairs in
+# `pairing-canary`, the roster pairs inside `run-probes-suite` and then runs
+# three more suites against that profile. A flow's own `ctx.ensureDemo` writes
+# to the gateway only, so every seed after that first pairing is invisible to
+# the phone — the notes corpus was seeded (16 rows, in the log) and no row ever
+# reached the replica. Home then saw every tile settled and empty, rendered
+# `DayOne` instead of `LauncherGrid`, and twelve journeys failed at their first
+# `Open <App>` tap while the app was behaving correctly.
+#
+# Seeding here, before the emulator script hands off to Maestro, is what makes
+# the corpus precede the clone. It is idempotent, so the per-flow calls that
+# document each journey's fixture stay and cost nothing.
+node tests/agent-e2e-mobile/seed-demo-corpus.mjs
+
 export MAESTRO_PLATFORM=android
 # Read by lib/harness.mjs: it selects the installed applicationId for this build
 # type and, on `release`, skips the Metro reachability wait and bundle prewarm

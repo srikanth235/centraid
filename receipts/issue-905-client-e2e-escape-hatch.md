@@ -25,6 +25,11 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 
 - [x] Establish whether `desktop-e2e-macos` is a gap or a decision, and change nothing if it is a decision
 
+### E — the mobile lanes seeded their fixture after the phone had already cloned
+
+- [x] Seed the demo corpus once per LANE, before anything pairs, rather than per flow after the first pairing
+- [x] Give `lint:e2e-wiring` a `corpus` rule holding both halves: no tile tap for an app that cannot earn the grid, and no seeding after the lane's handoff to Maestro
+
 ## What changed
 
 Where each checked item lands, then the reasoning behind it:
@@ -37,7 +42,9 @@ Where each checked item lands, then the reasoning behind it:
 - Add a wiring guard so a lane cannot again demand `--require-report` without running a script that writes the report — "B — verify's tripwire", second half; `scripts/ci/collection-tripwire.test.mjs`.
 - Convert the AVD cache to restore-then-save in all four mobile workflows, the arrangement the apk and gradle caches beside it already use — "C — the AVD snapshot"; `.github/workflows/ci.yml`, `.github/workflows/mobile-canary.yml`, `.github/workflows/mobile-alarm-test.yml`, `.github/workflows/e2e.yml`.
 - Give the Android release build `--stacktrace`, so a 35-minute build failure names its cause — "C — the AVD snapshot", final paragraph; `apps/mobile/scripts/android-emulator-install.sh`.
-- Establish whether `desktop-e2e-macos` is a gap or a decision, and change nothing if it is a decision — "D — `desktop-e2e-macos`"; no file changed, and that is the finding.
+- Establish whether `desktop-e2e-macos` is a gap or a decision, and change nothing if it is a decision — "D — `desktop-e2e-macos` is a decision, not a gap"; no file changed.
+- Seed the demo corpus once per LANE, before anything pairs, rather than per flow after the first pairing — "E — the corpus arrived after the clone"; `tests/agent-e2e-mobile/seed-demo-corpus.mjs`, `tests/agent-e2e-mobile/lib/demo-corpus.mjs`, `tests/agent-e2e-mobile/lib/harness.mjs`, `apps/mobile/scripts/android-emulator-install.sh`.
+- Give `lint:e2e-wiring` a `corpus` rule holding both halves: no tile tap for an app that cannot earn the grid, and no seeding after the lane's handoff to Maestro — "E — the corpus arrived after the clone", final paragraphs; `scripts/lint-e2e-wiring.mjs`, `scripts/lint-e2e-wiring.cases.mjs`, and `tests/agent-e2e-mobile/README.md`, whose `ctx.ensureDemo` entry described the per-flow contract without saying that a CI lane makes it a no-op.
 
 ### The defect
 
@@ -89,6 +96,34 @@ It is absent from `check`'s `needs:` while every other path-gated lane is presen
 
 The reason to record it rather than drop it is that "advisory" is exactly the state #892 Phase 3 spent an issue bounding, so the question worth asking is whether *this* advisory lane is bounded by anything. It is: `scripts/ci/lane-health.mjs` tallies every job name from main's runs with no allowlist, so a `desktop-e2e-macos` that stays red on main for more than three days fails the nightly health lane unless it carries an unexpired entry in `tests/lane-quarantine.json`. Non-required is not unwatched. Nothing to fix.
 
+### E — the corpus arrived after the clone, so a working app looked broken
+
+With A, B and C landed, `mobile-device-gate` was the one lane still red — and, once the cold build stopped hiding it, the suite reached the emulator and failed somewhere new. `pairing-canary` passed (182s, then 174s on the PR head — three consecutive passes, which retires the one 73s failure recorded above as a blip). What failed was every journey after it, at its first tap:
+
+```
+Assert that "All apps and places" is visible... COMPLETED
+Tap on "Open Notes.*"... FAILED
+Element not found: Text matching regex: Open Notes.*
+```
+
+The same shape on `main`, across the whole canary roster: `Open Photos.*`, `Open Docs.*`, `Open Agenda.*`, `Open Notes.*`, `Open Tasks.*`, `Open People.*` and `id: home-tile-photos`, all `Element not found`, while pairing, onboarding and cold start passed.
+
+**The app was correct.** `springboardState` (`apps/mobile/src/screens/home/springboard-policy.ts`) reads every tile settled and empty, returns `first-run`, and `Home.tsx` renders `<DayOne>` **instead of** `<LauncherGrid>`. There is no launcher tile on an empty vault, by design. `HOME_READY_MARKER` did not catch it because it is `"All apps and places"` — a `HomeBand` accessibility label that renders in *both* states. The harness comment beside that constant already said so: "it is a render signal, not a settled signal".
+
+So why was the vault empty when every flow seeds? Because **`ensureDemo` writes to the gateway, and a lane is many flows sharing one pairing.** Each flow does the right thing alone — `ensureDemo("notes")` then `configureGateway()` — but only the FIRST flow of a lane actually pairs. `run-pr-gate-suite` opens with `pairing-canary`, which pairs and seeds nothing; the roster pairs inside `run-probes-suite` and then runs three more suites against that profile. Every seed after that lands on a gateway whose client has already cloned, and nothing pulls a post-clone write down. The run log states it plainly, in order:
+
+```
+note : paired the journey with the gateway at http://127.0.0.1:18789
+note : notes demo seeded (16 rows)
+note : reused the paired nightly profile for http://127.0.0.1:18789
+```
+
+Sixteen rows written, none of them ever on the phone. `native-v0-resilience` is the clincher: it seeds `tally` and then opens all eight covers, so even a perfectly-synced phone would have needed seven scenarios it never asked for.
+
+The fix is one line of ordering. `tests/agent-e2e-mobile/seed-demo-corpus.mjs` seeds every app that ships a `packages/blueprints/apps/*/seed.js` — seven scenarios, 166 rows — and `android-emulator-install.sh` runs it before it hands off to Maestro, so both device lanes get it and the corpus precedes the first clone by construction. It is lane-wide rather than per-suite because a tile is a property of the vault, not of whichever flow ran first. The HTTP moves to `lib/demo-corpus.mjs` so the lane seeder and `ctx.ensureDemo` cannot disagree about the row-count guard that makes a second call free; the per-flow calls stay, because they document each journey's fixture and are what makes a flow runnable on its own.
+
+`lint:e2e-wiring` gains RULE `corpus`, in two halves, because the two ways to get this wrong are different. (a) A flow may only tap `Open <App>` for an app that ships a scenario or is one the springboard promotes on an empty vault — `locker` is the sole exemption, and it is an exemption rather than an oversight because its tile body is a *state* rather than a query result. (b) The lane preamble must run the seeder, and must do it **before** `export MAESTRO_PLATFORM`: ordering it after the handoff restores the defect while looking like the fix, so the rule checks position, not presence. The app table is read from `packages/blueprints/apps/` rather than listed, on the linter's existing principle that a hand-kept list is the thing that drifts.
+
 ### Docs
 
 `docs/decisions.md` gains **G-filter-escape-hatch** beside the existing G-filter-inverse. `TESTING.md`'s path-filter row records both the narrowed `client-e2e` gate and the new fallback requirement.
@@ -110,6 +145,7 @@ The reason to record it rather than drop it is that "advisory" is exactly the st
 
   **It did not recur, and the reason narrows the search.** The branch dispatch (run 33374941598, 08:52) restored the apk cache on key `android-release-Linux-jdk6ea3257c17f4-fp…-js0601c949dd337c83` — 147 MB, a hit — so the installer took its warm path (`Android cache hit … skipping gradle`) and no gradle ran at all. Two things follow. The 34m55s failure was reached only through the cold path, which supports the cold-cache-window bullet below as its precondition rather than a coincidence; and it is not deterministic on this tree, so the `--stacktrace` may have to wait for the next cold miss to pay out. Neither observation is a diagnosis, and the bullet stands.
 - **`mobile-device-gate` is still red, now for an unrelated reason in the product.** With the build skipped, the suite ran and `pairing-canary` failed at its first chunk `01-configure-gateway` after 73s with **0 completed assertions**, classified `product`; the four journeys behind that shared prerequisite never started. The chunk's own diagnostics are deliberately unreadable — it is a `sensitive: true` flow whose stdout is suppressed and whose `maestro-debug/*-configure-gateway` directory the `Remove sensitive pairing diagnostics` step deletes before upload, because it would otherwise ship a live enrollment capability. That control is correct and is not to be weakened to make this easier to read. The 73s is consistent with the flow's first `extendedWaitUntil` (`FIRST_LAUNCH_TIMEOUT_MS`, 45s on a release build) plus install and `clearState`, i.e. the app never reached "Connect your gateway." — consistent, not established, because the verdict could not be read from here (the artifact host is off this container's egress allowlist).
+- **The Android roster's remaining red, after E.** E fixes the cause of every `Element not found` tile tap. It does NOT re-verify the journeys behind those taps: `photos-permissions` also failed its own `photos-collections` assertion after warnings about `^Open$` and `^Continue$`, which is a permission-dialog path this change does not touch, and no lane has run past the tile tap yet to say what else is behind it. #904 and #870 stay open until a green roster closes them.
 - **The Android roster is broadly red on `main` itself, and is already tracked.** The `mobile-canary` run on main tip `f5ca34fb` (33370541215) paired and onboarded fine — `mobile-cold-start`, `home-loads` and `volume-proof` all PASS, and "All apps and places" asserts visible — then failed nearly every remaining journey at the tile tap: `Open Photos.*`, `Open Docs.*`, `Open Agenda.*`, `Open Notes.*`, `Open Tasks.*`, `Open People.*` and `id: home-tile-photos` are all `Element not found`. One shared symptom, a home screen rendering its heading without its tiles. The canary's own `File a tracking issue on a red canary` step filed **#904** for it, and **#870** is the older sibling ("home-app journeys never see home"). Nothing here changes app code; it is recorded because it is the actual reason the mobile lanes are red on main, and it is not the CI wiring this issue is about.
 - **The window in which the canary has not yet warmed the apk and gradle caches.** `mobile-canary.yml` saves them `if: always()`, which is already right, but it saves *after* the full roster — roughly 55 minutes after the build finishes. So for about an hour after each merge to `main`, a device-gate run on that content is cold by construction. Splitting the build out of the emulator-runner step would fix it and is a restructure of the mobile lanes, not a line change; out of scope for a PR that is otherwise about gate wiring.
 - **The other ten path-gated lanes.** All were verified to wake correctly on a `workflow_dispatch` run of main tip; none needed a change.

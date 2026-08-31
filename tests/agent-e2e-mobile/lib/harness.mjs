@@ -24,6 +24,7 @@ import {
   defaultRunId,
   writeFlowVerdict,
 } from "../../agent-e2e-shared/harness.mjs";
+import { purgeDemo, seedDemo } from "./demo-corpus.mjs";
 import { classifyFailure, countMaestroAssertions } from "./failure-class.mjs";
 import {
   DISMISS_KEYBOARD_ONBOARDING,
@@ -767,42 +768,22 @@ ${retryableTapCommands("Enter Centraid")}
    * flows never race a later refresh or depend on execution order. The GET
    * guard also lets all five Photos journeys share one gateway boot safely.
    */
+  // Both delegate to lib/demo-corpus.mjs, which the LANE also calls before any
+  // flow pairs (#905). Keeping the HTTP in one place is not tidiness here: the
+  // lane seeder and these two have to agree on the row-count guard, or the
+  // lane's corpus would be re-seeded per flow — or worse, disagree about
+  // whether one is present.
   ctx.ensureDemo = async (
     appId,
     gatewayUrl = process.env.MAESTRO_GATEWAY_URL,
     gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? ""
   ) => {
-    if (!gatewayUrl)
-      throw new Error("MAESTRO_GATEWAY_URL is required to seed demo data");
-    const base = gatewayUrl.replace(/\/+$/u, "");
-    const headers = gatewayToken
-      ? { authorization: `Bearer ${gatewayToken}` }
-      : {};
-    const statusResponse = await fetch(`${base}/centraid/_vault/demo`, {
-      headers,
-    });
-    const status = await statusResponse.json().catch(() => ({}));
-    if (!statusResponse.ok || !Array.isArray(status?.apps))
-      throw new Error(
-        `gateway refused demo status (${status?.error ?? statusResponse.status})`
-      );
-    const current = status.apps.find((app) => app?.appId === appId);
-    if (!current?.seedable)
-      throw new Error(`gateway does not ship the ${appId} demo scenario`);
-    if (Number(current.rows) > 0) {
-      ctx.note(`${appId} demo already present (${current.rows} rows)`);
-      return;
-    }
-    const seededResponse = await fetch(
-      `${base}/centraid/_vault/demo/${encodeURIComponent(appId)}`,
-      { headers, method: "POST" }
+    const result = await seedDemo(appId, gatewayUrl, gatewayToken);
+    ctx.note(
+      result.seeded
+        ? `${appId} demo seeded (${result.rows} rows)`
+        : `${appId} demo already present (${result.rows} rows)`
     );
-    const seeded = await seededResponse.json().catch(() => ({}));
-    if (!seededResponse.ok)
-      throw new Error(
-        `gateway refused ${appId} demo seed (${seeded?.error ?? seededResponse.status})`
-      );
-    ctx.note(`${appId} demo seeded (${seeded.rows ?? "unknown"} rows)`);
   };
 
   ctx.purgeDemo = async (
@@ -810,22 +791,8 @@ ${retryableTapCommands("Enter Centraid")}
     gatewayUrl = process.env.MAESTRO_GATEWAY_URL,
     gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? ""
   ) => {
-    if (!gatewayUrl)
-      throw new Error("MAESTRO_GATEWAY_URL is required to purge demo data");
-    const base = gatewayUrl.replace(/\/+$/u, "");
-    const headers = gatewayToken
-      ? { authorization: `Bearer ${gatewayToken}` }
-      : {};
-    const response = await fetch(
-      `${base}/centraid/_vault/demo/${encodeURIComponent(appId)}`,
-      { headers, method: "DELETE" }
-    );
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok)
-      throw new Error(
-        `gateway refused ${appId} demo purge (${result?.error ?? response.status})`
-      );
-    ctx.note(`${appId} demo purged (${result.purged ?? "unknown"} rows)`);
+    const result = await purgeDemo(appId, gatewayUrl, gatewayToken);
+    ctx.note(`${appId} demo purged (${result.purged} rows)`);
   };
 
   // Mirror desktop's ctx.restart(): kill the app process so AsyncStorage
