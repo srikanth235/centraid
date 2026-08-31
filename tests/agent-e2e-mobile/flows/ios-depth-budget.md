@@ -16,11 +16,12 @@ and evidence upload.
 `pairing-canary` runs first and short-circuits, for the same reason it does on
 the PR gate: it is the shared prerequisite. `photos-permissions` then pairs a
 clean, empty-Photos profile so its refusal claim is not contaminated by seeded
-content. `ios-roster-bootstrap` seeds Docs, Agenda, Notes, Tasks, People, Tally,
-and Photos and explicitly creates a fresh replica; every later app flow runs
-with `MAESTRO_REUSE_PAIRED_STATE=1` against that complete profile. This is why
-Home tile and app-content assertions are real rather than depending on gateway
-writes appearing in an already-cloned replica.
+content. `ios-roster-bootstrap` drives Home's real sample-content action, which
+seeds every seedable app and forces a fresh replica rebuild; every later app flow
+runs with `MAESTRO_REUSE_PAIRED_STATE=1` against that complete profile. This is
+why Home tile and app-content assertions are real: the phone observes the same
+product seed-and-rebootstrap path a member would use, rather than relying on
+host-side writes appearing in an already-cloned replica.
 
 ## Why these 19 flows
 
@@ -47,7 +48,7 @@ p95s from [`../ledger/durations.json`](../ledger/README.md).
 | --- | ---: | --- |
 | Fresh pairing (`pairing-canary`) | 5 | The existing product-latency budget; pairing remains a prerequisite, not an unbounded setup allowance. |
 | Empty-Photos permission journey | 5 | A second fresh pairing preserves the iOS refusal claim before any Photos seed. |
-| Fully seeded replica bootstrap | 5 | Seven deterministic app scenarios are seeded before the app-level clone. |
+| Product-driven replica bootstrap | 5 | Home seeds seven deterministic app scenarios and rebuilds the phone replica. |
 | Native depth (`native-v0-resilience`, `locker-gate`) | 10 | OS-mediated navigation, Keychain/process survival, and the required restart. |
 | App-level covers (Docs, Agenda, Notes, Tasks, People, Tally, Sharing, Places) | 24 | Eight direct product journeys, with iOS accessibility/render headroom per journey. |
 | Photos app-level journeys | 10 | Library, viewer, search, select/write, plus the separately established denied-permission path. |

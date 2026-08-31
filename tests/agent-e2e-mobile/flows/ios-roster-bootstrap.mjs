@@ -1,35 +1,19 @@
 // Establish the fully seeded replica used by the iOS app-level roster.
 //
 // `photos-permissions` intentionally pairs an empty Photos gateway first so it
-// can prove the iOS refusal takeover. Seeding after that pairing only changes
-// gateway state; it does not rewrite the phone's initial replica clone. This
-// boundary seeds every deterministic app scenario, then pairs a fresh client so
-// all later app journeys observe the same complete corpus while reusing one
-// profile. The canary and the permission journey remain separate claims.
+// can prove the iOS refusal takeover. The bootstrap below uses Home's own
+// sample-content action, which seeds the gateway and rebuilds the phone's
+// replica because demo writes intentionally sit outside the change feed. The
+// canary and the permission journey remain separate claims.
 
 import { ALLOW_PHOTOS_FULL_ACCESS } from "../lib/first-run.mjs";
 import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
 
-const SEEDED_APPS = [
-  "docs",
-  "agenda",
-  "notes",
-  "tasks",
-  "people",
-  "tally",
-  "photos",
-];
-
 await runFlow("ios-roster-bootstrap", async (ctx) => {
-  for (const appId of SEEDED_APPS) {
-    // The gateway seed endpoint is idempotent; keeping the list explicit makes
-    // the fixture contract visible to reviewers and future roster edits.
-    await ctx.ensureDemo(appId);
-  }
-
   await ctx.configureGateway({
     fresh: true,
     permissionCommands: ALLOW_PHOTOS_FULL_ACCESS,
+    fillSampleContent: true,
   });
   await ctx.run(
     `appId: ${ctx.state.appId}
@@ -45,6 +29,6 @@ await runFlow("ios-roster-bootstrap", async (ctx) => {
   return {
     pass: true,
     notes:
-      `fresh replica contains ${SEEDED_APPS.length} deterministic app scenarios for the iOS app roster`,
+      "Home's sample-content action seeded the deterministic app corpus and the fresh replica exposed it to the iOS app roster",
   };
 });

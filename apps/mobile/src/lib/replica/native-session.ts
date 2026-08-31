@@ -86,6 +86,11 @@ export type NativeWriteResult =
   | IntentOutcome
   | { intentId: string; status: "queued" | "in-flight"; reason?: string };
 
+export interface RebootstrapOptions {
+  /** The caller has just completed an explicit online operation. */
+  force?: boolean;
+}
+
 export interface MobileReplicaSession {
   /** `MountedReadResult` widens the wire result with what a degraded read cost. */
   read: (
@@ -111,6 +116,8 @@ export interface MobileReplicaSession {
     listener: (invalidations: readonly ReplicaInvalidation[]) => void
   ) => () => void;
   pullNow: () => Promise<void | boolean>;
+  /** Rebuild the local replica from the gateway's current snapshot. */
+  rebootstrap?: (options?: RebootstrapOptions) => Promise<void>;
 }
 
 /** AppState-shaped foreground signal; RN's `AppState` satisfies it. */
@@ -787,6 +794,32 @@ export class NativeReplicaSession implements MobileReplicaSession {
       if (!progressed || !batch.hasMore) break;
     }
     return true;
+  }
+
+  /** Force a full snapshot when a write is intentionally outside the feed. */
+  async rebootstrap(options?: RebootstrapOptions): Promise<void> {
+    const force = options?.force === true;
+    if (this.#closed) return;
+    if (!force && !this.#isConnected()) return;
+    this.#hasCursor = false;
+    // Progressive bootstrap may still be walking the pre-write snapshot. The
+    // explicit operation owns the next snapshot, so cancel that walk before
+    // starting again; otherwise the new rows can remain behind its stale page.
+    const inFlight = this.#bootstrapPromise;
+    if (inFlight) {
+      this.#bootstrapAbort?.abort();
+      await inFlight.catch(() => undefined);
+    }
+    if (this.#closed) return;
+    if (!force && !this.#isConnected()) return;
+    // `force` is used only after an online operation already proved the tunnel.
+    // Automatic/background paths remain subject to the transfer policy.
+    if (!force && !(await this.#isNetworkWorkAllowed())) return;
+    if (this.#bootstrapPromise) return this.#bootstrapPromise;
+    this.#bootstrapPromise = this.bootstrap().finally(() => {
+      this.#bootstrapPromise = undefined;
+    });
+    await this.#bootstrapPromise;
   }
 
   /**

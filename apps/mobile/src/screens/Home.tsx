@@ -40,6 +40,7 @@ import HomeTitleRow from "./home/HomeTitleRow";
 import LauncherGrid from "./home/LauncherGrid";
 import type { PlaceId } from "./home/places";
 import SearchOverlay from "./home/SearchOverlay";
+import { seedDemoAndRefreshReplica } from "./home/seed-demo-and-refresh-replica";
 import {
   countThings,
   springboardState,
@@ -246,26 +247,12 @@ export default function HomeScreen({
    */
   const fillSample = useCallback(async (): Promise<void> => {
     try {
-      const base = await requireGatewayBase();
-      const status = await fetchJson<{
-        apps: readonly { appId: string; seedable: boolean }[];
-      }>(`${base}/centraid/_vault/demo`, { headers: apiHeaders() });
-      const seedable = status.apps
-        .filter((app) => app.seedable)
-        .map((app) => app.appId);
-      for (const appId of seedable) {
-        try {
-          // oxlint-disable-next-line no-await-in-loop -- ordered by contract
-          await fetchJson(
-            `${base}/centraid/_vault/demo/${encodeURIComponent(appId)}`,
-            { headers: apiHeaders(), method: "POST" }
-          );
-        } catch {
-          // Per-app failure is survivable.
-        }
-      }
-      // Before the tiles re-read, or they rebuild from the pre-seed replica.
-      await replica.refresh?.();
+      await seedDemoAndRefreshReplica({
+        apiHeaders,
+        fetchJson,
+        replica,
+        requireGatewayBase,
+      });
     } catch {
       // A dead gateway costs this offer, never the screen.
     }

@@ -34,6 +34,28 @@ export const ALLOW_PHOTOS_FULL_ACCESS = `- runFlow:
 `;
 
 /**
+ * Exercise Home's own sample-data path when a paired replica is empty.
+ *
+ * The button is optional because a reused profile may already have content;
+ * the populated Photos tile remains mandatory, so this cannot turn a missing
+ * fixture or a broken replica refresh into a pass.
+ */
+export const FILL_SAMPLE_IF_DAYONE = `- extendedWaitUntil:
+    visible: "Fill it with sample content|Open Photos.*"
+    timeout: 120000
+- runFlow:
+    when:
+      visible: "^Fill it with sample content$"
+    commands:
+      - tapOn:
+          text: "^Fill it with sample content$"
+          retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: "Open Photos.*"
+    timeout: 240000
+`;
+
+/**
  * Tap an animated React Native control without treating its press animation as
  * proof that navigation happened.
  *

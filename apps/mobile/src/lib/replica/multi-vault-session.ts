@@ -15,6 +15,7 @@ import type {
   MobileReplicaSession,
   NativeReplicaSession,
   NativeReadRequest,
+  RebootstrapOptions,
   NativeSearchRequest,
   NativeWriteInput,
   NativeWriteResult,
@@ -203,6 +204,16 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
   async pullNow(): Promise<boolean> {
     const outcome = await this.pullScopes();
     return outcome.pulled.length > 0;
+  }
+
+  /** Rebuild every mounted scope after writes that are absent from the feed. */
+  async rebootstrap(options?: RebootstrapOptions): Promise<void> {
+    await Promise.all(
+      [...this.#sessions].map(async ([vaultId, session]) => {
+        await session.rebootstrap?.(options);
+        this.#onScopePulled?.(vaultId);
+      })
+    );
   }
 
   /**

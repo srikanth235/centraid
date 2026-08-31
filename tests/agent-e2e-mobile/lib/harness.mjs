@@ -25,7 +25,11 @@ import {
   writeFlowVerdict,
 } from "../../agent-e2e-shared/harness.mjs";
 import { classifyFailure, countMaestroAssertions } from "./failure-class.mjs";
-import { DISMISS_KEYBOARD_ONBOARDING, retryableTapCommands } from "./first-run.mjs";
+import {
+  DISMISS_KEYBOARD_ONBOARDING,
+  FILL_SAMPLE_IF_DAYONE,
+  retryableTapCommands,
+} from "./first-run.mjs";
 import {
   DEV_LAUNCHER_LINK,
   METRO_ORIGIN,
@@ -590,8 +594,9 @@ export function pairingTransitionMs(reports) {
  *   ctx.restart()           stopApp + launchApp without clearing state — mirrors desktop's ctx.restart()
  *   ctx.configureGateway(options?) pair cleanly, or reuse the paired nightly profile when requested;
  *     `{ session: true }` keeps fresh pairing phases in one Maestro process;
- *     `permissionCommands` is an opt-in system-permission boundary before Home
- *   ctx.ensureDemo(appId)   seed a scenario before the initial replica clone, if absent
+ *     `permissionCommands` is an opt-in system-permission boundary before Home;
+ *     `fillSampleContent` exercises Home's product seed path when a fixture is needed
+ *   ctx.ensureDemo(appId)   seed a gateway scenario; it does not update an already-paired replica
  *   ctx.purgeDemo(appId)    remove a scenario before an empty-vault journey
  *   ctx.note(msg)           record an observation; surfaces in verdict.md
  *   ctx.device(argv, opts?) one `adb -s <udid> …` / `xcrun simctl … <udid> …`
@@ -782,6 +787,7 @@ export async function runFlow(slug, fn) {
     gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? "",
     homeCommands = "",
     permissionCommands = "",
+    fillSampleContent = false,
     session = false,
     fresh = false,
   } = {}) => {
@@ -794,6 +800,8 @@ export async function runFlow(slug, fn) {
       throw new Error("homeCommands must be a Maestro YAML string");
     if (typeof permissionCommands !== "string")
       throw new Error("permissionCommands must be a Maestro YAML string");
+    if (typeof fillSampleContent !== "boolean")
+      throw new Error("fillSampleContent must be a boolean");
     // A suite may deliberately establish a second clean replica after a
     // prerequisite journey mutates gateway fixtures. Reuse is the default;
     // `fresh` is the explicit lifecycle boundary that makes the new replica
@@ -808,6 +816,7 @@ export async function runFlow(slug, fn) {
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 ${homeCommands}
+${fillSampleContent ? FILL_SAMPLE_IF_DAYONE : ""}
 `,
         "reuse-paired-gateway"
       );
@@ -892,6 +901,7 @@ ${permissionCommands}
     visible: "${HOME_READY_MARKER}"
     timeout: 30000
 ${homeCommands}
+${fillSampleContent ? FILL_SAMPLE_IF_DAYONE : ""}
 `;
 
     if (session) {
@@ -979,10 +989,10 @@ ${DEV_LAUNCHER_HANDOFF}- takeScreenshot: pairing-failure-safe
   };
 
   /**
-   * Ensure one deterministic scenario exists before pairing. Seeding on the
-   * host first means the phone's initial replica clone contains the corpus;
-   * flows never race a later refresh or depend on execution order. The GET
-   * guard also lets all five Photos journeys share one gateway boot safely.
+   * Ensure one deterministic scenario exists on the gateway. This is a
+   * host-side fixture seam; it does not populate an already-paired phone's
+   * replica. Tile-driven flows that need content must use `fillSampleContent`
+   * or pair fresh after this call.
    */
   ctx.ensureDemo = async (
     appId,

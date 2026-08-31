@@ -399,6 +399,19 @@ bash .governance/run.sh
 
 The CI repair re-pins the five mobile replica/upload files whose measured comment shares were not carried into the initial #890 ratchet, including the new bidirectional gateway-skew owner. These are exact current measurements of the load-bearing test rationale; the 15% cap and allowlist are unchanged.
 
+### iOS app-roster follow-up — 2026-09-01
+
+The first CI attempts at the expanded iOS roster exposed a real lifecycle defect:
+host-side demo writes updated the gateway's demo register, but those writes are
+outside the replica change feed, so a freshly paired phone still rendered Home's
+empty-vault treatment. The app-level assertions were correct; the fixture
+boundary was not. The repair routes the roster through Home's shipped “Fill it
+with sample content” action and makes that action force a bounded replica
+rebootstrap after its ordered per-app seed requests. The iOS roster now proves
+the product seed path before reusing one complete paired profile across its 19
+app/native/performance journeys. Its aggregate budget remains 75 minutes; no
+assertion, retry policy, permission-denial claim, or gate was weakened.
+
 ## User impact
 
 No deliberate visual product change is claimed: this work makes the mobile test layer exercise the existing first-run/native surfaces and adds accessibility/testID contracts used by those journeys. First-run: the existing Home/Sharing surface remains the user-visible baseline; the changed sharing journey emits the visual evidence at `artifacts/e2e/ui-impact/issue-880-mobile-share-group-sheet.png` when the device lane runs.
