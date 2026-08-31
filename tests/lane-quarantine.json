@@ -1,0 +1,4 @@
+{
+  "_comment": "#892 Phase 3 — the CHRONIC-RED rule, extended from tests to lanes. tests/quarantine.json already requires a skipped test to be declared, attributed and expiring; a required LANE that stays red on main had no equivalent, so it simply stayed red and taught everyone to merge past it. scripts/ci/lane-health.mjs (nightly) fails when a lane has been red on main for longer than the rule allows without an unexpired entry here. An entry is a park with a deadline, never a mute: `expires` in the past is treated as no entry at all, and the failure says so.",
+  "lanes": {}
+}

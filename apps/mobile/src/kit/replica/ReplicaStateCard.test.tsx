@@ -166,7 +166,10 @@ describe("offline/unavailable explanation card (issue #711)", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("unavailable card has borderColor #mock-net and role alert", async () => {
+  // Stub tier: the style object and the `accessibilityRole` PROP, echoed back
+  // by this file's host mock. Whether RN publishes an alert is not observable
+  // here (#890 W5).
+  it("gives the unavailable card the net borderColor and declares role alert", async () => {
     await renderCard({ connection: "unavailable", noun: "Tally" });
     const card = container.querySelector<HTMLElement>("div[data-style]");
     const style = JSON.parse(card?.dataset.style ?? "{}");

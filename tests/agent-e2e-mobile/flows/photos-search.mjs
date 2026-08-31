@@ -9,10 +9,23 @@ await runFlow("photos-search", async (ctx) => {
 ---
 ${retryableTapCommands("Open Photos.*")}
 - extendedWaitUntil:
-    visible: "Collections"
+    visible:
+      id: "photos-collections"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Search")}
-- tapOn: "Search photographs"
+- assertVisible: "Collections"
+# The band destination by its KEY (photos-band.ts already keys on it), never
+# its label — "Search" is a word half the app draws. A band tab stays on screen
+# after it is tapped, so Maestro's own retryTapIfNoChange plus the destination
+# assertion is the right instrument, not the conditional-retry helper.
+- tapOn:
+    id: "photos-band-search"
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: "photos-search-field"
+    timeout: 30000
+- tapOn:
+    id: "photos-search-field"
 - inputText: "Tahoe scouting"
 - hideKeyboard
 - extendedWaitUntil:

@@ -20,12 +20,15 @@ const soakWeeklyPath = path.join(root, ".github/workflows/soak-weekly.yml");
 
 const requiredFlowScripts = [
   "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs",
-  "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs",
   "tests/agent-e2e-pairing/flows/cross-network-relay.mjs",
-  // #839 G8 — a committed Maestro suite that e2e.yml never invokes is a roster
-  // that silently stopped running; the mobile jobs must call both suites.
-  "tests/agent-e2e-mobile/run-photos-suite.mjs",
-  "tests/agent-e2e-mobile/run-home-apps-suite.mjs",
+  "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs",
+  // #890 W4 — iOS is the depth platform and owns its own runner. The Android
+  // roster's runners are invoked from the committed emulator script rather
+  // than from this YAML (the action executes `script:`), so they are checked
+  // by scripts/lint-e2e-wiring.mjs against the shipped roster instead; that
+  // linter reads the script the lane hands off to and is the general form of
+  // the rule this list encodes for the pairing lanes.
+  "tests/agent-e2e-mobile/run-ios-depth-suite.mjs",
 ];
 
 const requiredJobs = [
@@ -262,6 +265,118 @@ if (joinJobIdx === -1) {
   }
 }
 
+// #890 W0/W1 — the three mobile device lanes, read once. Every check below is
+// pure over this snapshot, so no `await` sits inside a loop: the lanes are read
+// in parallel and then judged.
+//
+// DISCOVERED, not listed. A hand-kept list of mobile lanes is how a new lane
+// (the #890 alarm test was the fourth) joins the roster unpinned: it would
+// install `releases/latest` and nothing here would say a word. Any workflow
+// that installs Maestro or drives an Expo build is a mobile lane by definition,
+// so that is the test.
+const workflowDir = path.join(root, ".github/workflows");
+const workflowNames = (await readdir(workflowDir))
+  .filter((name) => name.endsWith(".yml"))
+  .sort();
+const allWorkflows = await Promise.all(
+  workflowNames.map(async (name) => ({
+    file: `.github/workflows/${name}`,
+    source: await readFile(path.join(workflowDir, name), "utf8").catch(
+      () => ""
+    ),
+  }))
+);
+// #892 Phase 3 — the marker moved. Maestro is no longer installed by piping an
+// unpinned remote script into bash; every lane now calls the checksum-verifying
+// `scripts/ci/install-maestro.sh`. Discovery keys on that, and the ban below
+// keeps the old shape from creeping back.
+const MAESTRO_INSTALLER = "scripts/ci/install-maestro.sh";
+const mobileLanes = allWorkflows.filter(
+  ({ source }) =>
+    source.includes(MAESTRO_INSTALLER) ||
+    /expo run:(?<platform>ios|android)/u.test(source)
+);
+if (mobileLanes.length === 0) {
+  errors.push(
+    "no workflow installs Maestro or builds the Expo app; either every mobile device lane was deleted or this discovery is stale"
+  );
+}
+
+// #890 W0 — ONE Maestro version across every mobile device lane. Android's
+// installer honoured `releases/latest` while iOS pinned 2.6.1, so the two
+// platforms could be driven by different device drivers on the same night and an
+// upstream driver change would land with no commit to blame it on. The pin is
+// per-workflow by necessity (GitHub has no cross-file env), so the thing that
+// keeps them one fact is this check.
+const maestroPins = new Set();
+for (const { file, source } of mobileLanes) {
+  const found = [
+    ...source.matchAll(/MAESTRO_VERSION:\s*"?(?<version>[\w.-]+)"?/gu),
+  ].map((match) => match.groups.version);
+  const installs = (source.match(/scripts\/ci\/install-maestro\.sh/gu) ?? [])
+    .length;
+  if (installs === 0) continue;
+  if (found.length === 0) {
+    errors.push(
+      `${file} installs Maestro without pinning MAESTRO_VERSION; the installer otherwise pulls releases/latest`
+    );
+    continue;
+  }
+  // The installer reads MAESTRO_VERSION from the environment and nowhere else,
+  // so a second `curl` that is not inside a pinning step floats silently.
+  if (installs !== found.length) {
+    errors.push(
+      `${file} installs Maestro ${installs} time(s) but pins MAESTRO_VERSION ${found.length} time(s); an unpinned install floats to releases/latest`
+    );
+  }
+  for (const version of found) maestroPins.add(version);
+}
+if (maestroPins.size > 1) {
+  errors.push(
+    `mobile lanes pin ${maestroPins.size} different Maestro versions (${[...maestroPins].join(", ")}); ` +
+      `two device drivers on one roster is a difference nobody chose`
+  );
+}
+
+// #892 Phase 3 — NO `curl | bash` IN A REQUIRED LANE. `MAESTRO_VERSION` pinned
+// what the remote installer would fetch and pinned nothing about the installer
+// itself: an unpinned third-party script, executed as the first act of the lane
+// that gates every mobile merge. gitleaks and osv-scanner already fetch a named
+// release artifact by version; this makes Maestro match, and this check is what
+// stops the one-liner coming back the next time somebody adds a device lane.
+for (const { file, source } of allWorkflows) {
+  if (!source.includes("get.maestro.mobile.dev")) continue;
+  errors.push(
+    `${file} installs Maestro by piping https://get.maestro.mobile.dev into a shell. ` +
+      `Use \`bash ${MAESTRO_INSTALLER}\` instead: it fetches the pinned release ` +
+      `artifact and refuses a checksum mismatch (#892).`
+  );
+}
+
+// #890 W1 — the scheduled lanes must drive the RELEASE artifact. The dev client
+// is the local exploratory rig; a CI lane that starts Metro is testing the
+// harness. These two bans are what stop it coming back one convenient step at a
+// time, since each individual re-addition always looks reasonable.
+for (const { file, source } of mobileLanes) {
+  const code = source
+    .split("\n")
+    .map((line) => {
+      const hash = line.indexOf("#");
+      return hash === -1 ? line : line.slice(0, hash);
+    })
+    .join("\n");
+  if (/expo start --dev-client/u.test(code)) {
+    errors.push(
+      `${file} starts Metro with --dev-client; #890 W1 lanes install a release build with an embedded bundle and must not depend on a bundler`
+    );
+  }
+  if (/expo run:ios(?![^\n]*--configuration Release)/u.test(code)) {
+    errors.push(
+      `${file} runs expo run:ios without --configuration Release; the lane would test a __DEV__ Hermes build rather than the artifact members install`
+    );
+  }
+}
+
 // Executable shell cross-workflow fetch — ban the retired pairing satellite.
 const shellBans = [
   /gh\s+run\s+list[^\n]*pairing-relay-e2e/u,
@@ -438,6 +553,9 @@ if (errors.length) {
   for (const error of errors) console.error(`nightly-wiring: ${error}`);
   process.exitCode = 1;
 } else {
+  console.log(
+    `nightly-wiring: ${mobileLanes.length} mobile device lane(s) discovered, all pinned to one Maestro version and none starting Metro`
+  );
   console.log(
     "nightly-wiring: e2e.yml owns pairing lifecycle, ticket-hygiene, cross-network-relay, mutation-testing, fuzz-parsers, dast-scan, and protocol-join; weekly enrichment-live and soak lanes wired; standalone pairing-relay-e2e removed"
   );

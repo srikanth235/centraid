@@ -16,6 +16,7 @@ import {
 import { Text } from "../../kit/components/NativeText";
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import { rowCanWrite } from "../../kit/replica/row-provenance";
+import { TEST_ID_PREFIXES, TEST_IDS } from "../../kit/test-ids";
 import TaskRow from "./TaskRow";
 import type { TasksListItem } from "./tasks-groups";
 import type { TasksPlaceKey } from "./tasks-places";
@@ -49,10 +50,23 @@ export default function TasksRows(props: TasksRowsProps): React.JSX.Element {
   const { onMoveAll, onOpen, onPickUp, onToggle } = props;
 
   const renderItem = useCallback(
-    ({ item }: { item: TasksListItem }): React.JSX.Element => {
+    ({
+      item,
+      index,
+    }: {
+      item: TasksListItem;
+      index: number;
+    }): React.JSX.Element => {
       if (item.kind === "header") {
         return (
-          <View style={styles.groupHead}>
+          // `attention` is the overdue group and nothing else — the label
+          // ("Overdue") is copy, the flag is the arithmetic.
+          <View
+            style={styles.groupHead}
+            testID={
+              item.group.attention ? TEST_IDS.tasks.groupAttention : undefined
+            }
+          >
             <Text
               style={[
                 styles.groupLabel,
@@ -72,6 +86,7 @@ export default function TasksRows(props: TasksRowsProps): React.JSX.Element {
                 accessibilityLabel={GROUPS.moveAll}
                 onPress={() => onMoveAll(item.group.rows)}
                 style={styles.headVerb}
+                testID={TEST_IDS.tasks.moveAll}
               >
                 <Text style={styles.verbText}>{GROUPS.moveAll}</Text>
               </Pressable>
@@ -82,6 +97,9 @@ export default function TasksRows(props: TasksRowsProps): React.JSX.Element {
       return (
         <TaskRow
           task={item.task}
+          // Position in the FLATTENED list — group headers occupy a slot too,
+          // which is what makes it a stable address rather than a row count.
+          testID={`${TEST_ID_PREFIXES.tasksRow}${index}`}
           now={now}
           styles={styles}
           projectName={projectName(item.task.project_id)}

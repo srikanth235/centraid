@@ -25,6 +25,7 @@ import Grabber from "../../kit/components/Grabber";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import Tappable from "../../kit/components/Tappable";
+import { TEST_IDS } from "../../kit/test-ids";
 import { spacing, useTheme } from "../../kit/theme";
 import { styles } from "./PhotoLightbox.styles";
 import type { PhotoAsset } from "./timeline-model";
@@ -158,6 +159,7 @@ export function PhotoInfoSheet(
         accessibilityRole="button"
         onPress={onClose}
         style={styles.modalBackdrop}
+        testID={TEST_IDS.photos.infoClose}
       />
       <View
         style={[
@@ -167,6 +169,7 @@ export function PhotoInfoSheet(
             height: infoSheetHeight(props.screenHeight),
           },
         ]}
+        testID={TEST_IDS.photos.infoSheet}
       >
         <View style={styles.grabberSlot}>
           <Grabber />

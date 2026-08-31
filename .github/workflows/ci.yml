@@ -46,6 +46,18 @@ jobs:
   # One paths-filter table for the whole repo. Previously these globs lived in
   # six `on: paths:` blocks with 20 lines duplicated verbatim between each
   # file's push: and pull_request: halves.
+  #
+  # #892 Phase 3 — THIS TABLE IS LOAD-BEARING AND IS NOW LINTED. `check` treats
+  # `skipped` as a pass (that is what makes a path-gated lane requirable at all),
+  # so a path no filter names wakes no lane and merges green, unexercised — #890
+  # W0 fixed one instance of that by hand. `bun run lint:path-filters` inverts the
+  # table: every workspace package, app and tracked top-level directory must be
+  # claimed here or ledgered in tests/path-filter-ledger.json with the always-on
+  # job that covers it. It also refuses duplicates, which is how the table looked
+  # when the check was written — `packages/server/**` four times inside `gateway`,
+  # twice inside `client` and twice inside `extension`, and `packages/core/**`
+  # twice inside `gateway`. Those are removed below; the SET each filter matches
+  # is unchanged.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -89,23 +101,18 @@ jobs:
               - 'apps/web/**'
               - 'apps/desktop/**'
               - 'packages/server/**'
-              - 'packages/server/**'
               - 'packages/client/**'
               - 'packages/blueprints/**'
               - 'packages/design/**'
             gateway:
               - 'packages/server/**'
-              - 'packages/server/**'
               - 'packages/core/**'
               - 'packages/cli/**'
-              - 'packages/server/**'
-              - 'packages/server/**'
               - 'packages/vault/**'
               - 'packages/backup/**'
               - 'packages/blueprints/**'
               - 'packages/tunnel/**'
               - 'packages/design/**'
-              - 'packages/core/**'
               # #781 — the recognition automations the packaged gateway ships
               # under packages/blueprints/automations are BUILT from
               # packages/model-runtime/automation-handlers, so a source-only
@@ -131,7 +138,6 @@ jobs:
               - 'apps/web/src/generated/**'
               - 'packages/server/**'
               - 'packages/blueprints/apps/locker/**'
-              - 'packages/server/**'
               - 'packages/tunnel/**'
               - 'packages/vault/**'
               - 'tests/agent-e2e-pairing/**'
@@ -148,6 +154,15 @@ jobs:
               - 'packages/blueprints/**'
               - 'packages/design/**'
               - '.github/workflows/ci.yml'
+              # #890 W0 — editing a Maestro flow, the harness, or the workflow
+              # that schedules them used to trigger NO mobile lane at all: the
+              # filter listed only product source, so a change to the test layer
+              # of the primary surface was merged unexercised. The device gate
+              # (`mobile-device-gate`) and `mobile-smoke` both key on this
+              # filter, so both must see a flow edit.
+              - 'tests/agent-e2e-mobile/**'
+              - 'tests/agent-e2e-shared/**'
+              - '.github/workflows/e2e.yml'
             # #781 — everything `bun run design:gallery` reads. #799 widened
             # it: the lane no longer renders a fixture, it BUILDS AND DRIVES
             # `apps/web` and photographs the shell's own `#ui-preview`
@@ -229,6 +244,16 @@ jobs:
       # `uses:` SHA-pinned, no hardcoded Bun version (packageManager is the one
       # source of truth), every job bounded by timeout-minutes.
       - run: bun run lint:workflow-pins
+      # #892 Phase 0 — no turbo `outputs` entry may name a git-tracked path. A
+      # tracked path is also one of the task's hashed INPUTS, so the task's cache
+      # key depends on its own product; turbo calls that undefined and it never
+      # errors, it just silently stops caching.
+      - run: bun run lint:turbo-cache
+      # #892 Phase 3 — the inverse of the `changes` filter table above. `check`
+      # counts `skipped` as a pass, so a path no filter names merges green and
+      # unexercised. Every workspace package, app and top-level directory must be
+      # claimed by a filter or ledgered with the always-on job that covers it.
+      - run: bun run lint:path-filters
       # #545 D9 — shellcheck governance hooks + coverage-scope self-test.
       - name: Install shellcheck (governance shell lane)
         run: sudo apt-get update && sudo apt-get install -y shellcheck
@@ -308,6 +333,12 @@ jobs:
       # in tests/env-red.json with an open issue and an expiry or revisit
       # trigger; the budget is down-only.
       - run: bun run test:env-red
+      # #892 Phase 3 — a step that ANNOUNCES it will never fail is the one place
+      # in this repo without a budget, a ledger or an expiry. The iroh
+      # binding-drift warning and the never-failing Expo compatibility map now
+      # carry an owner, an issue and a date by which somebody decides whether
+      # they should stay advisory (tests/advisory-ledger.json).
+      - run: bun run test:advisory-expiry
       # Assertion-hygiene counts (toBeTruthy/toBeFalsy and the non-negated
       # toHaveBeenCalled family) are down-only budgets in
       # tests/hygiene-budgets.json — the enforcement the lint preset cannot
@@ -318,32 +349,62 @@ jobs:
       # fake clocks / event-driven waits as the remedy (#781).
       - run: bun run test:sleep-inventory
 
+  # #892 Phase 1 — THE PASS/FAIL HALF. `verify` was 26m34s wall with `bun run
+  # coverage` alone at 20m15s, i.e. roughly 77% of PR feedback latency was
+  # instrumentation. Splitting it costs some duplicated test execution and buys
+  # the thing a PR author actually waits for: "did anything break" now arrives on
+  # the uninstrumented suite while the `coverage-shard` / `coverage` pair scores
+  # the floors in parallel. Both are in `check`'s needs, so nothing became
+  # advisory — only the ORDER in which answers arrive changed.
+  #
+  # What stayed here rather than moving: everything that needs the built dist and
+  # is not instrumentation — the tunnel's native and byte-plane contracts, the
+  # user-facing qualities lane, the mobile boot-condition tier, and the two perf
+  # ceilings. They are seconds-to-minutes each and would each pay a second
+  # `bun run build` if they moved.
   verify:
     runs-on: ubuntu-latest
-    # Full V8 coverage can exceed 25 minutes on a slow hosted runner even
-    # while tests continue passing; keep a bounded budget with headroom.
-    timeout-minutes: 35
+    # Uninstrumented, so the old 35-minute allowance is no longer the shape of
+    # this job. Kept generous rather than tight: this is a backstop against a
+    # hung runner, and a cancelled job counts as red with no evidence (#557).
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # Full history so test:diff-coverage can resolve merge-base vs origin/main.
-          fetch-depth: 0
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
           cargo-cache: verify
+      # `packages/tunnel test:data-plane` is a real `cargo test`, so the toolchain
+      # stays. The wasm32 target went with the iroh step below: nothing on this
+      # lane compiles to wasm.
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
         with:
           toolchain: stable
-          targets: wasm32-unknown-unknown
-      # K15 — wasm is gitignored; clean CI must rebuild via ensure-iroh-wasm.
+      # #892 Phase 1 — this is now a no-op on every lane that does not rebuild the
+      # binding, which is every lane but `iroh-wasm`. The header comment here used
+      # to say "wasm is gitignored; clean CI must rebuild"; it has been a COMMITTED
+      # 1.9 MB artifact for some time, so `ensure-iroh-wasm.mjs` always exited
+      # early and the `cargo install wasm-bindgen-cli` this step performed — ~1.7
+      # minutes, in this job and all three of lane-client-e2e — provisioned a
+      # toolchain for a build that could not happen. The script keeps the call
+      # site (a genuinely absent binding still provisions and rebuilds) and moves
+      # the decision inside, where the artifact can be looked at.
       - name: Ensure Iroh WASM toolchain
         run: bash scripts/ci/ensure-iroh-wasm-toolchain.sh
       # Build every package's dist (the worker-thread handler tests load the
-      # built worker, not the .ts source), then run the whole suite under
-      # vitest with v8 coverage. `coverage` enforces the seeded engine floors
-      # in vitest.config.ts; a test failure or a floor breach fails CI.
-      - run: bun run build
+      # built worker, not the .ts source), then run the whole suite under vitest.
+      # #892 — `build:ci` is `turbo run build --summarize` plus a per-task
+      # HIT/MISS table in the Job Summary. Five lanes were paying ~4.5 minutes for
+      # this step with the remote cache switched on and nobody could say why;
+      # the table is how the next run answers it.
+      - run: bun run build:ci
+      # #892 Phase 1 — folded in from `lane-client-e2e / boot-smoke`, which paid a
+      # 4m38s `build --filter=@centraid/desktop...` for a ~0s L2 structure
+      # assertion over a dist it did not need to produce. The build above is a
+      # superset of that closure, and this job is unfiltered, so the check now
+      # costs nothing AND runs on PRs that never woke the `client` filter.
+      - name: L2 boot-the-artifact structure smoke
+        run: node scripts/release/boot-smoke.mjs
       # The normal @centraid/tunnel build above ships its target-specific napi
       # module. Prove both pairing ALPNs plus streamed request/response bytes.
       - run: bun run --cwd packages/tunnel test:native
@@ -355,6 +416,19 @@ jobs:
       # workspace packages by their published entry points, so it needs the
       # `bun run build` above; that is why it rides here and not in `gates`.
       - run: bun run test:qualities
+      # #890 W3 — the mobile BOOT-CONDITION tier. It boots a real `serve()`
+      # gateway and a real native replica session over node:sqlite, arranges each
+      # app × state as a genuine boot condition, and asserts the state the
+      # SESSION reports rather than the state a fixture was handed. It rides here
+      # for the same reason `test:qualities` does: it needs the `bun run build`
+      # above, because it drives the packages by their published entry points.
+      #
+      # ~145 s of Linux time, and that is the trade the E-device-only ruling
+      # names: a simulator minute on macOS costs roughly 600x a vitest second, so
+      # the state grid moving down a tier is what pays for the device roster
+      # shrinking. It is NOT path-filtered — a change anywhere in the gateway,
+      # the vault or the replica can move what these states report.
+      - run: bun run test:integration:mobile
       # Issue #456's real-gateway budget gate. Linux strace supplies an exact
       # fsync/write count; losing that signal is itself a benchmark failure.
       - run: sudo apt-get update && sudo apt-get install --yes strace
@@ -394,31 +468,120 @@ jobs:
       # `probe` field for exactly which half of the interval is fenced.
       - name: Send-to-first-token ceiling
         run: bun run perf:send-to-first-token
-      - run: bun run coverage
+      # THE PASS/FAIL ANSWER. Same suite the `coverage` pair scores, run without
+      # v8 instrumentation — which is where the 20 minutes lived. Floors are not
+      # evaluated here (no `--coverage`, so `vitest.config.ts`'s thresholds never
+      # engage); this job answers "did anything break", and only that.
+      - run: bun run test:suite
+      # #842 W0.3 — no file may report zero collected tests. A suite that throws
+      # while LOADING registers no test at all, so every counting gate — matrix
+      # minimumTests floors, the skip budget, the quarantine ledger, the coverage
+      # floors — sees a smaller universe rather than a violated one, and the suite
+      # reads as absent instead of red. It rides HERE as well as on the merged
+      # report because this is the earliest place the shape can be seen, and a
+      # collection error is a "do not merge" answer, not a coverage observation.
+      - name: No test file failed to collect
+        run: bun run test:collection-tripwire -- --require-report
+
+  # #892 Phase 1 — the instrumented half, fanned out. `bun run coverage` on one
+  # runner was 20m15s; four shards each score a quarter of the test files and the
+  # merge job reassembles the blobs.
+  #
+  # A SHARD IS NOT A SMALLER GATE. It runs under `vitest.shard.config.ts`, which
+  # is the root config MINUS `coverage.thresholds`, because a shard sees only its
+  # slice: `packages/cli/**` measures 0% on the shard holding no CLI tests, so
+  # per-shard floors would either red every run or have to be lowered into
+  # meaninglessness. Every floor is evaluated exactly once, on the merged report.
+  #
+  # The hazard that introduces is #556's: a merge assembled from fewer blobs than
+  # were dispatched measures a smaller world and passes more easily. Two things
+  # close it — this job is an ordinary (not `always()`) dependency of `coverage`,
+  # so a dead shard fails the merge, and `assert-shard-blobs.mjs` requires the
+  # exact set {1..N} on disk before vitest is allowed to merge anything.
+  coverage-shard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+          cargo-cache: verify
+      - run: bun run build:ci
+      - name: Coverage shard ${{ matrix.shard }}/4
+        env:
+          CENTRAID_COVERAGE_SHARD: ${{ matrix.shard }}/4
+        run: bun run coverage:shard
+      # The blob is the shard's entire product. `if-no-files-found: error` rather
+      # than the default warning: a silently absent blob is precisely the partial
+      # world the merge guard exists to refuse, and failing here names the shard.
+      #
+      # `include-hidden-files` is NOT optional. Vitest's blob reporter writes to
+      # `.vitest-reports/`, and upload-artifact excludes any path with a
+      # dot-prefixed segment by default — so the first run of this lane wrote
+      # `blob-1-4.json` and then uploaded nothing, on all four shards. Left as a
+      # warning it would have been the exact #556 shape: four green shards, a
+      # merge over an empty directory, and every floor below scoring a world
+      # that never ran.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-blob-${{ matrix.shard }}
+          path: .vitest-reports/
+          include-hidden-files: true
+          retention-days: 1
+          if-no-files-found: error
+
+  coverage:
+    needs: [coverage-shard]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history so test:diff-coverage can resolve merge-base vs origin/main.
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      # The merge runs no tests, but `test:report` and the v8 remap read the
+      # workspace by its published entry points.
+      - run: bun run build:ci
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: coverage-blob-*
+          path: .vitest-reports
+          merge-multiple: true
+      # Fail-closed before the merge, not after: once a partial report exists,
+      # every gate below scores it happily.
+      - name: Merge the shard reports (refuses a partial world)
+        env:
+          CENTRAID_COVERAGE_SHARDS: "4"
+        run: bun run coverage:merge
       # #656 Layer 5 / #842 W0.1 — the PR lane's total wall clock against the
       # tighten-only ceiling in tests/suite-wall-clock.json. The ceiling shipped
       # with #656 but no lane ever ran the gate, so the one budget that pushes
-      # BACK on test-flooding had never fenced a PR. It scores the vitest JSON
-      # report `bun run coverage` just wrote — the only place it can see one.
-      # The existence check is load-bearing: the script exits 0 with "not
-      # measured" when the artifact is absent, which is right on a laptop and
-      # wrong in the lane that enforces it — a missing report here means the
-      # wiring rotted, not that the suite met its budget.
+      # BACK on test-flooding had never fenced a PR. It sums PER-FILE durations,
+      # not the run's elapsed time, so sharding does not move it: the ceiling
+      # still prices the work the suite asks for, which is the thing an added test
+      # increases. The existence check is load-bearing: the script exits 0 with
+      # "not measured" when the artifact is absent, which is right on a laptop and
+      # wrong in the lane that enforces it.
       - name: Suite wall-clock ceiling
         run: |
           set -euo pipefail
           if [ ! -f artifacts/test-results/vitest.json ]; then
-            echo "::error title=Suite wall-clock unmeasured::artifacts/test-results/vitest.json is missing after \`bun run coverage\`; the wall-clock ceiling cannot be enforced, so this lane fails rather than passing silently."
+            echo "::error title=Suite wall-clock unmeasured::artifacts/test-results/vitest.json is missing after the shard merge; the wall-clock ceiling cannot be enforced, so this lane fails rather than passing silently."
             exit 1
           fi
           bun run test:suite-wall-clock
-      # #842 W0.3 — no file may report zero collected tests. A suite that throws
-      # while LOADING registers no test at all, so every counting gate here —
-      # matrix minimumTests floors, the skip budget, the quarantine ledger, the
-      # coverage floors — sees a smaller universe rather than a violated one, and
-      # the suite reads as absent instead of red. It scores the same vitest JSON
-      # report `bun run coverage` just wrote; `--require-report` makes a missing
-      # artifact fail this lane rather than pass as "not measured".
+      # Scored on the merged report as well as on `verify`'s own run: `verify`
+      # sees the uninstrumented suite and this sees the world the floors were
+      # measured against, and a collection error that appears only under
+      # instrumentation is exactly the shape #842 W0.3 was written for.
       - name: No test file failed to collect
         run: bun run test:collection-tripwire -- --require-report
       # #532 — changed-line coverage vs origin/main must be ≥80% (or approvedDeviation).
@@ -450,9 +613,9 @@ jobs:
   # Merges into the gh-pages tree so nightly slots survive, then deploys via
   # GitHub Pages (workflow build type). Does not gate the required `check` job.
   publish-report:
-    needs: [verify]
+    needs: [coverage]
     if: >
-      always() && needs.verify.result != 'cancelled' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      always() && needs.coverage.result != 'cancelled' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Serialize with nightly so deploys do not race on gh-pages.
@@ -534,8 +697,19 @@ jobs:
 
   # #532 — per-PR mutation on affected property-defended seeds only. Skips when
   # the diff touches none of the seed watch paths; enforces mutation floors on
-  # packages that ran. The full 16-seed Stryker lane remains nightly (e2e.yml).
+  # packages that ran.
+  #
+  # #892 Phase 1 — THIS LANE WAS BIMODAL AND THE SWITCH WAS THE WRONG ONE. It
+  # measured either 4m30s of build plus ZERO mutation (no affected seeds) or
+  # 19m27s of full-seed run — and the second mode fired because `package.json`
+  # and `bun.lock` were in `MUTATION_GLOBAL_WATCH`, so any dependency bump ran all
+  # sixteen seeds on the PR loop. `scripts/mutation/seeds.mjs` now watches the
+  # mutation configuration itself and nothing else globally; the full-seed run
+  # moved to `mutation-canary` below, where nobody is waiting on it.
   mutation-pr:
+    # A push to main goes to the canary tier instead — running affected seeds
+    # there would re-prove on the merge commit what the PR already proved.
+    if: github.event_name != 'push' || github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -555,6 +729,67 @@ jobs:
         run: bun run turbo run build --filter='./packages/*'
       - name: Per-PR mutation (affected seeds + floors)
         run: bun run test:mutation:pr
+
+  # #892 Phase 1 — THE PER-MERGE MUTATION CANARY. The full seed set, on every
+  # merge to main, deliberately OUTSIDE `check`'s needs: the merge has already
+  # happened, so a red canary is a page rather than a gate. What it buys is the
+  # same thing `mobile-canary.yml` buys — a mutation-score regression attributable
+  # to ONE commit instead of a night's worth of them — without any of it sitting
+  # in front of a human waiting on review.
+  #
+  # The nightly full run in e2e.yml stays: it is the scheduled sweep that catches
+  # a seed that rots without any commit touching its watch list, and its evidence
+  # feeds the test-health report. This lane is about attribution, not coverage.
+  mutation-canary:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      issues: write
+    # Serialize: a run of merges must not stack sixteen Stryker runs on top of
+    # each other. `cancel-in-progress: false` keeps the older run's attribution.
+    concurrency:
+      group: mutation-canary-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - name: Build packages for mutation seeds
+        run: bun run turbo run build --filter='./packages/*'
+      - name: Full-seed mutation (all seeds + floors)
+        run: bun run test:mutation -- --enforce-floors
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: mutation-canary-scores
+          path: artifacts/mutation/
+          retention-days: 14
+      - name: File a tracking issue on a red canary
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/mutation-canary.md <<EOF
+          The per-merge mutation canary failed on \`${{ github.sha }}\`.
+
+          The regression is attributable to that ONE commit, which is the whole
+          reason this lane exists — do not wait for the nightly to re-observe it.
+          Evidence: the \`mutation-canary-scores\` artifact on run
+          ${{ github.run_id }}.
+
+          Fix or revert before the next merge. Prefer updating this issue over
+          opening duplicates.
+          EOF
+          node scripts/ci/file-tracking-issue.mjs \
+            --title '[mutation-canary] a mutation floor went red on main' \
+            --search '[mutation-canary] a mutation floor went red' \
+            --body-file /tmp/mutation-canary.md \
+            --label tech-debt \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
   # ---------------------------------------------------------------------------
   # Path-gated lanes. Each was its own `pull_request` workflow until #557; the
@@ -583,7 +818,9 @@ jobs:
     uses: ./.github/workflows/lane-gateway-package.yml
 
   # Required-check-capable mobile liveness gate (#587 E22–E23/F26–F29).
-  # This runs on Ubuntu and fails before an expensive macOS native build.
+  # Bundle export + committed-native-tree ratchets + shipped-weight ceilings.
+  # #892 — it no longer compiles anything: see the note where `ci:android-native`
+  # used to be for why that claim belongs to `mobile-device-gate`.
   mobile-smoke:
     needs: changes
     if: needs.changes.outputs.mobile == 'true' || needs.changes.outputs.all == 'true'
@@ -630,8 +867,208 @@ jobs:
       # tests/experience-budgets/mobile.json and are tighten-only.
       - name: Weigh the shipped mobile bundles
         run: bun run perf:app-weight -- --surface mobile
-      - name: Compile the Android application and native modules
-        run: bun run --cwd apps/mobile ci:android-native
+      # #892 Phase 1 — `ci:android-native` (a ~3-minute Debug Kotlin compile) is
+      # GONE. It proved the native modules compile; `mobile-device-gate` below
+      # compiles the same native tree under `assembleRelease` and then RUNS the
+      # artifact, on the same `mobile` path filter, so the two never disagree
+      # about a break — the Debug compile could only ever be the slower, weaker
+      # half of a claim already made.
+      #
+      # The `android/app/src/debug` and `debugOptimized` source sets Release never
+      # touches are the one thing that went with it. They are dev-client scaffolding
+      # (#890 W1 moved every lane off the dev client), and `ci:native-state` still
+      # ratchets the committed native trees, so a change to them is not
+      # unobserved — it is unCOMPILED, which is the trade being made here.
+      #
+      # The job's own header rationale ("fails before an expensive macOS build")
+      # went stale at the same time: since #890 W4 the mobile gate is Android on
+      # Linux, and there is no macOS build on the PR loop to fail before.
+
+  # #890 W4 — THE PR DEVICE GATE. Mobile is the primary surface and until this
+  # job no mobile journey ran on any PR: `mobile-smoke` above proves the app
+  # BUILDS and nothing about whether it works, and the nightly's first device
+  # signal arrived after merge. A feedback loop that contradicts surface priority
+  # is the defect; this job is the fix.
+  #
+  # Android, per D1 (docs/decisions.md#mobile-testing-890): Linux runners expose
+  # /dev/kvm so the emulator is hardware-accelerated and the gate costs Linux
+  # minutes rather than the macOS multiplier, and Maestro's UIAutomator2 driver
+  # is the stabler of the two. iOS is the nightly's depth platform, never a
+  # per-PR duplicate.
+  #
+  # It runs the RELEASE artifact (#890 W1), so none of the dev-client machinery
+  # — Metro, the dev launcher, the bundle prewarm, the developer-menu sheet —
+  # exists on this path.
+  mobile-device-gate:
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true' || needs.changes.outputs.all == 'true'
+    runs-on: ubuntu-latest
+    # The SUITE's own budget is 12 minutes warm (flows/pr-gate-budget.md) and is
+    # what fails a slow run, because it fails while evidence can still be written.
+    # This is an outer backstop only and must stay well above suite + a cold
+    # gradle release build, or a cancelled job destroys the verdicts (#557:
+    # cancelled counts as red, with nothing to read).
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      # ubuntu-latest exposes /dev/kvm; enable it so the x86_64 emulator gets
+      # hardware acceleration. Without it every journey times out.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      # TWO fingerprints, and the difference between them is the whole
+      # build-once-run-many contract (#892 Phase 0):
+      #
+      #   hash    native inputs only. Keys the GRADLE BUILD DIRECTORY, so a
+      #           JS-only PR restores a warm native compile and re-runs only the
+      #           bundle and packaging tasks.
+      #   apk_key native inputs PLUS a hash of the embedded Hermes bundle's
+      #           inputs. Keys the APK. `@expo/fingerprint` deliberately ignores
+      #           `src/**` — correct under the dev client, where Metro served the
+      #           JS live, and WRONG since #890 W1 put every device lane on the
+      #           release artifact, where the JS is compiled in. Without the js
+      #           component a JS-only PR restored main's apk and the critical five
+      #           drove main's JS: green, fast, and measuring the wrong commit.
+      - name: Fingerprint the Android native build inputs
+        id: native_android
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          fp="$(node scripts/native-fingerprint.mjs android)"
+          test -n "$fp" || { echo "::error::empty Android fingerprint"; exit 1; }
+          js="$(node scripts/js-bundle-fingerprint.mjs)"
+          test -n "$js" || { echo "::error::empty JS bundle fingerprint"; exit 1; }
+          jdk="$(java -version 2>&1 | head -1 | shasum -a 256 | cut -d' ' -f1)"
+          echo "hash=jdk${jdk:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
+          echo "apk_key=jdk${jdk:0:12}-fp${fp}-js${js}" >> "$GITHUB_OUTPUT"
+      - name: Install Maestro CLI
+        # Pinned to the SAME version every other mobile lane installs;
+        # scripts/test-report/validate-nightly-wiring.mjs fails when the three
+        # lanes disagree, because two device drivers on one roster is a
+        # difference nobody chose.
+        env:
+          MAESTRO_VERSION: 2.6.1
+        run: bash scripts/ci/install-maestro.sh
+      - name: Build and start the tokenless mobile test gateway
+        run: |
+          bun run turbo run build --filter=@centraid/server
+          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
+          for attempt in {1..90}; do
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/centraid-mobile-gateway.log
+          exit 1
+      # #890 W1, build-once-run-many. Two caches with DIFFERENT fallback rules,
+      # and the difference is the whole point:
+      #
+      #   apk cache      exact key, NO restore-keys. A partial match here would
+      #                  install a stale binary and pass, which is the one thing
+      #                  this must never do. #892 — the key carries the JS bundle
+      #                  hash as well as the native one, so "stale" now includes
+      #                  "built from a different commit's JS", which under the
+      #                  release artifact is the common case rather than the rare
+      #                  one.
+      #   gradle build   restore-keys ON. A partial match is a warm build
+      #     directory   DIRECTORY, not an artifact: gradle re-checks every task's
+      #                  inputs against the current tree, so a JS-only change
+      #                  re-runs only the bundle and packaging tasks and a native
+      #                  change rebuilds what it must. Nothing stale can survive
+      #                  a task-input check, which is why restore-keys is safe on
+      #                  this one and refused on the other.
+      #
+      # Both are populated on `main` by .github/workflows/mobile-canary.yml, so a
+      # PR normally restores rather than compiles.
+      - name: Restore the built Android app
+        id: android_app
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e-android
+          key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
+      - name: Restore the Android gradle build directory
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            apps/mobile/android/app/build
+            apps/mobile/android/build
+            ~/.gradle/caches
+          key: android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
+          restore-keys: |
+            android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
+            android-gradle-${{ runner.os }}-
+      - name: AVD cache
+        id: avd_cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-x86_64-google_apis-pixel6-r4096-c4-v1
+      - name: Create AVD + snapshot (cache miss only)
+        if: steps.avd_cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          # Every AVD-shaping input MUST match the test step's, or the cached
+          # snapshot will not load. Pinned in apps/mobile/scripts/device-matrix.json,
+          # where the x86_64-vs-arm64 divergence from a member's phone is recorded
+          # as deliberate rather than assumed away.
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 4096M
+          cores: 4
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Generated AVD snapshot for caching."
+      - name: Run the critical five on the release artifact
+        id: emu
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          ANDROID_CACHE_HIT: ${{ steps.android_app.outputs.cache-hit }}
+          CENTRAID_MOBILE_BUILD: release
+          CENTRAID_MOBILE_LANE: pr-gate
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 4096M
+          cores: 4
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
+          disable-animations: true
+          script: bash apps/mobile/scripts/android-emulator-pr-gate.sh
+      # The harness rm -rf's this in a finally; this is belt-and-braces against a
+      # run that dies before the finally, so a crash mid-pairing cannot ship a
+      # live enrollment capability in the uploaded artifact.
+      - name: Remove sensitive pairing diagnostics
+        if: always()
+        run: |
+          if [ -d tests/agent-e2e-mobile/runs ]; then
+            find tests/agent-e2e-mobile/runs -type d \
+              -path '*/maestro-debug/*-configure-gateway' \
+              -prune -exec rm -rf {} +
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: mobile-device-gate-runs
+          path: tests/agent-e2e-mobile/runs/
+          retention-days: 7
+          if-no-files-found: ignore
 
   docs:
     needs: changes
@@ -681,11 +1118,30 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
+        with:
+          # #892 Phase 1 — the `iroh-wasm` preset already caches `~/.cargo/bin`
+          # alongside the registry and this crate's target/. This lane is the one
+          # that actually rebuilds the binding, and it was the ONE lane not asking
+          # for the preset that exists for it: it re-ran `cargo install
+          # wasm-bindgen-cli --locked` from source on every run (~1.7 min with the
+          # apt install) while four other lanes provisioned the same toolchain for
+          # a rebuild that never happens. With the cache, the install below is a
+          # no-op on a warm runner.
+          cargo-cache: iroh-wasm
       - name: Install pinned binding tools
         run: |
+          set -euo pipefail
           # apps/web/iroh-wasm/rust-toolchain.toml pins rustc + wasm target.
           rustup show
-          cargo install wasm-bindgen-cli --version 0.2.108 --locked
+          # Restored from the cargo cache on a warm runner. Version-checked
+          # rather than presence-checked: a cache entry from before a pin bump
+          # would otherwise silently drive the rebuild with the wrong bindgen,
+          # which is exactly the drift the pin exists to prevent.
+          if [ "$(wasm-bindgen --version 2>/dev/null || true)" != "wasm-bindgen 0.2.108" ]; then
+            cargo install wasm-bindgen-cli --version 0.2.108 --locked
+          else
+            echo "wasm-bindgen 0.2.108 restored from the cargo cache"
+          fi
           # binaryen 108 matches Ubuntu 24.04 apt; pin so wasm-opt does not float.
           sudo apt-get update
           sudo apt-get install --yes binaryen=108-1 clang
@@ -888,35 +1344,24 @@ jobs:
   # These launch the desktop journey, NOT a signed packaged build. Booting the
   # signed installer's own journey is the deeper W5.2 goal and stays coupled to
   # lane-release-desktop.yml, where the Azure/Apple secrets live.
-  desktop-e2e-windows:
-    needs: changes
-    # Parked #846 P12 / #850: Windows first-run founding never leaves
-    # onboarding-view. `shouldUseFileFallback()` throws when
-    # `safeStorage.isEncryptionAvailable()` is false on any non-Linux
-    # platform; this job does not set `CENTRAID_INSECURE_DEVICE_SECRETS=1`.
-    # actionlint forbids `if: false`, so the gate is a repo Actions variable
-    # that is unset. Set `CENTRAID_DESKTOP_E2E_WINDOWS=1` (and restore the
-    # path filter) when founding works on `windows-latest`.
-    # was: needs.changes.outputs.desktop == 'true' || needs.changes.outputs.all == 'true'
-    if: vars.CENTRAID_DESKTOP_E2E_WINDOWS == '1'
-    runs-on: windows-latest
-    timeout-minutes: 35
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup
-        with:
-          turbo-cache: "true"
-      - run: bunx playwright install --with-deps chromium
-        working-directory: apps/desktop
-      - run: bun run build
-      - run: bun run test:e2e
-        working-directory: apps/desktop
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: failure()
-        with:
-          name: desktop-e2e-windows-traces
-          path: apps/desktop/test-results/
-          retention-days: 7
+  # #892 Phase 3 — `desktop-e2e-windows` IS GONE. It was permanently gated behind
+  # `vars.CENTRAID_DESKTOP_E2E_WINDOWS`, a repo Actions variable that is unset —
+  # so the job never ran, could never go red, and existed only as YAML that
+  # reviewers had to read past. The parking NOTE was the valuable half and it now
+  # lives where a parked thing belongs, in an issue rather than in a dead job:
+  #
+  #   Windows first-run founding never leaves onboarding-view.
+  #   `shouldUseFileFallback()` throws when `safeStorage.isEncryptionAvailable()`
+  #   is false on any non-Linux platform, and the job did not set
+  #   `CENTRAID_INSECURE_DEVICE_SECRETS=1`. Restoring the lane means fixing
+  #   founding on `windows-latest` first (#846 P12 / #850), then re-adding the
+  #   job with the `desktop` path filter.
+  #
+  # `desktop-e2e-macos` stays, and stays NON-REQUIRED. #892 asked whether a
+  # 10x-multiplier runner belongs on the PR loop at all; the answer recorded here
+  # is that it does while it is advisory, because the twice-burned promotion rule
+  # in lane-client-e2e.yml is the thing that would move it, and demoting it to
+  # nightly would delete the only darwin signal that rule could ever read.
 
   desktop-e2e-macos:
     needs: changes
@@ -941,17 +1386,24 @@ jobs:
           retention-days: 7
 
   check:
-    needs:
-      [
+    needs: [
         changes,
         static,
         gates,
         design-gallery,
         verify,
+        # #892 Phase 1 — `verify`'s coverage half split out. BOTH are here: the
+        # split was about when an answer arrives, never about which answers gate.
+        # `coverage-shard` is listed as well as `coverage` so a shard that dies
+        # without its dependent ever starting still reds `check` rather than
+        # reporting `skipped`, which this aggregator counts as satisfied.
+        coverage-shard,
+        coverage,
         mutation-pr,
         client-e2e,
         gateway-package,
         mobile-smoke,
+        mobile-device-gate,
         docs,
         web-build,
         iroh-wasm,

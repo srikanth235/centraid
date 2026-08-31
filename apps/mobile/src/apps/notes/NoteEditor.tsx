@@ -28,6 +28,7 @@ import {
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import TopSafeArea from "../../kit/components/TopSafeArea";
+import { TEST_IDS } from "../../kit/test-ids";
 import { useTheme } from "../../kit/theme";
 import type { NativeNote } from "./notes-model";
 import { styles } from "./NotesHome.styles";
@@ -99,6 +100,7 @@ export default function NoteEditor(props: NoteEditorProps): React.JSX.Element {
             accessibilityRole="button"
             accessibilityLabel="Close the note"
             onPress={props.onClose}
+            testID={TEST_IDS.notes.editorClose}
             style={styles.iconButton}
           >
             <Icon name="x" size={23} color={colors.text} />

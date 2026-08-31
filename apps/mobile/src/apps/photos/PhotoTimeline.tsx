@@ -17,6 +17,11 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 
 import { Text } from "../../kit/components/NativeText";
+import {
+  PHOTO_TILE_HANDLES,
+  TEST_IDS,
+  TEST_ID_PREFIXES,
+} from "../../kit/test-ids";
 import { pageMargin, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { usePhotosRung } from "./photos-rung-store";
@@ -37,6 +42,33 @@ import type { TimelineRow } from "./timeline-rows";
 import type { PhotoAsset, PhotoSection } from "./timeline-source";
 
 const RAIL_TOP = 8;
+
+/**
+ * Positional handles for the FIRST few tiles — `photos-tile-0` … — so a flow can
+ * open a photograph without keying on a filename the seed owns.
+ *
+ * BOUNDED BY CONSTRUCTION. This grid is the frame-drop surface
+ * (`tests/agent-e2e-mobile/flows/scroll-frames.mjs`), so the walk stops as soon
+ * as `PHOTO_TILE_HANDLES` ids exist: the cost is the same on a 90-photograph
+ * library and a 90,000-photograph one, which is the rule for anything that runs
+ * beside a render (CONSTITUTION "nothing whose cost scales with vault size").
+ */
+function tileHandles(
+  rows: readonly TimelineRow[]
+): ReadonlyMap<string, string> {
+  const handles = new Map<string, string>();
+  for (const row of rows) {
+    if (row.type !== "assets") continue;
+    for (const tile of row.tiles) {
+      handles.set(
+        tile.asset.id,
+        `${TEST_ID_PREFIXES.photosTile}${handles.size}`
+      );
+      if (handles.size >= PHOTO_TILE_HANDLES) return handles;
+    }
+  }
+  return handles;
+}
 
 /** `x` is already row-relative because the row is full-bleed. If the row regains
  *  an inset, subtract it here or every tap resolves one tile to the left. */
@@ -177,6 +209,7 @@ export default function PhotoTimeline({
     [contentWidth, placeNames, sections, target]
   );
   const stickyIndices = useMemo(() => monthHeaderIndices(rows), [rows]);
+  const handles = useMemo(() => tileHandles(rows), [rows]);
   const tops = useMemo(() => rowTops(rows), [rows]);
   const selecting = selection.size > 0;
 
@@ -301,6 +334,7 @@ export default function PhotoTimeline({
               width={tile.width}
               height={tile.height}
               rung={rung}
+              testID={handles.get(tile.asset.id)}
               selected={selection.has(tile.asset.id)}
               selecting={selecting}
               vaults={vaults}
@@ -312,6 +346,7 @@ export default function PhotoTimeline({
       ),
     [
       handleOpen,
+      handles,
       onSelectionChange,
       rung,
       selecting,
@@ -343,7 +378,7 @@ export default function PhotoTimeline({
       onTap={tapAsset}
       onDrag={dragSelect}
     >
-      <View style={styles.fill}>
+      <View style={styles.fill} testID={TEST_IDS.photos.grid}>
         <FlashList
           initialScrollIndex={initialLanding}
           ref={list}

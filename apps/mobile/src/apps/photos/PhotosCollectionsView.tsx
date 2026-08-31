@@ -17,6 +17,7 @@ import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useImageFallback } from "../../kit/media/use-image-fallback";
+import { TEST_ID_PREFIXES, TEST_IDS } from "../../kit/test-ids";
 import { borders, pageMargin, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
@@ -116,6 +117,9 @@ function Section({
           }
           onPress={() => onOpen()}
           style={styles.headOpen}
+          // The shelf's own key — the label is copy and the count moves with the
+          // vault, so `Open Places, 7` is a locator that changes every seed.
+          testID={`${TEST_ID_PREFIXES.photosShelf}${section.key}`}
         >
           <Text style={styles.headTitle}>{section.title}</Text>
           <Icon name="chevron-right" size={18} color={colors.textFaint} />
@@ -334,6 +338,7 @@ export default function PhotosCollectionsView({
     <ScrollView
       contentContainerStyle={styles.scroll}
       showsVerticalScrollIndicator={false}
+      testID={TEST_IDS.photos.collections}
     >
       {sections.map((section) => (
         <Section

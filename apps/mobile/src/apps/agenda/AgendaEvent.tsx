@@ -26,6 +26,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
+import { TEST_IDS } from "../../kit/test-ids";
 import { radii, t, useTheme } from "../../kit/theme";
 import type { NativeWriteInput } from "../../lib/replica/native-session";
 import type { AgendaScreenProps } from "../../navigation";
@@ -161,6 +162,7 @@ export default function AgendaEvent({
           accessibilityRole="button"
           accessibilityLabel="Back to the agenda"
           onPress={() => navigation.goBack()}
+          testID={TEST_IDS.agenda.eventBack}
         >
           <Icon name="ChevronLeft" size={26} color={colors.text} />
         </Tappable>

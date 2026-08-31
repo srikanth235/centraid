@@ -20,6 +20,8 @@ export interface PlacePinProps {
   active: boolean;
   onPress: () => void;
   style?: object;
+  /** A positional handle from `kit/test-ids`, supplied by the map that plots it. */
+  testID?: string;
 }
 
 export default function PlacePin({
@@ -28,6 +30,7 @@ export default function PlacePin({
   active,
   onPress,
   style,
+  testID,
 }: PlacePinProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -36,6 +39,7 @@ export default function PlacePin({
       accessibilityLabel={pinLabel(pin)}
       accessibilityRole="button"
       onPress={onPress}
+      testID={testID}
       style={[
         styles.pin,
         { height: size, width: size },

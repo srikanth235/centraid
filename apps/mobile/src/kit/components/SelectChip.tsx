@@ -9,9 +9,12 @@ import { Text } from "./NativeText";
 export default function SelectChip({
   disabled,
   onPress,
+  testID,
 }: {
   disabled: boolean;
   onPress: () => void;
+  /** A handle from `kit/test-ids`, never a hand-spelled string (#890 W2). */
+  testID?: string;
 }): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -22,6 +25,7 @@ export default function SelectChip({
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
+      testID={testID}
       style={styles.chip}
     >
       <Text style={styles.text}>Select</Text>

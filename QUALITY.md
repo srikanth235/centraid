@@ -2,6 +2,40 @@
 
 ## Open
 
+- **Ten web e2e specs still carry a hand-copied connected-session bootstrap.**
+  `apps/web/tests/e2e/connect.ts` (#892) now owns that bootstrap, and
+  `accessibility`, `pwa-offline-journey` and `web-pwa` import it. The other ten
+  — `agenda`, `docs-drive`, `locker-seat`, `notes`, `offline-reconnect`,
+  `offline-search`, `people`, `perf-waterfall`, `renderer-leak` and `tasks` —
+  each keep their own copy, in an **earlier variant**: they
+  add the `__centraid_control` cookie by hand and read the vault id back from
+  `/centraid/_vault/vaults` instead of taking it from the control response.
+  Both variants work today, which is precisely the risk: the product has one
+  connection shape and the harness asserts against two, so a change to that
+  shape can leave ten specs green against a connection onboarding no longer
+  writes. Not fixed in #892 because converting ten browser-lane specs is a
+  change with its own blast radius and belongs nowhere near a CI PR. The
+  conversion is mechanical once someone decides whether the cookie-then-lookup
+  path is still asserting something the control-response path does not.
+
+- **"Free up space" on mobile is a button that can never be pressed.**
+  `apps/mobile/src/screens/BackupHealth.custody.tsx` renders the `FREE_UP_ACTION`
+  Pressable with a hard-coded `disabled` and `accessibilityState={{ disabled: true }}`,
+  above a line reading "Release the copies from the app that holds them —
+  Photos re-hashes each device original before deleting it." So the surface
+  computes a real offer (`freeUpOffer` reports the releasable count and bytes),
+  states a real cause and consequence, renders an affordance for it — and then
+  refuses, permanently, pointing the member somewhere else. Not a bug in the
+  sense of broken code: the comment beside it (`this surface never deletes a
+  device original`) says the refusal is deliberate. It is a **product question**:
+  a disabled control with no path to becoming enabled reads as a defect to the
+  person looking at it, and the two candidate answers are opposite — either wire
+  it to the Photos eviction path it names, or stop drawing a button and make the
+  redirect the whole affordance. Found while trying to write #890 W5's
+  "device journey proving real eviction", which cannot exist while this holds:
+  there is no eviction on the phone to observe. Left unfixed because choosing
+  between those two answers is a design decision, not a test-layer one.
+
 - **The comment-density ratchet does not measure what its header claims.**
   `scripts/check-comment-density-ratchet.mjs` says its parser walk "catches
   trailing comments (they lead the NEXT token), JSX comments, and the file-end
@@ -214,11 +248,6 @@
   Harmless (the accurate statement is recorded in the `minimumTests` deviation
   pin next to the number), but the comment should be corrected by whoever next
   edits that file.
-- **Five `photos-*.mjs` Maestro flows are unlinted.** `scripts/lint-e2e-flows.mjs`
-  `FILES` omits all five photos flows (`photos-search.mjs` even carries a
-  marker for a nonexistent rule name, `input-observed`). Adding them may
-  surface latent findings in five flows at once, so it deserves its own pass
-  rather than a drive-by (#781 wave 3 added only the new `places-seat.mjs`).
 - **`google-calendar-invite-send` uses wall-clock `new Date()`** (DTSTAMP)
   and `Math.random()` (MIME boundary) inside the published handler —
   nondeterminism the connector lane's lint doesn't catch; its tests
@@ -258,7 +287,91 @@
   React flip; appearance-prefs, profile view-models, insights formatters, and
   near-duplicate `relativeTime` still need consolidation / floors — #545 D5/B8).
 
+- **Tasks' home screen cannot mount: its band names an icon the design package
+  does not ship.** `apps/mobile/src/apps/tasks/tasks-band.ts:42` names `"Inbox"`
+  for the third band destination (and again at `:92` as the More sheet's first
+  row), `@centraid/design` ships no `Inbox` icon, and
+  `apps/mobile/src/kit/components/icon-resolver.ts` carries no alias for it — so
+  `resolveIconName` **throws inside `TasksBand`'s render**, before any Tasks
+  content is drawn. Verified against the built design package:
+  `isIconName("Inbox") === false`. Nothing cheaper saw it, and the reason is
+  instructive: `tasks-band.test.ts` asserts the icon *table* and never that a
+  name in it resolves, and the DOM-stub tier never mounts the band at all. Found
+  by #890's RNTL promotion, and pinned there as a characterisation test in
+  `apps/mobile/src/apps/tasks/TasksHome.test.tsx` (first case, marked
+  DELETE-ON-FIX) per the A-pinned doctrine — #890 is chartered to rebuild the
+  test layer, not to change the product, and a lane that quietly fixed what it
+  found would leave no record that the gap in the cheaper tiers existed. The fix
+  is one of: add the glyph, alias it in `icon-resolver.ts`, or name a shipped
+  icon; whichever lands should delete the pin in the same change.
+
+- **Accessibility labels on plain `View`s are never published to the tree.**
+  `AgendaBand`'s tab group carries `accessibilityRole="tablist"` and
+  `AgendaHome`'s `NowLine` carries `accessibilityLabel="Now"`, but neither sets
+  `accessible`, so React Native never promotes them to accessibility elements —
+  the grouping role and the "Now" marker are absent from the tree a screen
+  reader walks, and on the Agenda that line is otherwise just a coloured rule.
+  The same shape appears in `DocsBand`, `TasksBand`, `TallyBand`, `LockerBand`
+  and `PeopleBand`. Invisible to the DOM-stub tier by construction: the stub
+  maps `accessibilityLabel` straight onto `aria-label`, so a stub test sees a
+  label that the device does not publish. Found and pinned by #890 in
+  `apps/mobile/src/apps/agenda/AgendaHome.test.tsx` (last case, DELETE-ON-FIX).
+
+- **`origin/main` was already red on `test:comment-density` before #890.**
+  Verified in a clean worktree at `3e555c8d`:
+  `node scripts/check-comment-density-ratchet.mjs` fails there on eighteen files
+  no branch had touched — `packages/vault/src/gateway/portable-export.ts`,
+  `packages/vault/src/{grant/fulfillment,schema/migrate}.test.ts`, six
+  `packages/blueprints/apps/*/pending-projection.ts`-shaped files, three
+  `apps/web/tests/e2e/*.spec.ts`, and `apps/mobile/src/kit/share/GrantSheet*`
+  among them — plus three unpinned files over the 15% cap. A down-only gate that
+  is red on the default branch cannot distinguish a regression from the standing
+  state, so every branch inherits the failure and every author must decide
+  whether to absorb it. #890 absorbed those eighteen into its pin raise, with the
+  reason stated at the number in `tests/comment-density-ratchet.json`, rather
+  than leave its own branch red for something it did not cause. That absorption
+  is a workaround, not the fix. Two things want settling on their own: how a pin
+  file drifts out of agreement with the tree on `main` at all (a `--write` that
+  was never run, or a merge that landed while red), and the separate open
+  observation above that the scanner under-measures trailing and JSX comments —
+  which makes every `.tsx` number in that file wrong in the same direction.
+
 ## Resolved
+
+- #890 — **The mobile upload allowlist accepted percent-encoded traversal,
+  backslash traversal, and embedded credentials.** Filed here rather than under
+  Open because all three are fixed; the shape of the miss is what is worth
+  keeping. `assertGatewayMintedUploadUrl` is the only thing standing between a
+  native background PUT and a destination the gateway never authorized, and it
+  checked scope with `target.pathname.startsWith(allowedUploadPrefix)`.
+  `new URL()` resolves a literal `../` before that test ever runs — which is
+  what made the existing traversal case pass and made the check look sound — but
+  it leaves `%2e%2e%2f` exactly as written, so
+  `…/tmp/blobs/%2e%2e%2f%2e%2e%2fblobs/sha256/<secret>` satisfied the prefix.
+  Separately, `URL.origin` omits userinfo, so
+  `https://evil:pw@provider.example/…` matched the provider origin and the
+  credentials would have ridden to it. **The first fix was itself incomplete**,
+  and that is the part most worth remembering: it split path segments on `/`
+  alone, so `..%5c..%5c` — which `URL` does not normalise, because it rewrites
+  only a *literal* backslash — walked straight through the check that had just
+  been written to stop exactly this. An independent audit found it; the tests
+  shipped alongside the fix did not. Scope is now checked at every decoding
+  depth, on both separators, with a bound on the decoding rounds and a
+  distinction between a malformed escape in the URL as minted (refused) and a
+  legitimately encoded `%` that simply cannot decode twice (accepted — the first
+  fix rejected valid uploads here). Two general lessons: **a normalization the
+  parser performs for you hides the cases it does not perform**, and **a fix
+  written from a failing case tends to cover that case and its siblings only** —
+  the sibling separator was one substitution away and nobody looked.
+
+- #890 — **The five `photos-*.mjs` Maestro flows are linted.** The observation
+  described `scripts/lint-e2e-flows.mjs`'s hand-written `FILES` list; #842 W0.4
+  replaced it with on-disk discovery over `flows/` and `lib/`, so every flow —
+  including the five photos ones, and any flow added later — is linted from the
+  moment its file exists. The nonexistent `input-observed` marker
+  `photos-search.mjs` carried went with it. #890 adds the second half the entry
+  implied: a flow that is linted but that no lane runs is now a hard failure of
+  `bun run lint:e2e-wiring`.
 
 - #883 — The #880 residuals register is closed, six of seven. The stored,
   indexed order column is **not** among them — the sort was pushed into SQLite,

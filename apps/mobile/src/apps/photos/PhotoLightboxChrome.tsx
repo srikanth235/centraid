@@ -11,6 +11,7 @@ import type { EdgeInsets } from "react-native-safe-area-context";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import Tappable from "../../kit/components/Tappable";
+import { TEST_IDS } from "../../kit/test-ids";
 import type { ThemeColors } from "../../kit/theme";
 import { styles } from "./PhotoLightbox.styles";
 import { SLIDESHOW_ACTION, VIEWER_CHROME_INSET } from "./viewer-model";
@@ -43,6 +44,7 @@ export function ViewerChromeTarget({
   tone,
   /** 56 inside a capsule (neighbours at 44 mis-tap). A lone chip IS its plate — 44 floor. */
   wide,
+  testID,
   onPress,
 }: {
   colors: ThemeColors;
@@ -53,6 +55,8 @@ export function ViewerChromeTarget({
   selected?: boolean;
   tone?: "ink" | "net";
   wide?: boolean;
+  /** A handle from `kit/test-ids`, never a hand-spelled string (#890 W2). */
+  testID?: string;
   onPress: () => void;
 }): React.JSX.Element {
   // `--on-stage-soft`, NOT `--text-disabled`: page-ramp disabled ink vanishes on the stage, so the control would read as absent.
@@ -69,6 +73,7 @@ export function ViewerChromeTarget({
       accessibilityState={{ disabled: Boolean(disabled), selected }}
       disabled={disabled}
       onPress={onPress}
+      testID={testID}
       style={[styles.chromeTarget, wide ? styles.chromeTargetWide : null]}
     >
       <Icon name={icon} size={23} color={ink} />
@@ -117,6 +122,7 @@ export function ViewerTopChrome({
           icon="chevron-left"
           label="Back to the photographs"
           onPress={onClose}
+          testID={TEST_IDS.photos.viewerBack}
         />
       </ViewerChromePlate>
 
@@ -169,6 +175,7 @@ export function ViewerTopChrome({
             icon="more-horizontal"
             label="More actions"
             onPress={onOverflow}
+            testID={TEST_IDS.photos.viewerMore}
           />
         </ViewerChromePlate>
       )}

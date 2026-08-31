@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 
 import register from "@babel/register";
+import { installExpoGlobalPolyfill } from "expo-modules-core/src/polyfill/dangerous-internal";
 import mockRequire from "mock-require";
 import React from "react";
 import { vi } from "vitest";
@@ -18,6 +19,18 @@ import { vi } from "vitest";
 (
   globalThis as { IS_REACT_NATIVE_TEST_ENVIRONMENT?: boolean }
 ).IS_REACT_NATIVE_TEST_ENVIRONMENT = true;
+
+// `globalThis.expo` is the JSI bridge object the native runtime installs before
+// any JS runs; every `expo-*` package dereferences it at module scope, so
+// without it an import of `expo-file-system` (or crypto, or a local Expo
+// module) throws "Cannot read properties of undefined (reading 'EventEmitter')"
+// before a single component renders. This is expo-modules-core's OWN JS
+// implementation of that global, from the subpath its package exports for
+// exactly this purpose — jest-expo installs it the same way — so it is a device
+// seam, not a hand-rolled fake, and it keeps every real `expo-*` JS module
+// loadable. Application modules remain real; a test that needs a device answer
+// still mocks that one package itself (#890).
+installExpoGlobalPolyfill();
 
 // Metro evaluates React Native's Flow-annotated source after applying the Expo
 // preset. Vitest executes dependencies in Node, so install the equivalent

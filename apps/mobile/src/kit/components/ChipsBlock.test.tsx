@@ -61,7 +61,9 @@ describe(ChipsBlock, () => {
     expect(onStyle.fontFamily).not.toBe(offStyle.fontFamily);
   });
 
-  it("holds every pill at the touch floor and marks the chosen one", () => {
+  // Stub tier: the computed style OBJECT and the state prop. A 44pt height in
+  // a style is not a 44pt hit area on a device — that is a Maestro claim.
+  it("declares the 44pt touch-floor height on every pill and marks the chosen one", () => {
     const container = render(
       <ChipsBlock
         chips={[{ id: "all", label: "All", on: true, onPress: noop }]}

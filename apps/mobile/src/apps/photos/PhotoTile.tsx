@@ -45,6 +45,8 @@ export interface PhotoTileProps {
   selected: boolean;
   selecting: boolean;
   vaults: ReadonlyMap<string, VaultFacts>;
+  /** A positional handle from `kit/test-ids`, on the leading tiles only. */
+  testID?: string;
   onOpen: (asset: PhotoAsset) => void;
   onSelect: (asset: PhotoAsset) => void;
 }
@@ -57,6 +59,7 @@ function PhotoTileImpl({
   selected,
   selecting,
   vaults,
+  testID,
   onOpen,
   onSelect,
 }: PhotoTileProps): React.JSX.Element {
@@ -89,6 +92,7 @@ function PhotoTileImpl({
       accessibilityRole="imagebutton"
       accessibilityState={{ selected }}
       onPress={() => (selecting ? onSelect(asset) : onOpen(asset))}
+      testID={testID}
       // The box is fixed from the record. Every state below paints INSIDE it.
       style={{ height, width }}
     >

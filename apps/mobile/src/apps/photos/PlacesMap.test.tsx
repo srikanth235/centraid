@@ -272,7 +272,7 @@ const here = path.dirname(expect.getState().testPath ?? "");
 const source = (file: string): string =>
   readFileSync(path.join(here, file), "utf8");
 
-describe("the Places map (native)", () => {
+describe("the Places map, over the RN DOM stub", () => {
   beforeEach(() => {
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -305,7 +305,10 @@ describe("the Places map (native)", () => {
     expect(container!.textContent).toContain("3 of 4");
   });
 
-  it("gives every place a pin a screen reader can land on", () => {
+  // Stub tier: the LABELS the component hands each pin, in order. Whether a
+  // screen reader can land on them is an RN accessibility-tree fact this tier
+  // cannot reach (#890 W5).
+  it("labels every pin with its place and its photograph count", () => {
     renderMap();
     expect(pins().map((pin) => pin.getAttribute("aria-label"))).toStrictEqual([
       "Lake Tahoe, 2 photographs",
@@ -322,13 +325,13 @@ describe("the Places map (native)", () => {
     ).toStrictEqual([TAHOE_PHOTO!.uri, HOME_PHOTO!.uri]);
   });
 
-  it("reads out the place whose pin was pressed", () => {
+  it("swaps the readout to the place whose pin ran its onPress", () => {
     renderMap();
     press(pins()[1]);
     expect(container!.textContent).toContain("Home · 1");
   });
 
-  it("replaces the readout when a second pin is pressed, never appending", () => {
+  it("replaces the readout when a second pin runs its onPress, never appending", () => {
     renderMap();
     press(pins()[1]);
     press(pins()[0]);

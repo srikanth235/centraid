@@ -21,7 +21,7 @@ import {
 import type { VaultMcpHandle } from "./vault-mcp-server.js";
 
 const STDIO_PROXY = fileURLToPath(
-  new URL("vault-mcp-stdio-proxy.mjs", import.meta.url)
+  new URL("vault-mcp-stdio-proxy.mjs", import.meta.url).href
 );
 
 export interface TurnVaultTools {

@@ -31,38 +31,62 @@ await runFlow("places-seat", async (ctx) => {
 ---
 ${retryableTapCommands("Open Photos.*")}
 - extendedWaitUntil:
-    visible: "Collections"
+    visible:
+      id: "photos-collections"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-# The Places section sits below Memories/Albums/People on the Collections
-# page; its heading is the "Open Places, N" Pressable.
+- assertVisible: "Collections"
+# The Places section sits below Memories/Albums/People on the Collections page.
+# Its heading is taken by the shelf's OWN KEY, not by "Open Places, N": that
+# label carries the vault's count, so it is a locator that changes every seed —
+# PhotosCollectionsView.tsx says exactly that at the handle.
 - scrollUntilVisible:
     element:
-      text: "Open Places.*"
+      id: "photos-shelf-places"
     direction: DOWN
-${retryableTapCommands("Open Places.*")}
+    visibilityPercentage: 100
+- tapOn:
+    id: "photos-shelf-places"
+    retryTapIfNoChange: true
 # The shelf's own header — "Places · N" is published by PlacesView alone, and
 # a seeded vault must count at least one place. A zero here is the #787
-# defect shape (map full, shelf empty), so the digit is the assertion.
+# defect shape (map full, shelf empty), so the digit is the assertion; the
+# handle beside it is what proves the header was drawn at all.
 - extendedWaitUntil:
-    visible: "Places · [1-9][0-9]*"
+    visible:
+      id: "places-shelf"
     timeout: 30000
-# At least one card, by the label every card publishes.
+- assertVisible: "Places · [1-9][0-9]*"
+# At least one card — the leading one by position, and the label every card
+# publishes. The label is the claim (a place, and how many photographs of it);
+# the handle is how the flow knows a card was drawn rather than a rail of
+# skeletons.
+- assertVisible:
+    id: "places-card-0"
 - assertVisible: ".*, [0-9]+ photographs"
 - takeScreenshot: places-shelf
-${retryableTapCommands("Open map")}
+- tapOn:
+    id: "places-map-open"
+    retryTapIfNoChange: true
 # The map's resting sentence — the privacy claim the screen makes about
 # itself — plus its own "drawn of held" count, both map-only copy.
 - extendedWaitUntil:
-    visible: "Plotted from your own photographs."
+    visible:
+      id: "places-map"
     timeout: 30000
+- assertVisible: "Plotted from your own photographs."
 - assertVisible: "[1-9][0-9]* of [1-9][0-9]*"
-# Press a pin (each is a Pressable labelled "<where>, N photographs?") and
-# the readout replaces the resting sentence with "<where> · N".
+# Press a pin — by position, since which place leads the plotted set is the
+# vault's business — and the readout replaces the resting sentence with
+# "<where> · N". BOTH halves are asserted, because a readout that appeared
+# BESIDE the resting sentence would be a different product than one that
+# replaced it.
 - tapOn:
-    text: ".*, [0-9]+ photographs?"
+    id: "places-pin-0"
 - extendedWaitUntil:
     visible: ".* · [0-9]+"
     timeout: 15000
+- assertVisible:
+    id: "places-readout"
 - assertNotVisible: "Plotted from your own photographs."
 - takeScreenshot: places-map-readout
 `,

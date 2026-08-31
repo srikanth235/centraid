@@ -101,7 +101,10 @@ describe(DocRow, () => {
     ).toBeNull();
   });
 
-  it("renders the device mark as a glyph with an accessible name, never a sentence", () => {
+  // Stub tier: this owns the PROP and the absence of the sentence. Whether
+  // React Native publishes an accessibility node from that label is
+  // `DocsHome.test.tsx`'s claim, on the real tree (#890 W5).
+  it("hands the device mark an accessibilityLabel and draws no sentence", () => {
     const container = render(
       <DocRow
         doc={doc({ custody_state: "local-only" })}

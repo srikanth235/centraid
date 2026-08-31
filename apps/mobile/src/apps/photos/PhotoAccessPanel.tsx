@@ -7,6 +7,7 @@ import React, { useMemo } from "react";
 import { Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { Text } from "../../kit/components/NativeText";
+import { TEST_IDS } from "../../kit/test-ids";
 import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { photoAccessCopy, photoAccessState } from "./photo-access";
@@ -61,7 +62,13 @@ export default function PhotoAccessPanel({
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.body}>
+    // The takeover's COPY is the claim — the refusal sentence and the recovery
+    // it offers are the product's promise, and stay asserted. The id is only
+    // how a flow FINDS the panel.
+    <ScrollView
+      contentContainerStyle={styles.body}
+      testID={TEST_IDS.photos.accessPanel}
+    >
       <Text style={styles.headline}>{copy.headline}</Text>
       <Text style={styles.lede}>{copy.lede}</Text>
       <View style={styles.actions}>
@@ -119,6 +126,11 @@ function Control({
       accessibilityRole="button"
       accessibilityLabel={control.label}
       onPress={() => onPress(control.action)}
+      testID={
+        control.action === "ask"
+          ? TEST_IDS.photos.accessAsk
+          : TEST_IDS.photos.accessSettings
+      }
       style={[
         styles.control,
         filled

@@ -10,6 +10,7 @@ import { iconChipFinish, radii } from "@centraid/design";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { TEST_IDS } from "../../kit/test-ids";
 import { borders, pageMargin, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
@@ -82,6 +83,9 @@ export default function VaultHeader({
         accessibilityLabel={`${name} on ${line}. Switch vault`}
         onPress={onSwitchVault}
         style={({ pressed }) => [styles.lockup, pressed && styles.pressed]}
+        // The label carries the vault's and gateway's names, so it is different
+        // on every device; the handle is not.
+        testID={TEST_IDS.home.vaultSwitch}
       >
         <View
           style={[styles.mark, { backgroundColor: finish.backgroundColor }]}

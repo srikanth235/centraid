@@ -26,6 +26,7 @@ import {
 } from "@centraid/blueprints/apps/tasks/view-copy";
 
 import { Text, TextInput } from "../../kit/components/NativeText";
+import { TEST_IDS } from "../../kit/test-ids";
 import { useTheme } from "../../kit/theme";
 import type { TasksStyles } from "./TasksHome.styles";
 
@@ -180,6 +181,7 @@ export default function TasksQuickAdd({
       <View style={styles.capture}>
         <TextInput
           accessibilityLabel={QUICK_ADD.add}
+          testID={TEST_IDS.tasks.capture}
           placeholder={QUICK_ADD.touchPlaceholder}
           placeholderTextColor={colors.textGhost}
           value={draft.title}

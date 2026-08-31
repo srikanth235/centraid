@@ -2,6 +2,43 @@
 //   vi.mock(import("react-native"), async () =>
 //     (await import("../../test/react-native-stub")).reactNativeStub());
 // Theme NOT stubbed: tests assert the real lowered token; style rides `data-style`.
+//
+// ── WHAT A STUB-TIER TEST MAY CLAIM (the contract; #890 W5) ────────────────
+//
+// This file fakes 14 React Native exports as DOM host elements. A component
+// mounted through it is rendered by `react-dom`, in jsdom, with no React Native
+// anywhere in the tree. So a test using it OWNS exactly four kinds of fact:
+//
+//   1. the PROPS a component hands its children — including `accessibilityRole`
+//      / `accessibilityLabel` / `accessibilityState`, which `domProps` below
+//      copies onto `data-role` / `aria-label` / `aria-selected` and friends;
+//   2. the OUTPUT of a pure model or projection the component renders;
+//   3. the STRINGS that reach the screen, and the ones that deliberately do not;
+//   4. the computed STYLE OBJECT, read back off `data-style`.
+//
+// And it may NOT claim any of these, however tempting the wording:
+//
+//   - that React Native PUBLISHES an accessibility node from those props. RN
+//     only promotes a `View` to an accessibility element when `accessible` is
+//     set; the stub writes the attribute unconditionally, so a stub-tier test
+//     asserting "has an accessible name" stays green on a screen that says
+//     nothing at all to a screen reader.
+//   - that a press was REFUSED. `Pressable` here is a `<button onClick>`; RN's
+//     `disabled` short-circuits in the responder tree, which does not exist
+//     here. "The component withheld its own callback" is a fair claim; "the
+//     press was refused" is not.
+//   - anything about NATIVE LAYOUT or hit area. A `minHeight: 44` in a style
+//     object is a declaration, not a measured 44pt target.
+//   - anything about LIST WINDOWING or recycling. `flatListStub()` renders
+//     every row it is handed, eagerly; the real `FlatList`/`FlashList` do not.
+//
+// Everything on the forbidden list is owned by the `@centraid/mobile-rn`
+// project, which runs the real React Native renderer under RNTL — one
+// consolidated file per app home screen, listed in `vitest.projects.ts`
+// (`nativeComponentFiles`). Device/runtime integration stays Maestro's
+// (TESTING.md). Title a test here for the fact it actually owns; the tier a
+// claim belongs to is not a matter of taste, and a title that overstates is a
+// green test standing in for a claim nobody makes.
 
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";

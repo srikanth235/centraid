@@ -1,16 +1,20 @@
-import { describe, expect, test } from "vitest";
+// The mobile.contracts owner: what shape the app DEMANDS of a gateway that is
+// the right age — which capability keys must be present, how an absent optional
+// key reads, and that the wall copy names the gateway rather than the app.
+//
+// Version SKEW — what happens when the two sides are different ages — is a
+// different question and lives in mobile-gateway-skew.test.ts, which owns
+// mobile.compat. This file used to carry both, so the matrix reported two green
+// cells over one body of evidence; #890 split them, and the judge test that used
+// to sit at the bottom of this file moved there rather than being duplicated.
 
-import {
-  GATEWAY_MIN_PROTOCOL_VERSION,
-  GATEWAY_PROTOCOL_VERSION,
-} from "@centraid/core/protocol";
+import { describe, expect, test } from "vitest";
 
 import {
   MOBILE_APP_UPDATE_MESSAGE,
   MOBILE_COMPATIBILITY_WALL_COPY,
   MOBILE_GATEWAY_UPDATE_MESSAGE,
   MOBILE_FEATURE_OFF_COPY,
-  judgeMobileGatewayCompatibility,
   readMobileGatewayFeatures,
   supportsMobileOfflineGateway,
 } from "./mobile-gateway-compatibility-core";
@@ -87,48 +91,5 @@ describe("mobile gateway compatibility", () => {
     expect(MOBILE_COMPATIBILITY_WALL_COPY["update-app"].action).toMatch(
       /retry/iu
     );
-  });
-
-  test("runs the mutual protocol judge and names the older side", () => {
-    const capabilities = {
-      ...base,
-      multiVaultReplica: true,
-      crossVaultPlacements: true,
-    };
-    // Stated against the shared constants, not against literals: the floor
-    // moves on breaking releases, and a literal here would assert that a
-    // current gateway needs updating the next time it does.
-    expect(
-      judgeMobileGatewayCompatibility({
-        version: "0.1.0",
-        protocolVersion: GATEWAY_PROTOCOL_VERSION,
-        minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
-        capabilities,
-      })
-    ).toBe("supported");
-    expect(
-      judgeMobileGatewayCompatibility({
-        version: "old-gateway",
-        protocolVersion: GATEWAY_MIN_PROTOCOL_VERSION - 1,
-        minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION - 1,
-        capabilities,
-      })
-    ).toBe("update-gateway");
-    expect(
-      judgeMobileGatewayCompatibility({
-        version: "future-gateway",
-        protocolVersion: GATEWAY_PROTOCOL_VERSION + 1,
-        minSupportedProtocol: GATEWAY_PROTOCOL_VERSION + 1,
-        capabilities,
-      })
-    ).toBe("update-app");
-    expect(
-      judgeMobileGatewayCompatibility({
-        version: "capability-old",
-        protocolVersion: GATEWAY_PROTOCOL_VERSION,
-        minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
-        capabilities: base,
-      })
-    ).toBe("update-gateway");
   });
 });

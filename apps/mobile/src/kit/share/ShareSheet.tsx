@@ -27,6 +27,7 @@ import Tappable from "../components/Tappable";
 import TopSafeArea from "../components/TopSafeArea";
 import { useReplicaQuery } from "../hooks/useReplicaQuery";
 import { useReplica } from "../replica/ReplicaProvider";
+import { TEST_IDS } from "../test-ids";
 import { borders, radii, spacing, t, useTheme } from "../theme";
 import { useNamedShareCircles } from "./named-circles";
 import QuickAddPerson from "./QuickAddPerson";
@@ -217,12 +218,19 @@ export default function ShareSheet({
       presentationStyle="pageSheet"
       visible={visible}
     >
-      <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
+      <TopSafeArea
+        style={[styles.safe, { backgroundColor: colors.bg }]}
+        testID={TEST_IDS.shell.shareSheet}
+      >
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>
             Share {noun.toLowerCase()}
           </Text>
-          <Tappable accessibilityLabel="Cancel" onPress={onClose}>
+          <Tappable
+            accessibilityLabel="Cancel"
+            onPress={onClose}
+            testID={TEST_IDS.shell.shareSheetCancel}
+          >
             <Text style={{ color: colors.accent }}>Cancel</Text>
           </Tappable>
         </View>

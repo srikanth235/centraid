@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Text, TextInput } from "../kit/components/NativeText";
 import TopSafeArea from "../kit/components/TopSafeArea";
+import { TEST_IDS } from "../kit/test-ids";
 import { readSelfMemberName } from "../lib/gateway";
 import { isTunnelAvailable, pair } from "../lib/phone-link";
 import {
@@ -273,6 +274,7 @@ function ConnectionStep({
         <>
           <Text style={[styles.fieldLabel, styles.fieldGap]}>PAIRING CODE</Text>
           <TextInput
+            testID={TEST_IDS.onboarding.ticketField}
             value={code}
             onChangeText={setCode}
             placeholder="Paste the one-line ticket"
@@ -300,7 +302,9 @@ function ConnectionStep({
             <PrimaryButton
               // Maestro must tap the Pressable, not its TextView child
               // (run 30708832841).
-              testID="onboarding-connect"
+              // Spelled through the vocabulary now; the STRING is unchanged,
+              // because renaming it would break every flow that pastes a ticket.
+              testID={TEST_IDS.onboarding.connect}
               label={pairing ? "Connecting…" : "Connect"}
               onPress={() => (pairing ? undefined : submit(code))}
             />
@@ -330,6 +334,7 @@ function ConnectionStep({
             <Pressable
               onPress={() => setShowPaste(true)}
               style={styles.textBtn}
+              testID={TEST_IDS.onboarding.paste}
             >
               <Text style={styles.textBtnLabel}>
                 Can&apos;t scan? Paste a code instead

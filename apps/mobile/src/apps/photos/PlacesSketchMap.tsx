@@ -10,6 +10,7 @@ import {
   tierNoun,
 } from "@centraid/blueprints/apps/photos/place-map";
 
+import { TEST_ID_PREFIXES } from "../../kit/test-ids";
 import { radii, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PlacesMapSurfaceProps } from "./places-map-mode";
@@ -102,11 +103,12 @@ export default function PlacesSketchMap({
         </SvgText>
       </Svg>
       {/* Real Pressables above the svg: RNSVG gives the a11y tree no control to land on. */}
-      {projection.pins.map((pin) => {
+      {projection.pins.map((pin, index) => {
         const size = pinSize(pin.count, largest);
         return (
           <PlacePin
             key={`hit-${pin.key}`}
+            testID={`${TEST_ID_PREFIXES.placesPin}${index}`}
             pin={pin}
             size={size}
             active={pin.key === activeKey}
