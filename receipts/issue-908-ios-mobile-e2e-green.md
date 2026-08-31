@@ -34,9 +34,10 @@ already have been consumed.
 
 The iOS nightly now also runs the app-level journeys directly on the iOS
 Release artifact: Docs, Agenda, Notes, Tasks, People, Tally, Sharing, Places,
-Locker, and all Photos surfaces. The ordered suite pairs once and reuses the
-paired profile, while each flow retains its own demo seed and product
-assertions. Its aggregate envelope is 70 minutes, below the workflow's
+Locker, and all Photos surfaces. It first proves empty Photos permission
+denial, then seeds every deterministic app scenario before creating a fresh
+replica for the app-level roster; later flows reuse that profile while retaining
+their own product assertions. Its aggregate envelope is 75 minutes, below the workflow's
 140-minute macOS backstop; the increase buys this named coverage and does not
 change per-assertion timeouts, retries, permissions, or allowlists.
 
@@ -95,9 +96,10 @@ Home evidence at `artifacts/e2e/ui-impact/issue-908-ios-paired-home.png`.
 - Preserve the five-minute canary and every product assertion. Stable handles
   and relay readiness fix the pairing causes; only the aggregate iOS suite
   envelope widened to pay for the explicitly added app-level coverage.
-- Pair once at the front of the iOS depth suite and reuse that paired profile
-  downstream. Keep ordinary evidence split by sensitivity, and keep the shared
-  canary's phases in one driver session so infrastructure startup is paid once.
+- Keep explicit pairing boundaries: canary first, empty Photos permission
+  second, then one fully seeded replica for the app-level roster. Keep ordinary
+  evidence split by sensitivity, and keep the shared canary's phases in one
+  driver session so infrastructure startup is paid once.
 - Run the app-level roster on iOS as direct release-artifact evidence, with one
   bounded aggregate envelope for the ordered suite.
 - Measure the canary's product transition from the Maestro command receipt,

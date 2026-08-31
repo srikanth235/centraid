@@ -784,6 +784,7 @@ export async function runFlow(slug, fn) {
     gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? "",
     homeCommands = "",
     session = false,
+    fresh = false,
   } = {}) => {
     if (!gatewayUrl) {
       throw new Error(
@@ -792,7 +793,11 @@ export async function runFlow(slug, fn) {
     }
     if (typeof homeCommands !== "string")
       throw new Error("homeCommands must be a Maestro YAML string");
-    if (process.env.MAESTRO_REUSE_PAIRED_STATE === "1") {
+    // A suite may deliberately establish a second clean replica after a
+    // prerequisite journey mutates gateway fixtures. Reuse is the default;
+    // `fresh` is the explicit lifecycle boundary that makes the new replica
+    // contain the fixtures seeded immediately before this call.
+    if (process.env.MAESTRO_REUSE_PAIRED_STATE === "1" && !fresh) {
       await ctx.run(
         `appId: ${state.appId}
 ---

@@ -4,9 +4,9 @@
 // runs the product's app-level journeys against the iOS Release artifact so
 // the question "does this app work on iOS?" has direct evidence, not an
 // inference from Android plus one native smoke test. The roster is one ordered
-// suite: pairing happens once, then every journey reuses that paired profile.
-// That keeps the added coverage honest about time and avoids paying the hosted
-// XCUITest startup cost once per app.
+// suite with explicit lifecycle boundaries: the canary pairs once, the empty
+// Photos permission journey pairs a clean profile, and the app roster then
+// pairs one fully seeded profile that every later journey reuses.
 //
 //   pairing-canary          iOS is a SEPARATE ARTIFACT. The Release .app is a
 //     different binary from the Android Release apk, built by a different
@@ -45,6 +45,10 @@ import { runSuite } from "./lib/run-suite.mjs";
 // that exists to catch exactly that.
 const FLOWS = [
   "pairing-canary.mjs",
+  // Permission denial needs an empty Photos replica, so it owns the second
+  // fresh pairing before the roster fixture is seeded.
+  "photos-permissions.mjs",
+  "ios-roster-bootstrap.mjs",
   "native-v0-resilience.mjs",
   // App-level coverage: every shipped first-party app/surface with a
   // scheduled mobile journey. Keep these names authoritative so
@@ -58,7 +62,6 @@ const FLOWS = [
   "sharing-invite.mjs",
   "places-seat.mjs",
   "locker-gate.mjs",
-  "photos-permissions.mjs",
   "photos-library.mjs",
   "photos-viewer.mjs",
   "photos-search.mjs",
@@ -71,7 +74,7 @@ const FLOWS = [
 // The expanded app-level roster's bounded iOS envelope. Derived, not observed;
 // see flows/ios-depth-budget.md. This stays below the workflow's 140-minute
 // backstop and is re-derived from measured CI p95s after three runs.
-const BUDGET_MS = 70 * 60_000;
+const BUDGET_MS = 75 * 60_000;
 
 process.exitCode = await runSuite({
   name: "ios-depth",

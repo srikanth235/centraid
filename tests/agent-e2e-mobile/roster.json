@@ -38,7 +38,7 @@
       "blocking": false,
       "platform": "ios",
       "budgetDoc": "tests/agent-e2e-mobile/flows/ios-depth-budget.md",
-      "why": "iOS release coverage — native depth plus every scheduled app-level journey, all against the iOS Release artifact. Pair once and reuse the paired profile; run-ios-depth-suite.mjs is the authoritative 18-flow list and its suite budget is bounded below the 140-minute macOS job timeout."
+      "why": "iOS release coverage — native depth plus every scheduled app-level journey, all against the iOS Release artifact. The lane proves empty Photos permission denial, then creates one fully seeded replica for the remaining app journeys; run-ios-depth-suite.mjs is the authoritative 19-flow list and its suite budget is bounded below the 140-minute macOS job timeout."
     }
   },
   "flows": {
@@ -53,6 +53,10 @@
     "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs": {
       "status": "scheduled",
       "claim": "Every native cover opens from Home, Settings loads, the app survives a process restart, and on Android an offline write reconnects and syncs. The one airplane-mode journey the device owns; the rest of the state grid is tests/integration-mobile/'s."
+    },
+    "tests/agent-e2e-mobile/flows/ios-roster-bootstrap.mjs": {
+      "status": "scheduled",
+      "claim": "The iOS app roster seeds every deterministic app scenario before creating its shared replica, so later Home tile and app-content assertions observe the fixtures they claim."
     },
     "tests/agent-e2e-mobile/flows/cold-start.mjs": {
       "status": "scheduled",
