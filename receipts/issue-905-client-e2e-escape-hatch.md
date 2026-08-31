@@ -34,6 +34,10 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 
 - [x] Let a sensitive chunk print its failing directive on failure, without ever letting its capability reach the log
 
+### G — a coverage shard could go red and name no test
+
+- [x] Give `coverage:shard` the default reporter alongside the blob, so a failing shard says which test failed
+
 ## What changed
 
 Where each checked item lands, then the reasoning behind it:
@@ -50,6 +54,7 @@ Where each checked item lands, then the reasoning behind it:
 - Seed the demo corpus once per LANE, before anything pairs, rather than per flow after the first pairing — "E — the corpus arrived after the clone"; `tests/agent-e2e-mobile/seed-demo-corpus.mjs`, `tests/agent-e2e-mobile/lib/demo-corpus.mjs`, `tests/agent-e2e-mobile/lib/harness.mjs`, `apps/mobile/scripts/android-emulator-install.sh`.
 - Give `lint:e2e-wiring` a `corpus` rule holding both halves: no tile tap for an app that cannot earn the grid, and no seeding after the lane's handoff to Maestro — "E — the corpus arrived after the clone", final paragraphs; `scripts/lint-e2e-wiring.mjs`, `scripts/lint-e2e-wiring.cases.mjs`, and `tests/agent-e2e-mobile/README.md`, whose `ctx.ensureDemo` entry described the per-flow contract without saying that a CI lane makes it a no-op.
 - Let a sensitive chunk print its failing directive on failure, without ever letting its capability reach the log — "F — a prerequisite that fails without saying how"; `tests/agent-e2e-mobile/lib/spawn.mjs`, `tests/agent-e2e-mobile/lib/harness.mjs`, `tests/agent-e2e-mobile/lib/spawn-redaction.test.mjs`.
+- Give `coverage:shard` the default reporter alongside the blob, so a failing shard says which test failed — "G — a shard that fails in silence"; `package.json`.
 
 ### The defect
 
@@ -152,6 +157,23 @@ The spec sits beside the harness and is run by the `test-report-scripts` vitest 
 
 **A wrong turn worth recording, because CI caught it and reasoning did not.** Grepping for what ran `sh-quote.test.mjs` — the spec next door — returned nothing, so this receipt briefly claimed it was an orphan that had never executed, and F's spec was written for `node --test` and added to `scripts:test` to avoid the same fate. Both halves were wrong. The directory is included by a config that names it only through a glob, so no grep for the filename could find it; `test:ratchet:unit` then failed with `No test suite found`, because that project had picked the file up and `node:test`'s `test()` is not vitest's. The spec is now vitest, matching its neighbour, and the `scripts:test` entry is removed so it is not run twice. The claim about the orphan is withdrawn: `sh-quote.test.mjs` runs, on that lane, with coverage.
 
+### G — a shard that fails in silence
+
+`coverage-shard (2)` went red on this branch, and its log ends:
+
+```
+blob report written to /home/runner/work/centraid/centraid/.vitest-reports/blob-2-4.json
+error: script "coverage:shard" exited with code 1
+```
+
+That is the whole diagnosis. `--reporter=blob` writes the machine artifact and prints nothing a human reads, and the failure detail inside the blob is only ever rendered by the `coverage` merge job — which `needs:` the shards, so a red shard means nobody ever sees why. Four runners can spend six minutes each and produce one line naming no test.
+
+`coverage:shard` now passes `--reporter=default` alongside `--reporter=blob`, the same shape B gave `test:suite`. The blob is still written (49 MB locally, and the merge lane's `assert-shard-blobs` guard is unaffected); a green shard gains a summary line; a red one names its file, its test and its assertion.
+
+It paid immediately. Running shard 4 locally with the new reporter surfaced two named failures in `packages/server/src/acp/backends/acp/launch.test.ts` — `expected 'yes' to be '1'` on `plan.env.IS_SANDBOX`. That is **this container**, not the repo: `IS_SANDBOX=yes` is set in the agent sandbox and `planLaunch` reads ambient env, so the two cases that assert on its absence cannot hold here. Nothing is changed for it — it is a third local-environment finding, recorded beside the other two rather than "fixed".
+
+The CI failure itself is NOT this PR's, and the check is deliberate rather than assumed: `coverageProjects` in `vitest.config.ts` does not include `scripts/test-report/vitest.config.ts`, so the only test file this branch adds is outside every shard — confirmed by grepping a local shard run for it (zero occurrences) rather than by reading the config alone. Shard 2 passes locally on this exact tree. No re-run was spent because this session has no tool that can re-run a job; that is stated in Out of scope rather than left as an unexplained omission.
+
 ### Docs
 
 `docs/decisions.md` gains **G-filter-escape-hatch** beside the existing G-filter-inverse. `TESTING.md`'s path-filter row records both the narrowed `client-e2e` gate and the new fallback requirement.
@@ -173,6 +195,8 @@ The spec sits beside the harness and is run by the `test-report-scripts` vitest 
 
   **It did not recur, and the reason narrows the search.** The branch dispatch (run 33374941598, 08:52) restored the apk cache on key `android-release-Linux-jdk6ea3257c17f4-fp…-js0601c949dd337c83` — 147 MB, a hit — so the installer took its warm path (`Android cache hit … skipping gradle`) and no gradle ran at all. Two things follow. The 34m55s failure was reached only through the cold path, which supports the cold-cache-window bullet below as its precondition rather than a coincidence; and it is not deterministic on this tree, so the `--stacktrace` may have to wait for the next cold miss to pay out. Neither observation is a diagnosis, and the bullet stands.
 - **`mobile-device-gate` is still red, now for an unrelated reason in the product.** With the build skipped, the suite ran and `pairing-canary` failed at its first chunk `01-configure-gateway` after 73s with **0 completed assertions**, classified `product`; the four journeys behind that shared prerequisite never started. The chunk's own diagnostics are deliberately unreadable — it is a `sensitive: true` flow whose stdout is suppressed and whose `maestro-debug/*-configure-gateway` directory the `Remove sensitive pairing diagnostics` step deletes before upload, because it would otherwise ship a live enrollment capability. That control is correct and is not to be weakened to make this easier to read. The 73s is consistent with the flow's first `extendedWaitUntil` (`FIRST_LAUNCH_TIMEOUT_MS`, 45s on a release build) plus install and `clearState`, i.e. the app never reached "Connect your gateway." — consistent, not established, because the verdict could not be read from here (the artifact host is off this container's egress allowlist).
+- **`coverage-shard (2)`'s own red.** Judged infra or flake: the shard is outside this branch's reach (see G), it passes locally, and all four shards were green on an earlier head of this same PR. It could not be confirmed by the one re-run the rules allow, because no tool in this session can re-run a job — so the honest position is "not reproduced, not explained", and G is what makes the next occurrence explain itself.
+- **`IS_SANDBOX` leaking into `launch.test.ts`.** Two cases in `packages/server/src/acp/backends/acp/launch.test.ts` assert on `plan.env.IS_SANDBOX` being unset or forced, and `planLaunch` reads ambient env — so they fail in any environment that exports it, as this agent sandbox does. Hermetic-ising them is a `packages/server` change with its own blast radius and no bearing on this issue.
 - **The `01-configure-gateway` flake itself.** F makes the next failure name its directive; it does not make the chunk stable. Two failures in four runs on the PR gate's short-circuiting prerequisite is a real reliability problem, and the two expiries were different waits, so there is probably more than one cause. Diagnosing it needs the step lines F now emits.
 - **The Android roster's remaining red, after E.** E fixes the cause of every `Element not found` tile tap. It does NOT re-verify the journeys behind those taps: `photos-permissions` also failed its own `photos-collections` assertion after warnings about `^Open$` and `^Continue$`, which is a permission-dialog path this change does not touch, and no lane has run past the tile tap yet to say what else is behind it. #904 and #870 stay open until a green roster closes them.
 - **The Android roster is broadly red on `main` itself, and is already tracked.** The `mobile-canary` run on main tip `f5ca34fb` (33370541215) paired and onboarded fine — `mobile-cold-start`, `home-loads` and `volume-proof` all PASS, and "All apps and places" asserts visible — then failed nearly every remaining journey at the tile tap: `Open Photos.*`, `Open Docs.*`, `Open Agenda.*`, `Open Notes.*`, `Open Tasks.*`, `Open People.*` and `id: home-tile-photos` are all `Element not found`. One shared symptom, a home screen rendering its heading without its tiles. The canary's own `File a tracking issue on a red canary` step filed **#904** for it, and **#870** is the older sibling ("home-app journeys never see home"). Nothing here changes app code; it is recorded because it is the actual reason the mobile lanes are red on main, and it is not the CI wiring this issue is about.

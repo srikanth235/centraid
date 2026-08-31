@@ -33,7 +33,7 @@
     "ci:retry": "node scripts/ci/retry.mjs",
     "coverage": "node scripts/test-report/prepare.mjs --lane vitest && node node_modules/vitest/vitest.mjs run --coverage --reporter=default --reporter=json --outputFile=artifacts/test-results/vitest.json",
     "coverage:merge": "node scripts/ci/assert-shard-blobs.mjs --expect \"$CENTRAID_COVERAGE_SHARDS\" && node node_modules/vitest/vitest.mjs --mergeReports --coverage --reporter=default --reporter=json --outputFile=artifacts/test-results/vitest.json",
-    "coverage:shard": "node scripts/test-report/prepare.mjs --lane vitest && node node_modules/vitest/vitest.mjs run --config vitest.shard.config.ts --coverage --reporter=blob --shard=\"$CENTRAID_COVERAGE_SHARD\"",
+    "coverage:shard": "node scripts/test-report/prepare.mjs --lane vitest && node node_modules/vitest/vitest.mjs run --config vitest.shard.config.ts --coverage --reporter=default --reporter=blob --shard=\"$CENTRAID_COVERAGE_SHARD\"",
     "design:gallery": "bun scripts/design-gallery.mjs",
     "dev:desktop": "turbo run dev --filter=@centraid/desktop",
     "dev:mobile": "turbo run dev --filter=@centraid/mobile",
