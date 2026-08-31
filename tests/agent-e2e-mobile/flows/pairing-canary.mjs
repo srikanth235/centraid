@@ -22,43 +22,48 @@ import path from "node:path";
 
 import { findScreenshot, HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
 
-// The claim: a broken prerequisite is known in single-digit minutes, not after
-// the fan-out. This is asserted on the flow's own wall clock AFTER the fact —
-// it is a budget, not an interrupt. A genuinely unreachable gateway or an
-// unpaired device fails in seconds to two minutes, which is the case that
-// matters; a wedged Maestro driver is still bounded by the harness's own
-// MAESTRO_CHUNK_TIMEOUT_MS, and the canary cannot make that shorter without
-// making the honest slow-CI pairing flake.
+// The claim: the product's pairing transition completes in five minutes, not
+// after the fan-out. This is asserted from Maestro's completed-command receipt
+// rather than the flow process wall clock: hosted XCUITest installation is
+// infrastructure setup, while Connect → Home is the product latency this
+// budget is meant to describe. A wedged driver still fails through the normal
+// harness timeout and the suite deadline.
 const BUDGET_MS = 5 * 60_000;
 
 await runFlow("pairing-canary", async (ctx) => {
-  const startedAt = Date.now();
-
   // Mints the ticket over the gateway lane the rig is configured for, clears
   // the client, redeems through the real ticket-only onboarding UI, and lands
   // on Home. Every failure mode of the three claims above surfaces inside it.
-  await ctx.configureGateway({
+  // The session option keeps the three short logical phases in one Maestro
+  // process, so XCUITest startup is paid once and cannot masquerade as three
+  // product failures.
+  const pairing = await ctx.configureGateway({
+    session: true,
     // Keep the canary's claim in this flow while executing it in the helper's
-    // existing final driver session. The helper reaches this extension point
-    // only after its own mandatory Home wait.
+    // final phase. The helper reaches this extension point only after its own
+    // mandatory Home wait; the retained screenshot is taken after the ticket
+    // has been removed from the rendered state.
     homeCommands: `
 - assertVisible: "${HOME_READY_MARKER}"
 - takeScreenshot: paired-home
 `,
   });
 
-  // configureGateway's final Home assertion and screenshot are the
-  // prerequisite boundary. Keeping that evidence in its final safe checkpoint
-  // avoids a separate iOS driver launch inflating the five-minute claim.
-  const elapsedMs = Date.now() - startedAt;
-  ctx.note(`prerequisites proven in ${Math.ceil(elapsedMs / 1000)}s`);
+  const elapsedMs = pairing?.pairingTransitionMs;
+  if (!Number.isFinite(elapsedMs)) {
+    return {
+      pass: false,
+      notes: "pairing completed without a Connect-to-Home timing receipt",
+    };
+  }
+  ctx.note(`pairing transition proven in ${Math.ceil(elapsedMs / 1000)}s`);
   if (elapsedMs >= BUDGET_MS) {
     // Over budget with the claims intact is still a failure: the canary's value
     // IS its speed. A slow canary has stopped being a canary and become the
     // first flow of the nightly.
     return {
       pass: false,
-      notes: `pairing prerequisites took ${Math.ceil(elapsedMs / 1000)}s, over the ${BUDGET_MS / 60_000}-minute canary budget`,
+      notes: `Connect-to-Home pairing took ${Math.ceil(elapsedMs / 1000)}s, over the ${BUDGET_MS / 60_000}-minute product budget`,
     };
   }
 

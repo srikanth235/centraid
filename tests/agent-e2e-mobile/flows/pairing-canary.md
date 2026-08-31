@@ -8,12 +8,12 @@
 
 **Steps:**
 
-1. `ctx.configureGateway({ homeCommands })` — mint a ticket, clear the client, redeem it through the real ticket-only onboarding UI, and complete the profile. The canary supplies its own Home assertion and `paired-home` screenshot as final commands in that same safe driver session.
+1. `ctx.configureGateway({ session: true, homeCommands })` — mint a ticket, clear the client, redeem it through the real ticket-only onboarding UI, and complete the profile. The three short phases run in one Maestro/XCUITest session; the canary supplies its own Home assertion and `paired-home` screenshot after the capability has been consumed.
 
 **Expectations:** it asserts **nothing app-specific**, on purpose. The moment the canary knows about Photos or Docs it acquires a second reason to go red, and a canary with two reasons to fail no longer answers the question it was asked. Everything below the Home marker belongs to the journey that claims it.
 
-The Home commands remain visibly owned by this flow, so the verdict cannot pass on an implicit helper contract. The helper executes them in its final safe checkpoint, avoiding a second iOS driver launch after Home was already proved.
+The Home commands remain visibly owned by this flow, so the verdict cannot pass on an implicit helper contract. The helper executes them in the final phase of the same driver session. The retained evidence is limited to explicit screenshots from before ticket entry and after Home; the session's hierarchy and command report are discarded because they span the live capability.
 
-**Budget:** five minutes, asserted on the flow's own wall clock after the fact — a budget, not an interrupt. Over budget with the claims intact is still a FAIL, because the canary's value _is_ its speed; a slow canary has stopped being a canary and become the first flow of the nightly. The honest limit: a genuinely unreachable gateway or an unpaired device fails in seconds to two minutes, which is the case this exists for, but a wedged Maestro driver is still bounded by the harness's `MAESTRO_CHUNK_TIMEOUT_MS` and the canary cannot shorten that without making an honest slow-CI pairing flake.
+**Budget:** five minutes of product latency from the completed `onboarding-connect` action to the completed Home-ready assertion, asserted after the fact from Maestro's command receipt. XCUITest installation, driver handshake, and app launch are infrastructure setup; counting them as pairing latency made the budget measure the test runner three times. Over budget with the claims intact is still a FAIL. A wedged driver remains bounded by the harness's `MAESTRO_CHUNK_TIMEOUT_MS` and the suite's absolute deadline.
 
 **Verdict:** PASS only if a fresh ticket redeems to a ready Home inside the budget. FAIL means no journey downstream can be trusted to be reporting on its own claim — fix the prerequisite before reading any other verdict from the run.

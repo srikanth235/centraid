@@ -465,6 +465,109 @@ async function runMaestroChunk(
   }
 }
 
+// A single Maestro invocation can execute several flow files in order while
+// keeping one XCUITest driver alive. This is the important distinction for
+// fresh pairing: the flow phases remain short enough for iOS, but the hosted
+// runner is installed and handshaken only once. Pairing sessions are marked
+// sensitive as a whole because Maestro's per-step command report spans all
+// phases; the session report is read in memory and then discarded.
+async function runMaestroSession(
+  flows,
+  { state, sessionLabel, maestroEnv = {}, sensitive = false }
+) {
+  const flowFiles = [];
+  for (const { yaml, label } of flows) {
+    const flowFile = path.join(state.flowsDir, `${label}.yaml`);
+    await fs.writeFile(flowFile, yaml);
+    flowFiles.push(flowFile);
+  }
+  const debugDir = path.join(state.runDir, "maestro-debug", sessionLabel);
+  const run = sensitive ? spawnQuiet : spawnLive;
+  let reports = [];
+  try {
+    await run(
+      "maestro",
+      [
+        "--udid",
+        state.udid,
+        "test",
+        "--debug-output",
+        debugDir,
+        "--flatten-debug-output",
+        ...flowFiles,
+      ],
+      {
+        cwd: state.screenshotsDir,
+        env: { ...process.env, ...maestroEnv },
+        timeoutMs: maestroChunkTimeoutMs(),
+      }
+    );
+    const debugFiles = await fs.readdir(debugDir).catch(() => []);
+    for (const file of debugFiles.filter(
+      (candidate) =>
+        candidate.startsWith("commands-") && candidate.endsWith(".json")
+    )) {
+      try {
+        reports.push({
+          file,
+          commands: JSON.parse(
+            await fs.readFile(path.join(debugDir, file), "utf8")
+          ),
+        });
+      } catch {
+        // A missing or malformed report is not allowed to turn a successful
+        // product run into a failure. Consumers that need a timing receipt
+        // treat the absent event as an invalid measurement instead.
+      }
+    }
+  } finally {
+    // The whole session's debug output is capability-adjacent: even the safe
+    // phases share one Maestro report directory with the ticket phase. Keep
+    // explicit screenshots from the safe phases, but never retain the
+    // command hierarchy or per-step artifacts for this session.
+    if (sensitive) await fs.rm(debugDir, { force: true, recursive: true });
+  }
+  return reports;
+}
+
+function commandText(command) {
+  return JSON.stringify(command?.command ?? command?.evaluatedCommand ?? "");
+}
+
+function commandTime(command) {
+  const timestamp = Number(command?.metadata?.timestamp);
+  return Number.isFinite(timestamp) ? timestamp : undefined;
+}
+
+/**
+ * Extract the product transition from a successful pairing session receipt.
+ * The timestamps come from Maestro's completed commands, so XCUITest driver
+ * installation and process startup are not misreported as pairing latency.
+ */
+export function pairingTransitionMs(reports) {
+  const commands = reports.flatMap((report) =>
+    Array.isArray(report.commands) ? report.commands : []
+  );
+  const submit = commands.find(
+    (command) =>
+      command?.metadata?.status === "COMPLETED" &&
+      commandText(command).includes("onboarding-connect")
+  );
+  const homeTimestamps = commands
+    .filter(
+      (command) =>
+        command?.metadata?.status === "COMPLETED" &&
+        commandText(command).includes(HOME_READY_MARKER)
+    )
+    .map(commandTime)
+    .filter((timestamp) => timestamp !== undefined);
+  const home = homeTimestamps.length ? Math.max(...homeTimestamps) : undefined;
+  const startedAt = commandTime(submit);
+  if (startedAt === undefined || home === undefined || home < startedAt)
+    return undefined;
+  return home - startedAt;
+}
+
 /**
  * Run a mobile agent-e2e flow end-to-end: discover sim → setup run dir →
  * exec → verdict.
@@ -488,7 +591,8 @@ async function runMaestroChunk(
  *   ctx.state               read-only snapshot of {runId, runDir, udid, appId, ...}
  *   ctx.run(yaml, label?, options?) execute a YAML chunk; screenshots land under runs/.../screenshots/
  *   ctx.restart()           stopApp + launchApp without clearing state — mirrors desktop's ctx.restart()
- *   ctx.configureGateway(options?) pair cleanly, or reuse the paired nightly profile when requested
+ *   ctx.configureGateway(options?) pair cleanly, or reuse the paired nightly profile when requested;
+ *     `{ session: true }` keeps fresh pairing phases in one Maestro process
  *   ctx.ensureDemo(appId)   seed a scenario before the initial replica clone, if absent
  *   ctx.purgeDemo(appId)    remove a scenario before an empty-vault journey
  *   ctx.note(msg)           record an observation; surfaces in verdict.md
@@ -534,6 +638,24 @@ export async function runFlow(slug, fn) {
     console.log(`  run     : ${label}`);
     await runMaestroChunk(yaml, { state, label, ...options });
     assertionsRun += countMaestroAssertions(yaml);
+  };
+  const runSession = async (steps, hint, options = {}) => {
+    const labeled = steps.map(({ yaml, label }) => ({
+      yaml,
+      label: nextLabel(label),
+    }));
+    const sessionLabel = `${labeled[0]?.label ?? nextLabel(hint)}-session`;
+    console.log(`  session : ${sessionLabel}`);
+    const reports = await runMaestroSession(labeled, {
+      state,
+      sessionLabel,
+      ...options,
+    });
+    assertionsRun += labeled.reduce(
+      (total, { yaml }) => total + countMaestroAssertions(yaml),
+      0
+    );
+    return reports;
   };
   // THE DEVICE ESCAPE (#890 follow-up). Maestro drives ONE app's UI and nothing
   // around it, which is why six W5 journeys were recorded as blocked on "tooling
@@ -581,6 +703,7 @@ export async function runFlow(slug, fn) {
       console.log(`  note    : ${m}`);
     },
     run,
+    runSession,
     device,
   };
 
@@ -660,6 +783,7 @@ export async function runFlow(slug, fn) {
     gatewayUrl = process.env.MAESTRO_GATEWAY_URL,
     gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? "",
     homeCommands = "",
+    session = false,
   } = {}) => {
     if (!gatewayUrl) {
       throw new Error(
@@ -686,11 +810,7 @@ ${homeCommands}
     }
     const pairingTicket = await mintPairingTicket(gatewayUrl, gatewayToken);
 
-    // Keep setup outside the capability-bearing chunk. A launch, launcher
-    // handoff, or selector regression now retains its own hierarchy and
-    // screenshot instead of becoming an opaque "pairing" failure.
-    await ctx.run(
-      `appId: ${state.appId}
+    const prepareYaml = `appId: ${state.appId}
 ---
 - launchApp:
     clearState: true
@@ -704,16 +824,9 @@ ${DEV_LAUNCHER_HANDOFF}- extendedWaitUntil:
     visible:
       id: "onboarding-ticket-field"
     timeout: 10000
-`,
-      "prepare-gateway-pairing"
-    );
-
-    // This is the only chunk that can observe the live one-time capability.
-    // On submit the app clears it from the rendered tree, making every later
-    // checkpoint safe to retain. This chunk's diagnostics are still discarded
-    // whether it passes or fails.
-    await ctx.run(
-      `appId: ${state.appId}
+- takeScreenshot: pairing-ticket-screen
+`;
+    const submitYaml = `appId: ${state.appId}
 ---
 - tapOn:
     id: "onboarding-ticket-field"
@@ -731,30 +844,8 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 # remains in the viewport even while the iOS keyboard is still visible.
 - tapOn:
     id: "onboarding-connect"
-`,
-      "submit-gateway-ticket",
-      {
-        maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
-        sensitive: true,
-      }
-    );
-
-    // A safe checkpoint owns redemption, identity, and Home. If the tunnel
-    // fails after submit, CI retains the error surface and hierarchy instead
-    // of deleting the only useful evidence.
-    // #603 removed the local/manual-URL bypass: every fresh client must redeem
-    // a real one-time pairing ticket. #634 made the profile step conditional:
-    // an owner who already has a name goes straight to Done, while one still
-    // carrying the placeholder label is asked for a profile.
-    // Ownership (#726) killed the pre-named-invite mint: a ticket can no
-    // longer carry a chosen label, so the FIRST pairing against a fresh
-    // gateway always lands the placeholder owner "You" (not a set name) and
-    // shows the form. A later flow that reuses the same nightly gateway
-    // process finds that owner already renamed "Nightly" by the run below
-    // and skips straight to Done — both are real product paths, so the
-    // pattern above accepts either.
-    await ctx.run(
-      `appId: ${state.appId}
+`;
+    const completeYaml = `appId: ${state.appId}
 ---
 - extendedWaitUntil:
     visible: "Who's using this phone[?]|You're all set, [^.]+[.]"
@@ -785,9 +876,89 @@ ${retryableTapCommands("Enter Centraid")}
     visible: "${HOME_READY_MARKER}"
     timeout: 30000
 ${homeCommands}
+`;
+
+    if (session) {
+      // Keep the three logical phases short for iOS, but execute them inside
+      // one Maestro process. The hosted XCUITest runner is expensive to start;
+      // paying that cost once is the difference between a useful canary and a
+      // false budget failure. The report is consumed only for the timing
+      // receipt and is discarded with the capability-bearing diagnostics.
+      let reports;
+      try {
+        reports = await ctx.runSession(
+          [
+            { yaml: prepareYaml, label: "prepare-gateway-pairing" },
+            { yaml: submitYaml, label: "submit-gateway-ticket" },
+            { yaml: completeYaml, label: "complete-onboarding" },
+          ],
+          "pairing",
+          {
+            maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
+            sensitive: true,
+          }
+        );
+      } catch (error) {
+        // The session report is gone by this point. A clean-state screenshot
+        // gives CI one safe visual checkpoint without attempting to preserve
+        // the failed screen, which could still contain the live ticket if the
+        // driver died before the submit tap cleared it.
+        try {
+          await ctx.run(
+            `appId: ${state.appId}
+---
+- launchApp:
+    clearState: true
+${DEV_LAUNCHER_HANDOFF}- takeScreenshot: pairing-failure-safe
 `,
-      "complete-onboarding"
-    );
+            "pairing-failure-safe"
+          );
+        } catch (diagnosticError) {
+          ctx.note(
+            `safe pairing failure evidence unavailable: ${diagnosticError.message}`
+          );
+        }
+        throw error;
+      }
+      const transitionMs = pairingTransitionMs(reports);
+      if (transitionMs === undefined) {
+        throw new Error(
+          "Maestro completed pairing without a usable Connect-to-Home timing receipt"
+        );
+      }
+      ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
+      return { pairingTransitionMs: transitionMs };
+    }
+
+    // Keep setup outside the capability-bearing chunk. A launch, launcher
+    // handoff, or selector regression now retains its own hierarchy and
+    // screenshot instead of becoming an opaque "pairing" failure.
+    await ctx.run(prepareYaml, "prepare-gateway-pairing");
+
+    // This is the only chunk that can observe the live one-time capability.
+    // On submit the app clears it from the rendered tree, making every later
+    // checkpoint safe to retain. This chunk's diagnostics are still discarded
+    // whether it passes or fails.
+    await ctx.run(submitYaml, "submit-gateway-ticket", {
+      maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
+      sensitive: true,
+    });
+
+    // A safe checkpoint owns redemption, identity, and Home. If the tunnel
+    // fails after submit, CI retains the error surface and hierarchy instead
+    // of deleting the only useful evidence.
+    // #603 removed the local/manual-URL bypass: every fresh client must redeem
+    // a real one-time pairing ticket. #634 made the profile step conditional:
+    // an owner who already has a name goes straight to Done, while one still
+    // carrying the placeholder label is asked for a profile.
+    // Ownership (#726) killed the pre-named-invite mint: a ticket can no
+    // longer carry a chosen label, so the FIRST pairing against a fresh
+    // gateway always lands the placeholder owner "You" (not a set name) and
+    // shows the form. A later flow that reuses the same nightly gateway
+    // process finds that owner already renamed "Nightly" by the run below
+    // and skips straight to Done — both are real product paths, so the
+    // pattern above accepts either.
+    await ctx.run(completeYaml, "complete-onboarding");
     ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
   };
 

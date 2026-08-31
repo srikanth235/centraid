@@ -21,13 +21,15 @@ Wait for the configured relay before exposing a pairing endpoint: both gateway e
 
 Drive profile entry through stable handles and read the value back before submission: the profile field and Continue action have stable test IDs. The canary focuses the field by ID, types `Nightly`, reads it back, and only then submits.
 
-Make pairing failures actionable without leaking the ticket: gateway pairing is
-three explicit checkpoints. Safe UI preparation retains diagnostics; the
-small capability-bearing submit checkpoint always discards them; safe
-redemption/profile/Home completion retains diagnostics again. The app removes
-the one-time ticket from its rendered state when submission starts, so a
-post-submit failure can publish its actual error surface without retaining or
-silently replaying a capability that may already have been consumed.
+Make pairing failures actionable without leaking the ticket: ordinary journeys
+keep three explicit sensitivity checkpoints, while the shared canary uses one
+Maestro session containing those same three short phases. The session pays the
+hosted XCUITest startup cost once, keeps only explicit screenshots from before
+ticket entry and after Home, and discards the session-wide hierarchy and
+command report because it spans the live capability. The app removes the
+one-time ticket from its rendered state when submission starts, so a
+post-submit failure cannot retain or silently replay a capability that may
+already have been consumed.
 
 Its already-asserted paired Home frame is copied to
 `artifacts/e2e/ui-impact/issue-908-ios-paired-home.png`.
@@ -40,12 +42,15 @@ by `tests/agent-e2e-mobile/flows/pairing-canary.mjs`,
 `tests/agent-e2e-mobile/flows/sharing-invite.mjs` so evidence assertions match
 the filenames emitted by the CI runner.
 
-The canary measures its existing five-minute budget at the actual prerequisite
-boundary—when `configureGateway` has asserted Home and captured its requested
-frame. Evidence stays in that final safe checkpoint instead of launching a
-second driver after Home. The ticket flow still dismisses the keyboard before
-tapping Connect because the hosted iOS driver did not reliably activate that
-control while the keyboard was visible.
+The canary keeps its five-minute product budget, but measures it from Maestro's
+completed `onboarding-connect` action to the completed Home-ready assertion.
+Maestro's command receipt excludes XCUITest installation, driver handshake,
+and app launch from that product-latency measurement; those remain bounded by
+the harness chunk timeout and the suite's absolute deadline. This avoids
+paying the hosted-driver startup three times and avoids calling infrastructure
+latency a pairing regression. The ticket flow still dismisses the keyboard
+before tapping Connect because the hosted iOS driver did not reliably activate
+that control while the keyboard was visible.
 
 The implementation surface is explicit:
 
@@ -81,7 +86,10 @@ Home evidence at `artifacts/e2e/ui-impact/issue-908-ios-paired-home.png`.
 - Preserve the five-minute canary and every product assertion. Stable handles
   and relay readiness fix the causes; no retry, timeout, or budget was widened.
 - Pair once at the front of the iOS depth suite and reuse that paired profile
-  downstream. Split evidence by sensitivity, not by duplicating product setup.
+  downstream. Keep ordinary evidence split by sensitivity, and keep the shared
+  canary's phases in one driver session so infrastructure startup is paid once.
+- Measure the canary's product transition from the Maestro command receipt,
+  not from the harness process wall clock.
 - Use GitHub Actions as the only device-level authority for this issue. Local
   checks are limited to static, unit, native-state, and governance gates.
 
@@ -125,14 +133,16 @@ CI iterations that shaped the checkpoint design:
 
 - Run `33383303026`: the cold Release build succeeded and pairing reached Home;
   only the assumed Maestro screenshot filename was wrong.
-- Run `33390645179`: the iOS app cache hit and pairing reached Home; a separate
-  evidence-only driver launch incorrectly pushed the canary over five minutes.
+- Run `33390645179`: the iOS app cache hit and pairing reached Home; separate
+  completion and evidence-only driver launches incorrectly pushed the canary
+  over five minutes.
 - Run `33392545566`: removing keyboard dismissal made the capability-bearing
   submit chunk fail before any observable assertion, so dismissal remains.
 - Run `33394452197`: the app cache hit again, but the monolithic sensitive
   pairing chunk failed after 244 seconds and correctly deleted all diagnostics.
-  That unobservable failure is the reason setup, submit, and completion now
-  have separate sensitivity boundaries.
+  The replacement keeps the three phase boundaries in one Maestro process and
+  retains only explicit safe screenshots, so a success no longer pays three
+  driver startups and a failure cannot retain the live capability's report.
 
 ## Audit
 
