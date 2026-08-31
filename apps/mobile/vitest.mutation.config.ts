@@ -23,6 +23,12 @@ export default defineConfig({
       "src/lib/notification-model.test.ts",
       "src/lib/notifications-plan.test.ts",
       "src/lib/phone-link.test.ts",
+      // #892 — the upload and replica halves. Plain node suites over
+      // import-free modules, which is what lets them run here at all.
+      "src/lib/upload/transfer-policy.test.ts",
+      "src/lib/upload/reconcile-gate.test.ts",
+      "src/lib/replica/background-scopes.test.ts",
+      "src/lib/replica/mobile-intent-id.test.ts",
     ],
     testTimeout: 60_000,
     expect: { requireAssertions: true },

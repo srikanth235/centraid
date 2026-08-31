@@ -94,24 +94,11 @@ jobs:
           path: apps/desktop/test-results/
           retention-days: 7
 
-  # #496 E7 — deliberately ungated inside the lane: gateway/app-engine changes
-  # break artifact boot without any client UI edit, and the `client` filter that
-  # invokes this lane already covers those paths.
-  boot-smoke:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup
-        with:
-          turbo-cache: "true"
-          cargo-cache: iroh-wasm
-      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
-        with:
-          toolchain: stable
-          targets: wasm32-unknown-unknown
-      - name: Ensure Iroh WASM toolchain
-        run: bash scripts/ci/ensure-iroh-wasm-toolchain.sh
-      - run: bun run build --filter=@centraid/desktop...
-      - name: L2 boot-the-artifact structure smoke
-        run: node scripts/release/boot-smoke.mjs
+  # #892 Phase 1 — `boot-smoke` MOVED to ci.yml's `verify` job. It was 4m38s of
+  # build and ~0s of assertion: an L2 structure check over a dist it did not need
+  # to produce itself. `verify` already runs `bun run build`, which is a superset
+  # of the `@centraid/desktop...` closure this used, so the assertion now costs
+  # nothing and — because `verify` is unfiltered — it also runs on PRs that never
+  # woke the `client` filter at all. That is strictly more coverage than the #496
+  # E7 arrangement it replaces, which was itself written to make sure a
+  # gateway-only change could not skip it.

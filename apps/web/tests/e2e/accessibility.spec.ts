@@ -1,6 +1,7 @@
 // Web accessibility browser lane (#781, closing #587 D21): static scanners
 // never see the live tree; axe-core (WCAG A/AA) runs in the shared Chromium
-// harness against the cold connect screen and connected Home shell (#708).
+// harness against the cold connect screen, the connected Home shell (#708),
+// and — since #892 — every first-party blueprint the shell can open.
 // The mobile device-side lane is NOT this spec's claim (#781 follow-up).
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
@@ -131,20 +132,34 @@ test("the connected Home shell has no WCAG A/AA violations", async ({
   ).toStrictEqual([]);
 });
 
-test("a first-party blueprint has no WCAG A/AA violations in its real renderer", async ({
-  page,
-}) => {
-  test.setTimeout(120_000);
-  await connectPwa(page);
-  await openFirstParty(page, "Docs");
-  await expect(
-    page.getByRole("heading", { name: "Docs" }).first()
-  ).toBeVisible();
+// #892 — every first-party blueprint, not one of them: a violation is
+// per-tree, so scanning Docs alone said nothing about the other seven.
+const FIRST_PARTY_APPS = [
+  "Docs",
+  "Notes",
+  "Tasks",
+  "Agenda",
+  "People",
+  "Photos",
+  "Tally",
+  "Locker",
+] as const;
 
-  // Inline routes, no served-app iframe (#799): plain scan reaches the real Docs tree.
-  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
-  expect(
-    results.violations,
-    describeViolations(results.violations)
-  ).toStrictEqual([]);
-});
+for (const app of FIRST_PARTY_APPS) {
+  test(`${app} has no WCAG A/AA violations in its real renderer`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await connectPwa(page);
+    // `openFirstParty` IS the arrival assertion, and deliberately not a heading
+    // matching the app name: three apps head their view with the shelf instead.
+    await openFirstParty(page, app);
+    const results = await new AxeBuilder({ page })
+      .withTags(WCAG_TAGS)
+      .analyze();
+    expect(
+      results.violations,
+      describeViolations(results.violations)
+    ).toStrictEqual([]);
+  });
+}

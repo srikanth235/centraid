@@ -58,9 +58,7 @@ jobs:
         # auditing something else.
         env:
           MAESTRO_VERSION: 2.6.1
-        run: |
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+        run: bash scripts/ci/install-maestro.sh
       - name: Build and start the tokenless mobile test gateway
         run: |
           bun run turbo run build --filter=@centraid/server

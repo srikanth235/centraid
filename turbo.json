@@ -4,12 +4,18 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [
-        "dist/**",
-        "native/*.node",
-        // web iroh wasm ensure path when rebuilt on CI
-        "src/generated/centraid_web_iroh_bg.wasm"
-      ]
+      // Every entry here must name a path that is NOT tracked by git, and
+      // `bun run lint:turbo-cache` enforces it (#892 Phase 0). A declared output
+      // that is also a committed file is simultaneously one of the task's own
+      // hashed INPUTS, so the task's cache key depends on its own product: a
+      // hit restores the file, a rebuild that is not byte-exact moves the key,
+      // and turbo's own docs call the overlap undefined. This list previously
+      // carried `src/generated/centraid_web_iroh_bg.wasm`, which is a committed
+      // 1.9 MB artifact — so `@centraid/web`'s cache entry shipped it on every
+      // save and restore for no gain, and the repo simultaneously documents its
+      // rebuild as non-hermetic ("intrinsic comment renumbering", ci.yml
+      // `iroh-wasm`). `dist/**` and `native/*.node` are both gitignored.
+      "outputs": ["dist/**", "native/*.node"]
     },
     "dev": {
       "cache": false,
