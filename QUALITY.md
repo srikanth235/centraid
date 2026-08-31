@@ -2,6 +2,22 @@
 
 ## Open
 
+- **Ten web e2e specs still carry a hand-copied connected-session bootstrap.**
+  `apps/web/tests/e2e/connect.ts` (#892) now owns that bootstrap, and
+  `accessibility`, `pwa-offline-journey` and `web-pwa` import it. The other ten
+  — `agenda`, `docs-drive`, `locker-seat`, `notes`, `offline-reconnect`,
+  `offline-search`, `people`, `perf-waterfall`, `renderer-leak` and `tasks` —
+  each keep their own copy, in an **earlier variant**: they
+  add the `__centraid_control` cookie by hand and read the vault id back from
+  `/centraid/_vault/vaults` instead of taking it from the control response.
+  Both variants work today, which is precisely the risk: the product has one
+  connection shape and the harness asserts against two, so a change to that
+  shape can leave ten specs green against a connection onboarding no longer
+  writes. Not fixed in #892 because converting ten browser-lane specs is a
+  change with its own blast radius and belongs nowhere near a CI PR. The
+  conversion is mechanical once someone decides whether the cookie-then-lookup
+  path is still asserting something the control-response path does not.
+
 - **"Free up space" on mobile is a button that can never be pressed.**
   `apps/mobile/src/screens/BackupHealth.custody.tsx` renders the `FREE_UP_ACTION`
   Pressable with a hard-coded `disabled` and `accessibilityState={{ disabled: true }}`,

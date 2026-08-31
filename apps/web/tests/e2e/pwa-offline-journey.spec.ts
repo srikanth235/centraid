@@ -4,10 +4,8 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import { SERVICE_WORKER_VERSION } from "../../src/sw-version.js";
-import {
-  installHarnessControlTransport,
-  setHarnessControlOnline,
-} from "./control-transport.js";
+import { GATEWAY_ENDPOINT_ID, connectPwa } from "./connect.js";
+import { setHarnessControlOnline } from "./control-transport.js";
 
 /**
  * THE PWA'S CORE PROMISE, AT THE BROWSER LEVEL (#892 Phase 2).
@@ -40,10 +38,6 @@ import {
  * in its own right.
  */
 
-const API_URL = "http://127.0.0.1:48765";
-const ADMIN_TOKEN = "centraid-web-e2e-token";
-const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
-const GATEWAY_ENDPOINT_TICKET = "web-e2e-control-transport";
 const SHELL_CACHE = `centraid-shell-${SERVICE_WORKER_VERSION}`;
 // Repo-root `artifacts/`, the same convention every other evidence-emitting
 // spec uses, so `bun run check:ui-receipt` and the nightly artifact upload agree
@@ -51,54 +45,6 @@ const SHELL_CACHE = `centraid-shell-${SERVICE_WORKER_VERSION}`;
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../../..");
 const EVIDENCE_DIR = path.join(REPO_ROOT, "artifacts/e2e/ui-impact");
 const EVIDENCE_PNG = "issue-892-pwa-offline-shell.png";
-
-/** The same connected-session bootstrap web-pwa / accessibility use. */
-async function connectPwa(page: Page): Promise<void> {
-  await installHarnessControlTransport(page, API_URL);
-  await page.goto("/");
-  const control = await page.evaluate(
-    async ({ apiUrl, token }) => {
-      const response = await fetch(`${apiUrl}/centraid/_web/control`, {
-        method: "POST",
-        credentials: "include",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return { status: response.status, body: await response.json() };
-    },
-    { apiUrl: API_URL, token: ADMIN_TOKEN }
-  );
-  expect(control.status).toBe(200);
-  const vaultId = (control.body as { vaultId: string }).vaultId;
-
-  await page.evaluate(
-    ({ endpointId, endpointTicket, vault }) => {
-      sessionStorage.removeItem("centraid.web.v1.connection");
-      localStorage.setItem(
-        "centraid.web.v1.connection",
-        JSON.stringify({
-          endpointId,
-          endpointTicket,
-          label: "Browser E2E",
-          displayName: "Web owner",
-          avatarColor: "#6f5bf6",
-          vaultId: vault,
-          rememberDevice: true,
-        })
-      );
-      localStorage.setItem(
-        "centraid.web.v1.settings",
-        JSON.stringify({ onboardingCompletedAt: new Date().toISOString() })
-      );
-    },
-    {
-      endpointId: GATEWAY_ENDPOINT_ID,
-      endpointTicket: GATEWAY_ENDPOINT_TICKET,
-      vault: vaultId,
-    }
-  );
-  await page.reload();
-  await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
-}
 
 /**
  * Wait until a service worker CONTROLS this page and the shell cache is warm.

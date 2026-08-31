@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
 
-import { installHarnessControlTransport } from "./control-transport.js";
-
-const API_URL = "http://127.0.0.1:48765";
-const ADMIN_TOKEN = "centraid-web-e2e-token";
-const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
-const GATEWAY_ENDPOINT_TICKET = "web-e2e-control-transport";
+import {
+  ADMIN_TOKEN,
+  API_URL,
+  GATEWAY_ENDPOINT_ID,
+  applyConnection,
+  mintControlSession,
+} from "./connect.js";
 
 test("boots as a PWA and establishes a cookie control session", async ({
   page,
@@ -16,54 +17,13 @@ test("boots as a PWA and establishes a cookie control session", async ({
       gatewayResponses.push({ url: response.url(), status: response.status() });
     }
   });
-  await installHarnessControlTransport(page, API_URL);
-  await page.goto("/");
-
-  const control = await page.evaluate(
-    async ({ apiUrl, token }) => {
-      const response = await fetch(`${apiUrl}/centraid/_web/control`, {
-        method: "POST",
-        credentials: "include",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return { status: response.status, body: await response.json() };
-    },
-    { apiUrl: API_URL, token: ADMIN_TOKEN }
-  );
-  expect(control.status).toBe(200);
-  const vaultId = (control.body as { vaultId: string }).vaultId;
+  const vaultId = await mintControlSession(page);
   const controlCookie = (
     await page.context().cookies(`${API_URL}/centraid/_web/control`)
   ).find((cookie) => cookie.name === "__centraid_control");
   expect(controlCookie).toMatchObject({ httpOnly: true, sameSite: "Strict" });
 
-  await page.evaluate(
-    ({ endpointId, endpointTicket, vault }) => {
-      sessionStorage.removeItem("centraid.web.v1.connection");
-      localStorage.setItem(
-        "centraid.web.v1.connection",
-        JSON.stringify({
-          endpointId,
-          endpointTicket,
-          label: "Browser E2E",
-          displayName: "Web owner",
-          avatarColor: "#6f5bf6",
-          vaultId: vault,
-          rememberDevice: true,
-        })
-      );
-      localStorage.setItem(
-        "centraid.web.v1.settings",
-        JSON.stringify({ onboardingCompletedAt: new Date().toISOString() })
-      );
-    },
-    {
-      endpointId: GATEWAY_ENDPOINT_ID,
-      endpointTicket: GATEWAY_ENDPOINT_TICKET,
-      vault: vaultId,
-    }
-  );
-  await page.reload();
+  await applyConnection(page, vaultId);
 
   await expect(
     page.evaluate(() => window.CentraidApi.getGatewayAuth())

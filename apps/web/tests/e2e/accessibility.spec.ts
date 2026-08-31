@@ -7,12 +7,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
-import { installHarnessControlTransport } from "./control-transport.js";
-
-const API_URL = "http://127.0.0.1:48765";
-const ADMIN_TOKEN = "centraid-web-e2e-token";
-const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
-const GATEWAY_ENDPOINT_TICKET = "web-e2e-control-transport";
+import { connectPwa } from "./connect.js";
 
 // WCAG A + AA — a testable standard, not axe's "best-practice" opinions.
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
@@ -34,53 +29,6 @@ function describeViolations(
         violation.nodes.map((node) => node.target.join(" ")).join(", ")
     )
     .join("\n");
-}
-
-async function connectPwa(page: Page): Promise<void> {
-  await installHarnessControlTransport(page, API_URL);
-  await page.goto("/");
-  const control = await page.evaluate(
-    async ({ apiUrl, token }) => {
-      const response = await fetch(`${apiUrl}/centraid/_web/control`, {
-        method: "POST",
-        credentials: "include",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return { status: response.status, body: await response.json() };
-    },
-    { apiUrl: API_URL, token: ADMIN_TOKEN }
-  );
-  expect(control.status).toBe(200);
-  const vaultId = (control.body as { vaultId: string }).vaultId;
-
-  await page.evaluate(
-    ({ endpointId, endpointTicket, vault }) => {
-      sessionStorage.removeItem("centraid.web.v1.connection");
-      localStorage.setItem(
-        "centraid.web.v1.connection",
-        JSON.stringify({
-          endpointId,
-          endpointTicket,
-          label: "Browser E2E",
-          displayName: "Web owner",
-          avatarColor: "#6f5bf6",
-          vaultId: vault,
-          rememberDevice: true,
-        })
-      );
-      localStorage.setItem(
-        "centraid.web.v1.settings",
-        JSON.stringify({ onboardingCompletedAt: new Date().toISOString() })
-      );
-    },
-    {
-      endpointId: GATEWAY_ENDPOINT_ID,
-      endpointTicket: GATEWAY_ENDPOINT_TICKET,
-      vault: vaultId,
-    }
-  );
-  await page.reload();
-  await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
 }
 
 async function openFirstParty(page: Page, name: string): Promise<void> {
@@ -122,7 +70,6 @@ test("the cold connect screen has no WCAG A/AA violations", async ({
 test("the connected Home shell has no WCAG A/AA violations", async ({
   page,
 }) => {
-  // Same connected-session bootstrap as web-pwa.spec.ts.
   await connectPwa(page);
 
   const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
