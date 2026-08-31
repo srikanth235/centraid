@@ -17,9 +17,17 @@ Build the iOS E2E artifact as a self-contained Release app without Expo developm
 
 Keep camera-roll reconciliation behind completed profile onboarding: `UploadReconciliation` now mounts only after profile onboarding. Pairing still creates the replica session first, but that ticket-only surface can no longer trigger a Photo Library permission request.
 
-Wait for the configured relay before exposing a pairing endpoint: both gateway endpoint implementations await the configured N0 relay before returning. A freshly minted ticket therefore carries a relay-ready endpoint instead of asking the first mobile dial to wait for discovery repair.
+Wait for the configured relay before exposing a pairing endpoint: both gateway endpoint implementations await the configured N0 relay before returning, and the iOS tunnel client now awaits its own N0 endpoint at the shared Swift bind seam before either pairing or tunnel dial. A freshly minted ticket and its first mobile dial therefore meet only after relay/discovery bootstrap has completed.
 
 Drive profile entry through stable handles and read the value back before submission: the profile field and Continue action have stable test IDs. The canary focuses the field by ID, types `Nightly`, reads it back, and only then submits.
+
+Make pairing failures actionable without leaking the ticket: gateway pairing is
+three explicit checkpoints. Safe UI preparation retains diagnostics; the
+small capability-bearing submit checkpoint always discards them; safe
+redemption/profile/Home completion retains diagnostics again. The app removes
+the one-time ticket from its rendered state when submission starts, so a
+post-submit failure can publish its actual error surface without retaining or
+silently replaying a capability that may already have been consumed.
 
 Its already-asserted paired Home frame is copied to
 `artifacts/e2e/ui-impact/issue-908-ios-paired-home.png`.
@@ -33,11 +41,11 @@ by `tests/agent-e2e-mobile/flows/pairing-canary.mjs`,
 the filenames emitted by the CI runner.
 
 The canary measures its existing five-minute budget at the actual prerequisite
-boundary—when `configureGateway` has asserted Home—so its separate evidence
-assertion and screenshot driver launch cannot inflate the pairing claim. The
-ticket flow still dismisses the keyboard before tapping Connect because the
-hosted iOS driver did not reliably activate that control while the keyboard was
-visible.
+boundary—when `configureGateway` has asserted Home and captured its requested
+frame. Evidence stays in that final safe checkpoint instead of launching a
+second driver after Home. The ticket flow still dismisses the keyboard before
+tapping Connect because the hosted iOS driver did not reliably activate that
+control while the keyboard was visible.
 
 The implementation surface is explicit:
 
@@ -48,8 +56,10 @@ The implementation surface is explicit:
   and resource graph; `apps/mobile/native-fingerprints.json` ratchets it.
 - `apps/mobile/src/kit/test-ids.ts` and
   `apps/mobile/src/screens/Onboarding.tsx` publish the profile handles.
-- `packages/tunnel/data-plane/src/iroh_relay.rs` and
-  `packages/tunnel/src/gateway-endpoint.ts` wait for relay readiness.
+- `packages/tunnel/data-plane/src/iroh_relay.rs`,
+  `packages/tunnel/src/gateway-endpoint.ts`, and
+  `apps/mobile/modules/centraid-tunnel/ios/TunnelWire.swift` wait for relay
+  readiness.
 - `tests/agent-e2e-mobile/lib/harness.mjs` drives and reads back the profile;
   `tests/agent-e2e-mobile/flows/pairing-canary.mjs` publishes the paired frame.
 - `tests/agent-e2e-mobile/ledger/durations.json` preserves every earlier
@@ -70,6 +80,8 @@ Home evidence at `artifacts/e2e/ui-impact/issue-908-ios-paired-home.png`.
   permission dialog belongs to the paired shell, not ticket onboarding.
 - Preserve the five-minute canary and every product assertion. Stable handles
   and relay readiness fix the causes; no retry, timeout, or budget was widened.
+- Pair once at the front of the iOS depth suite and reuse that paired profile
+  downstream. Split evidence by sensitivity, not by duplicating product setup.
 - Use GitHub Actions as the only device-level authority for this issue. Local
   checks are limited to static, unit, native-state, and governance gates.
 
@@ -108,6 +120,19 @@ bun run format:check
 
 The authoritative device verdict is the dispatched `mobile-e2e-ios` workflow
 run and will be recorded here after it completes.
+
+CI iterations that shaped the checkpoint design:
+
+- Run `33383303026`: the cold Release build succeeded and pairing reached Home;
+  only the assumed Maestro screenshot filename was wrong.
+- Run `33390645179`: the iOS app cache hit and pairing reached Home; a separate
+  evidence-only driver launch incorrectly pushed the canary over five minutes.
+- Run `33392545566`: removing keyboard dismissal made the capability-bearing
+  submit chunk fail before any observable assertion, so dismissal remains.
+- Run `33394452197`: the app cache hit again, but the monolithic sensitive
+  pairing chunk failed after 244 seconds and correctly deleted all diagnostics.
+  That unobservable failure is the reason setup, submit, and completion now
+  have separate sensitivity boundaries.
 
 ## Audit
 

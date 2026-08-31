@@ -37,12 +37,19 @@ await runFlow("pairing-canary", async (ctx) => {
   // Mints the ticket over the gateway lane the rig is configured for, clears
   // the client, redeems through the real ticket-only onboarding UI, and lands
   // on Home. Every failure mode of the three claims above surfaces inside it.
-  await ctx.configureGateway();
+  await ctx.configureGateway({
+    // Keep the canary's claim in this flow while executing it in the helper's
+    // existing final driver session. The helper reaches this extension point
+    // only after its own mandatory Home wait.
+    homeCommands: `
+- assertVisible: "${HOME_READY_MARKER}"
+- takeScreenshot: paired-home
+`,
+  });
 
-  // configureGateway's final Home wait is the prerequisite boundary. Keep the
-  // five-minute claim about pairing itself; the separate assertion and
-  // screenshot below are evidence-only and require another Maestro driver
-  // launch on iOS.
+  // configureGateway's final Home assertion and screenshot are the
+  // prerequisite boundary. Keeping that evidence in its final safe checkpoint
+  // avoids a separate iOS driver launch inflating the five-minute claim.
   const elapsedMs = Date.now() - startedAt;
   ctx.note(`prerequisites proven in ${Math.ceil(elapsedMs / 1000)}s`);
   if (elapsedMs >= BUDGET_MS) {
@@ -54,19 +61,6 @@ await runFlow("pairing-canary", async (ctx) => {
       notes: `pairing prerequisites took ${Math.ceil(elapsedMs / 1000)}s, over the ${BUDGET_MS / 60_000}-minute canary budget`,
     };
   }
-
-  // configureGateway already waited for Home. Re-observing it in a chunk of
-  // this flow's own is what makes the canary's verdict self-contained: the
-  // marker is asserted here, in this file, so a future change to the helper's
-  // internals cannot quietly leave the canary passing on nothing.
-  await ctx.run(
-    `appId: ${ctx.state.appId}
----
-- assertVisible: "${HOME_READY_MARKER}"
-- takeScreenshot: paired-home
-`,
-    "canary-home"
-  );
 
   const uiImpactDir = "artifacts/e2e/ui-impact";
   const screenshot = async () => {

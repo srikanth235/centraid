@@ -8,12 +8,11 @@
 
 **Steps:**
 
-1. `ctx.configureGateway()` — mint a ticket, clear the client, redeem it through the real ticket-only onboarding UI, complete the profile, land on Home.
-2. Assert `HOME_READY_MARKER` in a chunk of this flow's own and screenshot `paired-home`.
+1. `ctx.configureGateway({ homeCommands })` — mint a ticket, clear the client, redeem it through the real ticket-only onboarding UI, and complete the profile. The canary supplies its own Home assertion and `paired-home` screenshot as final commands in that same safe driver session.
 
 **Expectations:** it asserts **nothing app-specific**, on purpose. The moment the canary knows about Photos or Docs it acquires a second reason to go red, and a canary with two reasons to fail no longer answers the question it was asked. Everything below the Home marker belongs to the journey that claims it.
 
-Step 2 is not redundant with step 1. `configureGateway()` already waits for Home, but re-observing the marker here is what makes the verdict self-contained: the assertion lives in this file, so a future change to the helper's internals cannot quietly leave the canary passing on nothing.
+The Home commands remain visibly owned by this flow, so the verdict cannot pass on an implicit helper contract. The helper executes them in its final safe checkpoint, avoiding a second iOS driver launch after Home was already proved.
 
 **Budget:** five minutes, asserted on the flow's own wall clock after the fact — a budget, not an interrupt. Over budget with the claims intact is still a FAIL, because the canary's value _is_ its speed; a slow canary has stopped being a canary and become the first flow of the nightly. The honest limit: a genuinely unreachable gateway or an unpaired device fails in seconds to two minutes, which is the case this exists for, but a wedged Maestro driver is still bounded by the harness's `MAESTRO_CHUNK_TIMEOUT_MS` and the canary cannot shorten that without making an honest slow-CI pairing flake.
 

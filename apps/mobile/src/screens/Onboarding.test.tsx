@@ -464,7 +464,7 @@ describe("Onboarding scenarios", () => {
       expect(container!.textContent).toContain("Who's using");
     });
 
-    it("reports a pairing failure honestly and allows a retry", async () => {
+    it("reports a pairing failure, drops the capability, and accepts a fresh ticket", async () => {
       mocks.pair.mockRejectedValueOnce(new Error("gateway refused the ticket"));
       revealPasteFallback();
       typeValue(ticketInput(), "pair-ticket");
@@ -472,13 +472,19 @@ describe("Onboarding scenarios", () => {
       await flush();
 
       expect(container!.textContent).toContain("gateway refused the ticket");
-      // A rejected ticket must leave the code the person pasted on screen to
-      // fix, never bounce them back to the scanner with their typing gone.
+      // Redemption may have consumed a one-time capability even when the
+      // response was lost. Never retain or silently replay it after failure.
       expect(container!.textContent).toContain("PAIRING CODE");
+      expect(ticketInput().value).toBe("");
       expect(mocks.setOnboarded).not.toHaveBeenCalled();
 
+      typeValue(ticketInput(), "fresh-pair-ticket");
       click(button("Connect"));
       await flush();
+      expect(mocks.pair).toHaveBeenLastCalledWith(
+        "fresh-pair-ticket",
+        "iPhone"
+      );
       expect(container!.textContent).toContain("Who's using");
     });
   });

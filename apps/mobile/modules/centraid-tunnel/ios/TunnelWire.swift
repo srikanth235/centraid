@@ -251,7 +251,15 @@ enum IrohAdapter {
   static func bindEndpoint(secretKey: Data) async throws -> Endpoint {
     // iroh-ffi 1.0: no builder — Endpoint.bind(options:). presetN0 carries the
     // n0 relay/discovery defaults; secretKey is the raw 32 bytes.
-    try await Endpoint.bind(options: EndpointOptions(preset: presetN0(), secretKey: secretKey))
+    let endpoint = try await Endpoint.bind(
+      options: EndpointOptions(preset: presetN0(), secretKey: secretKey)
+    )
+    // A ticket carries the gateway's relay hint, but dialing before this
+    // endpoint has a usable home relay makes the first iOS pairing race the
+    // relay/discovery bootstrap. The gateway waits at its matching seam; the
+    // client must do the same before either one-shot pairing or tunnel dial.
+    await endpoint.online()
+    return endpoint
   }
 
   static func dial(_ endpoint: Endpoint, ticket: String, alpn: String) async throws -> Connection {

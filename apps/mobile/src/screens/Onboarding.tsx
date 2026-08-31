@@ -197,14 +197,16 @@ function ConnectionStep({
   };
 
   const submit = (payload: string): void => {
-    if (scannedRef.current || !payload.trim()) return;
+    const ticket = payload.trim();
+    if (scannedRef.current || !ticket) return;
     scannedRef.current = true;
     setScanning(false);
     setPairing(true);
     setError(undefined);
+    setCode("");
     const run = async (): Promise<void> => {
       try {
-        await pair(payload, deviceName);
+        await pair(ticket, deviceName);
         void Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success
         );

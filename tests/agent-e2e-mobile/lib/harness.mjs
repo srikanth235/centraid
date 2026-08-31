@@ -488,7 +488,7 @@ async function runMaestroChunk(
  *   ctx.state               read-only snapshot of {runId, runDir, udid, appId, ...}
  *   ctx.run(yaml, label?, options?) execute a YAML chunk; screenshots land under runs/.../screenshots/
  *   ctx.restart()           stopApp + launchApp without clearing state — mirrors desktop's ctx.restart()
- *   ctx.configureGateway()  pair from a clean state, or reuse the paired nightly profile when requested
+ *   ctx.configureGateway(options?) pair cleanly, or reuse the paired nightly profile when requested
  *   ctx.ensureDemo(appId)   seed a scenario before the initial replica clone, if absent
  *   ctx.purgeDemo(appId)    remove a scenario before an empty-vault journey
  *   ctx.note(msg)           record an observation; surfaces in verdict.md
@@ -656,15 +656,18 @@ export async function runFlow(slug, fn) {
     return ticketResult.ticket;
   };
 
-  ctx.configureGateway = async (
+  ctx.configureGateway = async ({
     gatewayUrl = process.env.MAESTRO_GATEWAY_URL,
-    gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? ""
-  ) => {
+    gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? "",
+    homeCommands = "",
+  } = {}) => {
     if (!gatewayUrl) {
       throw new Error(
         "MAESTRO_GATEWAY_URL is required for this mobile journey"
       );
     }
+    if (typeof homeCommands !== "string")
+      throw new Error("homeCommands must be a Maestro YAML string");
     if (process.env.MAESTRO_REUSE_PAIRED_STATE === "1") {
       await ctx.run(
         `appId: ${state.appId}
@@ -674,6 +677,7 @@ export async function runFlow(slug, fn) {
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+${homeCommands}
 `,
         "reuse-paired-gateway"
       );
@@ -682,12 +686,9 @@ export async function runFlow(slug, fn) {
     }
     const pairingTicket = await mintPairingTicket(gatewayUrl, gatewayToken);
 
-    // #603 removed the local/manual-URL bypass: every fresh client must redeem
-    // a real one-time pairing ticket. #634 made the profile step conditional:
-    // an owner who already has a name goes straight to Done, while one still
-    // carrying the placeholder label is asked for a profile. The gateway URL
-    // is used only by the host-side harness to mint that ticket; the phone
-    // reaches the gateway through the ticket's iroh endpoint.
+    // Keep setup outside the capability-bearing chunk. A launch, launcher
+    // handoff, or selector regression now retains its own hierarchy and
+    // screenshot instead of becoming an opaque "pairing" failure.
     await ctx.run(
       `appId: ${state.appId}
 ---
@@ -695,13 +696,27 @@ export async function runFlow(slug, fn) {
     clearState: true
 ${DEV_LAUNCHER_HANDOFF}- extendedWaitUntil:
     visible:
-      text: "Connect your gateway."
+      id: "onboarding-paste"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-- tapOn: "Can't scan? Paste a code instead"
+- tapOn:
+    id: "onboarding-paste"
 - extendedWaitUntil:
-    visible: "Paste the one-line ticket"
+    visible:
+      id: "onboarding-ticket-field"
     timeout: 10000
-- tapOn: "Paste the one-line ticket"
+`,
+      "prepare-gateway-pairing"
+    );
+
+    // This is the only chunk that can observe the live one-time capability.
+    // On submit the app clears it from the rendered tree, making every later
+    // checkpoint safe to retain. This chunk's diagnostics are still discarded
+    // whether it passes or fails.
+    await ctx.run(
+      `appId: ${state.appId}
+---
+- tapOn:
+    id: "onboarding-ticket-field"
 # e2e-lint-allow: unasserted-input — throwaway input only provokes iOS keyboard
 # onboarding and is erased before the pairing ticket is entered.
 - inputText: "x"
@@ -716,21 +731,21 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 # remains in the viewport even while the iOS keyboard is still visible.
 - tapOn:
     id: "onboarding-connect"
-# Redemption dials the gateway over iroh; on a cold simulator that handshake is
-# the slowest step in the journey, so budget for the network, not the render.
-- extendedWaitUntil:
-    visible: "Who's using this phone[?]|You're all set, [^.]+[.]"
-    timeout: 90000
 `,
-      "configure-gateway",
+      "submit-gateway-ticket",
       {
         maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
         sensitive: true,
       }
     );
 
-    // A second, non-sensitive Maestro chunk keeps the pairing capability out
-    // of retained diagnostics while proving both legitimate identity paths.
+    // A safe checkpoint owns redemption, identity, and Home. If the tunnel
+    // fails after submit, CI retains the error surface and hierarchy instead
+    // of deleting the only useful evidence.
+    // #603 removed the local/manual-URL bypass: every fresh client must redeem
+    // a real one-time pairing ticket. #634 made the profile step conditional:
+    // an owner who already has a name goes straight to Done, while one still
+    // carrying the placeholder label is asked for a profile.
     // Ownership (#726) killed the pre-named-invite mint: a ticket can no
     // longer carry a chosen label, so the FIRST pairing against a fresh
     // gateway always lands the placeholder owner "You" (not a set name) and
@@ -741,6 +756,9 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
     await ctx.run(
       `appId: ${state.appId}
 ---
+- extendedWaitUntil:
+    visible: "Who's using this phone[?]|You're all set, [^.]+[.]"
+    timeout: 90000
 - runFlow:
     when:
       visible: "Who's using this phone[?]"
@@ -766,6 +784,7 @@ ${retryableTapCommands("Enter Centraid")}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: 30000
+${homeCommands}
 `,
       "complete-onboarding"
     );
