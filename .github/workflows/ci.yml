@@ -62,9 +62,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      # A manual run has no diff for paths-filter to read, so every lane `if:`
-      # also accepts `all`. Lanes stay explicit about this rather than the
-      # filter lying about what changed.
+      # A manual run has no diff for paths-filter to read, so every READ of a
+      # filter output also accepts `all`. Lanes stay explicit about this rather
+      # than the filter lying about what changed. "Every read", not "every lane
+      # `if:`" — which is how this was worded, and how `client-e2e`'s two `with:`
+      # inputs came to be the one pair without the fallback. `lint:path-filters`
+      # checks the reads now instead of the wording promising it.
       all: ${{ github.event_name == 'workflow_dispatch' }}
       web: ${{ steps.filter.outputs.web }}
       desktop: ${{ steps.filter.outputs.desktop }}
@@ -253,6 +256,11 @@ jobs:
       # counts `skipped` as a pass, so a path no filter names merges green and
       # unexercised. Every workspace package, app and top-level directory must be
       # claimed by a filter or ledgered with the always-on job that covers it.
+      # It also checks the escape hatch: a read of a filter output without the
+      # `|| …outputs.all == 'true'` fallback is dead on a `workflow_dispatch`
+      # run, where the filter step is skipped and every output is the empty
+      # string — so the one control that forces a full run leaves that lane
+      # skipped, which is a pass.
       - run: bun run lint:path-filters
       # #545 D9 — shellcheck governance hooks + coverage-scope self-test.
       - name: Install shellcheck (governance shell lane)
@@ -798,13 +806,29 @@ jobs:
   # ---------------------------------------------------------------------------
 
   # Big enough to keep their own files, invoked via `workflow_call`.
+  # The `all` escape hatch has to reach the INPUTS, not just the `if:`. These two
+  # `with:` lines were the only place in this file where a `changes` output is
+  # read outside an `if:`, and they were the only two that did not carry the
+  # `|| all` fallback — so a `workflow_dispatch` run (where the paths-filter step
+  # is skipped and every output is the empty string) started this caller and
+  # handed it `web: false, desktop: false`. Both inner jobs took their own
+  # `if: inputs.web` / `if: inputs.desktop` and skipped; the lane finished in 0s
+  # having run nothing, and `check` counted it as satisfied. The one way to force
+  # a full run on `main` was also the one way this lane could not be exercised.
+  # `lint:path-filters` now fails on a `changes` output read without the fallback.
+  #
+  # The gate is `web || desktop` rather than `client`: `client` is a superset (it
+  # also matches `packages/server/**`), which was deliberate while `boot-smoke`
+  # lived in this lane and had to run for gateway-only PRs. #892 Phase 1 moved
+  # `boot-smoke` into `verify`, so nothing gated on `client` remains here and a
+  # server-only PR was spinning up a caller whose every job skips.
   client-e2e:
     needs: changes
-    if: needs.changes.outputs.client == 'true' || needs.changes.outputs.all == 'true'
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.desktop == 'true' || needs.changes.outputs.all == 'true'
     uses: ./.github/workflows/lane-client-e2e.yml
     with:
-      web: ${{ needs.changes.outputs.web == 'true' }}
-      desktop: ${{ needs.changes.outputs.desktop == 'true' }}
+      web: ${{ needs.changes.outputs.web == 'true' || needs.changes.outputs.all == 'true' }}
+      desktop: ${{ needs.changes.outputs.desktop == 'true' || needs.changes.outputs.all == 'true' }}
 
   gateway-package:
     needs: changes
