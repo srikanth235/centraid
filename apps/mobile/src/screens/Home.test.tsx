@@ -1,7 +1,7 @@
 // Home's springboard COMPOSITION (#905). Both units stayed green through the
 // defect; only the composition saw it. Seam: `useReplicaQuery` alone, so the
 // real tiles, grading and catalog run. Rationale: receipts/issue-905-*.md.
-// Also the generated conformance sweep; see scripts/lint-app-conformance.mjs.
+// Also the conformance sweep; see scripts/lint-app-conformance.mjs.
 
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -204,18 +204,22 @@ vi.mock(import("./home/SearchOverlay"), blank);
 
 interface MountedHome {
   container: HTMLElement;
-  navigate: ReturnType<typeof vi.fn<(...args: unknown[]) => void>>;
+  routed: unknown[][];
 }
 
 function mountHome(): MountedHome {
-  const navigate = vi.fn<(...args: unknown[]) => void>();
+  const routed: unknown[][] = [];
   const { container } = mountBlock(
     React.createElement(
       HomeScreen as unknown as React.ComponentType<{ navigation: unknown }>,
-      { navigation: { navigate } }
+      {
+        navigation: {
+          navigate: (...args: unknown[]) => routed.push(args),
+        },
+      }
     )
   );
-  return { container, navigate };
+  return { container, routed };
 }
 
 function renderHome(): HTMLElement {
@@ -271,7 +275,7 @@ describe("shell↔app conformance", () => {
   });
 
   it("sweeps exactly the apps the launcher builds", () => {
-    // No-op guard: a drifted manifest sweeps the wrong set and reports green.
+    // No-op guard: a drifted manifest sweeps the wrong set, greenly.
     expect(CONFORMANCE.map(([id]) => id).sort()).toStrictEqual(
       [...everyLauncherId].sort()
     );
@@ -286,15 +290,17 @@ describe("shell↔app conformance", () => {
     });
 
     it("opens its own cover when the tile is pressed", () => {
-      // The claim no unit sees: both halves stay correct alone.
-      const { container, navigate } = mountHome();
+      // The claim no unit sees. The sequence: one, to this cover.
+      const { container, routed } = mountHome();
 
       press(nodesOf(container, `[data-testid="${row.tile}"]`)[0]);
 
-      expect(navigate).toHaveBeenCalledWith(
-        row.navigator,
-        ...(row.screen === null ? [] : [{ screen: row.screen }])
-      );
+      expect(routed).toStrictEqual([
+        [
+          row.navigator,
+          ...(row.screen === null ? [] : [{ screen: row.screen }]),
+        ],
+      ]);
     });
   });
 });
