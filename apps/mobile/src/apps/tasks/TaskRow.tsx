@@ -36,6 +36,8 @@ export interface TaskRowProps {
   projectName?: string | null;
   child?: boolean;
   picked?: boolean;
+  /** A positional handle from `kit/test-ids`, supplied by the list. */
+  testID?: string;
   onToggle: (task: Task) => void;
   onOpen: (task: Task) => void;
   onPickUp?: (task: Task) => void;
@@ -50,6 +52,7 @@ export default function TaskRow({
   projectName,
   child,
   picked,
+  testID,
   onToggle,
   onOpen,
   onPickUp,
@@ -94,6 +97,7 @@ export default function TaskRow({
         accessibilityLabel={task.title}
         accessibilityState={{ selected: picked === true }}
         onPress={() => onOpen(task)}
+        testID={testID}
         {...(writable && onPickUp ? { onLongPress: () => onPickUp(task) } : {})}
         style={styles.rowMain}
       >

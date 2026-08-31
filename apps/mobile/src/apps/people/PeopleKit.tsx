@@ -169,6 +169,8 @@ export interface PersonRowProps {
   star?: React.ReactNode;
   /** No bottom rule — the section's last row. */
   last?: boolean;
+  /** A handle from `kit/test-ids`, on the rows a flow has to find. */
+  testID?: string;
 }
 
 /** THE ROW: avatar · main · meta · verbs · star, everywhere. */
@@ -211,6 +213,7 @@ export function PersonRow(props: PersonRowProps): React.JSX.Element {
           accessibilityRole="button"
           accessibilityLabel={LABELS.openPerson(props.name)}
           onPress={props.onOpen}
+          testID={props.testID}
           style={styles.rowMain}
         >
           {body}

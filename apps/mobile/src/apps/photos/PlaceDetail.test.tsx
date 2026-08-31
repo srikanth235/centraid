@@ -278,7 +278,7 @@ function click(button: Element | undefined): void {
   act(() => button!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 }
 
-describe("one place's photographs (native)", () => {
+describe("one place's photographs, on the phone seat", () => {
   beforeEach(() => {
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -359,7 +359,7 @@ describe("one place's photographs (native)", () => {
 // digits. This screen is where that question gets asked: the ask appears
 // exactly where the fallback phrase appears, one tap declares home, and a
 // place the member already named is never asked again.
-describe("naming this place (native)", () => {
+describe("naming this place, on the phone seat", () => {
   const COORD_ROWS = [
     {
       place_id: "place-coord",

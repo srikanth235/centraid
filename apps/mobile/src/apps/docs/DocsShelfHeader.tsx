@@ -9,6 +9,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { TEST_IDS } from "../../kit/test-ids";
 import { t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsShellNavigation } from "../../navigation";
@@ -34,6 +35,9 @@ export default function DocsShelfHeader({
         accessibilityLabel={`Back to ${backTo}`}
         onPress={() => navigation.goBack()}
         style={styles.back}
+        // The label NAMES the destination ("Back to All", "Back to Folders"),
+        // so it moves with the shelf a member came from; the handle does not.
+        testID={TEST_IDS.docs.breadcrumb}
       >
         <Icon name="chevron-left" size={22} color={colors.text} />
         <Text style={styles.backLabel}>{backTo}</Text>

@@ -98,7 +98,11 @@ ${retryableTapCommands("Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Groups", BALANCES_STATUS)}
+# The band destination by its KEY (tally-band.ts already keys on it), never
+# its label: "Groups" is copy shelves.ts owns and may re-word.
+- tapOn:
+    id: "tally-band-groups"
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible: "${GROUPS_STATUS}"
     timeout: 20000
@@ -107,21 +111,32 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
     visible: "${GROUP_HERO_SUB}"
     timeout: 20000
 # The life-acts section sits below the group's ledger, and the ledger is as
-# long as the group is old.
+# long as the group is old. Scrolled to by the verb's own handle: the row is
+# the SUBJECT of this journey's first claim, and finding it by the words it
+# prints would make a copy edit indistinguishable from the row disappearing.
 - scrollUntilVisible:
     element:
-      text: "${SHARE_VERB}"
+      id: "tally-share-verb"
     direction: DOWN
+    visibilityPercentage: 100
     timeout: 20000
 # WHAT AN INVITATION IS, said before it is pressed: one each, and redeemed in
-# the other person's own vault rather than granting access to this one.
+# the other person's own vault rather than granting access to this one. THIS
+# stays copy — it is the promise, not the locator.
 - assertVisible: "${SHARE_META}"
-- tapOn: "${SHARE_VERB}"
+- assertVisible: "${SHARE_VERB}"
+- tapOn:
+    id: "tally-share-verb"
 - extendedWaitUntil:
-    visible: "${SHEET_NOTE}"
+    visible:
+      id: "shell-share-sheet"
     timeout: 20000
+# …and the sheet states the consequence of joining in its own words, whoever
+# this vault does or does not have to hand it to.
+- assertVisible: "${SHEET_NOTE}"
 - takeScreenshot: sharing-tally-group-sheet
-- tapOn: "Cancel"
+- tapOn:
+    id: "shell-share-sheet-cancel"
 - extendedWaitUntil:
     visible: "${GROUP_HERO_SUB}"
     timeout: 20000
@@ -132,10 +147,25 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
     `Tally group "${DEMO_GROUP}" offered Share group with its own meta, and the share sheet opened on it`
   );
 
-  // The redeeming seat. Settings is opened from the vault drawer, not the dock:
-  // the dock sits where the dev build's LogBox toast parks itself, and a tap
-  // right after launch lands on the toast, reports COMPLETED and navigates
-  // nowhere. The drawer handle is top-right and is never covered.
+  // The redeeming seat.
+  //
+  // SETTINGS MOVED, AND THE PATH THIS FLOW USED IS GONE. Until #890 W2 this
+  // chunk opened a vault drawer: `Open vault menu` → wait for `GO TO` → tap
+  // `.*Settings`. NONE of those three strings exists anywhere in
+  // `apps/mobile/src` any more — the v17 shell ships no drawer, and
+  // `screens/home/AllAppsSheet.tsx` says so at the handle that replaced them:
+  // "Settings is reached from HERE, not from a drawer". The old first tap was
+  // non-optional, so this failed LOUDLY rather than navigating nowhere, but it
+  // was still a step red for a reason unrelated to its claim. DO NOT "RESTORE"
+  // THE DRAWER PATH — there is nothing to restore it to.
+  //
+  // The route now is the band's More tab → the all-apps sheet → the Settings
+  // place row, each hop by handle and each waiting on the NEXT surface's own
+  // handle, so a tap that did nothing cannot read as an arrival. Settings is the
+  // last row of the sheet's places half (below all eight apps), so it is
+  // scrolled to at full visibility: Maestro matches an element the sheet has
+  // clipped, and tapping one is the silent no-op README's "A passing step is not
+  // a working step" is about.
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
@@ -145,28 +175,52 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open vault menu")}
+- tapOn:
+    id: "home-band-more"
+    retryTapIfNoChange: true
 - extendedWaitUntil:
-    visible: "GO TO"
+    visible:
+      id: "home-all-apps"
     timeout: 15000
-# The row's accessible name is ", Settings" (icon + label collapsed into one
-# element) and Maestro will not match a selector that starts with the comma.
-${retryableTapCommands(".*Settings", "GO TO")}
-- extendedWaitUntil:
-    visible: "APPEARANCE"
-    timeout: 20000
 - scrollUntilVisible:
     element:
-      text: "${SHARING_ROW}"
+      id: "home-place-settings"
     direction: DOWN
+    visibilityPercentage: 100
     timeout: 20000
-- tapOn: "${SHARING_ROW}"
+- tapOn:
+    id: "home-place-settings"
+    retryTapIfNoChange: true
 - extendedWaitUntil:
-    visible: "${REDEEM_SECTION}"
+    visible:
+      id: "settings-screen"
+    timeout: 20000
+# "APPEARANCE" is the first section Settings publishes and nothing else in the
+# app renders it — kept beside the handle because it proves the screen actually
+# PAINTED, which a root testID on a mounted-but-empty view would not.
+- assertVisible: "APPEARANCE"
+- scrollUntilVisible:
+    element:
+      id: "settings-sharing-row"
+    direction: DOWN
+    visibilityPercentage: 100
+    timeout: 20000
+# The row's own sentence stays asserted — its accessible name is the bare word
+# "Sharing", which the section heading above it also carries, so this sentence
+# is what tells the two apart for a reader of the verdict.
+- assertVisible: "${SHARING_ROW}"
+- tapOn:
+    id: "settings-sharing-row"
+- extendedWaitUntil:
+    visible:
+      id: "sharing-redeem"
     timeout: 20000
 # The door a centraid://commons-invite URI goes through, and the order it
 # states: your own vault first, then the one-time invitation.
+- assertVisible: "${REDEEM_SECTION}"
 - assertVisible: "${REDEEM_LEDE}"
+- assertVisible:
+    id: "sharing-redeem-field"
 - assertVisible: "${REDEEM_FIELD}"
 - takeScreenshot: sharing-redeem-surface
 `,
@@ -218,7 +272,9 @@ ${retryableTapCommands("Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Groups", BALANCES_STATUS)}
+- tapOn:
+    id: "tally-band-groups"
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible: "${GROUPS_STATUS}"
     timeout: 20000
@@ -228,8 +284,9 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
     timeout: 20000
 - scrollUntilVisible:
     element:
-      text: "${SHARE_VERB}"
+      id: "tally-share-verb"
     direction: DOWN
+    visibilityPercentage: 100
     timeout: 20000
 - assertVisible: "${SHARE_META}"
 # The gateway goes out of reach UNDER a group that is already on screen: the
@@ -240,7 +297,12 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
     visible: "${SHARE_OFFLINE}"
     timeout: 30000
 # THE WITHHELD VERB. The row now carries the sentence INSTEAD of what it offers
-# when the gateway is reachable — not both, and not a greyed control.
+# when the gateway is reachable — not both, and not a greyed control. The row
+# ITSELF is still drawn (its handle is on the LedgerRow either way), which is
+# what separates "withheld with a reason" from "hidden", the distinction the
+# refusal grammar in docs/blueprint-seats.md turns on.
+- assertVisible:
+    id: "tally-share-verb"
 - assertNotVisible: "${SHARE_META}"
 - takeScreenshot: sharing-withheld-offline
 `,

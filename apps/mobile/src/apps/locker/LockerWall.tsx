@@ -33,6 +33,7 @@ import {
 
 import Button from "../../kit/components/Button";
 import { Text, TextInput } from "../../kit/components/NativeText";
+import { TEST_IDS } from "../../kit/test-ids";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { DEVICE_NOTE, DEVICE_REVOKE, DEVICE_UNLOCK } from "./locker-seat-copy";
@@ -103,6 +104,7 @@ export default function LockerWall({
     <ScrollView
       contentContainerStyle={styles.page}
       keyboardShouldPersistTaps="handled"
+      testID={TEST_IDS.locker.gate}
     >
       <Text accessibilityRole="header" style={styles.title}>
         {setup ? SETUP_TITLE : LOCK_TITLE}
@@ -111,6 +113,10 @@ export default function LockerWall({
 
       <TextInput
         accessibilityLabel={setup ? SETUP_PLACEHOLDER : LOCK_PLACEHOLDER}
+        // An RN TextInput's accessibilityLabel never reaches the iOS a11y tree
+        // (README "Known caveats"), so this field had NO selector at all — the
+        // reason the passphrase-floor journey is still an unowned gap.
+        testID={TEST_IDS.locker.gateField}
         autoCapitalize="none"
         autoComplete={setup ? "new-password" : "current-password"}
         autoCorrect={false}
@@ -139,6 +145,7 @@ export default function LockerWall({
           disabled={!ready}
           label={setup ? CREATE_PASSPHRASE : UNLOCK}
           onPress={submit}
+          testID={TEST_IDS.locker.gateSubmit}
           variant="primary"
         />
         {!setup && deviceEnrolled ? (

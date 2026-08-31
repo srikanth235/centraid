@@ -148,6 +148,15 @@ jobs:
               - 'packages/blueprints/**'
               - 'packages/design/**'
               - '.github/workflows/ci.yml'
+              # #890 W0 — editing a Maestro flow, the harness, or the workflow
+              # that schedules them used to trigger NO mobile lane at all: the
+              # filter listed only product source, so a change to the test layer
+              # of the primary surface was merged unexercised. The device gate
+              # (`mobile-device-gate`) and `mobile-smoke` both key on this
+              # filter, so both must see a flow edit.
+              - 'tests/agent-e2e-mobile/**'
+              - 'tests/agent-e2e-shared/**'
+              - '.github/workflows/e2e.yml'
             # #781 — everything `bun run design:gallery` reads. #799 widened
             # it: the lane no longer renders a fixture, it BUILDS AND DRIVES
             # `apps/web` and photographs the shell's own `#ui-preview`
@@ -355,6 +364,19 @@ jobs:
       # workspace packages by their published entry points, so it needs the
       # `bun run build` above; that is why it rides here and not in `gates`.
       - run: bun run test:qualities
+      # #890 W3 — the mobile BOOT-CONDITION tier. It boots a real `serve()`
+      # gateway and a real native replica session over node:sqlite, arranges each
+      # app × state as a genuine boot condition, and asserts the state the
+      # SESSION reports rather than the state a fixture was handed. It rides here
+      # for the same reason `test:qualities` does: it needs the `bun run build`
+      # above, because it drives the packages by their published entry points.
+      #
+      # ~145 s of Linux time, and that is the trade the E-device-only ruling
+      # names: a simulator minute on macOS costs roughly 600x a vitest second, so
+      # the state grid moving down a tier is what pays for the device roster
+      # shrinking. It is NOT path-filtered — a change anywhere in the gateway,
+      # the vault or the replica can move what these states report.
+      - run: bun run test:integration:mobile
       # Issue #456's real-gateway budget gate. Linux strace supplies an exact
       # fsync/write count; losing that signal is itself a benchmark failure.
       - run: sudo apt-get update && sudo apt-get install --yes strace
@@ -632,6 +654,174 @@ jobs:
         run: bun run perf:app-weight -- --surface mobile
       - name: Compile the Android application and native modules
         run: bun run --cwd apps/mobile ci:android-native
+
+  # #890 W4 — THE PR DEVICE GATE. Mobile is the primary surface and until this
+  # job no mobile journey ran on any PR: `mobile-smoke` above proves the app
+  # BUILDS and nothing about whether it works, and the nightly's first device
+  # signal arrived after merge. A feedback loop that contradicts surface priority
+  # is the defect; this job is the fix.
+  #
+  # Android, per D1 (docs/decisions.md#mobile-testing-890): Linux runners expose
+  # /dev/kvm so the emulator is hardware-accelerated and the gate costs Linux
+  # minutes rather than the macOS multiplier, and Maestro's UIAutomator2 driver
+  # is the stabler of the two. iOS is the nightly's depth platform, never a
+  # per-PR duplicate.
+  #
+  # It runs the RELEASE artifact (#890 W1), so none of the dev-client machinery
+  # — Metro, the dev launcher, the bundle prewarm, the developer-menu sheet —
+  # exists on this path.
+  mobile-device-gate:
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true' || needs.changes.outputs.all == 'true'
+    runs-on: ubuntu-latest
+    # The SUITE's own budget is 12 minutes warm (flows/pr-gate-budget.md) and is
+    # what fails a slow run, because it fails while evidence can still be written.
+    # This is an outer backstop only and must stay well above suite + a cold
+    # gradle release build, or a cancelled job destroys the verdicts (#557:
+    # cancelled counts as red, with nothing to read).
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      # ubuntu-latest exposes /dev/kvm; enable it so the x86_64 emulator gets
+      # hardware acceleration. Without it every journey times out.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Fingerprint the Android native build inputs
+        id: native_android
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          fp="$(node scripts/native-fingerprint.mjs android)"
+          test -n "$fp" || { echo "::error::empty Android fingerprint"; exit 1; }
+          jdk="$(java -version 2>&1 | head -1 | shasum -a 256 | cut -d' ' -f1)"
+          echo "hash=jdk${jdk:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
+      - name: Install Maestro CLI
+        # Pinned to the SAME version every other mobile lane installs;
+        # scripts/test-report/validate-nightly-wiring.mjs fails when the three
+        # lanes disagree, because two device drivers on one roster is a
+        # difference nobody chose.
+        env:
+          MAESTRO_VERSION: 2.6.1
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Build and start the tokenless mobile test gateway
+        run: |
+          bun run turbo run build --filter=@centraid/server
+          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
+          for attempt in {1..90}; do
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/centraid-mobile-gateway.log
+          exit 1
+      # #890 W1, build-once-run-many. Two caches with DIFFERENT fallback rules,
+      # and the difference is the whole point:
+      #
+      #   apk cache      exact key, NO restore-keys. A partial match here would
+      #                  install a stale binary and pass, which is the one thing
+      #                  this must never do.
+      #   gradle build   restore-keys ON. A partial match is a warm build
+      #     directory   DIRECTORY, not an artifact: gradle re-checks every task's
+      #                  inputs against the current tree, so a JS-only change
+      #                  re-runs only the bundle and packaging tasks and a native
+      #                  change rebuilds what it must. Nothing stale can survive
+      #                  a task-input check, which is why restore-keys is safe on
+      #                  this one and refused on the other.
+      #
+      # Both are populated on `main` by .github/workflows/mobile-canary.yml, so a
+      # PR normally restores rather than compiles.
+      - name: Restore the built Android app
+        id: android_app
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e-android
+          key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.hash }}
+      - name: Restore the Android gradle build directory
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            apps/mobile/android/app/build
+            apps/mobile/android/build
+            ~/.gradle/caches
+          key: android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
+          restore-keys: |
+            android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
+            android-gradle-${{ runner.os }}-
+      - name: AVD cache
+        id: avd_cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-x86_64-google_apis-pixel6-r4096-c4-v1
+      - name: Create AVD + snapshot (cache miss only)
+        if: steps.avd_cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          # Every AVD-shaping input MUST match the test step's, or the cached
+          # snapshot will not load. Pinned in apps/mobile/scripts/device-matrix.json,
+          # where the x86_64-vs-arm64 divergence from a member's phone is recorded
+          # as deliberate rather than assumed away.
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 4096M
+          cores: 4
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Generated AVD snapshot for caching."
+      - name: Run the critical five on the release artifact
+        id: emu
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          ANDROID_CACHE_HIT: ${{ steps.android_app.outputs.cache-hit }}
+          CENTRAID_MOBILE_BUILD: release
+          CENTRAID_MOBILE_LANE: pr-gate
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 4096M
+          cores: 4
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
+          disable-animations: true
+          script: bash apps/mobile/scripts/android-emulator-pr-gate.sh
+      # The harness rm -rf's this in a finally; this is belt-and-braces against a
+      # run that dies before the finally, so a crash mid-pairing cannot ship a
+      # live enrollment capability in the uploaded artifact.
+      - name: Remove sensitive pairing diagnostics
+        if: always()
+        run: |
+          if [ -d tests/agent-e2e-mobile/runs ]; then
+            find tests/agent-e2e-mobile/runs -type d \
+              -path '*/maestro-debug/*-configure-gateway' \
+              -prune -exec rm -rf {} +
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: mobile-device-gate-runs
+          path: tests/agent-e2e-mobile/runs/
+          retention-days: 7
+          if-no-files-found: ignore
 
   docs:
     needs: changes
@@ -952,6 +1142,7 @@ jobs:
         client-e2e,
         gateway-package,
         mobile-smoke,
+        mobile-device-gate,
         docs,
         web-build,
         iroh-wasm,

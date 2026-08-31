@@ -47,12 +47,19 @@ await runFlow("people-roster", async (ctx) => {
     `appId: ${ctx.state.appId}
 ---
 ${retryableTapCommands("Open People.*")}
-# The row's own accessible name (LABELS.openPerson) is the arrival marker: the
-# roster's header word is the app's name and is drawn by the launcher tile too,
-# so it could not tell an arrival from a tap that did nothing.
+# THE ROSTER DREW A ROW AT ALL, by the leading row's handle — the arrival
+# marker. The roster's header word is the app's name and is drawn by the
+# launcher tile too, so it could not tell an arrival from a tap that did
+# nothing; people-row-first can only exist where People drew a list.
 - extendedWaitUntil:
-    visible: "Open Grandpa Ray"
+    visible:
+      id: "people-row-first"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+# …and each row is the VAULT'S person, by the accessible name LABELS.openPerson
+# builds. All four are asserted, not one — a roster that carried the first row
+# of a query and stopped is exactly what a broken window looks like, and it is
+# the shape a handle on the leading row alone would miss.
+- assertVisible: "Open Grandpa Ray"
 - assertVisible: "Open Maya Alvarez"
 - assertVisible: "Open Jake Bennett"
 - assertVisible: "Open Chris Okafor"

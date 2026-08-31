@@ -63,7 +63,7 @@ describe(DistributionBlock, () => {
     ]);
   });
 
-  it("lowers a share to the one width a native style takes", () => {
+  it("lowers each share to the percentage width string in its style object", () => {
     const container = render(
       <DistributionBlock
         accessibilityLabel="Spend by harness"

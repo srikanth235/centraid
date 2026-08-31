@@ -117,13 +117,13 @@ describe("[law:people-row-marks] the row's meta takes net only as a consequence"
   });
 });
 
-describe("[law:people-star-a11y] the star names its object and its direction", () => {
+describe("[law:people-star-a11y] the star labels its object and its direction", () => {
   afterEach(() => {
     dispose?.();
     dispose = undefined;
   });
 
-  it("labels Star/Unstar and reports presses", () => {
+  it("labels Star/Unstar and reports its onPress", () => {
     let toggled = 0;
     const el = render(
       <StarButton name="Ana" starred={false} onToggle={() => (toggled += 1)} />
@@ -151,7 +151,10 @@ describe("[law:people-readonly-star] a person in a read-only source withholds th
     dispose = undefined;
   });
 
-  it("refuses the press instead of letting the write throw, and says why", () => {
+  // Stub tier: the component WITHHOLDS its own callback and carries the reason
+  // as a prop. That a disabled RN `Pressable` also refuses at the responder is
+  // the RNTL project's claim (`TasksHome.test.tsx` holds the twin).
+  it("withholds its own callback when disabled, and carries the reason", () => {
     let toggled = 0;
     const el = render(
       <StarButton

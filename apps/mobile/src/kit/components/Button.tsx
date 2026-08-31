@@ -25,6 +25,8 @@ export interface ButtonProps extends ButtonData {
   /** What distinguishes this instance of a repeated verb. A HINT, not a label:
    *  the control already renders its visible word (#708 B.4). */
   accessibilityHint?: string;
+  /** A handle from `kit/test-ids`, never a hand-spelled string (#890 W2). */
+  testID?: string;
 }
 
 export default function Button({
@@ -35,6 +37,7 @@ export default function Button({
   disabled,
   style,
   accessibilityHint,
+  testID,
 }: ButtonProps): React.JSX.Element {
   const { colors, radii, targetMin } = useTheme();
   const recipeStyle = useMemo(
@@ -48,6 +51,7 @@ export default function Button({
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       onPress={disabled ? undefined : onPress}
+      testID={testID}
       style={({ pressed }) => [
         styles.base,
         pressed && !disabled && styles.pressed,

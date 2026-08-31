@@ -55,7 +55,14 @@ ${retryableTapCommands("Open Tally.*")}
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-- tapOn: "Waiting"
+# The band destination by its KEY — tally-band.ts and shelves.ts both key
+# Waiting as contrib, while "Waiting" is the label those tables own and may
+# re-word. A band tab stays on screen after it is tapped, so Maestro's own
+# retryTapIfNoChange plus the destination assertion below is the right
+# instrument, not the conditional-retry helper.
+- tapOn:
+    id: "tally-band-contrib"
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible: "Every contribution says whose it is, where it is, and what it is waiting on"
     timeout: 30000

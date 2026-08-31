@@ -48,6 +48,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
+import { TEST_IDS } from "../../kit/test-ids";
 import { useTheme } from "../../kit/theme";
 import type { PlacementRecord } from "../../lib/replica/multi-vault-reader";
 import {
@@ -603,7 +604,10 @@ export default function PhotoLightbox({
       {/* A plain View, NOT a SafeAreaView: the stage is full-bleed and must run
           edge to edge, which a SafeAreaView would letterbox. The CONTROLS carry
           the insets instead. */}
-      <View style={[styles.fill, { backgroundColor: colors.stage }]}>
+      <View
+        style={[styles.fill, { backgroundColor: colors.stage }]}
+        testID={TEST_IDS.photos.viewer}
+      >
         {/* The editor takes the whole body — no pager, no swipe target, no
             filmstrip: a member mid-edit is never one gesture from a different
             photograph. It is also the ONE body pushed clear of the floating
@@ -627,7 +631,11 @@ export default function PhotoLightbox({
               setStageHeight(event.nativeEvent.layout.height)
             }
           >
+            {/* THE SWIPE TARGET. `flows/photos-viewer.mjs` paged this list with
+                `start: "80%,30%"` because it had no handle; a Maestro `swipe`
+                anchored on `from: { id }` survives every layout change. */}
             <FlatList
+              testID={TEST_IDS.photos.viewerPager}
               ref={list}
               data={assets}
               horizontal
@@ -652,6 +660,7 @@ export default function PhotoLightbox({
             <Pressable
               accessibilityLabel="Previous photograph"
               accessibilityRole="button"
+              testID={TEST_IDS.photos.viewerPrev}
               accessibilityState={{ disabled: index <= 0 }}
               disabled={index <= 0}
               onPress={() => goTo(index - 1)}
@@ -670,6 +679,7 @@ export default function PhotoLightbox({
             <Pressable
               accessibilityLabel="Next photograph"
               accessibilityRole="button"
+              testID={TEST_IDS.photos.viewerNext}
               accessibilityState={{ disabled: index >= assets.length - 1 }}
               disabled={index >= assets.length - 1}
               onPress={() => goTo(index + 1)}

@@ -1,5 +1,15 @@
-import { spawn } from "node:child_process";
-import path from "node:path";
+// The Photos seat, as one suite sharing ONE simulator boot and ONE pairing.
+// Sibling runners, same shape: run-home-apps-suite.mjs (the seven covers that
+// are not Photos) and run-probes-suite.mjs (#890 W0 — the standalone journeys
+// that were unbudgeted).
+//
+// `photos-permissions` is FIRST and pairs fresh: it owns the empty-vault denial
+// state, so it must run before anything seeds the corpus. Every later member
+// runs with MAESTRO_REUSE_PAIRED_STATE=1 (`reuseAfter: 1`) against the profile
+// it leaves behind, and every one still writes an independent verdict — a
+// mid-run failure must not grey the later cells (#535 F4).
+
+import { runSuite } from "./lib/run-suite.mjs";
 
 const FLOWS = [
   "photos-permissions.mjs",
@@ -8,40 +18,16 @@ const FLOWS = [
   "photos-search.mjs",
   "photos-select-write.mjs",
 ];
+// See flows/photos-budget.md for how this ceiling was derived and what to do
+// when it is breached. Do not raise it to buy time.
 const BUDGET_MS = 8 * 60_000;
-const flowsDir = path.join(import.meta.dirname, "flows");
 
-function runFlow(file, reusePairedState) {
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, [path.join(flowsDir, file)], {
-      env: {
-        ...process.env,
-        ...(reusePairedState ? { MAESTRO_REUSE_PAIRED_STATE: "1" } : {}),
-      },
-      stdio: "inherit",
-    });
-    child.on("exit", (code) => resolve(code ?? 1));
-    child.on("error", () => resolve(1));
-  });
-}
-
-const startedAt = Date.now();
-async function runRemainingFlows(index = 0, exitCode = 0) {
-  const flow = FLOWS[index];
-  if (!flow) return exitCode;
-  const code = await runFlow(flow, index > 0);
-  return runRemainingFlows(index + 1, code === 0 ? exitCode : 1);
-}
-let exitCode = await runRemainingFlows();
-
-const elapsedMs = Date.now() - startedAt;
-console.log(
-  `[photos-suite] aggregate ${Math.ceil(elapsedMs / 1000)}s / ${BUDGET_MS / 1000}s budget`
-);
-if (elapsedMs >= BUDGET_MS) {
-  console.error(
-    "[photos-suite] FAIL: the five Photos journeys exceeded eight minutes"
-  );
-  exitCode = 1;
-}
-process.exitCode = exitCode;
+process.exitCode = await runSuite({
+  name: "photos",
+  flows: FLOWS,
+  budgetMs: BUDGET_MS,
+  lane: "nightly-android",
+  canaryCount: 0,
+  reuseAfter: 1,
+  onBudgetBreach: "See flows/photos-budget.md.",
+});

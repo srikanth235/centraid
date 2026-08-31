@@ -24,13 +24,31 @@ await runFlow("photos-permissions", async (ctx) => {
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 - openLink: "centraid://photos"
 ${CONFIRM_SYSTEM_OPEN}- extendedWaitUntil:
-    visible: "Collections"
+    visible:
+      id: "photos-collections"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Library")}
+# The band destination by its KEY (photos-band.ts already keys on it), never
+# its label — and never the conditional-retry helper, which would not stop
+# retrying against a tab that stays on screen.
+- tapOn:
+    id: "photos-band-library"
+    retryTapIfNoChange: true
+# THE REFUSAL IS THE CLAIM AND STAYS COPY. photos-access-panel is only how the
+# takeover is FOUND; the sentence is what the OS's refusal is turned into for a
+# member, and a flow that stopped asserting it would stop proving anything.
 - extendedWaitUntil:
-    visible: "Photos cannot reach your camera roll"
+    visible:
+      id: "photos-access-panel"
     timeout: 20000
+- assertVisible: "Photos cannot reach your camera roll"
+# The two recovery labels are alternates because which one a refused state earns
+# is the OS's answer, not the app's — and each is a real control (photos-access-
+# ask / photos-access-settings), which is why the label is asserted rather
+# than a handle: naming one handle here would pin the flow to one OS answer.
 - assertVisible: "Allow access|Open Settings"
+- assertVisible:
+    id: "photos-select"
+    enabled: false
 - assertVisible:
     text: "Select"
     enabled: false
@@ -42,6 +60,12 @@ ${retryableTapCommands("Library")}
 # (route-name). Tap it and require Home to actually arrive — that is the
 # claim this journey's verdict makes ("escapable through Home"), and only a
 # real return can fail when the capsule is missing or wired to a no-op.
+#
+# THE CAPSULE HAS NO HANDLE. kit/band/band-capsule.ts is the frame's shared
+# way home and nothing in kit/test-ids.ts names it, so this tap stays on copy —
+# an invented id would fail scripts/lint-mobile-testids.mjs the moment it was
+# written. Reported as a gap under #890 W2. The tap is safe as copy precisely
+# because the ASSERTION below is not: arriving at Home is what is proven.
 ${retryableTapCommands("Home", "Photos cannot reach your camera roll")}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"

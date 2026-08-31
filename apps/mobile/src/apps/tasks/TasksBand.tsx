@@ -28,6 +28,7 @@ import type { BandOwner } from "../../kit/band/band-owner";
 import BandCapsuleControl from "../../kit/band/BandCapsule";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
 import { radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { resolveTasksBand } from "./tasks-band";
@@ -68,7 +69,10 @@ export default function TasksBand({
 
   const { capsule } = band;
   return (
-    <View style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}>
+    <View
+      style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}
+      testID={TEST_IDS.tasks.band}
+    >
       <BandCapsuleControl capsule={capsule} onPress={onHome} />
 
       <View style={styles.group} accessibilityRole="tablist">
@@ -79,6 +83,10 @@ export default function TasksBand({
               key={destination.key}
               accessibilityRole="tab"
               accessibilityLabel={destination.label}
+              // The DESTINATION KEY, never the label: the label is copy a v-next
+              // handoff may re-word, and a flow that tapped it would then tap
+              // nothing while still reporting COMPLETED (#890 W2).
+              testID={`${TEST_ID_PREFIXES.band.tasks}${destination.key}`}
               accessibilityState={{ selected: active }}
               onPress={() => onSelect(destination.key)}
               style={styles.tab}

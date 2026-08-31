@@ -19,6 +19,7 @@ import { radii } from "@centraid/design";
 import AppMark from "../../kit/components/AppMark";
 import { Text } from "../../kit/components/NativeText";
 import Tappable from "../../kit/components/Tappable";
+import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
 import { borders, durations, t, useTheme } from "../../kit/theme";
 import type { Scheme, ThemeColors } from "../../kit/theme";
 import type { LauncherItem } from "./catalog";
@@ -73,7 +74,7 @@ export default function LauncherGrid({
   );
 
   return (
-    <View style={styles.grid}>
+    <View style={styles.grid} testID={TEST_IDS.home.grid}>
       {packed.map((item) => (
         <ContentTile
           key={item.meta.id}
@@ -132,6 +133,10 @@ function ContentTile({
         onPress={onPress}
         onPressIn={pressIn}
         onPressOut={pressOut}
+        // Keyed on the blueprint app id. The label carries the live count
+        // ("Open Photos, 812 photographs"), so it changes with the vault; the
+        // id does not.
+        testID={`${TEST_ID_PREFIXES.homeTile}${meta.id}`}
       >
         <Animated.View style={[styles.card, animStyle]}>
           {/* Invariant header — see file top. */}

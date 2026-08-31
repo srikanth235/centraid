@@ -1,5 +1,5 @@
 // Screen-side half of the #659 frame-drop hook: arms on a deep link, counts
-// frames, publishes one copyable line. Measurement scaffolding, __DEV__-only.
+// frames, publishes one copyable line. Measurement scaffolding.
 
 import * as Linking from "expo-linking";
 import React, { useEffect, useState } from "react";
@@ -7,6 +7,7 @@ import { StyleSheet, View } from "react-native";
 
 import { formatFrameSample, sampleFrames } from "../../lib/perf/frame-sampler";
 import { Text } from "../components/NativeText";
+import { TEST_IDS } from "../test-ids";
 import { t, useTheme } from "../theme";
 
 /** centraid://perf-frames?ms=N arms one sample. */
@@ -14,9 +15,27 @@ const PROBE_PATH = "perf-frames";
 const DEFAULT_WINDOW_MS = 4_000;
 const MAX_WINDOW_MS = 30_000;
 
-/** Hardcoded Maestro testID handles. */
-const FRAME_PROBE_SAMPLING_ID = "perf-frame-sampling";
-const FRAME_PROBE_REPORT_ID = "perf-frame-report";
+/**
+ * Is the probe compiled into THIS build?
+ *
+ * It used to be `__DEV__` alone, and that made the frame budget unmeasurable in
+ * principle: every scheduled lane drove a `__DEV__` Hermes build served by
+ * Metro, so `scroll-frames` and `cold-start` were reporting numbers from a build
+ * no member installs — dropped frames on a development bundle with a live
+ * bundler attached are not the product's dropped frames (#890 W1).
+ *
+ * `EXPO_PUBLIC_CENTRAID_FRAME_PROBE` is inlined by Metro at export time, so the
+ * "perf-flavored release" the CI lanes build is a Release-configuration binary,
+ * with the Hermes bundle embedded and R8 applied, that additionally carries this
+ * one component. A store build never sets the flag, so the probe is absent from
+ * it exactly as it was before — the flag WIDENS where the probe can exist, it
+ * does not turn it on for members.
+ *
+ * Read once at module scope: the value is a build-time constant, so re-reading
+ * it per render would suggest it can change and it cannot.
+ */
+const PROBE_COMPILED_IN =
+  __DEV__ || process.env.EXPO_PUBLIC_CENTRAID_FRAME_PROBE === "1";
 
 function windowMsFrom(url: string): number | undefined {
   const parsed = Linking.parse(url);
@@ -32,7 +51,7 @@ export default function FrameProbe(): React.JSX.Element | null {
   const [report, setReport] = useState<string>();
 
   useEffect(() => {
-    if (!__DEV__) return undefined;
+    if (!PROBE_COMPILED_IN) return undefined;
     let armed = true;
     let running = false;
     const arm = (url: string): void => {
@@ -64,12 +83,12 @@ export default function FrameProbe(): React.JSX.Element | null {
     };
   }, []);
 
-  if (!__DEV__) return null;
+  if (!PROBE_COMPILED_IN) return null;
   if (sampling) {
     // Present but nearly nothing: drawn inside the window being measured.
     return (
       <View
-        testID={FRAME_PROBE_SAMPLING_ID}
+        testID={TEST_IDS.perf.sampling}
         pointerEvents="none"
         style={styles.armed}
       />
@@ -82,7 +101,7 @@ export default function FrameProbe(): React.JSX.Element | null {
       style={[styles.readout, { backgroundColor: colors.stage }]}
     >
       <Text
-        testID={FRAME_PROBE_REPORT_ID}
+        testID={TEST_IDS.perf.report}
         style={[styles.text, { color: colors.success }]}
       >
         {report}

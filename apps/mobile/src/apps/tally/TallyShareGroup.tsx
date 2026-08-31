@@ -10,6 +10,7 @@ import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ShareSheet from "../../kit/share/ShareSheet";
+import { TEST_IDS } from "../../kit/test-ids";
 import {
   SHARE_GROUP_META,
   SHARE_GROUP_OFFLINE,
@@ -45,7 +46,11 @@ export default function TallyShareGroup({
 
   return (
     <>
+      {/* The META is the claim and stays asserted: reachable says what an
+          invitation IS, unreachable says why there is no verb. The id is only
+          how a flow finds the row that carries whichever sentence is true. */}
       <LedgerRow
+        testID={TEST_IDS.tally.shareVerb}
         title={SHARE_GROUP_VERB}
         meta={reachable ? SHARE_GROUP_META : SHARE_GROUP_OFFLINE}
         {...(reachable ? { onPress: () => setOpen(true) } : {})}

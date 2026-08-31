@@ -17,6 +17,7 @@ import { Text, TextInput } from "../kit/components/NativeText";
 import Tappable from "../kit/components/Tappable";
 import TopSafeArea from "../kit/components/TopSafeArea";
 import { useReplica } from "../kit/replica/ReplicaProvider";
+import { TEST_IDS } from "../kit/test-ids";
 import { density, radii, t, useTheme } from "../kit/theme";
 import { listEdges } from "../lib/replica/edges-transport";
 import type { GatewayEdge } from "../lib/replica/edges-transport";
@@ -285,11 +286,16 @@ export default function SharingScreen({
           </Section>
         ) : null}
 
-        <Section title="Redeem a shared-space invite" colors={colors}>
+        <Section
+          title="Redeem a shared-space invite"
+          colors={colors}
+          testID={TEST_IDS.sharing.redeem}
+        >
           <Text style={[t("small"), { color: colors.textSoft }]}>
             Create your vault first, then paste the one-time invitation here.
           </Text>
           <TextInput
+            testID={TEST_IDS.sharing.redeemField}
             accessibilityLabel="Shared-space invitation"
             autoCapitalize="none"
             autoCorrect={false}
@@ -497,13 +503,16 @@ function Section({
   title,
   colors,
   children,
+  testID,
 }: {
   title: string;
   colors: ReturnType<typeof useTheme>["colors"];
   children: React.ReactNode;
+  /** A handle from `kit/test-ids`, on the sections a flow has to find. */
+  testID?: string;
 }): React.JSX.Element {
   return (
-    <View style={styles.section}>
+    <View style={styles.section} testID={testID}>
       <Text
         style={[t("control"), styles.sectionTitle, { color: colors.textSoft }]}
       >

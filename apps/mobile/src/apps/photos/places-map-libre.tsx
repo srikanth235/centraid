@@ -15,6 +15,7 @@ import {
   tileZoomFor,
 } from "@centraid/blueprints/apps/photos/place-map";
 
+import { TEST_ID_PREFIXES } from "../../kit/test-ids";
 import { pinSize } from "./places-model";
 import PlacePin from "./places-pin";
 import type { PlacesBasemapProps } from "./PlacesRealMap";
@@ -59,13 +60,14 @@ export default function PlacesLibreMap({
           zoom: tileZoomFor(camera),
         }}
       />
-      {pins.map((pin) => {
+      {pins.map((pin, index) => {
         // Anchor to the ground, not the box, so pins hold still while panning.
         const where = coordAt(camera, { height, width }, pin.x, pin.y);
         return (
           <Marker key={pin.key} id={pin.key} lngLat={[where.lng, where.lat]}>
             <View style={styles.anchor}>
               <PlacePin
+                testID={`${TEST_ID_PREFIXES.placesPin}${index}`}
                 pin={pin}
                 size={pinSize(pin.count, largest)}
                 active={pin.key === activeKey}

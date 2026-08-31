@@ -17,6 +17,7 @@ import {
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { TEST_IDS, TEST_ID_PREFIXES } from "../../kit/test-ids";
 import { borders, family, metrics, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { bandTabs } from "./band";
@@ -46,7 +47,10 @@ export default function HomeBand({
 
   return (
     // Home-indicator inset lifts the float — never padding inside the band.
-    <View style={[styles.wrap, { marginBottom: BAND_INSET + insets.bottom }]}>
+    <View
+      style={[styles.wrap, { marginBottom: BAND_INSET + insets.bottom }]}
+      testID={TEST_IDS.home.band}
+    >
       {tabs.map((tab) => (
         <Tab
           key={tab.id}
@@ -69,6 +73,7 @@ export default function HomeBand({
           onSelect("more");
         }}
         style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
+        testID={TEST_IDS.home.bandMore}
       >
         <View style={styles.moreGlyph}>
           <Text style={styles.moreGlyphMark}>···</Text>
@@ -101,6 +106,9 @@ function Tab({
       accessibilityState={{ selected: active }}
       onPress={onPress}
       style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
+      // Keyed on the tab's own id, never its label: the label is copy the pin
+      // model may re-word, the id is what `bandTabs()` already keys on.
+      testID={`${TEST_ID_PREFIXES.band.home}${tab.id}`}
     >
       <View style={styles.mark}>
         {/* Inactive is `textFaint`, never the label's token, never an app hue. */}

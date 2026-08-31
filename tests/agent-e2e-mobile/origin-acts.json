@@ -1,0 +1,52 @@
+{
+  "$comment": "The seat-verb register (#890 W5). Every `seats.originActs` entry an app manifest declares is an act ONLY the phone can perform — a camera, a scanner, a voice capture, an autofill provider — so each is by construction a device-only claim and each owes either an owning journey or a conscious, dated gap. `scripts/lint-seat-verbs.mjs` holds this file against `packages/blueprints/apps/*/app.json`, so a new app or a new verb cannot land without one or the other, and a verb that is deleted from a manifest cannot leave a phantom claim here. Before this register, 'are all critical journeys covered?' was a question nobody could answer mechanically.",
+  "$shape": {
+    "owned": "{ \"owner\": \"tests/agent-e2e-mobile/flows/<flow>.mjs\", \"assertion\": \"the sentence the flow asserts that carries this act\" } — the owner must be a flow the roster schedules, checked against roster.json.",
+    "gap": "{ \"gap\": true, \"since\": \"YYYY-MM-DD\", \"trackingIssue\": <n>, \"blocker\": \"what makes this un-automatable TODAY, not what would be nice\" } — `since` is what makes it DATED: an undated gap is indistinguishable from an oversight, and the audit ritual reads these dates."
+  },
+  "$honesty": "Every row below is still a gap, and that is the finding rather than an omission. 6 origin acts are declared across 5 apps and NONE is owned by a scheduled journey: the roster reads 8/8 apps and writes ~2.5/8, and every act only a phone can perform is on the unwritten side. WHAT CHANGED: `ctx.device` in lib/harness.mjs wraps one targeted `adb -s <udid> …` / `xcrun simctl … <udid> …` per call, which is what `emu finger touch`, `am start`, `simctl push` and `simctl addmedia` needed. That helps FOUR of these six — docs.scanner and notes.voice are untouched by it, because a live camera feed and a microphone feed are not a CLI call and no amount of harness plumbing conjures one. One journey is written on top of it (`flows/share-intent-in.mjs`, the Android half of notes.capture) and it is `promoting`, not scheduled, so it does NOT appear as an owner here. That is the discipline this file is for: a flow that has never run is not evidence, and an escape hatch landing is not a journey. The remaining blockers are now specific and different per row — a missing test image, an iOS `limited` state with no CLI, a second app to share from, a live frame source, a deterministic recognizer, an FCM payload — rather than one shared excuse. An earlier draft of this sentence said the shared excuse had been true of four rows and was 'no longer true of any'; both halves were wrong, and the correction is left visible because a register that quietly restates its own history is the thing this file exists to prevent.",
+  "acts": {
+    "docs.scanner": {
+      "gap": true,
+      "since": "2026-08-30",
+      "trackingIssue": 890,
+      "surface": "apps/mobile/src/screens/Scan.tsx",
+      "blocker": "The scanner reads a live camera feed. A simulator's camera is a synthetic pattern and an emulator's `-camera-back none` is what keeps the AVD snapshot bootable at all, so there is no frame source a flow can put a real document in front of. The tractable half — that the scan surface OPENS and states its refusal when the camera grant is denied — is a real journey and is the first thing to write here; the recognition half needs a device farm, which #890 records as a deferred release-cadence spend."
+    },
+    "locker.autofill": {
+      "gap": true,
+      "since": "2026-08-30",
+      "trackingIssue": 890,
+      "surface": "apps/mobile/src/apps/locker/locker-device-auth.ts",
+      "blocker": "TWO HALVES, and only the smaller one moved. The biometric half is no longer out of band: `ctx.device` wraps a targeted adb call, so `emu finger touch 1` is now one line a flow can write. Whether that emulated touch actually satisfies the BiometricPrompt behind `SecureStore` `requireAuthentication` is UNVERIFIED — it is the plausible Android-first route, not a known-working one, and finding out needs an emulator. The gate the Locker journey currently reaches is a passphrase gate (`locker-gate-field`), which is a different surface. The AUTOFILL half is untouched and is the harder one — it is an OS credential-provider extension, so the act happens in ANOTHER app's text field driven by the system, and Maestro drives one app under test. No flow is written for either half yet: the tooling exists, the journey does not, and claiming otherwise because the escape hatch landed would be exactly the kind of paper coverage this file was created to stop. iOS Simulator's Face ID enrolment is still a Simulator.app menu action with no CLI, and remains an honest gap on that platform."
+    },
+    "notes.capture": {
+      "gap": true,
+      "since": "2026-08-30",
+      "trackingIssue": 890,
+      "surface": "apps/mobile/src/screens/Capture.tsx",
+      "blocker": "HALF WRITTEN, STAGING — the smallest this gap has been. The Android route is no longer out of band: `ctx.device` in lib/harness.mjs wraps one targeted `adb -s <udid> …`, and `flows/share-intent-in.mjs` uses it to synthesise ACTION_SEND and assert Quick capture opens carrying the shared text verbatim. That flow is `promoting` rather than `scheduled`, so it cannot be named as this act's owner yet: it has never run, and an owner that has never run is the defect this register exists to prevent. Two things close this — the flow completing its five nights, and the iOS half, which genuinely remains blocked because a share into a simulator needs a SECOND app to share FROM and the lane installs no such app. Distinct from the in-app Notes quick-capture, which IS covered inside `flows/notes-library.mjs`; the act declared here is the frame-level one."
+    },
+    "notes.voice": {
+      "gap": true,
+      "since": "2026-08-30",
+      "trackingIssue": 890,
+      "surface": "apps/mobile/src/apps/notes",
+      "blocker": "Voice capture needs a microphone feed. A simulator has none a flow can speak into, and the transcript half runs through an on-device recognizer whose output a test cannot make deterministic. What IS testable at this tier — that the affordance appears, that a denied microphone grant produces the app's refusal rather than a silent no-op — is the journey to write first, and it is smaller than it looks."
+    },
+    "photos.camera": {
+      "gap": true,
+      "since": "2026-08-30",
+      "trackingIssue": 890,
+      "surface": "apps/mobile/src/apps/photos/PhotoAccessPanel.tsx",
+      "blocker": "The REFUSED camera-roll path is owned (`flows/photos-permissions.mjs`) and is the harder, more valuable half — a fabricated grid is indistinguishable from a working one on an empty vault, which is why the denial landed first. The GRANTED path is the gap, and the mechanical part of it is now in band: `ctx.device` dispatches `xcrun simctl <verb> <udid> …`, so `addmedia` to seed the library is one call. What is NOT solved is the image itself — the lane has no committed asset to add, and adding a binary to the repo for it needs a decision about where test media lives rather than a line of code — and iOS's third authorization state (`limited`), which has no Android counterpart and no simctl verb. Still the closest of the six to reachable and still the first one to close."
+    },
+    "tally.camera": {
+      "gap": true,
+      "since": "2026-08-30",
+      "trackingIssue": 890,
+      "surface": "packages/blueprints/apps/tally",
+      "blocker": "Tally's camera act is receipt capture, so it inherits `docs.scanner`'s blocker — a live frame source a flow can aim at a receipt — and adds its own: the captured bytes are then read by a recognition handler whose output would have to be deterministic for an assertion to mean anything. The seat's read side is covered (`flows/tally-derived.mjs`); this is the write side that needs a lens."
+    }
+  }
+}

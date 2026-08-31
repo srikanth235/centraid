@@ -414,7 +414,10 @@ describe("the inks a row's own state takes", () => {
     );
   });
 
-  it("gives a disabled row the disabled ink and refuses the press", () => {
+  // Stub tier: the DOM `disabled` attribute on this file's own host mock, not
+  // React Native's responder. A disabled RN `Pressable` short-circuits in the
+  // responder tree, which only the RNTL project observes (#890 W5).
+  it("gives a disabled row the disabled ink and withholds its choice", () => {
     render();
     const share = row("Share");
     expect(share.querySelector("span")?.dataset.color).toBe(

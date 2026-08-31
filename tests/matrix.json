@@ -158,9 +158,9 @@
       "failure": "the first usable PWA assertion fails"
     },
     "U1-mobile": {
-      "command": "node tests/agent-e2e-mobile/flows/home-loads.mjs",
-      "seed": "run the documented broken native onboarding flows in the mobile nightly harness",
-      "failure": "G2/G8/G9/G13/G14 remain explicit red/blocked evidence rather than green"
+      "command": "node tests/agent-e2e-mobile/flows/pairing-canary.mjs",
+      "seed": "break ticket redemption in the onboarding screen and run the canary",
+      "failure": "the canary fails at redemption in under five minutes, before any suite fans out"
     },
     "U2": {
       "command": "bun run test:qualities -t 'U2:'",
@@ -606,14 +606,14 @@
         {
           "id": "U1-mobile",
           "name": "mobile first-run product journey",
-          "owner": "tests/agent-e2e-mobile/flows/home-loads.mjs",
-          "evidence": "mobile first-run complete",
+          "owner": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
+          "evidence": "ticket minted, redeemed, profile completed, Home band settled",
           "lane": "nightly",
           "wallClockCost": "high",
           "knob": "tests/suite-wall-clock.json",
           "governance": "tighten-only",
           "redLastDemonstrated": "2026-08-01",
-          "blockedBy": "Documented G2/G8/G9/G13/G14 onboarding failures; deliberately grey, never counted as covered."
+          "blockedBy": "#890 W0 re-owned this gate. It was owned by flows/home-loads.mjs, which deliberately never pairs and never reaches Home — the gate and its owner were about different journeys, so the cell could not have gone green for the right reason. flows/pairing-canary.mjs is the flow that actually carries the claim. It stays grey until the rebuilt lanes produce a green scheduled run; greenness is the lane's to earn, not this edit's to assert."
         },
         {
           "id": "U2",
@@ -869,6 +869,10 @@
     "872": {
       "url": "https://github.com/srikanth235/centraid/issues/872",
       "state": "open"
+    },
+    "890": {
+      "url": "https://github.com/srikanth235/centraid/issues/890",
+      "state": "open"
     }
   },
   "gaps": {
@@ -979,8 +983,8 @@
     "desktop.compat": "Partial: gateway pairing response folding and primary-first multi-vault retention are covered by apps/desktop/src/main/gateway-pairing-core.test.ts; desktop settings/schema version-skew fixtures remain tracked under #864 (originally #656).",
     "web.scalability": "Owned by tests/scale/web-tabs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "web.compat": "apps/web/src/web-host.test.ts enrolls a pre-multi-vault gateway reply (vaultId only). Web storage/version-skew fixtures beyond that remain tracked under #864 (originally #656).",
-    "mobile.contracts": "apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts states the update-wall contract, but apps/mobile has no coverage floor behind it and the same file also carries the compat claim. Tracked under #864 (originally #656).",
-    "mobile.compat": "Shares its only owner with mobile.contracts and has no coverage floor behind it; old-app/new-gateway skew is proven in one direction only. Tracked under #864 (originally #656).",
+    "mobile.contracts": "apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts states the update-wall contract: which capability keys a gateway must advertise, how an absent optional key reads (off, never malformed), and that the wall copy names the gateway rather than the app. The double-ownership is gone as of #890 — the compat claim moved to mobile-gateway-skew.test.ts, so this cell is now one file answering one question. apps/mobile still has no coverage floor behind it; that half stays under #864 (originally #656).",
+    "mobile.compat": "DOUBLE-OWNERSHIP closed by #890 — the cell itself stays `partial`, see the last sentence. Split onto its own owner (apps/mobile/src/lib/replica/mobile-gateway-skew.test.ts), with the judge test REMOVED from mobile-gateway-compatibility.test.ts rather than duplicated — a repointed cell whose old owner keeps the evidence is the same double-ownership under a new name. Skew is now proven in both directions as range-overlap arithmetic: newer gateway, older gateway, containment, one-version overlap at each edge, the disjoint boundary either side, and a capability gap that must never blame the app. One residue is recorded in that file: while GATEWAY_MIN_PROTOCOL_VERSION equals GATEWAY_PROTOCOL_VERSION the app's window is a single point, so the judge's lower-bound comparison has no input that distinguishes `<` from `<=` — pre-empted by the earlier update-app return rather than by range overlap, which is the detail an earlier draft of that comment got wrong. Still no coverage floor behind the cell — that is the #864 half.",
     "tunnel-pairing.durability": "Was `skip` — durability read as not-applicable to a transport. #842 W3.1 made it applicable: tests/quality/network-chaos.integration.test.ts drives eight injected fault shapes (latency, jitter, fragmentation, asymmetric bandwidth, mid-request abort, mid-response disconnect, endpoint restart, address rebind) over a REAL iroh connection against the replica intent plane, and asserts the no-loss / apply-exactly-once / converge laws on real schedule_task and replica_intent_outcome rows. Byte-level loss and reorder are deliberately absent: QUIC converts those into delay, delivery, or connection failure, so injecting them would model a corrupt QUIC implementation rather than a lossy network. The two netem-tier faults that would need a privileged runner are declared, excluded from the schedule, and cannot be claimed for free. Partial rather than solid: no coverage floor gates the workspace that owns the rig, so the cell rests on the lane alone. Remaining depth tracked under #864.",
     "tunnel-pairing.scalability": "Owned by tests/scale/tunnel-pairs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "extension.correctness": "Owned by apps/extension/src/origin-matching.test.ts: loopback origin matching accepts true 127.0.0.0/8 and rejects lookalike hostnames. Malformed cross-context payload handling has no owner. Tracked under #864 (originally #656).",
@@ -1037,8 +1041,8 @@
     "desktop.correctness": "apps/desktop/src/main/gateway-supervisor-core.test.ts covers supervisor lifecycle. Negative and boundary cases remain under #864 (originally #656).",
     "desktop.security": "apps/desktop/src/main/gateway-pairing-core.test.ts covers pairing core. Adversarial authorization cases remain under #864 (originally #656).",
     "web.correctness": "apps/web/src/web-host.test.ts proves a pre-multi-vault pairing response still enrolls with a derived vaultIds list (#864 W4). Broader negative/boundary cases remain under #864 (originally #656).",
-    "mobile.concurrency": "apps/mobile/src/lib/replica/sqlite-intent-store.test.ts proves two claimNext actors on one queued intent: one sending, the other empty (#864 W4). Tracked under #864 (originally #656).",
-    "mobile.security": "apps/mobile/src/lib/upload/transfer-policy.test.ts refuses path traversal, unsigned, and cleartext provider URLs. Tracked remaining: broader authz cases under #864 (originally #656).",
+    "mobile.concurrency": "apps/mobile/src/lib/replica/sqlite-intent-store.test.ts proves two claimNext actors on one queued intent (#864 W4) and, as of #890, four INTERLEAVED cases, each driven in BOTH orderings: concurrent admissions taking unique strictly-increasing order, an admission and a claim leaving both intents accounted for, a settle and a transition leaving no row both queued and settled, and four drain workers settling every intent exactly once. Three of the four have a demonstrated killing mutation (splitting `add`'s order allocation, `claimNext`'s claim, or `transition`'s patch across an await); the admission/claim pair is a coherence assertion with no such mutation, and is recorded as that rather than claimed as demonstrated-red. TWO SCOPE LIMITS, stated because the cell should not be read as more: node:sqlite is synchronous and JS single-threaded, so these pin atomicity across await boundaries and not OS-thread contention on the file; and because those bodies contain no await, Promise.all runs the first entry to completion before the second is entered — the interleave is deterministic per order, which is why each case drives both orders instead of calling one of them a race. Coverage floor still absent — #864.",
+    "mobile.security": "apps/mobile/src/lib/upload/transfer-policy.test.ts refuses path traversal, unsigned, and cleartext provider URLs, and as of #890 a hostile-input set: percent-encoded, double-encoded, backslash-encoded and deeply-nested traversal, embedded credentials, a malformed escape, look-alike hosts, a wrong port, and the prefix appearing below the root — plus two counterweights (an ordinary presigned object, and a legitimate key containing an encoded percent) so the tightening cannot degenerate into refusing everything. THREE HOLES WERE FOUND AND FIXED, not pinned: `new URL()` resolves a literal `../` but leaves `%2e%2e%2f`, so the raw-pathname prefix test admitted an escape from the authorized namespace; `origin` omits userinfo, so credentials in the URL rode along to the real provider; and the first version of that fix split segments on `/` alone, so `..%5c..%5c` walked straight through it — found by audit, not by the tests that shipped with it. Tracked remaining: broader authz cases under #864 (originally #656).",
     "mobile.offline": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs covers native resilience. Disconnect/reconnect recovery remains under #864 (originally #656).",
     "tunnel-pairing.correctness": "packages/tunnel/src/tunnel.integration.test.ts covers the current tunnel path. Negative and boundary cases remain under #864 (originally #656).",
     "tunnel-pairing.concurrency": "packages/tunnel/src/tunnel.integration.test.ts covers the current tunnel path. Multi-actor interleaving remains under #864 (originally #656).",
@@ -1064,7 +1068,7 @@
     "web.journey": "apps/web/tests/e2e/web-pwa.spec.ts is a single test shared with the security claim; the install-to-app journey has no separate owner. Tracked under #864 (originally #656).",
     "mobile.correctness": "apps/mobile has no coverage floor scope, so nothing gates the replica session code these unit owners exercise. Tracked under #864 (originally #656).",
     "mobile.durability": "apps/mobile/src/lib/upload/crash.test.ts proves upload crash recovery, but apps/mobile has no coverage floor gating the storage code around it. Tracked under #864 (originally #656).",
-    "mobile.journey": "tests/agent-e2e-mobile/flows/home-loads.mjs runs on iOS only, so the Android journey is unproven and the flow declares three checks. Tracked under #864 (originally #656).",
+    "mobile.journey": "Owned by tests/agent-e2e-mobile/flows/pairing-canary.mjs, which pairs and reaches Home; the previous owner (home-loads.mjs) renders ticket-only onboarding on a cleared client and does neither (#890 W0). Android is the gating platform (D1) and runs it on every mobile-touching PR, on every merge, and nightly; iOS runs it nightly as the first member of the depth roster. Remaining: three consecutive green scheduled runs on the rebuilt lanes, tracked under #890.",
     "app-admission": "The named claims an app satisfies to sit in the shell are docs/blueprint-seats.md#app-admission-contract; the appSeats, appStates and appEngines blocks here are that contract's ledger, and scripts/test-report/validate-app-axes.mjs is what refuses an app that goes quiet about one of them.",
     "appStates.offline-as-stale": "notes.offline and tasks.offline are owned by the reachability verdict deliberately surfacing as the app's STALE notice rather than a second offline banner, so the one reachability-driven sentence proves both the offline and the stale cell.",
     "appSeats.desktop-nightly-only": "The six custodian desktop e2e owners newly wired under #864 (agenda, notes, tasks, people and photos plus docs' pending-overlay reuse) are nightly-validated only, because the authoring container has neither an Electron binary nor a Secret Service to run them at PR time."
@@ -1498,11 +1502,11 @@
       "tier": "e2e"
     },
     "mobile.compat": {
-      "owner": "apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts",
+      "owner": "apps/mobile/src/lib/replica/mobile-gateway-skew.test.ts",
       "tier": "unit"
     },
     "mobile.journey": {
-      "owner": "tests/agent-e2e-mobile/flows/home-loads.mjs",
+      "owner": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
       "tier": "e2e"
     },
     "tunnel-pairing.correctness": {
@@ -2795,7 +2799,8 @@
             "owner": "packages/blueprints/src/docs-shelves.test.ts"
           },
           "stale": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "tests/integration-mobile/stale.integration.test.ts"
           },
           "conflict": {
             "status": "owned",
@@ -2889,13 +2894,16 @@
             "owner": "packages/blueprints/apps/people/states.test.tsx"
           },
           "offline": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "tests/integration-mobile/offline.integration.test.ts"
           },
           "stale": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "tests/integration-mobile/stale.integration.test.ts"
           },
           "conflict": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "tests/integration-mobile/conflict.integration.test.ts"
           },
           "parked": {
             "status": "owned",
@@ -2923,7 +2931,8 @@
             "owner": "packages/blueprints/src/photos-view-state.test.ts"
           },
           "stale": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "tests/integration-mobile/stale.integration.test.ts"
           },
           "conflict": {
             "status": "owned",
@@ -4260,11 +4269,11 @@
         ]
       },
       {
-        "id": "standalone",
-        "label": "Standalone journeys (no aggregate budget)",
-        "runner": null,
-        "budgetDoc": null,
-        "budgetMinutes": null,
+        "id": "probes",
+        "label": "Standalone probes",
+        "runner": "tests/agent-e2e-mobile/run-probes-suite.mjs",
+        "budgetDoc": "tests/agent-e2e-mobile/flows/probes-budget.md",
+        "budgetMinutes": 35,
         "flows": [
           {
             "id": "cold-start",
@@ -4285,12 +4294,6 @@
             "flow": "mobile-native-v0-resilience"
           },
           {
-            "id": "sharing-invite",
-            "label": "Sharing invite",
-            "owner": "tests/agent-e2e-mobile/flows/sharing-invite.mjs",
-            "flow": "mobile-sharing-invite"
-          },
-          {
             "id": "places-seat",
             "label": "Places seat",
             "owner": "tests/agent-e2e-mobile/flows/places-seat.mjs",
@@ -4307,6 +4310,48 @@
             "label": "Volume proof",
             "owner": "tests/agent-e2e-mobile/flows/volume-proof.mjs",
             "flow": "mobile-volume-proof"
+          }
+        ]
+      },
+      {
+        "id": "standalone",
+        "label": "Standalone journeys (each its own lane entry)",
+        "runner": null,
+        "budgetDoc": null,
+        "budgetMinutes": null,
+        "flows": [
+          {
+            "id": "pairing-canary",
+            "label": "Pairing canary",
+            "owner": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
+            "flow": "mobile-pairing-canary"
+          },
+          {
+            "id": "sharing-invite",
+            "label": "Sharing invite",
+            "owner": "tests/agent-e2e-mobile/flows/sharing-invite.mjs",
+            "flow": "mobile-sharing-invite"
+          }
+        ]
+      },
+      {
+        "id": "promoting",
+        "label": "Promoting journeys",
+        "runner": "tests/agent-e2e-mobile/run-promoting-suite.mjs",
+        "budgetDoc": "tests/agent-e2e-mobile/flows/promoting-budget.md",
+        "budgetMinutes": 16,
+        "flows": [
+          {
+            "id": "op-sqlite-probe",
+            "label": "op-sqlite probe",
+            "owner": "tests/agent-e2e-mobile/flows/op-sqlite-probe.mjs",
+            "flow": null
+          },
+          {
+            "id": "share-intent-in",
+            "label": "Share intent in",
+            "owner": "tests/agent-e2e-mobile/flows/share-intent-in.mjs",
+            "flow": null
           }
         ]
       }
@@ -4865,6 +4910,15 @@
       "dimension": "performance",
       "tier": "perf",
       "owner": "tests/perf/pwa-waterfall.perf.test.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "mobile-pairing-canary",
+      "name": "The shared prerequisite: the gateway mints a ticket, the phone redeems it, and pairing completes to Home",
+      "surface": "mobile",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
       "minimumTests": 1
     },
     {

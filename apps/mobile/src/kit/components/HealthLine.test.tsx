@@ -101,7 +101,9 @@ describe(HealthLine, () => {
     expect(styleOf(text ?? null).color).toBe(colors.textFaint);
   });
 
-  it("gives the inline verb the touch floor and runs it", () => {
+  // Stub tier: the style OBJECT plus the callback the stubbed `Pressable`
+  // fires. Neither is the device's hit area or RN's responder tree.
+  it("declares the 44pt touch-floor minHeight on the inline verb and runs its onPress", () => {
     const calls: string[] = [];
     const container = render(
       <HealthLine

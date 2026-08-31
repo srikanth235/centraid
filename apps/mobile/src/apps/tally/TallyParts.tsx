@@ -142,6 +142,8 @@ export interface LedgerRowProps {
   act?: { label: string; onPress: () => void };
   /** An unsettled write. Takes the 2px leading rule and says so in its meta. */
   pending?: boolean;
+  /** A handle from `kit/test-ids`, on the rows a flow has to find. */
+  testID?: string;
   onPress?: () => void;
 }
 
@@ -155,6 +157,7 @@ export function LedgerRow({
   figure,
   act,
   pending,
+  testID,
   onPress,
 }: LedgerRowProps): React.JSX.Element {
   const { colors } = useTheme();
@@ -214,6 +217,7 @@ export function LedgerRow({
             }
           : undefined,
       ]}
+      testID={testID}
     >
       {onPress ? (
         <Pressable

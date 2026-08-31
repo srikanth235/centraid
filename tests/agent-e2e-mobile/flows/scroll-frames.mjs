@@ -6,7 +6,11 @@ import {
   rigDriftBudget,
 } from "../../agent-e2e-shared/harness.mjs";
 import { readFrameEvidence } from "../lib/frame-report.mjs";
-import { CONFIRM_SYSTEM_OPEN, runFlow } from "../lib/harness.mjs";
+import {
+  CONFIRM_SYSTEM_OPEN,
+  FIRST_LAUNCH_TIMEOUT_MS,
+  runFlow,
+} from "../lib/harness.mjs";
 
 /**
  * Frame-drop probe for the Photos grid (issue #659 R3c).
@@ -70,18 +74,36 @@ import { CONFIRM_SYSTEM_OPEN, runFlow } from "../lib/harness.mjs";
  * guess them. While the People phase ran it published what it COULD observe —
  * `people rows observed`, a real lower bound taken from the positional
  * `people-directory-row-<index>` handles — because a fling over a directory
- * that turns out to hold 12 rows says nothing about a 5,000-row one. Photos
- * has no equivalent positional handle, so no lower bound is claimed for it.
+ * that turns out to hold 12 rows says nothing about a 5,000-row one.
+ *
+ * PHOTOS NOW HAS POSITIONAL HANDLES, AND THEY STILL BUY NO LOWER BOUND (#890
+ * W2). `photos-tile-0` … `photos-tile-3` exist on the justified timeline, but
+ * `PHOTO_TILE_HANDLES` caps them at four ON PURPOSE — this is the frame-drop
+ * surface, so the handle map must cost the same whether the vault holds 90
+ * photographs or 90,000, and a bounded set cannot count an unbounded one. What
+ * the handles DO buy is the thing this flow was missing: a settle marker that
+ * means "the grid has drawn tiles", so the flings measure the timeline rather
+ * than whatever was on screen when the window opened.
  */
 const OWNER = "tests/agent-e2e-mobile/flows/scroll-frames.mjs";
 const FLINGS = 8;
 const SAMPLE_WINDOW_MS = 6_000;
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 
-// A durable accessibilityLabel published by PhotosHome's search control
-// (apps/mobile/src/apps/photos/PhotosHome.tsx). Deliberately NOT the "Photos"
-// tab label, which the tab bar draws on every screen.
-const PHOTOS_MARKER = "Search photos and moments";
+// THE SETTLE MARKER, AND WHAT IT REPLACED (#890 W2). This was
+// `"Search photos and moments"`, described as "a durable accessibilityLabel
+// published by PhotosHome's search control" — a string that exists NOWHERE in
+// `apps/mobile/src`. A text selector that matches nothing does not settle; it
+// burns its whole 30s budget and fails, so this probe was red for a reason
+// entirely unrelated to frame drops.
+//
+// The replacement is the leading tile of the justified timeline. It is the
+// right marker for a second reason: it can only be visible once the GRID has
+// laid out, and the grid is the surface whose frames this flow claims to
+// measure. Photos opens on Collections (`PhotosHome.tsx` defaults its
+// destination to "collections"), so the Library destination has to be entered
+// first — the old marker would not have been on the arrival screen either.
+const PHOTOS_MARKER = "photos-tile-0";
 
 /** Arm the sampler, fling the surface under test, and read the report back. */
 function flingYaml(appId, marker, markerKind, surface) {
@@ -143,12 +165,27 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-- tapOn: "Photos"
+# The launcher tile by its handle. This was a bare tapOn: "Photos" — the tab
+# label / route name that scripts/lint-e2e-flows.mjs refuses to let a flow
+# ASSERT on, used here as a locator, where it is the same hazard: it matches
+# whatever draws that word.
+- tapOn:
+    id: "home-tile-photos"
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: "photos-collections"
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+# Photos opens on Collections, which is a shelf list, not the timeline. The
+# grid this probe measures lives on the Library destination.
+- tapOn:
+    id: "photos-band-library"
+    retryTapIfNoChange: true
 `,
     "open-photos"
   );
   await ctx.run(
-    flingYaml(ctx.state.appId, PHOTOS_MARKER, "text", "photos"),
+    flingYaml(ctx.state.appId, PHOTOS_MARKER, "id", "photos"),
     "fling-photos"
   );
   const photos = await readFrameEvidence(ctx.state.runDir, photosStartedAt);

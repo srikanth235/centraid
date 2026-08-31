@@ -28,6 +28,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
+import { TEST_IDS } from "../../kit/test-ids";
 import { useTheme } from "../../kit/theme";
 import { hydrateBackupConsent } from "../../kit/transfer/transfer-consent";
 import type { BackupConsentRecord } from "../../kit/transfer/transfer-consent";
@@ -536,6 +537,7 @@ export default function PhotosHome({
                 tile the member can never see checked. */}
             {destination === "library" ? (
               <SelectChip
+                testID={TEST_IDS.photos.select}
                 disabled={timeline.assets.length === 0}
                 onPress={() => {
                   const first = timeline.assets[0];
@@ -711,6 +713,7 @@ export default function PhotosHome({
             accessibilityLabel="Add to album"
             onPress={addToAlbum}
             style={styles.selectionChip}
+            testID={TEST_IDS.photos.selectionAlbum}
           >
             <Icon name="folder-plus" size={20} color={colors.text} />
           </Pressable>
@@ -729,6 +732,7 @@ export default function PhotosHome({
             accessibilityLabel="Move to trash"
             onPress={trashSelection}
             style={styles.selectionChip}
+            testID={TEST_IDS.photos.selectionTrash}
           >
             <Icon name="trash-2" size={20} color={colors.danger} />
           </Pressable>

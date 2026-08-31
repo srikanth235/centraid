@@ -8,9 +8,11 @@
 
 1. Launch the platform-specific development app with `clearState: true`, wiping the device profile and any prior pairing.
 2. Wait up to `FIRST_LAUNCH_TIMEOUT_MS` for `"Connect your gateway."`.
-3. Assert and open the `"Can't scan? Paste a code instead"` fallback.
-4. Assert the pairing-code field and `"Connect"` action.
+3. Assert and open the fallback door — `onboarding-paste`, whose label is `"Can't scan? Paste a code instead"`.
+4. Assert the pairing-code field and the action — `onboarding-ticket-field` and `onboarding-connect`, labelled `"Paste the one-line ticket"` and `"Connect"`.
 5. Take screenshot `ticket-only-onboarding`.
+
+Each of the three is asserted by handle **and** by label ([#890](https://github.com/srikanth235/centraid/issues/890) W2). The handle proves the control was drawn; the label is what a member with no vault actually reads on the one screen they cannot get past, so a handle on a re-worded control would hide that loss rather than catch it.
 
 **Expectations:** the run dir contains `screenshots/01-home-fresh-ticket-only-onboarding.png`, `flows/01-home-fresh.yaml`, `state.json`, and a PASS `verdict.md`.
 

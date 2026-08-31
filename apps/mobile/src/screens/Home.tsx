@@ -9,7 +9,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { homeDayOneFoot } from "@centraid/client/home-copy";
 
+import { isAlarmBlanked } from "../kit/e2e-alarm";
 import { useReplica } from "../kit/replica/ReplicaProvider";
+import { TEST_IDS } from "../kit/test-ids";
 import { pageMargin, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import {
@@ -334,9 +336,29 @@ export default function HomeScreen({
     [goToPlace]
   );
 
+  // #890 W6 — the alarm test's mutation site. In every ordinary build this
+  // branch is statically false and eliminated: `EXPO_PUBLIC_CENTRAID_E2E_ALARM`
+  // is inlined at export time and nothing but the quarterly alarm lane sets it.
+  // In that lane, Home renders nothing, HOME_READY_MARKER never appears, and the
+  // suite MUST go red — a green there is the alarm not sounding, and it fails
+  // the job. See apps/mobile/src/kit/e2e-alarm.ts for why the mutation belongs
+  // in the artifact rather than in the harness.
+  // An empty View rather than `null`, so the production signature stays
+  // `React.JSX.Element` — widening a shipped return type to accommodate a
+  // test-only branch would be the mutation leaking into the product. The claim
+  // is identical either way: the band never mounts, so HOME_READY_MARKER never
+  // appears and every flow that waits for it must fail.
+  if (isAlarmBlanked("home")) return <View style={styles.screen} />;
+
   return (
     // Explicit paddingTop — SafeAreaView edges can resolve to zero in cover stacks.
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
+    // `home-screen` is the arrival handle: HOME_READY_MARKER keyed on the band's
+    // accessibility label, and its predecessor ("Home ready") vanished with a
+    // copy change (#789/#839). A root testID cannot be re-worded.
+    <View
+      style={[styles.screen, { paddingTop: insets.top }]}
+      testID={TEST_IDS.home.screen}
+    >
       <VaultHeader
         vaultName={vault.vaultName}
         gatewayName={vault.gatewayName}

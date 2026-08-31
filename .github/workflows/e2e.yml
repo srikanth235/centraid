@@ -308,17 +308,16 @@ jobs:
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
       - name: Boot an iOS simulator
+        # #890 W0 — the device is PINNED (apps/mobile/scripts/device-matrix.json),
+        # not "the first available iPhone". An unpinned pick makes a screen-size
+        # or OS-behaviour regression indistinguishable from a runner-image roll:
+        # the flow reds, and nothing in the run says the device changed. The
+        # resolver fails loudly when the pinned pair is absent rather than
+        # silently substituting a different phone.
         run: |
-          udid="$(xcrun simctl list devices available --json | node -e '
-            let input="";
-            process.stdin.on("data", chunk => input += chunk);
-            process.stdin.on("end", () => {
-              const devices = Object.values(JSON.parse(input).devices).flat();
-              const phone = devices.find(device => device.isAvailable && /iPhone/.test(device.name));
-              if (!phone) process.exit(1);
-              process.stdout.write(phone.udid);
-            });
-          ')"
+          set -euo pipefail
+          udid="$(xcrun simctl list devices available --json \
+            | node apps/mobile/scripts/resolve-ios-simulator.mjs)"
           echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
           xcrun simctl boot "$udid" || true
           xcrun simctl bootstatus "$udid" -b
@@ -345,7 +344,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/centraid-mobile-e2e
-          key: ios-app-${{ runner.os }}-${{ steps.native.outputs.hash }}
+          key: ios-release-${{ runner.os }}-${{ steps.native.outputs.hash }}
       # Deliberately NOT caching CocoaPods. A Pods cache hit leaves
       # ios/Pods/Manifest.lock matching Podfile.lock, so Expo CLI skips
       # `pod install` entirely — and `pod install` is the ONLY thing that runs
@@ -355,13 +354,25 @@ jobs:
       # the native build outright. It would not even fail on the first run: the
       # cache is empty then. It would fail on the second native change, which is
       # exactly the path a pods cache exists to serve.
-      - name: Build and install the mobile development app
+      - name: Build and install the mobile release app
         id: ios_build
         if: steps.ios_app.outputs.cache-hit != 'true'
         working-directory: apps/mobile
+        env:
+          # #890 W1 — the perf-flavored release. `scroll-frames` and `cold-start`
+          # were measuring a __DEV__ Hermes build, and the frame sampler only
+          # existed under __DEV__ at all, so the probes could not have run
+          # against the artifact even in principle. This flag is inlined into the
+          # embedded bundle at export time, so the sampler ships in a build that
+          # is otherwise a member's build.
+          EXPO_PUBLIC_CENTRAID_FRAME_PROBE: "1"
         run: |
           set -euo pipefail
-          bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler
+          # `--configure Release` is the whole #890 W1 change on this platform:
+          # a Release-configuration simulator build with the Hermes bundle
+          # EMBEDDED, so no bundler is involved at launch. `--no-bundler` then
+          # only stops the CLI opening one it would not need.
+          bunx expo run:ios --configuration Release --device "$SIMULATOR_UDID" --no-bundler
           # Copy the product out of derived data into the cached location. Fail
           # hard if it cannot be found: caching an empty directory would turn
           # every later run into a silent no-install.
@@ -383,8 +394,8 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/centraid-mobile-e2e
-          key: ios-app-${{ runner.os }}-${{ steps.native.outputs.hash }}
-      - name: Install the cached mobile development app
+          key: ios-release-${{ runner.os }}-${{ steps.native.outputs.hash }}
+      - name: Install the cached mobile release app
         if: steps.ios_app.outputs.cache-hit == 'true'
         run: |
           set -euo pipefail
@@ -400,40 +411,25 @@ jobs:
           xcrun simctl install "$SIMULATOR_UDID" "$app"
           # Confirm the simulator agrees the app is installed and resolvable.
           xcrun simctl get_app_container "$SIMULATOR_UDID" dev.centraid.mobile
-      - name: Start Metro
-        run: |
-          CI=1 nohup bunx expo start --dev-client > /tmp/centraid-metro.log 2>&1 &
-          for attempt in {1..90}; do
-            if curl -fsS http://127.0.0.1:8081/status; then exit 0; fi
-            sleep 2
-          done
-          cat /tmp/centraid-metro.log
-          exit 1
-        working-directory: apps/mobile
+      # #890 W1 — NO METRO. The step that started `expo start --dev-client` and
+      # waited on `/status` is gone with the dev client itself: a Release build
+      # carries its own Hermes bundle, so there is nothing for a bundler to
+      # serve. Everything that existed only to make the dev harness testable —
+      # the bundle prewarm, the dev-launcher `openLink`, the developer-menu
+      # explainer sheet — went with it.
       - run: node scripts/test-report/prepare.mjs
-      # Non-short-circuit: each flow always runs and writes evidence; aggregate
-      # exit afterward so a mid-run fail cannot grey later cells (#535 F4).
-      - name: Run all committed mobile journeys
+      # #890 W4 — iOS is the DEPTH platform, not a second copy of the roster.
+      # Android gates PRs and runs the full roster nightly (D1); duplicating all
+      # of it here would spend macOS minutes — roughly ten times a Linux minute —
+      # re-proving claims Android already proved that same night. What this lane
+      # owns is the set of claims only iOS can carry, enumerated with their
+      # reasons in run-ios-depth-suite.mjs.
+      - name: Run the iOS depth roster on the release artifact
         env:
           MAESTRO_PLATFORM: ios
-        run: |
-          set +e
-          ec=0
-          node tests/agent-e2e-mobile/flows/home-loads.mjs || ec=$?
-          node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
-          node tests/agent-e2e-mobile/flows/volume-proof.mjs || ec=$?
-          # #659 R3c — per-launch cold start (volume-proof times 20 launches as
-          # one sum, which is unreadable as an experience) and the Photos
-          # scroll-settle proxy.
-          node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?
-          node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
-          node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
-          node tests/agent-e2e-mobile/flows/places-seat.mjs || ec=$?
-          # #839 G8 — the five home-app journeys that are not Photos. One
-          # fresh pairing, four reuses; budget in flows/home-apps-budget.md.
-          # Tally has no journey (held under #831).
-          node tests/agent-e2e-mobile/run-home-apps-suite.mjs || ec=$?
-          exit "$ec"
+          CENTRAID_MOBILE_BUILD: release
+          CENTRAID_MOBILE_LANE: nightly-ios
+        run: node tests/agent-e2e-mobile/run-ios-depth-suite.mjs
       - name: Remove sensitive pairing diagnostics
         if: always()
         run: |
@@ -509,6 +505,12 @@ jobs:
           echo "hash=jdk${jdk:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
           echo "Android native fingerprint: fp=$fp jdk=$jdk"
       - name: Install Maestro CLI
+        # #890 W0 — pinned to the SAME version iOS pins. This lane installed
+        # whatever `releases/latest` served, so the two platforms could be
+        # driven by different device drivers on the same night and a driver
+        # regression would land here with no commit to blame it on.
+        env:
+          MAESTRO_VERSION: 2.6.1
         run: |
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
@@ -527,26 +529,40 @@ jobs:
           done
           cat /tmp/centraid-mobile-gateway.log
           exit 1
-      - name: Start Metro
-        working-directory: apps/mobile
-        run: |
-          CI=1 nohup bunx expo start --dev-client > /tmp/centraid-metro-android.log 2>&1 &
-          for attempt in {1..90}; do
-            if curl -fsS http://127.0.0.1:8081/status; then exit 0; fi
-            sleep 2
-          done
-          cat /tmp/centraid-metro-android.log
-          exit 1
-      # Restore the built Android dev-client .apk. Same all-or-nothing, split
+      # #890 W1 — NO METRO. Gone with the dev client: the Release apk carries its
+      # own Hermes bundle, so there is nothing for a bundler to serve and no
+      # `adb reverse` to set up. The dev client stays the LOCAL exploratory rig.
+      # Restore the built Android RELEASE apk. Same all-or-nothing, split
       # restore/save rationale as the iOS job: the emulator action's script runs
       # the build, so a cache HIT skips gradle entirely and just adb-installs the
       # banked apk. No restore-keys — a partial match would install a stale apk.
+      # The key names the configuration (`android-release-`) so a Debug apk
+      # banked before #890 W1 can never restore into this lane.
       - name: Restore the built Android app
         id: android_app
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/centraid-mobile-e2e-android
-          key: android-app-${{ runner.os }}-${{ steps.native_android.outputs.hash }}
+          key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.hash }}
+      # #890 W1 — the OTHER half of build-once-run-many, and the one place
+      # `restore-keys` is correct. A partial match here restores a warm gradle
+      # BUILD DIRECTORY, not an artifact: gradle re-checks every task's inputs
+      # against the current tree, so a JS-only change re-runs only the bundle and
+      # packaging tasks (the "repackage into the cached native shell" case) and a
+      # native change rebuilds what it must. Nothing stale can survive a
+      # task-input check — which is exactly why restore-keys is refused on the
+      # apk cache above and correct on this one.
+      - name: Restore the Android gradle build directory
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            apps/mobile/android/app/build
+            apps/mobile/android/build
+            ~/.gradle/caches
+          key: android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
+          restore-keys: |
+            android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
+            android-gradle-${{ runner.os }}-
       # AVD snapshot caching — the reactivecircus best practice. The first run
       # boots a clean emulator once and banks a booted-state snapshot; every
       # later run resumes from it in seconds instead of a ~40s cold boot. It also
@@ -589,6 +605,8 @@ jobs:
           # lives under $HOME so it carries from the restore step into the
           # action's shell (same runner, same home).
           ANDROID_CACHE_HIT: ${{ steps.android_app.outputs.cache-hit }}
+          CENTRAID_MOBILE_BUILD: release
+          CENTRAID_MOBILE_LANE: nightly-android
         with:
           api-level: 34
           # x86_64 (not arm64-v8a) so /dev/kvm on the Linux runner accelerates it.
@@ -609,7 +627,7 @@ jobs:
           # The action executes `script:` via dash; a multi-line if/else with
           # comments and non-ASCII chars tripped its parser (#535). Keep this a
           # single line that hands off to a committed bash file instead.
-          script: bash apps/mobile/scripts/android-emulator-e2e.sh
+          script: bash apps/mobile/scripts/android-emulator-roster.sh
       # Mirrors the iOS job's identical step. The harness already rm -rf's this
       # directory in a finally, so this is belt-and-braces against a run that
       # dies before the finally — but it was iOS-only, which meant an Android
@@ -632,7 +650,21 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/centraid-mobile-e2e-android
-          key: android-app-${{ runner.os }}-${{ steps.native_android.outputs.hash }}
+          key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.hash }}
+      # Bank the warm gradle build directory too, so tomorrow's nightly and the
+      # next PR gate both restore it. Unguarded `if: always()`: unlike the apk,
+      # a build directory is worth banking even from a run that never produced
+      # an installable artifact — the compiled native tasks inside it are still
+      # valid inputs for the next run.
+      - name: Save the Android gradle build directory
+        if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            apps/mobile/android/app/build
+            apps/mobile/android/build
+            ~/.gradle/caches
+          key: android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

@@ -16,6 +16,7 @@ import { Text } from "../../kit/components/NativeText";
 import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { TEST_IDS } from "../../kit/test-ids";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
@@ -120,7 +121,7 @@ export default function PlacesMap({
         </Pressable>
       </View>
       <ReplicaStatusBar />
-      <View style={styles.stage}>
+      <View style={styles.stage} testID={TEST_IDS.places.map}>
         {points.length ? (
           mode === "real" ? (
             <PlacesRealMap {...surface} />
@@ -135,12 +136,17 @@ export default function PlacesMap({
             </Text>
           </View>
         )}
+        {/* ONE node, two states: the resting privacy sentence and a pressed
+            pin's readout are the same slot, so a flow reads the slot by id and
+            asserts WHICH sentence is in it — the sentence is the claim. */}
         {reading ? (
-          <Text style={styles.readout}>
+          <Text style={styles.readout} testID={TEST_IDS.places.readout}>
             {readableName(reading.name) ?? "An unnamed place"} · {reading.count}
           </Text>
         ) : (
-          <Text style={styles.readout}>Plotted from your own photographs.</Text>
+          <Text style={styles.readout} testID={TEST_IDS.places.readout}>
+            Plotted from your own photographs.
+          </Text>
         )}
         {/* `net` marks what leaves the device. */}
         <Text

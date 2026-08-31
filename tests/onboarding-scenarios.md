@@ -89,7 +89,7 @@ Load-bearing strings:
 | connect | `Connect your gateway.` · `DEVICE NAME` · `PAIRING CODE` · placeholder `Paste the one-line ticket` · `Continue with pasted code` (→ `Connecting…`) · `Scan QR instead` |
 | profile | `Who's using this phone?` · placeholder `Your name` · `COLOUR` · error `Enter a name so the people you share with know who you are.` |
 | done | `You're all set, <firstName>.` · `Enter Centraid` |
-| home | `YOUR APPS` · `Open vault menu` · `Pair desktop` / `Connect your computer` / `Desktop is offline` |
+| home | `YOUR APPS` · `Pair desktop` / `Connect your computer` / `Desktop is offline`. **Not** `Open vault menu`: that drawer is gone, and Settings is reached from the band's More tab → the all-apps sheet → the Settings place row (`home-band-more` → `home-all-apps` → `home-place-settings`). Two committed flows still selected the drawer until #890 W2 found it. |
 | settings | section `Desktop link` · `Pair another` · `Unpair` · a11y `Paste pairing ticket` · `Pair with ticket` |
 
 Worktree trap: `bun install` + `bun run build` inside the worktree, private data dirs, no symlinked `node_modules` (`docs/traps/worktrees.md`).
@@ -276,7 +276,7 @@ Reset with `xcrun simctl erase` unless a scenario says otherwise.
 
 | ID | Scenario | Steps | Expected |
 | --- | --- | --- | --- |
-| J1 | Second gateway as a vault | Settings → `Desktop link` → `Pair another` → paste a ticket from gateway B | Both appear in the switcher (Home avatar → `Open vault menu` → `Switch vault`); switching stops the tunnel only when `gatewayId` differs |
+| J1 | Second gateway as a vault | Settings → `Desktop link` → `Pair another` → paste a ticket from gateway B | Both appear in the switcher (the vault header's own switch control, `home-vault-switch` — the `Open vault menu` drawer this row used to name is gone, #890 W2); switching stops the tunnel only when `gatewayId` differs |
 | J2 | Second vault, same gateway | Switcher → `ADD A VAULT` | `addActiveGatewayVault()` reuses the gateway identity + endpoint hint; tunnel is **not** restarted; Space id is minted, not content-derived |
 | J3 | Vault upsert identity | Re-pair the same `(gatewayId, vaultId)` | Upserts in place — no duplicate row; the minted vault-registry id and its ticket key are preserved |
 | J4 | Settings pairing cannot name the device | Pair via Settings rather than onboarding | Uses `defaultDeviceName()` only — no device-name field. Note the inconsistency with onboarding |

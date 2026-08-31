@@ -24,6 +24,7 @@ import { typeMeta } from "@centraid/blueprints/apps/docs/format";
 import type { MenuAnchor } from "../../kit/components/AnchoredMenu";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { TEST_IDS } from "../../kit/test-ids";
 import { borders, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { docRowState, kindIconName } from "./docs-projection";
@@ -77,6 +78,9 @@ export default function DocRow({
       accessibilityLabel={doc.title}
       onPress={() => onOpen(doc)}
       onLongPress={openMenu}
+      // The drive's leading row — a deterministic "open a document" target that
+      // does not key on a title the demo seed owns.
+      testID={first ? TEST_IDS.docs.rowFirst : undefined}
       style={[styles.row, first ? undefined : styles.rowRule]}
     >
       <Icon name={kindIconName(doc)} size={18} color={colors.textSoft} />
