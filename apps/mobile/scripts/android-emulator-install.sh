@@ -38,6 +38,21 @@
 
 build_type="${CENTRAID_MOBILE_BUILD:-release}"
 
+# #892 Phase 0 — BELT AND BRACES AGAINST A STALE-JS APK. Every lane's cache key
+# now carries `js<hash>` alongside the native fingerprint, so a restored apk is
+# supposed to be this commit's. That is a property of three hand-written key
+# expressions in three workflow files, and the failure mode when one of them
+# drifts is silent: the gate installs another commit's bundle, drives it, and
+# reports green. So the apk banks the hash it was BUILT from, and the warm path
+# refuses a mismatch here — where the cause is one line of output — instead of
+# letting it surface as a journey asserting on copy this commit changed.
+js_bundle_hash="$(node apps/mobile/scripts/js-bundle-fingerprint.mjs)"
+test -n "$js_bundle_hash" || {
+  echo "::error::empty JS bundle fingerprint; refusing to install an unverifiable apk"
+  exit 1
+}
+js_stamp="$HOME/.cache/centraid-mobile-e2e-android/js-bundle.hash"
+
 case "$build_type" in
   release)
     gradle_task=":app:assembleRelease"
@@ -58,8 +73,15 @@ case "$build_type" in
 esac
 
 if [ "${ANDROID_CACHE_HIT:-}" = "true" ] && [ -f "$cached_apk" ]; then
-  # Warm path: skip gradle entirely and install the banked apk.
-  echo "Android cache hit - installing $cached_apk (skipping gradle)"
+  # Warm path: skip gradle entirely and install the banked apk — but only after
+  # the apk itself agrees it was built from this commit's JS.
+  banked="$(cat "$js_stamp" 2>/dev/null || true)"
+  if [ "$banked" != "$js_bundle_hash" ]; then
+    echo "::error::the restored apk was built from JS bundle '${banked:-<unstamped>}' but this commit is '$js_bundle_hash'."
+    echo "::error::the apk cache key has drifted from apps/mobile/scripts/js-bundle-fingerprint.mjs — fix the key rather than the stamp; installing this apk would test another commit's JS."
+    exit 1
+  fi
+  echo "Android cache hit - installing $cached_apk (js $js_bundle_hash, skipping gradle)"
   adb install -r "$cached_apk"
 else
   # Cold path: build with gradle directly, then install — the SAME handoff the
@@ -99,6 +121,9 @@ else
   adb install -r "$apk"
   mkdir -p "$(dirname "$cached_apk")"
   cp "$apk" "$cached_apk"
+  # Stamp what this apk's JS actually is, so the warm path above can refuse a
+  # mismatch without trusting the key expression that restored it.
+  printf '%s' "$js_bundle_hash" > "$js_stamp"
   echo 'built=true' >> "$GITHUB_OUTPUT"
 fi
 

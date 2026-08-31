@@ -12,7 +12,7 @@ on:
     inputs:
       # #496 C3 — re-run one broken lane without the full ~70-min graph.
       suite:
-        description: "Which suite to run (all | desktop | web | mobile | mobile-android | pairing | report | mutation | fuzz | join)"
+        description: "Which suite to run (all | desktop | web | mobile | mobile-android | pairing | report | mutation | fuzz | join | compat)"
         required: false
         default: "all"
         type: choice
@@ -27,6 +27,7 @@ on:
           - mutation
           - fuzz
           - join
+          - compat
 
 # #496 C3 — overlapping schedule + dispatch must not double-run macOS.
 concurrency:
@@ -263,14 +264,21 @@ jobs:
           # hash and hard-fails on an empty digest (no constant false-hit key).
           fp="$(node scripts/native-fingerprint.mjs ios)"
           test -n "$fp" || { echo "::error::empty iOS fingerprint"; exit 1; }
+          # #892 Phase 0 — the same stale-JS defect the Android lanes had. This
+          # lane builds `--configuration Release`, so the Hermes bundle is
+          # EMBEDDED in the .app and `@expo/fingerprint`'s deliberate blindness to
+          # `src/**` means a JS-only night would have reinstalled the previous
+          # night's JS and called the depth roster green against it.
+          js="$(node scripts/js-bundle-fingerprint.mjs)"
+          test -n "$js" || { echo "::error::empty JS bundle fingerprint"; exit 1; }
           # Toolchain captured separately: `a="$(cmd1; cmd2)"` keeps only cmd2's
           # exit status, so a broken xcodebuild would silently weaken the key
           # instead of failing the step.
           xcode="$(xcodebuild -version)"
           sdk="$(xcrun --show-sdk-version --sdk iphonesimulator)"
           xc="$(printf '%s\n%s\n' "$xcode" "$sdk" | shasum -a 256 | cut -d' ' -f1)"
-          echo "hash=xc${xc:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
-          echo "iOS native fingerprint: fp=$fp toolchain(xc)=$xc"
+          echo "hash=xc${xc:0:12}-fp${fp}-js${js}" >> "$GITHUB_OUTPUT"
+          echo "iOS fingerprints: fp=$fp js=$js toolchain(xc)=$xc"
       - name: Assert runner Xcode satisfies React Native and ExpoModulesJSI
         working-directory: apps/mobile
         run: bun run ci:xcode
@@ -304,9 +312,7 @@ jobs:
         # current stable release (github.com/mobile-dev-inc/maestro/releases).
         env:
           MAESTRO_VERSION: 2.6.1
-        run: |
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+        run: bash scripts/ci/install-maestro.sh
       - name: Boot an iOS simulator
         # #890 W0 — the device is PINNED (apps/mobile/scripts/device-matrix.json),
         # not "the first available iPhone". An unpinned pick makes a screen-size
@@ -494,6 +500,13 @@ jobs:
       # The Android build toolchain (Gradle/AGP/NDK/compileSdk) lives in the
       # tracked android/ gradle files, which the fingerprint already hashes; the
       # host JDK is folded in separately (jdk<hash>), mirroring iOS's xc<hash>.
+      # #892 Phase 0 — `apk_key` adds the embedded Hermes bundle's inputs to the
+      # native ones and keys the APK; `hash` stays native-only and keys the gradle
+      # BUILD DIRECTORY. @expo/fingerprint ignores `src/**` by design, which was
+      # right under the dev client (Metro served the JS live) and wrong from #890
+      # W1 onward, when every device lane moved to the release artifact and the JS
+      # became part of the binary. All three Android lanes derive both identically
+      # or the caches cannot be shared between them.
       - name: Fingerprint the Android native build inputs
         id: native_android
         working-directory: apps/mobile
@@ -501,9 +514,12 @@ jobs:
           set -euo pipefail
           fp="$(node scripts/native-fingerprint.mjs android)"
           test -n "$fp" || { echo "::error::empty Android fingerprint"; exit 1; }
+          js="$(node scripts/js-bundle-fingerprint.mjs)"
+          test -n "$js" || { echo "::error::empty JS bundle fingerprint"; exit 1; }
           jdk="$(java -version 2>&1 | head -1 | shasum -a 256 | cut -d' ' -f1)"
           echo "hash=jdk${jdk:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
-          echo "Android native fingerprint: fp=$fp jdk=$jdk"
+          echo "apk_key=jdk${jdk:0:12}-fp${fp}-js${js}" >> "$GITHUB_OUTPUT"
+          echo "Android fingerprints: fp=$fp js=$js jdk=$jdk"
       - name: Install Maestro CLI
         # #890 W0 — pinned to the SAME version iOS pins. This lane installed
         # whatever `releases/latest` served, so the two platforms could be
@@ -511,9 +527,7 @@ jobs:
         # regression would land here with no commit to blame it on.
         env:
           MAESTRO_VERSION: 2.6.1
-        run: |
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+        run: bash scripts/ci/install-maestro.sh
       - name: Build mobile workspace (host, before emulator)
         run: bun run turbo run build --filter=@centraid/mobile...
       - name: Build and start the tokenless mobile test gateway
@@ -543,7 +557,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/centraid-mobile-e2e-android
-          key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.hash }}
+          key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
       # #890 W1 — the OTHER half of build-once-run-many, and the one place
       # `restore-keys` is correct. A partial match here restores a warm gradle
       # BUILD DIRECTORY, not an artifact: gradle re-checks every task's inputs
@@ -650,7 +664,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/centraid-mobile-e2e-android
-          key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.hash }}
+          key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
       # Bank the warm gradle build directory too, so tomorrow's nightly and the
       # next PR gate both restore it. Unguarded `if: always()`: unlike the apk,
       # a build directory is worth banking even from a run that never produced
@@ -792,6 +806,159 @@ jobs:
         if: always()
         with:
           name: nightly-evidence-mutation
+          path: artifacts/
+          retention-days: 14
+
+  # #892 Phase 3 — LANE HEALTH, AND THE CHRONIC-RED RULE.
+  #
+  # Two decisions this repo has been making on memory. The promotion rule
+  # ("a nightly-only area that burns us twice moves to the PR lane",
+  # lane-client-e2e.yml) counts nothing; and its inverse — a REQUIRED lane whose
+  # first attempt fails on clean code — is worse and was unwritten, because a
+  # re-run habit devalues all nineteen lanes at once. This job measures
+  # first-attempt pass rate per lane over the last 40 completed `main` runs and
+  # puts the table on the run page.
+  #
+  # The chronic-red half is the enforcement: a lane red on main for more than
+  # three days fails this job unless it carries an UNEXPIRED entry in
+  # tests/lane-quarantine.json — the same declared/attributed/expiring discipline
+  # tests/quarantine.json has applied to tests since #545, extended to lanes,
+  # which had no equivalent and so simply stayed red.
+  #
+  # Nightly rather than per-PR because it reads api.github.com, and the PR loop
+  # must not acquire a dependency on it (the rule test:citations already follows).
+  lane-health:
+    if: >
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'report'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          install: "false"
+      - name: Measure first-attempt pass rate and red streaks
+        id: lanes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/ci/lane-health.mjs \
+            --repo "${{ github.repository }}" \
+            --runs 40 \
+            --chronic-red-days 3 \
+            --out artifacts/lane-health/summary.json
+      # The measurement is evidence whether or not the rule fired, so it is
+      # uploaded `if: always()` and merged into the nightly report's artifact set
+      # the same way every other lane's evidence is.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-lane-health
+          path: artifacts/
+          retention-days: 14
+      - name: File a tracking issue for a chronically red lane
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/chronic-red.md <<EOF
+          A required lane has been red on \`main\` for more than three days.
+
+          A lane that stays red teaches merging past red, and that devalues every
+          other lane at the same time. Two ways out, both deliberate:
+
+          1. Fix it.
+          2. Park it in \`tests/lane-quarantine.json\` **with an expiry** and this
+             issue number. An entry with no \`expires\`, or one whose date has
+             passed, is treated as no entry at all.
+
+          The per-lane first-attempt pass rates and red streaks are in the
+          \`nightly-evidence-lane-health\` artifact on run ${{ github.run_id }}.
+          EOF
+          node scripts/ci/file-tracking-issue.mjs \
+            --title '[lanes] a required lane has been red on main for days' \
+            --search '[lanes] a required lane has been red on main' \
+            --body-file /tmp/chronic-red.md \
+            --label tech-debt \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  # #892 Phase 2 — DATA SAFETY OVER TIME FINALLY HAS A LANE.
+  #
+  # `tests/agent-e2e-compat/flows/install-upgrade-lifecycle.mjs` has existed since
+  # #842 W5.4. It asserts, in as many words, "upgrade did not preserve the old
+  # vault's data" — the #1 risk for a local-first sovereign vault — and it was
+  # referenced by NO WORKFLOW. Its sibling `released-binary-skew.mjs` was in the
+  # same position: version skew is proved in this repo as range arithmetic
+  # (`mobile-gateway-skew.test.ts`) and never as two real binaries talking.
+  #
+  # Both are written to skip-with-citation rather than fabricate a pass, so this
+  # job is green and LOUD from its first run: with no published release the
+  # runners emit their `blocked-external` reasons as warnings and exit 0. What
+  # changes tonight is that the citation is on a run page instead of in a file
+  # nobody executes, and the day a release exists the lanes start driving real
+  # binaries with no further wiring.
+  #
+  # `--json` on `gh release view` rather than parsing HTML, and a `|| true` so a
+  # repo with no releases at all resolves to empty instead of failing the job:
+  # "there is no previous release" is the state the runners are built to report.
+  compat-upgrade-and-skew:
+    if: >
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'report' || github.event.inputs.suite == 'compat'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      # Tonight's gateway, built from source — the N side of the N−1 pairing.
+      - run: bun run build
+      - name: Resolve the previous release
+        id: prev
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="$(gh release view --json tagName --jq .tagName 2>/dev/null || true)"
+          if [ -z "$tag" ]; then
+            echo "::warning title=No previous release::the compat lanes will skip with their blocked-external citations"
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "resolved previous release: $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/prev-release"
+          # Best-effort: a release that ships no installer asset leaves the
+          # upgrade lane on its citation rather than failing the job. The lane's
+          # own judge refuses an available-but-didn't-run result, so a downloaded
+          # asset can never pass vacuously.
+          gh release download "$tag" --dir "$RUNNER_TEMP/prev-release" --clobber || true
+          installer="$(find "$RUNNER_TEMP/prev-release" -maxdepth 1 -type f \
+            \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.tar.gz' \) -print -quit || true)"
+          echo "installer=$installer" >> "$GITHUB_OUTPUT"
+      # Data safety over time: install N−1, write real rows, upgrade in place,
+      # re-read them. `CENTRAID_UPGRADE_PREV_INSTALLER` is what turns the lane
+      # live; absent, `resolvePreviousInstaller` returns the #790 citation.
+      - name: Install → upgrade → the vault is still there
+        env:
+          CENTRAID_UPGRADE_PREV_INSTALLER: ${{ steps.prev.outputs.installer }}
+        run: node tests/agent-e2e-compat/flows/install-upgrade-lifecycle.mjs
+      # N−1 binary skew: the last published client against tonight's gateway.
+      # Shares "the previous release, runnable" with the lane above, which is why
+      # they are one job rather than two.
+      - name: N−1 client against tonight's gateway
+        env:
+          CENTRAID_SKEW_RELEASE_TAG: ${{ steps.prev.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node tests/agent-e2e-compat/flows/released-binary-skew.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-compat
           path: artifacts/
           retention-days: 14
 
@@ -1042,6 +1209,8 @@ jobs:
         mutation-testing,
         fuzz-parsers,
         dast-scan,
+        compat-upgrade-and-skew,
+        lane-health,
         quality-performance-scale,
         restore-year3,
         protocol-join,
@@ -1303,6 +1472,8 @@ jobs:
         mutation-testing,
         fuzz-parsers,
         dast-scan,
+        compat-upgrade-and-skew,
+        lane-health,
         quality-performance-scale,
         restore-year3,
         protocol-join,

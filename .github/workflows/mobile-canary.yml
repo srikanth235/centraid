@@ -72,6 +72,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      # #892 Phase 0 — `apk_key` folds the embedded Hermes bundle's inputs in on
+      # top of the native ones; `hash` stays native-only and keys the gradle
+      # build directory. THIS lane is where the apk the PR gate restores is
+      # banked, so the two keys must be derived identically here and in ci.yml or
+      # the gate can never hit. See the comment on ci.yml's copy for why the
+      # native-only key was wrong for a release artifact.
       - name: Fingerprint the Android native build inputs
         id: native_android
         working-directory: apps/mobile
@@ -79,16 +85,17 @@ jobs:
           set -euo pipefail
           fp="$(node scripts/native-fingerprint.mjs android)"
           test -n "$fp" || { echo "::error::empty Android fingerprint"; exit 1; }
+          js="$(node scripts/js-bundle-fingerprint.mjs)"
+          test -n "$js" || { echo "::error::empty JS bundle fingerprint"; exit 1; }
           jdk="$(java -version 2>&1 | head -1 | shasum -a 256 | cut -d' ' -f1)"
           echo "hash=jdk${jdk:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
+          echo "apk_key=jdk${jdk:0:12}-fp${fp}-js${js}" >> "$GITHUB_OUTPUT"
       - name: Install Maestro CLI
         # Same pin as ci.yml and e2e.yml; validate-nightly-wiring.mjs fails when
         # the three disagree.
         env:
           MAESTRO_VERSION: 2.6.1
-        run: |
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+        run: bash scripts/ci/install-maestro.sh
       - name: Build and start the tokenless mobile test gateway
         run: |
           bun run turbo run build --filter=@centraid/server
@@ -113,7 +120,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/centraid-mobile-e2e-android
-          key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.hash }}
+          key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
       - name: Restore the Android gradle build directory
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -180,7 +187,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/centraid-mobile-e2e-android
-          key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.hash }}
+          key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
       - name: Save the Android gradle build directory
         if: always()
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -200,11 +207,33 @@ jobs:
       # A canary is only worth running if somebody learns it went red. Same
       # deduplicating helper the weekly lanes use, so a run of red merges files
       # one issue rather than one per merge.
+      #
+      # #892 — THIS STEP HAS NEVER FILED AN ISSUE. It passed `--body`, which
+      # `scripts/ci/file-tracking-issue.mjs` rejects as an unknown flag, and
+      # omitted the required `--search` and `--body-file` entirely, so every red
+      # canary since #890 W4 threw on argument parsing inside an `if: failure()`
+      # step whose own failure nobody was watching for. Corrected to the
+      # documented call shape; the dedupe search string is what makes a run of red
+      # merges update one issue instead of opening one per merge.
       - name: File a tracking issue on a red canary
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+          cat > /tmp/mobile-canary.md <<EOF
+          The per-merge mobile canary failed on \`${{ github.sha }}\`.
+
+          The regression is attributable to that ONE commit, which is the whole
+          reason this lane exists — do not wait for the nightly to re-observe it.
+          Evidence: the \`mobile-canary-runs\` artifact on run ${{ github.run_id }}.
+
+          Fix or revert within 24 hours or before the next scheduled run. Prefer
+          updating this issue over opening duplicates.
+          EOF
           node scripts/ci/file-tracking-issue.mjs \
-            --title "[mobile-canary] the Android roster went red on main" \
-            --body "The per-merge mobile canary failed on ${{ github.sha }}. The regression is attributable to that one commit, which is the whole reason this lane exists — do not wait for the nightly to re-observe it. Evidence: the mobile-canary-runs artifact on run ${{ github.run_id }}. Fix or revert within 24 hours or before the next scheduled run."
+            --title '[mobile-canary] the Android roster went red on main' \
+            --search '[mobile-canary] the Android roster went red' \
+            --body-file /tmp/mobile-canary.md \
+            --label tech-debt \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

@@ -1033,6 +1033,26 @@ export {
   type SealKeyVerdict,
 } from "./restore-check.js";
 export {
+  SNAPSHOT_EXCLUSIONS,
+  compareSnapshot,
+  primaryKeyOf as snapshotPrimaryKeyOf,
+  snapshotTable,
+  snapshotTables,
+  snapshotVault,
+  type SnapshotComparison,
+  type TableSnapshot,
+  type VaultSnapshot,
+} from "./golden-snapshot.js";
+export {
+  assertVaultHealthy,
+  assertVaultTreeHealthy,
+  formatDoctorReport,
+  vaultDoctor,
+  type DoctorClass,
+  type DoctorFinding,
+  type DoctorReport,
+} from "./doctor.js";
+export {
   validateExtSpecs,
   canonicalSpecJson,
   extLogical,

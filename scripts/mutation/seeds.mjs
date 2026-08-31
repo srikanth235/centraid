@@ -13,13 +13,25 @@
  * }} MutationSeed
  */
 
-/** Paths that force every seed to re-run on the per-PR affected lane. */
+/**
+ * Paths that force every seed to re-run on the per-PR affected lane.
+ *
+ * WATCH THE MUTATION CONFIGURATION, NOT THE WORLD (#892 Phase 1). This list held
+ * `package.json` and `bun.lock`, which meant any dependency bump — and any
+ * script edit — ran all sixteen Stryker seeds inside the PR loop, at 19m27s. That
+ * is what made `mutation-pr` bimodal: 4m30s of build and zero mutation, or the
+ * whole catalog, with nothing in between and no relation to what the diff
+ * actually endangered.
+ *
+ * The three entries left are the ones that change what mutation MEANS: the
+ * runner, the catalog, and the floors. A lockfile change can of course move a
+ * score — that is what `mutation-canary` (per merge) and the nightly full run
+ * are for, neither of which has a human waiting on it.
+ */
 export const MUTATION_GLOBAL_WATCH = [
   "scripts/mutation/run.mjs",
   "scripts/mutation/seeds.mjs",
   "tests/mutation-floors.json",
-  "package.json",
-  "bun.lock",
 ];
 
 /** @type {MutationSeed[]} */
@@ -438,6 +450,20 @@ export const MUTATION_SEEDS = [
       "apps/mobile/src/lib/notification-model.test.ts",
       "apps/mobile/src/lib/notifications-plan.test.ts",
       "apps/mobile/src/lib/phone-link.test.ts",
+      // #892 Phase 2 — the two trees the #890 audit found undefended. The
+      // watch list is what makes a seed AFFECTED by a diff, so widening the
+      // mutate set without widening this would leave the new modules measured
+      // only by the nightly and the per-merge canary — which is precisely the
+      // gap that let the `transfer-policy` scope loop and the replica orphan
+      // check ship as tests that could not fail.
+      "apps/mobile/src/lib/upload/transfer-policy.ts",
+      "apps/mobile/src/lib/upload/transfer-policy.test.ts",
+      "apps/mobile/src/lib/upload/reconcile-gate.ts",
+      "apps/mobile/src/lib/upload/reconcile-gate.test.ts",
+      "apps/mobile/src/lib/replica/background-scopes.ts",
+      "apps/mobile/src/lib/replica/background-scopes.test.ts",
+      "apps/mobile/src/lib/replica/mobile-intent-id.ts",
+      "apps/mobile/src/lib/replica/mobile-intent-id.test.ts",
       "apps/mobile/stryker.config.mjs",
       "apps/mobile/vitest.mutation.config.ts",
     ],

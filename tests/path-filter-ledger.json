@@ -1,0 +1,8 @@
+{
+  "_comment": "#892 Phase 3 — the inverse of ci.yml's `changes` filter table. `skipped` counts as a PASS in the required `check` job, which makes that table load-bearing: a path no filter names wakes no path-gated lane and merges green, unexercised (#890 W0 fixed one instance of exactly this by hand). scripts/lint-path-filters.mjs requires every workspace package, every app and every tracked top-level directory to be claimed by a filter OR to appear here with the ALWAYS-ON job that covers it. An entry naming a path that no longer exists fails as stale — a dead exemption reads like a reviewed decision and is not one.",
+  "alwaysOn": {
+    "assets": "Product icon sources (13 files: the .svg masters plus the generated .icns/.ico/.png). They are consumed at PACKAGING time by lane-release-desktop.yml and lane-release-mobile.yml, not by any PR lane — there is no per-PR claim about them to gate, and the release lanes rebuild from them unconditionally on every tag.",
+    "packages/test-kit": "Test-only harness (no product surface, not shipped in any artifact). It is covered by `verify`, which is unfiltered and runs the whole vitest suite — the only consumer that matters. It is deliberately NOT in the client/gateway filters: the Playwright e2e lanes do not import it, so waking them on a test-kit change would cost minutes and prove nothing.",
+    "receipts": "The audit trail itself. Covered by `governance.yml` (unfiltered, runs .governance/run.sh on every PR) which owns receipt-per-issue, commit-issue-receipt-match and doc-integrity, plus `gates`' check:ui-receipt. A receipt change has no product lane to wake."
+  }
+}

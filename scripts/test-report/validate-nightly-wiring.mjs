@@ -286,9 +286,14 @@ const allWorkflows = await Promise.all(
     ),
   }))
 );
+// #892 Phase 3 — the marker moved. Maestro is no longer installed by piping an
+// unpinned remote script into bash; every lane now calls the checksum-verifying
+// `scripts/ci/install-maestro.sh`. Discovery keys on that, and the ban below
+// keeps the old shape from creeping back.
+const MAESTRO_INSTALLER = "scripts/ci/install-maestro.sh";
 const mobileLanes = allWorkflows.filter(
   ({ source }) =>
-    source.includes("get.maestro.mobile.dev") ||
+    source.includes(MAESTRO_INSTALLER) ||
     /expo run:(?<platform>ios|android)/u.test(source)
 );
 if (mobileLanes.length === 0) {
@@ -308,7 +313,8 @@ for (const { file, source } of mobileLanes) {
   const found = [
     ...source.matchAll(/MAESTRO_VERSION:\s*"?(?<version>[\w.-]+)"?/gu),
   ].map((match) => match.groups.version);
-  const installs = (source.match(/get\.maestro\.mobile\.dev/gu) ?? []).length;
+  const installs = (source.match(/scripts\/ci\/install-maestro\.sh/gu) ?? [])
+    .length;
   if (installs === 0) continue;
   if (found.length === 0) {
     errors.push(
@@ -329,6 +335,21 @@ if (maestroPins.size > 1) {
   errors.push(
     `mobile lanes pin ${maestroPins.size} different Maestro versions (${[...maestroPins].join(", ")}); ` +
       `two device drivers on one roster is a difference nobody chose`
+  );
+}
+
+// #892 Phase 3 — NO `curl | bash` IN A REQUIRED LANE. `MAESTRO_VERSION` pinned
+// what the remote installer would fetch and pinned nothing about the installer
+// itself: an unpinned third-party script, executed as the first act of the lane
+// that gates every mobile merge. gitleaks and osv-scanner already fetch a named
+// release artifact by version; this makes Maestro match, and this check is what
+// stops the one-liner coming back the next time somebody adds a device lane.
+for (const { file, source } of allWorkflows) {
+  if (!source.includes("get.maestro.mobile.dev")) continue;
+  errors.push(
+    `${file} installs Maestro by piping https://get.maestro.mobile.dev into a shell. ` +
+      `Use \`bash ${MAESTRO_INSTALLER}\` instead: it fetches the pinned release ` +
+      `artifact and refuses a checksum mismatch (#892).`
   );
 }
 

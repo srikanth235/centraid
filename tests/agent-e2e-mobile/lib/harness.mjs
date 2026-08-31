@@ -92,8 +92,18 @@ const appIdForPlatform = (platform) =>
  * `setup()` prewarms the bundle so this budget covers app start plus render
  * rather than a cold Metro build, but keep it generous: it is a bundle-fetch
  * wait, not a product-latency assertion, and nothing is proven by making it tight.
+ *
+ * #892 P0 — ON A RELEASE ARTIFACT THERE IS NO BUNDLE FETCH. Every sentence above
+ * prices a dev client refetching its JS from Metro after `clearState`; a release
+ * build carries its own Hermes bundle, so a cleared launch is a process start and
+ * a first render and nothing else. Keeping the dev number on that path was not
+ * merely generous, it was load-bearing in the wrong direction: `extendedWaitUntil`
+ * spends its whole ceiling before failing, so each doomed wait burned two minutes
+ * of a twelve-minute gate. 45s is still ~4x a healthy cold release launch on the
+ * emulator's software GPU, and it is a ceiling, not a target — a passing flow
+ * never reaches it.
  */
-export const FIRST_LAUNCH_TIMEOUT_MS = 120_000;
+export const FIRST_LAUNCH_TIMEOUT_MS = IS_RELEASE_BUILD ? 45_000 : 120_000;
 
 /**
  * Quote one value for the DEVICE's shell, for use inside an `adb shell` argv.
@@ -152,6 +162,36 @@ export const CONFIRM_SYSTEM_OPEN = `# iOS system confirmation for a custom-schem
 // leaves ample network/render headroom while still terminating a wedged
 // accessibility driver before the workflow's outer timeout destroys evidence.
 const MAESTRO_CHUNK_TIMEOUT_MS = 12 * 60_000;
+
+// #892 P0 — but 12 minutes is ALSO the whole pr-gate suite budget, so a single
+// wedged chunk could spend it and leave the suite's own comparison to report an
+// overrun it could no longer prevent. `lib/run-suite.mjs` publishes the suite's
+// absolute deadline here; a chunk gets whichever is smaller. A lane with no
+// deadline (a local `node flows/<flow>.mjs`, the nightly's un-budgeted members)
+// keeps the flat ceiling, so this only ever tightens.
+//
+// The floor exists because a clamp that reaches zero would kill Maestro before
+// it connected and report a driver fault where the truth is "the budget was
+// already gone" — the suite runner refuses to start a member in that state, and
+// this is the same refusal expressed as a timeout.
+const MAESTRO_CHUNK_FLOOR_MS = 15_000;
+
+/**
+ * The process timeout for one Maestro chunk: the flat ceiling, clamped to the
+ * suite deadline when a suite runner published one.
+ *
+ * @param {number} [now] injectable clock for the unit suite
+ * @returns {number} milliseconds
+ */
+export function maestroChunkTimeoutMs(now = Date.now()) {
+  const deadline = Number(process.env.CENTRAID_MOBILE_DEADLINE_MS);
+  if (!Number.isFinite(deadline) || deadline <= 0) {
+    return MAESTRO_CHUNK_TIMEOUT_MS;
+  }
+  const remaining = deadline - now;
+  if (remaining >= MAESTRO_CHUNK_TIMEOUT_MS) return MAESTRO_CHUNK_TIMEOUT_MS;
+  return Math.max(MAESTRO_CHUNK_FLOOR_MS, remaining);
+}
 
 // #890 W1 — the dev-launcher handoff, and the clearest example of what "the
 // device under test is not the product" meant. On a DEV build,
@@ -401,7 +441,7 @@ async function runMaestroChunk(
       {
         cwd: state.screenshotsDir,
         env: { ...process.env, ...maestroEnv },
-        timeoutMs: MAESTRO_CHUNK_TIMEOUT_MS,
+        timeoutMs: maestroChunkTimeoutMs(),
       }
     );
   } finally {

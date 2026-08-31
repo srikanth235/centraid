@@ -17,6 +17,7 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { appActionPath } from "../../../packages/core/src/protocol/index.js";
 import { serve } from "../../../packages/server/src/serve/serve.js";
 import type { GatewayServeHandle } from "../../../packages/server/src/serve/serve.js";
+import { assertVaultTreeHealthy } from "../../../packages/vault/src/doctor.js";
 
 /** What a bundled app action answered, reduced to what these suites assert on. */
 export interface ActionOutcome {
@@ -85,7 +86,17 @@ export async function bootMobileGateway(
       }
       return { status: response.status, body };
     },
-    close: () => handle.close(),
+    // #892 Phase 3 — THE INVARIANT SWEEP AT TEARDOWN. These suites write through
+    // the real command surface against a real vault, and until now nothing ever
+    // asked whether the rows they left behind still referred to each other. FKs
+    // catch what SQLite knows about; the polymorphic `(type, id)` pointers #441
+    // had to sweep by hand are invisible to the engine, and an orphan there is
+    // how deleted content resurfaces in search. Read-only, and strictly after the
+    // gateway has closed, so this cannot change what any assertion saw.
+    close: async () => {
+      await handle.close();
+      assertVaultTreeHealthy(dataDir);
+    },
   };
 }
 
