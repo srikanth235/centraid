@@ -50,7 +50,7 @@ vi.mock(import("./tally-store"), async (importOriginal) => {
     loadTallyActivity: vi.fn<() => Promise<void>>(async () => undefined),
     openTally: vi.fn<() => Promise<void>>(async () => undefined),
     readTallyVault: () => vaultState.current as never,
-    showMoreTallyActivity: vi.fn<() => Promise<void>>(async () => undefined),
+    showMoreTallyActivity: vi.fn<() => void>(() => undefined),
     subscribeTallyVault: () => () => undefined,
   };
 });
