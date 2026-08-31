@@ -42,8 +42,8 @@ import type { PlaceId } from "./home/places";
 import SearchOverlay from "./home/SearchOverlay";
 import {
   countThings,
+  gridMembership,
   springboardState,
-  tileEarnsGrid,
 } from "./home/springboard-policy";
 import { useOriginHealth } from "./home/useOriginHealth";
 import { useSpringboardTiles } from "./home/useSpringboardTiles";
@@ -150,17 +150,10 @@ export default function HomeScreen({
   );
   const tiles = useSpringboardTiles();
 
-  // No tile → keep on the grid. Home has no read that could call it empty.
-  const { earned, idleIds } = useMemo(() => {
-    const kept: LauncherItem[] = [];
-    const idle: string[] = [];
-    for (const item of items) {
-      const tile = tiles.get(item.meta.id);
-      if (!tile || tileEarnsGrid(tile)) kept.push(item);
-      else idle.push(item.meta.id);
-    }
-    return { earned: kept, idleIds: idle };
-  }, [items, tiles]);
+  const { earned, idleIds } = useMemo(
+    () => gridMembership(items, tiles),
+    [items, tiles]
+  );
 
   const moves = useMemo(() => firstMoves(idleIds), [idleIds]);
   const springboard = useMemo(

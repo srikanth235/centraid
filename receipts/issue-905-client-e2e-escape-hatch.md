@@ -38,6 +38,11 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 
 - [x] Give `coverage:shard` the default reporter alongside the blob, so a failing shard says which test failed
 
+### H — an unreadable springboard rendered a launcher with no tiles
+
+- [x] Keep every app on the grid when no tile is readable, so an unmounted replica cannot leave a member with no way into any app
+- [x] Move grid membership into `springboard-policy`, the module that claims it, so the rule is testable without a renderer
+
 ## What changed
 
 Where each checked item lands, then the reasoning behind it:
@@ -55,6 +60,8 @@ Where each checked item lands, then the reasoning behind it:
 - Give `lint:e2e-wiring` a `corpus` rule holding both halves: no tile tap for an app that cannot earn the grid, and no seeding after the lane's handoff to Maestro — "E — the corpus arrived after the clone", final paragraphs; `scripts/lint-e2e-wiring.mjs`, `scripts/lint-e2e-wiring.cases.mjs`, and `tests/agent-e2e-mobile/README.md`, whose `ctx.ensureDemo` entry described the per-flow contract without saying that a CI lane makes it a no-op.
 - Let a sensitive chunk print its failing directive on failure, without ever letting its capability reach the log — "F — a prerequisite that fails without saying how"; `tests/agent-e2e-mobile/lib/spawn.mjs`, `tests/agent-e2e-mobile/lib/harness.mjs`, `tests/agent-e2e-mobile/lib/spawn-redaction.test.mjs`.
 - Give `coverage:shard` the default reporter alongside the blob, so a failing shard says which test failed — "G — a shard that fails in silence"; `package.json`.
+- Keep every app on the grid when no tile is readable, so an unmounted replica cannot leave a member with no way into any app — "H — the launcher with no tiles"; `apps/mobile/src/screens/home/springboard-policy.ts`.
+- Move grid membership into `springboard-policy`, the module that claims it, so the rule is testable without a renderer — "H — the launcher with no tiles"; `apps/mobile/src/screens/Home.tsx`, and the policy cases move from `apps/mobile/src/screens/home/tile-model.test.ts` into a new `apps/mobile/src/screens/home/springboard-policy.test.ts`, with `tests/comment-density-ratchet.json` re-pinned for the arithmetic that split produced.
 
 ### The defect
 
@@ -188,6 +195,25 @@ That is the whole diagnosis. `--reporter=blob` writes the machine artifact and p
 It paid immediately. Running shard 4 locally with the new reporter surfaced two named failures in `packages/server/src/acp/backends/acp/launch.test.ts` — `expected 'yes' to be '1'` on `plan.env.IS_SANDBOX`. That is **this container**, not the repo: `IS_SANDBOX=yes` is set in the agent sandbox and `planLaunch` reads ambient env, so the two cases that assert on its absence cannot hold here. Nothing is changed for it — it is a third local-environment finding, recorded beside the other two rather than "fixed".
 
 The CI failure itself is NOT this PR's, and the check is deliberate rather than assumed: `coverageProjects` in `vitest.config.ts` does not include `scripts/test-report/vitest.config.ts`, so the only test file this branch adds is outside every shard — confirmed by grepping a local shard run for it (zero occurrences) rather than by reading the config alone. Shard 2 passes locally on this exact tree. No re-run was spent because this session has no tool that can re-run a job; that is stated in Out of scope rather than left as an unexplained omission.
+
+### H — the launcher with no tiles
+
+The product defect behind the red device gate, found by reading the grading path after E's ordering hypothesis was falsified. Two rules, each correct alone, each tested alone:
+
+- `tileEarnsGrid` demotes an `unknown` tile — "rather than showing a body it cannot stand behind", and its test says exactly that.
+- `springboardState` returns `content` when every tile is `unknown` — deliberately NOT `first-run`, because "we do not KNOW the vault is empty, so we do not say so".
+
+Composed, they produce the one outcome neither intends. With no replica session every tile reads `unknown` (`replicaQueryConnection` returns `unavailable` before it considers rows at all, and `combineStatus` maps that to `unknown`), so `springboardState` routes to the grid — and `Home.tsx`'s membership filter then demotes every tile, rendering that grid **empty**. The member is not told the vault is empty and has no way into any app. Offline, that is the whole product.
+
+Nothing tested it because nothing could: the membership loop lived inline in `Home.tsx`, there is no `Home` screen test, and both halves pass their own unit tests. So the rule moves to `springboard-policy.ts` — the module whose header already claims "which earned the grid" as its law and whose stated reason for staying pure is that its decisions are "testable without a renderer" — as `gridMembership`, beside a new `everyTileUnreadable`. `Home.tsx` now decides nothing about membership.
+
+The tests land in a new `springboard-policy.test.ts`. They had gone into `tile-model.test.ts`, which then crossed the 625-line god-file ceiling — and the policy module had no test file of its own, which is part of how this stayed invisible. The split follows the precedent #890 set when the wiring linter's fixtures moved to a sibling module for the same reason.
+
+Verified in both directions: with the pre-fix rule restored, two of the four new cases fail (`keeps every app when nothing is readable`, `populates the grid in exactly the state springboardState routes there`); with the fix, 24 pass in that file and 170 across `screens/home`.
+
+**What this does not claim.** It does not establish that an absent replica session is why CI's tiles are missing — the two states that produce no tiles (`unknown` everywhere, or `empty` everywhere routing to DayOne) are indistinguishable from the Maestro log, and the run artifact that would settle it is on a host this container cannot reach. What is established is that ONE of those two states is a genuine shipped defect, independent of CI: a phone whose replica has not mounted shows a home screen it cannot act on. If the device gate is red for the other reason, this fix is still correct and the gate will say so next run.
+
+**One approved deviation, with its arithmetic.** `apps/mobile/src/screens/home/tile-model.test.ts` is hand-re-pinned from `[1525, 14787]` to `[1391, 11523]` — 10.31% to 12.07%. Its comment content did not grow; it SHRANK. The file lost 134 comment characters and 3264 total characters when the policy describes moved out, so it shed proportionally more code than prose and the share rose on a smaller denominator. Same shape as the two pins #892 re-pinned for the same reason, and the reason is stated here rather than laundered through `--write`, which refuses to raise a pin precisely so this has to be argued.
 
 ### Docs
 
