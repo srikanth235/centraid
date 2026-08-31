@@ -861,6 +861,10 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
     commands:
       - tapOn:
           id: "onboarding-profile-name"
+# e2e-lint-allow: unasserted-input — throwaway input only provokes iOS keyboard
+# onboarding and is erased before the profile name is entered.
+      - inputText: "x"
+${DISMISS_KEYBOARD_ONBOARDING}      - eraseText
       - inputText: "Nightly"
       - assertVisible: "Nightly"
       - hideKeyboard
