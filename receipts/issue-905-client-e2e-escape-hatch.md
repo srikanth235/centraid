@@ -1,13 +1,20 @@
-# issue-905 — the `all` escape hatch never reached client-e2e's inputs
+# issue-905 — two lanes in the #892 gate loop that reported what they had not run
 
-A defect in [#892](https://github.com/srikanth235/centraid/issues/892) Phase 3's own remedy, found on `main` after it merged. #892's receipt is on the default branch and therefore immutable, so this is a new issue with its own receipt rather than an edit to that one.
+Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own remedies, both found on `main` after it merged, both the same shape: a required lane reporting a verdict it had not earned. #892's receipt is on the default branch and therefore immutable, so this is a new issue with its own receipt rather than an edit to that one. The file slug names the first defect because it was found first; the receipt covers both.
 
 ## Checklist
+
+### A — client-e2e never ran under the one trigger meant to force it
 
 - [x] Thread `|| needs.changes.outputs.all == 'true'` into both `with:` inputs
 - [x] Narrow the caller's gate from `client` to `web || desktop`, now that `boot-smoke` has left the lane
 - [x] Extend `bun run lint:path-filters` with a third sub-check: any read of a `changes` output without the `all` fallback fails, whatever construct does the reading
 - [x] Correct the comment on the `changes` job that promised the property for "every lane `if:`"
+
+### B — verify demanded a report its own lane never wrote
+
+- [x] Make `test:suite` emit the report, matching `coverage`'s shape minus `--coverage`
+- [x] Add a wiring guard so a lane cannot again demand `--require-report` without running a script that writes the report
 
 ## What changed
 
@@ -17,6 +24,8 @@ Where each checked item lands, then the reasoning behind it:
 - Narrow the caller's gate from `client` to `web || desktop`, now that `boot-smoke` has left the lane — "The gate was also wider than what remains in the lane"; `.github/workflows/ci.yml`.
 - Extend `bun run lint:path-filters` with a third sub-check: any read of a `changes` output without the `all` fallback fails, whatever construct does the reading — "The lint that makes it the last time"; `scripts/lint-path-filters.mjs`, `scripts/lint-path-filters.test.mjs`.
 - Correct the comment on the `changes` job that promised the property for "every lane `if:`" — "The lint that makes it the last time", final paragraph; `.github/workflows/ci.yml`.
+- Make `test:suite` emit the report, matching `coverage`'s shape minus `--coverage` — "B — verify's tripwire"; `package.json`.
+- Add a wiring guard so a lane cannot again demand `--require-report` without running a script that writes the report — "B — verify's tripwire", second half; `scripts/ci/collection-tripwire.test.mjs`.
 
 ### The defect
 
@@ -38,6 +47,18 @@ The scanner folds YAML block scalars back into one unit under the line number of
 
 The comment on the `changes` job in `.github/workflows/ci.yml` promised this property for "every lane `if:`" — the wording that *is* the blind spot. It now says "every read", names how the two `with:` inputs came to be the exception, and points at the lint that checks it instead of the wording promising it. The comment on `static`'s `lint:path-filters` step names the new sub-check.
 
+### B — verify's tripwire required a report its own lane never wrote
+
+`.github/workflows/ci.yml`'s `verify` ends with `bun run test:collection-tripwire -- --require-report`. `scripts/ci/collection-tripwire.mjs` reads `artifacts/test-results/vitest.json`. `package.json`'s `test:suite` — the only thing in that job that runs the suite — was `vitest run --reporter=default`, with no `--reporter=json` and no `--outputFile`, and neither `vitest.config.ts` nor `vitest.shard.config.ts` declares reporters. On a clean runner the file cannot exist, so the step failed every time it was reached.
+
+`verify` is in `check`'s `needs:`, so the required check could not pass on any run that got that far — every PR, not only `main`. It shipped unobserved because the preceding main-push runs were each cancelled by a superseding push before `verify` reached its last step. The dispatch run that exposed defect A exposed this one too: the suite was fully green (`1502 passed | 4 skipped` files, `18162 passed | 5 expected fail | 37 skipped` tests, 1158 s) and the job died on the step after it.
+
+`test:suite` now carries `--reporter=default --reporter=json --outputFile=artifacts/test-results/vitest.json` — `coverage`'s shape minus `--coverage`. That is the arrangement the `coverage` job's own comment already described ("Scored on the merged report as well as on `verify`'s own run"), so the reporter was the missing half of an intent already written down. Dropping `--require-report` would also have gone green and is the wrong fix: the flag is what separates "no file failed to collect" from "nothing was looked at", and the script's non-strict mode already prints `not measured` for a laptop.
+
+`scripts/ci/collection-tripwire.test.mjs` gains the wiring assertion, derived from the shipped YAML the way `lint-e2e-wiring` is: every `ci.yml` job running the tripwire with `--require-report` must also run a package script whose body writes the report path. Producers are read out of `package.json` rather than named, so a new producer or lane inherits the check.
+
+That assertion's first draft **passed against the very defect it was written for**. It joined each job's raw lines, and `verify`'s header comment contains the words "`bun run coverage` alone at 20m15s" — so a check looking for a producer invocation found one in prose. A wiring check that reads commentary is the same class of mistake as the wiring it checks. Comment lines are stripped now, and the correction was verified by reverting `test:suite` and watching the assertion fail with the job named.
+
 ### Docs
 
 `docs/decisions.md` gains **G-filter-escape-hatch** beside the existing G-filter-inverse. `TESTING.md`'s path-filter row records both the narrowed `client-e2e` gate and the new fallback requirement.
@@ -49,12 +70,17 @@ The comment on the `changes` job in `.github/workflows/ci.yml` promised this pro
 3. **Block scalars are folded, not banned.** The first draft refused any multi-line `if:` so the per-line scan stayed sound; `publish-report`'s folded `if:` — long for length, no filter output in it — failed immediately, which is the check inventing work rather than finding it. Joining the block is a dozen lines and refuses nothing that is fine.
 4. **No new GitHub issue was filed for `desktop-e2e-macos`.** It is absent from `check`'s `needs:` list while every other path-gated lane is present, so it can go red without `check` noticing. Named in this issue's "Out of scope" and left there: it is a different level of the same family, and folding it in would widen a fix that is currently four files.
 5. **Two local-environment findings are recorded but produced no code change.** They cost most of the time spent and would cost the next reader the same. See Verification.
+6. **Both defects ride one issue and one receipt.** They are separate bugs, and a second issue was briefly opened for B (#906, closed as a duplicate onto this one). Keeping them together is the deliberate call: they were found in the same dispatch run, they are the same failure shape — a lane in `check`'s needs reporting a verdict it had not earned — and splitting them would put two halves of one "is main actually green" answer in two places. The file slug still names A alone; the `## Checklist` is split A/B so neither is buried.
+7. **B's producer set is derived, not listed.** The wiring assertion finds every script whose body contains `--outputFile=artifacts/test-results/vitest.json` and requires one per demanding job. Hard-coding `coverage`/`test:suite` would have to be edited by exactly the person who would forget the reporter.
+8. **B's guard lives in `collection-tripwire.test.mjs`, not a new linter.** It is one assertion about one gate's wiring; a new `scripts/lint-*.mjs` plus a `package.json` entry plus a `static` step would be three files of ceremony. `scripts:test` already runs this file on the per-PR loop.
 
 ## Out of scope
 
 - **`desktop-e2e-macos`'s absence from `check`'s `needs:` list.** Real, adjacent, and not this fix. See Decisions 4.
 - **The other ten path-gated lanes.** All were verified to wake correctly on a `workflow_dispatch` run of main tip; none needed a change.
 - **`mutation-pr` and `dependency-review` reporting `skipped` on a main push.** Both are gated on `github.event_name` by design (PR-only / non-main-push), not by a path filter, and neither is a defect.
+- **`mobile-device-gate` failing on the same run.** `:app:packageRelease` failed after 34m55s on a fully cold build (`1414 actionable tasks: 1414 executed`), so the emulator suite never started, no run ledger was written, and the 12-minute suite budget never engaged. Gradle printed no root cause because the invocation carries no `--stacktrace`/`--info`. The build-once-run-many contract is unfunded here: both the apk and gradle caches are populated by `mobile-canary.yml`, whose first successful save landed at 08:37–08:38, sixteen minutes *after* this gate tried to restore them at 08:21:40. A separate defect with a separate diagnosis; folding an Android build investigation into this change would widen it past recognition.
+- **The wall-clock ceiling's own report dependency.** `coverage`'s "Suite wall-clock ceiling" step guards the same artifact with its own explicit existence check and is unaffected by B.
 
 ## Verification
 
@@ -73,6 +99,23 @@ The workflow still parses and the block reads as intended:
 node -e "const {parse}=require('./node_modules/yaml');console.log(JSON.stringify(parse(require('fs').readFileSync('.github/workflows/ci.yml','utf8')).jobs['client-e2e'],null,2))"
 ```
 
+B's guard fails on the pre-fix tree and passes on the fixed one — both directions, not just the green half:
+
+```sh
+node --test scripts/ci/collection-tripwire.test.mjs          # 10 passed
+# then, with test:suite reverted to `--reporter=default` alone:
+#   1 failing — "ci.yml job `verify` runs the tripwire with --require-report
+#   but no step in it runs a script that writes artifacts/test-results/vitest.json
+#   (one of: coverage, coverage:merge). The gate cannot pass there."
+```
+
+B's failure itself reproduces with no report on disk:
+
+```sh
+node scripts/ci/collection-tripwire.mjs --require-report
+# collection-tripwire: artifacts/test-results/vitest.json is missing, so no file could be scored.
+```
+
 Gates touching the changed files:
 
 ```sh
@@ -86,7 +129,9 @@ bun run test:matrix
 bash .governance/run.sh   # 22 directive(s) passed
 ```
 
-Field evidence for the defect itself — run `33372386799` (`workflow_dispatch` on `f5ca34fb`) reported `client-e2e / web-e2e` and `client-e2e / desktop-e2e` as `skipped` in 0s while all ten other path-gated lanes woke; its `changes` job shows `Run dorny/paths-filter@… skipped`, which is the empty-string source.
+Field evidence for A — run `33372386799` (`workflow_dispatch` on `f5ca34fb`) reported `client-e2e / web-e2e` and `client-e2e / desktop-e2e` as `skipped` in 0s while all ten other path-gated lanes woke; its `changes` job shows `Run dorny/paths-filter@… skipped`, which is the empty-string source. The fix is proved by the dispatch of this branch (run `33374941598`), where both inner jobs execute instead of skipping.
+
+Field evidence for B — the same run's `verify` job: `Test Files 1502 passed | 4 skipped (1506)`, `Tests 18162 passed | 5 expected fail | 37 skipped (18204)` in 1158.30 s, then `##[error]Process completed with exit code 1` on the step after it, with the tripwire's "is missing, so no file could be scored" as the last line of output.
 
 Two local-environment findings, recorded because each looked like a repo defect and was not:
 

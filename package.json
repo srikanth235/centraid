@@ -144,7 +144,7 @@
     "test:report:smoke": "node scripts/test-report/smoke.mjs",
     "test:scale": "node scripts/test-report/prepare.mjs --lane scale && node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts",
     "test:sleep-inventory": "node scripts/test-report/sleep-inventory.mjs",
-    "test:suite": "node scripts/test-report/prepare.mjs --lane vitest && node node_modules/vitest/vitest.mjs run --reporter=default",
+    "test:suite": "node scripts/test-report/prepare.mjs --lane vitest && node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=artifacts/test-results/vitest.json",
     "test:suite-wall-clock": "node scripts/test-report/suite-wall-clock.mjs",
     "toolchain:doctor": "ultracite doctor",
     "turbo": "turbo",
