@@ -154,6 +154,12 @@ export async function startGatewayEndpoint(
     ...(options.authorizePeer ? [alpnBytes(PEER_LINK_ALPN)] : []),
   ]);
   const endpoint = await builder.bind();
+  // Binding finishes before iroh has selected a relay. Returning the handle
+  // in that gap lets a remote mobile client receive only direct candidates and
+  // spend minutes waiting for discovery to repair the address. Wait until at
+  // least one configured N0 relay is connected before the first ticket can be
+  // minted, so it already carries a reachable relay hint.
+  if (options.relays !== "disabled") await endpoint.online();
 
   const server = new GatewayEndpoint(endpoint, options);
   server.runAcceptLoop();

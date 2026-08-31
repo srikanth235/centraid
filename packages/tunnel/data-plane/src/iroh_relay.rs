@@ -528,6 +528,14 @@ pub async fn start(config: IrohRelayConfig) -> Result<IrohRelayHandle> {
         .bind()
         .await
         .context("bind native iroh relay")?;
+    // Binding finishes before iroh has selected a relay. Returning the handle
+    // in that gap lets a remote mobile client receive only direct candidates and
+    // spend minutes waiting for discovery to repair the address. Wait until at
+    // least one configured N0 relay is connected before the first ticket can be
+    // minted, so it already carries a reachable relay hint.
+    if config.use_n0_relays {
+        endpoint.online().await;
+    }
     tracing::info!(endpoint_id = %endpoint.id(), "native iroh byte relay listening");
     let client = Client::builder()
         .connect_timeout(std::time::Duration::from_secs(10))
