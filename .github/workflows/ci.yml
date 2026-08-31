@@ -519,10 +519,19 @@ jobs:
       # The blob is the shard's entire product. `if-no-files-found: error` rather
       # than the default warning: a silently absent blob is precisely the partial
       # world the merge guard exists to refuse, and failing here names the shard.
+      #
+      # `include-hidden-files` is NOT optional. Vitest's blob reporter writes to
+      # `.vitest-reports/`, and upload-artifact excludes any path with a
+      # dot-prefixed segment by default — so the first run of this lane wrote
+      # `blob-1-4.json` and then uploaded nothing, on all four shards. Left as a
+      # warning it would have been the exact #556 shape: four green shards, a
+      # merge over an empty directory, and every floor below scoring a world
+      # that never ran.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-blob-${{ matrix.shard }}
           path: .vitest-reports/
+          include-hidden-files: true
           retention-days: 1
           if-no-files-found: error
 
