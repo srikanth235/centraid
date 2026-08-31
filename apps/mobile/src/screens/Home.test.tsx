@@ -1,12 +1,14 @@
 // Home's springboard COMPOSITION (#905). Both units stayed green through the
 // defect; only the composition saw it. Seam: `useReplicaQuery` alone, so the
 // real tiles, grading and catalog run. Rationale: receipts/issue-905-*.md.
+// Also the generated conformance sweep; see scripts/lint-app-conformance.mjs.
 
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import manifest from "../../app-conformance.json";
 // @vitest-environment jsdom
-import { mountBlock, nodesOf } from "../test/react-native-stub";
+import { mountBlock, nodesOf, press } from "../test/react-native-stub";
 import HomeScreen from "./Home";
 import {
   buildLauncherItems,
@@ -146,15 +148,34 @@ vi.mock(
     }) as unknown as Partial<OriginHealthModule>
 );
 
-// `LauncherGrid` publishes the ids it was handed — the #905 claim.
+// Publishes the ids it was handed (the #905 claim) and one pressable each,
+// under the grid's own handle expression.
 vi.mock(import("./home/LauncherGrid"), async () => {
   const ReactModule = await import("react");
+  const { TEST_ID_PREFIXES } = await import("../kit/test-ids");
   return {
-    default: ({ items }: { items: readonly { meta: { id: string } }[] }) =>
-      ReactModule.createElement("div", {
-        "data-testid": "launcher-grid",
-        "data-items": items.map((item) => item.meta.id).join(","),
-      }),
+    default: ({
+      items,
+      onOpen,
+    }: {
+      items: readonly { meta: { id: string } }[];
+      onOpen: (item: { meta: { id: string } }) => void;
+    }) =>
+      ReactModule.createElement(
+        "div",
+        {
+          "data-testid": "launcher-grid",
+          "data-items": items.map((item) => item.meta.id).join(","),
+        },
+        items.map((item) =>
+          ReactModule.createElement("button", {
+            "data-testid": `${TEST_ID_PREFIXES.homeTile}${item.meta.id}`,
+            key: item.meta.id,
+            onClick: () => onOpen(item),
+            type: "button",
+          })
+        )
+      ),
   } as unknown as Partial<LauncherGridModule>;
 });
 
@@ -181,14 +202,24 @@ vi.mock(import("./home/AllAppsSheet"), blank);
 vi.mock(import("./home/VaultsSwitcher"), blank);
 vi.mock(import("./home/SearchOverlay"), blank);
 
-function renderHome(): HTMLElement {
-  const navigation = { navigate: vi.fn<(...args: unknown[]) => void>() };
-  return mountBlock(
+interface MountedHome {
+  container: HTMLElement;
+  navigate: ReturnType<typeof vi.fn<(...args: unknown[]) => void>>;
+}
+
+function mountHome(): MountedHome {
+  const navigate = vi.fn<(...args: unknown[]) => void>();
+  const { container } = mountBlock(
     React.createElement(
       HomeScreen as unknown as React.ComponentType<{ navigation: unknown }>,
-      { navigation }
+      { navigation: { navigate } }
     )
-  ).container;
+  );
+  return { container, navigate };
+}
+
+function renderHome(): HTMLElement {
+  return mountHome().container;
 }
 
 /** Ids off the launcher, or `undefined` if it never mounted. */
@@ -227,5 +258,43 @@ describe("Home springboard composition", () => {
 
     expect(nodesOf(container, '[data-testid="day-one"]')).toHaveLength(1);
     expect(gridItems(container)).toBeUndefined();
+  });
+});
+
+// GENERATED: app #9 fails here, in the PR that registers it.
+
+const CONFORMANCE = Object.entries(manifest.apps);
+
+describe("shell↔app conformance", () => {
+  beforeEach(() => {
+    reads.readable = false;
+  });
+
+  it("sweeps exactly the apps the launcher builds", () => {
+    // No-op guard: a drifted manifest sweeps the wrong set and reports green.
+    expect(CONFORMANCE.map(([id]) => id).sort()).toStrictEqual(
+      [...everyLauncherId].sort()
+    );
+  });
+
+  describe.each(CONFORMANCE)("%s", (id, row) => {
+    it("puts a tile on the launcher under its declared handle", () => {
+      const { container } = mountHome();
+
+      expect(gridItems(container)).toContain(id);
+      expect(nodesOf(container, `[data-testid="${row.tile}"]`)).toHaveLength(1);
+    });
+
+    it("opens its own cover when the tile is pressed", () => {
+      // The claim no unit sees: both halves stay correct alone.
+      const { container, navigate } = mountHome();
+
+      press(nodesOf(container, `[data-testid="${row.tile}"]`)[0]);
+
+      expect(navigate).toHaveBeenCalledWith(
+        row.navigator,
+        ...(row.screen === null ? [] : [{ screen: row.screen }])
+      );
+    });
   });
 });

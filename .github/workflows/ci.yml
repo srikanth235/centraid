@@ -281,6 +281,14 @@ jobs:
       # input it never verifies. The flows themselves run nightly, but linting
       # their source is offline and fast, so it gates on the per-PR loop.
       - run: bun run lint:e2e-flows
+      # #905 Part 2 — the shell↔app conformance manifest. Four tables in three
+      # trees decide whether a launcher tile reaches a screen (the registry, the
+      # launcher catalog, Home's navigate switch, the deep-link table) and
+      # nothing linked them; `buildLauncherItems` drops an unmapped app id
+      # SILENTLY. This holds all four against
+      # `apps/mobile/app-conformance.json`, which is also what makes app #9
+      # covered the day it registers instead of the day someone remembers it.
+      - run: bun run lint:app-conformance
 
   # #782 — the ~19 gates in `check:push` that had NO CI job at all. They ran
   # only on a developer's machine, and receipts (#765, #731) show `check:push`

@@ -1,6 +1,6 @@
 # issue-905 — two lanes in the #892 gate loop that reported what they had not run
 
-Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own remedies, both found on `main` after it merged, both the same shape: a required lane reporting a verdict it had not earned. #892's receipt is on the default branch and therefore immutable, so this is a new issue with its own receipt rather than an edit to that one. The file slug names the first defect because it was found first; the receipt covers both.
+Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own remedies, both found on `main` after it merged, both the same shape: a required lane reporting a verdict it had not earned. #892's receipt is on the default branch and therefore immutable, so this is a new issue with its own receipt rather than an edit to that one. The file slug names the first defect because it was found first; the receipt covers both, plus the seven findings (C–I) that surfaced while getting them to green. **I** is the first slice of the mobile-coverage plan folded into #905 as Part 2 — the shell↔app conformance manifest and the gate and sweep generated from it.
 
 ## Checklist
 
@@ -43,6 +43,12 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Keep every app on the grid when no tile is readable, so an unmounted replica cannot leave a member with no way into any app
 - [x] Move grid membership into `springboard-policy`, the module that claims it, so the rule is testable without a renderer
 
+### I — the shell↔app contract had no source of truth, so coverage was per-app and hand-authored (#905 Part 2, first slice)
+
+- [x] Give the shell↔app contract one manifest both the RNTL tier and the Maestro tier can read
+- [x] Hold the registry, the launcher catalog, Home's navigate switch, the deep-link table and the testID vocabulary against it, so a new app is covered the day it registers
+- [x] Replace per-app authoring at the composition tier with a sweep generated from the manifest
+
 ## What changed
 
 Where each checked item lands, then the reasoning behind it:
@@ -66,6 +72,9 @@ Where each checked item lands, then the reasoning behind it:
 - Pin H's composition at the renderer tier — `apps/mobile/src/screens/Home.test.tsx`. Both units were green throughout the defect; only the composition could see it, which is why it had no test at any tier before now.
 - Score the suite wall-clock ceiling on `verify`, not on the sharded `coverage` lane — `.github/workflows/ci.yml`, `tests/suite-wall-clock.json`. The budget file claimed the metric was concurrency-invariant: "elapsed varies with host load and `--concurrency`, while the sum is the work the suite actually asked for". It is not, and the claim is corrected in place rather than left to mislead the next reader. The sum is of per-file WALL SPANS, and a run's files execute concurrently, so every span stretches when workers timeshare a slow runner. `budgetMs` is untouched at 2,867,000 — nothing was widened; the gate moved to the lane its own ceiling was measured from ("Reseeded 2026-08-29 from CI verify").
 - Build one ABI, not four, in the lanes that drive an emulator — `apps/mobile/scripts/android-emulator-install.sh`. `gradle.properties` declares all four `reactNativeArchitectures`, which is right for a store artifact and four times the native compile a test lane needs: every emulator this script feeds is `x86_64` (`arch: x86_64` in all four workflows, pinned in `device-matrix.json`, where the divergence is already recorded as deliberate because only x86_64 is KVM-accelerated). The three ARM ABIs were compiled on every cold build and never executed. Passed as `-P` rather than edited into `gradle.properties`, which is the store build's configuration too.
+- Give the shell↔app contract one manifest both the RNTL tier and the Maestro tier can read — `apps/mobile/app-conformance.json`, one row per first-party app carrying its launcher route, the navigator/screen its tile opens, its `centraid://` path, its tile handle, its arrival landmark and whether it ships a demo fixture. JSON rather than a TS module because the three consumers do not share a build: the RNTL sweep imports it, `lint:app-conformance` reads it from plain node, and the Maestro layer's `.mjs` runners can read it with no transpile. That answers #905 Part 2's first open question ("where does the app manifest live so that both RNTL and Maestro can read one source of truth") in the only way all three can be served.
+- Hold the registry, the launcher catalog, Home's navigate switch, the deep-link table and the testID vocabulary against it, so a new app is covered the day it registers — `scripts/lint-app-conformance.mjs`, `scripts/lint-app-conformance.test.mjs`, wired into `check:push` and `ci.yml`'s `static` job. Six rules: `registry-complete`, `route-registered`, `navigates`, `deep-link-routed`, `handles-declared`, `seed-declared`. See "I — the shell↔app contract had no source of truth", below.
+- Replace per-app authoring at the composition tier with a sweep generated from the manifest — `apps/mobile/src/screens/Home.test.tsx`, which now runs `describe.each` over the manifest: every registered app has a tile under its declared handle, and pressing that tile navigates to its declared cover. Sixteen assertions, no per-app authoring, and app #9 is swept the day it registers.
 
 ### The defect
 
@@ -219,6 +228,20 @@ Verified in both directions: with the pre-fix rule restored, two of the four new
 
 **One approved deviation, with its arithmetic.** `apps/mobile/src/screens/home/tile-model.test.ts` is hand-re-pinned from `[1525, 14787]` to `[1391, 11523]` — 10.31% to 12.07%. Its comment content did not grow; it SHRANK. The file lost 134 comment characters and 3264 total characters when the policy describes moved out, so it shed proportionally more code than prose and the share rose on a smaller denominator. Same shape as the two pins #892 re-pinned for the same reason, and the reason is stated here rather than laundered through `--write`, which refuses to raise a pin precisely so this has to be argued.
 
+### I — the shell↔app contract had no source of truth
+
+Investigating A and B opened a third question one level up, folded into the issue as Part 2: the mobile device lanes report verdicts that are *earned but nearly empty*. `mobile-device-gate` runs 5 of 22 flows; the mini-app journeys live on `mobile-canary`, which has never been green in any of its four runs. "The PR gate is minimal, depth lives on the canary" is therefore circular — the second half was never delivered.
+
+The Part 2 plan's own sequencing puts "get `mobile-canary` green" first and the manifest-driven conformance sweep third, and item 3 is what this branch delivers, at the layer the plan's layer-allocation table assigns it to: **the shell↔app contract belongs in RNTL against the real registry, not on a device.**
+
+**The defect the manifest names.** Four tables in three trees have to agree before a launcher tile can reach a screen — `packages/design/src/apps.ts` (who exists), `apps/mobile/src/screens/home/catalog.ts` (the route per id), `Home.tsx`'s `openItem` switch (what a tap does), `apps/mobile/src/deep-links.ts` (what `centraid://<app>` opens). Nothing linked them. Each can move alone and stay green, and the worst case is silent: `buildLauncherItems` resolves an id's route with `route ? [{ meta, route }] : []`, so an app the catalog forgets is DROPPED without an error — the launcher renders seven tiles where eight are registered, and every test deriving its expectation from the catalog (including H's, above) agrees with the defect.
+
+`apps/mobile/app-conformance.json` is the fifth table that pins the other four. `scripts/lint-app-conformance.mjs` holds them against it under six rules — `registry-complete` (manifest ids and registry ids are exact complements, both ways), `route-registered`, `navigates`, `deep-link-routed`, `handles-declared`, `seed-declared` — and refuses to pass when any parser comes back empty, because a table reformatted out from under a text-scanning linter is exactly how one rots into always-passing. Its rules self-test on inline fixtures before it reads the tree; that self-test caught a miscounted expectation in its own first draft.
+
+**Why this settles "shouldn't we treat all mini apps equally".** Hand-writing a journey per app is O(apps) to author *and* O(apps) to run, and app #9 arrives untested until somebody remembers it. Making conformance a property of the manifest inverts both: `Home.test.tsx` now runs `describe.each` over the manifest — every registered app has a tile under its declared handle, and pressing that tile navigates to its declared cover — so a new app is swept the day it registers, with no per-app authoring, and `registry-complete` is what stops a row being omitted to dodge the sweep. Photos keeps its extra hand-written flows, but on a stated principle rather than on taste: it is not special as a product, it is the app with the largest **native/OS** surface, and its extra coverage is proportional to that surface alone.
+
+**What this does not claim.** It matches text and mounts a composition; it does not prove a screen renders from a real replica on a real device. That claim is the device half of Part 2 item 3, deliberately not taken here — see "Out of scope".
+
 ### Docs
 
 `docs/decisions.md` gains **G-filter-escape-hatch** beside the existing G-filter-inverse. `TESTING.md`'s path-filter row records both the narrowed `client-e2e` gate and the new fallback requirement.
@@ -245,6 +268,9 @@ That frame is the canary's own `paired-home` screenshot, and the canary is the o
 6. **Both defects ride one issue and one receipt.** They are separate bugs, and a second issue was briefly opened for B (#906, closed as a duplicate onto this one). Keeping them together is the deliberate call: they were found in the same dispatch run, they are the same failure shape — a lane in `check`'s needs reporting a verdict it had not earned — and splitting them would put two halves of one "is main actually green" answer in two places. The file slug still names A alone; the `## Checklist` is split A/B so neither is buried.
 7. **B's producer set is derived, not listed.** The wiring assertion finds every script whose body contains `--outputFile=artifacts/test-results/vitest.json` and requires one per demanding job. Hard-coding `coverage`/`test:suite` would have to be edited by exactly the person who would forget the reporter.
 8. **B's guard lives in `collection-tripwire.test.mjs`, not a new linter.** It is one assertion about one gate's wiring; a new `scripts/lint-*.mjs` plus a `package.json` entry plus a `static` step would be three files of ceremony. `scripts:test` already runs this file on the per-PR loop.
+9. **The conformance manifest is JSON, and it lives under `apps/mobile/`.** Part 2's first open question asked where it could live so both RNTL and Maestro read one source of truth. A TS module serves the RNTL tier and neither of the others: `lint:app-conformance` runs from plain node on the per-PR loop, and the Maestro runners are `.mjs` with no transpile step. JSON is the only shape all three read as-is, and this repo already uses it for exactly this ("read by both a script and a test" — `tests/suite-wall-clock.json`, `roster.json`, `device-matrix.json`). It sits under `apps/mobile/` rather than `packages/design/` because the registry is cross-client and the routes, deep links and handles it pins are the mobile client's own.
+10. **The sweep extends `Home.test.tsx` rather than opening a `conformance.test.tsx`.** A new file would have re-declared roughly 150 lines of `vi.mock` seam to make one more class of assertion, and the sweep is the same claim H already pins, generalized from "every app reaches the grid" to "every app's tile reaches its own cover". Its comments were then cut back three times to stay under the 15% density cap without an allowlist entry; the rationale they carried was moved to `scripts/lint-app-conformance.mjs`, where it belongs and where the gate does not measure it.
+11. **`cold-start` stays on the PR gate, and Part 2 item 4 stays unstarted.** The plan argues on the merits that a `LAUNCHES = 8` perf-distribution probe with no absolute ceiling does not belong on a merge gate, and this branch is the one that watched it pass on `aeee58f4` and fail on `7288cd20` with no diff between them touching it. It is still not removed here. Removing it from a branch whose only red lane is the one it sits in would be weakening a gate to go green whatever the merits say, and the merits will still be there when the gate is reshaped as a whole.
 
 ## Out of scope
 
@@ -266,6 +292,7 @@ That frame is the canary's own `paired-home` screenshot, and the canary is the o
 - **The window in which the canary has not yet warmed the apk and gradle caches.** `mobile-canary.yml` saves them `if: always()`, which is already right, but it saves *after* the full roster — roughly 55 minutes after the build finishes. So for about an hour after each merge to `main`, a device-gate run on that content is cold by construction. Splitting the build out of the emulator-runner step would fix it and is a restructure of the mobile lanes, not a line change; out of scope for a PR that is otherwise about gate wiring.
 - **The gradle cache does not make a rebuild a repackage, and the ABI fix does not make it one either.** `android-emulator-install.sh` states the design as "miss the apk cache, hit the gradle cache", so a JS-only PR repackages rather than recompiles. It does not hold, for two reasons this change deliberately leaves standing. `org.gradle.caching` is unset, so Gradle's build cache is OFF and caching `~/.gradle/caches` preserves dependencies and transforms but no task outputs. And the cached paths — `apps/mobile/android/app/build`, `apps/mobile/android/build`, `~/.gradle/caches` — cover no native build directory: React Native library modules build under `node_modules/<lib>/android/build/` with NDK intermediates in `.cxx/`, neither of which appears in any of the four workflows. Observed directly on run 33405430819: the gradle cache restored in 41s and the job was still compiling `react-native-quick-crypto/deps/fastpbkdf2/fastpbkdf2.c` twenty-five minutes later. The ABI fix above makes that compile roughly four times cheaper; it does not make it skippable, so a mobile-JS PR still pays a cold build. Turning the build cache on and caching the native directories is the fix, and it is a caching restructure across four workflows rather than a line change.
 - **The canary re-banks a barren gradle directory.** Compounding the above and recorded because it is why the situation does not self-correct: `Save the built Android app` is gated on `steps.emu.outputs.built == 'true'`, so when the apk cache HITS gradle never runs, `built` stays false, and the unconditional `Save the Android gradle build directory` beside it banks a directory holding no fresh native output. That is exactly what run 33370541215 did — apk restored in 4s, save skipped, gradle directory saved anyway. `mobile-canary` has run four times ever and never succeeded, so no run has yet banked a warm native build for a PR to restore.
+- **The device half of the conformance sweep, and the rest of Part 2.** This branch delivers item 3 at the RNTL tier only. The device-side sweep — deep-link into each app, assert its landmark renders from the on-device replica — is genuinely device-only work (native sqlite under real storage) and belongs on a lane that can run it. It is deliberately not added here: the Part 2 plan's own sequencing puts "get `mobile-canary` green" first, `mobile-canary` has never been green, and adding a flow that has never executed to the lane currently being debugged adds an unknown to a red lane rather than coverage. The manifest is already readable by the `.mjs` runners, so that flow is a small follow-up rather than a rebuild. Items 1, 2, 4, 5 and 6 are untouched and their boxes in #905 stay unchecked.
 - **The other ten path-gated lanes.** All were verified to wake correctly on a `workflow_dispatch` run of main tip; none needed a change.
 - **`mutation-pr` and `dependency-review` reporting `skipped` on a main push.** Both are gated on `github.event_name` by design (PR-only / non-main-push), not by a path filter, and neither is a defect.
 - **The wall-clock ceiling's own report dependency.** The "Suite wall-clock ceiling" step guards the artifact with its own explicit existence check and is unaffected by B. It now rides on `verify`, whose `test:suite` writes that artifact — which is B's doing, so the two are related after all: before B, `verify` produced no report and the step could not have run there.
@@ -347,6 +374,40 @@ Field evidence for A — run `33372386799` (`workflow_dispatch` on `f5ca34fb`) r
 Field evidence for C — the defect and the fix are both visible in the step lists, on `main` and on this branch respectively. The `mobile-canary` job on main tip (`99430723132`) reports `AVD cache` **success** (a miss), `Create AVD + snapshot (cache miss only)` **success** (95 s), and `Post AVD cache` **skipped** — the save declining to run because the job was red, exactly the shape the fix removes. The same lane on this branch (`mobile-device-gate`, job `99443239488`) reports the new `Save the AVD snapshot` step as **success** in 15 s, before the emulator step it used to sit behind.
 
 Field evidence for B — the same run's `verify` job: `Test Files 1502 passed | 4 skipped (1506)`, `Tests 18162 passed | 5 expected fail | 37 skipped (18204)` in 1158.30 s, then `##[error]Process completed with exit code 1` on the step after it, with the tripwire's "is missing, so no file could be scored" as the last line of output.
+
+The conformance gate and the sweep were each shown to bite before being trusted, on this tree rather than on a fixture:
+
+```sh
+# I — the gate catches the silent catalog drop it exists for.
+$ sed -i 's/^  tally: { kind: "tally" },$//' apps/mobile/src/screens/home/catalog.ts
+$ node scripts/lint-app-conformance.mjs
+#   app-conformance: route-registered: … → tally declares route `tally`;
+#   apps/mobile/src/screens/home/catalog.ts maps `tally` to NOTHING. …
+#   app-conformance: 1 problem(s)      [exit 1]
+$ git checkout apps/mobile/src/screens/home/catalog.ts && node scripts/lint-app-conformance.mjs
+#   app-conformance: 8 first-party app(s) — registry, launcher catalog, Home's
+#   navigate switch, the deep-link table and the testID vocabulary all agree …
+
+# I — the sweep catches a tile opening the wrong cover.
+$ # Home.tsx: case "tally" → navigation.navigate("Tasks")
+$ bun run --cwd apps/mobile test -- src/screens/Home.test.tsx
+#   FAIL src/screens/Home.test.tsx > shell↔app conformance > tally >
+#     opens its own cover when the tile is pressed
+#   Tests  1 failed | 18 passed (19)
+$ git checkout apps/mobile/src/screens/Home.tsx && bun run --cwd apps/mobile test -- src/screens/Home.test.tsx
+#   Tests  19 passed (19)
+
+# I — the linter's own rules self-test before it reads the tree, and the
+# parsers are held against the real committed sources.
+$ node --test scripts/lint-app-conformance.test.mjs      # 7 pass, 0 fail
+$ node scripts/ci/run-gates.mjs lint:app-conformance lint:path-filters \
+    lint:mobile-testids lint:e2e-flows lint:e2e-wiring \
+    check:mobile-suite-budgets lint:turbo-cache knip      # 8/8 in 6.8s
+$ bun run format:check && bun run lint && bun run --cwd apps/mobile typecheck
+$ bun run test:comment-density                            # ok — no unpinned file over cap
+```
+
+The self-test earned its place immediately: its first draft expected two errors from the "tile opens the wrong cover" fixture and got one (the deep-link rule keys on the navigator the row declares, which that fixture leaves valid). The miscount was in the test, not the rule, and the linter refused to run until it was fixed.
 
 Two local-environment findings, recorded because each looked like a repo defect and was not:
 
