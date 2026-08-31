@@ -1,4 +1,117 @@
 {
   "version": 1,
-  "records": []
+  "records": [
+    {
+      "flow": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
+      "slug": "pairing-canary",
+      "platform": "ios",
+      "device": "951D75F6-40E9-494B-A8E4-5406FCDA4AF7",
+      "startedAt": "2026-08-31T08:39:14.458Z",
+      "durationMs": 17,
+      "pass": false,
+      "failureClass": "product",
+      "failureReason": "unclassified: unrecognized failure after 0 completed assertion(s); classified product by default",
+      "lane": "local-ios",
+      "runId": "pairing-canary-2026-08-31T08-39-13-865-76a482",
+      "commit": ""
+    },
+    {
+      "flow": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
+      "slug": "pairing-canary",
+      "platform": "ios",
+      "device": "951D75F6-40E9-494B-A8E4-5406FCDA4AF7",
+      "startedAt": "2026-08-31T08:39:50.825Z",
+      "durationMs": 111130,
+      "pass": false,
+      "failureClass": "product",
+      "failureReason": "unclassified: unrecognized failure after 0 completed assertion(s); classified product by default",
+      "lane": "local-ios",
+      "runId": "pairing-canary-2026-08-31T08-39-50-001-8b19e1",
+      "commit": ""
+    },
+    {
+      "flow": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
+      "slug": "pairing-canary",
+      "platform": "ios",
+      "device": "951D75F6-40E9-494B-A8E4-5406FCDA4AF7",
+      "startedAt": "2026-08-31T09:00:14.217Z",
+      "durationMs": 268856,
+      "pass": true,
+      "failureClass": null,
+      "failureReason": "",
+      "lane": "local-ios",
+      "runId": "pairing-canary-2026-08-31T09-00-12-601-12ad8a",
+      "commit": ""
+    },
+    {
+      "flow": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
+      "slug": "pairing-canary",
+      "platform": "ios",
+      "device": "951D75F6-40E9-494B-A8E4-5406FCDA4AF7",
+      "startedAt": "2026-08-31T09:04:52.401Z",
+      "durationMs": 104840,
+      "pass": false,
+      "failureClass": "product",
+      "failureReason": "unclassified: unrecognized failure after 0 completed assertion(s); classified product by default",
+      "lane": "local-ios",
+      "runId": "pairing-canary-2026-08-31T09-04-52-001-820271",
+      "commit": ""
+    },
+    {
+      "flow": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
+      "slug": "pairing-canary",
+      "platform": "ios",
+      "device": "951D75F6-40E9-494B-A8E4-5406FCDA4AF7",
+      "startedAt": "2026-08-31T09:07:52.091Z",
+      "durationMs": 65826,
+      "pass": false,
+      "failureClass": "product",
+      "failureReason": "unclassified: unrecognized failure after 0 completed assertion(s); classified product by default",
+      "lane": "local-ios",
+      "runId": "pairing-canary-2026-08-31T09-07-51-661-f0d089",
+      "commit": ""
+    },
+    {
+      "flow": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
+      "slug": "pairing-canary",
+      "platform": "ios",
+      "device": "951D75F6-40E9-494B-A8E4-5406FCDA4AF7",
+      "startedAt": "2026-08-31T09:11:45.448Z",
+      "durationMs": 70042,
+      "pass": false,
+      "failureClass": "product",
+      "failureReason": "unclassified: unrecognized failure after 0 completed assertion(s); classified product by default",
+      "lane": "local-ios",
+      "runId": "pairing-canary-2026-08-31T09-11-44-928-f3ed7e",
+      "commit": ""
+    },
+    {
+      "flow": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
+      "slug": "pairing-canary",
+      "platform": "ios",
+      "device": "951D75F6-40E9-494B-A8E4-5406FCDA4AF7",
+      "startedAt": "2026-08-31T09:37:13.985Z",
+      "durationMs": 171663,
+      "pass": false,
+      "failureClass": "product",
+      "failureReason": "unclassified: unrecognized failure after 0 completed assertion(s); classified product by default",
+      "lane": "local-ios",
+      "runId": "pairing-canary-2026-08-31T09-37-13-575-c72101",
+      "commit": ""
+    },
+    {
+      "flow": "tests/agent-e2e-mobile/flows/pairing-canary.mjs",
+      "slug": "pairing-canary",
+      "platform": "ios",
+      "device": "951D75F6-40E9-494B-A8E4-5406FCDA4AF7",
+      "startedAt": "2026-08-31T09:42:00.988Z",
+      "durationMs": 68074,
+      "pass": false,
+      "failureClass": "product",
+      "failureReason": "unclassified: unrecognized failure after 0 completed assertion(s); classified product by default",
+      "lane": "local-ios",
+      "runId": "pairing-canary-2026-08-31T09-42-00-562-c10223",
+      "commit": ""
+    }
+  ]
 }

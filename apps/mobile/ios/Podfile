@@ -21,7 +21,16 @@ platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
 prepare_react_native_project!
 
 target 'Centraid' do
-  use_expo_modules!
+  # The Release E2E artifact carries its own Hermes bundle and must not boot
+  # Expo's development server picker. Keep expo-dev-client for local Debug
+  # builds, but leave it out of the explicit Release lane.
+  release_expo_modules = ENV['CENTRAID_MOBILE_BUILD'] == 'release' ? [
+    'expo-dev-client',
+    'expo-dev-launcher',
+    'expo-dev-menu',
+    'expo-dev-menu-interface',
+  ] : []
+  use_expo_modules!(:exclude => release_expo_modules)
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
@@ -38,6 +47,7 @@ target 'Centraid' do
       'ios'
     ]
   end
+  config_command.concat(['--exclude', *release_expo_modules]) unless release_expo_modules.empty?
 
   config = use_native_modules!(config_command)
 

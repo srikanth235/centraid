@@ -17,6 +17,9 @@
 // two reasons to fail no longer answers the question it was asked. Everything
 // below the Home marker belongs to the journey that claims it.
 
+import { copyFile, mkdir, readdir } from "node:fs/promises";
+import path from "node:path";
+
 import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
 
 // The claim: a broken prerequisite is known in single-digit minutes, not after
@@ -48,6 +51,22 @@ await runFlow("pairing-canary", async (ctx) => {
 `,
     "canary-home"
   );
+
+  const uiImpactDir = "artifacts/e2e/ui-impact";
+  const screenshot = async () => {
+    const frames = await readdir(ctx.state.screenshotsDir);
+    const pairedHome = frames.find((frame) =>
+      frame.endsWith("-paired-home.png")
+    );
+    if (pairedHome === undefined)
+      throw new Error("paired Home frame was not captured");
+    await mkdir(uiImpactDir, { recursive: true });
+    await copyFile(
+      path.join(ctx.state.screenshotsDir, pairedHome),
+      path.join(uiImpactDir, "issue-908-ios-paired-home.png")
+    );
+  };
+  await screenshot();
 
   const elapsedMs = Date.now() - startedAt;
   ctx.note(`prerequisites proven in ${Math.ceil(elapsedMs / 1000)}s`);

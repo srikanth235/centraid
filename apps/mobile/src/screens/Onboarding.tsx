@@ -382,6 +382,7 @@ function ProfileStep({
           <Text style={styles.avatarInitial}>{initialsOf(name)}</Text>
         </View>
         <TextInput
+          testID={TEST_IDS.onboarding.profileName}
           value={name}
           onChangeText={setName}
           placeholder="Your name"
@@ -422,7 +423,12 @@ function ProfileStep({
       </View>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <PrimaryButton label="Continue" onPress={save} arrow />
+      <PrimaryButton
+        testID={TEST_IDS.onboarding.profileContinue}
+        label="Continue"
+        onPress={save}
+        arrow
+      />
     </View>
   );
 }

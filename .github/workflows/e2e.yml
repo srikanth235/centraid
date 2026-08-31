@@ -372,6 +372,7 @@ jobs:
           # embedded bundle at export time, so the sampler ships in a build that
           # is otherwise a member's build.
           EXPO_PUBLIC_CENTRAID_FRAME_PROBE: "1"
+          CENTRAID_MOBILE_BUILD: release
         run: |
           set -euo pipefail
           # `--configure Release` is the whole #890 W1 change on this platform:

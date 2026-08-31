@@ -448,8 +448,7 @@ async fn accept_loop(
     } else {
         GW_PAIR_ALPN
     };
-    // Only a GATEWAY has links. The desktop phone tunnel forwards under the
-    // host's own bearer and has no link store, so it never speaks the plane.
+    // Only a gateway has links; desktop forwarding never speaks this plane.
     let peer_enabled = !config.desktop_pairing;
     while let Some(incoming) = endpoint.accept().await {
         let mut accepting = match incoming.accept() {
@@ -528,12 +527,13 @@ pub async fn start(config: IrohRelayConfig) -> Result<IrohRelayHandle> {
         .bind()
         .await
         .context("bind native iroh relay")?;
+    if config.use_n0_relays {
+        endpoint.online().await;
+    }
     tracing::info!(endpoint_id = %endpoint.id(), "native iroh byte relay listening");
     let client = Client::builder()
         .connect_timeout(std::time::Duration::from_secs(10))
-        // Per-read inactivity timeout: long-lived SSE remains healthy while
-        // heartbeats flow, but a hung loopback/control response cannot pin a
-        // relay task forever.
+        // SSE stays healthy while heartbeats flow; hung loopback reads time out.
         .read_timeout(std::time::Duration::from_secs(120))
         .build()?;
     let live_connections = Arc::new(Mutex::new(RelayConnections::default()));

@@ -66,6 +66,8 @@ export const TEST_IDS = Object.freeze({
     /** "Can't scan? Paste a code instead" — the door to the ticket field. */
     paste: "onboarding-paste",
     ticketField: "onboarding-ticket-field",
+    profileName: "onboarding-profile-name",
+    profileContinue: "onboarding-profile-continue",
   }),
 
   settings: Object.freeze({

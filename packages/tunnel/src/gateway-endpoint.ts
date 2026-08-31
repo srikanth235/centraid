@@ -154,6 +154,7 @@ export async function startGatewayEndpoint(
     ...(options.authorizePeer ? [alpnBytes(PEER_LINK_ALPN)] : []),
   ]);
   const endpoint = await builder.bind();
+  if (options.relays !== "disabled") await endpoint.online();
 
   const server = new GatewayEndpoint(endpoint, options);
   server.runAcceptLoop();

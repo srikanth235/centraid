@@ -734,13 +734,13 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
     when:
       visible: "Who's using this phone[?]"
     commands:
-      - tapOn: "Your name"
-# e2e-lint-allow: unasserted-input — React Native TextInput values are not
-# reliably Maestro-matchable; the personalized done heading below proves the
-# submitted profile name end to end.
+      - tapOn:
+          id: "onboarding-profile-name"
       - inputText: "Nightly"
+      - assertVisible: "Nightly"
       - hideKeyboard
-      - tapOn: "Continue"
+      - tapOn:
+          id: "onboarding-profile-continue"
 - extendedWaitUntil:
     visible: "You're all set, [^.]+[.]"
     timeout: 60000

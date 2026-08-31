@@ -42,154 +42,6 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - expo-dev-client (57.0.11):
-    - EXManifests
-    - expo-dev-launcher
-    - expo-dev-menu
-    - expo-dev-menu-interface
-    - EXUpdatesInterface
-  - expo-dev-launcher (57.0.11):
-    - EXManifests
-    - expo-dev-launcher/Main (= 57.0.11)
-    - expo-dev-menu
-    - expo-dev-menu-interface
-    - ExpoModulesCore
-    - EXUpdatesInterface
-    - hermes-engine
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-Core-prebuilt
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-ImageManager
-    - React-jsi
-    - React-jsinspector
-    - React-NativeModulesApple
-    - React-RCTAppDelegate
-    - React-RCTFabric
-    - React-renderercss
-    - React-rendererdebug
-    - React-utils
-    - ReactAppDependencyProvider
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - ReactNativeDependencies
-    - Yoga
-  - expo-dev-launcher/Main (57.0.11):
-    - EXManifests
-    - expo-dev-launcher/Unsafe
-    - expo-dev-menu
-    - expo-dev-menu-interface
-    - ExpoModulesCore
-    - EXUpdatesInterface
-    - hermes-engine
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-Core-prebuilt
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-ImageManager
-    - React-jsi
-    - React-jsinspector
-    - React-NativeModulesApple
-    - React-RCTAppDelegate
-    - React-RCTFabric
-    - React-renderercss
-    - React-rendererdebug
-    - React-utils
-    - ReactAppDependencyProvider
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - ReactNativeDependencies
-    - Yoga
-  - expo-dev-launcher/Unsafe (57.0.11):
-    - EXManifests
-    - expo-dev-menu
-    - expo-dev-menu-interface
-    - ExpoModulesCore
-    - EXUpdatesInterface
-    - hermes-engine
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-Core-prebuilt
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-ImageManager
-    - React-jsi
-    - React-jsinspector
-    - React-NativeModulesApple
-    - React-RCTAppDelegate
-    - React-RCTFabric
-    - React-renderercss
-    - React-rendererdebug
-    - React-utils
-    - ReactAppDependencyProvider
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - ReactNativeDependencies
-    - Yoga
-  - expo-dev-menu (57.0.11):
-    - expo-dev-menu/Main (= 57.0.11)
-    - hermes-engine
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-Core-prebuilt
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-ImageManager
-    - React-jsi
-    - React-NativeModulesApple
-    - React-RCTFabric
-    - React-renderercss
-    - React-rendererdebug
-    - React-utils
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - ReactNativeDependencies
-    - Yoga
-  - expo-dev-menu-interface (57.0.0)
-  - expo-dev-menu/Main (57.0.11):
-    - EXManifests
-    - expo-dev-menu-interface
-    - ExpoModulesCore
-    - hermes-engine
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-Core-prebuilt
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-ImageManager
-    - React-jsi
-    - React-jsinspector
-    - React-NativeModulesApple
-    - React-RCTFabric
-    - React-renderercss
-    - React-rendererdebug
-    - React-utils
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - ReactNativeDependencies
-    - Yoga
   - ExpoAsset (57.0.10):
     - ExpoModulesCore
   - ExpoBackgroundTask (57.0.9):
@@ -2731,10 +2583,6 @@ DEPENDENCIES:
   - EXJSONUtils (from `../../../node_modules/expo-json-utils/ios`)
   - EXManifests (from `../../../node_modules/expo-manifests/ios`)
   - Expo (from `../../../node_modules/expo`)
-  - expo-dev-client (from `../../../node_modules/expo-dev-client/ios`)
-  - expo-dev-launcher (from `../../../node_modules/expo-dev-launcher`)
-  - expo-dev-menu (from `../../../node_modules/expo-dev-menu`)
-  - expo-dev-menu-interface (from `../../../node_modules/expo-dev-menu-interface/ios`)
   - ExpoAsset (from `../../../node_modules/expo-asset/ios`)
   - ExpoBackgroundTask (from `../../../node_modules/expo-background-task/ios`)
   - ExpoBattery (from `../../../node_modules/expo-battery/ios`)
@@ -2897,14 +2745,6 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/expo-manifests/ios"
   Expo:
     :path: "../../../node_modules/expo"
-  expo-dev-client:
-    :path: "../../../node_modules/expo-dev-client/ios"
-  expo-dev-launcher:
-    :path: "../../../node_modules/expo-dev-launcher"
-  expo-dev-menu:
-    :path: "../../../node_modules/expo-dev-menu"
-  expo-dev-menu-interface:
-    :path: "../../../node_modules/expo-dev-menu-interface/ios"
   ExpoAsset:
     :path: "../../../node_modules/expo-asset/ios"
   ExpoBackgroundTask:
@@ -3170,10 +3010,6 @@ SPEC CHECKSUMS:
   EXJSONUtils: 7a1683cfa2cbe6d11fca97097d51a496755b0287
   EXManifests: f9888c0bf5aaa6ddb7e3d4b224d6d54ac4ca84a4
   Expo: 423915c60a05e620e67a1f1bfcb612a217fd6f1b
-  expo-dev-client: f2494b77eac5746d3a665b0831dea0a449fb79b7
-  expo-dev-launcher: d1dbe578bea6088a9cecb1440c9db3cb1ec0267d
-  expo-dev-menu: 4661a94d85ea51ed82399c67ed9677f4993cfb34
-  expo-dev-menu-interface: 7a59e803916fbfd1b96c75ff91ea8dddac7e722f
   ExpoAsset: 64e4684e2cb6c45a52009f91e18c45ff56ed4a09
   ExpoBackgroundTask: 49f210009cae62912a09891c3dd991acce1a8d5e
   ExpoBattery: cb4f978965f2d14d06f2d36293c2deedee6616b0
@@ -3211,7 +3047,7 @@ SPEC CHECKSUMS:
   EXUpdates: 1031df0a408343d85e9d92595b102e9d65518656
   EXUpdatesInterface: 92d2aa5194b6fb93ca8ab749db75665cb28b2e60
   FBLazyVector: 3c3be9a019176b5699455f7f66c5444b78a411c6
-  hermes-engine: f6795bae85f4a8b2e50fb56afdfd156231a7d927
+  hermes-engine: 6754b930ab717efd08d0dc9e5e163aba539d474e
   libavif: 5f8e715bea24debec477006f21ef9e95432e254d
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
   libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8
@@ -3311,6 +3147,6 @@ SPEC CHECKSUMS:
   Yoga: 9891cfb1c680f64de9c41b09e7453dea33454d2b
   ZXingObjC: 8898711ab495761b2dbbdec76d90164a6d7e14c5
 
-PODFILE CHECKSUM: d32ccd2848b2114b0bdb4b8ebaaa597d8a3b66e9
+PODFILE CHECKSUM: a269cbdf50a9ba162157d888a36b27f4cc153203
 
 COCOAPODS: 1.16.2

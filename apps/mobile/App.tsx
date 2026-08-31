@@ -283,7 +283,14 @@ export default function App(): React.JSX.Element | null {
               <AppLockProvider>
                 <ReplicaProvider>
                   <ReplicaCompatibilityGate>
-                    <UploadReconciliation />
+                    {/*
+                     * Pairing creates a replica session before onboarding is
+                     * complete. Keep camera-roll reconciliation behind the
+                     * profile gate: its first sweep may need to ask for Photo
+                     * Library access, and that request belongs to the paired
+                     * app shell, not the ticket-only onboarding surface.
+                     */}
+                    {onboarded ? <UploadReconciliation /> : null}
                     <ShareIntentIngest />
                     <NotificationCoordinator />
                     {/* Onboarding has not paired yet — a replica-open banner is noise. */}
