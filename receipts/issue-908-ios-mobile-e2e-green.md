@@ -35,8 +35,9 @@ the filenames emitted by the CI runner.
 The canary measures its existing five-minute budget at the actual prerequisite
 boundary—when `configureGateway` has asserted Home—so its separate evidence
 assertion and screenshot driver launch cannot inflate the pairing claim. The
-ticket Connect action is tapped while the keyboard is visible because the
-one-line control is deliberately kept in the viewport.
+ticket flow still dismisses the keyboard before tapping Connect because the
+hosted iOS driver did not reliably activate that control while the keyboard was
+visible.
 
 The implementation surface is explicit:
 
