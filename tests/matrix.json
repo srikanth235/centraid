@@ -4327,6 +4327,12 @@
             "flow": "mobile-pairing-canary"
           },
           {
+            "id": "ios-roster-bootstrap",
+            "label": "iOS roster bootstrap",
+            "owner": "tests/agent-e2e-mobile/flows/ios-roster-bootstrap.mjs",
+            "flow": null
+          },
+          {
             "id": "sharing-invite",
             "label": "Sharing invite",
             "owner": "tests/agent-e2e-mobile/flows/sharing-invite.mjs",
