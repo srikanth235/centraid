@@ -122,8 +122,27 @@ else
   # — no cause, because gradle prints one only when asked. The next person then
   # pays another 35 minutes to learn what this run already knew. Stack traces are
   # emitted on failure only, so a green build's output is unchanged.
+  #
+  # ONE ABI, because exactly one is ever executed. gradle.properties declares
+  # `reactNativeArchitectures=armeabi-v7a,arm64-v8a,x86,x86_64` — right for a
+  # store artifact, and four times the native compile a test lane needs. Every
+  # emulator this script feeds is x86_64 (`arch: x86_64` in all four workflows,
+  # pinned in device-matrix.json), so the three ARM ABIs are compiled on every
+  # cold build and never run. The matrix already records the divergence as
+  # deliberate: only x86_64 is KVM-accelerated on the Linux runner, and the
+  # arm64 evidence a member's phone produces is a device-farm spend deferred in
+  # #890's non-goals. Building them here does not narrow that gap by one line —
+  # it only spends the gate's wall clock, and this lane's whole problem is that
+  # a JS-only PR misses the apk cache (the key names the JS, #892) and pays a
+  # full release build inside the twelve-minute suite's own step.
+  #
+  # Overridden here rather than edited into gradle.properties: that file is the
+  # STORE build's configuration too, and a store artifact that ships x86_64 only
+  # is the one mistake this must not make. `-P` scopes it to the lanes that
+  # source this script.
   ( cd apps/mobile/android \
-    && EXPO_PUBLIC_CENTRAID_FRAME_PROBE=1 ./gradlew "$gradle_task" --console=plain --stacktrace )
+    && EXPO_PUBLIC_CENTRAID_FRAME_PROBE=1 ./gradlew "$gradle_task" \
+      -PreactNativeArchitectures=x86_64 --console=plain --stacktrace )
   # Bank the apk under the content-addressed cache path. Fail hard if it is
   # missing rather than caching nothing (a later hit would install nothing and
   # fail obscurely at flow time).
