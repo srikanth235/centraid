@@ -38,7 +38,7 @@
       "blocking": false,
       "platform": "ios",
       "budgetDoc": "tests/agent-e2e-mobile/flows/ios-depth-budget.md",
-      "why": "iOS DEPTH — the six claims that are facts about iOS, never a second copy of Android's roster. A macOS minute costs roughly ten Linux minutes; run-ios-depth-suite.mjs names per member which iOS fact earns its place."
+      "why": "iOS release coverage — native depth plus every scheduled app-level journey, all against the iOS Release artifact. Pair once and reuse the paired profile; run-ios-depth-suite.mjs is the authoritative 18-flow list and its suite budget is bounded below the 140-minute macOS job timeout."
     }
   },
   "flows": {

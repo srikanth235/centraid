@@ -1,32 +1,74 @@
-# iOS depth-roster budget
+# iOS release app-roster budget
 
-`run-ios-depth-suite.mjs` runs six journeys on the iOS Release artifact — `pairing-canary`, `native-v0-resilience`, `locker-gate`, `cold-start`, `scroll-frames`, `photos-permissions`. The runner fails when aggregate wall time is **twenty-five minutes or more**, measured from the first flow process start through the sixth verdict.
+`run-ios-depth-suite.mjs` runs 18 ordered journeys on the iOS Release artifact:
+the pairing prerequisite, native resilience, the six non-Photos app covers,
+Sharing, Places, Locker, all five Photos journeys, and the cold-start/scroll
+probes. The runner fails when aggregate wall time is **seventy minutes or
+more**, measured from the first flow process start through the final verdict.
 
-`pairing-canary` runs first and short-circuits, for the same reason it does on the PR gate: it is the shared prerequisite, and on a broken one the five after it would each spend their own minutes failing on their own unrelated-looking assertion.
+This is an intentionally bounded increase from the former 25-minute native-
+depth envelope. It pays for direct app-level evidence on iOS; it is not a retry
+or a relaxed per-assertion timeout. The workflow's macOS job backstop remains
+140 minutes, leaving time for a cold native build, setup, artifact handling,
+and evidence upload.
 
-## Why the roster is six and not eighteen
+`pairing-canary` runs first and short-circuits, for the same reason it does on
+the PR gate: it is the shared prerequisite. Every later flow runs with
+`MAESTRO_REUSE_PAIRED_STATE=1`, so the suite pays for one fresh pairing rather
+than one pairing per app. The app flows still call `ensureDemo` and keep their
+own product assertions; reuse only avoids repeating the gateway/device
+onboarding ceremony.
 
-iOS is the **depth** platform, not a second copy of Android's roster ([D1](../../../docs/decisions.md#mobile-testing-890)). A macOS runner minute costs roughly ten Linux minutes, and every journey that asserts product logic over the replica is platform-independent by construction — one TypeScript source, one replica schema — so running it twice on the same night buys a second green at that multiple and nothing else. The six members each carry a claim that is a fact about **iOS**, and `run-ios-depth-suite.mjs`'s header names that fact per member, so a member whose reason stops holding can be removed by a reader rather than defended by tradition.
+## Why these 18 flows
 
-## Where twenty-five minutes came from
+The iOS lane now answers two separate questions against the same shipped
+artifact:
 
-**Derived, not observed.** The lane is new in this configuration — [#890](https://github.com/srikanth235/centraid/issues/890) W1 moved it off the dev client — so there is no distribution to sit on top of.
+1. Does the OS-specific shell and native integration work on iOS?
+2. Do the first-party app journeys actually render and act correctly on iOS?
 
-| Component | Minutes | Where the number comes from |
-| --- | --- | --- |
-| Fresh pairing (`pairing-canary`) | 4 | `lib/harness.mjs`: "Fresh pairing is the slowest legitimate chunk (~4 minutes on the reviewed CI runner)". |
-| `native-v0-resilience` | 5 | Its `minimumTests` floor is 13 declared checks across every cover plus a process restart — the heaviest single journey in the roster, priced at four navigation units plus the restart. |
-| `locker-gate`, `photos-permissions` | 3 | ~1.15 each at `home-apps-budget.md`'s per-journey rate, plus `locker-gate`'s own restart. |
-| `cold-start` | 5 | Eight per-launch cold starts. On a release artifact each is a real app launch rather than a bundle fetch, which is the point of the probe and also why it is no longer the ~43-second figure the dev client produced. |
-| `scroll-frames` | 4 | Eight flings each on two surfaces, plus arming and reading the frame probe. |
-| Headroom | 4 | The XCUITest driver's disconnect-and-retry behaviour past ~10 commands is recorded in [../README.md](../README.md#known-caveats) and is real time when it happens. |
+The first question is owned by `native-v0-resilience`, `photos-permissions`,
+`locker-gate`, `cold-start`, and `scroll-frames`. The second is explicit in
+`docs-drive`, `agenda-week`, `notes-library`, `tasks-board`, `people-roster`,
+`tally-derived`, `sharing-invite`, `places-seat`, and the remaining Photos
+journeys. Android-only offline and external-share branches remain guarded by
+their flows and are not falsely claimed as iOS evidence.
+
+## Where seventy minutes came from
+
+**Derived, not observed.** The expanded envelope is an initial CI scope budget;
+the first three successful runs will replace these allowances with measured
+p95s from [`../ledger/durations.json`](../ledger/README.md).
+
+| Component | Minutes | Why it is included |
+| --- | ---: | --- |
+| Fresh pairing (`pairing-canary`) | 5 | The existing product-latency budget; pairing remains a prerequisite, not an unbounded setup allowance. |
+| Native depth (`native-v0-resilience`, `photos-permissions`, `locker-gate`) | 15 | OS-mediated navigation, permissions, Keychain/process survival, and the required restart. |
+| App-level covers (Docs, Agenda, Notes, Tasks, People, Tally, Sharing, Places) | 24 | Eight direct product journeys, with iOS accessibility/render headroom per journey. |
+| Photos app-level journeys | 10 | Library, viewer, search, select/write, plus the denied-permission path. |
+| Performance probes (`cold-start`, `scroll-frames`) | 10 | Eight cold launches batched in one driver session, plus frame sampling on both surfaces. |
+| CI/accessibility headroom | 6 | Serialized XCUITest and evidence overhead inside the 140-minute job backstop. |
+
+The rows sum to the 70-minute aggregate ceiling. They are not individual
+timeouts: `lib/run-suite.mjs` enforces one absolute deadline, and the harness
+clamps each Maestro chunk to the time remaining.
 
 ## What to do when it is breached
 
-After **three real runs**, re-derive from the observed p95 in [`../ledger/durations.json`](../ledger/durations.json) and **tighten**. Until then, if two consecutive nightlies exceed twenty-five minutes:
+First classify the failure. A driver disconnect, missing receipt, or zero
+assertions is an infrastructure signal; an app assertion timeout remains a
+product failure and must not be retried into green. Then inspect the CI ledger
+and artifacts before changing the envelope:
 
-1. Check the ledger's failure classes first. Minutes spent on infrastructure-classified retries are an infrastructure problem, not a budget problem.
-2. Batch adjacent Maestro chunks — on iOS this also reduces exposure to the driver's long-flow disconnects, so it usually helps twice.
-3. **Remove a member whose reason no longer holds.** This is the first structural move on this lane, not the last: the roster is six because six claims are iOS's, and if one of them stops being iOS-specific it belongs on Android, where it costs a tenth as much.
+- If a chunk is needlessly paying a driver handshake, batch only adjacent
+  phases that preserve the same state and evidence boundary.
+- If a journey is genuinely slow, fix its app or harness cause and retain its
+  assertion; do not hide it with a larger chunk timeout.
+- After three real iOS runs, ratchet the aggregate budget to the observed p95
+  plus explicit bounded headroom. If the envelope still does not fit under the
+  140-minute job backstop, split the native/performance probes from the app
+  roster as a separately reported CI job rather than silently widening again.
 
-Do not raise the ceiling to buy time, do not add retries, and do not "balance" the lane by adding Android journeys to it. macOS minutes are the scarcest thing this repo spends, and the whole `≈150 macOS-minutes` half of the [#890](https://github.com/srikanth235/centraid/issues/890) W4 envelope is this job plus the desktop macOS lane.
+Do not add retries, skip flags, permission grants, or allowlist exceptions to
+make a product assertion green. The requested budget increase buys named iOS
+app coverage and nothing else.

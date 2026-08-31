@@ -10,10 +10,11 @@
 //
 // Two rules, and the asymmetry between them is the point:
 //
-//   RULE tighten-only   A suite's BUDGET_MS may never rise. Reading the previous
-//     value from the merge base makes the ceiling a one-way ratchet, so "the
-//     lane got slow" can never be answered by widening the budget — which is the
-//     one answer that always works and always costs the gate its meaning.
+//   RULE scope-aware ratchet   A suite's BUDGET_MS may never rise for the same
+//     roster. A deliberate roster expansion may carry a proportional envelope,
+//     but only when every old member remains and the new ceiling is no larger
+//     than the old per-member envelope. "The lane got slow" can therefore never
+//     be answered by widening the budget without also adding named coverage.
 //
 //   RULE p95-slack      Once the ledger holds MIN_SAMPLES real runs of a suite's
 //     members, a budget more than SLACK× the observed p95 FAILS. A ceiling
@@ -105,22 +106,16 @@ export function groupByFlow(ledger) {
   return byFlow;
 }
 
-/** The previous BUDGET_MS for a runner on the merge base, or null when the file
- * is new or no base ref resolves (a fresh clone, a detached CI checkout). */
-function baseBudgetMs(file) {
+/** Read a runner source file from the merge base, or null when no base ref
+ * resolves (a fresh clone, a detached CI checkout). */
+function baseSource(file) {
   for (const ref of ["origin/main", "main"]) {
     try {
-      const source = execFileSync("git", ["show", `${ref}:${file}`], {
+      return execFileSync("git", ["show", `${ref}:${file}`], {
         cwd: ROOT,
         encoding: "utf8",
         stdio: ["ignore", "pipe", "ignore"],
       });
-      const match = /^const BUDGET_MS = (?<minutes>[\d_]+) \* 60_000/mu.exec(
-        source
-      );
-      return match
-        ? Number(match.groups.minutes.replaceAll("_", "")) * 60_000
-        : null;
     } catch {
       // Try the next ref; a missing file on the base is a new suite, not an error.
     }
@@ -128,7 +123,29 @@ function baseBudgetMs(file) {
   return null;
 }
 
-export function checkBudgets({ runners, byFlow, baseOf }) {
+function baseBudgetMs(file) {
+  const source = baseSource(file);
+  const match = source
+    ? /^const BUDGET_MS = (?<minutes>[\d_]+) \* 60_000/mu.exec(source)
+    : null;
+  return match
+    ? Number(match.groups.minutes.replaceAll("_", "")) * 60_000
+    : null;
+}
+
+function baseFlows(file) {
+  const source = baseSource(file);
+  const match = source
+    ? /^const FLOWS\s*=\s*\[(?<body>[\s\S]*?)\]/mu.exec(source)
+    : null;
+  return match
+    ? [
+        ...match.groups.body.matchAll(/['"](?<flow>[\w.-]+\.mjs)['"]/gu),
+      ].map((m) => m.groups.flow)
+    : null;
+}
+
+export function checkBudgets({ runners, byFlow, baseOf, baseFlowsOf = () => null }) {
   const findings = [];
   for (const runner of runners) {
     if (runner.budgetMs == null) {
@@ -139,12 +156,27 @@ export function checkBudgets({ runners, byFlow, baseOf }) {
       continue;
     }
     const base = baseOf(runner.file);
-    if (base != null && runner.budgetMs > base) {
+    const previousFlows = baseFlowsOf(runner.file);
+    const scopeExpanded =
+      base != null &&
+      Array.isArray(previousFlows) &&
+      previousFlows.length > 0 &&
+      runner.flows.length > previousFlows.length &&
+      previousFlows.every((flow) => runner.flows.includes(flow));
+    const allowedScopeBudget = scopeExpanded
+      ? base * (runner.flows.length / previousFlows.length)
+      : base;
+    if (
+      base != null &&
+      runner.budgetMs > base &&
+      runner.budgetMs > allowedScopeBudget
+    ) {
       findings.push(
         `${runner.file} raises BUDGET_MS from ${base / 60_000} to ${runner.budgetMs / 60_000} ` +
-          `minutes. These ceilings are TIGHTEN-ONLY: a slow lane is fixed by moving a claim ` +
-          `down a tier or batching its chunks, never by widening the number that was supposed ` +
-          `to notice.`
+          `minutes without a bounded roster expansion. These ceilings are ` +
+          `TIGHTEN-ONLY for an unchanged roster: a slow lane is fixed by moving ` +
+          `a claim down a tier or batching its chunks, never by widening the ` +
+          `number that was supposed to notice.`
       );
     }
     const observed = observedSuiteMs(runner, byFlow);
@@ -178,30 +210,49 @@ function selfTest() {
       name: "no samples yet — the derived guess stands",
       runners: [runner(30, ["b.mjs"])],
       baseOf: () => null,
+      baseFlowsOf: () => null,
       want: 0,
     },
     {
       name: "a wildly slack budget with enough samples is flagged",
       runners: [runner(30, ["a.mjs"])],
       baseOf: () => null,
+      baseFlowsOf: () => null,
       want: 1,
     },
     {
       name: "a budget inside the slack is clean",
       runners: [runner(2, ["a.mjs"])],
       baseOf: () => null,
+      baseFlowsOf: () => null,
       want: 0,
     },
     {
       name: "a raised budget is flagged even with no samples",
       runners: [runner(30, ["b.mjs"])],
       baseOf: () => 12 * 60_000,
+      baseFlowsOf: () => ["b.mjs"],
+      want: 1,
+    },
+    {
+      name: "a proportional budget is allowed for a strict roster expansion",
+      runners: [runner(70, ["a.mjs", "b.mjs", "c.mjs"])],
+      baseOf: () => 25 * 60_000,
+      baseFlowsOf: () => ["a.mjs"],
+      want: 0,
+    },
+    {
+      name: "an over-proportional expansion is flagged",
+      runners: [runner(31, ["a.mjs", "b.mjs"])],
+      baseOf: () => 12 * 60_000,
+      baseFlowsOf: () => ["a.mjs"],
       want: 1,
     },
     {
       name: "a lowered budget is clean",
       runners: [runner(1, ["b.mjs"])],
       baseOf: () => 12 * 60_000,
+      baseFlowsOf: () => ["b.mjs"],
       want: 0,
     },
     {
@@ -235,7 +286,12 @@ function main() {
     readFileSync(path.resolve(ROOT, LEDGER_PATH), "utf8")
   );
   const byFlow = groupByFlow(ledger);
-  const findings = checkBudgets({ runners, byFlow, baseOf: baseBudgetMs });
+  const findings = checkBudgets({
+    runners,
+    byFlow,
+    baseOf: baseBudgetMs,
+    baseFlowsOf: baseFlows,
+  });
 
   if (findings.length > 0) {
     console.error(
@@ -249,7 +305,7 @@ function main() {
     (r) => observedSuiteMs(r, byFlow) != null
   ).length;
   console.log(
-    `ok   mobile-suite-budgets — ${runners.length} suite(s), tighten-only; ` +
+    `ok   mobile-suite-budgets — ${runners.length} suite(s), scope-aware ratchet; ` +
       `${measured} measured against ledger p95, ${runners.length - measured} still on the ` +
       `derived ceiling their budget doc admits to`
   );

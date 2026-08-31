@@ -189,12 +189,11 @@ jobs:
     # JSI xcframework step exits 65 with an empty "Could not resolve package
     # dependencies" footer (run 30417451436). macos-26 defaults to 26.5+.
     runs-on: macos-26
-    # Cold macOS native build + serialized journeys exceed 60 on a cache miss;
-    # cancelled counts as red (#557), so the backstop must sit above the
-    # budget. Raised from 60 under #781 after the 08-03/04/06/13 nightlies
-    # were cancelled at exactly this ceiling. Raised again to 105 under #839
-    # when the home-apps suite (10-minute aggregate ceiling) joined the run.
-    timeout-minutes: 105
+    # Cold macOS native build + the expanded serialized iOS roster exceed 105
+    # on a cache miss; cancelled counts as red (#557), so the backstop must sit
+    # above the 70-minute suite envelope plus build/setup time. This is a job
+    # backstop, not a product-test budget.
+    timeout-minutes: 140
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
@@ -425,13 +424,11 @@ jobs:
       # the bundle prewarm, the dev-launcher `openLink`, the developer-menu
       # explainer sheet — went with it.
       - run: node scripts/test-report/prepare.mjs
-      # #890 W4 — iOS is the DEPTH platform, not a second copy of the roster.
-      # Android gates PRs and runs the full roster nightly (D1); duplicating all
-      # of it here would spend macOS minutes — roughly ten times a Linux minute —
-      # re-proving claims Android already proved that same night. What this lane
-      # owns is the set of claims only iOS can carry, enumerated with their
-      # reasons in run-ios-depth-suite.mjs.
-      - name: Run the iOS depth roster on the release artifact
+      # #908 — the iOS nightly owns native depth plus app-level release
+      # coverage. Android remains the PR/merge gate; this lane answers the
+      # separate correctness question for the iOS artifact and reuses one
+      # paired profile across its ordered 18-flow roster.
+      - name: Run the iOS release app roster
         env:
           MAESTRO_PLATFORM: ios
           CENTRAID_MOBILE_BUILD: release

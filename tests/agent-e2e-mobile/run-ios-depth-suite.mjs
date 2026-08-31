@@ -1,15 +1,12 @@
-// THE iOS DEPTH ROSTER — the claims only iOS can carry (#890 W4).
+// THE iOS RELEASE ROSTER — native depth plus app-level journeys (#908).
 //
-// Android gates PRs and runs the full roster on the per-merge canary and the
-// nightly (D1, docs/decisions.md#mobile-testing-890). This lane is deliberately
-// NOT a second copy of that roster. A macOS runner minute costs roughly ten
-// Linux minutes, and re-proving on iOS, the same night, a claim Android already
-// proved buys one thing — a second green — for that multiple. What it does not
-// buy is the thing a nightly is for.
-//
-// So each member below is here because iOS is where its claim lives, and the
-// comment says which fact makes that true. A member whose reason stops holding
-// is removed; a member added without one is a duplicate wearing a new name.
+// Android remains the PR and merge-gating platform. This nightly lane also
+// runs the product's app-level journeys against the iOS Release artifact so
+// the question "does this app work on iOS?" has direct evidence, not an
+// inference from Android plus one native smoke test. The roster is one ordered
+// suite: pairing happens once, then every journey reuses that paired profile.
+// That keeps the added coverage honest about time and avoids paying the hosted
+// XCUITest startup cost once per app.
 //
 //   pairing-canary          iOS is a SEPARATE ARTIFACT. The Release .app is a
 //     different binary from the Android Release apk, built by a different
@@ -36,14 +33,9 @@
 //     denominator is per-device (targetHz is recorded beside every percentage),
 //     so the two platforms' numbers are not comparable and neither substitutes.
 //
-// DELIBERATELY ABSENT, and why, so the next reader does not "fix" the omission:
-// the Photos read/search/viewer/select journeys, the seven home-app covers,
-// places-seat, volume-proof and sharing-invite. Every one of those asserts
-// product logic over the replica — which is platform-independent by construction
-// (one TypeScript source, one replica schema) — and Android runs all of them
-// nightly. Their iOS-specific half is the native wiring, which
-// `native-v0-resilience` proves once for all of them. That is the E-device-only
-// ruling applied to this lane rather than quoted at it.
+// App-level coverage is intentionally explicit below. The Android-only
+// offline/share-intent branches remain guarded inside their flows; the iOS
+// lane still exercises each supported iOS path and its product assertions.
 
 import { runSuite } from "./lib/run-suite.mjs";
 
@@ -54,17 +46,32 @@ import { runSuite } from "./lib/run-suite.mjs";
 const FLOWS = [
   "pairing-canary.mjs",
   "native-v0-resilience.mjs",
+  // App-level coverage: every shipped first-party app/surface with a
+  // scheduled mobile journey. Keep these names authoritative so
+  // lint:e2e-wiring can prove the iOS lane really runs them.
+  "docs-drive.mjs",
+  "agenda-week.mjs",
+  "notes-library.mjs",
+  "tasks-board.mjs",
+  "people-roster.mjs",
+  "tally-derived.mjs",
+  "sharing-invite.mjs",
+  "places-seat.mjs",
   "locker-gate.mjs",
+  "photos-permissions.mjs",
+  "photos-library.mjs",
+  "photos-viewer.mjs",
+  "photos-search.mjs",
+  "photos-select-write.mjs",
+  // Platform probes remain part of the same release-artifact verdict.
   "cold-start.mjs",
   "scroll-frames.mjs",
-  "photos-permissions.mjs",
 ];
 
-// The nightly's iOS half of the #890 W4 envelope (≤45 min wall, ≈150 macOS
-// minutes across the whole nightly). Derived, not observed — see
-// flows/ios-depth-budget.md, which also carries the rule that this becomes a
-// measured p95 ratchet off ledger/durations.json once three real runs exist.
-const BUDGET_MS = 25 * 60_000;
+// The expanded app-level roster's bounded iOS envelope. Derived, not observed;
+// see flows/ios-depth-budget.md. This stays below the workflow's 140-minute
+// backstop and is re-derived from measured CI p95s after three runs.
+const BUDGET_MS = 70 * 60_000;
 
 process.exitCode = await runSuite({
   name: "ios-depth",
@@ -75,5 +82,5 @@ process.exitCode = await runSuite({
   canaryCount: 1,
   reuseAfter: 1,
   onBudgetBreach:
-    "macOS minutes are the scarcest thing this repo spends — move a claim down a tier rather than raising the ceiling.",
+    "the expanded iOS app roster exceeded its measured envelope; inspect CI failure classes and measured p95s before changing scope or budget.",
 });

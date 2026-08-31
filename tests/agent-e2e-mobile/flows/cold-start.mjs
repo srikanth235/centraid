@@ -42,6 +42,49 @@ function percentile(sorted, fraction) {
   return sorted[index];
 }
 
+function commandText(command) {
+  return JSON.stringify(command?.command ?? command?.evaluatedCommand ?? "");
+}
+
+function commandTime(command) {
+  const timestamp = Number(command?.metadata?.timestamp);
+  return Number.isFinite(timestamp) ? timestamp : undefined;
+}
+
+function measuredLaunches(reports) {
+  const commands = reports.flatMap((report) =>
+    Array.isArray(report.commands) ? report.commands : []
+  );
+  const starts = commands
+    .filter(
+      (command) =>
+        command?.metadata?.status === "COMPLETED" &&
+        commandText(command).includes("launchApp")
+    )
+    .map(commandTime)
+    .filter((timestamp) => timestamp !== undefined)
+    .sort((left, right) => left - right);
+  const homes = commands
+    .filter(
+      (command) =>
+        command?.metadata?.status === "COMPLETED" &&
+        commandText(command).includes(HOME_READY_MARKER)
+    )
+    .map(commandTime)
+    .filter((timestamp) => timestamp !== undefined)
+    .sort((left, right) => left - right);
+
+  return starts
+    .map((startedAt, index) => {
+      const nextStart = starts[index + 1] ?? Number.POSITIVE_INFINITY;
+      const home = homes.find(
+        (completedAt) => completedAt >= startedAt && completedAt < nextStart
+      );
+      return home === undefined ? undefined : home - startedAt;
+    })
+    .filter((duration) => duration !== undefined && duration >= 0);
+}
+
 await runFlow("mobile-cold-start", async (ctx) => {
   // Home only exists behind onboarding since #603, and this flow never clears
   // state again after this point — so establish the paired state first and let
@@ -50,15 +93,14 @@ await runFlow("mobile-cold-start", async (ctx) => {
   await ctx.configureGateway();
 
   // Sequential by construction: each sample must be a cold process start on an
-  // idle device, so these cannot be parallelised. Recursion rather than a loop
-  // keeps that explicit (and satisfies no-await-in-loop, which is right to be
-  // suspicious of every other shape).
-  const launchMs = [];
-  const measureNext = async (index) => {
-    if (index >= LAUNCHES) return;
-    const started = performance.now();
-    await ctx.run(
-      `appId: ${ctx.state.appId}
+  // idle device, so these cannot be parallelised. Submit the flow files together
+  // so Maestro keeps one XCUITest driver alive; every file still stops and
+  // relaunches the app, preserving the independent process boundary without
+  // paying the driver handshake eight times.
+  const reports = await ctx.runSession(
+    Array.from({ length: LAUNCHES }, (_, index) => ({
+      label: `cold-start-${index + 1}`,
+      yaml: `appId: ${ctx.state.appId}
 ---
 - stopApp
 - launchApp
@@ -67,12 +109,15 @@ await runFlow("mobile-cold-start", async (ctx) => {
       text: "${HOME_READY_MARKER}"
     timeout: 30000
 `,
-      `cold-start-${index + 1}`
+    })),
+    "cold-start-samples"
+  );
+  const launchMs = measuredLaunches(reports);
+  if (launchMs.length !== LAUNCHES) {
+    throw new Error(
+      `cold-start session produced ${launchMs.length}/${LAUNCHES} timing receipts`
     );
-    launchMs.push(performance.now() - started);
-    return measureNext(index + 1);
-  };
-  await measureNext(0);
+  }
 
   const sorted = [...launchMs].sort((left, right) => left - right);
   const medianMs = percentile(sorted, 0.5);

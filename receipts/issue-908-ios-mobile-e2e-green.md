@@ -9,7 +9,8 @@ claims remain open until the GitHub Actions lane proves them.
 - [x] Keep camera-roll reconciliation behind completed profile onboarding.
 - [x] Wait for the configured relay before exposing a pairing endpoint.
 - [x] Drive profile entry through stable handles and read the value back before submission.
-- [ ] Pass the complete `mobile-e2e-ios` depth roster within its existing budget.
+- [ ] Pass the complete `mobile-e2e-ios` native + app-level roster within its
+  expanded, bounded budget.
 
 ## What changed
 
@@ -30,6 +31,14 @@ command report because it spans the live capability. The app removes the
 one-time ticket from its rendered state when submission starts, so a
 post-submit failure cannot retain or silently replay a capability that may
 already have been consumed.
+
+The iOS nightly now also runs the app-level journeys directly on the iOS
+Release artifact: Docs, Agenda, Notes, Tasks, People, Tally, Sharing, Places,
+Locker, and all Photos surfaces. The ordered suite pairs once and reuses the
+paired profile, while each flow retains its own demo seed and product
+assertions. Its aggregate envelope is 70 minutes, below the workflow's
+140-minute macOS backstop; the increase buys this named coverage and does not
+change per-assertion timeouts, retries, permissions, or allowlists.
 
 Its already-asserted paired Home frame is copied to
 `artifacts/e2e/ui-impact/issue-908-ios-paired-home.png`.
@@ -84,10 +93,13 @@ Home evidence at `artifacts/e2e/ui-impact/issue-908-ios-paired-home.png`.
 - Gate the reconciliation side effect at the product lifecycle boundary. A
   permission dialog belongs to the paired shell, not ticket onboarding.
 - Preserve the five-minute canary and every product assertion. Stable handles
-  and relay readiness fix the causes; no retry, timeout, or budget was widened.
+  and relay readiness fix the pairing causes; only the aggregate iOS suite
+  envelope widened to pay for the explicitly added app-level coverage.
 - Pair once at the front of the iOS depth suite and reuse that paired profile
   downstream. Keep ordinary evidence split by sensitivity, and keep the shared
   canary's phases in one driver session so infrastructure startup is paid once.
+- Run the app-level roster on iOS as direct release-artifact evidence, with one
+  bounded aggregate envelope for the ordered suite.
 - Measure the canary's product transition from the Maestro command receipt,
   not from the harness process wall clock.
 - Use GitHub Actions as the only device-level authority for this issue. Local
@@ -97,7 +109,7 @@ Home evidence at `artifacts/e2e/ui-impact/issue-908-ios-paired-home.png`.
 
 - Redesigning onboarding or changing its identity/profile contract.
 - Removing `expo-dev-client` from local Debug development.
-- Widening E2E budgets, timeouts, retries, allowlists, or permission grants.
+- Widening per-assertion E2E timeouts, retries, allowlists, or permission grants.
 - Changing Android's artifact or journey roster.
 
 ## Verification
@@ -127,7 +139,8 @@ bun run format:check
 ```
 
 The authoritative device verdict is the dispatched `mobile-e2e-ios` workflow
-run and will be recorded here after it completes.
+run and will be recorded here after the expanded native + app-level roster
+completes.
 
 CI iterations that shaped the checkpoint design:
 
@@ -146,9 +159,9 @@ CI iterations that shaped the checkpoint design:
 
 ## Audit
 
-**VERDICT: REFUTED — completion is not yet proved.** The full iOS depth roster
-has not passed on this head. CI evidence, iteration, and a final diff audit are
-still required before merge.
+**VERDICT: REFUTED — completion is not yet proved.** The full iOS native +
+app-level roster has not passed on this head. CI evidence, iteration, and a
+final diff audit are still required before merge.
 
 ## Session
 

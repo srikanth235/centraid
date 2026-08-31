@@ -160,7 +160,7 @@ The claims layer under all of it is unchanged: what belongs _here_ is the runtim
 | `mobile-device-gate` (`ci.yml`) | every mobile-touching PR | Android | `run-pr-gate-suite.mjs` — the critical five, ≤12 min warm ([budget](flows/pr-gate-budget.md)) | **yes** |
 | `mobile-canary-android` (`mobile-canary.yml`) | every merge to `main` | Android | the full roster, and prebuilds the native shell the PR gate restores | no |
 | `mobile-e2e-android` (`e2e.yml`) | nightly | Android | the full roster | no |
-| `mobile-e2e-ios` (`e2e.yml`) | nightly | iOS | `run-ios-depth-suite.mjs` — the six claims that are facts about iOS, never a second copy ([budget](flows/ios-depth-budget.md)) | no |
+| `mobile-e2e-ios` (`e2e.yml`) | nightly | iOS | `run-ios-depth-suite.mjs` — native depth plus the 18-flow app-level release roster ([budget](flows/ios-depth-budget.md)) | no |
 | `alarm` (`mobile-alarm-test.yml`) | quarterly | Android | the critical five against a build with Home blanked, and **requires them to FAIL** | no |
 
 Android gates PRs per D1 in [docs/decisions.md](../../docs/decisions.md#mobile-testing-890): Linux runners expose `/dev/kvm`, and UIAutomator2 is the stabler of the two Maestro drivers.
@@ -173,7 +173,7 @@ Every lane, and every flow it schedules, is declared in [`roster.json`](roster.j
 | --- | --- |
 | `flows/pairing-canary.mjs` | the shared prerequisite: a ticket is minted, redeemed, and pairing completes to Home — in under five minutes, before anything fans out. First and short-circuiting in every suite that has one. |
 | `run-pr-gate-suite.mjs` (5 flows) | the critical five that gate a PR — budget in [flows/pr-gate-budget.md](flows/pr-gate-budget.md) |
-| `run-ios-depth-suite.mjs` (6 flows) | the iOS-only claims — budget in [flows/ios-depth-budget.md](flows/ios-depth-budget.md) |
+| `run-ios-depth-suite.mjs` (18 flows) | the iOS Release artifact: native depth, every app-level journey, and the cold-start/scroll probes — budget in [flows/ios-depth-budget.md](flows/ios-depth-budget.md) |
 | `run-photos-suite.mjs` (5 flows) | the Photos seat: refused permission, library, viewer, search, select-and-write — budget in [flows/photos-budget.md](flows/photos-budget.md) |
 | `run-home-apps-suite.mjs` (7 flows) | the Docs, Agenda, Notes, Tasks, People, Tally and Locker seats — budget in [flows/home-apps-budget.md](flows/home-apps-budget.md) |
 | `run-probes-suite.mjs` (6 flows) | the standalone journeys that grid G showed unbudgeted: `cold-start`, `home-loads`, `native-v0-resilience`, `places-seat`, `scroll-frames`, `volume-proof` — budget in [flows/probes-budget.md](flows/probes-budget.md) |
