@@ -62,6 +62,7 @@ Where each checked item lands, then the reasoning behind it:
 - Give `coverage:shard` the default reporter alongside the blob, so a failing shard says which test failed — "G — a shard that fails in silence"; `package.json`.
 - Keep every app on the grid when no tile is readable, so an unmounted replica cannot leave a member with no way into any app — "H — the launcher with no tiles"; `apps/mobile/src/screens/home/springboard-policy.ts`.
 - Move grid membership into `springboard-policy`, the module that claims it, so the rule is testable without a renderer — "H — the launcher with no tiles"; `apps/mobile/src/screens/Home.tsx`, and the policy cases move from `apps/mobile/src/screens/home/tile-model.test.ts` into a new `apps/mobile/src/screens/home/springboard-policy.test.ts`, with `tests/comment-density-ratchet.json` re-pinned for the arithmetic that split produced.
+- Publish the canary's paired-Home frame as UI-impact evidence for H — "User impact"; `tests/agent-e2e-mobile/flows/pairing-canary.mjs` and its companion `tests/agent-e2e-mobile/flows/pairing-canary.md`.
 
 ### The defect
 
@@ -218,6 +219,18 @@ Verified in both directions: with the pre-fix rule restored, two of the four new
 ### Docs
 
 `docs/decisions.md` gains **G-filter-escape-hatch** beside the existing G-filter-inverse. `TESTING.md`'s path-filter row records both the narrowed `client-e2e` gate and the new fallback requirement.
+
+## User impact
+
+**H is the only change on this branch a member can see.** Everything else is CI wiring, lint rules and receipts.
+
+Before it, a phone whose replica session was absent drew Home's heading and **zero tiles**. `springboardState` deliberately returns `content` when every tile is `unknown` — "we do not KNOW the vault is empty, so we do not say so" — and Home's membership filter then demoted every tile for being unreadable. The member was not told the vault was empty *and* had no way into any app: the launcher is the only door on a shell with no tab bar. Now, when nothing is readable, every app keeps its tile.
+
+**First-run: unchanged, deliberately.** A genuine day one settles every tile `empty` — a read that landed and returned no rows — and `everyTileUnreadable` tests for `unknown`, not `empty`. So the DayOne screen still wins exactly when it did before; the fix only takes the case where the tiles could not be *read* at all, which day one is not.
+
+**Evidence:** `artifacts/e2e/ui-impact/issue-905-mobile-paired-home.png`, published by `tests/agent-e2e-mobile/flows/pairing-canary.mjs`.
+
+That frame is the canary's own `paired-home` screenshot, and the canary is the only flow that currently reaches Home — every journey behind it dies at its first tile tap. It is also the artifact that settles the open question in E: a populated grid means the launcher was rendering `unknown` tiles and H is the cause of the tile taps; a DayOne screen means every tile read `empty` and the cause is elsewhere. Publishing is not asserting, so the canary gains no second reason to go red, and a failed copy is noted and swallowed.
 
 ## Decisions
 
