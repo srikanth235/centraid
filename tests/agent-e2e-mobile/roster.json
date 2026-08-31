@@ -38,7 +38,7 @@
       "blocking": false,
       "platform": "ios",
       "budgetDoc": "tests/agent-e2e-mobile/flows/ios-depth-budget.md",
-      "why": "iOS release coverage — native depth plus every scheduled app-level journey, all against the iOS Release artifact. The lane proves empty Photos permission denial, then drives Home's product sample-content action to create one complete replica for the remaining app journeys; run-ios-depth-suite.mjs is the authoritative 19-flow list and its suite budget is bounded below the 140-minute macOS job timeout."
+      "why": "iOS release coverage — native depth plus every scheduled app-level journey, all against the iOS Release artifact. The lane proves empty Photos permission denial, then drives Home's product sample-content action to create one complete replica for the remaining app journeys; run-ios-depth-suite.mjs is the authoritative 19-flow list and its 79-minute app-coverage budget remains bounded below the 140-minute macOS job timeout."
     }
   },
   "flows": {

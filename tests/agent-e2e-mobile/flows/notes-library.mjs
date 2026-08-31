@@ -31,7 +31,10 @@
 // publishes (issue #483's non-vacuous rules; this file is discovered by
 // scripts/lint-e2e-flows.mjs).
 
-import { retryableTapCommands } from "../lib/first-run.mjs";
+import {
+  openHomeAppCommands,
+  retryableTapCommands,
+} from "../lib/first-run.mjs";
 import {
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
@@ -51,11 +54,17 @@ await runFlow("notes-library", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${retryableTapCommands("Open Notes.*")}
+${openHomeAppCommands("notes", "Open Notes.*")}
 - extendedWaitUntil:
     visible: "New note"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-# The row's own accessible name, built by the blueprint's promote().
+# The row's own accessible name, built by the blueprint's promote(). It is
+# below the first viewport on iOS, so make the visible-row claim explicit.
+- scrollUntilVisible:
+    element: "Open Mom's chili, written down properly"
+    direction: DOWN
+    visibilityPercentage: 100
+    timeout: 20000
 - assertVisible: "Open Mom's chili, written down properly"
 # …and the preview under it, which is the note's BODY. The row collapses the
 # body's newlines to spaces, so this is one reachable single-line node rather
@@ -146,7 +155,7 @@ ${retryableTapCommands("Open Mom's chili, written down properly", "New note")}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open Notes.*")}
+${openHomeAppCommands("notes", "Open Notes.*")}
 - extendedWaitUntil:
     visible: "New note"
     timeout: 30000

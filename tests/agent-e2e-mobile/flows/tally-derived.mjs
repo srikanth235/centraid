@@ -21,7 +21,10 @@
 // Both assertions are on copy the asserted screen alone publishes (issue #483's
 // non-vacuous rules; this file is discovered by scripts/lint-e2e-flows.mjs).
 
-import { retryableTapCommands } from "../lib/first-run.mjs";
+import {
+  openHomeAppCommands,
+  retryableTapCommands,
+} from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 /** Balances' own ambient sentence — `apps/tally/view-copy.ts` BALANCES_STATUS,
@@ -40,7 +43,7 @@ await runFlow("tally-derived", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${retryableTapCommands("Open Tally.*")}
+${openHomeAppCommands("tally", "Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}

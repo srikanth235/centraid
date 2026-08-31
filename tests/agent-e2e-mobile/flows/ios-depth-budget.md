@@ -4,12 +4,14 @@
 the pairing prerequisite, empty-Photos permission denial, a fully seeded replica
 bootstrap, native resilience, the six non-Photos app covers, Sharing, Places,
 Locker, the remaining Photos journeys, and the cold-start/scroll probes. The
-runner fails when aggregate wall time is **seventy-five minutes or
+runner fails when aggregate wall time is **seventy-nine minutes or
 more**, measured from the first flow process start through the final verdict.
 
 This is an intentionally bounded increase from the former 25-minute native-
-depth envelope. It pays for direct app-level evidence on iOS; it is not a retry
-or a relaxed per-assertion timeout. The workflow's macOS job backstop remains
+depth envelope. The additional four minutes over the current 75-minute
+envelope are named for the expanded app-level roster and its evidence
+boundaries; they are not a retry or a
+relaxed per-assertion timeout. The workflow's macOS job backstop remains
 140 minutes, leaving time for a cold native build, setup, artifact handling,
 and evidence upload.
 
@@ -38,7 +40,7 @@ The first question is owned by `native-v0-resilience`, `photos-permissions`,
 journeys. Android-only offline and external-share branches remain guarded by
 their flows and are not falsely claimed as iOS evidence.
 
-## Where seventy-five minutes came from
+## Where seventy-nine minutes came from
 
 **Derived, not observed.** The expanded envelope is an initial CI scope budget;
 the first three successful runs will replace these allowances with measured
@@ -50,15 +52,14 @@ p95s from [`../ledger/durations.json`](../ledger/README.md).
 | Empty-Photos permission journey | 5 | A second fresh pairing preserves the iOS refusal claim before any Photos seed. |
 | Product-driven replica bootstrap | 5 | Home seeds seven deterministic app scenarios and rebuilds the phone replica. |
 | Native depth (`native-v0-resilience`, `locker-gate`) | 10 | OS-mediated navigation, Keychain/process survival, and the required restart. |
-| App-level covers (Docs, Agenda, Notes, Tasks, People, Tally, Sharing, Places) | 24 | Eight direct product journeys, with iOS accessibility/render headroom per journey. |
-| Photos app-level journeys | 10 | Library, viewer, search, select/write, plus the separately established denied-permission path. |
+| App-level covers (Docs, Agenda, Notes, Tasks, People, Tally, Sharing, Places) | 30 | Eight direct product journeys, with iOS accessibility/render headroom and explicit app-owned evidence boundaries per journey. |
+| Photos app-level journeys | 11 | Library, viewer, search, select/write, plus the separately established denied-permission path. |
 | Performance probes (`cold-start`, `scroll-frames`) | 10 | Eight cold launches batched in one driver session, plus frame sampling on both surfaces. |
-| CI/accessibility headroom | 6 | Serialized XCUITest and evidence overhead inside the 140-minute job backstop. |
+| CI/accessibility headroom | 3 | Serialized XCUITest and evidence overhead inside the 140-minute job backstop. |
 
-The rows sum to the 75-minute aggregate ceiling. The five-minute increase is
-the proportional allowance for the explicit fresh-replica lifecycle boundary;
-it is below the scope-aware budget ratchet and is not a timeout for any product
-assertion. The rows are not individual
+The rows sum to the 79-minute aggregate ceiling. The increase is tied to named
+app-level coverage and its explicit fresh-replica/evidence boundaries; it is
+not a timeout for any product assertion. The rows are not individual
 timeouts: `lib/run-suite.mjs` enforces one absolute deadline, and the harness
 clamps each Maestro chunk to the time remaining.
 

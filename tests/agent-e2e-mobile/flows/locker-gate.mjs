@@ -29,7 +29,10 @@
 // publishes (issue #483's non-vacuous rules; this file is listed in
 // scripts/lint-e2e-flows.mjs).
 
-import { retryableTapCommands } from "../lib/first-run.mjs";
+import {
+  openHomeAppCommands,
+  retryableTapCommands,
+} from "../lib/first-run.mjs";
 import {
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
@@ -70,7 +73,7 @@ await runFlow("locker-gate", async (ctx) => {
 - assertVisible:
     id: "home-tile-locker"
 - assertVisible: "Open Locker, locked"
-${retryableTapCommands("Open Locker.*")}
+${openHomeAppCommands("locker", "Open Locker.*")}
 - extendedWaitUntil:
     visible: "Choose a passphrase"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
@@ -89,7 +92,7 @@ ${GATE_ASSERTIONS}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open Locker.*")}
+${openHomeAppCommands("locker", "Open Locker.*")}
 - extendedWaitUntil:
     visible: "Choose a passphrase"
     timeout: 30000

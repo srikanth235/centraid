@@ -1,4 +1,7 @@
-import { retryableTapCommands } from "../lib/first-run.mjs";
+import {
+  openHomeAppCommands,
+  retryableTapCommands,
+} from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
 const now = new Date();
@@ -14,7 +17,7 @@ await runFlow("photos-library", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${retryableTapCommands("Open Photos.*")}
+${openHomeAppCommands("photos", "Open Photos.*")}
 - extendedWaitUntil:
     visible:
       id: "photos-collections"
@@ -36,11 +39,12 @@ ${retryableTapCommands("Open Photos.*")}
 - assertVisible: "${currentMonth}"
 - assertVisible: ".*(Sun|Mon|Tue|Wed|Thu|Fri|Sat),.*"
 - scroll
-# THE GRAIN DRAWER HAS NO HANDLES. "Months" / "All" are the scroll-owned grain
+# THE GRAIN CONTROL HAS NO HANDLES. "Months" / "All" are the scroll-owned grain
 # controls (TimelineGrain), and nothing in kit/test-ids.ts names them — so these
-# three steps stay on copy deliberately rather than on an invented id, which
-# scripts/lint-mobile-testids.mjs would refuse the moment it was written. Noted
-# as a gap under #890 W2.
+# steps stay on copy deliberately rather than on an invented id, which
+# scripts/lint-mobile-testids.mjs would refuse the moment it was written. The
+# selected grain remains in the fixed control after the drill-down; that state
+# is the assertion, not disappearance of the label.
 - assertVisible: "Months"
 - tapOn: "Months"
 - extendedWaitUntil:
@@ -48,10 +52,9 @@ ${retryableTapCommands("Open Photos.*")}
     timeout: 15000
 - tapOn:
     text: "${currentMonth}.*"
-- assertVisible: "All"
-- extendedWaitUntil:
-    notVisible: "All"
-    timeout: 7000
+- assertVisible:
+    text: "Months"
+    selected: true
 - takeScreenshot: photos-library-drilldown
 `,
     "library-drilldown"
@@ -59,6 +62,6 @@ ${retryableTapCommands("Open Photos.*")}
   return {
     pass: true,
     notes:
-      "library headers, scroll-owned drawer, Months drill-down, and withdrawal passed",
+      "library headers, scroll-owned grain control, Months drill-down, and return path passed",
   };
 });

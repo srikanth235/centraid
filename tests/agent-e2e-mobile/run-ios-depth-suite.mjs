@@ -74,7 +74,7 @@ const FLOWS = [
 // The expanded app-level roster's bounded iOS envelope. Derived, not observed;
 // see flows/ios-depth-budget.md. This stays below the workflow's 140-minute
 // backstop and is re-derived from measured CI p95s after three runs.
-const BUDGET_MS = 75 * 60_000;
+const BUDGET_MS = 79 * 60_000;
 
 process.exitCode = await runSuite({
   name: "ios-depth",

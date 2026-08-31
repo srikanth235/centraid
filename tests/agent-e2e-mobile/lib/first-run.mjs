@@ -80,3 +80,27 @@ export function retryableTapCommands(selector, sourceSelector = selector) {
 ${conditionalRetry}
 ${conditionalRetry}`;
 }
+
+/**
+ * Open an app from Home by its stable tile handle.
+ *
+ * Home is a real scroll surface: the launcher order is deliberately allowed
+ * to put later apps below the first viewport. Copy remains an assertion beside
+ * the handle, but it is not a navigation locator because the live count is
+ * part of that accessible name and changes with the vault.
+ */
+export function openHomeAppCommands(appId, label) {
+  const tile = `home-tile-${appId}`;
+  return `- scrollUntilVisible:
+    element:
+      id: "${tile}"
+    direction: DOWN
+    visibilityPercentage: 100
+    timeout: 30000
+- assertVisible:
+    id: "${tile}"
+- assertVisible: "${label}"
+- tapOn:
+    id: "${tile}"
+    retryTapIfNoChange: true`;
+}

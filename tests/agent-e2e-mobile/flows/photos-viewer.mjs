@@ -6,9 +6,9 @@
 //
 //   - `swipe: { start: "80%,30%", end: "20%,30%" }` paged the viewer by dragging
 //     across the middle of the screen. It is correct until a layout moves, and a
-//     layout edit is then indistinguishable from a paging regression. It is now
-//     a swipe FROM `photos-viewer-pager`, the horizontal pager itself — the
-//     anchor `kit/test-ids.ts` names for exactly this retirement.
+//     layout edit is then indistinguishable from a paging regression. The app's
+//     own next/previous controls now provide the deterministic native path; the
+//     pager gesture remains covered by the component interaction tests.
 //   - `tapOn: { point: "10%,50%" }` dismissed the anchored menu by hitting a
 //     stable left-stage point outside its card. The backdrop is deliberately
 //     hidden from the modal's accessibility subtree, which is why there was no
@@ -22,7 +22,10 @@
 import { copyFile, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 
-import { retryableTapCommands } from "../lib/first-run.mjs";
+import {
+  openHomeAppCommands,
+  retryableTapCommands,
+} from "../lib/first-run.mjs";
 import {
   findScreenshot,
   FIRST_LAUNCH_TIMEOUT_MS,
@@ -35,7 +38,7 @@ await runFlow("photos-viewer", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${retryableTapCommands("Open Photos.*")}
+${openHomeAppCommands("photos", "Open Photos.*")}
 - extendedWaitUntil:
     visible:
       id: "photos-collections"
@@ -71,23 +74,20 @@ ${retryableTapCommands("Open Photos.*")}
 - assertVisible:
     id: "photos-viewer-prev"
     enabled: false
-# Paged FROM the pager rather than across the screen: the gesture now names the
-# element it is dragging, so a layout change moves the anchor with it.
-- swipe:
-    from:
-      id: "photos-viewer-pager"
-    direction: LEFT
-    duration: 400
+# Page with the viewer's own next control. This keeps the native iOS path
+# deterministic while still proving the pager state transition; the pager
+# gesture itself is covered by the component interaction tests.
+- tapOn:
+    id: "photos-viewer-next"
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible:
       id: "photos-viewer-prev"
       enabled: true
     timeout: 10000
-- swipe:
-    from:
-      id: "photos-viewer-pager"
-    direction: RIGHT
-    duration: 400
+- tapOn:
+    id: "photos-viewer-prev"
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible:
       id: "photos-viewer-prev"

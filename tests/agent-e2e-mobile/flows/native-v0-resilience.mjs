@@ -3,6 +3,7 @@ import path from "node:path";
 
 import {
   DISMISS_KEYBOARD_ONBOARDING,
+  openHomeAppCommands,
   retryableTapCommands,
 } from "../lib/first-run.mjs";
 import {
@@ -73,7 +74,7 @@ const SURFACES = [
   // marker. The pre-rebuild `Search photos.*` keyed on the search field's
   // placeholder, now "Search photographs, people, places, albums" — and that
   // field lives on the Search destination, not on the one a cover opens to.
-  { marker: "Collections", open: "Open Photos.*", name: "photos" },
+  { marker: "Collections", open: "Open Photos.*", name: "photos", tile: "photos" },
   // The All shelf's own foot sentence (`apps/docs/docs-copy.ts` allStatus), and
   // `docs-drive.mjs`'s arrival marker. The digit is part of it: a drive read
   // that never reached the replica has a shape, and this assertion can see it.
@@ -81,9 +82,10 @@ const SURFACES = [
     marker: "[0-9,]+ · press and hold a row for quick actions",
     open: "Open Docs.*",
     name: "docs",
+    tile: "docs",
   },
   // `AgendaHome.tsx`'s header action, and `agenda-week.mjs`'s arrival marker.
-  { marker: "Go to today", open: "Open Agenda.*", name: "agenda" },
+  { marker: "Go to today", open: "Open Agenda.*", name: "agenda", tile: "agenda" },
   // The capture field at the foot of `TasksHome.tsx`, which is drawn on every
   // Tasks destination (`view-copy.ts` QUICK_ADD.touchPlaceholder is
   // "What is it? Name it for Friday"). The tail is taken rather than the whole
@@ -93,22 +95,24 @@ const SURFACES = [
     marker: ".*Name it for Friday",
     open: "Open Tasks.*",
     name: "tasks",
+    tile: "tasks",
   },
   // The People band's second destination (`people-band.ts` TOUCH_TITLE). The
   // roster itself has two honest shapes — a first run and a filled list — so a
   // marker inside the body would assert one vault's contents, not an arrival.
-  { marker: "Touch", open: "Open People.*", name: "people" },
+  { marker: "Touch", open: "Open People.*", name: "people", tile: "people" },
   // `NotesHome.tsx`'s own control, and `notes-library.mjs`'s arrival marker.
-  { marker: "New note", open: "Open Notes.*", name: "notes" },
+  { marker: "New note", open: "Open Notes.*", name: "notes", tile: "notes" },
   // Tally and Locker were rebuilt from the v17 handoff (#872), and both covers
   // now carry the design's per-route ambient sentence in the app bar instead of
   // a fixed subtitle. These two markers are those sentences, and they are the
   // same ones `tally-derived.mjs` and `locker-gate.mjs` assert on arrival.
-  { marker: BALANCES_STATUS, open: "Open Tally.*", name: "tally" },
+  { marker: BALANCES_STATUS, open: "Open Tally.*", name: "tally", tile: "tally" },
   {
     marker: "Nothing is browsable until there is a passphrase",
     open: "Open Locker.*",
     name: "locker",
+    tile: "locker",
   },
   // SETTINGS IS A PLACE NOW, AND THE PATH THIS FLOW USED IS GONE.
   //
@@ -174,7 +178,7 @@ await runFlow("native-v0-resilience", async (ctx) => {
     const surface = SURFACES[index];
     if (surface === undefined) return;
     const openCommands =
-      surface.openCommands ?? retryableTapCommands(surface.open);
+      surface.openCommands ?? openHomeAppCommands(surface.tile, surface.open);
     await ctx.run(
       `appId: ${ctx.state.appId}
 ---
@@ -238,7 +242,7 @@ ${openCommands}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open Tally.*")}
+${openHomeAppCommands("tally", "Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: 20000
@@ -304,7 +308,7 @@ ${DISMISS_KEYBOARD_ONBOARDING}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open Tally.*")}
+${openHomeAppCommands("tally", "Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: 30000
@@ -350,7 +354,7 @@ ${retryableTapCommands("Open Tally.*")}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open Tally.*")}
+${openHomeAppCommands("tally", "Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: 30000

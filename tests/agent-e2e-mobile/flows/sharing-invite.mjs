@@ -38,7 +38,10 @@
 import { copyFile, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 
-import { retryableTapCommands } from "../lib/first-run.mjs";
+import {
+  openHomeAppCommands,
+  retryableTapCommands,
+} from "../lib/first-run.mjs";
 import {
   FIRST_LAUNCH_TIMEOUT_MS,
   findScreenshot,
@@ -95,7 +98,7 @@ await runFlow("sharing-invite", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${retryableTapCommands("Open Tally.*")}
+${openHomeAppCommands("tally", "Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
@@ -269,7 +272,7 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open Tally.*")}
+${openHomeAppCommands("tally", "Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
