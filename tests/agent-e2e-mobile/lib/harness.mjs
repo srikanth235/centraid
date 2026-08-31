@@ -711,7 +711,6 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 # end-to-end observation of the one-time ticket. MAESTRO_* shell variables are
 # resolved by Maestro without persisting the live capability in this YAML.
 - inputText: \${MAESTRO_PAIRING_TICKET}
-- hideKeyboard
 # The ticket is deliberately a one-line field, so its stable native Pressable
 # remains in the viewport even while the iOS keyboard is still visible.
 - tapOn:

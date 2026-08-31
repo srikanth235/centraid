@@ -32,6 +32,12 @@ by `tests/agent-e2e-mobile/flows/pairing-canary.mjs`,
 `tests/agent-e2e-mobile/flows/sharing-invite.mjs` so evidence assertions match
 the filenames emitted by the CI runner.
 
+The canary measures its existing five-minute budget at the actual prerequisite
+boundary—when `configureGateway` has asserted Home—so its separate evidence
+assertion and screenshot driver launch cannot inflate the pairing claim. The
+ticket Connect action is tapped while the keyboard is visible because the
+one-line control is deliberately kept in the viewport.
+
 The implementation surface is explicit:
 
 - `.github/workflows/e2e.yml` selects the Release-only native graph.

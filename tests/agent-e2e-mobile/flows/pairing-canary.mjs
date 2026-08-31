@@ -39,6 +39,22 @@ await runFlow("pairing-canary", async (ctx) => {
   // on Home. Every failure mode of the three claims above surfaces inside it.
   await ctx.configureGateway();
 
+  // configureGateway's final Home wait is the prerequisite boundary. Keep the
+  // five-minute claim about pairing itself; the separate assertion and
+  // screenshot below are evidence-only and require another Maestro driver
+  // launch on iOS.
+  const elapsedMs = Date.now() - startedAt;
+  ctx.note(`prerequisites proven in ${Math.ceil(elapsedMs / 1000)}s`);
+  if (elapsedMs >= BUDGET_MS) {
+    // Over budget with the claims intact is still a failure: the canary's value
+    // IS its speed. A slow canary has stopped being a canary and become the
+    // first flow of the nightly.
+    return {
+      pass: false,
+      notes: `pairing prerequisites took ${Math.ceil(elapsedMs / 1000)}s, over the ${BUDGET_MS / 60_000}-minute canary budget`,
+    };
+  }
+
   // configureGateway already waited for Home. Re-observing it in a chunk of
   // this flow's own is what makes the canary's verdict self-contained: the
   // marker is asserted here, in this file, so a future change to the helper's
@@ -65,18 +81,6 @@ await runFlow("pairing-canary", async (ctx) => {
     );
   };
   await screenshot();
-
-  const elapsedMs = Date.now() - startedAt;
-  ctx.note(`prerequisites proven in ${Math.ceil(elapsedMs / 1000)}s`);
-  if (elapsedMs >= BUDGET_MS) {
-    // Over budget with the claims intact is still a failure: the canary's value
-    // IS its speed. A slow canary has stopped being a canary and become the
-    // first flow of the nightly.
-    return {
-      pass: false,
-      notes: `pairing prerequisites took ${Math.ceil(elapsedMs / 1000)}s, over the ${BUDGET_MS / 60_000}-minute canary budget`,
-    };
-  }
   return {
     pass: true,
     notes: "gateway mints a ticket, device is paired, Home is ready",
