@@ -644,13 +644,19 @@ export async function runFlow(slug, fn) {
     clearState: true
 ${DEV_LAUNCHER_HANDOFF}- extendedWaitUntil:
     visible:
-      text: "Connect your gateway."
+      id: "onboarding-paste"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-- tapOn: "Can't scan? Paste a code instead"
+- assertVisible: "Connect your gateway."
+- assertVisible: "Can't scan? Paste a code instead"
+- tapOn:
+    id: "onboarding-paste"
 - extendedWaitUntil:
-    visible: "Paste the one-line ticket"
+    visible:
+      id: "onboarding-ticket-field"
     timeout: 10000
-- tapOn: "Paste the one-line ticket"
+- assertVisible: "Paste the one-line ticket"
+- tapOn:
+    id: "onboarding-ticket-field"
 # e2e-lint-allow: unasserted-input — throwaway input only provokes iOS keyboard
 # onboarding and is erased before the pairing ticket is entered.
 - inputText: "x"
