@@ -11,6 +11,7 @@ import type {
 } from "@centraid/client/replica/native";
 
 import { authHeader, resolveGatewayBase } from "../../lib/gateway";
+import { fetchWithinReplyDeadline } from "../../lib/replica/gateway-deadline";
 import type { MountedReplicaScope } from "../../lib/replica/multi-vault-reader";
 import { nativeReplicaDigest } from "../../lib/replica/native-hash";
 import { MAX_MOUNTED_NATIVE_SCOPES } from "../../lib/replica/offline-budgets";
@@ -39,10 +40,12 @@ export function fetcher(vaultId?: string): ReplicaFetcher {
     for (const [key, value] of Object.entries(authHeader()))
       headers.set(key, value);
     if (vaultId) headers.set("x-centraid-vault", vaultId);
-    return fetch(new URL(pathname, `${baseUrl}/`), {
-      ...init,
-      headers,
-    } as RequestInit);
+    const url = new URL(pathname, `${baseUrl}/`);
+    // Deadlined: the tunnel accepts after its peer is gone (#903).
+    return fetchWithinReplyDeadline(
+      (signal) => fetch(url, { ...init, headers, signal } as RequestInit),
+      init.signal ?? undefined
+    );
   };
 }
 

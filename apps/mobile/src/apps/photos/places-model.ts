@@ -85,6 +85,32 @@ export function placeCardKey(row: PlaceRow | undefined): string | null {
   return `${latitude.toFixed(1)}:${longitude.toFixed(1)}`;
 }
 
+export interface PlaceCell {
+  key: string;
+  name: string;
+  placeIds: readonly string[];
+}
+
+export function placeCells(rows: readonly PlaceRow[]): PlaceCell[] {
+  const cells = new Map<string, { name: string; placeIds: string[] }>();
+  for (const row of rows) {
+    const key = placeCardKey(row);
+    if (key === null) continue;
+    const name = readableName(row.name ? String(row.name) : null);
+    const current = cells.get(key);
+    if (current) {
+      current.placeIds.push(String(row.place_id));
+      if (current.name === PLACE_UNNAMED && name) current.name = name;
+    } else {
+      cells.set(key, {
+        name: name ?? PLACE_UNNAMED,
+        placeIds: [String(row.place_id)],
+      });
+    }
+  }
+  return [...cells.entries()].map(([key, cell]) => ({ key, ...cell }));
+}
+
 export function placeCards(
   assets: readonly PhotoAsset[],
   rows: readonly PlaceRow[]

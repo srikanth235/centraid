@@ -1102,3 +1102,89 @@ document created on the gateway each appeared at the top of an open list within
 seconds and unprompted; a gateway-side rename re-sorted its row to the top and
 stayed visible instead of vanishing; and the footer count agreed with the rows
 in both apps.
+
+## The seat kept saying all was well over a vault that had stopped answering
+
+Found the same way as the section above — a real gateway killed under a real
+phone. Home read `Everything's uploaded`, the Docs caption read `Everything
+here is on this gateway and on this device`, and a change saved on the phone
+read `Sending this change.` None of `docs/mobile-offline.md`'s foreground states
+appeared on any surface, and the state did not correct itself.
+
+**Root cause, three assumptions compounding.** Reachability was re-read only on
+a device network-state change, and a gateway dying is not one. `resolveGatewayBase()`
+resolves an address and never probes, so "connected" meant "a URL exists" — and
+every pass re-asserted it, bringing a state that had just settled to
+`gateway-asleep` back to life. And gateway requests had no deadline: the phone
+reaches its vault through a tunnel listener inside its own process, which keeps
+accepting after its peer is gone, so `pullScopes()` hung rather than failed and
+the pass that "MUST settle" never did. The change feed knew — its stream had
+ended — and swallowed it under a comment saying `ReplicaProvider` would report
+connectivity.
+
+**Fix.** `apps/mobile/src/lib/replica/gateway-deadline.ts` bounds time to first
+byte (not the body, so a long bootstrap page and a live event stream are both
+unaffected); `apps/mobile/src/kit/replica/replica-mount.ts` and
+`apps/mobile/src/lib/replica/native-multiplex-change-feed.ts` run every request
+through it. `attemptedReachability` in
+`apps/mobile/src/kit/replica/replica-status.ts` makes a pass that has asked
+nothing able to lower reachability and never raise it, and
+`apps/mobile/src/kit/replica/ReplicaProvider.tsx` applies the same rule to
+`online` and writes the pull's own answer back to the flag the write drain
+reads. The feed (`onStreamOutcome`) and the drain
+(`onGatewayOutcome` in `apps/mobile/src/lib/replica/native-session.ts`) report
+what they saw; `refreshReachability` remains the only authority.
+
+**Copy that was wrong on its own.** `apps/mobile/src/screens/home/origin-health.ts`
+fell through to `Everything's uploaded` whenever the upload queue was empty,
+including while the vault was unreachable — an empty queue is not a synced
+vault. It now says what the phone can honestly say.
+
+**An Undo that outlived its act.** `postStatus` sets no timer for a note
+carrying an action, so `Renamed · 1 document — Undo` stood across every screen
+for minutes, over changes it had nothing to do with. The seat now uses the
+shell's own bounded `showUndoStatus`
+(`apps/mobile/src/kit/components/status-line.ts`,
+`apps/mobile/src/apps/docs/DriveList.tsx`,
+`apps/mobile/src/apps/tally/tally-writes.ts`).
+
+**Two children under one key on Photos.**
+`apps/mobile/src/apps/photos/PhotosCollectionsView.tsx` passed
+`core.place` rows straight to the Collections rail keyed by `placeCardKey`,
+which is a 0.1° (~11km) cell several rows share — so the rail drew duplicate
+React keys and counted one place more than once. `placeCells` in
+`apps/mobile/src/apps/photos/places-model.ts` collapses rows onto the shelf's
+own cells, and `apps/mobile/src/apps/photos/photos-collections.ts` takes every
+place id in a cell so a cover may come from any of them.
+
+**Verified on device**, against a live seeded gateway killed and restarted
+underneath it: with the vault dead Home read `Can't reach your vault · nothing
+is waiting on this phone` and the Photos status row read `Gateway asleep · Wake
+help`, both HELD rather than flapping back; the Photos screen logged no
+duplicate-key warning where it had logged two; and when the gateway returned the
+seat recovered to reachable on its own, with no tap and no relaunch. The
+instrumented trace shows the whole chain — feed reports the outage, the pull
+settles `landed=false`, the flag the drain reads goes false, and on restart the
+feed reports reachable, the pull lands, and the flag comes back.
+
+**Not re-checked on the device**, because injected taps stopped reaching the app
+part-way through (a pre-existing inertness, unrelated — the same build navigated
+fine before and after): the Docs caption flipping, the queued-write sentence,
+and the Undo expiring. Each follows from a mechanism that was checked: the
+caption reads the same `reachability` the Photos status row rendered live, the
+queued sentence follows from the drain's existing `isConnected()` guard over the
+flag now proven to fall, and `showUndoStatus` is the shell's own timer.
+
+**Regression locks.**
+`apps/mobile/src/lib/replica/native-multiplex-change-feed.test.ts` pins that the
+feed reports a gateway going silent;
+`apps/mobile/src/kit/replica/replica-status.test.ts` pins that a resolved URL
+alone is not `syncing`; `apps/mobile/src/screens/home/origin-health.test.ts`
+pins that the home card never claims the vault is caught up while it cannot be
+reached; `apps/mobile/src/apps/photos/places-model.test.ts` and
+`apps/mobile/src/apps/photos/photos-collections.test.ts` pin the cell collapse.
+`apps/mobile/src/apps/tally/TallyShareGroup.test.tsx` and
+`apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` stub the status
+channel, so their mocks gain `showUndoStatus` alongside `postStatus`.
+`docs/traps/unreachable-vault.md` is the written trap, indexed from
+`docs/traps/README.md`, and `docs/mobile-offline.md` records the rule.

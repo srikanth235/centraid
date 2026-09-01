@@ -12,3 +12,4 @@ Read the matching trap before working near its area; each one was paid for once.
 | [mobile-native-state.md](mobile-native-state.md) | Mobile recipe completeness vs fingerprint ratchet (L1–L4) |
 | [coverage-run-filters.md](coverage-run-filters.md) | Filtering a vitest coverage run without over-measuring |
 | [list-anchoring.md](list-anchoring.md) | Virtualized lists that hide rows arriving from another device |
+| [unreachable-vault.md](unreachable-vault.md) | A gateway that stops answering while the phone stays online |

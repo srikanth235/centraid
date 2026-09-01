@@ -189,7 +189,11 @@ vi.mock(
 const posted = vi.hoisted(() => [] as string[]);
 vi.mock(
   import("../../kit/components/status-line"),
-  () => ({ postStatus: (message: string) => posted.push(message) }) as never
+  () =>
+    ({
+      postStatus: (message: string) => posted.push(message),
+      showUndoStatus: (message: string) => posted.push(message),
+    }) as never
 );
 
 const { WAITING_OWN_SCOPE } = await import("./tally-seat-copy");

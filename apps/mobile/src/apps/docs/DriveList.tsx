@@ -6,9 +6,9 @@
 // and the caption + status sentences under the set.
 //
 // The menu's WRITES live here too — star/unstar, rename, refile, trash,
-// restore — one implementation with one Undo grammar (`postStatus` + the
+// restore — one implementation with one Undo grammar (`showUndoStatus` + the
 // reverse write, only where a reverse write exists), so five shelves cannot
-// drift on what a verb does. Outcomes surface through the kit's
+// drift on what a verb does. The Undo is BOUNDED (#903). Outcomes surface through the kit's
 // `surfaceWriteOutcome` (parked → Approvals; queued → the one queued
 // sentence).
 
@@ -28,7 +28,7 @@ import EmptyBlock from "../../kit/components/EmptyBlock";
 import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import SkeletonRows from "../../kit/components/SkeletonRows";
-import { postStatus } from "../../kit/components/status-line";
+import { postStatus, showUndoStatus } from "../../kit/components/status-line";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import { readOnlyRouteReason } from "../../kit/replica/row-provenance";
@@ -164,17 +164,12 @@ export default function DriveList({
   ): Promise<void> => {
     const result = await write(action, input);
     if (!result) return;
-    postStatus(
-      actionStatus(label, 1),
-      undo
-        ? {
-            action: {
-              label: "Undo",
-              run: () => void write(undo.action, undo.input),
-            },
-          }
-        : undefined
-    );
+    const sentence = actionStatus(label, 1);
+    if (!undo) {
+      postStatus(sentence);
+      return;
+    }
+    showUndoStatus(sentence, () => void write(undo.action, undo.input));
   };
 
   /**
@@ -207,26 +202,23 @@ export default function DriveList({
     }
     leaveSelection();
     if (settled.length === 0) return;
-    postStatus(
-      actionStatus(label, settled.length),
-      undo
-        ? {
-            action: {
-              label: "Undo",
-              run: () =>
-                void (async () => {
-                  // Serial for the same reason the forward pass is: an Undo
-                  // that races can reorder writes the member made in one
-                  // gesture.
-                  for (const doc of settled) {
-                    const step = undo(doc);
-                    // oxlint-disable-next-line no-await-in-loop -- see above
-                    await write(step.action, step.input);
-                  }
-                })(),
-            },
+    const sentence = actionStatus(label, settled.length);
+    if (!undo) {
+      postStatus(sentence);
+      return;
+    }
+    showUndoStatus(
+      sentence,
+      () =>
+        void (async () => {
+          // Serial for the same reason the forward pass is: an Undo that races
+          // can reorder writes the member made in one gesture.
+          for (const doc of settled) {
+            const step = undo(doc);
+            // oxlint-disable-next-line no-await-in-loop -- see above
+            await write(step.action, step.input);
           }
-        : undefined
+        })()
     );
   };
 
