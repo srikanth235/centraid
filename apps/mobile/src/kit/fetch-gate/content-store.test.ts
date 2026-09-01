@@ -22,8 +22,17 @@ const storage = {
 };
 
 function join(parts: readonly (string | FakeFile | FakeDirectory)[]): string {
-  return parts
-    .map((part) => (typeof part === "string" ? part : part.path))
+  const [head, ...rest] = parts;
+  if (typeof head === "string" && !head.startsWith("file://"))
+    throw new Error("URI is not absolute");
+  const base =
+    typeof head === "string"
+      ? head.slice("file://".length)
+      : (head?.path ?? "");
+  return [
+    base,
+    ...rest.map((part) => (typeof part === "string" ? part : part.path)),
+  ]
     .join("/")
     .replace(/\/+/gu, "/");
 }
@@ -58,7 +67,9 @@ class FakeDirectory {
       if (seen.has(child)) continue;
       seen.set(
         child,
-        rest.includes("/") ? new FakeDirectory(child) : new FakeFile(child)
+        rest.includes("/")
+          ? new FakeDirectory(`file://${child}`)
+          : new FakeFile(`file://${child}`)
       );
     }
     return [...seen.values()];
@@ -108,6 +119,10 @@ vi.mock(import("expo-file-system"), () => ({
 }));
 vi.mock(import("../../../modules/centraid-storage"), () => ({
   replicaStorageDirectory: () => storage.replicaStorageDirectory(),
+  replicaStorageDirectoryUri: () => {
+    const path = storage.replicaStorageDirectory();
+    return path === undefined ? undefined : `file://${path}`;
+  },
   // Absent on purpose in this rig: the JavaScript listing fallback is the path
   // a build without the native module takes, and it is the one under test.
   nativeDirectorySize: () => undefined,

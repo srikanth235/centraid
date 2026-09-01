@@ -10,6 +10,7 @@ import type {
   ReplicaFetcher,
 } from "@centraid/client/replica/native";
 
+import { pathToFileUri } from "../../../modules/centraid-storage";
 import { authHeader, resolveGatewayBase } from "../../lib/gateway";
 import type { MountedReplicaScope } from "../../lib/replica/multi-vault-reader";
 import { nativeReplicaDigest } from "../../lib/replica/native-hash";
@@ -215,7 +216,8 @@ function restoredCacheKeys(gatewayId: string, vaultId: string): string[] {
 /** An absent or zero-byte database is a container this replica never wrote. */
 function replicaFileHasData(databaseName: string): boolean {
   try {
-    const file = new File(databaseName);
+    // A path, not a URI — `File` throws on a scheme-less one (#905).
+    const file = new File(pathToFileUri(databaseName));
     return file.exists && (file.size ?? 0) > 0;
   } catch {
     // An unreadable path is not evidence of a restore; keep the cursor.
@@ -285,7 +287,7 @@ export function deleteReplicaDatabaseFamily(databaseName: string): void {
   if (!databaseName.includes("/")) return;
   for (const path of replicaDatabaseFamily(databaseName)) {
     try {
-      const file = new File(path);
+      const file = new File(pathToFileUri(path));
       if (file.exists) file.delete();
     } catch {
       // A sidecar the OS already removed is the outcome asked for.

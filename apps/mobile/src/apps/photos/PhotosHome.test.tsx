@@ -237,6 +237,7 @@ vi.mock(import("../../kit/media/media-source"), () => ({
 vi.mock(import("../../../modules/centraid-storage"), () => ({
   nativeDirectorySize: vi.fn<(path: string) => number>(() => 0),
   replicaStorageDirectory: vi.fn<() => string | undefined>(() => undefined),
+  replicaStorageDirectoryUri: vi.fn<() => string | undefined>(() => undefined),
 }));
 
 describe("Photos native component coverage", () => {

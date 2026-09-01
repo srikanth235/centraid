@@ -66,6 +66,14 @@ vi.mock(import("expo-file-system") as Promise<unknown>, () => ({
   },
 }));
 
+vi.mock(
+  import("../../../modules/centraid-storage") as Promise<unknown>,
+  () => ({
+    pathToFileUri: (path: string) =>
+      path.startsWith("/") ? `file://${path}` : path,
+  })
+);
+
 vi.mock(import("../../lib/gateway") as Promise<unknown>, () => ({
   authHeader: () => ({ Authorization: "Bearer test-mobile" }),
   resolveGatewayBase,
@@ -329,17 +337,17 @@ describe("reclaiming a revoked scope's bytes", () => {
   });
 
   test("deletes every family member that exists, and nothing else", () => {
-    files.present.add("/replica/vault-1.sqlite3");
-    files.present.add("/replica/vault-1.sqlite3-wal");
-    files.present.add("/replica/vault-2.sqlite3");
+    files.present.add("file:///replica/vault-1.sqlite3");
+    files.present.add("file:///replica/vault-1.sqlite3-wal");
+    files.present.add("file:///replica/vault-2.sqlite3");
 
     deleteReplicaDatabaseFamily("/replica/vault-1.sqlite3");
 
     expect(files.deleted).toStrictEqual([
-      "/replica/vault-1.sqlite3",
-      "/replica/vault-1.sqlite3-wal",
+      "file:///replica/vault-1.sqlite3",
+      "file:///replica/vault-1.sqlite3-wal",
     ]);
-    expect(files.present.has("/replica/vault-2.sqlite3")).toBe(true);
+    expect(files.present.has("file:///replica/vault-2.sqlite3")).toBe(true);
   });
 
   // op-sqlite's own default location, which this module cannot address. The

@@ -98,11 +98,13 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Collapse a repeated log line so it cannot crowd the one that says why
 - [x] Pin what the provider does when a gateway IS in reach, which nothing asserted
 - [x] Bind the phone's loopback proxy to the address every caller dials
+- [x] Hand expo-file-system the URI form of the replica directory, not the bare path
 
 ## What changed
 
 Where each checked item lands, then the reasoning behind it:
 
+- Hand expo-file-system the URI form of the replica directory, not the bare path — "The screen behind the socket"; `apps/mobile/modules/centraid-storage/index.ts`, `apps/mobile/src/kit/fetch-gate/content-store.ts`, `apps/mobile/src/kit/fetch-gate/content-store.test.ts`, `apps/mobile/src/kit/replica/replica-mount.ts`, `apps/mobile/src/kit/replica/replica-mount.test.ts`, `apps/mobile/src/kit/replica/ReplicaProvider.test.tsx`, `apps/mobile/src/lib/replica/thumbnail-pack.ts`, `apps/mobile/src/lib/replica/thumbnail-pack.test.ts`, `apps/mobile/src/lib/replica/background-sync.test.ts`, `apps/mobile/src/apps/photos/PhotosHome.test.tsx`, `apps/mobile/src/screens/PhoneStorage.tsx`.
 - Trace what the gateway actually served the phone, since the device's replica path logs nothing — "P — the phone drew an empty library over a vault holding rows"; `tests/agent-e2e-mobile/lib/ci-gateway.mjs`, `.github/workflows/ci.yml`.
 - Print the app's own logcat on a failing flow, beside the screen digest — same section; `tests/agent-e2e-mobile/lib/harness.mjs`.
 - Keep both diagnostics off the JS bundle fingerprint, so asking the question costs no rebuild — same section, final paragraph; no file changed.
@@ -542,6 +544,24 @@ Nothing could have caught it here. The Kotlin unit tests in `android/src/test` r
 The Kotlin edit moves the Android native fingerprint, so `native-fingerprints.json` is ratcheted with it: L1–L3 green, L4 only, android `d5f54e40…` → `209a3026…`, ios unmoved at `bd2490e7…`, module↔lock delta `present [CentraidNetworkStatus, CentraidOcr, CentraidStorage, CentraidTunnel]; missing [none]` — no module added and no podspec touched, so the lock is unchanged by construction. The APK cache key moves with it, which is the point: the cached artifact carries the broken bind.
 
 A static guard against a regression to `getLoopbackAddress()` is not written — a JVM test cannot express it, and a lint for it is a separate scope. The invariant is stated at the bind site and in the trap.
+
+#### The screen behind the socket
+
+Run 33506614475 carried the IPv4 bind, and the `ConnectException` is gone — no request dies on the phone any more. The next layer failed instead, and only because the first one now works:
+
+    Error: Exception in HostFunction: java.lang.IllegalArgumentException: URI is not absolute
+      at expo.modules.kotlin.functions.SyncFunctionComponent.callUserImplementation
+      at ReplicaCompatibilityGate / ReplicaProvider / ErrorBoundary
+
+`CentraidStorageModule.replicaDirectory()` answers `absolutePath`, a bare filesystem path, and that is the right form for two of its three consumers: op-sqlite takes a `location`, and `directorySize` takes a path for `java.io.File`. The third is `expo-file-system`, whose `File` and `Directory` take URIs — its own constructor documents `file:///` — and which throws `URI is not absolute` from inside the native constructor when handed a scheme-less string. Ten call sites were passing the path straight in. `index()` in the offline content store is the one that reached a render: it builds the store root to resolve a cached image URI, so the ErrorBoundary caught the throw and drew "Try again" where Home should have been.
+
+The conversion lives in `apps/mobile/modules/centraid-storage/index.ts` beside the path form rather than at each call site, because which form a consumer needs is a property of that consumer, and the two do not swap. The path consumers are untouched: `storePath`, `packPath`, `nativeDirectorySize`, op-sqlite's `location`, and the existence guards all still take the bare path.
+
+This was invisible to vitest for a sharper reason than the two gaps above, and the fix is not only in the source. Both filesystem rigs — `apps/mobile/src/kit/fetch-gate/content-store.test.ts` and `apps/mobile/src/lib/replica/thumbnail-pack.test.ts` — carry a hand-written `FakeDirectory`/`FakeFile` that accepted a bare path and joined it happily. A double that accepts what the real thing rejects does not merely fail to catch the bug; it certifies it. Both fakes now throw `URI is not absolute` on a scheme-less location exactly as the native constructor does, and `apps/mobile/src/kit/replica/replica-mount.test.ts` keys its fake on the URI it is actually handed. Those three files are the regression test: revert the source and they fail.
+
+`apps/mobile/src/kit/replica/ReplicaProvider.test.tsx`, `apps/mobile/src/lib/replica/background-sync.test.ts` and `apps/mobile/src/apps/photos/PhotosHome.test.tsx` mock the storage module wholesale, so each gained the new export; without it the module under test sees `undefined` where a directory belongs.
+
+No comment-density pin was raised for any of this. Four rose on the first pass and every one was cut back rather than pinned — the reasoning that would have paid for them is in this section and in the trap, which is where it is useful to someone who was not here.
 
 ## User impact
 

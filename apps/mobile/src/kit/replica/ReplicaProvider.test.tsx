@@ -113,6 +113,7 @@ vi.mock(
   () =>
     ({
       replicaStorageDirectory: () => "/replica",
+      replicaStorageDirectoryUri: () => "file:///replica",
     }) as unknown as Partial<StorageDirModule>
 );
 
