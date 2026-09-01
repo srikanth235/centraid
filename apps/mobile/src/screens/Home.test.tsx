@@ -33,7 +33,7 @@ type LauncherGridModule = typeof import("./home/LauncherGrid");
 type FirstMovesModule = typeof import("./home/FirstMoves");
 
 /** Flipped per test; read by the seam on every call. */
-const reads = vi.hoisted(() => ({ readable: true }));
+const reads = vi.hoisted(() => ({ readable: true, synced: true }));
 
 vi.mock(import("react-native"), async () => {
   const stub = await import("../test/react-native-stub");
@@ -133,6 +133,7 @@ vi.mock(import("../kit/hooks/useReplicaQuery"), async (importOriginal) => {
         ? ("current" as const)
         : ("unavailable" as const),
       error: undefined,
+      lastSyncedAt: reads.synced ? "2026-09-01T05:20:00.000Z" : undefined,
       loading: false,
       refresh: async () => undefined,
       rows: [],
@@ -242,6 +243,7 @@ const everyLauncherId = orderByPins(
 describe("Home springboard composition", () => {
   beforeEach(() => {
     reads.readable = true;
+    reads.synced = true;
   });
 
   it("keeps every app on the grid when no tile can be read", () => {
@@ -262,6 +264,15 @@ describe("Home springboard composition", () => {
 
     expect(nodesOf(container, '[data-testid="day-one"]')).toHaveLength(1);
     expect(gridItems(container)).toBeUndefined();
+  });
+
+  it("keeps every app on the grid until a pull has landed", () => {
+    reads.synced = false; // the CLONE has not arrived (#905 N)
+
+    const container = renderHome();
+
+    expect(gridItems(container)).toStrictEqual(everyLauncherId);
+    expect(nodesOf(container, '[data-testid="day-one"]')).toHaveLength(0);
   });
 });
 

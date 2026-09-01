@@ -224,6 +224,25 @@ adb shell monkey -p "$expected_package" -c android.intent.category.LAUNCHER 1 >/
 sleep 20
 adb shell am force-stop "$expected_package" || true
 
+# WHAT THE RADIO SAYS, BECAUSE THE REPLICA ASKS IT (#905). Replica sync shares
+# the byte-transfer rules — `nativeSyncAllowed` in
+# apps/mobile/src/lib/upload/native-policy.ts is literally `canTransfer()` — and
+# `DEFAULT_TRANSFER_POLICY` is `wifiOnly: true`. So on a device whose ACTIVE
+# network is not Wi-Fi, a fresh phone pairs, draws Home, and never pulls a row:
+# `pullScopes` returns `policyBlocked` and stamps no freshness. There is no
+# error anywhere, and at flow time that is indistinguishable from a vault that
+# is genuinely empty — the exact ambiguity that cost this lane days.
+#
+# Which state an emulator image is in is an accident of the CI image, not a
+# property of the product, so it is recorded rather than assumed. Two lines,
+# best-effort, no assertion: this names the transport the app will see, next in
+# the log to the failure it would explain. Nothing branches on it — a lane that
+# quietly relaxed a member's transfer rules to go green would be testing a
+# device no member has.
+echo "--- active network (what the transfer rules will be evaluated against) ---"
+adb shell dumpsys connectivity 2>/dev/null | sed -n '/Active default network/,+8p' || true
+adb shell dumpsys connectivity 2>/dev/null | grep -m2 -oE 'Transports: [A-Z_|]+' || true
+
 node scripts/test-report/prepare.mjs
 
 # #905 — THE CORPUS GOES IN BEFORE ANYTHING PAIRS.

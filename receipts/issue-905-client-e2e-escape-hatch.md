@@ -67,10 +67,19 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Wait for the launcher, not the band's label, wherever a flow's next act is opening an app from Home
 - [x] Measure cold start to the launcher, closing the false green this receipt recorded rather than left standing
 
+### N — Home claimed the vault was empty on the word of a replica that had never synced
+
+- [x] Withhold `empty` from a tile whose reads have never had a landed pull behind them
+- [x] Move the tile-status rule into the pure module that is tested, out of the hook that is not
+- [x] Record the emulator's active network transport in device preparation, since the replica's sync policy is evaluated against it
+
 ## What changed
 
 Where each checked item lands, then the reasoning behind it:
 
+- Withhold `empty` from a tile whose reads have never had a landed pull behind them — "N — Home claimed the vault was empty"; `apps/mobile/src/screens/home/tile-model.ts`, `apps/mobile/src/screens/home/useSpringboardTiles.ts`, `apps/mobile/src/screens/home/tile-model.test.ts`, `apps/mobile/src/screens/Home.test.tsx`.
+- Move the tile-status rule into the pure module that is tested, out of the hook that is not — same section; `apps/mobile/src/screens/home/tile-model.ts`, `apps/mobile/src/screens/home/useSpringboardTiles.ts`, `apps/mobile/src/screens/home/tile-model.test.ts`.
+- Record the emulator's active network transport in device preparation, since the replica's sync policy is evaluated against it — next in the log to the failure it would explain — "N — Home claimed the vault was empty", final paragraph; `apps/mobile/scripts/android-emulator-install.sh`.
 - Thread `|| needs.changes.outputs.all == 'true'` into both `with:` inputs — "The defect", below; `.github/workflows/ci.yml`.
 - Narrow the caller's gate from `client` to `web || desktop`, now that `boot-smoke` has left the lane — "The gate was also wider than what remains in the lane"; `.github/workflows/ci.yml`.
 - Extend `bun run lint:path-filters` with a third sub-check: any read of a `changes` output without the `all` fallback fails, whatever construct does the reading — "The lint that makes it the last time"; `scripts/lint-path-filters.mjs`, `scripts/lint-path-filters.test.mjs`.
@@ -112,6 +121,18 @@ Every flow in the gate waits for `HOME_READY_MARKER` and then acts. That marker 
 It is applied where a flow's next act is opening an app from Home, not everywhere: `photos-permissions` purges its scenario on purpose and reaches Photos by deep link, and the flows that face a deliberately cleared client still expect DayOne. The constant says so, so the next reader does not paste it in by reflex.
 
 `cold-start` now measures **icon-to-usable** rather than icon-to-band. Its numbers get longer, because they now include the replica reads settling — that is the honest reading, and no history is invalidated, since the drift budget stays inactive until thirty samples exist. It also fails when the vault does not arrive, where it used to pass; that is the point.
+
+### N — Home claimed the vault was empty on the word of a replica that had never synced
+
+Section M gave the flows a handle that can tell Home's two branches apart. Run 33472898285 then used it, and the answer was not a race: `notes-library`, `native-v0-resilience` and `cold-start` each waited the full sixty seconds and each failed on `id: home-grid`, on a screen whose digest carried "Nothing in here yet" and "Fill it with sample content" — while the lane's own log, three minutes earlier, read `seed-demo-corpus: notes seeded (16 rows)` and the flow's own note read `notes demo already present (16 rows)`. The corpus was in the gateway before the first pairing, which is what section E fixed. The phone still never saw a row.
+
+So the ordering fix was necessary and not sufficient, and what remained is a defect in Home rather than in the harness. `combineStatus` already carried the right rule and one clause short of it: "`unavailable` and a failed read stay `unknown` — neither is evidence the app is empty, and only a settled empty read may claim first-run." The case it does not cover is a read that settles, succeeds, and returns nothing **because the clone has not arrived**. The local store answers instantly and correctly that it holds no rows; that is a fact about the replica, not about the vault. Every tile then reads `empty`, `springboardState` calls it `first-run`, and Home draws `DayOne` over a full vault.
+
+`lastSyncedAt` is what separates the two, and it was already on every read: it is the newest freshness stamp over the mounted scopes, and only a landed pull writes one. `NativeReplicaSession.pullNow` returns `false` — stamping nothing — while the session is closed, disconnected, still without a cursor, or refused by the member's own transfer rules, and `MultiVaultReplicaSession.pullScopes` refuses the whole pass with `policyBlocked` before it asks any scope. So the stamp's absence means this phone has not completed one exchange with its gateway. Its presence over an empty result is the real first run, and still routes to `DayOne` — which is why the fix cannot cost a genuinely new member the one screen written for them.
+
+The rule moved to `tile-model.ts` in the same change, and that is not tidying. `springboard-policy.ts` says of the defect in section H that it "had no test at any tier, a renderer being the only way to reach it", and `combineStatus` sat in the hook for the same reason and with the same consequence. `tile-model.ts` is pure, is the module `useSpringboardTiles` already names as where the selection logic is tested, and the four cases now pinned there are the ones a renderer could not have reached cheaply. Removing the new clause reds two of them by name.
+
+What this does NOT do is explain why the pull never lands, and it deliberately does not guess. One candidate is cheap enough to rule in or out from the log rather than by argument: replica sync shares the byte-transfer rules — `nativeSyncAllowed` is literally `canTransfer()` — and `DEFAULT_TRANSFER_POLICY` is `wifiOnly: true`, so a device whose active network is not Wi-Fi pulls nothing, silently, for a reason that is a member setting rather than a fault. Whether a CI emulator image is in that state is an accident of the image, so device preparation now prints the active network's transport instead of anyone assuming it. Nothing branches on the reading. Relaxing a member's transfer rules to get a lane green would be testing a device no member has, and if that reading comes back `CELLULAR` the finding belongs to the product — the seat doctrine gives record-only apps "offline reads and queued writes for free", and gating row sync on the photo-backup policy is not that.
 
 ### L — a suite of flows that had stopped saying what they were for
 

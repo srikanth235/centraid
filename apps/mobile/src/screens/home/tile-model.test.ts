@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import type { ReplicaRow } from "@centraid/client/replica/native";
 
 import {
+  combineTileStatus,
   countUpcoming,
   decodeProse,
   firstProseLine,
@@ -482,5 +483,59 @@ describe(sumMinor, () => {
 describe(monthStartDate, () => {
   it("is the ISO date `spent_on` stores", () => {
     expect(monthStartDate(new Date(2026, 6, 17))).toBe("2026-07-01");
+  });
+});
+
+describe(combineTileStatus, () => {
+  /** A read that has heard from the gateway at least once. */
+  const settled = (
+    over: Partial<Parameters<typeof combineTileStatus>[0][0]> = {}
+  ) => ({
+    connection: "current",
+    lastSyncedAt: "2026-09-01T05:20:00.000Z",
+    loading: false,
+    ...over,
+  });
+
+  it("calls an app empty only once a pull has landed behind the read", () => {
+    expect(combineTileStatus([settled()], false)).toBe("empty");
+  });
+
+  it("withholds empty from a replica that has never landed a pull", () => {
+    expect(
+      combineTileStatus([settled({ lastSyncedAt: undefined })], false)
+    ).toBe("unknown");
+  });
+
+  it("withholds empty when ONE of an app's reads has no landed pull", () => {
+    expect(
+      combineTileStatus(
+        [settled(), settled({ lastSyncedAt: undefined })],
+        false
+      )
+    ).toBe("unknown");
+  });
+
+  // Rows in hand outrank the stamp: a cached replica can hold real content
+  // before this launch has pulled anything.
+  it("still reports content an unsynced read did return", () => {
+    expect(
+      combineTileStatus([settled({ lastSyncedAt: undefined })], true)
+    ).toBe("content");
+  });
+
+  it("keeps loading and unreadable ahead of the freshness question", () => {
+    expect(
+      combineTileStatus(
+        [settled({ lastSyncedAt: undefined, loading: true })],
+        false
+      )
+    ).toBe("loading");
+    expect(
+      combineTileStatus([settled({ connection: "unavailable" })], false)
+    ).toBe("unknown");
+    expect(combineTileStatus([settled({ error: "read refused" })], false)).toBe(
+      "unknown"
+    );
   });
 });
