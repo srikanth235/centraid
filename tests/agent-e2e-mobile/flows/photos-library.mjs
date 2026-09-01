@@ -1,5 +1,5 @@
 import {
-  openHomeAppCommands,
+  openAppLinkCommands,
   retryableTapCommands,
 } from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
@@ -17,7 +17,7 @@ await runFlow("photos-library", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${openHomeAppCommands("photos", "Open Photos.*")}
+${openAppLinkCommands("photos")}
 - extendedWaitUntil:
     visible:
       id: "photos-collections"

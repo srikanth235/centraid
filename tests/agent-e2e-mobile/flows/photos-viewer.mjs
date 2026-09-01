@@ -23,7 +23,7 @@ import { copyFile, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 
 import {
-  openHomeAppCommands,
+  openAppLinkCommands,
   retryableTapCommands,
 } from "../lib/first-run.mjs";
 import {
@@ -38,7 +38,7 @@ await runFlow("photos-viewer", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${openHomeAppCommands("photos", "Open Photos.*")}
+${openAppLinkCommands("photos")}
 - extendedWaitUntil:
     visible:
       id: "photos-collections"

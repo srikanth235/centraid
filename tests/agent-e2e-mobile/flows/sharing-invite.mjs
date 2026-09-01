@@ -39,7 +39,7 @@ import { copyFile, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 
 import {
-  openHomeAppCommands,
+  openAppLinkCommands,
   retryableTapCommands,
 } from "../lib/first-run.mjs";
 import {
@@ -98,7 +98,7 @@ await runFlow("sharing-invite", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${openHomeAppCommands("tally", "Open Tally.*")}
+${openAppLinkCommands("apps/tally")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
@@ -272,7 +272,7 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${openHomeAppCommands("tally", "Open Tally.*")}
+${openAppLinkCommands("apps/tally")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}

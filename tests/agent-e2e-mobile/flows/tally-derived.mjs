@@ -22,7 +22,7 @@
 // non-vacuous rules; this file is discovered by scripts/lint-e2e-flows.mjs).
 
 import {
-  openHomeAppCommands,
+  openAppLinkCommands,
   retryableTapCommands,
 } from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
@@ -43,7 +43,7 @@ await runFlow("tally-derived", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${openHomeAppCommands("tally", "Open Tally.*")}
+${openAppLinkCommands("apps/tally")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}

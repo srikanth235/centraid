@@ -104,3 +104,15 @@ export function openHomeAppCommands(appId, label) {
     id: "${tile}"
     retryTapIfNoChange: true`;
 }
+
+/**
+ * Enter an app-level journey through the product's registered URL path.
+ * App journeys must not make the Home springboard a prerequisite: that turns
+ * a shell-navigation regression into a dozen unrelated app failures. The
+ * shell has its own roster in native-v0-resilience; this helper starts at the
+ * app's actual cover and keeps the assertions below about that app's replica
+ * and writes.
+ */
+export function openAppLinkCommands(path) {
+  return `- openLink: "centraid://${path}"`;
+}

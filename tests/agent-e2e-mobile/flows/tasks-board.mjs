@@ -33,7 +33,7 @@
 // scripts/lint-e2e-flows.mjs).
 
 import {
-  openHomeAppCommands,
+  openAppLinkCommands,
   retryableTapCommands,
 } from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
@@ -50,7 +50,7 @@ await runFlow("tasks-board", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${openHomeAppCommands("tasks", "Open Tasks.*")}
+${openAppLinkCommands("apps/tasks")}
 # The overdue group's own verb. "Today" and "Overdue" are bare group labels and
 # are deliberately not the arrival marker — this handle is on a group
 # todayGroups() flagged for attention, which is the overdue group alone, and

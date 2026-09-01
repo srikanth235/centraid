@@ -30,7 +30,7 @@
 // scripts/lint-e2e-flows.mjs).
 
 import {
-  openHomeAppCommands,
+  openAppLinkCommands,
   retryableTapCommands,
 } from "../lib/first-run.mjs";
 import {
@@ -73,7 +73,7 @@ await runFlow("locker-gate", async (ctx) => {
 - assertVisible:
     id: "home-tile-locker"
 - assertVisible: "Open Locker, locked"
-${openHomeAppCommands("locker", "Open Locker.*")}
+${openAppLinkCommands("locker")}
 - extendedWaitUntil:
     visible: "Choose a passphrase"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
@@ -92,7 +92,7 @@ ${GATE_ASSERTIONS}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${openHomeAppCommands("locker", "Open Locker.*")}
+${openAppLinkCommands("locker")}
 - extendedWaitUntil:
     visible: "Choose a passphrase"
     timeout: 30000

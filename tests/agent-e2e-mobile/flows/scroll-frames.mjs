@@ -165,13 +165,11 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-# The launcher tile by its handle. This was a bare tapOn: "Photos" — the tab
-# label / route name that scripts/lint-e2e-flows.mjs refuses to let a flow
-# ASSERT on, used here as a locator, where it is the same hazard: it matches
-# whatever draws that word.
-- tapOn:
-    id: "home-tile-photos"
-    retryTapIfNoChange: true
+# This is a performance journey, not a springboard journey. Enter through the
+# registered app link so the sample window measures Photos rather than a
+# separate Home-navigation concern; the app cover and timeline handles below
+# still prove the app-specific surface is what was measured.
+- openLink: "centraid://photos"
 - extendedWaitUntil:
     visible:
       id: "photos-collections"

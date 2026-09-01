@@ -38,7 +38,7 @@
 // scripts/lint-e2e-flows.mjs).
 
 import {
-  openHomeAppCommands,
+  openAppLinkCommands,
   retryableTapCommands,
 } from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
@@ -49,7 +49,7 @@ await runFlow("people-roster", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${openHomeAppCommands("people", "Open People.*")}
+${openAppLinkCommands("apps/people")}
 # THE ROSTER DREW A ROW AT ALL, by the leading row's handle — the arrival
 # marker. The roster's header word is the app's name and is drawn by the
 # launcher tile too, so it could not tell an arrival from a tap that did

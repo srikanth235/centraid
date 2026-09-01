@@ -32,7 +32,7 @@
 // scripts/lint-e2e-flows.mjs).
 
 import {
-  openHomeAppCommands,
+  openAppLinkCommands,
   retryableTapCommands,
 } from "../lib/first-run.mjs";
 import {
@@ -54,7 +54,7 @@ await runFlow("notes-library", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${openHomeAppCommands("notes", "Open Notes.*")}
+${openAppLinkCommands("apps/notes")}
 - extendedWaitUntil:
     visible: "New note"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
@@ -155,7 +155,7 @@ ${retryableTapCommands("Open Mom's chili, written down properly", "New note")}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${openHomeAppCommands("notes", "Open Notes.*")}
+${openAppLinkCommands("apps/notes")}
 - extendedWaitUntil:
     visible: "New note"
     timeout: 30000
