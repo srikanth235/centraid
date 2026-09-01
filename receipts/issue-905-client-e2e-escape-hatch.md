@@ -103,6 +103,17 @@ Measured on run 33418649297, head `0655a1b7`, a 27m25s job:
 
 `BUILD SUCCESSFUL in 16m 21s` is in the job log. Inside it: `lintVital*` 4m37s across 35 tasks, the Metro bundle 27s (`Android Bundled 27426ms`, 2668 modules), native compile and packaging the rest.
 
+**Measured after, on run 33467906385, head `6ee9cec2`:**
+
+| | before (`0655a1b7`) | after (`6ee9cec2`) |
+| --- | --- | --- |
+| whole job | 27m25s | **17m06s** |
+| the emulator step | 25m43s | 13m55s |
+| gradle build | 16m21s | **11m19s** |
+| `lintVital` task lines | 35 (4m37s) | 1 (the umbrella, now a no-op) |
+
+A 10m19s cut, 38% of the job, with no assertion changed. Both new cache-save steps ran (`Save the built Android app` in 3s, the gradle directory in 55s), so the next push on this branch that leaves the JS fingerprint alone should show the apk restore as a hit rather than the 0s miss it has been every time so far — that half is not yet demonstrated and is not claimed here.
+
 **Android Lint is not this lane's claim.** AGP wires `lintVital<Variant>` into `assembleRelease`, so the gate ran Lint across every module before it could hand Maestro an apk it then throws away. `bun run lint` is a gate of its own on every PR in `static`, where a lint failure names itself in seconds. Excluded by task name on the CI command line rather than through `lint { checkReleaseBuilds }`, for the reason already written above the ABI override beside it: that DSL block is the STORE build's configuration too.
 
 **And it built at all because nothing banks a shell for a PR.** The apk cache key names the JS bundle fingerprint, and this job had only a restore step — the sole writer was `mobile-canary`, on main. So a PR touching JS could never hit it: "Restore the built Android app" was a 0s miss on `0655a1b7` and again on `60732d30`. The save added here does not help the push that paid for the build; it helps the next push on the same branch, which is the common shape — a receipt edit, a doc fix, a workflow tweak, none of which move the JS fingerprint. Actions cache scoping keeps a branch's entry to that branch and its children, so it cannot serve a stale shell to main or to an unrelated PR.
