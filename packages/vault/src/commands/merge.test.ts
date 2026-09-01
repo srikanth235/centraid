@@ -112,6 +112,109 @@ describe("merge", () => {
     expect(map.target_id).toBe(john);
   });
 
+  function grantTo(
+    authorityId: string,
+    partyId: string,
+    subjectId: string
+  ): void {
+    db.vault
+      .prepare(
+        `INSERT INTO share_authority
+           (authority_id, principal_kind, principal_id, subject_type, subject_id,
+            verb, duration, decision, granted_at, granted_by)
+         VALUES (?, 'person', ?, 'core.document', ?, 'view', 'standing',
+                 'granted', '2026-08-01T00:00:00Z', ?)`
+      )
+      .run(authorityId, partyId, subjectId, boot.ownerPartyId);
+  }
+
+  function principalOf(authorityId: string): {
+    principal_id: string;
+    revoked_at: string | null;
+  } {
+    return db.vault
+      .prepare(
+        "SELECT principal_id, revoked_at FROM share_authority WHERE authority_id = ?"
+      )
+      .get(authorityId) as { principal_id: string; revoked_at: string | null };
+  }
+
+  // The plane carries no FK on `principal_id` and says 'person', not
+  // 'core.party', so neither the FK walk nor the poly registry reaches it. Left
+  // behind, the grant names a deleted row and the share stops being delivered.
+  test("a standing grant to the duplicate follows the survivor", () => {
+    const asha = addParty("Asha Rao");
+    const dupe = addParty("Asha R.");
+    grantTo("auth-1", dupe, "doc-1");
+
+    expect(merge(asha, dupe).status).toBe("executed");
+
+    const grant = principalOf("auth-1");
+    expect(grant.principal_id).toBe(asha);
+    expect(grant.revoked_at).toBeNull();
+  });
+
+  // `share_authority_live_answer` covers LIVE rows only, so the loser is
+  // revoked before it re-points: the answer survives as history rather than
+  // being deleted, and the survivor's own answer stays the live one.
+  test("a colliding answer is revoked, not dropped, and still stops naming the deleted party", () => {
+    const asha = addParty("Asha Rao");
+    const dupe = addParty("Asha R.");
+    grantTo("auth-keep", asha, "doc-1");
+    grantTo("auth-dupe", dupe, "doc-1");
+
+    expect(merge(asha, dupe).status).toBe("executed");
+
+    const kept = principalOf("auth-keep");
+    expect(kept.principal_id).toBe(asha);
+    expect(kept.revoked_at).toBeNull();
+    const loser = principalOf("auth-dupe");
+    expect(loser.principal_id).toBe(asha);
+    expect(loser.revoked_at).not.toBeNull();
+  });
+
+  function inviteTo(
+    invitationId: string,
+    grantId: string,
+    partyId: string
+  ): void {
+    db.vault
+      .prepare(
+        `INSERT INTO share_commons_invitation
+           (invitation_id, grant_id, steward_vault_id, member_party_id,
+            capability, container_type, container_id, current_size_bytes,
+            status, created_at)
+         VALUES (?, ?, 'vault-steward', ?, 'read', 'tally.group', 'group-1', 0,
+                 'pending', '2026-08-01T00:00:00Z')`
+      )
+      .run(invitationId, grantId, partyId);
+  }
+
+  // Same shape as the authority principal, different answer on collision: an
+  // invitation is machinery, not a standing answer, so the duplicate ask is
+  // dropped rather than kept as history.
+  test("a pending invitation follows the merge, and a duplicate ask is dropped", () => {
+    const asha = addParty("Asha Rao");
+    const dupe = addParty("Asha R.");
+    inviteTo("inv-follow", "grant-a", dupe);
+    inviteTo("inv-keep", "grant-b", asha);
+    inviteTo("inv-dupe", "grant-b", dupe);
+
+    expect(merge(asha, dupe).status).toBe("executed");
+
+    const invitations = db.vault
+      .prepare(
+        `SELECT invitation_id, grant_id, member_party_id
+           FROM share_commons_invitation ORDER BY invitation_id`
+      )
+      .all() as { invitation_id: string; member_party_id: string }[];
+    expect(invitations.map((row) => row.invitation_id)).toStrictEqual([
+      "inv-follow",
+      "inv-keep",
+    ]);
+    for (const row of invitations) expect(row.member_party_id).toBe(asha);
+  });
+
   test("merging the vault owner away is refused by contract", () => {
     const other = addParty("Someone Else");
     const outcome = merge(other, boot.ownerPartyId);

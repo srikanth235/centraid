@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useBandOwner } from "../../kit/band/band-owner";
 import { useTheme } from "../../kit/theme";
+import VaultBar from "../../screens/home/VaultBar";
 import type { NotesBandDestinationKey } from "./notes-band";
 import NotesBand from "./NotesBand";
 
@@ -35,6 +36,9 @@ export default function NotesScreen({
         { backgroundColor: colors.bg, paddingTop: insets.top },
       ]}
     >
+      {/* The vault lockup on every route (see `VaultBar`): which vault, which
+          gateway, and the product's two global verbs. */}
+      <VaultBar />
       {/* Content ends ABOVE the band structurally: the slot is `flex:1` and
           the band below it is `flex:none`, so the scroll viewport is genuinely
           shorter by the band's height. */}

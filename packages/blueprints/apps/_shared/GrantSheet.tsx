@@ -46,6 +46,7 @@ import {
   grantOverSubject,
   grantRequestFor,
   liveGrants,
+  reachBlocksSharing,
   subjectNoun,
 } from "./grant-plane.ts";
 import type {
@@ -253,6 +254,10 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
     registryPending ||
     registryUnreadable ||
     notOfferable ||
+    // A person is reachable only through a live link (#903), and the command
+    // pack refuses the rest — so the sheet does not grow a control naming an
+    // act it cannot perform. The reach line above already says why.
+    reachBlocksSharing(reach) ||
     busy;
 
   const submit = async (): Promise<void> => {

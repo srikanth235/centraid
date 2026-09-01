@@ -5,6 +5,7 @@ import {
   bytesOnDevice,
   docRowState,
   kindIconName,
+  originsByDocument,
   projectDrive,
   purgeDaysLeft,
   sharesByDocument,
@@ -20,6 +21,7 @@ function fixtureRows(
   overrides: Partial<DriveEntityRows> = {}
 ): DriveEntityRows {
   return {
+    origins: null,
     schemes: [
       { scheme_id: "s-folders", uri: FOLDERS_URI },
       { scheme_id: "s-flags", uri: FLAGS_URI },
@@ -184,6 +186,123 @@ describe(projectDrive, () => {
     for (const doc of projection.documents) {
       expect(doc.shared_with).toBeNull();
     }
+  });
+
+  it("says it does not KNOW what was shared when the origin read is absent", () => {
+    // The Shared shelf reads this flag before it draws a set: an unanswered
+    // read and an empty inbox are different facts and must not look alike.
+    expect(projection.sharedFromKnown).toBe(false);
+    for (const doc of projection.documents) {
+      expect(doc.shared_from).toBeNull();
+    }
+  });
+
+  it("hangs the placement on the row it names, once the origin read answers", () => {
+    const answered = projectDrive(
+      fixtureRows({
+        origins: {
+          origins: [
+            {
+              item_type: "core.document",
+              item_id: "doc-lease",
+              origin_vault_id: "vault-alice",
+              origin_item_id: "doc-far-away",
+              shared_at: 1_788_183_726_358,
+            },
+          ],
+          bindings: [
+            {
+              party_id: "party-alice",
+              vault_id: "vault-alice",
+              revoked_at: null,
+            },
+          ],
+          parties: [{ party_id: "party-alice", display_name: "Alice" }],
+        },
+      })
+    );
+    expect(answered.sharedFromKnown).toBe(true);
+    const lease = answered.documents.find(
+      (doc) => doc.document_id === "doc-lease"
+    );
+    expect(lease?.shared_from).toMatchObject({
+      vaultId: "vault-alice",
+      partyId: "party-alice",
+      name: "Alice",
+    });
+    // A shelf built on "has an origin row" must leave every other row alone.
+    expect(
+      answered.documents.filter((doc) => doc.shared_from !== null)
+    ).toHaveLength(1);
+  });
+});
+
+describe(originsByDocument, () => {
+  const origin = {
+    item_type: "core.document",
+    item_id: "doc-1",
+    origin_vault_id: "vault-alice",
+    origin_item_id: "doc-far-away",
+    shared_at: 1_788_183_726_358,
+  };
+  const binding = {
+    party_id: "party-alice",
+    vault_id: "vault-alice",
+    revoked_at: null,
+  };
+  const party = { party_id: "party-alice", display_name: "Alice" };
+
+  it("names the sender through the link binding, and carries when it landed", () => {
+    const found = originsByDocument({
+      origins: [origin],
+      bindings: [binding],
+      parties: [party],
+    }).get("doc-1");
+    expect(found).toStrictEqual({
+      vaultId: "vault-alice",
+      partyId: "party-alice",
+      name: "Alice",
+      at: 1_788_183_726_358,
+    });
+  });
+
+  it("leaves the vault unnamed rather than wearing its id as a name", () => {
+    // No binding is the ordinary case for a share that arrived before the
+    // link was made, or after it was taken back.
+    const noBinding = originsByDocument({
+      origins: [origin],
+      bindings: [],
+      parties: [party],
+    }).get("doc-1");
+    expect(noBinding).toMatchObject({ partyId: null, name: null });
+    expect(noBinding?.vaultId).toBe("vault-alice");
+
+    const revoked = originsByDocument({
+      origins: [origin],
+      bindings: [{ ...binding, revoked_at: "2026-08-31T00:00:00Z" }],
+      parties: [party],
+    }).get("doc-1");
+    expect(revoked).toMatchObject({ partyId: null, name: null });
+  });
+
+  it("keeps a bound vault unnamed when the directory holds no name for it", () => {
+    const unnamed = originsByDocument({
+      origins: [origin],
+      bindings: [binding],
+      parties: [{ party_id: "party-alice", display_name: "   " }],
+    }).get("doc-1");
+    expect(unnamed).toMatchObject({ partyId: "party-alice", name: null });
+  });
+
+  it("ignores placements of anything that is not a document", () => {
+    // The table is shared with Photos and every other placed kind; Docs may
+    // only ever claim its own rows out of it.
+    const map = originsByDocument({
+      origins: [{ ...origin, item_type: "media.asset", item_id: "asset-1" }],
+      bindings: [binding],
+      parties: [party],
+    });
+    expect(map.size).toBe(0);
   });
 });
 

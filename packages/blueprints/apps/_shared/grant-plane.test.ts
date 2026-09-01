@@ -9,6 +9,7 @@ import { describe, expect, test } from "vitest";
 import {
   capabilitiesFor,
   channelReach,
+  reachBlocksSharing,
   defaultCapability,
   drawableCapability,
   GRANT_LOCI,
@@ -208,12 +209,25 @@ describe("parsing the grant wire", () => {
 });
 
 describe("absent is never empty", () => {
-  test("never reached, invited and severed are three different facts", () => {
+  test("never reached and severed are two different facts", () => {
     expect(channelReach(parseChannel(null))).toBe("never-reached");
-    expect(channelReach(parseChannel({ state: "invited" }))).toBe("invited");
     expect(
       channelReach(parseChannel({ state: "severed", vaultId: "vault-priya" }))
     ).toBe("severed");
+    // A third state used to sit between them. `invited` meant a share had
+    // minted a commons claim and was waiting for the person to arrive with a
+    // vault; #903 retired that bootstrap, so the word is no longer a channel
+    // and a wire still sending it is a READ that did not say.
+    expect(channelReach(parseChannel({ state: "invited" }))).toBe("unknown");
+  });
+
+  test("only a live link makes the share verb performable", () => {
+    // `unknown` must not block: "we could not look" is not "not linked", and
+    // the route stays the authority either way.
+    expect(reachBlocksSharing("live")).toBe(false);
+    expect(reachBlocksSharing("unknown")).toBe(false);
+    expect(reachBlocksSharing("never-reached")).toBe(true);
+    expect(reachBlocksSharing("severed")).toBe(true);
   });
 
   test("a read that did not say is unknown, never the definite never-reached", () => {

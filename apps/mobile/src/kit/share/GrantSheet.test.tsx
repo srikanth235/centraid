@@ -167,7 +167,15 @@ function standingGrant(overrides: Partial<GrantRecord> = {}): GrantRecord {
 function stubDoor(overrides: Partial<GrantDoor> = {}): GrantDoor {
   return {
     subjects: () => Promise.resolve({ readable: true, offers: OFFERS }),
-    forParty: () => Promise.resolve({ known: true, channel: null, grants: [] }),
+    // A LINKED person is the baseline, because since #903 that is the only
+    // person who can be granted at all; `channel: null` is the exception the
+    // never-reached tests opt into, not the default every other test inherits.
+    forParty: () =>
+      Promise.resolve({
+        known: true,
+        channel: { state: "live" as const, vaultId: "vault-priya" },
+        grants: [],
+      }),
     forAudience: () => Promise.resolve({ known: true, grants: [] }),
     forSubject: () => Promise.resolve([]),
     create: () => Promise.resolve({ ok: true, outcome: "created" as const }),
@@ -282,9 +290,20 @@ describe("the grant sheet, native seat", () => {
       expect(has("Can edit")).toBe(false);
     });
 
-    test("a person this vault has never reached says so", async () => {
-      await render();
+    test("a person this vault has never reached says so, and Share is not offered", async () => {
+      await render({
+        door: stubDoor({
+          forParty: () =>
+            Promise.resolve({ known: true, channel: null, grants: [] }),
+        }),
+      });
       expect(container?.textContent).toContain("Not reached yet");
+      expect(container?.textContent).toContain(
+        "Link their account in People to share with them."
+      );
+      // #903: the sheet does not grow a control naming an act it cannot
+      // perform — the reach line above already says what would work.
+      expect(press("Share").getAttribute("aria-disabled")).toBe("true");
     });
 
     test("saying it twice is a success, not a failure", async () => {
@@ -496,13 +515,13 @@ describe("the grant sheet, native seat", () => {
       expect(container?.textContent).not.toContain("Not reached yet");
     });
 
-    test("an unaccepted invitation reads as pending, not as an error", async () => {
+    test("a link that has ended reads as its own state, not as an error", async () => {
       await render({
         door: stubDoor({
           forParty: () =>
             Promise.resolve({
               known: true,
-              channel: { state: "invited" as const },
+              channel: { state: "severed" as const, vaultId: "vault-priya" },
               grants: [
                 standingGrant({
                   fulfillment: [
@@ -518,7 +537,7 @@ describe("the grant sheet, native seat", () => {
             }),
         }),
       });
-      expect(container?.textContent).toContain("Invitation pending");
+      expect(container?.textContent).toContain("Link ended");
     });
   });
 });

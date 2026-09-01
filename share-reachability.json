@@ -3,7 +3,6 @@
     "apps/mobile/src/kit/share/*.ts",
     "apps/mobile/src/kit/share/*.tsx",
     "packages/blueprints/apps/_shared/GrantSheet.tsx",
-    "packages/blueprints/apps/_shared/commons-invite.ts",
     "packages/blueprints/apps/_shared/grant-audiences.ts",
     "packages/blueprints/apps/_shared/grant-copy.ts",
     "packages/blueprints/apps/_shared/grant-door.ts",

@@ -19,12 +19,10 @@
  */
 export const SAVED_TO_MY_VAULT = "Saved to my vault";
 
-/** The share sheet's outcome when some of the chosen people have no vault
- *  yet: the count, and what happens to the invitations. */
-export function sharedWithOutcome(count: number, invited: number): string {
-  return invited
-    ? `Shared with ${count} people; ${invited} ${invited === 1 ? "is" : "are"} invited and will join after creating a vault.`
-    : `Shared with ${count} ${count === 1 ? "person" : "people"}.`;
+/** The share sheet's outcome: the count, and nothing else. Every audience is
+ *  a LINKED person, so there is no half-delivered case to report. */
+export function sharedWithOutcome(count: number): string {
+  return `Shared with ${count} ${count === 1 ? "person" : "people"}.`;
 }
 
 /** The share sheet's failure. What happened; the sheet is still open, which is

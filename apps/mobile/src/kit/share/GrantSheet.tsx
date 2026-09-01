@@ -46,6 +46,7 @@ import {
   grantOverSubject,
   grantRequestFor,
   liveGrants,
+  reachBlocksSharing,
   subjectNoun,
 } from "@centraid/blueprints/apps/_shared/grant-plane";
 import type {
@@ -259,6 +260,10 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     registryPending ||
     registryUnreadable ||
     notOfferable ||
+    // A person is reachable only through a live link (#903), and the command
+    // pack refuses the rest — so the sheet does not grow a control naming an
+    // act it cannot perform. The reach line above already says why.
+    reachBlocksSharing(reach) ||
     busy;
 
   const submit = async (): Promise<void> => {
@@ -434,7 +439,7 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
                       style={[
                         styles.reachState,
                         {
-                          // Unaccepted invitation is `--seam`, not error. Unread is quieter.
+                          // Not linked yet is `--seam`, not error. Unread is quieter.
                           color:
                             reach === "severed"
                               ? colors.net

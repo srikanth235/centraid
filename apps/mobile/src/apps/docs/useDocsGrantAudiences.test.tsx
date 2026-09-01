@@ -50,6 +50,19 @@ vi.mock(
 const links = vi.hoisted(() => ({
   answer: (): Promise<unknown[]> => Promise.resolve([]),
 }));
+
+/** An approved two-sided link — the whole address a grant is delivered over,
+ *  and therefore the whole reason a party appears as an audience at all. */
+function linkTo(partyId: string): Record<string, unknown> {
+  return {
+    vaultA: "vault-own",
+    vaultB: `vault-${partyId}`,
+    partyIdA: "party-own",
+    partyIdB: partyId,
+    approved: true,
+    revoked: false,
+  };
+}
 vi.mock(
   import("../../lib/replica/links-transport"),
   () => ({ listLinks: () => links.answer() }) as never
@@ -112,9 +125,20 @@ describe("the Docs seat's roster, phone side", () => {
     rows.value = {
       "core.party": [{ party_id: "party-asha", display_name: "Asha Rao" }],
     };
+    links.answer = () => Promise.resolve([linkTo("party-asha")]);
     await expect(read()).resolves.toStrictEqual([
       { kind: "party", id: "party-asha", label: "Asha Rao" },
     ]);
+  });
+
+  it("does not offer a person the vault is not linked with", async () => {
+    // A directory entry is a NAME; the link is the address. Offering a name
+    // with no address is a promise the product cannot keep — the grant would
+    // park forever with nowhere to deliver.
+    rows.value = {
+      "core.party": [{ party_id: "party-asha", display_name: "Asha Rao" }],
+    };
+    await expect(read()).resolves.toStrictEqual([]);
   });
 
   it("answers an EMPTY roster where the vault genuinely knows nobody", async () => {
@@ -130,18 +154,14 @@ describe("the Docs seat's roster, phone side", () => {
     await expect(read()).resolves.toStrictEqual([]);
   });
 
-  it("answers NOT-AN-ANSWER where the links read failed and People named nobody", async () => {
-    links.answer = () => Promise.reject(new Error("gateway gone"));
-    await expect(read()).resolves.toBeNull();
-  });
-
-  it("keeps the People rows when only the links read failed", async () => {
+  it("answers NOT-AN-ANSWER where the links read failed", async () => {
+    // Not `[]`, even with People rows in hand: without the links this device
+    // cannot tell an addressable person from an unaddressable one, and an
+    // empty sheet would call the member friendless on a broken read.
     links.answer = () => Promise.reject(new Error("gateway gone"));
     rows.value = {
       "core.party": [{ party_id: "party-asha", display_name: "Asha Rao" }],
     };
-    await expect(read()).resolves.toStrictEqual([
-      { kind: "party", id: "party-asha", label: "Asha Rao" },
-    ]);
+    await expect(read()).resolves.toBeNull();
   });
 });

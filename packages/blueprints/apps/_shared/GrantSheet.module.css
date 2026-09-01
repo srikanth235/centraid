@@ -45,9 +45,8 @@
   color: var(--text-soft);
 }
 
-/* "Not yet, and not wrong" — an invitation nobody has accepted is neither an
+/* "Not yet, and not wrong" — a person nobody has linked yet is neither an
    error nor a delivery, and `--seam` is the one role that says so. */
-.reachState[data-reach="invited"],
 .reachState[data-reach="never-reached"] {
   color: var(--seam);
 }

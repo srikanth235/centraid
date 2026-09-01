@@ -22,6 +22,10 @@ const SHEET_TOP_ROOM = 120;
 export const styles = StyleSheet.create({
   head: { paddingHorizontal: pageMargin },
   page: { flex: 1 },
+  // The screen ROOT, which `TopSafeArea` does not fill on its own: it
+  // renders a bare `View`, so a root styled only with a colour collapses
+  // to nothing and takes `page` (and every block under it) with it.
+  safe: { flex: 1 },
   // The scrim fills the modal root rather than sharing it with the plate: two
   // `flex: 1` siblings would each take half the screen and the sheet would
   // start at the middle.

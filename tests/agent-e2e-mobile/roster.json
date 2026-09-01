@@ -118,9 +118,9 @@
       "status": "scheduled",
       "claim": "Home's launcher never read the one app it must not (a WITHHELD count, never 0), and no Locker session crossed a real process boundary. Only killing the process proves the second half."
     },
-    "tests/agent-e2e-mobile/flows/sharing-invite.mjs": {
+    "tests/agent-e2e-mobile/flows/sharing-reach.mjs": {
       "status": "scheduled",
-      "claim": "The phone mints an invitation from the one subject it may share, the sheet that mints it opens, the surface that redeems one loads, and on Android the verb is WITHHELD with its own sentence while the gateway is out of reach. Named three times in tests/matrix.json as an evidence owner while nothing ran it, until #890 W0 scheduled it on the roster lanes."
+      "claim": "The phone compiles a share from the one subject it may share, the sheet that compiles it opens, the surface that makes a person reachable loads, and on Android the verb is WITHHELD with its own sentence while the gateway is out of reach. Named three times in tests/matrix.json as an evidence owner while nothing ran it, until #890 W0 scheduled it on the roster lanes."
     },
     "tests/agent-e2e-mobile/flows/op-sqlite-probe.mjs": {
       "status": "promoting",

@@ -1,16 +1,13 @@
-// The native sheet's quick-add path (#776).
+// The native share sheet (#776), and the claims its shape rests on:
 //
-// Three claims live here, and they are the ones that make quick-add safe to
-// ship on a device that may be offline:
-//
-//  1. A SETTLED PERSON IS SELECTED, AND ONLY THEIR REAL ID IS SUBMITTED. The
-//     gateway takes a party id as an opaque string, so a share carrying an
-//     unsettled id would durably record an identity nobody has.
-//  2. A QUEUED PERSON IS NOT SELECTED. Their row still appears — the member
-//     added them and the outbox overlay shows it — but it is an honest UI
-//     overlay, not a domain record, so the sheet says so and refuses it.
-//  3. A NEAR NAME MATCH COMMITS NOTHING on the first press. Ambiguous input
-//     asks before it mints a second identity for the same person (#630).
+//  1. THE AUDIENCE IS THE LINKED ROSTER, AND ONLY THAT. A share is delivered
+//     into the receiver's own vault, so a person with no approved link has
+//     nowhere to receive one and is not offered.
+//  2. ONE CONTROL PER PERSON. The role menu carries "no access" as one of its
+//     answers, so selecting somebody and choosing what they may do is a single
+//     decision in a single place.
+//  3. A REUSED CIRCLE OPENS ALREADY SUBMITTING ITS OWN ROSTER, and detaches
+//     the moment the member edits one of its capabilities.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -23,20 +20,13 @@ import ShareSheet from "./ShareSheet";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-interface WriteResult {
-  intentId: string;
-  status: string;
-  output?: Record<string, unknown>;
-  reason?: string;
-}
-
 const mocks = vi.hoisted(() => ({
   circleMembers: [] as Record<string, unknown>[],
   circles: [] as Record<string, unknown>[],
   containers: [] as Record<string, unknown>[],
   parties: [] as Record<string, unknown>[],
+  links: [] as Record<string, unknown>[],
   share: vi.fn<(input: unknown) => Promise<{ claims: unknown[] }>>(),
-  write: vi.fn<(appId: string, input: unknown) => Promise<unknown>>(),
 }));
 
 vi.mock(import("react-native"), async () => {
@@ -79,17 +69,11 @@ vi.mock(import("react-native"), async () => {
       }),
     ScrollView: ({ children }: { children?: React.ReactNode }) =>
       element("div", { children }),
-    Share: { share: vi.fn<() => void>() },
     StyleSheet: { create: <T,>(styles: T): T => styles },
     View: ({ children }: { children?: React.ReactNode }) =>
       element("div", { children }),
   } as never;
 });
-
-vi.mock(
-  import("expo-clipboard"),
-  () => ({ setStringAsync: vi.fn<() => Promise<void>>() }) as never
-);
 
 vi.mock(import("../components/NativeText"), async () => {
   const ReactModule = await import("react");
@@ -122,6 +106,55 @@ vi.mock(import("../components/TopSafeArea"), async () => {
   } as never;
 });
 
+vi.mock(import("../components/Icon"), () => ({ default: () => null }) as never);
+vi.mock(
+  import("../components/PersonAvatar"),
+  () => ({ default: () => null }) as never
+);
+
+// The menu is the kit's own, proved by `AnchoredMenu.test.tsx`. Here it is a
+// window onto the rows the sheet HANDS it, so a role choice is pressable.
+vi.mock(import("../components/AnchoredMenu"), async () => {
+  const ReactModule = await import("react");
+  return {
+    default: ({
+      groups,
+      visible,
+    }: {
+      groups: readonly {
+        rows: readonly {
+          key: string;
+          label: string;
+          checked?: boolean;
+          onSelect: () => void;
+        }[];
+      }[];
+      visible: boolean;
+    }) =>
+      visible
+        ? ReactModule.createElement(
+            "div",
+            {},
+            groups.flatMap((group) =>
+              group.rows.map((row) =>
+                ReactModule.createElement(
+                  "button",
+                  {
+                    "aria-checked": row.checked,
+                    "aria-label": `Menu: ${row.label}`,
+                    key: row.key,
+                    onClick: row.onSelect,
+                    type: "button",
+                  },
+                  row.label
+                )
+              )
+            )
+          )
+        : null,
+  } as never;
+});
+
 vi.mock(
   import("../hooks/useReplicaQuery"),
   () =>
@@ -146,16 +179,16 @@ vi.mock(
   () =>
     ({
       useReplica: () => ({
-        gatewayBase: "",
+        gatewayBase: "http://gateway.local",
         scopes: [],
-        session: { share: mocks.share, write: mocks.write },
+        session: { share: mocks.share },
       }),
     }) as never
 );
 
 vi.mock(
   import("../../lib/replica/links-transport"),
-  () => ({ listLinks: () => Promise.resolve([]) }) as never
+  () => ({ listLinks: () => Promise.resolve(mocks.links) }) as never
 );
 
 vi.mock(
@@ -163,7 +196,7 @@ vi.mock(
   () =>
     ({
       borders: { hairline: 1 },
-      radii: { md: 8 },
+      radii: { md: 8, pill: 999 },
       spacing: Array.from({ length: 8 }, (_, index) => index * 4),
       t: () => ({}),
       useTheme: () => ({
@@ -174,12 +207,26 @@ vi.mock(
           bgSunken: "#sunk",
           line: "#line",
           text: "#text",
+          textFaint: "#faint",
           textInv: "#inv",
           textSoft: "#soft",
         },
       }),
     }) as never
 );
+
+/** An approved link to a person's own vault — the only thing that puts them
+ *  in this sheet. */
+function link(partyId: string, vaultId: string) {
+  return {
+    vaultA: "owner-vault",
+    vaultB: vaultId,
+    partyIdA: "owner",
+    partyIdB: partyId,
+    approved: true,
+    revoked: false,
+  };
+}
 
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
@@ -225,17 +272,28 @@ async function press(target: HTMLButtonElement): Promise<void> {
   });
 }
 
-async function type(text: string): Promise<void> {
+/** Open one person's role menu and answer it. */
+async function setRole(person: string, role: string): Promise<void> {
+  const opener = [
+    ...container!.querySelectorAll<HTMLButtonElement>("button"),
+  ].find((candidate) =>
+    candidate.getAttribute("aria-label")?.startsWith(`${person}: `)
+  );
+  expect(opener, person).toBeTruthy();
+  await press(opener!);
+  await press(button(`Menu: ${role}`));
+}
+
+async function search(text: string): Promise<void> {
   const field = container!.querySelector<HTMLInputElement>(
-    'input[aria-label="Name of someone to add"]'
+    'input[aria-label="Search the people you are linked with"]'
   );
   expect(field).toBeTruthy();
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(
+    Object.getOwnPropertyDescriptor(
       HTMLInputElement.prototype,
       "value"
-    )?.set;
-    setter?.call(field, text);
+    )?.set?.call(field, text);
     field!.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
@@ -247,9 +305,9 @@ function openSheetContainer(): void {
   mocks.circles = [];
   mocks.containers = [];
   mocks.parties = [];
+  mocks.links = [];
   mocks.share.mockReset();
   mocks.share.mockResolvedValue({ claims: [] });
-  mocks.write.mockReset();
   onDone.mockReset();
 }
 
@@ -260,83 +318,78 @@ function closeSheetContainer(): void {
   container = undefined;
 }
 
-describe("ShareSheet quick-add", () => {
+describe("ShareSheet audience", () => {
   beforeEach(openSheetContainer);
   afterEach(closeSheetContainer);
 
-  it("selects a person the gateway settled, and submits their real party id", async () => {
-    mocks.write.mockImplementation(async () => {
-      mocks.parties = [
-        ...mocks.parties,
-        { party_id: "p9", display_name: "Nadia" },
-      ];
-      return {
-        intentId: "i1",
-        status: "executed",
-        output: { party_id: "p9" },
-      } satisfies WriteResult;
-    });
-    await render();
-    await type("Nadia");
-    await press(button("Add this person"));
-
-    expect(mocks.write).toHaveBeenCalledWith("people", {
-      action: "add-person",
-      input: { display_name: "Nadia", cadence_days: 30 },
-    });
-    await press(buttonWithText("Share"));
-    expect(mocks.share).toHaveBeenCalledOnce();
-    const [submitted] = mocks.share.mock.calls[0] as [
-      { members: { partyId?: string; capability: string }[] },
+  it("offers the people this vault is linked to, and nobody else", async () => {
+    mocks.parties = [
+      { party_id: "asha", display_name: "Asha" },
+      { party_id: "ben", display_name: "Ben" },
     ];
-    const members = submitted.members;
-    expect(members).toStrictEqual([{ partyId: "p9", capability: "read" }]);
-    expect(
-      members.every((member) => !member.partyId?.startsWith("pending:"))
-    ).toBe(true);
+    mocks.links = [link("ben", "ben-vault")];
+    await render();
+    expect(container!.textContent).toContain("Ben");
+    // Asha is in People, but no link means nowhere to deliver.
+    expect(container!.textContent).not.toContain("Asha");
+    expect(container!.textContent).toContain(
+      "Everyone you add gets the full shared item in their own vault and backup."
+    );
   });
 
-  it("selects nobody when the add is queued offline, and says when they become selectable", async () => {
-    mocks.write.mockImplementation(async () => {
-      // What the outbox overlay projects while the write waits: a row whose
-      // party id no vault has settled.
-      mocks.parties = [
-        ...mocks.parties,
-        { party_id: "pending:i2:party", display_name: "Nadia" },
-      ];
-      return { intentId: "i2", status: "queued" } satisfies WriteResult;
-    });
+  it("says where a link is made when this vault is linked to nobody", async () => {
+    mocks.parties = [{ party_id: "asha", display_name: "Asha" }];
     await render();
-    await type("Nadia");
-    await press(button("Add this person"));
-
     expect(container!.textContent).toContain(
-      "Nadia is saved on this device — selectable once the gateway has them."
+      "Settings → People & circles is where a link is made."
     );
-    // The row is visible and honest about itself, and pressing it selects
-    // nothing — so Share stays unavailable and no member array exists to send.
-    const row = button("Nadia cannot be shared with yet");
-    await press(row);
+    expect(buttonWithText("Share").getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("keeps a person findable while the roster is long", async () => {
+    mocks.parties = [
+      { party_id: "asha", display_name: "Asha" },
+      { party_id: "ben", display_name: "Ben" },
+    ];
+    mocks.links = [link("asha", "asha-vault"), link("ben", "ben-vault")];
+    await render();
+    await search("ben");
+    expect(container!.textContent).toContain("Ben");
+    expect(container!.textContent).not.toContain("Asha");
+  });
+});
+
+describe("ShareSheet role", () => {
+  beforeEach(() => {
+    openSheetContainer();
+    mocks.parties = [{ party_id: "ben", display_name: "Ben" }];
+    mocks.links = [link("ben", "ben-vault")];
+  });
+  afterEach(closeSheetContainer);
+
+  it("submits the capability the role menu chose, addressed to their vault", async () => {
+    await render();
+    // Nobody is selected until a role is chosen: that IS the selection.
+    expect(buttonWithText("Share").getAttribute("aria-disabled")).toBe("true");
+    await setRole("Ben", "Editor");
+    await press(buttonWithText("Share with 1"));
+    const [submitted] = mocks.share.mock.calls[0] as [
+      { members: Record<string, unknown>[] },
+    ];
+    expect(submitted.members).toStrictEqual([
+      { partyId: "ben", vaultId: "ben-vault", capability: "read+write" },
+    ]);
+  });
+
+  it("takes the person back out of the share when the answer is no access", async () => {
+    await render();
+    await setRole("Ben", "Viewer");
+    expect(buttonWithText("Share with 1").getAttribute("aria-disabled")).toBe(
+      "false"
+    );
+    await setRole("Ben", "No access");
     expect(buttonWithText("Share").getAttribute("aria-disabled")).toBe("true");
     expect(mocks.share).not.toHaveBeenCalled();
-  });
-
-  it("asks before minting a second identity for a name already on the list", async () => {
-    mocks.parties = [{ party_id: "asha", display_name: "Asha" }];
-    mocks.write.mockResolvedValue({
-      intentId: "i3",
-      status: "executed",
-      output: { party_id: "p10" },
-    } satisfies WriteResult);
-    await render();
-    await type("asha");
-    expect(container!.textContent).toContain("Already on this list: Asha");
-    await press(button("Add anyway"));
-    expect(mocks.write).not.toHaveBeenCalled();
-    expect(container!.textContent).toContain("Nobody was added yet");
-
-    await press(button("Add anyway"));
-    expect(mocks.write).toHaveBeenCalledOnce();
   });
 });
 
@@ -348,6 +401,7 @@ describe("ShareSheet preferred circle", () => {
   beforeEach(() => {
     openSheetContainer();
     mocks.parties = [{ party_id: "ana", display_name: "Ana" }];
+    mocks.links = [link("ana", "ana-vault")];
     mocks.circles = [
       { circle_id: "c1", owner_party_id: "owner", name: "Sitwell Road" },
     ];
@@ -363,13 +417,13 @@ describe("ShareSheet preferred circle", () => {
   it("opens with that circle selected, sourcing capability from its roster", async () => {
     await render("c1");
     expect(
-      buttonWithText("Named group · Sitwell Road").getAttribute("aria-selected")
+      button("Select the group Sitwell Road").getAttribute("aria-selected")
     ).toBe("true");
-    await press(buttonWithText("Share"));
+    await press(buttonWithText("Share with 1"));
     const [submitted] = mocks.share.mock.calls[0] as [Record<string, unknown>];
     expect(submitted["circleId"]).toBe("c1");
     expect(submitted["members"]).toStrictEqual([
-      { partyId: "ana", capability: "read" },
+      { partyId: "ana", vaultId: "ana-vault", capability: "read" },
     ]);
   });
 
@@ -381,12 +435,12 @@ describe("ShareSheet preferred circle", () => {
 
   it("detaches the circle the moment the member edits a capability", async () => {
     await render("c1");
-    await press(buttonWithText("Can edit"));
-    await press(buttonWithText("Share"));
+    await setRole("Ana", "Editor");
+    await press(buttonWithText("Share with 1"));
     const [submitted] = mocks.share.mock.calls[0] as [Record<string, unknown>];
     expect(submitted["circleId"]).toBeUndefined();
     expect(submitted["members"]).toStrictEqual([
-      { partyId: "ana", capability: "read+write" },
+      { partyId: "ana", vaultId: "ana-vault", capability: "read+write" },
     ]);
   });
 });

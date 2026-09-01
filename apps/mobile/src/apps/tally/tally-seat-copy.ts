@@ -96,6 +96,6 @@ export function waitingCount(total: number): string {
  */
 export const SHARE_GROUP_VERB = "Share group";
 export const SHARE_GROUP_META =
-  "one invitation each, redeemed in their own vault";
+  "each member you are linked with gets it in their own vault";
 export const SHARE_GROUP_OFFLINE =
-  "Sharing needs a gateway connection · an invitation cannot be queued";
+  "Sharing needs a gateway connection · it cannot be queued";

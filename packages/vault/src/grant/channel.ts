@@ -1,17 +1,22 @@
-// Channel state per party (#825) — #731 binding rows + pending invitation:
-// live = deliverable; invited = invitation stands, nothing delivers;
-// severed = revoked only; neither = null.
+// Channel state per party, read off #731's binding rows alone: live =
+// deliverable, severed = the link ended, never linked = null.
+//
+// A third state used to sit between them — `invited`, meaning a share had
+// minted a commons claim and was waiting for the person to arrive with a
+// vault. #903 retired that bootstrap: the People link ceremony is the one
+// thing that opens a channel, so there is no longer a way to be part-way
+// through opening one. Every state here is now a fact about a binding.
 
 import type { DatabaseSync } from "node:sqlite";
 
-export type ShareChannelState = "invited" | "live" | "severed";
+export type ShareChannelState = "live" | "severed";
 
 export interface ShareChannel {
   partyId: string;
   state: ShareChannelState;
-  /** Absent only for `invited`. */
-  vaultId?: string;
-  linkedAt?: string;
+  /** Always known: both states are read off a binding row that names it. */
+  vaultId: string;
+  linkedAt: string;
   revokedAt?: string;
 }
 
@@ -37,51 +42,24 @@ function bindingForParty(
     .get(partyId) as BindingRow | undefined;
 }
 
-function pendingInvitationVaultId(
-  db: DatabaseSync,
-  partyId: string
-): { member_vault_id: string | null } | undefined {
-  return db
-    .prepare(
-      `SELECT member_vault_id FROM share_commons_invitation
-        WHERE member_party_id = ? AND status = 'pending'
-        ORDER BY created_at DESC, invitation_id
-        LIMIT 1`
-    )
-    .get(partyId) as { member_vault_id: string | null } | undefined;
-}
-
 export function channelForParty(
   db: DatabaseSync,
   partyId: string
 ): ShareChannel | null {
   const binding = bindingForParty(db, partyId);
-  if (binding && binding.revoked_at === null) {
+  if (!binding) return null;
+  if (binding.revoked_at === null)
     return {
       partyId,
       state: "live",
       vaultId: binding.vault_id,
       linkedAt: binding.linked_at,
     };
-  }
-  const invitation = pendingInvitationVaultId(db, partyId);
-  if (invitation) {
-    const vaultId = invitation.member_vault_id ?? binding?.vault_id;
-    return {
-      partyId,
-      state: "invited",
-      ...(vaultId === undefined ? {} : { vaultId }),
-      ...(binding === undefined ? {} : { linkedAt: binding.linked_at }),
-    };
-  }
-  if (binding) {
-    return {
-      partyId,
-      state: "severed",
-      vaultId: binding.vault_id,
-      linkedAt: binding.linked_at,
-      ...(binding.revoked_at === null ? {} : { revokedAt: binding.revoked_at }),
-    };
-  }
-  return null;
+  return {
+    partyId,
+    state: "severed",
+    vaultId: binding.vault_id,
+    linkedAt: binding.linked_at,
+    revokedAt: binding.revoked_at,
+  };
 }

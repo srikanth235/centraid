@@ -25,7 +25,7 @@ import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { borders, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
-import { DOCS_MORE_ROWS } from "./docs-band";
+import { DOCS_MORE_SHEET_ROWS } from "./docs-band";
 import type { DocsMoreRowKey } from "./docs-band";
 
 export interface DocsMoreSheetProps {
@@ -70,7 +70,7 @@ export default function DocsMoreSheet({
             <Icon name="X" size={16} color={colors.text} />
           </Pressable>
         </View>
-        {DOCS_MORE_ROWS.map((row) => (
+        {DOCS_MORE_SHEET_ROWS.map((row) => (
           <Pressable
             key={row.key}
             accessibilityRole="button"

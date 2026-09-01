@@ -46,7 +46,12 @@ function stubHost(): void {
             { subjectType: "core.document", capabilities: ["view", "edit"] },
           ],
         }),
-      forParty: () => Promise.resolve({ channel: null, grants: [] }),
+      // Linked, because since #903 that is the only person a grant can name.
+      forParty: () =>
+        Promise.resolve({
+          channel: { state: "live", vaultId: "vault-priya" },
+          grants: [],
+        }),
       forAudience: () => Promise.resolve({ grants: [] }),
       forSubject: () => Promise.resolve({ grants: [] }),
       create: (request: GrantCreateRequest) => {

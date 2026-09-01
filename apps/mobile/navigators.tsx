@@ -26,7 +26,6 @@ import {
   DocsUpload,
   DocsScan,
   DocsRecent,
-  DocsStarred,
   DocsTrash,
   DocsStorage,
   LockerHome,
@@ -156,7 +155,6 @@ export function DocsNavigator(): React.JSX.Element {
       <DocsStack.Screen name="DocsUpload" component={DocsUpload} />
       <DocsStack.Screen name="DocsScan" component={DocsScan} />
       <DocsStack.Screen name="DocsRecent" component={DocsRecent} />
-      <DocsStack.Screen name="DocsStarred" component={DocsStarred} />
       <DocsStack.Screen name="DocsTrash" component={DocsTrash} />
       <DocsStack.Screen name="DocsStorage" component={DocsStorage} />
     </DocsStack.Navigator>

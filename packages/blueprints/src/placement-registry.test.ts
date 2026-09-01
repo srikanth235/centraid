@@ -219,8 +219,13 @@ describe("native Photos selection reaches the grant plane by subject", () => {
   });
 });
 
-describe("unjoined Commons invitations have a complete sender/receiver handoff", () => {
-  it("the sender surface consumes returned claims and offers deliberate copy/share actions", () => {
+// This block used to pin the OPPOSITE: a claim-code handoff that let a share
+// reach somebody the member had never linked — sender copies a code, receiver
+// pastes and redeems it. #903 retired that mechanism, so the same surfaces are
+// held to its absence. Inverted rather than deleted, because a source scan
+// that stops running is how a retired transport creeps back.
+describe("there is no claim-code path to someone this vault has not linked", () => {
+  it("the share sheet mints no claim and offers nothing to copy or send", () => {
     const native = readFileSync(
       path.resolve(
         PACKAGE_ROOT,
@@ -228,12 +233,14 @@ describe("unjoined Commons invitations have a complete sender/receiver handoff",
       ),
       "utf8"
     );
-    expect(native).toContain("result.claims");
-    expect(native).toContain("Clipboard.setStringAsync");
-    expect(native).toContain("Share.share");
+    expect(native).not.toContain("result.claims");
+    expect(native).not.toContain("Clipboard.setStringAsync");
+    expect(native).not.toContain("Share.share");
+    // What it says instead names the ONE act that makes a person shareable.
+    expect(native).toContain("You have not linked with anyone yet");
   });
 
-  it("web and native receiver surfaces parse, redeem, and immediately clear the raw code", () => {
+  it("neither sharing screen redeems a pasted invite code", () => {
     const web = readFileSync(
       path.resolve(PACKAGE_ROOT, "../client/src/react/screens/SharingCard.tsx"),
       "utf8"
@@ -243,11 +250,11 @@ describe("unjoined Commons invitations have a complete sender/receiver handoff",
       "utf8"
     );
     for (const source of [web, native]) {
-      expect(source).toContain("parseCommonsInvite");
-      expect(source).toContain('setCommonsInviteCode("")');
+      expect(source).not.toContain("parseCommonsInvite");
+      expect(source).not.toContain("CommonsInviteCode");
     }
-    expect(web).toContain("onClaimCommonsInvitation");
-    expect(native).toContain("claimCommonsInvitation");
+    expect(web).not.toContain("onClaimCommonsInvitation");
+    expect(native).not.toContain("claimCommonsInvitation");
   });
 });
 
@@ -262,7 +269,8 @@ describe("named-circle reuse stays exact", () => {
     );
     expect(native).toContain("manualShareSelection");
     expect(native).toContain("setSelectedCircleId(next.circleId)");
-    expect(native).toContain("Named group ·");
+    // The group is named by its own chip now, not by a prefixed option label.
+    expect(native).toContain("accessibilityLabel={`Select the group ");
   });
 });
 

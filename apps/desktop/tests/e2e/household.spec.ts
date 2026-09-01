@@ -190,11 +190,13 @@ test("2.12 — Household renders the roster, the owner's scopes, and the sharing
     await expect(
       page.getByRole("heading", { name: "People & circles" })
     ).toBeVisible();
+    // The panel's two halves, and its whole content: the ceremony that makes
+    // a person reachable, and the roster that ceremony writes.
     await expect(
-      page.getByRole("heading", { name: "Shared-space recovery" })
+      page.getByRole("heading", { name: "Link with someone" })
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Recover from my copy" })
+      page.getByRole("heading", { name: "People", exact: true })
     ).toBeVisible();
 
     // Retired ask surface is not drawn; nothing on this page reaches the

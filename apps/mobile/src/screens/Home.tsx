@@ -20,7 +20,7 @@ import {
   requireGatewayBase,
   resolveGatewayBase,
 } from "../lib/gateway";
-import { getActiveVaultLink, subscribeVaultLinks } from "../lib/vault-links";
+import { subscribeVaultLinks } from "../lib/vault-links";
 import type { HomeScreenProps } from "../navigation";
 import AllAppsSheet from "./home/AllAppsSheet";
 import type { BandTarget } from "./home/band";
@@ -39,7 +39,6 @@ import HomeStatusLine from "./home/HomeStatusLine";
 import HomeTitleRow from "./home/HomeTitleRow";
 import LauncherGrid from "./home/LauncherGrid";
 import type { PlaceId } from "./home/places";
-import SearchOverlay from "./home/SearchOverlay";
 import {
   countThings,
   springboardState,
@@ -47,8 +46,7 @@ import {
 } from "./home/springboard-policy";
 import { useOriginHealth } from "./home/useOriginHealth";
 import { useSpringboardTiles } from "./home/useSpringboardTiles";
-import VaultHeader from "./home/VaultHeader";
-import VaultsSwitcher from "./home/VaultsSwitcher";
+import VaultBar from "./home/VaultBar";
 
 // From the token, never re-typed (R.margin.m).
 const H_PADDING = pageMargin;
@@ -89,33 +87,18 @@ async function runHomeLoad(setState: (next: HomeState) => void): Promise<void> {
   }
 }
 
-function useActiveVault(): {
-  vaultName: string | undefined;
-  gatewayName: string | undefined;
-  color: string | undefined;
-} {
-  const [link, setLink] = useState(getActiveVaultLink);
-  useEffect(() => subscribeVaultLinks(() => setLink(getActiveVaultLink())), []);
-  return {
-    color: link?.color,
-    gatewayName: link?.desktopName,
-    vaultName: link?.vaultName,
-  };
-}
-
 export default function HomeScreen({
   navigation,
 }: HomeScreenProps): React.JSX.Element {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [state, setState] = useState<HomeState>({ kind: "loading" });
+  // Write-only on purpose: the cover renders the same either way, and the
+  // setter is what `loadHome` needs to drive its retries.
+  const [, setState] = useState<HomeState>({ kind: "loading" });
   const [refreshing, setRefreshing] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [vaultsOpen, setVaultsOpen] = useState(false);
   const [allAppsOpen, setAllAppsOpen] = useState(false);
   const pins = usePins();
-  const vault = useActiveVault();
   const replica = useReplica();
   const healthSignal = useOriginHealth();
 
@@ -168,7 +151,6 @@ export default function HomeScreen({
     [tiles]
   );
   const things = useMemo(() => countThings(tiles.values()), [tiles]);
-  const offline = state.kind === "no-gateway" || state.kind === "error";
 
   const openItem = useCallback(
     (item: LauncherItem): void => {
@@ -206,14 +188,6 @@ export default function HomeScreen({
   const openSettings = useCallback(
     () => navigation.navigate("Settings", { screen: "Settings" }),
     [navigation]
-  );
-
-  const openFromSearch = useCallback(
-    (item: LauncherItem): void => {
-      setSearchOpen(false);
-      openItem(item);
-    },
-    [openItem]
   );
 
   /** `connectors` has no mobile screen — route to Settings. */
@@ -359,15 +333,9 @@ export default function HomeScreen({
       style={[styles.screen, { paddingTop: insets.top }]}
       testID={TEST_IDS.home.screen}
     >
-      <VaultHeader
-        vaultName={vault.vaultName}
-        gatewayName={vault.gatewayName}
-        color={vault.color}
-        offline={offline}
-        onSwitchVault={() => setVaultsOpen(true)}
-        onSearch={() => setSearchOpen(true)}
-        onNewChat={() => navigation.navigate("Assistant")}
-      />
+      {/* The same lockup every app draws (`VaultBar`) — the springboard has no
+          special version of "which vault, which gateway". */}
+      <VaultBar />
 
       {/* Fixed chrome, not scroll content — scrollbar starts below the app-bar rule. */}
       <HomeTitleRow />
@@ -422,29 +390,15 @@ export default function HomeScreen({
 
       <HomeBand active="home" onSelect={selectBandTab} />
 
-      {searchOpen ? (
-        <SearchOverlay
-          items={items}
-          onOpen={openFromSearch}
-          onClose={() => setSearchOpen(false)}
-        />
-      ) : null}
-
       <AllAppsSheet
         visible={allAppsOpen}
         items={items}
         tiles={tiles}
         pinnedIds={pins}
-        onOpenApp={openFromSearch}
+        onOpenApp={openItem}
         onOpenPlace={openPlace}
         onTogglePin={togglePin}
         onClose={() => setAllAppsOpen(false)}
-      />
-
-      <VaultsSwitcher
-        open={vaultsOpen}
-        onClose={() => setVaultsOpen(false)}
-        onPairDesktop={openSettings}
       />
     </View>
   );

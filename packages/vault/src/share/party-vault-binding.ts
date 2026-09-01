@@ -76,6 +76,7 @@ export function bindPartyToVault(
     },
     input.linkedAt
   );
+  ensurePeopleProfile(db, input.partyId, input.linkedAt);
   db.prepare(
     `INSERT INTO share_party_vault_binding
        (binding_id, party_id, vault_id, vault_public_key, linked_at, revoked_at)
@@ -95,6 +96,31 @@ export function bindPartyToVault(
     input.linkedAt
   );
   return "bound";
+}
+
+/**
+ * A linked peer is a PERSON, not just a foreign key. The People roster is
+ * driven by `people_profile` (one per canonical party), so a party with only
+ * the `core_party` row `ensureCommonsParty` writes is invisible there while
+ * the share sheet — which reads `core.party` directly — still lists it. That
+ * asymmetry is what put two same-named rows in one share sheet and left the
+ * roster's `Linked` filter empty beside a live binding.
+ *
+ * Cadence 0 is "never": a person the vault learned about by linking has not
+ * asked to be nagged, and the member can set a cadence like any other.
+ */
+function ensurePeopleProfile(
+  db: DatabaseSync,
+  partyId: string,
+  now: string
+): void {
+  db.prepare(
+    `INSERT INTO people_profile
+       (profile_id, party_id, role, avatar_color, cadence_days,
+        last_contacted_at, met, created_at)
+     VALUES (?, ?, NULL, NULL, 0, NULL, NULL, ?)
+     ON CONFLICT (party_id) DO NOTHING`
+  ).run(uuidv7(), partyId, now);
 }
 
 /** Tombstone the pair. The row stays: memory that these two were linked, and

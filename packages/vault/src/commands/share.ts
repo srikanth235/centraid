@@ -13,6 +13,7 @@ import {
   isRegisteredAuthority,
   registeredVerbs,
 } from "../grant/authority-registry.js";
+import { channelForParty } from "../grant/channel.js";
 import {
   createShareGrant,
   declineShare,
@@ -24,7 +25,11 @@ import type {
   ShareGrantAudienceKind,
   ShareGrantCapability,
 } from "../grant/grant-store.js";
-import { unregisteredVerbCopy, verbConflictCopy } from "../grant/phrases.js";
+import {
+  unlinkedAudienceCopy,
+  unregisteredVerbCopy,
+  verbConflictCopy,
+} from "../grant/phrases.js";
 import type { ShareableItemType } from "../share/closure.js";
 
 const PRINCIPAL_OF_AUDIENCE: Readonly<
@@ -87,6 +92,36 @@ function registered(input: ShareInput): {
   };
 }
 
+// The channel gate (#903): a person is reachable exactly when a live
+// `share_party_vault_binding` names their party, and the People link ceremony
+// is the only thing that writes one. A grant to an unlinked party is refused
+// HERE rather than parked, because share no longer mints an invitation of its
+// own — nothing downstream could open the channel, so the row would be a
+// standing promise to nobody.
+//
+// CIRCLES ARE EXEMPT, deliberately. G-membership already rules a container
+// grant covers its members now and later, so an unlinked member is
+// undeliverable until they link and delivers on the next pass with no
+// re-grant. Refusing the whole circle over one unlinked member would cost the
+// member their circle — the same reasoning V-mask uses for a refusal standing
+// inside a granted one.
+function reachable(ctx: HandlerCtx, audience: ShareGrantAudience): void {
+  if (audience.kind !== "party") return;
+  const channel = channelForParty(ctx.db, audience.id);
+  if (channel?.state === "live") return;
+  const party = ctx.db
+    .prepare("SELECT display_name FROM core_party WHERE party_id = ?")
+    .get(audience.id) as { display_name: string } | undefined;
+  throw new Error(
+    unlinkedAudienceCopy({
+      // A grant to a party this vault does not hold is a caller error, not an
+      // unlinked person; naming the id is more use than inventing a name.
+      displayName: party?.display_name ?? audience.id,
+      severed: channel !== null,
+    })
+  );
+}
+
 const GRANT: CommandDefinition = {
   name: "share.grant",
   ownerSchema: "share",
@@ -131,6 +166,7 @@ const GRANT: CommandDefinition = {
       max_size_bytes?: number;
     };
     const asked = registered(input);
+    reachable(ctx, asked.audience);
     const created = createShareGrant(ctx.db, {
       audience: asked.audience,
       subjectType: asked.subjectType,

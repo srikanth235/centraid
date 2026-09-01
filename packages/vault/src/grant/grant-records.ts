@@ -19,7 +19,10 @@ export interface ShareGrantAudience {
   id: string;
 }
 
-/** `awaiting_channel`: no live binding. `remove_sent`: revocation in flight. */
+/** `awaiting_channel`: the peer vault is known and the link to it has ended
+ *  (#903 narrowed this from "no channel yet, an invitation is recorded" — a
+ *  party who was never linked cannot be granted at all, and no longer has a
+ *  row here to park in). `remove_sent`: revocation in flight. */
 export type ShareFulfillmentState =
   | "awaiting_channel"
   | "syncing"

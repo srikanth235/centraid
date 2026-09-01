@@ -102,7 +102,10 @@ export default function DevicesScreen({
   const handleCloseActions = (): void => setActing(undefined);
 
   return (
-    <TopSafeArea edges={["top"]} style={{ backgroundColor: colors.bg }}>
+    <TopSafeArea
+      edges={["top"]}
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+    >
       <View style={styles.page}>
         <PlaceHeader
           title="Copies"

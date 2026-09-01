@@ -1,5 +1,6 @@
 import { projectPendingWrite } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import type { PendingProjectionDeclaration } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import { isAddressablePartyKind } from "@centraid/blueprints/apps/_shared/share-kit";
 // governance: allow-repo-hygiene file-size-limit (#731) the inline host bridge keeps query, write, sharing, Commons claim, resident-save, and replica invalidation doors in one security boundary.
 import type {
   InlineAppModule,
@@ -413,7 +414,8 @@ async function loadShareTargets(
       typeof partyId !== "string" ||
       partyId === ownerPartyId ||
       typeof displayName !== "string" ||
-      !displayName.trim()
+      !displayName.trim() ||
+      !isAddressablePartyKind(row.values["kind"])
     )
       continue;
     const vaultId = linkedByParty.get(partyId);

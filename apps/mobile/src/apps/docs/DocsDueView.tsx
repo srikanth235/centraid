@@ -34,7 +34,7 @@ export default function DocsDueView(): React.JSX.Element {
   return (
     <View style={styles.page}>
       <View style={styles.panel}>
-        <Text style={styles.eyebrow}>Off</Text>
+        <Text style={styles.eyebrow}>Switched off</Text>
         <Text accessibilityRole="header" style={styles.title}>
           {DUE_EMPTY_TITLE}
         </Text>

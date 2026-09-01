@@ -126,6 +126,13 @@ vi.mock(
   () =>
     ({
       borders: { hairline: 1 },
+      popoverShadow: {
+        elevation: 8,
+        shadowColor: "#141414",
+        shadowOffset: { height: 8, width: 0 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+      },
       spacing: { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32 },
       t: () => ({}),
       useTheme: () => ({ colors: mocks.colors }),

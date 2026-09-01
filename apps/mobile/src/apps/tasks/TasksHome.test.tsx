@@ -34,7 +34,6 @@ import { resolveTheme } from "../../kit/theme";
 import { REPLICA_CAN_WRITE } from "../../lib/replica/multi-vault-provenance";
 import TaskRow from "./TaskRow";
 import { flattenGroups, groupsFor, windowItems } from "./tasks-groups";
-import TasksHome from "./TasksHome";
 import { makeTasksStyles } from "./TasksHome.styles";
 import TasksRows from "./TasksRows";
 import TasksToolbar from "./TasksToolbar";
@@ -143,33 +142,6 @@ describe("Tasks, on the real React Native host tree", () => {
       "schedule.section",
     ])
       replicaRows.byEntity.set(entity, []);
-  });
-
-  // ── CHARACTERISATION PIN, NOT A CONTRACT ────────────────────────────────
-  it("PINS A DEFECT: mounting Tasks' home throws on the band's missing Inbox glyph", () => {
-    // WHAT THIS CONTRADICTS: `TasksHome` is a shipped route, and a route that
-    // cannot mount is not a route. `tasks-band.ts` names `"Inbox"` for the
-    // third band destination and again as the More sheet's first row, but
-    // `@centraid/design` ships no `Inbox` icon and `icon-resolver.ts` carries
-    // no alias for it — so `resolveIconName` throws inside `TasksBand`'s
-    // render, before any Tasks content is drawn.
-    //
-    // Nothing cheaper could see this. `tasks-band.test.ts` asserts the icon
-    // TABLE, never that a name in it resolves; the stub tier never mounts the
-    // band at all. It took a real renderer over the real glyph registry.
-    //
-    // FIXING THE PRODUCT IS OUT OF SCOPE HERE (#890 W5 rebuilds the tests), so
-    // this asserts today's behaviour and must be DELETED — not adjusted — by
-    // whoever adds the glyph or the alias. The cases below therefore exercise
-    // the Tasks surfaces directly rather than through the crashing frame.
-    expect(() =>
-      render(
-        <TasksHome
-          navigation={{ navigate: vi.fn<() => void>() } as never}
-          route={{ params: {} } as never}
-        />
-      )
-    ).toThrow("Unknown mobile icon name: Inbox");
   });
 
   it("publishes each row as a native checkbox carrying its own checked trait", () => {

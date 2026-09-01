@@ -52,6 +52,11 @@ export function useDocs(): UseDocsResult {
   const members = useDocsEntity("social.circle_member");
   const states = useDocsEntity("share.commons_member_state");
   const parties = useDocsEntity("core.party");
+  // Where a projected row came from, and whose vault that is. Decoration on
+  // every other shelf; on Shared it IS the shelf, which is why its read has to
+  // answer separately from the outbound share join above.
+  const origins = useDocsEntity("core.share_origin");
+  const bindings = useDocsEntity("share.party_vault_binding");
 
   const queryState = combineReplicaQueryStates([
     documents,
@@ -60,6 +65,12 @@ export function useDocs(): UseDocsResult {
     concepts,
     schemes,
   ]);
+
+  const originQueries = [origins, bindings, parties];
+  const originsDenied = originQueries.some(
+    (query) => query.error !== undefined || query.connection === "unavailable"
+  );
+  const originsLoading = originQueries.some((query) => query.loading);
 
   const shareQueries = [grants, circles, members, states, parties];
   const sharesDenied = shareQueries.some(
@@ -86,6 +97,14 @@ export function useDocs(): UseDocsResult {
                 states: states.rows,
                 parties: parties.rows,
               },
+        origins:
+          originsDenied || originsLoading
+            ? null
+            : {
+                origins: origins.rows,
+                bindings: bindings.rows,
+                parties: parties.rows,
+              },
       }),
     [
       documents.rows,
@@ -102,6 +121,10 @@ export function useDocs(): UseDocsResult {
       members.rows,
       states.rows,
       parties.rows,
+      originsDenied,
+      originsLoading,
+      origins.rows,
+      bindings.rows,
     ]
   );
 
@@ -120,6 +143,8 @@ export function useDocs(): UseDocsResult {
       members.refresh(),
       states.refresh(),
       parties.refresh(),
+      origins.refresh(),
+      bindings.refresh(),
     ]);
   };
 

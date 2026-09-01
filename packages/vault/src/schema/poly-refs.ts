@@ -155,6 +155,65 @@ export const POLY_REF_REGISTRY: readonly PolyRefEntry[] = [
 ];
 
 /**
+ * What a merge does with a party pointer whose re-point collides with a
+ * uniqueness constraint the survivor already satisfies.
+ *   - `revoke`: the row is a standing ANSWER, and an answer is never silently
+ *     deleted — it is dated shut and then re-pointed, which is also the only
+ *     order that works where the constraint covers live rows only.
+ *   - `delete`: the row is duplicate machinery that says nothing the survivor's
+ *     copy does not already say.
+ */
+export type PartyPointerCollision = "revoke" | "delete";
+
+export interface PartyPointer {
+  /** Physical vault.db table name. */
+  table: string;
+  /** The column holding a `core_party.party_id` with no foreign key on it. */
+  column: string;
+  /**
+   * Raw-SQL predicate ANDed onto the match (no bound parameters), for a column
+   * that holds a party id only for SOME rows.
+   */
+  predicate?: string;
+  collision: PartyPointerCollision;
+  note: string;
+}
+
+/**
+ * Party pointers the engine cannot see (#290 + #883).
+ *
+ * `core.merge_party` re-points references two ways, and neither reaches these:
+ * `PRAGMA foreign_key_list` finds nothing, because the column carries no
+ * foreign key, and `POLY_REF_REGISTRY` matches `= 'core.party'`, a value these
+ * columns never hold. Nor does the DDL scan in `poly-refs.test.ts` catch them —
+ * it looks for `(X_type, X_id)` siblings, and neither `principal_kind` nor a
+ * bare `member_party_id` has that shape. So this list is the third mechanism,
+ * enumerated once for the same reason `POLY_REF_REGISTRY` is: the next
+ * FK-less party pointer is one entry here, not a remembered clause.
+ *
+ * PURGE deliberately does not walk it — a person is soft-deleted, never purged,
+ * and both rows here are meant to outlive the row they name. MERGE must, because
+ * a merge DELETES the folded-in party: left behind, the pointer names a row that
+ * no longer exists and the feature it belongs to silently stops working, with
+ * nothing reporting a failure.
+ */
+export const PARTY_POINTER_REGISTRY: readonly PartyPointer[] = [
+  {
+    table: "share_authority",
+    column: "principal_id",
+    predicate: "principal_kind = 'person'",
+    collision: "revoke",
+    note: "The authority plane is polymorphic on BOTH sides, so `principal_id` holds a party id, a circle id, an engine class or a device id depending on `principal_kind`. A standing grant left naming the folded-in party cannot be resolved to a peer vault, so a share the owner already granted stops being delivered.",
+  },
+  {
+    table: "share_commons_invitation",
+    column: "member_party_id",
+    collision: "delete",
+    note: "A pending invitation names the party it is addressed to. Left behind, the ask can never be matched to the person it was for, and `UNIQUE (grant_id, member_party_id)` no longer does its job: the two ids are different rows, so one person ends up holding two open invitations to the same commons.",
+  },
+];
+
+/**
  * Tables that carry a `(type, id)`-shaped pair but are deliberately NOT swept
  * on purge, each with the reason. `poly-refs.test.ts` treats membership here as
  * accounting for the pair, so an exclusion is a documented decision, never an
@@ -174,7 +233,7 @@ export const POLY_REF_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
   ],
   [
     "share_authority",
-    "The subject pair is the same family as share_circle_grant's container pair (issues #825, #883): durable authority truth, not an independently swept live pointer. A standing answer states what the owner decided about a subject; purging that subject ends the answer through revocation, which is a dated decision, not a silent row deletion — and the revoked row must survive as the record that the authority once stood. This covers the plane's own subjects too: `core.vault` for a device's reach and `enrich.scope` for an egress answer name a cascade level, not a purgeable row.",
+    "The subject pair is the same family as share_circle_grant's container pair (issues #825, #883): durable authority truth, not an independently swept live pointer. A standing answer states what the owner decided about a subject; purging that subject ends the answer through revocation, which is a dated decision, not a silent row deletion — and the revoked row must survive as the record that the authority once stood. This covers the plane's own subjects too: `core.vault` for a device's reach and `enrich.scope` for an egress answer name a cascade level, not a purgeable row. The PRINCIPAL pair (`principal_kind`/`principal_id`) is a different question and is not excluded by this entry — the scan cannot see it, since `principal_kind` is not `_type`-shaped. It is accounted for in `PARTY_POINTER_REGISTRY` below.",
   ],
   [
     "share_commons_invitation",

@@ -30,7 +30,7 @@ export default function Icon({
   const { colors } = useTheme();
   const paths = icons[resolveIconName(name)];
   const resolvedColor = color ?? colors.text;
-  const resolvedStrokeWidth = resolveStrokeWidth(size, strokeWidth);
+  const resolvedStrokeWidth = resolveStrokeWidth(size, strokeWidth, paths);
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       {paths.map((p, i) => (
