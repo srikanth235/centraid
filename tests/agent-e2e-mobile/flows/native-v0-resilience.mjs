@@ -400,6 +400,15 @@ ${DISMISS_KEYBOARD_ONBOARDING}
 - tapOn:
     id: "tally-add-commit"
     retryTapIfNoChange: true
+# ARRIVAL, NOT THE NEXT TAP. The composer sets hideBand (TallyAddScreen), so
+# the band cannot exist until commit has resolved and called goBack() — and on
+# runs 33559959847 and 33564004616 the next step failed on the band's Waiting
+# tab, which named a missing tab when what had actually happened is that the
+# composer never left. Assert the group screen we are supposed to be back on, so
+# the failure says which of the two it is (#905).
+- extendedWaitUntil:
+    visible: "${GROUP_HERO_SUB}"
+    timeout: 20000
 # Waiting is the band's fourth place and the one surface that reads the durable
 # outbox rather than the gateway. Its key is contrib — the label "Waiting" is
 # copy shelves.ts owns, the key is the contract.

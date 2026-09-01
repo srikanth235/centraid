@@ -131,6 +131,7 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Scroll once more to the commit, which sits below the foot as the ScrollView's last child
 - [x] Make Photos ask before it is refused, since a pre-revoked grant is not a denied one
 - [x] Give Tally's commit a handle, since its label and the screen title are the same words
+- [x] Assert the return to the group screen after the commit, rather than blind-tapping the band
 - [x] Spend one spawn on Notes' three adjacent read and write chunks
 
 ### U — the merged tree's own three client-e2e failures
@@ -150,6 +151,7 @@ Where each checked item lands, then the reasoning behind it:
 - Scroll the composer to its foot sentence, which six fields push under the fold — same section; same file.
 - Scroll once more to the commit, which sits below the foot as the ScrollView's last child — same section; same file.
 - Make Photos ask before it is refused, since a pre-revoked grant is not a denied one — same section; `tests/agent-e2e-mobile/flows/photos-permissions.mjs`.
+- Assert the return to the group screen after the commit, rather than blind-tapping the band — same section; `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
 - Give Tally's commit a handle, since its label and the screen title are the same words — same section; `apps/mobile/src/kit/test-ids.ts`, `apps/mobile/src/apps/tally/TallyAddScreen.tsx`, `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
 - Spend one spawn on Notes' three adjacent read and write chunks — same section; `tests/agent-e2e-mobile/flows/notes-library.mjs`.
 - Disambiguate the Household sharing panel's headings, which the merge made ambiguous page-wide — "U — three failures the merge produced and nothing before it could have"; `apps/desktop/tests/e2e/household.spec.ts`.
@@ -757,6 +759,12 @@ So the arithmetic is settled and the remaining gap is not a defect. `pr-gate-bud
 So the control now has a handle, `tally-add-commit`, the way `locker-gate-submit` already does. That is the repo's own rule applied to a control that had been exempt from it — "the band destination is taken by its KEY, not its label, because the label is copy the shelf table may re-word" — and it removes the ambiguity rather than working around it.
 
 Two failures in that run were not this branch's: `notes-library` missed its capture row after waiting the full 30s having PASSED the three runs before it, and `cold-start` was killed before a single assertion and classified infrastructure by the harness itself. The capture-row timeout is left at 30s deliberately: raising it would buy green by waiting longer on a write that is genuinely sometimes slow, which is the measurement going soft rather than the defect being fixed.
+
+**Where the airplane journey now stops, and what is known about it.** With `tally-add-commit` the tap lands on the control rather than possibly on the screen title: run 33564004616 shows `Tap on id: tally-add-commit ... COMPLETED`, and then the Waiting band tab is not found, with the composer still on screen. The composer sets `hideBand`, so the band cannot appear until `commit` resolves and calls `goBack()` — the journey is therefore stuck on the commit not taking effect, not on a missing tab.
+
+The whole call chain was read and every link is sound, which is worth recording so the next person does not re-derive it: `surfaceWriteOutcome` returns TRUE for `queued`, so an offline write is a success; `refreshTally` cannot throw, because `openTally` and `loadTallyGroup` both catch internally; and `expenseVerdict` refusing would render `verdict.refusal`, which is not on screen. The one branch that refuses SILENTLY is `!allocation || !allocation.ok`, which returns `refuse(allocation?.line ?? "")` — an empty string renders nothing, so a member gets a control that declines without saying why. That is a real state-honesty defect in its own right whether or not it is what is happening here, and it is recorded rather than fixed: nothing observed proves it fired.
+
+Settling it needs the run's screenshots and hierarchy dumps, and those are on `productionresultssa7.blob.core.windows.net`, which this container's egress policy refuses. So the step is left asserting its own arrival instead: the flow now waits for the group screen's own sentence after the commit, which makes the next run say whether the composer left at all rather than reporting a missing tab.
 
 **The budget closed on its own, and the claim that it could not is withdrawn.** Run 33556574795 came in at **649s against 720s** — under, with all five journeys run. Everything above in this section that argued the five could not fit twelve minutes was extrapolation from runs whose later members were being starved, and it was wrong twice over: once at ~1000s before run 33544048980 measured 727s, and again after it. The chunk merges (25 spawns down to 15) plus journeys that stop burning time on doomed waits are what did it, which is precisely what `pr-gate-budget.md`'s remedy 1 predicted. No budget was raised, no member dropped, no assertion weakened, and remedy 3 was never needed.
 
