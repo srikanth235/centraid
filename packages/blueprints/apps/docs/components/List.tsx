@@ -10,6 +10,7 @@ import { WINDOW_FAILED } from "../drive-copy.ts";
 import { fmtBytes, fmtDate, typeMeta } from "../format.ts";
 import { I, KIND_ICONS } from "../icons.ts";
 import type { DriveDoc, SortKey } from "../types.ts";
+import { sharedFromLine } from "../view-copy.ts";
 import { RowStateSlot, rowStateFor } from "./RowStateSlot.tsx";
 import { ActionBtn, Checkbox, CustodyDot, Icon, Snippet } from "./Shared.tsx";
 
@@ -39,6 +40,7 @@ export function ListRow({
   onOpenMenu,
   onRestore,
   position,
+  showSender = false,
 }: {
   doc: DriveDoc;
   index: number;
@@ -51,6 +53,8 @@ export function ListRow({
   trashed: boolean;
   /** The gateway is out of reach — rung 4 of the state ladder (§4.1). */
   offline: boolean;
+  /** The lead slot answers "why is this row here"; only Shared answers WHO. */
+  showSender?: boolean;
   folderName: (id: string | null | undefined) => string;
   onOpenDetails: (id: string) => void;
   onOpenQuick: (id: string) => void;
@@ -173,8 +177,13 @@ export function ListRow({
           input={rowState}
           fallback={<CustodyDot state={doc.custody_state} />}
         />
+        {/* ONE lead line — a row answers "why am I here" only once. */}
         {search.trim() && doc.snippet ? (
           <Snippet snippet={doc.snippet} />
+        ) : showSender && doc.shared_from ? (
+          <div className={shared.snippet}>
+            {sharedFromLine(doc.shared_from)}
+          </div>
         ) : null}
         {/* The compact row folds the trailing columns into one line, in the
             same order the head lists them: size · changed (§4.1). No kind

@@ -62,10 +62,16 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
   } = props;
   const [links, setLinks] = useState<GatewayLink[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [proposeVault, setProposeVault] = useState(ownVaultIds[0] ?? "");
+  // A CHOICE, not a mirror: `ownVaultIds` arrives async, so seeded state keeps
+  // `""` while the select paints its first option and the propose posts empty.
+  const [pickedVault, setPickedVault] = useState("");
   const [proposeTarget, setProposeTarget] = useState("");
   const [busyRow, setBusyRow] = useState<string | null>(null);
   const mountedRef = useRef(true);
+
+  const proposeVault = ownVaultIds.includes(pickedVault)
+    ? pickedVault
+    : (ownVaultIds[0] ?? "");
 
   const refresh = useCallback((): void => {
     void loadLinks()
@@ -137,7 +143,7 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
               aria-label="From vault"
               className={styles.receiveSelect}
               value={proposeVault}
-              onChange={(event) => setProposeVault(event.target.value)}
+              onChange={(event) => setPickedVault(event.target.value)}
             >
               {ownVaultIds.map((id) => (
                 <option key={id} value={id}>
@@ -154,7 +160,9 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
             <button
               type="button"
               className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
-              disabled={!proposeTarget.trim() || busyRow === "propose"}
+              disabled={
+                !proposeVault || !proposeTarget.trim() || busyRow === "propose"
+              }
               onClick={() =>
                 void act("propose", async () => {
                   await onProposeLink(proposeVault, proposeTarget.trim());

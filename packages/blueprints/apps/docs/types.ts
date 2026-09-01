@@ -30,6 +30,16 @@ export interface SharedWith {
   pending_count: number;
 }
 
+/** Another vault delivered this (#903); nothing else says so. */
+export interface SharedFrom {
+  vault_id: string;
+  /** `null` is "cannot say who", never "nobody": no live binding names them. */
+  party_id: string | null;
+  name: string | null;
+  /** Landed here, epoch ms. */
+  at: number;
+}
+
 /** One free-form label (core.tag_item over the shared Tags scheme). */
 export interface DocTag {
   tag_id: string;
@@ -64,6 +74,8 @@ export interface DriveDoc {
    * says "not shared" (#821).
    */
   shared_with: SharedWith[] | null;
+  /** `null` is a FACT; `shared_from_known` says if the read answered. */
+  shared_from: SharedFrom | null;
 }
 
 /**
@@ -163,6 +175,8 @@ export interface AppState {
    * "is anything set" has one home (`filtersActive`).
    */
   filters: DriveFilters;
+  /** `false` is "cannot say", which is not an empty inbox (#903). */
+  sharedFromKnown: boolean;
   sortKey: SortKey;
   sortDir: 1 | -1;
   /**

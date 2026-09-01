@@ -13,6 +13,7 @@ import {
 } from "../format.ts";
 import { KIND_ICONS_LG } from "../icons.ts";
 import type { DriveDoc } from "../types.ts";
+import { sharedFromLine } from "../view-copy.ts";
 import { RowStateSlot, rowStateFor } from "./RowStateSlot.tsx";
 import { Checkbox, CustodyDot, Icon } from "./Shared.tsx";
 
@@ -29,6 +30,7 @@ export function GridCard({
   onOpenDetails,
   onOpenQuick,
   onToggleSelect,
+  showSender = false,
 }: {
   doc: DriveDoc;
   index: number;
@@ -42,6 +44,8 @@ export function GridCard({
   onOpenDetails: (id: string) => void;
   onOpenQuick: (id: string) => void;
   onToggleSelect: (id: string, index: number, shift: boolean) => void;
+  /** A card is the same row in another layout (`ListRow`). */
+  showSender?: boolean;
 }) {
   const m = typeMeta(doc.media_type, doc.title);
   const selected = selectedIds.has(doc.document_id);
@@ -159,7 +163,9 @@ export function GridCard({
         </div>
         <div className={styles.cardMeta}>
           <span>
-            {fmtBytes(doc.byte_size)} · {fmtDate(doc.created_at)}
+            {showSender && doc.shared_from
+              ? sharedFromLine(doc.shared_from)
+              : `${fmtBytes(doc.byte_size)} · ${fmtDate(doc.created_at)}`}
           </span>
           {/* The same one-mark slot the list row carries (§4.1): the card is
               a different layout of the same row, not a different set of

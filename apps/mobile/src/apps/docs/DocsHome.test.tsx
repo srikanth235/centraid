@@ -261,9 +261,7 @@ describe("Docs, on the real React Native host tree", () => {
     expect(texts.some((line) => line.startsWith("Another vault · "))).toBe(
       true
     );
-    expect(texts).toContain(
-      "2 documents · each one arrived in your vault and is yours to keep"
-    );
+    expect(texts).toContain("2 documents · each stays while its share stands");
   });
 
   it("draws its own empty, never the drive's — a full drive with nothing shared", () => {

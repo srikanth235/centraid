@@ -12,7 +12,14 @@ import { applyFilters } from "./filters.ts";
 import { typeMeta } from "./format.ts";
 import { createMetadata } from "./metadata.ts";
 import { createPopovers } from "./popovers.ts";
-import { FOLDERS, RECENT, STARRED, TRASH, folderIdFrom } from "./shelves.ts";
+import {
+  FOLDERS,
+  RECENT,
+  SHARED,
+  STARRED,
+  TRASH,
+  folderIdFrom,
+} from "./shelves.ts";
 import type { AppData, AppState, DriveDoc, Folder } from "./types.ts";
 import { createUploads } from "./uploads.ts";
 import { createVersions } from "./versions.ts";
@@ -155,6 +162,12 @@ export function createLogic({
     } else {
       list = activeFiles();
       if (shelf === STARRED) list = list.filter((f) => f.starred);
+      // A seat that could not READ placements draws its own state, so empty
+      // here always means nothing arrived.
+      if (shelf === SHARED)
+        list = state.sharedFromKnown
+          ? list.filter((f) => f.shared_from !== null)
+          : [];
       if (folderId)
         list = list.filter((f) => (f.folder_id ?? null) === folderId);
     }
@@ -164,6 +177,11 @@ export function createLogic({
     if (tag && tag !== "all")
       list = list.filter((f) => (f.tags ?? []).some((t) => t.label === tag));
     if (search.trim()) return list; // keep the vault's rank order for search
+    // Newest ARRIVAL first, not `updated_at`; the sort control overrides it.
+    if (shelf === SHARED && state.sortKey === "changed" && state.sortDir === -1)
+      return [...list].sort(
+        (a, b) => (b.shared_from?.at ?? 0) - (a.shared_from?.at ?? 0)
+      );
     if (shelf === RECENT) {
       return [...list]
         .sort((a, b) =>

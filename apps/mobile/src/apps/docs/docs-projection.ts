@@ -33,7 +33,6 @@ import type { EntityRow } from "./docs-projection-rows";
 import { originsByDocument, sharesByDocument } from "./docs-projection-shares";
 import type {
   OriginEntityRows,
-  SharedFrom,
   ShareEntityRows,
 } from "./docs-projection-shares";
 
@@ -44,7 +43,6 @@ export {
   originsByDocument,
   sharesByDocument,
   type OriginEntityRows,
-  type SharedFrom,
   type ShareEntityRows,
 } from "./docs-projection-shares";
 export { type EntityRow } from "./docs-projection-rows";
@@ -55,8 +53,6 @@ export type MobileDriveDoc = DriveDoc & {
   folderGone: boolean;
   canWrite: boolean;
   scopeLabels: readonly string[];
-  /** Set only where a placement record names an origin vault. */
-  shared_from: SharedFrom | null;
   raw: EntityRow;
 };
 

@@ -27,13 +27,6 @@ export interface ShareMemberSelection {
   capability: "read" | "read+write";
 }
 
-const PARTY_KINDS_THAT_HOLD_NO_VAULT: readonly string[] = ["agent", "animal"];
-
-export function isAddressablePartyKind(kind: unknown): boolean {
-  if (typeof kind !== "string") return true;
-  return !PARTY_KINDS_THAT_HOLD_NO_VAULT.includes(kind);
-}
-
 /** An invitation never gets a synthetic vault id. */
 export function selectedShareMembers(
   destinations: readonly ShareDestination[],

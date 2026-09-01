@@ -156,7 +156,7 @@ test("an album shares through the one grant kit, view only", async ({
   await expect(page.getByRole("button", { name: "Can edit" })).toHaveCount(0);
   // Absent ≠ empty: nothing shared says so in the album's own words.
   await expect(
-    page.getByText("Nothing shared with Cornwall 2024 yet.")
+    page.getByText("Cornwall 2024 is not shared with anyone yet.")
   ).toBeVisible();
 
   await mkdir(EVIDENCE_DIR, { recursive: true });

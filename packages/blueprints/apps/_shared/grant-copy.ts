@@ -72,6 +72,13 @@ export function nothingSharedYet(audienceLabel: string): string {
   return `Nothing shared with ${audienceLabel} yet.`;
 }
 
+/** Subject-first lists one subject's grants across every audience, so its empty
+ *  line is about the subject; `nothingSharedYet` would read the document as the
+ *  person it went to. */
+export function notSharedWithAnyoneYet(subjectLabel: string): string {
+  return `${subjectLabel} is not shared with anyone yet.`;
+}
+
 export function audienceNotKnown(audienceLabel: string): string {
   return `This vault has no record of ${audienceLabel}.`;
 }

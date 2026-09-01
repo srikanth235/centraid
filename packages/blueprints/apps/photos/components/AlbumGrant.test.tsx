@@ -129,7 +129,7 @@ describe("an album shares through the one grant kit", () => {
     expect(button("Can edit")).toBeUndefined();
     expect(container.textContent).toContain("Cornwall 2024");
     expect(container.textContent).toContain(
-      "Nothing shared with Cornwall 2024 yet."
+      "Cornwall 2024 is not shared with anyone yet."
     );
 
     await press("Share");

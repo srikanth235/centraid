@@ -1,8 +1,6 @@
 // The phone's own status sentences (#821). Sentences the SHARED copy modules
 // carry are imported at their call sites, never restated here.
 
-import { fmtDate } from "@centraid/blueprints/apps/docs/format";
-
 const fmt = (n: number): string => n.toLocaleString("en-US");
 
 export function allStatus(count: number): string {
@@ -42,7 +40,7 @@ export function starredStatus(count: number): string {
 export const SHARED_TITLE = "Shared with you";
 
 export function sharedStatus(count: number): string {
-  return `${fmt(count)} ${count === 1 ? "document" : "documents"} · each one arrived in your vault and is yours to keep`;
+  return `${fmt(count)} ${count === 1 ? "document" : "documents"} · each stays while its share stands`;
 }
 
 export const SHARED_CAPTION = "Sorted by when it reached you, newest first.";
@@ -51,25 +49,17 @@ export const SHARED_CAPTION = "Sorted by when it reached you, newest first.";
  *  alike, so this replaces the set rather than captioning it. */
 export const SHARED_UNKNOWN_TITLE = "This device cannot say what was shared";
 export const SHARED_UNKNOWN_BODY =
-  "Where a document came from is a separate read, and it did not answer. Rather than show you an empty shelf that would mean the wrong thing, this one shows nothing at all.";
+  "Where each document came from is a separate read, and it did not answer.";
 
 export const SHARED_EMPTY_TITLE = "Nothing has been shared with you yet";
+/** Ruling G-revoke: withdrawal hard-deletes the audience's copy. The shelf may
+ *  not promise it survives one. */
 export const SHARED_EMPTY_BODY =
-  "When someone you are linked with shares a document, a copy lands in your vault and appears here. It is yours from that moment — it stays if they unshare it, and it goes into your backup.";
+  "When someone you are linked with shares a document, a copy lands here — and goes when they withdraw it.";
 
-/** The sender, unnamed where no link binding says whose vault it was. */
-export const SHARED_SENDER_UNKNOWN = "Another vault";
-
-/** The Shared row's lead line, in the slot a matched passage takes on Search:
- *  who sent it, and the day it landed. */
-export function sharedFromLine(from: {
-  name: string | null;
-  at: number;
-}): string {
-  const who = from.name ?? SHARED_SENDER_UNKNOWN;
-  const when = from.at ? fmtDate(new Date(from.at).toISOString()) : "";
-  return when ? `${who} · ${when}` : who;
-}
+// The sender line is the BLUEPRINT's, not a second copy: both seats draw the
+// same shelf and must name a sender the same way (law:one-computation).
+export { sharedFromLine } from "@centraid/blueprints/apps/docs/view-copy";
 
 /** The replica indexes TITLES only; could-not-read counts the whole drive. */
 export function searchStatus(results: number, couldNotRead: number): string {
@@ -108,7 +98,7 @@ export function searchReachTitle(count: number): string {
     : `${fmt(count)} documents can be matched on their titles only`;
 }
 export const SEARCH_REACH_BODY =
-  "This device holds a copy of your documents' names, not of what is written inside them. Reading the contents is machine work and a separate consent, and it is off — so a phrase you remember from inside a document will not find it here.";
+  "Reading inside a document is a separate consent, and it is off — a phrase from inside one will not find it here.";
 export const SEARCH_REACH_ACTION = "What Docs may read";
 
 /** The `due` capability is off with no runner: state the absence, never guess. */

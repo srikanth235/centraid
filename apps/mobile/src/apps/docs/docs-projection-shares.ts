@@ -1,14 +1,15 @@
 // The SHARING half of the drive projection — who sent a document into this
 // vault, and who this vault has sent it on to. Split out of
-// `docs-projection.ts` when that file outgrew the size limit; the two answer
-// different questions over the same rows, and only this one needs the link
-// plane.
+// `docs-projection.ts` when that file outgrew the size limit; only this half
+// needs the link plane.
 //
 // Same law as its parent: nothing is fabricated. Every field is a replica fact
 // or `null` where the replica cannot say — "unknown" is never "shared with
 // nobody" (#903).
 
+// `SharedFrom` is the BLUEPRINT's: two shapes for one fact is how seats drift.
 import type {
+  SharedFrom,
   SharedMember,
   SharedWith,
 } from "@centraid/blueprints/apps/docs/types";
@@ -22,28 +23,10 @@ import {
 } from "./docs-projection-rows";
 import type { EntityRow } from "./docs-projection-rows";
 
-/**
- * Where a document in THIS vault came from, when it came from another one.
- *
- * `core_share_origin` is written by delivery, so its presence is the whole
- * answer to "was this shared with me" — there is no second signal, and a
- * document with no row here simply arrived some other way.
- */
-export interface SharedFrom {
-  /** The vault it was delivered from. Always known; the name may not be. */
-  vaultId: string;
-  /** The linked person that vault belongs to, where a binding names one.
-   *  `null` is "this device cannot say who", never "nobody". */
-  partyId: string | null;
-  name: string | null;
-  /** When it landed here, epoch milliseconds. */
-  at: number;
-}
-
+/** The three replica reads `originsByDocument` joins. */
 export interface OriginEntityRows {
-  /** `core.share_origin` — one row per projected item. */
   origins: readonly EntityRow[];
-  /** `share.party_vault_binding` — what turns an origin VAULT into a person. */
+  /** What turns an origin VAULT into a person. */
   bindings: readonly EntityRow[];
   parties: readonly EntityRow[];
 }
@@ -71,12 +54,9 @@ function shareLabel(
 /**
  * Inbound placements, by document id — the Shared shelf's whole source.
  *
- * The vault id is the durable fact; the NAME is a courtesy the vault can only
- * extend where a link binding already says which person that vault belongs to
- * (`share_party_vault_binding`, the same mechanism every share sheet resolves
- * an audience through). No binding, no name — never a truncated vault id worn
- * as one, and never a guess from the `shared_by` attribution, which is an
- * owner id or `peer:<vaultId>` rather than a party.
+ * The vault id is the durable fact; the NAME needs a live
+ * `share_party_vault_binding`. No binding, no name — never a vault id worn as
+ * one, and never a guess from `shared_by`, which is an owner id, not a party.
  */
 export function originsByDocument(
   rows: OriginEntityRows
@@ -110,8 +90,8 @@ export function originsByDocument(
         [
           itemId,
           {
-            vaultId,
-            partyId,
+            vault_id: vaultId,
+            party_id: partyId,
             name: partyId ? (nameByParty.get(partyId) ?? null) : null,
             at: num(origin, "shared_at") ?? 0,
           },

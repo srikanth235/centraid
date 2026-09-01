@@ -2,8 +2,8 @@
 // Native re-states only the parts whose INPUTS differ (two-sided links, vault
 // scopes); everything whose types line up delegates here rather than keeping a
 // second copy that can drift (#776).
+import { isAddressablePartyKind } from "@centraid/blueprints/apps/_shared/party-kind";
 import {
-  isAddressablePartyKind,
   selectedShareMembers,
   selectionsForCircle,
 } from "@centraid/blueprints/apps/_shared/share-kit";

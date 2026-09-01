@@ -226,8 +226,8 @@ describe(projectDrive, () => {
       (doc) => doc.document_id === "doc-lease"
     );
     expect(lease?.shared_from).toMatchObject({
-      vaultId: "vault-alice",
-      partyId: "party-alice",
+      vault_id: "vault-alice",
+      party_id: "party-alice",
       name: "Alice",
     });
     // A shelf built on "has an origin row" must leave every other row alone.
@@ -259,8 +259,8 @@ describe(originsByDocument, () => {
       parties: [party],
     }).get("doc-1");
     expect(found).toStrictEqual({
-      vaultId: "vault-alice",
-      partyId: "party-alice",
+      vault_id: "vault-alice",
+      party_id: "party-alice",
       name: "Alice",
       at: 1_788_183_726_358,
     });
@@ -274,15 +274,15 @@ describe(originsByDocument, () => {
       bindings: [],
       parties: [party],
     }).get("doc-1");
-    expect(noBinding).toMatchObject({ partyId: null, name: null });
-    expect(noBinding?.vaultId).toBe("vault-alice");
+    expect(noBinding).toMatchObject({ party_id: null, name: null });
+    expect(noBinding?.vault_id).toBe("vault-alice");
 
     const revoked = originsByDocument({
       origins: [origin],
       bindings: [{ ...binding, revoked_at: "2026-08-31T00:00:00Z" }],
       parties: [party],
     }).get("doc-1");
-    expect(revoked).toMatchObject({ partyId: null, name: null });
+    expect(revoked).toMatchObject({ party_id: null, name: null });
   });
 
   it("keeps a bound vault unnamed when the directory holds no name for it", () => {
@@ -291,7 +291,7 @@ describe(originsByDocument, () => {
       bindings: [binding],
       parties: [{ party_id: "party-alice", display_name: "   " }],
     }).get("doc-1");
-    expect(unnamed).toMatchObject({ partyId: "party-alice", name: null });
+    expect(unnamed).toMatchObject({ party_id: "party-alice", name: null });
   });
 
   it("ignores placements of anything that is not a document", () => {
