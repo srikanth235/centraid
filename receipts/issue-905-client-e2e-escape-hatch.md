@@ -113,9 +113,15 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Derive the Hermes Array ban from what the mobile bundle actually reaches, instead of a hand-written glob
 - [x] Name the two ES2023 copies the ban never listed, and the two more sites the walk found
 
+### S — the app tour tapped three tiles the fold was hiding
+
+- [x] Scroll the springboard to a tile before tapping it, since only five of the eight fit a phone screen
+
 ## What changed
 
 Where each checked item lands, then the reasoning behind it:
+
+- Scroll the springboard to a tile before tapping it, since only five of the eight fit a phone screen — "The three tiles under the fold"; `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
 
 - Ship the `Inbox` glyph the Tasks band has named since it was written — "The route that never mounted"; `packages/design/src/icons.ts`, `apps/mobile/src/apps/tasks/TasksHome.test.tsx`.
 - Assert that a band icon RESOLVES, not merely that it is a non-empty string — same section; `apps/mobile/src/apps/tasks/tasks-band.test.ts`.
@@ -623,6 +629,24 @@ The second one is the reason `.sort()` is not a free substitution. `parsed.toRev
 The rest of that class is held by the type system rather than by review: these functions take `readonly` arrays, and TypeScript declares no `sort` on `ReadonlyArray`, so sorting a caller's array in place does not compile. `toSpliced` and `findLastIndex` join the oxlint list alongside `toReversed`, which was never on it — which is how one survived *inside* the guarded tree. That list stays the fast local signal; the walker is the gate, and its comment says so, so nobody widens the glob again believing that is where coverage comes from.
 
 One comment-density pin is hand-raised, for no prose at all: `packages/client/src/access-lens.ts`, 14.42% → 14.43%. Its only change is `.toSorted(` → `.sort(`, which deletes three characters of code, and the metric is comment *share* — a shrinking denominator raises it with the numerator untouched. `08e50fcc` recorded seven of these on the same rewrite. Nothing was added to that file; the comment explaining the rewrite was cut rather than pinned, along with the three others this section's edits would have raised, and the reasoning is here instead. `--write` lowered 27 other pins on its own and refused this one, which is the gate working.
+
+#### The three tiles under the fold
+
+R's glyph worked on the device: run 33525449602 has `Assert that ".*Name it for Friday" is visible... COMPLETED` and the note `tasks: opened from Home`, where the run before it drew an error boundary. The tour then walked one surface further and failed on `Tap on "Open People.*"`.
+
+Nothing is wrong with People. `SPRINGBOARD_ORDER` is photos, docs, notes, agenda, tasks, people, tally, locker, and the digest carried exactly the first five — the last three sit under the fold on a Pixel 6, and the flow re-launches the app before every surface, so Home is back at the top each time. `tapOn` does not scroll; a selector matching nothing on screen is an error, not a no-op. So the tour could never have reached its last four entries.
+
+It had simply never been asked to. `05-tasks` has been the tour's last completed step for as long as the Tasks cover has been throwing, and before that the lane died in pairing — the People, Tally, Locker and Settings entries have not run in any recent lane, and this is the first run to get far enough to find out. That is what a prerequisite failure hides: not a regression, a step that was never exercised.
+
+`scrollUntilVisible` is a no-op for a tile already on screen, so the first five are untouched, and `visibilityPercentage: 100` matches what the Settings entry below it already does for the same reason — Maestro will match an element the fold has clipped.
+
+#### What the notes-library failure is NOT
+
+Recorded because the run narrows it and the next round should not re-derive it. `04-quick-capture` still fails its `notes-row-first` assertion, and the digest shows the Notes library rendering exactly the five demo rows, with the band immediately after the fifth — so the list ended at five and the new note is not below the fold.
+
+The row is not lost. `native-v0-resilience`, running after, drew Home with `"Open Notes, 6 notes"` — five seeded plus the one this flow wrote — so the write reached the replica and the tile counted it. `POST /replica/intents` returned 200 and the following `/changes` came back at 864B against the usual 464B, which is that note coming back down. Transport, persistence and the count are all correct.
+
+So the defect is in the library's own read. `NotesHome.tsx` imports the pending overlay only to draw a `pendingChangeLabel` badge on a row it already has; nothing injects an unreplicated row into the list. That leaves the list dependent on `useReplicaQuery("notes", { entity: "knowledge.note" })` re-running, and the editor is pushed OVER the library rather than replacing it, so the list may never re-query on the pop back. That is the hypothesis to test first — it is not confirmed here, and no change was made for it.
 
 ## User impact
 

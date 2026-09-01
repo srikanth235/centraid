@@ -173,8 +173,31 @@ await runFlow("native-v0-resilience", async (ctx) => {
   const visitNext = async (index) => {
     const surface = SURFACES[index];
     if (surface === undefined) return;
+    // SCROLL THE GRID BEFORE TAPPING IT (#905). `SPRINGBOARD_ORDER` is photos,
+    // docs, notes, agenda, tasks, people, tally, locker, and only the first
+    // FIVE fit a Pixel 6 screen — the phone re-launches before every surface
+    // below, so Home is back at the top each time and the last three tiles are
+    // under the fold. `tapOn` does not scroll: it fails outright on a selector
+    // that matches nothing on screen, which is how `Tap on "Open People.*"`
+    // failed on run 33525449602 against a grid that was drawing People
+    // perfectly well, three tiles down.
+    //
+    // This was never a regression — it is a step that had not been REACHED
+    // since before the Tasks cover started throwing, so the tour died at
+    // `05-tasks` and nothing past it ran. `scrollUntilVisible` is a no-op for a
+    // tile already on screen, so the first five are unaffected, and
+    // `visibilityPercentage: 100` is the same guard the Settings entry below
+    // uses for the same reason: Maestro will match an element the fold has
+    // clipped (README, "A passing step is not a working step").
     const openCommands =
-      surface.openCommands ?? retryableTapCommands(surface.open);
+      surface.openCommands ??
+      `- scrollUntilVisible:
+    element:
+      text: "${surface.open}"
+    direction: DOWN
+    visibilityPercentage: 100
+    timeout: 20000
+${retryableTapCommands(surface.open)}`;
     await ctx.run(
       `appId: ${ctx.state.appId}
 ---
