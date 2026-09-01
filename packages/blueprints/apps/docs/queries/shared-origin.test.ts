@@ -1,8 +1,7 @@
 // The Shared shelf's data door (#903): a document DELIVERED into this vault.
 //
-// A join, not a filter. The drive's window is built from folders-scheme tags
-// and a delivered copy carries none, so these seats could not show a received
-// document AT ALL, however the shelf above them was written.
+// A join, not a filter — the drive's window is built from folders-scheme tags
+// and a delivered copy carries none.
 //
 // The ctx honours `where`, unlike `shares.test.ts`'s — a harness returning
 // every row would report the second door open while only the first ever was.
@@ -19,8 +18,8 @@ const ORIGIN_ENTITIES = new Set([
   "share.party_vault_binding",
 ]);
 
-// `doc-filed` is tagged into the drive the ordinary way. `doc-sent` carries no
-// folders-scheme tag at all — it arrived, which is the only reason it exists.
+// `doc-sent` carries no folders-scheme tag at all: it arrived, which is the
+// only reason it exists.
 const ROWS: Record<string, Array<Record<string, unknown>>> = {
   "core.concept_scheme": [{ scheme_id: "s-folders", uri: FOLDER_SCHEME_URI }],
   "core.concept": [
@@ -143,8 +142,7 @@ describe("the drive's shared_from (#903)", () => {
   it("reaches a delivered document that carries no folder tag at all", async () => {
     const { documents } = await run();
     // The regression this locks: `doc-sent` is in NO folder, so the tag window
-    // that builds the drive cannot see it. Its placement record is the second
-    // door, and without one the seat shows a received document nowhere.
+    // cannot see it and the seat shows a received document nowhere.
     expect(documents.map((d) => d.document_id).toSorted()).toStrictEqual([
       "doc-filed",
       "doc-sent",
@@ -172,8 +170,7 @@ describe("the drive's shared_from (#903)", () => {
     const { documents } = await run({
       deniedEntities: new Set(["share.party_vault_binding"]),
     });
-    // A denial of the binding read costs the NAME, never the arrival: the vault
-    // id is the durable fact and the row still belongs on the shelf.
+    // A denied binding read costs the NAME, never the arrival.
     expect(rowFor(documents, "doc-sent").shared_from).toStrictEqual({
       vault_id: "vault-ravi",
       party_id: null,
@@ -186,8 +183,8 @@ describe("the drive's shared_from (#903)", () => {
     const { documents, shared_from_known } = await run({
       deniedEntities: new Set(["core.share_origin"]),
     });
-    // ABSENT IS NOT EMPTY: the drive still answers for its tagged half, and the
-    // shelf is told the read failed rather than drawing an empty inbox.
+    // ABSENT IS NOT EMPTY: the tagged half still answers, and the shelf is told
+    // the read failed rather than drawing an empty inbox.
     expect(shared_from_known).toBe(false);
     expect(documents.map((d) => d.document_id)).toStrictEqual(["doc-filed"]);
   });

@@ -259,7 +259,6 @@ export {
   listShareGrantsForSubject,
   listLiveGrantsReachingParty,
   resolveAudienceParties,
-  ensureFulfillment,
   setFulfillmentState,
   readFulfillment,
   listFulfillment,

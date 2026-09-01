@@ -536,7 +536,7 @@ a U4 violation, so the fix drains seeds rather than allowlisting them.
 `packages/blueprints/apps/photos/components/AlbumGrant.test.tsx` and
 `apps/web/tests/e2e/photos-grants.spec.ts` follow the copy.
 
-**Two red gates.** `packages/blueprints/apps/_shared/party-kind.ts` is new: a
+**Four red gates.** `packages/blueprints/apps/_shared/party-kind.ts` is new: a
 leaf holding `isAddressablePartyKind`, moved out of
 `packages/blueprints/apps/_shared/share-kit.ts` so
 `packages/client/src/react/blueprints/centraid-inline.ts` and
@@ -545,6 +545,31 @@ leaf holding `isAddressablePartyKind`, moved out of
 declaration build. `tests/comment-density-ratchet.json` carries five allowlist
 entries, 92 hand-raised pins and the itemised note explaining both — see
 `## Decisions`.
+
+`packages/vault/src/grant/grant-fulfillment-rows.ts` loses `ensureFulfillment`,
+and `packages/vault/src/index.ts` its barrel re-export. It is DEAD: this issue
+replaced it with `setFulfillmentState` at the one production call site, and
+`packages/vault/src/grant/fulfillment.ts` says why — a severed link must DEMOTE
+a row that already read `delivered`, which an insert-if-absent cannot do. Its
+three uses in `packages/vault/src/grant/grant-store.test.ts` were seeding, and
+move to `setFulfillmentState`; the one assertion that tested only its
+DO-NOTHING semantics goes with it, and the test loses "once" from its name.
+`packages/vault/src/share/commons-sim-grant.test-fixtures.ts` loses the same
+name from a transition-table comment.
+
+`packages/vault/src/gateway/portable-export.ts` gains the #903 schema/export
+audit and `tests/schema-export-fingerprint.json` the fingerprint that made it
+due. The ruling is that there is NOTHING to carry: every changed line in
+`packages/vault/src/schema/share-grant.ts` is a comment — `share_fulfillment`'s
+state CHECK is byte-identical — and `packages/vault/src/schema/poly-refs.ts`
+carries no DDL, its new `PARTY_POINTER_REGISTRY` being a merge-time list of
+FK-less party pointers. `core.share_origin` and `share.party_vault_binding`,
+the two entities the Docs manifest above reads, were already registered and
+already exported.
+
+`packages/blueprints/manifest.json` gains one line, `queries/shared-origin.test.ts`,
+which is not a hand edit: the manifest's per-app file list is generated, and the
+new test entered it the moment the file became git-tracked.
 
 ## Out of scope
 
@@ -678,6 +703,18 @@ Out of scope for the sharing wave:
   The global figure is unchanged by the raise — 14.73% against the 24.31% the
   ratchet was seeded at — because a pin raise moves no characters. The reviewable
   claim is the itemised note now standing in `approvedDeviation`.
+
+  Three more pins were raised when the other two gates were closed, and all three
+  are the same denominator effect read at its purest. `packages/vault/src/index.ts`
+  and `packages/vault/src/grant/grant-store.test.ts` rose because
+  `ensureFulfillment` was DELETED from them: removing code raises the share of the
+  comments left standing, and index.ts moves 11.02% to 11.02% — a rise only the
+  gate's integer cross-multiplication can see. `portable-export.ts` is the
+  schema/export audit OWNER, a register that is 42% comment by design, and the
+  ruling written into it is the one thing the schema/export ratchet demands of
+  this PR. `packages/blueprints/apps/docs/queries/shared-origin.test.ts` was NOT
+  raised: it entered the measured set only once committed, and its header was cut
+  under the cap instead.
 - **`packages/client build` was broken by #903, not pre-existing.** An earlier
   note in this receipt called it pre-existing; that was wrong, and it was wrong
   because the check reverted only the Shared-shelf edits, never #903's. That

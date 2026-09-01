@@ -13,37 +13,6 @@ export type {
   ShareFulfillmentState,
 } from "./grant-records.js";
 
-export function ensureFulfillment(
-  db: DatabaseSync,
-  input: {
-    grantId: string;
-    peerVaultId: string;
-    state: ShareFulfillmentState;
-    updatedAt: string;
-  }
-): ShareFulfillmentRecord {
-  // A row opened AT `delivered` carries the memory from birth (#846).
-  db.prepare(
-    `INSERT INTO share_fulfillment
-       (grant_id, peer_vault_id, state, updated_at, detail, delivered_at)
-     VALUES (?, ?, ?, ?, NULL, ?)
-     ON CONFLICT (grant_id, peer_vault_id) DO NOTHING`
-  ).run(
-    input.grantId,
-    input.peerVaultId,
-    input.state,
-    input.updatedAt,
-    input.state === "delivered" ? input.updatedAt : null
-  );
-  const row = readFulfillment(db, input.grantId, input.peerVaultId);
-  if (!row) {
-    throw new Error(
-      `share fulfillment ${input.grantId}/${input.peerVaultId} vanished after insert`
-    );
-  }
-  return row;
-}
-
 /**
  * `delivered_at` is maintained HERE, never by callers (#846): `delivered`
  * stamps the FIRST instant, `removed` clears it, everything else leaves it be.
