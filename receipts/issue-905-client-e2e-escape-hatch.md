@@ -97,6 +97,7 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Name a replica request that never left the phone, since no trace can show it
 - [x] Collapse a repeated log line so it cannot crowd the one that says why
 - [x] Pin what the provider does when a gateway IS in reach, which nothing asserted
+- [x] Bind the phone's loopback proxy to the address every caller dials
 
 ## What changed
 
@@ -118,6 +119,7 @@ Where each checked item lands, then the reasoning behind it:
 - Name a replica request that never left the phone, since no trace can show it — same section; `apps/mobile/src/kit/replica/replica-mount.ts`, `apps/mobile/src/kit/replica/ReplicaProvider.tsx`, `apps/mobile/src/lib/gateway.ts`.
 - Collapse a repeated log line so it cannot crowd the one that says why — same section; `tests/agent-e2e-mobile/lib/harness.mjs`.
 - Pin what the provider does when a gateway IS in reach, which nothing asserted — same section; `apps/mobile/src/kit/replica/ReplicaProvider.test.tsx`.
+- Bind the phone's loopback proxy to the address every caller dials — "P — the phone drew an empty library over a vault holding rows", "The socket that was listening somewhere else"; `apps/mobile/modules/centraid-tunnel/android/src/main/java/expo/modules/centraidtunnel/TunnelProxy.kt`, `apps/mobile/native-fingerprints.json`, `docs/traps/device-only-runtime-gaps.md`, `docs/traps/README.md`.
 - Withhold `empty` from a tile whose reads have never had a landed pull behind them — "N — Home claimed the vault was empty"; `apps/mobile/src/screens/home/tile-model.ts`, `apps/mobile/src/screens/home/useSpringboardTiles.ts`, `apps/mobile/src/screens/home/tile-model.test.ts`, `apps/mobile/src/screens/Home.test.tsx`.
 - Move the tile-status rule into the pure module that is tested, out of the hook that is not — same section; `apps/mobile/src/screens/home/tile-model.ts`, `apps/mobile/src/screens/home/useSpringboardTiles.ts`, `apps/mobile/src/screens/home/tile-model.test.ts`.
 - Record the emulator's active network transport in device preparation, since the replica's sync policy is evaluated against it — next in the log to the failure it would explain — "N — Home claimed the vault was empty", final paragraph; `apps/mobile/scripts/android-emulator-install.sh`.
@@ -516,6 +518,30 @@ The second is on the phone, and it is the one that matters. `ensureTunnelStarted
 The digest keeps them. A failing request repeats until its retry ladder gives up, and forty copies would push out the one line that says why, so repeats now collapse on the message with the pid and timestamp dropped.
 
 One more thing was wrong, and it is the reason none of this was ever caught in vitest. `ReplicaProvider.test.tsx` mocked `InteractionManager.runAfterInteractions` to fire synchronously, `getNetworkStateAsync` to `{ isConnected: false }`, and `resolveGatewayBase` to `undefined` — the device pinned offline on all three axes, with `fetcher` and `postPlacement` rejecting `offline` beneath them. A provider that never connects agrees with that suite perfectly. The network axis is a variable now, and two tests assert the other half: given a reachable gateway, the provider publishes its base and reports itself online. They pass, so the defect is not in that layer — which is a real narrowing, and it is also why `ensureTunnelStarted`, which has no test anywhere, is where the instrumentation went.
+
+#### The socket that was listening somewhere else
+
+Run 33502294546 carried the instrumentation above, and the phone answered in one read:
+
+    [centraid] replica: tunnel started on port 46515 from stopped
+    [centraid] replica: GET /centraid/_vault/replica/bootstrap?window=5000&priority=newest
+      never left the phone — fetch failed:
+      java.net.ConnectException: Failed to connect to /127.0.0.1:46515
+    [centraid] replica: tunnel reused on port 46515
+
+`TunnelProxy.start()` bound `ServerSocket(0, 64, InetAddress.getLoopbackAddress())`. Android answers `::1` there, and a socket bound to `::1` is not dual-stack — it refuses IPv4 connections. Every caller dials IPv4: `http://127.0.0.1:${port}` is the JS contract in `phone-link.ts`, the WebView origin, and what the module's own README documents. So the proxy bound a port, reported it truthfully, and refused every request made to it.
+
+Two lines rule out the alternatives. The refusal came 60ms after the start, which is not a race — a `ServerSocket` is listening the moment its constructor returns, and the backlog accepts before `accept()` is ever called. And `tunnel reused on port 46515`, 1.5s later, proves the runtime still held that socket RUNNING on that exact port: nothing had stopped it. A bound IPv4 listener cannot refuse an IPv4 connection, so it was listening on an address the caller was not dialing.
+
+This is why the phone looked paired and never asked. Pairing rides iroh straight from Kotlin and never touches the proxy, so `pairing-canary` passed, the gateway logged `device plane: enrolled c434f97eda… as owner You`, and one hundred percent of the phone's HTTP died a layer below it — invisible to the gateway by construction, which is what the widened trace above finally proved rather than assumed: it shows the seeder's `/demo` calls, the enrollment and the photos purge, and not one request from the device.
+
+The other two implementations of the same proxy already pin the family: iOS binds `NWEndpoint.hostPort(host: .ipv4(.loopback), port: .any)`, and the Node reference binds `server.listen(port, "127.0.0.1")`. Android was the only one delegating to the JDK helper, and Android is the only one that failed. It binds the literal now.
+
+Nothing could have caught it here. The Kotlin unit tests in `android/src/test` run on the desktop JVM, where the same call returns `127.0.0.1` — the same shape as the Hermes gap above, where Node has the method the phone lacks. Both now live in `docs/traps/device-only-runtime-gaps.md`, together with the `console.warn` finding: it does not reach logcat in the release build and `console.error` does, which is why the first round of diagnostics printed nothing at all.
+
+The Kotlin edit moves the Android native fingerprint, so `native-fingerprints.json` is ratcheted with it: L1–L3 green, L4 only, android `d5f54e40…` → `209a3026…`, ios unmoved at `bd2490e7…`, module↔lock delta `present [CentraidNetworkStatus, CentraidOcr, CentraidStorage, CentraidTunnel]; missing [none]` — no module added and no podspec touched, so the lock is unchanged by construction. The APK cache key moves with it, which is the point: the cached artifact carries the broken bind.
+
+A static guard against a regression to `getLoopbackAddress()` is not written — a JVM test cannot express it, and a lint for it is a separate scope. The invariant is stated at the bind site and in the trap.
 
 ## User impact
 
