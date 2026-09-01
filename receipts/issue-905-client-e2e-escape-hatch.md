@@ -132,6 +132,7 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Make Photos ask before it is refused, since a pre-revoked grant is not a denied one
 - [x] Give Tally's commit a handle, since its label and the screen title are the same words
 - [x] Assert the return to the group screen after the commit, rather than blind-tapping the band
+- [x] Stop racing the gateway's own reply deadline with a wait of exactly the same length
 - [x] Spend one spawn on Notes' three adjacent read and write chunks
 
 ### U — the merged tree's own three client-e2e failures
@@ -152,6 +153,7 @@ Where each checked item lands, then the reasoning behind it:
 - Scroll once more to the commit, which sits below the foot as the ScrollView's last child — same section; same file.
 - Make Photos ask before it is refused, since a pre-revoked grant is not a denied one — same section; `tests/agent-e2e-mobile/flows/photos-permissions.mjs`.
 - Assert the return to the group screen after the commit, rather than blind-tapping the band — same section; `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
+- Stop racing the gateway's own reply deadline with a wait of exactly the same length — same section; same file.
 - Give Tally's commit a handle, since its label and the screen title are the same words — same section; `apps/mobile/src/kit/test-ids.ts`, `apps/mobile/src/apps/tally/TallyAddScreen.tsx`, `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
 - Spend one spawn on Notes' three adjacent read and write chunks — same section; `tests/agent-e2e-mobile/flows/notes-library.mjs`.
 - Disambiguate the Household sharing panel's headings, which the merge made ambiguous page-wide — "U — three failures the merge produced and nothing before it could have"; `apps/desktop/tests/e2e/household.spec.ts`.
@@ -773,6 +775,16 @@ What that leaves is a claim, not a flow bug. `native-v0-resilience` exists to pr
 **What the dump does and does not contain, which narrows it.** The failure hierarchy lists `id:tally-add-commit`, and that control sits BELOW the foot — so the digest carries below-fold nodes rather than only the visible window. The absence of a reconcile line and of any refusal sentence is therefore real, not an artefact of where the screen happened to be scrolled. Nothing was logged either: the only `ReactNativeJS` line anywhere near the commit is a tunnel notice, and `surfaceWriteFailure` would have spoken.
 
 So: the button is still there, no refusal is drawn, no status is posted, no error is logged, and the screen does not leave. `commit` returning early at `!verdict.ok` would leave a refusal (every `refuse()` but one passes a non-empty string) and `issueTallyWrite` failing would log. The reading most consistent with all four observations is that `await session.write("tally", …)` never resolves while the radio is off — a write that hangs instead of queueing. That is a hypothesis and is labelled one; what is established is the four observations above.
+
+**FOUND, and it was the flow after all — a dead heat with a documented product timeout.** `GATEWAY_REPLY_DEADLINE_MS` is 20_000 (`lib/replica/gateway-deadline.ts`), and the wait after the commit was `timeout: 20000`. Run 33567489343 tapped the commit at 22:56:18 and failed here at 22:56:38, to the second. The write was settling as the flow gave up on it.
+
+Why the write needs that long is the trap the constant exists for: offline, the phone still talks to `http://127.0.0.1:<port>` — the LOCAL tunnel — and airplane mode does not stop a loopback connection. The listener keeps ACCEPTING after its peer is gone (`docs/traps/unreachable-vault.md`), so nothing fails fast; the request hangs until the deadline aborts it, and only then does the intent settle as queued. That is also why the earlier reasoning kept coming up empty: no `never left the phone` line was logged because the fetch had not yet finished failing, and no refusal was drawn because nothing had been refused.
+
+`PendingRestartJourney.test.tsx` passes all four of its claims locally — a real `node:sqlite` outbox, the real session facade — which is the other half of the evidence: the contract holds, and what the device adds is the tunnel's accept-then-hang. A test at that tier cannot see it, which is exactly the gap the device gate is for.
+
+The wait is now 60s, because the commit can pay that deadline TWICE: `issueTallyWrite` awaits `refreshTally()` before returning, and that is a second gateway read just as unreachable. `extendedWaitUntil` returns as soon as the screen arrives, so the ceiling costs nothing when the write settles sooner. The assertion is untouched; it is sized to a documented product timeout instead of racing it.
+
+**The earlier reading in this section — that the product cannot queue an offline write — is WITHDRAWN.** It was stated as a hypothesis and labelled one, and it was wrong. The product queues; the flow was not waiting long enough to see it.
 
 **This is therefore NOT papered over in the flow, and should not be.** Loosening the step, dropping the offline half, or asserting something weaker would retire the one claim on this gate that covers offline writing. What it needs is either the run's artifacts — `productionresultssa7.blob.core.windows.net`, which this container's egress policy refuses — or a device, and then a fix in Tally's offline commit path rather than in the journey. The candidate identified above stands: `expenseVerdict` refusing through `!allocation || !allocation.ok` returns `refuse(allocation?.line ?? "")`, and an empty refusal renders nothing, so a member gets a control that declines in silence.
 

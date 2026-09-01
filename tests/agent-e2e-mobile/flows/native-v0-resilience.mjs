@@ -400,15 +400,30 @@ ${DISMISS_KEYBOARD_ONBOARDING}
 - tapOn:
     id: "tally-add-commit"
     retryTapIfNoChange: true
-# ARRIVAL, NOT THE NEXT TAP. The composer sets hideBand (TallyAddScreen), so
-# the band cannot exist until commit has resolved and called goBack() — and on
-# runs 33559959847 and 33564004616 the next step failed on the band's Waiting
-# tab, which named a missing tab when what had actually happened is that the
-# composer never left. Assert the group screen we are supposed to be back on, so
-# the failure says which of the two it is (#905).
+# ARRIVAL, NOT THE NEXT TAP — AND LONGER THAN THE GATEWAY'S OWN DEADLINE.
+#
+# The composer sets hideBand (TallyAddScreen), so the band cannot exist until
+# commit has resolved and called goBack(); asserting the group screen instead of
+# tapping the band is what turned "the Waiting tab is missing" into the true
+# statement, which is that the composer never left.
+#
+# It never left because this wait was in a dead heat with the product's own
+# timeout. Offline the write goes to the local tunnel, which keeps ACCEPTING
+# after its peer is gone (docs/traps/unreachable-vault.md), so it cannot settle
+# until GATEWAY_REPLY_DEADLINE_MS elapses — and that constant is 20_000, exactly
+# what this wait used to be. Run 33567489343 tapped the commit at 22:56:18 and
+# failed here at 22:56:38, to the second. The write was queueing as the flow
+# gave up on it.
+#
+# 60s, because the commit can pay that deadline TWICE: issueTallyWrite awaits
+# refreshTally() before it returns, and that is a second gateway read which is
+# just as unreachable. 20 + 20 plus the outbox write, the pop and the render.
+# extendedWaitUntil returns as soon as the screen arrives, so the ceiling costs
+# nothing when the write settles sooner. Nothing is loosened: the assertion is
+# the same one, sized to a documented product timeout instead of racing it.
 - extendedWaitUntil:
     visible: "${GROUP_HERO_SUB}"
-    timeout: 20000
+    timeout: 60000
 # Waiting is the band's fourth place and the one surface that reads the durable
 # outbox rather than the gateway. Its key is contrib — the label "Waiting" is
 # copy shelves.ts owns, the key is the contract.
