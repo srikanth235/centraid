@@ -42,6 +42,32 @@ const QUEUED_REASON = ".*on a device, not in the vault yet.*";
  *  placeholders, which is what an empty RN `TextInput` publishes as its text. */
 const DESCRIPTION_PLACEHOLDER = "Dinner at the Ship";
 const AMOUNT_PLACEHOLDER = "0.00";
+/**
+ * THE ROUTE TO TALLY, used at all four places this flow opens it.
+ *
+ * Not the Home grid: the tile counts expenses `spent_on >= monthStart` and says
+ * "spent this month", while `seed.js` dates the demo expenses 4 and 6 days ago,
+ * so for the first week of any month Tally is a FIRST MOVE ("Log a shared
+ * expense") rather than "Open Tally, …" and a grid tap finds nothing. The
+ * all-apps sheet lists every app unconditionally, labelled `Open <name>,
+ * <count>` by `AllAppsSheet.tsx` whatever the tile status — including offline,
+ * where the count degrades but the label still matches (#905).
+ */
+const OPEN_TALLY = `- tapOn:
+    id: "home-band-more"
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: "home-all-apps"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      text: "Open Tally.*"
+    direction: DOWN
+    visibilityPercentage: 100
+    timeout: 20000
+${retryableTapCommands("Open Tally.*")}`;
+
 /** `seed.js` — the one group the Tally demo scenario creates. */
 const DEMO_GROUP = "Tahoe Trip";
 
@@ -104,45 +130,13 @@ const SURFACES = [
   // now carry the design's per-route ambient sentence in the app bar instead of
   // a fixed subtitle. These two markers are those sentences, and they are the
   // same ones `tally-derived.mjs` and `locker-gate.mjs` assert on arrival.
-  // TALLY IS REACHED THROUGH THE SHEET, NOT THE GRID, AND THE CALENDAR IS WHY.
-  //
-  // The Home tile counts expenses with `spent_on >= monthStart`
-  // (`home-tile-reads.ts` expenseTileRead) and its caption says "spent this
-  // month", so on the 1st of a month a vault whose newest expense is four days
-  // old has nothing to show. `seed.js` dates the demo expenses 4 and 6 days
-  // ago, so for roughly the first WEEK of every month Tally's tile is `empty`,
-  // fails `tileEarnsGrid`, and Home draws it as a first move — "Log a shared
-  // expense" — instead of "Open Tally, …". Nothing is broken when that
-  // happens: zero spent this month is true, and demoting an app with nothing
-  // to say is what the launcher is for. This flow was simply asserting one of
-  // the two honest shapes, and picked the one the 1st of September did not
-  // have (#905).
-  //
-  // Neither the tile nor the first-move card is dependable, then — and the
-  // card is doubly not, since `FIRST_MOVE_LIMIT` is 3 and Tally sits 8th in
-  // leverage order, so a vault with three emptier apps drops it from the band
-  // altogether. The all-apps sheet is the one surface that lists every app
-  // unconditionally, labelling each row `Open <name>, <count>`
-  // (`AllAppsSheet.tsx` AppRow) whatever the tile status. Same three hops the
-  // `settings` entry below takes, and the same reason for
-  // `visibilityPercentage: 100`: Maestro matches a row the sheet has clipped.
+  // Tally opens through the sheet (`OPEN_TALLY` above) rather than the grid,
+  // because its tile is absent for the first week of every month; the reason
+  // is on that constant, and the other three relaunches share it.
   {
     marker: BALANCES_STATUS,
     name: "tally",
-    openCommands: `- tapOn:
-    id: "home-band-more"
-    retryTapIfNoChange: true
-- extendedWaitUntil:
-    visible:
-      id: "home-all-apps"
-    timeout: 15000
-- scrollUntilVisible:
-    element:
-      text: "Open Tally.*"
-    direction: DOWN
-    visibilityPercentage: 100
-    timeout: 20000
-${retryableTapCommands("Open Tally.*")}`,
+    openCommands: OPEN_TALLY,
   },
   {
     marker: "Nothing is browsable until there is a passphrase",
@@ -323,7 +317,7 @@ ${SURFACES.map((surface) => surfaceBlock(surface)).join("")}`,
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${AWAIT_LAUNCHER}${retryableTapCommands("Open Tally.*")}
+${AWAIT_LAUNCHER}${OPEN_TALLY}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: 20000
@@ -389,7 +383,7 @@ ${DISMISS_KEYBOARD_ONBOARDING}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${AWAIT_LAUNCHER}${retryableTapCommands("Open Tally.*")}
+${AWAIT_LAUNCHER}${OPEN_TALLY}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: 30000
@@ -435,7 +429,7 @@ ${AWAIT_LAUNCHER}${retryableTapCommands("Open Tally.*")}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${AWAIT_LAUNCHER}${retryableTapCommands("Open Tally.*")}
+${AWAIT_LAUNCHER}${OPEN_TALLY}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: 30000
