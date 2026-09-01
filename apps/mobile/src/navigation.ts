@@ -154,7 +154,8 @@ export type AgendaStackParamList = {
 };
 
 export type SettingsStackParamList = {
-  Settings: undefined;
+  /** Not `Settings` — the root stack owns that name for the navigator. */
+  SettingsHome: undefined;
   Approvals: undefined;
   Sharing: undefined;
   PhoneStorage: { signalCause?: string } | undefined;

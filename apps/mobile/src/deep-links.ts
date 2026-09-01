@@ -92,7 +92,7 @@ export const LINKING: LinkingOptions<RootStackParamList> = {
       SystemOnPhone: SYSTEM_DEEP_LINK_PATH,
       Settings: {
         screens: {
-          Settings: "settings",
+          SettingsHome: "settings",
         },
       },
       Home: "",

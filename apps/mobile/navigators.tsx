@@ -263,7 +263,7 @@ export function SettingsNavigator(): React.JSX.Element {
         headerShown: false,
       }}
     >
-      <SettingsStack.Screen name="Settings" component={SettingsScreen} />
+      <SettingsStack.Screen name="SettingsHome" component={SettingsScreen} />
       <SettingsStack.Screen name="Approvals" component={ApprovalsScreen} />
       <SettingsStack.Screen name="Sharing" component={SharingScreen} />
       <SettingsStack.Screen

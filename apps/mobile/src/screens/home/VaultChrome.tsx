@@ -100,7 +100,7 @@ export default function VaultChromeProvider({
         open={vaultsOpen}
         onClose={() => setVaultsOpen(false)}
         onPairDesktop={() =>
-          navigation.navigate("Settings", { screen: "Settings" })
+          navigation.navigate("Settings", { screen: "SettingsHome" })
         }
       />
     </VaultChromeContext.Provider>

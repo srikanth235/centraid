@@ -186,7 +186,7 @@ export default function HomeScreen({
   );
 
   const openSettings = useCallback(
-    () => navigation.navigate("Settings", { screen: "Settings" }),
+    () => navigation.navigate("Settings", { screen: "SettingsHome" }),
     [navigation]
   );
 

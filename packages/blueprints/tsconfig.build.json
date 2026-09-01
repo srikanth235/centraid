@@ -6,6 +6,13 @@
     "hydrate",
     "journal",
     "todos",
-    "src/**/*.test.ts"
+    "src/**/*.test.ts",
+    // A vitest harness, not a shipped module: it is `src/app-boot/*.test.ts`'s
+    // only consumer, so `dist` published it for nobody. It is ALSO the one file
+    // under `src/` that imports `apps/` — outside `rootDir` — and tsc answers
+    // that by emitting to `outDir + "../apps/…"`, which cancels `dist` and
+    // drops .js/.d.ts/.js.map INTO the source tree, silently and with exit 0.
+    // Keep this program to files that stay under `rootDir`.
+    "src/app-boot-harness.ts"
   ]
 }

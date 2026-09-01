@@ -571,6 +571,66 @@ already exported.
 which is not a hand edit: the manifest's per-app file list is generated, and the
 new test entered it the moment the file became git-tracked.
 
+### Three defects found by running the seat against a live seeded gateway
+
+Driving the built iOS app against a throwaway gateway seeded through
+`POST /centraid/_vault/demo/<appId>` (#290) surfaced three faults that no test
+covers, because each one needs a SECOND saved gateway to show itself.
+
+`packages/blueprints/tsconfig.build.json` excludes `src/app-boot-harness.ts`. It
+is a vitest harness — `src/app-boot/*.test.ts` is its only consumer — so `dist`
+published it for nobody. It is also the one file under `src/` importing `apps/`,
+outside `rootDir`; tsc answers that by emitting to `outDir + "../apps/…"`, which
+cancels `dist` and drops `.js`/`.d.ts`/`.js.map` into the SOURCE tree, silently,
+exit 0. A `git add -A` then scoops them up.
+
+`apps/mobile/src/lib/phone-link.ts` orders the gateway's name before the vault's
+when recording `desktopName`. It read `result.vaultName` first, so the switcher's
+second line echoed its first: two auto-founded gateways — each naming its vault
+`Personal` (#603) — drew two rows spelled "Personal / Personal", indistinguishable,
+which is the one thing a vault switcher must never be. `gatewayName` is the host's
+own hostname and was already on the wire (`packages/server/src/cli/endpoint-host.ts`).
+Verified on device: the lockup now reads `Personal / Crewscales-MacBook-Pro-461`.
+Links saved BEFORE this fix keep their stored name until re-paired — `desktopName`
+is written once, at pair time.
+
+The Settings screen is renamed `SettingsHome`, matching the `AgendaHome` /
+`DocsHome` / `PeopleHome` shape already used by every other stack: a screen may
+not repeat the name of the navigator holding it, and React Navigation said so on
+every boot ("Found screens with the same name nested inside one another"). That
+renaming is `apps/mobile/navigators.tsx`, `apps/mobile/src/navigation.ts`,
+`apps/mobile/src/deep-links.ts`, `apps/mobile/src/screens/Settings.tsx`,
+`apps/mobile/src/screens/Approvals.tsx` (a `popTo` target),
+`apps/mobile/src/screens/Home.tsx` and
+`apps/mobile/src/screens/home/VaultChrome.tsx` (the two `navigate` call sites),
+and `apps/mobile/src/screens/approvals/Approvals.test.tsx`, whose assertion
+tracks the name. `centraid://settings` still resolves — checked on device.
+
+Two pins rise in `tests/comment-density-ratchet.json` for this slice, both
+load-bearing and both trimmed hard first: `apps/mobile/src/lib/phone-link.ts`
+(12.84% -> 13.87%, having peaked at 16.90%, and still under the 15% cap) carries
+the ordering invariant a future refactor would otherwise re-break, and
+`apps/mobile/src/navigation.ts` (34.98% -> 35.34%) is a types file whose entire
+rise is one JSDoc line. Neither is allowlisted.
+
+### Known, reproduced, NOT fixed: a deep link strands an inert Home
+
+From any non-Home screen, a `centraid://` open (empty path → `Home`) leaves Home
+drawn as an inset modal card that answers no touch at all — not the lockup, not
+search, not a card, not scrolling, not the tab bar. Only relaunching clears it.
+Reproduced deliberately: `centraid://docs` then `centraid://` wedges it every
+time, while `centraid://` sent from Home does not. The native side stays alive
+throughout (sockets open, a data stall reported), so it is the nav layer, and
+Metro reports no exception.
+
+The idiomatic fix — `initialRouteName: "Home"` on the linking config, giving
+deep-linked state a stack floor — was written, run against the reproduction, and
+did NOT clear it, so it is not in this diff: a change whose comment claims a fix
+it does not deliver is worse than the bug. This is recorded here rather than
+carried to an issue because #903's own umbrella is where the seat's faults live.
+Reach for it through notifications and share intents, which is how `centraid://`
+arrives in production; a member tapping Home in the tab bar never takes this path.
+
 ## Out of scope
 
 - ~~Web and desktop Docs — they already implement their briefs.~~ SUPERSEDED,

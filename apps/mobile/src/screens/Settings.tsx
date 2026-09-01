@@ -139,7 +139,7 @@ function tunnelStatusLabel(status: TunnelStatus | undefined): string {
 
 export default function SettingsScreen({
   navigation,
-}: SettingsScreenProps<"Settings">): React.JSX.Element {
+}: SettingsScreenProps<"SettingsHome">): React.JSX.Element {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
