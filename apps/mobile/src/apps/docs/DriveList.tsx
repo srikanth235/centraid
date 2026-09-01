@@ -25,6 +25,7 @@ import { emptyStateView } from "@centraid/blueprints/apps/docs/view-state";
 import AnchoredMenu from "../../kit/components/AnchoredMenu";
 import type { MenuAnchor, MenuGroup } from "../../kit/components/AnchoredMenu";
 import EmptyBlock from "../../kit/components/EmptyBlock";
+import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import { postStatus } from "../../kit/components/status-line";
@@ -435,6 +436,7 @@ export default function DriveList({
       ) : (
         <View style={styles.container}>
           <FlashList
+            maintainVisibleContentPosition={NEWEST_FIRST_ANCHORING}
             data={docs as MobileDriveDoc[]}
             keyExtractor={(doc) => doc.document_id}
             numColumns={arrangement === "grid" ? 2 : 1}

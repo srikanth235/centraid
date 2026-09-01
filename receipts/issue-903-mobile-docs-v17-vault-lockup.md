@@ -1050,3 +1050,55 @@ as the mid-flight amendments: the band criterion, which #903's body now states
 with the Shared shelf in it, and the sharing criterion, whose wording #910's
 ruling section supports. #910 carries no acceptance list of its own, so there
 is no second checklist to mirror.
+
+## A live change from another device never reached an open list
+
+Found by running the seat against a live seeded gateway: a document uploaded or
+renamed on the gateway did not appear on a phone sitting on the Docs list. The
+same held on Notes. Home, which reads the same replica through the same hook,
+was correct throughout.
+
+**Root cause.** FlashList v2 sets `maintainVisibleContentPosition` on by
+default. Every seat sorts newest first, so a row arriving from elsewhere is
+inserted at the top — exactly where the anchor holds the reader's rows still by
+scrolling the new one out of sight above the fold. Nothing was lost: the read
+returned it, the component re-rendered with it, and it sat one swipe above the
+viewport. A re-sorted row (a rename) left the viewport the same way, which is
+why a document appeared to vanish, and why the footer count — plain text off the
+same array — disagreed with the rows beneath it.
+
+Ruled out on the way, each with device evidence: the SSE feed, the coordinator's
+invalidations, `session.subscribe`'s shape filter, `coalesceWork`, and React
+re-rendering. A non-virtualized sibling view on the same screen (Notebooks) drew
+the fresh data, and navigation and taps kept working while the list was stale,
+so the screen was not frozen. Upgrading `@shopify/flash-list` to 2.3.2 did not
+help — this is documented default behaviour, not a defect — and `extraData` did
+not either. The dependency stays at the Expo SDK 57 pin, `2.0.2`, which carries
+the same anchoring knobs.
+
+**Fix.** One shared rule in
+`apps/mobile/src/kit/components/list-anchoring.ts`: `NEWEST_FIRST_ANCHORING`
+follows the top while the reader is at it and holds position once they have
+scrolled in, where an unrequested jump would be the worse answer. It is declared
+at every virtualized list — `apps/mobile/src/apps/docs/DriveList.tsx`,
+`apps/mobile/src/apps/notes/NotesHome.tsx`,
+`apps/mobile/src/apps/people/PeopleHome.tsx` (two lists),
+`apps/mobile/src/apps/photos/PhotosLibrary.tsx`,
+`apps/mobile/src/apps/photos/PhotoTimeline.tsx`, and
+`apps/mobile/src/apps/photos/PhotoGrainView.tsx`.
+
+**Regression lock.** `scripts/lint-list-anchoring.mjs` fails any `FlashList`
+that declares no anchoring; it is wired into `package.json` as
+`lint:list-anchoring`, into the `check:push` gate wave beside the other mobile
+lints, and into the design-consumer lint job in
+`.github/workflows/ci.yml`. The component tests cannot cover this — the mobile
+test stub replaces FlashList — and no lane in the repo owns "a change made
+elsewhere lands while a list is open", so the lint is the enforcement and
+`docs/traps/list-anchoring.md` (indexed from `docs/traps/README.md`) is the
+written trap.
+
+**Verified on device**, on the pinned `2.0.2` with the fix: a note and a
+document created on the gateway each appeared at the top of an open list within
+seconds and unprompted; a gateway-side rename re-sorted its row to the top and
+stayed visible instead of vanishing; and the footer count agreed with the rows
+in both apps.
