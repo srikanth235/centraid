@@ -129,6 +129,7 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Scroll the group ledger to its Add expense act, which four demo members push under the fold
 - [x] Scroll the composer to its foot sentence, which six fields push under the fold
 - [x] Scroll once more to the commit, which sits below the foot as the ScrollView's last child
+- [x] Make Photos ask before it is refused, since a pre-revoked grant is not a denied one
 - [x] Spend one spawn on Notes' three adjacent read and write chunks
 
 ### U — the merged tree's own three client-e2e failures
@@ -147,6 +148,7 @@ Where each checked item lands, then the reasoning behind it:
 - Scroll the group ledger to its Add expense act, which four demo members push under the fold — same section; same file.
 - Scroll the composer to its foot sentence, which six fields push under the fold — same section; same file.
 - Scroll once more to the commit, which sits below the foot as the ScrollView's last child — same section; same file.
+- Make Photos ask before it is refused, since a pre-revoked grant is not a denied one — same section; `tests/agent-e2e-mobile/flows/photos-permissions.mjs`.
 - Spend one spawn on Notes' three adjacent read and write chunks — same section; `tests/agent-e2e-mobile/flows/notes-library.mjs`.
 - Disambiguate the Household sharing panel's headings, which the merge made ambiguous page-wide — "U — three failures the merge produced and nothing before it could have"; `apps/desktop/tests/e2e/household.spec.ts`.
 - Bring the two grant-kit e2e fixtures to the #903 reach ruling instead of the #825 one they still encoded — same section; `apps/web/tests/e2e/photos-grants.spec.ts`, `apps/web/tests/e2e/people-grants.spec.ts`.
@@ -748,7 +750,11 @@ Priced from the four runs, the five journeys run to completion cost roughly: pai
 
 So the arithmetic is settled and the remaining gap is not a defect. `pr-gate-budget.md` forbids raising the number, dropping a member and weakening an assertion, and its remedy 1 is now spent; remedy 3 — move a claim down a tier — is a judgment about which claims earn a device, and it is deliberately not taken unilaterally here.
 
-**The budget is still the open item, and it is not closable by defect-fixing.** With the tour combined this recovers ~81s. The gap is larger than that: `native-v0-resilience`'s airplane journey — offline write, process kill, reconnect — never ran at all in this run, so 248s is not that flow's finished cost, and `photos-permissions` has not run on this branch at any point. `pr-gate-budget.md` lists three remedies; the first is done here, the second (failure classes) is already bounded by #892 Phase 0, and the third is the substantive one: **move a claim down a tier** into `tests/integration-mobile/`, which the doc calls "the correct first move, not the last resort". That is a decision about which claims earn a device, not a change that belongs in a commit fixing a scroll selector.
+**The budget closed on its own, and the claim that it could not is withdrawn.** Run 33556574795 came in at **649s against 720s** — under, with all five journeys run. Everything above in this section that argued the five could not fit twelve minutes was extrapolation from runs whose later members were being starved, and it was wrong twice over: once at ~1000s before run 33544048980 measured 727s, and again after it. The chunk merges (25 spawns down to 15) plus journeys that stop burning time on doomed waits are what did it, which is precisely what `pr-gate-budget.md`'s remedy 1 predicted. No budget was raised, no member dropped, no assertion weakened, and remedy 3 was never needed.
+
+What that headroom then exposed is the thing worth having: `photos-permissions` reached its own assertion for the first time in this branch's history, and it is a real defect in the flow. `permissions: { all: deny }` revokes through adb, and a permission the app has never REQUESTED is left "not requested" rather than denied — so `getPermissionsAsync` answers `undetermined`, `photoAccessState` correctly reports never-asked, and the panel truthfully says "Photos has not asked for your camera roll yet" while the flow waits for the refusal sentence. The journey now taps the panel's own ask control, lets the OS put up the real dialog, and refuses THAT. The assertion is untouched; what changed is that there is now a refused grant behind it.
+
+`native-v0-resilience` failed this run at its second surface with the ANDROID LAUNCHER on screen — `id:launcher`, `id:hotseat`, Chrome and Gmail — meaning `launchApp` reported COMPLETED and the app was not running. The identical combined tour finished all ten surfaces on the run before, so that is a launch flake and not the tour. With the tour combined this recovers ~81s. The gap is larger than that: `native-v0-resilience`'s airplane journey — offline write, process kill, reconnect — never ran at all in this run, so 248s is not that flow's finished cost, and `photos-permissions` has not run on this branch at any point. `pr-gate-budget.md` lists three remedies; the first is done here, the second (failure classes) is already bounded by #892 Phase 0, and the third is the substantive one: **move a claim down a tier** into `tests/integration-mobile/`, which the doc calls "the correct first move, not the last resort". That is a decision about which claims earn a device, not a change that belongs in a commit fixing a scroll selector.
 
 ## User impact
 
