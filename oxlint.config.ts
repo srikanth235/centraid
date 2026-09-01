@@ -119,36 +119,18 @@ const VITEST_TEST_FILES = [
 // can carry both this and the seam rules — an override replaces a rule's
 // configuration, so the two lists have to be spread together rather than
 // layered.
-// Only `toSorted` is a MEASURED absence — the device threw on it, and #903's
-// polyfill header reaches the same finding from the engine side while stating
-// that this Hermes build does ship the other three copies and `findLast`. The
-// rest are banned as a precaution, at no cost to anything the repo writes;
-// `scripts/lint-hermes-array-surface.mjs` carries the full reasoning (#905).
+// `toSorted` alone, because it is the only absence anything measured (#905):
+// the device threw on it, and #903's polyfill header reaches the same finding
+// from the engine side while recording that this Hermes build DOES ship
+// `toReversed`, `toSpliced`, `with` and `findLast`. Those four were briefly
+// banned here as a precaution; a gate that fails a build over a method the
+// engine implements is wrong rather than cautious, so they are gone.
+// `scripts/lint-hermes-array-surface.mjs` carries the full reasoning.
 const HERMES_ARRAY_PROPERTIES = [
   {
     property: "toSorted",
     message:
       "The reviewed Hermes runtime does not implement Array.prototype.toSorted; sort a fresh array with .sort instead.",
-  },
-  {
-    property: "toReversed",
-    message:
-      "The reviewed Hermes runtime does not implement Array.prototype.toReversed; reverse a COPY with [...rows].reverse() — never the array itself, which other reads may still hold.",
-  },
-  {
-    property: "toSpliced",
-    message:
-      "The reviewed Hermes runtime does not implement Array.prototype.toSpliced; build the new array explicitly instead.",
-  },
-  {
-    property: "findLast",
-    message:
-      "Keep the mobile/time-engine bundle on the reviewed Hermes Array surface; use an explicit forward scan instead.",
-  },
-  {
-    property: "findLastIndex",
-    message:
-      "Keep the mobile/time-engine bundle on the reviewed Hermes Array surface; use an explicit backward scan instead.",
   },
 ] as const;
 

@@ -126,7 +126,7 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 
 - [x] Disambiguate the Household sharing panel's headings, which the merge made ambiguous page-wide
 - [x] Bring the two grant-kit e2e fixtures to the #903 reach ruling instead of the #825 one they still encoded
-- [x] Correct the Hermes claim: one absence is measured, four are a precaution
+- [x] Correct the Hermes claim and narrow the ban to the one measured absence
 
 ## What changed
 
@@ -135,7 +135,7 @@ Where each checked item lands, then the reasoning behind it:
 - Merge #911 into this branch and close that PR — "One phone, two branches"; the merge commit itself, whose second parent is `724c0785`. #911's own 225-file diff is described by its own receipt, `receipts/issue-903-mobile-docs-v17-vault-lockup.md`, which comes across with it; nothing in that half is re-narrated here.
 - Disambiguate the Household sharing panel's headings, which the merge made ambiguous page-wide — "U — three failures the merge produced and nothing before it could have"; `apps/desktop/tests/e2e/household.spec.ts`.
 - Bring the two grant-kit e2e fixtures to the #903 reach ruling instead of the #825 one they still encoded — same section; `apps/web/tests/e2e/photos-grants.spec.ts`, `apps/web/tests/e2e/people-grants.spec.ts`.
-- Correct the Hermes claim: one absence is measured, four are a precaution — same section; `scripts/lint-hermes-array-surface.mjs`, `oxlint.config.ts`.
+- Correct the Hermes claim and narrow the ban to the one measured absence — same section; `apps/mobile/src/lib/replica/multi-vault-session.ts`, `scripts/lint-hermes-array-surface.mjs`, `oxlint.config.ts`.
 - Reconcile the two branches' independent answers where they collided — same section; `packages/design/src/icons.ts`, `apps/mobile/src/apps/tasks/TasksHome.test.tsx`, `apps/mobile/src/kit/replica/replica-mount.ts`, `apps/mobile/src/kit/replica/ReplicaProvider.tsx`, `apps/mobile/src/kit/share/ShareSheet.test.tsx`, `apps/mobile/scripts/android-emulator-roster.sh`, `apps/mobile/native-fingerprints.json`, `package.json`, `docs/traps/README.md`, `tests/matrix.json`, `tests/quality/classification-ratchet.json`, `tests/comment-density-ratchet.json`, `tests/hygiene-budgets.json`, `tests/agent-e2e-mobile/flows/claim-pins.json`, `tests/agent-e2e-mobile/flows/sharing-reach.md`.
 
 - Scroll the springboard to a tile before tapping it, since only five of the eight fit a phone screen — "The three tiles under the fold"; `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
@@ -695,7 +695,11 @@ The one claim genuinely lost is "not reached is an OPPORTUNITY, not an error", a
 
 **The Hermes claim, corrected.** This branch's gate said Hermes ships no ES2023 change-array-by-copy at all. The branch's own evidence never supported that: the only device observation is `AllShelf`'s `[...labels].toSorted(...)` throwing, and the other four names were generalized from it by family resemblance. #903's polyfill header is the better-grounded claim — it names the engine build and the upstream PR still open for `toSorted` alone, and states that this build does ship `toReversed`, `toSpliced`, `with` and `findLast`. It cannot be settled in this container: `node_modules/hermes-compiler` ships `hermesc`, which compiles and has no VM, and no `libhermes` binary or Hermes source is present.
 
-So the *claim* is corrected in both places that made it, and the *ban* is deliberately not narrowed. Being wrong in the banning direction costs a rewrite; being wrong the other way costs a redbox on a lane that takes an hour per attempt. What changed is that the four extra names are now labelled a precaution with no evidence behind them, rather than presented as fact — which is the part that was actually wrong. Decision 13 above is superseded by this paragraph: it framed the two branches as holding an open disagreement, and they were not — one side had evidence for one method and the other had evidence for five, of which four were mine and unfounded.
+So the claim is corrected in both places that made it, and **the ban is narrowed to `toSorted` alone**. Decision 13 above is superseded by this paragraph twice over: it framed the two branches as holding an open disagreement, and they were not — one side had evidence for one method, the other had an assumption about five.
+
+The first attempt at this correction fixed only the wording and kept all five names banned, on the argument that a needless ban is the cheap direction to be wrong in. That argument does not survive contact with what a gate is for. A gate that fails a build over a method the engine implements is not cautious, it is wrong, and it spends its credibility on a claim it cannot support — the next person who hits it has no way to tell which of the five names is the measured one, so they either work around all of them or trust none. `receipt-capture.ts`'s backward scan and `multi-vault-session.ts`'s in-place reverse both stay, because both are correct on their own merits: the first avoids a genuine aliasing hazard, the second reverses a freshly-filtered temporary and saves the copy `toReversed()` would allocate. Only the false reason for them is removed.
+
+**Withdrawn claim, recorded because it is the kind that spreads.** "Hermes ships no ES2023 change-array-by-copy" appears earlier in this receipt as though it were an observation. It never was. The observation was one throw on one method, and the sentence generalized it to a family. Every downstream artefact — the lint's name, the oxlint list, a suppression justification in `multi-vault-session.ts` — inherited it without anyone re-checking, which is exactly how a plausible sentence outlives its evidence.
 
 ## User impact
 

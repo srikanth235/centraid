@@ -91,7 +91,14 @@ test("skips tests, which run in Node and never reach a device", (t) => {
   assert.deepEqual(runHermesArraySurface(root).violations, []);
 });
 
-test("catches every method the reviewed Hermes lacks, not just toSorted", (t) => {
+// The boundary, pinned from BOTH sides (#905). An earlier version of this test
+// asserted the opposite of the second half — it required all four of these to
+// be flagged, on the assumption that Hermes ships no change-array-by-copy at
+// all. Only `toSorted` was ever measured absent, and #903's polyfill records
+// that this engine implements the rest, so flagging them failed builds over
+// methods that work. Asserting the silence is the half that keeps the ban from
+// creeping back outward on family resemblance.
+test("flags the one method the engine lacks and leaves the ones it ships", (t) => {
   const root = fixture(t, {
     "apps/mobile/package.json": PKG("@centraid/mobile"),
     "apps/mobile/src/App.ts": [
@@ -99,11 +106,12 @@ test("catches every method the reviewed Hermes lacks, not just toSorted", (t) =>
       "export const b = (r: number[]) => r.toSpliced(0, 1);",
       "export const c = (r: number[]) => r.findLast(Boolean);",
       "export const d = (r: number[]) => r.findLastIndex(Boolean);",
+      "export const e = (r: number[]) => r.toSorted();",
     ].join("\n"),
   });
 
   assert.deepEqual(
     runHermesArraySurface(root).violations.map((v) => v.property),
-    ["toReversed", "toSpliced", "findLast", "findLastIndex"]
+    ["toSorted"]
   );
 });

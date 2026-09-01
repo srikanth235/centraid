@@ -48,32 +48,29 @@ const ENTRY_DIRS = ["apps/mobile/src"];
 
 /**
  * Array methods absent from the reviewed Hermes runtime (Expo 57 / RN 0.86).
- * `with` is deliberately NOT here: `.with(` is a common builder verb, and a
- * property-name check cannot tell `array.with(0, x)` from a fluent API's own
- * `with`. Reaching that one needs a type checker, which this gate is not.
- */
-/**
- * ONE of these is a measured absence; the rest are a precaution, and the
- * difference is recorded rather than blurred (#905). `toSorted` is the one the
- * device threw on — `AllShelf`'s own frame, `[...labels].toSorted(...)`, an
- * `undefined is not a function` on the phone. #903's
- * `apps/mobile/polyfills/array-to-sorted.js` reached the same finding from the
- * engine side, names the build (Static Hermes 250829098.0.16) and the upstream
- * PR still open for it, and states that this engine DOES ship `toReversed`,
- * `toSpliced`, `with` and `findLast`.
  *
- * The other four stay banned anyway. No device evidence exists either way for
- * them, banning them blocks nothing the repo wants to write, and being wrong in
- * this direction costs a rewrite while being wrong in the other costs a redbox
- * on a lane that takes an hour to re-run. Narrow it when a probe on real
- * hardware says so — not from either comment, this one included.
+ * ONE name, because one is what the evidence supports (#905). `toSorted` is
+ * the method the device actually threw on — `AllShelf`'s own frame,
+ * `[...labels].toSorted(...)`, `undefined is not a function` on the phone —
+ * and #903's `apps/mobile/polyfills/array-to-sorted.js` reaches the same
+ * finding from the engine side: it names the build (Static Hermes
+ * 250829098.0.16) and the upstream PR still open for this one method, and
+ * records that the engine DOES ship `toReversed`, `toSpliced`, `with` and
+ * `findLast`.
+ *
+ * Those four were briefly banned here too. That was a generalization from the
+ * single `toSorted` throw by family resemblance — "Hermes ships no ES2023
+ * change-array-by-copy" — and nothing ever measured it. A gate that fails a
+ * build over a method the engine implements is not a cautious gate, it is a
+ * wrong one, and it makes every other name on this list less believable. So
+ * the list is what is known.
+ *
+ * `with` is out for a second, independent reason: `.with(` is a common builder
+ * verb, and a property-name check cannot tell `array.with(0, x)` from a fluent
+ * API's own `with`. Reaching that one needs a type checker, which this is not.
  */
 const MISSING = new Map([
   ["toSorted", "sort a fresh array with .sort() instead"],
-  ["toReversed", "reverse a fresh array with .reverse() instead"],
-  ["toSpliced", "build the new array explicitly instead"],
-  ["findLast", "use an explicit backward scan instead"],
-  ["findLastIndex", "use an explicit backward scan instead"],
 ]);
 
 const SOURCE_RE = /\.tsx?$/u;
