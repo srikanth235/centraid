@@ -1126,6 +1126,37 @@ jobs:
               -path '*/maestro-debug/*-configure-gateway' \
               -prune -exec rm -rf {} +
           fi
+      # BANK WHAT THIS RUN COMPILED. Until now only `mobile-canary` saved, so a
+      # PR could restore a shell only if main had already built that exact
+      # `apk_key` — and the key names the JS bundle, so any PR touching JS
+      # missed it and paid a full cold release build inside this job. On
+      # 0655a1b7 and again on 60732d30 the restore was a 0s miss and the build
+      # cost 16m21s of a 27m job.
+      #
+      # Saving here does not help the push that paid for it; it helps the NEXT
+      # push on the same branch, which is the common shape — a receipt edit, a
+      # doc fix, a workflow tweak, none of which move the JS fingerprint. Actions
+      # cache scoping keeps a branch's entry to that branch and its children, so
+      # this cannot serve a stale shell to main or to an unrelated PR.
+      #
+      # `if: always()` and gated on `built` for the same reason the canary's is:
+      # a red suite still leaves the next push a warm build, and a run that
+      # restored rather than compiled has nothing new to bank.
+      - name: Save the built Android app
+        if: always() && steps.emu.outputs.built == 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e-android
+          key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
+      - name: Save the Android gradle build directory
+        if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            apps/mobile/android/app/build
+            apps/mobile/android/build
+            ~/.gradle/caches
+          key: android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

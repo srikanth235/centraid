@@ -54,6 +54,11 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Print the handles the screen was carrying when a non-sensitive chunk fails, so a device failure is diagnosable from the log rather than only from an artifact
 - [x] Keep the sensitive path silent, and say so when no hierarchy is found rather than printing nothing
 
+### K — the device gate spent 60% of its wall clock building, not testing
+
+- [x] Stop running Android Lint on the gate's throwaway test artifact
+- [x] Let the PR gate bank the shell it compiled, instead of only ever restoring one main built
+
 ## What changed
 
 Where each checked item lands, then the reasoning behind it:
@@ -80,8 +85,29 @@ Where each checked item lands, then the reasoning behind it:
 - Give the shell↔app contract one manifest both the RNTL tier and the Maestro tier can read — `apps/mobile/app-conformance.json`, one row per first-party app carrying its launcher route, the navigator/screen its tile opens, its `centraid://` path, its tile handle, its arrival landmark and whether it ships a demo fixture. JSON rather than a TS module because the three consumers do not share a build: the RNTL sweep imports it, `lint:app-conformance` reads it from plain node, and the Maestro layer's `.mjs` runners can read it with no transpile. That answers #905 Part 2's first open question ("where does the app manifest live so that both RNTL and Maestro can read one source of truth") in the only way all three can be served.
 - Hold the registry, the launcher catalog, Home's navigate switch, the deep-link table and the testID vocabulary against it, so a new app is covered the day it registers — `scripts/lint-app-conformance.mjs`, `scripts/lint-app-conformance.test.mjs`, wired into `check:push` and `ci.yml`'s `static` job. Six rules: `registry-complete`, `route-registered`, `navigates`, `deep-link-routed`, `handles-declared`, `seed-declared`. See "I — the shell↔app contract had no source of truth", below.
 - Replace per-app authoring at the composition tier with a sweep generated from the manifest — `apps/mobile/src/screens/Home.test.tsx`, which now runs `describe.each` over the manifest: every registered app has a tile under its declared handle, and pressing that tile navigates to its declared cover. Sixteen assertions, no per-app authoring, and app #9 is swept the day it registers.
-- Print the handles the screen was carrying when a non-sensitive chunk fails, so a device failure is diagnosable from the log rather than only from an artifact — `tests/agent-e2e-mobile/lib/hierarchy-digest.mjs`, `tests/agent-e2e-mobile/lib/hierarchy-digest.test.mjs`, and the failure path of `runMaestroChunk` in `tests/agent-e2e-mobile/lib/harness.mjs`. See "J — `Element not found` never said what WAS found", below.
+- Print the handles the screen was carrying when a non-sensitive chunk fails, so a device failure is diagnosable from the log rather than only from an artifact — `tests/agent-e2e-mobile/lib/hierarchy-digest.mjs`, `tests/agent-e2e-mobile/lib/hierarchy-digest.test.mjs`, and the failure path of `runMaestroChunk` in `tests/agent-e2e-mobile/lib/harness.mjs`. `knip.json` gains `maestro` under `ignoreBinaries`, beside `actionlint`, `gitleaks` and `trivy`: the harness has always required the Maestro CLI, but every previous invocation went through a variable (`const run = sensitive ? spawnQuiet : spawnLive`) that knip could not resolve to a binary name. The literal `execFile("maestro", …)` added here is the first one it can see, so this declares a dependency that was already real rather than silencing a new finding. See "J — `Element not found` never said what WAS found", below.
 - Keep the sensitive path silent, and say so when no hierarchy is found rather than printing nothing — `tests/agent-e2e-mobile/lib/harness.mjs`. The digest is gated on `!sensitive` and refuses any label containing `configure-gateway`; when nothing matches, it prints the directory's actual contents, because a diagnostic that quietly stops diagnosing is the silent no-op this repo treats as a failure.
+- Stop running Android Lint on the gate's throwaway test artifact — `apps/mobile/scripts/android-emulator-install.sh`, `-x lintVitalAnalyzeRelease -x lintVitalReportRelease`. See "K — the device gate spent 60% of its wall clock building", below.
+- Let the PR gate bank the shell it compiled, instead of only ever restoring one main built — `.github/workflows/ci.yml`, two `actions/cache/save` steps mirroring `mobile-canary.yml`'s, in its step order (run → scrub → saves → upload) and against the same keys and paths its own restore steps use.
+
+### K — the device gate spent 60% of its wall clock building
+
+Measured on run 33418649297, head `0655a1b7`, a 27m25s job:
+
+| phase | time | share |
+| --- | --- | --- |
+| setup, cache restores, AVD | 1.6 min | 6% |
+| gradle release build | **16.4 min** | **60%** |
+| the five flows — the signal | 8.0 min | 29% |
+| overhead, teardown | 1.5 min | 5% |
+
+`BUILD SUCCESSFUL in 16m 21s` is in the job log. Inside it: `lintVital*` 4m37s across 35 tasks, the Metro bundle 27s (`Android Bundled 27426ms`, 2668 modules), native compile and packaging the rest.
+
+**Android Lint is not this lane's claim.** AGP wires `lintVital<Variant>` into `assembleRelease`, so the gate ran Lint across every module before it could hand Maestro an apk it then throws away. `bun run lint` is a gate of its own on every PR in `static`, where a lint failure names itself in seconds. Excluded by task name on the CI command line rather than through `lint { checkReleaseBuilds }`, for the reason already written above the ABI override beside it: that DSL block is the STORE build's configuration too.
+
+**And it built at all because nothing banks a shell for a PR.** The apk cache key names the JS bundle fingerprint, and this job had only a restore step — the sole writer was `mobile-canary`, on main. So a PR touching JS could never hit it: "Restore the built Android app" was a 0s miss on `0655a1b7` and again on `60732d30`. The save added here does not help the push that paid for the build; it helps the next push on the same branch, which is the common shape — a receipt edit, a doc fix, a workflow tweak, none of which move the JS fingerprint. Actions cache scoping keeps a branch's entry to that branch and its children, so it cannot serve a stale shell to main or to an unrelated PR.
+
+**What was deliberately not cut.** Three candidates buy wall clock by deleting signal and were rejected: `cold-start`'s eight launches ARE its measurement; dropping a member from the critical five is the thing the lane exists to prevent; and `native-v0-resilience`'s relaunch per surface is load-bearing, not waste — its own header records that covers dismiss with a swipe Maestro cannot drive, so each surface is entered from a fresh launch on purpose. The one genuine flow-level redundancy found, the throwaway `launchApp` in `01-reuse-paired-gateway` when the next chunk stops and relaunches anyway, is worth ~35s across the suite and is left for a change that can be measured on its own.
 
 ### The defect
 
@@ -258,6 +284,8 @@ The second is that E's fix is necessary and not sufficient. `seed-demo-corpus.mj
 **Why that took a day's reading to establish, and what fixes it.** Maestro's `Element not found` names the selector that missed and *nothing about what was on the screen instead*. For the two tap failures that is precisely the fact in question: Home renders `DayOne` instead of `LauncherGrid` when `springboardState` sees every tile settled and empty, and `HOME_READY_MARKER` renders in **both** branches — so the assertion before the tap passes either way and the log cannot tell them apart. The hierarchy that would settle it is written per step into `maestro-debug/`, uploaded, and unreadable to anyone who cannot download the artifact.
 
 `lib/hierarchy-digest.mjs` turns that artifact into log output: on the failure path only, the newest hierarchy is reduced to the handles and short labels the screen carried and printed under the failure. `day-one` present with no `home-tile-*` is the first-run branch; `home-tile-*` present is a different bug. It is pure — a tree in, strings out — so the shapes it must survive (bare arrays, flat nodes, null children, 50k-deep nesting, unparseable JSON) are covered by unit tests rather than by a 28-minute lane, and it never throws, because a diagnostic that fails on the failure path replaces the real error with its own.
+
+**The first attempt read the artifact directory, and the run said no.** It looked for a hierarchy file under `maestro-debug/<chunk>/`; run 33465058064 reported, on all three failures, `no hierarchy in 02-reading-room; it holds: commands-(02-reading-room.yaml).json, maestro.log, screenshot-❌-….png`. Under `--flatten-debug-output` Maestro writes no hierarchy at all. The refusal-to-no-op paid for itself on its first run — a version that printed nothing would have looked like a screen with no handles, and the next reader would have been debugging the digest instead of the app. The capture now comes from the DEVICE (`maestro hierarchy`) on the failure path, which is strictly better: Maestro has exited but the app is still foregrounded on the failing screen, so it is the screen the assertion actually missed on rather than a file written before it.
 
 **The sensitive path stays silent.** A sensitive chunk's hierarchy is discarded precisely because it may hold a live enrollment capability, so the digest is gated on `!sensitive` and additionally refuses any label containing `configure-gateway` — belt-and-braces against the same chunk ever being run non-sensitive, and matching the workflow's own pre-upload scrub. And when no hierarchy matches, it prints what the directory *does* hold rather than nothing: Maestro's debug filenames are its own, and a digest that quietly stopped digesting is the silent no-op this repo treats as a failure.
 

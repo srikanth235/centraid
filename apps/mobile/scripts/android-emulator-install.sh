@@ -140,9 +140,26 @@ else
   # STORE build's configuration too, and a store artifact that ships x86_64 only
   # is the one mistake this must not make. `-P` scopes it to the lanes that
   # source this script.
+  # NO ANDROID LINT ON A TEST ARTIFACT. AGP wires `lintVital<Variant>` into
+  # `assembleRelease`, so a cold gate build runs Android Lint across every
+  # module before it can hand Maestro an apk: measured at 4m37s over 35 tasks
+  # on run 33418649297, inside a 16m21s build, inside a 12-minute suite's own
+  # step. It is not this lane's claim to make — `bun run lint` is a gate of its
+  # own and runs on every PR in `static`, where a lint failure names itself in
+  # seconds instead of costing a device lane.
+  #
+  # Excluded by task NAME (unqualified, so it matches in every module) rather
+  # than by turning the check off in the DSL: `lint { checkReleaseBuilds }` is
+  # the STORE build's configuration too, and a store artifact that skips lint
+  # is the one mistake this must not make — the same reasoning as the ABI
+  # override below. If AGP ever renames these tasks the build fails loudly with
+  # "Task not found" rather than quietly resuming a 4-minute lint, which is the
+  # failure mode to want.
   ( cd apps/mobile/android \
     && EXPO_PUBLIC_CENTRAID_FRAME_PROBE=1 ./gradlew "$gradle_task" \
-      -PreactNativeArchitectures=x86_64 --console=plain --stacktrace )
+      -PreactNativeArchitectures=x86_64 \
+      -x lintVitalAnalyzeRelease -x lintVitalReportRelease \
+      --console=plain --stacktrace )
   # Bank the apk under the content-addressed cache path. Fail hard if it is
   # missing rather than caching nothing (a later hit would install nothing and
   # fail obscurely at flow time).

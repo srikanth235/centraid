@@ -1,12 +1,18 @@
 // What was actually on the screen when a chunk failed (#905).
 //
-// WHY THIS EXISTS RATHER THAN "read the artifact". Maestro already writes a view
-// hierarchy per step into `maestro-debug/<chunk>/`, and that directory is
-// uploaded as `mobile-device-gate-runs`. But an artifact is only evidence to
-// someone who can download it, and the failures this lane reports most often —
-// `Element not found` on a launcher tile — are answered by ONE fact: which
-// handles the screen was carrying. Printing that fact costs a dozen log lines
-// and answers the question in the same place the failure is read.
+// WHY THIS EXISTS RATHER THAN "read the artifact". The failures this lane
+// reports most often — `Element not found` on a launcher tile — are answered by
+// ONE fact: which handles the screen was carrying. Printing it costs a dozen log
+// lines and answers the question where the failure is already being read, rather
+// than in an artifact that is only evidence to someone who can download it.
+//
+// AND THERE IS NO HIERARCHY IN THE ARTIFACT ANYWAY. Under
+// `--flatten-debug-output` Maestro writes only `commands-(<chunk>.yaml).json`,
+// `maestro.log` and a screenshot — established by run 33465058064, whose digest
+// reported exactly that directory listing. So `harness.mjs` captures the tree
+// from the DEVICE (`maestro hierarchy`) on the failure path: Maestro has exited
+// but the app is still foregrounded on the failing screen, which makes the live
+// capture both available and more truthful than a file would have been.
 //
 // The concrete case: `notes-library` and `native-v0-resilience` both died on
 // `Tap on "Open Notes.*"` / `"Open Photos.*"`. Home renders `DayOne` INSTEAD of
@@ -94,10 +100,29 @@ export function digestHierarchy(root, { limit = DIGEST_LIMIT } = {}) {
 export function digestLines(json, { limit = DIGEST_LIMIT } = {}) {
   let parsed;
   try {
-    parsed = typeof json === "string" ? JSON.parse(json) : json;
+    parsed = typeof json === "string" ? JSON.parse(sliceJson(json)) : json;
   } catch {
     return [];
   }
   const entries = digestHierarchy(parsed, { limit });
   return entries.length === 0 ? [] : entries;
+}
+
+/**
+ * The JSON inside whatever else a CLI printed around it.
+ *
+ * `maestro hierarchy` writes its own banner to stdout before the tree, so
+ * parsing the raw capture fails and the digest degrades to "no hierarchy" on a
+ * device that answered perfectly well. Widest span between the first opening
+ * brace/bracket and the last closing one — a tree is one value, so anything
+ * outside that span is banner.
+ */
+function sliceJson(text) {
+  const start = Math.min(
+    ...["{", "["].map((c) => text.indexOf(c)).filter((i) => i >= 0)
+  );
+  const end = Math.max(...["}", "]"].map((c) => text.lastIndexOf(c)));
+  return Number.isFinite(start) && end > start
+    ? text.slice(start, end + 1)
+    : text;
 }

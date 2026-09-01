@@ -100,6 +100,15 @@ describe("the screen digest", () => {
     expect(digestHierarchy(deep)).toStrictEqual(["id:leaf"]);
   });
 
+  it("finds the tree inside a CLI's banner", () => {
+    // `maestro hierarchy` prints its own preamble before the JSON; parsing the
+    // raw capture would degrade to "no hierarchy" on a device that answered.
+    const captured = `Running on emulator-5554\n${JSON.stringify(
+      node({ "resource-id": "day-one" })
+    )}\n`;
+    expect(digestLines(captured)).toStrictEqual(["id:day-one"]);
+  });
+
   it("never throws on the failure path", () => {
     expect(digestLines("{not json")).toStrictEqual([]);
     expect(digestLines("")).toStrictEqual([]);

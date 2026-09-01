@@ -16,9 +16,10 @@
 //   node lib/harness.mjs setup         -> JSON with runId, platform, udid, runDir
 //   node lib/harness.mjs list-devices  -> JSON with first booted device
 
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import {
   defaultRunId,
@@ -40,6 +41,8 @@ import {
 } from "./metro.mjs";
 import { appendRunRecord, ledgerPathFromEnv } from "./run-ledger.mjs";
 import { spawnLive, spawnQuiet } from "./spawn.mjs";
+
+const execFileAsync = promisify(execFile);
 
 const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
@@ -413,43 +416,68 @@ export async function setup({ runId } = {}) {
 // `--udid` pins Maestro to the chosen device — without it Maestro picks any
 // connected target, which silently runs flows on the wrong platform when
 // both an iOS sim and an Android emulator are booted.
+/** Long enough for a slow emulator to answer, short enough that a wedged
+ *  device cannot add a minute to a failure that already happened. */
+const HIERARCHY_TIMEOUT_MS = 20_000;
+
+/** A hierarchy from a scrollable screen is large; the default 1MB truncates it
+ *  into unparseable JSON, which reads as "no hierarchy" rather than as a cap. */
+const HIERARCHY_MAX_BYTES = 16 * 1024 * 1024;
+
 /**
- * Print the handles the LAST screen Maestro captured was carrying.
+ * `maestro hierarchy` on the device, as a string, or `undefined`.
  *
- * Newest file wins because Maestro writes one hierarchy per step and the step
- * that failed is the last one it reached. Swallows everything: this runs while
- * an error is already in flight, and a diagnostic that throws would replace the
- * real failure with its own.
+ * `execFile` rather than a hand-rolled promise: it already owns the timeout, the
+ * kill and the single settlement, and every one of those is a place a bespoke
+ * version gets subtly wrong on the failure path.
  */
-async function printScreenDigest(debugDir) {
+async function captureHierarchy(udid) {
   try {
-    const names = await fs.readdir(debugDir, { recursive: true });
-    const candidates = names.filter((name) => /hierarchy/iu.test(name));
-    if (candidates.length === 0) {
-      // A SILENT NO-OP IS A FAILURE. Maestro's debug filenames are its own and
-      // may change under us; saying what it actually wrote turns "the digest
-      // printed nothing" into the one fact needed to fix this line, instead of
-      // a diagnostic that quietly stopped diagnosing.
-      console.error(
-        `  no hierarchy in ${path.basename(debugDir)}; it holds: ${
-          names.slice(0, 20).join(", ") || "nothing"
-        }`
-      );
+    const { stdout } = await execFileAsync(
+      "maestro",
+      ["--udid", udid, "hierarchy"],
+      { maxBuffer: HIERARCHY_MAX_BYTES, timeout: HIERARCHY_TIMEOUT_MS }
+    );
+    return stdout;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Print the handles the failing screen is carrying.
+ *
+ * Read from the DEVICE, not from `--debug-output`: Maestro writes no hierarchy
+ * there under `--flatten-debug-output` — run 33465058064 reported the directory
+ * holding only `commands-(<chunk>.yaml).json`, `maestro.log` and a screenshot.
+ * Maestro has exited by the time this runs but the app is still foregrounded on
+ * the failing screen, so a live capture is both available and more truthful
+ * than a file: it is the screen the assertion actually missed on.
+ *
+ * Swallows everything. This runs while an error is already in flight, and a
+ * diagnostic that throws would replace the real failure with its own.
+ */
+async function printScreenDigest(udid, debugDir) {
+  try {
+    const lines = digestLines(await captureHierarchy(udid));
+    if (lines.length > 0) {
+      console.error("  the screen carried:");
+      for (const line of lines) console.error(`    ${line}`);
       return;
     }
-    const stated = await Promise.all(
-      candidates.map(async (name) => {
-        const file = path.join(debugDir, name);
-        return { file, at: (await fs.stat(file)).mtimeMs };
-      })
+    // A SILENT NO-OP IS A FAILURE. If the capture came back empty the reason is
+    // the next thing anyone needs, so say what the run dir does hold rather
+    // than printing nothing and looking like a screen with no handles.
+    const names = await fs
+      .readdir(debugDir, { recursive: true })
+      .catch(() => []);
+    console.error(
+      `  no hierarchy from the device; ${path.basename(debugDir)} holds: ${
+        names.slice(0, 20).join(", ") || "nothing"
+      }`
     );
-    const newest = stated.sort((a, b) => b.at - a.at)[0];
-    const lines = digestLines(await fs.readFile(newest.file, "utf8"));
-    if (lines.length === 0) return;
-    console.error(`  the screen carried (${path.basename(newest.file)}):`);
-    for (const line of lines) console.error(`    ${line}`);
   } catch {
-    // A missing or unreadable hierarchy is not itself a failure worth naming.
+    // Never let the diagnostic outlive the failure it was meant to explain.
   }
 }
 
@@ -504,7 +532,7 @@ async function runMaestroChunk(
     // repeats the workflow's own pre-upload scrub as belt-and-braces, so a
     // chunk that pairs stays silent even if it is ever run non-sensitive.
     if (!sensitive && !label.includes("configure-gateway"))
-      await printScreenDigest(debugDir);
+      await printScreenDigest(state.udid, debugDir);
     throw error;
   } finally {
     // A pairing ticket is a live enrollment capability. Sensitive flows use a
