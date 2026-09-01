@@ -60,6 +60,27 @@ describe("countDeclaredTests", () => {
     ).toBe(2);
     expect(countDeclaredTests(flow, "packages/x/src/x.test.ts")).toBe(0);
   });
+
+  test("counts an assertion the harness emits, and not its import", () => {
+    const flow = [
+      'import { AWAIT_LAUNCHER, runFlow } from "../lib/harness.mjs";',
+      "await runFlow('x', async (ctx) => {",
+      `  await ctx.run(yaml + \${AWAIT_LAUNCHER}, 'a');`,
+      "});",
+    ].join("\n");
+    expect(countDeclaredTests(flow, "tests/agent-e2e-mobile/flows/x.mjs")).toBe(
+      1
+    );
+  });
+
+  test("an import alone declares nothing", () => {
+    expect(
+      countDeclaredTests(
+        'import { AWAIT_LAUNCHER } from "../lib/harness.mjs";',
+        "tests/agent-e2e-mobile/flows/x.mjs"
+      )
+    ).toBe(0);
+  });
 });
 
 describe("evidence scope matching", () => {

@@ -4,7 +4,7 @@ import {
   recordQualityResult,
   rigDriftBudget,
 } from "../../agent-e2e-shared/harness.mjs";
-import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
+import { AWAIT_LAUNCHER, runFlow } from "../lib/harness.mjs";
 
 /**
  * PER-LAUNCH mobile cold start (issue #659 R3c).
@@ -62,11 +62,12 @@ await runFlow("mobile-cold-start", async (ctx) => {
 ---
 - stopApp
 - launchApp
-- extendedWaitUntil:
-    visible:
-      text: "${HOME_READY_MARKER}"
-    timeout: 30000
-`,
+# THE LAUNCHER, NOT THE BAND'S LABEL — icon-to-usable, not icon-to-band. The
+# band's marker renders on the empty-vault DayOne screen too, so it used to stop
+# the clock on a Home that could not open a single app, and did (cold-start.md
+# has the run). Longer numbers, and no history invalidated: the drift budget
+# stays inactive until thirty samples exist.
+${AWAIT_LAUNCHER}`,
       `cold-start-${index + 1}`
     );
     launchMs.push(performance.now() - started);

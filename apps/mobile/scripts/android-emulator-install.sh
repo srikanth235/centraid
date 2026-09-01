@@ -194,6 +194,36 @@ adb shell pm list packages "$expected_package" | grep -q "package:$expected_pack
 # background instead of stealing the window.
 adb shell settings put global hide_error_dialogs 1 || true
 
+# THE FIRST LAUNCH AFTER AN INSTALL IS NOT A LAUNCH ANY FLOW CLAIMS TO MEASURE
+# (#905). A just-installed apk has no AOT artifacts, so Android's first start of
+# it verifies and compiles on the spot; on a SwiftShader emulator that pushed the
+# very first launch past `FIRST_LAUNCH_TIMEOUT_MS` and red-lined `pairing-canary`
+# on `Assert that "Connect your gateway." is visible` — an assertion about
+# onboarding failing for a reason that has nothing to do with onboarding.
+#
+# THIS LANE USED TO GET THE WARM-UP BY ACCIDENT: the cold gradle build sat
+# between `adb install` and the first flow, so the emulator had sixteen minutes
+# to settle. Caching the apk (#905) removed the build and, with it, the pause
+# nothing had ever named. The fix is to name it — this is device preparation,
+# the same kind of thing as `hide_error_dialogs` above, not a retry.
+#
+# `compile -m speed` is what makes it deterministic rather than a wait-and-hope:
+# it does the one-time ART work up front instead of leaving it to land inside
+# whichever assertion runs first. It also moves the emulator TOWARD a member's
+# phone, where the installer and background dexopt have long since done this —
+# a freshly side-loaded apk is the unrepresentative case, not the compiled one.
+# Best-effort: on an image whose `cmd package` refuses, the throwaway launch
+# below still absorbs the cost.
+adb shell cmd package compile -m speed -f "$expected_package" || true
+# One throwaway launch for everything AOT cannot pre-pay — the first Hermes
+# bundle evaluation, the cold page cache. The settle is a fixed budget, not a
+# readiness signal: nothing is asserted here, so there is nothing to observe,
+# and `am force-stop` hands the first flow a cold PROCESS over a warm install,
+# which is exactly the state every flow already believes it starts from.
+adb shell monkey -p "$expected_package" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+sleep 20
+adb shell am force-stop "$expected_package" || true
+
 node scripts/test-report/prepare.mjs
 
 # #905 — THE CORPUS GOES IN BEFORE ANYTHING PAIRS.

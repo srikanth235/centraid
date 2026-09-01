@@ -61,13 +61,31 @@ const lower = (grade, cap) => (gradeRank(cap) < gradeRank(grade) ? cap : grade);
  * Error(...)`, `ctx.expect*()`, and embedded Maestro assertions doing the
  * asserting. Counting `test(` there would report zero and grade every real
  * pairing/mobile flow a gap, so those owners are counted in their own grammar.
+ *
+ * A SHARED CONSTANT THAT EMITS AN ASSERTION COUNTS AS ONE (#905). This is a
+ * text scanner, so an assertion factored out of a flow and into the harness
+ * becomes invisible to it — and it under-counts SILENTLY, which is the failure
+ * mode to fear: the flow still asserts exactly as much, but the matrix reads a
+ * shrunken contract and the obvious way to make it green again is to lower a
+ * `minimumTests`. So the harness constants that expand to an assertion are
+ * named here, and only those: `retryableTapCommands`, `CONFIRM_SYSTEM_OPEN` and
+ * `DENY_MEDIA_PERMISSION` expand to taps and are deliberately absent, because a
+ * tap proves nothing. Adding a name here is a claim that using it asserts.
+ *
+ * Matched as the INTERPOLATION, `${NAME}`, not as the bare identifier: the
+ * import at the top of the file names it too, and an import asserts nothing.
  */
+const FLOW_ASSERTION_HELPERS = /\$\{AWAIT_LAUNCHER\}/u;
+
 export function countDeclaredTests(source, file = "") {
   if (typeof source !== "string") return 0;
   if (/^tests\/agent-e2e-[^/]+\/flows\/.+\.mjs$/u.test(file)) {
     const checks =
       source.match(
-        /throw new Error\(|\bctx\.expect\w*\s*\(|\bassert(?:Visible|NotVisible|True)\s*:|\bextendedWaitUntil\s*:/gu
+        new RegExp(
+          `throw new Error\\(|\\bctx\\.expect\\w*\\s*\\(|\\bassert(?:Visible|NotVisible|True)\\s*:|\\bextendedWaitUntil\\s*:|${FLOW_ASSERTION_HELPERS.source}`,
+          "gu"
+        )
       )?.length ?? 0;
     return checks;
   }

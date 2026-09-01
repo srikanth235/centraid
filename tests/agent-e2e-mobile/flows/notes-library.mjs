@@ -33,6 +33,7 @@
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
 import {
+  AWAIT_LAUNCHER,
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
   runFlow,
@@ -51,7 +52,10 @@ await runFlow("notes-library", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${retryableTapCommands("Open Notes.*")}
+# The launcher, before the tile. This journey reads a corpus seeded BEFORE
+# pairing, so the grid is what the seeded vault is supposed to produce; waiting
+# for the band alone let the tap land on DayOne.
+${AWAIT_LAUNCHER}${retryableTapCommands("Open Notes.*")}
 - extendedWaitUntil:
     visible: "New note"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
@@ -146,7 +150,7 @@ ${retryableTapCommands("Open Mom's chili, written down properly", "New note")}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open Notes.*")}
+${AWAIT_LAUNCHER}${retryableTapCommands("Open Notes.*")}
 - extendedWaitUntil:
     visible: "New note"
     timeout: 30000

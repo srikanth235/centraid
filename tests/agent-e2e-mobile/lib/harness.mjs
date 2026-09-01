@@ -134,6 +134,39 @@ export function shQuote(value) {
 // stable, but it is a render signal, not a settled signal: it appears when
 // the band mounts, which may precede tile settlement.
 export const HOME_READY_MARKER = "All apps and places";
+// THE LAUNCHER — what "Home is ready" was always meant to mean (#905).
+//
+// The marker above renders in BOTH of Home's branches: the launcher grid and
+// the `DayOne` empty-vault fallback (apps/mobile/src/screens/Home.tsx picks
+// between them on `springboardState`). So it proves the band mounted and says
+// nothing about whether the vault's contents arrived — and a flow that waits
+// only for it walks into DayOne and then fails on its own selector. "could not
+// tap Open Notes" is what the log said; "the initial replica clone had not
+// landed yet" is what had happened.
+//
+// `home-grid` is published by `LauncherGrid` alone (kit/test-ids.ts
+// `TEST_IDS.home.grid`), so it is the first thing on screen that tells the two
+// branches apart. It is deliberately a HANDLE: every string on this screen is
+// copy that moves, and the branch is the contract.
+//
+// Waiting on it is also the repair, not merely the diagnosis. Home's tile reads
+// are LIVE — `useReplicaQuery` re-reads when a scope syncs — so a clone landing
+// a beat after the band flips the screen by itself. Nothing polls; this wait is
+// only what gives that beat somewhere to happen.
+export const HOME_LAUNCHER_HANDLE = "home-grid";
+// Budgeted like the pairing handshake rather than like a render: the initial
+// clone crosses iroh, and on a cold emulator that is the slow part.
+export const LAUNCHER_ARRIVAL_TIMEOUT_MS = 60_000;
+/**
+ * Wait for the launcher, for a flow whose next act is opening an app from Home.
+ * A flow that deliberately faces an empty vault (a purge, a cleared client)
+ * must NOT use this — DayOne is the correct screen there.
+ */
+export const AWAIT_LAUNCHER = `- extendedWaitUntil:
+    visible:
+      id: "${HOME_LAUNCHER_HANDLE}"
+    timeout: ${LAUNCHER_ARRIVAL_TIMEOUT_MS}
+`;
 // iOS Simulator's `openLink` (simctl openurl) raises a system
 // `Open in "Centraid"?` confirmation for custom-scheme links a moment AFTER the
 // openLink directive returns; Android fires the VIEW intent directly. That half

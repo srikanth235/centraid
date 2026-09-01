@@ -6,6 +6,7 @@ import {
   retryableTapCommands,
 } from "../lib/first-run.mjs";
 import {
+  AWAIT_LAUNCHER,
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
   runFlow,
@@ -183,7 +184,10 @@ await runFlow("native-v0-resilience", async (ctx) => {
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${openCommands}
+# The launcher before every open, here and at the three Tally relaunches below:
+# the band's marker renders on DayOne too, so it cannot tell a Home that has the
+# seeded vault from one still waiting for it (see AWAIT_LAUNCHER).
+${AWAIT_LAUNCHER}${openCommands}
 - extendedWaitUntil:
     visible: "${surface.marker}"
     timeout: 20000
@@ -237,7 +241,7 @@ ${openCommands}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open Tally.*")}
+${AWAIT_LAUNCHER}${retryableTapCommands("Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: 20000
@@ -303,7 +307,7 @@ ${DISMISS_KEYBOARD_ONBOARDING}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open Tally.*")}
+${AWAIT_LAUNCHER}${retryableTapCommands("Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: 30000
@@ -349,7 +353,7 @@ ${retryableTapCommands("Open Tally.*")}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open Tally.*")}
+${AWAIT_LAUNCHER}${retryableTapCommands("Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: 30000
