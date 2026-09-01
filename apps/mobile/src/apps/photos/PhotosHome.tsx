@@ -35,6 +35,7 @@ import type { BackupConsentRecord } from "../../kit/transfer/transfer-consent";
 import { refreshPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
 import { backupDeviceMedia } from "../../lib/upload/media-producer";
 import type { PhotosScreenProps } from "../../navigation";
+import VaultBar from "../../screens/home/VaultBar";
 import { Store } from "../../storage";
 import CameraRollImportOffer from "./CameraRollImportOffer";
 import { detectFacesFor } from "./people-model";
@@ -463,6 +464,9 @@ export default function PhotosHome({
         { backgroundColor: colors.bg, paddingTop: insets.top },
       ]}
     >
+      {/* The vault lockup on every route (see `VaultBar`). This surface hosts
+          its own band rather than a shared frame, so it mounts the bar. */}
+      <VaultBar />
       {selecting ? (
         // iOS parity (#712): Select keeps the page title. Count/verbs live on the foot bar.
         <View style={styles.header}>

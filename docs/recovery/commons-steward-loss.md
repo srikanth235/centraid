@@ -2,6 +2,8 @@
 
 When the single steward vault of a shared space (Commons plane, issue #731/#750) stops answering — lost device, wiped machine, person unreachable — and the group needs to keep going. Product paths: `packages/vault/src/share/commons-recovery.ts` (the ceremony), `packages/server/src/routes/commons-recovery-routes.ts` (the doors), `packages/server/src/serve/commons-recovery-invites.ts` (delivery), `packages/server/src/serve/commons-notices.ts` (the card that starts this).
 
+> **No member-facing door reaches this ceremony today.** The Sharing screen's "Shared-space recovery" section and its `Recover from my copy` control, and the web seat's equivalent, were deleted alongside the invitation bootstrap in [#903](https://github.com/srikanth235/centraid/issues/903). Everything below — the vault ceremony, the routes and the delivery — is still implemented and still correct; only the way a member starts it is missing. Restoring the door is open work under that umbrella.
+
 ## Invariants (do not violate while recovering)
 
 | Rule | Detail |

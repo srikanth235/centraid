@@ -120,28 +120,6 @@ export function isPendingPartyId(partyId: string): boolean {
   return partyId.startsWith("pending:");
 }
 
-/** Id shape must match `peopleDestinations` or a reload doubles the row. */
-export function quickAddedDestination(
-  partyId: string,
-  label: string
-): ShareDestination {
-  return { id: `party:${partyId}`, label, partyId };
-}
-
-/** Loose on purpose: rosters spell names out; typists don't. */
-export function nearNameMatches(
-  destinations: readonly ShareDestination[],
-  name: string
-): ShareDestination[] {
-  const needle = name.trim().toLowerCase();
-  if (!needle) return [];
-  return destinations.filter((destination) => {
-    const label = destination.label.trim().toLowerCase();
-    if (!label) return false;
-    return label.includes(needle) || needle.includes(label);
-  });
-}
-
 /** A read throws rather than answering empty (#883): the link fallback is
  *  feature detection, never failure handling. */
 export async function readShareDestinations(

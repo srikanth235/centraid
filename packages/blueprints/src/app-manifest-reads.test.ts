@@ -53,6 +53,9 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     "core.concept_scheme",
     "consent.provenance",
     "blob.custody_state",
+    // The Shared shelf: where a document came from, and whose vault that was.
+    "core.share_origin",
+    "share.party_vault_binding",
   ],
   locker: [
     "locker.item",

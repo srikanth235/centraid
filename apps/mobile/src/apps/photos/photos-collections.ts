@@ -57,7 +57,7 @@ export interface AlbumRow {
 }
 
 export interface PlaceRow {
-  placeId: string;
+  placeIds: readonly string[];
   key: string;
   name: string;
 }
@@ -220,7 +220,9 @@ export function buildCollectionSections(
       count: facts.places.length,
       tiles: facts.places.slice(0, RAIL_LIMIT).map((place) => {
         const front = cover(
-          live.filter((asset) => asset.placeId === place.placeId)
+          live.filter(
+            (asset) => asset.placeId && place.placeIds.includes(asset.placeId)
+          )
         );
         return {
           id: place.key,

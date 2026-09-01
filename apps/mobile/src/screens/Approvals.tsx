@@ -171,7 +171,7 @@ export default function ApprovalsScreen({
               grantsY.current = y;
             }}
             onOpenNotice={openNotice}
-            onOpenSettings={() => navigation.popTo("Settings")}
+            onOpenSettings={() => navigation.popTo("SettingsHome")}
             page={page}
             patch={patch}
             reviewGrants={scrollToGrants}

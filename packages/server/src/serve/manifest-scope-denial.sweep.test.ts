@@ -49,7 +49,7 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       withScopes: 36,
       // `app-manifest-reads.test.ts` is the gate keeping a manifest's declared
       // reads and its seats' actual reads honest; this number only tracks them.
-      declaredScopes: 276,
+      declaredScopes: 278,
     });
     // Every scope-carrying manifest rides the one defaulted DPV purpose.
     expect([

@@ -90,15 +90,9 @@ export const LINKING: LinkingOptions<RootStackParamList> = {
       Automations: "automations",
       Insights: "insights",
       SystemOnPhone: SYSTEM_DEEP_LINK_PATH,
-      // `commons-invite` is not a path under `settings`: the URI is minted by
-      // the vault (`_shared/commons-invite.ts`), carried by hand, and its host
-      // is fixed — this table follows it rather than the other way round. It
-      // lands on Sharing because that is the redemption door, and the claim
-      // rides through as route params.
       Settings: {
         screens: {
-          Settings: "settings",
-          Sharing: "commons-invite",
+          SettingsHome: "settings",
         },
       },
       Home: "",

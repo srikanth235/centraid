@@ -46,6 +46,7 @@ import {
   leadLabel,
 } from "../../lib/birthday-notifications";
 import type { AgendaScreenProps } from "../../navigation";
+import VaultBar from "../../screens/home/VaultBar";
 import type { AgendaBandDestinationKey } from "./agenda-band";
 import { groupEventsByLocalDay } from "./agenda-days";
 import AgendaBand from "./AgendaBand";
@@ -285,6 +286,9 @@ export default function AgendaHome({
     // There is one page for the shell and every app in it — no per-app surface
     // tone (docs/traps/design-tokens.md).
     <View style={[styles.frame, { backgroundColor: colors.bg }]}>
+      {/* The vault lockup on every route (see `VaultBar`). This surface hosts
+          its own band rather than a shared frame, so it mounts the bar. */}
+      <VaultBar />
       <TopSafeArea style={styles.body}>
         <View style={styles.header}>
           <View style={styles.headerCopy}>

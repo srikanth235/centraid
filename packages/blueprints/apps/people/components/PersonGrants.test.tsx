@@ -146,7 +146,7 @@ describe("the person screen's grant dashboard", () => {
     expect(text).toContain("Shared");
   });
 
-  test("an unreached person is an invitation opportunity, not an error", async () => {
+  test("an unreached person is a linking opportunity, not an error", async () => {
     const { container } = await mount({
       door: stubDoor({
         forParty: () =>
@@ -157,7 +157,7 @@ describe("the person screen's grant dashboard", () => {
               grant({
                 phrase: "on its way",
                 reason:
-                  "there is no way to reach them yet; the ask is recorded",
+                  "the link to their vault has ended; nothing new can be delivered",
                 fulfillment: [
                   {
                     peerVaultId: "vault-priya",
@@ -174,7 +174,7 @@ describe("the person screen's grant dashboard", () => {
     const text = container.textContent ?? "";
     // The reach line names the opportunity; the grant row names the wait.
     expect(text).toContain("Not reached yet");
-    expect(text).toContain("Sharing sends an invitation first.");
+    expect(text).toContain("Link their account in People to share with them.");
     // The row's standing is the WIRE's phrase, never one derived here.
     expect(text).toContain("On its way");
   });
@@ -265,16 +265,14 @@ describe("the person screen's grant dashboard", () => {
     ).toBe(false);
   });
 
-  test("sharing to an unreached person is one gesture — no link step", async () => {
+  test("sharing to a linked person is one gesture, and to an unlinked one is none", async () => {
     const sent: GrantRequest[] = [];
     const { container, status } = await mount({
       door: stubDoor({
         forParty: () =>
           Promise.resolve({
             known: true,
-            // Never reached: the grant will park at `awaiting_channel` and
-            // mint the invitation itself.
-            channel: null,
+            channel: { state: "live" as const, vaultId: "vault-priya" },
             grants: [grant()],
           }),
         create: (request) => {
@@ -283,8 +281,8 @@ describe("the person screen's grant dashboard", () => {
         },
       }),
     });
-    // ONE gesture opens the sheet, ONE press sends the grant. Nothing in
-    // between asks the member to link a vault first.
+    // ONE gesture opens the sheet, ONE press sends the grant. The link is the
+    // prerequisite (#903), not a step inside this flow.
     await act(async () => {
       pressing(container, "Share").click();
     });
@@ -304,5 +302,30 @@ describe("the person screen's grant dashboard", () => {
       },
     ]);
     expect(status).toStrictEqual(["Priya can see it"]);
+  });
+
+  test("the sheet will not send a grant to a person nobody has linked", async () => {
+    const sent: GrantRequest[] = [];
+    const { container } = await mount({
+      door: stubDoor({
+        forParty: () =>
+          Promise.resolve({ known: true, channel: null, grants: [grant()] }),
+        create: (request) => {
+          sent.push(request);
+          return Promise.resolve({ ok: true, outcome: "created" as const });
+        },
+      }),
+    });
+    await act(async () => {
+      pressing(container, "Share").click();
+    });
+    const sheetButtons = buttons(container).filter(
+      (button) => button.textContent?.trim() === "Share"
+    );
+    await act(async () => {
+      sheetButtons[sheetButtons.length - 1]?.click();
+    });
+    // The command pack would refuse it (#903); the sheet declines to ask.
+    expect(sent).toStrictEqual([]);
   });
 });

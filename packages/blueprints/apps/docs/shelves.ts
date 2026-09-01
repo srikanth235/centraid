@@ -9,6 +9,7 @@ export type { Shelf, ShelfId } from "../_shared/shelves.ts";
 export const FOLDERS = "built-in:folders";
 export const RECENT = "built-in:recent";
 export const STARRED = "built-in:starred";
+export const SHARED = "built-in:shared";
 export const TRASH = "built-in:trash";
 export const SEARCH = "built-in:search";
 export const STORAGE = "built-in:storage";
@@ -35,6 +36,7 @@ export const DSHELVES: readonly Shelf[] = [
   { id: FOLDERS, label: "Folders", segment: "folders" },
   { id: RECENT, label: "Recently changed", segment: "recent" },
   { id: STARRED, label: "Starred", segment: "starred" },
+  { id: SHARED, label: "Shared with you", segment: "shared" },
   { id: TRASH, label: "Trash", segment: "trash" },
 ];
 
@@ -56,6 +58,7 @@ const ALL_ID = "list";
 export const BAND_DESTINATIONS: readonly BandDestination[] = [
   { id: ALL_ID, label: "All" },
   { id: "folders", label: "Folders" },
+  { id: "shared", label: "Shared" },
   { id: "search", label: "Search" },
 ];
 

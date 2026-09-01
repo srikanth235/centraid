@@ -46,17 +46,38 @@ export const KIND_ICONS_LG = {
   other: glyph("FileText", 30, 1.35),
 } as const;
 
+/**
+ * The row menu's glyphs, as REGISTRY NAMES. Named separately from the rendered
+ * SVGs below because `glyph()` returns markup, and a React Native surface can
+ * do nothing with markup — the phone's own menu was picking names by hand and
+ * had already drifted (a document mark where the web opens with `OpenExternal`).
+ * One table, two lowerings.
+ */
+export const MENU_ICON_NAMES = {
+  open: "OpenExternal",
+  download: "Download",
+  share: "Share",
+  rename: "Pencil",
+  move: "Folder",
+  star: "Star",
+  history: "History",
+  details: "Info",
+  tag: "Tag",
+  trash: "Trash",
+} as const satisfies Record<string, IconName>;
+
 /** EVERY item carries a glyph: one with a gap reads as a menu missing one. */
 export const MENU_ICONS = {
-  open: glyph("OpenExternal", 15, 1.6),
-  download: glyph("Download", 15, 1.6),
-  rename: glyph("Pencil", 15, 1.6),
-  move: glyph("Folder", 15, 1.6),
-  star: glyph("Star", 15, 1.6),
-  history: glyph("History", 15, 1.6),
-  details: glyph("Info", 15, 1.6),
-  tag: glyph("Tag", 15, 1.6),
-  trash: glyph("Trash", 15, 1.6),
+  open: glyph(MENU_ICON_NAMES.open, 15, 1.6),
+  download: glyph(MENU_ICON_NAMES.download, 15, 1.6),
+  share: glyph(MENU_ICON_NAMES.share, 15, 1.6),
+  rename: glyph(MENU_ICON_NAMES.rename, 15, 1.6),
+  move: glyph(MENU_ICON_NAMES.move, 15, 1.6),
+  star: glyph(MENU_ICON_NAMES.star, 15, 1.6),
+  history: glyph(MENU_ICON_NAMES.history, 15, 1.6),
+  details: glyph(MENU_ICON_NAMES.details, 15, 1.6),
+  tag: glyph(MENU_ICON_NAMES.tag, 15, 1.6),
+  trash: glyph(MENU_ICON_NAMES.trash, 15, 1.6),
 } as const;
 
 export const PLACE_ICONS = {

@@ -99,7 +99,15 @@ function standingGrant(overrides: Partial<GrantRecord> = {}): GrantRecord {
 function stubDoor(overrides: Partial<GrantDoor> = {}): GrantDoor {
   return {
     subjects: () => Promise.resolve({ readable: true, offers: [] }),
-    forParty: () => Promise.resolve({ known: true, channel: null, grants: [] }),
+    // A LINKED person is the baseline, because since #903 that is the only
+    // person who can be granted at all; `channel: null` is the exception the
+    // never-reached tests opt into, not the default every other test inherits.
+    forParty: () =>
+      Promise.resolve({
+        known: true,
+        channel: { state: "live" as const, vaultId: "vault-priya" },
+        grants: [],
+      }),
     forAudience: () => Promise.resolve({ known: true, grants: [] }),
     forSubject: () => Promise.resolve([]),
     create: () => Promise.resolve({ ok: true, outcome: "created" as const }),
@@ -212,28 +220,36 @@ describe("the person screen's grant dashboard, phone seat", () => {
   });
 
   it("says nothing is shared only for a read that came back empty", async () => {
-    const el = await show(stubDoor());
+    const el = await show(
+      stubDoor({
+        forParty: () =>
+          Promise.resolve({ known: true, channel: null, grants: [] }),
+      })
+    );
     expect(el.textContent).toContain(nothingSharedYet(ASHA));
     expect(el.textContent).toContain("Not reached yet");
-    expect(el.textContent).toContain("Sharing sends an invitation first.");
+    expect(el.textContent).toContain(
+      "Link their account in People to share with them."
+    );
   });
 
-  it("reads an unaccepted invitation as pending, never as an error", async () => {
+  it("reads a link that has ended as its own state, never as an error", async () => {
     const el = await show(
       stubDoor({
         forParty: () =>
           Promise.resolve({
             known: true,
-            channel: { state: "invited" as const },
+            channel: { state: "severed" as const, vaultId: "vault-asha" },
             grants: [standingGrant()],
           }),
       })
     );
-    expect(el.textContent).toContain("Invitation pending");
+    expect(el.textContent).toContain("Link ended");
     expect(el.textContent).toContain(
-      "Sharing waits here until they join with a vault."
+      "The link to their vault ended; link again in People to share."
     );
-    // A pending invitation withholds nothing: its grant is drawn.
+    // An ended link withholds nothing that was already granted: its grant is
+    // still drawn, because the member's answer still stands.
     expect(el.textContent).not.toContain(nothingSharedYet(ASHA));
   });
 

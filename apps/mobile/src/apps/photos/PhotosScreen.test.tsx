@@ -19,6 +19,14 @@ const mocks = vi.hoisted(() => ({
   popTo: vi.fn<(...args: unknown[]) => void>(),
 }));
 
+// The vault lockup every app frame draws. Stubbed because this file's claim is
+// PhotosScreen's own composition, not the header's: mounting the real one pulls
+// the active-vault read and its native storage into a project that has no setup
+// file to seam them (unlike the RNTL tier's `native-device-seams.ts`).
+vi.mock(import("../../screens/home/VaultBar"), () => ({
+  default: (): React.JSX.Element => React.createElement("view"),
+}));
+
 vi.mock(import("react-native"), async () => {
   const ReactModule = await import("react");
   const positionOf = (style: unknown): string | undefined => {

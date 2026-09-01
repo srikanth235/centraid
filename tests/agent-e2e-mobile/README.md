@@ -170,7 +170,7 @@ The claims layer under all of it is unchanged: what belongs _here_ is the runtim
 
 Android gates PRs per D1 in [docs/decisions.md](../../docs/decisions.md#mobile-testing-890): Linux runners expose `/dev/kvm`, and UIAutomator2 is the stabler of the two Maestro drivers.
 
-Every lane, and every flow it schedules, is declared in [`roster.json`](roster.json) and checked by `bun run lint:e2e-wiring`, which derives the real wiring from the shipped YAML and the shipped runners. A flow the roster calls `scheduled` that no lane runs is a hard failure — as is a `tests/matrix.json` owner nothing schedules, which is how `sharing-invite.mjs` spent its life being cited as evidence for a journey nobody ran.
+Every lane, and every flow it schedules, is declared in [`roster.json`](roster.json) and checked by `bun run lint:e2e-wiring`, which derives the real wiring from the shipped YAML and the shipped runners. A flow the roster calls `scheduled` that no lane runs is a hard failure — as is a `tests/matrix.json` owner nothing schedules, which is how `sharing-reach.mjs` spent its life being cited as evidence for a journey nobody ran.
 
 ## The committed roster
 
@@ -182,7 +182,7 @@ Every lane, and every flow it schedules, is declared in [`roster.json`](roster.j
 | `run-photos-suite.mjs` (5 flows) | the Photos seat: refused permission, library, viewer, search, select-and-write — budget in [flows/photos-budget.md](flows/photos-budget.md) |
 | `run-home-apps-suite.mjs` (7 flows) | the Docs, Agenda, Notes, Tasks, People, Tally and Locker seats — budget in [flows/home-apps-budget.md](flows/home-apps-budget.md) |
 | `run-probes-suite.mjs` (6 flows) | the standalone journeys that grid G showed unbudgeted: `cold-start`, `home-loads`, `native-v0-resilience`, `places-seat`, `scroll-frames`, `volume-proof` — budget in [flows/probes-budget.md](flows/probes-budget.md) |
-| `flows/sharing-invite.mjs` | the phone's one commons producer and the surface that redeems an invitation |
+| `flows/sharing-reach.mjs` | the phone's one commons producer and the surface that makes a person reachable |
 
 Every suite runner declares only `FLOWS` and `BUDGET_MS`; the shared body — spawn, the classified retry, the aggregate budget — is [`lib/run-suite.mjs`](lib/run-suite.mjs). Those two literals stay in each runner because `lint:e2e-wiring` and `validate-report-registries.mjs` read them off disk to derive what a lane schedules and what it may cost.
 

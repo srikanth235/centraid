@@ -1,6 +1,7 @@
 // Mobile design boundary. Canonical values come directly from
-// `@centraid/design/native`; `native.ts` contains the two unavoidable React
-// Native adaptations (Expo font family names and em-to-point tracking).
+// `@centraid/design/native`; `native.ts` contains the unavoidable React Native
+// adaptations (Expo font family names, em-to-point tracking, and the CSS
+// shadow strings lowered to RN shadow props).
 
 export {
   borders,
@@ -10,6 +11,7 @@ export {
   fonts,
   metrics,
   pageMargin,
+  popoverShadow,
   radii,
   spacing,
   t,

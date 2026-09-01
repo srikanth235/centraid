@@ -34,6 +34,21 @@ export function settledReachability(
   return pullLanded ? "current" : "gateway-asleep";
 }
 
+/**
+ * What a pass may claim BEFORE asking the gateway anything: a resolved URL is
+ * not an answer, so optimism needs a good previous one
+ * (docs/traps/unreachable-vault.md).
+ */
+export function attemptedReachability(
+  deviceOnline: boolean,
+  hasGatewayBase: boolean,
+  wasOnline: boolean
+): ReplicaReachability {
+  if (!deviceOnline) return "device-offline";
+  if (!hasGatewayBase) return "gateway-asleep";
+  return wasOnline ? "syncing" : "gateway-asleep";
+}
+
 export interface ReplicaStatusRow {
   /** Absent when the state earns no row. */
   label?: string;

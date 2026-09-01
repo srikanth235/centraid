@@ -87,9 +87,6 @@ export const DocsScan = lazyScreen(() => import("./src/apps/docs/DocsScan"));
 export const DocsRecent = lazyScreen(
   () => import("./src/apps/docs/RecentlyChanged")
 );
-export const DocsStarred = lazyScreen(
-  () => import("./src/apps/docs/DocsStarred")
-);
 export const DocsTrash = lazyScreen(() => import("./src/apps/docs/DocsTrash"));
 export const DocsStorage = lazyScreen(
   () => import("./src/apps/docs/DocsStorage")

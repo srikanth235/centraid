@@ -10,6 +10,8 @@ import {
 import { closeOpenVaults, household } from "../share/placement-fixture.js";
 import { channelForParty } from "./channel.js";
 
+/** A commons roster ask, which is NOT a channel: #903 retired the reading of
+ *  this row as one, and the tests below hold that line. */
 function pendingInvitation(
   db: DatabaseSync,
   partyId: string,
@@ -56,6 +58,31 @@ describe("grant/channel", () => {
     });
   });
 
+  test("binding a peer makes them a PERSON the People roster can see", () => {
+    // The roster is driven by `people_profile`, one per canonical party. A
+    // linked peer with only a `core_party` row was invisible there while the
+    // share sheet — which reads `core.party` — still listed them, so one
+    // sheet showed two same-named rows and `Linked` stayed empty beside a
+    // live binding.
+    const { origin } = household();
+    const partyId = uuidv7();
+    bindPartyToVault(origin.vault, {
+      partyId,
+      vaultId: "vault-tomas",
+      linkedAt: nowIso(),
+      displayName: "Tomas",
+    });
+
+    expect({
+      ...origin.vault
+        .prepare(
+          `SELECT cadence_days, deleted_at FROM people_profile WHERE party_id = ?`
+        )
+        .get(partyId),
+      // Cadence 0 is "never": linking is not a request to be nagged.
+    }).toStrictEqual({ cadence_days: 0, deleted_at: null });
+  });
+
   test("a revoked binding severs the channel rather than erasing it", () => {
     const { origin } = household();
     const now = nowIso();
@@ -83,7 +110,11 @@ describe("grant/channel", () => {
     });
   });
 
-  test("a pending invitation with no live binding is an invited channel", () => {
+  test("a pending invitation does not resurrect a severed channel", () => {
+    // It used to: a commons ask read back as an `invited` channel, which is
+    // how sharing reached people the member had never linked (#903 retired
+    // it). The row still exists for the commons roster, so this is the guard
+    // that it can no longer speak for the link.
     const { origin } = household();
     const now = nowIso();
     const partyId = uuidv7();
@@ -102,13 +133,14 @@ describe("grant/channel", () => {
 
     expect(channelForParty(origin.vault, partyId)).toStrictEqual({
       partyId,
-      state: "invited",
-      vaultId: "vault-uma-new",
+      state: "severed",
+      vaultId: "vault-uma",
       linkedAt: now,
+      revokedAt: "2033-02-02T00:00:00.000Z",
     });
   });
 
-  test("an invitation addressed by party alone still reports a channel", () => {
+  test("an invitation addressed by party alone is still no channel", () => {
     const { origin } = household();
     const now = nowIso();
     const partyId = uuidv7();
@@ -122,13 +154,10 @@ describe("grant/channel", () => {
       .run(partyId, now, now);
     pendingInvitation(origin.vault, partyId, null, now);
 
-    expect(channelForParty(origin.vault, partyId)).toStrictEqual({
-      partyId,
-      state: "invited",
-    });
+    expect(channelForParty(origin.vault, partyId)).toBeNull();
   });
 
-  test("a live binding outranks a pending invitation", () => {
+  test("a live binding is the channel, invitation or no invitation", () => {
     const { origin } = household();
     const now = nowIso();
     const partyId = uuidv7();

@@ -161,6 +161,7 @@ export interface CreateNativeReplicaSessionOptions {
   }) => void;
   /** Fires once per storage-full pause, so the mount need not poll. */
   onStorageFull?: (error: unknown) => void;
+  onGatewayOutcome?: (reachable: boolean) => void;
   /**
    * Who a queued write into THIS vault may wait for. Set only where
    * `MountedReplicaScope.personal === false`; absent means the member's own
@@ -210,6 +211,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     | CreateNativeReplicaSessionOptions["onBootstrapProgress"]
     | undefined;
   readonly #stewardLabel: string | undefined;
+  readonly #onGatewayOutcome: ((reachable: boolean) => void) | undefined;
   #previewReady:
     | { resolve: () => void; reject: (error: unknown) => void }
     | undefined;
@@ -241,6 +243,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       | "bootstrapWindow"
       | "progressiveBootstrap"
       | "onBootstrapProgress"
+      | "onGatewayOutcome"
       | "steward"
     > & { idFactory: ReplicaIdFactory }
   ) {
@@ -270,6 +273,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#bootstrapWindow = options.bootstrapWindow;
     this.#progressiveBootstrap = options.progressiveBootstrap ?? false;
     this.#onBootstrapProgress = options.onBootstrapProgress;
+    this.#onGatewayOutcome = options.onGatewayOutcome;
     this.#stewardLabel = options.steward
       ? stewardDeviceLabel(options.steward.displayName)
       : undefined;
@@ -997,6 +1001,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
         this.resolveWaiter(intent.intentId, outcome);
         // The gateway answered, so whatever the outage was is over.
         this.#retryBackoff.reset();
+        this.#onGatewayOutcome?.(true);
       } catch (error) {
         if (isAuthorizationError(error)) {
           this.rejectWaiter(intent.intentId, error);
@@ -1016,6 +1021,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
           this.resolveWaiter(intent.intentId, outcome);
           return drainNextIntent();
         }
+        this.#onGatewayOutcome?.(false);
         await this.#coordinator
           .markIntentTransportFailed(intent.intentId, errorMessage(error))
           .catch(() => undefined);

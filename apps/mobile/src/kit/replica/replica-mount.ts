@@ -12,6 +12,7 @@ import type {
 
 import { pathToFileUri } from "../../../modules/centraid-storage";
 import { authHeader, resolveGatewayBase } from "../../lib/gateway";
+import { fetchWithinReplyDeadline } from "../../lib/replica/gateway-deadline";
 import type { MountedReplicaScope } from "../../lib/replica/multi-vault-reader";
 import { nativeReplicaDigest } from "../../lib/replica/native-hash";
 import { MAX_MOUNTED_NATIVE_SCOPES } from "../../lib/replica/offline-budgets";
@@ -41,18 +42,20 @@ export function fetcher(vaultId?: string): ReplicaFetcher {
       headers.set(key, value);
     if (vaultId) headers.set("x-centraid-vault", vaultId);
     const method = init.method ?? "GET";
+    const url = new URL(pathname, `${baseUrl}/`);
     try {
-      const response = await fetch(new URL(pathname, `${baseUrl}/`), {
-        ...init,
-        headers,
-      } as RequestInit);
+      // Deadlined: the tunnel accepts after its peer is gone (#903).
+      const response = await fetchWithinReplyDeadline(
+        (signal) => fetch(url, { ...init, headers, signal } as RequestInit),
+        init.signal ?? undefined
+      );
       if (!response.ok)
         console.error(
           `[centraid] replica: ${method} ${pathname} -> ${response.status}`
         );
       return response;
     } catch (error) {
-      // Died on this device, so the gateway trace cannot show it (#905).
+      // Died on this device, so no gateway trace can show it (#905).
       console.error(
         `[centraid] replica: ${method} ${pathname} never left the phone — ${error instanceof Error ? error.message : String(error)}`
       );

@@ -1,23 +1,13 @@
-// People & circles on the phone (#880). Three claims, each about a fact the
-// screen used to state without having learned it:
-//
-//  1. L-READ (#821): a read that did not land renders ABSENT. "No people
-//     linked yet." is an answer, and this screen may only print it when it got
-//     one — and offline must not read the same as refused.
-//  2. Every MOUNTED vault is listed, each row named by the vault it came from.
-//     Pairing can grant several vaults and up to four are mounted, so a
-//     pending invitation on a non-focused one was previously invisible.
-//  3. A tapped `centraid://commons-invite` link arrives as route params and is
-//     redeemed, with the one-time token lifted straight back out of navigation
-//     state. Redeem-by-paste still works.
+// People & circles on the phone (#880). The screen reads ONE thing — who this
+// vault is linked to — and the claim is L-READ (#821): a read that did not
+// land renders ABSENT. "No people linked yet." is an answer, and this screen
+// may only print it when it got one; offline must not read as refused.
 // @vitest-environment jsdom
 
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { encodeCommonsInvite } from "@centraid/blueprints/apps/_shared/commons-invite";
 
 import SharingScreen from "./Sharing";
 import { shareAbsentLine } from "./sharing-reads";
@@ -29,21 +19,6 @@ import { shareAbsentLine } from "./sharing-reads";
 const wire = vi.hoisted(() => ({
   listLinks: vi.fn<() => Promise<unknown[]>>(),
   approveLink: vi.fn<() => Promise<unknown>>(),
-  listEdges: vi.fn<() => Promise<unknown[]>>(),
-  listCommonsInvitations:
-    vi.fn<(base: string, v: string) => Promise<unknown[]>>(),
-  listCommonsRecovery: vi.fn<(base: string, v: string) => Promise<unknown[]>>(),
-  claimCommonsInvitation:
-    vi.fn<
-      (
-        base: string,
-        actor: string,
-        steward: string,
-        token: string
-      ) => Promise<unknown>
-    >(),
-  answerCommonsInvitation: vi.fn<() => Promise<unknown>>(),
-  recoverCommons: vi.fn<() => Promise<unknown>>(),
 }));
 
 const replica = vi.hoisted(() => ({
@@ -51,24 +26,8 @@ const replica = vi.hoisted(() => ({
 }));
 
 vi.mock(import("react-native"), async () => {
-  const ReactModule = await import("react");
   const stub = await import("../test/react-native-stub");
-  return {
-    ...stub.reactNativeStub(),
-    // The shared stub drops `onChangeText`, and this suite types an invitation
-    // into the field to prove redeem-by-paste survived the deep link.
-    TextInput: (props: {
-      accessibilityLabel?: string;
-      value?: string;
-      onChangeText?: (value: string) => void;
-    }) =>
-      ReactModule.createElement("input", {
-        "aria-label": props.accessibilityLabel,
-        onChange: (event: { target: { value: string } }) =>
-          props.onChangeText?.(event.target.value),
-        value: props.value ?? "",
-      }),
-  } as unknown as typeof import("react-native");
+  return stub.reactNativeStub() as unknown as typeof import("react-native");
 });
 vi.mock(import("@react-native-async-storage/async-storage"), async () => {
   const stub = await import("../test/react-native-stub");
@@ -111,48 +70,14 @@ vi.mock(
   import("../lib/replica/links-transport"),
   () => ({ listLinks: wire.listLinks, approveLink: wire.approveLink }) as never
 );
-vi.mock(
-  import("../lib/replica/edges-transport"),
-  () => ({ listEdges: wire.listEdges }) as never
-);
-vi.mock(
-  import("../lib/replica/placement-transport"),
-  () =>
-    ({
-      listCommonsInvitations: wire.listCommonsInvitations,
-      listCommonsRecovery: wire.listCommonsRecovery,
-      claimCommonsInvitation: wire.claimCommonsInvitation,
-      answerCommonsInvitation: wire.answerCommonsInvitation,
-      recoverCommons: wire.recoverCommons,
-    }) as never
-);
 
 const BASE = "http://127.0.0.1:4599";
 const HOME = { vaultId: "vault-home", label: "Home", canWrite: true };
-const STUDIO = { vaultId: "vault-studio", label: "Studio", canWrite: true };
-
-function invitation(overrides: Record<string, unknown> = {}) {
-  return {
-    invitationId: "inv-1",
-    grantId: "grant-1",
-    stewardVaultId: "vault-priya",
-    memberVaultId: STUDIO.vaultId,
-    currentSizeBytes: 2048,
-    status: "pending",
-    createdAt: "2026-08-01T10:00:00.000Z",
-    ...overrides,
-  };
-}
 
 let root: Root | undefined;
 let container: HTMLElement | undefined;
 
-const setParams = vi.fn<(params: Record<string, unknown>) => void>();
-
-async function show(params?: {
-  stewardVaultId?: string;
-  claimToken?: string;
-}): Promise<HTMLElement> {
+async function show(): Promise<HTMLElement> {
   container = document.createElement("div");
   document.body.append(container);
   await act(async () => {
@@ -162,15 +87,16 @@ async function show(params?: {
         navigation={
           {
             goBack: vi.fn<() => void>(),
-            setParams,
+            setParams: vi.fn<() => void>(),
           } as unknown as React.ComponentProps<
             typeof SharingScreen
           >["navigation"]
         }
         route={
-          { key: "Sharing", name: "Sharing", params } as React.ComponentProps<
-            typeof SharingScreen
-          >["route"]
+          {
+            key: "Sharing",
+            name: "Sharing",
+          } as React.ComponentProps<typeof SharingScreen>["route"]
         }
       />
     );
@@ -181,16 +107,11 @@ async function show(params?: {
 describe("the Sharing screen", () => {
   beforeEach(() => {
     for (const call of Object.values(wire)) call.mockReset();
-    setParams.mockReset();
     wire.listLinks.mockResolvedValue([]);
-    wire.listEdges.mockResolvedValue([]);
-    wire.listCommonsInvitations.mockResolvedValue([]);
-    wire.listCommonsRecovery.mockResolvedValue([]);
-    wire.claimCommonsInvitation.mockResolvedValue({ claimed: true });
     replica.value = {
       gatewayBase: BASE,
       vaultId: HOME.vaultId,
-      scopes: [HOME, STUDIO],
+      scopes: [HOME],
       online: true,
       ready: true,
     };
@@ -214,116 +135,35 @@ describe("the Sharing screen", () => {
     });
 
     it("says out of reach when the request never left the device", async () => {
-      wire.listEdges.mockRejectedValue(new TypeError("Network request failed"));
+      wire.listLinks.mockRejectedValue(new TypeError("Network request failed"));
       const el = await show();
-      expect(el.textContent).not.toContain(
-        "No copies between your vaults yet."
-      );
       expect(el.textContent).toContain(
-        shareAbsentLine("Copies between your vaults", "unreachable")
+        shareAbsentLine("Who is linked", "unreachable")
       );
       // The refusal sentence is a DIFFERENT sentence, and this is not it.
       expect(el.textContent).not.toContain(
-        shareAbsentLine("Copies between your vaults", "refused")
+        shareAbsentLine("Who is linked", "refused")
       );
     });
 
     it("still says 'none' when the gateway actually answered none", async () => {
       const el = await show();
       expect(el.textContent).toContain("No people linked yet.");
-      expect(el.textContent).toContain("No copies between your vaults yet.");
-    });
-
-    it("does not blank the sections that did answer", async () => {
-      wire.listLinks.mockRejectedValue(new Error("list links failed (500)"));
-      wire.listEdges.mockResolvedValue([]);
-      const el = await show();
-      expect(el.textContent).toContain("No copies between your vaults yet.");
     });
   });
 
-  describe("every mounted vault", () => {
-    it("is asked, not just the focused one", async () => {
-      await show();
-      expect(
-        wire.listCommonsInvitations.mock.calls.map((call) => call[1])
-      ).toStrictEqual([HOME.vaultId, STUDIO.vaultId]);
-      expect(
-        wire.listCommonsRecovery.mock.calls.map((call) => call[1])
-      ).toStrictEqual([HOME.vaultId, STUDIO.vaultId]);
-    });
-
-    it("names the vault each offered space arrived in", async () => {
-      wire.listCommonsInvitations.mockImplementation((_base, vaultId) =>
-        Promise.resolve(
-          vaultId === STUDIO.vaultId
-            ? [invitation({ invitationId: "inv-studio" })]
-            : []
-        )
-      );
-      const el = await show();
-      expect(el.textContent).toContain("Ongoing shared space from vault-priya");
-      // The row is on a vault this member is not currently focused on.
-      expect(el.textContent).toContain("Studio");
-    });
-
-    it("says which vaults it could not read rather than showing a short list", async () => {
-      wire.listCommonsInvitations.mockImplementation((_base, vaultId) =>
-        vaultId === STUDIO.vaultId
-          ? Promise.reject(new TypeError("Network request failed"))
-          : Promise.resolve([invitation()])
-      );
-      const el = await show();
-      expect(el.textContent).toContain("Not everything is shown");
-      expect(el.textContent).toContain("Studio");
-    });
-  });
-
-  describe("a tapped invitation link", () => {
-    const CLAIM = { stewardVaultId: "vault-priya", claimToken: "one-time" };
-
-    it("redeems the claim the link carried", async () => {
-      await show(CLAIM);
-      expect(wire.claimCommonsInvitation.mock.calls).toStrictEqual([
-        [BASE, HOME.vaultId, CLAIM.stewardVaultId, CLAIM.claimToken],
-      ]);
-    });
-
-    it("lifts the one-time token straight out of navigation state", async () => {
-      await show(CLAIM);
-      expect(setParams.mock.calls).toStrictEqual([
-        [{ stewardVaultId: undefined, claimToken: undefined }],
-      ]);
-    });
-
-    it("claims nothing when the link carried no claim", async () => {
-      await show();
-      expect(wire.claimCommonsInvitation).not.toHaveBeenCalled();
-      expect(setParams).not.toHaveBeenCalled();
-    });
-
-    it("keeps redeem-by-paste working", async () => {
-      const el = await show();
-      const field = el.querySelector("input") as HTMLInputElement;
-      const uri = encodeCommonsInvite({
-        stewardVaultId: "vault-ravi",
-        claimToken: "pasted-token",
-      });
-      await act(async () => {
-        Object.getOwnPropertyDescriptor(
-          HTMLInputElement.prototype,
-          "value"
-        )?.set?.call(field, uri);
-        field.dispatchEvent(new Event("input", { bubbles: true }));
-      });
-      await act(async () => {
-        [...el.querySelectorAll("button")]
-          .find((button) => button.textContent === "Redeem")
-          ?.click();
-      });
-      expect(wire.claimCommonsInvitation.mock.calls).toStrictEqual([
-        [BASE, HOME.vaultId, "vault-ravi", "pasted-token"],
-      ]);
-    });
+  it("lists the people a link produced", async () => {
+    wire.listLinks.mockResolvedValue([
+      {
+        linkId: "link-1",
+        vaultA: HOME.vaultId,
+        vaultB: "vault-bob",
+        labelB: "Bob's vault",
+        remoteVaultId: "vault-bob",
+      },
+    ]);
+    const el = await show();
+    expect(el.textContent).toContain("Bob's vault");
+    expect(el.textContent).not.toContain("No people linked yet.");
   });
 });

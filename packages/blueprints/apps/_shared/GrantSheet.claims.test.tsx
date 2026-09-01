@@ -18,28 +18,36 @@ describe("the grant sheet, web seat — claims", () => {
   });
 
   describe("absent is never empty", () => {
-    test("a person this vault has never reached says so", async () => {
-      const { container } = await mount();
+    test("a person this vault has never reached says so, and Share is not offered", async () => {
+      const { container } = await mount({
+        door: stubDoor({
+          forParty: () =>
+            Promise.resolve({ known: true, channel: null, grants: [] }),
+        }),
+      });
       expect(container.textContent).toContain("Not reached yet");
       expect(container.textContent).toContain(
-        "Sharing sends an invitation first."
+        "Link their account in People to share with them."
       );
+      // #903: the reach line names the act that WOULD work, and the sheet does
+      // not grow a control naming the one that would not.
+      expect(pressing(container, "Share").disabled).toBe(true);
     });
 
-    test("an unaccepted invitation reads as pending, not as an error", async () => {
+    test("a grant whose channel has since closed reads as pending, not as an error", async () => {
       const { container } = await mount({
         door: stubDoor({
           forParty: () =>
             Promise.resolve({
               known: true,
-              channel: { state: "invited" as const },
+              channel: { state: "severed" as const },
               grants: [
                 standingGrant({
                   // The vault's own phrase and reason for a grant with no
-                  // channel to carry it (ruling V-phrases).
+                  // channel left to carry it (ruling V-phrases).
                   phrase: "on its way",
                   reason:
-                    "there is no way to reach them yet; the ask is recorded",
+                    "the link to their vault has ended; nothing new can be delivered",
                   fulfillment: [
                     {
                       peerVaultId: "vault-priya",
@@ -55,7 +63,7 @@ describe("the grant sheet, web seat — claims", () => {
       });
       expect(container.textContent).toContain("On its way");
       expect(container.textContent).toContain(
-        "there is no way to reach them yet; the ask is recorded"
+        "the link to their vault has ended; nothing new can be delivered"
       );
       // The seam rung, not the error rung, and keyed on the WIRE's word.
       expect(
@@ -76,10 +84,11 @@ describe("the grant sheet, web seat — claims", () => {
       });
       expect(container.textContent).toContain("Link ended");
       expect(container.textContent).toContain(
-        "The link to their vault ended; nothing new can be delivered."
+        "The link to their vault ended; link again in People to share."
       );
       expect(container.querySelector('[data-reach="severed"]')).not.toBeNull();
       expect(container.textContent).not.toContain("Not reached yet");
+      expect(pressing(container, "Share").disabled).toBe(true);
     });
 
     test("a reach still being read makes no claim about the person", async () => {

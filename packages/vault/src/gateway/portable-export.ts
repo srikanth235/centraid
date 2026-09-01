@@ -74,6 +74,15 @@
 // SELECT * is unchanged. The schema-dir hash includes the new module and
 // `entity-labels.test.ts`, which is why the fingerprint moved again.
 
+// Schema/export audit #903 (linked account is the one way to share): NOTHING
+// to carry. No table, no column, no sealed cell. Every changed line in
+// schema/share-grant.ts is a COMMENT, `share_fulfillment`'s state CHECK
+// byte-identical; schema/poly-refs.ts carries no DDL, its new
+// `PARTY_POINTER_REGISTRY` being a MERGE-time list of FK-less party pointers,
+// which rewrites rows the walk already carries. `core.share_origin` and
+// `share.party_vault_binding` — the entities this issue's Docs manifest reads —
+// were already registered and already exported.
+
 import { createHash } from "node:crypto";
 
 import { sha256OfBytes } from "../blob/store.js";

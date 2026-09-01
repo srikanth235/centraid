@@ -1,12 +1,16 @@
 // core.merge_party (#290): without a merge every added source DEGRADES the
 // vault. Folds B into A — engine FKs re-point (PRAGMA foreign_key_list, no
-// hand-kept list), polymorphic refs follow, identifiers demote rather than
-// vanish, B's row deletes, history is not rewritten. Uniqueness collisions
-// dedupe onto the survivor's copy; a handle is never lost.
+// hand-kept list), polymorphic refs follow, the FK-less party pointers follow
+// from their own registry, identifiers demote rather than vanish, B's row
+// deletes, history is not rewritten. Uniqueness collisions dedupe onto the
+// survivor's copy; a handle is never lost.
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
-import { POLY_REF_REGISTRY } from "../schema/poly-refs.js";
+import {
+  PARTY_POINTER_REGISTRY,
+  POLY_REF_REGISTRY,
+} from "../schema/poly-refs.js";
 
 const MERGE_PARTY: CommandDefinition = {
   name: "core.merge_party",
@@ -157,6 +161,73 @@ function foldPeopleProfile(
   ctx.db.prepare("DELETE FROM people_profile WHERE party_id = ?").run(merged);
 }
 
+/**
+ * The FK-less party pointers, from the one registry that enumerates them
+ * (`schema/poly-refs.ts`). Neither walk in `mergeParty` can reach these — there
+ * is no foreign key for `PRAGMA foreign_key_list` to find, and no `core.party`
+ * type column for the polymorphic sweep to match — so a merge that skipped them
+ * would delete the folded-in party out from under a live pointer and break the
+ * feature holding it, silently.
+ *
+ * A collision means the survivor already satisfies the constraint. What happens
+ * to the loser is the registry's call, not this walk's: an ANSWER is dated shut
+ * and kept, duplicate machinery is dropped. Revoking BEFORE re-pointing is also
+ * the only order that works where the constraint covers live rows only.
+ */
+function foldPartyPointers(
+  ctx: HandlerCtx,
+  survivor: string,
+  merged: string
+): { repointed: number; revoked: number; deduped: number } {
+  let repointed = 0;
+  let revoked = 0;
+  let deduped = 0;
+  for (const pointer of PARTY_POINTER_REGISTRY) {
+    const pk =
+      (
+        ctx.db
+          .prepare(`PRAGMA table_info(${JSON.stringify(pointer.table)})`)
+          .all() as { name: string; pk: number }[]
+      ).find((column) => column.pk === 1)?.name ?? "rowid";
+    const scope = pointer.predicate ? ` AND ${pointer.predicate}` : "";
+    const rows = ctx.db
+      .prepare(
+        `SELECT "${pk}" AS pk FROM "${pointer.table}"
+          WHERE "${pointer.column}" = ?${scope}`
+      )
+      .all(merged) as { pk: string | number }[];
+    for (const row of rows) {
+      try {
+        ctx.db
+          .prepare(
+            `UPDATE "${pointer.table}" SET "${pointer.column}" = ?
+              WHERE "${pk}" = ?`
+          )
+          .run(survivor, row.pk);
+        repointed += 1;
+      } catch {
+        if (pointer.collision === "revoke") {
+          ctx.db
+            .prepare(
+              `UPDATE "${pointer.table}"
+                  SET revoked_at = ?, "${pointer.column}" = ?
+                WHERE "${pk}" = ?`
+            )
+            .run(ctx.now, survivor, row.pk);
+          repointed += 1;
+          revoked += 1;
+        } else {
+          ctx.db
+            .prepare(`DELETE FROM "${pointer.table}" WHERE "${pk}" = ?`)
+            .run(row.pk);
+          deduped += 1;
+        }
+      }
+    }
+  }
+  return { repointed, revoked, deduped };
+}
+
 function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
     survivor_party_id: string;
@@ -168,6 +239,9 @@ function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
   let deduped = 0;
 
   foldPeopleProfile(ctx, survivor, merged);
+  const pointers = foldPartyPointers(ctx, survivor, merged);
+  repointed += pointers.repointed;
+  deduped += pointers.deduped;
 
   for (const ref of partyFkColumns(ctx)) {
     const rows = ctx.db
@@ -261,7 +335,12 @@ function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
   ctx.wrote("core.party", survivor);
   ctx.wrote("core.party", merged);
   ctx.cite({
-    claim: `party ${merged} folded into ${survivor}: ${repointed} reference(s) re-pointed, ${deduped} duplicate relation(s) removed`,
+    claim:
+      `party ${merged} folded into ${survivor}: ${repointed} reference(s) ` +
+      `re-pointed, ${deduped} duplicate relation(s) removed` +
+      (pointers.revoked
+        ? `, ${pointers.revoked} duplicate standing answer(s) revoked`
+        : ""),
     entityType: "core.party",
     entityId: survivor,
   });

@@ -3663,10 +3663,10 @@
           },
           {
             "id": "origin-sharing",
-            "label": "origin sharing journey — mint an invitation, redeem the claim on the mounted plane",
+            "label": "origin sharing journey — compile a share, make a person reachable on the mounted plane",
             "layer": "journey",
             "status": "owned",
-            "owner": "tests/agent-e2e-mobile/flows/sharing-invite.mjs"
+            "owner": "tests/agent-e2e-mobile/flows/sharing-reach.mjs"
           }
         ]
       },
@@ -4327,10 +4327,10 @@
             "flow": "mobile-pairing-canary"
           },
           {
-            "id": "sharing-invite",
-            "label": "Sharing invite",
-            "owner": "tests/agent-e2e-mobile/flows/sharing-invite.mjs",
-            "flow": "mobile-sharing-invite"
+            "id": "sharing-reach",
+            "label": "Sharing reach",
+            "owner": "tests/agent-e2e-mobile/flows/sharing-reach.mjs",
+            "flow": "mobile-sharing-reach"
           }
         ]
       },
@@ -4986,12 +4986,14 @@
       "minimumTests": 1
     },
     {
-      "id": "mobile-sharing-invite",
-      "name": "The phone mints an invitation from a Tally group, withholds the verb with its own sentence while the gateway is out of reach, and loads the surface that redeems one",
+      "id": "mobile-sharing-reach",
+      "replacesMinimumTestsFlow": "mobile-sharing-invite",
+      "approvedMinimumTestsDeviation": "#903 renames the flow, it does not retire it: the invitation bootstrap is deleted, so a grant names a person only through a live vault binding and the journey that proves it is reach, not invitation. Same surface, dimension and tier, and the floor of 15 is carried across unchanged.",
+      "name": "The phone compiles a share from a Tally group, withholds the verb with its own sentence while the gateway is out of reach, and loads the surface that makes a person reachable",
       "surface": "mobile",
       "dimension": "journey",
       "tier": "e2e",
-      "owner": "tests/agent-e2e-mobile/flows/sharing-invite.mjs",
+      "owner": "tests/agent-e2e-mobile/flows/sharing-reach.mjs",
       "minimumTests": 15
     },
     {

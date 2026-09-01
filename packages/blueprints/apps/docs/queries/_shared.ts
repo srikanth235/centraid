@@ -163,6 +163,32 @@ export interface SharedMember {
   status: "invited" | "current";
 }
 
+interface OriginRow {
+  item_id: string;
+  origin_vault_id: string;
+  shared_at?: number | string | null;
+}
+
+interface BindingRow {
+  party_id: string;
+  vault_id: string;
+}
+
+interface PartyRow {
+  party_id: string;
+  display_name?: string | null;
+}
+
+/** One inbound placement: which vault delivered a document, and when. */
+export interface SharedFromEntry {
+  vault_id: string;
+  /** `null` is "cannot say who", never "nobody": no live binding names them. */
+  party_id: string | null;
+  name: string | null;
+  /** Landed here, epoch ms. */
+  at: number;
+}
+
 export interface SharedWithEntry {
   grant_id: string;
   circle_id: string;
@@ -384,6 +410,112 @@ export async function readSharesByDocument({
       if (entries.length > 0) byDocument.set(documentId, entries);
     }
     return byDocument;
+  } catch {
+    return null;
+  }
+}
+
+/** Its own function because its own denial is survivable: an unnamed sender
+ *  still belongs on the shelf. */
+async function readSenderNames({
+  ctx,
+  purpose,
+  vaultIds,
+}: {
+  ctx: HandlerCtx;
+  purpose: string;
+  vaultIds: string[];
+}): Promise<{
+  partyByVault: Map<string, string>;
+  nameByParty: Map<string, string>;
+}> {
+  const empty = { partyByVault: new Map(), nameByParty: new Map() };
+  if (vaultIds.length === 0) return empty;
+  try {
+    const bindings = await ctx.vault.read({
+      entity: "share.party_vault_binding",
+      where: [
+        { column: "vault_id", op: "in", value: vaultIds },
+        // A revoked binding no longer says whose vault that is.
+        { column: "revoked_at", op: "is-null" },
+      ],
+      limit: shareLimit(vaultIds.length),
+      purpose,
+    });
+    const partyByVault = new Map(
+      ((bindings.rows ?? []) as unknown as BindingRow[]).map((b) => [
+        b.vault_id,
+        b.party_id,
+      ])
+    );
+    const partyIds = [...new Set(partyByVault.values())];
+    if (partyIds.length === 0) return { partyByVault, nameByParty: new Map() };
+    const parties = await ctx.vault.read({
+      entity: "core.party",
+      where: [{ column: "party_id", op: "in", value: partyIds }],
+      limit: shareLimit(partyIds.length),
+      purpose,
+    });
+    return {
+      partyByVault,
+      nameByParty: new Map(
+        ((parties.rows ?? []) as unknown as PartyRow[]).flatMap((p) => {
+          const name = p.display_name?.trim();
+          return name ? [[p.party_id, name] as const] : [];
+        })
+      ),
+    };
+  } catch {
+    return empty;
+  }
+}
+
+/**
+ * Where a document came from (#903). NOT bounded by the caller's window: it is
+ * what DISCOVERS rows, so the caller unions these ids in and `limit` is the
+ * only bound. No binding, no name — never a vault id worn as one.
+ */
+export async function readOriginsByDocument({
+  ctx,
+  purpose,
+  limit,
+}: {
+  ctx: HandlerCtx;
+  purpose: string;
+  limit: number;
+}): Promise<Map<string, SharedFromEntry> | null> {
+  try {
+    const origins = await ctx.vault.read({
+      entity: "core.share_origin",
+      where: [{ column: "item_type", op: "eq", value: DOCUMENT_TARGET_TYPE }],
+      orderBy: { column: "shared_at", dir: "desc" },
+      limit,
+      purpose,
+    });
+    const originRows = (origins.rows ?? []) as unknown as OriginRow[];
+    if (originRows.length === 0) return new Map();
+
+    // A LOST NAME IS NOT A LOST ARRIVAL: only a denied placement is unknown.
+    const { partyByVault, nameByParty } = await readSenderNames({
+      ctx,
+      purpose,
+      vaultIds: [...new Set(originRows.map((o) => o.origin_vault_id))],
+    });
+
+    return new Map(
+      originRows.map((o) => {
+        const partyId = partyByVault.get(o.origin_vault_id) ?? null;
+        return [
+          o.item_id,
+          {
+            vault_id: o.origin_vault_id,
+            party_id: partyId,
+            name: partyId ? (nameByParty.get(partyId) ?? null) : null,
+            at: Number(o.shared_at) || 0,
+          } satisfies SharedFromEntry,
+        ];
+      })
+    );
   } catch {
     return null;
   }

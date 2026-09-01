@@ -107,7 +107,8 @@ export function usePhotoGrantEntry(
           setVisible(true);
           return;
         }
-        // A failed link read half-answered the roster — never say "you know nobody".
+        // A link is the WHOLE address (#903), so a failed link read answers
+        // nothing at all — never say "you know nobody" off a read that broke.
         refuse(linksUnread ? ROSTER_UNREADABLE : NOBODY_TO_SHARE_WITH);
       })();
     },

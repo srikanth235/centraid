@@ -156,8 +156,10 @@ export async function pair(
       "Gateway did not return its EndpointId."
     );
   }
+  // Hostname first: this is a switcher row's SECOND line, and `vaultName` made
+  // both lines read the same word.
   const desktopName =
-    result.vaultName || result.gatewayName || parsed.vaultName || "Gateway";
+    result.gatewayName || result.vaultName || parsed.vaultName || "Gateway";
   const deviceId =
     result.enrollmentId || result.gatewayId || result.deviceId || "gateway";
   const returnedVaults = normalizePairedVaults(result);

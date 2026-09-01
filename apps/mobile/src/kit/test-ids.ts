@@ -75,10 +75,10 @@ export const TEST_IDS = Object.freeze({
     sharingRow: "settings-sharing-row",
   }),
 
-  /** Settings → Sharing: the seat that REDEEMS an invitation. */
+  /** Settings → Sharing: who this vault is linked to, and the link ceremony. */
   sharing: Object.freeze({
-    redeem: "sharing-redeem",
-    redeemField: "sharing-redeem-field",
+    screen: "sharing-screen",
+    people: "sharing-people",
   }),
 
   photos: Object.freeze({

@@ -77,7 +77,11 @@ import {
   removeCachedScope,
   resolveIdentity,
 } from "./replica-mount";
-import { loadRevokedNotices, settledReachability } from "./replica-status";
+import {
+  attemptedReachability,
+  loadRevokedNotices,
+  settledReachability,
+} from "./replica-status";
 
 export { REPLICA_UNPAIRED_MESSAGE } from "./replica-mount";
 
@@ -252,6 +256,11 @@ export function ReplicaProvider({
         if (identity.online) sendEventualWork(identity.auth.baseUrl);
         if (cancelled) return;
         let connected = identity.online;
+        // Reports, never decides (docs/traps/unreachable-vault.md).
+        const noteGatewayOutcome = (reachable: boolean): void => {
+          if (cancelled || reachable === connected) return;
+          reachabilityWork?.signal();
+        };
         const sessions = new Map<string, NativeReplicaSession>();
         // Kept per vault, not just until the session takes over: a revoked
         // scope's file cannot be deleted while its handle is still open, and
@@ -297,6 +306,7 @@ export function ReplicaProvider({
             gatewayId: identity.gatewayId,
           },
           storage: AsyncStorage,
+          onStreamOutcome: noteGatewayOutcome,
           onScopeUpdated: updateScopeFreshness,
           onScopeRevoked: (vaultId) => {
             revokedScopeIds.add(vaultId);
@@ -362,6 +372,7 @@ export function ReplicaProvider({
               ...(scope.personal === false ? { steward: {} } : {}),
               onBootstrapProgress: (progress) =>
                 bootstrap.report(scope, progress),
+              onGatewayOutcome: noteGatewayOutcome,
               // Out of room parks this scope's feed; the phone, not the vault,
               // is what ran out, so one paused scope raises the state for all.
               onStorageFull: () =>
@@ -478,15 +489,15 @@ export function ReplicaProvider({
             ...value,
             ...(liveBase ? { gatewayBase: liveBase } : {}),
             ...(features ? { features } : {}),
-            online: connected,
+            online: value.online === true && connected,
             // The one pass that runs whatever the radio said: re-read the
             // pause so a resume from the storage screen clears the state.
             storageFull: facade?.storageFull === true,
-            reachability: deviceOnline
-              ? liveBase
-                ? "syncing"
-                : "gateway-asleep"
-              : "device-offline",
+            reachability: attemptedReachability(
+              deviceOnline,
+              liveBase !== undefined,
+              value.online === true
+            ),
           }));
           if (liveBase) {
             const outcome = await facade?.pullScopes().catch(() => undefined);
@@ -499,6 +510,7 @@ export function ReplicaProvider({
             // data that was never fetched.
             const policyBlocked = outcome?.policyBlocked === true;
             const landed = outcome !== undefined && !policyBlocked;
+            connected = landed || policyBlocked;
             if (!landed)
               console.error(
                 `[centraid] replica: scopes pull did not land — blocked=${policyBlocked}`

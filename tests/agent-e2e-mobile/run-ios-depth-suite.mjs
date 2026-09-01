@@ -38,7 +38,7 @@
 //
 // DELIBERATELY ABSENT, and why, so the next reader does not "fix" the omission:
 // the Photos read/search/viewer/select journeys, the seven home-app covers,
-// places-seat, volume-proof and sharing-invite. Every one of those asserts
+// places-seat, volume-proof and sharing-reach. Every one of those asserts
 // product logic over the replica — which is platform-independent by construction
 // (one TypeScript source, one replica schema) — and Android runs all of them
 // nightly. Their iOS-specific half is the native wiring, which

@@ -1044,6 +1044,7 @@
         "queries/drive.ts",
         "queries/history.ts",
         "queries/search.ts",
+        "queries/shared-origin.test.ts",
         "queries/shares.test.ts",
         "seed.js",
         "shelves.ts",

@@ -1,6 +1,6 @@
 // THE COMMONS PRODUCER, AND THE ONLY ONE THIS DEVICE HAS (#825 G-edit).
 // `tally.group` is v1's one edit-capable subject, so this row is where a
-// `centraid://commons-invite` URI is minted. Offline: `tally-seat-copy.ts`.
+// shared space is compiled. Offline: `tally-seat-copy.ts`.
 
 import React, { useMemo, useState } from "react";
 
@@ -46,8 +46,8 @@ export default function TallyShareGroup({
 
   return (
     <>
-      {/* The META is the claim and stays asserted: reachable says what an
-          invitation IS, unreachable says why there is no verb. The id is only
+      {/* The META is the claim and stays asserted: reachable says what a
+          share DOES, unreachable says why there is no verb. The id is only
           how a flow finds the row that carries whichever sentence is true. */}
       <LedgerRow
         testID={TEST_IDS.tally.shareVerb}

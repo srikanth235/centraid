@@ -408,15 +408,20 @@ const ICON_DATA = {
   Maximize: [{ d: "M8 3H3v5M16 3h5v5M8 21H3v-5M21 16v5h-5" }],
   List: [{ d: "M4 6h16M4 12h16M4 18h16" }],
   Archive: [{ d: "M4 5h16v4H4z" }, { d: "M6 9v10h12V9M9 13h6" }],
-  Inbox: [
-    { d: "M5 4h14l3 8v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z" },
-    { d: "M2 12h6l2 3h4l2-3h6" },
-  ],
   Upload: [{ d: "M12 15V3m0 0 4 4m-4-4-4 4M5 21h14" }],
   Download: [{ d: "M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" }],
   FolderPlus: [
     { d: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9H3z" },
     { d: "M12 11v5M9.5 13.5h5" },
+  ],
+  // Own entry, not `Archive`: an inbox holds work that ARRIVED and is
+  // undecided, an archive holds work put away. Tasks' band names both, so
+  // one glyph would blur the two.
+  Inbox: [
+    { d: "M22 12h-6l-2 3h-4l-2-3H2" },
+    {
+      d: "M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z",
+    },
   ],
   Bookmark: [{ d: "M6 4h12v17l-6-3-6 3z" }],
   Shield: [{ d: "M12 3 20 6v5c0 5-3.4 8.7-8 10-4.6-1.3-8-5-8-10V6z" }],

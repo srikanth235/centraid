@@ -329,6 +329,9 @@ jobs:
       # are the machine-checkable half of it (docs/design-machinery.md).
       - run: bun run lint:design-tokens
       - run: bun run lint:mobile-design
+      # A virtualized list that anchors by default swallows rows arriving
+      # from another device (#903); every FlashList states its anchoring.
+      - run: bun run lint:list-anchoring
       - run: bun run lint:logical-insets
       - run: bun run lint:hairline
       - run: bun run lint:aria-labels

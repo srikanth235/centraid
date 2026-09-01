@@ -6,7 +6,7 @@
 // Why this exists. Three separate ways a mobile journey could be committed,
 // linted, registered as evidence, and never executed:
 //
-//   1. `flows/sharing-invite.mjs` was named three times in `tests/matrix.json`
+//   1. `flows/sharing-reach.mjs` was named three times in `tests/matrix.json`
 //      as an evidence owner — an appScenarios journey, a canonical `flows[]`
 //      record with `minimumTests: 15`, and a member of the `standalone` suite —
 //      while no workflow, no suite runner and no script invoked it. The matrix
@@ -32,7 +32,7 @@
 //
 //   RULE scheduled       A flow whose roster status is `scheduled` must be
 //     reachable from at least one declared lane. This is the rule
-//     `sharing-invite.mjs` fails today.
+//     `sharing-reach.mjs` fails today.
 //
 //   RULE exploratory     A flow whose roster status is `exploratory` must be
 //     reachable from NO lane. Exploratory means "a human drives this by hand";

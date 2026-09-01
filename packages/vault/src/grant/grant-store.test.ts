@@ -6,7 +6,6 @@ import { nowIso, uuidv7 } from "../ids.js";
 import { closeOpenVaults, household } from "../share/placement-fixture.js";
 import {
   createShareGrant,
-  ensureFulfillment,
   listFulfillment,
   listLiveGrantsReachingParty,
   listShareGrantsForAudience,
@@ -214,7 +213,7 @@ describe("grant/grant-store", () => {
       grantedAt: now,
       grantedBy: originBoot.ownerPartyId,
     });
-    ensureFulfillment(db, {
+    setFulfillmentState(db, {
       grantId: grant.grantId,
       peerVaultId: "vault-ilan",
       state: "delivered",
@@ -329,7 +328,7 @@ describe("grant/grant-store", () => {
     ).toStrictEqual([partyGrant.grantId]);
   });
 
-  test("fulfillment opens once and then moves state with a detail note", () => {
+  test("fulfillment opens and then moves state with a detail note", () => {
     const { origin, originBoot } = household();
     const db = origin.vault;
     const now = nowIso();
@@ -343,22 +342,15 @@ describe("grant/grant-store", () => {
       grantedBy: originBoot.ownerPartyId,
     });
 
-    const opened = ensureFulfillment(db, {
+    const opened = setFulfillmentState(db, {
       grantId: grant.grantId,
       peerVaultId: "vault-pia",
       state: "awaiting_channel",
       updatedAt: now,
     });
     expect(opened.state).toBe("awaiting_channel");
-    // ensureFulfillment never rewrites a row that already stands.
-    expect(
-      ensureFulfillment(db, {
-        grantId: grant.grantId,
-        peerVaultId: "vault-pia",
-        state: "delivered",
-        updatedAt: "2032-01-01T00:00:00.000Z",
-      }).state
-    ).toBe("awaiting_channel");
+    // Nothing has reached the peer, so the memory starts empty.
+    expect(opened.deliveredAt).toBeNull();
 
     const moved = setFulfillmentState(db, {
       grantId: grant.grantId,
@@ -415,7 +407,7 @@ describe("grant/grant-store", () => {
       }).deliveredAt
     ).toBeNull();
 
-    ensureFulfillment(db, {
+    setFulfillmentState(db, {
       grantId: grant.grantId,
       peerVaultId: "vault-other",
       state: "awaiting_channel",

@@ -23,6 +23,7 @@ import {
   grantedOutcome,
   groupContributionNote,
   nothingSharedYet,
+  notSharedWithAnyoneYet,
   reachLabel,
   reachNote,
   REGISTRY_UNREACHABLE,
@@ -46,6 +47,7 @@ import {
   grantOverSubject,
   grantRequestFor,
   liveGrants,
+  reachBlocksSharing,
   subjectNoun,
 } from "@centraid/blueprints/apps/_shared/grant-plane";
 import type {
@@ -239,12 +241,11 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     : null;
   const rows = standing ? liveGrants(standing) : [];
   // Unknown audience gets its own sentence; "nothing shared" is a lie.
+  // Subject-first lists this subject's grants; audience-first, the audience's.
   const standingEmptyLine = audienceKnown
-    ? nothingSharedYet(
-        props.subject
-          ? subjectTitle(props.subject)
-          : (audience?.label ?? "this audience")
-      )
+    ? props.subject
+      ? notSharedWithAnyoneYet(subjectTitle(props.subject))
+      : nothingSharedYet(audience?.label ?? "this audience")
     : audienceNotKnown(audience?.label ?? "this audience");
   const showStanding = audienceKnown && rows.length > 0;
   const reach = channelReach(channel);
@@ -259,6 +260,10 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     registryPending ||
     registryUnreadable ||
     notOfferable ||
+    // A person is reachable only through a live link (#903), and the command
+    // pack refuses the rest — so the sheet does not grow a control naming an
+    // act it cannot perform. The reach line above already says why.
+    reachBlocksSharing(reach) ||
     busy;
 
   const submit = async (): Promise<void> => {
@@ -434,7 +439,7 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
                       style={[
                         styles.reachState,
                         {
-                          // Unaccepted invitation is `--seam`, not error. Unread is quieter.
+                          // Not linked yet is `--seam`, not error. Unread is quieter.
                           color:
                             reach === "severed"
                               ? colors.net

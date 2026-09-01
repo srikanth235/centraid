@@ -20,7 +20,7 @@ set -euo pipefail
 #
 # #890 W0 wrapped the six formerly bare `node …` lines in run-probes-suite.mjs so
 # the standalone journeys carry an aggregate budget like the two seated suites do
-# (Grid G showed them unbudgeted), and scheduled sharing-invite.mjs, which
+# (Grid G showed them unbudgeted), and scheduled sharing-reach.mjs, which
 # tests/matrix.json named three times as an evidence owner while nothing ran it.
 export CENTRAID_MOBILE_LANE="${CENTRAID_MOBILE_LANE:-nightly-android}"
 set +e
@@ -28,7 +28,7 @@ ec=0
 node tests/agent-e2e-mobile/run-probes-suite.mjs || ec=$?
 node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
 node tests/agent-e2e-mobile/run-home-apps-suite.mjs || ec=$?
-node tests/agent-e2e-mobile/flows/sharing-invite.mjs || ec=$?
+node tests/agent-e2e-mobile/flows/sharing-reach.mjs || ec=$?
 # The D3 promotion pipeline. Runs LAST and only here: both non-blocking Android
 # lanes carry it, the PR gate never does, and that asymmetry is the rule
 # `scripts/lint-e2e-wiring.mjs` enforces for every `promoting` flow.

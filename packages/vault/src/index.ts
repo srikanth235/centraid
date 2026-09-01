@@ -259,7 +259,6 @@ export {
   listShareGrantsForSubject,
   listLiveGrantsReachingParty,
   resolveAudienceParties,
-  ensureFulfillment,
   setFulfillmentState,
   readFulfillment,
   listFulfillment,
@@ -336,12 +335,6 @@ export {
   SHARE_GRANT_CO_CONTRIBUTION_TYPES,
   type ShareGrantEditRoute,
 } from "./grant/fulfillment-edit.js";
-export {
-  mintGrantInvitation,
-  withdrawGrantInvitations,
-  type GrantInvitation,
-  type MintGrantInvitationInput,
-} from "./grant/fulfillment-invite.js";
 // The LOCAL orphan reclaim (#599 d11): each vault unlinks only its own CAS
 // directory entries, so hardlinked bytes survive until the last vault lets go.
 export {
@@ -582,7 +575,12 @@ export {
 export { REPLICA_SCHEMA_EPOCH } from "./schema/replica.js";
 // The engine-computed cascade every purge runs, exported so the
 // declared-writes gate unions it rather than have a manifest restate it.
-export { POLY_REF_REGISTRY, type PolyRefEntry } from "./schema/poly-refs.js";
+export {
+  PARTY_POINTER_REGISTRY,
+  POLY_REF_REGISTRY,
+  type PartyPointer,
+  type PolyRefEntry,
+} from "./schema/poly-refs.js";
 export {
   DEFAULT_REPLICA_MAX_VALUE_BYTES,
   readReplicaRow,

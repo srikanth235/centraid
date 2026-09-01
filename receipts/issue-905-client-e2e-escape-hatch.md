@@ -117,9 +117,17 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 
 - [x] Scroll the springboard to a tile before tapping it, since only five of the eight fit a phone screen
 
+### T — two branches were fixing the same phone, and neither could see the other's half
+
+- [x] Merge #911 into this branch and close that PR
+- [x] Reconcile the two branches' independent answers where they collided
+
 ## What changed
 
 Where each checked item lands, then the reasoning behind it:
+
+- Merge #911 into this branch and close that PR — "One phone, two branches"; the merge commit itself, whose second parent is `724c0785`. #911's own 225-file diff is described by its own receipt, `receipts/issue-903-mobile-docs-v17-vault-lockup.md`, which comes across with it; nothing in that half is re-narrated here.
+- Reconcile the two branches' independent answers where they collided — same section; `packages/design/src/icons.ts`, `apps/mobile/src/apps/tasks/TasksHome.test.tsx`, `apps/mobile/src/kit/replica/replica-mount.ts`, `apps/mobile/src/kit/replica/ReplicaProvider.tsx`, `apps/mobile/src/kit/share/ShareSheet.test.tsx`, `apps/mobile/scripts/android-emulator-roster.sh`, `apps/mobile/native-fingerprints.json`, `package.json`, `docs/traps/README.md`, `tests/matrix.json`, `tests/quality/classification-ratchet.json`, `tests/comment-density-ratchet.json`, `tests/hygiene-budgets.json`, `tests/agent-e2e-mobile/flows/claim-pins.json`, `tests/agent-e2e-mobile/flows/sharing-reach.md`.
 
 - Scroll the springboard to a tile before tapping it, since only five of the eight fit a phone screen — "The three tiles under the fold"; `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
 
@@ -648,6 +656,20 @@ The row is not lost. `native-v0-resilience`, running after, drew Home with `"Ope
 
 So the defect is in the library's own read. `NotesHome.tsx` imports the pending overlay only to draw a `pendingChangeLabel` badge on a row it already has; nothing injects an unreplicated row into the list. That leaves the list dependent on `useReplicaQuery("notes", { entity: "knowledge.note" })` re-running, and the editor is pushed OVER the library rather than replacing it, so the list may never re-query on the pop back. That is the hypothesis to test first — it is not confirmed here, and no change was made for it.
 
+### T — one phone, two branches
+
+#911 and this branch were fixing the same device at the same time from opposite ends — that one redesigning Docs and hardening the replica transport under #903, this one chasing the device gate under #905 — and neither lane could see the other's half, so each was measuring a phone the other had already partly fixed. Folding #911 in here means one PR, one gate run, and one phone under test; #911 is closed onto this branch rather than merged separately.
+
+The merge conflicted in six files, and the resolutions are the record of where the two branches had independently answered the same question:
+
+- **Two `Inbox` glyphs.** Both branches added one to `packages/design/src/icons.ts` — the Tasks band has named `"Inbox"` since it was written, and both lanes found the same missing key. #911's is the fuller Lucide form and is the one kept; mine is deleted. Removing it lowered the file's non-comment character count, which mechanically *raised* its comment share past its pin, so a comment in that file was cut to match. That is the density ratchet behaving correctly: it measures a share, and deleting code is one of the two ways a share can rise.
+- **Two answers about Hermes, and they disagree.** #911's `apps/mobile/polyfills/array-to-sorted.js` states that Static Hermes 250829098.0.16 ships `toReversed`, `toSpliced`, `with` and `findLast` but not `toSorted`, and polyfills that one method through Metro. This branch's `lint:hermes-surface` bans all five across everything the mobile bundle reaches. Both survive the merge unchanged, and the stricter one still passes over the merged tree — 805 modules reachable, no violation — so nothing had to be reconciled to go green. The disagreement is left standing rather than resolved by argument: the ban is the cheaper thing to be wrong about, and a polyfill plus a ban is not a contradiction.
+- **Two log lines on the same replica fetch.** `replica-mount.ts` and `ReplicaProvider.tsx` each had #911 adding behaviour (a reply deadline; a `connected` computation) exactly where this branch had added a `console.error` saying why the phone went quiet. Both are kept in each: theirs is functional, mine is diagnostic, and taking either side alone would have dropped the other's fix.
+- **One gate list, and a correction.** `package.json`'s `check:push` was rebuilt as the union of both parents. An earlier pass at this resolution took #911's side wholesale on the belief that #911 had deleted `lint:app-conformance` and `lint:e2e-claims`; it had not. Neither gate exists at the merge base `f5ca34fb` or on `docs-mobile-design` — both were added by earlier #905 work on this branch, and taking "theirs" was silently deleting two of my own gates. #911 deletes no gate; it adds `lint:list-anchoring`. The merged list is 60 gates and was checked against both parents for losses.
+- **One flow, renamed.** #911 renamed `sharing-invite` to `sharing-reach` and missed two references: the Android roster script still named the old file, and `tests/matrix.json` had no continuity marker, so the minimum-tests check read the rename as a retirement. Both are repaired here rather than by loosening either check — `replacesMinimumTestsFlow` is the field that exists for exactly this, and `claim-pins.json` shrinks from 17 to 16, which the down-only rule permits.
+
+Three ratchets moved as a consequence and none was hand-raised: `toHaveBeenCalled` tightened 783 → 778, `toBeTruthy` held at 378 after two of #911's and my own assertions were sharpened to `toBeInstanceOf` and a counted `toHaveLength`, and the ten comment-density pins that a bad `--theirs` resolution had inflated were reset to their measured values.
+
 ## User impact
 
 **H, P's bootstrap retry, and R's Tasks route are what a member can see** — Tasks could not be opened at all on the phone, and the two `packages/client` sites would have thrown the same way in the access lens and in receipt capture. Everything else is CI wiring, lint rules and receipts.
@@ -676,8 +698,12 @@ That frame is the canary's own `paired-home` screenshot, and the canary is the o
 10. **The sweep extends `Home.test.tsx` rather than opening a `conformance.test.tsx`.** A new file would have re-declared roughly 150 lines of `vi.mock` seam to make one more class of assertion, and the sweep is the same claim H already pins, generalized from "every app reaches the grid" to "every app's tile reaches its own cover". Its comments were then cut back three times to stay under the 15% density cap without an allowlist entry; the rationale they carried was moved to `scripts/lint-app-conformance.mjs`, where it belongs and where the gate does not measure it.
 11. **`cold-start` stays on the PR gate, and Part 2 item 4 stays unstarted.** The plan argues on the merits that a `LAUNCHES = 8` perf-distribution probe with no absolute ceiling does not belong on a merge gate, and this branch is the one that watched it pass on `aeee58f4` and fail on `7288cd20` with no diff between them touching it. It is still not removed here. Removing it from a branch whose only red lane is the one it sits in would be weakening a gate to go green whatever the merits say, and the merits will still be there when the gate is reshaped as a whole.
 
+12. **#911 is merged into this branch and closed, rather than merged to `main` on its own.** Both branches change the same phone, and both were red on the same lane; landing them separately means one of them merges onto a `main` that then invalidates the other's device evidence, and the second lane gets debugged twice. Merging costs one large conflict resolution, recorded above; not merging costs a second full device-gate cycle on a lane that takes an hour. #903's receipt travels with the merge, so neither issue loses its record.
+13. **The Hermes disagreement between the two branches is left standing, not adjudicated.** See T. This branch's ban is broader than #911's polyfill header says it needs to be. Narrowing it to match would be deciding an empirical question about a device from a comment on the other side of a merge, and it would relax a gate to no benefit — nothing in the merged tree is blocked by the extra four names.
+
 ## Out of scope
 
+- **Which of the two Hermes claims is actually right.** #911 says the engine ships four of the five change-array-by-copy methods; this branch's gate assumes none of them. Settling it needs a probe on the device, which is a flow, not a lint. Neither claim blocks anything today (T), so it is recorded rather than chased.
 - **`:app:packageRelease`'s actual failure.** NOT fixed here, and not diagnosed. Gradle reported only `A failure occurred while executing PackageAndroidArtifact$IncrementalSplitterRunnable` with no cause, on a build with no `--stacktrace`. The canary built and packaged the same tree successfully at 08:37, so packaging is not systematically broken and a guess would be a guess. The `--stacktrace` added under C is what makes the next occurrence diagnosable; that is the honest extent of it. Whoever picks it up should start from the daemon's 2 GiB max heap and a fully cold 1414-task build on a shared runner.
 
   **It did not recur, and the reason narrows the search.** The branch dispatch (run 33374941598, 08:52) restored the apk cache on key `android-release-Linux-jdk6ea3257c17f4-fp…-js0601c949dd337c83` — 147 MB, a hit — so the installer took its warm path (`Android cache hit … skipping gradle`) and no gradle ran at all. Two things follow. The 34m55s failure was reached only through the cold path, which supports the cold-cache-window bullet below as its precondition rather than a coincidence; and it is not deterministic on this tree, so the `--stacktrace` may have to wait for the next cold miss to pay out. Neither observation is a diagnosis, and the bullet stands.

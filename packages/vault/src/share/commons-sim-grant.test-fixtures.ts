@@ -63,7 +63,7 @@ export type GrantActionName = keyof typeof GRANT_ACTION_WEIGHTS;
 
 /**
  * Every legal edge, keyed by the state observed BEFORE an action; `none` is
- * "no row yet". `ensureFulfillment` never falls an existing row back to
+ * "no row yet". Propagation never falls an existing row back to
  * `awaiting_channel`; one action can cross `syncing` to `delivered`;
  * propagation alone writes `remove_sent`/`removed`, which are terminal.
  */
