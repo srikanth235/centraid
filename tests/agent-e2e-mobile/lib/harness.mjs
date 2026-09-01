@@ -847,6 +847,14 @@ export async function runFlow(slug, fn) {
     // carrying the placeholder label is asked for a profile. The gateway URL
     // is used only by the host-side harness to mint that ticket; the phone
     // reaches the gateway through the ticket's iroh endpoint.
+    //
+    // SPLIT AT THE CAPABILITY (#905 P). Everything up to the ticket field is
+    // ordinary onboarding: a cold launch and two taps, with nothing on screen
+    // and nothing in the environment that is worth protecting. It used to ride
+    // in the sensitive chunk anyway, which cost twice over — the ticket was
+    // handed to steps that never use it, and the chunk that fails most often on
+    // this lane was the one chunk that may not say what it saw. The failing
+    // assertion below is the FIRST in the journey, long before redemption.
     await ctx.run(
       `appId: ${state.appId}
 ---
@@ -860,6 +868,16 @@ ${DEV_LAUNCHER_HANDOFF}- extendedWaitUntil:
 - extendedWaitUntil:
     visible: "Paste the one-line ticket"
     timeout: 10000
+`,
+      "open-onboarding"
+    );
+
+    // From here the capability is real: the ticket is in the environment and,
+    // once typed, on the screen. Kept named `configure-gateway` so the
+    // workflow's pre-upload scrub keeps matching it.
+    await ctx.run(
+      `appId: ${state.appId}
+---
 - tapOn: "Paste the one-line ticket"
 # e2e-lint-allow: unasserted-input — throwaway input only provokes iOS keyboard
 # onboarding and is erased before the pairing ticket is entered.

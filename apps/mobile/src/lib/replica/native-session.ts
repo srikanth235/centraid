@@ -199,6 +199,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   readonly #appState: AppStateLike | undefined;
   readonly #isConnected: () => boolean;
   readonly #retryBackoff: BackoffSchedule;
+  readonly #bootstrapBackoff: BackoffSchedule;
   readonly #isNetworkWorkAllowed: () => Promise<boolean>;
   readonly #isRowSyncAllowed: () => Promise<boolean>;
   readonly #bootstrapWindow: number | undefined;
@@ -220,6 +221,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   #drainPromise: Promise<void> | undefined;
   #drainRequested = false;
   #retryTimer: ReturnType<typeof setTimeout> | undefined;
+  #bootstrapRetryTimer: ReturnType<typeof setTimeout> | undefined;
   #appStateSub: { remove: () => void } | undefined;
   #closed = false;
 
@@ -255,6 +257,11 @@ export class NativeReplicaSession implements MobileReplicaSession {
       options.isRowSyncAllowed ?? this.#isNetworkWorkAllowed;
     const baseMs = options.retryDelayMs ?? 2_000;
     this.#retryBackoff = backoffSchedule({
+      baseMs,
+      maxMs: Math.max(baseMs, MAX_INTENT_RETRY_DELAY_MS),
+      jitter: 0.2,
+    });
+    this.#bootstrapBackoff = backoffSchedule({
       baseMs,
       maxMs: Math.max(baseMs, MAX_INTENT_RETRY_DELAY_MS),
       jitter: 0.2,
@@ -728,7 +735,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     if (this.#hasCursor) {
       void this.pullNow().catch(() => undefined);
     } else {
-      void this.bootstrapWhenReachable();
+      void this.bootstrapWhenReachable().catch(() => undefined);
     }
     void this.flushIntents();
   }
@@ -803,7 +810,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
     if (detail !== undefined)
       noteResyncVerdict(detail, this.#gatewayAuth.vaultId);
     this.#hasCursor = false;
-    if (!this.#closed) void this.bootstrapWhenReachable();
+    if (!this.#closed)
+      void this.bootstrapWhenReachable().catch(() => undefined);
   }
 
   async close(): Promise<void> {
@@ -811,6 +819,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#closed = true;
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
     this.#retryTimer = undefined;
+    if (this.#bootstrapRetryTimer) clearTimeout(this.#bootstrapRetryTimer);
+    this.#bootstrapRetryTimer = undefined;
     this.#appStateSub?.remove();
     this.#appStateSub = undefined;
     this.#feed.setActive(false);
@@ -826,6 +836,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#closed = true;
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
     this.#retryTimer = undefined;
+    if (this.#bootstrapRetryTimer) clearTimeout(this.#bootstrapRetryTimer);
+    this.#bootstrapRetryTimer = undefined;
     this.#appStateSub?.remove();
     this.#appStateSub = undefined;
     this.#feed.setActive(false);
@@ -843,7 +855,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       if (this.#hasCursor) {
         void this.pullNow().catch(() => undefined);
       } else {
-        void this.bootstrapWhenReachable();
+        void this.bootstrapWhenReachable().catch(() => undefined);
       }
       void this.flushIntents();
     } else if (state === "background") {
@@ -855,10 +867,29 @@ export class NativeReplicaSession implements MobileReplicaSession {
     if (this.#bootstrapPromise || this.#closed || !this.#isConnected())
       return this.#bootstrapPromise;
     if (!(await this.#isRowSyncAllowed())) return;
-    this.#bootstrapPromise = this.bootstrap().finally(() => {
-      this.#bootstrapPromise = undefined;
-    });
+    this.#bootstrapPromise = this.bootstrap()
+      .then(() => {
+        this.#bootstrapBackoff.reset();
+      })
+      .catch((error: unknown) => {
+        this.scheduleBootstrapRetry();
+        throw error;
+      })
+      .finally(() => {
+        this.#bootstrapPromise = undefined;
+      });
     return this.#bootstrapPromise;
+  }
+
+  /** THE ONLY THING THAT ASKS AGAIN (#905): every other trigger fires once per
+   *  event, so one refusal left an empty library over a full vault. Its own
+   *  slot, never the outbox's — a parked drain must not swallow a rebootstrap. */
+  private scheduleBootstrapRetry(): void {
+    if (this.#bootstrapRetryTimer || this.#closed) return;
+    this.#bootstrapRetryTimer = setTimeout(() => {
+      this.#bootstrapRetryTimer = undefined;
+      void this.bootstrapWhenReachable().catch(() => undefined);
+    }, this.#bootstrapBackoff.next());
   }
 
   /**
@@ -1015,6 +1046,11 @@ export class NativeReplicaSession implements MobileReplicaSession {
   /** Something changed, so do not keep waiting out an outage-length delay. */
   private resetRetry(): void {
     this.#retryBackoff.reset();
+    this.#bootstrapBackoff.reset();
+    if (this.#bootstrapRetryTimer) {
+      clearTimeout(this.#bootstrapRetryTimer);
+      this.#bootstrapRetryTimer = undefined;
+    }
     if (!this.#retryTimer) return;
     clearTimeout(this.#retryTimer);
     this.#retryTimer = undefined;

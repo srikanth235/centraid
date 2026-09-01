@@ -122,22 +122,41 @@ await gateway.start(`http://127.0.0.1:${port}`);
  */
 const TRACED = /^\/centraid\/_vault\/(?<surface>replica|changes|scopes|demo)/u;
 
-function trace(request, response, startedAt) {
-  const target = (request.url ?? "/").split("?")[0];
-  if (!TRACED.test(target)) return;
-  // The SIZE is the row count's shadow, and it is the whole question: a 200 on
-  // a bootstrap page proves the phone asked and the gateway answered, never
-  // that the answer carried anything. An empty page and a full one differ by
-  // orders of magnitude here.
-  const bytes = response.getHeader("content-length") ?? "?";
-  logger.info(
-    `${request.method} ${target} -> ${response.statusCode} ${bytes}B in ${Date.now() - startedAt}ms`
-  );
+/*
+ * The SIZE is the row count's shadow, and it is the whole question: a 200 on a
+ * bootstrap page proves the phone asked and the gateway answered, never that
+ * the answer carried anything. An empty page and a full one differ by orders of
+ * magnitude here.
+ *
+ * Counted rather than read off `content-length`, which the first run of this
+ * trace showed is absent on every one of these responses — the header is set
+ * for some routes and not others, and a diagnostic that prints `?B` for the one
+ * question it exists to answer is no diagnostic. `write`/`end` are wrapped
+ * because they are the only place the byte count is certain.
+ */
+function countBytes(response) {
+  const counter = { total: 0 };
+  for (const method of ["write", "end"]) {
+    const original = response[method].bind(response);
+    response[method] = (chunk, ...rest) => {
+      if (chunk) counter.total += Buffer.byteLength(chunk);
+      return original(chunk, ...rest);
+    };
+  }
+  return counter;
 }
 
 const server = http.createServer((request, response) => {
   const startedAt = Date.now();
-  response.on("finish", () => trace(request, response, startedAt));
+  const target = (request.url ?? "/").split("?")[0];
+  if (TRACED.test(target)) {
+    const counter = countBytes(response);
+    response.on("finish", () =>
+      logger.info(
+        `${request.method} ${target} -> ${response.statusCode} ${counter.total}B in ${Date.now() - startedAt}ms`
+      )
+    );
+  }
   void gateway
     .composedHandler(request, response)
     .then((handled) => {

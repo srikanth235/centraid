@@ -84,6 +84,10 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Trace what the gateway actually served the phone, since the device's replica path logs nothing
 - [x] Print the app's own logcat on a failing flow, beside the screen digest
 - [x] Keep both diagnostics off the JS bundle fingerprint, so asking the question costs no rebuild
+- [x] Split the pairing chunk at the capability, so the assertion that fails most may say what it saw
+- [x] Count the bytes a traced response actually wrote, rather than trusting a header that is not set
+- [x] Retry a bootstrap that was refused, because nothing else ever asks again
+- [x] Reproduce the empty library locally, on a session that mounts believing it is offline
 
 ## What changed
 
@@ -92,6 +96,10 @@ Where each checked item lands, then the reasoning behind it:
 - Trace what the gateway actually served the phone, since the device's replica path logs nothing — "P — the phone drew an empty library over a vault holding rows"; `tests/agent-e2e-mobile/lib/ci-gateway.mjs`, `.github/workflows/ci.yml`.
 - Print the app's own logcat on a failing flow, beside the screen digest — same section; `tests/agent-e2e-mobile/lib/harness.mjs`.
 - Keep both diagnostics off the JS bundle fingerprint, so asking the question costs no rebuild — same section, final paragraph; no file changed.
+- Split the pairing chunk at the capability, so the assertion that fails most may say what it saw — "P — the phone drew an empty library over a vault holding rows", final section; `tests/agent-e2e-mobile/lib/harness.mjs`.
+- Count the bytes a traced response actually wrote, rather than trusting a header that is not set — same section; `tests/agent-e2e-mobile/lib/ci-gateway.mjs`.
+- Retry a bootstrap that was refused, because nothing else ever asks again — "P — the phone drew an empty library over a vault holding rows", "The attempt that was never made twice"; `apps/mobile/src/lib/replica/native-session.ts`.
+- Reproduce the empty library locally, on a session that mounts believing it is offline — same section; `tests/integration-mobile/bootstrap-recovery.integration.test.ts`, `tests/integration-mobile/lib/seat.ts`.
 - Withhold `empty` from a tile whose reads have never had a landed pull behind them — "N — Home claimed the vault was empty"; `apps/mobile/src/screens/home/tile-model.ts`, `apps/mobile/src/screens/home/useSpringboardTiles.ts`, `apps/mobile/src/screens/home/tile-model.test.ts`, `apps/mobile/src/screens/Home.test.tsx`.
 - Move the tile-status rule into the pure module that is tested, out of the hook that is not — same section; `apps/mobile/src/screens/home/tile-model.ts`, `apps/mobile/src/screens/home/useSpringboardTiles.ts`, `apps/mobile/src/screens/home/tile-model.test.ts`.
 - Record the emulator's active network transport in device preparation, since the replica's sync policy is evaluated against it — next in the log to the failure it would explain — "N — Home claimed the vault was empty", final paragraph; `apps/mobile/scripts/android-emulator-install.sh`.
@@ -420,9 +428,46 @@ Both are host-side, and that is deliberate. `apps/mobile/scripts/js-bundle-finge
 
 **What this section does not claim.** Nothing here fixes anything. The gate is red, three of the critical five fail, and `photos-permissions` is a fourth thing again: its panel reads `Photos has not asked for your camera roll yet` while the flow asserts `Photos cannot reach your camera roll`, because the `Don.t allow` runFlow was SKIPPED — the permission dialog never appeared, so the device is in the never-asked state, not the denied one the flow is written against.
 
+#### The first run of the trace, and a hypothesis it killed
+
+Run 33485209085 answered a different question than the one it was built for, and the answer was worth more.
+
+`mobile-device-gate` failed at `pairing-canary` / `01-configure-gateway` — `Assert that "Connect your gateway." is visible`, the FIRST assertion in the journey — on a run that hit the apk cache and ran **no gradle build at all**: `Android cache hit - installing … (js eb31c65863509593, skipping gradle)`. Emulator booted 08:08:37, app installed 08:09:11, warm-up done 08:09:52, first flow 08:10:18, failed 08:11:27. The four journeys after it did not run; aggregate 69s.
+
+**This kills the cold-build starvation hypothesis outright**, and it is recorded here because this receipt carried it as live reasoning across two sections. The four data points on this branch are:
+
+| head | apk cache | gradle build | `pairing-canary` |
+| --- | --- | --- | --- |
+| `3ed6c76c` | hit | none | PASS |
+| `7feb4bd7` | miss | ~17 min | FAIL at 45s |
+| `87473b00` | miss | ~16 min | PASS at 180s |
+| `294ffc59` | hit | none | FAIL at 69s |
+
+Two passes and two failures, one of each on both paths: the build is uncorrelated. If anything the sign is inverted from the guess — the run with the longest build passed, having left the emulator idle for sixteen minutes before its first cold launch. The honest reading is that the first cold launch after `clearState: true` is **nondeterministic on this emulator**, and the same binary (`js eb31c65863509593` on both the last two runs) both passes and fails it.
+
+**What the trace itself proved.** It works, and it is already load-bearing: the log carried every lane-side seed (`POST /centraid/_vault/demo/notes -> 200`), which is how the ordering above is confirmed rather than assumed. It also showed a flaw in its own first draft — `content-length` is not set on these responses, so every line read `?B`, the one field the trace exists for. Now counted at `write`/`end`. And it recorded no `/centraid/_vault/replica/bootstrap` line, which here means only that the phone never got past onboarding — not that it would not have asked.
+
+**The split, and why it is a tightening rather than a loosening.** `01-configure-gateway` bundled two unlike things: a cold launch and two taps on an empty onboarding screen, then the ticket's entry and redemption. The whole chunk was `sensitive: true`, so the assertion that fails most often on this lane was the one assertion that may not say what it saw — and the pairing ticket was handed, through `maestroEnv`, to steps that never use it. It is now two chunks. `open-onboarding` carries no capability in its environment and none on its screen, and so earns the screen and logcat digests. `configure-gateway` begins at the ticket field, keeps `sensitive: true`, and keeps its name so the workflow's pre-upload scrub goes on matching it. The sensitive window got smaller, not larger; nothing that was protected stops being protected.
+
+#### The attempt that was never made twice
+
+The trace was built to separate two possibilities — a clone that never arrived from a read that cannot see one — and reading the code that fires the clone answered it without needing the run.
+
+A phone can mount believing it is offline. `resolveIdentity` probes the gateway base **once** and carries the answer as a boolean; a cold launch whose first probe misses mounts a session whose `isConnected()` is false while the socket underneath it is fine. `NativeReplicaSession.start()` then skips the bootstrap, which is right — an offline mount fails open on disk rather than hanging.
+
+The defect is what came next. Every trigger that could bootstrap it afterwards fires exactly once per event: a reachability wake, a foreground transition, a rebootstrap demand. None is a schedule, and `scheduleRetry()` — the only retry in the file — arms a timer that flushes **intents**. So the first attempt after the wake was the only one that would ever be made, and when it was refused the rejection went nowhere: `#bootstrapPromise` cleared in a `finally`, no cursor, no status row, no log, and on three of the four call sites an unhandled rejection besides.
+
+That is the whole reported symptom. The library draws its empty state over a vault holding rows; coverage reports `partial`; reachability settles rather than stalling, because a cursorless `pullNow()` returns on `!#hasCursor` before it dials, so `pullScopes` reports neither a block nor a stall. Every one of those is what a genuinely empty vault looks like too, which is why it survived on device and why the device stayed mute.
+
+`bootstrapWhenReachable()` now arms its own retry on refusal, on a backoff **separate from the outbox's** — sharing one slot would let a parked drain swallow the rebootstrap a member is waiting on — and the wakes reset it, since each attempts the work immediately anyway.
+
+**Reproduced before it was fixed, which is the part that had been missing.** `tests/integration-mobile/bootstrap-recovery.integration.test.ts` mounts a real session against a real gateway with its connectivity oracle saying offline, writes a row it has never seen, wakes it onto a transport that is still refusing — a real socket on a dead loopback port, not a flag — and then restores the transport and touches nothing further. Without the fix it fails in fifteen seconds, raising the swallowed rejection as an unhandled error; with it the row lands. Its negative half hands a second seat the same wake on a live transport, so "the rows arrived" cannot be a retry rescuing a vault that was never reachable. This tier could always have caught it: `openSeat` defaulted `isConnected` to `true` and so never produced a mount that believed otherwise.
+
 ## User impact
 
-**H is the only change on this branch a member can see.** Everything else is CI wiring, lint rules and receipts.
+**H and P's bootstrap retry are what a member can see.** Everything else is CI wiring, lint rules and receipts.
+
+**P's retry is the larger of the two.** A phone that mounted while its gateway was briefly unreachable, and whose first bootstrap after waking was refused, kept an empty library over a full vault for the rest of that launch — silently, since the refusal reached no status row and no log. Nothing the member could do from inside the app recovered it: pull-to-refresh dials nothing without a cursor, and only backgrounding and returning offered another attempt. It now retries on its own backoff, so the same interruption costs a delay rather than the library. Its own visible ceiling is unchanged: a phone that is genuinely offline still fails open on the replica it holds.
 
 Before it, a phone whose replica session was absent drew Home's heading and **a single Locker tile** — the renderer test below pins the exact list as `['locker']`. `springboardState` deliberately returns `content` when every tile is `unknown` — "we do not KNOW the vault is empty, so we do not say so" — and Home's membership filter then demoted every tile for being unreadable, except Locker, whose body is a *state* rather than a query result and so earns the grid unconditionally. The member was not told the vault was empty *and* had no way into any of the other seven apps: the launcher is the only door on a shell with no tab bar. Now, when nothing is readable, every app keeps its tile.
 
