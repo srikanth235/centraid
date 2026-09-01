@@ -42,7 +42,10 @@ import {
 } from "../../lib/replica/placement-transport";
 import { isReplicaStorageFullError } from "../../lib/replica/replica-storage-error";
 import { clearPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
-import { nativeSyncAllowed } from "../../lib/upload/native-policy";
+import {
+  nativeRowSyncAllowed,
+  nativeSyncAllowed,
+} from "../../lib/upload/native-policy";
 import {
   LAST_BASE,
   LAST_GATEWAY,
@@ -348,6 +351,7 @@ export function ReplicaProvider({
               appState: AppState,
               isConnected: () => connected,
               isNetworkWorkAllowed: nativeSyncAllowed,
+              isRowSyncAllowed: nativeRowSyncAllowed,
               bootstrapWindow: MOBILE_REPLICA_BOOTSTRAP_WINDOW,
               progressiveBootstrap: true,
               // A vault the member does not steward is one a queued write may
@@ -394,6 +398,7 @@ export function ReplicaProvider({
           createId: nativeReplicaIdFactory,
           isConnected: () => connected,
           isNetworkWorkAllowed: nativeSyncAllowed,
+          isRowSyncAllowed: nativeRowSyncAllowed,
           onScopePulled: updateScopeFreshness,
           onScopeRevoked: revoked.note,
           reclaimRevokedReplica,

@@ -252,6 +252,7 @@ vi.mock(
   () =>
     ({
       nativeSyncAllowed: () => Promise.resolve(true),
+      nativeRowSyncAllowed: () => Promise.resolve(true),
     }) as unknown as Partial<UploadPolicyModule>
 );
 

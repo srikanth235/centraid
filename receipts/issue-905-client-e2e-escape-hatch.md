@@ -73,6 +73,12 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Move the tile-status rule into the pure module that is tested, out of the hook that is not
 - [x] Record the emulator's active network transport in device preparation, since the replica's sync policy is evaluated against it
 
+### O — a phone that was not on Wi-Fi never pulled a row, and said nothing
+
+- [x] Stop gating replica row pulls on the byte-transfer policy
+- [x] Keep blobs, the write drain and the background pass on the whole transfer table
+- [x] Record the ruling and correct the docs that stated the old coupling as current
+
 ## What changed
 
 Where each checked item lands, then the reasoning behind it:
@@ -111,6 +117,10 @@ Where each checked item lands, then the reasoning behind it:
 - Warm the freshly installed apk in device preparation, now that caching removed the pause the build used to provide — `apps/mobile/scripts/android-emulator-install.sh`, an AOT compile plus one throwaway launch after the ANR-dialog suppression. See "K — the device gate spent 60% of its wall clock building", final paragraph.
 - Wait for the launcher, not the band's label, wherever a flow's next act is opening an app from Home — `tests/agent-e2e-mobile/lib/harness.mjs` gains `AWAIT_LAUNCHER`, used by `tests/agent-e2e-mobile/flows/notes-library.mjs` and `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`. See "M — 'Home is ready' could not tell a Home that has the vault from one that does not", below.
 - Measure cold start to the launcher, closing the false green this receipt recorded rather than left standing — `tests/agent-e2e-mobile/flows/cold-start.mjs` and `tests/agent-e2e-mobile/flows/cold-start.md`, whose "honest limit" section is replaced by what the flow now measures. `scripts/test-report/matrix-grades.mjs` and `scripts/test-report/matrix-grades.test.mjs` come with it: `countDeclaredTests` is a text scanner over flow files, so factoring `cold-start`'s only assertion into a harness constant made it read `0 tests, minimum 1` — an assertion that still runs, counted as gone. It now counts the interpolation `${AWAIT_LAUNCHER}` (not the bare identifier, which the import line also carries), and the comment states the bar for adding another name: the constant must assert. `retryableTapCommands`, `CONFIRM_SYSTEM_OPEN` and `DENY_MEDIA_PERMISSION` are deliberately absent — they expand to taps, and a tap proves nothing. Proven to bite: with the rule disabled the matrix reds by name, on `mobile-cold-start` and on `mobile.performance`.
+
+- Stop gating replica row pulls on the byte-transfer policy — `apps/mobile/src/lib/upload/native-policy.ts` gains `nativeRowSyncAllowed`, wired through `apps/mobile/src/kit/replica/ReplicaProvider.tsx` as a new `isRowSyncAllowed` option on `apps/mobile/src/lib/replica/native-session.ts` and `apps/mobile/src/lib/replica/multi-vault-session.ts`, where it replaces `isNetworkWorkAllowed` at the three read gates (first-open bootstrap, `bootstrapWhenReachable`, `pullNow`) and at `pullScopes`. Covered by `apps/mobile/src/lib/upload/native-policy.test.ts` and `apps/mobile/src/lib/replica/multi-vault-session.test.ts`; `apps/mobile/src/kit/replica/ReplicaProvider.test.tsx` mocks the new export alongside the old one, since the provider now imports both. See "O — a phone that was not on Wi-Fi never pulled a row, and said nothing", below.
+- Keep blobs, the write drain and the background pass on the whole transfer table — `flushIntents` and `flushPlacements` still ask `isNetworkWorkAllowed`, `apps/mobile/src/lib/replica/thumbnail-pack.ts` still asks `nativeSyncAllowed`, and `apps/mobile/src/lib/replica/background-sync.ts` keeps its pass-level gate with a comment naming the asymmetry as deliberate. The new option defaults to `isNetworkWorkAllowed`, so a caller that does not pass it keeps today's behaviour.
+- Record the ruling and correct the docs that stated the old coupling as current — `docs/decisions.md` gains **M-rowsync** under "Mobile offline, scale and sharing (#880)", and `docs/mobile-offline.md`'s freshness paragraph no longer states a pull the metered/battery rules refuse as the ordinary case, because it is now only the `never` floor.
 
 ### M — "Home is ready" could not tell a Home that has the vault from one that does not
 
@@ -361,6 +371,27 @@ The second is that E's fix is necessary and not sufficient. `seed-demo-corpus.mj
 ### Docs
 
 `docs/decisions.md` gains **G-filter-escape-hatch** beside the existing G-filter-inverse. `TESTING.md`'s path-filter row records both the narrowed `client-e2e` gate and the new fallback requirement.
+
+### O — a phone that was not on Wi-Fi never pulled a row, and said nothing
+
+Section N stopped Home *claiming* an unsynced vault was empty. It did not answer why the vault never arrived. The device preparation added in N answered it on the first run that carried it — `mobile-device-gate` printed, next in the log to the failure it explains:
+
+```
+ni{MOBILE[HSPA] CONNECTED extra: epc.tmobile.com}
+nc{[ Transports: CELLULAR Capabilities: ... NOT_ROAMING ... ]}
+```
+
+The emulator's only network is a simulated cellular radio. `nativeSyncAllowed` is literally `nativeUploadPolicy().canTransfer()`, `DEFAULT_TRANSFER_POLICY` is `wifiOnly: true`, and `canTransfer` returns false at `rules.wifiOnly && network.type !== WIFI`. `MultiVaultReplicaSession.pullScopes` therefore returned `{pulled: [], stalled: […], policyBlocked: true}` **before asking a single scope**. The phone paired, drew Home, and pulled nothing — no error, no stamp, nowhere to look.
+
+**This is a product defect, not a lane defect, and the fix is in the product.** The lane could have been made green by relaxing `wifiOnly` in the test image, which would have tested a device no member has. Every member whose phone is not on Wi-Fi — the ordinary case for a phone — got the same silence: no rows, ever, until they reached Wi-Fi. The transfer table exists to keep photo bytes off a data plan; a replica delta is metadata, and [blueprint-seats.md](../docs/blueprint-seats.md) already promises record-only apps "offline reads and queued writes for free", which cannot be true while reads are gated on the byte rules.
+
+The split is between **reads** and **byte work**. Reads — first-open bootstrap, `bootstrapWhenReachable`, `pullNow`, `pullScopes` — now obey only `never`. Blobs, the write drain (`flushIntents`), placements (`flushPlacements`) and the unprompted background pass keep the whole table. `never` still stops reads because it is the floor (#712): a control that read "never" while the phone kept talking is exactly the lying switch that table exists to prevent, and that switch's own label — "Never move bytes off this device" — is the one rule a member could not have meant narrowly.
+
+`isRowSyncAllowed` defaults to `isNetworkWorkAllowed` rather than to `true`, so the behaviour changes at the one wiring site that means it. That is why the three existing `multi-vault-session` tests that pass only `isNetworkWorkAllowed: false` still expect `policyBlocked: true` and still pass: they pin the floor, which has not moved.
+
+Proven to bite. With `nativeRowSyncAllowed` reverted to `canTransfer()`, two of the new unit tests red by name — `pulls rows on a radio the byte rules refuse` and `ignores metered, roaming and charger rules alike`. The device-lane half is **not** yet evidence: the run that produced the transport reading failed earlier, so no flow on this branch has observed a synced vault on device.
+
+**What this section does not claim.** `mobile-device-gate` is not green. Run 33476501179 red-lined at `Assert that "Connect your gateway." is visible` after 45s — the first-launch cost section K already names, recurring because a JS change misses the apk cache and puts a 17-minute gradle build immediately before the flows. That is a third defect, separate from N and from O, and it is not fixed here.
 
 ## User impact
 

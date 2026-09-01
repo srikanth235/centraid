@@ -4,7 +4,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { nativeUploadPolicy } from "./native-policy";
+import { nativeRowSyncAllowed, nativeUploadPolicy } from "./native-policy";
 
 type ExpoBattery = typeof import("expo-battery");
 type ExpoNetwork = typeof import("expo-network");
@@ -67,6 +67,7 @@ interface Rules {
   allowMetered: boolean;
   allowRoaming: boolean;
   chargerOnly: boolean;
+  never?: boolean;
 }
 
 function scenario(opts: {
@@ -191,6 +192,30 @@ describe("native-policy", () => {
           roaming: true,
         })
       ).resolves.toBe(true);
+    });
+  });
+
+  describe(nativeRowSyncAllowed, () => {
+    it("pulls rows on a radio the byte rules refuse (#905 O)", async () => {
+      await expect(
+        scenario({ rules: { wifiOnly: true }, type: "CELLULAR" })
+      ).resolves.toBe(false);
+      await expect(nativeRowSyncAllowed()).resolves.toBe(true);
+    });
+
+    it("still refuses rows under the never floor", async () => {
+      await scenario({ rules: { wifiOnly: false, never: true } });
+      await expect(nativeRowSyncAllowed()).resolves.toBe(false);
+    });
+
+    it("ignores metered, roaming and charger rules alike", async () => {
+      await scenario({
+        rules: { wifiOnly: false, allowMetered: false, chargerOnly: true },
+        type: "CELLULAR",
+        roaming: true,
+        batteryState: 1,
+      });
+      await expect(nativeRowSyncAllowed()).resolves.toBe(true);
     });
   });
 });

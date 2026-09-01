@@ -31,6 +31,7 @@ export interface MultiVaultSessionOptions {
   sendCommons?: (input: CommonsIntent) => Promise<CommonsRecord>;
   isConnected: () => boolean;
   isNetworkWorkAllowed?: () => Promise<boolean>;
+  isRowSyncAllowed?: () => Promise<boolean>;
   onScopePulled?: (vaultId: string) => void;
   /** Fires once per revoked scope, with the label the purge is about to erase. */
   onScopeRevoked?: (scope: MountedReplicaScope) => void;
@@ -93,6 +94,7 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
   readonly #sendCommons: (input: CommonsIntent) => Promise<CommonsRecord>;
   readonly #isConnected: () => boolean;
   readonly #isNetworkWorkAllowed: () => Promise<boolean>;
+  readonly #isRowSyncAllowed: () => Promise<boolean>;
   readonly #onScopePulled: ((vaultId: string) => void) | undefined;
   readonly #onScopeRevoked: ((scope: MountedReplicaScope) => void) | undefined;
   readonly #reclaimRevokedReplica:
@@ -114,6 +116,8 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     this.#isConnected = options.isConnected;
     this.#isNetworkWorkAllowed =
       options.isNetworkWorkAllowed ?? (() => Promise.resolve(true));
+    this.#isRowSyncAllowed =
+      options.isRowSyncAllowed ?? this.#isNetworkWorkAllowed;
     this.#onScopePulled = options.onScopePulled;
     this.#onScopeRevoked = options.onScopeRevoked;
     this.#reclaimRevokedReplica = options.reclaimRevokedReplica;
@@ -213,7 +217,7 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
    */
   async pullScopes(): Promise<ReplicaPullOutcome> {
     const vaultIds = [...this.#sessions.keys()];
-    if (!(await this.#isNetworkWorkAllowed()))
+    if (!(await this.#isRowSyncAllowed()))
       return { pulled: [], stalled: vaultIds, policyBlocked: true };
     const results = await Promise.all(
       [...this.#sessions].map(async ([vaultId, session]) => {

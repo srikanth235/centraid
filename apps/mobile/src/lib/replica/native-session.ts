@@ -137,6 +137,7 @@ export interface CreateNativeReplicaSessionOptions {
   appState?: AppStateLike;
   isConnected?: () => boolean;
   isNetworkWorkAllowed?: () => Promise<boolean>;
+  isRowSyncAllowed?: () => Promise<boolean>;
   retryDelayMs?: number;
   /**
    * Hermes has no WebCrypto; these default to `./native-hash` (expo-crypto),
@@ -199,6 +200,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   readonly #isConnected: () => boolean;
   readonly #retryBackoff: BackoffSchedule;
   readonly #isNetworkWorkAllowed: () => Promise<boolean>;
+  readonly #isRowSyncAllowed: () => Promise<boolean>;
   readonly #bootstrapWindow: number | undefined;
   readonly #progressiveBootstrap: boolean;
   readonly #intentStore: SqliteIntentStore;
@@ -232,6 +234,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       | "appState"
       | "isConnected"
       | "isNetworkWorkAllowed"
+      | "isRowSyncAllowed"
       | "retryDelayMs"
       | "bootstrapWindow"
       | "progressiveBootstrap"
@@ -248,6 +251,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#isConnected = options.isConnected ?? (() => true);
     this.#isNetworkWorkAllowed =
       options.isNetworkWorkAllowed ?? (() => Promise.resolve(true));
+    this.#isRowSyncAllowed =
+      options.isRowSyncAllowed ?? this.#isNetworkWorkAllowed;
     const baseMs = options.retryDelayMs ?? 2_000;
     this.#retryBackoff = backoffSchedule({
       baseMs,
@@ -291,7 +296,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       (status.coverage === "partial" ||
         (status.cursor === null && status.coverage !== "complete")) &&
       this.#isConnected() &&
-      (await this.#isNetworkWorkAllowed())
+      (await this.#isRowSyncAllowed())
     ) {
       const preview = new Promise<void>((resolve, reject) => {
         this.#previewReady = { resolve, reject };
@@ -766,7 +771,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   /** Force a foreground delta pull immediately (e.g. on manual refresh). */
   async pullNow(): Promise<boolean> {
     if (this.#closed || !this.#isConnected() || !this.#hasCursor) return false;
-    if (!(await this.#isNetworkWorkAllowed())) return false;
+    if (!(await this.#isRowSyncAllowed())) return false;
     const status = await this.#coordinator.status();
     if (!status.cursor) return false;
     const abort = new AbortController();
@@ -849,7 +854,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   private async bootstrapWhenReachable(): Promise<void> {
     if (this.#bootstrapPromise || this.#closed || !this.#isConnected())
       return this.#bootstrapPromise;
-    if (!(await this.#isNetworkWorkAllowed())) return;
+    if (!(await this.#isRowSyncAllowed())) return;
     this.#bootstrapPromise = this.bootstrap().finally(() => {
       this.#bootstrapPromise = undefined;
     });
