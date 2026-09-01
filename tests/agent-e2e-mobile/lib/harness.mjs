@@ -26,6 +26,7 @@ import {
 } from "../../agent-e2e-shared/harness.mjs";
 import { classifyFailure, countMaestroAssertions } from "./failure-class.mjs";
 import {
+  CONFIRM_SYSTEM_OPEN as CONFIRM_SYSTEM_OPEN_SNIPPET,
   DISMISS_KEYBOARD_ONBOARDING,
   FILL_SAMPLE_IF_DAYONE,
   retryableTapCommands,
@@ -160,15 +161,7 @@ export function findScreenshot(frames, name) {
 // session, or a release build); `^…$` anchors each tap so it cannot land on the
 // dialog's own title text, which also contains "Open", or on prose that
 // contains "Continue".
-export const CONFIRM_SYSTEM_OPEN = `# iOS system confirmation for a custom-scheme openLink, then the dev-client
-# first-run explainer — see CONFIRM_SYSTEM_OPEN.
-- tapOn:
-    text: "^Open$"
-    optional: true
-- tapOn:
-    text: "^Continue$"
-    optional: true
-`;
+export const CONFIRM_SYSTEM_OPEN = CONFIRM_SYSTEM_OPEN_SNIPPET;
 // An individual chunk owns one coherent user interaction. Fresh pairing is the
 // slowest legitimate chunk (~4 minutes on the reviewed CI runner); 12 minutes
 // leaves ample network/render headroom while still terminating a wedged

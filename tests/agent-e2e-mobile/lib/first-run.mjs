@@ -21,6 +21,19 @@ export const DISMISS_KEYBOARD_ONBOARDING = `- runFlow:
       - tapOn: "^Continue$"
 `;
 
+// iOS Simulator raises a system confirmation for custom-scheme links a moment
+// after `openLink` returns; Android fires the VIEW intent directly. Keep this
+// with the reusable link snippets so every CI app journey handles the same OS
+// boundary, including release-artifact deep links.
+export const CONFIRM_SYSTEM_OPEN = `# iOS system confirmation for a custom-scheme openLink
+- tapOn:
+    text: "^Open$"
+    optional: true
+- tapOn:
+    text: "^Continue$"
+    optional: true
+`;
+
 /**
  * iOS may present the Photos full-access sheet immediately after pairing,
  * before Home can become visible. Only flows that claim a fully authorized
@@ -114,5 +127,6 @@ export function openHomeAppCommands(appId, label) {
  * and writes.
  */
 export function openAppLinkCommands(path) {
-  return `- openLink: "centraid://${path}"`;
+  return `- openLink: "centraid://${path}"
+${CONFIRM_SYSTEM_OPEN}`;
 }
