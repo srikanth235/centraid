@@ -499,6 +499,17 @@ const LOGCAT_DIGEST_LINES = 40;
 const REPLICA_LOG_PATTERN =
   /replica|bootstrap|scope|vault|pull|sync|cursor|clone|undefined is not|Error|Exception/iu;
 
+/**
+ * The driver's own chatter, which defeated the filter above.
+ *
+ * Maestro walks the accessibility tree continuously and logs a line per skipped
+ * node. Each carries `packageName: dev.centraid.mobile` and `error: null`, so
+ * every one of them satisfies BOTH filters below — and at forty lines of tail
+ * they push out everything the app said. Run 33489359040's notes-library digest
+ * was one hundred percent this, which is why it named no cause.
+ */
+const DRIVER_NOISE_PATTERN = /\bMaestro\s*:/u;
+
 async function printReplicaDigest(udid) {
   try {
     const { stdout } = await execFileAsync(
@@ -508,6 +519,7 @@ async function printReplicaDigest(udid) {
     );
     const lines = stdout
       .split("\n")
+      .filter((line) => !DRIVER_NOISE_PATTERN.test(line))
       .filter((line) => /ReactNativeJS|ReactNative:|centraid/iu.test(line))
       .filter((line) => REPLICA_LOG_PATTERN.test(line))
       .slice(-LOGCAT_DIGEST_LINES);

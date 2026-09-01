@@ -160,13 +160,18 @@ function withBudget<T>(work: Promise<T>, ms: number): Promise<T | undefined> {
 
 /**
  * Tunnel first, manual URL second. `undefined` when neither is configured.
- * Budget covers TIMEOUT only — a genuine start failure still rejects.
+ * Neither a timeout nor a failed start rejects: both fall through (#905).
  */
 export async function resolveGatewayBase(): Promise<string | undefined> {
   const tunnel = await withBudget(
     ensureTunnelStarted(),
     TUNNEL_START_BUDGET_MS
-  );
+  ).catch((error: unknown) => {
+    console.warn(
+      `[centraid] replica: tunnel start failed — ${error instanceof Error ? error.message : String(error)}`
+    );
+    return undefined;
+  });
   if (tunnel) return tunnel.baseUrl;
   const manual = await hydrateGatewayUrl();
   if (!manual) return undefined;

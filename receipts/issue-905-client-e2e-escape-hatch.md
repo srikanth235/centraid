@@ -88,6 +88,9 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Count the bytes a traced response actually wrote, rather than trusting a header that is not set
 - [x] Retry a bootstrap that was refused, because nothing else ever asks again
 - [x] Reproduce the empty library locally, on a session that mounts believing it is offline
+- [x] Fall through to the configured base when the tunnel fails, not only when it times out
+- [x] Say which way reachability failed, since every route to no base is swallowed
+- [x] Keep the driver's own chatter out of the app-log digest it was drowning
 
 ## What changed
 
@@ -100,6 +103,9 @@ Where each checked item lands, then the reasoning behind it:
 - Count the bytes a traced response actually wrote, rather than trusting a header that is not set — same section; `tests/agent-e2e-mobile/lib/ci-gateway.mjs`.
 - Retry a bootstrap that was refused, because nothing else ever asks again — "P — the phone drew an empty library over a vault holding rows", "The attempt that was never made twice"; `apps/mobile/src/lib/replica/native-session.ts`.
 - Reproduce the empty library locally, on a session that mounts believing it is offline — same section; `tests/integration-mobile/bootstrap-recovery.integration.test.ts`, `tests/integration-mobile/lib/seat.ts`.
+- Fall through to the configured base when the tunnel fails, not only when it times out — "P — the phone drew an empty library over a vault holding rows", "The phone never asked"; `apps/mobile/src/lib/gateway.ts`.
+- Say which way reachability failed, since every route to no base is swallowed — same section; `apps/mobile/src/kit/replica/ReplicaProvider.tsx`.
+- Keep the driver's own chatter out of the app-log digest it was drowning — same section; `tests/agent-e2e-mobile/lib/harness.mjs`.
 - Withhold `empty` from a tile whose reads have never had a landed pull behind them — "N — Home claimed the vault was empty"; `apps/mobile/src/screens/home/tile-model.ts`, `apps/mobile/src/screens/home/useSpringboardTiles.ts`, `apps/mobile/src/screens/home/tile-model.test.ts`, `apps/mobile/src/screens/Home.test.tsx`.
 - Move the tile-status rule into the pure module that is tested, out of the hook that is not — same section; `apps/mobile/src/screens/home/tile-model.ts`, `apps/mobile/src/screens/home/useSpringboardTiles.ts`, `apps/mobile/src/screens/home/tile-model.test.ts`.
 - Record the emulator's active network transport in device preparation, since the replica's sync policy is evaluated against it — next in the log to the failure it would explain — "N — Home claimed the vault was empty", final paragraph; `apps/mobile/scripts/android-emulator-install.sh`.
@@ -462,6 +468,20 @@ That is the whole reported symptom. The library draws its empty state over a vau
 `bootstrapWhenReachable()` now arms its own retry on refusal, on a backoff **separate from the outbox's** — sharing one slot would let a parked drain swallow the rebootstrap a member is waiting on — and the wakes reset it, since each attempts the work immediately anyway.
 
 **Reproduced before it was fixed, which is the part that had been missing.** `tests/integration-mobile/bootstrap-recovery.integration.test.ts` mounts a real session against a real gateway with its connectivity oracle saying offline, writes a row it has never seen, wakes it onto a transport that is still refusing — a real socket on a dead loopback port, not a flag — and then restores the transport and touches nothing further. Without the fix it fails in fifteen seconds, raising the swallowed rejection as an unhandled error; with it the row lands. Its negative half hands a second seat the same wake on a live transport, so "the rows arrived" cannot be a retry rescuing a vault that was never reachable. This tier could always have caught it: `openSeat` defaulted `isConnected` to `true` and so never produced a mount that believed otherwise.
+
+#### The phone never asked
+
+Run 33489359040 carried the retry above, and its gateway trace answered the question the trace was built for — against the section before this one.
+
+`pairing-canary` passed and `cold-start` passed; `notes-library`, `native-v0-resilience` and `photos-permissions` failed as before. The trace is the whole gateway log, sixty lines, not a tail of one: the harness's own `/centraid/_vault/demo` seeding, one `device plane: enrolled … as owner You`, and **no replica, changes or scopes request at all**. Not a refused one, not an empty one. Across five flows and twenty-eight minutes the phone paired and then never spoke to the gateway again.
+
+That is the first prong of the four-way fork, and it retires the other three: no 403 on the Iroh axis, no page scoped down to the device credential, no read losing rows it was handed. It also bounds the retry above. `bootstrapWhenReachable()` returns at `!#isConnected()` before it dials, so where no attempt is ever made there is no refusal to retry — the fix is sound and reproduced, and it is a later link than the one that breaks here. The screen digest agrees: `"Recent items ready; older history syncing"` beside `"Write the first one."` is partial coverage read off disk by a session that never asked for a page.
+
+What decides it is `connected` in `ReplicaProvider`, set only where `resolveGatewayBase()` returns a base. In this lane that base can only come from the tunnel — #603 removed the manual-URL bypass, so the phone reaches the gateway through the ticket's Iroh endpoint and has no second address to fall back to. Two ways to fail it survive the evidence, and the log cannot separate them: a start that throws, or a status that reports `running` on a port belonging to the process that pairing ran in. Requests that die at a dead port never reach the gateway, so both leave exactly the trace above.
+
+Both were also silent, which is the reason five runs did not narrow it. `resolveGatewayBase()` rejected on a failed start rather than falling through, so the fallback below it was unreachable **and** the reason was discarded by the `.catch(() => undefined)` at every call site. It now falls through as a timeout does and says what failed. Beside it, the reachability pass names its own verdict — `device=… base=…`, then whether the scopes pull landed — because a phone that never asks and a vault with nothing in it are otherwise the same phone.
+
+The logcat digest had been unable to carry any of that. Its filter kept lines matching `centraid` and a word like `Error`, and Maestro's accessibility walk logs one line per skipped node carrying `packageName: dev.centraid.mobile` and `error: null` — so the driver satisfied both filters and, at forty lines of tail, pushed out everything the app said. This run's `notes-library` digest was one hundred percent driver chatter, which is why it named no cause. The driver's own tag is now dropped before either filter runs.
 
 ## User impact
 
