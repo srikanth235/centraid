@@ -128,6 +128,7 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Spend one Maestro spawn on the cover tour instead of ten
 - [x] Scroll the group ledger to its Add expense act, which four demo members push under the fold
 - [x] Scroll the composer to its foot sentence, which six fields push under the fold
+- [x] Scroll once more to the commit, which sits below the foot as the ScrollView's last child
 - [x] Spend one spawn on Notes' three adjacent read and write chunks
 
 ### U — the merged tree's own three client-e2e failures
@@ -145,6 +146,7 @@ Where each checked item lands, then the reasoning behind it:
 - Spend one Maestro spawn on the cover tour instead of ten — same section; same file.
 - Scroll the group ledger to its Add expense act, which four demo members push under the fold — same section; same file.
 - Scroll the composer to its foot sentence, which six fields push under the fold — same section; same file.
+- Scroll once more to the commit, which sits below the foot as the ScrollView's last child — same section; same file.
 - Spend one spawn on Notes' three adjacent read and write chunks — same section; `tests/agent-e2e-mobile/flows/notes-library.mjs`.
 - Disambiguate the Household sharing panel's headings, which the merge made ambiguous page-wide — "U — three failures the merge produced and nothing before it could have"; `apps/desktop/tests/e2e/household.spec.ts`.
 - Bring the two grant-kit e2e fixtures to the #903 reach ruling instead of the #825 one they still encoded — same section; `apps/web/tests/e2e/photos-grants.spec.ts`, `apps/web/tests/e2e/people-grants.spec.ts`.

@@ -385,6 +385,13 @@ ${DISMISS_KEYBOARD_ONBOARDING}
     visibilityPercentage: 100
     timeout: 20000
 - assertVisible: "Lands in ${DEMO_GROUP} . queued on this device until the gateway answers"
+# The commit sits BELOW the foot and is the ScrollView's last child
+# (TallyAddScreen.tsx), so scrolling the foot to full visibility leaves the
+# button itself still under the edge — which is how the tap below failed on run
+# 33553387446 with the assertion above it passing. One more scroll pins to the
+# bottom, where the two adjacent last elements are both on screen; it cannot
+# overshoot, there being nothing after the button to scroll to.
+- scroll
 - tapOn:
     text: "Add expense"
     below: "Lands in ${DEMO_GROUP}.*"
