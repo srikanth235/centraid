@@ -343,7 +343,19 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
     visible: "${GROUP_HERO_SUB}"
     timeout: 20000
 - setAirplaneMode: enabled
-# The ledger section's own verb, on the group that is already on screen.
+# The ledger section's own verb (TallyGroupScreen.tsx, the Section act), and it
+# is UNDER THE FOLD: the group route draws the hero, Settle up / Simplify, then
+# the whole MEMBERS list before the ledger, so on a Pixel 6 the four demo
+# members push this act off screen. tapOn does not scroll, so it failed
+# outright against a screen that was drawing the control perfectly well —
+# the same shape as the springboard tiles above (#905). Scrolled at full
+# visibility for the same reason: Maestro matches an element the fold clipped.
+- scrollUntilVisible:
+    element:
+      text: "Add expense"
+    direction: DOWN
+    visibilityPercentage: 100
+    timeout: 20000
 ${retryableTapCommands("Add expense", GROUP_HERO_SUB)}
 - extendedWaitUntil:
     visible: "${ADD_STATUS}"

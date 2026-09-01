@@ -126,6 +126,8 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 
 - [x] Reach Tally through the all-apps sheet, since its Home tile is empty for the first week of every month
 - [x] Spend one Maestro spawn on the cover tour instead of ten
+- [x] Scroll the group ledger to its Add expense act, which four demo members push under the fold
+- [x] Spend one spawn on Notes' three adjacent read and write chunks
 
 ### U — the merged tree's own three client-e2e failures
 
@@ -140,6 +142,8 @@ Where each checked item lands, then the reasoning behind it:
 - Merge #911 into this branch and close that PR — "One phone, two branches"; the merge commit itself, whose second parent is `724c0785`. #911's own 225-file diff is described by its own receipt, `receipts/issue-903-mobile-docs-v17-vault-lockup.md`, which comes across with it; nothing in that half is re-narrated here.
 - Reach Tally through the all-apps sheet, since its Home tile is empty for the first week of every month — "V — a calendar bug and a spawn tax"; `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
 - Spend one Maestro spawn on the cover tour instead of ten — same section; same file.
+- Scroll the group ledger to its Add expense act, which four demo members push under the fold — same section; same file.
+- Spend one spawn on Notes' three adjacent read and write chunks — same section; `tests/agent-e2e-mobile/flows/notes-library.mjs`.
 - Disambiguate the Household sharing panel's headings, which the merge made ambiguous page-wide — "U — three failures the merge produced and nothing before it could have"; `apps/desktop/tests/e2e/household.spec.ts`.
 - Bring the two grant-kit e2e fixtures to the #903 reach ruling instead of the #825 one they still encoded — same section; `apps/web/tests/e2e/photos-grants.spec.ts`, `apps/web/tests/e2e/people-grants.spec.ts`.
 - Correct the Hermes claim and narrow the ban to the one measured absence — same section; `apps/mobile/src/lib/replica/multi-vault-session.ts`, `scripts/lint-hermes-array-surface.mjs`, `oxlint.config.ts`.
@@ -727,6 +731,12 @@ The fix does not touch the tile, the seed or the calendar. Tally is opened throu
 The tour combine paid for itself in the same run: the previous one spent 248s dying at surface eight of ten, this one spent 253s finishing all ten AND starting the airplane journey.
 
 That journey then failed at the same calendar bug in a second place. It relaunches into Tally three more times, each with its own grid tap, and those had never executed before because nothing had ever got past the tour. All four sites now share one `OPEN_TALLY` constant, so the next person cannot fix three of them.
+
+**Run 33548398202 ran all five journeys for the first time, and refuted the estimate above.** `pairing-canary` 173s PASS, `notes-library` 129s PASS, `native-v0-resilience` 250s, `mobile-cold-start` 133s **PASS**, `photos-permissions` 42s, aggregate **727s against 720s — seven seconds over**. The earlier arithmetic in this section guessed ~1000s and was wrong by a wide margin; it is left above as written, and this paragraph supersedes it.
+
+Two things that looked like defects were not. `photos-permissions` did not fail on the permission dialog — the dialog was on screen, `id:grant_dialog` and `permission_deny_button` and all, and the chunk was killed after 42s by the deadline clamp mid-`Tap on (Optional) "^Open$"`. It is starved, not broken, and it has still never been allowed to finish. `mobile-cold-start` passed once it had budget, which is the same point from the other side.
+
+The one real defect left is Tally's ledger act, and it is the fold again: `TallyGroupScreen.tsx` draws the hero, Settle up / Simplify and the whole MEMBERS list before the ledger Section whose act is "Add expense", so four demo members push it off a Pixel 6 — and the digest ends at "Remove. Chris" having never reached it. Scrolled now, exactly as the springboard tiles were.
 
 **The budget is still the open item, and it is not closable by defect-fixing.** With the tour combined this recovers ~81s. The gap is larger than that: `native-v0-resilience`'s airplane journey — offline write, process kill, reconnect — never ran at all in this run, so 248s is not that flow's finished cost, and `photos-permissions` has not run on this branch at any point. `pr-gate-budget.md` lists three remedies; the first is done here, the second (failure classes) is already bounded by #892 Phase 0, and the third is the substantive one: **move a claim down a tier** into `tests/integration-mobile/`, which the doc calls "the correct first move, not the last resort". That is a decision about which claims earn a device, not a change that belongs in a commit fixing a scroll selector.
 

@@ -49,6 +49,10 @@ await runFlow("notes-library", async (ctx) => {
   // exactly how a persistence claim quietly stops being one.
   const capturedNote = `Capture round trip ${ctx.state.runId}`;
 
+  // ONE SPAWN FOR THE THREE READ/WRITE CHUNKS (#905). `pr-gate-budget.md`
+  // names combining adjacent chunks as the first remedy for an overrun, and
+  // each `ctx.run` costs ~9s of JVM start before its first command. Nothing
+  // ran between these three but the next spawn.
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
@@ -70,12 +74,6 @@ ${AWAIT_LAUNCHER}${retryableTapCommands("Open Notes.*")}
     id: "notes-row-first-preview"
 - assertVisible: ".*Brown 2 lb chuck in batches.*"
 - takeScreenshot: notes-library
-`,
-    "reading-room"
-  );
-  await ctx.run(
-    `appId: ${ctx.state.appId}
----
 ${retryableTapCommands("Open Mom's chili, written down properly", "New note")}
 # The editor sheet's own controls. "Note title" / "Note body" are deliberately
 # NOT asserted: they are accessibilityLabels on React Native TextInputs, which
@@ -90,16 +88,6 @@ ${retryableTapCommands("Open Mom's chili, written down properly", "New note")}
 - takeScreenshot: notes-editor
 - tapOn:
     id: "notes-editor-close"
-`,
-    "editor-sheet"
-  );
-
-  // ─── The write (#890 W5) ──────────────────────────────────────────────────
-  // ~35 s of marginal work on a journey that has already paid the boot, the
-  // pairing and the seed: one sheet open, one field, one save, one relaunch.
-  await ctx.run(
-    `appId: ${ctx.state.appId}
----
 - extendedWaitUntil:
     visible:
       id: "notes-capture"
@@ -136,7 +124,7 @@ ${retryableTapCommands("Open Mom's chili, written down properly", "New note")}
     timeout: 30000
 - takeScreenshot: notes-captured
 `,
-    "quick-capture"
+    "reading-room"
   );
 
   // A real OS process boundary — stopApp, then a relaunch that clears nothing.
