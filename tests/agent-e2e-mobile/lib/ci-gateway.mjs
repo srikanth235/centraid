@@ -118,9 +118,17 @@ await gateway.start(`http://127.0.0.1:${port}`);
  * requests pass through here exactly as a loopback client's do.
  *
  * Method, path and status only, and never for the enrollment surface: a pairing
- * ticket is a live capability and this log is printed into CI output.
+ * ticket is a live capability and this log is printed into CI output. Those
+ * surfaces are `/centraid/_gateway/tunnel/pair` and `/_gateway/devices/ticket`,
+ * both OUTSIDE `_vault`, so the whole vault plane traces without exposing one.
+ *
+ * EVERY vault surface, not the four of the data path (#905). Naming only
+ * replica/changes/scopes/demo answered "did it fetch rows" and nothing else:
+ * the phone speaks sixteen other surfaces here — status, vaults, grants,
+ * notifications — so a run where it reached the gateway and a run where the
+ * tunnel never came up produced the same empty trace. They are different bugs.
  */
-const TRACED = /^\/centraid\/_vault\/(?<surface>replica|changes|scopes|demo)/u;
+const TRACED = /^\/centraid\/_vault\//u;
 
 /*
  * The SIZE is the row count's shadow, and it is the whole question: a 200 on a

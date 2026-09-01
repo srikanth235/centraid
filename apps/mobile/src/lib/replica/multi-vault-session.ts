@@ -458,7 +458,8 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
             record.status === "parked" ||
             record.status === "in-flight"
         )
-        .toReversed();
+        // oxlint-disable-next-line unicorn/no-array-reverse -- (#905) no toReversed in Hermes; governance: allow-no-unjustified-suppressions runtime capability gap
+        .reverse();
       await Promise.all(
         pending.map(async (record) => {
           this.#reader.updatePlacement({ ...record, status: "in-flight" });

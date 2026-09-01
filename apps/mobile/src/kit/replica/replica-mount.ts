@@ -39,10 +39,24 @@ export function fetcher(vaultId?: string): ReplicaFetcher {
     for (const [key, value] of Object.entries(authHeader()))
       headers.set(key, value);
     if (vaultId) headers.set("x-centraid-vault", vaultId);
-    return fetch(new URL(pathname, `${baseUrl}/`), {
-      ...init,
-      headers,
-    } as RequestInit);
+    const method = init.method ?? "GET";
+    try {
+      const response = await fetch(new URL(pathname, `${baseUrl}/`), {
+        ...init,
+        headers,
+      } as RequestInit);
+      if (!response.ok)
+        console.error(
+          `[centraid] replica: ${method} ${pathname} -> ${response.status}`
+        );
+      return response;
+    } catch (error) {
+      // Died on this device, so the gateway trace cannot show it (#905).
+      console.error(
+        `[centraid] replica: ${method} ${pathname} never left the phone — ${error instanceof Error ? error.message : String(error)}`
+      );
+      throw error;
+    }
   };
 }
 

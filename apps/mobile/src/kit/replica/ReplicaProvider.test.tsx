@@ -48,6 +48,12 @@ const registry = vi.hoisted(() => ({
   listeners: new Set<() => void>(),
 }));
 
+/** The device axis. Every double below used to pin it to "offline" (#905). */
+const net = vi.hoisted(() => ({
+  deviceOnline: false,
+  base: undefined as string | undefined,
+}));
+
 const world = vi.hoisted(() => ({
   enrolled: [] as string[],
   /** Scopes the gateway has taken away; the plan can never return them. */
@@ -97,7 +103,8 @@ vi.mock(
   () =>
     ({
       addNetworkStateListener: () => ({ remove: (): void => undefined }),
-      getNetworkStateAsync: () => Promise.resolve({ isConnected: false }),
+      getNetworkStateAsync: () =>
+        Promise.resolve({ isConnected: net.deviceOnline }),
     }) as unknown as Partial<NetworkModule>
 );
 
@@ -121,7 +128,7 @@ vi.mock(
   import("../../lib/gateway"),
   () =>
     ({
-      resolveGatewayBase: () => Promise.resolve(undefined),
+      resolveGatewayBase: () => Promise.resolve(net.base),
     }) as unknown as Partial<GatewayModule>
 );
 
@@ -367,6 +374,8 @@ describe("activating a vault outside the mounted four (#880 W3.4)", () => {
       "vault-5",
       "vault-6",
     ];
+    net.deviceOnline = false;
+    net.base = undefined;
     world.revoked = [];
     world.mountPlans = 0;
     world.purged = [];
@@ -441,5 +450,47 @@ describe("activating a vault outside the mounted four (#880 W3.4)", () => {
     // The plan is asked exactly once more, and then the provider settles.
     expect(world.mountPlans).toBe(2);
     expect(seen?.ready).toBe(true);
+  });
+});
+
+// Every double above pinned the device offline, so the suite agreed with a
+// provider that never connects. These pin the other half of the axis (#905).
+describe("a device that is online with a gateway in reach (#905)", () => {
+  const BASE = "http://127.0.0.1:9999";
+
+  beforeEach(async () => {
+    net.deviceOnline = true;
+    net.base = BASE;
+    registry.active = { gatewayId: "gateway-1", vaultId: "vault-1" };
+    registry.listeners.clear();
+    world.enrolled = ["vault-1"];
+    world.revoked = [];
+    world.mountPlans = 0;
+    world.purged = [];
+    world.closedSessions = [];
+    seen = undefined;
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root.render(
+        React.createElement(ReplicaProvider, null, React.createElement(Probe))
+      );
+    });
+    await settle();
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("resolves a base and publishes it as the gateway to talk to", () => {
+    expect(seen?.gatewayBase).toBe(BASE);
+  });
+
+  it("reports itself online rather than settling offline", () => {
+    expect(seen?.online).toBe(true);
+    expect(seen?.reachability).not.toBe("device-offline");
   });
 });

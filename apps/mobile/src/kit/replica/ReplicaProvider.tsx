@@ -437,7 +437,7 @@ export function ReplicaProvider({
           if (cancelled) return;
           connected = liveBase !== undefined;
           if (!liveBase)
-            console.warn(
+            console.error(
               `[centraid] replica: no gateway base — device=${deviceOnline}`
             );
           if (liveBase) {
@@ -500,7 +500,7 @@ export function ReplicaProvider({
             const policyBlocked = outcome?.policyBlocked === true;
             const landed = outcome !== undefined && !policyBlocked;
             if (!landed)
-              console.warn(
+              console.error(
                 `[centraid] replica: scopes pull did not land — blocked=${policyBlocked}`
               );
             await refreshCoverage();

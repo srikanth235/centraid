@@ -271,9 +271,15 @@ export async function ensureTunnelStarted(): Promise<
   if (startInFlight) return startInFlight;
   startInFlight = (async () => {
     await hydratePhoneLink();
-    if (!isPaired() || !isTunnelAvailableImpl()) return undefined;
+    if (!isPaired() || !isTunnelAvailableImpl()) {
+      console.error(
+        `[centraid] replica: no tunnel — paired=${isPaired()} native=${isTunnelAvailableImpl()}`
+      );
+      return undefined;
+    }
     const status = await getTunnelStatusImpl();
     if (status.state === "running" && status.port) {
+      console.error(`[centraid] replica: tunnel reused on port ${status.port}`);
       return { baseUrl: `http://127.0.0.1:${status.port}` };
     }
     try {
@@ -281,6 +287,9 @@ export async function ensureTunnelStarted(): Promise<
         secretKeyB64: getSecure(LINK_SECRET_KEY, ""),
         ticket: getSecure(LINK_ENDPOINT_HINT_KEY, ""),
       });
+      console.error(
+        `[centraid] replica: tunnel started on port ${port} from ${status.state}`
+      );
       return { baseUrl: `http://127.0.0.1:${port}` };
     } catch (error) {
       throw new PhoneLinkError(

@@ -517,11 +517,23 @@ async function printReplicaDigest(udid) {
       ["-s", udid, "logcat", "-d", "-t", String(LOGCAT_TAIL_LINES)],
       { maxBuffer: HIERARCHY_MAX_BYTES, timeout: HIERARCHY_TIMEOUT_MS }
     );
-    const lines = stdout
+    const kept = stdout
       .split("\n")
       .filter((line) => !DRIVER_NOISE_PATTERN.test(line))
       .filter((line) => /ReactNativeJS|ReactNative:|centraid/iu.test(line))
-      .filter((line) => REPLICA_LOG_PATTERN.test(line))
+      .filter((line) => REPLICA_LOG_PATTERN.test(line));
+    // One failing request repeats until the retry ladder gives up, and forty
+    // copies of it push out the one line that says WHY (#905). Keyed on the
+    // message with the pid/timestamp prefix dropped, so repeats collapse and
+    // every distinct thing the app said survives the tail.
+    const seen = new Set();
+    const lines = kept
+      .filter((line) => {
+        const message = line.replace(/^.*?\b[VDIWEF]\s+/u, "");
+        if (seen.has(message)) return false;
+        seen.add(message);
+        return true;
+      })
       .slice(-LOGCAT_DIGEST_LINES);
     if (lines.length === 0) {
       console.error("  the app logged nothing about the replica");

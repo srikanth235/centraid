@@ -91,6 +91,12 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Fall through to the configured base when the tunnel fails, not only when it times out
 - [x] Say which way reachability failed, since every route to no base is swallowed
 - [x] Keep the driver's own chatter out of the app-log digest it was drowning
+- [x] Stop calling ES2023 array copies the phone's engine does not implement
+- [x] Trace every vault surface, not the four of the data path
+- [x] Say which of the five ways out of the tunnel start was taken
+- [x] Name a replica request that never left the phone, since no trace can show it
+- [x] Collapse a repeated log line so it cannot crowd the one that says why
+- [x] Pin what the provider does when a gateway IS in reach, which nothing asserted
 
 ## What changed
 
@@ -106,6 +112,12 @@ Where each checked item lands, then the reasoning behind it:
 - Fall through to the configured base when the tunnel fails, not only when it times out — "P — the phone drew an empty library over a vault holding rows", "The phone never asked"; `apps/mobile/src/lib/gateway.ts`.
 - Say which way reachability failed, since every route to no base is swallowed — same section; `apps/mobile/src/kit/replica/ReplicaProvider.tsx`.
 - Keep the driver's own chatter out of the app-log digest it was drowning — same section; `tests/agent-e2e-mobile/lib/harness.mjs`.
+- Stop calling ES2023 array copies the phone's engine does not implement — "P — the phone drew an empty library over a vault holding rows", "What the digest said once it could speak"; `packages/blueprints/apps/docs/filters.ts`, `packages/blueprints/apps/locker/format.ts`, `packages/blueprints/apps/locker/import-model.ts`, `packages/blueprints/apps/notes/powerbox.ts`, `packages/blueprints/apps/tally/spending-model.ts`, `packages/blueprints/apps/tasks/logic.ts`, `apps/mobile/src/lib/replica/multi-vault-session.ts`, `tests/comment-density-ratchet.json`.
+- Trace every vault surface, not the four of the data path — same section; `tests/agent-e2e-mobile/lib/ci-gateway.mjs`.
+- Say which of the five ways out of the tunnel start was taken — same section; `apps/mobile/src/lib/phone-link.ts`.
+- Name a replica request that never left the phone, since no trace can show it — same section; `apps/mobile/src/kit/replica/replica-mount.ts`, `apps/mobile/src/kit/replica/ReplicaProvider.tsx`, `apps/mobile/src/lib/gateway.ts`.
+- Collapse a repeated log line so it cannot crowd the one that says why — same section; `tests/agent-e2e-mobile/lib/harness.mjs`.
+- Pin what the provider does when a gateway IS in reach, which nothing asserted — same section; `apps/mobile/src/kit/replica/ReplicaProvider.test.tsx`.
 - Withhold `empty` from a tile whose reads have never had a landed pull behind them — "N — Home claimed the vault was empty"; `apps/mobile/src/screens/home/tile-model.ts`, `apps/mobile/src/screens/home/useSpringboardTiles.ts`, `apps/mobile/src/screens/home/tile-model.test.ts`, `apps/mobile/src/screens/Home.test.tsx`.
 - Move the tile-status rule into the pure module that is tested, out of the hook that is not — same section; `apps/mobile/src/screens/home/tile-model.ts`, `apps/mobile/src/screens/home/useSpringboardTiles.ts`, `apps/mobile/src/screens/home/tile-model.test.ts`.
 - Record the emulator's active network transport in device preparation, since the replica's sync policy is evaluated against it — next in the log to the failure it would explain — "N — Home claimed the vault was empty", final paragraph; `apps/mobile/scripts/android-emulator-install.sh`.
@@ -482,6 +494,28 @@ What decides it is `connected` in `ReplicaProvider`, set only where `resolveGate
 Both were also silent, which is the reason five runs did not narrow it. `resolveGatewayBase()` rejected on a failed start rather than falling through, so the fallback below it was unreachable **and** the reason was discarded by the `.catch(() => undefined)` at every call site. It now falls through as a timeout does and says what failed. Beside it, the reachability pass names its own verdict — `device=… base=…`, then whether the scopes pull landed — because a phone that never asks and a vault with nothing in it are otherwise the same phone.
 
 The logcat digest had been unable to carry any of that. Its filter kept lines matching `centraid` and a word like `Error`, and Maestro's accessibility walk logs one line per skipped node carrying `packageName: dev.centraid.mobile` and `error: null` — so the driver satisfied both filters and, at forty lines of tail, pushed out everything the app said. This run's `notes-library` digest was one hundred percent driver chatter, which is why it named no cause. The driver's own tag is now dropped before either filter runs.
+
+#### What the digest said once it could speak
+
+Run 33494669948 carried the digest fix, and the app's own log came through for the first time: four real lines per failing flow instead of forty of Maestro's. It named a cause immediately, and it was not the one the section above was chasing.
+
+`native-v0-resilience` dies on the Docs cover with `TypeError: undefined is not a function`, thrown in `AllShelf`'s **own** frame — the innermost entry of the component stack, before a single child renders. The one call in that frame that can be undefined is `liveAxes(rows)` → `liveOptions` → `sharedWithLabels`, which ended at `[...labels].toSorted(...)`. Hermes ships no ES2023 change-array-by-copy, so on the phone that property is `undefined` and calling it throws. Node has it, which is why 2337 unit tests pass over code that cannot render on a device.
+
+The repository already knew. `oxlint.config.ts` bans `toSorted` under `no-restricted-properties` and says why in its own comment — it "caused the native Photos cover to redbox in the exact-HEAD journey". The ban was never wrong; its `files` glob was `apps/mobile/src/**` and `packages/core/src/time/**`, and every one of these call sites is in `packages/blueprints/**`. `toReversed` was not on the banned list at all, which is how one slipped through inside the guarded tree.
+
+Scope is the modules the phone actually loads, not the package. Walking every import edge out of `apps/mobile/src` reaches 112 `packages/*` modules — the pure logic and copy modules, never the app roots, the React components or the `queries/*` readers, which are the web and desktop seats' and are left alone. Twenty of the twenty-one substitutions are inside that reachable set; the twenty-first is the `toReversed` in the mobile tree.
+
+Those substitutions are also why eight comment-density pins moved, and none of them for a word of prose. `.toSorted(` → `.sort(` deletes three characters of code per site, and the metric is comment share, so a pure code shrink raises it. Seven pins are hand-raised on that basis. The eighth, `multi-vault-session.ts`, is a gate standing against a gate: the replacement for `toReversed()` trips `unicorn/no-array-reverse`, which demands the method Hermes lacks, so the line carries the per-line suppression that `allow-no-unjustified-suppressions` requires be justified in full — the pattern this repository already chose at `sqlite-intent-store.ts` for `structuredClone`. Prose that was genuinely added — in `phone-link.ts`, `replica-mount.ts` and the provider test — was cut back instead of pinned.
+
+None of this explains the silence. The Docs crash is downstream of a screen that opened; the replica path never runs at all, and the diagnostics added above printed nothing. That is now two separate gaps, and both are closed here rather than guessed at again.
+
+The first is on the gateway. `TRACED` named four surfaces — `replica`, `changes`, `scopes`, `demo` — and the phone speaks about twenty. So "the phone never asked" and "the phone asked on `/status`, `/vaults` or `/grants` and only the data path is broken" produced an identical empty log, and they are different bugs. The whole vault plane traces now. The enrollment surfaces stay out of it and did not need excluding: `/centraid/_gateway/tunnel/pair` and `/_gateway/devices/ticket` are outside `_vault`, and the trace records method, path and status, never a header or a body.
+
+The second is on the phone, and it is the one that matters. `ensureTunnelStarted()` has five exits — unpaired, no native module, a reused running port, a fresh start, a start that threw — and until now every one of them was indistinguishable from outside: a base or no base, never a reason. Each says which it took. Below it, `fetcher` is the single choke point for the whole data path, the native session included, and a request that dies on the device is the one thing no gateway trace can ever show; it is now named where it fails. Successes are deliberately left silent, because the widened trace above already carries them.
+
+The digest keeps them. A failing request repeats until its retry ladder gives up, and forty copies would push out the one line that says why, so repeats now collapse on the message with the pid and timestamp dropped.
+
+One more thing was wrong, and it is the reason none of this was ever caught in vitest. `ReplicaProvider.test.tsx` mocked `InteractionManager.runAfterInteractions` to fire synchronously, `getNetworkStateAsync` to `{ isConnected: false }`, and `resolveGatewayBase` to `undefined` — the device pinned offline on all three axes, with `fetcher` and `postPlacement` rejecting `offline` beneath them. A provider that never connects agrees with that suite perfectly. The network axis is a variable now, and two tests assert the other half: given a reachable gateway, the provider publishes its base and reports itself online. They pass, so the defect is not in that layer — which is a real narrowing, and it is also why `ensureTunnelStarted`, which has no test anywhere, is where the instrumentation went.
 
 ## User impact
 

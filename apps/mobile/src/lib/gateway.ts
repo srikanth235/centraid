@@ -167,7 +167,7 @@ export async function resolveGatewayBase(): Promise<string | undefined> {
     ensureTunnelStarted(),
     TUNNEL_START_BUDGET_MS
   ).catch((error: unknown) => {
-    console.warn(
+    console.error(
       `[centraid] replica: tunnel start failed — ${error instanceof Error ? error.message : String(error)}`
     );
     return undefined;
