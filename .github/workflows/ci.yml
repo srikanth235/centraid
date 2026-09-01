@@ -1119,6 +1119,16 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
           disable-animations: true
           script: bash apps/mobile/scripts/android-emulator-pr-gate.sh
+      # The gateway's side of a red run. The phone is mute about its replica —
+      # nothing on that path logs and the release artifact carries no debugger —
+      # so whether a clone was ever ASKED FOR is only knowable from here. Failure
+      # only: a green run has nothing to explain, and this is CI output rather
+      # than an artifact because the artifact store is not reachable to everyone
+      # who has to read it. `ci-gateway.mjs` traces method, path and status for
+      # the replica surface alone and never for enrollment.
+      - name: What the gateway served
+        if: failure()
+        run: tail -n 200 /tmp/centraid-mobile-gateway.log || true
       # The harness rm -rf's this in a finally; this is belt-and-braces against a
       # run that dies before the finally, so a crash mid-pairing cannot ship a
       # live enrollment capability in the uploaded artifact.

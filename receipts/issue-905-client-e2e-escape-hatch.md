@@ -79,10 +79,19 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Keep blobs, the write drain and the background pass on the whole transfer table
 - [x] Record the ruling and correct the docs that stated the old coupling as current
 
+### P — the phone drew an empty library over a vault holding rows, and nothing on either side said why
+
+- [x] Trace what the gateway actually served the phone, since the device's replica path logs nothing
+- [x] Print the app's own logcat on a failing flow, beside the screen digest
+- [x] Keep both diagnostics off the JS bundle fingerprint, so asking the question costs no rebuild
+
 ## What changed
 
 Where each checked item lands, then the reasoning behind it:
 
+- Trace what the gateway actually served the phone, since the device's replica path logs nothing — "P — the phone drew an empty library over a vault holding rows"; `tests/agent-e2e-mobile/lib/ci-gateway.mjs`, `.github/workflows/ci.yml`.
+- Print the app's own logcat on a failing flow, beside the screen digest — same section; `tests/agent-e2e-mobile/lib/harness.mjs`.
+- Keep both diagnostics off the JS bundle fingerprint, so asking the question costs no rebuild — same section, final paragraph; no file changed.
 - Withhold `empty` from a tile whose reads have never had a landed pull behind them — "N — Home claimed the vault was empty"; `apps/mobile/src/screens/home/tile-model.ts`, `apps/mobile/src/screens/home/useSpringboardTiles.ts`, `apps/mobile/src/screens/home/tile-model.test.ts`, `apps/mobile/src/screens/Home.test.tsx`.
 - Move the tile-status rule into the pure module that is tested, out of the hook that is not — same section; `apps/mobile/src/screens/home/tile-model.ts`, `apps/mobile/src/screens/home/useSpringboardTiles.ts`, `apps/mobile/src/screens/home/tile-model.test.ts`.
 - Record the emulator's active network transport in device preparation, since the replica's sync policy is evaluated against it — next in the log to the failure it would explain — "N — Home claimed the vault was empty", final paragraph; `apps/mobile/scripts/android-emulator-install.sh`.
@@ -392,6 +401,24 @@ The split is between **reads** and **byte work**. Reads — first-open bootstrap
 Proven to bite. With `nativeRowSyncAllowed` reverted to `canTransfer()`, two of the new unit tests red by name — `pulls rows on a radio the byte rules refuse` and `ignores metered, roaming and charger rules alike`. The device-lane half is **not** yet evidence: the run that produced the transport reading failed earlier, so no flow on this branch has observed a synced vault on device.
 
 **What this section does not claim.** `mobile-device-gate` is not green. Run 33476501179 red-lined at `Assert that "Connect your gateway." is visible` after 45s — the first-launch cost section K already names, recurring because a JS change misses the apk cache and puts a 17-minute gradle build immediately before the flows. That is a third defect, separate from N and from O, and it is not fixed here.
+
+### P — the phone drew an empty library over a vault holding rows, and nothing on either side said why
+
+Run 33480643429, on the head carrying O, is the first on this branch to get past the wall. `pairing-canary` passed in 180s and `mobile-cold-start` passed 8/8 launches — both had died at `id: home-grid`. `notes-library`, `native-v0-resilience` and `photos-permissions` reached their apps. The transfer-policy block is gone from the device, and the hierarchy digests say so directly: the failing screens carry `Recent items ready; older history syncing` — `replicaCoverageRow`'s partial-coverage row — and carry neither `Sync paused by transfer rules`, which is what `policyBlocked` drew before, nor `Gateway asleep`.
+
+What they also carry is `Write the first one.` Notes rendered its empty state while the gateway held sixteen demo rows, and every other app was empty the same way. `[pr-gate] aggregate 536s / 720s budget`.
+
+**Ruled out, against a real gateway rather than by reading.** `tests/integration-mobile` boots the shipped host and a real native replica session; a scratch suite there (not committed — it proved a negative) seeded the demo corpus through the same `POST /centraid/_vault/demo/notes` the lane uses, **before** the phone existed, then opened a seat and read back through the mounted `MultiVaultReplicaReader` + `MultiVaultReplicaSession` facade the app actually mounts. Five `knowledge.note` rows, `coverage: complete`, `pullScopes` reporting the scope pulled. Unfocused (`focusedVaultId: () => undefined`) it reads the same five. So neither the seed-before-clone ordering, nor the multi-vault facade, nor the mounted reader is the defect — the whole stack is sound over loopback with an owner bearer. What the tier cannot reach is the axis the device is alone on: a paired enrollment over Iroh.
+
+**Why this section adds instruments rather than a fix.** Three cycles of inference have now been spent on a question the evidence cannot settle, because neither end speaks. The device is mute — `apps/mobile/src/kit/replica` and `apps/mobile/src/lib/replica` contain no `console` call at all, by design — and the release artifact carries no debugger. The gateway is mute too. So a bootstrap that was never requested and one that was answered with an empty page are, from CI, the same picture.
+
+`ci-gateway.mjs` now traces the replica surface — method, path, status, `content-length`, duration — for `/centraid/_vault/{replica,changes,scopes,demo}` only, and the workflow tails that log on failure. Size is the point as much as status: a `200` proves the phone asked and the gateway answered, never that the answer carried a row. The enrollment surface is deliberately not traced; a pairing ticket is a live capability and this log is printed into CI output.
+
+Beside it, `printReplicaDigest` prints the app's own logcat tail on a failing flow, next to the existing screen digest and under the same two rules — swallow everything, never for a sensitive chunk. It will not explain the empty library, since the replica path logs nothing to find; it will explain `native-v0-resilience`, whose Docs screen reached the error boundary with `undefined is not a function`, a fault that reaches logcat whatever the bundle chooses to log.
+
+Both are host-side, and that is deliberate. `apps/mobile/scripts/js-bundle-fingerprint.mjs` hashes `apps/mobile/src`, the four workspace packages and `bun.lock`; `tests/agent-e2e-mobile/**` is in none of them. A diagnostic written into the app would have cost a sixteen-minute cold gradle build to ask one question — this one costs nothing, and the apk cache still hits.
+
+**What this section does not claim.** Nothing here fixes anything. The gate is red, three of the critical five fail, and `photos-permissions` is a fourth thing again: its panel reads `Photos has not asked for your camera roll yet` while the flow asserts `Photos cannot reach your camera roll`, because the `Don.t allow` runFlow was SKIPPED — the permission dialog never appeared, so the device is in the never-asked state, not the denied one the flow is written against.
 
 ## User impact
 

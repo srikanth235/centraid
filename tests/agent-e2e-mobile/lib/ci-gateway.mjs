@@ -105,7 +105,39 @@ const gateway = await buildGateway({
 runtime.gateway = gateway;
 await gateway.start(`http://127.0.0.1:${port}`);
 
+/*
+ * WHAT THE PHONE ACTUALLY ASKED FOR (#905 O follow-up).
+ *
+ * A library that draws its empty state over a vault holding rows is either a
+ * clone that never arrived or a read that cannot see one, and the device is
+ * mute about which: nothing on the replica path logs, and the release artifact
+ * carries no debugger. From here the difference is plain — a bootstrap request
+ * that never appears is the first case, one that answers 200 is the second.
+ *
+ * The Iroh endpoint forwards into this same listener, so a paired phone's
+ * requests pass through here exactly as a loopback client's do.
+ *
+ * Method, path and status only, and never for the enrollment surface: a pairing
+ * ticket is a live capability and this log is printed into CI output.
+ */
+const TRACED = /^\/centraid\/_vault\/(?<surface>replica|changes|scopes|demo)/u;
+
+function trace(request, response, startedAt) {
+  const target = (request.url ?? "/").split("?")[0];
+  if (!TRACED.test(target)) return;
+  // The SIZE is the row count's shadow, and it is the whole question: a 200 on
+  // a bootstrap page proves the phone asked and the gateway answered, never
+  // that the answer carried anything. An empty page and a full one differ by
+  // orders of magnitude here.
+  const bytes = response.getHeader("content-length") ?? "?";
+  logger.info(
+    `${request.method} ${target} -> ${response.statusCode} ${bytes}B in ${Date.now() - startedAt}ms`
+  );
+}
+
 const server = http.createServer((request, response) => {
+  const startedAt = Date.now();
+  response.on("finish", () => trace(request, response, startedAt));
   void gateway
     .composedHandler(request, response)
     .then((handled) => {

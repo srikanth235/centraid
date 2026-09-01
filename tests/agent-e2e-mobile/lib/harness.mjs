@@ -477,6 +477,51 @@ async function captureHierarchy(udid) {
   }
 }
 
+/** Keep the tail bounded: a wedged app can fill logcat faster than anyone reads it. */
+const LOGCAT_TAIL_LINES = 4000;
+const LOGCAT_DIGEST_LINES = 40;
+
+/**
+ * What the app SAID while it was failing, reduced to the replica story.
+ *
+ * The screen digest answers "what was drawn"; nothing so far has answered "why
+ * was it drawn that way". A library that renders its empty state on a vault
+ * holding sixteen rows is either a clone that never arrived or a read that
+ * cannot see it, and those two look identical from the hierarchy. The app's own
+ * console reaches logcat under `ReactNativeJS` even in the release artifact, so
+ * this is available without changing one line of the bundle — which matters,
+ * because the apk cache key hashes the bundle and a JS-only diagnostic would
+ * cost a sixteen-minute rebuild to ask a question.
+ *
+ * Matched loosely on purpose. A regex tuned to today's phrasing goes quiet the
+ * first time a message is reworded, and a quiet diagnostic is worse than none.
+ */
+const REPLICA_LOG_PATTERN =
+  /replica|bootstrap|scope|vault|pull|sync|cursor|clone|undefined is not|Error|Exception/iu;
+
+async function printReplicaDigest(udid) {
+  try {
+    const { stdout } = await execFileAsync(
+      "adb",
+      ["-s", udid, "logcat", "-d", "-t", String(LOGCAT_TAIL_LINES)],
+      { maxBuffer: HIERARCHY_MAX_BYTES, timeout: HIERARCHY_TIMEOUT_MS }
+    );
+    const lines = stdout
+      .split("\n")
+      .filter((line) => /ReactNativeJS|ReactNative:|centraid/iu.test(line))
+      .filter((line) => REPLICA_LOG_PATTERN.test(line))
+      .slice(-LOGCAT_DIGEST_LINES);
+    if (lines.length === 0) {
+      console.error("  the app logged nothing about the replica");
+      return;
+    }
+    console.error("  the app logged:");
+    for (const line of lines) console.error(`    ${line.trim()}`);
+  } catch {
+    // Same contract as the screen digest: never outlive the failure it explains.
+  }
+}
+
 /**
  * Print the handles the failing screen is carrying.
  *
@@ -564,8 +609,10 @@ async function runMaestroChunk(
     // print a digest would defeat the control. The `configure-gateway` guard
     // repeats the workflow's own pre-upload scrub as belt-and-braces, so a
     // chunk that pairs stays silent even if it is ever run non-sensitive.
-    if (!sensitive && !label.includes("configure-gateway"))
+    if (!sensitive && !label.includes("configure-gateway")) {
       await printScreenDigest(state.udid, debugDir);
+      await printReplicaDigest(state.udid);
+    }
     throw error;
   } finally {
     // A pairing ticket is a live enrollment capability. Sensitive flows use a
