@@ -14,6 +14,9 @@
  * Node's Array prototype has every one of these, which is why thousands of unit
  * tests pass over code that cannot render on a phone. Only a device or this
  * gate can see it.
+ *
+ * What is measured and what is assumed is spelt out on `MISSING` below; the
+ * name of this file overstates it, and the map is the honest version.
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -48,6 +51,22 @@ const ENTRY_DIRS = ["apps/mobile/src"];
  * `with` is deliberately NOT here: `.with(` is a common builder verb, and a
  * property-name check cannot tell `array.with(0, x)` from a fluent API's own
  * `with`. Reaching that one needs a type checker, which this gate is not.
+ */
+/**
+ * ONE of these is a measured absence; the rest are a precaution, and the
+ * difference is recorded rather than blurred (#905). `toSorted` is the one the
+ * device threw on — `AllShelf`'s own frame, `[...labels].toSorted(...)`, an
+ * `undefined is not a function` on the phone. #903's
+ * `apps/mobile/polyfills/array-to-sorted.js` reached the same finding from the
+ * engine side, names the build (Static Hermes 250829098.0.16) and the upstream
+ * PR still open for it, and states that this engine DOES ship `toReversed`,
+ * `toSpliced`, `with` and `findLast`.
+ *
+ * The other four stay banned anyway. No device evidence exists either way for
+ * them, banning them blocks nothing the repo wants to write, and being wrong in
+ * this direction costs a rewrite while being wrong in the other costs a redbox
+ * on a lane that takes an hour to re-run. Narrow it when a probe on real
+ * hardware says so — not from either comment, this one included.
  */
 const MISSING = new Map([
   ["toSorted", "sort a fresh array with .sort() instead"],

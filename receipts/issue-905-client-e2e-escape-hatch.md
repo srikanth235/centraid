@@ -122,11 +122,20 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Merge #911 into this branch and close that PR
 - [x] Reconcile the two branches' independent answers where they collided
 
+### U — the merged tree's own three client-e2e failures
+
+- [x] Disambiguate the Household sharing panel's headings, which the merge made ambiguous page-wide
+- [x] Bring the two grant-kit e2e fixtures to the #903 reach ruling instead of the #825 one they still encoded
+- [x] Correct the Hermes claim: one absence is measured, four are a precaution
+
 ## What changed
 
 Where each checked item lands, then the reasoning behind it:
 
 - Merge #911 into this branch and close that PR — "One phone, two branches"; the merge commit itself, whose second parent is `724c0785`. #911's own 225-file diff is described by its own receipt, `receipts/issue-903-mobile-docs-v17-vault-lockup.md`, which comes across with it; nothing in that half is re-narrated here.
+- Disambiguate the Household sharing panel's headings, which the merge made ambiguous page-wide — "U — three failures the merge produced and nothing before it could have"; `apps/desktop/tests/e2e/household.spec.ts`.
+- Bring the two grant-kit e2e fixtures to the #903 reach ruling instead of the #825 one they still encoded — same section; `apps/web/tests/e2e/photos-grants.spec.ts`, `apps/web/tests/e2e/people-grants.spec.ts`.
+- Correct the Hermes claim: one absence is measured, four are a precaution — same section; `scripts/lint-hermes-array-surface.mjs`, `oxlint.config.ts`.
 - Reconcile the two branches' independent answers where they collided — same section; `packages/design/src/icons.ts`, `apps/mobile/src/apps/tasks/TasksHome.test.tsx`, `apps/mobile/src/kit/replica/replica-mount.ts`, `apps/mobile/src/kit/replica/ReplicaProvider.tsx`, `apps/mobile/src/kit/share/ShareSheet.test.tsx`, `apps/mobile/scripts/android-emulator-roster.sh`, `apps/mobile/native-fingerprints.json`, `package.json`, `docs/traps/README.md`, `tests/matrix.json`, `tests/quality/classification-ratchet.json`, `tests/comment-density-ratchet.json`, `tests/hygiene-budgets.json`, `tests/agent-e2e-mobile/flows/claim-pins.json`, `tests/agent-e2e-mobile/flows/sharing-reach.md`.
 
 - Scroll the springboard to a tile before tapping it, since only five of the eight fit a phone screen — "The three tiles under the fold"; `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
@@ -669,6 +678,24 @@ The merge conflicted in six files, and the resolutions are the record of where t
 - **One flow, renamed.** #911 renamed `sharing-invite` to `sharing-reach` and missed two references: the Android roster script still named the old file, and `tests/matrix.json` had no continuity marker, so the minimum-tests check read the rename as a retirement. Both are repaired here rather than by loosening either check — `replacesMinimumTestsFlow` is the field that exists for exactly this, and `claim-pins.json` shrinks from 17 to 16, which the down-only rule permits.
 
 Three ratchets moved as a consequence and none was hand-raised: `toHaveBeenCalled` tightened 783 → 778, `toBeTruthy` held at 378 after two of #911's and my own assertions were sharpened to `toBeInstanceOf` and a counted `toHaveLength`, and the ten comment-density pins that a bad `--theirs` resolution had inflated were reset to their measured values.
+
+### U — three failures the merge produced and nothing before it could have
+
+`b15d72ce` went in with a green local suite and CI came back red on `client-e2e / desktop-e2e` and `client-e2e / web-e2e`. Neither lane runs in `check:push`, so nothing local could have seen them; all three failures are the merge's own, in the sense that each needs both parents' code present to happen.
+
+**The Household heading, and why "exact" was not enough.** `household.spec.ts` asked for `getByRole("heading", { name: "People", exact: true })` and got two nodes: `SharingCard`'s `<h3>People</h3>` and the census `<SectionBlock label="People">`'s `<h2>`, which sits further up the same page. Playwright's strict mode makes that an error rather than a first-match. #911 wrote the assertion, and its own comment says what it means — "the panel's two halves" — so the fix is to scope both halves to the panel (`ancestor::section[1]` off the "People & circles" heading), which asserts *more* than the page-wide query did: that the roster heading is inside the sharing panel and not merely somewhere on the page.
+
+**The grant kit, which is a superseded ruling meeting a stale fixture.** Both web failures are the same: the sheet's Share button never enabled, and the click timed out after 120s. The cause is `cannotShare`'s new `reachBlocksSharing(reach)` term. Both fixtures answered `forParty` with `channel: null`, which `channelReach` reads as `never-reached`, which since #903 blocks sharing.
+
+That is the product behaving correctly. [G-channel](../docs/decisions.md) records the supersession in as many words — "~~Share subsumes linking.~~ **Superseded 2026-09-01 by #903: linking IS the prerequisite**" — and L-write spells out this exact control: "the grant sheet's Share is inert against a person no link reaches, rather than posting a request the pack would refuse." The fixtures encoded #825's retired rule, and `people-grants`' own comment said so out loud: "the screen still offers sharing — the invitation is the grant's own step." So both fixtures move to a live binding, which is what each test's claim — a share actually posting — now presupposes.
+
+The one claim genuinely lost is "not reached is an OPPORTUNITY, not an error", and it is the claim #903 retired; keeping it would be pinning a rule the repo has ruled against. Its replacement is not nothing: the shipped copy for that state was already corrected on #911's side (`reachNote` says "Link their account in People to share with them." and its comment explains that promising an invitation would name an act the sheet will not perform), and `GrantSheet.claims.test.tsx` pins every reach state at the unit tier, including that `unknown` must NOT block.
+
+**None of this was reachable from a local gate**, which is the honest limit worth recording: `check:push` runs neither Playwright lane, so the merge's first real verdict was CI's. Both lanes now reproduce locally in this container — the web one needs the pinned headless-shell path pointed at the Chromium that is actually installed, and the desktop one needs `xvfb-run`, Electron having no display otherwise. That is environment, not repo, and it is written down in Verification so the next person does not conclude the lanes are unrunnable.
+
+**The Hermes claim, corrected.** This branch's gate said Hermes ships no ES2023 change-array-by-copy at all. The branch's own evidence never supported that: the only device observation is `AllShelf`'s `[...labels].toSorted(...)` throwing, and the other four names were generalized from it by family resemblance. #903's polyfill header is the better-grounded claim — it names the engine build and the upstream PR still open for `toSorted` alone, and states that this build does ship `toReversed`, `toSpliced`, `with` and `findLast`. It cannot be settled in this container: `node_modules/hermes-compiler` ships `hermesc`, which compiles and has no VM, and no `libhermes` binary or Hermes source is present.
+
+So the *claim* is corrected in both places that made it, and the *ban* is deliberately not narrowed. Being wrong in the banning direction costs a rewrite; being wrong the other way costs a redbox on a lane that takes an hour per attempt. What changed is that the four extra names are now labelled a precaution with no evidence behind them, rather than presented as fact — which is the part that was actually wrong. Decision 13 above is superseded by this paragraph: it framed the two branches as holding an open disagreement, and they were not — one side had evidence for one method and the other had evidence for five, of which four were mine and unfounded.
 
 ## User impact
 

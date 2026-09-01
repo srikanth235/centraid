@@ -119,6 +119,11 @@ const VITEST_TEST_FILES = [
 // can carry both this and the seam rules — an override replaces a rule's
 // configuration, so the two lists have to be spread together rather than
 // layered.
+// Only `toSorted` is a MEASURED absence — the device threw on it, and #903's
+// polyfill header reaches the same finding from the engine side while stating
+// that this Hermes build does ship the other three copies and `findLast`. The
+// rest are banned as a precaution, at no cost to anything the repo writes;
+// `scripts/lint-hermes-array-surface.mjs` carries the full reasoning (#905).
 const HERMES_ARRAY_PROPERTIES = [
   {
     property: "toSorted",

@@ -84,9 +84,10 @@ const door = {
   forParty: () =>
     Promise.resolve({
       known: true,
-      // NEVER REACHED: this vault has no channel to Priya at all, and the
-      // screen still offers sharing — the invitation is the grant's own step.
-      channel: null,
+      // LINKED. #825 had this never-reached, sharing sending the invitation
+      // itself; #903's G-channel superseded that, so the gesture below is
+      // only testable over a live binding (#905).
+      channel: { state: "live", vaultId: "vault-priya" },
       grants: [
         grant("doc-1", "core.document", "delivered"),
         grant("photo-1", "media.asset", "awaiting_channel"),
@@ -170,10 +171,11 @@ test("the person screen lists live grants and shares in one gesture", async ({
   await expect(page.getByText("Shared", { exact: true })).toBeVisible();
   await expect(page.getByText("On its way", { exact: true })).toBeVisible();
 
-  // Not reached is an OPPORTUNITY, not an error or a link ceremony.
+  // A live link needs no note: nothing for the member to do first (#903).
+  await expect(page.getByText("Reachable", { exact: true })).toBeVisible();
   await expect(
-    page.getByText("Not reached yet · Sharing sends an invitation first.")
-  ).toBeVisible();
+    page.getByText("Link their account in People to share with them.")
+  ).toBeHidden();
 
   await mkdir(EVIDENCE_DIR, { recursive: true });
   await page.screenshot({

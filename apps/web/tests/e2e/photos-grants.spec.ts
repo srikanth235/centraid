@@ -65,7 +65,15 @@ window.centraid = {
           { subjectType: "core.document", capabilities: ["view", "edit"] },
         ],
       }),
-    forParty: () => Promise.resolve({ channel: null, grants: [] }),
+    // Priya is LINKED. Since #903 a live \`share_party_vault_binding\` is the
+    // prerequisite for a party grant, so a null channel would leave the
+    // sheet's Share correctly inert and this claim untestable (#905).
+    forParty: () =>
+      Promise.resolve({
+        known: true,
+        channel: { state: "live", vaultId: "vault-priya" },
+        grants: [],
+      }),
     forAudience: () => Promise.resolve({ grants: [] }),
     forSubject: () => Promise.resolve({ grants: [] }),
     create: (request) => {
