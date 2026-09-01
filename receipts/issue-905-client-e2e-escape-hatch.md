@@ -106,10 +106,21 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Stop leaving the launcher cold when device preparation force-stops the app
 - [x] Classify a system error dialog over the app as infrastructure, since the assertion never reached the product
 
+### R — Tasks could not mount at all, and the Hermes ban was still guessing at reachability
+
+- [x] Ship the `Inbox` glyph the Tasks band has named since it was written
+- [x] Assert that a band icon RESOLVES, not merely that it is a non-empty string
+- [x] Derive the Hermes Array ban from what the mobile bundle actually reaches, instead of a hand-written glob
+- [x] Name the two ES2023 copies the ban never listed, and the two more sites the walk found
+
 ## What changed
 
 Where each checked item lands, then the reasoning behind it:
 
+- Ship the `Inbox` glyph the Tasks band has named since it was written — "The route that never mounted"; `packages/design/src/icons.ts`, `apps/mobile/src/apps/tasks/TasksHome.test.tsx`.
+- Assert that a band icon RESOLVES, not merely that it is a non-empty string — same section; `apps/mobile/src/apps/tasks/tasks-band.test.ts`.
+- Derive the Hermes Array ban from what the mobile bundle actually reaches, instead of a hand-written glob — "The glob that was a guess about reachability"; `scripts/lint-hermes-array-surface.mjs`, `scripts/lint-hermes-array-surface.test.mjs`, `package.json`, `oxlint.config.ts`.
+- Name the two ES2023 copies the ban never listed, and the two more sites the walk found — same section; `oxlint.config.ts`, `packages/client/src/access-lens.ts`, `packages/client/src/receipt-capture.ts`.
 - Force the configuration re-latch that makes `hide_error_dialogs` take effect on a snapshot-restored emulator — "The dialog that was already supposed to be hidden"; `apps/mobile/scripts/android-emulator-install.sh`, `docs/traps/emulator-snapshot-settings.md`, `docs/traps/README.md`.
 - Stop leaving the launcher cold when device preparation force-stops the app — same section; `apps/mobile/scripts/android-emulator-install.sh`.
 - Classify a system error dialog over the app as infrastructure, since the assertion never reached the product — same section, final paragraphs; `tests/agent-e2e-mobile/lib/failure-class.mjs`, `tests/agent-e2e-mobile/lib/harness.mjs`.
@@ -589,9 +600,33 @@ The third change is a backstop, and it is the one worth arguing about. `tests/ag
 
 Neither the suppression nor the launcher settle can be verified off a device, which is the same asymmetry the trap above is about. They are best-effort by construction — every `adb` call here is `|| true`, and the read is guarded because the caller runs under `set -euo pipefail`. The classifier signal is the half that *is* pinned here, by `tests/agent-e2e-mobile/lib/failure-class.test.mjs`, which asserts every signal is the first match for its own example.
 
+#### The route that never mounted
+
+The fix under Q worked. `pairing-canary` passed in 203s on run 33518484505, `cold-start` passed all eight launches, no `id:aerr_*` appears anywhere, and the gateway trace finally carries phone-originated requests — `replica/bootstrap` at 10330B and again at 24273B, then `/changes`, `/scopes`, `POST /replica/checkpoint`, `POST /replica/intents`. The Notes library on the phone renders the seeded corpus by name. The three device-runtime fixes are confirmed end to end, and what the gate reports now are product defects rather than an environment that could not run.
+
+`native-v0-resilience` failed on one of them. Tapping Tasks from Home drew `"Something went wrong" / "Unknown mobile icon name: Inbox" / "Try again"` — an error boundary where the list should be. `tasks-band.ts` has named `"Inbox"` for the third band destination and again as the More sheet's first row since it was written, `@centraid/design` shipped no such glyph, and `resolveIconName` throws by design so a missing name cannot silently become an unrelated mark. So the shipped route could not mount at all.
+
+This was known and pinned. `TasksHome.test.tsx` carried a characterisation test asserting the throw, with its own instruction: DELETED, not adjusted, by whoever adds the glyph or the alias. The glyph is the right half of that choice — an alias would have to point somewhere, and inbox is where things arrive while archive is where they rest; at 18px the slotted lip is the whole distinction. The pin is replaced by its inverse, which asserts the route mounts *and* that the band drew its destinations, because a band rendering nothing would also not throw.
+
+What let it ship for that long is the more useful finding. `tasks-band.test.ts` asserted `destination.icon.length > 0` — a name that is a string but not a glyph passes that and then throws in the renderer. Both icon assertions now resolve the name through `resolveIconName`. The check that was already there was the right check one predicate too weak.
+
+#### The glob that was a guess about reachability
+
+`08e50fcc` rewrote eight `toSorted`/`toReversed` call sites and left the lint alone, so the hole that let them ship was still open: `oxlint.config.ts` bans `toSorted` under `files: ["apps/mobile/src/**", "packages/core/src/time/**"]`, and every crashing site was in `packages/blueprints`. A glob cannot express "everything Metro bundles", so that glob was a guess about reachability — and the guess is what failed, not the ban.
+
+Widening the glob is not the fix either. There are 121 `toSorted` and about 90 `toReversed` calls in this repo, nearly all in `packages/server` and `packages/vault` code that runs in Node, where these exist; a repo-wide ban would mean two hundred pointless rewrites and would still be a guess, just a larger one. So `scripts/lint-hermes-array-surface.mjs` derives the answer: a BFS from `apps/mobile/src` over the real import graph, following value imports and skipping type-only ones (erased before Metro sees them) and tests (they run in Node). It reads the TypeScript AST rather than matching text, so the method named in a comment — this paragraph's own file included — is not a violation. 793 modules are reachable today.
+
+It found two more live crashes on its first run, both in `packages/client`, which no glob covered: `access-lens.ts:189` and `receipt-capture.ts:69`. That is the gate paying for itself before it was committed.
+
+The second one is the reason `.sort()` is not a free substitution. `parsed.toReversed().find(…)` looks like the same shape as the other seven, but `parsed` is read twice more below — a bare `.reverse()` would have reordered the receipt's own lines as a side effect of looking for its total, trading a crash for a silent wrong answer. It became an explicit backward scan, which copies nothing, mutates nothing, and also satisfies `unicorn(no-array-reverse)` — a rule that otherwise demands the exact method Hermes lacks, and would have forced a suppression. The other site sorts a `.filter()` result, which is fresh, so `.sort()` is safe there.
+
+The rest of that class is held by the type system rather than by review: these functions take `readonly` arrays, and TypeScript declares no `sort` on `ReadonlyArray`, so sorting a caller's array in place does not compile. `toSpliced` and `findLastIndex` join the oxlint list alongside `toReversed`, which was never on it — which is how one survived *inside* the guarded tree. That list stays the fast local signal; the walker is the gate, and its comment says so, so nobody widens the glob again believing that is where coverage comes from.
+
+One comment-density pin is hand-raised, for no prose at all: `packages/client/src/access-lens.ts`, 14.42% → 14.43%. Its only change is `.toSorted(` → `.sort(`, which deletes three characters of code, and the metric is comment *share* — a shrinking denominator raises it with the numerator untouched. `08e50fcc` recorded seven of these on the same rewrite. Nothing was added to that file; the comment explaining the rewrite was cut rather than pinned, along with the three others this section's edits would have raised, and the reasoning is here instead. `--write` lowered 27 other pins on its own and refused this one, which is the gate working.
+
 ## User impact
 
-**H and P's bootstrap retry are what a member can see.** Everything else is CI wiring, lint rules and receipts.
+**H, P's bootstrap retry, and R's Tasks route are what a member can see** — Tasks could not be opened at all on the phone, and the two `packages/client` sites would have thrown the same way in the access lens and in receipt capture. Everything else is CI wiring, lint rules and receipts.
 
 **P's retry is the larger of the two.** A phone that mounted while its gateway was briefly unreachable, and whose first bootstrap after waking was refused, kept an empty library over a full vault for the rest of that launch — silently, since the refusal reached no status row and no log. Nothing the member could do from inside the app recovered it: pull-to-refresh dials nothing without a cursor, and only backgrounding and returning offered another attempt. It now retries on its own backoff, so the same interruption costs a delay rather than the library. Its own visible ceiling is unchanged: a phone that is genuinely offline still fails open on the replica it holds.
 

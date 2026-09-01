@@ -126,9 +126,24 @@ const HERMES_ARRAY_PROPERTIES = [
       "The reviewed Hermes runtime does not implement Array.prototype.toSorted; sort a fresh array with .sort instead.",
   },
   {
+    property: "toReversed",
+    message:
+      "The reviewed Hermes runtime does not implement Array.prototype.toReversed; reverse a COPY with [...rows].reverse() — never the array itself, which other reads may still hold.",
+  },
+  {
+    property: "toSpliced",
+    message:
+      "The reviewed Hermes runtime does not implement Array.prototype.toSpliced; build the new array explicitly instead.",
+  },
+  {
     property: "findLast",
     message:
       "Keep the mobile/time-engine bundle on the reviewed Hermes Array surface; use an explicit forward scan instead.",
+  },
+  {
+    property: "findLastIndex",
+    message:
+      "Keep the mobile/time-engine bundle on the reviewed Hermes Array surface; use an explicit backward scan instead.",
   },
 ] as const;
 
@@ -510,6 +525,15 @@ export default defineConfig({
       // redbox in the exact-HEAD journey, and time-engine is bundled into
       // native Agenda/Tally. Keep compatibility mechanical rather than relying
       // on Node-based unit tests, whose newer Array prototype masks the bug.
+      //
+      // THIS GLOB IS THE FAST SIGNAL, NOT THE GATE (#905). It covers the two
+      // trees an author is most likely to be editing, and it is a guess about
+      // reachability — the guess that failed, when eight crashing sites turned
+      // out to live in `packages/blueprints` and two more in `packages/client`.
+      // `bun run lint:hermes-surface` walks the import graph out of
+      // `apps/mobile/src` and checks what the bundle ACTUALLY reaches (793
+      // modules today), so widening this list is never the way to cover a new
+      // package: the walker already does, and derives it rather than guessing.
       files: ["apps/mobile/src/**", "packages/core/src/time/**"],
       rules: {
         "no-restricted-properties": ["error", ...HERMES_ARRAY_PROPERTIES],

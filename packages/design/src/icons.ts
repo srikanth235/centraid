@@ -408,6 +408,10 @@ const ICON_DATA = {
   Maximize: [{ d: "M8 3H3v5M16 3h5v5M8 21H3v-5M21 16v5h-5" }],
   List: [{ d: "M4 6h16M4 12h16M4 18h16" }],
   Archive: [{ d: "M4 5h16v4H4z" }, { d: "M6 9v10h12V9M9 13h6" }],
+  Inbox: [
+    { d: "M5 4h14l3 8v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z" },
+    { d: "M2 12h6l2 3h4l2-3h6" },
+  ],
   Upload: [{ d: "M12 15V3m0 0 4 4m-4-4-4 4M5 21h14" }],
   Download: [{ d: "M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" }],
   FolderPlus: [
