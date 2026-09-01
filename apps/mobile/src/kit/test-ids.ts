@@ -152,6 +152,8 @@ export const TEST_IDS = Object.freeze({
 
   tally: Object.freeze({
     band: "tally-band",
+    /** The composer's commit; it and the title share a label (#905). */
+    addCommit: "tally-add-commit",
     /** The group's own life-act that mints an invitation. */
     shareVerb: "tally-share-verb",
   }),

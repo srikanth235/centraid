@@ -67,6 +67,7 @@ import {
 
 import { Text } from "../../kit/components/NativeText";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { TEST_IDS } from "../../kit/test-ids";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { TallyScreenProps } from "../../navigation";
@@ -455,6 +456,7 @@ export default function TallyAddScreen({
           accessibilityState={{ disabled: !verdict.ok }}
           onPress={commit}
           style={[styles.commit, verdict.ok ? undefined : styles.commitOff]}
+          testID={TEST_IDS.tally.addCommit}
         >
           {expenseId ? EDIT_COMMIT : ADD_COMMIT}
         </Text>

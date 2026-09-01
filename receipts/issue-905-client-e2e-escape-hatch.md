@@ -130,6 +130,7 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Scroll the composer to its foot sentence, which six fields push under the fold
 - [x] Scroll once more to the commit, which sits below the foot as the ScrollView's last child
 - [x] Make Photos ask before it is refused, since a pre-revoked grant is not a denied one
+- [x] Give Tally's commit a handle, since its label and the screen title are the same words
 - [x] Spend one spawn on Notes' three adjacent read and write chunks
 
 ### U — the merged tree's own three client-e2e failures
@@ -149,6 +150,7 @@ Where each checked item lands, then the reasoning behind it:
 - Scroll the composer to its foot sentence, which six fields push under the fold — same section; same file.
 - Scroll once more to the commit, which sits below the foot as the ScrollView's last child — same section; same file.
 - Make Photos ask before it is refused, since a pre-revoked grant is not a denied one — same section; `tests/agent-e2e-mobile/flows/photos-permissions.mjs`.
+- Give Tally's commit a handle, since its label and the screen title are the same words — same section; `apps/mobile/src/kit/test-ids.ts`, `apps/mobile/src/apps/tally/TallyAddScreen.tsx`, `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
 - Spend one spawn on Notes' three adjacent read and write chunks — same section; `tests/agent-e2e-mobile/flows/notes-library.mjs`.
 - Disambiguate the Household sharing panel's headings, which the merge made ambiguous page-wide — "U — three failures the merge produced and nothing before it could have"; `apps/desktop/tests/e2e/household.spec.ts`.
 - Bring the two grant-kit e2e fixtures to the #903 reach ruling instead of the #825 one they still encoded — same section; `apps/web/tests/e2e/photos-grants.spec.ts`, `apps/web/tests/e2e/people-grants.spec.ts`.
@@ -749,6 +751,12 @@ The one real defect left is Tally's ledger act, and it is the fold again: `Tally
 Priced from the four runs, the five journeys run to completion cost roughly: pairing 199s, notes 133s, native ~420s (345s reached the composer foot, with the commit, Waiting, restart and reconnect still to come), cold-start ~130s, photos-permissions ~120s — about **1000s against a 720s budget**. The ~90s the chunk merges recovered is real and is already in those numbers.
 
 So the arithmetic is settled and the remaining gap is not a defect. `pr-gate-budget.md` forbids raising the number, dropping a member and weakening an assertion, and its remedy 1 is now spent; remedy 3 — move a claim down a tier — is a judgment about which claims earn a device, and it is deliberately not taken unilaterally here.
+
+**Run 33559959847 got the composer all the way through and stopped one step later.** The foot scroll, the foot assertion, the extra scroll and the commit tap all COMPLETED, and then `tapOn: id: tally-band-contrib` found nothing — with the composer still on screen and NO refusal drawn. A refusal is what `verdict.ok === false` renders (`draft-model.ts` REFUSALS), so the commit was not refused; it was very likely never pressed. "Add expense" is the commit's label AND the screen's own title, and the only thing separating them was a `below:` anchor.
+
+So the control now has a handle, `tally-add-commit`, the way `locker-gate-submit` already does. That is the repo's own rule applied to a control that had been exempt from it — "the band destination is taken by its KEY, not its label, because the label is copy the shelf table may re-word" — and it removes the ambiguity rather than working around it.
+
+Two failures in that run were not this branch's: `notes-library` missed its capture row after waiting the full 30s having PASSED the three runs before it, and `cold-start` was killed before a single assertion and classified infrastructure by the harness itself. The capture-row timeout is left at 30s deliberately: raising it would buy green by waiting longer on a write that is genuinely sometimes slow, which is the measurement going soft rather than the defect being fixed.
 
 **The budget closed on its own, and the claim that it could not is withdrawn.** Run 33556574795 came in at **649s against 720s** — under, with all five journeys run. Everything above in this section that argued the five could not fit twelve minutes was extrapolation from runs whose later members were being starved, and it was wrong twice over: once at ~1000s before run 33544048980 measured 727s, and again after it. The chunk merges (25 spawns down to 15) plus journeys that stop burning time on doomed waits are what did it, which is precisely what `pr-gate-budget.md`'s remedy 1 predicted. No budget was raised, no member dropped, no assertion weakened, and remedy 3 was never needed.
 

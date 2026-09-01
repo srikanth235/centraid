@@ -392,9 +392,14 @@ ${DISMISS_KEYBOARD_ONBOARDING}
 # bottom, where the two adjacent last elements are both on screen; it cannot
 # overshoot, there being nothing after the button to scroll to.
 - scroll
+# BY HANDLE, NOT BY COPY. "Add expense" is the commit's label AND the screen's
+# own title, so a text tap needs a positional anchor to say which it meant —
+# and on run 33559959847 that tap reported COMPLETED while the app stayed on the
+# composer with no refusal drawn, which is what an ambiguous match looks like.
+# tally-add-commit names the control itself (#905).
 - tapOn:
-    text: "Add expense"
-    below: "Lands in ${DEMO_GROUP}.*"
+    id: "tally-add-commit"
+    retryTapIfNoChange: true
 # Waiting is the band's fourth place and the one surface that reads the durable
 # outbox rather than the gateway. Its key is contrib — the label "Waiting" is
 # copy shelves.ts owns, the key is the contract.
