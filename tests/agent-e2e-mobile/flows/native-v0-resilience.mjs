@@ -104,7 +104,46 @@ const SURFACES = [
   // now carry the design's per-route ambient sentence in the app bar instead of
   // a fixed subtitle. These two markers are those sentences, and they are the
   // same ones `tally-derived.mjs` and `locker-gate.mjs` assert on arrival.
-  { marker: BALANCES_STATUS, open: "Open Tally.*", name: "tally" },
+  // TALLY IS REACHED THROUGH THE SHEET, NOT THE GRID, AND THE CALENDAR IS WHY.
+  //
+  // The Home tile counts expenses with `spent_on >= monthStart`
+  // (`home-tile-reads.ts` expenseTileRead) and its caption says "spent this
+  // month", so on the 1st of a month a vault whose newest expense is four days
+  // old has nothing to show. `seed.js` dates the demo expenses 4 and 6 days
+  // ago, so for roughly the first WEEK of every month Tally's tile is `empty`,
+  // fails `tileEarnsGrid`, and Home draws it as a first move — "Log a shared
+  // expense" — instead of "Open Tally, …". Nothing is broken when that
+  // happens: zero spent this month is true, and demoting an app with nothing
+  // to say is what the launcher is for. This flow was simply asserting one of
+  // the two honest shapes, and picked the one the 1st of September did not
+  // have (#905).
+  //
+  // Neither the tile nor the first-move card is dependable, then — and the
+  // card is doubly not, since `FIRST_MOVE_LIMIT` is 3 and Tally sits 8th in
+  // leverage order, so a vault with three emptier apps drops it from the band
+  // altogether. The all-apps sheet is the one surface that lists every app
+  // unconditionally, labelling each row `Open <name>, <count>`
+  // (`AllAppsSheet.tsx` AppRow) whatever the tile status. Same three hops the
+  // `settings` entry below takes, and the same reason for
+  // `visibilityPercentage: 100`: Maestro matches a row the sheet has clipped.
+  {
+    marker: BALANCES_STATUS,
+    name: "tally",
+    openCommands: `- tapOn:
+    id: "home-band-more"
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: "home-all-apps"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      text: "Open Tally.*"
+    direction: DOWN
+    visibilityPercentage: 100
+    timeout: 20000
+${retryableTapCommands("Open Tally.*")}`,
+  },
   {
     marker: "Nothing is browsable until there is a passphrase",
     open: "Open Locker.*",
@@ -170,9 +209,28 @@ await runFlow("native-v0-resilience", async (ctx) => {
   await ctx.ensureDemo("tally");
   await ctx.configureGateway();
 
-  const visitNext = async (index) => {
-    const surface = SURFACES[index];
-    if (surface === undefined) return;
+  // ONE MAESTRO SPAWN FOR THE WHOLE TOUR, not one per surface (#905).
+  //
+  // `pr-gate-budget.md` names this as the FIRST thing to do when the gate
+  // overruns twelve minutes — "combine adjacent Maestro chunks … the per-spawn
+  // overhead is real" — and run 33539023776 priced it: every `run :` line sits
+  // about NINE SECONDS ahead of the first command in its chunk (17:53:34 →
+  // 17:53:43 for `06-people`, 17:54:07 → 17:54:16 for `07-notes`, 17:54:37 →
+  // 17:54:46 for `08-tally`), which is JVM start plus driver connect and buys
+  // nothing. Ten surfaces paid it ten times; the tour now pays it once.
+  //
+  // NOTHING IS DROPPED. Every surface keeps its own `stopApp` + `launchApp` —
+  // the relaunch IS the resilience claim, and combining chunks removes the
+  // spawn between them, never the process death — plus its own launcher wait,
+  // its own arrival marker and its own screenshot.
+  //
+  // What it costs: `ctx.note` per surface used to land as each one passed, so a
+  // tour that died at surface eight left seven notes behind it. They are
+  // emitted together after the tour now, so a failure leaves none. The evidence
+  // that replaces them is Maestro's own — a failing command is printed with its
+  // selector, and `takeScreenshot: native-<name>` still fires per surface, so
+  // the debug directory shows exactly how far the tour walked.
+  const surfaceBlock = (surface) => {
     // SCROLL THE GRID BEFORE TAPPING IT (#905). `SPRINGBOARD_ORDER` is photos,
     // docs, notes, agenda, tasks, people, tally, locker, and only the first
     // FIVE fit a Pixel 6 screen — the phone re-launches before every surface
@@ -198,10 +256,7 @@ await runFlow("native-v0-resilience", async (ctx) => {
     visibilityPercentage: 100
     timeout: 20000
 ${retryableTapCommands(surface.open)}`;
-    await ctx.run(
-      `appId: ${ctx.state.appId}
----
-- stopApp
+    return `- stopApp
 - launchApp:
     clearState: false
 - extendedWaitUntil:
@@ -215,13 +270,17 @@ ${AWAIT_LAUNCHER}${openCommands}
     visible: "${surface.marker}"
     timeout: 20000
 - takeScreenshot: native-${surface.name}
-`,
-      surface.name
-    );
-    ctx.note(`${surface.name}: opened from Home, "${surface.marker}" rendered`);
-    return visitNext(index + 1);
+`;
   };
-  await visitNext(0);
+  await ctx.run(
+    `appId: ${ctx.state.appId}
+---
+${SURFACES.map((surface) => surfaceBlock(surface)).join("")}`,
+    "tour"
+  );
+  for (const surface of SURFACES) {
+    ctx.note(`${surface.name}: opened from Home, "${surface.marker}" rendered`);
+  }
 
   // Maestro's real airplane-mode control is Android-only. This is the device
   // journey for #738: the write goes through the mounted UI, the OS process is

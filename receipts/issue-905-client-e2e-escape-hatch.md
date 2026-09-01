@@ -122,6 +122,11 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Merge #911 into this branch and close that PR
 - [x] Reconcile the two branches' independent answers where they collided
 
+### V — the device gate, measured rather than estimated
+
+- [x] Reach Tally through the all-apps sheet, since its Home tile is empty for the first week of every month
+- [x] Spend one Maestro spawn on the cover tour instead of ten
+
 ### U — the merged tree's own three client-e2e failures
 
 - [x] Disambiguate the Household sharing panel's headings, which the merge made ambiguous page-wide
@@ -133,6 +138,8 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 Where each checked item lands, then the reasoning behind it:
 
 - Merge #911 into this branch and close that PR — "One phone, two branches"; the merge commit itself, whose second parent is `724c0785`. #911's own 225-file diff is described by its own receipt, `receipts/issue-903-mobile-docs-v17-vault-lockup.md`, which comes across with it; nothing in that half is re-narrated here.
+- Reach Tally through the all-apps sheet, since its Home tile is empty for the first week of every month — "V — a calendar bug and a spawn tax"; `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
+- Spend one Maestro spawn on the cover tour instead of ten — same section; same file.
 - Disambiguate the Household sharing panel's headings, which the merge made ambiguous page-wide — "U — three failures the merge produced and nothing before it could have"; `apps/desktop/tests/e2e/household.spec.ts`.
 - Bring the two grant-kit e2e fixtures to the #903 reach ruling instead of the #825 one they still encoded — same section; `apps/web/tests/e2e/photos-grants.spec.ts`, `apps/web/tests/e2e/people-grants.spec.ts`.
 - Correct the Hermes claim and narrow the ban to the one measured absence — same section; `apps/mobile/src/lib/replica/multi-vault-session.ts`, `scripts/lint-hermes-array-surface.mjs`, `oxlint.config.ts`.
@@ -700,6 +707,22 @@ So the claim is corrected in both places that made it, and **the ban is narrowed
 The first attempt at this correction fixed only the wording and kept all five names banned, on the argument that a needless ban is the cheap direction to be wrong in. That argument does not survive contact with what a gate is for. A gate that fails a build over a method the engine implements is not cautious, it is wrong, and it spends its credibility on a claim it cannot support — the next person who hits it has no way to tell which of the five names is the measured one, so they either work around all of them or trust none. `receipt-capture.ts`'s backward scan and `multi-vault-session.ts`'s in-place reverse both stay, because both are correct on their own merits: the first avoids a genuine aliasing hazard, the second reverses a freshly-filtered temporary and saves the copy `toReversed()` would allocate. Only the false reason for them is removed.
 
 **Withdrawn claim, recorded because it is the kind that spreads.** "Hermes ships no ES2023 change-array-by-copy" appears earlier in this receipt as though it were an observation. It never was. The observation was one throw on one method, and the sentence generalized it to a family. Every downstream artefact — the lint's name, the oxlint list, a suppression justification in `multi-vault-session.ts` — inherited it without anyone re-checking, which is exactly how a plausible sentence outlives its evidence.
+
+### V — a calendar bug and a spawn tax
+
+Run 33539023776 is the first run in which the device gate got far enough to be *measured* rather than guessed at. `pairing-canary` PASSED in 209s — the first clean pairing on this branch — and the four behind it produced numbers instead of a prerequisite failure: `notes-library` 149s, `native-v0-resilience` 248s, `cold-start` 133s, `photos-permissions` unrun, aggregate 740s against a 720s budget.
+
+**Tally's tile is empty for the first week of every month, and nothing is wrong.** The tour died scrolling for `"Open Tally.*"`, and the digest shows why: the grid had scrolled to the bottom (Locker was on screen below it) and Tally was not a grid tile at all. It was a FIRST MOVE — "Log a shared expense. Who owes whom, settled.", `FirstMoves.tsx`'s `${label}. ${hint}`. Home's tile counts expenses with `spent_on >= monthStart` and captions itself "spent this month" (`home-tile-reads.ts`); `seed.js` dates the demo expenses 4 and 6 days ago; CI ran on 1 September. So every seeded expense fell in August, the tile read `empty`, `tileEarnsGrid` demoted it, and Home offered the invitation instead. Zero spent this month was TRUE. The product was right and the flow was asserting one of two honest shapes.
+
+Twenty rows had been seeded — `seed-demo-corpus: tally seeded (20 rows)` — which is what makes this worth writing down: the seed log said the data was there, and the tile was still correctly empty, because "seeded" and "spent this month" are different questions. A flow keyed on the grid tile is therefore red for roughly the first week of every month and green for the rest, which is the worst shape a gate can have.
+
+The fix does not touch the tile, the seed or the calendar. Tally is opened through the all-apps sheet, whose `AppRow` labels every app `Open <name>, <count>` unconditionally, whatever the tile status — the same three hops the `settings` entry already takes. The first-move card was the other candidate and is worse: `FIRST_MOVE_LIMIT` is 3 and Tally sits 8th in leverage order, so three emptier apps would drop it from the band entirely.
+
+**Nine seconds a spawn, ten times.** `pr-gate-budget.md` names combining adjacent Maestro chunks as the FIRST remedy for an overrun, and this run priced the overhead exactly: each `run :` line sits ~9s ahead of the first command in its chunk (`06-people` 17:53:34 → 17:53:43, `07-notes` 17:54:07 → 17:54:16, `08-tally` 17:54:37 → 17:54:46) — JVM start plus driver connect, buying nothing. The tour now emits one flow for all ten surfaces. Every `stopApp`/`launchApp` survives, because the relaunch is the resilience claim; only the spawn between them goes.
+
+**`cold-start` is deliberately left on eight spawns.** It times each `ctx.run` with `performance.now()`, so combining would destroy the per-launch series the drift budget keys off — and would silently redefine what the recorded history means. Worth noting for whoever picks this up: those samples currently include the ~9s spawn in every measurement, so the recorded "cold start" is really "spawn + stop + launch + ready". That is a measurement question, not a budget one, and it is not touched here.
+
+**The budget is still the open item, and it is not closable by defect-fixing.** With the tour combined this recovers ~81s. The gap is larger than that: `native-v0-resilience`'s airplane journey — offline write, process kill, reconnect — never ran at all in this run, so 248s is not that flow's finished cost, and `photos-permissions` has not run on this branch at any point. `pr-gate-budget.md` lists three remedies; the first is done here, the second (failure classes) is already bounded by #892 Phase 0, and the third is the substantive one: **move a claim down a tier** into `tests/integration-mobile/`, which the doc calls "the correct first move, not the last resort". That is a decision about which claims earn a device, not a change that belongs in a commit fixing a scroll selector.
 
 ## User impact
 
