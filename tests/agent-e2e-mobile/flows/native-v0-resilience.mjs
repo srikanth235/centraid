@@ -373,6 +373,17 @@ ${DISMISS_KEYBOARD_ONBOARDING}
 - hideKeyboard
 # THE FOOT NAMES WHERE THE WRITE LANDS BEFORE THE COMMIT, not after it — and
 # offline that sentence is the whole promise this journey then goes and checks.
+#
+# Scrolled to first, because the composer is longer than a Pixel 6: What was
+# it, How much, Paid by, Group, Category and When all precede the foot, and the
+# digest of the run that found this ends at "Yesterday" with the foot and the
+# commit button below it. Third instance of the same shape in this flow (#905).
+- scrollUntilVisible:
+    element:
+      text: "Lands in ${DEMO_GROUP}.*"
+    direction: DOWN
+    visibilityPercentage: 100
+    timeout: 20000
 - assertVisible: "Lands in ${DEMO_GROUP} . queued on this device until the gateway answers"
 - tapOn:
     text: "Add expense"
