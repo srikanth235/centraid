@@ -100,10 +100,19 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Bind the phone's loopback proxy to the address every caller dials
 - [x] Hand expo-file-system the URI form of the replica directory, not the bare path
 
+### Q — the guard against the emulator's ANR dialog had been inert since the snapshot cache landed
+
+- [x] Force the configuration re-latch that makes `hide_error_dialogs` take effect on a snapshot-restored emulator
+- [x] Stop leaving the launcher cold when device preparation force-stops the app
+- [x] Classify a system error dialog over the app as infrastructure, since the assertion never reached the product
+
 ## What changed
 
 Where each checked item lands, then the reasoning behind it:
 
+- Force the configuration re-latch that makes `hide_error_dialogs` take effect on a snapshot-restored emulator — "The dialog that was already supposed to be hidden"; `apps/mobile/scripts/android-emulator-install.sh`, `docs/traps/emulator-snapshot-settings.md`, `docs/traps/README.md`.
+- Stop leaving the launcher cold when device preparation force-stops the app — same section; `apps/mobile/scripts/android-emulator-install.sh`.
+- Classify a system error dialog over the app as infrastructure, since the assertion never reached the product — same section, final paragraphs; `tests/agent-e2e-mobile/lib/failure-class.mjs`, `tests/agent-e2e-mobile/lib/harness.mjs`.
 - Hand expo-file-system the URI form of the replica directory, not the bare path — "The screen behind the socket"; `apps/mobile/modules/centraid-storage/index.ts`, `apps/mobile/src/kit/fetch-gate/content-store.ts`, `apps/mobile/src/kit/fetch-gate/content-store.test.ts`, `apps/mobile/src/kit/replica/replica-mount.ts`, `apps/mobile/src/kit/replica/replica-mount.test.ts`, `apps/mobile/src/kit/replica/ReplicaProvider.test.tsx`, `apps/mobile/src/lib/replica/thumbnail-pack.ts`, `apps/mobile/src/lib/replica/thumbnail-pack.test.ts`, `apps/mobile/src/lib/replica/background-sync.test.ts`, `apps/mobile/src/apps/photos/PhotosHome.test.tsx`, `apps/mobile/src/screens/PhoneStorage.tsx`.
 - Trace what the gateway actually served the phone, since the device's replica path logs nothing — "P — the phone drew an empty library over a vault holding rows"; `tests/agent-e2e-mobile/lib/ci-gateway.mjs`, `.github/workflows/ci.yml`.
 - Print the app's own logcat on a failing flow, beside the screen digest — same section; `tests/agent-e2e-mobile/lib/harness.mjs`.
@@ -562,6 +571,23 @@ This was invisible to vitest for a sharper reason than the two gaps above, and t
 `apps/mobile/src/kit/replica/ReplicaProvider.test.tsx`, `apps/mobile/src/lib/replica/background-sync.test.ts` and `apps/mobile/src/apps/photos/PhotosHome.test.tsx` mock the storage module wholesale, so each gained the new export; without it the module under test sees `undefined` where a directory belongs.
 
 No comment-density pin was raised for any of this. Four rose on the first pass and every one was cut back rather than pinned — the reasoning that would have paid for them is in this section and in the trap, which is where it is useful to someone who was not here.
+
+#### The dialog that was already supposed to be hidden
+
+Run 33512726935 carried the URI fix and failed with **zero completed assertions** on the canary's first directive:
+
+    13:37:52.803  Launch app "dev.centraid.mobile" with clear state... COMPLETED
+    13:38:38.581  Assert that "Connect your gateway." is visible... FAILED
+
+The screen digest says what was there instead — `id:alertTitle "Pixel Launcher isn't responding"`, `id:aerr_close`, `id:aerr_wait`. Those are AOSP `app_error.xml` handles: a system window with no app content, covering the app. Pairing was not failing; pairing was never reached, and the gateway trace agrees — it holds the seeder's seven `POST /centraid/_vault/demo/*` calls and not one phone-originated request. The app's own logcat in the same digest is clean: both background tasks registered and `[centraid] replica: no tunnel — paired=false native=true`, the correct branch for an unpaired launch. None of the three device-runtime defects above recurred.
+
+That dialog is the one `#535` already fixed, and line 195 of `apps/mobile/scripts/android-emulator-install.sh` has been setting `hide_error_dialogs 1` against it ever since. The setting was being written and was doing nothing. `system_server` does not read it per-ANR — it latches it into `mShowDialogs` in `updateShouldShowDialogsLocked()`, which runs only on a configuration change or at boot — and this lane restores a **cached AVD RAM snapshot**, so the latch was taken during a different run's boot with the setting at 0 and the restore brings that `false` back with it. The guard has been inert since the snapshot cache landed under C, and stayed green throughout because the launcher happened not to ANR. A night-mode round trip after the write forces the re-latch; the current value is read first and restored, so it is a net no-op with no app running to see either edge. `docs/traps/emulator-snapshot-settings.md` records the general shape, because the next `settings put global` on this lane will hit it too.
+
+The launcher ANR'd now, and not before, because the warm-up added under K hands it back cold. `am force-stop` evicts our app after the twenty-second settle — logcat's `MainActivity EXITING` at 13:37:39.9 is that line — and resumes a Pixel Launcher that has been swapped out on a runner fresh off a gradle build and a full dexopt. It then sits unscheduled while the seeder saturates the CPU, and `pm clear`'s package broadcast, twelve seconds later, lands on a process that cannot answer inside the broadcast timeout. A HOME keyevent and a short settle draw and schedule it while the machine is still idle. That is device preparation of the same kind as the warm-up itself, not a retry.
+
+The third change is a backstop, and it is the one worth arguing about. `tests/agent-e2e-mobile/lib/failure-class.mjs` defaults a zero-assertion failure to `product` on purpose — that is exactly the shape of a regression on a flow's first assertion, and forgiving it is how a suite learns to lie. This failure is the one case the default gets wrong: under a system window the assertion did not look at the product and disagree, it never reached the product at all, so `product` is a fabrication in the file's own sense. `id:aerr_*` is unforgeable — it is framework layout, never app copy — so the signal is added with the observed line as its `example`, as that file requires, and it is first because nothing looser should claim it. The digest was printed but discarded, so `tests/agent-e2e-mobile/lib/harness.mjs` now carries it on the error and hands it to `classifyFailure` as `stdout`; a sensitive chunk has no digest to carry, which is the pairing-capability control, not a gap. The retry this unlocks is the existing one — one clean-state attempt, both attempts' evidence kept. Nothing was loosened: no assertion, no budget, no member of the critical five, and not the `product`-by-default rule itself.
+
+Neither the suppression nor the launcher settle can be verified off a device, which is the same asymmetry the trap above is about. They are best-effort by construction — every `adb` call here is `|| true`, and the read is guarded because the caller runs under `set -euo pipefail`. The classifier signal is the half that *is* pinned here, by `tests/agent-e2e-mobile/lib/failure-class.test.mjs`, which asserts every signal is the first match for its own example.
 
 ## User impact
 

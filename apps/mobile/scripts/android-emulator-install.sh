@@ -194,6 +194,34 @@ adb shell pm list packages "$expected_package" | grep -q "package:$expected_pack
 # background instead of stealing the window.
 adb shell settings put global hide_error_dialogs 1 || true
 
+# WRITING THAT SETTING IS NOT ENOUGH, AND HAS NOT BEEN SINCE THE SNAPSHOT CACHE
+# (#905). `system_server` never reads HIDE_ERROR_DIALOGS at ANR time: it latches
+# it into `mShowDialogs` inside `updateShouldShowDialogsLocked()`, which runs
+# only on a configuration change or at boot. This lane RESTORES A CACHED AVD RAM
+# SNAPSHOT (`.github/workflows/ci.yml`, the `AVD cache` step feeding
+# `force-avd-creation: false`), so the latch was taken during a different run's
+# boot with the setting still at 0 and the restore brings that `false` back in
+# the RAM image. `settings put` then updates a row nobody re-reads, and the
+# guard #535 added has been inert on this lane ever since — which is how the
+# launcher ANR dialog covered onboarding again on run 33512726935 and failed
+# `Assert that "Connect your gateway." is visible` with zero assertions run.
+#
+# A night-mode round trip is the cheapest configuration change that forces the
+# re-latch. It is a net no-op: the current value is read first and restored, and
+# no app is running to observe either edge. Best-effort throughout — on an image
+# whose `cmd uimode` refuses, the classifier signal in
+# tests/agent-e2e-mobile/lib/failure-class.mjs is what keeps the dialog from
+# being recorded as a product regression.
+# `|| true` on the read too: the caller runs under `set -euo pipefail`, so a
+# pipeline `adb` fails would abort the whole lane on a diagnostic round trip.
+night_now="$(adb shell cmd uimode night 2>/dev/null | tr -d '\r' | awk '{print $NF}')" || true
+case "$night_now" in
+  yes) night_other=no ;;
+  *) night_other=yes ;;
+esac
+adb shell cmd uimode night "$night_other" >/dev/null 2>&1 || true
+adb shell cmd uimode night "${night_now:-no}" >/dev/null 2>&1 || true
+
 # THE FIRST LAUNCH AFTER AN INSTALL IS NOT A LAUNCH ANY FLOW CLAIMS TO MEASURE
 # (#905). A just-installed apk has no AOT artifacts, so Android's first start of
 # it verifies and compiles on the spot; on a SwiftShader emulator that pushed the
@@ -223,6 +251,23 @@ adb shell cmd package compile -m speed -f "$expected_package" || true
 adb shell monkey -p "$expected_package" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
 sleep 20
 adb shell am force-stop "$expected_package" || true
+
+# AND THEN GIVE THE LAUNCHER ITS OWN SETTLE, because the force-stop above is
+# what resumes it (#905). The stop evicts our app and hands the foreground back
+# to a Pixel Launcher that has been swapped out for twenty seconds on a runner
+# that just finished a gradle build and a full dexopt; it then sits unscheduled
+# while the seeder below saturates the CPU, and the `pm clear` broadcast that
+# opens the first flow lands on a process that cannot answer inside the
+# broadcast timeout. Run 33512726935 caught the result: `MainActivity EXITING`
+# at 13:37:39.9 — this line — and "Pixel Launcher isn't responding" over the
+# app twelve seconds later.
+#
+# A HOME keyevent plus a short settle draws and schedules the launcher while the
+# machine is still idle, so the broadcast reaches a warm process. Nothing is
+# asserted here and nothing branches on it: like the app warm-up above, this is
+# device preparation, not a retry.
+adb shell input keyevent KEYCODE_HOME >/dev/null 2>&1 || true
+sleep 5
 
 # WHAT THE RADIO SAYS, BECAUSE THE REPLICA ASKS IT (#905). Replica sync shares
 # the byte-transfer rules — `nativeSyncAllowed` in

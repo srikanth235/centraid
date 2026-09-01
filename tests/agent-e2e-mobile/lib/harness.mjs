@@ -565,7 +565,7 @@ async function printScreenDigest(udid, debugDir) {
     if (lines.length > 0) {
       console.error("  the screen carried:");
       for (const line of lines) console.error(`    ${line}`);
-      return;
+      return lines;
     }
     // A SILENT NO-OP IS A FAILURE. If the capture came back empty the reason is
     // the next thing anyone needs, so say what the run dir does hold rather
@@ -581,6 +581,7 @@ async function printScreenDigest(udid, debugDir) {
   } catch {
     // Never let the diagnostic outlive the failure it was meant to explain.
   }
+  return [];
 }
 
 async function runMaestroChunk(
@@ -634,8 +635,14 @@ async function runMaestroChunk(
     // repeats the workflow's own pre-upload scrub as belt-and-braces, so a
     // chunk that pairs stays silent even if it is ever run non-sensitive.
     if (!sensitive && !label.includes("configure-gateway")) {
-      await printScreenDigest(state.udid, debugDir);
+      const screen = await printScreenDigest(state.udid, debugDir);
       await printReplicaDigest(state.udid);
+      // CARRIED ON THE ERROR, because the digest is the only witness to a
+      // screen the assertion never reached — a system window over the app
+      // looks, from the exit text alone, exactly like a first-assertion
+      // regression (#905). `classifyFailure` reads it as `stdout`; a sensitive
+      // chunk has no digest to carry, which is the control above, not a gap.
+      if (error instanceof Error) error.screenDigest = screen.join("\n");
     }
     throw error;
   } finally {
@@ -1064,7 +1071,13 @@ ${retryableTapCommands("Enter Centraid")}
   // could not be recorded still passed. Failing here would let a read-only
   // checkout or a full disk red a green nightly, so the failure is a warning
   // naming the path — the one fact needed to fix it (#890).
-  const failure = pass ? null : classifyFailure({ error, assertionsRun });
+  const failure = pass
+    ? null
+    : classifyFailure({
+        error,
+        assertionsRun,
+        stdout: error?.screenDigest ?? "",
+      });
   try {
     await appendRunRecord({
       flow: owner,
