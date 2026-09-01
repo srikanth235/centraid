@@ -289,6 +289,10 @@ jobs:
       # `apps/mobile/app-conformance.json`, which is also what makes app #9
       # covered the day it registers instead of the day someone remembers it.
       - run: bun run lint:app-conformance
+      # Every device flow names what merges wrongly if it passes when it should
+      # not. `cold-start` is why: it asserted a marker that renders in both of
+      # Home's branches, and passed against a Home with no launcher tiles at all.
+      - run: bun run lint:e2e-claims
 
   # #782 — the ~19 gates in `check:push` that had NO CI job at all. They ran
   # only on a developer's machine, and receipts (#765, #731) show `check:push`

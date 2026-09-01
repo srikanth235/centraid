@@ -1,5 +1,7 @@
 # native-v0-resilience
 
+**Claim:** every one of the eight blueprint covers still opens from the springboard, and an offline write reconnects and syncs. If this passes when it should not, a release ships in which an app is unreachable from Home, or a write made on a train is silently lost on arrival.
+
 **Goal:** preserve a repeatable native v0 smoke and resilience matrix across the Home springboard, all eight blueprint covers (Photos, Docs, Agenda, Tasks, People, Notes, Tally, and Locker), and Settings.
 
 There is no bottom-tab navigator (`apps/mobile/src/navigation.ts`): all eight apps are full-screen covers launched from Home's tiles, and Settings is a **place**, reached from the band's More tab through the all-apps sheet. Each surface is therefore entered the way a user enters it — by the tile's `Open <name>` accessibility label — and asserted on a string that only the opened screen publishes, never on the tile label, which can be visible before the destination opens. Covers dismiss with a native swipe-down gesture Maestro cannot drive, so each surface starts from a fresh launch; React Navigation state is not persisted, so every launch lands on Home.
