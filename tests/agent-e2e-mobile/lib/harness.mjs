@@ -30,6 +30,7 @@ import {
   DISMISS_KEYBOARD_ONBOARDING,
   retryableTapCommands,
 } from "./first-run.mjs";
+import { digestLines } from "./hierarchy-digest.mjs";
 import {
   DEV_LAUNCHER_LINK,
   METRO_ORIGIN,
@@ -412,6 +413,46 @@ export async function setup({ runId } = {}) {
 // `--udid` pins Maestro to the chosen device — without it Maestro picks any
 // connected target, which silently runs flows on the wrong platform when
 // both an iOS sim and an Android emulator are booted.
+/**
+ * Print the handles the LAST screen Maestro captured was carrying.
+ *
+ * Newest file wins because Maestro writes one hierarchy per step and the step
+ * that failed is the last one it reached. Swallows everything: this runs while
+ * an error is already in flight, and a diagnostic that throws would replace the
+ * real failure with its own.
+ */
+async function printScreenDigest(debugDir) {
+  try {
+    const names = await fs.readdir(debugDir, { recursive: true });
+    const candidates = names.filter((name) => /hierarchy/iu.test(name));
+    if (candidates.length === 0) {
+      // A SILENT NO-OP IS A FAILURE. Maestro's debug filenames are its own and
+      // may change under us; saying what it actually wrote turns "the digest
+      // printed nothing" into the one fact needed to fix this line, instead of
+      // a diagnostic that quietly stopped diagnosing.
+      console.error(
+        `  no hierarchy in ${path.basename(debugDir)}; it holds: ${
+          names.slice(0, 20).join(", ") || "nothing"
+        }`
+      );
+      return;
+    }
+    const stated = await Promise.all(
+      candidates.map(async (name) => {
+        const file = path.join(debugDir, name);
+        return { file, at: (await fs.stat(file)).mtimeMs };
+      })
+    );
+    const newest = stated.sort((a, b) => b.at - a.at)[0];
+    const lines = digestLines(await fs.readFile(newest.file, "utf8"));
+    if (lines.length === 0) return;
+    console.error(`  the screen carried (${path.basename(newest.file)}):`);
+    for (const line of lines) console.error(`    ${line}`);
+  } catch {
+    // A missing or unreadable hierarchy is not itself a failure worth naming.
+  }
+}
+
 async function runMaestroChunk(
   yaml,
   { state, label, maestroEnv = {}, sensitive = false }
@@ -449,6 +490,22 @@ async function runMaestroChunk(
         timeoutMs: maestroChunkTimeoutMs(),
       }
     );
+  } catch (error) {
+    // THE SCREEN, on the failure path only. `Element not found` names the
+    // selector that missed and nothing about what was there instead, which is
+    // the difference between "Home rendered the other branch" and "the tile is
+    // broken" — see hierarchy-digest.mjs. Printed rather than left in the
+    // artifact because the artifact is not evidence to a reader who cannot
+    // download it.
+    //
+    // NEVER for a sensitive chunk: its hierarchy is discarded below precisely
+    // because it may hold a live enrollment capability, and reading it here to
+    // print a digest would defeat the control. The `configure-gateway` guard
+    // repeats the workflow's own pre-upload scrub as belt-and-braces, so a
+    // chunk that pairs stays silent even if it is ever run non-sensitive.
+    if (!sensitive && !label.includes("configure-gateway"))
+      await printScreenDigest(debugDir);
+    throw error;
   } finally {
     // A pairing ticket is a live enrollment capability. Sensitive flows use a
     // MAESTRO_* variable so the retained YAML contains only a placeholder, run

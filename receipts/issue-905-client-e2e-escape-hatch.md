@@ -49,6 +49,11 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Hold the registry, the launcher catalog, Home's navigate switch, the deep-link table and the testID vocabulary against it, so a new app is covered the day it registers
 - [x] Replace per-app authoring at the composition tier with a sweep generated from the manifest
 
+### J — `Element not found` never said what WAS found, so the device lanes could not be read
+
+- [x] Print the handles the screen was carrying when a non-sensitive chunk fails, so a device failure is diagnosable from the log rather than only from an artifact
+- [x] Keep the sensitive path silent, and say so when no hierarchy is found rather than printing nothing
+
 ## What changed
 
 Where each checked item lands, then the reasoning behind it:
@@ -75,6 +80,8 @@ Where each checked item lands, then the reasoning behind it:
 - Give the shell↔app contract one manifest both the RNTL tier and the Maestro tier can read — `apps/mobile/app-conformance.json`, one row per first-party app carrying its launcher route, the navigator/screen its tile opens, its `centraid://` path, its tile handle, its arrival landmark and whether it ships a demo fixture. JSON rather than a TS module because the three consumers do not share a build: the RNTL sweep imports it, `lint:app-conformance` reads it from plain node, and the Maestro layer's `.mjs` runners can read it with no transpile. That answers #905 Part 2's first open question ("where does the app manifest live so that both RNTL and Maestro can read one source of truth") in the only way all three can be served.
 - Hold the registry, the launcher catalog, Home's navigate switch, the deep-link table and the testID vocabulary against it, so a new app is covered the day it registers — `scripts/lint-app-conformance.mjs`, `scripts/lint-app-conformance.test.mjs`, wired into `check:push` and `ci.yml`'s `static` job. Six rules: `registry-complete`, `route-registered`, `navigates`, `deep-link-routed`, `handles-declared`, `seed-declared`. See "I — the shell↔app contract had no source of truth", below.
 - Replace per-app authoring at the composition tier with a sweep generated from the manifest — `apps/mobile/src/screens/Home.test.tsx`, which now runs `describe.each` over the manifest: every registered app has a tile under its declared handle, and pressing that tile navigates to its declared cover. Sixteen assertions, no per-app authoring, and app #9 is swept the day it registers.
+- Print the handles the screen was carrying when a non-sensitive chunk fails, so a device failure is diagnosable from the log rather than only from an artifact — `tests/agent-e2e-mobile/lib/hierarchy-digest.mjs`, `tests/agent-e2e-mobile/lib/hierarchy-digest.test.mjs`, and the failure path of `runMaestroChunk` in `tests/agent-e2e-mobile/lib/harness.mjs`. See "J — `Element not found` never said what WAS found", below.
+- Keep the sensitive path silent, and say so when no hierarchy is found rather than printing nothing — `tests/agent-e2e-mobile/lib/harness.mjs`. The digest is gated on `!sensitive` and refuses any label containing `configure-gateway`; when nothing matches, it prints the directory's actual contents, because a diagnostic that quietly stops diagnosing is the silent no-op this repo treats as a failure.
 
 ### The defect
 
@@ -241,6 +248,18 @@ The Part 2 plan's own sequencing puts "get `mobile-canary` green" first and the 
 **Why this settles "shouldn't we treat all mini apps equally".** Hand-writing a journey per app is O(apps) to author *and* O(apps) to run, and app #9 arrives untested until somebody remembers it. Making conformance a property of the manifest inverts both: `Home.test.tsx` now runs `describe.each` over the manifest — every registered app has a tile under its declared handle, and pressing that tile navigates to its declared cover — so a new app is swept the day it registers, with no per-app authoring, and `registry-complete` is what stops a row being omitted to dodge the sweep. Photos keeps its extra hand-written flows, but on a stated principle rather than on taste: it is not special as a product, it is the app with the largest **native/OS** surface, and its extra coverage is proportional to that surface alone.
 
 **What this does not claim.** It matches text and mounts a composition; it does not prove a screen renders from a real replica on a real device. That claim is the device half of Part 2 item 3, deliberately not taken here — see "Out of scope".
+
+### J — `Element not found` never said what WAS found
+
+Reading run 33418649297 turned up two things worth recording. The first is a correction: `mobile-device-gate` fails on **three** of the critical five, not on `photos-permissions` alone as an earlier PR comment on this branch claimed. The suite does not short-circuit past the canary, so all five verdicts were in the log the whole time — `notes-library` (`Tap on "Open Notes.*"`), `native-v0-resilience` (`Tap on "Open Photos.*"`) and `photos-permissions` (`id: photos-collections`), against `pairing-canary` and `cold-start` green, at 479s of the 720s budget.
+
+The second is that E's fix is necessary and not sufficient. `seed-demo-corpus.mjs` ran and seeded all seven scenarios before `pairing-canary` paired — the log lines are in the job — pairing then passed, and `notes-library` still reported `notes demo already present (16 rows)` with no Notes tile on the grid. So the corpus precedes the clone, and rows are still not reaching the paired replica. That is downstream of anything this branch touches; `seed.js` writes through `ctx.vault.invoke` on the ordinary command path, so it is not a ledger-bypassing seed.
+
+**Why that took a day's reading to establish, and what fixes it.** Maestro's `Element not found` names the selector that missed and *nothing about what was on the screen instead*. For the two tap failures that is precisely the fact in question: Home renders `DayOne` instead of `LauncherGrid` when `springboardState` sees every tile settled and empty, and `HOME_READY_MARKER` renders in **both** branches — so the assertion before the tap passes either way and the log cannot tell them apart. The hierarchy that would settle it is written per step into `maestro-debug/`, uploaded, and unreadable to anyone who cannot download the artifact.
+
+`lib/hierarchy-digest.mjs` turns that artifact into log output: on the failure path only, the newest hierarchy is reduced to the handles and short labels the screen carried and printed under the failure. `day-one` present with no `home-tile-*` is the first-run branch; `home-tile-*` present is a different bug. It is pure — a tree in, strings out — so the shapes it must survive (bare arrays, flat nodes, null children, 50k-deep nesting, unparseable JSON) are covered by unit tests rather than by a 28-minute lane, and it never throws, because a diagnostic that fails on the failure path replaces the real error with its own.
+
+**The sensitive path stays silent.** A sensitive chunk's hierarchy is discarded precisely because it may hold a live enrollment capability, so the digest is gated on `!sensitive` and additionally refuses any label containing `configure-gateway` — belt-and-braces against the same chunk ever being run non-sensitive, and matching the workflow's own pre-upload scrub. And when no hierarchy matches, it prints what the directory *does* hold rather than nothing: Maestro's debug filenames are its own, and a digest that quietly stopped digesting is the silent no-op this repo treats as a failure.
 
 ### Docs
 
@@ -416,6 +435,21 @@ Two local-environment findings, recorded because each looked like a repo defect 
 1. **`receipt-per-issue` and `toolchain-config-protection` failed on a clean checkout of main tip.** The cause is a stale local `main` ref (`3b8c3f0c`, ten behind `origin/main`): the directive resolves its change set from `merge-base(HEAD, main)`, so the walk pulled #892's entire squash into scope. CI is green on the same commit because there `merge-base == HEAD` and the rule is skipped. `git branch -f main origin/main` clears it. This is the second time a stale `origin/main` in a container has produced a red gate attributable to nothing in the tree — see #892's receipt, Decisions 10.
 2. **`agent-session-identity` reads the issue anchor from the git process argv.** `git commit -F <file>` therefore has no anchor even when the subject carries `(#905)`; `AGENT_ISSUE` is the supported alternative.
 
+```console
+# J — the digest is pure, so the shapes it must survive are unit-tested rather
+# than discovered on a 28-minute lane.
+$ node node_modules/vitest/vitest.mjs run \
+    --config scripts/test-report/vitest.config.ts   # 41 files, 546 tests, 0 fail
+$ bun run check:push                                # 56/57
+```
+
+`check:push` was run whole rather than by hand-picked gate — the lesson from I, where `test:hygiene-ratchet` was missed locally and cost a CI cycle. The one failure is `design:gallery`, which cannot pass in this container: Playwright wants `chromium_headless_shell-1234` and the image ships a different build. It fails identically on a clean tree, so it is an environment limitation, not a finding; the push therefore carries `SKIP_CHECK_PR=1`, as this branch's earlier pushes did.
+
+Two claims in J are corrections of things stated earlier on this branch, recorded here because a receipt that keeps only the flattering half of its own reasoning is worth less than none:
+
+1. **The device gate's failure was reported as `photos-permissions` alone.** It is three of the critical five. The earlier claim came from reading the first failing flow and stopping; the suite short-circuits only on the canary, so the other verdicts were in the same log. Corrected on the PR in comment 5487960296.
+2. **`tests/agent-e2e-mobile/lib/**` was briefly thought to be unrun by any script.** It is not: `test:ratchet:unit` runs the `test-report-scripts` vitest project, whose `include` already covers it. The appearance of a gap came from running those files under `node --test`, which is the wrong runner for a vitest suite — `hierarchy-digest.test.mjs` is written in vitest style to match its siblings for exactly that reason.
+
 ## Audit
 
 **VERDICT: REFUTED — the independent audit required by `receipt-per-issue` rule 7 has NOT been performed.**
@@ -440,4 +474,4 @@ Recorded as REFUTED because the directive defaults to REFUTED under uncertainty 
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-08-31 | claude-code | 91a550cd-d7f2-5fa3-9d41-c4d75aaf2c05 |
+| 2026-09-01 | claude-code | 91a550cd-d7f2-5fa3-9d41-c4d75aaf2c05 |
