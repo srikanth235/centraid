@@ -50,13 +50,15 @@
 // `tally_group.simplify_opt_in`/`archived_at` (two owner decisions — a dropped
 // opt-in re-wires who owes whom, a dropped archive un-files a group).
 
-// Schema/export audit #872 (Locker): five tables enter the canonical walk and
+// Schema/export audit #872 (Locker): four tables enter the canonical walk and
 // three columns join `locker_item`, and all MUST be carried.
 // `locker_item_alias` binds connectors (`locker:@<alias>:<column>`);
 // `locker_item_field` is the member's own sections and fields;
 // `locker_item_address` the extra addresses a login answers to;
-// `locker_item_passkey` the passkey slot; `locker_item_history` the ONLY
-// record that a password was ever rotated. Each is a fact the owner entered.
+// `locker_item_passkey` the passkey slot. Each is a fact the owner entered.
+// `locker_item_history` was a fifth and is GONE (#916, D2): rotation history
+// is a `core_entity_revision` snapshot now, which is already in the walk, so
+// the record survives the table under the row that owns it.
 // Registration in schema/tables.ts is the whole fix — the `SELECT *` walk
 // carries the new `locker_item` columns and the sidecars' sealed cells, which
 // stay CIPHERTEXT: the bundle never carries plaintext, and since #630 never
