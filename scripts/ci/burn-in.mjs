@@ -144,22 +144,98 @@ export function verdictForRuns(outcomes) {
 }
 
 /**
- * Group candidate files by the package they must run from.
+ * How each candidate is actually RUN, in first-match order.
  *
- * @param {string[]} files Repository-relative paths.
- * @param {(candidate: string) => boolean} hasPackageJson Existence probe.
- * @returns {Map<string, string[]>} Package directory → files.
+ * A monorepo does not have one test runner. The `scripts/**` unit tests are
+ * driven by `node --test` (see the `scripts:test` script); the report and
+ * mutation helpers, the release guards and the three suites under `tests/` each
+ * have a Vitest config that the ROOT config does not load. Burning a file in
+ * from the wrong place does not fail on the test: Vitest collects zero files
+ * and exits non-zero, which this lane then reports as "the test is broken" for
+ * a test that is fine. Kept as a literal first-match list for the same reason
+ * DEVICE_DRIVEN_PREFIXES is — a wrong guess here is a false red on somebody
+ * else's PR — and the bare `scripts/` catch-all must stay last.
  */
-export function groupByPackage(files, hasPackageJson) {
-  /** @type {Map<string, string[]>} */
-  const groups = new Map();
-  for (const file of files) {
-    const dir = nearestPackageDir(file, hasPackageJson);
-    const list = groups.get(dir) ?? [];
-    list.push(file);
-    groups.set(dir, list);
+export const RUNNERS = Object.freeze([
+  {
+    prefix: "scripts/test-report/",
+    runner: "vitest",
+    config: "scripts/test-report/vitest.config.ts",
+  },
+  {
+    prefix: "scripts/mutation/",
+    runner: "vitest",
+    config: "scripts/test-report/vitest.config.ts",
+  },
+  {
+    prefix: "scripts/release/",
+    runner: "vitest",
+    config: "scripts/release/vitest.config.ts",
+  },
+  {
+    prefix: "scripts/fuzz/",
+    runner: "vitest",
+    config: "scripts/fuzz/vitest.config.ts",
+  },
+  { prefix: "scripts/", runner: "node" },
+  {
+    prefix: "tests/integration-mobile/",
+    runner: "vitest",
+    config: "tests/integration-mobile/vitest.config.ts",
+  },
+  { prefix: "tests/perf/", runner: "vitest", config: "vitest.perf.config.ts" },
+  {
+    prefix: "tests/quality/",
+    runner: "vitest",
+    config: "vitest.quality.config.ts",
+  },
+  {
+    prefix: "tests/scale/",
+    runner: "vitest",
+    config: "vitest.scale.config.ts",
+  },
+]);
+
+/**
+ * The run plan for one candidate: which runner, from where, with what filter.
+ *
+ * Anything the table does not claim is a package-owned Vitest test, and runs
+ * from its owning package for the reason nearestPackageDir documents.
+ *
+ * @param {string} file Repository-relative path.
+ * @param {(candidate: string) => boolean} hasPackageJson Existence probe, injected for tests.
+ * @returns {{runner: "node"|"vitest", cwd: string, filter: string, config?: string}} Run plan.
+ */
+export function planRun(file, hasPackageJson) {
+  for (const entry of RUNNERS) {
+    if (!file.startsWith(entry.prefix)) continue;
+    if (entry.runner === "node")
+      return { runner: "node", cwd: ".", filter: file };
+    return { runner: "vitest", cwd: ".", filter: file, config: entry.config };
   }
-  return groups;
+  const dir = nearestPackageDir(file, hasPackageJson);
+  return {
+    runner: "vitest",
+    cwd: dir,
+    filter: path.relative(dir === "." ? "" : dir, file) || file,
+  };
+}
+
+/**
+ * The argv for one run of a plan, passed to `process.execPath`.
+ *
+ * @param {{runner: "node"|"vitest", filter: string, config?: string}} plan Run plan.
+ * @returns {string[]} Node argv.
+ */
+export function argvFor(plan) {
+  if (plan.runner === "node") return ["--test", plan.filter];
+  return [
+    VITEST,
+    "run",
+    ...(plan.config ? ["--config", plan.config] : []),
+    plan.filter,
+    "--no-coverage",
+  ];
 }
 
 function parseArgs(argv) {
@@ -215,34 +291,33 @@ function main() {
     );
     return;
   }
-  const groups = groupByPackage(files, (candidate) =>
-    existsSync(path.join(root, candidate))
-  );
+  const plans = files.map((file) => ({
+    file,
+    plan: planRun(file, (candidate) => existsSync(path.join(root, candidate))),
+  }));
   if (args.list) {
-    for (const [dir, group] of groups)
-      console.log(`${dir}: ${group.join(" ")}`);
+    for (const { file, plan } of plans) {
+      const where = plan.config ? ` --config ${plan.config}` : "";
+      console.log(`${file}: ${plan.runner}${where} (cwd ${plan.cwd})`);
+    }
     return;
   }
 
   /** @type {{file: string, why: string}[]} */
   const failures = [];
-  for (const [dir, group] of groups) {
-    for (const file of group) {
-      const relative = path.relative(dir === "." ? "" : dir, file) || file;
-      /** @type {boolean[]} */
-      const outcomes = [];
-      for (let attempt = 1; attempt <= args.runs; attempt += 1) {
-        const run = spawnSync(
-          process.execPath,
-          [VITEST, "run", relative, "--no-coverage"],
-          { cwd: path.join(root, dir), stdio: "inherit" }
-        );
-        outcomes.push(run.status === 0);
-      }
-      const verdict = verdictForRuns(outcomes);
-      console.log(`burn-in: ${file} — ${verdict.why}`);
-      if (!verdict.ok) failures.push({ file, why: verdict.why });
+  for (const { file, plan } of plans) {
+    /** @type {boolean[]} */
+    const outcomes = [];
+    for (let attempt = 1; attempt <= args.runs; attempt += 1) {
+      const run = spawnSync(process.execPath, argvFor(plan), {
+        cwd: path.join(root, plan.cwd),
+        stdio: "inherit",
+      });
+      outcomes.push(run.status === 0);
     }
+    const verdict = verdictForRuns(outcomes);
+    console.log(`burn-in: ${file} — ${verdict.why}`);
+    if (!verdict.ok) failures.push({ file, why: verdict.why });
   }
 
   if (failures.length === 0) {

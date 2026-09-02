@@ -743,6 +743,34 @@ is cold), and for #870's fourteen inferred journeys, whose confirmation is
 `gh workflow run candidate.yml --ref main` and
 `gh workflow run e2e.yml --ref main -f suite=mobile`.
 
+**The first PR run, and the two reds it found** (`ci` run 33617683286 on
+`edb9c162`). Pushing the branch put the merge gate on its own new shape for the
+first time, and two lanes came back red. Neither could have been caught by the
+`check:push` block above: one needs a base ref, the other needs the lane's own
+subprocess.
+
+- `new-test-burn-in` called 34 of the 37 changed test files "failed all 3 runs —
+  the test is broken, not flaky". None of them was broken. The lane planned every
+  candidate onto a repo-root Vitest run, but `scripts/**` unit tests are
+  `node --test` modules, and the report, mutation, release, perf,
+  integration-mobile and quality suites each have a Vitest config the ROOT config
+  does not load. Vitest collected zero files, exited non-zero, and the lane read
+  that as a broken test — the one failure mode a burn-in lane must not invent,
+  since it accuses somebody else's healthy test. `scripts/ci/burn-in.mjs` now
+  carries a first-match `RUNNERS` table with `planRun`/`argvFor`, unit-tested in
+  `scripts/ci/burn-in.test.mjs`; run whole in this container the lane now reports
+  `37 file(s) each passed 3/3 runs in isolation`.
+- `static` failed `test:ratchet` with `flow replacement names unknown predecessor
+  "mobile-sharing-invite"`. That red is not this change's: it reproduces exactly
+  on a pristine `origin/main` worktree (`0a3258e3`). #903's rename marker
+  (`replacesMinimumTestsFlow`) stayed on `mobile-sharing-reach` after the rename
+  landed, so once main became the base the named predecessor no longer existed
+  and the ratchet failed for every PR opened against it. The spent marker and its
+  paired `approvedMinimumTestsDeviation` are dropped here — the flow-level
+  deviation waives by presence alone, so leaving it behind would have silently
+  waived a future drop of that flow's floor of 15. `bun run test:ratchet`,
+  `bun run test:claims` and `bun run lint:ledgers` are green.
+
 ## Audit
 
 **Verdict: PASS**
