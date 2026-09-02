@@ -576,6 +576,28 @@ property Wave 4 was for. The three failures, none of them a defect in this chang
   changed `receipts/issue-<N>-<slug>.md` carrying a `## Decisions` heading and the
   file's `approvedDeviation` note verbatim, and both are above.
 
+All three reds were environment, not code, and all three are now closed in this
+same container — the 14/17 above is kept as the first record of this session, not
+superseded prose. The `sqlite3` CLI was installed here (`apt-get install sqlite3`,
+3.45.1) and `packages/server/src/serve/gateway-db-lock.integration.test.ts` passes
+(1/1). The pre-installed Playwright Chromium
+(`/opt/pw-browsers/chromium_headless_shell-1194`) was aliased under the pinned
+build id through a scratch `PLAYWRIGHT_BROWSERS_PATH` — no download, because
+`cdn.playwright.dev` is refused by this environment's network policy — and
+`bun run design:gallery` then verified all 8 product-grammar baselines at 0.00 %
+change. `lint:quality-knobs` closed when this receipt landed. A fresh run of the
+whole loop is green:
+
+```sh
+bun run check:push           # 17/17 gates passed in 516.6 s
+                             #   test:affected   516.6 s (wall clock)
+                             #   test:qualities  120.4 s
+                             #   design:gallery   18.8 s
+```
+
+The pre-push hook therefore ran `check:push` green — after the two deferred
+governance directives — for the push that carries this branch.
+
 The whole-repo gates, all green:
 
 ```sh
