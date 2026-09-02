@@ -759,7 +759,16 @@ subprocess.
   since it accuses somebody else's healthy test. `scripts/ci/burn-in.mjs` now
   carries a first-match `RUNNERS` table with `planRun`/`argvFor`, unit-tested in
   `scripts/ci/burn-in.test.mjs`; run whole in this container the lane now reports
-  `37 file(s) each passed 3/3 runs in isolation`.
+  `37 file(s) each passed 3/3 runs in isolation`. The next CI run narrowed that
+  to one survivor, and it was a classification error rather than a routing one:
+  `tests/perf/desktop-launch.perf.test.ts` throws by design when `CI` is set and
+  the nightly desktop-e2e report is absent — correct at rung 4, where a missing
+  artifact means the gate guarded nothing, and a guaranteed "broken test" at
+  rung 2, where that artifact cannot exist. It passed here only because `CI` is
+  unset locally and the test then skips itself. `tests/perf/` and `tests/scale/`
+  are now refused by `NIGHTLY_RIG_PREFIXES` with a printed reason, the way the
+  device-driven suites already were: those rigs are fed by another job's
+  artifact and run whole on their own lane.
 - `static` failed `test:ratchet` with `flow replacement names unknown predecessor
   "mobile-sharing-invite"`. That red is not this change's: it reproduces exactly
   on a pristine `origin/main` worktree (`0a3258e3`). #903's rename marker

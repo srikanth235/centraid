@@ -18,8 +18,10 @@
  *
  * WHAT IT REFUSES TO RUN. Playwright and Maestro specs match `*.spec.*` and
  * `*.test.*` too, and running them here would boot browsers and emulators on the
- * PR gate — the opposite of the merge diet this lane ships inside. They are
- * skipped with a printed reason rather than silently dropped, because a skip
+ * PR gate — the opposite of the merge diet this lane ships inside. The nightly
+ * rigs are refused for the opposite reason: they are FED by an artifact another
+ * job publishes, and several fail on purpose under CI when it is absent. Both
+ * are skipped with a printed reason rather than silently dropped, because a skip
  * nobody can see is indistinguishable from a check that never looked.
  *
  * Usage:
@@ -61,6 +63,20 @@ export const DEVICE_DRIVEN_PREFIXES = Object.freeze([
 ]);
 
 /**
+ * Directory prefixes whose tests are NIGHTLY RIGS, fed by an artifact another
+ * job publishes (`artifacts/perf-input/…`, the scale fixtures). Several of them
+ * fail on purpose when `CI` is set and that artifact is absent, because at
+ * rung 4 a missing artifact means the gate guarded nothing — so at rung 2,
+ * where the artifact does not exist and cannot, a burn-in run measures the
+ * absence rather than the test, three times. Their own lanes (`test:perf`,
+ * `test:scale`) run them whole where the inputs are.
+ */
+export const NIGHTLY_RIG_PREFIXES = Object.freeze([
+  "tests/perf/",
+  "tests/scale/",
+]);
+
+/**
  * Why a changed file is not a burn-in candidate, or null when it is one.
  *
  * @param {string} file Repository-relative path.
@@ -77,6 +93,10 @@ export function skipReason(file) {
   }
   if (file.includes("/e2e/"))
     return "driven by Playwright/Maestro (/e2e/ path)";
+  for (const prefix of NIGHTLY_RIG_PREFIXES) {
+    if (file.startsWith(prefix))
+      return `a nightly rig fed by another job's artifact (${prefix}); it runs whole on rung 4`;
+  }
   return null;
 }
 
@@ -183,16 +203,12 @@ export const RUNNERS = Object.freeze([
     runner: "vitest",
     config: "tests/integration-mobile/vitest.config.ts",
   },
-  { prefix: "tests/perf/", runner: "vitest", config: "vitest.perf.config.ts" },
+  // tests/perf and tests/scale are not here on purpose: skipReason refuses
+  // them upstream as nightly rigs, so no plan can reach them.
   {
     prefix: "tests/quality/",
     runner: "vitest",
     config: "vitest.quality.config.ts",
-  },
-  {
-    prefix: "tests/scale/",
-    runner: "vitest",
-    config: "vitest.scale.config.ts",
   },
 ]);
 

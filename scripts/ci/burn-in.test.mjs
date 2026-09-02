@@ -33,6 +33,18 @@ test("Playwright and Maestro specs are skipped with a reason, not silently", () 
   assert.match(skipReason("packages/server/e2e/boot.test.ts"), /\/e2e\/ path/u);
 });
 
+test("nightly rigs are skipped: their input is another job's artifact", () => {
+  // Regression (#915): desktop-launch.perf.test.ts throws under CI when the
+  // nightly desktop-e2e report is absent — correct at rung 4, and a guaranteed
+  // "broken test" verdict at rung 2, where the artifact cannot exist.
+  assert.match(
+    skipReason("tests/perf/desktop-launch.perf.test.ts"),
+    /nightly rig fed by another job's artifact/u
+  );
+  assert.match(skipReason("tests/scale/backup.scale.test.ts"), /nightly rig/u);
+  assert.equal(skipReason("tests/quality/user-facing-qualities.test.ts"), null);
+});
+
 test("partitionChangedFiles reports skips and ignores non-test files entirely", () => {
   const { files, skipped } = partitionChangedFiles(
     [
@@ -85,8 +97,8 @@ test("each candidate is planned onto the runner that actually owns it", () => {
     "scripts/release/vitest.config.ts"
   );
   assert.equal(
-    planRun("tests/perf/desktop-launch.perf.test.ts", has).config,
-    "vitest.perf.config.ts"
+    planRun("tests/quality/user-facing-qualities.test.ts", has).config,
+    "vitest.quality.config.ts"
   );
   assert.equal(
     planRun("tests/integration-mobile/parked.integration.test.ts", has).config,
