@@ -955,12 +955,35 @@ jobs:
   # It runs the RELEASE artifact (#890 W1), so none of the dev-client machinery
   # — Metro, the dev launcher, the bundle prewarm, the developer-menu sheet —
   # exists on this path.
+  #
+  # TWO LEGS ON TWO EMULATORS (#905). In sequence the critical five measured
+  # ~795s against the suite's 720s deadline (run 33582899886), so the fifth
+  # member was starved on every run. No member was dropped and no assertion was
+  # loosened; the five are split across two matrix legs that each pair
+  # themselves, so the gate's wall time is the slower leg. The cost is one extra
+  # pairing per run, and it is accepted — see flows/pr-gate-budget.md. ONE job
+  # with a matrix rather than two jobs, so `check`'s `needs:` still names one
+  # lane, the roster still declares ONE blocking mobile device lane, and both
+  # committed leg scripts sit literally inside this job block where
+  # scripts/lint-e2e-wiring.mjs reads them.
   mobile-device-gate:
     needs: changes
     if: needs.changes.outputs.mobile == 'true' || needs.changes.outputs.all == 'true'
     runs-on: ubuntu-latest
-    # The SUITE's own budget is 12 minutes warm (flows/pr-gate-budget.md) and is
-    # what fails a slow run, because it fails while evidence can still be written.
+    strategy:
+      # Both legs always report. A red paired leg tells you nothing about
+      # whether the app still cold-starts, and cancelling the sibling would
+      # throw away the half of the gate that was still answering.
+      fail-fast: false
+      matrix:
+        include:
+          - leg: paired
+            script: apps/mobile/scripts/android-emulator-pr-gate.sh
+          - leg: resilience
+            script: apps/mobile/scripts/android-emulator-pr-gate-resilience.sh
+    # The SUITE's own budget is 12 minutes warm, now PER LEG
+    # (flows/pr-gate-budget.md), and is what fails a slow run, because it fails
+    # while evidence can still be written.
     # This is an outer backstop only and must stay well above suite + a cold
     # gradle release build, or a cancelled job destroys the verdicts (#557:
     # cancelled counts as red, with nothing to read).
@@ -1104,7 +1127,7 @@ jobs:
             ~/.android/avd/*
             ~/.android/adb*
           key: avd-api34-x86_64-google_apis-pixel6-r4096-c4-v1
-      - name: Run the critical five on the release artifact
+      - name: Run this leg of the critical five on the release artifact
         id: emu
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         env:
@@ -1121,7 +1144,9 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
           disable-animations: true
-          script: bash apps/mobile/scripts/android-emulator-pr-gate.sh
+          # The leg's committed script. Both paths appear literally in the
+          # matrix above, which is where the wiring linter reads them from.
+          script: bash ${{ matrix.script }}
       # The gateway's side of a red run. The phone is mute about its replica —
       # nothing on that path logs and the release artifact carries no debugger —
       # so whether a clone was ever ASKED FOR is only knowable from here. Failure
@@ -1159,6 +1184,13 @@ jobs:
       # `if: always()` and gated on `built` for the same reason the canary's is:
       # a red suite still leaves the next push a warm build, and a run that
       # restored rather than compiled has nothing new to bank.
+      #
+      # BOTH LEGS SAVE THE SAME KEYS, and that is safe rather than lucky (#905).
+      # On a cold cache each leg compiles and each reaches this step with the
+      # identical apk / gradle key. `actions/cache/save` wraps its whole body in
+      # `catch (error) { utils.logWarning(...) }` (src/saveImpl.ts at the pinned
+      # v6.1.0), so the second reservation loses, logs a warning, and the step
+      # still exits 0 — the same shape the AVD snapshot save has always had.
       - name: Save the built Android app
         if: always() && steps.emu.outputs.built == 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -1177,7 +1209,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: mobile-device-gate-runs
+          name: mobile-device-gate-runs-${{ matrix.leg }}
           path: tests/agent-e2e-mobile/runs/
           retention-days: 7
           if-no-files-found: ignore
@@ -1188,7 +1220,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: mobile-run-ledger-pr-gate
+          name: mobile-run-ledger-pr-gate-${{ matrix.leg }}
           path: tests/agent-e2e-mobile/ledger/durations.json
           retention-days: 30
           if-no-files-found: warn

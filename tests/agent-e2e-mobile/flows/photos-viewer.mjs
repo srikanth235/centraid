@@ -139,9 +139,8 @@ ${retryableTapCommands("Open Photos.*")}
   const uiImpactDir = "artifacts/e2e/ui-impact";
   const screenshot = async () => {
     const frames = await readdir(ctx.state.screenshotsDir);
-    const infoFrame = frames.find((frame) =>
-      frame.endsWith("-place-phrase-info.png")
-    );
+    // The frame is `<name>.png`, unprefixed — see `pairing-canary.mjs` (#905).
+    const infoFrame = frames.find((frame) => frame === "place-phrase-info.png");
     if (infoFrame === undefined)
       throw new Error("place-phrase-info frame was not captured");
     await mkdir(uiImpactDir, { recursive: true });

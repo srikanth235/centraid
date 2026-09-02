@@ -10,11 +10,14 @@
     "pr-gate-android": {
       "workflow": ".github/workflows/ci.yml",
       "job": "mobile-device-gate",
-      "scripts": ["apps/mobile/scripts/android-emulator-pr-gate.sh"],
+      "scripts": [
+        "apps/mobile/scripts/android-emulator-pr-gate.sh",
+        "apps/mobile/scripts/android-emulator-pr-gate-resilience.sh"
+      ],
       "blocking": true,
       "platform": "android",
       "budgetDoc": "tests/agent-e2e-mobile/flows/pr-gate-budget.md",
-      "why": "Device signal BEFORE merge, on the primary surface. Android per D1: Linux + /dev/kvm, and the stabler of the two Maestro drivers. The only blocking mobile device lane there is."
+      "why": "Device signal BEFORE merge, on the primary surface. Android per D1: Linux + /dev/kvm, and the stabler of the two Maestro drivers. The only blocking mobile device lane there is. One job, TWO matrix legs on two emulators — paired (pairing-canary, notes-library, photos-permissions) and resilience (pairing-canary, native-v0-resilience, cold-start) — because the five measured ~795s in sequence against a 720s deadline; each leg pairs itself and the twelve-minute budget is now per leg."
     },
     "canary-android": {
       "workflow": ".github/workflows/mobile-canary.yml",

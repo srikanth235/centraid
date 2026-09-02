@@ -1,8 +1,8 @@
 # PR device-gate budget
 
-`run-pr-gate-suite.mjs` runs the **critical five** — `pairing-canary`, `notes-library`, `native-v0-resilience`, `cold-start`, `photos-permissions` — on the gating platform (Android, per D1 in [docs/decisions.md](../../../docs/decisions.md#mobile-testing-890)). The runner fails when aggregate wall time is **twelve minutes or more**, measured from the first flow process start through the fifth verdict.
+The gate runs the **critical five** — `pairing-canary`, `notes-library`, `native-v0-resilience`, `cold-start`, `photos-permissions` — on the gating platform (Android, per D1 in [docs/decisions.md](../../../docs/decisions.md#mobile-testing-890)), as two parallel legs (see [Two legs](#two-legs)). A runner fails when its own aggregate wall time is **twelve minutes or more**, measured from its first flow process start through its last verdict.
 
-`pairing-canary` runs first and **short-circuits**: it is the shared prerequisite of the four after it, and when pairing is broken those four each fail on their own unrelated-looking assertion after their own several minutes. Everywhere else in this layer a mid-run failure must not grey the later cells ([#535](https://github.com/srikanth235/centraid/issues/535) F4); here the later cells would be greyed by a prerequisite and would name the wrong cause.
+`pairing-canary` runs first in **each leg** and **short-circuits**: it is the shared prerequisite of every other member, and when pairing is broken those members each fail on their own unrelated-looking assertion after their own several minutes. Everywhere else in this layer a mid-run failure must not grey the later cells ([#535](https://github.com/srikanth235/centraid/issues/535) F4); here the later cells would be greyed by a prerequisite and would name the wrong cause.
 
 ## Where twelve minutes came from
 
@@ -32,6 +32,19 @@ Ten PR-gate runs on [#905](https://github.com/srikanth235/centraid/issues/905) a
 |  | **≈950 to pass in the shape it had** | **600 + 120 headroom** |
 
 The derivation was not wrong about pairing; it was wrong about the four behind it, pricing ~6 minutes of work that measures ~9. **The ceiling stays at twelve minutes and the suite is fitted to it instead.** Two things were cut: the ten-surface cover tour moved down a tier under remedy 3 (the covers-open claim is `apps/mobile/src/screens/Home.test.tsx`'s manifest-generated sweep plus the per-cover canary and nightly journeys), and six Maestro spawns — four reuse-mode gateway configures and two restarts, ~9–15s of JVM start each — now stage onto the next chunk instead of spawning `maestro test` of their own, under remedy 1.
+
+## Two legs
+
+The five run as **two legs on two emulators in parallel**, one job with a matrix in `ci.yml`. Measured on run 33582899886 (head `1485d8f4`, after the tour moved down a tier and six spawns folded): `pairing-canary` 187s, `notes-library` 106s, `native-v0-resilience` 267s, `cold-start` 145s, `photos-permissions` ~90s to pass — **≈795s in sequence against a 720s deadline**, so the fifth member was starved on every run.
+
+| Leg | Runner | Members, in order |
+| --- | --- | --- |
+| paired | [`../run-pr-gate-suite.mjs`](../run-pr-gate-suite.mjs) | `pairing-canary`, `notes-library`, `photos-permissions` |
+| resilience | [`../run-pr-gate-resilience-suite.mjs`](../run-pr-gate-resilience-suite.mjs) | `pairing-canary`, `native-v0-resilience`, `cold-start` |
+
+`pairing-canary` is the shared prerequisite, so it runs first and short-circuits in **both** legs; each leg pairs itself. `photos-permissions` stays last in its leg (it clears the client and denies every permission) and `cold-start` stays last in its — its eight launches run over the profile the member before it leaves.
+
+**Twelve minutes is now per leg, and wall-clock for the gate.** The number did not move; the shape did. The accepted cost is one extra pairing per run — the same ~190s, paid twice instead of once — which the design takes in exchange for the gate answering in the time of its slower leg (~600s) rather than the sum.
 
 ## The budget is a deadline, not a verdict
 

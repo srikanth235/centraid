@@ -746,7 +746,7 @@ export function prependPrefix(prefix, yaml) {
  *   runs/<slug-runId>/
  *     state.json
  *     flows/<NN-label>.yaml     ← every ctx.run() chunk, in order
- *     screenshots/<NN-name>.png ← whatever `takeScreenshot:` produced
+ *     screenshots/<name>.png    ← whatever `takeScreenshot:` produced
  *     verdict.md                ← PASS/FAIL + notes (written last)
  */
 export async function runFlow(slug, fn) {

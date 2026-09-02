@@ -156,6 +156,9 @@ await runFlow("native-v0-resilience", async (ctx) => {
   // is what the journey is actually about.
   if (ctx.state.platform === "android") {
     const airplaneExpense = `Airplane expense ${ctx.state.runId}`;
+    // The arc's own reconnect is the radio restore whenever it is reached; the
+    // `finally` below is the cleanup for every path that never got there.
+    let radioRestored = false;
     try {
       await ctx.run(
         `appId: ${ctx.state.appId}
@@ -327,21 +330,18 @@ ${AWAIT_LAUNCHER}${OPEN_TALLY}
       );
 
       // ─── The radio comes back (#890 W4) ───────────────────────────────────
-      // Restoring the network is its own chunk so the app is FOREGROUNDED and
-      // on Waiting when the radio returns — the state a member is in when a
-      // train leaves a tunnel. `native-session.ts` flushes the outbox on
-      // AppState changes and on every session open, so the relaunch below is
-      // what makes the drain deterministic rather than a race against backoff.
+      // Restoring the network is this chunk's FIRST command, ahead of the
+      // stopApp, so the app is still foregrounded and on Waiting when the radio
+      // returns — the state a member is in when a train leaves a tunnel. It was
+      // a chunk of its own until #905 measured 11s of bare JVM start for one
+      // directive (`flows/pr-gate-budget.md` remedy 1). `native-session.ts`
+      // flushes the outbox on AppState changes and on every session open, so
+      // the relaunch below is what makes the drain deterministic rather than a
+      // race against retry backoff.
       await ctx.run(
         `appId: ${ctx.state.appId}
 ---
 - setAirplaneMode: disabled
-`,
-        "airplane-reconnect"
-      );
-      await ctx.run(
-        `appId: ${ctx.state.appId}
----
 - stopApp
 - launchApp:
     clearState: false
@@ -374,17 +374,24 @@ ${AWAIT_LAUNCHER}${OPEN_TALLY}
 `,
         "airplane-settled-after-reconnect"
       );
+      radioRestored = true;
       ctx.note(
         "Android: with the radio restored the queued expense left the outbox on its own — Waiting drew its empty in-flight section and no queued reason"
       );
     } finally {
-      await ctx.run(
-        `appId: ${ctx.state.appId}
+      // A FAILURE ANYWHERE EARLIER LEAVES THE EMULATOR ONLINE — that is the
+      // invariant, and it is the only thing this chunk is for. Skipped once the
+      // settled chunk has already restored the radio, because a second
+      // `maestro test` for a directive that is a no-op costs 10s of JVM start
+      // on every green run (#905, `flows/pr-gate-budget.md` remedy 1).
+      if (!radioRestored)
+        await ctx.run(
+          `appId: ${ctx.state.appId}
 ---
 - setAirplaneMode: disabled
 `,
-        "restore-network"
-      );
+          "restore-network"
+        );
     }
   } else {
     // No airplane chunk on this side, so the Settings hop is its own chunk here
@@ -420,11 +427,17 @@ ${OPEN_SETTINGS}
   // launcher is the all-native surface — publish the post-restart Home frame
   // where the desktop journeys publish theirs.
   const uiImpactDir = "artifacts/e2e/ui-impact";
+  // `takeScreenshot: <name>` LANDS AS `<name>.png`, WITH NO STEP PREFIX.
+  // harness.mjs runs every chunk with `cwd = state.screenshotsDir`, and the
+  // `NN-` prefix it mints belongs to the chunk's flow YAML and debug dir, not
+  // to the frame; `--debug-output` only relocates Maestro's OWN per-step
+  // captures. So a `-after-force-kill.png` suffix could never match, and run
+  // 33582899886 failed here with every assertion of the arc already green.
+  // The directory is still read rather than the file joined blind, so an
+  // absent frame says so instead of surfacing as a copy's ENOENT.
   const screenshot = async () => {
     const frames = await readdir(ctx.state.screenshotsDir);
-    const home = frames.find((frame) =>
-      frame.endsWith("-after-force-kill.png")
-    );
+    const home = frames.find((frame) => frame === "after-force-kill.png");
     if (home === undefined)
       throw new Error("after-force-kill Home frame was not captured");
     await mkdir(uiImpactDir, { recursive: true });

@@ -11,27 +11,35 @@
 // to the per-merge canary and the nightly:
 //
 //   1. PAIRING WORKS.            pairing-canary — the shared prerequisite of
-//      every other journey. It runs FIRST and SHORT-CIRCUITS: when the gateway
-//      cannot mint a ticket or the phone cannot redeem one, the remaining four
-//      would each fail with their own unrelated-looking assertion after their
-//      own several minutes, and the run's headline would name whichever one
-//      happened to be last. Failing here costs ~5 minutes and names the cause.
+//      every other journey. It runs FIRST in BOTH legs and SHORT-CIRCUITS: when
+//      the gateway cannot mint a ticket or the phone cannot redeem one, the
+//      members behind it would each fail with their own unrelated-looking
+//      assertion after their own several minutes, and the run's headline would
+//      name whichever one happened to be last. Failing here costs ~5 minutes and
+//      names the cause.
 //   2. A WRITE ROUND-TRIPS AND SURVIVES PROCESS DEATH.   notes-library
-//   3. THE COVERS OPEN, AND AN OFFLINE WRITE RECONNECTS AND SYNCS.
-//                                                        native-v0-resilience
+//   3. SETTINGS LOADS, THE APP SURVIVES A RESTART, AND AN OFFLINE WRITE
+//      RECONNECTS AND SYNCS.                             native-v0-resilience
 //   4. COLD START OVER EXISTING DATA.                    cold-start
 //   5. A REFUSED OS PERMISSION DEGRADES GRACEFULLY.      photos-permissions
 //
-// ORDER IS LOAD-BEARING, for two reasons that pull the same way. `pairing-canary`
-// pairs fresh, so every later member runs with MAESTRO_REUSE_PAIRED_STATE=1
-// against the profile it leaves behind (the run-photos-suite / run-home-apps-suite
-// pattern — one boot, one pairing). And `photos-permissions` is LAST because it
-// is the only member that launches with `permissions: { all: deny }` on a cleared
-// client: running it earlier would destroy the paired profile the others reuse.
+// THE FIVE RUN AS TWO PARALLEL LEGS (#905), because in sequence they measured
+// ~795s against a 720s deadline and the fifth was starved every run. Claims 3
+// and 4 are `run-pr-gate-resilience-suite.mjs` on a second emulator; this file
+// is the PAIRED leg and keeps 1, 2 and 5. The arithmetic, and the extra pairing
+// the split costs, are in flows/pr-gate-budget.md.
 //
-// Budget: see flows/pr-gate-budget.md. The envelope is 12 minutes wall on a WARM
-// runner (a restored native shell); a cold build is the build job's cost, not
-// this suite's, which is exactly why #890 W1 split building from testing.
+// ORDER IS LOAD-BEARING within a leg. `pairing-canary` pairs fresh, so every
+// later member runs with MAESTRO_REUSE_PAIRED_STATE=1 against the profile it
+// leaves behind (the run-photos-suite / run-home-apps-suite pattern — one boot,
+// one pairing). And `photos-permissions` is LAST because it is the only member
+// that launches with `permissions: { all: deny }` on a cleared client: running
+// it earlier would destroy the paired profile the others reuse.
+//
+// Budget: see flows/pr-gate-budget.md. The envelope is 12 minutes wall PER LEG
+// on a WARM runner (a restored native shell); a cold build is the build job's
+// cost, not this suite's, which is exactly why #890 W1 split building from
+// testing.
 
 import { runSuite } from "./lib/run-suite.mjs";
 
@@ -43,14 +51,14 @@ import { runSuite } from "./lib/run-suite.mjs";
 const FLOWS = [
   "pairing-canary.mjs",
   "notes-library.mjs",
-  "native-v0-resilience.mjs",
-  "cold-start.mjs",
   "photos-permissions.mjs",
 ];
 
-// The W4 envelope. Derived, not observed: see flows/pr-gate-budget.md for the
-// arithmetic and for the rule that this becomes a measured p95 ratchet off
-// tests/agent-e2e-mobile/ledger/durations.json once three real runs exist.
+// The W4 envelope, unchanged by the split into two legs: twelve minutes is now
+// per leg and wall-clock for the gate. Derived, not observed — see
+// flows/pr-gate-budget.md for the arithmetic and for the rule that this becomes
+// a measured p95 ratchet off tests/agent-e2e-mobile/ledger/durations.json once
+// three real runs exist.
 const BUDGET_MS = 12 * 60_000;
 
 process.exitCode = await runSuite({

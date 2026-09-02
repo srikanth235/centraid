@@ -74,7 +74,12 @@ await runFlow("pairing-canary", async (ctx) => {
   // the suite behind it must not fall over a file copy.
   const screenshot = async () => {
     const frames = await readdir(ctx.state.screenshotsDir);
-    const home = frames.find((frame) => frame.endsWith("-paired-home.png"));
+    // The frame is `<name>.png`, unprefixed: harness.mjs runs every chunk with
+    // `cwd = screenshotsDir`, and the `NN-` prefix it mints belongs to the
+    // chunk, not to the frame. A `-paired-home.png` suffix never matched, so
+    // the swallowed note below fired on every run and this frame was never
+    // published (#905).
+    const home = frames.find((frame) => frame === "paired-home.png");
     if (home === undefined)
       throw new Error("paired-home frame was not captured");
     await mkdir(UI_IMPACT_DIR, { recursive: true });

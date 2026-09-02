@@ -1046,6 +1046,55 @@ Each `run :` line also sat ~9–15s ahead of its first Maestro command, and the 
 - **Sharding the gate and a cold-start beacon.** Both are wave 2 and both should be decided from the next measured run rather than from this one's arithmetic — that is the whole point of the ledger artifact.
 - **`design:gallery` cannot run in this container** (pre-existing; recorded in Verification above).
 
+## X — two legs, and the arc that finally closed
+
+- [x] Close `native-v0-resilience`'s tail: publish the post-restart Home frame by the name the frame actually has, fold the airplane reconnect onto the chunk that follows it, and leave the `finally` restore for the paths that never reached the settled chunk
+- [x] Run the critical five as two parallel emulator legs, each pairing itself and each under the unchanged twelve-minute deadline — no member dropped, no assertion loosened
+- [x] Fix the same latent screenshot lookup in the three other flows that carry one, and record the two-leg ruling in the docs that claim it
+
+**What changed**
+
+- `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs` — the `after-force-kill` lookup matches `frame === "after-force-kill.png"`; the radio restore is the settled chunk's first command instead of a chunk of its own; the `finally` restore runs only when the settled chunk never did.
+- `tests/agent-e2e-mobile/flows/native-v0-resilience.md` — states both, and that the emulator is still left online on every failing path.
+- `tests/agent-e2e-mobile/run-pr-gate-resilience-suite.mjs` — new. The resilience leg: `pairing-canary`, `native-v0-resilience`, `cold-start`, same twelve-minute envelope, `canaryCount: 1`, lane `pr-gate`.
+- `apps/mobile/scripts/android-emulator-pr-gate-resilience.sh` — new. The resilience leg's committed script, sourcing the shared install preamble like its sibling.
+- `tests/agent-e2e-mobile/run-pr-gate-suite.mjs` — trimmed to the paired leg: `pairing-canary`, `notes-library`, `photos-permissions`.
+- `.github/workflows/ci.yml` — `mobile-device-gate` is one job with a `strategy.matrix.include` of two legs (`paired`, `resilience`), each naming its script path literally so `lint:e2e-wiring` still reads them; `fail-fast: false`; run and ledger artifacts suffixed by leg.
+- `apps/mobile/scripts/android-emulator-install.sh` — the header names three callers, and the one-script-per-lane-shape rationale is restated for legs.
+- `tests/agent-e2e-mobile/roster.json` — the `pr-gate-android` lane declares both scripts and says why there are two legs.
+- `tests/agent-e2e-mobile/flows/pr-gate-budget.md` — a "Two legs" section: the run 33582899886 measurements, the per-leg member table, and that twelve minutes is now per leg and wall-clock for the gate.
+- `tests/agent-e2e-mobile/ledger/README.md` — the PR gate's ledger artifact is `pr-gate-paired` / `pr-gate-resilience`.
+- `tests/agent-e2e-mobile/README.md` and `TESTING.md` — the lane table and property 2 describe two parallel legs; the alarm row now says it drives the paired leg.
+- `tests/agent-e2e-mobile/flows/pairing-canary.mjs`, `tests/agent-e2e-mobile/flows/photos-viewer.mjs`, `tests/agent-e2e-mobile/flows/sharing-reach.mjs` — the same latent lookup, three more times: `paired-home`, `place-phrase-info`, and `sharing-reach`'s two-call helper all matched a `-<name>.png` suffix that no frame can have. Each now matches `<name>.png`.
+- `tests/agent-e2e-mobile/lib/harness.mjs` — the runDir layout comment said `screenshots/<NN-name>.png`; the prefix is the chunk's, not the frame's.
+- `docs/decisions.md` — `G-device-only-gate` carries the two-leg paragraph.
+
+**What run 33582899886 measured** (head `1485d8f4`, after the cover tour moved down a tier and six Maestro spawns folded):
+
+| Journey | Measured (s) | Leg |
+| --- | --- | --- |
+| `pairing-canary` | 187 | both |
+| `notes-library` | 106 | paired |
+| `native-v0-resilience` | 267 | resilience |
+| `cold-start` | 145 | resilience |
+| `photos-permissions` | starved by the clamp at 24; ~90 to pass | paired |
+| aggregate | 730 against the 720 deadline; ~795 to pass in sequence | |
+
+The Android airplane arc passed end to end on CI for the first time in this run — every assertion of offline write → process death → reconnect → settled was green, and the flow then failed on the #799 screenshot copy alone. Two legs price at ≈385s (paired: 187+106+90) and ≈580s (resilience: 187+267+145), so the gate answers in its slower leg.
+
+17. **The five are split across two legs rather than the deadline raised.** `pr-gate-budget.md` forbids raising twelve minutes, dropping a member and weakening an assertion; the split does none of the three. The bound a human waits on is unchanged and now applies per leg, so the gate's wall time falls from ~795s to ~580s. The currency spent is runner minutes — one extra pairing per run, ~190s — which is the one resource nobody is waiting on.
+18. **One job with a matrix, not two jobs.** `check`'s `needs:` still names one lane, the roster still declares one blocking mobile device lane, and both committed leg scripts sit literally inside the job block where `scripts/lint-e2e-wiring.mjs` reads them. Two jobs would have duplicated ~90 lines of build, cache and upload wiring and given the linter two lanes to reconcile with one roster entry.
+19. **Both legs save the same apk and gradle cache keys, and that is left as-is.** On a cold cache the two legs reach the save step with identical keys; `actions/cache/save` wraps its body in a `catch` that logs a warning (`src/saveImpl.ts` at the pinned v6.1.0), so the loser exits 0. This is the shape the AVD snapshot save has always had, and gating one leg out of the save would make which leg banks the build depend on which finished first.
+20. **The canary runs in both legs deliberately.** It is the shared prerequisite and the source of the paired profile each leg's later members reuse, so a leg that skipped it would have nothing to reuse and would misattribute a pairing failure to whichever member ran first. The duplicate ~187s is the split's whole cost, and it is named rather than absorbed.
+21. **The three other screenshot lookups are fixed here rather than left for the flow that next fails on one.** They are the same defect as native-v0's, latent for the same reason, and two of the three are on lanes that publish `check:ui-receipt` evidence. `pairing-canary`'s copy failure is swallowed into a note by design — the canary's verdict is about pairing — which is exactly why it could never have surfaced on its own.
+
+**Open**
+
+- **`mobile-alarm-test.yml` audits the paired leg only.** It drives `android-emulator-pr-gate.sh`, which is now three of the five; its claim — that a build with Home blanked makes the suite FAIL — still holds, because `pairing-canary` and `notes-library` both assert Home. Whether the quarterly alarm should also run the resilience leg is a decision to make on evidence from a real two-leg run, not now.
+- **The launch-stall failure class is still unclassified.** Carried from W: a launch that never reaches Home within 45–60s, filed as `product` by the classifier. Nothing here changes it.
+- **A cold-start beacon stays deferred until the two-leg numbers exist.** Same reason as in W, and now with a specific next input: the first `mobile-run-ledger-pr-gate-resilience` artifact.
+- **`design:gallery` is container-only red** (pre-existing; recorded in Verification above).
+
 ## Audit
 
 **VERDICT: REFUTED — the independent audit required by `receipt-per-issue` rule 7 has NOT been performed.**
