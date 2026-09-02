@@ -848,8 +848,6 @@ next run of `check`.
 
 ## Audit
 
-## Audit
-
 **Verdict: PASS**
 
 A fresh-context sub-agent, handed only the change set, this receipt and issue #915, audited
