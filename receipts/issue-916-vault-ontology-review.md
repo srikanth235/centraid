@@ -135,6 +135,8 @@ Almost all of this wave is under the floor: a member sees the same screens, and 
 
 ![Photos grid with a starred photograph, drawn from the flags-scheme tag](artifacts/e2e/ui-impact/issue-916-photos-star.png)
 
+`packages/blueprints/apps/photos/app.json`'s `update-asset` description went with it: it still told the reader "favorite and archived live on the asset", and half of that stopped being true when the column went. Its `writes` were already correct — `core.concept`, `core.concept_scheme` and `core.tag` joined `media.asset` when the star moved — so only the sentence a member's assistant reads was stale.
+
 **First-run:** nothing to do, and nothing to see. A vault founded on this baseline mints the flags scheme and its `starred` concept the first time something is starred, so a brand-new vault shows an empty grid with no stars and no scheme rows — the absence is an honest "nothing is starred", never an error. There is no migration and no first-run prompt: v0 has no vaults in the field, and a pre-#916 vault directory is refused by `openVaultDb` as an old-format install (see **Out of scope**) rather than upgraded.
 
 **Locker's password history is not reachable.** `locker.item_history` is dropped and its rotation record lives in a `core_entity_revision` snapshot, but the Locker blueprint's readers were not ported with it. Until they are, that pane queries a table that no longer exists. This is the wave's one user-visible regression and it is open, not fixed — tracked in `## Still red / not run` rather than claimed here.
@@ -361,6 +363,7 @@ packages/blueprints/apps/notes/logic-panes.test.ts
 packages/blueprints/apps/notes/logic.test.ts
 packages/blueprints/apps/people/queries/person.ts
 packages/blueprints/apps/people/queries/share-links.test.ts
+packages/blueprints/apps/photos/app.json
 packages/blueprints/apps/photos/queries/_shared.ts
 packages/blueprints/apps/photos/queries/duplicates.ts
 packages/blueprints/apps/photos/queries/enrichment-status.ts
