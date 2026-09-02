@@ -780,6 +780,32 @@ subprocess.
   waived a future drop of that flow's floor of 15. `bun run test:ratchet`,
   `bun run test:claims` and `bun run lint:ledgers` are green.
 
+**Two flaky server tests, hardened at the request of the issue owner.** The
+merge gate's `coverage-shard (2)` went red on `11c16dd5` with two failures in
+`packages/server/src/serve/**` — code this change does not touch (`git diff
+origin/main -- packages/server` was empty) and which passed on the head before
+it. A single re-run came back green, confirming them as flakes rather than
+regressions; both are now fixed at the source rather than left to re-run.
+
+- `serve-scheduler-reconcile.test.ts` asserted `Date.now() - startedAt < 1000`
+  around a poll loop whose own budget was 900 ms, so every HTTP round trip the
+  test made counted against the scheduler: it read 1638 ms on a shard
+  contending with three others. The claim — the commit nudge fires the
+  automation in well under a second — is now measured on the turn's own
+  server-stamped `startedAt` against the instant the in-process commit
+  returned, and the poll budget (5 s) says only how long the test watches.
+  Nothing about the claim was loosened; the measurement stopped including the
+  observer.
+- `web-session-store.test.ts` walked a 180-day absolute lifetime one hour at a
+  time, and each hourly step clears the store's own disk-write throttle: about
+  4,300 SQLite writes to prove that `touch` cannot slide expiry past the wall.
+  It now steps by half the IDLE window — the thing that actually makes a touch
+  a slide — which is 11 writes for the same invariant and the same assertions.
+  The file's test time fell from 4.18 s to 0.38 s.
+
+Both files burn in 3/3 in isolation, and `bun run typecheck` is green across
+all 25 packages.
+
 ## Audit
 
 **Verdict: PASS**
