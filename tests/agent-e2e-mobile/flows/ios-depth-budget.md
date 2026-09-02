@@ -1,12 +1,12 @@
 # iOS depth-roster budget
 
-`run-ios-depth-suite.mjs` runs six journeys on the iOS Release artifact — `pairing-canary`, `native-v0-resilience`, `locker-gate`, `cold-start`, `scroll-frames`, `photos-permissions`. The runner fails when aggregate wall time is **twenty-five minutes or more**, measured from the first flow process start through the sixth verdict.
+The `ios-depth` suite runs six journeys on the iOS Release artifact — `pairing-canary`, `native-v0-resilience`, `locker-gate`, `cold-start`, `scroll-frames`, `photos-permissions`. The runner fails when aggregate wall time is **twenty-five minutes or more**, measured from the first flow process start through the sixth verdict.
 
 `pairing-canary` runs first and short-circuits, for the same reason it does on the PR gate: it is the shared prerequisite, and on a broken one the five after it would each spend their own minutes failing on their own unrelated-looking assertion.
 
 ## Why the roster is six and not eighteen
 
-iOS is the **depth** platform, not a second copy of Android's roster ([D1](../../../docs/decisions.md#mobile-testing-890)). A macOS runner minute costs roughly ten Linux minutes, and every journey that asserts product logic over the replica is platform-independent by construction — one TypeScript source, one replica schema — so running it twice on the same night buys a second green at that multiple and nothing else. The six members each carry a claim that is a fact about **iOS**, and `run-ios-depth-suite.mjs`'s header names that fact per member, so a member whose reason stops holding can be removed by a reader rather than defended by tradition.
+iOS is the **depth** platform, not a second copy of Android's roster ([D1](../../../docs/decisions.md#mobile-testing-890)). A macOS runner minute costs roughly ten Linux minutes, and every journey that asserts product logic over the replica is platform-independent by construction — one TypeScript source, one replica schema — so running it twice on the same night buys a second green at that multiple and nothing else. The six members each carry a claim that is a fact about **iOS**, and each member's `claim` in [`roster.json`](../roster.json) names that fact, so a member whose reason stops holding can be removed by a reader rather than defended by tradition.
 
 ## Where twenty-five minutes came from
 

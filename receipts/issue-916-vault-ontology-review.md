@@ -937,3 +937,13 @@ tests/skips.json
 **Not run — the owner pushed early.** The independent fresh-context audit of "What changed" that this receipt's own checklist asks for did not happen: the finishing pass ended before it was spawned, and the owner chose to push the wave without it. Everything under "Verification" was run and is reported as it returned; the audit is the one acceptance criterion this change set does not meet.
 
 Also not run at push time, by the same decision: `bash .governance/run.sh` and the pre-commit and pre-push hooks (the commit and push used `--no-verify`). CI runs both against this branch, so what they would have caught surfaces there. The next pass owes this receipt an audit verdict and a governance result.
+
+## Session
+
+<!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
+
+### Identifiers
+
+| date | harness | session |
+| --- | --- | --- |
+| 2026-09-02 | claude-code | afeff558-9f71-5ea3-b2fa-0b0772eb9ed7 |

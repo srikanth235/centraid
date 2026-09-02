@@ -315,50 +315,58 @@ function scanReplicaReads(
 }
 
 describe("issue #679 user-facing quality gates", () => {
-  test("A1/A3/A4: seven visible qualities own classified, governed, demonstrated-red gates", async () => {
-    const matrix = await json("tests/matrix.json");
-    const qualities = matrix["qualities"] as Array<{
+  test("A1/A3/A4: every visible quality claim is classified, governed and demonstrated red", async () => {
+    // #915 retired `tests/matrix.json#qualities` — a seven-row panel whose 45
+    // gates were nested under it and whose demonstrated-red seeds lived in a
+    // parallel top-level block, so a gate could lose its seed without either
+    // half noticing. The panel is now 45 flat claim ROWS in
+    // `tests/claims.json#claims`, each carrying its own family, severity and
+    // demonstrated-red evidence, which is what makes this test one pass over
+    // one list instead of a join.
+    const claimsFile = await json("tests/claims.json");
+    const claims = claimsFile["claims"] as Array<{
       id: string;
-      gates: Array<{
-        id: string;
-        owner: string;
-        knob: string;
-        governance: string;
-        redLastDemonstrated: string;
-      }>;
+      family: string;
+      severity: string;
+      owner: string;
+      knob: string;
+      governance: string;
+      demonstratedRed: {
+        date: string;
+        command: string;
+        seed: string;
+        failure: string;
+      };
     }>;
-    expect(qualities.map((quality) => quality.id)).toStrictEqual([
-      "trust",
-      "correctness",
-      "reliability",
-      "responsiveness",
-      "friction",
-      "transparency",
-      "longevity",
-    ]);
-    const gates = qualities.flatMap((quality) => quality.gates);
-    const demonstratedRed = matrix["demonstratedRed"] as Record<
-      string,
-      { command: string; seed: string; failure: string }
-    >;
-    expect(new Set(gates.map((gate) => gate.id)).size).toBe(gates.length);
-    expect(Object.keys(demonstratedRed).toSorted()).toStrictEqual(
-      gates.map((gate) => gate.id).toSorted()
+    expect(
+      [...new Set(claims.map((claim) => claim.family))].toSorted()
+    ).toStrictEqual(
+      [
+        "correctness",
+        "friction",
+        "longevity",
+        "reliability",
+        "responsiveness",
+        "transparency",
+        "trust",
+      ].toSorted()
     );
+    expect(new Set(claims.map((claim) => claim.id)).size).toBe(claims.length);
     await Promise.all(
-      gates.flatMap((gate) => [
-        access(path.join(root, gate.owner)),
-        access(path.join(root, gate.knob.split("#", 1)[0]!)),
+      claims.flatMap((claim) => [
+        access(path.join(root, claim.owner.split("#", 1)[0]!)),
+        access(path.join(root, claim.knob.split("#", 1)[0]!)),
       ])
     );
-    for (const gate of gates) {
+    for (const claim of claims) {
       expect(["tighten-only", "waiver-gated", "none"]).toContain(
-        gate.governance
+        claim.governance
       );
-      expect(Number.isNaN(Date.parse(gate.redLastDemonstrated))).toBe(false);
-      expect(demonstratedRed[gate.id]?.command).toMatch(/^(?:bun|node) /u);
-      expect(demonstratedRed[gate.id]?.seed.length).toBeGreaterThan(8);
-      expect(demonstratedRed[gate.id]?.failure.length).toBeGreaterThan(8);
+      expect(["S1", "S2", "S3", "S4"]).toContain(claim.severity);
+      expect(Number.isNaN(Date.parse(claim.demonstratedRed.date))).toBe(false);
+      expect(claim.demonstratedRed.command).toMatch(/^(?:bun|node) /u);
+      expect(claim.demonstratedRed.seed.length).toBeGreaterThan(8);
+      expect(claim.demonstratedRed.failure.length).toBeGreaterThan(8);
     }
   });
 

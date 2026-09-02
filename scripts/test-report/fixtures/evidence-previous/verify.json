@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "candidate": "f5ca34fb6deadbeef0000000000000000000000",
+  "startedAt": "2026-09-02T06:00:00Z",
+  "finishedAt": "2026-09-02T06:40:00Z",
+  "budgetMs": 720000,
+  "durationMs": 640000,
+  "cases": [
+    {
+      "id": "boot-smoke",
+      "verdict": "passed",
+      "durationMs": 40000,
+      "attempts": 1
+    }
+  ],
+  "parked": null,
+  "tags": {
+    "qualities": ["correctness", "durability"],
+    "surfaces": ["gateway", "vault"]
+  },
+  "lane": "verify",
+  "rung": 2,
+  "platform": "any",
+  "verdict": "passed"
+}

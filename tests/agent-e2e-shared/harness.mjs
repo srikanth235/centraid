@@ -74,16 +74,13 @@ export async function qualityRegressionBudget(repoRoot, lane, owner) {
 /**
  * Sustained-drift budget (#659 R4) — the JavaScript-lane counterpart of
  * `rigDriftBudgetMs` in tests/helpers/rig-budgets.ts. Knobs come from
- * tests/quality-rig-budgets.json rather than being repeated here, so the
+ * tests/budgets.json#qualityRigs rather than being repeated here, so the
  * on-device flows and the vitest rigs cannot drift apart on what "drift" means.
  */
 export async function rigDriftBudget(repoRoot, lane, owner) {
   const registry = JSON.parse(
-    await fs.readFile(
-      path.join(repoRoot, "tests/quality-rig-budgets.json"),
-      "utf8"
-    )
-  );
+    await fs.readFile(path.join(repoRoot, "tests/budgets.json"), "utf8")
+  ).qualityRigs;
   return trailingMedianBudget(
     repoRoot,
     lane,

@@ -155,11 +155,24 @@ function runPublish(root, args) {
   );
 }
 
-/** @param {string} root @param {string[]} args */
+/**
+ * @param {string} root @param {string[]} args
+ *
+ * Every fixture passes `--allow-uncandidated`: #915 made "HEAD is the promoted
+ * candidate" a prepare precondition, and a throwaway fixture repo with no
+ * remote is by construction not one. The refusal itself is asserted by its own
+ * test below and unit-tested in candidate-guard.test.ts; the fixtures below are
+ * about the OTHER guards, so they opt out explicitly rather than silently.
+ */
 function runPrepare(root, args) {
   return spawnSync(
     process.execPath,
-    [path.join(root, "scripts/release/prepare.mjs"), ...args],
+    [
+      path.join(root, "scripts/release/prepare.mjs"),
+      "--allow-uncandidated",
+      "release fixture repo: no remote, never promoted",
+      ...args,
+    ],
     { cwd: root, encoding: "utf8", env: isolatedEnv }
   );
 }
@@ -381,6 +394,24 @@ describe("release publish derivation", () => {
 });
 
 describe("release prepare guards", () => {
+  // #915 Wave 1 — releases ship builds rung 3 promoted. Without the override a
+  // fixture repo (no remote, no `refs/candidates/latest`) must be refused
+  // BEFORE anything else is checked, because the remedy takes the longest.
+  test("refuses to prepare a HEAD that was never promoted", () => {
+    const root = makeFixtureRoot();
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.join(root, "scripts/release/prepare.mjs"),
+        "--allow-dirty",
+        "--skip-check",
+      ],
+      { cwd: root, encoding: "utf8", env: isolatedEnv }
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("no candidate has ever been promoted");
+  });
+
   test("refuses to prepare from a dirty working tree", () => {
     const root = makeFixtureRoot();
     spawnSync("git", ["init", "-q"], { cwd: root, env: isolatedEnv });

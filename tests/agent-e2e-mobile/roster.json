@@ -1,142 +1,397 @@
 {
-  "$comment": "The mobile device roster and the lanes that run it (#890 W0). This file is the DECLARATION; scripts/lint-e2e-wiring.mjs derives the reality from the shipped workflow YAML and the shipped suite runners and fails when the two disagree. That direction matters: three separate journeys were once committed, linted, and named in tests/matrix.json as evidence while nothing executed them, and every one of those was invisible precisely because the roster lived only in people's heads. Adding a row here does not schedule anything — wiring a lane does; a row that claims `scheduled` without a lane is a hard failure.",
+  "$comment": "The mobile device roster and the lanes that run it (#890 W0). This file is the DECLARATION; scripts/lint-e2e-wiring.mjs derives the reality from the shipped workflow YAML and the shipped suite runners and fails when the two disagree. That direction matters: three separate journeys were once committed, linted, and named in tests/matrix.json as evidence while nothing executed them, and every one of those was invisible precisely because the roster lived only in people's heads. Adding a row here does not schedule anything \u2014 wiring a lane does; a row that claims `scheduled` without a lane is a hard failure.",
   "$status": {
     "scheduled": "A lane runs it and the ledger may cite it. The normal state.",
-    "promoting": "New signal, staging per D3: runs on non-blocking lanes only, for `nights` scheduled nights from `since`, then is promoted to `scheduled` or deleted. It may NEVER gate a PR while promoting, and a `scheduled` flow may never be demoted here to get a lane green — that is the quarantine D3 distinguishes itself from.",
+    "promoting": "New signal, staging per D3: runs on non-blocking lanes only, for `nights` scheduled nights from `since`, then is promoted to `scheduled` or deleted. It may NEVER gate a PR while promoting, and a `scheduled` flow may never be demoted here to get a lane green \u2014 that is the quarantine D3 distinguishes itself from.",
     "exploratory": "A human drives it by hand; NO lane may run it. A lane running an exploratory flow makes it load-bearing without anyone deciding that, so the linter refuses it."
   },
   "$doctrine": "The roster SHRINKS, not fans out (E-device-only). A simulator minute on macOS costs roughly 600x a vitest second on Linux, so a claim any lower tier can falsify does not belong here at all: state variety lives in tests/integration-mobile/, pure logic in the package unit tiers, and RN accessibility/responder semantics in the @centraid/mobile-rn Vitest project. Before adding a row, name the OS fact it needs a real device to observe. If you cannot, you have found a test for a cheaper tier.",
+  "$rungs": {
+    "2": "PR, the required `check`. Blocking. Android only, eight minutes warm, ZERO iOS minutes (#915 non-goal). Can this land without a regression a user would see on the phone?",
+    "3": "Every push to main \u2014 the candidate. Non-blocking, 45-minute envelope shared with the rest of rung 3. Is this SHA a build we would hand to a device? Every candidate carries an iOS verdict.",
+    "4": "Nightly, against the latest candidate. Depth: the Photos seat, the probes, the promotion pipeline, and the six iOS-only claims.",
+    "5": "Weekly. No mobile device suite sits here today; the row exists so a suite that earns it has somewhere to go."
+  },
+  "$budgets": "TWO ceilings, and they measure different things. `suites[*].budgetMs` is the AGGREGATE wall clock lib/run-suite.mjs enforces as a DEADLINE (#892 P0) \u2014 it prices the members' work AND the pairings the suite pays. `flows[*].budgetMs` is one journey's MARGINAL cost, excluding any fresh pairing, which is why a flow's number is smaller than its measured wall time on a suite where it pairs for itself, and why the flow budgets of a suite may sum past the suite's own. Both are derived arithmetic today: tests/agent-e2e-mobile/ledger/durations.json holds ZERO records, so the p95x1.5 rule scripts/check-mobile-suite-budgets.mjs applies at three samples has nothing to apply to yet. Each flow number is the per-member figure its suite's budget doc derives, raised to the measured CI figure where flows/pr-gate-budget.md records one (pairing-canary 187-209s, notes-library 106-154s, native-v0-resilience 267s, cold-start 116-150s, photos-permissions ~90s). BOTH are TIGHTEN-ONLY: check:mobile-suite-budgets reads the suite ceilings out of this file and refuses a rise against the merge base, following `supersedes` across a rename so a renamed suite cannot launder its ratchet.",
+  "suites": {
+    "pr-gate": {
+      "budgetMs": 480000,
+      "doc": "tests/agent-e2e-mobile/flows/pr-gate-budget.md",
+      "rungs": [2],
+      "platform": ["android"],
+      "lane": "pr-gate",
+      "canaryCount": 1,
+      "reuseAfter": 1,
+      "flows": ["pairing-canary.mjs", "notes-library.mjs", "cold-start.mjs"],
+      "why": "The only device minutes a PR spends (#915 rung 2). Three claims, one leg, one emulator: pairing works, a write round-trips and survives process death, and the app still reaches a usable Home over existing data. Eight minutes WARM \u2014 a cold native-shell cache is a named lane failure, not a sixty-minute wait. Everything the twelve-minute two-leg gate also carried (native-v0-resilience, photos-permissions) answers a post-merge question and now sits on rungs 3 and 4.",
+      "onBudgetBreach": "The PR gate's whole value is that it answers before a human context-switches."
+    },
+    "resilience": {
+      "budgetMs": 720000,
+      "doc": "tests/agent-e2e-mobile/flows/pr-gate-budget.md",
+      "rungs": [3],
+      "platform": ["android"],
+      "lane": "canary-android",
+      "canaryCount": 1,
+      "reuseAfter": 1,
+      "flows": [
+        "pairing-canary.mjs",
+        "native-v0-resilience.mjs",
+        "cold-start.mjs"
+      ],
+      "why": "The former PR-gate resilience leg, moved to rung 3 (#915 Wave 2). Settings from the all-apps sheet, a real process restart and an offline write that reconnects and syncs are a question about the candidate, not about the diff: they have never once caught something the paired leg did not, and they cost the gate a second emulator. Same members, same twelve minutes, one rung later.",
+      "onBudgetBreach": "The candidate rung answers in 45 minutes; a suite that outgrows twelve moves a claim down a tier.",
+      "supersedes": "pr-gate-resilience"
+    },
+    "ios-smoke": {
+      "budgetMs": 600000,
+      "doc": "tests/agent-e2e-mobile/flows/ios-smoke-budget.md",
+      "rungs": [3],
+      "platform": ["ios"],
+      "lane": "ios-smoke",
+      "canaryCount": 1,
+      "reuseAfter": 1,
+      "flows": ["pairing-canary.mjs", "cold-start.mjs", "notes-library.mjs"],
+      "why": "Every candidate carries an iOS verdict (#915 Wave 2). The iOS Release .app is a SEPARATE ARTIFACT built by a different toolchain over a different driver, so 'it paired and reached a usable Home on Android' says nothing about it. Three members, ten minutes warm on the cached shell with this SHA's bundle injected \u2014 the smallest set whose failure means the candidate is not a build we would hand to a device.",
+      "onBudgetBreach": "macOS minutes are the scarcest thing this repo spends \u2014 move a claim down a tier rather than raising the ceiling."
+    },
+    "probes-suite": {
+      "budgetMs": 2100000,
+      "doc": "tests/agent-e2e-mobile/flows/probes-budget.md",
+      "rungs": [4],
+      "platform": ["android"],
+      "lane": "nightly-android",
+      "canaryCount": 0,
+      "reuseAfter": null,
+      "flows": [
+        "cold-start.mjs",
+        "home-loads.mjs",
+        "native-v0-resilience.mjs",
+        "places-seat.mjs",
+        "scroll-frames.mjs",
+        "volume-proof.mjs"
+      ],
+      "why": "A BUDGET WRAPPER, not a shared-boot suite: `home-loads` must face a CLEARED client and `native-v0-resilience` restarts the app process, so no member may inherit another's pairing. Depth, on the nightly only (#915 rung 4).",
+      "onBudgetBreach": "See flows/probes-budget.md."
+    },
+    "photos": {
+      "budgetMs": 480000,
+      "doc": "tests/agent-e2e-mobile/flows/photos-budget.md",
+      "rungs": [4],
+      "platform": ["android"],
+      "lane": "nightly-android",
+      "canaryCount": 0,
+      "reuseAfter": 1,
+      "flows": [
+        "photos-permissions.mjs",
+        "photos-library.mjs",
+        "photos-viewer.mjs",
+        "photos-search.mjs",
+        "photos-select-write.mjs"
+      ],
+      "why": "The Photos seat, sharing ONE boot and ONE pairing. `photos-permissions` is FIRST and pairs fresh: it owns the empty-vault denial state, so it must run before anything seeds the corpus.",
+      "onBudgetBreach": "See flows/photos-budget.md."
+    },
+    "home-apps": {
+      "budgetMs": 720000,
+      "doc": "tests/agent-e2e-mobile/flows/home-apps-budget.md",
+      "rungs": [3, 4],
+      "platform": ["android"],
+      "lane": "canary-android",
+      "canaryCount": 0,
+      "reuseAfter": 1,
+      "flows": [
+        "docs-drive.mjs",
+        "agenda-week.mjs",
+        "notes-library.mjs",
+        "tasks-board.mjs",
+        "people-roster.mjs",
+        "tally-derived.mjs",
+        "locker-gate.mjs"
+      ],
+      "why": "The seven home-journey covers that are not Photos. On rung 3 as well as 4 because these are the journeys #870 broke and nothing noticed for a month: a per-merge run makes a regression attributable to ONE commit. Docs stays FIRST (it pairs fresh and every later member reuses that profile); locker-gate stays LAST (it is the only member that restarts the app).",
+      "onBudgetBreach": "Combine adjacent Maestro chunks and drop duplicate arrival assertions first; see flows/home-apps-budget.md."
+    },
+    "sharing": {
+      "budgetMs": 300000,
+      "doc": "tests/agent-e2e-mobile/flows/sharing-budget.md",
+      "rungs": [4],
+      "platform": ["android"],
+      "lane": "nightly-android",
+      "canaryCount": 0,
+      "reuseAfter": null,
+      "flows": ["sharing-reach.mjs"],
+      "why": "The reach seat, which ran as a BARE `node flows/sharing-reach.mjs` line in the roster shell \u2014 the one journey on the roster that no suite priced. #915 Wave 2 gives it the ceiling every other journey already owed.",
+      "onBudgetBreach": "One member: shrink the journey's chunks, never the ceiling."
+    },
+    "promoting-suite": {
+      "budgetMs": 960000,
+      "doc": "tests/agent-e2e-mobile/flows/promoting-budget.md",
+      "rungs": [4],
+      "platform": ["android"],
+      "lane": "nightly-android",
+      "canaryCount": 0,
+      "reuseAfter": null,
+      "flows": ["op-sqlite-probe.mjs", "share-intent-in.mjs"],
+      "why": "The D3 promotion pipeline: new device signal serving its probation on non-blocking lanes only. A `promoting` flow may NEVER gate a PR, which is why this suite carries rung 4 alone.",
+      "onBudgetBreach": "See flows/promoting-budget.md."
+    },
+    "ios-depth": {
+      "budgetMs": 1500000,
+      "doc": "tests/agent-e2e-mobile/flows/ios-depth-budget.md",
+      "rungs": [4],
+      "platform": ["ios"],
+      "lane": "nightly-ios",
+      "canaryCount": 1,
+      "reuseAfter": 1,
+      "flows": [
+        "pairing-canary.mjs",
+        "native-v0-resilience.mjs",
+        "locker-gate.mjs",
+        "cold-start.mjs",
+        "scroll-frames.mjs",
+        "photos-permissions.mjs"
+      ],
+      "why": "iOS DEPTH \u2014 the six claims that are facts about iOS, never a second copy of Android's roster. Each member's `claim` names the iOS fact that earns its place; ios-depth-budget.md prices the set.",
+      "onBudgetBreach": "macOS minutes are the scarcest thing this repo spends \u2014 move a claim down a tier rather than raising the ceiling."
+    }
+  },
   "lanes": {
     "pr-gate-android": {
       "workflow": ".github/workflows/ci.yml",
       "job": "mobile-device-gate",
-      "scripts": [
-        "apps/mobile/scripts/android-emulator-pr-gate.sh",
-        "apps/mobile/scripts/android-emulator-pr-gate-resilience.sh"
-      ],
+      "rung": 2,
+      "scripts": ["apps/mobile/scripts/android-emulator-pr-gate.sh"],
       "blocking": true,
       "platform": "android",
       "budgetDoc": "tests/agent-e2e-mobile/flows/pr-gate-budget.md",
-      "why": "Device signal BEFORE merge, on the primary surface. Android per D1: Linux + /dev/kvm, and the stabler of the two Maestro drivers. The only blocking mobile device lane there is. One job, TWO matrix legs on two emulators — paired (pairing-canary, notes-library, photos-permissions) and resilience (pairing-canary, native-v0-resilience, cold-start) — because the five measured ~795s in sequence against a 720s deadline; each leg pairs itself and the twelve-minute budget is now per leg."
+      "why": "Device signal BEFORE merge, on the primary surface. Android per D1: Linux + /dev/kvm, and the stabler of the two Maestro drivers. The only blocking mobile device lane there is, and after #915 Wave 1 it is ONE leg on ONE emulator running the `pr-gate` suite (pairing-canary, notes-library, cold-start) inside an eight-minute WARM budget. The resilience members it used to carry answer a post-merge question and moved to the `resilience` suite on rung 3."
     },
     "canary-android": {
-      "workflow": ".github/workflows/mobile-canary.yml",
+      "workflow": ".github/workflows/candidate.yml",
       "job": "mobile-canary-android",
-      "scripts": ["apps/mobile/scripts/android-emulator-roster.sh"],
+      "rung": 3,
+      "scripts": ["apps/mobile/scripts/android-emulator-canary.sh"],
       "blocking": false,
       "platform": "android",
-      "why": "The full roster on every merge to main, so a regression is attributable to ONE commit rather than a night's worth. Also prebuilds the native shell and gradle build directory the PR gate restores from, which is what keeps that gate inside twelve minutes."
+      "why": "Rung 3, the CANDIDATE: is this SHA a build we would hand to a device? It moved out of the deleted mobile-canary.yml into candidate.yml with the rest of rung 3 (#915 Wave 1) and runs `run-roster.mjs --rung 3 --platform android`, which resolves to the `resilience` and `home-apps` suites this rung is priced for. It also prebuilds the native shell and gradle build directory the PR gate restores from, which is what keeps that gate inside eight minutes."
     },
     "nightly-android": {
       "workflow": ".github/workflows/e2e.yml",
       "job": "mobile-e2e-android",
+      "rung": 4,
       "scripts": ["apps/mobile/scripts/android-emulator-roster.sh"],
       "blocking": false,
       "platform": "android",
-      "why": "Depth on the gating platform. Same roster as the canary; what it adds is a run against a tree nobody just pushed to, which is where a time-dependent or accumulated-state failure shows up."
+      "why": "Rung 4, depth on the gating platform: probes, photos, sharing and the promotion pipeline against a tree nobody just pushed to, which is where a time-dependent or accumulated-state failure shows up."
     },
     "nightly-ios": {
       "workflow": ".github/workflows/e2e.yml",
       "job": "mobile-e2e-ios",
+      "rung": 4,
       "blocking": false,
       "platform": "ios",
       "budgetDoc": "tests/agent-e2e-mobile/flows/ios-depth-budget.md",
-      "why": "iOS DEPTH — the six claims that are facts about iOS, never a second copy of Android's roster. A macOS minute costs roughly ten Linux minutes; run-ios-depth-suite.mjs names per member which iOS fact earns its place."
+      "why": "iOS DEPTH \u2014 the six claims that are facts about iOS, never a second copy of Android's roster. A macOS minute costs roughly ten Linux minutes; the job runs `run-roster.mjs --rung 4 --platform ios` and each member's claim names the iOS fact it carries."
+    },
+    "ios-smoke": {
+      "workflow": ".github/workflows/candidate.yml",
+      "job": "mobile-ios-smoke",
+      "rung": 3,
+      "scripts": ["apps/mobile/scripts/ios-simulator-smoke.sh"],
+      "blocking": false,
+      "platform": "ios",
+      "budgetDoc": "tests/agent-e2e-mobile/flows/ios-smoke-budget.md",
+      "why": "EVERY CANDIDATE CARRIES AN iOS VERDICT (#915 Wave 2). The iOS .app is a SEPARATE ARTIFACT \u2014 a different binary, a different toolchain, a different Maestro driver \u2014 so Android's green says nothing about it, and before this lane the first iOS answer of the day came from the nightly against a tree that had already absorbed a day of merges. Ten minutes WARM on the fingerprint-cached shell with this SHA's bundle injected, so no compilation is inside the clock. It gates `promote`, not a merge: rung 3 is not a merge gate, which is why `blocking` is false."
     }
   },
   "flows": {
     "tests/agent-e2e-mobile/flows/pairing-canary.mjs": {
       "status": "scheduled",
-      "claim": "The shared prerequisite of every other journey: the gateway mints a ticket, the device is booted with the app installed, and pairing completes to Home — in under five minutes, before anything fans out."
+      "suite": ["pr-gate", "resilience", "ios-smoke", "ios-depth"],
+      "rungs": [2, 3, 4],
+      "platform": ["android", "ios"],
+      "budgetMs": 240000,
+      "claim": "the three prerequisites every committed mobile journey shares are working \u2014 the gateway is reachable and mints a one-time pairing ticket, the device is booted with the dev build installed, and that ticket redeems through onboarding to a ready Home."
     },
     "tests/agent-e2e-mobile/flows/home-loads.mjs": {
       "status": "scheduled",
+      "suite": ["probes-suite"],
+      "rungs": [4],
+      "platform": ["android"],
+      "budgetMs": 120000,
       "claim": "Ticket-only onboarding renders on a cleared client. Deliberately NARROW: it does not pair and does not reach Home, which is why #890 W0 moved the U1-mobile first-run gate off it and onto pairing-canary."
     },
     "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs": {
       "status": "scheduled",
-      "claim": "Settings loads from the all-apps sheet, the app survives a process restart, and on Android an offline write reconnects and syncs. The one airplane-mode journey the device owns; the covers-open claim is Home.test.tsx's conformance sweep plus the per-cover canary journeys, and the rest of the state grid is tests/integration-mobile/'s."
+      "suite": ["resilience", "probes-suite", "ios-depth"],
+      "rungs": [3, 4],
+      "platform": ["android", "ios"],
+      "budgetMs": 280000,
+      "claim": "Settings still loads from the all-apps sheet, the app survives an OS process restart, and on Android a write made offline survives that restart and settles once the radio returns. If this passes when it should not, a release ships in which Settings is unreachable from Home, or a write made on a train is silently lost on arrival."
     },
     "tests/agent-e2e-mobile/flows/cold-start.mjs": {
       "status": "scheduled",
-      "claim": "Per-launch cold start to Home-ready, median and p95, on the release artifact with the frame-probe flag compiled in."
+      "suite": [
+        "pr-gate",
+        "resilience",
+        "ios-smoke",
+        "probes-suite",
+        "ios-depth"
+      ],
+      "rungs": [2, 3, 4],
+      "platform": ["android", "ios"],
+      "budgetMs": 160000,
+      "claim": "the app still reaches a usable Home over EXISTING data, launch after launch, and does so within a stable time. If this passes when it should not, a release ships in which the app takes visibly longer to become usable \u2014 or, worse, comes up to a Home that is not usable at all."
     },
     "tests/agent-e2e-mobile/flows/scroll-frames.mjs": {
       "status": "scheduled",
+      "suite": ["probes-suite", "ios-depth"],
+      "rungs": [4],
+      "platform": ["android", "ios"],
+      "budgetMs": 60000,
       "claim": "Dropped-frame percentage during a driven scroll on the Photos grid and the People directory, sampled by the release build's own rAF sampler."
     },
     "tests/agent-e2e-mobile/flows/volume-proof.mjs": {
       "status": "scheduled",
+      "suite": ["probes-suite"],
+      "rungs": [4],
+      "platform": ["android"],
+      "budgetMs": 300000,
       "claim": "The native replica holds up across twenty relaunches on a volume vault."
     },
     "tests/agent-e2e-mobile/flows/places-seat.mjs": {
       "status": "scheduled",
+      "suite": ["probes-suite"],
+      "rungs": [4],
+      "platform": ["android"],
+      "budgetMs": 60000,
       "claim": "The Places shelf, the native map and the pin readout render over real geo_lat/geo_lng rows."
     },
     "tests/agent-e2e-mobile/flows/photos-permissions.mjs": {
       "status": "scheduled",
-      "claim": "A REFUSED camera-roll authorization produces the app's denied takeover on an EMPTY vault — the one state in which a fabricated grid would be indistinguishable from a working one. The refusal is the OS's, which is what makes it device-only."
+      "suite": ["photos", "ios-depth"],
+      "rungs": [4],
+      "platform": ["android", "ios"],
+      "budgetMs": 100000,
+      "claim": "a REFUSED OS media grant degrades into an honest takeover with a working recovery path, and never removes the way back Home. If this passes when it should not, a release ships in which denying a permission strands the member on a dead screen with no way out of Photos."
     },
     "tests/agent-e2e-mobile/flows/photos-library.mjs": {
       "status": "scheduled",
+      "suite": ["photos"],
+      "rungs": [4],
+      "platform": ["android"],
+      "budgetMs": 60000,
       "claim": "The Photos temporal library and zoom drill-down render real replica rows on the native grid."
     },
     "tests/agent-e2e-mobile/flows/photos-viewer.mjs": {
       "status": "scheduled",
+      "suite": ["photos"],
+      "rungs": [4],
+      "platform": ["android"],
+      "budgetMs": 60000,
       "claim": "Viewer paging and the capability menu respond to real gestures on the native surface."
     },
     "tests/agent-e2e-mobile/flows/photos-search.mjs": {
       "status": "scheduled",
+      "suite": ["photos"],
+      "rungs": [4],
+      "platform": ["android"],
+      "budgetMs": 60000,
       "claim": "Grouped search reaches the viewer over the device's own FTS read."
     },
     "tests/agent-e2e-mobile/flows/photos-select-write.mjs": {
       "status": "scheduled",
+      "suite": ["photos"],
+      "rungs": [4],
+      "platform": ["android"],
+      "budgetMs": 60000,
       "claim": "Selection trash and restore round-trip as a real write through the device replica."
     },
     "tests/agent-e2e-mobile/flows/docs-drive.mjs": {
       "status": "scheduled",
-      "claim": "The Docs cover opens, a row's quick actions appear, and a band tap POPS rather than pushes — a React Navigation stack fact both outcomes would otherwise render identically."
+      "suite": ["home-apps"],
+      "rungs": [3, 4],
+      "platform": ["android"],
+      "budgetMs": 70000,
+      "claim": "The Docs cover opens, a row's quick actions appear, and a band tap POPS rather than pushes \u2014 a React Navigation stack fact both outcomes would otherwise render identically."
     },
     "tests/agent-e2e-mobile/flows/agenda-week.mjs": {
       "status": "scheduled",
+      "suite": ["home-apps"],
+      "rungs": [3, 4],
+      "platform": ["android"],
+      "budgetMs": 70000,
       "claim": "Day and Schedule differ by the size of the read, not by fixture: the widened read carries an event two days out, and a created event appears in it."
     },
     "tests/agent-e2e-mobile/flows/notes-library.mjs": {
       "status": "scheduled",
-      "claim": "The row and its body preview are two separate replica reads joined on device, and a quick capture survives a real process death."
+      "suite": ["pr-gate", "ios-smoke", "home-apps"],
+      "rungs": [2, 3, 4],
+      "platform": ["android", "ios"],
+      "budgetMs": 160000,
+      "claim": "a write made on the phone reaches the vault and survives process death \u2014 the one property that makes this a local-first product rather than a cache. If this passes when it should not, a release ships in which a member's note is gone after the OS reclaims the app."
     },
     "tests/agent-e2e-mobile/flows/tasks-board.mjs": {
       "status": "scheduled",
+      "suite": ["home-apps"],
+      "rungs": [3, 4],
+      "platform": ["android"],
+      "budgetMs": 70000,
       "claim": "The rows the phone's replica hands the screen are the vault's rows and land in the group the screen draws, and a created task appears in its group."
     },
     "tests/agent-e2e-mobile/flows/people-roster.mjs": {
       "status": "scheduled",
+      "suite": ["home-apps"],
+      "rungs": [3, 4],
+      "platform": ["android"],
+      "budgetMs": 70000,
       "claim": "The People roster renders real party rows on the origin seat."
     },
     "tests/agent-e2e-mobile/flows/tally-derived.mjs": {
       "status": "scheduled",
+      "suite": ["home-apps"],
+      "rungs": [3, 4],
+      "platform": ["android"],
+      "budgetMs": 70000,
       "claim": "Read-time figures are derived on device, and the seat offers no verb it cannot fire."
     },
     "tests/agent-e2e-mobile/flows/locker-gate.mjs": {
       "status": "scheduled",
+      "suite": ["home-apps", "ios-depth"],
+      "rungs": [3, 4],
+      "platform": ["android", "ios"],
+      "budgetMs": 90000,
       "claim": "Home's launcher never read the one app it must not (a WITHHELD count, never 0), and no Locker session crossed a real process boundary. Only killing the process proves the second half."
     },
     "tests/agent-e2e-mobile/flows/sharing-reach.mjs": {
       "status": "scheduled",
-      "claim": "The phone compiles a share from the one subject it may share, the sheet that compiles it opens, the surface that makes a person reachable loads, and on Android the verb is WITHHELD with its own sentence while the gateway is out of reach. Named three times in tests/matrix.json as an evidence owner while nothing ran it, until #890 W0 scheduled it on the roster lanes."
+      "suite": ["sharing"],
+      "rungs": [4],
+      "platform": ["android"],
+      "budgetMs": 180000,
+      "claim": "a person becomes shareable-with only by being LINKED, and the phone says so \u2014 the sheet opens, the linking surface loads, and offline the verb is withheld with its own sentence rather than offered and refused. If this passes when it should not, a release ships in which the mobile seat offers a share it cannot deliver."
     },
     "tests/agent-e2e-mobile/flows/op-sqlite-probe.mjs": {
       "status": "promoting",
+      "suite": ["promoting-suite"],
+      "rungs": [4],
+      "platform": ["android"],
+      "budgetMs": 300000,
       "since": "2026-08-30",
       "nights": 10,
-      "claim": "A burst of five writes, each read back before the next, ALL survive process death on real flash. The Node boot-condition tier proves 52 of 56 cells against NodeSqliteDriver — an in-memory node:sqlite stand-in with no database file and no WAL to recover — so this is the only evidence in the repo about the engine the product actually ships. NOT a concurrency claim: Maestro drives one device serially and awaits each chunk's exit, so the writes cannot overlap the reads, and an earlier draft that claimed contention was wrong. NOT an exactly-once proof either: it detects an intent RE-EXECUTED on recovery (the row would sort ahead) but not a row duplicated verbatim, which needs a surface publishing a count.",
+      "claim": "A burst of five writes, each read back before the next, ALL survive process death on real flash. The Node boot-condition tier proves 52 of 56 cells against NodeSqliteDriver \u2014 an in-memory node:sqlite stand-in with no database file and no WAL to recover \u2014 so this is the only evidence in the repo about the engine the product actually ships. NOT a concurrency claim: Maestro drives one device serially and awaits each chunk's exit, so the writes cannot overlap the reads, and an earlier draft that claimed contention was wrong. NOT an exactly-once proof either: it detects an intent RE-EXECUTED on recovery (the row would sort ahead) but not a row duplicated verbatim, which needs a surface publishing a count.",
       "promotionNote": "Ten nights because the claim is about recovery of a repeatedly-appended WAL, which is the shape that fails intermittently or not at all. Three nights would not distinguish a real fix from a lucky week."
     },
     "tests/agent-e2e-mobile/flows/share-intent-in.mjs": {
       "status": "promoting",
+      "suite": ["promoting-suite"],
+      "rungs": [4],
+      "platform": ["android"],
+      "budgetMs": 60000,
       "since": "2026-08-30",
       "nights": 5,
-      "claim": "A text share delivered from OUTSIDE the app (ACTION_SEND via the activity manager) opens Quick capture carrying the shared text verbatim. The payload half is the claim: ShareIntentIngest routes through centraid://capture?text=<encoded>, so a build that opened the right screen while mangling the text is a regression a screen-only assertion misses. Android only — iOS needs a second app to share from, which the lane does not install.",
+      "claim": "A text share delivered from OUTSIDE the app (ACTION_SEND via the activity manager) opens Quick capture carrying the shared text verbatim. The payload half is the claim: ShareIntentIngest routes through centraid://capture?text=<encoded>, so a build that opened the right screen while mangling the text is a regression a screen-only assertion misses. Android only \u2014 iOS needs a second app to share from, which the lane does not install.",
       "promotionNote": "Five nights: the act is deterministic once the intent lands, so the risk being staged is harness flakiness (intent timing against the ShareIntentIngest `ready` guard) rather than product nondeterminism."
     }
   }

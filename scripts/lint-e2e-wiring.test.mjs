@@ -19,7 +19,10 @@ import {
   isRunnerPath,
   jobBlock,
   matrixMobileOwners,
+  invocationSelector,
   runnerMembers,
+  shimSelector,
+  stateVarietyProblems,
   stripComments,
 } from "./lint-e2e-wiring.mjs";
 
@@ -54,9 +57,24 @@ test("a commented-out invocation is not an invocation", () => {
     "      # node tests/agent-e2e-mobile/flows/retired.mjs",
     "      - run: node tests/agent-e2e-mobile/flows/live.mjs",
   ].join("\n");
-  assert.deepEqual(directInvocations(chunk), [
-    "tests/agent-e2e-mobile/flows/live.mjs",
-  ]);
+  assert.deepEqual(
+    directInvocations(chunk).map((hit) => hit.target),
+    ["tests/agent-e2e-mobile/flows/live.mjs"]
+  );
+});
+
+test("an invocation carries the whole line, because the flags are the wiring", () => {
+  // #915 Wave 2: `--rung/--platform/--suite` select the journeys. A parser that
+  // returned the target alone could not tell a rung-2 gate from a rung-4
+  // nightly, which is the distinction the promoting and exploratory rules rest
+  // on.
+  const [hit] = directInvocations(
+    "      - run: node tests/agent-e2e-mobile/run-roster.mjs --rung 4 --platform android"
+  );
+  assert.deepEqual(invocationSelector(hit.line), {
+    rung: 4,
+    platform: "android",
+  });
 });
 
 test("stripComments keeps the code half of a trailing-comment line", () => {
@@ -79,25 +97,82 @@ test("only run-*.mjs at the directory root counts as a suite runner", () => {
   );
 });
 
-test("runnerMembers is not defeated by a header comment about itself", () => {
-  // The regression this pins: the unanchored regex matched the prose in a
-  // runner's own header explaining that the linter reads its array, took the
-  // ellipsis as the body, and reported the runner as scheduling nothing.
+test("shimSelector is not defeated by a header comment about itself", () => {
+  // The regression this pins, carried over from the `const FLOWS` reader it
+  // replaced: an unanchored regex matched the PROSE in a runner's own header
+  // explaining what the linter reads, and reported the runner as scheduling
+  // nothing. A declaration is at column zero; a mention of one never is.
   const source = [
-    "// the wiring linter reads this runner's `const FLOWS = [ … ]` array",
-    'const FLOWS = ["a.mjs", "b.mjs"];',
+    "// the wiring linter reads this shim's `resolvePlan({ rung, platform, suite })` call",
+    "process.exitCode = await runPlan(",
+    '  resolvePlan({ rung: 2, platform: "android", suite: "pr-gate" })',
+    ");",
   ].join("\n");
-  assert.deepEqual(runnerMembers(source, "r.mjs"), [
-    "tests/agent-e2e-mobile/flows/a.mjs",
-    "tests/agent-e2e-mobile/flows/b.mjs",
-  ]);
+  assert.deepEqual(shimSelector(source), {
+    rung: 2,
+    platform: "android",
+    suite: "pr-gate",
+  });
 });
 
-test("a runner with no readable FLOWS array throws rather than scheduling nothing", () => {
+test("a runner with no readable selector throws rather than scheduling nothing", () => {
   // Silently returning an empty list would unschedule every member of that
   // suite while the linter reported clean — the exact failure it exists for.
-  assert.throws(() => runnerMembers("const OTHER = [];", "r.mjs"), /FLOWS/u);
-  assert.throws(() => runnerMembers("const FLOWS = [];", "r.mjs"), /empty/u);
+  assert.throws(
+    () => runnerMembers("const OTHER = [];", "r.mjs", ""),
+    /selector/u
+  );
+});
+
+test("a shim naming a suite the roster does not declare throws", () => {
+  assert.throws(
+    () =>
+      runnerMembers(
+        'resolvePlan({ rung: 2, platform: "android", suite: "ghost" })',
+        "r.mjs",
+        ""
+      ),
+    /does not declare/u
+  );
+});
+
+test("state variety may not be owned by a device flow", () => {
+  // The doctrine made mechanical: the Linux boot-condition tier proves the
+  // states in about two minutes, and a device minute costs roughly 600 Vitest
+  // seconds.
+  assert.equal(
+    stateVarietyProblems({
+      appStates: {
+        apps: [
+          {
+            id: "notes",
+            states: {
+              dayone: {
+                owner: "packages/blueprints/apps/notes/states.test.tsx",
+              },
+            },
+          },
+        ],
+      },
+    }).length,
+    0
+  );
+  const problems = stateVarietyProblems({
+    appStates: {
+      apps: [
+        {
+          id: "notes",
+          states: {
+            offline: {
+              owner: "tests/agent-e2e-mobile/flows/notes-library.mjs",
+            },
+          },
+        },
+      ],
+    },
+  });
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /tests\/integration-mobile/u);
 });
 
 test("matrixMobileOwners walks structurally and reports every citing path", () => {
@@ -131,7 +206,9 @@ test("discovery finds the real roster and excludes sibling test files", () => {
   assert.ok(flows.includes("tests/agent-e2e-mobile/flows/home-loads.mjs"));
   const runners = discoverRunners();
   assert.ok(runners.every(isRunnerPath));
-  assert.ok(runners.includes("tests/agent-e2e-mobile/run-photos-suite.mjs"));
+  // One runner since #915 Wave 2: the six compatibility shims went with the
+  // last workflow that spelled their paths.
+  assert.ok(runners.includes("tests/agent-e2e-mobile/run-roster.mjs"));
 });
 
 test("every lane the committed roster declares names a job that exists", () => {

@@ -137,6 +137,35 @@ export const INFRASTRUCTURE_SIGNALS = [
   },
 ];
 
+/**
+ * THE THIRD CLASS: the JOURNEY itself is broken (#915 Wave 2, from #870).
+ *
+ * `flows/share-intent-in.mjs` referenced `shQuote` and never imported it. On the
+ * 2026-09-01 nightly (run 33498199941) the flow threw
+ * `ReferenceError: shQuote is not defined` at its own line 75, AFTER six
+ * assertions had passed — so nothing above matched, the default fired, and the
+ * ledger recorded `product`. The run therefore said the app was broken. The app
+ * was fine; the journey was.
+ *
+ * A flow-script crash is neither. It is not `infrastructure` — nothing flaked,
+ * and a retry would reproduce it exactly, which is why `retry-policy.mjs`
+ * retries only `infrastructure` and this class is silently correct there. And it
+ * is not `product` — no claim was ever exercised, so counting it against the
+ * lane's pass rate makes the phone look worse than it is and the journey look
+ * fine, which is the wrong end of both.
+ *
+ * Matched on the ERROR TYPE plus a stack frame inside this tree, so a
+ * `TypeError` the app raised through Maestro cannot borrow the class: Maestro
+ * failures arrive as `Error: maestro … exited 1` with no `tests/agent-e2e-mobile`
+ * frame at all.
+ */
+const FLOW_CRASH_RE = /^(?:ReferenceError|TypeError|SyntaxError|RangeError):/mu;
+// `.test.mjs` is excluded on purpose: the spec for this very function builds
+// errors whose stacks name the spec file, and matching those would make the
+// classifier agree with itself for the wrong reason.
+const FLOW_FRAME_RE =
+  /tests\/agent-e2e-mobile\/(?:flows|lib)\/[\w.-]+(?<!\.test)\.mjs/u;
+
 /** Maestro's vocabulary for "I looked and the product disagreed". Naming it
  * buys a readable `signal` in the ledger; it changes no verdict, because
  * everything that reaches this point is `product` either way. */
@@ -178,6 +207,17 @@ export function classifyFailure({
         signal: signal.id,
       };
     }
+  }
+
+  if (FLOW_CRASH_RE.test(text) && FLOW_FRAME_RE.test(text)) {
+    const named = FLOW_CRASH_RE.exec(text)[0].replace(/:$/u, "");
+    return {
+      class: "harness",
+      reason:
+        `the journey's own script threw ${named} after ${completed} completed assertion(s) — ` +
+        `this is a defect in the flow, not in the product, and no claim was exercised`,
+      signal: "flow-crash",
+    };
   }
 
   if (PRODUCT_ASSERTION_RE.test(text)) {

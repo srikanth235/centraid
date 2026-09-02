@@ -19,11 +19,16 @@
  *   node scripts/test-report/suite-wall-clock.mjs           # enforce
  *   node scripts/test-report/suite-wall-clock.mjs --write   # ratchet DOWN only
  */
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 
+import { writeLedgerSection } from "../check-ledgers.mjs";
+
 const root = path.resolve(import.meta.dirname, "../..");
-const BUDGET_PATH = path.join(root, "tests/suite-wall-clock.json");
+// The wall-clock ceilings are `tests/budgets.json#suiteWallClock` (#915 Wave 4).
+const BUDGET_REL = "tests/budgets.json";
+const BUDGET_SECTION = "suiteWallClock";
+const BUDGET_PATH = path.join(root, BUDGET_REL);
 const VITEST_PATH = path.join(root, "artifacts/test-results/vitest.json");
 
 /**
@@ -77,14 +82,14 @@ export function compareToBudget(totalMs, lane) {
     message:
       totalMs <= budgetMs
         ? `suite-wall-clock: ${fmt(totalMs)} of ${fmt(budgetMs)} (${fmt(slackMs)} slack)`
-        : `suite-wall-clock: ${fmt(totalMs)} exceeds the ${fmt(budgetMs)} ceiling by ${fmt(-slackMs)}. Make the suite faster, or widen \`budgetMs\` in tests/suite-wall-clock.json with an \`approvedDeviation\` saying what the extra time buys.`,
+        : `suite-wall-clock: ${fmt(totalMs)} exceeds the ${fmt(budgetMs)} ceiling by ${fmt(-slackMs)}. Make the suite faster, or widen \`budgetMs\` in tests/budgets.json#suiteWallClock with an \`approvedDeviation\` saying what the extra time buys.`,
   };
 }
 
 const fmt = (ms) => `${(ms / 1000).toFixed(1)}s`;
 
 if (process.argv[1] === import.meta.filename) {
-  const budgets = JSON.parse(readFileSync(BUDGET_PATH, "utf8"));
+  const budgets = JSON.parse(readFileSync(BUDGET_PATH, "utf8"))[BUDGET_SECTION];
   const lane = budgets.lanes?.["pr-vitest"];
   if (!existsSync(VITEST_PATH)) {
     console.log(
@@ -109,7 +114,7 @@ if (process.argv[1] === import.meta.filename) {
       process.exit(0);
     }
     budgets.lanes["pr-vitest"].budgetMs = next;
-    writeFileSync(BUDGET_PATH, `${JSON.stringify(budgets, null, 2)}\n`);
+    writeLedgerSection(BUDGET_REL, BUDGET_SECTION, budgets);
     console.log(
       `suite-wall-clock: tightened ceiling to ${fmt(next)} from a measured ${fmt(measured.totalMs)}`
     );

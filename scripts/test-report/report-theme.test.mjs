@@ -1,8 +1,7 @@
 import { describe, expect, test } from "vitest";
 
-import { BRIEFING_CSS } from "./render-briefing.mjs";
-import { makeFixtureRoot, runGenerate } from "./report-fixture-root.mjs";
 import { designSystemCss, REPORT_CSS, verifySheet } from "./report-theme.mjs";
+import { renderFixture } from "./smoke.mjs";
 
 /**
  * The report renders in the PRODUCT's design (issue #853), and these are the
@@ -20,8 +19,9 @@ import { designSystemCss, REPORT_CSS, verifySheet } from "./report-theme.mjs";
  * it against the emitter.
  */
 
-/** The two layers the report writes by hand, over the generated sheet. */
-const AUTHORED = `${REPORT_CSS}\n${BRIEFING_CSS}`;
+/** The layer the report writes by hand, over the generated sheet. #915 folded
+ *  the briefing's sheet into it, so there is one authored layer again. */
+const AUTHORED = REPORT_CSS;
 
 /** CSS comments name what a rule replaced ("was Inter"), which is not a live
  *  declaration — the same strip `lint-design-tokens.mjs` and the emitter do. */
@@ -165,67 +165,29 @@ function rung(value) {
  * question"; naming the fact is what keeps the four greys separable inside it.
  */
 const REGISTER = {
-  ".cell.axis-bug": {
-    fact: "the product is known-broken",
-    family: "the product is known-broken",
-  },
-  ".cell.axis-declared": {
-    fact: "an owner is declared",
-    family: "an owner is declared",
-  },
-  ".cell.axis-skipped": {
-    fact: "not taken by this app",
-    family: "not taken by this app",
-  },
-  ".cell.axis-unowned": { fact: "no test exists", family: "no test exists" },
-  ".cell.evidence-unmatched": {
-    fact: "a basename collision resolved to another owner",
-    family: "the evidence cannot be vouched for",
-  },
-  ".cell.expected-grey": {
-    fact: "a registered absence with no lane yet",
-    family: "the evidence is absent",
+  ".cell.degraded": {
+    fact: "over budget, or outside its noise band",
+    family: "the promise degraded",
   },
   ".cell.failed": {
-    fact: "the product failed",
+    fact: "the lane falsified its claim tonight",
     family: "the run went wrong",
   },
-  ".cell.flaky": {
-    fact: "green only on retry",
-    family: "green only on retry",
+  ".cell.na": {
+    fact: "the claim cannot arise here",
+    family: "the claim cannot arise here",
   },
-  ".cell.gap": { fact: "no test exists", family: "no test exists" },
-  ".cell.infra-mismatch": {
-    fact: "the lane's environment disagreed with its declaration",
-    family: "the environment disagreed",
-  },
-  ".cell.lane-did-not-run": {
-    fact: "the lane did not run",
+  ".cell.no-evidence": {
+    fact: "the lane wrote nothing for this candidate",
     family: "the evidence is absent",
   },
-  ".cell.missing": {
-    fact: "no evidence, outside nightly scope",
-    family: "the evidence is absent",
-  },
-  ".cell.owner-silent": {
-    fact: "the lane ran and this owner reported nothing",
-    family: "the evidence cannot be vouched for",
+  ".cell.parked": {
+    fact: "red, with an expiry and an issue against it",
+    family: "the failure has a date on it",
   },
   ".cell.passed": {
-    fact: "evidence passed a solid claim",
-    family: "evidence passed a solid claim",
-  },
-  ".cell.passed.assessment-partial": {
-    fact: "evidence passed a partial claim",
-    family: "evidence passed a partial claim",
-  },
-  ".cell.skipped": {
-    fact: "not taken by this app",
-    family: "not taken by this app",
-  },
-  ".cell.stale": {
-    fact: "the newest evidence is older than the window",
-    family: "the evidence is absent",
+    fact: "the lane ran and the claim held",
+    family: "the claim held",
   },
 };
 
@@ -237,10 +199,7 @@ const REGISTER = {
  * `stale` / `lane-did-not-run` sit inside the absence family, which the legend
  * prints as a single entry.
  */
-const WORD_SEPARATED = [
-  [".cell.failed", ".cell.infra-mismatch"],
-  [".cell.stale", ".cell.lane-did-not-run"],
-];
+const WORD_SEPARATED = [];
 
 /**
  * Every rung on this page that means a STATE, grouped by the state it means.
@@ -259,7 +218,7 @@ const SEMANTIC_STATES = {
   "nw:attention": ["--nw-attn", "--nw-attnbg"],
   "nw:bug": ["--nw-bug", "--nw-bugbg"],
   "nw:failed": ["--nw-danger", "--nw-dangerbg"],
-  "nw:flaky": ["--nw-flaky", "--nw-flakybg"],
+  "nw:parked": ["--nw-park", "--nw-parkbg"],
   "nw:gap": ["--nw-gap", "--nw-gapbg"],
   "nw:partial": ["--nw-partial", "--nw-partialbg"],
   "nw:passed": ["--nw-ok", "--nw-okbg"],
@@ -446,12 +405,11 @@ describe("the layers the report authors", () => {
     const doubled = [...backgrounds]
       .filter(([, meanings]) => meanings.size > 1)
       .map(([value, meanings]) => [value, [...meanings].sort()]);
-    expect(doubled).toEqual([
-      [
-        "var(--nw-dangerbg)",
-        ["the environment disagreed", "the run went wrong"],
-      ],
-    ]);
+    // #915 shortened the vocabulary to four words plus n/a and degraded, and
+    // the collapse #864 had to name — `infra-mismatch` riding the consequence
+    // tint with `failed` — went with the state itself. Six states, six
+    // families, no doubling at all.
+    expect(doubled).toEqual([]);
     // And the converse: a meaning may not be spoken in two tints either, which
     // is how "no test exists" came to be red in §8 and grey in §2.
     const tints = new Map();
@@ -594,12 +552,10 @@ describe("the Night Watch palette", () => {
 });
 
 describe("the rendered page", () => {
-  test("resolves every token it references and names no withdrawn face", () => {
-    const root = makeFixtureRoot();
-    const result = runGenerate(root);
-    expect(result.status).toBe(0);
+  test("resolves every token it references and names no withdrawn face", async () => {
+    const { html } = await renderFixture();
     const style =
-      /<style>(?<css>[\s\S]*?)<\/style>/u.exec(result.html)?.groups?.css ?? "";
+      /<style>(?<css>[\s\S]*?)<\/style>/u.exec(html)?.groups?.css ?? "";
     expect(style.length).toBeGreaterThan(0);
     const resolvable = declared(style);
     const unresolved = [...referenced(live(style))].filter(

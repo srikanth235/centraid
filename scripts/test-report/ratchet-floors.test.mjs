@@ -378,7 +378,7 @@ describe("ratchetFloors", () => {
       headMatrix: { flows: [] },
       perfBudgets: [
         {
-          label: "tests/suite-wall-clock.json",
+          label: "tests/budgets.json#suiteWallClock",
           base: { totalMs: 100 },
           head: { totalMs: 999 },
           approvedDeviation: "same ledger text",

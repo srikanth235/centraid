@@ -1,7 +1,20 @@
 import { describe, expect, test } from "vitest";
 
-import { baseMatrix, REAL_FILE } from "./matrix-fixture.mjs";
-import { validateMatrix } from "./validate-matrix.mjs";
+import { baseMatrix, REAL_FILE } from "./claims-fixture.mjs";
+import { validateAppAxes } from "./validate-app-axes.mjs";
+
+/**
+ * The app-axis half of the claims law, in the shape these suites were written
+ * against. #915 retired `validate-matrix.mjs`; `validateAppAxes` is the rule
+ * set these cases actually exercise, and the fixture declares its own flow ids
+ * rather than inheriting a repo-wide set.
+ */
+async function validateMatrix(claims, options = {}) {
+  const flowIds = new Set(
+    (claims.flows ?? []).map((flow) => flow.id).concat(["vault-core-flow"])
+  );
+  return { errors: await validateAppAxes(claims, options, flowIds) };
+}
 
 describe("appScenarios ledger", () => {
   test("accepts the well-formed fixture ledger", async () => {

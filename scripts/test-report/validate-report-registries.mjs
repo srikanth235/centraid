@@ -1,6 +1,8 @@
 import { glob, readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { loadRoster, readSuiteRunners } from "./derive.mjs";
+
 /**
  * Derivation locks for the two registry blocks report v2 renders from
  * (#839 Wave 5, gaps G13/G15/G16).
@@ -158,113 +160,67 @@ function validateJoinLaws(matrix, read, flowIds) {
 }
 
 /**
- * Validate `matrix.journeys` against the suite runners and the flows on disk.
- * @param {object} matrix Parsed test matrix.
- * @param {(file: string) => string|null} read Pre-loaded source reader.
- * @param {Set<string>} flowIds Every canonical flow id in the matrix.
+ * Validate the JOURNEY side, which #915 turned from a hand-typed registry into
+ * a derivation.
+ *
+ * `tests/claims.json#journeys` used to declare every suite, its runner, its
+ * budget and its flow list, and this function held that declaration against
+ * each runner's own `FLOWS` and `BUDGET_MS`. The declaration is gone: §5 reads
+ * `tests/agent-e2e-mobile/roster.json` directly, which is also what
+ * `run-roster.mjs` runs. What is still worth locking is the half a derivation
+ * cannot notice — COMPLETENESS. A journey file committed under
+ * `tests/agent-e2e-mobile/flows/` that no runner schedules is a flow nobody
+ * runs and the report cannot show, which is exactly the grey #839 closed.
+ *
+ * @param {{id: string, runner: string, flows: string[], budgetMs: number|null}[]} suites the roster's suites, normalised
  * @param {string[]} flowFiles Every journey flow file that exists on disk.
- * @returns {string[]} Errors; empty means the block is derived.
+ * @param {object} roster The mobile roster, for the deliberate exceptions.
+ * @returns {string[]} Errors; empty means every committed flow has a home.
  */
-function validateJourneys(matrix, read, flowIds, flowFiles) {
+function validateJourneyCompleteness(suites, flowFiles, roster) {
   const errors = [];
-  const suites = matrix.journeys?.suites;
-  if (!Array.isArray(suites) || !suites.length) {
-    return ["matrix has no journeys registry (grid G has nothing to derive)"];
+  if (suites.length === 0) {
+    return ["the roster declares no suites (§5 would render empty)"];
   }
-  const flowsById = new Map(
-    (matrix.flows ?? []).map((flow) => [flow.id, flow])
-  );
-  const declaredOwners = new Set();
+  const scheduled = new Set();
   const seenSuites = new Set();
   for (const suite of suites) {
-    if (seenSuites.has(suite.id))
-      errors.push(`duplicate journey suite id ${suite.id}`);
+    if (seenSuites.has(suite.id)) errors.push(`duplicate suite id ${suite.id}`);
     seenSuites.add(suite.id);
-    for (const entry of suite.flows ?? []) {
-      if (declaredOwners.has(entry.owner)) {
-        errors.push(`journey flow declared twice: ${entry.owner}`);
-      }
-      declaredOwners.add(entry.owner);
-      if (read(entry.owner) == null) {
-        errors.push(`journey flow owner does not exist: ${entry.owner}`);
-      }
-      if (entry.flow == null) continue;
-      const flow = flowsById.get(entry.flow);
-      if (!flow) {
-        errors.push(
-          `journey ${suite.id}/${entry.id} references unknown flow ${entry.flow}`
-        );
-      } else if (flow.owner !== entry.owner) {
-        errors.push(
-          `journey ${suite.id}/${entry.id} claims flow ${entry.flow}, which is owned by ${flow.owner}`
-        );
-      }
+    if (suite.budgetMs == null) {
+      errors.push(`roster suite ${suite.id} declares no budgetMs`);
     }
-    if (suite.runner == null) {
-      // An unbudgeted suite is an honest state, not an escape hatch: it may
-      // not also claim a budget it has no runner to enforce.
-      if (suite.budgetMinutes != null || suite.budgetDoc != null) {
-        errors.push(
-          `journey suite ${suite.id} declares a budget but no runner to enforce it`
-        );
-      }
-      continue;
-    }
-    const runner = read(suite.runner);
-    if (runner == null) {
-      errors.push(`journey suite runner does not exist: ${suite.runner}`);
-      continue;
-    }
-    const runnerFlows = runnerFlowList(runner);
-    if (runnerFlows) {
-      const declared = (suite.flows ?? []).map((entry) =>
-        path.posix.basename(entry.owner)
-      );
-      if (declared.join(",") !== runnerFlows.join(",")) {
-        errors.push(
-          `journey suite ${suite.id} flow list [${declared.join(", ")}] does not match its runner's [${runnerFlows.join(", ")}]`
-        );
-      }
-    } else {
-      errors.push(`journey suite runner declares no FLOWS: ${suite.runner}`);
-    }
-    const budget = runnerBudgetMinutes(runner);
-    if (budget == null) {
-      errors.push(
-        `journey suite runner declares no BUDGET_MS: ${suite.runner}`
-      );
-    } else if (budget !== suite.budgetMinutes) {
-      errors.push(
-        `journey suite ${suite.id} declares a ${suite.budgetMinutes}-minute budget; ${suite.runner} enforces ${budget}`
-      );
-    }
-    if (suite.budgetDoc && read(suite.budgetDoc) == null) {
-      errors.push(`journey budget doc does not exist: ${suite.budgetDoc}`);
+    for (const file of suite.flows) {
+      scheduled.add(`tests/agent-e2e-mobile/flows/${file}`);
     }
   }
-  // Completeness: every journey on disk owes a row, and no row may name a
-  // journey that is gone. This is the zero-grey lock for grid G.
+  // A flow the roster lists but no runner schedules is allowed ONLY when the
+  // roster says so in words: `status` other than `scheduled` is the roster's
+  // own declaration that the flow is promoting or exploratory.
   for (const file of flowFiles) {
-    if (!declaredOwners.has(file)) {
+    if (scheduled.has(file)) continue;
+    const status = roster.flows?.[file]?.status;
+    if (status && status !== "scheduled") continue;
+    errors.push(
+      `journey flow exists on disk and the roster calls it scheduled, but no roster suite schedules it: ${file}`
+    );
+  }
+  for (const file of scheduled) {
+    if (!flowFiles.includes(file)) {
       errors.push(
-        `journey flow exists on disk but no journeys suite declares it: ${file}`
+        `a roster suite schedules ${file}, which does not exist on disk`
       );
     }
   }
   return errors;
 }
 
-/** Every repo-relative file the two registry blocks name. */
+/** Every repo-relative file the join-law registry names. */
 function referencedFiles(matrix) {
   return new Set(
-    [
-      ...(matrix.joinLaws ?? []).map((law) => law.owner),
-      ...(matrix.journeys?.suites ?? []).flatMap((suite) => [
-        suite.runner,
-        suite.budgetDoc,
-        ...(suite.flows ?? []).map((entry) => entry.owner),
-      ]),
-    ].filter((file) => typeof file === "string")
+    (matrix.joinLaws ?? [])
+      .map((law) => law.owner)
+      .filter((file) => typeof file === "string")
   );
 }
 
@@ -293,8 +249,10 @@ export async function validateReportRegistries(matrix, options = {}) {
   const read = (file) => loaded.get(file) ?? null;
   const flowFiles = discovered.map((file) => file.replaceAll("\\", "/")).sort();
   const flowIds = new Set((matrix.flows ?? []).map((flow) => flow.id));
+  const suites = options.suites ?? readSuiteRunners();
+  const roster = options.roster ?? (await loadRoster());
   return [
     ...validateJoinLaws(matrix, read, flowIds),
-    ...validateJourneys(matrix, read, flowIds, flowFiles),
+    ...validateJourneyCompleteness(suites, flowFiles, roster),
   ];
 }

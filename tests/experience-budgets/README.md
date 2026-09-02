@@ -1,6 +1,8 @@
 # Experience budgets (issue #659 R2)
 
-One file per shipping surface, written in **what the vault owner feels** — not in what the machine spends. A ceiling here answers "how long until I can use it", never "how many bytes did we transfer". The byte/request/CPU ceilings still exist and still gate; they live in [`apps/web/tests/e2e/perf-budgets.ts`](../../apps/web/tests/e2e/perf-budgets.ts), [`packages/server/benchmarks/low-end-budgets.json`](../../packages/server/benchmarks/low-end-budgets.json) and [`tests/quality-rig-budgets.json`](../quality-rig-budgets.json). This directory is the layer above them: the same regressions, stated as symptoms.
+One file per shipping surface, written in **what the vault owner feels** — not in what the machine spends. A ceiling here answers "how long until I can use it", never "how many bytes did we transfer". The byte/request/CPU ceilings still exist and still gate; they live in [`apps/web/tests/e2e/perf-budgets.ts`](../../apps/web/tests/e2e/perf-budgets.ts), [`packages/server/benchmarks/low-end-budgets.json`](../../packages/server/benchmarks/low-end-budgets.json) and [`tests/budgets.json`](../budgets.json)'s `qualityRigs` section. This directory is the layer above them: the same regressions, stated as symptoms.
+
+These files stay here rather than folding into the merged budgets ledger ([#915](https://github.com/srikanth235/centraid/issues/915) Wave 4): fifteen tests and probes across `tests/scale`, `tests/perf`, `tests/quality`, `scripts/perf`, `apps/web` and `apps/mobile` import them directly. [`tests/budgets.json`](../budgets.json)'s `experience` section names them and owns the tighten-only rule; the numbers and the volume vocabulary below stay where their readers are.
 
 | File                           | Surface                                   |
 | ------------------------------ | ----------------------------------------- |
@@ -39,7 +41,7 @@ An `unmeasured` entry deliberately has no `ceilingMs`. Landing a plausible numbe
 
 ## Year-3 declared volumes (D6)
 
-Every ceiling in this directory is stated **at a volume**. A ceiling with no volume is not a budget. These are the repo's declared year-3 numbers for a single personal vault, and they are the same ones the nightly scale rigs seed to — see the `volume` string on each entry in [`tests/quality-rig-budgets.json`](../quality-rig-budgets.json).
+Every ceiling in this directory is stated **at a volume**. A ceiling with no volume is not a budget. These are the repo's declared year-3 numbers for a single personal vault, and they are the same ones the nightly scale rigs seed to — see the `volume` string on each entry in [`tests/budgets.json`](../budgets.json)'s `qualityRigs` section.
 
 | Dimension | Year-3 volume | Rig that seeds it |
 | --- | --- | --- |

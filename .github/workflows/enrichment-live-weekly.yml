@@ -4,6 +4,13 @@ on:
   schedule:
     - cron: "20 8 * * 1" # Monday 08:20 UTC
   workflow_dispatch:
+    inputs:
+      # #915 Wave 1 — empty means "the promoted candidate"; a value overrides it.
+      ref:
+        description: "Candidate ref or SHA to test (default: the promoted candidate)"
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: enrichment-live-weekly-${{ github.ref }}
@@ -14,11 +21,41 @@ permissions:
   issues: write
 
 jobs:
+  # #915 Wave 1 — RUNG 5 CONSUMES THE CANDIDATE, like rung 4. A weekly lane that
+  # tests whatever `main` happened to point at on Saturday morning cannot tell a
+  # product regression from Friday's merge, and it has a whole week to be wrong
+  # about it. `scripts/ci/resolve-candidate.mjs` prints which link of the
+  # fallback chain answered (dispatch input -> refs/candidates/latest -> the last
+  # green ci.yml run -> this run's own SHA).
+  resolve-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.candidate.outputs.sha }}
+      source: ${{ steps.candidate.outputs.source }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Resolve the candidate under test
+        id: candidate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/ci/resolve-candidate.mjs \
+            --repo "${{ github.repository }}" \
+            --ref "${{ github.event.inputs.ref }}" \
+            --fallback-sha "${{ github.sha }}"
+
   real-model-goldens:
+    needs: [resolve-candidate]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See resolve-candidate.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
       - name: Restore pinned native runtime and model weights
         id: model_cache
@@ -55,9 +92,25 @@ jobs:
         with:
           path: artifacts/enrichment-live/
           key: enrichment-live-${{ runner.os }}-${{ github.run_id }}
+      # #915 Wave 3 — the LANE's verdict, which is a different artifact from the
+      # goldens above: that cache carries what the run measured, this carries
+      # whether the lane ran at all. See the note in soak-weekly.yml.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane real-model-goldens --rung 5 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities compat,correctness --surfaces model-runtime
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: enrichment-live-weekly-evidence
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
 
   live-failure-issue:
-    needs: [real-model-goldens]
+    needs: [resolve-candidate, real-model-goldens]
     if: >
       always() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' && (
         contains(join(needs.*.result, ','), 'failure') ||
@@ -70,6 +123,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See resolve-candidate.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - name: Open or update tracking issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

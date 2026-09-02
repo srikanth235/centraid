@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-const floorsPath = path.resolve("tests/coverage-floors.json");
-const floors = JSON.parse(await readFile(floorsPath, "utf8"));
+const floorsPath = path.resolve("tests/floors.json");
+const floors = JSON.parse(await readFile(floorsPath, "utf8")).coverage;
 console.log("\nCoverage floors enforced by `bun run coverage`:");
 for (const [scope, floor] of Object.entries(floors)) {
   if (typeof floor === "number") {

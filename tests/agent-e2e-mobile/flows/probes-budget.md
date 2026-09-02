@@ -1,6 +1,6 @@
 # Probe journey budget
 
-The six journeys `cold-start`, `home-loads`, `native-v0-resilience`, `places-seat`, `scroll-frames` and `volume-proof` run under `run-probes-suite.mjs`. The runner fails when aggregate wall time is **thirty-five minutes or more**, measured from the first flow process start through the sixth verdict. Every journey writes an independent verdict, including after an earlier failure.
+The six journeys `cold-start`, `home-loads`, `native-v0-resilience`, `places-seat`, `scroll-frames` and `volume-proof` run under the `probes-suite` suite. The runner fails when aggregate wall time is **thirty-five minutes or more**, measured from the first flow process start through the sixth verdict. Every journey writes an independent verdict, including after an earlier failure.
 
 Unlike its two sibling suites, this one shares **nothing**. `home-loads` must run on a cleared client and `native-v0-resilience` restarts the app process, so `MAESTRO_REUSE_PAIRED_STATE` is never set and five of the six pair fresh against the gateway. That is not waste to be optimized away — it is what these six claim — but it dominates the number below, and any future attempt to shrink this budget has to start there.
 

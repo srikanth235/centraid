@@ -186,6 +186,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with:
@@ -228,11 +230,18 @@ jobs:
       # ~90% false positives); run `bunx knip --include exports,types` on-demand
       # for a deep export sweep. Offline and fast, so it gates on the per-PR loop.
       - run: bun run knip
-      # Product-flow catalog anti-rot (issue #458 Phase 4): fail if any
-      # matrix.json cell names an owning test file that no longer exists, or a
-      # named contract suite shrinks below its recorded floor. Offline and fast,
-      # so it belongs on the per-PR loop next to lint/typecheck.
-      - run: bun run test:matrix
+      # Claims-ledger anti-rot (#458 Phase 4, renamed in #915 Wave 3 when
+      # tests/matrix.json became tests/claims.json): fail if any claim names an
+      # owning test file that no longer exists, or a named contract suite shrinks
+      # below its recorded floor, or a registered lane's job carries no evidence
+      # step. Offline and fast, so it belongs on the per-PR loop next to
+      # lint/typecheck.
+      - run: bun run test:claims
+      # The converse direction of the same seam: an evidence step naming a lane
+      # tests/claims.json#lanes does not register writes a file the report has no
+      # row for. That must fail a PR rather than become a banner, so it runs
+      # here rather than in the nightly.
+      - run: bun run lint:evidence-mapping
       - run: bun run test:accessibility
       # #545 A6–A8 — smoke + orphaned script lanes + protocol/css linters that
       # previously lived only in check:pr (no CI enforcement).
@@ -270,6 +279,9 @@ jobs:
       # (or carry an approvedDeviation / approvedMinimumTestsDeviation marker).
       # Fetch is best-effort; ratchet-floors.mjs fails closed when the base ref
       # is missing (no silent "run everything" skip) (#545 A11).
+      # `test:ratchet` is the FLOORS half only since #915: a floor is a contract
+      # and stays on the merge loop, while the skip budget became
+      # `test:skip-inventory` on the weekly hygiene lane (hygiene.yml).
       - name: Ratchet coverage floors and minimumTests
         run: |
           git fetch --no-tags --depth=1 origin main 2>/dev/null || true
@@ -294,30 +306,45 @@ jobs:
       # Home's branches, and passed against a Home with no launcher tiles at all.
       - run: bun run lint:e2e-claims
 
-  # #782 — the ~19 gates in `check:push` that had NO CI job at all. They ran
-  # only on a developer's machine, and receipts (#765, #731) show `check:push`
-  # being skipped locally, so "enforced by the pre-push hook" was enforcement in
-  # name only. These are all offline, deterministic Node scripts with no
-  # toolchain beyond `bun install`, so they cost a few seconds each and belong
-  # on the required per-PR loop.
-  #
-  # Deliberately NOT here (tracked in #781 for the excluded lanes):
-  #   - `design:gallery` — needs a downloaded Playwright browser; that is an
-  #     install + network dependency, not a static check.
-  #   - `check:mobile-native-state` — a path filter that shells out to
-  #     `apps/mobile ci:native-state`, which `mobile-smoke` already runs on
-  #     exactly the diffs that matter. Duplicating it here buys nothing.
-  #   - `test:qualities` — needs every package's `dist/`, so it rides `verify`
-  #     (which already builds) rather than paying for a second full build.
-  # Everything else in `check:push` is already covered by `static` or `verify`.
+      # #782 — the ~19 gates in `check:push` that had NO CI job at all. They ran
+      # only on a developer's machine, and receipts (#765, #731) show `check:push`
+      # being skipped locally, so "enforced by the pre-push hook" was enforcement in
+      # name only. These are all offline, deterministic Node scripts with no
+      # toolchain beyond `bun install`, so they cost a few seconds each and belong
+      # on the required per-PR loop.
+      #
+      # Deliberately NOT here (tracked in #781 for the excluded lanes):
+      #   - `design:gallery` — needs a downloaded Playwright browser; that is an
+      #     install + network dependency, not a static check.
+      #   - `check:mobile-native-state` — a path filter that shells out to
+      #     `apps/mobile ci:native-state`, which `mobile-smoke` already runs on
+      #     exactly the diffs that matter. Duplicating it here buys nothing.
+      #   - `test:qualities` — needs every package's `dist/`, so it rides `verify`
+      #     (which already builds) rather than paying for a second full build.
+      # Everything else in `check:push` is already covered by `static` or `verify`.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane static --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities contracts,correctness --surfaces gateway,web,desktop,mobile
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pr-evidence-static
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: warn
   gates:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # check:ui-receipt, lint:quality-knobs and lint:schema-export resolve
-          # a merge-base against origin/main; a shallow clone has none.
+          # check:ui-receipt and lint:quality-knobs resolve a merge-base against
+          # origin/main; a shallow clone has none.
           fetch-depth: 0
       - uses: ./.github/actions/setup
       - name: Fetch origin/main for merge-base gates
@@ -336,7 +363,6 @@ jobs:
       - run: bun run lint:hairline
       - run: bun run lint:aria-labels
       - run: bun run lint:container-opacity
-      - run: bun run lint:type-floor
       - run: bun run lint:motion-rule
       # Lints DESIGN.md itself (structure of the rulebook, not its consumers).
       - run: bun run lint:design-md
@@ -348,47 +374,47 @@ jobs:
       # naming a physical vault table lives in packages/vault or in an entry of
       # the linter's allow-list with a reason (review lens 8.1).
       - run: bun run lint:vault-sql
-      # Quality knobs and schema exports ratchet — tighten-only vs origin/main.
+      # Quality-knob ratchet — tighten-only vs origin/main. The schema-export
+      # half is a standing fingerprint check rather than a diff-scoped one, so
+      # #915 moved it to the weekly hygiene lane; see hygiene.yml.
       - run: bun run lint:quality-knobs
-      - run: bun run lint:schema-export
       # A UI-touching PR must carry a UI receipt.
       - run: bun run check:ui-receipt
       # Quarantined tests must be declared, attributed, and not expired.
       - run: bun run test:quarantine
-      # Deterministically-environment-red tests (#781): every environment-
-      # predicate guard (platform/arch/uid) in a test file must be inventoried
-      # in tests/env-red.json with an open issue and an expiry or revisit
-      # trigger; the budget is down-only.
-      - run: bun run test:env-red
       # #892 Phase 3 — a step that ANNOUNCES it will never fail is the one place
       # in this repo without a budget, a ledger or an expiry. The iroh
       # binding-drift warning and the never-failing Expo compatibility map now
       # carry an owner, an issue and a date by which somebody decides whether
-      # they should stay advisory (tests/advisory-ledger.json).
+      # they should stay advisory (tests/inventory.json#advisory).
       - run: bun run test:advisory-expiry
-      # Assertion-hygiene counts (toBeTruthy/toBeFalsy and the non-negated
-      # toHaveBeenCalled family) are down-only budgets in
-      # tests/hygiene-budgets.json — the enforcement the lint preset cannot
-      # give, since neither matcher is wrong in isolation (#781).
-      - run: bun run test:hygiene-ratchet
-      # Fixed sleeps in tests are a down-only budget in
-      # tests/sleep-inventory.json — wall-clock waits priced per site, with
-      # fake clocks / event-driven waits as the remedy (#781).
-      - run: bun run test:sleep-inventory
 
-  # #892 Phase 1 — THE PASS/FAIL HALF. `verify` was 26m34s wall with `bun run
-  # coverage` alone at 20m15s, i.e. roughly 77% of PR feedback latency was
-  # instrumentation. Splitting it costs some duplicated test execution and buys
-  # the thing a PR author actually waits for: "did anything break" now arrives on
-  # the uninstrumented suite while the `coverage-shard` / `coverage` pair scores
-  # the floors in parallel. Both are in `check`'s needs, so nothing became
-  # advisory — only the ORDER in which answers arrive changed.
-  #
-  # What stayed here rather than moving: everything that needs the built dist and
-  # is not instrumentation — the tunnel's native and byte-plane contracts, the
-  # user-facing qualities lane, the mobile boot-condition tier, and the two perf
-  # ceilings. They are seconds-to-minutes each and would each pay a second
-  # `bun run build` if they moved.
+      # #892 Phase 1 — THE PASS/FAIL HALF. `verify` was 26m34s wall with `bun run
+      # coverage` alone at 20m15s, i.e. roughly 77% of PR feedback latency was
+      # instrumentation. Splitting it costs some duplicated test execution and buys
+      # the thing a PR author actually waits for: "did anything break" now arrives on
+      # the uninstrumented suite while the `coverage-shard` / `coverage` pair scores
+      # the floors in parallel. Both are in `check`'s needs, so nothing became
+      # advisory — only the ORDER in which answers arrive changed.
+      #
+      # What stayed here rather than moving: everything that needs the built dist and
+      # is not instrumentation — the tunnel's native and byte-plane contracts, the
+      # user-facing qualities lane, the mobile boot-condition tier, and the two perf
+      # ceilings. They are seconds-to-minutes each and would each pay a second
+      # `bun run build` if they moved.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane gates --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 720000 --qualities contracts --surfaces gateway
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pr-evidence-gates
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: warn
   verify:
     runs-on: ubuntu-latest
     # Uninstrumented, so the old 35-minute allowance is no longer the shape of
@@ -396,6 +422,8 @@ jobs:
     # hung runner, and a cancelled job counts as red with no evidence (#557).
     timeout-minutes: 30
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with:
@@ -424,7 +452,7 @@ jobs:
       # HIT/MISS table in the Job Summary. Five lanes were paying ~4.5 minutes for
       # this step with the remote cache switched on and nobody could say why;
       # the table is how the next run answers it.
-      - run: bun run build:ci
+      - run: bun run build:ci:floored
       # #892 Phase 1 — folded in from `lane-client-e2e / boot-smoke`, which paid a
       # 4m38s `build --filter=@centraid/desktop...` for a ~0s L2 structure
       # assertion over a dist it did not need to produce. The build above is a
@@ -495,65 +523,44 @@ jobs:
       # `probe` field for exactly which half of the interval is fenced.
       - name: Send-to-first-token ceiling
         run: bun run perf:send-to-first-token
-      # THE PASS/FAIL ANSWER. Same suite the `coverage` pair scores, run without
-      # v8 instrumentation — which is where the 20 minutes lived. Floors are not
-      # evaluated here (no `--coverage`, so `vitest.config.ts`'s thresholds never
-      # engage); this job answers "did anything break", and only that.
-      - run: bun run test:suite
-      # #842 W0.3 — no file may report zero collected tests. A suite that throws
-      # while LOADING registers no test at all, so every counting gate — matrix
-      # minimumTests floors, the skip budget, the quarantine ledger, the coverage
-      # floors — sees a smaller universe rather than a violated one, and the suite
-      # reads as absent instead of red. It rides HERE as well as on the merged
-      # report because this is the earliest place the shape can be seen, and a
-      # collection error is a "do not merge" answer, not a coverage observation.
-      - name: No test file failed to collect
-        run: bun run test:collection-tripwire -- --require-report
-      # #656 Layer 5 / #842 W0.1 — the PR lane's total wall clock against the
-      # tighten-only ceiling in tests/suite-wall-clock.json. It rides HERE, on the
-      # single-job uninstrumented suite, because that is the lane the ceiling was
-      # measured from ("Reseeded 2026-08-29 from CI verify") and the only one
-      # whose number means what the budget file says it means.
-      #
-      # It used to ride on `coverage`, and that was wrong for a reason worth
-      # stating so it is not undone: the metric sums per-file WALL SPANS, and the
-      # files inside a shard run CONCURRENTLY, so the sum inflates when workers
-      # timeshare a slow runner. #905 measured it — the same 1508 files scored
-      # 2370.5s uninstrumented and 2427.0s instrumented on one host (+2.4%, so
-      # instrumentation is not the variable), while the four-way sharded lane
-      # reported 3824.0s on a run whose shard 1 took 545s against main's 383s.
-      # Main passing the identical gate on the identical suite is the same fact
-      # from the other side. A budget that a slow runner can breach is a flake
-      # with a number, and it fails the lane that adds tests rather than the
-      # change that added them.
-      #
-      # The existence check is load-bearing: the script exits 0 with "not
-      # measured" when the artifact is absent, which is right on a laptop and
-      # wrong in the lane that enforces it.
-      - name: Suite wall-clock ceiling
-        run: |
-          set -euo pipefail
-          if [ ! -f artifacts/test-results/vitest.json ]; then
-            echo "::error title=Suite wall-clock unmeasured::artifacts/test-results/vitest.json is missing after test:suite; the wall-clock ceiling cannot be enforced, so this lane fails rather than passing silently."
-            exit 1
-          fi
-          bun run test:suite-wall-clock
+      # `bun run test:suite` — the uninstrumented serial run — no longer rides
+      # here. It was ~19 of this job's 24 minutes and re-ran the SAME projects the
+      # four `coverage-shard` legs already run, sharded, with coverage; the
+      # shards are the pass/fail answer as well as the floors (a failing test
+      # fails its shard). The serial run, its collection tripwire and the suite
+      # wall-clock ceiling (which #905 showed must be scored on a single unsharded
+      # runner) now ride on `candidate.yml`'s `suite` lane, on every push to
+      # main, where they block the promotion rather than the merge. The rung-2
+      # `pr-gate` ceiling is what forced the move: 24.2 min measured against 15.
 
-  # #892 Phase 1 — the instrumented half, fanned out. `bun run coverage` on one
-  # runner was 20m15s; four shards each score a quarter of the test files and the
-  # merge job reassembles the blobs.
-  #
-  # A SHARD IS NOT A SMALLER GATE. It runs under `vitest.shard.config.ts`, which
-  # is the root config MINUS `coverage.thresholds`, because a shard sees only its
-  # slice: `packages/cli/**` measures 0% on the shard holding no CLI tests, so
-  # per-shard floors would either red every run or have to be lowered into
-  # meaninglessness. Every floor is evaluated exactly once, on the merged report.
-  #
-  # The hazard that introduces is #556's: a merge assembled from fewer blobs than
-  # were dispatched measures a smaller world and passes more easily. Two things
-  # close it — this job is an ordinary (not `always()`) dependency of `coverage`,
-  # so a dead shard fails the merge, and `assert-shard-blobs.mjs` requires the
-  # exact set {1..N} on disk before vitest is allowed to merge anything.
+      # #892 Phase 1 — the instrumented half, fanned out. `bun run coverage` on one
+      # runner was 20m15s; four shards each score a quarter of the test files and the
+      # merge job reassembles the blobs.
+      #
+      # A SHARD IS NOT A SMALLER GATE. It runs under `vitest.shard.config.ts`, which
+      # is the root config MINUS `coverage.thresholds`, because a shard sees only its
+      # slice: `packages/cli/**` measures 0% on the shard holding no CLI tests, so
+      # per-shard floors would either red every run or have to be lowered into
+      # meaninglessness. Every floor is evaluated exactly once, on the merged report.
+      #
+      # The hazard that introduces is #556's: a merge assembled from fewer blobs than
+      # were dispatched measures a smaller world and passes more easily. Two things
+      # close it — this job is an ordinary (not `always()`) dependency of `coverage`,
+      # so a dead shard fails the merge, and `assert-shard-blobs.mjs` requires the
+      # exact set {1..N} on disk before vitest is allowed to merge anything.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane verify --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities correctness,contracts,durability,concurrency --surfaces vault-core,gateway,replica-sync
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pr-evidence-verify
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: warn
   coverage-shard:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -562,12 +569,14 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
           cargo-cache: verify
-      - run: bun run build:ci
+      - run: bun run build:ci:floored
       - name: Coverage shard ${{ matrix.shard }}/4
         env:
           CENTRAID_COVERAGE_SHARD: ${{ matrix.shard }}/4
@@ -590,12 +599,27 @@ jobs:
           include-hidden-files: true
           retention-days: 1
           if-no-files-found: error
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane coverage-shard-${{ matrix.shard }} --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities correctness --surfaces vault-core,gateway
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pr-evidence-coverage-shard-${{ matrix.shard }}
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: warn
 
   coverage:
     needs: [coverage-shard]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history so test:diff-coverage can resolve merge-base vs origin/main.
@@ -603,9 +627,15 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
+          # #915 — a turbo MISS on `@centraid/tunnel#build` is a release cargo
+          # compile (278s of a 349s cold `build:ci`, measured). Without a Cargo
+          # cache that miss is a FULLY COLD compile; with one it is incremental.
+          # `verify` already carried this preset and this lane did not, so the
+          # two lanes degraded very differently from the same miss.
+          cargo-cache: verify
       # The merge runs no tests, but `test:report` and the v8 remap read the
       # workspace by its published entry points.
-      - run: bun run build:ci
+      - run: bun run build:ci:floored
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: coverage-blob-*
@@ -617,15 +647,15 @@ jobs:
         env:
           CENTRAID_COVERAGE_SHARDS: "4"
         run: bun run coverage:merge
-      # The suite wall-clock ceiling used to ride here and now rides on `verify`
-      # — see the comment above that step. Short version: sharding DOES move the
-      # metric, because it sums per-file wall spans and a shard's files run
-      # concurrently, so this lane scored the runner rather than the suite.
+      # The suite wall-clock ceiling used to ride here, then on `verify`, and now
+      # rides on `candidate.yml`'s `suite` lane with the serial run it measures.
+      # It cannot come back here: sharding DOES move the metric, because it sums
+      # per-file wall spans and a shard's files run concurrently, so this lane
+      # scored the runner rather than the suite (#905).
       #
-      # Scored on the merged report as well as on `verify`'s own run: `verify`
-      # sees the uninstrumented suite and this sees the world the floors were
-      # measured against, and a collection error that appears only under
-      # instrumentation is exactly the shape #842 W0.3 was written for.
+      # On the merge gate the merged report is the only place the whole suite's
+      # shape can be seen, so the collection tripwire rides here: a collection
+      # error is a "do not merge" answer, not a coverage observation (#842 W0.3).
       - name: No test file failed to collect
         run: bun run test:collection-tripwire -- --require-report
       # #532 — changed-line coverage vs origin/main must be ≥80% (or approvedDeviation).
@@ -653,9 +683,22 @@ jobs:
           path: dist/test-report/
           retention-days: 14
 
-  # Public HTML on GitHub Pages — main branch only (not PRs).
-  # Merges into the gh-pages tree so nightly slots survive, then deploys via
-  # GitHub Pages (workflow build type). Does not gate the required `check` job.
+      # Public HTML on GitHub Pages — main branch only (not PRs).
+      # Merges into the gh-pages tree so nightly slots survive, then deploys via
+      # GitHub Pages (workflow build type). Does not gate the required `check` job.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane coverage --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities correctness --surfaces vault-core,gateway
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pr-evidence-coverage
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: warn
   publish-report:
     needs: [coverage]
     if: >
@@ -757,6 +800,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -771,69 +816,87 @@ jobs:
       # vault/automation dry-runs fail with "No tests were executed".
       - name: Build packages for mutation seeds
         run: bun run turbo run build --filter='./packages/*'
-      - name: Per-PR mutation (affected seeds + floors)
-        run: bun run test:mutation:pr
+      # #915 Wave 1 — CAPPED AT EIGHT MINUTES, THEN DEFERRED TO RUNG 3. The
+      # affected-seed set is a function of the diff, so one PR paid 90 seconds
+      # and the next paid nineteen minutes; the second one is a rung-2 lane
+      # answering a rung-3 question. Over the cap the run is killed, the PR gets
+      # ONE comment (rewritten in place) saying which rung now owns the answer,
+      # and `candidate.yml`'s `mutation-full` re-runs every seed with floors on
+      # the merge commit. Nothing is skipped; only the moment the answer arrives
+      # moves. See scripts/ci/mutation-cap.mjs.
+      - name: Per-PR mutation (affected seeds + floors, 8-minute cap)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CENTRAID_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/ci/mutation-cap.mjs
 
-  # #892 Phase 1 — THE PER-MERGE MUTATION CANARY. The full seed set, on every
-  # merge to main, deliberately OUTSIDE `check`'s needs: the merge has already
-  # happened, so a red canary is a page rather than a gate. What it buys is the
-  # same thing `mobile-canary.yml` buys — a mutation-score regression attributable
-  # to ONE commit instead of a night's worth of them — without any of it sitting
-  # in front of a human waiting on review.
-  #
-  # The nightly full run in e2e.yml stays: it is the scheduled sweep that catches
-  # a seed that rots without any commit touching its watch list, and its evidence
-  # feeds the test-health report. This lane is about attribution, not coverage.
-  mutation-canary:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    permissions:
-      contents: read
-      issues: write
-    # Serialize: a run of merges must not stack sixteen Stryker runs on top of
-    # each other. `cancel-in-progress: false` keeps the older run's attribution.
-    concurrency:
-      group: mutation-canary-${{ github.ref }}
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup
-        with:
-          turbo-cache: "true"
-      - name: Build packages for mutation seeds
-        run: bun run turbo run build --filter='./packages/*'
-      - name: Full-seed mutation (all seeds + floors)
-        run: bun run test:mutation -- --enforce-floors
+      # #915 Wave 1 — `mutation-canary` MOVED TO `candidate.yml` as `mutation-full`.
+      # It was already outside `check`'s needs (the merge had happened, so a red
+      # canary was a page rather than a gate); rung 3 is where a page belongs, and
+      # there it gates promotion instead of only filing an issue. The nightly full
+      # run in e2e.yml stays: it is the scheduled sweep that catches a seed rotting
+      # without any commit touching its watch list.
+
+      # #915 Wave 1 — NEW-TEST BURN-IN. `author ≠ auditor` was enforced for the
+      # product (mutation seeds, diff coverage, the e2e alarm) and not at all for the
+      # tests themselves: a newly written test ran exactly once before merging,
+      # inside a full suite sharing a worker pool with a thousand siblings. A test
+      # that passes because a sibling seeded a fixture, or because it is 1-in-3
+      # flaky, passes that one run and then costs everybody a re-run habit for
+      # months. Three runs, alone, and any DISAGREEMENT between them is red — not
+      # just a failure, because the file that passes twice and fails once is the
+      # expensive one and the one a single run cannot see.
+      #
+      # `fetch-depth: 0` because the file list is a merge-base diff, not a tip diff:
+      # what matters is what THIS branch changed, not what main moved underneath it.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane mutation-pr --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities correctness --surfaces vault-core,gateway --cases artifacts/mutation-cap/cases.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: mutation-canary-scores
-          path: artifacts/mutation/
-          retention-days: 14
-      - name: File a tracking issue on a red canary
-        if: failure()
+          name: pr-evidence-mutation-pr
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: warn
+  new-test-burn-in:
+    runs-on: ubuntu-latest
+    # Three runs of a handful of files. The cap is generous against a PR that
+    # adds many suites at once; over it, the honest answer is to split the PR.
+    timeout-minutes: 25
+    steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - name: Fetch the merge base
+        run: git fetch --no-tags origin main 2>/dev/null || true
+      # Workspace package entry points must exist so vitest can resolve
+      # @centraid/* imports when a test is run from its own package directory.
+      - name: Build packages so a per-package vitest run resolves
+        run: bun run turbo run build --filter='./packages/*'
+      - name: Run every added or modified test three times, alone
+        run: node scripts/ci/burn-in.mjs --base origin/main --runs 3
+      - name: Write lane evidence
+        if: always()
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          cat > /tmp/mutation-canary.md <<EOF
-          The per-merge mutation canary failed on \`${{ github.sha }}\`.
-
-          The regression is attributable to that ONE commit, which is the whole
-          reason this lane exists — do not wait for the nightly to re-observe it.
-          Evidence: the \`mutation-canary-scores\` artifact on run
-          ${{ github.run_id }}.
-
-          Fix or revert before the next merge. Prefer updating this issue over
-          opening duplicates.
-          EOF
-          node scripts/ci/file-tracking-issue.mjs \
-            --title '[mutation-canary] a mutation floor went red on main' \
-            --search '[mutation-canary] a mutation floor went red' \
-            --body-file /tmp/mutation-canary.md \
-            --label tech-debt \
-            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane new-test-burn-in --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities correctness,concurrency --surfaces vault-core,gateway
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pr-evidence-new-test-burn-in
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: warn
 
   # ---------------------------------------------------------------------------
   # Path-gated lanes. Each was its own `pull_request` workflow until #557; the
@@ -841,41 +904,19 @@ jobs:
   # reports `skipped`, which `check` treats as satisfied.
   # ---------------------------------------------------------------------------
 
-  # Big enough to keep their own files, invoked via `workflow_call`.
-  # The `all` escape hatch has to reach the INPUTS, not just the `if:`. These two
-  # `with:` lines were the only place in this file where a `changes` output is
-  # read outside an `if:`, and they were the only two that did not carry the
-  # `|| all` fallback — so a `workflow_dispatch` run (where the paths-filter step
-  # is skipped and every output is the empty string) started this caller and
-  # handed it `web: false, desktop: false`. Both inner jobs took their own
-  # `if: inputs.web` / `if: inputs.desktop` and skipped; the lane finished in 0s
-  # having run nothing, and `check` counted it as satisfied. The one way to force
-  # a full run on `main` was also the one way this lane could not be exercised.
-  # `lint:path-filters` now fails on a `changes` output read without the fallback.
+  # #915 Wave 1 — `client-e2e` AND `gateway-package` ARE GONE FROM RUNG 2.
+  # Both were `workflow_call` callers into lanes that still exist and are still
+  # run: `candidate.yml` invokes `lane-client-e2e.yml` twice (as
+  # `web-e2e-linux` and `desktop-e2e-linux`) and `lane-gateway-package.yml`
+  # once, on every push to `main`. What changed is WHICH RUNG ANSWERS: a desktop
+  # Playwright journey and a container smoke test are questions about a build we
+  # would hand to a device, not about whether a diff can land, and each was
+  # ~25-30 minutes of a 15-minute merge budget for a secondary surface.
   #
-  # The gate is `web || desktop` rather than `client`: `client` is a superset (it
-  # also matches `packages/server/**`), which was deliberate while `boot-smoke`
-  # lived in this lane and had to run for gateway-only PRs. #892 Phase 1 moved
-  # `boot-smoke` into `verify`, so nothing gated on `client` remains here and a
-  # server-only PR was spinning up a caller whose every job skips.
-  client-e2e:
-    needs: changes
-    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.desktop == 'true' || needs.changes.outputs.all == 'true'
-    uses: ./.github/workflows/lane-client-e2e.yml
-    with:
-      web: ${{ needs.changes.outputs.web == 'true' || needs.changes.outputs.all == 'true' }}
-      desktop: ${{ needs.changes.outputs.desktop == 'true' || needs.changes.outputs.all == 'true' }}
-
-  gateway-package:
-    needs: changes
-    if: needs.changes.outputs.gateway == 'true' || needs.changes.outputs.all == 'true'
-    # #637 — lane-gateway-package requests packages: write for GHCR buildcache.
-    # Caller must grant it; otherwise the whole ci workflow fails at startup
-    # with packages: none (same pattern as release.yml → lane-release-gateway-image).
-    permissions:
-      contents: read
-      packages: write
-    uses: ./.github/workflows/lane-gateway-package.yml
+  # The promotion rule recorded in lane-client-e2e.yml is unchanged and is now
+  # counted rather than remembered: `scripts/ci/lane-health.mjs` tallies the
+  # times a rung-3 lane caught something the merge gate had already called
+  # green, and files `[lanes] promote <lane>` on the second one in 30 days.
 
   # Required-check-capable mobile liveness gate (#587 E22–E23/F26–F29).
   # Bundle export + committed-native-tree ratchets + shipped-weight ceilings.
@@ -887,6 +928,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
       - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.2.0
@@ -944,55 +987,66 @@ jobs:
       # went stale at the same time: since #890 W4 the mobile gate is Android on
       # Linux, and there is no macOS build on the PR loop to fail before.
 
-  # #890 W4 — THE PR DEVICE GATE. Mobile is the primary surface and until this
-  # job no mobile journey ran on any PR: `mobile-smoke` above proves the app
-  # BUILDS and nothing about whether it works, and the nightly's first device
-  # signal arrived after merge. A feedback loop that contradicts surface priority
-  # is the defect; this job is the fix.
-  #
-  # Android, per D1 (docs/decisions.md#mobile-testing-890): Linux runners expose
-  # /dev/kvm so the emulator is hardware-accelerated and the gate costs Linux
-  # minutes rather than the macOS multiplier, and Maestro's UIAutomator2 driver
-  # is the stabler of the two. iOS is the nightly's depth platform, never a
-  # per-PR duplicate.
-  #
-  # It runs the RELEASE artifact (#890 W1), so none of the dev-client machinery
-  # — Metro, the dev launcher, the bundle prewarm, the developer-menu sheet —
-  # exists on this path.
-  #
-  # TWO LEGS ON TWO EMULATORS (#905). In sequence the critical five measured
-  # ~795s against the suite's 720s deadline (run 33582899886), so the fifth
-  # member was starved on every run. No member was dropped and no assertion was
-  # loosened; the five are split across two matrix legs that each pair
-  # themselves, so the gate's wall time is the slower leg. The cost is one extra
-  # pairing per run, and it is accepted — see flows/pr-gate-budget.md. ONE job
-  # with a matrix rather than two jobs, so `check`'s `needs:` still names one
-  # lane, the roster still declares ONE blocking mobile device lane, and both
-  # committed leg scripts sit literally inside this job block where
-  # scripts/lint-e2e-wiring.mjs reads them.
+      # #890 W4 — THE PR DEVICE GATE. Mobile is the primary surface and until this
+      # job no mobile journey ran on any PR: `mobile-smoke` above proves the app
+      # BUILDS and nothing about whether it works, and the nightly's first device
+      # signal arrived after merge. A feedback loop that contradicts surface priority
+      # is the defect; this job is the fix.
+      #
+      # Android, per D1 (docs/decisions.md#mobile-testing-890): Linux runners expose
+      # /dev/kvm so the emulator is hardware-accelerated and the gate costs Linux
+      # minutes rather than the macOS multiplier, and Maestro's UIAutomator2 driver
+      # is the stabler of the two. iOS is the nightly's depth platform, never a
+      # per-PR duplicate.
+      #
+      # It runs the RELEASE artifact (#890 W1), so none of the dev-client machinery
+      # — Metro, the dev launcher, the bundle prewarm, the developer-menu sheet —
+      # exists on this path.
+      #
+      # ONE LEG, EIGHT MINUTES WARM (#915 Wave 1). #905 split the critical five
+      # across two matrix legs because in sequence they measured ~795s against a
+      # 720s deadline. #915 makes the smaller cut instead: the RESILIENCE leg
+      # (native-v0 resilience) is a rung-3 question about a build, not a rung-2
+      # question about a diff, and it moved to the candidate roster with the rest of
+      # the Android depth. What stays on the merge gate is the smallest set that can
+      # falsify "this diff broke the phone": the pairing canary, one home-app
+      # journey (`notes-library`), and cold start — 8 minutes warm.
+      #
+      # A COLD CACHE IS NOW A NAMED LANE FAILURE, NOT A SIXTY-MINUTE WAIT. When the
+      # apk restore misses, this job used to compile a release build inside the leg
+      # (16m21s on 0655a1b7, inside a 27-minute job) and every PR behind it paid the
+      # same. The shell is banked by `candidate.yml`'s `mobile-canary-android` on
+      # every push to main, so a miss means that lane has not run for this native +
+      # JS fingerprint yet — a statement about the pipeline, which the pipeline
+      # should say out loud in seconds rather than discover in an hour.
+      #
+      # The committed leg script sits literally inside this job block, which is where
+      # scripts/lint-e2e-wiring.mjs reads it from.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane mobile-smoke --rung 2 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities contracts,compat --surfaces mobile
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pr-evidence-mobile-smoke
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: warn
   mobile-device-gate:
     needs: changes
     if: needs.changes.outputs.mobile == 'true' || needs.changes.outputs.all == 'true'
     runs-on: ubuntu-latest
-    strategy:
-      # Both legs always report. A red paired leg tells you nothing about
-      # whether the app still cold-starts, and cancelling the sibling would
-      # throw away the half of the gate that was still answering.
-      fail-fast: false
-      matrix:
-        include:
-          - leg: paired
-            script: apps/mobile/scripts/android-emulator-pr-gate.sh
-          - leg: resilience
-            script: apps/mobile/scripts/android-emulator-pr-gate-resilience.sh
-    # The SUITE's own budget is 12 minutes warm, now PER LEG
-    # (flows/pr-gate-budget.md), and is what fails a slow run, because it fails
-    # while evidence can still be written.
-    # This is an outer backstop only and must stay well above suite + a cold
-    # gradle release build, or a cancelled job destroys the verdicts (#557:
-    # cancelled counts as red, with nothing to read).
-    timeout-minutes: 60
+    # The SUITE's own 8-minute budget (flows/pr-gate-budget.md) is what fails a
+    # slow run, because it fails while evidence can still be written. This is an
+    # outer backstop only — but it no longer has to sit above a cold gradle
+    # release build, because a cold cache fails fast above instead of building.
+    timeout-minutes: 20
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with:
@@ -1071,14 +1125,34 @@ jobs:
       #                  a task-input check, which is why restore-keys is safe on
       #                  this one and refused on the other.
       #
-      # Both are populated on `main` by .github/workflows/mobile-canary.yml, so a
-      # PR normally restores rather than compiles.
+      # Both are populated on `main` by `candidate.yml`'s `mobile-canary-android`
+      # (rung 3), so a PR normally restores rather than compiles.
       - name: Restore the built Android app
         id: android_app
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/centraid-mobile-e2e-android
           key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
+      # #915 Wave 1 — A COLD SHELL FAILS IN SECONDS WITH A NAME. The apk key
+      # folds the native fingerprint AND the JS bundle fingerprint, and
+      # `candidate.yml`'s `mobile-canary-android` banks that exact key on every
+      # push to `main`. A miss therefore means one of two pipeline facts, not a
+      # product fact: the canary has not yet run for this fingerprint, or it ran
+      # and did not bank. Either way the honest lane verdict is "this gate could
+      # not be answered cheaply", and the honest cost is one minute rather than
+      # the sixteen-minute release build this job used to absorb silently
+      # (0655a1b7, 60732d30: a 0s restore and a 16m21s build inside a 27m job).
+      #
+      # It writes its own case id so the evidence says WHY, and it fails the job
+      # so the miss is visible instead of amortised across everybody's PR.
+      - name: A cold Android shell is a lane failure, not an hour of building
+        if: steps.android_app.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          printf '%s\n' '[{"id":"cold-cache","verdict":"failed","durationMs":0,"attempts":1}]' > artifacts/mobile-device-gate-cases.json
+          echo "::error title=mobile-device-gate cold cache::no banked Android release shell for this native+JS fingerprint (key android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}). candidate.yml's mobile-canary-android banks it on every push to main; if that lane is red or has not run for this fingerprint, fix THAT rather than paying a cold release build on every PR behind this one."
+          exit 1
       - name: Restore the Android gradle build directory
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -1131,7 +1205,7 @@ jobs:
             ~/.android/avd/*
             ~/.android/adb*
           key: avd-api34-x86_64-google_apis-pixel6-r4096-c4-v1
-      - name: Run this leg of the critical five on the release artifact
+      - name: Run the critical journeys on the release artifact
         id: emu
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         env:
@@ -1148,9 +1222,9 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
           disable-animations: true
-          # The leg's committed script. Both paths appear literally in the
-          # matrix above, which is where the wiring linter reads them from.
-          script: bash ${{ matrix.script }}
+          # The committed gate script. The literal path lives inside this job
+          # block, which is where scripts/lint-e2e-wiring.mjs reads it from.
+          script: bash apps/mobile/scripts/android-emulator-pr-gate.sh
       # The gateway's side of a red run. The phone is mute about its replica —
       # nothing on that path logs and the release artifact carries no debugger —
       # so whether a clone was ever ASKED FOR is only knowable from here. Failure
@@ -1189,12 +1263,10 @@ jobs:
       # a red suite still leaves the next push a warm build, and a run that
       # restored rather than compiled has nothing new to bank.
       #
-      # BOTH LEGS SAVE THE SAME KEYS, and that is safe rather than lucky (#905).
-      # On a cold cache each leg compiles and each reaches this step with the
-      # identical apk / gradle key. `actions/cache/save` wraps its whole body in
-      # `catch (error) { utils.logWarning(...) }` (src/saveImpl.ts at the pinned
-      # v6.1.0), so the second reservation loses, logs a warning, and the step
-      # still exits 0 — the same shape the AVD snapshot save has always had.
+      # #915 — with one leg and a cold cache failing fast above, this now only
+      # ever banks a shell the run legitimately built (a `workflow_dispatch`
+      # forcing the lane on, say). The `built` gate is what keeps a run that
+      # restored rather than compiled from re-saving what it was given.
       - name: Save the built Android app
         if: always() && steps.emu.outputs.built == 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -1213,7 +1285,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: mobile-device-gate-runs-${{ matrix.leg }}
+          name: mobile-device-gate-runs
           path: tests/agent-e2e-mobile/runs/
           retention-days: 7
           if-no-files-found: ignore
@@ -1224,9 +1296,35 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: mobile-run-ledger-pr-gate-${{ matrix.leg }}
+          name: mobile-run-ledger-pr-gate
           path: tests/agent-e2e-mobile/ledger/durations.json
           retention-days: 30
+          if-no-files-found: warn
+      # `--cases` only when a step wrote one: the cold-cache guard above emits a
+      # single `cold-cache` case so the evidence says WHY the lane is red, and a
+      # normal run has no case file to pass.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: |
+          set -euo pipefail
+          cases=()
+          if [ -f artifacts/mobile-device-gate-cases.json ]; then
+            cases=(--cases artifacts/mobile-device-gate-cases.json)
+          fi
+          node scripts/test-report/write-evidence.mjs \
+            --lane mobile-device-gate --rung 2 --platform android \
+            --verdict auto --job-status "${{ job.status }}" \
+            --started-at "$LANE_STARTED_AT" --budget-ms 480000 \
+            --qualities journey,correctness,offline \
+            --surfaces mobile,tunnel-pairing "${cases[@]+"${cases[@]}"}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pr-evidence-mobile-device-gate
+          path: artifacts/
+          retention-days: 7
           if-no-files-found: warn
 
   docs:
@@ -1242,19 +1340,36 @@ jobs:
       DOCS_SITE_BASE_PATH: /docs
       DOCS_SITE_CANONICAL_ORIGIN: https://centraid.dev/docs
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
       - run: bun run docs:bundle
       - run: bun run docs:smoke
 
-  # #501 — continuous public PWA (app.centraid.dev) gate. The Cloudflare deploy
-  # of the same build lives in web.yml, push-to-main only.
+      # #501 — continuous public PWA (app.centraid.dev) gate. The Cloudflare deploy
+      # of the same build lives in web.yml, push-to-main only.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane docs --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities contracts --surfaces web
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pr-evidence-docs
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: warn
   web-build:
     needs: changes
     if: needs.changes.outputs.web == 'true' || needs.changes.outputs.all == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
       - run: bun run web:build
@@ -1268,6 +1383,19 @@ jobs:
           name: web-dist
           path: apps/web/dist/
           retention-days: 7
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane web-build --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 900000 --qualities contracts --surfaces web
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pr-evidence-web-build
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: warn
 
   iroh-wasm:
     needs: changes
@@ -1275,6 +1403,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with:
@@ -1324,14 +1454,29 @@ jobs:
             git diff --stat -- apps/web/src/generated || true
           fi
 
-  # Pure-local Companion gate. The live n0-relay flow is environmentally flaky
-  # and deliberately stays schedule-only in extension-e2e.yml.
+      # Pure-local Companion gate. The live n0-relay flow is environmentally flaky
+      # and deliberately stays schedule-only in extension-e2e.yml.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane iroh-wasm --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1500000 --qualities contracts --surfaces tunnel-pairing,web
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pr-evidence-iroh-wasm
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: warn
   companion-static:
     needs: changes
     if: needs.changes.outputs.extension == 'true' || needs.changes.outputs.all == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
       # Extension unit suite + locker companion query handlers. Avoid full
@@ -1343,24 +1488,52 @@ jobs:
       - run: bun run --filter @centraid/core build
       - run: bun run --filter @centraid/blueprints test -- src/query-handlers.test.ts
 
-  # #526 — stateless Assist ceremony edge. The protected production deploy of
-  # the same build lives in oauth-worker.yml, push-to-main only.
+      # #526 — stateless Assist ceremony edge. The protected production deploy of
+      # the same build lives in oauth-worker.yml, push-to-main only.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane companion-static --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities contracts --surfaces extension
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pr-evidence-companion-static
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: warn
   oauth-worker:
     needs: changes
     if: needs.changes.outputs.oauth-worker == 'true' || needs.changes.outputs.all == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
       - run: bun run --cwd apps/oauth-worker typecheck
       - run: bun run --cwd apps/oauth-worker test
       - run: bun run --cwd apps/oauth-worker build
 
-  # #557 — fails a PR that ADDS a dependency carrying a known advisory (or a
-  # copyleft licence that would contaminate a shipped desktop/mobile binary).
-  # Dependabot reports what you already have; this stops new ones arriving.
-  # Unfiltered: any PR can add a dependency, so this never skips.
+      # #557 — fails a PR that ADDS a dependency carrying a known advisory (or a
+      # copyleft licence that would contaminate a shipped desktop/mobile binary).
+      # Dependabot reports what you already have; this stops new ones arriving.
+      # Unfiltered: any PR can add a dependency, so this never skips.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane oauth-worker --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities contracts,security --surfaces oauth-worker
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pr-evidence-oauth-worker
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: warn
   dependency-review:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -1369,6 +1542,8 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
@@ -1380,17 +1555,32 @@ jobs:
           # untouched, so it cannot retroactively red an unrelated PR.
           deny-licenses: AGPL-3.0, AGPL-3.0-only, AGPL-3.0-or-later, GPL-3.0, GPL-3.0-only, GPL-3.0-or-later
 
-  # #671 — secret scanning on every PR/push. GitHub secret scanning + push
-  # protection are already enabled for this public repo (primary hosted control).
-  # Gitleaks covers non-provider / high-entropy patterns on the *current tree*
-  # (not full history — historical fixture noise is not a merge gate). Allowlist:
-  # `.gitleaks.toml`. Unfiltered: any PR can introduce a secret.
+      # #671 — secret scanning on every PR/push. GitHub secret scanning + push
+      # protection are already enabled for this public repo (primary hosted control).
+      # Gitleaks covers non-provider / high-entropy patterns on the *current tree*
+      # (not full history — historical fixture noise is not a merge gate). Allowlist:
+      # `.gitleaks.toml`. Unfiltered: any PR can introduce a secret.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane dependency-review --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 300000 --qualities security --surfaces gateway
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pr-evidence-dependency-review
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: warn
   gitleaks:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install gitleaks
         env:
@@ -1405,17 +1595,32 @@ jobs:
       - name: Scan working tree
         run: gitleaks detect --source . --no-git --config .gitleaks.toml --verbose --redact
 
-  # #671 — full lockfile inventory via OSV. Complements dependency-review:
-  # dependency-review fails *new* high-severity deps on the PR diff; this job
-  # scans the whole `bun.lock` for known advisories so latent inventory debt
-  # cannot hide. Fail closed on CRITICAL only (HIGH reported, non-blocking) —
-  # see scripts/ci/osv-lockfile-scan.mjs + SECURITY.md. Cheap; no bun install.
+      # #671 — full lockfile inventory via OSV. Complements dependency-review:
+      # dependency-review fails *new* high-severity deps on the PR diff; this job
+      # scans the whole `bun.lock` for known advisories so latent inventory debt
+      # cannot hide. Fail closed on CRITICAL only (HIGH reported, non-blocking) —
+      # see scripts/ci/osv-lockfile-scan.mjs + SECURITY.md. Cheap; no bun install.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane gitleaks --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 300000 --qualities security --surfaces gateway
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pr-evidence-gitleaks
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: warn
   osv-scanner:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install OSV-Scanner
         env:
@@ -1429,43 +1634,58 @@ jobs:
       - name: Scan bun.lock (fail on CRITICAL)
         run: node scripts/ci/osv-lockfile-scan.mjs
 
-  # The one required status check (`check`, matching the main-protection
-  # ruleset). Every gate above is in `needs:`, so a lane that goes red turns
-  # this red — including the eight that could not gate a merge at all before
-  # #557. Reads results only; re-runs no install or tests.
-  #
-  # `skipped` is a PASS on purpose: that is what a path-gated lane reports when
-  # the diff does not touch it. `cancelled` is a FAIL — a dead runner is not a
-  # green build. publish-report is best-effort UX and is deliberately absent.
-  # #781 — `design:gallery` was one of the two `check:push` gates with NO CI
-  # lane. #782 left it out of `gates` because it needs a downloaded Playwright
-  # browser — an install + network dependency, not a static check. This
-  # path-gated job pays that install only when a design-relevant path changes,
-  # mirroring how lane-client-e2e.yml provisions the same pinned browser.
-  #
-  # THE `system-ui` CAUSE IS FIXED; THE CROSS-PLATFORM CLAIM IS UNMEASURED.
-  # #781 recorded this lane as red because the retired fixtures hardcoded
-  # `system-ui`, which resolves to a different physical font per OS, and the
-  # committed baselines were darwin arm64 (measured 2026-08-15 on linux x64,
-  # Chromium 141 / playwright 1.62.0: all 22 diffed 1.93%-7.26% against the 1%
-  # ceiling). #799 removed that cause: every lane now loads the product's own
-  # vendored Instrument Sans `.woff2`, and each capture FAILS LOUDLY if the
-  # family does not resolve, so no baseline can bake in a fallback face.
-  #
-  # The baselines were then re-pinned from a LINUX x64 container — the same
-  # renderer this job uses — so this lane should be green. What has NOT been
-  # measured is the reverse: whether darwin `check:push` now agrees with them.
-  # A self-hosted woff2 removes the font as a variable, but subpixel and
-  # hinting differences between the two rasterizers remain plausible. The
-  # first darwin run decides it. If a residual delta appears, record the
-  # NUMBERS and land per-platform baseline directories in
-  # scripts/design-gallery.mjs — do not widen the 1% ceiling to absorb it.
+      # The one required status check (`check`, matching the main-protection
+      # ruleset). Every gate above is in `needs:`, so a lane that goes red turns
+      # this red — including the eight that could not gate a merge at all before
+      # #557. Reads results only; re-runs no install or tests.
+      #
+      # `skipped` is a PASS on purpose: that is what a path-gated lane reports when
+      # the diff does not touch it. `cancelled` is a FAIL — a dead runner is not a
+      # green build. publish-report is best-effort UX and is deliberately absent.
+      # #781 — `design:gallery` was one of the two `check:push` gates with NO CI
+      # lane. #782 left it out of `gates` because it needs a downloaded Playwright
+      # browser — an install + network dependency, not a static check. This
+      # path-gated job pays that install only when a design-relevant path changes,
+      # mirroring how lane-client-e2e.yml provisions the same pinned browser.
+      #
+      # THE `system-ui` CAUSE IS FIXED; THE CROSS-PLATFORM CLAIM IS UNMEASURED.
+      # #781 recorded this lane as red because the retired fixtures hardcoded
+      # `system-ui`, which resolves to a different physical font per OS, and the
+      # committed baselines were darwin arm64 (measured 2026-08-15 on linux x64,
+      # Chromium 141 / playwright 1.62.0: all 22 diffed 1.93%-7.26% against the 1%
+      # ceiling). #799 removed that cause: every lane now loads the product's own
+      # vendored Instrument Sans `.woff2`, and each capture FAILS LOUDLY if the
+      # family does not resolve, so no baseline can bake in a fallback face.
+      #
+      # The baselines were then re-pinned from a LINUX x64 container — the same
+      # renderer this job uses — so this lane should be green. What has NOT been
+      # measured is the reverse: whether darwin `check:push` now agrees with them.
+      # A self-hosted woff2 removes the font as a variable, but subpixel and
+      # hinting differences between the two rasterizers remain plausible. The
+      # first darwin run decides it. If a residual delta appears, record the
+      # NUMBERS and land per-platform baseline directories in
+      # scripts/design-gallery.mjs — do not widen the 1% ceiling to absorb it.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane osv-scanner --rung 2 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --qualities security --surfaces gateway
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pr-evidence-osv-scanner
+          path: artifacts/
+          retention-days: 7
+          if-no-files-found: warn
   design-gallery:
     needs: changes
     if: needs.changes.outputs.design == 'true' || needs.changes.outputs.all == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with:
@@ -1492,57 +1712,40 @@ jobs:
           path: artifacts/design-gallery/actual/
           retention-days: 7
 
-  # #842 W5.2 — the desktop journey on the two OSes CI has never launched. Both
-  # are path-gated on `desktop` and DELIBERATELY ABSENT from `check`'s needs, so
-  # they are non-required: per the twice-burned promotion rule recorded in
-  # lane-client-e2e.yml, full OS coverage stays advisory until an OS-specific
-  # area burns us twice. Neither needs the Linux job's xvfb + gnome-keyring
-  # bootstrap: Electron safeStorage uses DPAPI on Windows and the login Keychain
-  # (already unlocked in the runner's user session) on macOS.
-  #
-  # These launch the desktop journey, NOT a signed packaged build. Booting the
-  # signed installer's own journey is the deeper W5.2 goal and stays coupled to
-  # lane-release-desktop.yml, where the Azure/Apple secrets live.
-  # #892 Phase 3 — `desktop-e2e-windows` IS GONE. It was permanently gated behind
-  # `vars.CENTRAID_DESKTOP_E2E_WINDOWS`, a repo Actions variable that is unset —
-  # so the job never ran, could never go red, and existed only as YAML that
-  # reviewers had to read past. The parking NOTE was the valuable half and it now
-  # lives where a parked thing belongs, in an issue rather than in a dead job:
-  #
-  #   Windows first-run founding never leaves onboarding-view.
-  #   `shouldUseFileFallback()` throws when `safeStorage.isEncryptionAvailable()`
-  #   is false on any non-Linux platform, and the job did not set
-  #   `CENTRAID_INSECURE_DEVICE_SECRETS=1`. Restoring the lane means fixing
-  #   founding on `windows-latest` first (#846 P12 / #850), then re-adding the
-  #   job with the `desktop` path filter.
-  #
-  # `desktop-e2e-macos` stays, and stays NON-REQUIRED. #892 asked whether a
-  # 10x-multiplier runner belongs on the PR loop at all; the answer recorded here
-  # is that it does while it is advisory, because the twice-burned promotion rule
-  # in lane-client-e2e.yml is the thing that would move it, and demoting it to
-  # nightly would delete the only darwin signal that rule could ever read.
-
-  desktop-e2e-macos:
-    needs: changes
-    if: needs.changes.outputs.desktop == 'true' || needs.changes.outputs.all == 'true'
-    runs-on: macos-latest
-    timeout-minutes: 35
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup
-        with:
-          turbo-cache: "true"
-      - run: bunx playwright install --with-deps chromium
-        working-directory: apps/desktop
-      - run: bun run build
-      - run: bun run test:e2e
-        working-directory: apps/desktop
+      # #892 Phase 3 — `desktop-e2e-windows` IS GONE. It was permanently gated behind
+      # `vars.CENTRAID_DESKTOP_E2E_WINDOWS`, a repo Actions variable that is unset —
+      # so the job never ran, could never go red, and existed only as YAML that
+      # reviewers had to read past. The parking NOTE was the valuable half and it now
+      # lives where a parked thing belongs, in an issue rather than in a dead job:
+      #
+      #   Windows first-run founding never leaves onboarding-view.
+      #   `shouldUseFileFallback()` throws when `safeStorage.isEncryptionAvailable()`
+      #   is false on any non-Linux platform, and the job did not set
+      #   `CENTRAID_INSECURE_DEVICE_SECRETS=1`. Restoring the lane means fixing
+      #   founding on `windows-latest` first (#846 P12 / #850), then re-adding the
+      #   job with the `desktop` path filter.
+      #
+      # #915 Wave 1 — `desktop-e2e-macos` MOVED TO RUNG 3 (`candidate.yml`). #892
+      # asked whether a 10x-multiplier runner belongs on the PR loop at all and
+      # answered "while it is advisory, yes, because otherwise the twice-burned
+      # promotion rule has no darwin signal to read". #915 answers it differently:
+      # the signal is worth keeping and the PR loop is the wrong place to buy it, so
+      # the lane runs on every promoted build instead of on every push of every
+      # branch. It gates promotion there, which is strictly MORE than the advisory
+      # status it had here.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane design-gallery --rung 2 --platform web --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 720000 --qualities contracts,accessibility --surfaces web
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: failure()
+        if: always()
         with:
-          name: desktop-e2e-macos-traces
-          path: apps/desktop/test-results/
+          name: pr-evidence-design-gallery
+          path: artifacts/
           retention-days: 7
+          if-no-files-found: warn
 
   check:
     needs: [
@@ -1559,8 +1762,8 @@ jobs:
         coverage-shard,
         coverage,
         mutation-pr,
-        client-e2e,
-        gateway-package,
+        # #915 Wave 1 — every added or modified Vitest file, three times, alone.
+        new-test-burn-in,
         mobile-smoke,
         mobile-device-gate,
         docs,
@@ -1575,6 +1778,10 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      # #915 — the wall-clock step below reads this run's own jobs.
+      actions: read
     steps:
       # `needs.*.result` means a lane added to `needs:` above is covered
       # automatically, rather than needing a matching line in a hand-kept list
@@ -1605,3 +1812,26 @@ jobs:
             esac
           done
           exit "$bad"
+      # #915 — THE RUNG-2 BUDGET, MEASURED ON THE RUN THAT SPENT IT. The suite
+      # wall-clock ratchet fences the vitest suite's summed file spans, which is
+      # backpressure on adding TESTS and says nothing about the minutes a person
+      # waits between pushing and this job going green. That number was measured
+      # at ~26 min against a docs claim of 12.3 and nothing could have noticed.
+      # `if: always()` so a red gate is still weighed — a slow red gate is worse
+      # than a slow green one, not exempt from the budget.
+      # The script lives in the repo and this aggregator had no checkout, so
+      # every `check` since the ladder landed died on MODULE_NOT_FOUND right
+      # after the aggregate step passed: the job read red while every lane it
+      # aggregates was green, and the budget it exists to enforce was never
+      # measured once. Checked out here rather than at the top of the job so
+      # the aggregate step above still runs against a bare runner.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: always()
+      - name: PR gate wall clock
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/ci/pr-gate-wall-clock.mjs \
+            --repo "${{ github.repository }}" \
+            --run-id "${{ github.run_id }}"

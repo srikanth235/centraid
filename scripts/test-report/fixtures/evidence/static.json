@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "candidate": "0a3258e3adeadbeef0000000000000000000000",
+  "startedAt": "2026-09-02T06:00:00Z",
+  "finishedAt": "2026-09-02T06:40:00Z",
+  "budgetMs": 300000,
+  "durationMs": 276000,
+  "cases": [
+    {
+      "id": "typecheck",
+      "verdict": "passed",
+      "durationMs": 90000,
+      "attempts": 1
+    },
+    {
+      "id": "lint",
+      "verdict": "passed",
+      "durationMs": 60000,
+      "attempts": 1
+    }
+  ],
+  "parked": null,
+  "tags": {
+    "qualities": ["correctness", "contracts"],
+    "surfaces": ["gateway"]
+  },
+  "lane": "static",
+  "rung": 2,
+  "platform": "any",
+  "verdict": "passed"
+}

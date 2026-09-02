@@ -45,16 +45,17 @@
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import path from "node:path";
 
+import { loadRoster } from "../tests/agent-e2e-mobile/lib/roster.mjs";
+
 const ROOT = path.resolve(import.meta.dirname, "..");
 
 // DISCOVERED, never hand-listed — the lesson of #842 W0.4, where five flows
 // landed after a hardcoded roster was written and went unlinted for their whole
 // life. `lib/` is scanned too: the harness helpers emit YAML on a flow's behalf
 // (`configureGateway` selects `onboarding-connect`).
-const FLOW_DIRS = [
-  "tests/agent-e2e-mobile/flows",
-  "tests/agent-e2e-mobile/lib",
-];
+/** The journeys the roster prices. Held against `roster.json` in `main`. */
+const JOURNEY_DIR = "tests/agent-e2e-mobile/flows";
+const FLOW_DIRS = [JOURNEY_DIR, "tests/agent-e2e-mobile/lib"];
 
 /** Production mobile source. The vocabulary lives here too. */
 const SOURCE_DIR = "apps/mobile/src";
@@ -434,6 +435,29 @@ function main() {
       `discovered zero source files under ${SOURCE_DIR}. ` +
         `The mobile source tree moved; fix SOURCE_DIR in this linter.`
     );
+
+  // THE ROSTER IS THE SINGLE SOURCE (#915 Wave 2), and this linter's discovery
+  // is held against it rather than replaced by it. Discovery is what catches a
+  // flow that landed after a list was written (#842 W0.4); the roster is what
+  // catches a journey that was rostered and then deleted, or renamed on one
+  // side only. Reading only the roster would lose the first; reading only the
+  // directory would lose the second. Both, and they must agree.
+  const rosterFlows = new Set(Object.keys(loadRoster().flows ?? {}));
+  const scanned = new Set(
+    flowRels.filter((rel) => rel.startsWith(`${JOURNEY_DIR}/`))
+  );
+  for (const rel of [...scanned].sort())
+    if (!rosterFlows.has(rel))
+      fail(
+        `${rel} is on disk but has no tests/agent-e2e-mobile/roster.json row, so no ` +
+          `rung, no budget and no claim price it. Roster it or delete it.`
+      );
+  for (const rel of [...rosterFlows].sort())
+    if (!scanned.has(rel))
+      fail(
+        `tests/agent-e2e-mobile/roster.json rosters ${rel}, which this linter never ` +
+          `scanned. A roster row for a file that is not there is a claim with no code.`
+      );
 
   const vocabularyPath = path.resolve(ROOT, VOCABULARY);
   if (!existsSync(vocabularyPath))

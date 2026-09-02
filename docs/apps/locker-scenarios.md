@@ -6,7 +6,7 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 - **Seat class**: `byte-bearing` (secrets). Viewer seat is disabled; see `appSeats`.
 - **Graduation issue**: none yet. Tracked under [#864](https://github.com/srikanth235/centraid/issues/864) only for ledger closure.
 - **Journey ownership**: origin `tests/agent-e2e-mobile/flows/locker-gate.mjs`; custodian `apps/desktop/tests/e2e/locker.spec.ts`; viewer structurally skipped.
-- **Structural exclusions**: see `tests/matrix.json#appEngines`.
+- **Structural exclusions**: see `tests/claims.json#appEngines`.
 - **Origin seat**: the phone draws every custodian/origin route of the v17 surface inventory's Locker table. Import, Export and Companion are surfaces of another seat and are drawn as facts plus the sentence naming where the act happens, never as controls. Access history is served by the `access` query and drawn on both seats.
 - **Custodian seat**: the web app performs what it used to describe. Import runs the staged-import doors (stage → review → publish/discard), Export commits and assembles the plaintext file on the device, and Access history renders the receipts. Each door is feature-detected and there is no fallback: a seat without one draws no control and names the seat that has it.
 - **Item model**: fifteen types. Six own columns on `locker_item`; the other nine are sets of fields the vault mints from a template, which is the same mechanism that degrades a type this build does not know to a note that still carries its fields. The rail stays **six rows with counts** (README-Locker §1) — the other nine are reached from the add form's type chip and from the `type:` filters.

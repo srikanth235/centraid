@@ -25,7 +25,7 @@ const OWNER = "tests/perf/desktop-launch.perf.test.ts";
  *
  * NO ABSOLUTE CEILING BY DESIGN. A cold Electron launch on a shared CI runner
  * has no distribution yet; the gate is the trailing-median drift budget every
- * other rig now uses (30 samples, 1.5x — tests/quality-rig-budgets.json). An
+ * other rig now uses (30 samples, 1.5x — tests/budgets.json#qualityRigs). An
  * absolute ceiling lands in tests/experience-budgets/desktop.json once ~10
  * green nightlies justify one, and not before.
  *

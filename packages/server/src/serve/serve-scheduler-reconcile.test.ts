@@ -229,12 +229,15 @@ describe("serve-scheduler-reconcile scenarios", () => {
       )
       .get();
     expect(cursor).toBeTruthy();
-    const startedAt = Date.now();
     const outcome = plane.gateway.invoke(plane.ownerCredential, {
       command: "core.add_party",
       input: { display_name: "Doorbell Test" },
       purpose: "dpv:ServiceProvision",
     });
+    // The commit is in-process and synchronous, so this is the instant the
+    // scheduler's nudge window opens — and it is the same clock the turn
+    // record below is stamped with.
+    const committedAt = Date.now();
     expect(outcome.status).toBe("executed");
     expect(
       plane.db.audit
@@ -244,7 +247,12 @@ describe("serve-scheduler-reconcile scenarios", () => {
         .get()
     ).toMatchObject({ n: 1 });
 
-    let runs: Array<{ turnId: string; endedAt?: number; ok: boolean }> = [];
+    let runs: Array<{
+      turnId: string;
+      startedAt: number;
+      endedAt?: number;
+      ok: boolean;
+    }> = [];
     const refreshRuns = async (): Promise<boolean> => {
       const response = await fetch(
         `${handle.url}/centraid/_automations/turns?ref=${encodeURIComponent("brief/brief")}`,
@@ -253,17 +261,33 @@ describe("serve-scheduler-reconcile scenarios", () => {
       expect(response.status).toBe(200);
       runs = (
         (await response.json()) as {
-          turns: Array<{ turnId: string; endedAt?: number; ok: boolean }>;
+          turns: Array<{
+            turnId: string;
+            startedAt: number;
+            endedAt?: number;
+            ok: boolean;
+          }>;
         }
       ).turns;
       return runs.length > 0;
     };
+    // How long the TEST is willing to watch — not the claim. The two used to
+    // be the same 900/1000 ms, so every HTTP round trip this poll loop makes
+    // counted against the scheduler: on a coverage shard contending with
+    // three others the assertion read 1638 ms and failed a gateway that had
+    // done nothing wrong.
     await waitFor(async () => {
       return refreshRuns();
-    }, 900);
+    }, 5_000);
 
     expect(runs).toHaveLength(1);
-    expect(Date.now() - startedAt).toBeLessThan(1_000);
+    // "Well under a second" is a claim about the SCHEDULER: it reacted to the
+    // commit nudge instead of waiting for a periodic sweep. Measured on the
+    // turn's own recorded start, which is stamped server-side and owes
+    // nothing to how fast this process could poll for it.
+    expect(
+      (runs[0]?.startedAt ?? Number.POSITIVE_INFINITY) - committedAt
+    ).toBeLessThan(1_000);
     await waitFor(async () => {
       await refreshRuns();
       return runs[0]?.endedAt !== undefined;

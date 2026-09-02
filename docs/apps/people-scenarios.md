@@ -6,7 +6,7 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 - **Seat class**: `record-only`.
 - **Graduation issue**: none yet; write-path holes tracked under [#864](https://github.com/srikanth235/centraid/issues/864).
 - **Journey ownership**: origin `tests/agent-e2e-mobile/flows/people-roster.mjs`; custodian `apps/desktop/tests/e2e/people.spec.ts`; viewer `apps/web/tests/e2e/people.spec.ts`.
-- **Structural exclusions**: see `tests/matrix.json#appEngines`.
+- **Structural exclusions**: see `tests/claims.json#appEngines`.
 
 | People scenario | U | C | E | Owner / evidence |
 | --- | --- | --- | --- | --- |

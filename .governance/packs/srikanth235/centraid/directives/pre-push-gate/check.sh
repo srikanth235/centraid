@@ -64,8 +64,23 @@ export GOVERNANCE_SHELL_FULL=1
 # `check:push` is the same gates minus the four that CI recomputes
 # authoritatively anyway (full typecheck, lint:types, workflow-pins,
 # diff-coverage), run concurrently, reporting every failure in one pass.
-# ~52s, bounded by the affected tests — which is the gate that actually
-# catches breakage.
+# Bounded by the affected tests — which is the gate that actually catches
+# breakage.
+#
+# #915 Wave 4 re-cut the list: 59 gate names became 17. Thirty-eight
+# sub-second contract gates collapsed into one `lint:product` bundle, seven
+# suite-hygiene ratchets moved to the weekly `hygiene.yml` lane, and
+# `check:mobile-native-state` (30.5s) dropped to rung 2, where ci.yml's
+# `mobile-smoke` job already runs it on exactly the diffs that matter. Nothing
+# left the ladder; `scripts/ci/gate-classes.json` records the class and the
+# reason for every one, and `scripts/ci/gate-classes.test.mjs` fails if a
+# hygiene gate is enforced nowhere.
+#
+# This directive also carries the other half of the rung-0 deferral (#915):
+# `.githooks/pre-push` runs `repo-hygiene` and `receipt-per-issue` — the two
+# repo-wide vendored directives `.githooks/pre-commit` now skips — immediately
+# before this check, so a push still pays for all 22 directives while a commit
+# pays 6s instead of 89s.
 printf "\n▶ pre-push-gate: bun run check:push (skip with SKIP_CHECK_PR=1)\n\n" >&2
 # Strip git's hook environment before handing control to the gate (#668).
 #

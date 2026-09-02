@@ -37,12 +37,17 @@ export default defineConfig({
       // count as functions too — the denominator grew to 218 and the same test
       // set measures 30.27%. This is a re-seed against the new definition, not
       // a regression in what the tests cover; these thresholds are local to
-      // this lane and are not the ratcheted floors in tests/coverage-floors.json.
+      // this lane and are not the ratcheted floors in tests/floors.json#coverage.
+      // #915 re-seeded these upward: the report's reader/renderer split gave
+      // the model and every section a unit suite, and the measured numbers
+      // moved from ~36% to 66/61/79/66. Seeded a few points under the
+      // measurement, as the floors elsewhere are — tighten-only, never lowered
+      // to buy room for an untested module.
       thresholds: {
-        lines: 35,
-        branches: 30,
-        functions: 30,
-        statements: 35,
+        lines: 62,
+        branches: 57,
+        functions: 74,
+        statements: 62,
       },
     },
   },

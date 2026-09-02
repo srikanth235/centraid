@@ -10,6 +10,7 @@ import {
   classifyFailure,
   countMaestroAssertions,
 } from "./failure-class.mjs";
+import { decideRetry } from "./retry-policy.mjs";
 
 test("every infrastructure signal is reachable through its own example", () => {
   expect(INFRASTRUCTURE_SIGNALS.length > 0).toBe(true);
@@ -75,6 +76,36 @@ test("an unknown error defaults to PRODUCT, never infrastructure", () => {
   });
   expect(verdict.class).toBe("product");
   expect(verdict.signal).toBe("unclassified");
+});
+
+test("a flow script that throws its own ReferenceError is HARNESS, not product", () => {
+  // #870, exactly: `flows/share-intent-in.mjs` used `shQuote` without importing
+  // it, threw at its own line 75 after six assertions had passed, and the
+  // nightly recorded a product failure — i.e. said the app was broken when the
+  // journey was. No claim was exercised, so it is neither class the file had.
+  const error = new Error("shQuote is not defined");
+  error.stack = [
+    "ReferenceError: shQuote is not defined",
+    "    at file:///w/tests/agent-e2e-mobile/flows/share-intent-in.mjs:75:13",
+    "    at async runFlow (file:///w/tests/agent-e2e-mobile/lib/harness.mjs:856:14)",
+  ].join("\n");
+  const verdict = classifyFailure({ error, assertionsRun: 6 });
+  expect(verdict.class).toBe("harness");
+  expect(verdict.signal).toBe("flow-crash");
+  expect(verdict.reason).toMatch(/defect in the flow, not in the product/u);
+});
+
+test("a harness-class failure is never retried", () => {
+  // `retry-policy.mjs` retries `infrastructure` alone, so the new class is
+  // correct there by construction — asserted rather than assumed, because a
+  // later widening of that condition would silently start re-running a crash
+  // that reproduces every time.
+  expect(
+    decideRetry({
+      record: { failureClass: "harness", failureReason: "flow crash" },
+      alreadyRetried: false,
+    }).retry
+  ).toBe(false);
 });
 
 test("a non-zero maestro exit with zero assertions is still product", () => {

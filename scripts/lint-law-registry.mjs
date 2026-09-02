@@ -8,7 +8,7 @@
  *
  * The mechanism: a named product law carries a machine-readable tag in its
  * test title, `[law:backup-no-change]`. The registry in
- * `tests/matrix.json#laws` records which file owns each tag. This linter fails
+ * `tests/claims.json#laws` records which file owns each tag. This linter fails
  * a PR when a tag appears in a file that does not own it — which is what
  * re-duplicating a law looks like at write time.
  *
@@ -93,7 +93,7 @@ export function collectLawTags(scanRoot = root) {
 /**
  * Compare the tags found in the tree against the registry.
  *
- * `laws` is `tests/matrix.json#laws`: `{ [tag]: { statement, owner, flow? } }`.
+ * `laws` is `tests/claims.json#laws`: `{ [tag]: { statement, owner, flow? } }`.
  * Pass `undefined` when the key is absent — the duplicate-owner check still
  * runs (it is derivable from the tree alone) and the registration checks
  * report that they could not run, rather than passing silently.
@@ -133,14 +133,14 @@ export function checkLawRegistry({ laws, tags, flowIds = [], files = [] }) {
   }
 
   if (!registryDeclared) {
-    // A notice, not a violation. The registry key lands in tests/matrix.json,
+    // A notice, not a violation. The registry key lands in tests/claims.json,
     // which #656 Layer 2 is rewriting in parallel; until it merges, the
     // duplicate check above is the live gate — it is derivable from the tree
     // alone and needs no registry. The owner/orphan checks then switch on
     // without touching this file.
     if (filesByTag.size > 0) {
       notices.push(
-        `tests/matrix.json has no "laws" key; ${filesByTag.size} law tag(s) are in use. Duplicate-owner checking is active; owner and orphan checking is NOT until the key lands.`
+        `tests/claims.json has no "laws" key; ${filesByTag.size} law tag(s) are in use. Duplicate-owner checking is active; owner and orphan checking is NOT until the key lands.`
       );
     }
     return { violations, notices };
@@ -153,7 +153,7 @@ export function checkLawRegistry({ laws, tags, flowIds = [], files = [] }) {
     if (!known.has(tag)) {
       const first = [...perFile][0];
       violations.push(
-        `${first[0]}:${first[1]}: law tag "${tag}" is not in tests/matrix.json#laws — register it (statement + owner) or remove the tag.`
+        `${first[0]}:${first[1]}: law tag "${tag}" is not in tests/claims.json#laws — register it (statement + owner) or remove the tag.`
       );
       continue;
     }
@@ -193,7 +193,7 @@ export function checkLawRegistry({ laws, tags, flowIds = [], files = [] }) {
       !flowIds.includes(entry.flow)
     ) {
       violations.push(
-        `law "${tag}": flow "${entry.flow}" is not a flow id in tests/matrix.json.`
+        `law "${tag}": flow "${entry.flow}" is not a derived flow id (scripts/test-report/derive-flows.mjs).`
       );
     }
   }
@@ -203,7 +203,7 @@ export function checkLawRegistry({ laws, tags, flowIds = [], files = [] }) {
 
 function main() {
   const matrix = JSON.parse(
-    readFileSync(path.join(root, "tests", "matrix.json"), "utf8")
+    readFileSync(path.join(root, "tests", "claims.json"), "utf8")
   );
   const tags = collectLawTags(root);
   const files = walk(root).map((file) =>

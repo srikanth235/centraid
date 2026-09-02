@@ -102,7 +102,7 @@ test("[law:backup-no-change] no-change run registers nothing", async () => { …
 
 `bun run lint:law-registry` (in `check:pr`) fails when the same tag appears in more than one file. Several tests in the **owning** file are fine — that is one home. A second file asserting the same law is a restatement, and Layer 1D of #656 deleted a batch of exactly those; the tag is what stops them coming back.
 
-The registry lives in `tests/matrix.json#laws` as `{ [tag]: { statement, owner, flow? } }`. Once a tag is registered the linter also fails an unregistered tag, an owner file that does not exist, and a registered law whose owner carries no such tag.
+The registry lives in `tests/claims.json#laws` as `{ [tag]: { statement, owner, flow? } }`. Once a tag is registered the linter also fails an unregistered tag, an owner file that does not exist, and a registered law whose owner carries no such tag.
 
 ## Store atomicity
 
@@ -212,7 +212,7 @@ Doctrine governs what a comment may say; the budget governs how much ([#861](htt
 
 - **The metric is character share** — non-whitespace comment characters over non-whitespace file characters, comment ranges taken from the TypeScript parser. Line counts are gameable: fuse three comment lines into one wrapped sentence and the count falls while the prose is unchanged.
 - **Per-file cap 15%** for files of 40 non-blank lines or more; **global target ≤10%**, printed on every run.
-- **Enforcement is a per-file ratchet** — `tests/comment-density-ratchet.json`, `bun run test:comment-density`. Any rise fails CI. Downward re-pins are free (`--write` recomputes, and refuses to raise a pin). A deliberate raise is a hand edit to the baseline carrying an approved-deviation note in the receipt.
+- **Enforcement is a per-file ratchet** — `tests/inventory.json#commentDensity`, `bun run test:comment-density`. Any rise fails CI. Downward re-pins are free (`--write` recomputes, and refuses to raise a pin). A deliberate raise is a hand edit to the baseline carrying an approved-deviation note in the receipt.
 - **Blocks over 10 lines warn** — 15 for a file-top orientation header — via `scripts/lint-comment-blocks.mjs`.
 - **The allowlist is by name, with a reason**, for registries where the prose _is_ the payload. Never delete load-bearing rationale to hit a number; the allowlist is that pressure valve.
 

@@ -31,7 +31,14 @@
 export const MUTATION_GLOBAL_WATCH = [
   "scripts/mutation/run.mjs",
   "scripts/mutation/seeds.mjs",
-  "tests/mutation-floors.json",
+  // A SECTION, not a file (#915 Wave 4). The floors moved into the merged
+  // `tests/floors.json`, which also holds the coverage floors and the
+  // minimumTests mirror — watching that PATH would have run all 24 seeds on
+  // every coverage-floor edit, which is exactly the over-triggering the list
+  // above was trimmed to avoid. `selectAffectedSeeds` is handed
+  // `tests/floors.json#<section>` tokens for the sections that actually
+  // differ from the merge base, so only a mutation-floor edit is global.
+  "tests/floors.json#mutation",
 ];
 
 /** @type {MutationSeed[]} */

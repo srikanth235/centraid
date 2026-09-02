@@ -1,8 +1,25 @@
 {
-  "_comment": "Flake quarantine (#656 Layer 5). A test that fails nondeterministically moves HERE — it is never deleted inline and never retried-in-place until green, because both of those hide the flake instead of paying it down. A quarantined owner is excluded from the required checks, so the lane stays trustworthy, and carries an expiry: on expiry it either returns fixed or is deleted with a receipt. `bun run test:quarantine` fails on an expired, unissued, or unparseable entry, and the count is down-only under `test:ratchet`.",
+  "_comment": "THE QUARANTINE LEDGER (#915 Wave 4). One of four ledgers under tests/; it holds both halves of the same rule. `entries` are flaky TESTS (#656 Layer 5) and `lanes` are parked CI LANES (#892 Phase 3, merged here from tests/lane-quarantine.json by #915). Both are DOWN-ONLY with an expiry: a park is a deadline, never a mute, `expires` in the past is treated as no entry at all, and the count may not rise without a CHANGED approvedDeviation. `bun run test:quarantine` fails on an expired, unissued or unparseable test entry; scripts/ci/lane-health.mjs, scripts/test-report/write-evidence.mjs and scripts/ci/rolling-issue-fallback-body.mjs read `lanes`; `bun run lint:ledgers` holds the shape and the direction for both.",
   "_policy": {
     "maxDays": 30,
     "budget": 0
   },
-  "entries": []
+  "entries": [],
+  "lanes": {
+    "mobile-e2e-android": {
+      "issue": 870,
+      "expires": "2026-09-16",
+      "why": "#870 — the Android home-app journeys never see home, red on every scheduled nightly since 2026-08-03. Parked for 14 days from 2026-09-02 while #915's MOBILE slice fixes the product bug; the lane still runs and still writes evidence, it just renders as parked with this deadline instead of as red."
+    },
+    "mobile-e2e-ios": {
+      "issue": 870,
+      "expires": "2026-09-16",
+      "why": "#870 — the iOS pairing canary fails at 02-complete-onboarding on the release artifact, same nightly-red streak as the Android lane. #864's M16 (the iOS shell cache + bundle injection) is the build-side half of the fix and is Wave 2 of #915; #870 is cited as the open tracking issue because #864 is closed. Parked for 14 days from 2026-09-02."
+    },
+    "web-e2e-cross-browser": {
+      "issue": 915,
+      "expires": "2026-09-16",
+      "why": "first green on a candidate is the baseline — this lane joined test-health-report's needs in #915 Wave 0 having never run green, so its first run is a measurement, not a regression. Parked so it renders as parked rather than red until it has one green run on a candidate; the park expiring is the prompt to read the number and either promote it to a gating verdict or fix it."
+    }
+  }
 }

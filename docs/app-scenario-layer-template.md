@@ -10,7 +10,7 @@ An instance opens by naming, in prose or a definition list:
 - **Seat class** — `record-only` or `byte-bearing` (the two classes in [docs/blueprint-seats.md](blueprint-seats.md#two-classes-of-blueprint)).
 - **Graduation issue** — the issue whose measurement seeded the app's own coverage floor, or the tracking issue while the app still rides the blended floor.
 - **Journey ownership** — for a byte-bearing app: one north-star journey **per platform** it ships on, each with a tighten-only budget beside its flows; for a record-only app: the shared record-only replica journey (`pending-overlay.spec.ts` on desktop and web), until the app gains a genuinely app-specific native integration.
-- **Structural exclusions** — every engine the app is structurally excluded from, recorded as `skip` cells in `tests/matrix.json#appEngines` citing [docs/blueprint-seats.md#engine-contracts](blueprint-seats.md#engine-contracts). Exclusions live in the matrix, not in this table: a scenario that cannot exist is not a row.
+- **Structural exclusions** — every engine the app is structurally excluded from, recorded as `skip` cells in `tests/claims.json#appEngines` citing [docs/blueprint-seats.md#engine-contracts](blueprint-seats.md#engine-contracts). Exclusions live in the matrix, not in this table: a scenario that cannot exist is not a row.
 
 ## The table
 
@@ -35,10 +35,10 @@ Row rules, from the admission contract:
 
 ## Wiring an instance in
 
-- The journey flows join `tests/matrix.json#flows` (journey tier) so the computed grade sees them; the app's engine cells in `#appEngines` stay pass/skip as the seat doctrine dictates.
+- The journey flows join `tests/claims.json#flows` (journey tier) so the computed grade sees them; the app's engine cells in `#appEngines` stay pass/skip as the seat doctrine dictates.
 - Journeys reuse the seeded `@centraid/test-kit/year3-vault` profile where the platform run shares one; a destructive/exclusive-state journey runs first and explicitly reseeds.
 - PR workflows path-filter the app's journey by the changed app directory; the suite wall-clock ratchet is the global backpressure.
-- A graduating app leaves the blended coverage floor for a measured scope of its own (`tests/coverage-floors.json`), tied to the graduation issue.
+- A graduating app leaves the blended coverage floor for a measured scope of its own (`tests/floors.json#coverage`), tied to the graduation issue.
 
 ## Instances
 
@@ -51,4 +51,4 @@ Row rules, from the admission contract:
 - Locker — [docs/apps/locker-scenarios.md](apps/locker-scenarios.md).
 - Tally — [docs/apps/tally-scenarios.md](apps/tally-scenarios.md) (held with #831).
 
-The machine-readable promotion of these tables is `tests/matrix.json#appScenarios`, rendered as §3b of the nightly report.
+The machine-readable promotion of these tables is `tests/claims.json#appScenarios`, rendered as §3b of the nightly report.

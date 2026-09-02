@@ -3,11 +3,6 @@ import { pathToFileURL } from "node:url";
 
 import { onTestFinished } from "vitest";
 
-import type {
-  BuildGatewayOptions,
-  BuiltGateway,
-  GatewayPaths,
-} from "@centraid/server";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 import type { OpenVaultOptions, VaultDb } from "@centraid/vault";
@@ -65,40 +60,4 @@ export async function createTestVault(
     },
     { ...(dir ? { dir } : {}), ownerName }
   ).db;
-}
-
-export interface BuildTestGatewayOptions extends Omit<
-  BuildGatewayOptions,
-  "paths"
-> {
-  rootDir?: string;
-  paths?: Partial<GatewayPaths>;
-}
-
-export interface TestGateway {
-  gateway: BuiltGateway;
-  paths: GatewayPaths;
-  rootDir: string;
-}
-
-/** Build the listener-free host-agnostic gateway with disposable paths. */
-export async function buildTestGateway(
-  options: BuildTestGatewayOptions = {}
-): Promise<TestGateway> {
-  const { buildGateway } = await import(workspaceSrc("gateway"));
-  const {
-    rootDir: providedRoot,
-    paths: pathOverrides,
-    ...gatewayOptions
-  } = options;
-  const rootDir = providedRoot ?? (await tempDir("centraid-gateway-test-"));
-  const paths: GatewayPaths = {
-    vaultDir: path.join(rootDir, "vault"),
-    ...pathOverrides,
-  };
-  const gateway = await buildGateway({ ...gatewayOptions, paths });
-  onTestFinished(async () => {
-    await gateway.stop().catch(() => undefined);
-  });
-  return { gateway, paths, rootDir };
 }

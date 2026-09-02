@@ -37,10 +37,15 @@ describe("validate-nightly-wiring structure (#545)", () => {
     expect(e2e).toMatch(/steps\.scale\.outcome/u);
   });
 
-  test("nightly-failure-issue needs mutation-testing (A2)", () => {
-    const failBlock = e2e.slice(e2e.indexOf("nightly-failure-issue:"));
+  test("the rolling-issue job sees every lane, mutation-testing included (A2)", () => {
+    // #915 Wave 0 replaced the single `nightly-failure-issue` with one rolling
+    // issue per lane, and its body iterates `toJSON(needs)` instead of a
+    // hand-maintained list of `needs.<job>.result` lines — which is what let
+    // fuzz-parsers and dast-scan go uncovered. So the invariant moved: the job
+    // must NEED the lane, not name it in a body.
+    const failBlock = e2e.slice(e2e.indexOf("nightly-lane-issues:"));
     expect(failBlock).toMatch(/mutation-testing/u);
-    expect(failBlock).toMatch(/needs\.mutation-testing\.result/u);
+    expect(failBlock).toMatch(/toJSON\(needs\)/u);
   });
 
   test("a failed issue create is loud, never swallowed (A11)", () => {
@@ -50,7 +55,7 @@ describe("validate-nightly-wiring structure (#545)", () => {
     // in both halves: the workflow delegates rather than hand-rolling `gh`, and
     // the script it delegates to exits non-zero. (The decision tree itself is
     // covered by scripts/ci/file-tracking-issue.test.mjs.)
-    const failBlock = e2e.slice(e2e.indexOf("nightly-failure-issue:"));
+    const failBlock = e2e.slice(e2e.indexOf("nightly-lane-issues:"));
     expect(failBlock).toMatch(/scripts\/ci\/file-tracking-issue\.mjs/u);
     expect(failBlock).not.toMatch(/gh issue create/u);
     expect(failBlock).not.toMatch(/gh issue create[^\n]*\|\|\s*true/u);
