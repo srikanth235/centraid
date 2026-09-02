@@ -843,6 +843,8 @@ That frame is the canary's own `paired-home` screenshot, and the canary is the o
 12. **#911 is merged into this branch and closed, rather than merged to `main` on its own.** Both branches change the same phone, and both were red on the same lane; landing them separately means one of them merges onto a `main` that then invalidates the other's device evidence, and the second lane gets debugged twice. Merging costs one large conflict resolution, recorded above; not merging costs a second full device-gate cycle on a lane that takes an hour. #903's receipt travels with the merge, so neither issue loses its record.
 13. **The Hermes disagreement between the two branches is left standing, not adjudicated.** See T. This branch's ban is broader than #911's polyfill header says it needs to be. Narrowing it to match would be deciding an empirical question about a device from a comment on the other side of a merge, and it would relax a gate to no benefit — nothing in the merged tree is blocked by the extra four names.
 
+14. **The matrix classification ratchet is re-pinned, not waived.** W restates the `mobile-native-v0-resilience` row, and `tests/quality/classification-ratchet.json` pins a hash of the whole of `tests/matrix.json`, so the edit turns `lint:quality-knobs` red until the pin moves with it. The pin is recomputed and the deviation note says exactly what moved: "#905 re-pins the tests/matrix.json fingerprint after `mobile-native-v0-resilience` was restated to the claims only a device can falsify. The row's prose moved, nothing it governs did: `minimumTests` stays at 13, the owner still names the same flow file, no gate id was removed, and the `qualities` and `demonstratedRed` payloads are untouched, so `matrixGovernanceFingerprint` is unchanged. The every-cover-opens half of the delegation now names where it actually lives — the conformance sweep in `apps/mobile/src/screens/Home.test.tsx` plus the canary and nightly device lanes."
+
 ## Out of scope
 
 - **Which of the two Hermes claims is actually right.** #911 says the engine ships four of the five change-array-by-copy methods; this branch's gate assumes none of them. Settling it needs a probe on the device, which is a flow, not a lint. Neither claim blocks anything today (T), so it is recorded rather than chased.
@@ -1002,6 +1004,47 @@ Two claims in J are corrections of things stated earlier on this branch, recorde
 
 1. **The device gate's failure was reported as `photos-permissions` alone.** It is three of the critical five. The earlier claim came from reading the first failing flow and stopping; the suite short-circuits only on the canary, so the other verdicts were in the same log. Corrected on the PR in comment 5487960296.
 2. **`tests/agent-e2e-mobile/lib/**` was briefly thought to be unrun by any script.** It is not: `test:ratchet:unit` runs the `test-report-scripts` vitest project, whose `include` already covers it. The appearance of a gap came from running those files under `node --test`, which is the wrong runner for a vitest suite — `hierarchy-digest.test.mjs` is written in vitest style to match its siblings for exactly that reason.
+
+## W — the gate fitted to its budget, not the budget to the gate
+
+- [x] Hold `native-v0-resilience` to the claims only a device can falsify, and move the ten-surface cover tour down a tier
+- [x] Fold the reuse-mode gateway configures and the restarts onto the chunk that follows them, instead of one `maestro test` spawn each
+- [x] Upload every device lane's run ledger, and record the ruling and the measurements in the docs that claim them
+
+**What changed**
+
+- `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs` — the tour is gone. What remains: the Settings hop through the all-apps sheet, the Android airplane arc (offline write → process death → reconnect → settled), the iOS honest gap, and a final force-kill.
+- `tests/agent-e2e-mobile/flows/native-v0-resilience.md` and `tests/agent-e2e-mobile/roster.json` — the claim is restated to what the flow now proves, and both name where the covers-open claim went.
+- `tests/agent-e2e-mobile/lib/harness.mjs` — reuse-mode `configureGateway()` and `ctx.restart()` stage their commands onto the next `ctx.run()` chunk through the pure `reusePairedCommands`, `restartCommands` and `prependPrefix` helpers; `ctx.flush()` exists for the flows that must not have a staged prefix land inside a timed window.
+- `tests/agent-e2e-mobile/lib/harness-prefix.test.mjs` — new, covering those three pure helpers.
+- `tests/agent-e2e-mobile/flows/cold-start.mjs` and `tests/agent-e2e-mobile/flows/volume-proof.mjs` — `await ctx.flush()` after `configureGateway()`, so a staged reuse launch is never measured as part of a timed launch.
+- `.github/workflows/ci.yml`, `.github/workflows/mobile-canary.yml`, `.github/workflows/e2e.yml` and `tests/agent-e2e-mobile/ledger/README.md` — four lanes upload `ledger/durations.json` as `mobile-run-ledger-<lane>` on every run, red or green, and the README says where those runs land and that folding them into the committed file stays a deliberate act.
+- `docs/decisions.md` — the `G-device-only-gate` ruling under "The PR gate loop (#892)".
+- `tests/agent-e2e-mobile/flows/pr-gate-budget.md` — the derivation row no longer prices the flow as "opens every cover", and a "What ten runs measured" section carries the table below.
+- `tests/agent-e2e-mobile/flows/probes-budget.md`, `tests/agent-e2e-mobile/flows/ios-depth-budget.md`, `tests/matrix.json` and `tests/agent-e2e-mobile/seed-demo-corpus.mjs` — the four remaining places that still described the flow as the one that opens all eight covers. No `minimumTests` number or floor moved; matrix's flow `name` and its `approvedMinimumTestsDeviation` prose now say where the delegated coverage actually lives.
+
+**What ten runs measured.** All ten ended at 727–742s against the 720s deadline, each with a later member starved by the clamp rather than finished. Per-journey figures are Android CI; run 33573882728 is the fullest sample.
+
+| Journey | Measured on CI (s) | Derived price (s) |
+| --- | --- | --- |
+| `pairing-canary` | 167–209 (192 typical) | 240 |
+| `notes-library` | 112–154 (126 typical) | 72 |
+| `native-v0-resilience` | 390+ without finishing; the tour alone 187 (ten `stopApp`/`launchApp` pairs ≈ 19s) | 144 |
+| `cold-start` | 116–150 for eight launches, when it had budget | 72 |
+| `photos-permissions` | 36–79, killed by the clamp every time | 72 |
+| | ≈950 to pass in the shape it had | 600 + 120 headroom |
+
+Each `run :` line also sat ~9–15s ahead of its first Maestro command, and the gate paid four reuse spawns plus two restart spawns per run. The `mobile-device-gate` job has never passed anywhere: it was added to `main` by #892 (`f5ca34fb`), and its one run there (33372386799) failed in the Android release build. The committed ledger still reads `records: []` after all ten runs, because nothing uploaded it — which is the gap the artifact closes.
+
+14. **The suite is fitted to the budget; the twelve minutes is not raised.** The derivation priced the four reusing journeys at ~6 minutes and they measure ~9, so the number is wrong in the direction that tempts raising it. It stays: `pr-gate-budget.md` forbids raising it, dropping a member and weakening an assertion, and remedies 1 and 3 were both still unspent.
+15. **The covers-open claim moves down a tier rather than off.** It is not device-only — `Home.test.tsx`'s manifest-generated sweep falsifies it at the rendered tier, and each cover still has its own device journey on the canary and nightly lanes — so the PR gate was paying 187s for a claim two cheaper lanes already hold. That is E-device-only applied to the gate, and it is ruled as `G-device-only-gate` rather than left as a flow edit, because "which claims earn a device" is not a decision a scroll-selector commit should make silently.
+16. **The ledger leaves CI, and folding it in stays manual.** The re-derivation every budget file owes needs data, and ten runs produced none because the file only ever existed on the runner. Uploading it is unconditional; committing it is not — a workflow that rewrites its own evidence is not evidence anyone chose to keep.
+
+**Open, and deliberately not closed here**
+
+- **A launch-stall failure class.** A launch that never reaches Home within 45–60s occurred in three of the last four attempts (run 33576730402, attempts 1 and 2). The classifier files it as `product`, which may well be right; nothing here changes it. It is the next wave's first item.
+- **Sharding the gate and a cold-start beacon.** Both are wave 2 and both should be decided from the next measured run rather than from this one's arithmetic — that is the whole point of the ledger artifact.
+- **`design:gallery` cannot run in this container** (pre-existing; recorded in Verification above).
 
 ## Audit
 

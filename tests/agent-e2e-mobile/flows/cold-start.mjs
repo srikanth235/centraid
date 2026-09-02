@@ -48,6 +48,11 @@ await runFlow("mobile-cold-start", async (ctx) => {
   // every launch below measure a warm-install, cold-process start, which is
   // what a person does every morning.
   await ctx.configureGateway();
+  // A MEASURED LAUNCH CARRIES NOTHING BUT ITSELF. In reuse mode configureGateway
+  // stages its launch onto the next chunk, and the next chunk here is sample one
+  // — whose clock the drift budget reads. This flow is the one that pays the
+  // extra Maestro spawn on purpose, so the staged launch runs on its own first.
+  await ctx.flush();
 
   // Sequential by construction: each sample must be a cold process start on an
   // idle device, so these cannot be parallelised. Recursion rather than a loop

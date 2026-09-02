@@ -219,6 +219,16 @@ jobs:
           path: tests/agent-e2e-mobile/runs/
           retention-days: 7
           if-no-files-found: ignore
+      # #905 — the ledger this runner appended, uploaded red or green; nothing
+      # else carries the observed durations off the runner.
+      - name: Upload the mobile run ledger
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mobile-run-ledger-canary-android
+          path: tests/agent-e2e-mobile/ledger/durations.json
+          retention-days: 30
+          if-no-files-found: warn
       # A canary is only worth running if somebody learns it went red. Same
       # deduplicating helper the weekly lanes use, so a run of red merges files
       # one issue rather than one per merge.

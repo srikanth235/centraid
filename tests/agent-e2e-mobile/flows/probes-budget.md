@@ -10,7 +10,7 @@ Unlike its two sibling suites, this one shares **nothing**. `home-loads` must ru
 | --- | --- | --- | --- |
 | `cold-start` | 4 min | 8 launch cycles × 15 s | 6 min |
 | `home-loads` | — (cleared client) | one cleared-state launch, whose own `FIRST_LAUNCH_TIMEOUT_MS` bundle-fetch ceiling is 120 s | 2 min |
-| `native-v0-resilience` | 4 min | 10 units — eight covers, Settings, one process restart | 6.5 min |
+| `native-v0-resilience` | 4 min | 10 units — Settings, the airplane arc's offline write and reconnect, four process restarts | 6.5 min |
 | `places-seat` | 4 min | 4 units — seed, shelf, map, pin readout | 5 min |
 | `scroll-frames` | 4 min | 4 units — arm the sampler, the fling block, the report read, the People leg | 5 min |
 | `volume-proof` | 4 min | 20 relaunch cycles × 15 s | 9 min |

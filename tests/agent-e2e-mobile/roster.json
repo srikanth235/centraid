@@ -52,7 +52,7 @@
     },
     "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs": {
       "status": "scheduled",
-      "claim": "Every native cover opens from Home, Settings loads, the app survives a process restart, and on Android an offline write reconnects and syncs. The one airplane-mode journey the device owns; the rest of the state grid is tests/integration-mobile/'s."
+      "claim": "Settings loads from the all-apps sheet, the app survives a process restart, and on Android an offline write reconnects and syncs. The one airplane-mode journey the device owns; the covers-open claim is Home.test.tsx's conformance sweep plus the per-cover canary journeys, and the rest of the state grid is tests/integration-mobile/'s."
     },
     "tests/agent-e2e-mobile/flows/cold-start.mjs": {
       "status": "scheduled",

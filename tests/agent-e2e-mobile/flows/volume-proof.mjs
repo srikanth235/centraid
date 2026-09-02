@@ -17,6 +17,10 @@ await runFlow("mobile-volume-proof", async (ctx) => {
   // device. configureGateway clears state, redeems a one-time ticket and lands
   // on Home; every relaunch below then measures a warm, paired launch.
   await ctx.configureGateway();
+  // Same reason as cold-start.mjs: a staged reuse launch would otherwise run
+  // inside the wall clock below, adding a launch the 20-relaunch budget never
+  // measured.
+  await ctx.flush();
   const started = performance.now();
   await ctx.run(
     `appId: ${ctx.state.appId}

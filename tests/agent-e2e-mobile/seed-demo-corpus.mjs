@@ -7,10 +7,10 @@
 //
 // It seeds EVERY app that ships a `seed.js`, not a per-lane subset, for a
 // reason the per-flow calls cannot express: a launcher tile exists only when its
-// app earned the grid, and `native-v0-resilience` alone opens all eight covers
-// while naming one scenario. A lane-wide corpus makes "which apps does this
-// lane's grid show" a property of the lane rather than of whichever flow
-// happened to run first.
+// app earned the grid, and a flow that names one scenario can still tap a tile
+// another app owns — the home-apps and Photos suites walk every cover between
+// them. A lane-wide corpus makes "which apps does this lane's grid show" a
+// property of the lane rather than of whichever flow happened to run first.
 //
 // FAILS THE LANE. A missing corpus does not produce a missing corpus's error —
 // it produces twelve journeys failing at their first tap with `Element not

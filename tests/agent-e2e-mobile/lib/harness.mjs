@@ -656,6 +656,56 @@ async function runMaestroChunk(
 }
 
 /**
+ * The commands a reuse-mode `configureGateway` contributes: a state-preserving
+ * launch and a wait for Home. Body lines only — the chunk they are folded into
+ * already carries the `appId:` header.
+ *
+ * @returns {string} YAML command lines.
+ */
+export function reusePairedCommands() {
+  return `- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible: "${HOME_READY_MARKER}"
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+`;
+}
+
+/**
+ * The commands `ctx.restart()` contributes: an OS process boundary that clears
+ * nothing, so only the vault's own bytes cross it.
+ *
+ * @returns {string} YAML command lines.
+ */
+export function restartCommands() {
+  return `- stopApp
+- launchApp:
+    clearState: false
+`;
+}
+
+/**
+ * Fold staged command lines into a chunk, immediately after its `---` document
+ * separator and before the chunk's own first command.
+ *
+ * @param {string} prefix Command lines to insert; empty leaves the chunk alone.
+ * @param {string} yaml A chunk, which always opens `appId: …` then `---`.
+ * @returns {string} The combined chunk.
+ */
+export function prependPrefix(prefix, yaml) {
+  if (!prefix) return yaml;
+  const separator = "\n---\n";
+  const at = yaml.indexOf(separator);
+  if (at === -1) {
+    throw new Error(
+      "cannot fold staged commands into a chunk with no `---` document separator"
+    );
+  }
+  const head = at + separator.length;
+  return `${yaml.slice(0, head)}${prefix}${yaml.slice(head)}`;
+}
+
+/**
  * Run a mobile agent-e2e flow end-to-end: discover sim → setup run dir →
  * exec → verdict.
  *
@@ -677,7 +727,8 @@ async function runMaestroChunk(
  * ctx surface:
  *   ctx.state               read-only snapshot of {runId, runDir, udid, appId, ...}
  *   ctx.run(yaml, label?, options?) execute a YAML chunk; screenshots land under runs/.../screenshots/
- *   ctx.restart()           stopApp + launchApp without clearing state — mirrors desktop's ctx.restart()
+ *   ctx.restart()           stopApp + launchApp without clearing state, staged onto the next chunk
+ *   ctx.flush()             run any staged prefix now, so it lands outside a timed ctx.run()
  *   ctx.configureGateway()  pair from a clean state, or reuse the paired nightly profile when requested
  *   ctx.ensureDemo(appId)   seed a scenario before the initial replica clone, if absent
  *   ctx.purgeDemo(appId)    remove a scenario before an empty-vault journey
@@ -719,11 +770,31 @@ export async function runFlow(slug, fn) {
   // its last of six assertions reports none of them — and undercounting is the
   // safe direction: it never inflates the evidence a failure claims to have.
   let assertionsRun = 0;
+  // Commands staged by `ctx.restart()` / reuse-mode `ctx.configureGateway()`
+  // rather than spawned: each `maestro test` costs ~9-15s of JVM start, and
+  // every caller of those two immediately follows with a `ctx.run()` the launch
+  // can ride along in. Nothing is dropped — a prefix still pending when the flow
+  // ends, or when `ctx.device()` needs the relaunch to have happened, runs as
+  // its own chunk under the label it would have had.
+  let pendingPrefix = "";
+  const pendingLabels = [];
   const run = async (yaml, hint, options = {}) => {
     const label = nextLabel(hint);
     console.log(`  run     : ${label}`);
-    await runMaestroChunk(yaml, { state, label, ...options });
-    assertionsRun += countMaestroAssertions(yaml);
+    const chunk = prependPrefix(pendingPrefix, yaml);
+    pendingPrefix = "";
+    pendingLabels.length = 0;
+    await runMaestroChunk(chunk, { state, label, ...options });
+    assertionsRun += countMaestroAssertions(chunk);
+  };
+  const stagePrefix = (commands, label) => {
+    pendingPrefix += commands;
+    pendingLabels.push(label);
+    console.log(`  prefix  : ${label} folded into the next chunk`);
+  };
+  const flushPrefix = async () => {
+    if (!pendingPrefix) return;
+    await run(`appId: ${state.appId}\n---\n`, pendingLabels.join("-"));
   };
   // THE DEVICE ESCAPE (#890 follow-up). Maestro drives ONE app's UI and nothing
   // around it, which is why six W5 journeys were recorded as blocked on "tooling
@@ -752,6 +823,7 @@ export async function runFlow(slug, fn) {
   // `adb shell` argv. Not needed for plain `adb` verbs (`emu`, `install`) or for
   // simctl, neither of which re-parses.
   const device = async (args, { label } = {}) => {
+    await flushPrefix();
     const hint = label ?? args[0] ?? "device";
     console.log(`  device  : ${hint}`);
     if (state.platform === "android")
@@ -772,6 +844,7 @@ export async function runFlow(slug, fn) {
     },
     run,
     device,
+    flush: flushPrefix,
   };
 
   // Mint the one-time pairing ticket the phone will redeem.
@@ -856,17 +929,7 @@ export async function runFlow(slug, fn) {
       );
     }
     if (process.env.MAESTRO_REUSE_PAIRED_STATE === "1") {
-      await ctx.run(
-        `appId: ${state.appId}
----
-- launchApp:
-    clearState: false
-- extendedWaitUntil:
-    visible: "${HOME_READY_MARKER}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-`,
-        "reuse-paired-gateway"
-      );
+      stagePrefix(reusePairedCommands(), "reuse-paired-gateway");
       ctx.note(`reused the paired nightly profile for ${gatewayUrl}`);
       return;
     }
@@ -1022,15 +1085,7 @@ ${retryableTapCommands("Enter Centraid")}
     await new Promise((resolve) => {
       setTimeout(resolve, 300);
     });
-    await ctx.run(
-      `appId: ${state.appId}
----
-- stopApp
-- launchApp:
-    clearState: false
-`,
-      "restart"
-    );
+    stagePrefix(restartCommands(), "restart");
   };
 
   let error;
@@ -1041,6 +1096,11 @@ ${retryableTapCommands("Enter Centraid")}
     result = await fn(ctx);
   } catch (caughtError) {
     error = caughtError;
+  }
+  try {
+    await flushPrefix();
+  } catch (flushError) {
+    error ??= flushError;
   }
   const elapsedMs = Date.now() - t0;
   const pass = !error && result?.pass !== false;

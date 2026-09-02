@@ -4968,13 +4968,13 @@
     },
     {
       "id": "mobile-native-v0-resilience",
-      "name": "Native app covers survive gateway loss, restart, and cold start",
+      "name": "Settings loads and an offline write survives restart and reconnects",
       "surface": "mobile",
       "dimension": "journey",
       "tier": "e2e",
       "owner": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs",
       "minimumTests": 13,
-      "approvedMinimumTestsDeviation": "#799 retired the mobile WebView app cover, and with it the served-app plane on the phone: all eight bundled apps route to native covers, so template-gate's premise (a bundled UI template rendering inside the phone's WebView) names a surface that no longer exists. Its journey coverage was ALREADY delegated to this flow — template-gate.md said so in its own scope note (\"the eight native apps are covered by the native resilience flow\") and it short-circuited to a trivial pass because its own NATIVE_ON_MOBILE set covers all eight kind:\"app\" templates in packages/blueprints/index.json, leaving it nothing to gate. The floor did not shrink: template-gate's was 7, this flow is pinned at 13 declared checks (a floor, not a ceiling)."
+      "approvedMinimumTestsDeviation": "#799 retired the mobile WebView app cover, and with it the served-app plane on the phone: all eight bundled apps route to native covers, so template-gate's premise (a bundled UI template rendering inside the phone's WebView) names a surface that no longer exists. It short-circuited to a trivial pass because its own NATIVE_ON_MOBILE set covers all eight kind:\"app\" templates in packages/blueprints/index.json, leaving it nothing to gate, and its journey coverage was delegated to this flow. Since #905 (G-device-only-gate) the every-cover-opens half of that delegation is held off the device: apps/mobile/src/screens/Home.test.tsx generates a conformance sweep from apps/mobile/app-conformance.json over every bundled app, and each cover keeps its own device journey on the per-merge canary and nightly lanes. This flow keeps the device-only claims — Settings through the all-apps sheet, and on Android the offline write, process restart, reconnect and settle arc. The floor did not shrink: template-gate's was 7, this flow is pinned at 13 declared checks (a floor, not a ceiling)."
     },
     {
       "id": "mobile-photos-permissions",
