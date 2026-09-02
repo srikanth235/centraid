@@ -943,7 +943,6 @@ describe("issue #679 user-facing quality gates", () => {
       // seeded canary item so every selected cell is a populated sealed one.
       ...[
         "SELECT value_sealed FROM locker_item_field WHERE item_id = 'year3-sealed-locker'",
-        "SELECT password FROM locker_item_history WHERE item_id = 'year3-sealed-locker'",
         "SELECT private_key FROM locker_item_passkey WHERE item_id = 'year3-sealed-locker'",
       ].map((sql) =>
         gateway.sql(
@@ -965,6 +964,31 @@ describe("issue #679 user-facing quality gates", () => {
     ).toSatisfy((values: unknown[]) =>
       values.every((value) => value === SEALED_PLACEHOLDER)
     );
+    // HISTORY IS REVISIONS (#916, D2). `locker_item_history` carried a sealed
+    // `password` column and is gone; the previous value now lives in a
+    // `core_entity_revision` snapshot. That snapshot must record THAT a sealed
+    // column changed and never WHAT it changed to, so the canary reads the
+    // snapshot as stored: no placeholder to check, because there must be no
+    // secret there in the first place.
+    const snapshots = gateway.sql(
+      {
+        kind: "device",
+        deviceId: device.device_id,
+        deviceKey: device.public_key,
+      },
+      {
+        sql: "SELECT snapshot_json FROM core_entity_revision WHERE entity_type = 'locker.item' AND entity_id = 'year3-sealed-locker'",
+      }
+    );
+    expect(snapshots.rows.length).toBeGreaterThan(0);
+    for (const row of snapshots.rows) {
+      const snapshot = String(
+        (row as { snapshot_json: unknown }).snapshot_json
+      );
+      for (const sentinel of Object.values(profile.sealedSentinels)) {
+        expect(snapshot).not.toContain(sentinel);
+      }
+    }
     const portable = await exportPortableVault(db, {
       kind: "owner-device",
       callerId: device.device_id,
@@ -1005,11 +1029,6 @@ describe("issue #679 user-facing quality gates", () => {
         purpose: "dpv:ServiceProvision",
       }),
       gateway.reveal(credential, {
-        entity: "locker.item_history",
-        entityId: "year3-sealed-revision",
-        purpose: "dpv:ServiceProvision",
-      }),
-      gateway.reveal(credential, {
         entity: "locker.item_passkey",
         entityId: "year3-sealed-locker",
         purpose: "dpv:ServiceProvision",
@@ -1027,7 +1046,11 @@ describe("issue #679 user-facing quality gates", () => {
       db.vault.prepare("SELECT * FROM locker_item").all(),
       db.vault.prepare("SELECT * FROM sync_connection_credential").all(),
       db.vault.prepare("SELECT * FROM locker_item_field").all(),
-      db.vault.prepare("SELECT * FROM locker_item_history").all(),
+      db.vault
+        .prepare(
+          "SELECT * FROM core_entity_revision WHERE entity_type = 'locker.item'"
+        )
+        .all(),
       db.vault.prepare("SELECT * FROM locker_item_passkey").all(),
     ];
     expect(JSON.stringify(rawStorage)).not.toContain("CENTRAID-SEALED-");
@@ -1049,7 +1072,7 @@ describe("issue #679 user-facing quality gates", () => {
       reader.readRows("locker.item"),
       reader.readRows("sync.connection_credential"),
       reader.readRows("locker.item_field"),
-      reader.readRows("locker.item_history"),
+      reader.readRows("core.entity_revision"),
       reader.readRows("locker.item_passkey"),
     ]);
     const backupArtifact = checkpointVault(db);

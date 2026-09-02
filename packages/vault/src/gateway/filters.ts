@@ -16,6 +16,19 @@ const OPS: Record<string, string> = {
   gte: ">=",
 };
 
+interface ColumnInfo {
+  name: string;
+  type: string;
+  pk: number;
+}
+
+// ONE `PRAGMA table_info` per table per process. The column set and the
+// scalar primary key are two readings of the SAME pragma row set, and they
+// used to hold separate caches that each paid their own statement — so the
+// first touch of a table on a screen's first paint cost two pragmas where the
+// second answered a question the first had already asked. They share the row
+// set now, and the derived answers stay memoised beside it (#916).
+const tableInfoCache = new Map<string, readonly ColumnInfo[]>();
 const columnCache = new Map<string, Set<string>>();
 const scalarPrimaryKeyCache = new Map<string, string | null>();
 
@@ -26,24 +39,33 @@ const scalarPrimaryKeyCache = new Map<string, string | null>();
  */
 export function clearColumnCache(physical?: string): void {
   if (physical === undefined) {
+    tableInfoCache.clear();
     columnCache.clear();
     scalarPrimaryKeyCache.clear();
   } else {
+    tableInfoCache.delete(physical);
     columnCache.delete(physical);
     scalarPrimaryKeyCache.delete(physical);
   }
+}
+
+/** The table's `PRAGMA table_info` rows, read once per process. */
+function tableInfo(db: DatabaseSync, physical: string): readonly ColumnInfo[] {
+  let info = tableInfoCache.get(physical);
+  if (!info) {
+    info = db
+      .prepare(`PRAGMA table_info(${JSON.stringify(physical)})`)
+      .all() as unknown as ColumnInfo[];
+    tableInfoCache.set(physical, info);
+  }
+  return info;
 }
 
 /** Actual column names of a physical table (cached per process). */
 export function tableColumns(db: DatabaseSync, physical: string): Set<string> {
   let cols = columnCache.get(physical);
   if (!cols) {
-    const rows = db
-      .prepare(`PRAGMA table_info(${JSON.stringify(physical)})`)
-      .all() as {
-      name: string;
-    }[];
-    cols = new Set(rows.map((r) => r.name));
+    cols = new Set(tableInfo(db, physical).map((r) => r.name));
     columnCache.set(physical, cols);
   }
   return cols;
@@ -146,13 +168,9 @@ export function compileReplicaHistoricalFilters(
   clauses: FilterClause[],
   now: string
 ): CompiledFilter {
-  const info = db
-    .prepare(`PRAGMA table_info(${JSON.stringify(physical)})`)
-    .all() as {
-    name: string;
-    type: string;
-  }[];
-  const columns = new Map(info.map((column) => [column.name, column.type]));
+  const columns = new Map(
+    tableInfo(db, physical).map((column) => [column.name, column.type])
+  );
   return compileFilterClauses(clauses, now, (column) => {
     const declared = columns.get(column);
     if (declared === undefined)
@@ -215,13 +233,7 @@ export function scalarPrimaryKeyColumn(
 ): string | undefined {
   const cached = scalarPrimaryKeyCache.get(physical);
   if (cached !== undefined) return cached ?? undefined;
-  const primary = (
-    db.prepare(`PRAGMA table_info(${JSON.stringify(physical)})`).all() as {
-      name: string;
-      type: string;
-      pk: number;
-    }[]
-  )
+  const primary = tableInfo(db, physical)
     .filter((column) => column.pk > 0)
     .sort((left, right) => left.pk - right.pk);
   if (primary.length !== 1) {

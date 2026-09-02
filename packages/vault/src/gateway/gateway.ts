@@ -216,9 +216,12 @@ function commonsStewardDeviceLabel(
  * carry secret material of their own. Their reveal spends the OWNING item's
  * one-time permit — a permit is minted per item, never per field/revision.
  */
+// `locker.item_history` is NOT one of them any more (#916, D2): the table is
+// gone and a previous value lives in a `core_entity_revision` snapshot, which
+// records that a sealed column changed and never what it changed to. There is
+// no secret in a revision to spend a permit on.
 const LOCKER_SIDECAR_ENTITIES = new Set([
   "locker.item_field",
-  "locker.item_history",
   "locker.item_passkey",
 ]);
 
