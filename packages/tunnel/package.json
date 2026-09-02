@@ -45,7 +45,7 @@
   "devDependencies": {
     "@centraid/core": "workspace:*",
     "@centraid/test-kit": "workspace:*",
-    "@types/node": "^26.1.2",
+    "@types/node": "^26.4.0",
     "typescript": "catalog:"
   },
   "engines": {
