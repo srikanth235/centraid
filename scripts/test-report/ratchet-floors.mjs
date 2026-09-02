@@ -6,10 +6,18 @@
  * unit tests and the CLI entry share a single source of truth.
  *
  * Diffs against a git merge-base (default: origin/main):
- *   - `tests/coverage-floors.json` (up-only)
- *   - every matrix flow `minimumTests` (up-only)
- *   - `tests/mutation-floors.json` (up-only mutation scores, #532)
+ *   - `tests/floors.json#coverage` (up-only)
+ *   - every claims flow `minimumTests` (up-only)
+ *   - `tests/floors.json#mutation` (up-only mutation scores, #532)
  *   - perf budget numeric ceilings/floors (tighten-only / widen fails, #532)
+ *
+ * #915 Wave 4 merged twenty ledgers into four. The ceiling table below names
+ * SECTIONS of `tests/budgets.json` rather than seven separate files, and each
+ * section keeps its OWN `approvedDeviation` — merging the files must not merge
+ * the waivers, or a reviewed widen of one ceiling would silently waive a drop
+ * in another. `scripts/check-ledgers.mjs` (`bun run lint:ledgers`) holds the
+ * rest of the merged shape (issue-and-expiry, the derived mirrors, the
+ * inventory budgets); this module stays the numeric ratchet the report reads.
  *
  * Any decrease (or budget widen) fails unless the touched file's
  * `approvedDeviation` (flow-level: `approvedMinimumTestsDeviation`) was
@@ -41,11 +49,26 @@ export const PERF_BUDGET_SOURCES = [
   // floor and may only rise. Before this the absolute ceilings lived as
   // `const BUDGET_MS` inside five rig files, where widening one to make a slow
   // rig green was an unreviewed one-line edit.
-  { path: "tests/quality-rig-budgets.json" },
+  {
+    path: "tests/budgets.json",
+    section: "qualityRigs",
+    legacy: "tests/quality-rig-budgets.json",
+  },
   // #656 Layer 5 — the PR lane's total wall clock. Tighten-only for the same
   // reason as any perf ceiling: it is the only gate that pushes back on adding
   // tests, so widening it must be a reviewed edit rather than a quiet one.
-  { path: "tests/suite-wall-clock.json" },
+  {
+    path: "tests/budgets.json",
+    section: "suiteWallClock",
+    legacy: "tests/suite-wall-clock.json",
+  },
+  // #915 — the ladder's own p95 budget per rung, lifted out of a literal in
+  // scripts/ci/lane-rules.mjs so that widening a rung is a reviewed edit.
+  { path: "tests/budgets.json", section: "rungs" },
+  // #915 Wave 2/4 — the mobile suite budgets, mirrored from the roster. The
+  // roster is still ratcheted at its own source by check-mobile-suite-budgets;
+  // this holds the mirror to the same direction so neither copy can drift up.
+  { path: "tests/budgets.json", section: "mobileSuites" },
   // #659 R2 — the EXPERIENCE budgets: the same regressions the files above
   // fence, restated as what the vault owner feels (cold open → first usable
   // screen, tap → visual response, send → first token, scroll frame drops,
@@ -517,6 +540,10 @@ function readJsonAt(ref, relPath) {
     const raw = execFileSync("git", ["show", `${ref}:${relPath}`], {
       cwd: root,
       encoding: "utf8",
+      // A path absent on the base is the FIRST-LAND case, handled by the
+      // callers; git's "exists on disk, but not in <ref>" on stderr would read
+      // as a gate failure in the log when it is nothing of the sort.
+      stdio: ["ignore", "pipe", "ignore"],
       maxBuffer: 8 * 1024 * 1024,
     });
     return JSON.parse(raw);
@@ -530,6 +557,7 @@ function readTextAt(ref, relPath) {
     return execFileSync("git", ["show", `${ref}:${relPath}`], {
       cwd: root,
       encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
       maxBuffer: 8 * 1024 * 1024,
     });
   } catch {
@@ -568,14 +596,21 @@ function parseArgs(argv) {
 /**
  * Load flattened budget numbers from a working-tree or base-ref source.
  * @param {string} absPath Absolute path on disk for head.
- * @param {{ path: string; exportName?: string }} source Source descriptor.
+ * @param {{ path: string; exportName?: string; section?: string; legacy?: string }} source Source descriptor. `section` names one section of a merged ledger; `legacy` is the standalone file it lived in before #915 Wave 4, read only on the base side.
  * @param {string | null} ref Git ref, or null for working tree.
  * @returns {{ numbers: Record<string, number>; approvedDeviation: string }} Return value.
  */
 function loadBudgetSource(absPath, source, ref) {
   let text = null;
+  let section = source.section;
   if (ref) {
     text = readTextAt(ref, source.path);
+    if (text === null && source.legacy) {
+      // The merged ledger does not exist on the base: read the file this
+      // section used to be, whole, so the rename cannot widen a ceiling.
+      text = readTextAt(ref, source.legacy);
+      section = undefined;
+    }
   } else if (existsSync(absPath)) {
     text = readFileSync(absPath, "utf8");
   }
@@ -588,10 +623,14 @@ function loadBudgetSource(absPath, source, ref) {
 
   if (source.path.endsWith(".json")) {
     try {
-      const parsed = JSON.parse(text);
-      if (typeof parsed.approvedDeviation === "string") {
-        approvedDeviation = parsed.approvedDeviation;
-      }
+      const whole = JSON.parse(text);
+      // A section's waiver is its own. Reading the file-level note would let a
+      // reviewed widen of one budget waive a drop in the section next door.
+      const parsed = section ? (whole[section] ?? {}) : whole;
+      approvedDeviation =
+        typeof parsed.approvedDeviation === "string"
+          ? parsed.approvedDeviation
+          : "";
       return { numbers: flattenBudgetNumbers(parsed), approvedDeviation };
     } catch {
       return { numbers: {}, approvedDeviation };
@@ -623,9 +662,8 @@ function main() {
     return;
   }
 
-  const floorsPath = "tests/coverage-floors.json";
-  const matrixPath = "tests/matrix.json";
-  const mutationPath = "tests/mutation-floors.json";
+  const floorsPath = "tests/floors.json";
+  const matrixPath = "tests/claims.json";
   if (
     !existsSync(path.join(root, floorsPath)) ||
     !existsSync(path.join(root, matrixPath))
@@ -636,19 +674,32 @@ function main() {
     process.exitCode = 1;
     return;
   }
-  const headFloors = JSON.parse(
+  const floorsDoc = JSON.parse(
     readFileSync(path.join(root, floorsPath), "utf8")
   );
+  const headFloors = floorsDoc.coverage;
   const headMatrix = JSON.parse(
     readFileSync(path.join(root, matrixPath), "utf8")
   );
-  const baseFloors = readJsonAt(baseRef, floorsPath);
-  const baseMatrix = readJsonAt(baseRef, matrixPath);
+  // #915 Wave 4 merged tests/coverage-floors.json and tests/mutation-floors.json
+  // into tests/floors.json. The base side falls back to the OLD paths so the
+  // very commit that renamed them cannot lower a floor unwatched — without this
+  // the ratchet would go silent for exactly one merge.
+  const baseFloorsDoc = readJsonAt(baseRef, floorsPath);
+  const baseFloors =
+    baseFloorsDoc?.coverage ??
+    readJsonAt(baseRef, "tests/coverage-floors.json");
+  // #915 renamed tests/matrix.json to tests/claims.json. The `flows[]`
+  // minimumTests floors moved file, not value, so the base side falls back to
+  // the old path: without this the ratchet would go silent for exactly one
+  // merge, which is when a floor could be lowered unwatched.
+  const baseMatrix =
+    readJsonAt(baseRef, matrixPath) ?? readJsonAt(baseRef, "tests/matrix.json");
 
-  const headMutation = existsSync(path.join(root, mutationPath))
-    ? JSON.parse(readFileSync(path.join(root, mutationPath), "utf8"))
-    : null;
-  const baseMutation = readJsonAt(baseRef, mutationPath);
+  const headMutation = floorsDoc.mutation ?? null;
+  const baseMutation =
+    baseFloorsDoc?.mutation ??
+    readJsonAt(baseRef, "tests/mutation-floors.json");
 
   if (!baseFloors || !baseMatrix) {
     if (!baseFloors && !baseMatrix) {
@@ -668,7 +719,7 @@ function main() {
   // the file, decreases require approvedDeviation.
   if (headMutation && !baseMutation) {
     console.log(
-      `ratchet-floors: ${mutationPath} absent on ${baseRef}; mutation floors first land (ok)`
+      `ratchet-floors: ${floorsPath}#mutation absent on ${baseRef}; mutation floors first land (ok)`
     );
   }
 
@@ -683,7 +734,7 @@ function main() {
       continue;
     }
     perfBudgets.push({
-      label: source.path,
+      label: source.section ? `${source.path}#${source.section}` : source.path,
       base: base.numbers,
       head: head.numbers,
       approvedDeviation: head.approvedDeviation,

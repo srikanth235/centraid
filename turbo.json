@@ -15,7 +15,39 @@
       // save and restore for no gain, and the repo simultaneously documents its
       // rebuild as non-hermetic ("intrinsic comment renumbering", ci.yml
       // `iroh-wasm`). `dist/**` and `native/*.node` are both gitignored.
-      "outputs": ["dist/**", "native/*.node"]
+      "outputs": ["dist/**", "native/*.node"],
+      // #915 — WHAT A BUILD IS ALLOWED TO CARE ABOUT. With no `inputs`, turbo
+      // hashes every non-ignored file in the package, so a one-line edit to
+      // `packages/core/src/blob/cbsf-properties.test.ts` moved ELEVEN of the
+      // sixteen build hashes — `@centraid/tunnel` among them, whose build is a
+      // release cargo compile measured at 278s of a 349s cold `build:ci`. Five
+      // CI lanes run `build:ci`, so one test-file edit cost roughly 23 minutes
+      // of runner time re-proving a Rust artifact that could not have changed.
+      // That is the whole of the "~4.5-minute build:ci miss" #915 asks about,
+      // and it is caused by hashing files no build reads.
+      //
+      // `$TURBO_DEFAULT$` keeps the default set and the negations remove only
+      // files that cannot reach a build output: every package's build is `tsc`
+      // or a bundler (see the `build` scripts), none reads markdown, and every
+      // tsconfig excludes test modules from its program. Adding a file type
+      // here that a build DOES read would produce a stale cache hit, which is
+      // the one failure this list must never cause — so extend it only against
+      // a build script that provably ignores the pattern.
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.test.ts",
+        "!**/*.test.tsx",
+        "!**/*.test.js",
+        "!**/*.test.jsx",
+        "!**/*.test.mjs",
+        "!**/*.test.mts",
+        "!**/*.spec.ts",
+        "!**/*.spec.tsx",
+        "!**/*.spec.js",
+        "!**/*.spec.mjs",
+        "!**/__tests__/**",
+        "!**/*.md"
+      ]
     },
     "dev": {
       "cache": false,

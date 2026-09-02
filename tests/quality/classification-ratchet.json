@@ -1,6 +1,6 @@
 {
-  "approvedDeviation": "#905 re-pins the tests/matrix.json fingerprint after `mobile-native-v0-resilience` was restated to the claims only a device can falsify. The row's prose moved, nothing it governs did: `minimumTests` stays at 13, the owner still names the same flow file, no gate id was removed, and the `qualities` and `demonstratedRed` payloads are untouched, so `matrixGovernanceFingerprint` is unchanged. The every-cover-opens half of the delegation now names where it actually lives — the conformance sweep in `apps/mobile/src/screens/Home.test.tsx` plus the canary and nightly device lanes.",
-  "matrixGovernanceFingerprint": "c2beb73259a02858be1bb8dd3dd3681cb1a36cfd6c0c9d7d0a3f89573ad473aa",
+  "approvedDeviation": "#915 re-pins the governed classification payload after the Quality Ladder replaced tests/matrix.json with tests/claims.json. The 45-gate user-facing qualities panel retired into 45 claim ROWS: each keeps its id, owner, evidence selector, lane, knob and governance regime unchanged, and gains a declared severity (S1-S4, previously computed from the cell assessment) plus its demonstratedRed date and seed folded in from the matrix top-level block. No gate id was removed, no owner moved, and no date was bumped. The fingerprint is therefore renamed matrixGovernanceFingerprint -> claimsGovernanceFingerprint over the same content in a new shape, and the per-file fingerprint follows the file rename.",
+  "claimsGovernanceFingerprint": "ba7c9ae7dc40e36bf9e97e47e75bcff96712d775c5208f7943432bce3a819a5d",
   "fingerprints": {
     "packages/server/src/acp/backends/acp/vault-mcp-server.ts": "e7c3fcc3cbbafa3c0e5e36dd10a0e82aa088629fd9d790f00c276d8d630ce3ed",
     "packages/server/src/automation/manifest/manifest.ts": "9f946d923d0f6875e0623de01d1104d35b277cdd3a6d708f141e901bfc388b1f",
@@ -8,6 +8,6 @@
     "packages/server/src/serve/health-registry.ts": "14ad4979e4b0adda60f16478522b8edda3606e87caa26a71d389aeaa94b7d4e0",
     "packages/vault/src/schema/sealed.ts": "2595ae8fb01e4e91255c266ee478dc72eae178233a79135a38db44a9cd013401",
     "tests/quality/fault-points.ts": "2b667efd1354071ab91043ab33f5ebd29cd79a11fcc4716edbe00aeada60f4bd",
-    "tests/matrix.json": "c31669a9cdfce3979fb05b8b3fed7810513eb11c71883ce976b533bc05e26e3d"
+    "tests/claims.json": "7e28908cde52d9b5739801ab697a0bfcc9c30a9defde852d825f46fad07613ff"
   }
 }

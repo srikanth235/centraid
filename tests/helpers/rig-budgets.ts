@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 /**
- * Single reader for `tests/quality-rig-budgets.json` (issue #656 Layer 1F).
+ * Single reader for `tests/budgets.json#qualityRigs` (issue #656 Layer 1F;
+ * merged into the budgets ledger by #915 Wave 4).
  *
  * Before this, three perf rigs and two scale rigs each carried their absolute
  * catastrophic-failure ceiling as a `const BUDGET_MS` in their own source. Those
@@ -17,10 +18,7 @@ import path from "node:path";
  * Resolution is from this file, not `process.cwd()`: perf and scale rigs run
  * under the repo-root vitest configs but a forked child fixture may not.
  */
-const REGISTRY_PATH = path.resolve(
-  import.meta.dirname,
-  "../quality-rig-budgets.json"
-);
+const REGISTRY_PATH = path.resolve(import.meta.dirname, "../budgets.json");
 
 interface RigEntry {
   lane: "perf" | "scale";
@@ -36,14 +34,18 @@ interface RigRegistry {
   rigs: Record<string, RigEntry>;
 }
 
-const registry = JSON.parse(readFileSync(REGISTRY_PATH, "utf8")) as RigRegistry;
+const registry = (
+  JSON.parse(readFileSync(REGISTRY_PATH, "utf8")) as {
+    qualityRigs: RigRegistry;
+  }
+).qualityRigs;
 
 /** Full registry entry for a rig, keyed by its `OWNER` path. */
 export function rigEntry(owner: string): RigEntry {
   const entry = registry.rigs[owner];
   if (!entry)
     throw new Error(
-      `${owner} is not registered in tests/quality-rig-budgets.json — add its lane and volume before recording quality results`
+      `${owner} is not registered in tests/budgets.json#qualityRigs — add its lane and volume before recording quality results`
     );
   return entry;
 }
@@ -58,7 +60,7 @@ export function rigBudgetMs(owner: string): number {
   const { budgetMs } = rigEntry(owner);
   if (typeof budgetMs !== "number")
     throw new Error(
-      `${owner} has no budgetMs in tests/quality-rig-budgets.json — declare one there rather than inlining a constant`
+      `${owner} has no budgetMs in tests/budgets.json#qualityRigs — declare one there rather than inlining a constant`
     );
   return budgetMs;
 }
@@ -81,7 +83,7 @@ export function rigBudgetMs(owner: string): number {
  * long enough that one slow runner cannot move the median, short enough to
  * catch a regression inside a release cycle), then fail above
  * `driftMultiplier` x the trailing median. Both knobs live in
- * `tests/quality-rig-budgets.json` so `bun run test:ratchet` holds them
+ * `tests/budgets.json#qualityRigs` so `bun run test:ratchet` holds them
  * tighten-only; nothing here invents a number.
  *
  * Returns `null` until the history is deep enough. A null must be treated as

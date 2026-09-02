@@ -31,6 +31,7 @@
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
 import {
+  AWAIT_LAUNCHER,
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
   runFlow,
@@ -67,6 +68,7 @@ await runFlow("locker-gate", async (ctx) => {
 # reading the one app it must not. The tile's handle is asserted first so the
 # sentence cannot pass on a Home that drew no Locker tile at all — the label is
 # the claim, the handle is what proves there is something carrying it.
+${AWAIT_LAUNCHER}
 - assertVisible:
     id: "home-tile-locker"
 - assertVisible: "Open Locker, locked"
@@ -89,7 +91,7 @@ ${GATE_ASSERTIONS}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open Locker.*")}
+${AWAIT_LAUNCHER}${retryableTapCommands("Open Locker.*")}
 - extendedWaitUntil:
     visible: "Choose a passphrase"
     timeout: 30000

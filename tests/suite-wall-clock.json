@@ -1,9 +1,0 @@
-{
-  "_comment": "Suite wall-clock ceilings (#656 Layer 5). Tighten-only, ratcheted alongside the perf budgets in scripts/test-report/ratchet-floors.mjs. `budgetMs` is the sum of per-file durations in artifacts/test-results/vitest.json, not the run's elapsed time. SCORE IT ONLY ON A SINGLE-JOB, UNSHARDED RUN — ci.yml enforces it on `verify`, and #905 is why. This comment used to claim the sum was concurrency-invariant ('elapsed varies with host load and --concurrency, while the sum is the work the suite actually asked for'). It is not: the sum is of per-file WALL SPANS, and files inside a run execute concurrently, so every file's span stretches when workers timeshare a slow runner. Measured in #905 on one host, same 1508 files — 2,370.5s uninstrumented, 2,427.0s instrumented (+2.4%, so v8 coverage is NOT the variable) — against 3,824.0s from the four-way sharded `coverage` lane on a run whose shard 1 took 545s to main's 383s. Reseeded 2026-08-29 from CI verify (1487 files, 2,492.7s measured, 15% headroom → 2,867,000ms). Prior seed 2026-08-22: 1332 files, 2,018.1s, 2,321,000ms. Widening this number needs a top-level `approvedDeviation` saying what the extra time buys; `bun run test:suite-wall-clock -- --write` only ever lowers it.",
-  "approvedDeviation": "#883 reseed after Grants v2 + platform consolidation: CI verify measured 2492.7s across 1487 files vs the #850 1332-file / 2018.1s seed (2321.0s ceiling, +474.6s). The extra time is the grant-plane, replica pushdown, fulfillment, ontology, and compact-band suites this umbrella added to the PR vitest lane — not runner variance. Ceiling set 15% above that CI measurement at 2,867,000ms. Mere presence of this field does not waive a later widen (#781).",
-  "lanes": {
-    "pr-vitest": {
-      "budgetMs": 2867000
-    }
-  }
-}

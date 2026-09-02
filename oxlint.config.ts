@@ -377,6 +377,43 @@ export default defineConfig({
       },
     },
     {
+      // #915 Wave 2 — `shQuote` was USED and never imported in
+      // `tests/agent-e2e-mobile/flows/share-intent-in.mjs`, and it survived six
+      // passing assertions before throwing. Nothing caught it statically: a
+      // `promoting` member that has never run on a device is exactly where an
+      // unimported name lives, because nothing at any tier evaluates the module
+      // body. A bespoke "every referenced helper is imported" lint was tried and
+      // reverted — it needs a scope chain and fired on 29 of 37 files — and
+      // `no-undef` is the rule that already has one. Scoped to this tree, whose
+      // files are all Node ESM scripts, so the environment below is the whole
+      // configuration the rule needs to be right here without being enabled
+      // repo-wide (where TypeScript's own checker already answers it).
+      files: ["tests/agent-e2e-*/**/*.mjs"],
+      env: {
+        browser: false,
+        es2024: true,
+        node: true,
+      },
+      rules: {
+        "no-undef": "error",
+      },
+    },
+    {
+      // The one file in that tree that legitimately names browser and MV3
+      // globals: `extension-companion.mjs` serialises callbacks INTO the page
+      // and into the extension's service worker (`page.waitForFunction`,
+      // `worker.evaluate`), where `document` and `chrome` exist and the Node
+      // process's globals do not. Declaring exactly those two here keeps the
+      // rule above meaningful — turning on the whole `browser` env would let a
+      // genuine `document` typo in a Node-side flow pass unnoticed, which is
+      // the class of defect the rule was enabled for.
+      files: ["tests/agent-e2e-pairing/flows/extension-companion.mjs"],
+      globals: {
+        chrome: "readonly",
+        document: "readonly",
+      },
+    },
+    {
       // The two rules in the preset that trade assertion precision for
       // brevity, and the only two that contradict a rule this repo already
       // documents: TESTING.md's test convention says "Prefer specific matchers

@@ -1,0 +1,336 @@
+{
+  "_comment": "THE FLOORS LEDGER (#915 Wave 4). One of four ledgers under tests/; every number here is UP-ONLY and every section carries its own approvedDeviation, so a waiver for one floor can never launder a drop in another. Validated by `bun run lint:ledgers` (scripts/check-ledgers.mjs) and by `bun run test:ratchet`, both against the merge base; for the merge that created this file the base side falls back to the old paths (tests/coverage-floors.json, tests/mutation-floors.json), so this rename cannot widen anything. `coverage` is the object vitest.config.ts hands v8 as its thresholds and the object the constitution's coverage-scope-reachability directive reads its floor globs out of. `mutation` is the Stryker score floor per seed. `minimumTests` is a DERIVED MIRROR of tests/claims.json#flows[].minimumTests, asserted equal by lint:ledgers rather than hand-typed: the up-only comparison for a flow rename needs that flow's surface/dimension/tier, which live in the claims file, so moving the numbers out of it would have split one record across two files. See TESTING.md 'The four ledgers'.",
+  "coverage": {
+    "_comment": "Coverage floors (#532/#587). Up-only under test:ratchet. Floors move to two points below a level sustained for three runs; absolute floor-lag remains visible in the report.",
+    "_ratchetPolicy": {
+      "sustainedRuns": 3,
+      "marginPoints": 2,
+      "floorLagWarningPoints": 15
+    },
+    "approvedDeviation": "#801 remaps coverage scope keys from retired packages (protocol/blob-format/time-engine/gateway/app-engine/automation/agent-runtime) onto packages/core/src/{protocol,blob,time} and packages/server/src/{engine,automation,acp} plus the former-gateway dir brace; every numeric floor is unchanged. Prior: @vitest/coverage-v8 4 (#565) made AST-aware remapping the only mode, redefining what counts as a branch (optional chaining, nullish coalescing, default params, nested arrows). This is a MEASUREMENT change, not lost coverage — proven by packages/tunnel, packages/backup, packages/agent-runtime and packages/cli, which have ZERO source or test changes vs origin/main yet all moved (tunnel branches 80 -> 52.67). Local and CI agree within 0.06pt, so it is deterministic, not runner variance. Branch floors re-seed ~1pt under the newly measured values; the vault/tunnel/cli LINE floors move 1-3pt for the same reason. NOT re-seeded downward: packages/design lines TIGHTENS 90 -> 98, because #565 added packages/design/src/css.test.ts covering toCss(), which had 0/32 lines and no test anywhere in the repo — that gap, not the remap, was the entire design-tokens lines miss (66.01 -> 99.03). Issue #630 deliberately expands the global denominator by 11,639 executable blueprint app/kit lines that the old 71% never measured. The final complete issue tree measures 63.05%, so the aggregate seeds at 62 with one point of runner/remapping headroom while the two newly visible scopes retain their own higher measured floors and ratchet upward. No previously instrumented file lost coverage. PR #638 re-seeds packages/vault and packages/gateway line floors 1pt under the honest measured tip (vault 87.7/73.9 → 87/73, gateway 79.9 → 79) after #630 vault expansion (locker-auth, schedule-organize, recurrence, household) diluted the old mainline 88/80 seeds; tests for those surfaces were added in the same change. #709 Binding Layer re-seed: packages/design/src lines 98→94 after CI verify run 30901194404 measured 95.1% (expanded token/kit surface diluted the prior toCss()-heavy floor from #565). Floor is ~1pt under measured with the same margin used elsewhere for measurement-driven reseeds. #781 floors the hand-authored recognition handler source (packages/model-runtime/automation-handlers/**) that the packages/model-runtime/src/** floor could never reach: measured 2026-08-14 at 83.28 lines / 80.44 branches over the five handlers with the new source-level suites in that directory, seeded the usual two points under at 81/78. #725 graduates Photos to its own scope and leaves a measured blend over _shared plus the seven non-graduated apps; measured 2026-08-08 at Photos 46.82/42.81 (floors 44/40) and blend 22.53/16.92 (floors 20/14). #781 second tree: floors the 23 hand-authored connector/enricher handlers under packages/blueprints/automations, measured 2026-08-15 at 92.64/71.76 with the in-tree source suites, seeded two points under at 90/69; the five generated recognition bundles are coverage-excluded (source-floored under packages/model-runtime/automation-handlers, drift-checked). #799 stage 6 removes the packages/design/kit/** floor scope (49/37) because the directory it floors no longer exists: the surviving element classes, DOM substrate, and sha256 hasher folded into packages/design/src/elements/** where the existing packages/design/src/** floor (94/70) governs them, and the rest of the kit was deleted as dead code. A scope ceasing to exist, not a floor lowering: every surviving line moved INTO the stricter scope. Measured on the merged tree before this edit landed. #839 Wave 0 (gap G14) graduates tasks, agenda, and notes out of the blended blueprint scope and floors apps/mobile for the first time. The blend key changes shape — `packages/blueprints/apps/{_shared,agenda,docs,locker,notes,people,tally,tasks}/**` is REPLACED by `packages/blueprints/apps/{_shared,docs,locker,people,tally}/**` — which the ratchet reads as a scope removal; nothing is weakened by it. Every tree the old key governed is still floored, and every floor over those trees RISES: the shrunken blend seeds at 41/33 against a measured 44.12/36.31, and the three graduated apps seed at tasks 37/25 (measured 39.36/27.76), agenda 40/30 (measured 42.27/32.47), notes 39/27 (measured 41.05/29.47) — all far above the 20/14 the blend guaranteed them, which was a #725-era seed the tree had long outgrown. No number decreases. Measured 2026-08-21 by a vitest run over the packages/blueprints and apps/mobile test files with the root config's repo-root coverage include (so untested files still count in every denominator), seeded the usual two points under. A path-filtered run can only UNDER-measure relative to the unified `bun run coverage` — cross-package suites add coverage, never remove it — so seeding under it is conservative in the same direction as the margin; for reference the full-run blend measurement recorded on #839 (42.21/33.08 over all eight trees) agrees with this run's 42.94/33.95 to within 0.9pt. apps/mobile is floored on its pure-logic surface only, matching the standing rule that mobile UI is owned by extracted logic plus journeys rather than a whole-surface line percentage: `apps/mobile/src/lib/**` at 56/48 (measured 58.12/50.65 over 81 files) and `apps/mobile/src/**/*-model.ts` at 86/72 (measured 88.62/74.26 over the 22 view-model modules). The two keys deliberately overlap on `src/lib/notification-model.ts`; vitest resolves each threshold glob into its own coverage map, so an overlap double-counts one file's lines across two independent floors rather than confusing either. Reproduce every number in this paragraph from the repo root with `bun run --cwd packages/server build && node node_modules/vitest/vitest.mjs run --coverage --coverage.reportOnFailure packages/blueprints/ apps/mobile/`, then sum the per-file lines/branches totals in `coverage/coverage-summary.json` over each scope's globs; `--coverage.reportOnFailure` is required because the untouched packages' floors fail the run and vitest writes no report otherwise, and positional path filters (never `--project`) are what keep the coverage roots at the repo root so untested files stay in the denominators.",
+    "lines": 62,
+    "packages/server/src/engine/**": {
+      "lines": 84,
+      "branches": 73
+    },
+    "packages/server/src/automation/**": {
+      "lines": 82,
+      "branches": 75
+    },
+    "packages/backup/src/**": {
+      "lines": 90,
+      "branches": 74
+    },
+    "packages/core/src/blob/**": {
+      "lines": 98,
+      "branches": 96
+    },
+    "packages/blueprints/src/**": {
+      "lines": 90,
+      "branches": 75
+    },
+    "packages/blueprints/apps/photos/**": {
+      "lines": 44,
+      "branches": 40
+    },
+    "packages/blueprints/apps/agenda/**": {
+      "lines": 40,
+      "branches": 30
+    },
+    "packages/blueprints/apps/notes/**": {
+      "lines": 39,
+      "branches": 27
+    },
+    "packages/blueprints/apps/tasks/**": {
+      "lines": 37,
+      "branches": 25
+    },
+    "packages/blueprints/apps/{_shared,docs,locker,people,tally}/**": {
+      "lines": 41,
+      "branches": 33
+    },
+    "packages/model-runtime/src/**": {
+      "lines": 66,
+      "branches": 49
+    },
+    "packages/model-runtime/automation-handlers/**": {
+      "lines": 81,
+      "branches": 78
+    },
+    "packages/blueprints/automations/**/handler.js": {
+      "lines": 90,
+      "branches": 69
+    },
+    "packages/client/src/replica/**": {
+      "lines": 75,
+      "branches": 62
+    },
+    "packages/client/src/*.{ts,tsx}": {
+      "lines": 78,
+      "branches": 65
+    },
+    "packages/server/src/{backup,brief,capture,cli,enrich,lifecycle,preview,push,reminders,routes,runs,serve,skills,worktree-store}/**": {
+      "lines": 79,
+      "branches": 65
+    },
+    "packages/server/src/*.{ts,js}": {
+      "lines": 79,
+      "branches": 65
+    },
+    "packages/core/src/time/**": {
+      "lines": 82,
+      "branches": 65
+    },
+    "packages/server/src/acp/**": {
+      "lines": 84,
+      "branches": 75
+    },
+    "packages/vault/src/**": {
+      "lines": 87,
+      "branches": 73
+    },
+    "packages/design/src/**": {
+      "lines": 94,
+      "branches": 70
+    },
+    "packages/tunnel/src/**": {
+      "lines": 70,
+      "branches": 51
+    },
+    "packages/core/src/protocol/**": {
+      "lines": 98,
+      "branches": 96
+    },
+    "packages/cli/src/**": {
+      "lines": 83,
+      "branches": 81
+    },
+    "apps/mobile/src/lib/**": {
+      "lines": 56,
+      "branches": 48
+    },
+    "apps/mobile/src/**/*-model.ts": {
+      "lines": 86,
+      "branches": 72
+    },
+    "apps/desktop/src/main/*-core.ts": {
+      "lines": 96,
+      "branches": 89
+    },
+    "apps/oauth-worker/src/**": {
+      "lines": 88,
+      "branches": 82
+    },
+    "packages/client/src/react/**": {
+      "lines": 65,
+      "branches": 54
+    }
+  },
+  "mutation": {
+    "_comment": "Mutation-score floors (#532). Up-only under test:ratchet. Seeded ~2–3pt below measured Stryker on property-defended mutate sets (2026-07-23/24): vault custody 100%; client intents+payload-hash ~73.5%; automation scheduler ~82%; blob-format CBSF 100%; protocol judge ~76.3%; tunnel pure wire ~81.5%; app-engine cost formula 100%. Re-seeded 2026-07-31 (#656 Layer 1C): backup 97.09% measured locally after the WAL-addressing + seal/derive mutation-kill campaign (was 46.07%, below _absoluteWeaknessBelow); gateway allowed-hosts 78.79% and agent-runtime low-priority 91.89% taken from the last green nightly mutation lane (e2e.yml run 30524995032, 2026-07-30T08:10Z), replacing the conservative #545 D6 placeholders. Ratcheted 2026-07-31 (#656 Layer 3) to (measured − 2/3) against that same nightly run: protocol 85.71 → 83, tunnel 81.48 → 79, automation 83.84 → 81, client-replica 74.14 → 72. vault / blob-format / app-engine measured 100 and their 97 floors are already (measured − 3), so they are unchanged. #656 CORRECTION (2026-07-31, PR #661 CI run 30616999454): packages/backup and packages/blueprints were first seeded from LOCAL Stryker runs (97.09 and 88.52) and CI measured 85.47 and 77.46 — an ~11pt gap in both. Local darwin/arm64 and CI linux/x64 do not agree on these two mutate sets, so the floor is re-seeded ~3pt under the CI number, because CI is the lane that enforces it. Seeding from the developer's own machine is precisely the author-asserted claim this issue exists to eliminate.",
+    "_layer3Comment": "#656 Layer 3 extended the adversary from 10 seeds to 15. Each new floor is (first measured − 2/3) AFTER the laws in that package's *-properties / *-contract test file landed; the score before those laws is recorded too, because the gap is the finding: blueprints 56.97 → 88.52 (floor 86); time-engine 57.90 → 77.87 (floor 75); cli 61.69 → 92.21 (floor 90); design-tokens 0.00 → 96.00 (floor 93 — the 0.00 is literal: the only css test called toCss() at module scope, and `ignoreStatic` discards static mutants, so the generator contributed zero mutants to measure); oauth-worker 57.75 → 90.85 (floor 88, pure fail-closed guard line range only). #725 adds seed 16: packages/model-runtime (named enrichment-service until #753 renamed it) tokenizer/CTC/NMS pure math measured 83.00 locally, floor 80 (measured − 3). Mutate paths and the reasoning for what was left out live in each package's stryker.config.mjs.",
+    "_w2Comment": "#839 W2-1 extends the adversary from 16 seeds to 24, over the blueprint APP layer (tasks / notes / agenda / _shared pending-overlay, selection, triage, search-scaffold) and the phone (apps/mobile src/lib). EVERY FLOOR ADDED BY THIS CHANGE IS PROVISIONAL-LOCAL: it was seeded from a LOCAL linux/x64 Stryker run and NOT from CI, which this file's header says is the only lane a floor may be seeded from. To stay honest about that, each provisional floor is (local measured − 11) rather than the usual (measured − 2/3) — 11 points is the local/CI gap #656 measured on packages/backup and packages/blueprints, applied in the pessimistic direction because the direction of that gap was never verified. Re-seed each of these to (CI measured − 3) on the first green nightly mutation lane that includes them, and delete this note when that happens. Local measurements (2026-08-21, node 24 linux/x64): tasks 72.31 → 61; notes 72.18 → 61; agenda 85.52 → 74 (re-measured 79.30 after W3-C's format-locale suite let format.ts join the mutate set — the floor stays 74, seeded from the narrower set, and still holds against the wider one); pending-overlay 96.79 → 85; selection 76.42 → 65; triage 73.08 → 62; search-scaffold 95.65 → 84; mobile 73.00 → 62. Two of those numbers are the finding rather than the baseline: pending-overlay measured 48.23 against its existing suite alone — below _absoluteWeaknessBelow — and reached 96.79 only after apps/_shared/pending-overlay-law.test.ts landed in the same change; notes/logic.ts and agenda/logic.ts had NO test at all before it, and now measure 82.30 and 89.87. Deliberately NOT seeded: apps/_shared/placement-registry.ts and apps/_shared/pending-projections.ts (module-scope const tables — `ignoreStatic` discards their mutants, so they score 0 and say nothing), apps/mobile src/lib/notification-model.ts (57.14 local, 24 of 98 mutants never executed by its own suite) and src/lib/phone-link-parse.ts (60.71 local, the base64url transport decode unasserted). apps/_shared/untrusted.ts is no longer in this deliberately-unseeded list — #864 W2 seeded it once a node-side suite existed; see _w864Comment.",
+    "_w864Comment": "#864 W2 (M4) adds seed 25: packages/blueprints/apps/_shared/untrusted — the shell's render boundary (the displayText control/bidi scrubber plus the safeExternal / safeMedia / safeDocument / safeBackgroundImage URL sinks). A node-side property suite (apps/_shared/untrusted-properties.test.ts: four tagged laws over arbitrary unicode + fc.webUrl() + an adversarial scheme alphabet, plus two it.fails boundary pins) now exists precisely so Stryker's vitest runner can measure the module — its only prior suite (src/untrusted-rendering.test.ts) is jsdom, which the runner dry-runs as \"No tests were executed\"; that is why the 'Deliberately NOT seeded … untrusted.ts' clause has been struck from _w2Comment. PROVISIONAL-LOCAL exactly like every _w2Comment floor: local (2026-08-25, node 24 linux/x64) measured 95.14 → floor 84 (measured − 11, the same pessimistic local/CI gap, because CI has not measured it yet). The 7 survivors are the two 16 MiB media/document length caps (untestable without a 16 MiB input) and two equivalent mutants (the empty-string sentinel and the scheme-regex anchor, both re-null via the URL parse). Re-seed to (CI measured − 3) on the first green nightly mutation lane that includes it, and delete this note when that happens.",
+    "_w892Comment": "#892 Phase 2 widens the apps/mobile seed from five pure src/lib modules to nine, adding the two trees the #890 audit found undefended: src/lib/upload/ (transfer-policy.ts, reconcile-gate.ts) and src/lib/replica/ (background-scopes.ts, mobile-intent-id.ts). The audit's exhibit was that neither the transfer-policy scope loop nor the replica orphan check was inside ANY seed's watch list, so two tests that could not fail were invisible to the one gate built to notice exactly that. THE FLOOR IS UNCHANGED AT 62. The wider set measures 72.31 local (2026-08-31, node 22 linux/x64) against 73.00 for the narrower one, so (measured - 11) would be 61 and floors are tighten-only; 62 holds against 72.31 with margin and lowering it to match a provisional-local convention would be a weakening, not an accounting. Per-file, and recorded because it is the finding rather than the baseline: reconcile-gate.ts 100.00, transfer-policy.ts 73.21 (26 survivors), mobile-intent-id.ts 68.75 (8 survivors), background-scopes.ts 59.09 (8 survivors) - the last is below _absoluteWeaknessBelow as a FILE, which the seed-level floor does not see. Seeding it anyway is deliberate: excluding an under-defended module because it is under-defended is how these two trees came to have no adversary at all. Re-seed the whole seed to (CI measured - 3) on the first green mutation-canary or nightly run that includes the wider set.",
+    "_absoluteWeaknessBelow": 60,
+    "packages/vault": 97,
+    "packages/client/src/replica": 72,
+    "packages/server/src/automation": 81,
+    "packages/backup": 82,
+    "packages/core/src/blob": 97,
+    "packages/core/src/protocol": 83,
+    "packages/tunnel": 79,
+    "packages/server/src/engine": 97,
+    "packages/server": 76,
+    "packages/server/src/acp": 89,
+    "packages/blueprints": 74,
+    "packages/core/src/time": 75,
+    "packages/cli": 90,
+    "packages/design": 71,
+    "apps/oauth-worker": 88,
+    "packages/model-runtime": 80,
+    "packages/blueprints/apps/tasks": 61,
+    "packages/blueprints/apps/notes": 61,
+    "packages/blueprints/apps/agenda": 74,
+    "packages/blueprints/apps/_shared/pending-overlay": 85,
+    "packages/blueprints/apps/_shared/selection": 65,
+    "packages/blueprints/apps/_shared/triage": 62,
+    "packages/blueprints/apps/_shared/search-scaffold": 84,
+    "packages/blueprints/apps/_shared/untrusted": 84,
+    "apps/mobile": 62,
+    "approvedDeviation": "#801 remaps mutation seed/floor ids from retired package names onto packages/core/src/{protocol,blob,time} and packages/server{/src/engine,/src/automation,/src/acp}; every numeric floor is unchanged. Prior: #672 renamed packages/design-tokens -> packages/design. #709 Binding Layer expands the mutate set (css.ts + typography.ts + tile.ts). CI Stryker on PR #709 run 30901194404 measured packages/design at 74.30% (css 63.92 / tile 72.73 / typography 96.08). Prior 93 floor was the design-tokens-only seed (css-properties alone ~96%). Re-seeded to 71 (~3pt under the CI measurement), matching the CI-linux reseed pattern in this file's header for backup/blueprints. #725 seeds packages/model-runtime at 80 from an 83.00 measured score."
+  },
+  "minimumTests": {
+    "_source": "tests/claims.json#flows[].minimumTests",
+    "_policy": "DERIVED MIRROR, asserted equal by lint:ledgers. Edit the number in tests/claims.json; `node scripts/check-ledgers.mjs --write` refreshes this map. The up-only ratchet (including approvedMinimumTestsDeviation and replacesMinimumTestsFlow) runs over the claims rows in scripts/test-report/ratchet-floors.mjs.",
+    "flows": {
+      "consent-chain-properties": 6,
+      "manifest-scope-denial-hostile": 12,
+      "untrusted-render-properties": 12,
+      "blueprint-placement-law": 8,
+      "blueprint-custody-law": 6,
+      "blueprint-consent-law": 1,
+      "blueprint-triage-law": 9,
+      "blueprint-search-law": 10,
+      "blueprint-enrichment-law": 5,
+      "blueprint-pending-overlay-law": 1,
+      "blueprint-one-computation-law": 3,
+      "blueprint-select-all-law": 7,
+      "enrichment-service-contract": 8,
+      "vault-consent-write": 38,
+      "vault-sealed-columns": 21,
+      "vault-write-budget": 2,
+      "ontology-10k-query": 1,
+      "blob-custody-state": 3,
+      "blob-custody-properties": 12,
+      "vault-json-schema-properties": 7,
+      "commons-convergence-properties": 3,
+      "commons-grant-plane-simulation": 6,
+      "backup-crypto-properties": 8,
+      "backup-wal-address-properties": 7,
+      "blob-format-cbsf-properties": 6,
+      "protocol-handshake-properties": 9,
+      "tunnel-wire-properties": 5,
+      "tunnel-peer-target-differential": 9,
+      "backup-format-archaeology": 3,
+      "schema-migration-corpus": 4,
+      "hostile-peer-state-machine": 8,
+      "agent-prompt-injection-red-team": 2,
+      "replica-payload-hash-properties": 7,
+      "app-engine-cost-properties": 7,
+      "blob-disk-full": 2,
+      "blob-egress-budget": 1,
+      "blob-gc-volume": 1,
+      "backup-round-trip": 16,
+      "backup-crash-recovery": 28,
+      "backup-provider": 11,
+      "backup-big-vault": 1,
+      "replica-intents": 4,
+      "replica-intent-properties": 10,
+      "replica-multi-writer": 3,
+      "replica-bootstrap-volume": 1,
+      "gateway-session-boundaries": 8,
+      "gateway-request-budget": 1,
+      "web-session-e2e": 1,
+      "app-handler-sandbox": 4,
+      "conversation-custody": 4,
+      "conversation-years": 1,
+      "scheduler-no-backfill": 19,
+      "harness-provider-compat": 6,
+      "blueprint-boot": 1,
+      "desktop-real-journey": 13,
+      "desktop-app-open-journey": 6,
+      "web-real-journey": 1,
+      "web-offline-cache": 11,
+      "web-waterfall-budget": 6,
+      "mobile-crash-recovery": 6,
+      "pwa-waterfall-budget": 1,
+      "mobile-pairing-canary": 1,
+      "mobile-real-journey": 3,
+      "mobile-photos-library": 1,
+      "mobile-photos-viewer": 1,
+      "mobile-photos-search": 1,
+      "mobile-photos-select-write": 1,
+      "mobile-native-v0-resilience": 13,
+      "mobile-photos-permissions": 1,
+      "mobile-sharing-reach": 15,
+      "mobile-pending-restart-journey": 4,
+      "tunnel-wire": 10,
+      "tunnel-throughput": 1,
+      "pairing-device-lifecycle": 8,
+      "gateway-journey": 6,
+      "pairing-real-journey": 11,
+      "harness-conversation-journey": 2,
+      "blank-machine-restore": 2,
+      "vault-search": 18,
+      "vault-enrichment": 4,
+      "vault-cross-link": 16,
+      "people-crm": 16,
+      "blueprint-handler-crud": 5,
+      "authz-matrix-smoke": 2,
+      "secret-log-smoke": 3,
+      "manifest-scope-denial-sweep": 4,
+      "manifest-scope-denial-closed-grammar": 10,
+      "manifest-scope-denial-fuzz": 4,
+      "extension-origin-matching": 1,
+      "oauth-worker-fail-closed": 5,
+      "core-accessibility-contract": 4,
+      "blueprint-accessibility-axe": 1,
+      "mobile-native-accessibility-tree": 1,
+      "backup-throughput-budget": 1,
+      "restore-seal-key-verify": 2,
+      "backup-restore-drill": 3,
+      "backup-restore-drill-grading": 8,
+      "cron-clock-adversity": 11,
+      "cron-calendar-boundaries": 12,
+      "renderer-leak-soak": 1,
+      "handler-sandbox-policy": 15,
+      "handler-sandbox-escape": 20,
+      "rust-supply-chain-gate": 15,
+      "rust-unsafe-edge-ratchet": 15,
+      "desktop-update-signature-custody": 29,
+      "desktop-update-signature-gate": 14,
+      "release-supply-chain-attestation": 16,
+      "dependency-behaviour-ratchets": 24,
+      "gateway-support-bundle-redaction": 21,
+      "gateway-anomaly-ledger": 9,
+      "gateway-support-bundle-contract": 12,
+      "diagnostics-leak-canary": 6,
+      "mobile-resource-evidence-law": 9,
+      "mobile-resource-evidence-recompute": 4,
+      "composite-household-load": 1,
+      "stress-to-failure-knee": 1,
+      "long-run-soak": 1,
+      "tunnel-network-chaos": 4,
+      "composition-component-chaos": 3,
+      "app-engine-handler-budget": 1,
+      "app-vault-bridge-authz": 7,
+      "automation-fire-semantics": 11,
+      "recurrence-properties": 14,
+      "enrich-policy-cascade-properties": 16,
+      "automation-fire-budget": 1,
+      "automations-desktop-journey": 14,
+      "harness-turn-budget": 1,
+      "harness-sessions-volume": 1,
+      "blueprint-clones-volume": 1,
+      "desktop-windows-volume": 1,
+      "web-tabs-volume": 1,
+      "tunnel-pairs-volume": 1,
+      "mobile-volume-proof": 1,
+      "photos.scale-50k": 1,
+      "photos.memories-scale-50k": 1,
+      "vault-atlas-census": 6,
+      "vault-schema-ladder": 16,
+      "gateway-serve-core": 18,
+      "app-handler-dispatch": 9,
+      "share-closure-confinement": 5,
+      "share-receipt-authority": 4,
+      "share-outbox-obligation": 4,
+      "gateway-experimental-gate-law": 10,
+      "insights-rollup-law": 22,
+      "mobile-block-parity-law": 11,
+      "web-block-parity": 12,
+      "mobile-places-seat": 20,
+      "mobile-photos-places": 1,
+      "connector-handler-contract": 10,
+      "connector-outbox-artifact": 10,
+      "docs-drive-journey-desktop": 1,
+      "docs-drive-journey-web": 1,
+      "locker-custodian-journey": 1,
+      "locker-viewer-seat-refusal": 1,
+      "web-offline-write-reconnect": 1,
+      "web-offline-pending-row": 1,
+      "household-sharing-journey": 2,
+      "sharing-roster-topology-hiding": 5,
+      "owner-scope-registry-read": 6,
+      "web-accessibility-axe": 2,
+      "desktop-delete-app-journey": 8,
+      "desktop-launch-time": 1,
+      "desktop-pending-overlay": 1,
+      "desktop-settings-gateways": 12,
+      "mobile-cold-start": 1,
+      "mobile-scroll-frames": 1,
+      "connector-handler-contract-graph": 15
+    }
+  }
+}

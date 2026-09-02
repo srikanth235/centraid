@@ -35,10 +35,7 @@
       "reason": "Holds EXPO_TOKEN and store credentials; EAS submits from CI. Its allowlist must include Expo/EAS endpoints. Priority 2."
     },
     "mobile-alarm-test.yml": {
-      "reason": "Quarterly alarm lane (#890 W6): the same Android install surface as mobile-canary.yml, four times a year, on a schedule with no PR trigger at all. Inherits whatever allowlist the device lanes learn; there is nothing distinct about its egress. Priority 4."
-    },
-    "mobile-canary.yml": {
-      "reason": "Per-merge Android device lane (#890 W4). Same install surface as e2e.yml's mobile jobs plus one egress those lanes already make: the pinned Maestro installer from get.maestro.mobile.dev. It runs only on pushes to main, never on a fork PR, so its exposure is strictly narrower than ci.yml's. Harden with the other device lanes, from e2e.yml's learned allowlist plus the Maestro host. Priority 4."
+      "reason": "Weekly alarm lane (#890 W6; raised from quarterly to weekly by #915): the same Android install surface as candidate.yml's mobile-canary-android lane, once a week, on a schedule with no PR trigger at all. Inherits whatever allowlist the device lanes learn; there is nothing distinct about its egress. Priority 4."
     },
     "oauth-worker.yml": {
       "reason": "Holds the Cloudflare deploy token for the Assist OAuth courier — the one worker that brokers user Google tokens. Small workflow, narrow allowlist (Cloudflare API), so it is the cheapest priority-1 win."

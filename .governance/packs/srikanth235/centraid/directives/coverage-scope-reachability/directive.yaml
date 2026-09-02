@@ -7,7 +7,7 @@ summary: |
   contains non-test TypeScript source, plus every executable tree co-located
   OUTSIDE src/ inside a package or app (packages/blueprints/apps,
   packages/model-runtime/automation-handlers, …), must
-  either (a) be covered by a coverage-floors.json glob, (b) own at least one
+  either (a) be covered by a tests/floors.json#coverage glob, (b) own at least one
   tests/matrix.json flow, or (c) be listed in this directive's
   intentional-ungated allowlist. The non-src trees are discovered rather than
   enumerated (#781) and are scored as their own scope ids, because a floor on
@@ -16,7 +16,7 @@ summary: |
   package read as floored. Directory names that are never product runtime
   (scripts, tests, fixtures, build output) are skipped.
 
-  Additionally, every coverage-floors.json glob key must still match the
+  Additionally, every tests/floors.json#coverage glob key must still match the
   vitest coverage include patterns (packages/*/src/**, apps/*/src/**, the
   blueprint app runtime root, and any other floored non-src tree) so a floor
   cannot point at a scope the coverage tool never instruments. A tree that

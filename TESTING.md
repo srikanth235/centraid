@@ -6,7 +6,7 @@ Centraid tests protect important product flows and invariants, not a test-file c
 
 This repo is written almost entirely by agents, and agents fail in predictable ways. They optimize for the green checkmark. They grade their own homework. They cannot see the whole suite, so they duplicate. They have no memory, so prose conventions decay. And the agent that writes the code writes the tests that _confirm_ it rather than tests that try to _falsify_ it.
 
-This is not a hypothesis — the repo's own history demonstrates each mode. A probe sentinel was once left behind in a live assertion. Matrix cells were graded solid on the strength of prose. Owners of "solid" cells could skip themselves. Eight files hand-rolled a vault bootstrap that already existed in the test kit. `tests/quality-rig-budgets.json` drifted to describing 9 of 24 rigs while nothing in the repo actually read it.
+This is not a hypothesis — the repo's own history demonstrates each mode. A probe sentinel was once left behind in a live assertion. Matrix cells were graded solid on the strength of prose. Owners of "solid" cells could skip themselves. Eight files hand-rolled a vault bootstrap that already existed in the test kit. `tests/budgets.json#qualityRigs` drifted to describing 9 of 24 rigs while nothing in the repo actually read it.
 
 Therefore:
 
@@ -22,14 +22,14 @@ Five principles follow, each with a mechanical consequence:
 
 The older working principles still hold and are now consequences rather than assertions: coverage of flows rather than a count of tests; one flow, one home, proven at the cheapest tier that can falsify it; runtime is a budget; duplication is visible; floors ratchet up, never down.
 
-The machine-readable source of product-flow ownership is [`tests/matrix.json`](tests/matrix.json). `bun run test:matrix` verifies its surface/dimension references, owning paths, unique flow ids, and minimum contract sizes — and, since #656, **derives each cell's grade from evidence**. A new test either claims an unowned flow/cell or extends its existing owner.
+The machine-readable source of product-flow ownership is [`tests/claims.json`](tests/claims.json), joined with the mobile roster by `node scripts/test-report/derive-flows.mjs --json`. `bun run test:claims` verifies its vocabulary, its lane registry, every owning path, unique flow ids, and minimum contract sizes. A new test either claims an unowned flow or extends its existing owner.
 
 ## What the machine cannot check
 
 The mechanisms below make dishonesty expensive, not impossible. These judgements have no gate, so this is where human scrutiny concentrates:
 
 - **Whether a law is worth writing.** A registry entry proves a law has exactly one owner. It cannot tell you the law matters. A suite of true, trivial laws passes every gate here.
-- **Whether a skip's reason is honest.** `tests/skips.json` forces every skip to cite an open issue and give a reason. Nothing checks that the reason is the _real_ reason, or that the issue is being worked.
+- **Whether a skip's reason is honest.** `tests/inventory.json#skips` forces every skip to cite an open issue and give a reason. Nothing checks that the reason is the _real_ reason, or that the issue is being worked.
 - **Whether a journey covers what its name claims.** `minimumTests` counts tests; the computed grade checks that they ran. Neither reads the assertions. A journey named "pairing survives a network partition" that never partitions a network is green.
 - **Whether a mutation-killing test asserts a law or an implementation detail.** Both raise the score. Only one survives a refactor.
 - **Whether a deletion was a de-duplication or a loss.** #656 deleted a dozen restatements and _refused_ four more because the surviving owner turned out to be weaker. That call needed reading both tests, and no gate could have made it.
@@ -66,22 +66,29 @@ If you are reviewing agent-authored test work, spend your attention here and let
 
 Decided in [#468](https://github.com/srikanth235/centraid/issues/468); cite [docs/decisions.md](docs/decisions.md).
 
-| Lane | Runs |
-| --- | --- |
-| **Every PR** | Unit, integration, contract — including the **protocol join lane** at its 3-seat floor, which is an ordinary `packages/server` test; matrix validation + **floors ratchet** via `check:pr`; **affected-package vitest** (`turbo run test --filter='[origin/main]'` — changed packages only, not the full dependent graph); **boot-the-artifact smoke** when the `client` filter triggers (includes `packages/server` paths — #496 E7); **path-filtered client e2e** (the `client-e2e` lane of `ci.yml` since #557) |
-| **Path filters (client e2e)** | **Web** e2e when `apps/web`, `packages/client`, or service-worker files change; **desktop** e2e when `apps/desktop` changes. **boot-smoke moved to `verify`** under [#892](https://github.com/srikanth235/centraid/issues/892) — it was 4m38s of build for a ~0s L2 assertion over a dist `verify` already produces, and `verify` is unfiltered, so the check now also runs on PRs that never woke the `client` filter. With boot-smoke gone the lane's caller gates on `web \|\| desktop` rather than the wider `client`, which only ever existed to wake boot-smoke for gateway-only PRs; a `packages/server`-only change was starting a caller whose every job skips. Every top-level path must be claimed by a filter or ledgered, and every read of a filter output must carry the `\|\| …outputs.all == 'true'` fallback (`bun run lint:path-filters`), because `check` counts `skipped` as a pass. |
-| **Nightly** | Full cross-client suites, perf budgets, the **full Android mobile roster** plus the **iOS depth roster** (the claims only iOS carries, never a second copy), pairing journeys, scale, **mutation (Stryker)**, **fuzz (`fuzz-parsers`)**, **protocol join at width (`protocol-join`)** |
-| **Per merge to `main`** | The **mobile canary** — the full Android roster against one commit, so a regression is attributable to it rather than to a night's worth; it also prebuilds the native shell the PR device gate restores from |
-| **Quarterly** | The **mobile alarm test** — the critical five against a build with Home deliberately blanked, which must FAIL. Mutation testing for the E2E layer: a suite that cannot be shown to go red is not evidence. |
-| **Weekly / release opt-in** | Real-weight enrichment goldens: pinned runtime + weights, capability handshake, OCR text, embedding cosine tolerance, face count/geometry, and licence pins. This lane is scheduled, manually dispatchable, and required after model/preprocessing changes; it never joins PR CI. |
+Restructured into the six-rung Quality Ladder by [#915](https://github.com/srikanth235/centraid/issues/915); the **Rung** column is the ladder's number, and each rung asks exactly one question.
 
-**Promotion rule:** if a nightly-only area burns us **twice**, move it to PR-time.
+| Rung | Lane | Runs |
+| --: | --- | --- |
+| 2 | **Every PR** (`ci.yml` `check`, ≤ 15 min p95) | Unit, integration, contract — including the **protocol join lane** at its 3-seat floor, which is an ordinary `packages/server` test; matrix validation + **floors ratchet** via `check:pr`; **affected-package vitest** (`turbo run test --filter='[origin/main]'` — changed packages only, not the full dependent graph); **boot-the-artifact smoke** when the `client` filter triggers (includes `packages/server` paths — #496 E7); **path-filtered client e2e** (the `client-e2e` lane of `ci.yml` since #557) |
+| 2 | **Path filters** | **Web** e2e when `apps/web`, `packages/client`, or service-worker files change; **desktop** e2e when `apps/desktop` changes. **boot-smoke moved to `verify`** under [#892](https://github.com/srikanth235/centraid/issues/892) — it was 4m38s of build for a ~0s L2 assertion over a dist `verify` already produces, and `verify` is unfiltered, so the check now also runs on PRs that never woke the `client` filter. With boot-smoke gone the lane's caller gates on `web \|\| desktop` rather than the wider `client`, which only ever existed to wake boot-smoke for gateway-only PRs; a `packages/server`-only change was starting a caller whose every job skips. Every top-level path must be claimed by a filter or ledgered, and every read of a filter output must carry the `\|\| …outputs.all == 'true'` fallback (`bun run lint:path-filters`), because `check` counts `skipped` as a pass. |
+| 4 | **Nightly** (`e2e.yml`, on the promoted candidate, ≤ 90 min) | Full cross-client suites, perf budgets, the **full Android mobile roster** plus the **iOS depth roster** (the claims only iOS carries, never a second copy), pairing journeys, scale, **mutation (Stryker)**, **fuzz (`fuzz-parsers`)**, **protocol join at width (`protocol-join`)** |
+| 3 | **Per merge to `main`** (`candidate.yml`, ≤ 45 min) | The **promotion lanes**: the rung-3 Android suites (`mobile-canary-android`, which also prebuilds the native shell the PR device gate restores from), `mobile-ios-smoke` (every candidate carries an iOS verdict — the `.app` is a separate artifact), web + desktop Playwright on Linux, `desktop-e2e-macos`, the gateway package smoke, `mutation-full`, CodeQL and the Rust supply chain. On green, `promote` moves `refs/candidates/latest` and publishes `test-report/candidate.json`; on red the pointer stays and each red lane's rolling issue is rewritten |
+| 2 | **New-test burn-in** | Every added or modified `*.test.*` / `*.spec.*` Vitest file in the diff runs **3× in isolation** (`scripts/ci/burn-in.mjs`). Any disagreement between the three is red, not just a failure: the file that passes twice and fails once is the expensive one and the one a single run cannot see. Playwright and Maestro specs are skipped with a printed reason |
+| 5 | **Quarterly** | The **mobile alarm test** — the critical five against a build with Home deliberately blanked, which must FAIL. Mutation testing for the E2E layer: a suite that cannot be shown to go red is not evidence. |
+| 5 | **Weekly / release opt-in** (on the promoted candidate) | Real-weight enrichment goldens: pinned runtime + weights, capability handshake, OCR text, embedding cosine tolerance, face count/geometry, and licence pins. This lane is scheduled, manually dispatchable, and required after model/preprocessing changes; it never joins PR CI. |
+
+**Promotion rule:** if a deeper lane burns us **twice**, move it to PR-time. Since [#915](https://github.com/srikanth235/centraid/issues/915) the burns are counted rather than remembered: `scripts/ci/lane-health.mjs` tallies escapes (a rung ≥ 3 lane red on a SHA whose rung-2 gate was green) and files `[lanes] promote <lane>` on the second in 30 days. The inverse rule is enforced too — a rung-2 lane below 99 % first-attempt pass gets `[lanes] demote <lane>`.
+
+**Every rung 2–5 lane writes evidence.** Each ends with a `Write lane evidence` step calling `scripts/test-report/write-evidence.mjs`, which emits `artifacts/evidence/<lane>.json` with the lane's rung, platform, candidate SHA, verdict, budget and cases. A lane that claims `qualities × surfaces` and writes no evidence renders **no evidence** in every cell it claims — that is what makes absence visible rather than silent.
+
+**Parks are deadlines, not mutes.** [`tests/quarantine.json`](tests/quarantine.json)'s `lanes` block carries an `issue`, an `expires` and a `why` per parked lane. A parked lane still runs and still writes evidence; it renders as **parked** rather than red, is excluded from the nightly verdict, and counts as red again the day its expiry passes. More than three parked lanes, or any park longer than 30 days, is a report-level **HOLD**.
 
 ### Nightly SLA (#496 E3)
 
 Soft SLA (auto-issue, not a hard age gate):
 
-1. A **scheduled** nightly that fails opens or updates a single tracking issue titled `[nightly] e2e lane red — tracking` with the Actions run URL and the report link. The report link is the **immutable dated slot** for that run (`test-report/nightly/runs/<date>-<runId>/`), not the `nightly/` alias — the alias is overwritten the next night, so an issue citing it would silently start describing a different run (#557).
+1. A **scheduled** nightly that fails opens or updates **one rolling issue per red lane**, titled `[nightly] lane red — <lane>` ([#915](https://github.com/srikanth235/centraid/issues/915)). The body is **rewritten in place** every night, never appended to and never re-created, so the issue always states that lane's current condition and closing it means the lane is green. It replaces the single `[nightly] e2e lane red — tracking` issue, thirteen of which were opened and closed as noise: an issue that says "something was red" every night for a month is a cadence, not a signal. The red-lane list comes from `toJSON(needs)` via jq, so a lane added to `needs:` is covered without editing a second list. The report link is the **immutable dated slot** for that run (`test-report/nightly/runs/<date>-<runId>/`), not the `nightly/` alias — the alias is overwritten the next night, so an issue citing it would silently start describing a different run (#557).
 2. **Expected response:** within **24 hours** or before the next scheduled run — triage, fix, or document a temporary waiver in the issue.
 3. A job result of `cancelled` counts as red alongside `failure` (#557): a dead runner is not a pass. The condition reads `needs.*.result` in aggregate, so a job added to `needs:` is covered without editing a second list.
 4. Branch `workflow_dispatch` runs **do not** publish to GitHub Pages (main-only guard on `publish-nightly-report`) so they cannot spuriously red the workflow with a Pages deploy error.
@@ -89,31 +96,61 @@ Soft SLA (auto-issue, not a hard age gate):
 6. Missing nightly HTML is **visible** (error annotation + tracking issue + a failed job), not a silent `::warning` only.
 7. The scheduled `companion` lane in `extension-e2e.yml` and the weekly `backup-interop` lane both file their own tracking issues on the same terms.
 
+### The four ledgers (#915 Wave 4)
+
+Twenty tighten-only JSON ledgers under `tests/` are four, behind one validator — `bun run lint:ledgers` ([`scripts/check-ledgers.mjs`](scripts/check-ledgers.mjs)), a rung-1 contract gate inside the `lint:product` bundle.
+
+| Ledger | Direction | Sections |
+| --- | --- | --- |
+| [`tests/floors.json`](tests/floors.json) | **up-only** | `coverage` (the globs the root Vitest config takes as its v8 thresholds and the constitution's `coverage-scope-reachability` directive reads), `mutation` (Stryker score per seed), `minimumTests` |
+| [`tests/budgets.json`](tests/budgets.json) | **down-only** | `suiteWallClock`, `rungs` (the ladder's p95 budget per rung), `qualityRigs`, `experience`, `designTokenCss`, `mobileSuites` |
+| [`tests/inventory.json`](tests/inventory.json) | **down-only, with an issue and an expiry** | `skips`, `envRed`, `sleeps`, `hygiene`, `commentDensity`, `naCells`, `advisory` |
+| [`tests/quarantine.json`](tests/quarantine.json) | **down-only, with an expiry** | `entries` (flaky tests), `lanes` (parked CI lanes) |
+
+Four rules make the merge safe rather than merely tidier:
+
+1. **The waiver did not merge with the files.** Each section carries its own `approvedDeviation`, and a widen is waived only by a CHANGED note in the section being widened (#781: presence never waives). Before the merge, seven files each scoped their own waiver; one file-level note would have let a reviewed widen of the desktop cold-start ceiling silently waive a coverage-floor drop riding the same PR.
+2. **The rename cannot widen anything.** Every comparison reads the merged file at the merge base first and falls back to the section's pre-merge path (`tests/coverage-floors.json`, `tests/suite-wall-clock.json`, …). Without that fallback every ratchet in the repo would go silent for exactly one commit — the one that did the renaming.
+3. **Two sections are derived mirrors, not second copies.** `floors.minimumTests` mirrors `tests/claims.json#flows[].minimumTests` and `budgets.mobileSuites` mirrors `tests/agent-e2e-mobile/roster.json#suites[].budgetMs`; `lint:ledgers` asserts equality and `node scripts/check-ledgers.mjs --write` refreshes them. The source of each number is still the one document that also holds its context — the flow's surface/dimension/tier, the suite's flows and rung — so nothing is typed twice.
+4. **`budgets.experience` is a reference, not a copy.** The per-surface files under [`tests/experience-budgets/`](tests/experience-budgets/README.md) stay on disk because fifteen tests and probes import them directly; the ledger names them and applies the ratchet, which is what the ledger is for.
+
+Two more things earn their own note. `commentDensity` is 3,600 per-file pins and 44% of all ledger bytes; the bespoke serializer that kept `--write` output passing `format:check` moved into `serializeLedger` and now serves every section, so any scanner's `--write` produces exactly what oxfmt would. And `designTokenCss` is deliberately **empty** — see [docs/traps/design-tokens.md](docs/traps/design-tokens.md); folding it in kept the emptiness, it did not repopulate it.
+
+**Ledgers that are NOT ratchets stay separate files**, because merging a structural contract into a budget file would say something false about it: [`tests/design-grammar-matrix.json`](tests/design-grammar-matrix.json) (a design contract), [`tests/mobile-resource-evidence.json`](tests/mobile-resource-evidence.json) (observations with per-row tolerances), [`tests/diff-coverage-deviation.json`](tests/diff-coverage-deviation.json) (a waiver slot whose whole point is the ABSENCE of a key), [`tests/path-filter-ledger.json`](tests/path-filter-ledger.json) (the CI path-filter inverse register), [`tests/schema-export-fingerprint.json`](tests/schema-export-fingerprint.json) (a sha256 coupling gate, neither up- nor down-only) and [`tests/quality/classification-ratchet.json`](tests/quality/classification-ratchet.json).
+
 ### Floors ratchet (#496 E4, extended #532)
 
-`tests/coverage-floors.json` values, matrix flow `minimumTests`, and `tests/mutation-floors.json` scores **move only upward**. Perf budget files (`apps/web/tests/e2e/perf-budgets.ts`, `packages/server/benchmarks/low-end-budgets.json`) are **tighten-only**: ceilings may drop freely; widening a ceiling or lowering a `min*` floor fails. CI and `bun run test:ratchet` / `check:pr` fail on any decrease/widen unless:
+`tests/floors.json#coverage` values, claims flow `minimumTests`, and `tests/floors.json#mutation` scores **move only upward**. Perf budget files (`apps/web/tests/e2e/perf-budgets.ts`, `packages/server/benchmarks/low-end-budgets.json`) and every `tests/budgets.json` section are **tighten-only**: ceilings may drop freely; widening a ceiling or lowering a `min*` floor fails. CI and `bun run test:ratchet` / `bun run lint:ledgers` / `check:pr` fail on any decrease/widen unless:
 
-- top-level `approvedDeviation` on `coverage-floors.json` or `mutation-floors.json`,
+- the section's own `approvedDeviation` in `tests/floors.json` or `tests/budgets.json` CHANGED in the same change set,
 - per-flow `approvedMinimumTestsDeviation` on the lowered flow, or
 - `approvedDeviation` in the perf budget source when deliberately widening.
 
 ### Computed grades (#656 Layer 2)
 
-A cell's `solid` / `partial` / `gap` is **derived from evidence**, not read from the JSON. `assessment` survives in `tests/matrix.json` only as a _declared expectation that the computation checks_: declaring above the computed ceiling is a hard error, and declaring below it needs a note. An agent may still type `solid` — the gate simply rejects it.
+A cell's `solid` / `partial` / `gap` is **derived from evidence**, not read from the JSON. `assessment` survives in `tests/claims.json` only as a _declared expectation that the computation checks_: declaring above the computed ceiling is a hard error, and declaring below it needs a note. An agent may still type `solid` — the gate simply rejects it.
 
 The ceiling is computed from, in order: the owner exists and declares tests (a zero-test owner is a `gap` at PR time, with no lane run needed); the owner has no inventoried skip site and no default-CI env gate; the cell has a flow with a met `minimumTests`; the declared owner owns one of the cell's flows and no backing file is _oversubscribed_ (the floors it owns exceed the tests it declares — this is what kills "one four-test file owns fifteen cells" as a class); a tier-appropriate adversary exists (a coverage-floor scope for unit/contract/integration, a registered rig budget for perf/scale); mutation score, where a seeded package below `_absoluteWeaknessBelow` can never back a `solid`; and finally fresh run evidence, which can only _lower_ a grade. Absent or stale evidence reports `unknown` — never health.
 
 `solid` is therefore **uncomputable** for a cell whose owner can skip itself, whose flow has no `minimumTests`, or whose package is mutation-weak.
 
+### The weekly hygiene lane (#915)
+
+Seven gates are **hygiene**: tighten-only ratchets over the test suite's own quality rather than over the product. The skip budget, the environment-red inventory, the assertion-hygiene budgets, the fixed-sleep inventory, the comment-density pin, the type floor, and the schema/export fingerprint. They protect the suite from the agents; none of them can prove the phone works, and charging every push for them (10.2 s for comment density alone) bought a latency nobody used. They run in [`.github/workflows/hygiene.yml`](.github/workflows/hygiene.yml) on Saturdays at 05:00 UTC and on `workflow_dispatch`, driven by `bun run hygiene:lane`, and one **rolling** issue (`[hygiene] weekly ratchets red`) is replaced in place on any red.
+
+This is not "enforced by the pre-push hook", which [#782](https://github.com/srikanth235/centraid/issues/782) ruled is enforcement in name only. It is a third tier: CI runs it, against `main`, on a schedule, and files an issue. Nothing depends on a developer's hook, and `test:comment-density` had no CI job at all before this, so weekly is strictly more enforcement than it had. What makes the move safe is that every one of the seven is a **standing** check over the whole tree — a count, an inventory, a fingerprint — never a diff-scoped one, so a weekly run on `main` sees exactly what a per-push run would have seen. The cost is detection latency (push → within 7 days), and nothing else. The classification and the reason for each gate live in [`scripts/ci/gate-classes.json`](scripts/ci/gate-classes.json), enforced by `scripts/ci/gate-classes.test.mjs`; the ruling is in [docs/decisions.md](docs/decisions.md).
+
+Running one by hand is unchanged — `bun run test:sleep-inventory` and friends still work, and `bun run hygiene:lane` runs all seven.
+
 ### Skip budget (#656 Layer 2)
 
-Every `test.skip` / `describe.skipIf` / env gate is inventoried in [`tests/skips.json`](tests/skips.json) with an **open** issue and a reason. An uninventoried skip fails `check:pr`. The total is a **down-only** budget under `bun run test:ratchet`: removing a skip demands you tighten the budget, and adding one is a visible, reviewed edit. Keys are `<path>#<ordinal>`, so line drift is a warning rather than churn.
+Every `test.skip` / `describe.skipIf` / env gate is inventoried in [`tests/inventory.json`](tests/inventory.json)'s `skips` section with an **open** issue, a reason, and an `expires` date. An uninventoried skip fails `bun run test:skip-inventory`, which runs in the weekly [hygiene lane](#the-weekly-hygiene-lane-915); the up-only floors half kept the `test:ratchet` name at rung 1. The total is a **down-only** budget: removing a skip demands you tighten the budget, and adding one is a visible, reviewed edit. Keys are `<path>#<ordinal>`, so line drift is a warning rather than churn.
 
 ### Deterministically-environment-red inventory (#781)
 
 The quarantine owns nondeterministic failures and the skip budget owns declared skips, which left a third class homeless: a test that fails **every** time in a known environment — the wal-shipper `[G4]` chmod fault injection that root ignores, fixed as an instance in #782. Quarantining such a test would exclude it from the required checks everywhere, deleting live coverage on every environment where it is green to silence the one where it is red; leaving it naked makes a lane untrustworthy for whoever runs in the red environment.
 
-The mechanism is a hybrid. The test **must carry an env guard** — `skipIf(predicate)` or a runtime `t.skip` — so it is honest at runtime everywhere (the guard also lands it in the skip budget), and the guard must be inventoried in [`tests/env-red.json`](tests/env-red.json) with the guarded test's title, the human-readable environment predicate, the guard mechanism (`skipIf`, `runtime-skip`, `reduced-assertion`, or `hard-fail`), an **open** tracking issue, and an `expiresAt` date or a `revisitTrigger` sentence. `bun run test:env-red` (in `check:push` and the CI `gates` job) discovers the population by scanning the same globs as the skip inventory for environment-predicate comparisons (`process.platform`, `process.arch`, `process.getuid`/`geteuid`) and fails on an uninventoried guard, a stale entry, a vanished test title, a declared guard the file does not contain, a closed or missing issue, an expired entry, and any drift from the **down-only** `_budget` — the only way to shrink the file is the #782 move: rewrite the test so the environment stops mattering (there, a path-shape fault no uid can bypass replaced a permission bit root ignores). Keys are `<path>#<ordinal>`; `--write` refreshes lines and stubs new sites undocumented so it cannot launder a new hole.
+The mechanism is a hybrid. The test **must carry an env guard** — `skipIf(predicate)` or a runtime `t.skip` — so it is honest at runtime everywhere (the guard also lands it in the skip budget), and the guard must be inventoried in [`tests/inventory.json`](tests/inventory.json)'s `envRed` section with the guarded test's title, the human-readable environment predicate, the guard mechanism (`skipIf`, `runtime-skip`, `reduced-assertion`, or `hard-fail`), an **open** tracking issue, and an `expiresAt` date or a `revisitTrigger` sentence. `bun run test:env-red` (in the weekly [hygiene lane](#the-weekly-hygiene-lane-915)) discovers the population by scanning the same globs as the skip inventory for environment-predicate comparisons (`process.platform`, `process.arch`, `process.getuid`/`geteuid`) and fails on an uninventoried guard, a stale entry, a vanished test title, a declared guard the file does not contain, a closed or missing issue, an expired entry, and any drift from the **down-only** `_budget` — the only way to shrink the file is the #782 move: rewrite the test so the environment stops mattering (there, a path-shape fault no uid can bypass replaced a permission bit root ignores). Keys are `<path>#<ordinal>`; `--write` refreshes lines and stubs new sites undocumented so it cannot launder a new hole.
 
 What no static scan can find is the _unguarded_ instance — G4's chmod named no platform or uid. The contract is therefore about the response: the moment a deterministic environment red is diagnosed, it is either rewritten environment-independent or guarded, and a guard cannot land uninventoried.
 
@@ -137,15 +174,15 @@ An opt-in environment gate is not itself a defect: it is honest only when its re
 | PWA waterfall perf evidence | Nightly `web-e2e` runs `bun run e2e` in `apps/web` and publishes `nightly-evidence-web`; `quality-performance-scale` restores it and runs `bun run test:perf` |
 | native tunnel load perf evidence | `quality-performance-scale` runs `bun run build` to produce the host module, then `bun run test:perf`; the inverse absent-module assertion owns environments without a built native |
 
-The missing rigs remain explicit #790 blockers. Do not delete or narrow their `tests/skips.json` / `tests/env-red.json` entries merely to close the tracker; an entry shrinks only when the named rig actually runs the law or a current decision retires the claim.
+The missing rigs remain explicit #790 blockers. Do not delete or narrow their `tests/inventory.json#skips` / `#envRed` entries merely to close the tracker; an entry shrinks only when the named rig actually runs the law or a current decision retires the claim.
 
 ### Assertion-hygiene ratchet (#781)
 
-Two matcher families are weak enough to erode a suite from the inside, and neither is wrong in isolation, so no lint rule can ban them: `toBeTruthy()` / `toBeFalsy()` accept `1`, `'x'`, `[]`, `{}` where the house style asserts an exact `toBe(true)`, and a bare `toHaveBeenCalled()` proves a call happened without proving it was the right one. [`tests/hygiene-budgets.json`](tests/hygiene-budgets.json) makes their totals **down-only** budgets under `bun run test:hygiene-ratchet`, the same shape as the skip budget: a slice may not add sites without a reviewed edit, and slack is a hard failure so the ceiling cannot drift upward by neglect. `--write` reconciles budgets with `Math.min(previous, measured)`, so the escape hatch can only lower a number, never launder a regression.
+Two matcher families are weak enough to erode a suite from the inside, and neither is wrong in isolation, so no lint rule can ban them: `toBeTruthy()` / `toBeFalsy()` accept `1`, `'x'`, `[]`, `{}` where the house style asserts an exact `toBe(true)`, and a bare `toHaveBeenCalled()` proves a call happened without proving it was the right one. [`tests/inventory.json`](tests/inventory.json)'s `hygiene` section makes their totals **down-only** budgets under `bun run test:hygiene-ratchet`, the same shape as the skip budget: a slice may not add sites without a reviewed edit, and slack is a hard failure so the ceiling cannot drift upward by neglect. `--write` reconciles budgets with `Math.min(previous, measured)`, so the escape hatch can only lower a number, never launder a regression.
 
 ### Fixed-sleep ratchet (#781)
 
-A fixed sleep — `await new Promise((r) => setTimeout(r, 50))`, a `setTimeout as sleep` alias, a local `delay(20)` helper — bets that the awaited work finishes inside the literal, and pays for that bet in flake on a loaded runner and in wall clock everywhere else. [`tests/sleep-inventory.json`](tests/sleep-inventory.json) inventories every site by file with a **down-only** `_budget` under `bun run test:sleep-inventory`, the same shape as the skip budget: an uninventoried sleep or a file that grew fails with the remedy (`useFakeClock()` + `clock.advance()`, an event-driven wait such as `vi.waitFor` or a deferred the test resolves, or an outcome poll), and a total under budget fails until the ceiling is ratcheted down (`--write` reconciles and can only lower it).
+A fixed sleep — `await new Promise((r) => setTimeout(r, 50))`, a `setTimeout as sleep` alias, a local `delay(20)` helper — bets that the awaited work finishes inside the literal, and pays for that bet in flake on a loaded runner and in wall clock everywhere else. [`tests/inventory.json`](tests/inventory.json)'s `sleeps` section inventories every site by file with a **down-only** `_budget` under `bun run test:sleep-inventory`, the same shape as the skip budget: an uninventoried sleep or a file that grew fails with the remedy (`useFakeClock()` + `clock.advance()`, an event-driven wait such as `vi.waitFor` or a deferred the test resolves, or an outcome poll), and a total under budget fails until the ceiling is ratcheted down (`--write` reconciles and can only lower it).
 
 Three shapes are deliberately **not** counted: 0ms yields (`flushMacrotasks()` and friends wait on the queue, not the clock), non-literal delays (`setTimeout(r, timeoutMs)` is configurable, not hard-coded), and rejecting deadlines (`setTimeout(() => reject(new Error(…)), 10_000)` — a watchdog is the upper bound on an event-driven wait, which is the remedy, not the defect). `scripts/test-report/**` is excluded as the detector's own fixtures; `packages/test-kit/**` is excluded because the kit's seam tests schedule literal timers under `useFakeClock()` to prove the fake clock runs them.
 
@@ -153,7 +190,7 @@ Negated bare `.not.toHaveBeenCalled()` is **exempt** — asserting a call did _n
 
 ### Law registry (#656 Layer 4)
 
-A named product law carries a machine-readable tag in its test title — `test("[law:backup-no-change] …")` — and is registered under `laws` in `tests/matrix.json` with a statement and its owning file. `bun run lint:law-registry` fails when a tag appears in more than one file (this is "one flow, one home" enforced at write time, which is what makes de-duplication _stick_), when a registered law has no tagged test, or when a tag names no registered law.
+A named product law carries a machine-readable tag in its test title — `test("[law:backup-no-change] …")` — and is registered under `laws` in `tests/claims.json` with a statement and its owning file. `bun run lint:law-registry` fails when a tag appears in more than one file (this is "one flow, one home" enforced at write time, which is what makes de-duplication _stick_), when a registered law has no tagged test, or when a tag names no registered law.
 
 ### Flake quarantine (#656 Layer 5)
 
@@ -163,11 +200,15 @@ On expiry it either returns fixed or is deleted with a receipt. `bun run test:qu
 
 ### Suite wall-clock ratchet (#656 Layer 5)
 
-Every other gate here pushes one way — more tests, higher floors — so the cheapest way for an agent to look thorough was to flood the suite, and the bill arrived as PR latency nobody owned. [`tests/suite-wall-clock.json`](tests/suite-wall-clock.json) is the backpressure: the PR lane's total wall clock is a **tighten-only** ceiling, ratcheted like a perf budget. Adding tests means making something else faster, or widening the ceiling in a reviewed edit that records what the extra time buys. Current `pr-vitest` ceiling is **2,321,000 ms**, reseeded [#850](https://github.com/srikanth235/centraid/issues/850) from CI verify run 32567610776 after [#839](https://github.com/srikanth235/centraid/issues/839)/[#842](https://github.com/srikanth235/centraid/issues/842) merged (1,332 files, 2,018.1 s measured, 15% headroom). The 2026-07-31 seed was 849 files / 1,408.3 s / 1,620,000 ms.
+Every other gate here pushes one way — more tests, higher floors — so the cheapest way for an agent to look thorough was to flood the suite, and the bill arrived as PR latency nobody owned. [`tests/budgets.json`](tests/budgets.json)'s `suiteWallClock` section is the backpressure: the PR lane's total wall clock is a **tighten-only** ceiling, ratcheted like a perf budget. Adding tests means making something else faster, or widening the ceiling in a reviewed edit that records what the extra time buys. Current `pr-vitest` ceiling is **2,867,000 ms**, reseeded 2026-08-29 under [#883](https://github.com/srikanth235/centraid/issues/883) from CI verify (1,487 files, 2,492.7 s measured, 15% headroom). The prior seed was [#850](https://github.com/srikanth235/centraid/issues/850)'s 1,332 files / 2,018.1 s / 2,321,000 ms; before that, 2026-07-31, 849 files / 1,408.3 s / 1,620,000 ms.
+
+A **second lane, `pr-gate`, with a different metric and the same tighten-only rule**, was added by [#915](https://github.com/srikanth235/centraid/issues/915): the rung-2 gate's ELAPSED wall clock — `max(completed_at) − min(started_at)` across `check`'s `needs:` jobs, read from the Actions API by `scripts/ci/pr-gate-wall-clock.mjs` inside the `check` job (which therefore holds `actions: read`). The budget is **900,000 ms (15 min)**, the ladder's rung-2 price of a merge. It is the span a person waits, not a sum: summing the lanes would punish the parallelism that makes the gate fast. Over budget, the fix is to move a lane to rung 3 or make it faster — both numbers are ratcheted by `scripts/test-report/ratchet-floors.mjs`, which fails any widen without a changed `approvedDeviation`.
+
+**`lanes["pr-gate"]` is the JOB SPAN, not the device suite of the same name.** The `pr-gate` Maestro suite's own 480,000 ms ceiling lives in [`tests/agent-e2e-mobile/roster.json`](tests/agent-e2e-mobile/roster.json) and fails one lane; this 900,000 ms figure is the rung-2 budget for the whole required check, across every job in `check`'s `needs:`. They share a name because they answer to the same rung, and they must not be reconciled into one number: the suite ceiling would leave fourteen other lanes unpriced, and the job span would let a device suite triple while the gate still fit.
 
 It measures the sum of per-file durations from the vitest JSON report rather than the run's elapsed time, because elapsed time varies with host load and concurrency while the sum is the work the suite actually asked for. With no report present it prints "not measured" and exits 0 — a budget that could not be measured must never read as a budget that was met.
 
-The lane that enforces it is CI **`coverage`** — the merge half of the [#892](https://github.com/srikanth235/centraid/issues/892) split — in the step immediately after `bun run coverage:merge` writes `artifacts/test-results/vitest.json`; `check:full` runs it at the same point locally. The ceiling sums PER-FILE durations rather than the run's elapsed time, so sharding the lane four ways does not move it: it still prices the work the suite asks for, which is the thing an added test increases. That step asserts the report exists before invoking the gate, because the "not measured" exit-0 above is right on a laptop and wrong in the lane that enforces the ceiling — a missing report there means the wiring rotted, not that the suite met its budget.
+The lane that enforces it is CI **`verify`** — the single-job, unsharded half of the [#892](https://github.com/srikanth235/centraid/issues/892) split — in the `Suite wall-clock ceiling` step. It must be scored **only** there: the metric is NOT shard-invariant. Every file's span stretches when workers timeshare a slow runner, so the four-way sharded `coverage` lane reads ~3,824 s for the same 1,508 files that measure ~2,370 s uninstrumented on one host ([#905](https://github.com/srikanth235/centraid/issues/905)). That step asserts the report exists before invoking the gate, because the "not measured" exit-0 above is right on a laptop and wrong in the lane that enforces the ceiling — a missing report there means the wiring rotted, not that the suite met its budget.
 
 ### Collection-error tripwire (#842 W0.3)
 
@@ -183,7 +224,7 @@ Scheduling is `chaosSchedule(catalog, seed, {mode})`. `cover` is a seeded Fisher
 
 ### Long-run soak and load rigs (#842 W3.4, W4)
 
-`tests/scale/{composite-load,stress-to-failure,long-run-soak}.scale.test.ts` are nightly-only (`tests/scale` is never in the PR lane). They live there rather than anywhere else on purpose: `validate-nightly-wiring.mjs` walks only `tests/perf` and `tests/scale`, and for every file it finds there it _forces_ a `tests/quality-rig-budgets.json` entry, bans inline `const BUDGET_MS`, and requires the rig to read its own drift history. A rig placed elsewhere gets none of that and could land unbudgeted.
+`tests/scale/{composite-load,stress-to-failure,long-run-soak}.scale.test.ts` are nightly-only (`tests/scale` is never in the PR lane). They live there rather than anywhere else on purpose: `validate-nightly-wiring.mjs` walks only `tests/perf` and `tests/scale`, and for every file it finds there it _forces_ a `tests/budgets.json#qualityRigs` entry, bans inline `const BUDGET_MS`, and requires the rig to read its own drift history. A rig placed elsewhere gets none of that and could land unbudgeted.
 
 The soak is **not** an env-gated skip. `CENTRAID_SOAK_MINUTES` defaults to `0.75`, so the rig always runs and always gates its always-true invariants; only the _growth_ ceilings assert at `>= declaredSoakMinutes`. That split is not a convenience — at 45 seconds the per-cycle RSS slope reads ~58× higher than it does over ten minutes, because warm-up has not amortized, so a growth ceiling asserted at the nightly duration would be measuring start-up. `declaredSoakMinutes` is 10 because ten minutes is the longest run the ceilings were derived from; `soak-weekly.yml` runs the same file at 240 minutes to turn them into a distribution.
 
@@ -195,7 +236,7 @@ The kit path is enforced, not merely recommended. In test files, oxlint bans raw
 
 ### Skipped-gate honesty + partial → solid (#496 B2/B3)
 
-- Env-gated **cell or flow owners** (`CENTRAID_*`, `CLAWGNITION_*`, whole-file `describe.skipIf` / early `t.skip`) cannot keep a `solid` or `partial` assessment — `bun run test:matrix` fails until the gate is removed or the assessment is demoted.
+- Env-gated **cell or flow owners** (`CENTRAID_*`, `CLAWGNITION_*`, whole-file `describe.skipIf` / early `t.skip`) cannot keep a `solid` or `partial` assessment — `bun run test:claims` fails until the gate is removed or the assessment is demoted.
 - Closing a QUALITY / matrix note item **must** promote the assessment and delete/update the note. `partial` is temporary evidence, not permanent furniture.
 
 ### Confidence map (#496 J1)
@@ -218,7 +259,7 @@ Playwright alone owns desktop and web regression journeys. The mobile journey la
 Since [#890](https://github.com/srikanth235/centraid/issues/890) the mobile layer holds six properties the rest of this document assumes:
 
 1. **CI drives the release artifact.** Every scheduled lane installs a Release-configuration build with the Hermes bundle embedded — no Metro, no dev launcher, no bundle prewarm. The dev client is the _local exploratory_ rig. `validate-nightly-wiring.mjs` refuses a lane that starts Metro or builds iOS without `--configuration Release`, and it discovers mobile lanes rather than listing them so a new lane cannot join unpinned.
-2. **Device signal lands before merge.** `mobile-device-gate` in `ci.yml` runs the critical five on Android as two parallel emulator legs, each within twelve minutes warm; `mobile-canary.yml` runs the full roster per merge; `e2e.yml` owns nightly depth. Android gates PRs per D1 in [docs/decisions.md](docs/decisions.md#mobile-testing-890).
+2. **Device signal lands before merge.** `mobile-device-gate` in `ci.yml` runs the `pr-gate` suite on Android as ONE emulator leg within eight minutes warm; `candidate.yml` runs `mobile-canary-android` (the rung-3 Android suites) and `mobile-ios-smoke` per merge to `main`; `e2e.yml` owns nightly depth. Android gates PRs per D1 in [docs/decisions.md](docs/decisions.md#mobile-testing-890).
 3. **Four linters make a green run unfakeable.** `lint:e2e-wiring` (a flow the ledger claims and no lane runs is a hard failure), `lint:mobile-testids` (every id a flow references exists in the app source), `lint:seat-verbs` (every act only a phone can perform has a journey or a dated gap), and `lint:app-conformance` (the five tables that decide whether a launcher tile reaches a screen agree with `apps/mobile/app-conformance.json`, in both directions). Each carries a self-test and silent-no-op guards.
 4. **The roster shrinks rather than fans out.** State variety moved down to the boot-condition tier; the device proves the native wiring once.
 5. **Every app is covered identically, by manifest.** `apps/mobile/app-conformance.json` is the shell↔app contract's one source of truth, read by the RNTL sweep in `apps/mobile/src/screens/Home.test.tsx`, by `lint:app-conformance`, and by the Maestro `.mjs` runners. Registering an app with no launcher route, no switch arm or no tile handle fails on the per-PR loop, in the PR that registers it — no per-app authoring, and no roster to remember to extend (E-conformance-manifest in [docs/decisions.md](docs/decisions.md#mobile-testing-890), [#905](https://github.com/srikanth235/centraid/issues/905)).
@@ -245,7 +286,7 @@ When an app graduates beyond sample data, its current design record and matrix e
 - a `*-model.ts` beside each view for pure product arithmetic;
 - one cheapest falsifying layer per scenario: `U`, `C`, or `E` (`U + E` only when the assertions differ);
 - a handler contract for every vault-facing action, including refusal, receipt/postcondition, and partial-batch behavior;
-- structurally impossible engine/app combinations as `skip` in `tests/matrix.json#appEngines`, with a seat-doctrine citation;
+- structurally impossible engine/app combinations as `skip` in `tests/claims.json#appEngines`, with a seat-doctrine citation;
 - one north-star journey and tighten-only budget per byte-bearing app/platform, or the shared replica journey for record-only apps;
 - the seeded `@centraid/test-kit/year3-vault` profile, destructive-flow reseed order, app path filter, and a measured app coverage floor.
 
@@ -259,7 +300,7 @@ The smallest reusable record is:
 
 Every vault action records its happy-path postcondition, refusal/partial-failure behavior, and owning contract file. Every structural exclusion records why the engine is impossible and cites `docs/blueprint-seats.md#engine-contracts`. The shared profile is paid for once per platform; a byte-bearing app's journey owns its budget and PR filter.
 
-The reusable table shape is [docs/app-scenario-layer-template.md](docs/app-scenario-layer-template.md); per-app instances live in `docs/apps/` and are promoted into `tests/matrix.json#appScenarios` (Docs: [docs/apps/docs-scenarios.md](docs/apps/docs-scenarios.md); Photos: [docs/apps/photos-scenarios.md](docs/apps/photos-scenarios.md); Notes, Tasks, Agenda, People, Locker, Tally: the matching `docs/apps/<app>-scenarios.md`). The nightly report renders that ledger as §3b.
+The reusable table shape is [docs/app-scenario-layer-template.md](docs/app-scenario-layer-template.md); per-app instances live in `docs/apps/` and are promoted into `tests/claims.json#appScenarios` (Docs: [docs/apps/docs-scenarios.md](docs/apps/docs-scenarios.md); Photos: [docs/apps/photos-scenarios.md](docs/apps/photos-scenarios.md); Notes, Tasks, Agenda, People, Locker, Tally: the matching `docs/apps/<app>-scenarios.md`). The nightly report renders that ledger as §3b.
 
 ### Photos native renderer contract (#716)
 
@@ -291,11 +332,51 @@ The five Photos device journeys use one gateway and paired profile and target **
 
 ### Home-app device journeys (#839)
 
-The seven non-Photos home seats have one Maestro suite, [`tests/agent-e2e-mobile/run-home-apps-suite.mjs`](tests/agent-e2e-mobile/run-home-apps-suite.mjs): `docs-drive`, `agenda-week`, `notes-library`, `tasks-board`, `people-roster`, `tally-derived`, `locker-gate`. Its shape is the Photos suite's — the Docs journey pairs fresh, the remaining four run under `MAESTRO_REUSE_PAIRED_STATE=1` against that paired profile, and every journey writes an independent verdict even after an earlier failure, so a mid-run failure cannot grey the later cells. Tally's journey landed under [#873](https://github.com/srikanth235/centraid/issues/873); the [#831](https://github.com/srikanth235/centraid/issues/831) hold that once excluded it is over.
+The seven non-Photos home seats have one Maestro suite, `home-apps` in [`tests/agent-e2e-mobile/roster.json`](tests/agent-e2e-mobile/roster.json): `docs-drive`, `agenda-week`, `notes-library`, `tasks-board`, `people-roster`, `tally-derived`, `locker-gate`. Its shape is the Photos suite's — the Docs journey pairs fresh, the remaining four run under `MAESTRO_REUSE_PAIRED_STATE=1` against that paired profile, and every journey writes an independent verdict even after an earlier failure, so a mid-run failure cannot grey the later cells. Tally's journey landed under [#873](https://github.com/srikanth235/centraid/issues/873); the [#831](https://github.com/srikanth235/centraid/issues/831) hold that once excluded it is over.
 
 Each flow owns a claim the device is the only layer that can falsify — a React Navigation pop that a push would also render, two replica reads joined on the phone, a withheld Locker count that survives a real process restart — and the roster's per-flow assertions are the `tests/agent-e2e-mobile/README.md` device-only claims table.
 
 The aggregate ceiling is twelve minutes across the seven, in [`flows/home-apps-budget.md`](tests/agent-e2e-mobile/flows/home-apps-budget.md), and it is a **first-land ceiling derived from the Photos suite's measured neighbour, not an observed distribution** — nothing in this suite has run on a device yet. The first nightly runs are what turn it into a measured budget: once three real runs exist the ceiling is re-derived from the observed p95 and **tightened**, under the tighten-only rule every other budget file follows. A budget nothing has ever approached is not a budget.
+
+### The mobile roster and its rungs (#915 Wave 2)
+
+**One document, one runner.** [`tests/agent-e2e-mobile/roster.json`](tests/agent-e2e-mobile/roster.json) is the single source for the device layer, and [`tests/agent-e2e-mobile/lib/roster.mjs`](tests/agent-e2e-mobile/lib/roster.mjs) is its only reader:
+
+- `suites` — the ordered member list, the aggregate `budgetMs`, the `rungs`, the `platform`, the canary/reuse rules and the budget doc.
+- `flows` — the claim, the `status` (`scheduled` / `promoting` / `exploratory`), the suites it belongs to and a per-journey marginal `budgetMs`.
+- `lanes` — the workflow, the job id, the `rung` and whether the lane blocks.
+
+One runner reads it:
+
+```sh
+node tests/agent-e2e-mobile/run-roster.mjs --rung <2|3|4|5> --platform <android|ios> [--suite <id>] [--dry-run]
+```
+
+It replaced seven `run-*-suite.mjs` files whose `const FLOWS` and `const BUDGET_MS` literals `lint:e2e-wiring`, `check:mobile-suite-budgets` and the report each parsed off disk in their own dialect, and none of which carried a rung. The six one-line shims that bridged the swap are gone with the last workflow that spelled their paths, so `run-roster.mjs` is the only runner on disk.
+
+**The flags are the wiring, not a convenience.** `lint:e2e-wiring` derives what each lane schedules by reading the invocation the shipped workflow or shell script contains and resolving it through the roster. A runner selected by an environment variable would make every lane look identical to the gate whose whole job is telling a blocking lane from a nightly one — which is also why there is still one committed shell script per lane shape.
+
+| Rung | Android | iOS | Warm budget |
+| --- | --- | --- | --- |
+| 2 merge (`ci.yml` `mobile-device-gate`) | `pr-gate` — `pairing-canary`, `notes-library`, `cold-start` | **none** (a #915 non-goal) | 8 min |
+| 3 candidate (`candidate.yml`) | `resilience`, `home-apps` | `ios-smoke` — `pairing-canary`, `cold-start`, `notes-library` | 12 + 12 / 10 min |
+| 4 nightly (`e2e.yml`) | `probes-suite`, `photos`, `home-apps`, `sharing`, `promoting-suite` | `ios-depth` | 35 / 8 / 12 / 5 / 16 / 25 min |
+
+`sharing` is new only as a _suite_: `sharing-reach` already ran, as a bare `node …/flows/sharing-reach.mjs` line with no ceiling — the one journey on the roster nothing priced.
+
+**Two ceilings, and they measure different things.** A suite's `budgetMs` is the aggregate wall clock `lib/run-suite.mjs` enforces as a deadline and prices the pairings the suite pays; a flow's `budgetMs` is its marginal cost with no fresh pairing in it. A suite's members may therefore sum past the suite's own number, and `validateRoster` refuses only a member that cannot fit its suite at all. Both are TIGHTEN-ONLY: `check:mobile-suite-budgets` reads the merge base's roster, then any suite named by `supersedes`, then the retired runner literal, so a ceiling cannot be laundered by moving it or renaming it. The p95-slack rule is unchanged and still dormant — `ledger/durations.json` holds zero records.
+
+### The iOS shell cache (#915 Wave 2)
+
+`mobile-ios-smoke` and `mobile-e2e-ios` restore a built `Centraid.app` keyed on the **native** fingerprint alone (`ios-shell-<os>-xc<toolchain>-fp<native>` — no `js` component), and [`apps/mobile/scripts/ios-simulator-install.sh`](apps/mobile/scripts/ios-simulator-install.sh) makes the JavaScript current instead of rebuilding: it re-exports this SHA's bundle into the banked `.app`, the "pay packaging, not compilation" path Android has used since [#905](https://github.com/srikanth235/centraid/issues/905). On a JS-only commit that is ~32 minutes of a 51-minute macOS job.
+
+The injection runs **both** commands the Xcode build phase runs — `expo export:embed` and then `hermesc -emit-binary` — because `export:embed` emits plain JavaScript by design and Hermes will run it without complaint, which would leave every `cold-start` and `scroll-frames` number describing an engine path nobody ships. `hermesc` is banked beside the `.app` under the same key, and the injected bundle is asserted to carry the Hermes magic `0xC61FBC03`. Read [docs/traps/ios-shell-injection.md](docs/traps/ios-shell-injection.md) before touching any of it. The branch itself is `apps/mobile/scripts/ios-shell-cache.mjs`, with a unit suite: a wrong rebuild costs minutes, a wrong reuse reports green over another commit's JavaScript.
+
+### A journey waits for the launcher, not for the band (#870)
+
+`HOME_READY_MARKER` is the Home band's accessibility label, and the band renders over `DayOne` as well as over the launcher grid. A flow that waits only for it walks into an empty-vault Home and then fails on its own tile selector — which is exactly what the 2026-09-01 nightly reported twelve times: `Element not found: Open <App>`, naming the app, while the app was correct and the demo corpus had simply arrived after the phone cloned. `AWAIT_LAUNCHER` waits for `home-grid`, which `LauncherGrid` alone publishes, and `lint:e2e-flows`'s RULE `launcher-await` now requires it in every chunk that reaches a launcher tile. Flows that deliberately face an empty vault mark the chunk `# e2e-lint-allow: launcher-await — <reason>`.
+
+A journey whose own script throws is a third failure class, `harness`: never retried, and stated as a defect in the flow rather than in the product.
 
 ## Five testing layers for the app axis (#725)
 
@@ -303,7 +384,7 @@ Eight apps do not imply eight copies of their shared machinery. The strategy mir
 
 ### Layer 1 — engine law
 
-Placement, custody, consent, triage, search, and enrichment each have one canonical matrix flow and named `[law:…]` ownership. Pure surfaces use property or contract tests and qualifying packages carry mutation seeds. An app joins an engine by passing its cell in `tests/matrix.json#appEngines`; it does not restate that engine's behavior in an app-local suite. Every pass cell points to the canonical conformance gate. Every structural non-applicability is a `skip` with a reason and the [seat-doctrine contract](docs/blueprint-seats.md#engine-contracts) citation, never a gap disguised as health.
+Placement, custody, consent, triage, search, and enrichment each have one canonical matrix flow and named `[law:…]` ownership. Pure surfaces use property or contract tests and qualifying packages carry mutation seeds. An app joins an engine by passing its cell in `tests/claims.json#appEngines`; it does not restate that engine's behavior in an app-local suite. Every pass cell points to the canonical conformance gate. Every structural non-applicability is a `skip` with a reason and the [seat-doctrine contract](docs/blueprint-seats.md#engine-contracts) citation, never a gap disguised as health.
 
 The recognition boundary law is especially strict: blueprint apps enqueue consent-scoped `enrich_request` rows and read vault projections, while bundled recognition automations alone own local model execution. The conformance gate scans web, native, and automation source for direct provider SDKs, obsolete service clients/endpoints, and generic `ctx.infer` / `ctx.enrich` calls.
 
@@ -328,7 +409,7 @@ The weekly artifact has its own **eight-day freshness window** in the health rep
 
 ### Layer 4 — cost discipline
 
-Per-app journey budgets are tighten-only and sit beside the flows they own, so an overrun has an addressable app owner. Pairing/import/seeding is paid once per platform through the shared profile. Exclusive-state flows run first and restore the deterministic seed for the remaining apps. PR-time path filtering runs an app's journey only when its app surface changes. Parallelism is by SUITE, not by dynamic shard: `run-probes-suite`, `run-photos-suite`, `run-home-apps-suite` and the standalone `sharing-invite` are four committed units with declared budgets, and their partition is statically readable by `lint:e2e-wiring`. A shard list computed at dispatch time would be faster to bin-pack and would make the schedule underivable by the very linter that exists to prove a flow is scheduled, which is the wrong trade. Re-cut the partition from the observed p95 in `tests/agent-e2e-mobile/ledger/durations.json` once it holds three real runs.
+Per-app journey budgets are tighten-only and sit beside the flows they own, so an overrun has an addressable app owner. Pairing/import/seeding is paid once per platform through the shared profile. Exclusive-state flows run first and restore the deterministic seed for the remaining apps. PR-time path filtering runs an app's journey only when its app surface changes. Parallelism is by SUITE, not by dynamic shard: `probes-suite`, `photos`, `home-apps`, `sharing` and `promoting-suite` are declared units with declared budgets in [`roster.json`](tests/agent-e2e-mobile/roster.json), and their partition is statically readable by `lint:e2e-wiring` through `tests/agent-e2e-mobile/lib/roster.mjs`. A shard list computed at dispatch time would be faster to bin-pack and would make the schedule underivable by the very linter that exists to prove a flow is scheduled, which is the wrong trade. Re-cut the partition from the observed p95 in `tests/agent-e2e-mobile/ledger/durations.json` once it holds three real runs.
 
 ### Layer 5 — honest floors per app
 
@@ -344,7 +425,7 @@ Timeouts come in two tiers. Node projects — the `node:sqlite` ones, which boot
 
 The deeply gated engine is vault, client replica, gateway, app-engine, automation, backup, blueprints (including its co-located app sources), design (tokens + the kit runtime), agent-runtime, plus pure libraries tunnel, protocol, and cli. Renderer screens and mobile UI are covered by extracted logic plus journeys, not by a whole-surface line percentage. `packages/client/src/replica/**` is gated independently from `packages/client/src/react/**` for that reason — and since [#839](https://github.com/srikanth235/centraid/issues/839) the same split is made inside `apps/mobile`, where the extracted logic (`src/lib/**`, the `*-model.ts` view models) is floored while the screens around it are not. "Mobile has no coverage floor" was true until then; what remains true is that no floor covers a mobile screen.
 
-Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and are consumed directly by the root Vitest config — that file, not this table, is the enforced contract. Floors are a conservative integer margin below the measured `bun run coverage` run that seeded them; most were seeded by the 2026-08-08 run (1,065 files / 11,719 tests **as of that run** — the suite has grown since, so treat the counts as the measurement's provenance, not a current census). A row whose floor was re-seeded by a later issue carries that issue's measurement instead, and says so.
+Floors live in [`tests/floors.json`](tests/floors.json)'s `coverage` section and are consumed directly by the root Vitest config — that file, not this table, is the enforced contract. Floors are a conservative integer margin below the measured `bun run coverage` run that seeded them; most were seeded by the 2026-08-08 run (1,065 files / 11,719 tests **as of that run** — the suite has grown since, so treat the counts as the measurement's provenance, not a current census). A row whose floor was re-seeded by a later issue carries that issue's measurement instead, and says so.
 
 | Scope | Measured lines / branches | Floor lines / branches |
 | --- | --- | --- |
@@ -376,9 +457,9 @@ Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and ar
 | `apps/desktop/src/main/*-core.ts` | — / — | **96** / **89** |
 | `apps/oauth-worker/src/**` | 90.65 / 84.23 | **88** / **82** |
 
-Three rows read `—` rather than a number because the measurement that seeded them is not recorded in `tests/coverage-floors.json`; the floor is still enforced, and the next `bun run coverage` that touches those scopes is what fills the column in. `packages/vault` and the former-gateway scopes under `packages/server/src` carry the [#638](https://github.com/srikanth235/centraid/issues/638) re-seed (the #630 vault expansion diluted the older 88/80 seeds) and `packages/design/src` the [#709](https://github.com/srikanth235/centraid/issues/709) re-seed measured on CI verify run 30901194404; those provenance notes live in the JSON's `approvedDeviation`.
+Three rows read `—` rather than a number because the measurement that seeded them is not recorded in `tests/floors.json#coverage`; the floor is still enforced, and the next `bun run coverage` that touches those scopes is what fills the column in. `packages/vault` and the former-gateway scopes under `packages/server/src` carry the [#638](https://github.com/srikanth235/centraid/issues/638) re-seed (the #630 vault expansion diluted the older 88/80 seeds) and `packages/design/src` the [#709](https://github.com/srikanth235/centraid/issues/709) re-seed measured on CI verify run 30901194404; those provenance notes live in the JSON's `approvedDeviation`.
 
-The #630 denominator expansion is an approved measurement deviation: the old 71% aggregate excluded 11,639 executable lines under `packages/blueprints/apps` and `packages/design/kit`. Issue #725 graduated Photos to its own scope, measured on the complete 2026-08-08 run with the down-only change from the old 17/12 blend documented in `tests/coverage-floors.json`. Issue #839 graduated tasks, agenda, and notes on a 2026-08-21 measurement and re-seeded what the blend still covers (`_shared`, `docs`, `locker`, `people`, `tally`) from 20/14 to 41/33; the mobile pure-logic rows were seeded by the same run. That run was path-filtered to the `packages/blueprints` and `apps/mobile` suites rather than the full unified pass, which can only under-measure — cross-package suites add coverage, never remove it — so every floor it seeded sits under a number the unified run would only raise. Real handler contracts and platform journeys own correctness while the line/branch floors ratchet upward from here. The `packages/model-runtime` scope covers recognition model/build sources; its live model lane is intentionally separate from PR coverage.
+The #630 denominator expansion is an approved measurement deviation: the old 71% aggregate excluded 11,639 executable lines under `packages/blueprints/apps` and `packages/design/kit`. Issue #725 graduated Photos to its own scope, measured on the complete 2026-08-08 run with the down-only change from the old 17/12 blend documented in `tests/floors.json#coverage`. Issue #839 graduated tasks, agenda, and notes on a 2026-08-21 measurement and re-seeded what the blend still covers (`_shared`, `docs`, `locker`, `people`, `tally`) from 20/14 to 41/33; the mobile pure-logic rows were seeded by the same run. That run was path-filtered to the `packages/blueprints` and `apps/mobile` suites rather than the full unified pass, which can only under-measure — cross-package suites add coverage, never remove it — so every floor it seeded sits under a number the unified run would only raise. Real handler contracts and platform journeys own correctness while the line/branch floors ratchet upward from here. The `packages/model-runtime` scope covers recognition model/build sources; its live model lane is intentionally separate from PR coverage.
 
 `bun run test` prints the active floors after package tests so the local loop never hides the CI contract; `bun run coverage` measures and enforces them. Floors move only upward (`bun run test:ratchet`).
 
@@ -419,7 +500,7 @@ Generated-state properties cover blob custody and replica intent idempotency. Th
 
 Do not add another local helper when the shared package already owns the seam — for `mkdtemp`, fake timers, and `Math.random` this is enforced by lint, not left to review (see [Test-kit seams](#test-kit-seams-656-layer-4)).
 
-Two factories sit outside the kit, in [`tests/helpers/factories.ts`](tests/helpers/factories.ts), because they resolve workspace TypeScript entries directly for the root perf/scale/quality projects. `createTestVault()` builds a bootstrapped on-disk vault over the kit's `bootstrappedVault()` and is the owner of that seam for those projects. `buildTestGateway()` builds the host-agnostic gateway with disposable paths and **no listener**, which means nothing reachable over the tunnel can be asserted through it; it currently has **zero callers**, so it is a retirement candidate rather than a seam anything is required to use. A suite needing a real wire uses the [protocol join lane](#protocol-join-lane-839) instead.
+One factory sits outside the kit, in [`tests/helpers/factories.ts`](tests/helpers/factories.ts), because it resolves workspace TypeScript entries directly for the root perf/scale/quality projects. `createTestVault()` builds a bootstrapped on-disk vault over the kit's `bootstrappedVault()` and is the owner of that seam for those projects. A suite needing a real wire uses the [protocol join lane](#protocol-join-lane-839) instead of a local gateway factory; the listener-free `buildTestGateway()` that used to sit beside `createTestVault()` was retired unused in [#915](https://github.com/srikanth235/centraid/issues/915).
 
 Deterministic automation fires need no mock: their handlers run in-process against the parent-side `ctx.vault` / `ctx.fetch` / `ctx.state` rails, and only `ctx.delegate` reaches a provider. In tests that provider turn is faked through the ACP fake-harness fixture (`packages/server/src/acp/backends/acp/fake-acp-harness.mjs`), the same seam conversation turns use — there is no automation-specific mock LLM (the `@centraid/mock-llm` package was removed with the `ctx.tool` rail).
 
@@ -427,12 +508,13 @@ Deterministic automation fires need no mock: their handlers run in-process again
 
 | Command / workflow | Contents |
 | --- | --- |
-| `bun run check:pr` | **Before every push:** `bun install --frozen-lockfile`, then `check:push` — the ~40-gate deterministic chain driven by [`scripts/ci/run-gates.mjs`](scripts/ci/run-gates.mjs), whose argument list in `package.json` is the authoritative enumeration — plus `typecheck`, `lint:types`, `lint:workflow-pins`, and `check:diff-coverage`. Do not restate the gate list here; read the script's arguments. Vitest alone is not a substitute. |
+| `bun run check:pr` | **Before every push:** `bun install --frozen-lockfile`, then `check:push` — the 17-gate deterministic set (38 sub-second contract gates ride inside the one `lint:product` bundle) driven by [`scripts/ci/run-gates.mjs`](scripts/ci/run-gates.mjs), whose argument list in `package.json` is the authoritative enumeration — plus `typecheck`, `lint:types`, `lint:workflow-pins`, and `check:diff-coverage`. Do not restate the gate list here; read the script's arguments. Vitest alone is not a substitute. |
 | `bun run check:full` | `check:pr` plus affected dependents, unified coverage, affected mutation/perf, and desktop/web e2e. Required before requesting merge when shared infrastructure changed. |
 | `bun run test` | package unit + integration + contract tests; prints floors |
 | `bun run test:affected` | vitest for packages changed since `origin/main` (`turbo --filter='[origin/main]'` — changed packages only; dependents stay on full CI `verify`) |
 | `bun run test:affected:full` | vitest for changed packages **and dependents** (`turbo --filter='...[origin/main]'`) |
 | `bun run test:ratchet` | coverage floors + `minimumTests` + mutation floors up-only, and perf budgets tighten-only, vs `origin/main` |
+| `bun run lint:ledgers` | the four merged ledgers: direction per section, per-section waiver scope, issue-and-expiry, and the two derived mirrors, vs `origin/main` |
 | `bun run test:ratchet:unit` | Unit tests for the ratchet / diff-coverage pure functions (`scripts/test-report/vitest.config.ts`) |
 | `bun run test:diff-coverage` | changed instrumentable lines vs merge base must be ≥ **80%** covered (`coverage-final.json`); CI `verify` after `coverage` |
 | `bun run test:mutation` | StrykerJS on all twenty-four property-defended seeds (nightly); writes `artifacts/mutation/scores.json` |
@@ -445,14 +527,15 @@ Deterministic automation fires need no mock: their handlers run in-process again
 | `bun run coverage` | unified suite + v8 report + floor enforcement, one runner (nightly, and local) |
 | `bun run coverage:shard` | one quarter of the suite under `vitest.shard.config.ts`, blob report only (`ci.yml` **coverage-shard** matrix) |
 | `bun run coverage:merge` | refuses a partial blob set, then merges and enforces every floor (`ci.yml` **coverage** job) |
-| `bun run test:matrix` | catalog/owner/contract validation (also inside `check:pr`) |
+| `bun run test:claims` | claims-file, nightly-wiring and release-wiring validation (also inside `check:pr`) |
+| `bun run lint:evidence-mapping` | every `Write lane evidence` step names a registered lane |
 | `bun run test:perf` | hot-path budget tests; nightly only |
 | `bun run test:scale` | deterministic volume tests; nightly only |
 | `bun run test:report` | build `dist/test-report/index.html` (+ `summary.json` / `summary.md`) from available evidence |
-| `.github/workflows/ci.yml` | parallel **static** + **gates** + **verify** + **coverage-shard**×4 → **coverage**, required **check** aggregator (ruleset-required); **mutation-canary** and **publish-report** on main only; Bun/Turbo/Cargo caches. `governance.yml` is kit-managed and rolls up into NO aggregate — it needs its own required-check entry (see [docs/decisions.md](docs/decisions.md#the-pr-gate-loop-892)) |
-| `.github/workflows/e2e.yml` | desktop, web, the full Android mobile roster + the iOS depth roster, pairing, perf, scale, **mutation**, **fuzz-parsers**, **protocol-join**, full report → **publish-nightly-report** on main only; red scheduled nightly → auto-issue |
-| `.github/workflows/mobile-canary.yml` | push to `main`: the full Android roster against one commit, and the native-shell prebuild the PR device gate restores from; red → deduplicated auto-issue |
-| `.github/workflows/mobile-alarm-test.yml` | quarterly: the critical five against a deliberately blanked Home, **required to fail**; a green suite there fails the job |
+| `.github/workflows/ci.yml` (rung 2) | parallel **static** + **gates** + **verify** + **coverage-shard**×4 → **coverage**, plus **new-test-burn-in** and a one-leg **mobile-device-gate**; required **check** aggregator (ruleset-required), which also enforces the `pr-gate` wall-clock budget; **publish-report** on main only; Bun/Turbo/Cargo caches. `governance.yml` is kit-managed and rolls up into NO aggregate — it needs its own required-check entry (see [docs/decisions.md](docs/decisions.md#the-pr-gate-loop-892)) |
+| `.github/workflows/candidate.yml` (rung 3) | push to `main`: **mobile-canary-android** (the `resilience` + `home-apps` suites + the native-shell prebuild the PR device gate restores from), **mobile-ios-smoke** (the `ios-smoke` suite on the fingerprint-cached iOS shell), **web-e2e-linux**, **desktop-e2e-linux**, **desktop-e2e-macos**, **lane-gateway-package**, **mutation-full**, **codeql**, **rust-supply-chain**; then **promote** — on green it moves `refs/candidates/latest`, writes `artifacts/candidate.json` and publishes `test-report/candidate.json`; on red the pointer stays put and each red lane's `[candidate] lane red — <lane>` issue is rewritten. **lane-health** scores the rung-3 rules table afterwards |
+| `.github/workflows/e2e.yml` (rung 4) | on the **promoted candidate**: desktop, web, cross-browser web, the full Android mobile roster + the iOS depth roster, pairing, perf, scale, **mutation**, **fuzz-parsers**, **protocol-join**, full report → **publish-nightly-report** on main only; every red lane gets one rolling `[nightly] lane red — <lane>` issue, rewritten in place |
+| `.github/workflows/mobile-alarm-test.yml` | weekly (Sun 03:00 UTC): the rung-2 `pr-gate` suite against a deliberately blanked Home, **required to fail**; a green suite there fails the job |
 
 A gate that runs only in `check:push` is a gate nobody can be required to pass: it is skippable by pushing without it, and a broken `main` cannot be attributed. CI's `gates` job exists to close that hole — it carries the deterministic design/governance gates (reachability, the design-token/mobile-design/logical-insets/hairline/aria-label/container-opacity/type-floor/motion-rule linters, `lint:design-md`, engine-conformance, law-registry, quality-knobs, schema-export, `check:ui-receipt`, `test:quarantine`) and feeds the required `check` aggregator; `test:qualities` rides `verify` because it needs `bun run build` first. **`design:gallery`** now has its own path-gated CI job (`design-gallery` in `ci.yml`) that installs the pinned Playwright browser; since [#799](https://github.com/srikanth235/centraid/issues/799) it builds `apps/web` and photographs the shell’s own `#ui-preview` gallery with the product’s self-hosted faces, and the baselines are Linux-captured, so whether darwin `check:push` agrees with them is the open question the job’s comment records (#781). **`check:mobile-native-state`** is deliberately absent from `gates`: CI's `mobile-smoke` runs the identical `apps/mobile ci:native-state` command on a strictly wider path filter (root dependency drift triggers it where the local check's `apps/mobile/**` filter would not — #587 E22), so the delegation is complete, not a hole. `check:pr` remains a superset of CI in one further respect: it runs `test:affected`, where CI runs the full vitest suite on `verify` (uninstrumented) and again across the `coverage-shard` matrix (instrumented) instead.
 
@@ -471,7 +554,7 @@ Cite the dated slot when linking a report from an issue or a PR; the `nightly/` 
 
 Performance and scale budgets use generous regression multipliers. A noisy budget is fixed or removed; it is never promoted to the per-PR loop. Lane results are JSON under `artifacts/perf` and `artifacts/scale`; the nightly workflow restores and appends their bounded cross-run history before the combined report is published. Coverage, desktop Playwright, web Playwright, performance, and scale commands stamp distinct lane-start markers: a cached result not refreshed by that invocation turns grey immediately. Vitest, Playwright, agent-e2e, performance, and scale evidence all carries a capture time and expires after 36 hours. This staleness signal exists because a nightly-only suite rots silently: #458 found the entire desktop Playwright suite red after the React/CSS-modules migrations — hard-coded selectors like `.cd-sb-item`, `.ctx-menu`, and `.modal-card` had all gone dead, exactly the #225-class silent rot — while the per-PR loop stayed green. Grey (or expired) evidence in the report is the standing guard against that class of drift.
 
-The full nightly has a stricter contract than a PR/main report: **zero grey**. Every declared owner must emit matchable evidence, every lane must run, and an owner may not die silently. PR/main reports may remain grey because the nightly lanes deliberately do not run there. A matrix `skip` means structural N/A for the product; missing but valuable proof is a `gap` with a live tracking issue. `partial` means real evidence exists but the cell note names the precise depth still missing. Performance harnesses live in `tests/perf/`, scale rigs in `tests/scale/`, and both write `recordQualityResult` evidence whose `OWNER` matches `tests/matrix.json` exactly.
+The full nightly has a stricter contract than a PR/main report: **no silent absence**. Every registered lane must write evidence, and a lane that does not renders `no evidence` in every cell it claims rather than disappearing from the page — a gating lane that says nothing degrades the night's verdict, and a night in which nothing reported is a HOLD. PR/main reports carry `no evidence` on the nightly-only lanes by design. An `n/a` cell is a claim the [`tests/claims.json`](tests/claims.json) register says cannot arise, with the reason and the date it was last re-read; anything else missing is a lane to wire or a claim to own. Performance harnesses live in `tests/perf/`, scale rigs in `tests/scale/`, and both write `recordQualityResult` evidence whose `OWNER` matches a derived flow owner exactly.
 
 ### Quality-dimension decisions (#587 D21)
 
@@ -495,26 +578,75 @@ Android decisions mirror iOS where the artifact exists: Android uses the same fi
 
 ## Unified report
 
-[`scripts/test-report`](scripts/test-report) ingests the matrix, Vitest JSON, `coverage/coverage-summary.json`, every Playwright JSON result, agent-e2e evidence, and perf/scale JSON. It emits one self-contained page at `dist/test-report/index.html` with:
+The nightly report is **Night Watch**: one page that answers three questions in order — _can we ship the candidate_, _what changed since the last one_, _who owes what by when_ — and treats everything below that as evidence for one of the three. It is a single self-contained HTML file at `dist/test-report/index.html`, both themes, no runtime fetches, with the product's tokens lowered from `@centraid/design` by [`scripts/site-tokens.mjs`](scripts/site-tokens.mjs). Ruling: [docs/decisions.md](docs/decisions.md#night-watch-v2-915).
 
-- a **verdict strip** — `shippable` / `degraded` / `red`, or `no evidence` when no lane reported into the render — with the reasons that produced it and the deltas against last night's durable history point;
-- an **attention queue**: every red, newly-grey, still-grey and stale item, each with the file that owns it and its tracking-issue hook;
-- the app-shaped grids — app × seat, app × shared engine, app × designed state — then **join laws and simulation**, the **adversary panel**, and **journeys with budget vs actual**;
-- the **consent ledger**: one row per permission layer, with its enforcement point, refusal grammar, adversary, and seat coverage;
-- seven collapsed user-facing quality rows. Each row shows one status light, its name, the weakest-link sentence, and `N/M gates`; expanding shows only gate status, name, and owner. Lane, cost, knob governance, and demonstrated-red date remain in the gate tooltip. Grey means no gate exists, never health;
-- the clickable surface × quality-dimension heatmap;
-- canonical owners, tier, lane, last status, and runtime in the cell inspector;
-- coverage versus floor, per-package wall clock, slowest ten files, and skip counts;
-- perf/scale trends;
-- grey missing or stale evidence instead of an absent lane.
+### The evidence contract
 
-The verdict and the queue are **computed from the same grading the rest of the page renders** — cells, floors, lanes — never hand-assigned, and the queue's severity comes from the matrix's own claim for a cell (`surfaces[].assessment`) against tonight's observed state: `S1` a cell the matrix calls solid went red, `S2` any other red or a lane that reported last night and is silent tonight, `S3` an absence that was already there, `S4` a standing finding pinned in a register. The `S1`/`S2` band rides into the auto-filed nightly tracking issue via `summary.json#attentionQueue` and [`scripts/ci/report-cell-delta.mjs`](scripts/ci/report-cell-delta.mjs), under the 24h SLA above.
+The page is a **pure function of a directory**. Every lane on rungs 2–5 ends with a `Write lane evidence` step that calls [`scripts/test-report/write-evidence.mjs`](scripts/test-report/write-evidence.mjs) with `if: always()`, writing one `artifacts/evidence/<lane>.json`:
 
-**No hand-written lane list survives in the generator.** Every row source is a registry that a validator pins to the code it names: `tests/matrix.json#joinLaws` to the owning suites' own `test(...)` declarations (including their count), `tests/matrix.json#journeys` to each Maestro runner's own `FLOWS` array and `BUDGET_MS` ceiling and to every flow file on disk, plus [`scripts/mutation/seeds.mjs`](scripts/mutation/seeds.mjs), [`scripts/fuzz/targets.mjs`](scripts/fuzz/targets.mjs) with its committed corpus, and the matrix's `engineRegistry` and `consentLedger`. The locks live in [`scripts/test-report/validate-report-registries.mjs`](scripts/test-report/validate-report-registries.mjs) and run under `bun run test:matrix`. The point is that **absence is unexpressible**: a lane that dies loses its evidence, not its row, so it renders grey rather than disappearing. Sparklines draw only from durable history that exists — fewer than two nights renders an empty slot, never an invented trend.
+```json
+{
+  "schema": 1,
+  "lane": "mobile-e2e-ios",
+  "rung": 4,
+  "platform": "ios",
+  "candidate": "<sha>|null",
+  "startedAt": "<ISO>",
+  "finishedAt": "<ISO>",
+  "verdict": "passed|failed|parked|no-evidence",
+  "budgetMs": 0,
+  "durationMs": 0,
+  "cases": [
+    { "id": "locker-gate", "verdict": "failed", "durationMs": 0, "attempts": 3 }
+  ],
+  "parked": { "until": "YYYY-MM-DD", "issue": 870 },
+  "tags": { "qualities": ["journey"], "surfaces": ["mobile-native"] }
+}
+```
 
-PR CI uploads the report even when coverage fails. Nightly jobs upload surface evidence; the final job merges the latest pairing/relay artifact, reruns the full Vitest coverage suite, then publishes one report after performance and scale run. `bun run test:report:smoke` verifies the generator without requiring prior test artifacts.
+[`evidence-schema.mjs`](scripts/test-report/evidence-schema.mjs) validates it on write and on read; a malformed file is an error the page prints, never a file that is silently dropped. The writer downgrades a `failed` verdict to `parked` by itself when the lane has an unexpired entry in `tests/quarantine.json#lanes`, so a park is a date on the debt rather than a mute.
 
-The machine-readable qualities layer is `tests/matrix.json#qualities`. `bun run test:matrix` requires exactly seven rows and verifies every gate owner, knob, governance regime, and demonstrated-red date. `bun run lint:quality-knobs` rejects removed gates, widened first-paint query ceilings, and expanded copy/query waivers without `approvedDeviation`.
+**The cell vocabulary is exactly four words plus `n/a`**: `passed`, `failed`, `parked`, `no-evidence`, and `n/a`-with-a-reason. There is no "flaky", no "stale", no "partial" — a run either falsified the claim or did not. A lane that declares `tags.qualities × tags.surfaces` and then writes nothing renders **no evidence** in every cell it claims. Evidence naming a lane the claims file does not register is a rung-2 lint failure (`bun run lint:evidence-mapping`), not a banner on the page.
+
+### The claims file, and what is derived
+
+[`tests/claims.json`](tests/claims.json) replaced `tests/claims.json`. It holds **only what a machine cannot derive**:
+
+- the `vocabulary` — 11 qualities × 10 surfaces — that §7 joins lane tags against;
+- the **lane registry** (`id, rung, platform, budgetMs, qualities[], surfaces[], status`), which is the list of lanes the page has a row for;
+- the 45 **claim rows** (the retired user-facing qualities panel), each with a declared severity `S1`–`S4` and the date it was last demonstrated red;
+- the law registry, the consent ledger, the join laws, the app-seat / app-state / app-scenario registries;
+- the deliberate **n/a cells** with their reasons and their 183-day re-verification date (`bun run check:na-cells`);
+- the revisit triggers, and the flow ownership + `minimumTests` floors.
+
+Everything observable is derived at read time by [`derive.mjs`](scripts/test-report/derive.mjs): journeys and their tighten-only suite budgets from [`tests/agent-e2e-mobile/roster.json`](tests/agent-e2e-mobile/roster.json), mutation seeds from [`scripts/mutation/seeds.mjs`](scripts/mutation/seeds.mjs), fuzz targets from [`scripts/fuzz/targets.mjs`](scripts/fuzz/targets.mjs), the Vitest projects from `vitest.config.ts`, the Stryker configs by glob, and the rig and experience budgets from their ledgers. `bun run test:claims` validates the file, holds every owner path to disk, and pins the app-axis registries to the code they name.
+
+Flow ownership no longer lives in one file, so the constitution's `coverage-scope-reachability` directive reads the derived view instead: `node scripts/test-report/derive-flows.mjs --json`.
+
+### The page, section by section
+
+| § | What it answers | Source |
+| --- | --- | --- |
+| §0 masthead + verdict lamp | can we ship? | the lane board, over **unparked** lanes |
+| §1 blockers | what is holding it | S1/S2 reds, with first-red and last-green candidates |
+| §2 since yesterday | what changed | tonight's evidence against the previous night's directory |
+| §3 attention queue | who owes what, oldest first | one row per lane, each with a concrete deadline |
+| §4 lane health board | the promotion and demotion rules | 30-run history, pass rate, p95 vs budget, last green |
+| §5 journeys | every committed flow and its cost | the roster's suites and their budgets |
+| §6 coverage grid | what the product is proven to do | app × platform, three modes |
+| §7 promises × surfaces | which promise has evidence where | the join of lane tags with tonight's verdicts |
+| §8 adversaries | what the author did not write | mutation seeds, fuzz targets, engine property flows |
+| §9 trends | what is drifting | series with ≥ 14 candidates, trailing-30 IQR band |
+| §10 evidence | the ratchets and registries | floors, consent ledger, join laws, inventory, parks, QUALITY.md |
+| §11 how to read this | the vocabulary and the contract | the glossary, the tab map, the `evidence.json` shape |
+
+The verdict is `HOLD | DEGRADED | SHIPPABLE`, computed over unparked lanes: **HOLD** on any S1/S2 red, more than 3 parks, a park older than 30 days, or a night in which nothing reported at all; **DEGRADED** on S3/S4 reds, a series outside its noise band, a lane whose p95 walked past its rung budget, or a gating lane that wrote nothing; **SHIPPABLE** otherwise. Parked and no-evidence lanes never count as red. The lamp carries one sentence of why and the single change that would flip it.
+
+### Wiring
+
+`generate.mjs` is a CLI shell: [`collect.mjs`](scripts/test-report/collect.mjs) reads, [`read-model.mjs`](scripts/test-report/read-model.mjs) builds the model with no I/O, and [`render/`](scripts/test-report/render) draws it. `bun run test:report:smoke` renders the committed fixture root at `scripts/test-report/fixtures/` and asserts every section §0–§11 with zero validation errors, plus a second root where the only evidence is a park. The per-lane rolling issue is rendered by [`rolling-issue-body.mjs`](scripts/test-report/rolling-issue-body.mjs) from the same attention-queue model, so the issue body and §3 cannot disagree.
+
+Publishing is unchanged in shape — a mutable `nightly/` alias plus an immutable `nightly/runs/<date>-<runId>/` — and the immutable copy now also carries the `evidence/` directory that produced it, so the next night can compute a candidate-to-candidate delta. `summary.json` carries `{schema, verdict, why, flip, blockers[], deltas{}, parks[], candidate, generatedAt, lanes{}}`; [`history-point.mjs`](scripts/test-report/history-point.mjs) is the read boundary for the durable series and reads every #915 field as null or empty on nights recorded before it.
 
 ### Issue #679 lane and fixture decisions
 
@@ -571,7 +703,7 @@ Nightly StrykerJS (`@stryker-mutator/vitest-runner`) on 24 property-defended see
 - `packages/tunnel` (wire frame / pair QR / sanitize)
 - `packages/server/src/engine` (pricing cost formula)
 
-Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts`) mutate the property-defended modules. [`scripts/mutation/seeds.mjs`](scripts/mutation/seeds.mjs) is canonical for where each seed's config lives: the runner resolves `seed.cwd` + `seed.config` and spawns Stryker there. The eight root pointers formerly under `tests/mutation/` were deleted in #842 W0.6: they indexed only eight of the twenty-four seeds and were read by nothing. `scripts/mutation/seeds.mjs` is the only catalog — do not add a pointer file expecting it to run. `bun run test:mutation` writes `artifacts/mutation/scores.json` for the test-health report. Floors live in `tests/mutation-floors.json` and ratchet up-only (measured 2026-07-23/24 — see file comment).
+Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts`) mutate the property-defended modules. [`scripts/mutation/seeds.mjs`](scripts/mutation/seeds.mjs) is canonical for where each seed's config lives: the runner resolves `seed.cwd` + `seed.config` and spawns Stryker there. The eight root pointers formerly under `tests/mutation/` were deleted in #842 W0.6: they indexed only eight of the twenty-four seeds and were read by nothing. `scripts/mutation/seeds.mjs` is the only catalog — do not add a pointer file expecting it to run. `bun run test:mutation` writes `artifacts/mutation/scores.json` for the test-health report. Floors live in `tests/floors.json#mutation` and ratchet up-only (measured 2026-07-23/24 — see file comment).
 
 ### The golden-vault gate, and the invariant sweep
 
@@ -594,7 +726,7 @@ Eight of the twenty-four seeds are not engine packages. [#839](https://github.co
 
 Every mutate set added there is browser-side TypeScript with no DOM in it, run under a plain **node** vitest project on purpose. Stryker's vitest runner dry-runs a jsdom project as "No tests were executed", so a suite carrying the `@vitest-environment jsdom` docblock defends nothing in this lane, however green it is — which is why `apps/_shared/untrusted.ts` takes no seed until a node-side suite exists, and why each seed's Stryker config states what it leaves out.
 
-**Provisional-local floors.** This file's standing rule is that a floor is seeded from **CI**, because seeding from the author's own machine is the author-asserted claim the mutation lane exists to eliminate. The eight #839 floors are the recorded exception: each is seeded from a local linux/x64 run and therefore sits at **(local measured − 11)** rather than the usual (measured − 2/3). Eleven points is the local/CI gap #656 measured on `packages/backup` and `packages/blueprints`, applied in the pessimistic direction because the direction of that gap was never verified — a floor too low fails to catch a regression it should have, while a floor too high reds a lane that is fine, and only the first is recoverable by the next measurement. **Re-seed each of them to (CI measured − 3) on the first green nightly mutation lane that includes them**, and delete the `_w2Comment` note in `tests/mutation-floors.json` when that happens. The ruling and its rationale are in [decisions.md](docs/decisions.md#adversary-lanes-and-provisional-evidence-839).
+**Provisional-local floors.** This file's standing rule is that a floor is seeded from **CI**, because seeding from the author's own machine is the author-asserted claim the mutation lane exists to eliminate. The eight #839 floors are the recorded exception: each is seeded from a local linux/x64 run and therefore sits at **(local measured − 11)** rather than the usual (measured − 2/3). Eleven points is the local/CI gap #656 measured on `packages/backup` and `packages/blueprints`, applied in the pessimistic direction because the direction of that gap was never verified — a floor too low fails to catch a regression it should have, while a floor too high reds a lane that is fine, and only the first is recoverable by the next measurement. **Re-seed each of them to (CI measured − 3) on the first green nightly mutation lane that includes them**, and delete the `_w2Comment` note in `tests/floors.json#mutation` when that happens. The ruling and its rationale are in [decisions.md](docs/decisions.md#adversary-lanes-and-provisional-evidence-839).
 
 **Per-PR perf** (`bun run test:perf:pr` / `verify` step): gateway low-end budget gate (`packages/server` `perf:low-end`, fsync-required on Linux). Perf budget _numbers_ also tighten-only via `test:ratchet`. Full `test:perf` / Playwright waterfall remains nightly.
 

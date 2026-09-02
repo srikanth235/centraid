@@ -1,0 +1,323 @@
+{
+  "_comment": "Gate classes for #915 Wave 4. class: product (a user-visible claim) | contract (a repo-internal wiring or shape claim) | hygiene (a tighten-only ratchet over the test suite's own meta-quality). rung: the ladder rung the gate is enforced at (docs/dev-environment.md#the-local-gate-loop). Enforced by scripts/ci/gate-classes.test.mjs.",
+  "test:affected": {
+    "class": "product",
+    "rung": 1,
+    "why": "The affected packages' tests — the gate that actually catches breakage, and the wall clock every other rung-1 gate hides behind."
+  },
+  "test:qualities": {
+    "class": "product",
+    "rung": 1,
+    "why": "The U/T-series product quality suites over the built packages."
+  },
+  "design:gallery": {
+    "class": "product",
+    "rung": 1,
+    "why": "Pixel baselines for the design gallery. No CI job owns it (it needs a downloaded browser), so rung 1 is its only enforcement."
+  },
+  "knip": {
+    "class": "contract",
+    "rung": 1,
+    "why": "Repo-wide dead-export sweep. At 28.8 s it needs a 3.9% hit rate against the 12.3-minute round trip, and it clears it."
+  },
+  "typecheck:affected": {
+    "class": "product",
+    "rung": 1,
+    "why": "Types on the diff. The full typecheck stays in CI, which recomputes it authoritatively."
+  },
+  "scripts:test": {
+    "class": "contract",
+    "rung": 1,
+    "why": "The unit tests for every gate script. A broken gate is a silent gate."
+  },
+  "test:ratchet:unit": {
+    "class": "contract",
+    "rung": 1,
+    "why": "The floors ratchet's own unit tests (deletion and missing-key cases)."
+  },
+  "check:reachability": {
+    "class": "product",
+    "rung": 1,
+    "why": "Every share surface must be reachable from a route a user can get to."
+  },
+  "format:check": {
+    "class": "contract",
+    "rung": 1,
+    "why": "Formatting. The formatter is the contract; a reformat in review is noise nobody reads."
+  },
+  "turbo:lint": {
+    "class": "contract",
+    "rung": 1,
+    "why": "Per-package lint, which the root oxlint pass does not cover."
+  },
+  "lint": {
+    "class": "contract",
+    "rung": 1,
+    "why": "oxlint over the tree at 2.5 s — the cheapest gate in the set by hit rate."
+  },
+  "lint:hermes-surface": {
+    "class": "product",
+    "rung": 1,
+    "why": "A Hermes array-surface gap crashes the phone, and the phone is the product."
+  },
+  "test:claims": {
+    "class": "contract",
+    "rung": 1,
+    "why": "Claims, nightly and release wiring: a lane the report claims must be a lane a workflow schedules. Renamed from test:matrix with tests/claims.json (#915 Wave 3)."
+  },
+  "lint:evidence-mapping": {
+    "class": "contract",
+    "rung": 1,
+    "why": "An evidence file naming no claim, or a claim whose lane writes no evidence, is a rung-2 lint failure rather than a banner on the report (#915 Wave 3)."
+  },
+  "test:report:smoke": {
+    "class": "contract",
+    "rung": 1,
+    "why": "The report generator must render every section from the fixture root."
+  },
+  "lint:product": {
+    "class": "contract",
+    "rung": 1,
+    "why": "The bundle: 38 sub-second contract/product gates in one node process under one gate name (scripts/lint-product.mjs)."
+  },
+  "test:governance-shell": {
+    "class": "contract",
+    "rung": 1,
+    "why": "The coverage-scope directive's self-test plus its live check — the enforcing test for a constitutional directive."
+  },
+  "lint:node-version": {
+    "class": "contract",
+    "rung": 1,
+    "why": "The pinned Node. Warns locally, fatal under CI, where the claim is real."
+  },
+  "lint:packages": {
+    "class": "contract",
+    "rung": 1,
+    "why": "Monorepo package hygiene (sherif): duplicate deps and mismatched versions across workspaces."
+  },
+  "lint:tsconfigs": {
+    "class": "contract",
+    "rung": 1,
+    "why": "tsconfig shape across the workspace — one composite graph, no ad-hoc overrides."
+  },
+  "lint:turbo-cache": {
+    "class": "contract",
+    "rung": 1,
+    "why": "A turbo `outputs` entry naming a tracked path makes the task its own input, and turbo silently stops caching."
+  },
+  "lint:path-filters": {
+    "class": "contract",
+    "rung": 1,
+    "why": "`skipped` counts as a pass, so a path no filter names merges green and unexercised (G-filter-inverse)."
+  },
+  "test:ratchet": {
+    "class": "contract",
+    "rung": 1,
+    "why": "Coverage and mutation floors are up-only against the merge base. Up-only floors are a contract, not a suite ratchet."
+  },
+  "lint:css": {
+    "class": "contract",
+    "rung": 1,
+    "why": "The CSS class contract between the blueprint apps and the design package."
+  },
+  "lint:design-tokens": {
+    "class": "contract",
+    "rung": 1,
+    "why": "The machine-checkable half of DESIGN.md."
+  },
+  "lint:site-tokens": {
+    "class": "contract",
+    "rung": 1,
+    "why": "The site's tokens must be the ones lowered from @centraid/design, not a second copy."
+  },
+  "lint:mobile-design": {
+    "class": "contract",
+    "rung": 1,
+    "why": "Design-token consumption on the mobile surface."
+  },
+  "lint:mobile-testids": {
+    "class": "contract",
+    "rung": 1,
+    "why": "E-unfakeable: a device flow may only assert on a declared testID."
+  },
+  "lint:list-anchoring": {
+    "class": "product",
+    "rung": 1,
+    "why": "A virtualized list that anchors by default swallows rows arriving from another device (#903)."
+  },
+  "lint:logical-insets": {
+    "class": "contract",
+    "rung": 1,
+    "why": "Logical inset properties, never physical ones, so RTL is correct by construction."
+  },
+  "lint:hairline": {
+    "class": "contract",
+    "rung": 1,
+    "why": "Hairline borders come from the token, not from a literal that breaks at 3x density."
+  },
+  "lint:design-md": {
+    "class": "contract",
+    "rung": 1,
+    "why": "The structure of the rulebook itself, so DESIGN.md stays machine-readable."
+  },
+  "lint:e2e-flows": {
+    "class": "contract",
+    "rung": 1,
+    "why": "A flow may not assert on a marker every screen draws."
+  },
+  "lint:e2e-wiring": {
+    "class": "contract",
+    "rung": 1,
+    "why": "An owner that no lane schedules is a claim with no evidence."
+  },
+  "lint:app-conformance": {
+    "class": "product",
+    "rung": 1,
+    "why": "A launcher tile that reaches no screen — buildLauncherItems drops an unmapped app id silently."
+  },
+  "lint:e2e-claims": {
+    "class": "contract",
+    "rung": 1,
+    "why": "Every device flow must name what merges wrongly if it passes when it should not."
+  },
+  "lint:seat-verbs": {
+    "class": "contract",
+    "rung": 1,
+    "why": "Seat verbs must match the seat registry; a verb no seat declares reaches no screen."
+  },
+  "check:na-cells": {
+    "class": "contract",
+    "rung": 1,
+    "why": "A deliberate n/a cell carries a kind, a citation and a review date; the report renders it as n/a-with-reason. It pins a claims-file row to a reason, so it is a contract rather than a suite ratchet."
+  },
+  "check:mobile-suite-budgets": {
+    "class": "contract",
+    "rung": 1,
+    "why": "A mobile suite budget must track its observed p95; slack is a failure."
+  },
+  "lint:engine-conformance": {
+    "class": "contract",
+    "rung": 1,
+    "why": "Shared engines conform to their declared contracts."
+  },
+  "lint:ledgers": {
+    "class": "contract",
+    "rung": 1,
+    "why": "The one validator over the four merged ledgers (#915 Wave 4): direction, per-section waiver scope, issue-and-expiry, and the two derived mirrors. Pure file reading against the merge base, so it is a rung-1 contract gate."
+  },
+  "lint:law-registry": {
+    "class": "contract",
+    "rung": 1,
+    "why": "One law, one home: every law in the registry is wired to a real enforcer."
+  },
+  "lint:protocol-routes": {
+    "class": "contract",
+    "rung": 1,
+    "why": "The protocol route table: a declared route with no handler, or a handler with no route."
+  },
+  "lint:acp-min-versions": {
+    "class": "contract",
+    "rung": 1,
+    "why": "ACP minimum versions: a backend claiming a protocol level it cannot serve."
+  },
+  "lint:aria-labels": {
+    "class": "product",
+    "rung": 1,
+    "why": "Accessibility is user-facing, so it is product, not meta-quality."
+  },
+  "lint:container-opacity": {
+    "class": "contract",
+    "rung": 1,
+    "why": "The container-opacity rule from DESIGN.md; opacity on a container flattens everything inside it."
+  },
+  "lint:motion-rule": {
+    "class": "contract",
+    "rung": 1,
+    "why": "The motion rule from DESIGN.md: durations and easings come from the tokens."
+  },
+  "lint:quality-knobs": {
+    "class": "contract",
+    "rung": 1,
+    "why": "A governed knob may only tighten against the merge base."
+  },
+  "check:ui-receipt": {
+    "class": "contract",
+    "rung": 1,
+    "why": "A UI-touching diff must carry a UI receipt."
+  },
+  "test:quarantine": {
+    "class": "contract",
+    "rung": 1,
+    "why": "A quarantined test must be declared, attributed and unexpired. The expiry is the contract; the count is not ratcheted."
+  },
+  "test:advisory-expiry": {
+    "class": "contract",
+    "rung": 1,
+    "why": "A step that announces it will never fail must carry an owner, an issue and a date by which someone decides."
+  },
+  "test:accessibility": {
+    "class": "product",
+    "rung": 1,
+    "why": "The accessibility contract — the behaviours a screen reader depends on."
+  },
+  "lockfile:lint": {
+    "class": "contract",
+    "rung": 1,
+    "why": "Lockfile shape: a lockfile that drifts from package.json makes every other gate's answer conditional."
+  },
+  "security:lifecycle": {
+    "class": "product",
+    "rung": 1,
+    "why": "Supply chain: lifecycle scripts reach the user's machine."
+  },
+  "security:unsafe-edges": {
+    "class": "product",
+    "rung": 1,
+    "why": "Supply chain: unsafe dependency edges reach the user's machine."
+  },
+  "lint:ci-egress": {
+    "class": "contract",
+    "rung": 1,
+    "why": "Every workflow that runs dependency code must constrain its egress or be ledgered."
+  },
+  "test:comment-density": {
+    "class": "hygiene",
+    "rung": 5,
+    "why": "A down-only per-file comment-density pin over the whole tree. It protects the suite from the agents; it cannot prove the phone works. 10.2 s, the most expensive non-test gate, and it had NO CI job at all before #915 — weekly on main is strictly more enforcement than it had."
+  },
+  "test:hygiene-ratchet": {
+    "class": "hygiene",
+    "rung": 5,
+    "why": "Down-only assertion-matcher family counts (toBeTruthy/toBeFalsy, the non-negated toHaveBeenCalled family). A standing count over the tree, so a weekly run on main sees exactly what a push run would."
+  },
+  "test:sleep-inventory": {
+    "class": "hygiene",
+    "rung": 5,
+    "why": "A down-only budget on fixed sleeps in tests. Standing inventory; weekly on main loses latency, not coverage."
+  },
+  "test:skip-inventory": {
+    "class": "hygiene",
+    "rung": 5,
+    "why": "The skip budget, split out of test:ratchet so the up-only floors half stays at rung 1. Standing inventory over the tree."
+  },
+  "test:env-red": {
+    "class": "hygiene",
+    "rung": 5,
+    "why": "The deterministically-environment-red inventory and its down-only budget. Standing inventory; the budget must equal the discovered count either way."
+  },
+  "lint:type-floor": {
+    "class": "hygiene",
+    "rung": 5,
+    "why": "The 11px type floor. Named by #915 as hygiene and moved, but it is the one gate in this class whose red IS user-visible (an unreadable label ships), and it reads no ledger — a pure source scan. The tradeoff is recorded in docs/decisions.md: detection moves from every push to within 7 days on main."
+  },
+  "lint:schema-export": {
+    "class": "hygiene",
+    "rung": 5,
+    "why": "The vault-schema/portable-export fingerprint. Its enforcing comparison is standing (fingerprint vs source), so a weekly run on main detects the same drift; only the diff-scoped 'touch the export owner in the same PR' hint is lost. Tradeoff recorded in docs/decisions.md."
+  },
+  "check:mobile-native-state": {
+    "class": "contract",
+    "rung": 2,
+    "why": "30.5 s, the second-largest non-test pole. ci.yml's mobile-smoke job already runs it on exactly the diffs that matter (ci.yml #782 note); paying it on every push duplicated a rung-2 answer."
+  }
+}

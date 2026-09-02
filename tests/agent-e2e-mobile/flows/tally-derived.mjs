@@ -22,7 +22,11 @@
 // non-vacuous rules; this file is discovered by scripts/lint-e2e-flows.mjs).
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import {
+  AWAIT_LAUNCHER,
+  FIRST_LAUNCH_TIMEOUT_MS,
+  runFlow,
+} from "../lib/harness.mjs";
 
 /** Balances' own ambient sentence — `apps/tally/view-copy.ts` BALANCES_STATUS,
  *  drawn into the app bar by `TallyScreen.tsx` and published nowhere else. */
@@ -40,7 +44,7 @@ await runFlow("tally-derived", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${retryableTapCommands("Open Tally.*")}
+${AWAIT_LAUNCHER}${retryableTapCommands("Open Tally.*")}
 - extendedWaitUntil:
     visible: "${BALANCES_STATUS}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}

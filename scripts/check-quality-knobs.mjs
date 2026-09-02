@@ -53,7 +53,21 @@ function approved(config) {
       })
   );
 }
-const queryFile = "tests/experience-budgets/client-query-counts.json";
+// The experience budgets are named by the merged budgets ledger rather than
+// hard-coded here (#915 Wave 4): `tests/budgets.json#experience.files` is the
+// one list of what those ceilings are, and this gate holds the per-screen
+// query counts among them.
+const experienceFiles =
+  currentJson("tests/budgets.json").experience?.files ?? [];
+const queryFile = experienceFiles.find((file) =>
+  file.endsWith("client-query-counts.json")
+);
+if (!queryFile) {
+  console.error(
+    "quality-knobs: tests/budgets.json#experience.files does not name client-query-counts.json"
+  );
+  process.exit(1);
+}
 const queryBase = baseJson(queryFile);
 const queryCurrent = currentJson(queryFile);
 if (queryBase) {
@@ -120,45 +134,41 @@ if (
     `${classificationFile}: governed classifications changed without a receipt-approved deviation`
   );
 
-const matrixBase = baseJson("tests/matrix.json");
-const matrixCurrent = currentJson("tests/matrix.json");
-const matrixGovernedPayload = JSON.stringify({
-  qualities: matrixCurrent.qualities,
-  demonstratedRed: matrixCurrent.demonstratedRed,
-});
-const matrixGovernanceFingerprint = createHash("sha256")
-  .update(matrixGovernedPayload)
+// #915 replaced tests/matrix.json with tests/claims.json: the 45-gate
+// user-facing qualities panel retired into claim ROWS, each carrying its own
+// severity and the date it was last demonstrated red. The governed payload is
+// those rows — remove a claim, restate what a gate proves, or move the date it
+// was last shown to go red, and this fingerprint moves with it.
+const claimsBase = baseJson("tests/claims.json");
+const claimsCurrent = currentJson("tests/claims.json");
+const claimsGovernedPayload = JSON.stringify({ claims: claimsCurrent.claims });
+const claimsGovernanceFingerprint = createHash("sha256")
+  .update(claimsGovernedPayload)
   .digest("hex");
 if (
-  classificationCurrent.matrixGovernanceFingerprint !==
-  matrixGovernanceFingerprint
+  classificationCurrent.claimsGovernanceFingerprint !==
+  claimsGovernanceFingerprint
 )
   errors.push(
-    `${classificationFile}: stale matrixGovernanceFingerprint; qualities metadata, evidence selectors, blockers, weakest-link text, or demonstrated-red evidence changed`
+    `${classificationFile}: stale claimsGovernanceFingerprint; a claim row's owner, evidence selector, severity, or demonstrated-red date changed`
   );
 if (
-  classificationBase?.matrixGovernanceFingerprint &&
-  classificationBase.matrixGovernanceFingerprint !==
-    classificationCurrent.matrixGovernanceFingerprint &&
+  classificationBase?.claimsGovernanceFingerprint &&
+  classificationBase.claimsGovernanceFingerprint !==
+    classificationCurrent.claimsGovernanceFingerprint &&
   !approved(classificationCurrent)
 )
   errors.push(
-    `${classificationFile}: governed qualities matrix changed without a receipt-approved deviation`
+    `${classificationFile}: governed claims changed without a receipt-approved deviation`
   );
-if (matrixBase?.qualities) {
-  const prior = new Set(
-    matrixBase.qualities.flatMap((quality) =>
-      quality.gates.map((gate) => gate.id)
-    )
-  );
+if (Array.isArray(claimsBase?.claims)) {
+  const prior = new Set(claimsBase.claims.map((claim) => claim.id));
   const current = new Set(
-    matrixCurrent.qualities.flatMap((quality) =>
-      quality.gates.map((gate) => gate.id)
-    )
+    (claimsCurrent.claims ?? []).map((claim) => claim.id)
   );
   for (const id of prior) {
     if (!current.has(id))
-      errors.push(`tests/matrix.json: quality gate ${id} was removed`);
+      errors.push(`tests/claims.json: claim ${id} was removed`);
   }
 }
 

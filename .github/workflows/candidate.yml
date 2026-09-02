@@ -1,0 +1,928 @@
+# governance: allow-toolchain-config issue #915 — rung 3 owns the Android shell
+# prebuild (gradle/AVD/apk caches the PR gate restores) and the turbo cache on
+# every build-bearing promotion lane.
+name: candidate
+
+# RUNG 3 OF THE QUALITY LADDER (#915). One question: **is this SHA a build we
+# would hand to a device?**
+#
+#   rung 2  ci.yml `check`  — can this land? Blocks the merge. ≤ 15 min.
+#   rung 3  THIS            — is the merged tree promotable? ≤ 45 min.
+#   rung 4  e2e.yml         — does the promoted candidate hold under depth?
+#   rung 5  the weeklies    — does it survive time and live dependencies?
+#
+# Nothing here blocks a merge: the merge already happened. What it produces is a
+# CANDIDATE — `refs/candidates/latest` plus `artifacts/candidate.json` — and
+# every deeper rung, and the release chain, consumes that instead of the tip of
+# `main`. Before this existed, a red nightly could not distinguish "the product
+# regressed" from "the 04:00 dependency merge broke the build", which is most of
+# why thirty consecutive red nights carried no information.
+#
+# The lanes here are the ones #915 took OFF the merge gate — desktop Playwright,
+# the gateway package smoke, the macOS desktop journey, the full mutation seed
+# set, CodeQL and the Rust supply chain — plus the Android roster that used to
+# live in `mobile-canary.yml`. Each was answering a post-merge question in front
+# of a human waiting on review. `mobile-ios-smoke` is the one lane that is new
+# rather than moved: every candidate now carries an iOS verdict, because the iOS
+# `.app` is a separate artifact and Android's green says nothing about it.
+#
+# Deliberately NOT a `pull_request` trigger: ci.yml is the only workflow allowed
+# to listen on open-PR events (scripts/lint-workflow-pins.mjs rule 5).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One promotion at a time, and NEVER cancel a running one: a superseded
+# candidate run still banks the Android shell caches the PR gate restores from,
+# and cancelling it would throw away the verdicts of every lane that finished.
+concurrency:
+  group: candidate-main
+  cancel-in-progress: false
+
+permissions:
+  # `promote` pushes `refs/candidates/latest` and the gh-pages candidate record.
+  contents: write
+  # A red lane updates its rolling issue.
+  issues: write
+
+jobs:
+  # THE ANDROID ROSTER, moved verbatim from the deleted `mobile-canary.yml`
+  # (#890 W4). It kept two jobs: prove the full roster on one commit rather than
+  # a night's worth, and BANK the `android-release-*` / `android-gradle-*` caches
+  # `ci.yml`'s `mobile-device-gate` restores from. Both are rung-3 questions, so
+  # the lane belongs here rather than in a workflow of its own — and being a job
+  # of `candidate` means a red roster now blocks promotion instead of only
+  # filing an issue.
+  mobile-canary-android:
+    runs-on: ubuntu-latest
+    # The roster's own budgets (probes / photos / home-apps) are what fail a slow
+    # run while evidence can still be written. This backstop must stay above
+    # their sum plus a cold release build, because a cancelled job loses every
+    # verdict (#557).
+    timeout-minutes: 120
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      # #892 Phase 0 — `apk_key` folds the embedded Hermes bundle's inputs in on
+      # top of the native ones; `hash` stays native-only and keys the gradle
+      # build directory. THIS lane is where the apk the PR gate restores is
+      # banked, so the two keys must be derived identically here and in ci.yml or
+      # the gate can never hit. See the comment on ci.yml's copy for why the
+      # native-only key was wrong for a release artifact.
+      - name: Fingerprint the Android native build inputs
+        id: native_android
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          fp="$(node scripts/native-fingerprint.mjs android)"
+          test -n "$fp" || { echo "::error::empty Android fingerprint"; exit 1; }
+          js="$(node scripts/js-bundle-fingerprint.mjs)"
+          test -n "$js" || { echo "::error::empty JS bundle fingerprint"; exit 1; }
+          jdk="$(java -version 2>&1 | head -1 | shasum -a 256 | cut -d' ' -f1)"
+          echo "hash=jdk${jdk:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
+          echo "apk_key=jdk${jdk:0:12}-fp${fp}-js${js}" >> "$GITHUB_OUTPUT"
+      - name: Install Maestro CLI
+        # Same pin as ci.yml and e2e.yml; validate-nightly-wiring.mjs fails when
+        # the three disagree.
+        env:
+          MAESTRO_VERSION: 2.6.1
+        run: bash scripts/ci/install-maestro.sh
+      - name: Build and start the tokenless mobile test gateway
+        run: |
+          bun run turbo run build --filter=@centraid/server
+          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
+          for attempt in {1..90}; do
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/centraid-mobile-gateway.log
+          exit 1
+      # Restore-then-save (not the one-step action) because `actions/cache`
+      # declares `post-if: success()`, so on a lane that is currently red the
+      # cache never populates and the expensive build is paid on every run — the
+      # warm path stays unreachable until the greenness the cache exists to help
+      # deliver. The save below runs `if: always()`, which is safe because the
+      # key is content-addressed: the artifact is the product of those inputs
+      # whether or not a flow passed.
+      - name: Restore the built Android app
+        id: android_app
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e-android
+          key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
+      - name: Restore the Android gradle build directory
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            apps/mobile/android/app/build
+            apps/mobile/android/build
+            ~/.gradle/caches
+          key: android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
+          restore-keys: |
+            android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
+            android-gradle-${{ runner.os }}-
+      - name: AVD cache
+        id: avd_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-x86_64-google_apis-pixel6-r4096-c4-v1
+      - name: Create AVD + snapshot (cache miss only)
+        if: steps.avd_cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 4096M
+          cores: 4
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Generated AVD snapshot for caching."
+      - name: Save the AVD snapshot
+        if: steps.avd_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-x86_64-google_apis-pixel6-r4096-c4-v1
+      - name: Run the rung-3 Android suites on the release artifact
+        id: emu
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          ANDROID_CACHE_HIT: ${{ steps.android_app.outputs.cache-hit }}
+          CENTRAID_MOBILE_BUILD: release
+          CENTRAID_MOBILE_LANE: canary-android
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 4096M
+          cores: 4
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
+          disable-animations: true
+          # The committed rung-3 script. The literal path lives inside this job
+          # block, which is where scripts/lint-e2e-wiring.mjs reads it from, and
+          # it is a DIFFERENT file from the nightly's on purpose: one script per
+          # lane shape is what keeps a candidate lane distinguishable from a
+          # depth lane to that linter. It runs `run-roster.mjs --rung 3
+          # --platform android`, which the roster resolves to `resilience` +
+          # `home-apps` — the two suites this rung is priced for (#915 Wave 2).
+          script: bash apps/mobile/scripts/android-emulator-canary.sh
+      - name: Remove sensitive pairing diagnostics
+        if: always()
+        run: |
+          if [ -d tests/agent-e2e-mobile/runs ]; then
+            find tests/agent-e2e-mobile/runs -type d \
+              -path '*/maestro-debug/*-configure-gateway' \
+              -prune -exec rm -rf {} +
+          fi
+      # THE POINT OF RUNNING ON MAIN: bank the shell the PR gate restores. Saved
+      # `if: always()` so a red roster still leaves the next PR a warm build.
+      - name: Save the built Android app
+        if: always() && steps.emu.outputs.built == 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e-android
+          key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
+      - name: Save the Android gradle build directory
+        if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            apps/mobile/android/app/build
+            apps/mobile/android/build
+            ~/.gradle/caches
+          key: android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: mobile-canary-runs
+          path: tests/agent-e2e-mobile/runs/
+          retention-days: 7
+          if-no-files-found: ignore
+      # #905 — the ledger this runner appended, uploaded red or green; nothing
+      # else carries the observed durations off the runner.
+      - name: Upload the mobile run ledger
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mobile-run-ledger-canary-android
+          path: tests/agent-e2e-mobile/ledger/durations.json
+          retention-days: 30
+          if-no-files-found: warn
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane mobile-canary-android --rung 3 --platform android --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities journey,correctness,offline --surfaces mobile,replica-sync,tunnel-pairing
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: candidate-evidence-mobile-canary-android
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # EVERY CANDIDATE CARRIES AN iOS VERDICT (#915 Wave 2). The iOS Release `.app`
+  # is a SEPARATE ARTIFACT — a different binary, a different toolchain, a
+  # different Maestro driver — so "it paired and reached a usable Home on
+  # Android" is not evidence about it. Before this lane the first iOS answer of
+  # the day arrived from the nightly, against a tree that had already absorbed a
+  # day of merges, which is exactly the attribution problem rung 3 exists to end.
+  #
+  # Ten minutes WARM: the shell is restored by NATIVE fingerprint and this SHA's
+  # JavaScript is injected into it, so no compilation sits inside the suite's
+  # clock. See apps/mobile/scripts/ios-simulator-install.sh and
+  # docs/traps/ios-shell-injection.md.
+  mobile-ios-smoke:
+    runs-on: macos-26
+    # Outer backstop only. The `ios-smoke` suite's own 10-minute budget is what
+    # fails a slow run, because it fails while evidence can still be written.
+    # This must stay above that plus a COLD shell build (~32 min), because a
+    # cancelled job loses every verdict (#557).
+    timeout-minutes: 60
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        # Deliberately no turbo-cache, for e2e.yml `mobile-e2e-ios`'s reason:
+        # macOS is 1-of-1 here and must not restore a Linux-built native/*.node
+        # even with RUNNER_OS in the hash.
+      - name: Select Xcode 26.4 or newer
+        # Prefer the newest installed >= 26.4 so image rolls stay green without
+        # pinning a patch. Expo SDK 57's expo-modules-jsi needs Swift tools 6.2 /
+        # Xcode 26.4+ (#620); below that the JSI xcframework step exits 65 with
+        # an empty "Could not resolve package dependencies" footer.
+        run: |
+          set -euo pipefail
+          selected=""
+          for app in $(ls -d /Applications/Xcode_26.*.app 2>/dev/null | sort -V -r); do
+            version="${app#/Applications/Xcode_}"
+            version="${version%.app}"
+            major="${version%%.*}"
+            rest="${version#*.}"
+            minor="${rest%%.*}"
+            if [ "$major" -gt 26 ] || { [ "$major" -eq 26 ] && [ "$minor" -ge 4 ]; }; then
+              selected="$app"
+              break
+            fi
+          done
+          test -n "$selected" || {
+            echo "::error::no Xcode >=26.4 under /Applications (ExpoModulesJSI floor)"
+            ls -d /Applications/Xcode*.app || true
+            exit 1
+          }
+          echo "selecting $selected"
+          sudo xcode-select -s "$selected"
+          xcodebuild -version
+      # NATIVE ONLY — no `js` component, and that omission is the whole #915
+      # Wave 2 change on this platform. `expo run:ios --configuration Release`
+      # embeds the Hermes bundle, so keying the cache on the JS as well (which
+      # e2e.yml did until this wave) meant a JS-only candidate rebuilt a
+      # thirty-two-minute binary to change a file the install step can inject.
+      # The install script re-exports this SHA's bundle into the banked shell and
+      # REFUSES to install one whose stamp disagrees, so dropping the component
+      # costs no staleness — see ios-simulator-install.sh's header.
+      - name: Fingerprint the iOS native build inputs
+        id: native
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          # @expo/fingerprint reads node_modules for the autolinked native tree,
+          # so this runs after the setup action's install.
+          fp="$(node scripts/native-fingerprint.mjs ios)"
+          test -n "$fp" || { echo "::error::empty iOS fingerprint"; exit 1; }
+          # Captured separately: `a="$(cmd1; cmd2)"` keeps only cmd2's exit
+          # status, so a broken xcodebuild would silently weaken the key.
+          xcode="$(xcodebuild -version)"
+          sdk="$(xcrun --show-sdk-version --sdk iphonesimulator)"
+          xc="$(printf '%s\n%s\n' "$xcode" "$sdk" | shasum -a 256 | cut -d' ' -f1)"
+          echo "hash=xc${xc:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
+          echo "iOS fingerprints: fp=$fp toolchain(xc)=$xc"
+      - name: Assert runner Xcode satisfies React Native and ExpoModulesJSI
+        working-directory: apps/mobile
+        run: bun run ci:xcode
+      - name: Build and start the tokenless mobile test gateway
+        run: |
+          bun run turbo run build --filter=@centraid/server
+          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
+          for attempt in {1..90}; do
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/centraid-mobile-gateway.log
+          exit 1
+      - name: Install Maestro CLI
+        # Same pin as ci.yml, candidate.yml's Android lane and e2e.yml;
+        # validate-nightly-wiring.mjs fails when they disagree, because two
+        # device drivers on one roster is a difference nobody chose.
+        env:
+          MAESTRO_VERSION: 2.6.1
+        run: bash scripts/ci/install-maestro.sh
+      - name: Boot an iOS simulator
+        # #890 W0 — the device is PINNED (apps/mobile/scripts/device-matrix.json),
+        # not "the first available iPhone": an unpinned pick makes a screen-size
+        # or OS-behaviour regression indistinguishable from a runner-image roll.
+        run: |
+          set -euo pipefail
+          udid="$(xcrun simctl list devices available --json \
+            | node apps/mobile/scripts/resolve-ios-simulator.mjs)"
+          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl boot "$udid" || true
+          xcrun simctl bootstatus "$udid" -b
+      # No `restore-keys`: a partial-match fallback is exactly the stale-binary
+      # false-pass this must never allow. The key is all-or-nothing. Restore and
+      # save are SPLIT rather than the one-step `actions/cache` because that
+      # action declares `post-if: success()` — on a lane that is currently red
+      # the cache never populates, so the cold build is paid on every run and the
+      # warm path stays unreachable until the greenness the cache exists to help
+      # deliver (receipt 905 section C observed exactly that).
+      - name: Restore the built iOS shell
+        id: ios_app
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e
+          key: ios-shell-${{ runner.os }}-${{ steps.native.outputs.hash }}
+      # The committed rung-3 iOS script, sourcing ios-simulator-install.sh: it
+      # decides BUILD / INJECT / INSTALL, seeds the demo corpus before anything
+      # pairs (#870) and then runs
+      # `run-roster.mjs --rung 3 --platform ios --suite ios-smoke`. The literal
+      # path lives inside this job block, which is where
+      # scripts/lint-e2e-wiring.mjs reads it from.
+      - name: Run the iOS smoke suite on the release artifact
+        id: ios_shell
+        env:
+          IOS_CACHE_HIT: ${{ steps.ios_app.outputs.cache-hit }}
+          CENTRAID_MOBILE_BUILD: release
+        run: bash apps/mobile/scripts/ios-simulator-smoke.sh
+      # Banked even when the suite is red: the artifact is the product of the
+      # fingerprinted inputs whether or not a later Maestro flow passed. Gated on
+      # `built` so a run that restored rather than compiled does not re-save what
+      # it was just given.
+      - name: Save the built iOS shell
+        if: always() && steps.ios_shell.outputs.built == 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e
+          key: ios-shell-${{ runner.os }}-${{ steps.native.outputs.hash }}
+      # The gateway's side of a red run. The phone is mute about its replica, so
+      # whether a clone was ever ASKED FOR is only knowable from here.
+      - name: What the gateway served
+        if: failure()
+        run: tail -n 200 /tmp/centraid-mobile-gateway.log || true
+      # The harness rm -rf's this in a finally; belt-and-braces against a run
+      # that dies before the finally, so a crash mid-pairing cannot ship a live
+      # enrollment capability in the uploaded artifact.
+      - name: Remove sensitive pairing diagnostics
+        if: always()
+        run: |
+          if [ -d tests/agent-e2e-mobile/runs ]; then
+            find tests/agent-e2e-mobile/runs -type d \
+              -path '*/maestro-debug/*-configure-gateway' \
+              -prune -exec rm -rf {} +
+          fi
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane mobile-ios-smoke --rung 3 --platform ios --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 600000 --candidate ${{ github.sha }} --qualities journey,correctness --surfaces mobile,replica-sync,tunnel-pairing
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: candidate-evidence-mobile-ios-smoke
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: candidate-debug-mobile-ios-smoke-runs
+          path: tests/agent-e2e-mobile/runs/
+          retention-days: 7
+          if-no-files-found: ignore
+      # #905 — the ledger this runner appended, uploaded red or green; nothing
+      # else carries the observed durations off the runner.
+      - name: Upload the mobile run ledger
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mobile-run-ledger-ios-smoke
+          path: tests/agent-e2e-mobile/ledger/durations.json
+          retention-days: 30
+          if-no-files-found: warn
+
+  # The two Linux Playwright suites #915 took off the merge gate. Two CALLS
+  # rather than one with both booleans, so each reports as its own lane: the
+  # promotion aggregate and the lane-health rules both key on the job id, and a
+  # single caller would collapse "web is red" and "desktop is red" into one
+  # verdict nobody could act on.
+  web-e2e-linux:
+    uses: ./.github/workflows/lane-client-e2e.yml
+    with:
+      web: true
+      desktop: false
+
+  desktop-e2e-linux:
+    uses: ./.github/workflows/lane-client-e2e.yml
+    with:
+      web: false
+      desktop: true
+
+  # #842 W5.2 — the desktop journey on darwin, moved off the PR loop (#915).
+  # The "twice-burned promotion rule" recorded in lane-client-e2e.yml is what
+  # would move it back to rung 2, and `scripts/ci/lane-health.mjs` now counts
+  # the burns instead of leaving them to memory.
+  #
+  # This launches the desktop journey, NOT a signed packaged build. Booting the
+  # signed installer's own journey stays coupled to lane-release-desktop.yml,
+  # where the Azure/Apple secrets live. It needs no xvfb + gnome-keyring
+  # bootstrap: Electron safeStorage uses the login Keychain, already unlocked in
+  # the runner's user session.
+  desktop-e2e-macos:
+    runs-on: macos-latest
+    timeout-minutes: 35
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - run: bunx playwright install --with-deps chromium
+        working-directory: apps/desktop
+      - run: bun run build
+      - run: bun run test:e2e
+        working-directory: apps/desktop
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: desktop-e2e-macos-traces
+          path: apps/desktop/test-results/
+          retention-days: 7
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane desktop-e2e-macos --rung 3 --platform macos --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1800000 --candidate ${{ github.sha }} --qualities journey,compat --surfaces desktop
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: candidate-evidence-desktop-e2e-macos
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # #637 — lane-gateway-package requests packages: write for the GHCR build
+  # cache. The caller must grant it, or the whole workflow fails at startup with
+  # packages: none (the same pattern release.yml → lane-release-gateway-image
+  # follows).
+  lane-gateway-package:
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/lane-gateway-package.yml
+
+  # #892 Phase 1's `mutation-canary`, renamed for the rung it now names. The full
+  # seed set with floors enforced, on every merge: a mutation-score regression
+  # attributable to ONE commit rather than a night's worth of them. The nightly
+  # full run in e2e.yml stays — it is the scheduled sweep that catches a seed
+  # rotting without any commit touching its watch list.
+  #
+  # It is also where `mutation-pr` sends the PRs whose affected-seed set ran past
+  # the rung-2 cap (scripts/ci/mutation-cap.mjs): "deferred to rung 3" names this
+  # job, so removing it would make that deferral a lie.
+  mutation-full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - name: Build packages for mutation seeds
+        run: bun run turbo run build --filter='./packages/*'
+      - name: Full-seed mutation (all seeds + floors)
+        run: bun run test:mutation -- --enforce-floors
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: mutation-full-scores
+          path: artifacts/mutation/
+          retention-days: 14
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane mutation-full --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities correctness,contracts --surfaces vault-core,gateway,app-engine
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: candidate-evidence-mutation-full
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # #557 — SAST over the TS/Rust product code AND the workflow YAML itself (the
+  # `actions` language finds injection and unpinned-ref classes actionlint does
+  # not model). It ran on a weekly cron in `security.yml`; #915 moved it here so
+  # a candidate is not promotable with an unreviewed injection sink in it, and so
+  # the answer arrives attributed to one commit rather than to a week.
+  #
+  # `build-mode` is deliberately not set. All three languages default to the
+  # no-build database (CodeQL reads source directly rather than observing a
+  # compiler), so no Rust toolchain setup is needed — the three crates,
+  # packages/tunnel/{data-plane,native} and apps/web/iroh-wasm, are picked up
+  # straight from the checkout. Passing the flag explicitly only creates a way to
+  # be wrong when a default changes.
+  codeql:
+    name: codeql (${{ matrix.language }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+      # Required for CodeQL to map alerts back to the commit on private forks.
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: javascript-typescript
+            os: ubuntu-latest
+          - language: actions
+            os: ubuntu-latest
+          - language: rust
+            os: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          languages: ${{ matrix.language }}
+          # security-extended adds the lower-precision-but-real queries; the
+          # default suite alone misses most injection sinks.
+          queries: security-extended
+      - name: Analyze
+        uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          category: /language:${{ matrix.language }}
+
+  # #842 W7.2 — the Rust half of supply chain. CodeQL above reads the crates'
+  # source; this reads their DEPENDENCIES: cargo-audit for known advisories,
+  # cargo-deny for licences, banned crates, duplicate versions and unknown
+  # registries. Off the PR loop for the same reason codeql is — installing two
+  # cargo binaries is minutes — and on rung 3 rather than a weekly cron so a
+  # promoted build is one whose dependency posture was checked.
+  #
+  # The unsafe-edge ratchet also runs on every PR (`check:push`): it needs no
+  # toolchain, so there is no reason to defer it. It is repeated here only so one
+  # place reports the whole Rust posture.
+  rust-supply-chain:
+    name: rust supply-chain (cargo-audit + cargo-deny)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # `toolchain` is REQUIRED when the action is pinned by SHA. Unpinned, it
+      # reads the toolchain from its own ref (`@stable`); a SHA has no ref name
+      # to read, so the input has to be spelled out or the action exits 1 with
+      # "'toolchain' is a required input" before installing anything.
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: stable
+      - run: cargo install cargo-audit --locked
+      - run: cargo install cargo-deny --locked
+      # `--require` is what makes this job worth having. Without it a missing
+      # binary is a loud guarded skip that still exits 0 — correct on a
+      # developer machine, wrong here, where this job installs both and so an
+      # absent binary means the install step lied rather than that the tool is
+      # unavailable. Under --require, "available but did not run" is red too.
+      - run: node scripts/security/rust-supply-chain.mjs --require
+      - run: node scripts/security/unsafe-edge-audit.mjs
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane rust-supply-chain --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 1200000 --candidate ${{ github.sha }} --qualities security,compat --surfaces tunnel-pairing,gateway
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: candidate-evidence-rust-supply-chain
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # THE PROMOTION. Fail-closed over every lane above, exactly like ci.yml's
+  # `check`: `success | skipped` is satisfied, anything else — `cancelled`
+  # included — is not, and an EMPTY result list refuses to pass rather than
+  # returning 0 because it never looked (#556).
+  #
+  # On green the pointer moves and the record is published. On red the pointer
+  # STAYS WHERE IT IS — that is the entire value of a candidate: the deep rungs
+  # keep testing the last build somebody would have handed to a device, instead
+  # of following `main` into whatever broke.
+  promote:
+    needs:
+      [
+        mobile-canary-android,
+        mobile-ios-smoke,
+        web-e2e-linux,
+        desktop-e2e-linux,
+        desktop-e2e-macos,
+        lane-gateway-package,
+        mutation-full,
+        codeql,
+        rust-supply-chain,
+      ]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      issues: write
+    # The gh-pages tree is written by three workflows; they share one group so a
+    # promotion cannot race the nightly publish into a corrupt commit.
+    concurrency:
+      group: github-pages-test-report
+      cancel-in-progress: false
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          install: "false"
+      - name: Record what every lane said
+        if: always()
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          mkdir -p artifacts
+          printf '%s\n' "$NEEDS_JSON" > artifacts/candidate-needs.json
+      # The two `uses:` lanes cannot carry an evidence step of their own — a
+      # reusable-workflow caller job has no `steps:` — so their evidence is
+      # written here from the result the caller saw. Same schema, same reader;
+      # the only thing lost is the per-case detail, which those lanes do not
+      # produce today anyway.
+      - name: Write evidence for the reusable-workflow lanes
+        if: always()
+        run: |
+          set -euo pipefail
+          started="$(date -u +%FT%TZ)"
+          for pair in \
+            "web-e2e-linux:${{ needs.web-e2e-linux.result }}:web:vault-core,web" \
+            "desktop-e2e-linux:${{ needs.desktop-e2e-linux.result }}:desktop:vault-core,desktop" \
+            "lane-gateway-package:${{ needs.lane-gateway-package.result }}:gateway:gateway,blob-custody"; do
+            lane="${pair%%:*}"; rest="${pair#*:}"
+            result="${rest%%:*}"; rest="${rest#*:}"
+            platform="${rest%%:*}"; surfaces="${rest#*:}"
+            verdict=passed
+            [ "$result" = "success" ] || verdict=failed
+            node scripts/test-report/write-evidence.mjs \
+              --lane "$lane" --rung 3 --platform "$platform" \
+              --verdict "$verdict" --started-at "$started" \
+              --budget-ms 2700000 --candidate "$GITHUB_SHA" \
+              --qualities journey,contracts --surfaces "$surfaces"
+          done
+      - name: Aggregate every promotion lane
+        id: aggregate
+        env:
+          RESULTS: ${{ join(needs.*.result, ',') }}
+        run: |
+          set -euo pipefail
+          echo "results: $RESULTS"
+          if [ -z "${RESULTS//,/}" ]; then
+            echo "::error::aggregator received no lane results — refusing to promote"
+            exit 1
+          fi
+          bad=0
+          IFS=',' read -ra each <<< "$RESULTS"
+          for result in "${each[@]}"; do
+            case "$result" in
+              success | skipped) ;;
+              *) echo "::warning::a promotion lane reported '$result'"; bad=1 ;;
+            esac
+          done
+          if [ "$bad" = "0" ]; then
+            echo "green=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "green=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Read the pointer this promotion replaces
+        id: previous
+        run: |
+          set -euo pipefail
+          sha="$(git ls-remote origin refs/candidates/latest 2>/dev/null | cut -f1 || true)"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+      - name: Restore the published site tree (gh-pages)
+        if: steps.aggregate.outputs.green == 'true'
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: gh-pages
+          path: site
+      - name: Write the candidate record
+        if: steps.aggregate.outputs.green == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p site/test-report
+          rm -rf site/.git
+          node scripts/ci/write-candidate.mjs \
+            --sha "$GITHUB_SHA" \
+            --previous "${{ steps.previous.outputs.sha }}" \
+            --run-id "${{ github.run_id }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --needs artifacts/candidate-needs.json \
+            --out artifacts/candidate.json \
+            --history site/test-report/candidates.json
+          cp artifacts/candidate.json site/test-report/candidate.json
+      - name: Move the candidate pointer
+        if: steps.aggregate.outputs.green == 'true'
+        run: |
+          set -euo pipefail
+          git update-ref refs/candidates/latest "$GITHUB_SHA"
+          git push origin refs/candidates/latest --force
+          echo "promoted $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: candidate
+          path: artifacts/
+          retention-days: 30
+          if-no-files-found: warn
+      - name: Publish the candidate record to gh-pages
+        if: steps.aggregate.outputs.green == 'true'
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          publish_branch: gh-pages
+          force_orphan: false
+          enable_jekyll: false
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com
+      # A red candidate updates ONE rolling issue per red lane, in place. Never a
+      # comment, never a new issue: the body is the lane's current condition, so
+      # a run of red merges leaves one readable issue per lane rather than a
+      # thread nobody opens (#915 Wave 0's lesson, applied at rung 3).
+      - name: Update the rolling issue for every red lane
+        if: always() && steps.aggregate.outputs.green != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$NEEDS_JSON" > /tmp/needs.json
+          jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key' /tmp/needs.json > /tmp/red-lanes.txt
+          while read -r lane; do
+            [ -n "$lane" ] || continue
+            node scripts/ci/rolling-issue-fallback-body.mjs \
+              --lane "$lane" --rung 3 --result failure \
+              --run-url "$RUN_URL" --out /tmp/rolling-body.md
+            node scripts/ci/file-tracking-issue.mjs --update \
+              --title "[candidate] lane red — ${lane}" \
+              --search "[candidate] lane red — ${lane}" \
+              --body-file /tmp/rolling-body.md \
+              --label tech-debt \
+              --run-url "$RUN_URL"
+          done < /tmp/red-lanes.txt
+      - name: Fail the promotion when a lane was red
+        if: always()
+        run: |
+          if [ "${{ steps.aggregate.outputs.green }}" != "true" ]; then
+            echo "::error::the candidate pointer did not move — a promotion lane was red"
+            exit 1
+          fi
+
+  # The rules table, scored over THIS workflow's runs (#915). Rung 3 is where
+  # "pass rate on candidates" is a real measurement rather than a phrase, and
+  # `--escape-workflow ci.yml` is what lets it count the times rung 3 caught
+  # something the merge gate had already called green.
+  lane-health:
+    needs: [promote]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          install: "false"
+      - name: Score the candidate lanes against the rules table
+        id: lanes
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/ci/lane-health.mjs \
+            --repo "${{ github.repository }}" \
+            --workflow candidate.yml \
+            --rung 3 \
+            --escape-workflow ci.yml \
+            --runs 30 \
+            --out artifacts/lane-health/candidate-summary.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: candidate-lane-health
+          path: artifacts/
+          retention-days: 30
+          if-no-files-found: warn
+      # Each finding already carries the rolling issue title the rule wants, so
+      # this is a loop rather than a second copy of the rules table.
+      - name: Open or update one rolling issue per finding
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          summary=artifacts/lane-health/candidate-summary.json
+          if [ ! -f "$summary" ]; then
+            echo "::warning::lane-health wrote no summary; no rules issues to file"
+            exit 0
+          fi
+          jq -c '.findings[]?' "$summary" > /tmp/findings.jsonl
+          while read -r finding; do
+            [ -n "$finding" ] || continue
+            title="$(printf '%s' "$finding" | jq -r '.title')"
+            {
+              printf '## %s\n\n' "$title"
+              printf '%s\n\n' "$(printf '%s' "$finding" | jq -r '.detail')"
+              printf 'Rule: `%s`. Measured over the trailing 30 `candidate.yml` runs on `main`.\n\n' "$(printf '%s' "$finding" | jq -r '.kind')"
+              printf 'This issue is rolling: its body is rewritten every run and never appended to. Close it when the rule stops firing.\n\n'
+              printf 'Run: %s\n' "$RUN_URL"
+            } > /tmp/rule-body.md
+            node scripts/ci/file-tracking-issue.mjs --update \
+              --title "$title" --search "$title" \
+              --body-file /tmp/rule-body.md --label tech-debt --run-url "$RUN_URL"
+          done < /tmp/findings.jsonl
+      - name: Fail when a rule that is red fired
+        if: always()
+        run: |
+          if [ "${{ steps.lanes.outcome }}" != "success" ]; then
+            echo "::error::a lane rule that counts as red fired — see the step above"
+            exit 1
+          fi

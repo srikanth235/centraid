@@ -22,6 +22,13 @@ on:
     # 06:00 nightly e2e, so a red soak never competes for attention with either.
     - cron: "40 3 * * 6"
   workflow_dispatch:
+    inputs:
+      # #915 Wave 1 — empty means "the promoted candidate"; a value overrides it.
+      ref:
+        description: "Candidate ref or SHA to test (default: the promoted candidate)"
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: soak-weekly-${{ github.ref }}
@@ -31,7 +38,32 @@ permissions:
   contents: read
 
 jobs:
+  # #915 Wave 1 — RUNG 5 CONSUMES THE CANDIDATE, like rung 4. A weekly lane that
+  # tests whatever `main` happened to point at on Saturday morning cannot tell a
+  # product regression from Friday's merge, and it has a whole week to be wrong
+  # about it. `scripts/ci/resolve-candidate.mjs` prints which link of the
+  # fallback chain answered (dispatch input -> refs/candidates/latest -> the last
+  # green ci.yml run -> this run's own SHA).
+  resolve-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.candidate.outputs.sha }}
+      source: ${{ steps.candidate.outputs.source }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Resolve the candidate under test
+        id: candidate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/ci/resolve-candidate.mjs \
+            --repo "${{ github.repository }}" \
+            --ref "${{ github.event.inputs.ref }}" \
+            --fallback-sha "${{ github.sha }}"
+
   long-run-soak:
+    needs: [resolve-candidate]
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -45,7 +77,12 @@ jobs:
       - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: audit
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See resolve-candidate.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
@@ -63,6 +100,16 @@ jobs:
         env:
           CENTRAID_SOAK_MINUTES: "240"
         run: node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/long-run-soak.scale.test.ts
+      # #915 Wave 3 — the report is a pure function of `artifacts/evidence/`, so
+      # a lane with no evidence file renders as `no evidence` forever and nobody
+      # can tell that from a lane that did not run. Written before the upload
+      # below, which already ships the whole `artifacts/` root.
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane long-run-soak --rung 5 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 18000000 --candidate ${{ needs.resolve-candidate.outputs.sha }} --qualities durability,performance --surfaces gateway,vault
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -77,7 +124,7 @@ jobs:
           key: soak-weekly-${{ runner.os }}-${{ github.run_id }}
 
   soak-failure-issue:
-    needs: [long-run-soak]
+    needs: [resolve-candidate, long-run-soak]
     if: >
       always() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' && (
         contains(join(needs.*.result, ','), 'failure') ||
@@ -90,6 +137,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # #915 — the CANDIDATE, not the tip. See resolve-candidate.
+          ref: ${{ needs.resolve-candidate.outputs.sha }}
       - name: Open or update tracking issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

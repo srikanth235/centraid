@@ -6,7 +6,7 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 - **Seat class**: `record-only`.
 - **Graduation issue**: none yet; write-path holes tracked under [#864](https://github.com/srikanth235/centraid/issues/864).
 - **Journey ownership**: origin `tests/agent-e2e-mobile/flows/tasks-board.mjs`; custodian `apps/desktop/tests/e2e/tasks.spec.ts`; viewer `apps/web/tests/e2e/tasks.spec.ts`. Shared replica overlay until a Tasks-specific native integration exists.
-- **Structural exclusions**: see `tests/matrix.json#appEngines`.
+- **Structural exclusions**: see `tests/claims.json#appEngines`.
 
 | Tasks scenario | U | C | E | Owner / evidence |
 | --- | --- | --- | --- | --- |

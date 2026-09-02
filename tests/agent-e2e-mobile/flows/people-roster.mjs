@@ -38,7 +38,11 @@
 // scripts/lint-e2e-flows.mjs).
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import {
+  AWAIT_LAUNCHER,
+  FIRST_LAUNCH_TIMEOUT_MS,
+  runFlow,
+} from "../lib/harness.mjs";
 
 await runFlow("people-roster", async (ctx) => {
   await ctx.ensureDemo("people");
@@ -46,7 +50,7 @@ await runFlow("people-roster", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${retryableTapCommands("Open People.*")}
+${AWAIT_LAUNCHER}${retryableTapCommands("Open People.*")}
 # THE ROSTER DREW A ROW AT ALL, by the leading row's handle — the arrival
 # marker. The roster's header word is the app's name and is drawn by the
 # launcher tile too, so it could not tell an arrival from a tap that did

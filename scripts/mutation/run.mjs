@@ -105,7 +105,7 @@ export function buildScoresArtifact(rows) {
 /**
  * Compare measured scores against floors.
  * @param {{ packages?: Array<{ id?: string; score?: number | null }> }} scores Artifact.
- * @param {Record<string, unknown>} floors tests/mutation-floors.json shape.
+ * @param {Record<string, unknown>} floors the `tests/floors.json#mutation` shape.
  * @returns {string[]} Human-readable errors (empty = pass).
  */
 /**
@@ -214,14 +214,58 @@ export function listChangedFiles(base, cwd = root) {
 
 /**
  * Load mutation score floors from disk.
- * @param {string} [floorsPath] Absolute path to mutation-floors.json.
- * @returns {Record<string, unknown>} Parsed floors object, or empty when missing.
+ * @param {string} [floorsPath] Absolute path to the merged floors ledger.
+ * @returns {Record<string, unknown>} The `mutation` section, or empty when missing.
  */
 export function loadMutationFloors(
-  floorsPath = path.join(root, "tests/mutation-floors.json")
+  floorsPath = path.join(root, "tests/floors.json")
 ) {
   if (!existsSync(floorsPath)) return {};
-  return JSON.parse(readFileSync(floorsPath, "utf8"));
+  return JSON.parse(readFileSync(floorsPath, "utf8")).mutation ?? {};
+}
+
+/**
+ * `tests/floors.json#<section>` tokens for the sections that differ from the
+ * merge base, so a section of a merged ledger can be watched without watching
+ * the whole file (#915 Wave 4).
+ * @param {unknown} base the floors ledger on the merge base
+ * @param {unknown} head the floors ledger in the working tree
+ * @returns {string[]} one token per section whose content changed
+ */
+export function changedFloorSections(base, head) {
+  const keys = new Set([
+    ...Object.keys(base ?? {}),
+    ...Object.keys(head ?? {}),
+  ]);
+  return [...keys]
+    .filter(
+      (key) =>
+        !key.startsWith("_") &&
+        JSON.stringify(base?.[key]) !== JSON.stringify(head?.[key])
+    )
+    .map((key) => `tests/floors.json#${key}`)
+    .sort();
+}
+
+/**
+ * Read a JSON file at a git ref, or null when it is not there.
+ * @param {string} ref git ref
+ * @param {string} relative repo-relative path
+ * @param {string} [cwd] repo root
+ * @returns {unknown} the parsed document, or null
+ */
+export function readJsonAtRef(ref, relative, cwd = root) {
+  try {
+    return JSON.parse(
+      execFileSync("git", ["show", `${ref}:${relative}`], {
+        cwd,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+    );
+  } catch {
+    return null;
+  }
 }
 
 function parseArgs(argv) {
@@ -377,7 +421,22 @@ function main() {
       return;
     }
   } else if (args.affected) {
-    const changed = listChangedFiles(args.base);
+    let changed = listChangedFiles(args.base);
+    // A merged ledger is watched by SECTION: expand tests/floors.json into the
+    // sections that actually moved before the watch list is consulted.
+    if (changed.includes("tests/floors.json")) {
+      changed = [
+        ...changed,
+        ...changedFloorSections(
+          readJsonAtRef(args.base, "tests/floors.json"),
+          existsSync(path.join(root, "tests/floors.json"))
+            ? JSON.parse(
+                readFileSync(path.join(root, "tests/floors.json"), "utf8")
+              )
+            : null
+        ),
+      ];
+    }
     seeds = selectAffectedSeeds(changed);
     console.log(
       `mutation: --affected vs ${args.base}: ${changed.length} changed file(s), ${seeds.length} seed(s)`

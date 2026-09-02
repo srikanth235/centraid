@@ -4,7 +4,7 @@ Top-level `packages/*` / `apps/*` source trees and every executable tree
 co-located outside `src/` inside a package or app must not fall outside every
 coverage floor, matrix owner, and intentional-ungated allowlist.
 
-Coverage floors only gate the globs listed in `tests/coverage-floors.json`.
+Coverage floors only gate the globs listed in `tests/floors.json#coverage`.
 A new package under `packages/foo/src`, or executable code added to a non-`src`
 runtime tree, with no floor, no matrix owner, and no allowlist entry is
 invisible to `bun run coverage` thresholds — the exact blind spots #532, #630,

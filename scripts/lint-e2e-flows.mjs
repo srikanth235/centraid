@@ -199,6 +199,71 @@ function isAllowed(lines, i, rule) {
   return false;
 }
 
+/** A launcher-tile reference: the `Open <App>` cover tap every home journey
+ *  opens with, in either of the two shapes flows write it — the
+ *  `retryableTapCommands("Open Docs.*")` helper call and a bare `tapOn` — plus
+ *  the `home-tile-<app>` handle the two probe journeys use instead. */
+const TILE_RE = /(?:Open\s+[A-Z][a-zA-Z]*\s*\.\*|home-tile-[a-z]+)/gu;
+
+/** The wait that tells DayOne from a launcher with tiles. Matched by NAME, not
+ *  by the id it expands to: the constant is the contract, and a flow that
+ *  inlined the id would be one rename away from waiting on nothing. */
+const LAUNCHER_WAIT = "AWAIT_LAUNCHER";
+
+/**
+ * RULE launcher-await — the #870 rule.
+ *
+ * `HOME_READY_MARKER` is the band's label and the band renders in BOTH of
+ * Home's branches, so a flow that waits only for it cannot tell a Home that has
+ * the vault from one that does not. When the replica's clone has not landed,
+ * `springboardState` settles every tile `empty`, `Home.tsx` renders `DayOne`,
+ * and the very next `Open <App>` tap fails with `Element not found`. That is
+ * what the 2026-09-01 nightly said twelve times over — and what it meant was
+ * "the corpus arrived after the phone had already cloned" (#905 section E),
+ * a sentence no line of that log contained.
+ *
+ * `AWAIT_LAUNCHER` waits for `home-grid`, which `LauncherGrid` alone publishes,
+ * so it is the first thing on screen that separates the branches. #905 added it
+ * and applied it to three flows; every other cover-tapping journey still walked
+ * into DayOne and blamed a tile. This rule is what makes "apply it where the
+ * next act is opening an app" mechanical instead of remembered.
+ *
+ * Chunk-scoped, because that is the scope the wait has to be in: a wait in an
+ * earlier `ctx.run()` is a different Maestro process against a screen that may
+ * have changed. Flows that deliberately face an empty vault — a purge, a
+ * cleared client — mark the chunk `# e2e-lint-allow: launcher-await — <reason>`,
+ * because for them DayOne is the correct screen.
+ */
+export function launcherAwaitFindings(text) {
+  const findings = [];
+  // Chunks are the segments between `ctx.run(` calls: one Maestro process each.
+  const segments = text.split("ctx.run(");
+  let offset = segments[0].length;
+  for (const segment of segments.slice(1)) {
+    const start = offset + "ctx.run(".length;
+    offset = start + segment.length;
+    const tile = TILE_RE.exec(segment);
+    TILE_RE.lastIndex = 0;
+    if (!tile) continue;
+    if (/e2e-lint-allow:\s*launcher-await\b/u.test(segment)) continue;
+    const waitAt = segment.indexOf(LAUNCHER_WAIT);
+    if (waitAt !== -1 && waitAt < tile.index) continue;
+    findings.push({
+      line: text.slice(0, start + tile.index).split("\n").length,
+      rule: "launcher-await",
+      message:
+        `this chunk reaches the launcher tile \`${tile[0]}\` without waiting for ` +
+        `\`${LAUNCHER_WAIT}\` first. HOME_READY_MARKER is the band, and the band renders ` +
+        `over DayOne too — so on a phone whose replica has not cloned, this tap fails ` +
+        `with \`Element not found\` and names the app instead of the vault (#870). Put ` +
+        `\`\${${LAUNCHER_WAIT}}\` before the tap, or mark the chunk ` +
+        `\`# e2e-lint-allow: launcher-await — <reason>\` if it deliberately faces an ` +
+        `empty vault.`,
+    });
+  }
+  return findings;
+}
+
 /**
  * Lint one flow source. Pure — takes text, returns findings + a step count so
  * the caller can enforce the silent-no-op guard. Exported for the self-test.
@@ -263,6 +328,8 @@ export function lintFlowSource(text) {
       }
     }
   }
+
+  findings.push(...launcherAwaitFindings(text));
 
   return { findings, steps: steps.length };
 }

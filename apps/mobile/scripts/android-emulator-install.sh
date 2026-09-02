@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Shared preamble for every Android device lane: build-or-restore the apk,
 # install it, prove the right package landed, and silence the emulator's ANR
-# dialogs. SOURCED (not executed) by its three callers:
+# dialogs. SOURCED (not executed) by its three callers (#915 Wave 2):
 #
-#   android-emulator-pr-gate.sh             ci.yml `mobile-device-gate`, the
-#                                           PAIRED leg of the critical five
-#   android-emulator-pr-gate-resilience.sh  the same job's RESILIENCE leg, on a
-#                                           second emulator in parallel (#905)
-#   android-emulator-roster.sh              mobile-canary.yml and e2e.yml — the
-#                                           full roster
+#   android-emulator-pr-gate.sh   ci.yml `mobile-device-gate` — rung 2, ONE leg,
+#                                 the `pr-gate` suite at eight minutes warm
+#   android-emulator-canary.sh    candidate.yml `mobile-canary-android` — rung 3
+#   android-emulator-roster.sh    e2e.yml `mobile-e2e-android` — rung 4, depth
+#
+# The retired `android-emulator-pr-gate-resilience.sh` was the gate's second leg
+# until #915 Wave 1 cut the gate to one; its three members are the `resilience`
+# suite on rung 3 now.
 #
 # WHY ONE SCRIPT PER LANE SHAPE RATHER THAN ONE SCRIPT WITH A SUITE SWITCH
 # (#890 W4). The earlier shape was one script branching on

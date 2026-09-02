@@ -42,7 +42,7 @@ test("an unregistered advisory fails", () => {
     "2026-08-31"
   );
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /no entry in tests\/advisory-ledger\.json/u);
+  assert.match(errors[0], /no entry in tests\/inventory\.json#advisory/u);
 });
 
 test("a registered, unexpired advisory passes", () => {
