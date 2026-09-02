@@ -133,6 +133,7 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Give Tally's commit a handle, since its label and the screen title are the same words
 - [x] Assert the return to the group screen after the commit, rather than blind-tapping the band
 - [x] Stop racing the gateway's own reply deadline with a wait of exactly the same length
+- [x] Deadline the app-query door too, which had none and so hung the offline commit forever
 - [x] Spend one spawn on Notes' three adjacent read and write chunks
 
 ### U — the merged tree's own three client-e2e failures
@@ -154,6 +155,7 @@ Where each checked item lands, then the reasoning behind it:
 - Make Photos ask before it is refused, since a pre-revoked grant is not a denied one — same section; `tests/agent-e2e-mobile/flows/photos-permissions.mjs`.
 - Assert the return to the group screen after the commit, rather than blind-tapping the band — same section; `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
 - Stop racing the gateway's own reply deadline with a wait of exactly the same length — same section; same file.
+- Deadline the app-query door too, which had none and so hung the offline commit forever — same section; `apps/mobile/src/lib/gateway.ts`.
 - Give Tally's commit a handle, since its label and the screen title are the same words — same section; `apps/mobile/src/kit/test-ids.ts`, `apps/mobile/src/apps/tally/TallyAddScreen.tsx`, `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
 - Spend one spawn on Notes' three adjacent read and write chunks — same section; `tests/agent-e2e-mobile/flows/notes-library.mjs`.
 - Disambiguate the Household sharing panel's headings, which the merge made ambiguous page-wide — "U — three failures the merge produced and nothing before it could have"; `apps/desktop/tests/e2e/household.spec.ts`.
@@ -776,6 +778,14 @@ What that leaves is a claim, not a flow bug. `native-v0-resilience` exists to pr
 
 So: the button is still there, no refusal is drawn, no status is posted, no error is logged, and the screen does not leave. `commit` returning early at `!verdict.ok` would leave a refusal (every `refuse()` but one passes a non-empty string) and `issueTallyWrite` failing would log. The reading most consistent with all four observations is that `await session.write("tally", …)` never resolves while the radio is off — a write that hangs instead of queueing. That is a hypothesis and is labelled one; what is established is the four observations above.
 
+**THE ACTUAL CAUSE, and a correction to the paragraph below it.** The 60s wait did not help: run 33570760531 tapped the commit at 23:39:01 and failed at 23:40:02, a full minute later. That also exposes the flaw in the reasoning that produced the 60s — a step always fails at exactly its own timeout, so "failed at exactly 20s" was never evidence that the 20s deadline was what elapsed. It was circular, and the paragraph below is left standing as written with this correction over it.
+
+What the minute of silence proves is better evidence than the timing was. Between the tap and the failure the app logged NOTHING — no `never left the phone`, which `fetcher()` emits on an aborted request, and no error. So no deadline fired and nothing failed. `postReplicaIntent` does use the deadlined fetcher, and offline it is never called at all, because the drain does not run without a connection — the intent simply queues, which is correct.
+
+The hang is one line further on. `issueTallyWrite` awaits `refreshTally()` BEFORE it returns, that calls `tallyDashboard()`, and every Tally read goes through `lib/gateway.ts`'s `appQuery` → `fetchOrThrow`, which called **bare `fetch(href, init)` with no deadline and no signal**. #903 gave the replica fetcher a reply deadline for exactly this trap and this door never got one. So offline the write was already queued and the read behind it never came back: the promise never settled, `.then` never ran, `navigation.goBack()` never fired, and the composer sat there with nothing drawn and nothing logged — every observation recorded above, explained.
+
+`fetchOrThrow` is now deadlined the same way. This is a member-facing fix, not a test fix: ANY Tally read on a phone that has lost its gateway hung the surface that issued it, forever, and an offline expense that had genuinely been recorded looked like a control that did nothing.
+
 **FOUND, and it was the flow after all — a dead heat with a documented product timeout.** `GATEWAY_REPLY_DEADLINE_MS` is 20_000 (`lib/replica/gateway-deadline.ts`), and the wait after the commit was `timeout: 20000`. Run 33567489343 tapped the commit at 22:56:18 and failed here at 22:56:38, to the second. The write was settling as the flow gave up on it.
 
 Why the write needs that long is the trap the constant exists for: offline, the phone still talks to `http://127.0.0.1:<port>` — the LOCAL tunnel — and airplane mode does not stop a loopback connection. The listener keeps ACCEPTING after its peer is gone (`docs/traps/unreachable-vault.md`), so nothing fails fast; the request hangs until the deadline aborts it, and only then does the intent settle as queued. That is also why the earlier reasoning kept coming up empty: no `never left the phone` line was logged because the fetch had not yet finished failing, and no refusal was drawn because nothing had been refused.
@@ -1009,4 +1019,4 @@ Recorded as REFUTED because the directive defaults to REFUTED under uncertainty 
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-09-01 | claude-code | 91a550cd-d7f2-5fa3-9d41-c4d75aaf2c05 |
+| 2026-09-02 | claude-code | 91a550cd-d7f2-5fa3-9d41-c4d75aaf2c05 |

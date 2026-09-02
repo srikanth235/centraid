@@ -14,6 +14,7 @@ import { MOBILE_AUTHORIZE_SURFACE } from "./connection-reauth";
 import type { AssistHandoff } from "./connection-reauth";
 import type { DecisionScope } from "./decision-detail";
 import { ensureTunnelStarted } from "./phone-link";
+import { fetchWithinReplyDeadline } from "./replica/gateway-deadline";
 import { getSecure, hydrateSecure, setSecure } from "./secure-storage";
 import { getActiveVaultId } from "./vault-links";
 
@@ -213,7 +214,10 @@ async function fetchOrThrow(
   init?: RequestInit
 ): Promise<Response> {
   try {
-    return await fetch(href, init);
+    return await fetchWithinReplyDeadline(
+      (signal) => fetch(href, { ...init, signal }),
+      init?.signal ?? undefined
+    );
   } catch (error) {
     throw new GatewayError(
       "unreachable",
