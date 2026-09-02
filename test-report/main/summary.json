@@ -1,372 +1,215 @@
 {
-  "generatedAt": "2026-09-02T04:21:58.672Z",
-  "passed": 1507,
-  "failed": 0,
-  "skipped": 0,
-  "skippedTests": 37,
-  "envGated": 37,
-  "stale": 0,
-  "unhandledErrors": 0,
-  "unhandledErrorMessages": [],
-  "cellsPassed": 77,
-  "cellsFailed": 0,
-  "cellsMissing": 59,
-  "cellsFlaky": 0,
-  "cellsOwnerSilent": 0,
-  "cellsLaneDidNotRun": 0,
-  "cellsInfraMismatch": 0,
-  "cellsEvidenceUnmatched": 0,
-  "cellsExpectedGrey": 0,
-  "expectedGreyCellIds": [],
-  "missingCellIds": [
-    "vault-core:performance",
-    "vault-core:scalability",
-    "vault-core:accessibility",
-    "blob-custody:performance",
-    "blob-custody:scalability",
-    "blob-custody:accessibility",
-    "backup-restore:performance",
-    "backup-restore:scalability",
-    "backup-restore:accessibility",
-    "replica-sync:performance",
-    "replica-sync:scalability",
-    "replica-sync:journey",
-    "replica-sync:accessibility",
-    "gateway:concurrency",
-    "gateway:performance",
-    "gateway:scalability",
-    "gateway:journey",
-    "gateway:accessibility",
-    "app-engine:performance",
-    "app-engine:scalability",
-    "app-engine:accessibility",
-    "automations:performance",
-    "automations:scalability",
-    "automations:journey",
-    "automations:accessibility",
-    "agent-runtime:performance",
-    "agent-runtime:scalability",
-    "agent-runtime:accessibility",
-    "blueprints:correctness",
-    "blueprints:performance",
-    "blueprints:scalability",
-    "blueprints:journey",
-    "blueprints:accessibility",
-    "desktop:performance",
-    "desktop:scalability",
-    "desktop:security",
-    "desktop:offline",
-    "desktop:journey",
-    "desktop:accessibility",
-    "web:durability",
-    "web:concurrency",
-    "web:performance",
-    "web:scalability",
-    "web:security",
-    "web:offline",
-    "web:journey",
-    "web:accessibility",
-    "mobile:performance",
-    "mobile:scalability",
-    "mobile:offline",
-    "mobile:journey",
-    "tunnel-pairing:performance",
-    "tunnel-pairing:scalability",
-    "tunnel-pairing:security",
-    "tunnel-pairing:offline",
-    "tunnel-pairing:journey",
-    "tunnel-pairing:accessibility",
-    "extension:accessibility",
-    "oauth-worker:accessibility"
-  ],
-  "failedCellIds": [],
-  "infraMismatchCellIds": [],
-  "envGatedOwners": [],
-  "unmappedEvidence": 0,
-  "unmappedFailed": [],
-  "unmatchedOwners": [],
-  "appSeatCells": {
-    "declared": 22,
-    "unowned": 0,
-    "skipped": 2
-  },
-  "appStateCells": {
-    "declared": 56,
-    "unowned": 0,
-    "skipped": 0
-  },
-  "appScenarioCells": {
-    "owned": 95,
-    "gap": 0,
-    "bug": 0,
-    "skipped": 0
-  },
-  "cellsSolid": 42,
-  "cellsPartial": 94,
-  "cellsGap": 2,
-  "cellsNotApplicable": 27,
-  "laneSeries": {},
-  "flakyOwnerIds": [],
-  "playwrightOwnerIds": [],
-  "failedJobs": [],
-  "silentAllClear": false,
-  "jobReconciliation": null,
-  "cellsMissingPrior": null,
-  "cellsMissingRose": false,
-  "cellsMissingDelta": 0,
-  "newMissingCellIds": [
-    "agent-runtime:accessibility",
-    "agent-runtime:performance",
-    "agent-runtime:scalability",
-    "app-engine:accessibility",
-    "app-engine:performance",
-    "app-engine:scalability",
-    "automations:accessibility",
-    "automations:journey",
-    "automations:performance",
-    "automations:scalability",
-    "backup-restore:accessibility",
-    "backup-restore:performance",
-    "backup-restore:scalability",
-    "blob-custody:accessibility",
-    "blob-custody:performance",
-    "blob-custody:scalability",
-    "blueprints:accessibility",
-    "blueprints:correctness",
-    "blueprints:journey",
-    "blueprints:performance",
-    "blueprints:scalability",
-    "desktop:accessibility",
-    "desktop:journey",
-    "desktop:offline",
-    "desktop:performance",
-    "desktop:scalability",
-    "desktop:security",
-    "extension:accessibility",
-    "gateway:accessibility",
-    "gateway:concurrency",
-    "gateway:journey",
-    "gateway:performance",
-    "gateway:scalability",
-    "mobile:journey",
-    "mobile:offline",
-    "mobile:performance",
-    "mobile:scalability",
-    "oauth-worker:accessibility",
-    "replica-sync:accessibility",
-    "replica-sync:journey",
-    "replica-sync:performance",
-    "replica-sync:scalability",
-    "tunnel-pairing:accessibility",
-    "tunnel-pairing:journey",
-    "tunnel-pairing:offline",
-    "tunnel-pairing:performance",
-    "tunnel-pairing:scalability",
-    "tunnel-pairing:security",
-    "vault-core:accessibility",
-    "vault-core:performance",
-    "vault-core:scalability",
-    "web:accessibility",
-    "web:concurrency",
-    "web:durability",
-    "web:journey",
-    "web:offline",
-    "web:performance",
-    "web:scalability",
-    "web:security"
-  ],
-  "newFailedCellIds": [],
-  "floorSeries": {
-    "coverage:repo-wide:lines": 74.53,
-    "coverage:repo-wide:branches": 63.58,
-    "coverage:packages/server/src/engine/**:lines": 84.29,
-    "coverage:packages/server/src/engine/**:branches": 73.52,
-    "coverage:packages/server/src/automation/**:lines": 85.7,
-    "coverage:packages/server/src/automation/**:branches": 79.2,
-    "coverage:packages/backup/src/**:lines": 90.36,
-    "coverage:packages/backup/src/**:branches": 77.9,
-    "coverage:packages/core/src/blob/**:lines": 100,
-    "coverage:packages/core/src/blob/**:branches": 100,
-    "coverage:packages/blueprints/src/**:lines": 95.99,
-    "coverage:packages/blueprints/src/**:branches": 83.77,
-    "coverage:packages/blueprints/apps/photos/**:lines": 55.1,
-    "coverage:packages/blueprints/apps/photos/**:branches": 49.47,
-    "coverage:packages/blueprints/apps/agenda/**:lines": 77.35,
-    "coverage:packages/blueprints/apps/agenda/**:branches": 59.38,
-    "coverage:packages/blueprints/apps/notes/**:lines": 75.28,
-    "coverage:packages/blueprints/apps/notes/**:branches": 56.33,
-    "coverage:packages/blueprints/apps/tasks/**:lines": 66.41,
-    "coverage:packages/blueprints/apps/tasks/**:branches": 52.08,
-    "coverage:packages/blueprints/apps/{_shared,docs,locker,people,tally}/**:lines": 59.71,
-    "coverage:packages/blueprints/apps/{_shared,docs,locker,people,tally}/**:branches": 50.48,
-    "coverage:packages/model-runtime/src/**:lines": 72.28,
-    "coverage:packages/model-runtime/src/**:branches": 61.64,
-    "coverage:packages/model-runtime/automation-handlers/**:lines": 86.29,
-    "coverage:packages/model-runtime/automation-handlers/**:branches": 81.82,
-    "coverage:packages/blueprints/automations/**/handler.js:lines": 92.76,
-    "coverage:packages/blueprints/automations/**/handler.js:branches": 72.18,
-    "coverage:packages/client/src/replica/**:lines": 83.37,
-    "coverage:packages/client/src/replica/**:branches": 74.22,
-    "coverage:packages/client/src/*.{ts,tsx}:lines": 81.25,
-    "coverage:packages/client/src/*.{ts,tsx}:branches": 67.88,
-    "coverage:packages/server/src/{backup,brief,capture,cli,enrich,lifecycle,preview,push,reminders,routes,runs,serve,skills,worktree-store}/**:lines": 82.48,
-    "coverage:packages/server/src/{backup,brief,capture,cli,enrich,lifecycle,preview,push,reminders,routes,runs,serve,skills,worktree-store}/**:branches": 69.49,
-    "coverage:packages/server/src/*.{ts,js}:lines": 90.67,
-    "coverage:packages/server/src/*.{ts,js}:branches": 75.61,
-    "coverage:packages/core/src/time/**:lines": 97.61,
-    "coverage:packages/core/src/time/**:branches": 88,
-    "coverage:packages/server/src/acp/**:lines": 87.02,
-    "coverage:packages/server/src/acp/**:branches": 76.36,
-    "coverage:packages/vault/src/**:lines": 89.55,
-    "coverage:packages/vault/src/**:branches": 76.29,
-    "coverage:packages/design/src/**:lines": 96.18,
-    "coverage:packages/design/src/**:branches": 83.8,
-    "coverage:packages/tunnel/src/**:lines": 76.89,
-    "coverage:packages/tunnel/src/**:branches": 61.61,
-    "coverage:packages/core/src/protocol/**:lines": 100,
-    "coverage:packages/core/src/protocol/**:branches": 98.81,
-    "coverage:packages/cli/src/**:lines": 90.14,
-    "coverage:packages/cli/src/**:branches": 90,
-    "coverage:apps/mobile/src/lib/**:lines": 67.22,
-    "coverage:apps/mobile/src/lib/**:branches": 58.75,
-    "coverage:apps/mobile/src/**/*-model.ts:lines": 90.1,
-    "coverage:apps/mobile/src/**/*-model.ts:branches": 76.32,
-    "coverage:apps/desktop/src/main/*-core.ts:lines": 98.72,
-    "coverage:apps/desktop/src/main/*-core.ts:branches": 91.86,
-    "coverage:apps/oauth-worker/src/**:lines": 91.91,
-    "coverage:apps/oauth-worker/src/**:branches": 87.95,
-    "coverage:packages/client/src/react/**:lines": 76.69,
-    "coverage:packages/client/src/react/**:branches": 67.18,
-    "mutation:apps/mobile": null,
-    "mutation:apps/oauth-worker": null,
-    "mutation:packages/backup": null,
-    "mutation:packages/blueprints": null,
-    "mutation:packages/blueprints/apps/_shared/pending-overlay": null,
-    "mutation:packages/blueprints/apps/_shared/search-scaffold": null,
-    "mutation:packages/blueprints/apps/_shared/selection": null,
-    "mutation:packages/blueprints/apps/_shared/triage": null,
-    "mutation:packages/blueprints/apps/_shared/untrusted": null,
-    "mutation:packages/blueprints/apps/agenda": null,
-    "mutation:packages/blueprints/apps/notes": null,
-    "mutation:packages/blueprints/apps/tasks": null,
-    "mutation:packages/cli": null,
-    "mutation:packages/client/src/replica": null,
-    "mutation:packages/core/src/blob": null,
-    "mutation:packages/core/src/protocol": null,
-    "mutation:packages/core/src/time": null,
-    "mutation:packages/design": null,
-    "mutation:packages/model-runtime": null,
-    "mutation:packages/server": null,
-    "mutation:packages/server/src/acp": null,
-    "mutation:packages/server/src/automation": null,
-    "mutation:packages/server/src/engine": null,
-    "mutation:packages/tunnel": null,
-    "mutation:packages/vault": null
-  },
-  "floorRatchetCandidates": [],
-  "agedInfraMismatchCellIds": [],
-  "absoluteWeaknesses": [
-    {
-      "kind": "coverage-floor-lag",
-      "scope": "packages/blueprints/apps/agenda/**",
-      "value": 77.35,
-      "floor": 40
-    },
-    {
-      "kind": "coverage-floor-lag",
-      "scope": "packages/blueprints/apps/agenda/** (branches)",
-      "value": 59.38,
-      "floor": 30
-    },
-    {
-      "kind": "coverage-floor-lag",
-      "scope": "packages/blueprints/apps/notes/**",
-      "value": 75.28,
-      "floor": 39
-    },
-    {
-      "kind": "coverage-floor-lag",
-      "scope": "packages/blueprints/apps/notes/** (branches)",
-      "value": 56.33,
-      "floor": 27
-    },
-    {
-      "kind": "coverage-floor-lag",
-      "scope": "packages/blueprints/apps/tasks/**",
-      "value": 66.41,
-      "floor": 37
-    },
-    {
-      "kind": "coverage-floor-lag",
-      "scope": "packages/blueprints/apps/tasks/** (branches)",
-      "value": 52.08,
-      "floor": 25
-    },
-    {
-      "kind": "coverage-floor-lag",
-      "scope": "packages/blueprints/apps/{_shared,docs,locker,people,tally}/**",
-      "value": 59.71,
-      "floor": 41
-    },
-    {
-      "kind": "coverage-floor-lag",
-      "scope": "packages/blueprints/apps/{_shared,docs,locker,people,tally}/** (branches)",
-      "value": 50.48,
-      "floor": 33
-    },
-    {
-      "kind": "coverage-floor-lag",
-      "scope": "packages/core/src/time/**",
-      "value": 97.61,
-      "floor": 82
-    },
-    {
-      "kind": "coverage-floor-lag",
-      "scope": "packages/core/src/time/** (branches)",
-      "value": 88,
-      "floor": 65
-    }
-  ],
-  "flakeRates": [],
-  "adversaryCounts": {
-    "mutationSeeds": 25,
-    "mutationBelowFloor": 0,
-    "fuzzTargets": 6,
-    "fuzzCorpusSeeds": 42,
-    "fuzzCrashers": 3,
-    "pinnedFindings": 0,
-    "propertyFlows": 10,
-    "enginesWithoutProperty": 11
-  },
-  "joinLawCounts": {
-    "scripted": 4,
-    "simulation": 6,
-    "passed": 10,
-    "failed": 0
-  },
-  "journeyCounts": {
-    "journeys": 22,
+  "schema": 1,
+  "verdict": "HOLD",
+  "why": "No lane wrote evidence for this candidate — the run proved nothing, which is not the same as proving nothing broke.",
+  "flip": "make one gating lane write evidence → DEGRADED",
+  "blockers": [],
+  "deltas": {
     "passed": 0,
-    "missing": 22,
-    "unbudgeted": 2
+    "failed": 0,
+    "degraded": 0,
+    "noEvidence": 48,
+    "newRed": 0,
+    "newGreen": 0,
+    "previousVerdict": null
   },
-  "consentLedgerCounts": {
-    "layers": 8,
-    "withoutAdversary": 0,
-    "fullSeatCoverage": 5
-  },
-  "verdict": "degraded",
-  "verdictReasons": [
-    "59 cell(s) with no evidence"
-  ],
-  "verdictDirection": "unknown",
-  "attentionQueueBands": {
-    "S1": 0,
-    "S2": 0,
-    "S3": 59,
-    "S4": 0
-  },
-  "attentionQueue": [],
-  "coverageBelowFloor": [],
-  "validationErrorCount": 0
+  "parks": [],
+  "candidate": null,
+  "generatedAt": "2026-09-02T13:26:12.805Z",
+  "label": "2026-09-02",
+  "validationErrorCount": 0,
+  "lanes": {
+    "companion-static": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "coverage": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "coverage-shard": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "dependency-review": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "design-gallery": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "docs": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "gates": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "gitleaks": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "iroh-wasm": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "mobile-device-gate": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "mobile-smoke": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "mutation-pr": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "new-test-burn-in": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "oauth-worker": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "osv-scanner": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "static": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "verify": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "web-build": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "desktop-e2e-linux": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "desktop-e2e-macos": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "lane-gateway-package": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "mobile-canary-android": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "mobile-ios-smoke": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "mutation-full": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "rust-supply-chain": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "suite": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "web-e2e-linux": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "compat-upgrade-and-skew": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "dast-scan": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "desktop-e2e": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "fuzz-parsers": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "lane-health": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "mobile-e2e-android": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "mobile-e2e-ios": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "mutation-testing": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "pairing-cross-network-relay": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "pairing-lifecycle": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "pairing-ticket-hygiene": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "protocol-join": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "quality-performance-scale": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "restore-year3": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "web-e2e": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "web-e2e-cross-browser": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "alarm": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "backup-interop": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "hygiene": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "long-run-soak": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "real-model-goldens": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    }
+  }
 }

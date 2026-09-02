@@ -1,19 +1,24 @@
-## Test health
+## Night Watch — HOLD
 
-**Status:** ok
+No lane wrote evidence for this candidate — the run proved nothing, which is not the same as proving nothing broke.
 
 | Signal | Value |
 | --- | ---: |
-| Evidence passed | 1507 |
-| Evidence failed | 0 |
-| Cells failed (ran) | 0 |
-| Cells not run | 59 |
-| Unhandled errors | 0 |
-| Coverage floors below | 0 |
-| Matrix validation errors | 0 |
+| Lanes passed | 0 |
+| Lanes failed | 0 |
+| Lanes degraded | 0 |
+| Lanes parked | 0 |
+| Lanes with no evidence | 48 |
+| New red since the last candidate | 0 |
+| New green since the last candidate | 0 |
+| Validation errors | 0 |
+
+**To flip the verdict:** make one gating lane write evidence → DEGRADED
 
 _Public HTML report publishes on main (and nightly); this run keeps the artifact + Job Summary only._
 
-Generated: `2026-09-02T04:21:58.672Z`
+Actions run: https://github.com/srikanth235/centraid/actions/runs/33634276036
+
+Generated: `2026-09-02T13:26:12.805Z`
 
 <!-- centraid-test-health-report -->
