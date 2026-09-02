@@ -559,8 +559,6 @@ function manifestErrorToResult(appId: string, err: unknown): ToolErrorResult {
   );
 }
 
-// ─── HTTP-status mapping for the app RPC routes (#505) ───
-
 export function statusForToolError(code: ToolErrorCode): number {
   switch (code) {
     case "UNKNOWN_APP":

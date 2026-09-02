@@ -16,7 +16,6 @@ import {
   seedConversation,
   seedTurn,
 } from "./test-fixtures.js";
-// ── selector edges ──────────────────────────────────────────────────────────
 
 describe("selector edges", () => {
   it("keeps a live automation thread’s newest turn and any unfinished turn", () => {
@@ -295,8 +294,6 @@ describe("selector edges", () => {
     journal.close();
   });
 });
-
-// ── referencedHashes union (blob GC keeps archived bytes pinned) ────────────
 
 describe("referencedHashes union", () => {
   it("unions live attachment hashes with hashes in unpruned AND pruned archive rows", () => {

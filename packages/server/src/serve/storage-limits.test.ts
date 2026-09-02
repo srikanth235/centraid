@@ -17,9 +17,8 @@ import {
 } from "./storage-limits.js";
 import type { StorageLimits } from "./storage-limits.js";
 
-// The owner's two limits (#544). The rules worth pinning are the ones a
-// wrong answer makes dangerous: a limit low enough to be unsatisfiable, a
-// malformed file silently becoming a real limit, and — above all — that the
+// The owner's two limits (#544): pinning the dangerous cases — an
+// unsatisfiable limit, a malformed file becoming a real limit, and that the
 // disk budget classifies but never claims to block.
 
 const dirs: string[] = [];
@@ -56,8 +55,7 @@ describe("storage-limits", () => {
         journalLimitBytes: 1024 ** 3,
       });
       expect(withBoth.totalLimitBytes).toBe(30 * 1024 ** 3);
-      // Clearing one must not disturb the other — the two controls are separate
-      // PUTs from the same panel.
+      // Clearing one must not disturb the other — separate PUTs from the same panel.
       expect(
         applyLimitsPatch(withBoth, { totalLimitBytes: null })
       ).toMatchObject({

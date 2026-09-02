@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit (#865) each hardening case crosses the same two-vault peer transport; per-case files would re-boot that world per suite.
-/* PR #735 peer-plane commons hardening: the signed-command route must bind the
+/* Peer-plane commons hardening: the signed-command route must bind the
  * acted-as party to the PROVEN peer (never trust body.actorPartyId), and a
  * fully caught-up member's pull must be a no-op that neither scrubs nor counts
  * as sweep progress. Both cross the real peer routes on two in-process vaults. */
@@ -573,9 +573,9 @@ describe("commons peer-plane hardening", () => {
     ).toMatchObject({ n: 0 });
   });
 
-  /* (#865 F9) A nonce is bound straight into SQLite as `signature_nonce`; a
-   * non-string value used to reach that binding and surface as a 500 instead
-   * of the route's normal refusal. */
+  /* (#865 F9) A nonce binds straight into SQLite as `signature_nonce`; a
+   * non-string value must surface as the route's normal refusal, never a 500
+   * from the binding. */
   test("a malformed signature nonce is refused on the wire, not surfaced as a 500", async () => {
     const origin = makeSide("nonce-steward");
     const member = makeSide("nonce-member");
@@ -649,9 +649,9 @@ describe("commons peer-plane hardening", () => {
     ).toMatchObject({ n: 0 });
   });
 
-  /* (#865 F9) The transfer-session store swept only EXPIRED sessions; opens
-   * that outpace the TTL used to grow it without limit. Past the cap, the
-   * oldest session must die while fresh ones keep working. */
+  /* (#865 F9) The transfer-session store must sweep OPEN sessions too, not
+   * only expired ones — otherwise opens that outpace the TTL grow it without
+   * limit. Past the cap, the oldest session dies while fresh ones keep working. */
   test("transfer sessions evict oldest-first past the retention cap", async () => {
     const origin = makeSide("retention-steward");
     const member = makeSide("retention-member");

@@ -49,7 +49,7 @@ export class BlobStore {
       await fs.access(dest);
       return { hash, sizeBytes: bytes.byteLength, deduped: true };
     } catch {
-      // absent — write
+      /* absent — write */
     }
     await fs.mkdir(this.blobDir(appId), { recursive: true });
     // Temp sibling then rename so a crash never leaves a partial blob under its hash.

@@ -1,17 +1,15 @@
 /*
  * Translating ACP `session/update` notifications into the normalized
- * `TurnStreamEvent` shape every surface (chat + builder) consumes.
- *
- * Streaming wire shape (verified against the public ACP spec):
- * `session/update` { sessionId, update: { sessionUpdate, ... } } — variants
+ * `TurnStreamEvent` shape every surface (chat + builder) consumes. Wire shape
+ * (verified against the public ACP spec): `session/update`
+ * { sessionId, update: { sessionUpdate, ... } } — variants
  * agent_message_chunk, agent_thought_chunk, tool_call, tool_call_update,
  * plan, user_message_chunk, available_commands_update, current_mode_update,
  * usage_update.
  *
- * The mapper owns the per-turn accumulation that only it can see: the
- * assistant text assembled from chunks, which tool calls are open, and the
- * usage folded off `usage_update`. The orchestrator reads those back at the
- * end of the turn.
+ * The mapper owns the per-turn accumulation only it can see: the assistant
+ * text assembled from chunks, which tool calls are open, and the usage folded
+ * off `usage_update`. The orchestrator reads those back at the end of the turn.
  */
 
 import type { SessionNotification, Usage } from "@agentclientprotocol/sdk";
@@ -25,17 +23,12 @@ import type { TokenUsage, UsageCost } from "./usage.js";
 export interface SessionUpdateMapper {
   /** Feed one `session/update` notification's `params`. */
   handleSessionUpdate: (params: SessionNotification) => void;
-  /**
-   * Is the harness itself already streaming a tool call by this name?
-   *
-   * A harness that surfaces its MCP calls announces `tool_call` BEFORE it
-   * dials our endpoint, and closes it with `tool_call_update` afterwards —
-   * so by the time a vault tool runs, a matching open ACP tool call means
-   * the transcript is already covered and our own events would double-render
-   * it. Harnesses that keep MCP calls private leave nothing open, and we emit.
-   * The `includes` is deliberate: namespacing harnesses surface the tool as
-   * `mcp__centraid__vault_sql`.
-   */
+  // Is the harness itself already streaming a tool call by this name? A
+  // harness that surfaces its MCP calls announces `tool_call` before dialing
+  // our endpoint, so a matching open ACP tool call means our own events would
+  // double-render it; private-MCP harnesses leave nothing open, so we emit.
+  // The `includes` is deliberate: namespacing harnesses surface the tool as
+  // `mcp__centraid__vault_sql`.
   harnessStreamsTool: (toolName: string) => boolean;
   /** Assistant text accumulated across `agent_message_chunk`s. */
   finalText: () => string;
@@ -301,7 +294,6 @@ export function createSessionUpdateMapper(
       ? undefined
       : textOf(update.content) || "tool call failed";
     let diffs = extractToolDiffs(update.content);
-    // Also scan rawOutput for nested content blocks.
     if (diffs.length === 0 && update.rawOutput !== undefined) {
       diffs = extractToolDiffs(update.rawOutput);
     }

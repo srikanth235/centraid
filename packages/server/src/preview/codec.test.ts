@@ -1,10 +1,7 @@
-// The raster preview codec (#405): decode → area-average downscale →
-// JPEG re-encode. Fixtures are synthesized with the SAME libraries the codec
-// decodes with (jpeg-js / pngjs), so these are true round-trips — encode a
-// known-size image, run it through the codec, decode the result and assert the
-// resulting dimensions and a rough size band. Plus the boundary behaviors the
-// orchestration relies on: no upscaling, and `null` for unsupported / oversize
-// / corrupt inputs.
+// Fixtures are synthesized with the SAME libraries the codec decodes with
+// (jpeg-js / pngjs), so these are true round-trips, plus the boundary
+// behaviors the orchestration relies on: no upscaling, and `null` for
+// unsupported / oversize / corrupt inputs (#405).
 
 import jpegJs from "jpeg-js";
 import { PNG } from "pngjs";
@@ -14,8 +11,7 @@ import { createImagePreviewCodec } from "./codec.js";
 
 const codec = createImagePreviewCodec();
 
-/** A synthesized RGBA raster with a deterministic gradient (never flat — a
- *  flat image compresses to a handful of bytes and hides size regressions). */
+/** Synthesized RGBA raster with a deterministic gradient (never flat — a flat image compresses to a handful of bytes and hides size regressions). */
 function raster(width: number, height: number): Buffer {
   const data = Buffer.alloc(width * height * 4);
   for (let y = 0; y < height; y += 1) {
@@ -70,7 +66,6 @@ describe("codec", () => {
     expect(out!.mediaType).toBe("image/jpeg");
     expect(Math.max(out!.width, out!.height)).toBe(256);
     expect(out!.height).toBe(Math.round((256 / 1000) * 600)); // aspect preserved
-    // The reported dims match what the bytes actually decode to.
     expect(decodedSize(out!.bytes)).toStrictEqual({
       width: out!.width,
       height: out!.height,
@@ -91,7 +86,7 @@ describe("codec", () => {
   test("medium rung (2048) on a smaller source never upscales", async () => {
     const out = await codec.downscale(makeJpeg(1000, 600), "image/jpeg", 2048);
     expect(out).not.toBeNull();
-    expect(out!.width).toBe(1000); // native size preserved, just re-encoded
+    expect(out!.width).toBe(1000);
     expect(out!.height).toBe(600);
   });
 
@@ -109,12 +104,11 @@ describe("codec", () => {
 
   test("thumbhash encodes a known raster to the exact reference value", async () => {
     // The fixture is what the faithful ThumbHash reference port emits for this
-    // 64×64 gradient — a regression pin on the byte-identical algorithm. 24 hash
-    // bytes → 32 unpadded base64 chars, standard alphabet.
+    // 64×64 gradient — a regression pin on the byte-identical algorithm. 24
+    // hash bytes → 32 unpadded base64 chars, standard alphabet.
     const hash = await codec.thumbhash(makePng(64, 64), "image/png");
     expect(hash).toBe("mOkFFwoywEiCh4eGeFiIV4eE0eBXA4sK");
     expect(Buffer.from(hash!, "base64")).toHaveLength(24);
-    // Canonical: unpadded standard base64 that round-trips exactly.
     expect(
       Buffer.from(hash!, "base64").toString("base64").replace(/=+$/u, "")
     ).toBe(hash);
@@ -122,7 +116,6 @@ describe("codec", () => {
     await expect(codec.thumbhash(makePng(96, 48), "image/png")).resolves.toBe(
       "WQkGJIhABeJzh3dziIVPikSx9w"
     );
-    // Unsupported / undecodable inputs are null, exactly like the other rungs.
     await expect(
       codec.thumbhash(makePng(9, 8), "image/gif")
     ).resolves.toBeNull();
@@ -131,11 +124,10 @@ describe("codec", () => {
     ).resolves.toBeNull();
   });
 
-  // A generous timeout: pure-JS decode/downscale of a multi-MP source is
-  // hundreds of ms and can stretch under parallel-suite CPU contention (exactly
-  // why generation is a bounded background backstop, never a request path).
+  // Generous timeout: pure-JS decode/downscale of a multi-MP source is
+  // hundreds of ms and can stretch under parallel-suite CPU contention.
   test("the medium rung of a large source is meaningfully bigger than the tiny rung", async () => {
-    const src = makeJpeg(2600, 1800); // long edge > 2048, so medium truly downscales
+    const src = makeJpeg(2600, 1800);
     const tiny = await codec.downscale(src, "image/jpeg", 256);
     const medium = await codec.downscale(src, "image/jpeg", 2048);
     expect(Math.max(medium!.width, medium!.height)).toBe(2048);
@@ -150,8 +142,7 @@ describe("codec", () => {
   });
 
   test("an input past the dimension cap returns null, never throws", async () => {
-    // 13000 px on one edge is over MAX_INPUT_EDGE — a cheap 13000×1 strip proves
-    // the guard fires before any heavy downscale work.
+    // 13000 px is over MAX_INPUT_EDGE — a cheap 13000×1 strip proves the guard fires before any heavy downscale work.
     await expect(
       codec.downscale(makePng(13_000, 1), "image/png", 256)
     ).resolves.toBeNull();

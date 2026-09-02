@@ -168,7 +168,6 @@ describe("support bundle — redaction", () => {
     const bundle = buildSupportBundle(input({ level: "standard" }));
     const planted = {
       ...bundle,
-      // Simulate a lane that copied an owner-authored value through.
       disclosure: [...bundle.disclosure, "Priya's private vault"],
     };
     const serialized = serializeSupportBundle(planted, [
@@ -189,7 +188,6 @@ describe("support bundle — redaction", () => {
       storage: [
         {
           ...extended.storage[0]!,
-          // A future field carrying owner text.
           ownerNote: "Priya's laptop",
         } as never,
       ],
@@ -217,36 +215,30 @@ describe("support bundle — usefulness", () => {
     expect(bundle.gateway.protocolVersion).toBe(11);
     expect(bundle.runtime.platform).toBe("darwin");
     expect(bundle.health.status).toBe("degraded");
-    // The failing component is named, with its error count.
     const failing = bundle.health.components.find(
       (component) => component.component === "storage-latency"
     );
     expect(failing?.status).toBe("degraded");
     expect(failing?.errorCount).toBe(3);
-    // The anomaly ledger keeps the machine-readable cause and its recurrence.
     expect(bundle.anomalies.count).toBe(3);
     expect(bundle.anomalies.histogram["vault.mount.schema-mismatch"]).toBe(2);
     const first = bundle.anomalies.records[0] as Record<string, unknown>;
     expect(first.code).toBe("vault.mount.schema-mismatch");
     expect(first.severity).toBe("error");
     expect(first.facts).toStrictEqual({ attempt: 2, epoch: 7 });
-    // The log tail keeps its shape: which component, which level, how many.
     expect(bundle.logs.count).toBe(3);
     expect(bundle.logs.byLevel).toStrictEqual({ warn: 1, error: 1, info: 1 });
     expect(
       bundle.logs.groups.map((group) => group.component).toSorted()
     ).toStrictEqual(["backup-service", "vault-registry", "vault-registry"]);
-    // Every group carries a digest the owner can grep their own log for.
     expect(bundle.logs.groups.every((group) => group.digests.length > 0)).toBe(
       true
     );
-    // Storage sizing survives, so "the vault is 84MB with 41k items" is answerable.
     const storage = bundle.storage[0] as Record<string, unknown>;
     expect(storage.vaultDbBytes).toBe(84_000_000);
     expect(
       (storage.tableRowCounts as Record<string, number>).core_content_item
     ).toBe(41_233);
-    // Non-secret config survives.
     expect(JSON.stringify(bundle.config)).toContain('"provider":"s3"');
     expect(JSON.stringify(bundle.health.metrics)).toContain(
       '"outboxPending":6'
@@ -259,7 +251,6 @@ describe("support bundle — usefulness", () => {
     const redactedFraction =
       rendered.bundle.redaction.redactedLeaves /
       rendered.bundle.redaction.leaves;
-    // Most leaves survive. A bundle that redacts everything is a blank page.
     expect(rendered.bundle.redaction.leaves).toBeGreaterThan(30);
     expect(redactedFraction).toBeLessThan(0.5);
   });
@@ -330,9 +321,6 @@ describe("support bundle — no egress", () => {
   });
 
   test("building a bundle performs no timer or scheduler work", () => {
-    // Purity in the shape that matters here: the same call twice, with the
-    // clock supplied by the caller, is the same value. Nothing schedules,
-    // nothing uploads, nothing observes the wall clock.
     const one = buildSupportBundle(input());
     const two = buildSupportBundle(input());
     expect(JSON.stringify(one)).toBe(JSON.stringify(two));

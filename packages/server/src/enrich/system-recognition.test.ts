@@ -72,9 +72,7 @@ describe("system recognition lane", () => {
   });
 
   it("place-names ships disabled, which is what makes it opt-in", () => {
-    // The reconcile in build-gateway.ts filters these rows on `row.enabled`, so
-    // this one bit is the whole opt-in mechanism: no scheduler registration and
-    // no data cursor until a member turns it on.
+    // The reconcile in build-gateway.ts filters these rows on `row.enabled`, so this one bit is the whole opt-in mechanism: no scheduler registration and no data cursor until a member turns it on.
     expect(manifestOf("place-names").enabled).toBe(false);
   });
 });

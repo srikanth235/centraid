@@ -144,8 +144,8 @@ describe("restore-lazy", () => {
     const remote: RemoteTier = { store: remoteStore, encryptKey: sealKey };
 
     try {
-      // 1. Seed three "image" items, each an ORIGINAL blob plus a tiny THUMB
-      // derivative row — what the warm pass reads.
+      // Each item: an ORIGINAL blob plus a tiny THUMB derivative row — what
+      // the warm pass reads.
       const originals: { contentId: string; sha: string; bytes: Buffer }[] = [];
       const thumbs: { sha: string; bytes: Buffer }[] = [];
       for (let i = 0; i < 3; i++) {
@@ -181,7 +181,7 @@ describe("restore-lazy", () => {
         thumbs.push({ sha: thumbSha, bytes: thumbBytes });
       }
 
-      // 2. Replicate originals[0..1] plus ALL thumbs; originals[2] stays
+      // originals[0..1] plus ALL thumbs replicate; originals[2] stays
       // local-only so lazy still has to materialize it.
       const seedCustody = new BlobCustody(
         new FsBlobStore(path.join(plane.dir, "blobs")),
@@ -200,11 +200,9 @@ describe("restore-lazy", () => {
       );
       await expect(remoteStore.has(originals[2]!.sha)).resolves.toBe(false);
 
-      // 3. Snapshot the whole vault.
       await service.runBackup(vaultId);
       expect((await service.status())[vaultId]?.lastSeq).toBe(1);
 
-      // 4. LAZY restore into a fresh dest.
       const destParent = await tempDir("lazy-dest");
       const destDir = path.join(destParent, "restored");
       const result = await service.restore({
@@ -213,7 +211,6 @@ describe("restore-lazy", () => {
         lazy: { remote },
       });
 
-      // --- The DB restored intact ---
       expect(result.entries).toContain("vault.db");
       const restoredDb = new DatabaseSync(path.join(destDir, "vault.db"), {
         readOnly: true,
@@ -237,7 +234,6 @@ describe("restore-lazy", () => {
         restoredDb.close();
       }
 
-      // --- Remote-held blobs DEFERRED, local-only blob MATERIALIZED ---
       const destBlobs = new FsBlobStore(path.join(destDir, "blobs"));
       expect(destBlobs.hasSync(originals[0]!.sha)).toBe(false); // remote holds it ⇒ skipped
       expect(destBlobs.hasSync(originals[1]!.sha)).toBe(false); // remote holds it ⇒ skipped
@@ -246,10 +242,8 @@ describe("restore-lazy", () => {
       expect(result.skippedBlobs).toContain(originals[1]!.sha);
       expect(result.skippedBlobs).not.toContain(originals[2]!.sha);
 
-      // --- The warm pass made ALL tinies present locally (usable grid) ---
       for (const t of thumbs) expect(destBlobs.hasSync(t.sha)).toBe(true);
 
-      // --- The §5 time-to-usable-grid metric is reported ---
       expect(result.previewsWarm).toBeDefined();
       expect(result.previewsWarm!.tiniesTotal).toBe(3);
       expect(result.previewsWarm!.tiniesWarmed).toBe(3);
@@ -257,7 +251,6 @@ describe("restore-lazy", () => {
       expect(result.previewsWarm!.timeToUsableGridMs).toBeTypeOf("number");
       expect(result.previewsWarm!.timeToUsableGridMs).toBeGreaterThanOrEqual(0);
 
-      // --- Deferred originals read-through on demand ---
       const readCustody = new BlobCustody(
         new FsBlobStore(path.join(destDir, "blobs")),
         () => remote

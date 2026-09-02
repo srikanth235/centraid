@@ -1,11 +1,8 @@
 /*
- * The ceremony end to end (#726 P3 decision 3), both gateways in one
- * process: side A shows a ticket, side B scans it, and the transport is a
- * function that hands B's request to A's real route handler.
- *
- * What this proves that the two halves cannot prove alone: the link is MUTUAL
- * (both sides end up holding the other's vault id, key, route and labels) and
- * DIRECTION-FREE (nothing about the resulting rows records who showed).
+ * The ceremony end to end (#726 P3 decision 3), both gateways in one process:
+ * what the two halves cannot prove alone is that the link is MUTUAL (each side
+ * holds the other's vault id, key, route and labels) and DIRECTION-FREE
+ * (nothing about the resulting rows records who showed).
  */
 
 import crypto from "node:crypto";
@@ -152,7 +149,6 @@ describe("link ceremony end to end", () => {
       peerLabel: "bob",
       myLabel: "alice",
     });
-    // Nothing in either row says who showed the ticket.
     expect(Object.keys(onBob ?? {})).toStrictEqual(Object.keys(onAlice ?? {}));
   });
 
@@ -192,8 +188,7 @@ describe("link ceremony end to end", () => {
     const bob = makeSide("bob");
     const payload = parseLinkTicket(showTicket(alice))!;
     const result = await redeemLinkTicket({
-      // A ticket whose advertised key is not the one the peer answers with:
-      // somebody rewrote one of the two.
+      // The advertised key is not the one the peer answers with — somebody rewrote one of the two.
       ticket: { ...payload, vaultPublicKey: bob.publicKey },
       links: bob.links,
       request: transportTo(alice, bob.endpointId),

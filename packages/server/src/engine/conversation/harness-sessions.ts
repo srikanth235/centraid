@@ -133,10 +133,8 @@ export class HarnessSessions {
           ? (usedPlan.recoveryHydrationContext?.estimatedTokens ?? 0)
           : (usedPlan.hydrationContext?.estimatedTokens ?? 0);
     }
-    // A subsequent delegate call to this harness in the same turn must resume
-    // the session just observed, not the binding snapshot loaded at turn start.
-    // Hydration is intentionally absent: the first call either resumed the
-    // existing actor or delivered the bounded handoff/recovery context.
+    // A later delegate call in the same turn must resume the session just observed, not the turn-start binding snapshot.
+    // Hydration intentionally absent: the first call either resumed the actor or got the bounded handoff/recovery context.
     this.plans.set(observation.kind, {
       ...(observation.sessionId ? { sessionId: observation.sessionId } : {}),
       ...(observation.usageSnapshot

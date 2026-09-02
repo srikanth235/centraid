@@ -10,14 +10,11 @@ describe("authoring-prompt", () => {
     });
     expect(prompt.startsWith("## Automation context")).toBe(true);
     expect(prompt).toContain("## Centraid automation authoring");
-    // Blocks joined by blank lines.
     expect(prompt).toContain("\n\n");
   });
 
   test("buildAuthoringExtraPrompt for an app adds no authoring contract (#799)", () => {
-    // App front ends are written in this repo, not authored by a harness: the
-    // there is no app-authoring skill and no UI grounding, so an `app` turn
-    // gets its preamble and nothing else.
+    // App front ends are written in this repo, not harness-authored: no app-authoring skill, no UI grounding — an `app` turn gets its preamble and nothing else.
     const prompt = buildAuthoringExtraPrompt({
       baseExtra: "## App context\n\nid: notes",
       appKind: "app",

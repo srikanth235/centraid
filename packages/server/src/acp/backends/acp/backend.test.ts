@@ -147,8 +147,6 @@ describe("backend suite", () => {
     expect(err && err.type === "error" && err.failureClass).toBe("spawn");
   });
 
-  // ──── auth handshake ───────────────────────────────────────────────────────
-
   test("AUTH_REQUIRED becomes an actionable message, not a raw RPC error", async () => {
     const { events } = await runFake({
       extraArgs: ["--mode=auth"],
@@ -175,8 +173,6 @@ describe("backend suite", () => {
     const err = events.find((event) => event.type === "error");
     expect(err && err.type === "error" && err.failureClass).toBe("wedge");
   });
-
-  // ──── stopReason / continuity / policy / permissions ───────────────────────
 
   test("refusal stopReason is an error without final", async () => {
     const { events } = await runFake({ extraArgs: ["--mode=refusal"] });

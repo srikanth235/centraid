@@ -2,16 +2,12 @@
 /*
  * Owner-facing vault routes (duality §12) under `/centraid/_vault` — the
  * consent surface over the mounted vault registry. Every handler is an OWNER
- * act: it runs behind the gateway's host-level auth, answers for the vault the
- * request is addressed to (resolved upstream from the `x-centraid-vault`
- * header / device enrollment, #289), and executes with the owner-device
- * credential. Apps never call these — their door is `ctx.vault`.
- *
- * Vault create/delete are ADMIN acts on the gateway host, not routes here
- * (#289). The vault list is filtered to the calling device's enrollments: an
- * owner sees no evidence of others' vaults. Deny-by-default is structural —
- * until a POST …/grants lands, an enrolled app's every vault call is a
- * receipted deny.
+ * act: behind the gateway's host-level auth, answering for the vault the
+ * request is addressed to, with the owner-device credential (#289). Apps never
+ * call these — their door is `ctx.vault`. Vault create/delete are ADMIN acts on
+ * the gateway host, not routes here (#289). The vault list is filtered to the
+ * calling device's enrollments, and deny-by-default is structural — until a
+ * POST …/grants lands, an enrolled app's every vault call is a receipted deny.
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -81,21 +77,16 @@ export interface VaultRouteOptions {
   deviceAccess?: DeviceAccess;
   /** Fire-and-forget: drains now, not on the next periodic pass. */
   onOutboxDecided?: (plane: VaultPlane) => void;
-  /** The published manifest's display name, so a FIRST-touch enrollment does
-   *  not fall back to `ensureAgentEnrolled`'s `humanizeSlug(appId)`. */
+  /** Manifest display name, so FIRST-touch enrollment does not fall back to `humanizeSlug(appId)`. */
   resolveAutomationName?: (
     appId: string
   ) => Promise<string | undefined> | string | undefined;
-  /** When set, a `connectionId` in a blob-store body resolves against it,
-   *  denormalizing endpoint/region/bucket/prefix and forcing `encrypt: true`.
-   *  Absent → the caller supplies endpoint/bucket/region directly (#367). */
+  /** A `connectionId` in a blob-store body resolves against it, denormalizing endpoint/region/bucket/prefix and forcing `encrypt: true`; absent → caller supplies them (#367). */
   storageConnections?: StorageConnectionStore;
-  /** Attaching a `connectionId` is refused `409 recovery_kit_not_confirmed`
-   *  until the kit is exported, re-selected, and verified (#367). */
+  /** Attaching a `connectionId` is refused `409 recovery_kit_not_confirmed` until the kit is verified (#367). */
   recoveryKit?: RecoveryKitStateStore;
   enrollments?: EnrollmentStore;
-  /** Host custody can SEE this vault, so it gets a typed `owner_only` refusal
-   *  naming the owner — never `not_found` topology hiding (#726). */
+  /** Host custody gets a typed `owner_only` refusal naming the owner — never `not_found` topology hiding (#726). */
   isHostCustody?: (req: IncomingMessage) => boolean;
   gatewayDatabase?: GatewayDatabase;
   keys?: KeyStore;
@@ -113,8 +104,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-/** An overlay, not a plane field: the plane must not import the gateway's verb
- *  registry (#308). */
+/** An overlay, not a plane field: the plane must not import the gateway's verb registry (#308). */
 function withCanEdit(
   items: readonly OutboxItemSummary[]
 ): Array<OutboxItemSummary & { canEdit: boolean }> {
@@ -217,9 +207,8 @@ export function makeVaultRouteHandler(
                ON CONFLICT(vault_id) DO NOTHING`
             )
             .run(vaultId, new Date().toISOString());
-          // The `vault_owners` row is the whole authority record (#726).
-          // Web sessions and replica checkpoints are vault-keyed, so they go
-          // explicitly.
+          // The `vault_owners` row is the whole authority record (#726); web
+          // sessions and replica checkpoints are vault-keyed, so they go explicitly.
           options
             .gatewayDatabase!.db.prepare(
               "DELETE FROM vault_owners WHERE vault_id = ?"
@@ -258,10 +247,10 @@ export function makeVaultRouteHandler(
         options.afterEraseStateCommitted?.(vaultId);
         vaults.delete(vaultId);
         options.keys.destroy(`${vaultId}.sealkey`);
-        // The identity keypair shares the DEK's custody (#726) and the
-        // public-key PIN goes with it (#750 invariant 1): a pin outliving its
-        // seed is what `VaultIdentityMismatchError` refuses to open, so a
-        // leftover makes a re-created vault of the same id unopenable.
+        // Identity keypair shares the DEK's custody (#726); the public-key PIN
+        // goes with it (#750 invariant 1) — a pin outliving its seed is what
+        // `VaultIdentityMismatchError` refuses to open, so a leftover makes a
+        // re-created same-id vault unopenable.
         options.keys.destroy(`${vaultId}.identity`);
         options.keys.destroy(`${vaultId}.identity.pub`);
         options.gatewayDatabase.transaction(() => {
@@ -536,8 +525,7 @@ export function makeVaultRouteHandler(
       }
 
       // The #807 cascade is a SIBLING resource under the same prefix
-      // (`vault-enrich-rules-routes.ts`): the tier's own request/response
-      // bodies must stay unchanged byte for byte.
+      // (`vault-enrich-rules-routes.ts`): the tier's own bodies stay byte-for-byte.
       if (segments[0] === "enrich" && segments.length > 1) {
         const handled = await handleEnrichCascadeRoute({
           req,
@@ -759,7 +747,7 @@ export function makeVaultRouteHandler(
         }
         // The owner surface edits the ARTIFACT only — the wire request carries
         // `{{connection:…}}` placeholders it never parses. A raw `request` is
-        // refused outright, never ignored, so no caller thinks an edit landed.
+        // refused outright so no caller thinks an edit landed.
         if (body.request !== undefined) {
           return sendJson(res, 400, {
             error: "bad_request",
@@ -1349,10 +1337,9 @@ async function handleVaultsRoute(
 ): Promise<boolean> {
   try {
     if (method === "GET" && segments.length === 1) {
-      // A directory that failed to mount has no plane and so is invisible in
-      // `vaults`; reporting failures alongside separates "you have one vault"
-      // from "one of two would not open" (#603). Entries carry a directory and
-      // the mount error, never vault contents.
+      // Failed mounts are invisible in `vaults`; reporting them separates "you
+      // have one vault" from "one of two would not open" (#603). Entries carry
+      // a directory and the mount error, never vault contents.
       return sendJson(res, 200, {
         vaults: visibleVaults(),
         failedMounts: vaults.failedMounts(),
@@ -1473,10 +1460,7 @@ async function handleVaultsRoute(
   }
 }
 
-/**
- * STRICT NOT NULL / CHECK violations and sealed-column or machinery refusals
- * all land here as a clean 4xx with a reason, never a crash (#441).
- */
+/** STRICT NOT NULL/CHECK violations and sealed-column or machinery refusals land here as a clean 4xx with a reason, never a crash (#441). */
 async function runBrowseWrite(
   res: ServerResponse,
   plane: VaultPlane,

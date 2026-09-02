@@ -1,5 +1,3 @@
-// Process-wide performance signals for the gateway (#456).
-
 import { monitorEventLoopDelay } from "node:perf_hooks";
 
 import { unrefTimer } from "../lib/unref-timer.js";
@@ -78,8 +76,7 @@ export class GatewayPerformanceMonitor {
   snapshot(): GatewayPerformanceSnapshot {
     const current = this.readWindow();
     const signal = current.eventLoopLagSamples > 0 ? current : this.lastWindow;
-    // Promote the in-progress window only when no timer runs (unit tests
-    // with sampleWindowMs: 0); peak is completed-window only.
+    // Promote only when no timer runs (unit tests, sampleWindowMs: 0); peak is completed-window only.
     if (!this.timer) {
       this.peakP99Ms = Math.max(this.peakP99Ms, signal.eventLoopLagP99Ms);
     }
@@ -101,8 +98,7 @@ export class GatewayPerformanceMonitor {
     this.lastWindow = { ...EMPTY_WINDOW };
     this.peakP99Ms = 0;
     this.histogram.reset();
-    // Restart so the first post-reset close is a full interval, not the max
-    // of partial samples (CI: 6 samples, 503 ms).
+    // Reschedule so the first post-reset close is a full interval, not the max of partial samples.
     if (this.timer) {
       clearTimeout(this.timer);
       this.scheduleWindowEnd(this.sampleIntervalMs);
@@ -135,8 +131,7 @@ export class GatewayPerformanceMonitor {
   private readWindow(): typeof EMPTY_WINDOW {
     const count = Number(this.histogram.count);
     if (!Number.isFinite(count) || count <= 0) return { ...EMPTY_WINDOW };
-    // Raw values include the sampling interval itself (an idle monitor
-    // reports ≈ its resolution); callers need delay beyond that baseline.
+    // Raw values include the sampling interval itself; callers need delay beyond that baseline.
     const lagMilliseconds = (nanoseconds: number): number =>
       Math.max(0, milliseconds(nanoseconds) - this.resolutionMs);
     return {

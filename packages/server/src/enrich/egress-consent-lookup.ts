@@ -1,5 +1,4 @@
-// Gateway read of vault egress-consent (#807). Most-specific first; a
-// decline stops the walk. Exports no writer.
+// Gateway read of vault egress-consent (#807): most-specific scope first, a decline stops the walk. Read-only — exports no writer.
 
 import type { DatabaseSync } from "node:sqlite";
 

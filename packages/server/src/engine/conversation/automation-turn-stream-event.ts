@@ -1,10 +1,6 @@
 /*
- * Native automation turn stream (#541).
- *
- * The durable source of truth is the same conversation → turn → item ledger
- * used by interactive conversations. Lifecycle events mirror those row names;
- * model-token activity stays the shared `TurnStreamEvent`, nested under the
- * item that owns it.
+ * Native automation turn stream (#541): lifecycle events mirror the same conversation → turn → item ledger rows used by interactive conversations;
+ * model-token activity stays the shared `TurnStreamEvent`, nested under the item that owns it.
  */
 
 import type { TurnStreamEvent } from "./runner.js";

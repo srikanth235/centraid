@@ -1,8 +1,6 @@
 /*
- * Provider-observability helpers for the gateway backup engine (#414).
- * Policy declaration and inventory/audit collection live here so the service
- * remains the serialized lifecycle owner rather than growing wire-protocol
- * parsing inline.
+ * Provider-policy declaration and inventory/audit collection (#414), kept out
+ * of BackupService so the service stays the serialized lifecycle owner.
  */
 
 import { BackupProviderError } from "@centraid/backup";

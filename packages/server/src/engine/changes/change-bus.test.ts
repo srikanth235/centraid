@@ -81,7 +81,6 @@ describe(ChangeBus, () => {
     bus.subscribe("app1", () => order.push("b"));
     bus.emit({ appId: "app1", tables: ["t"], ts: 1, source: "handler" });
     bus.emit({ appId: "app1", tables: ["t"], ts: 2, source: "handler" });
-    // First emit: a, b. Second emit: only b (a unsubscribed itself).
     expect(order).toStrictEqual(["a", "b", "b"]);
   });
 

@@ -1,6 +1,5 @@
 /*
- * Loader-safe entry (#842): worker type stripping can't map a `./sib.js`
- * specifier onto its `.ts` source, so boot resolves by absolute path.
+ * Loader-safe entry (#842): worker type stripping can't map a `./sib.js` specifier onto its `.ts` source, so boot resolves by absolute path.
  */
 
 import { existsSync } from "node:fs";

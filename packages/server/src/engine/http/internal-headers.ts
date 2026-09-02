@@ -1,7 +1,6 @@
 /**
  * Internal, server-stamped module profile for a constrained Companion device.
- * The public HTTP listener strips client copies before the gateway stamps the
- * value from the authenticated enrollment record.
+ * The public HTTP listener strips client copies before the gateway stamps the value from the authenticated enrollment record.
  */
 export const COMPANION_GRANTS_HEADER = "x-centraid-companion-grants";
 
@@ -22,11 +21,7 @@ const COMPANION_CAPABILITIES: Readonly<
   people: { action: ["add-person"] },
 };
 
-/**
- * Enforce the narrow action/query bundle behind each selected module. The app
- * id and handler name ride in the request path (#505), so the caller
- * passes them directly rather than a tool-body envelope.
- */
+/** Enforce the narrow action/query bundle behind each selected module; the app id and handler name ride in the request path (#505), not a tool-body envelope. */
 export function companionHandlerAllowed(
   profile: ReadonlySet<string>,
   kind: CompanionHandlerKind,

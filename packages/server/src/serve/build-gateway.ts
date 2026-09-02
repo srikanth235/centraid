@@ -3,13 +3,12 @@
  * `buildGateway()` — the host-agnostic gateway core (#280, #289).
  *
  * Every personal surface resolves through the vault the CURRENT REQUEST is
- * addressed to, because `composedHandler` runs the whole chain inside that
- * ambient scope. There is NO server-global active vault: switching is a
- * client-side view change, and N clients ride N vaults concurrently.
- *
- * The per-vault host bundle is built lazily and cached by vault id.
- * `start()` mounts every vault's workspace and starts each vault's scheduler,
- * so automations fire in every vault regardless of what a client looks at.
+ * addressed to: `composedHandler` runs the whole chain inside that ambient
+ * scope. There is NO server-global active vault — switching is a client-side
+ * view change, and N clients ride N vaults concurrently. The per-vault host
+ * bundle is built lazily and cached by vault id; `start()` mounts every
+ * vault's workspace and starts its scheduler, so automations fire in every
+ * vault regardless of what a client looks at.
  */
 
 import crypto from "node:crypto";
@@ -1541,7 +1540,7 @@ export async function buildGateway(
   };
   let serverUrl = "";
 
-  // ── Per-vault host bundles (#280, #289) ───────────────────────────────
+  // ── Per-vault host bundles (#280, #289)
   const hosts = new Map<string, Promise<VaultHost>>();
   const settledHosts = new Map<string, VaultHost>();
   const runEventBus = new RunEventBus();
@@ -2802,7 +2801,7 @@ export async function buildGateway(
     };
   }
 
-  // ── Schedulers (issue #149, #289) ─────────────────────────────────────
+  // ── Schedulers (issue #149, #289)
   // One persistent in-process scheduler PER VAULT; `reconcileScheduler` settles
   // that vault's registry off ITS `main`, coalesced so concurrent publishes
   // don't thrash it. Scheduled fires enter their vault's ambient scope.
@@ -3279,7 +3278,7 @@ export async function buildGateway(
     return settled.inFlight;
   };
 
-  // ── Webhook trigger route (issue #96) ─────────────────────────────────
+  // ── Webhook trigger route (issue #96)
   // `makeWebhookRouteHandler` closes over ONE `appsDir`, so one instance is
   // built per vault and a pre-scan delegates the WHOLE request to the owning
   // vault — auth, rate limit, body cap and response shape are never
@@ -3372,7 +3371,7 @@ export async function buildGateway(
     return limiter;
   };
 
-  // ── The runtime ───────────────────────────────────────────────────────
+  // ── The runtime
   const runtime = new Runtime({
     appsDir: () => currentWorkspace().appsDir,
     timeModuleUrl: TIME_ENGINE_MODULE_URL,
@@ -3658,7 +3657,7 @@ export async function buildGateway(
     return renderSupportBundle(input).text;
   };
 
-  // ── Route chain ───────────────────────────────────────────────────────
+  // ── Route chain
   const routeEntries: RoutePrefixRegistration[] = [
     forRoutePrefixes(
       ["/centraid/_web", "/centraid/_apps"],

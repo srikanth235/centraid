@@ -1,10 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#408) one serialized run-chain contract — backup, verify, restore-verify and the wal drain share one state row, fencing and keyring
-/*
- * `BackupService` — gateway-side owner of the offsite backup engine
- * (`@centraid/backup`, PROTOCOL.md + FORMAT.md). Static config and live
- * connections resolve through one engine; manual runs and the scheduler share
- * one code path.
- */
 
 import { randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -185,9 +179,8 @@ export interface BackupServiceOptions {
   logger: RuntimeLogger;
   now?: () => number;
   assembleEntries?: (opts: AssembleOptions) => Promise<SourceEntry[]>;
-  /** Test seam: no REAL source forces `createSnapshot` to return `null` while
-   *  a base is unanchored, so it is the only way to exercise the
-   *  base-registration invariant. */
+  /** Test seam: no REAL source returns `null` with a base unanchored, so the
+   *  override is the only way to exercise base registration. */
   snapshot?: typeof createSnapshot;
   provider?: BackupProvider;
   storageConnections?: StorageConnectionStore;
@@ -200,8 +193,8 @@ export interface BackupServiceOptions {
     bytesUploaded: number;
     durationMs: number;
   }) => void;
-  /** With `authorizedOwnerId` (#726): skip a vault whose owner differs from
-   *  this host's. Either omitted ⇒ no filter. */
+  /** With `authorizedOwnerId` (#726): skip a vault owned by someone other
+   *  than this host. Either omitted ⇒ no filter. */
   ownerOf?: (vaultId: string) => string | undefined;
   authorizedOwnerId?: () => string | undefined;
 }
@@ -213,7 +206,6 @@ export type LazyRestoreResult = RestoreResult & {
 
 /** `restore()` AUTO-resolves one when neither `lazy` nor `full` is given. */
 export interface LazyRestoreOption {
-  /** Skip oracle AND warm-pass source. */
   remote: RemoteTier;
   warmConcurrency?: number;
 }
@@ -223,8 +215,8 @@ export interface HomeDiscovery {
   restoreCostClass: "free-egress" | "metered-egress";
 }
 
-/** The recovery window N (#439) is the retention DAILY rung. `undefined` ⇒
- *  the orphan-grace gate disengages. */
+/** The recovery window (#439) is the retention DAILY rung. `undefined` ⇒ the
+ *  orphan-grace gate disengages. */
 export function recoveryWindowMs(
   retention: Retention | undefined
 ): number | undefined {
@@ -232,8 +224,8 @@ export function recoveryWindowMs(
   return undefined;
 }
 
-/** A lazy restore's upfront download is unknowable from the registry row and
- *  deliberately not fabricated (#439). */
+/** Upfront download is unknowable from the registry row, deliberately not
+ *  fabricated (#439). */
 export interface RestoreEgressEstimate {
   costClass: "free-egress" | "metered-egress" | undefined;
   seq: number | undefined;
@@ -511,8 +503,6 @@ export class BackupService {
     if (this.stopped) throw new Error("backup service is stopped");
   }
 
-  // ── Provider policy ─────────────────────────────────────────────────
-
   async syncPolicy(vaultId: string): Promise<ProviderPolicySyncState> {
     this.assertRunning();
     const plane = this.vaults.get(vaultId);
@@ -592,8 +582,6 @@ export class BackupService {
     };
   }
 
-  // ── Backup ────────────────────────────────────────────────────────────
-
   async runBackup(vaultId: string): Promise<void> {
     this.assertRunning();
     return this.enqueue(async () => {
@@ -630,8 +618,7 @@ export class BackupService {
       return;
     }
     // Hosting a vault confers no right to ship its bytes to THIS host's
-    // destination without its owner's say-so (#726). Skip + report, never
-    // silent.
+    // destination without its owner's say-so (#726) — skip + report, never silent.
     if (this.ownerOf && this.authorizedOwnerId) {
       const owner = this.ownerOf(vaultId);
       const authorized = this.authorizedOwnerId();
@@ -973,8 +960,6 @@ export class BackupService {
     };
   }
 
-  // ── Verify ────────────────────────────────────────────────────────────
-
   async runVerify(vaultId: string): Promise<VerifySnapshotResult | undefined> {
     this.assertRunning();
     let result: VerifySnapshotResult | undefined;
@@ -1058,8 +1043,6 @@ export class BackupService {
       throw error;
     }
   }
-
-  // ── Inventory reconciliation (issue #414 D14) ───────────────────────
 
   async runReconciliation(
     vaultId: string,
@@ -1179,8 +1162,6 @@ export class BackupService {
     else this.health.reportOk("backups", detail);
     return summary;
   }
-
-  // ── Restore verification (issue #408 G9) ────────────────────────────
 
   /** A REAL restore into a scratch dir plus every check #408 G9 names. */
   async runRestoreVerify(vaultId: string): Promise<void> {
@@ -1352,8 +1333,6 @@ export class BackupService {
     if (!plane) return undefined;
     return spineCensus(plane.db.vault);
   }
-
-  // ── WAL segment drain (issue #408) ───────────────────────────────────
 
   private lastAutoBackupAttemptMs = new Map<string, number>();
   private readonly manifestGenerationCache = new Map<string, string[]>();
@@ -1549,8 +1528,6 @@ export class BackupService {
     });
   }
 
-  // ── Scheduler ─────────────────────────────────────────────────────────
-
   start(): void {
     if (this.timer) return;
     void this.syncEnabledPolicies().catch((error) => {
@@ -1735,8 +1712,6 @@ export class BackupService {
       if (reconciliationDue) await this.runReconciliation(vaultId);
     });
   }
-
-  // ── CLI-facing reads ─────────────────────────────────────────────────
 
   async status(): Promise<Record<string, BackupTargetState>> {
     const state = await loadBackupState(

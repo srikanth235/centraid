@@ -1,7 +1,5 @@
 /*
- * The capture point behind the realtime Logs surface: `wrap(inner)` tees each
- * line into a bounded ring + subscribers, then forwards to `inner`. Entries
- * carry a monotonic `seq` for resume and dedupe. Persistence is OPTIONAL
+ * Capture point behind the realtime Logs surface: persistence is optional
  * (#351) and its failures are swallowed and counted — logging must never
  * crash or recurse into logging.
  */
@@ -136,8 +134,7 @@ export class GatewayLogStore {
 
   private persist(serialized: string): void {
     if (!this.dir || !this.currentFile) return;
-    // The next `append()` past the window IS the retry: no timer, no extra
-    // state machine, and a full disk is not hammered once per line.
+    // The next append() past the window IS the retry — no timer, and a full disk is not hammered per line.
     if (this.diskFullUntil !== null && Date.now() < this.diskFullUntil) {
       this.droppedWrites += 1;
       return;
@@ -185,8 +182,7 @@ export class GatewayLogStore {
     }
   }
 
-  /** `nextSeq` resumes from the highest persisted seq, so a post-restart
-   *  entry never collides with a seq a client already saw. */
+  /** nextSeq resumes from the highest persisted seq, so a post-restart entry never collides with one a client saw. */
   private loadTail(): void {
     if (!this.dir || !this.currentFile) return;
     const files = [

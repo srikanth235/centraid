@@ -1,11 +1,7 @@
 /*
- * Durable-ingress cursor reads (#541 review). The invariant:
- *
- *   A cursor may only advance to the position of an element actually
- *   delivered. Never report a target beyond the last element returned.
- *
- * Rows past the catch-up cap are SURPLUS (next tick delivers them); only
- * unrecoverable losses become `skipped`/`gapReason`.
+ * Durable-ingress cursor reads (#541): a cursor may only advance to the last
+ * element actually delivered. Rows past the catch-up cap are SURPLUS (next
+ * tick delivers them); only unrecoverable losses become `skipped`/`gapReason`.
  */
 
 import type { CursorReadResult } from "@centraid/server/automation";
@@ -14,10 +10,7 @@ import type {
   PruneIngressResult,
 } from "@centraid/server/engine";
 
-/**
- * TTL cost to *this* source: rows above `deliveredThrough` were never
- * delivered — an unrecoverable gap.
- */
+/** Rows above `deliveredThrough` were never delivered — an unrecoverable TTL gap for this source. */
 export function ingressRetentionGap(
   prune: PruneIngressResult,
   sourceKey: string,
@@ -28,7 +21,6 @@ export function ingressRetentionGap(
   return { skipped: lost.pruned, gapReason: "ingress_retention" };
 }
 
-/** Last delivered row id. */
 function parseIngressPosition(positionJson: string | undefined): number {
   if (!positionJson) return 0;
   try {
@@ -49,7 +41,6 @@ function parseIngressPayload(payloadJson: string | undefined): unknown {
   }
 }
 
-/** One ingress row as a cursor element. */
 export function ingressElement(record: {
   id: number;
   receivedAt: number;
@@ -66,7 +57,6 @@ export function ingressElement(record: {
   };
 }
 
-/** Advance the cursor only as far as the last row returned. */
 export function readIngressCursor(
   store: Pick<AutomationTriggerStore, "listIngressAfter" | "pruneIngress">,
   sourceKey: string,
@@ -75,8 +65,7 @@ export function readIngressCursor(
   now: number
 ): CursorReadResult {
   const afterId = parseIngressPosition(positionJson);
-  // Prune where the delivered position is known: expired-before-delivery rows
-  // are accounted, not silently dropped.
+  // Prune where the delivered position is known: expired-before-delivery rows are accounted, not dropped.
   const retention = ingressRetentionGap(
     store.pruneIngress(now),
     sourceKey,

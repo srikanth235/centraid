@@ -338,12 +338,11 @@ describe("lifecycle-automation-routes scenarios", () => {
     expect(json.error).toBe("not_found");
   });
 
-  // ──── update-route WIRING (#656 1D) ──────────────────────────────────────
   // Trigger legality is the manifest validator's law
-  // (`packages/server/src/automation/manifest/manifest.test.ts`). The two tests below
-  // prove only that the update handler runs its own kind pre-check and that a
-  // validator rejection surfaces verbatim as a 400 `bad_request`. Do not add
-  // further malformed-trigger shapes here — extend the validator suite instead.
+  // (`packages/server/src/automation/manifest/manifest.test.ts`). These tests prove only
+  // that the update handler runs its own kind pre-check and that a validator
+  // rejection surfaces verbatim as a 400 `bad_request` — extend the validator
+  // suite instead of adding malformed-trigger shapes here.
 
   test("update rejects an unsupported trigger kind with a 400", async () => {
     const created = await createAutomation("bad-trigger-kind");

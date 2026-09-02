@@ -32,8 +32,6 @@ function fakeConfig(
   };
 }
 
-// ──── happy path ───────────────────────────────────────────────────────────
-
 describe("enumerate-models", () => {
   test("maps the harness’s advertised model options to HarnessModel[]", async () => {
     const models = await enumerateAcpModels(fakeConfig(["--mode=normal"]));
@@ -44,8 +42,6 @@ describe("enumerate-models", () => {
       { id: "fake-opus-9-1", name: "Most capable" },
     ]);
   });
-
-  // ──── best-effort empties ──────────────────────────────────────────────────
 
   test("a harness with no model option enumerates []", async () => {
     const models = await enumerateAcpModels(
@@ -69,8 +65,6 @@ describe("enumerate-models", () => {
     expect(models).toStrictEqual([]);
   });
 
-  // ──── teardown ─────────────────────────────────────────────────────────────
-
   test("the child process is dead once enumeration resolves", async () => {
     const dir = await tempDir("acp-enum-pid-");
     const pidMarker = path.join(dir, "pid");
@@ -85,8 +79,6 @@ describe("enumerate-models", () => {
     // child has already been reaped, which is the invariant we require.
     expect(() => process.kill(pid, 0)).toThrow(/ESRCH/u);
   });
-
-  // ──── mapping unit ─────────────────────────────────────────────────────────
 
   test("mapOfferedModels dedupes by id, drops blanks, and flags the current value", () => {
     const models = mapOfferedModels(

@@ -1,6 +1,5 @@
-// Settings merge: global prefs ⊕ per-app settings ⊕ caller overrides, last
-// layer winning. A global key must be in `KNOWN_KEYS`; anything outside it and
-// outside the dynamic `app*` namespace is dropped. Unused in this repo (#799).
+// Settings merge: global prefs ⊕ per-app settings ⊕ caller overrides, last layer winning.
+// Global keys must be in `KNOWN_KEYS`; anything outside it and the dynamic `app*` namespace is dropped.
 
 export interface SettingsInject {
   dataAttrs?: Record<string, string>;

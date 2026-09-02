@@ -44,8 +44,6 @@ export interface HarnessSpec {
   readonly enumerateModels: (prefs: EnumeratePrefs) => Promise<HarnessModel[]>;
 }
 
-// ──── the one harness shape ──────────────────────────────────────────────
-
 interface AcpHarnessSpec {
   kind: HarnessKind;
   label: string;
@@ -171,8 +169,6 @@ function makeAcpHarness(spec: AcpHarnessSpec): HarnessSpec {
   };
 }
 
-// ──── codex ───────────────────────────────────────────────────────────────
-
 const codexHarness = makeAcpHarness({
   kind: "codex",
   label: "Codex",
@@ -188,8 +184,6 @@ const codexHarness = makeAcpHarness({
   },
   probeModels: true,
 });
-
-// ──── claude-code ─────────────────────────────────────────────────────────
 
 const claudeHarness = makeAcpHarness({
   kind: "claude-code",

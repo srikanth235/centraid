@@ -48,7 +48,6 @@ function anchorQuote(selectorJson: unknown): string {
     const parsed = JSON.parse(selectorJson) as { exact?: unknown };
     return typeof parsed.exact === "string" ? parsed.exact : "";
   } catch {
-    // Malformed selectors cannot match a term.
     return "";
   }
 }

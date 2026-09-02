@@ -1,14 +1,11 @@
 import { promises as fs } from "node:fs";
 // `validateManifestAt` walks `automations/<id>/automation.json` through
 // `@centraid/server/automation`'s `parseManifest`, not just `app.json` and the
-// `handler.js` replay lint. Without that walk only the dedicated POST
-// /centraid/_automations create route checks trigger/vault shapes, so a
-// malformed edit through the generic draft file-write route (PUT
-// /centraid/_apps/<id>/files/<path> — how the builder's trigger editor applies
-// changes) rides straight through publish and fails later at fire/schedule
+// handler replay lint: without that walk a malformed edit through the generic
+// draft file-write route (PUT /centraid/_apps/<id>/files/<path> — the builder's
+// trigger editor) rides straight through publish and fails at fire/schedule
 // time. This file covers the walk directly;
-// `lifecycle/automation-lifecycle-over-http.test.ts` covers the end-to-end
-// publish-time 400.
+// `lifecycle/automation-lifecycle-over-http.test.ts` covers the end-to-end publish-time 400.
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -157,8 +154,7 @@ describe("validate-manifest", () => {
     await writeAutomationApp(
       baseManifest({ triggers: [{ kind: "cron", expr: "bogus" }] })
     );
-    // Overwrite the handler with a replay-unsafe one too — the manifest error
-    // must win so authors fix structural problems first.
+    // Overwrite the handler with a replay-unsafe one too — the manifest error must win so authors fix structural problems first.
     await fs.writeFile(
       path.join(dir, "automations", "main", "handler.js"),
       "export default async () => ({ summary: String(Date.now()) });\n"
@@ -184,8 +180,7 @@ describe("validate-manifest", () => {
     );
     const autoDir = path.join(dir, "automations", "main");
     await fs.mkdir(autoDir, { recursive: true });
-    // A structurally invalid automation.json that would fail parseManifest —
-    // ignored because this app's kind is not 'automation'.
+    // Structurally invalid automation.json that would fail parseManifest — ignored because this app's kind is not 'automation'.
     await fs.writeFile(
       path.join(autoDir, "automation.json"),
       "{ not valid json"

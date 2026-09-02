@@ -63,7 +63,6 @@ const SYMBOL: Record<IntegrityFinding["level"], string> = {
   error: "FAIL",
 };
 
-/** `centraid-gateway doctor …`. */
 export async function commandDoctor(args: string[], fail: Fail): Promise<void> {
   const json = args.includes("--json");
   const localFail: Fail = jsonFail(json, fail);

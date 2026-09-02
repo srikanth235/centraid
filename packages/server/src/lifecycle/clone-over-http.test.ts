@@ -96,8 +96,8 @@ describe("clone-over-http scenarios", () => {
   });
 
   test("cloning a template over HTTP publishes a plain-slug automation app with a provisioned webhook", async () => {
-    // 1. Rewrite the template's file map for a fresh id + name, exactly as
-    //    the desktop's TEMPLATES_CLONE handler does.
+    // Rewrite the template's file map for a fresh id + name, exactly as the
+    //    desktop's TEMPLATES_CLONE handler does.
     const cloned = cloneTemplateFiles({
       newAppId: "inbound-2",
       templateFiles: templateFiles(),
@@ -107,8 +107,6 @@ describe("clone-over-http scenarios", () => {
       iconKey: "Sparkle",
       colorKey: "rose",
     });
-    // app.json carries the new id + name + version reset, kind preserved,
-    // and the catalog tile identity backfilled.
     const appJson = JSON.parse(
       cloned.find((f) => f.path === "app.json")!.content
     ) as {
@@ -126,7 +124,7 @@ describe("clone-over-http scenarios", () => {
     expect(appJson.iconKey).toBe("Sparkle");
     expect(appJson.colorKey).toBe("rose");
 
-    // 2. Provision the pending webhook (secret minted here; only its hash is
+    // Provision the pending webhook (secret minted here; only its hash is
     //    written into the manifest).
     const { files, minted } = provisionPendingWebhooksInFiles(
       cloned,
@@ -137,7 +135,7 @@ describe("clone-over-http scenarios", () => {
     expect(minted[0]!.automationId).toBe("inbound");
     expect(minted[0]!.secret.length > 0).toBeTruthy();
 
-    // 3. Open a session, PUT every file, publish — the HTTP path that works
+    // Open a session, PUT every file, publish — the HTTP path that works
     //    against a remote gateway.
     await fetch(`${handle.url}/centraid/_apps/_sessions`, {
       method: "POST",
@@ -161,8 +159,6 @@ describe("clone-over-http scenarios", () => {
     });
     expect(pub.status).toBe(201);
 
-    // 4. The cloned app is on `main` with its kind + tile identity surfaced
-    //    in the list.
     const listRes = await fetch(`${handle.url}/centraid/_apps`, {
       headers: auth(),
     });
@@ -178,8 +174,6 @@ describe("clone-over-http scenarios", () => {
     expect(row!.iconKey).toBe("Sparkle");
     expect(row!.colorKey).toBe("rose");
 
-    // 5. The published manifest carries a provisioned webhook — hashed
-    //    secret, no plaintext, no lingering `pending` flag.
     const filesRes = await fetch(
       `${handle.url}/centraid/_apps/inbound-2/files?sessionId=s1`,
       {

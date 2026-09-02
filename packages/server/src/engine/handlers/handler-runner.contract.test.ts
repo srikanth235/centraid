@@ -18,8 +18,7 @@ describe("handler-runner", () => {
   beforeEach(async () => {
     appDir = await tempDir("centraid-worker-admission-");
     handlerFile = path.join(appDir, "slow.js");
-    // Park on `import()` of a gate file, not `fs.access` (#842): the sandbox
-    // refuses `node:fs/promises`, and a missing module rejects uncached.
+    // Park on `import()` of a gate file, not `fs.access` (#842): the sandbox refuses `node:fs/promises`, and a missing module rejects uncached.
     await writeFile(
       handlerFile,
       `const gate = ${JSON.stringify(pathToFileURL(path.join(appDir, "release.gate.mjs")).href)};

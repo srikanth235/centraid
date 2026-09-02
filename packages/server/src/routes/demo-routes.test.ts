@@ -166,10 +166,9 @@ describe("demo routes", () => {
   });
 
   test("finds a BUNDLED app's generator, which lives outside the code store", async () => {
-    // The regression this whole dep exists for. Issue #434 made a bundled
-    // install serve in place and #708 made all eight installed by default, so
-    // scanning only the git store answered `{apps:[]}` and 404'd every POST on
-    // a vault that owned every seedable app there is.
+    // The regression this dep exists for (#434, #708): bundled installs serve
+    // in place and are installed by default, so a handler scanning only the
+    // git store answers `{apps:[]}` and 404s every seed POST.
     const codeAppsDir = await tempDir("demo-routes-code-");
     const bundledRoot = await tempDir("demo-routes-bundled-");
     await writeSeed(bundledRoot, "tasks");

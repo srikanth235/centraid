@@ -1,7 +1,5 @@
-// Per-app runtime settings: flat JSON at <appsDir>/<id>/settings.json,
-// runtime state not owner data (#286). Unprefixed keys app-owned; "__" keys
-// runtime-owned. Reads best-effort (corrupt file must not block serving);
-// writes throw.
+// Per-app runtime settings: flat JSON at <appsDir>/<id>/settings.json — runtime state, not owner data (#286).
+// Unprefixed keys app-owned; "__" keys runtime-owned. Reads best-effort (corrupt file must not block serving); writes throw.
 
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";

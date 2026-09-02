@@ -71,7 +71,6 @@ describe(ConnectionLimiter, () => {
         throw new Error("boom");
       })
     ).rejects.toThrow("boom");
-    // The slot was released in the finally, so the next task runs.
     await expect(limiter.run(async () => "after")).resolves.toBe("after");
   });
 });

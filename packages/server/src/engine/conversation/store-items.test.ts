@@ -307,7 +307,6 @@ describe("ConversationStore — conversation-wide batched reads (#659 G5)", () =
         store.listItems(turn.turnId)
       );
     }
-    // No stray turns beyond those the conversation owns.
     expect([...batchedItems.keys()].sort()).toStrictEqual(
       turns.map((t) => t.turnId).sort()
     );
@@ -458,7 +457,6 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
     const store = newStore();
     const conversationId = seedTurns(store, 8);
 
-    // listTurnsWindow — cursor absent, present, and limit at the cap.
     expect(() => store.listTurnWindow(conversationId)).not.toThrow();
     expect(() =>
       store.listTurnWindow(conversationId, { limit: 3 })
@@ -466,7 +464,6 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
     expect(() =>
       store.listTurnWindow(conversationId, { limit: 3, beforeSeq: 5 })
     ).not.toThrow();
-    // …and the unwindowed listTurns, same SQL now.
     expect(store.listTurns(conversationId).map((t) => t.seq)).toStrictEqual([
       0, 1, 2, 3, 4, 5, 6, 7,
     ]);

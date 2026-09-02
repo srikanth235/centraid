@@ -1,6 +1,4 @@
-// Engine profiles (#807) — that the built-ins are derived rather than
-// stored, that egress is computed from the engine and unreachable from input,
-// and that the write gate refuses out loud everything the reader drops.
+// Engine profiles (#807): built-ins are derived, not stored; egress is computed from the engine and unreachable from input; the write gate refuses out loud everything the reader drops.
 
 import { describe, expect, test } from "vitest";
 
@@ -193,10 +191,10 @@ describe("prefs round-trip", () => {
 });
 
 describe("validation refuses out loud what the reader drops", () => {
-  // `readerDrops` marks the cases the lenient reader also refuses. The
-  // optional fields (label, model, prompt rev, pins) are typo-tolerant on
-  // read — a bad one is dropped and the profile still runs — but the writer
-  // refuses them rather than silently discarding what a member typed.
+  // `readerDrops` marks the cases the lenient reader also refuses. Optional
+  // fields (label, model, prompt rev, pins) are typo-tolerant on read — a bad
+  // one is dropped and the profile still runs — but the writer refuses them
+  // rather than silently discarding what a member typed.
   interface RejectionCase {
     name: string;
     patch: Record<string, unknown>;

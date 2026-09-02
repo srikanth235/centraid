@@ -37,7 +37,6 @@ describe(RunEventBus, () => {
     expect(bus.subscriberCount("r")).toBe(0);
     bus.publish("r", { type: "turn.end", turnId: "r", ok: true });
     expect(seen).toHaveLength(1);
-    // Idempotent.
     expect(() => unsub()).not.toThrow();
   });
 

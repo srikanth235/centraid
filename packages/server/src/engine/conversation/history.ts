@@ -291,7 +291,6 @@ export class ConversationHistoryStore {
     if (!meta) return undefined;
 
     const prunedRefs = store.listArchiveSegments(id).filter((r) => r.pruned);
-    // No pruned range ⇒ every turn is still a live row.
     if (prunedRefs.length === 0) return this.getSession(appId, id, window);
 
     const archived = await collectArchivedRows(
@@ -487,7 +486,6 @@ export class ConversationHistoryStore {
             : { workspacePath: att.workspacePath }),
         });
       }
-      // Ordinal 0 is the inbound message.
       input.nodes.forEach((node, i) => {
         const itemId = recordNode(store, turnId, i + 1, node);
         if (node.kind !== "tool") return;

@@ -96,9 +96,9 @@ describe("peer lane at the composed handler", () => {
     });
   });
 
-  /* (#865 F9) The backstop used to judge only the endpoint header; the Rust
-   * relay's forwarder-owned set carries a peer-vault name too, so each of
-   * them alone must be enough to refuse. */
+  /* (#865 F9) The backstop must judge EVERY peer identity header — the
+   * endpoint name and the Rust relay's forwarder-owned peer-vault name alike —
+   * so each alone is enough to refuse. */
   test.each([
     { [PEER_ENDPOINT_HEADER]: "ep-peer" },
     { [PEER_PROOF_HEADER]: PEER_PROOF },

@@ -1,12 +1,6 @@
-/**
- * Output-schema validator for automation handlers (#80).
- *
- * The handler's optional `return { summary, output }` is validated
- * against `manifest.outputSchema`. We keep the schema deliberately
- * minimal — `type: 'object'` + `properties` + `required` — enough to
- * flag obvious shape drift. Full JSON-Schema support is on the
- * roadmap, not in scope here.
- */
+// Output-schema validator for automation handlers (#80). Deliberately minimal
+// — `type: 'object'` + `properties` + `required` — enough to flag obvious
+// shape drift; not a general JSON-Schema engine.
 
 import { ManifestError } from "./manifest-errors.js";
 
@@ -112,12 +106,7 @@ export function validateOutputSchema(raw: unknown): OutputSchema | undefined {
   };
 }
 
-/**
- * Validate a handler's return `output` against `manifest.outputSchema`.
- * Returns null on pass, an error message on fail. Used by the runtime
- * to flip `runs.ok=0` and populate `runs.error` when the handler's
- * output doesn't match the declared shape.
- */
+// Null on pass, an error message on fail; the runtime flips `runs.ok=0` with it.
 export function validateOutputAgainstSchema(
   schema: OutputSchema,
   output: unknown

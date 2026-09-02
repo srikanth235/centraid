@@ -1,17 +1,10 @@
 /*
- * Seed the daemon's prefs file with `harness.*` prefs from the
- * config file.
+ * Seeds the daemon's prefs with `harness.*` from the config file. Without it
+ * the per-turn prefs loader sees empty gateway prefs and falls back to
+ * "codex on $PATH", missing the operator's binPath/extraArgs.
  *
- * Without this, the runtime's per-turn prefs loader would see an empty
- * gateway preferences and fall back to "codex with whatever's on $PATH" —
- * which is fine for a default but doesn't pick up the daemon operator's
- * configured binPath / extra args.
- *
- * Idempotent: runs `setPrefs` with the same patch shape the renderer's
- * Settings panel uses, so re-running with the same config is a no-op.
- * A pref key set on a previous boot that's been removed from the
- * config file is explicitly cleared (set to `null`) so the file
- * remains the source of truth.
+ * Idempotent; a key removed from the config file is explicitly cleared
+ * (`null`) so the file stays the source of truth.
  */
 
 import type { PrefsStore } from "@centraid/server/engine";

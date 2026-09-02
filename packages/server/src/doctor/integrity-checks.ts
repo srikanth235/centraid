@@ -1,9 +1,4 @@
-/*
- * Integrity scrub checks (#839). Keep every check a pure function over an
- * already-open handle (or a CAS directory) returning an `IntegrityFinding` and
- * touching no product state: the doctor verb, the scheduled scrub, and the
- * crash lane all import these rather than reimplement the invariants.
- */
+/** Integrity scrub checks (#839). Every check is a pure function over an already-open handle (or CAS directory) returning an `IntegrityFinding` and touching no product state — the doctor verb, the scheduled scrub, and the crash lane all import these rather than reimplement the invariants. */
 
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, statSync } from "node:fs";
@@ -47,8 +42,6 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-// ─── database-integrity ───
-
 export interface DatabaseTarget {
   readonly label: string;
   readonly db: DatabaseSync;
@@ -89,8 +82,6 @@ export function checkDatabaseIntegrity(
     );
   }
 }
-
-// ─── cas-rehash ───
 
 export interface CasRehashInput {
   readonly vaultId: string;
@@ -179,8 +170,6 @@ export function checkCasRehash(input: CasRehashInput): IntegrityFinding {
   );
 }
 
-// ─── hardlink-refcount ───
-
 export interface VaultCasRoot {
   readonly vaultId: string;
   /** The vault's `blobs/` directory; the audit walks `blobs/sha256/`. */
@@ -192,11 +181,7 @@ interface InodeRecord {
   paths: string[];
 }
 
-/**
- * Link count IS the cross-vault refcount (#599 decision 11): a blob's `st_nlink`
- * above its CAS entries across owned vaults is an outside link, so the refcount
- * never reaches zero. Collect all vaults first — sharing is not a leak.
- */
+/** Link count IS the cross-vault refcount (#599 decision 11): a blob's `st_nlink` above its CAS entries across owned vaults is an outside link, so the refcount never reaches zero. Collect all vaults first — sharing is not a leak. */
 export function checkHardlinkRefcounts(
   vaults: readonly VaultCasRoot[]
 ): IntegrityFinding {
@@ -252,8 +237,6 @@ export function checkHardlinkRefcounts(
       .join(" | ")}`
   );
 }
-
-// ─── replica-journal ───
 
 export interface ReplicaJournalInput {
   readonly vaultId: string;
@@ -334,8 +317,6 @@ export function checkReplicaJournalConsistency(
     input.vaultId
   );
 }
-
-// ─── orchestrator ───
 
 export interface DoctorVaultTarget {
   readonly vaultId: string;

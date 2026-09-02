@@ -1,15 +1,8 @@
-/*
- * Storage quota watermark — the `storage-quota` health component (issue
- * #367 §D2). Mirrors `disk-health.ts`'s two-watermark shape, just reading a
- * provider-reported figure (`StoreUsageReport.quotaBytes`,
- * packages/backup/PROTOCOL.md § Usage) instead of a local `statfs` call.
- *
- * Only a storage connection with a provider-reported `quotaBytes` can ever go
- * `degraded`/`error` here — a provider that doesn't meter reports
- * `quotaBytes: null` ("unmetered", per PROTOCOL.md), which reads as `ok` with
- * an honest "unmetered" detail rather than a fabricated pass — there is
- * genuinely nothing to watch.
- */
+// `storage-quota` health component (#367 §D2), reading a provider-reported
+// quota (packages/backup/PROTOCOL.md § Usage) instead of a local statfs call.
+// Only a connection with a provider-reported `quotaBytes` can go
+// degraded/error here — an unmetered provider reports `quotaBytes: null` and
+// reads as an honest "unmetered" ok, not a fabricated pass.
 
 import type { UsageByStore } from "@centraid/backup";
 

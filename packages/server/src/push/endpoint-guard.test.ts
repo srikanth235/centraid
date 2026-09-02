@@ -1,9 +1,4 @@
-/*
- * Push-endpoint SSRF guard (issue #865): registration must refuse reserved
- * ranges — loopback, RFC1918, link-local, CGNAT, Class E, unique-local,
- * 0.0.0.0, IPv4-mapped IPv6 — whether the host is an IP literal or a DNS
- * name resolving into one, and fail closed on resolution failure.
- */
+/** SSRF guard (#865): registration must refuse reserved ranges — loopback, RFC1918, link-local, CGNAT, Class E, unique-local, 0.0.0.0, IPv4-mapped IPv6 — whether the host is an IP literal or a DNS name resolving into one, and fail closed on resolution failure. */
 
 import { promises as dns } from "node:dns";
 

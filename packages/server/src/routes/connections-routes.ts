@@ -184,13 +184,11 @@ export function makeConnectionsRouteHandler(
       return true;
     }
 
-    // GET /connections — the health surface: status, why, freshness.
     if (segments.length === 0 && method === "GET") {
       sendJson(res, 200, { connections: listConnections(plane) });
       return true;
     }
 
-    // GET /connections/providers — the BYO-client wizard content.
     if (
       segments.length === 1 &&
       segments[0] === "providers" &&
@@ -211,8 +209,8 @@ export function makeConnectionsRouteHandler(
       return true;
     }
 
-    // POST /connections/assist — configure with public shared-client
-    // coordinates supplied by the gateway, never by the browser.
+    // Configure with public shared-client coordinates supplied by the
+    // gateway, never by the browser.
     if (
       segments.length === 1 &&
       segments[0] === "assist" &&
@@ -273,7 +271,6 @@ export function makeConnectionsRouteHandler(
       return true;
     }
 
-    // POST /connections/assist/complete — authenticated courier handoff.
     if (
       segments.length === 2 &&
       segments[0] === "assist" &&
@@ -331,7 +328,6 @@ export function makeConnectionsRouteHandler(
       return true;
     }
 
-    // POST /connections — attach/detach a credential.
     if (segments.length === 0 && method === "POST") {
       const body = await readJson(req).catch(() => undefined);
       if (!body) {
@@ -349,7 +345,6 @@ export function makeConnectionsRouteHandler(
       return true;
     }
 
-    // PATCH /connections/<id> — pause / resume.
     if (segments.length === 1 && method === "PATCH") {
       const body = (await readJson(req).catch(() => undefined)) as
         | { status?: string; note?: string }
@@ -366,7 +361,6 @@ export function makeConnectionsRouteHandler(
       return true;
     }
 
-    // DELETE /connections/<id> — remove entirely (sync.remove_connection).
     // Checked for existence up front so an unknown id answers 404 rather
     // than folding into the command's generic refusal 409 — the two are
     // different problems (nothing to delete vs. won't delete this yet).
@@ -402,7 +396,6 @@ export function makeConnectionsRouteHandler(
       return true;
     }
 
-    // POST /connections/<id>/authorize — start the consent ceremony.
     if (
       segments.length === 2 &&
       segments[1] === "authorize" &&

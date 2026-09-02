@@ -302,8 +302,6 @@ describe("hardware-profile", () => {
     );
   });
 
-  // --- #528 Phase F: durable per-knob UI overrides through the ONE resolver ---
-
   const STANDARD_HOST = {
     cores: 8,
     totalMemoryBytes: 16 * 1024 ** 3,

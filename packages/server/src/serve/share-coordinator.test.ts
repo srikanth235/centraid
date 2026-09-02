@@ -1,12 +1,9 @@
 /*
  * The edge lifecycle's legal transitions, as one table (#750 abstraction 5).
- * These are pure-function tests on purpose: without the reducer these
- * questions can only be asked through a route, a database and a transport,
- * which is how separate files come to disagree about them.
- *
- * The one transport's behaviour over these transitions is pinned by
- * `edges-routes.test.ts`; there is no peer transport and no peer answer
- * signals (#825, ruling G-copy).
+ * Pure-function tests on purpose: without the reducer these questions can only
+ * be asked through a route, a database and a transport, which is how separate
+ * files come to disagree. The transport's behaviour over these transitions is
+ * pinned by `edges-routes.test.ts` (#825, ruling G-copy).
  */
 
 import { describe, expect, test } from "vitest";

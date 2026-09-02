@@ -1,10 +1,3 @@
-// Gmail history cursors (bootstrap, expiry re-baseline, page exhaustion, the
-// over-budget tail gap) plus the cross-provider fail-closed and malformed-row
-// contracts. GitHub conditional cursors / pagination / backoff live in
-// automation-event-sources-github.test.ts; provider failures in
-// automation-event-sources-errors.test.ts. Shared fixtures in
-// automation-event-sources.test-fixtures.ts.
-
 import { describe, expect, it, vi } from "vitest";
 
 import { pollProviderEventSource } from "./automation-event-sources.js";

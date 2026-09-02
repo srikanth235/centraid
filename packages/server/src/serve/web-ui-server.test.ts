@@ -69,8 +69,7 @@ describe("web-ui-server", () => {
     // WebAssembly.instantiate needs 'wasm-unsafe-eval' in script-src.
     expect(csp).toContain("script-src 'self' 'nonce-");
     expect(csp).toContain("blob: 'wasm-unsafe-eval'");
-    // Browser Iroh is relay-only: it opens a wss:// WebSocket + https to the n0
-    // relay. connect-src must admit both while keeping 'self' and the API origin.
+    // Browser Iroh is relay-only (wss + https to the n0 relay): connect-src must admit both.
     expect(csp).toContain(
       "connect-src 'self' http://127.0.0.1:8765 https: wss:"
     );
@@ -95,12 +94,10 @@ describe("web-ui-server", () => {
   });
 
   test("never pins unhashed root files as year-immutable", async () => {
-    // Content-hashed /assets/ files are safe to pin forever.
     const hashed = await fetch(`${server.url}/assets/app.js`);
     expect(hashed.headers.get("cache-control")).toContain("immutable");
 
-    // Stable-URL root files must revalidate — a year-immutable copy would strand
-    // redeploys. The service worker + manifest gate updates, so they no-cache.
+    // A year-immutable root file would strand redeploys; sw + manifest gate updates.
     const sw = await fetch(`${server.url}/sw.js`);
     expect(sw.headers.get("cache-control")).not.toContain("immutable");
     expect(sw.headers.get("cache-control")).toBe("no-cache");
@@ -140,9 +137,6 @@ describe("web-ui-server", () => {
   });
 
   test("degrades to an ephemeral port instead of failing on a collision", async () => {
-    // Occupy a port, then ask the web UI to bind exactly that port. It must not
-    // reject (which would take down the whole gateway) — it falls back to an
-    // ephemeral port and comes up on a different, listening URL.
     const squatter = http.createServer((_req, res) => res.end());
     await new Promise<void>((resolve) => {
       squatter.listen(0, "127.0.0.1", resolve);

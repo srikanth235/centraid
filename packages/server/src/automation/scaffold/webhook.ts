@@ -27,7 +27,6 @@ import {
 
 export const WEBHOOK_ROUTE_PREFIX = "/_centraid-hook";
 
-/** 64 KiB. */
 const MAX_BODY_BYTES = 64 * 1024;
 
 const RATE_LIMIT_MAX = 60;

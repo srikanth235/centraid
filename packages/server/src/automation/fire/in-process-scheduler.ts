@@ -1,8 +1,5 @@
-/**
- * Compatibility name for the single vault cursor scheduler (#541).
- * Existing hosts construct `InProcessScheduler`; all trigger work now runs
- * inside `VaultCursorEngine`.
- */
+// Compatibility name for the single vault cursor scheduler (#541); all trigger
+// work runs inside `VaultCursorEngine`.
 export {
   VaultCursorEngine as InProcessScheduler,
   type VaultCursorEngineOptions as InProcessSchedulerOptions,

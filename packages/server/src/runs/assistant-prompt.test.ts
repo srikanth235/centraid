@@ -2,10 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import { buildAssistantPrompt } from "./assistant-prompt.js";
 
-// The prompt must guard writes and parking, not just outbox sends: without
-// that guard an agent claims a destructive purge completed without ever
-// calling `vault_invoke` (observed in real-app E2E). This assertion covers the
-// vault assistant and the per-app kit-ask register alike (both share REGISTER).
+// REGISTER is shared by the vault assistant and per-app kit-ask; the guard exists because an agent once claimed a destructive purge completed without calling `vault_invoke` (real-app E2E).
 describe("assistant-prompt", () => {
   test("the register warns against claiming a write completed without calling vault_invoke", () => {
     const prompt = buildAssistantPrompt("My vault", "schema…");

@@ -1,8 +1,4 @@
-/**
- * Complements digest-parity (Insights union): `archiveRange` +
- * `readArchivedConversationSegment` round-trip, and `conversation_digest`
- * accretion.
- */
+/** Complements digest-parity (Insights union): `archiveRange` + `readArchivedConversationSegment` round-trip, and `conversation_digest` accretion. */
 
 import { createHash } from "node:crypto";
 

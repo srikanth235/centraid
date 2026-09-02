@@ -1,5 +1,4 @@
-// DECLARED ⊇ OBSERVED for an action's `writes:`; the gate is
-// `declared-writes.conformance.test.ts` (#883 D2).
+// DECLARED ⊇ OBSERVED for an action's `writes:`; gated by declared-writes.conformance.test.ts (#883 D2).
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -36,8 +35,7 @@ export function engineCascadeEntities(): Set<string> {
   return new Set(["access.app", "core.entity_revision"]);
 }
 
-// This cascade and `partyRepointEntities` are unioned per-action, never by
-// default: `core_tag` is an ordinary app write and nearly every table carries a
+// Cascades are unioned per-action, never by default: nearly every table carries a
 // `core_party` FK, so a blanket union would exempt most of the product.
 /** The entity-pointer tables (#916, rung ten): every `(type, id)` mechanism
  *  that is now a composite foreign key into `core_entity`. A purge cascades
@@ -74,9 +72,7 @@ export function partyRepointEntities(
     const entity = entityForPhysical(name, all);
     if (entity) cascade.add(entity);
   }
-  // The merge walks one more set that no foreign key describes: the party
-  // pointers `core_party` has no FK for. Derived from the same registry the
-  // merge itself walks, so the two cannot drift.
+  // Party pointers no FK describes; same registry the merge walks, so the two cannot drift.
   for (const pointer of PARTY_POINTER_REGISTRY) {
     const entity = entityForPhysical(pointer.table, all);
     if (entity) cascade.add(entity);

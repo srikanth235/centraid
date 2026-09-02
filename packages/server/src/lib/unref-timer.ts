@@ -1,7 +1,4 @@
-/** Node `Timeout#unref` is missing when the same file is typechecked under DOM.
- *  Callers must use the global `setTimeout`/`setInterval` so vitest fake
- *  timers still intercept; `import { setTimeout } from "node:timers"` binds
- *  the real timer and tests that advance a fake clock never fire. */
+/** `{ unref? }` because Node `Timeout#unref` is missing under DOM typecheck. Callers must use the global `setTimeout`/`setInterval`, never `node:timers` — vitest fake timers never fire a real bound timer. */
 export function unrefTimer(
   timer: { unref?: () => unknown } | number | undefined | null
 ): void {

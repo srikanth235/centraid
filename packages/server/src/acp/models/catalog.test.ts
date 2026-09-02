@@ -17,8 +17,6 @@ async function tmpCatalogPath(): Promise<string> {
   return path.join(dir, `model-catalog-${counter++}.json`);
 }
 
-// ──── reads (no seed, no enumeration) ────
-
 describe("catalog", () => {
   test("readHarnessModels returns [] when the catalog file is absent", async () => {
     const catalogPath = await tmpCatalogPath();
@@ -47,8 +45,6 @@ describe("catalog", () => {
       readHarnessModels(catalogPath, "claude-code")
     ).resolves.toStrictEqual([]);
   });
-
-  // ──── merge-write (a partial write never clobbers other fields) ────
 
   test("writeCatalogEntry preserves other harnesses", async () => {
     const catalogPath = await tmpCatalogPath();

@@ -1,17 +1,12 @@
 /*
- * Owners — the principal layer (#726).
- *
- * An owner is a human on this gateway. Authorization is two questions,
- * neither a role: whose device is this (`enrollment-store.ts` binds proved
- * EndpointIds to owners), and does that owner own this vault (`vault_owners`,
- * one owner per vault — the PRIMARY KEY is the invariant). The label is
- * display only — every binding and attribution keys on `ownerId`, so renaming
- * a person can never fork their history or strand their access.
- *
- * Two removal verbs live at different layers on purpose: revoking a device is
- * `EnrollmentStore.revoke` (a tombstone on one binding), while removing a
- * person is `OwnerStore.remove` — refused while they still own vaults,
- * because deleting a person must never orphan a vault.
+ * Owners — the principal layer (#726). Authorization is two questions, neither
+ * a role: whose device is this (`enrollment-store.ts` binds proved EndpointIds
+ * to owners), and does that owner own this vault (`vault_owners`, one owner
+ * per vault — the PRIMARY KEY is the invariant). The label is display only —
+ * every binding and attribution keys on `ownerId`. Two removal verbs at
+ * different layers on purpose: `EnrollmentStore.revoke` tombstones one device
+ * binding; `OwnerStore.remove` removes a person and is refused while they
+ * still own vaults, so deleting a person can never orphan a vault.
  */
 
 import crypto from "node:crypto";
@@ -128,9 +123,9 @@ export class OwnerStore {
   }
 
   /**
-   * Author ownership. INSERT OR REPLACE is deliberate: a vault has exactly
-   * one owner, so re-pointing replaces rather than accumulates. Callers own
-   * the "may this ownership change" decision.
+   * INSERT OR REPLACE is deliberate: a vault has exactly one owner, so
+   * re-pointing replaces rather than accumulates. Callers own the "may this
+   * ownership change" decision.
    */
   setOwner(vaultId: string, ownerId: string): void {
     this.gatewayDatabase.db
@@ -151,9 +146,9 @@ export class OwnerStore {
   }
 
   /**
-   * Remove a person: one transaction that drops their device bindings and
-   * the owner row. Refused while they still own vaults — the ownership
-   * analogue of a last-admin guard, structural instead of counted.
+   * One transaction dropping their device bindings and the owner row. Refused
+   * while they still own vaults — a last-admin guard, structural instead of
+   * counted.
    */
   remove(ownerId: string): { removedEndpointIds: string[] } {
     return this.gatewayDatabase.transaction(() => {

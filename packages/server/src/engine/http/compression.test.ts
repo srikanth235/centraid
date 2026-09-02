@@ -110,7 +110,6 @@ describe("compression", () => {
       expect(data.statusCode).toBe(200);
       expect(data.headers["Content-Encoding"]).toBe("br");
       expect(data.headers["Vary"]).toBe("Accept-Encoding");
-      // Body is the compressed form and decodes back to the JSON.
       expect(
         JSON.parse(zlib.brotliDecompressSync(data.body).toString("utf8"))
       ).toStrictEqual(big);

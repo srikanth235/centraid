@@ -44,7 +44,6 @@ export function runConversationArchival(
   const maxPruneSegments =
     options.maxPruneSegments ?? DEFAULT_MAX_PRUNE_SEGMENTS_PER_RUN;
 
-  // ── Phase A — archive (never deletes) ────────────────────────────────
   const ranges = selectEligibleRanges(journal, cutoffMs, maxConversations);
   const archived: ArchivedRange[] = [];
   let turnsArchived = 0;
@@ -80,7 +79,6 @@ export function runConversationArchival(
     }
   }
 
-  // ── Phase B — custody-gated prune (separate phase, same call) ─────────
   const pruned = pruneCustodyProven(
     journal,
     custodyProven,

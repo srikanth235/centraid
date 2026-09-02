@@ -1,11 +1,3 @@
-// The GitHub events adapter: conditional (ETag / Last-Modified) cursors and
-// 304 no-ops, safe `Link: rel=next` pagination, the `x-poll-interval` backoff
-// (including the clamp that stops a hostile hint parking a trigger for years),
-// and baselining a newly authored watcher without replay. Gmail cursors and the
-// cross-provider malformed-row handling stay in automation-event-sources.test.ts;
-// provider failures in automation-event-sources-errors.test.ts; shared
-// fixtures in automation-event-sources.test-fixtures.ts.
-
 import { describe, expect, it, vi } from "vitest";
 
 import { pollProviderEventSource } from "./automation-event-sources.js";
@@ -201,9 +193,6 @@ describe("pollProviderEventSource — GitHub", () => {
       event: "issue" as const,
       filter: { repo: "acme/app" },
     };
-    // An unbounded `x-poll-interval` (hostile response, or a proxy inside
-    // `allowed_hosts`) would park the trigger for ~3 years with no
-    // health signal (#541 review). Clamp is 15 minutes.
     const parked = await pollProviderEventSource({
       trigger,
       connection: github,
@@ -219,7 +208,6 @@ describe("pollProviderEventSource — GitHub", () => {
       notBefore: Date.parse("2026-07-25T00:15:00Z"),
     });
 
-    // A sane provider hint is still honored verbatim.
     const honored = await pollProviderEventSource({
       trigger,
       connection: github,

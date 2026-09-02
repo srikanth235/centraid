@@ -18,9 +18,8 @@ const HARNESS_SUBSYSTEMS: readonly ModelSubsystem[] = [
 ];
 
 /**
- * Resolve gateway launch prefs for one turn. `binPath`/`extraArgs` are one
- * configured harness's settings, not portable flags; a different requested
- * harness must use its registry defaults.
+ * `binPath`/`extraArgs` are one configured harness's settings, not portable
+ * flags — a different requested harness must use its registry defaults.
  */
 export function resolveGatewayHarnessPrefs(
   allPrefs: Record<string, unknown>,
@@ -61,11 +60,10 @@ export function resolveGatewayHarnessPrefs(
 }
 
 /**
- * Same resolution, but reject a harness this host cannot execute instead of
- * coercing it. `resolveGatewayHarnessPrefs` deliberately degrades to `codex` so
- * a live turn always has a harness; the Settings patch path must not, or an
- * unregistered `harness.<subsystem>` value silently persists as `codex` and the
- * user's saved choice quietly means something else.
+ * Reject a harness this host cannot execute instead of coercing: the Settings
+ * patch path must not silently persist an unregistered `harness.<subsystem>`
+ * value as `codex` (the lenient variant deliberately degrades so a live turn
+ * always has a harness).
  */
 export function resolveStrictGatewayHarnessPrefs(
   allPrefs: Record<string, unknown>,
@@ -74,16 +72,15 @@ export function resolveStrictGatewayHarnessPrefs(
   const kindRaw = subsystem
     ? resolveSubsystemHarness(allPrefs, subsystem)
     : allPrefs["harness.kind"];
-  // Unset is legitimate — it means "the historical default harness".
+  // Unset is legitimate — it means the default harness.
   if (kindRaw !== undefined && kindRaw !== null && !isHarnessKind(kindRaw))
     return undefined;
   return resolveGatewayHarnessPrefs(allPrefs, subsystem);
 }
 
 /**
- * Return every fallback membership removed by a Settings patch. Membership is
- * subsystem-scoped: retaining a harness in one ladder must not preserve consent
- * derived from a different ladder.
+ * Membership is subsystem-scoped: retaining a harness in one ladder must not
+ * preserve consent derived from a different ladder.
  */
 export function removedHarnessLadderMembers(
   before: Record<string, unknown>,

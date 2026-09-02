@@ -1,13 +1,12 @@
 /*
- * `POST /centraid/_gateway/edges` — cross-vault share/move plane (#726 P2).
- * Replaces `placement_intents`/`/placements` outright (pre-1.0): one edge
- * covers a SET of items through ONE reconcile pass. SAME-OWNER ONLY since
- * #825 (ruling G-copy) — copies to another person's vault are refused;
+ * `POST /centraid/_gateway/edges` — cross-vault share/move plane (#726 P2):
+ * one edge covers a SET of items through ONE reconcile pass. SAME-OWNER ONLY
+ * (#825, ruling G-copy) — copies to another person's vault are refused;
  * sharing is a standing grant on `/centraid/_vault/grants`. Whether a pair
  * may be crossed is decided ONLY by `serve/link-crossing.ts` (D3);
- * unauthorized pairs answer `not_found` — topology hiding. Since #750 the
- * route hand-writes no status (reducer `begin` enqueues ONE `deliver-give`
- * effect, run inline for a synchronous answer). GET lists by OWNER;
+ * unauthorized pairs answer `not_found` — topology hiding. The route
+ * hand-writes no status (#750): reducer `begin` enqueues ONE `deliver-give`
+ * effect, run inline for a synchronous answer. GET lists by OWNER;
  * `createdByDevice` stays as provenance. Live/lend not accepted (#731).
  */
 

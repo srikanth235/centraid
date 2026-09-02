@@ -62,9 +62,7 @@ export function createWebPushSender(database: GatewayDatabase): WebPushSender {
       await Promise.all(
         rows.map(async (row) => {
           try {
-            // Issue #865: rows persisted before the registration guard (or by
-            // an older build) never get a wake POST when the endpoint is an
-            // obvious non-https or reserved-range IP-literal target.
+            // Rows persisted without the guard (older build) never get a wake POST to a non-https or reserved-range IP endpoint (#865).
             if (!endpointHostIsPublicSync(row.endpoint)) return;
             await webPush.sendNotification(
               {

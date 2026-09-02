@@ -33,7 +33,6 @@ describe(routeLabel, () => {
 describe(RouteLatencyMetrics, () => {
   it("reports percentiles as the bucket ceiling that covers them", () => {
     const metrics = new RouteLatencyMetrics();
-    // 99 fast requests and one slow one.
     for (let index = 0; index < 95; index += 1)
       metrics.record("/centraid/_apps", 3);
     for (let index = 0; index < 5; index += 1)
@@ -42,10 +41,8 @@ describe(RouteLatencyMetrics, () => {
     const [summary] = metrics.snapshot();
     expect(summary?.route).toBe("/centraid/_apps");
     expect(summary?.count).toBe(100);
-    // 95% of requests finished within the 5ms bucket…
     expect(summary?.p50Ms).toBe(5);
     expect(summary?.p95Ms).toBe(5);
-    // …and the slow tail only shows up once the quantile reaches into it.
     expect(summary?.p99Ms).toBe(5_000);
     expect(summary?.maxMs).toBe(4_000);
   });

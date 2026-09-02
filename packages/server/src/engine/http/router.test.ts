@@ -39,8 +39,7 @@ describe("parseRoute — app RPC routes (issue #505)", () => {
   });
 
   it("rejects non-POST action/query invocation", () => {
-    // No UI-byte serving (#799): a GET does not fall through to a static
-    // read — the RPC plane is POST-only and everything else 404s.
+    // No UI-byte serving (#799): the RPC plane is POST-only — a GET never falls through to a static read, everything else 404s.
     expect(parseRoute("GET", "/centraid/todos/queries/upcoming").kind).toBe(
       "not-found"
     );

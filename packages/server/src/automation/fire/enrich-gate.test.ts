@@ -243,8 +243,8 @@ describe("enrichment tier gate", () => {
     }
   );
 
-  // ── the cascade on the fire path (#807 Wave 2): a bare tier gets the
-  // pre-#807 decision; the cascade is the same gate, one resolver deeper.
+  // The cascade on the fire path (#807): a bare tier gets the legacy
+  // decision; the cascade is the same gate, one resolver deeper.
 
   it("refuses when a rule switches the capability off, even at the gateway tier", async () => {
     const { outcome, opened } = await fire({
@@ -297,8 +297,8 @@ describe("enrichment tier gate", () => {
     expect(opened).toStrictEqual([]);
   });
 
-  // ── egress consent on the fire path (#807 Wave 3): the tier says how far
-  // work may RUN; the consent ledger says whether the member ever agreed.
+  // Egress consent on the fire path (#807): the tier says how far work may
+  // RUN; the consent ledger says whether the member ever agreed.
 
   /** A cascade that pins a provider-backed engine under a `gateway` vault. */
   function providerCascade(consent?: EnrichConsentRecord | null) {
@@ -541,7 +541,7 @@ describe(decideEnrichmentGate, () => {
     expect(decision).toStrictEqual({ allowed: true, sealModelTurns: false });
   });
 
-  // ── the profile-aware form (#807) ───────────────────────────────────────
+  // The profile-aware form (#807).
   const resolved = (tier: EnrichTier, profileId = "built-in") =>
     resolveEnrichmentPolicy(
       [

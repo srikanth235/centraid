@@ -1,8 +1,7 @@
 /*
- * Durable PWA control sessions (#555).
- *
- * Cookie hashes live in gateway.db and join device enrollments with
- * ON DELETE CASCADE. A source-less store remains in-memory for isolated tests.
+ * Durable PWA control sessions (#555): cookie hashes in gateway.db, joined to
+ * device enrollments with ON DELETE CASCADE. A source-less store stays
+ * in-memory for isolated tests.
  */
 
 import crypto from "node:crypto";
@@ -52,10 +51,9 @@ function toSession(row: StoredSessionRow): ControlSessionRow {
 }
 
 /**
- * SQL prepared once per store (#659). `GatewayDatabase.db` is a
- * `readonly` handle for the process lifetime, so a statement compiled here
- * stays valid; re-preparing on every authorize() re-parses six statements per
- * HTTP request.
+ * SQL prepared once per store (#659): `GatewayDatabase.db` is a `readonly`
+ * handle for the process lifetime, so a statement compiled here stays valid;
+ * re-preparing re-parses six statements per HTTP request.
  */
 interface SessionStatements {
   establish: StatementSync;
@@ -166,15 +164,10 @@ export class WebControlSessionStore {
   }
 
   /**
-   * Look a live session up by its cookie hash.
-   *
-   * The row is fetched by PRIMARY KEY rather than by scanning every live
-   * session (#659): that scan is O(sessions) SQL on every authorized
-   * request. The constant-time comparison is kept on the returned row, and the
-   * value being matched is already a SHA-256 of the cookie — `touch()` and
-   * `remove()` have always looked it up by key, so the index lookup exposes
-   * nothing new. Expired rows never match, so authorization does not depend on
-   * the sweep having run.
+   * The row is fetched by PRIMARY KEY, not by scanning live sessions (#659).
+   * Timing-safe comparison is safe on the key lookup: the matched value is
+   * already a SHA-256 of the cookie. Expired rows never match, so
+   * authorization does not depend on the sweep having run.
    */
   find(tokenHash: string): ControlSessionRow | undefined {
     const expected = Buffer.from(tokenHash, "hex");
@@ -201,13 +194,13 @@ export class WebControlSessionStore {
     const row = this.find(tokenHash);
     if (!row) return;
     const now = this.now();
-    // The absolute TTL is enforced HERE, from the stored creation instant
-    // (issue #865): the cookie Max-Age is advisory — a stolen cookie file
-    // replays without any browser honoring it. The idle window can slide a
-    // session's expiry, but never past its creation + CONTROL_ABSOLUTE_TTL_MS.
+    // The absolute TTL is enforced HERE from the stored creation instant
+    // (#865): the cookie Max-Age is advisory — a stolen cookie file replays
+    // without any browser honoring it. The idle window can slide expiry, but
+    // never past creation + CONTROL_ABSOLUTE_TTL_MS.
     const created = Date.parse(row.createdAt);
-    // A malformed createdAt (Date.parse → NaN) would otherwise write NaN
-    // into expires_at: Math.min(idle, NaN) is NaN, and NaN <= now is false.
+    // A malformed createdAt (Date.parse → NaN) would otherwise write NaN into
+    // expires_at: Math.min(idle, NaN) is NaN, and NaN <= now is false.
     if (Number.isNaN(created)) {
       this.remove(tokenHash);
       return;

@@ -269,7 +269,6 @@ describe("backup", () => {
       h.gatewayDatabase.close();
     });
 
-    // Seed: rows, a >1MiB blob (multi-chunk), published app, sealed value, approved outbox.
     const taskTitles = ["Frame the print", "Pay the invoice", "Call the vet"];
     const taskIds = taskTitles.map(
       (title) =>
@@ -630,7 +629,6 @@ describe("backup", () => {
     ) as { id: string };
     expect(appJson.id).toBe("todo");
 
-    // Reopen the shared registry for fencing.
     reopen();
   }, 30_000);
 

@@ -1,7 +1,6 @@
 /*
- * Per-vault scheduler liveness + missed-run visibility (#351 tier 2/3). Both
- * signals read the same persisted ledger (written each tick by the in-process
- * scheduler). Never escalates past `degraded`: behind schedule ≠ gateway down.
+ * Per-vault scheduler liveness + missed-run visibility (#351 tier 2/3).
+ * Never escalates past `degraded`: behind schedule ≠ gateway down.
  */
 
 import type { SchedulerLedgerSnapshot } from "@centraid/server/automation";
@@ -10,21 +9,16 @@ import type { HealthProbe } from "./health-registry.js";
 
 export interface SchedulerHealthVaultEntry {
   readonly vaultId: string;
-  /** Synchronous read of the vault's scheduler ledger. */
   readonly snapshot: () => SchedulerLedgerSnapshot;
 }
 
 export interface SchedulerHealthOptions {
   readonly vaults: () => readonly SchedulerHealthVaultEntry[];
-  /** Tick cadence; defaults to 60s (minute-boundary timer). */
   readonly periodMs?: number;
-  /** Periods of silence before liveness flips degraded; defaults to 3. */
   readonly staleAfterPeriods?: number;
-  /** Clock override (tests). */
   readonly now?: () => number;
 }
 
-/** The `scheduler` component's HealthProbe (registered in build-gateway.ts). */
 export function createSchedulerHealthProbe(
   options: SchedulerHealthOptions
 ): HealthProbe {
@@ -41,8 +35,7 @@ export function createSchedulerHealthProbe(
     for (const vault of vaults) {
       const snapshot = vault.snapshot();
       const tag = vault.vaultId.slice(0, 8);
-      // No baseline before the first tick; dormant schedulers stop ticking and
-      // the transition hook resets the baseline before re-enabling.
+      // No baseline before the first tick; dormant schedulers stop ticking (the transition hook resets on re-enable).
       if (snapshot.lastTickAt && !snapshot.dormant) {
         const age = now() - Date.parse(snapshot.lastTickAt);
         if (Number.isFinite(age) && age > staleMs) {

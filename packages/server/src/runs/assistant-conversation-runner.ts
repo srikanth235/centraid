@@ -1,9 +1,4 @@
-/*
- * Vault-assistant config over `makeConversationRunnerCore`. Tools: host-side
- * `vault_sql` with the active vault's owner credential. cwd: empty per-vault
- * scratch (`harness-sessions/assistant-cwd`). Writes ride `_assistant` so
- * confirm-gated commands park (#306).
- */
+/** Vault-assistant config over `makeConversationRunnerCore`: host-side `vault_sql` with the active vault's owner credential, empty per-vault scratch cwd (`harness-sessions/assistant-cwd`), writes riding `_assistant` so confirm-gated commands park (#306). */
 
 import { promises as fs } from "node:fs";
 import path from "node:path";

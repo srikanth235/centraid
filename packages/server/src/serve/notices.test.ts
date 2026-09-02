@@ -94,9 +94,6 @@ describe("Notifications notice delivery", () => {
       const store = new NoticeStore(db.vault, (change) =>
         changes.push({ wake: change.wake })
       );
-      // A producer's sourceRef is stable per (source, outcome): an automation
-      // that keeps failing must collapse into ONE card that counts up, not
-      // dedupe into the first failure forever.
       const input = {
         kind: "automation",
         sourceRef: "myapp/nightly-digest:failure",
@@ -114,7 +111,6 @@ describe("Notifications notice delivery", () => {
       expect(again.count).toBe(2);
       expect(again.lastAt).toBe("2026-07-30T10:05:00.000Z");
       expect(again.firstAt).toBe(first.firstAt);
-      // An outage the owner had already filed away comes back unread.
       expect(again.readAt).toBeNull();
       expect(again.archivedAt).toBeNull();
       expect(store.list()).toHaveLength(1);
@@ -265,26 +261,19 @@ describe("Notifications notice delivery", () => {
             notificationsDecisionKeys(plane.blocking())
           );
 
-        // A decision open before this process started is not news: the first
-        // observation after a restart seeds silently.
         expect(plane.blocking().outbox).toHaveLength(1);
         expect(observe()).toBe(false);
 
-        // Net zero across one grouped commit — one decision closes while
-        // another opens. The count never moves; the new decision still has
-        // to reach a closed device.
         await plane.decideOutbox({ itemId: first, decision: "discard" });
         const second = stageItem(plane);
         expect(plane.blocking().outbox).toHaveLength(1);
         expect(plane.blocking().outbox[0]?.itemId).toBe(second);
         expect(observe()).toBe(true);
 
-        // An unchanged projection is quiet; a plain new decision wakes.
         expect(observe()).toBe(false);
         stageItem(plane);
         expect(observe()).toBe(true);
 
-        // Closing decisions never wakes.
         await plane.decideOutbox({ itemId: second, decision: "discard" });
         expect(observe()).toBe(false);
       } finally {

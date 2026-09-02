@@ -1,6 +1,6 @@
 import { defineConfig } from "vitest/config";
 
-/** Standalone Stryker test root for app-engine (defineConfig, not defineProject). */
+/** Standalone Stryker root — defineConfig, not defineProject. */
 export default defineConfig({
   test: {
     name: "@centraid/server/engine-mutation",

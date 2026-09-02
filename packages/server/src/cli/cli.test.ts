@@ -126,7 +126,6 @@ describe("cli scenarios", () => {
     expect(timingSafeTokenEqual("abc", "abc")).toBe(true);
     expect(timingSafeTokenEqual("abc", "abd")).toBe(false);
     expect(timingSafeTokenEqual("abc", "ab")).toBe(false);
-    // Re-export from the entrypoint matches the pure helper module.
     expect(pureFromHelper(["--port", "1"])).toStrictEqual(
       parseServeArgsPure(["--port", "1"])
     );

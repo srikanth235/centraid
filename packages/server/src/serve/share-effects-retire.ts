@@ -1,11 +1,7 @@
-/*
- * One-time drain of the obligations copy-as-share retired (#825, ruling
- * G-copy). NOT a schema migration — `gateway.db` refuses those. Queued rows
- * survive an upgrade: left alone the sweep dials `not_found` forever, marked
- * `done` the audit lies. So delete the row, move a still-RUNNING edge to
- * terminal `failed` with a member-facing reason, and never rewrite a
- * completed/denied/revoked/failed edge.
- */
+// One-time drain of obligations copy-as-share retired (#825, ruling G-copy).
+// Not a schema migration — gateway.db refuses those. Left alone the sweep dials
+// `not_found` forever; marked `done` the audit lies. So: delete the row, move a
+// still-RUNNING edge to terminal `failed`, never rewrite a settled edge.
 
 import type { GatewayDatabase } from "./gateway-db.js";
 
@@ -15,10 +11,9 @@ export interface RetiredShareEffects {
 }
 
 /**
- * `gateway_meta` key stamped once the drain has run against this file (#883
- * C2). Without it a ONE-TIME upgrade step costs two SELECTs — one a
- * `sqlite_master` probe — on the critical path of every writable open, forever,
- * to discover nothing.
+ * `gateway_meta` key stamped once the drain has run (#883 C2). Without it the
+ * one-time check costs two SELECTs on the critical path of every writable open,
+ * forever.
  */
 const RETIRED_MARKER = "share_effects_retired";
 
@@ -32,12 +27,7 @@ const RETIRED_WHERE = `
   OR payload_json LIKE '%"crossOwner":true%'
 `;
 
-/**
- * At most once per `gateway.db` file. Fail-open on the marker read, so a
- * control plane too young for `gateway_meta` still drains; the marker is
- * stamped after the drain, so a crash mid-drain leaves it unset and the next
- * open finishes the job.
- */
+/** At most once per gateway.db file; marker stamped after the drain, so a crash mid-drain finishes on the next open. */
 export function retireDeadShareEffectsOnce(
   db: GatewayDatabase
 ): RetiredShareEffects {
@@ -61,8 +51,7 @@ export function retireDeadShareEffectsOnce(
       RETIRED_MARKER
     );
   } catch {
-    // The drain is idempotent, so failing to record it only costs doing it
-    // again — never a boot failure.
+    // Idempotent drain: failing to record it only costs redoing it, never a boot failure.
   }
   return drained;
 }

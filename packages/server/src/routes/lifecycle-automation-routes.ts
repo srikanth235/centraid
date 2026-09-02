@@ -1,7 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#387) one cohesive lifecycle handler family (create/update/set-enabled/rotate/delete) sharing the same session+stage+publish plumbing; splitting duplicates the shared helpers
-// Automation lifecycle handlers for the gateway-owned builder (#141),
-// dispatched from `makeLifecycleRouteHandler`. Webhook secrets are minted
-// here: the plaintext is returned once, only the hash persists.
+// Automation lifecycle handlers for the gateway-owned builder (#141), dispatched
+// from `makeLifecycleRouteHandler`. Webhook secrets: plaintext returned once, only the hash persists.
 
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -37,8 +36,6 @@ function refuseSystemRecipeMutation(
     message: `${canonical} is a release-managed recognition recipe; ${action} is unavailable. Toggle it or change its declared model/variant settings instead.`,
   });
 }
-
-// ─── POST /centraid/_automations/compile ───
 
 export async function handleAutomationCompile(
   opts: LifecycleRouteOptions,
@@ -79,8 +76,6 @@ export async function handleAutomationCompile(
   });
   return sendJson(res, 202, { compileTurnId });
 }
-
-// ─── POST /centraid/_automations/revise ───
 
 export async function handleAutomationRevise(
   opts: LifecycleRouteOptions,
@@ -127,8 +122,6 @@ export async function handleAutomationRevise(
   return sendJson(res, 202, { compileTurnId });
 }
 
-// ─── POST /centraid/_automations ───
-
 export async function handleAutomationCreate(
   opts: LifecycleRouteOptions,
   req: IncomingMessage,
@@ -165,9 +158,8 @@ export async function handleAutomationCreate(
   }
 
   // The closed trigger vocabulary: an unknown kind is rejected loudly rather
-  // than coerced, and `validateManifest` (via `scaffoldAppFiles`) owns
-  // condition/data spec validation so its field-scoped message is the one
-  // callers see.
+  // than coerced; `validateManifest` owns condition/data spec validation so its
+  // field-scoped message is the one callers see.
   const ALLOWED_TRIGGER_KINDS = new Set([
     "cron",
     "webhook",
@@ -305,8 +297,6 @@ export async function handleAutomationCreate(
   });
 }
 
-// ─── POST /centraid/_automations/set-enabled ───
-
 export async function handleAutomationSetEnabled(
   opts: LifecycleRouteOptions,
   req: IncomingMessage,
@@ -356,8 +346,6 @@ export async function handleAutomationSetEnabled(
   }
   return sendJson(res, 200, { ok: true, staged: !publish });
 }
-
-// ─── POST /centraid/_automations/update ───
 
 /**
  * PATCH semantics over POST: only a present field is applied. A
@@ -643,8 +631,6 @@ export async function handleAutomationUpdate(
   });
 }
 
-// ─── POST /centraid/_automations/rotate-webhook ───
-
 /**
  * Mints a fresh secret over the SAME route id, so a caller already configured
  * with the webhook URL keeps working and only its credential changes. The
@@ -723,8 +709,6 @@ export async function handleAutomationRotateWebhook(
   });
 }
 
-// ─── POST /centraid/_automations/enrichment ───
-
 /**
  * ONE owner decision (#306): every installed enricher flips in one act.
  * Enrichers are the catalog's `category: "Enrichment"` template ids.
@@ -790,8 +774,6 @@ export async function handleEnrichmentToggle(
   await toggleNext(0);
   return sendJson(res, 200, { ok: true, enabled, toggled, unchanged });
 }
-
-// ─── DELETE /centraid/_automations ───
 
 export async function handleAutomationDelete(
   opts: LifecycleRouteOptions,

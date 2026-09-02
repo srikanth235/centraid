@@ -16,7 +16,6 @@ export interface BrokerHealthVaultEntry {
 export interface BrokerHealthOptions {
   readonly vaults: () => readonly BrokerHealthVaultEntry[];
   readonly overdueGraceMs?: number;
-  /** Clock override (tests). */
   readonly now?: () => number;
 }
 

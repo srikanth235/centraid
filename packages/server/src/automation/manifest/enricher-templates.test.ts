@@ -1,11 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit one suite over the whole enricher-template contract — each template’s manifest validity, determinism lint, and stub-ctx spine behavior share the one fixture (#299)
-/*
- * The enricher automation templates (#299 phases 1–2): their
- * manifests must parse under the runtime's real validator (vault block +
- * data trigger coherence), their handlers must pass the determinism lint,
- * and — driven with a stub ctx — they must enforce the spine's contract:
- * derivatives only, stage-don't-write, cursor watermarks, honest skips.
- */
+// The enricher automation templates (#299): manifests must parse under the
+// runtime's real validator, handlers must pass the determinism lint, and —
+// driven with a stub ctx — they must enforce the spine's contract: derivatives
+// only, stage-don't-write, cursor watermarks, honest skips.
 
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -987,10 +984,9 @@ describe("doc-text-extractor behavior", () => {
     expect(result.summary).toContain("OCRed 1");
   });
 
-  // ── the delegate variant (issue #807, Wave 5) ───────────────────────────
-  // `doc-text` has no bundled deterministic engine — both variants take a
-  // model turn. What the delegate variant adds is a PINNED engine whose
-  // answer is stamped: profile, ACP-confirmed model, prompt revision.
+  // The delegate variant (#807): `doc-text` has no bundled deterministic engine
+  // — both variants take a model turn, and the delegate variant adds a PINNED
+  // engine whose answer is stamped: profile, ACP-confirmed model, prompt rev.
   it("stamps the resolved profile and confirmed model on a delegate transcription", async () => {
     const handler = await loadHandler("doc-text-extractor");
     const harness = stubCtx({

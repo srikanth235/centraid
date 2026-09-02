@@ -56,7 +56,6 @@ describe("recover() restores the vault identity keypair alongside the DEK (#726 
   );
 
   test("a recovered vault signs a challenge that verifies against the pre-move public key", async () => {
-    // ── Machine A: found, capture identity, back up ──────────────────────
     const vaultRootA = await tempDir("recover-identity-a-vault");
     const keysA = new KeyStore(path.join(vaultRootA, "keys"));
     const registryA = openVaultRegistry({
@@ -102,7 +101,6 @@ describe("recover() restores the vault identity keypair alongside the DEK (#726 
     await serviceA.stop();
     registryA.stop();
 
-    // ── Machine B: blank data dir, recover from the kit ──────────────────
     const dataDirB = await tempDir("recover-identity-b-data");
     const vaultRootB = path.join(dataDirB, "vault");
     const keysB = new KeyStore(path.join(dataDirB, "keys"));
@@ -135,8 +133,6 @@ describe("recover() restores the vault identity keypair alongside the DEK (#726 
     const planeB = registryB.get(vaultId)!;
     expect(planeB.db.identitySeed).toStrictEqual(planeA.db.identitySeed);
 
-    // The proof: the recovered vault SIGNS, and the signature verifies
-    // against the public key recorded before the move.
     const challenge = Buffer.from("prove you are the same vault");
     const signature = signWithVaultIdentity(planeB.db.identitySeed, challenge);
     expect(
@@ -151,7 +147,6 @@ describe("recover() restores the vault identity keypair alongside the DEK (#726 
       )
     ).toBe(false);
 
-    // Data survived the move too (id + identity + grants intact).
     const tasks = planeB.db.vault
       .prepare("SELECT task_id FROM schedule_task WHERE task_id = ?")
       .get(taskId) as { task_id: string } | undefined;

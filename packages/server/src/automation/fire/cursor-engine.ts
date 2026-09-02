@@ -1,9 +1,7 @@
-/**
- * One durable cursor engine for every automation trigger (#541): a
- * write-ahead pending batch precedes firing, each terminal turn is
- * acknowledged, and position advances only when the batch settles. Cron is
- * a virtual source computed on read.
- */
+// One durable cursor engine for every automation trigger (#541): a write-ahead
+// pending batch precedes firing, each terminal turn is acknowledged, and
+// position advances only when the batch settles. Cron is a virtual source
+// computed on read.
 
 import { unrefTimer } from "../../lib/unref-timer.js";
 import type { Trigger } from "../manifest/manifest.js";

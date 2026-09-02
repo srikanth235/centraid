@@ -1,8 +1,4 @@
-/*
- * Issue #567 Phase-0 evidence: emit one bounded capability record for every
- * registered harness. Missing CLIs are honest `available:false` rows rather
- * than omissions, so the dump always proves full registry coverage.
- */
+/** One bounded capability record per registered harness; missing CLIs are honest `available:false` rows rather than omissions, so the dump proves full registry coverage. */
 
 import type { HarnessKind } from "@centraid/server/engine";
 
@@ -16,10 +12,8 @@ const envKey = (kind: HarnessKind): string =>
   `CENTRAID_${kind.replaceAll("-", "_").toUpperCase()}_BIN`;
 
 /**
- * Each probed kind spawns a CLI and (when reachable) sends one live
- * diagnostic prompt to that vendor's provider. Running all ~31 at once would
- * fire a burst of real, billable requests at a handful of providers, so the
- * dump is bounded — evidence collection must not look like an attack.
+ * All ~31 at once would fire a burst of real, billable vendor requests —
+ * evidence collection must not look like an attack.
  */
 const MAX_CONCURRENT_PROBES = 3;
 

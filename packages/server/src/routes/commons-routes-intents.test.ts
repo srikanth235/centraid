@@ -1,6 +1,5 @@
-// Issue #731's gateway plumbing for two goals: goal 1 (the command route
-// carries `based_on_sequence` into `executeCommonsCommand`) and goal 2 (the
-// intent cancel route).
+// #731 gateway plumbing: goal 1 — the command route carries `based_on_sequence`
+// into `executeCommonsCommand`; goal 2 — the intent cancel route.
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 

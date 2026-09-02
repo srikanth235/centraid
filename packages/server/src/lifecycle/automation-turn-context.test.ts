@@ -1,6 +1,5 @@
 /*
- * automationContextPreamble: standing-instruction assembly for automation
- * turns. This file owns the preamble module's tests.
+ * automationContextPreamble: standing-instruction assembly for automation turns.
  */
 
 import { describe, expect, it } from "vitest";

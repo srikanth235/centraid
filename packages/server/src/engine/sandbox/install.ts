@@ -44,7 +44,6 @@ export interface SandboxHandle {
   readonly isTainted: (url: string) => boolean;
 }
 
-/** Strip the `?query#hash` a loader may append. */
 function bareUrl(url: string): string {
   const cut = Math.min(
     ...[url.indexOf("?"), url.indexOf("#")]
@@ -67,7 +66,6 @@ function canonicalFileUrl(url: string): string {
   }
 }
 
-/** Prefers compiled `.js` over `.ts`. */
 function siblingUrl(base: string): string {
   const js = new URL(`${base}.js`, import.meta.url);
   if (existsSync(fileURLToPath(js))) return js.href;
@@ -336,12 +334,9 @@ function revokeAmbientAuthority(
   }
 }
 
-/**
- * A diagnostic report with no OS environ, no command line, and no user
- * limits. Shape matches Node's `getReport()` keys so Electron's crash
- * reporter can traverse it; values are empty so a handler cannot read the
- * gateway's secrets around the frozen `process.env`.
- */
+/** Shape matches Node's `getReport()` so Electron's crash reporter traverses
+ * it; values are empty so a handler cannot read gateway secrets past the
+ * frozen `process.env`. */
 function redactedDiagnosticReport(): Record<string, unknown> {
   return {
     header: { event: "centraid-sandbox-redacted", filename: "" },

@@ -14,8 +14,7 @@ import { rgbaToThumbHash } from "./thumbhash.js";
 /** ThumbHash requires ≤100 px on each edge. */
 const THUMBHASH_EDGE = 100;
 
-/** Memory bound (#405 §2): an edge cap AND a total-pixel ceiling. A refusal
- *  returns `null`, never a throw that could stall the sweep. */
+/** Memory bound (#405 §2): an edge cap AND a total-pixel ceiling. A refusal returns `null`, never a throw that could stall the sweep. */
 const MAX_INPUT_EDGE = 12_000;
 const MAX_INPUT_PIXELS = 40_000_000; // ~40 MP — comfortably above phone cameras
 
@@ -65,8 +64,7 @@ function withinCaps(width: number, height: number): boolean {
   return width * height <= MAX_INPUT_PIXELS;
 }
 
-/** Area-average downscale to `maxEdge`, NEVER upscaling: a source already
- *  within it comes back 1:1. Dependency-free on purpose. */
+/** Area-average downscale to `maxEdge`, NEVER upscaling: a source already within it comes back 1:1. Dependency-free on purpose. */
 function downscaleRaster(src: Raster, maxEdge: number): Raster {
   const longEdge = Math.max(src.width, src.height);
   const scale = Math.min(1, maxEdge / longEdge);
@@ -74,9 +72,8 @@ function downscaleRaster(src: Raster, maxEdge: number): Raster {
   const dh = Math.max(1, Math.round(src.height * scale));
   if (dw === src.width && dh === src.height) return src;
 
-  // Edge cells take fewer contributors when the ratio is not integral, which
-  // is what an area average wants. `?? 0` satisfies
-  // `noUncheckedIndexedAccess` without a blanket assertion.
+  // Edge cells take fewer contributors when the ratio is not integral — what
+  // an area average wants. `?? 0` satisfies `noUncheckedIndexedAccess`.
   const cells = dw * dh;
   const sum = new Float64Array(cells * 4);
   const count = new Uint32Array(cells);
@@ -157,8 +154,7 @@ function perceptualHash(src: Raster): string {
   return hex;
 }
 
-/** The output is always JPEG whatever the input type — a PNG screenshot's
- *  thumbnail is a JPEG — and `null` means "skip, the placeholder covers it". */
+/** Output is always JPEG whatever the input — a PNG screenshot's thumbnail is a JPEG — and `null` means "skip, the placeholder covers it". */
 export function createPortableImagePreviewCodec(): PreviewCodec {
   return {
     downscale(
@@ -192,7 +188,6 @@ export function createPortableImagePreviewCodec(): PreviewCodec {
       const raster = decode(source, mediaType);
       if (!raster) return null;
       try {
-        // ThumbHash caps at 100×100, so downscale first.
         const small = downscaleRaster(raster, THUMBHASH_EDGE);
         const bytes = rgbaToThumbHash(small.width, small.height, small.data);
         // Unpadded standard base64 — the canonical form ingress validates.

@@ -181,8 +181,6 @@ describe("preflight suite", () => {
     expect(warm.models?.map((m) => m.id)).toStrictEqual(["gpt-x"]);
   });
 
-  // ──── pluggable harness kinds (gemini / qwen / custom acp) ────────────────
-
   test("gemini/qwen preflight probe their bin and carry the registry min version", async () => {
     invalidatePreflightCache();
     const gemini = await runPreflight({ kind: "gemini", binPath: "true" });
@@ -230,8 +228,6 @@ describe("preflight suite", () => {
       }
     );
   });
-
-  // ──── wave 7: eight more ACP-native kinds ─────────────────────────────────
 
   const WAVE_7_KINDS = [
     "copilot",
@@ -331,8 +327,6 @@ describe("preflight suite", () => {
     expect(status.available).toBe(false);
   });
 
-  // ──── probeCliAvailability tests ─────────────────────────────────────────
-
   test("probeCliAvailability reports available + version when the CLI runs", async () => {
     // `true` always exits 0 (empty output) — stands in for an installed CLI.
     const status = await probeCliAvailability("codex", "true");
@@ -359,9 +353,8 @@ describe("preflight suite", () => {
     ).toBe(false);
   });
 
-  // ---- PATH sanitization (issue: stray ~/node_modules/.bin/claude shim) ---
-  //
-  // `npm run` / `bun run` prepend every ancestor directory's
+  // PATH sanitization (stray ~/node_modules/.bin/claude shim): `npm run` /
+  // `bun run` prepend every ancestor directory's
   // `node_modules/.bin` to PATH. If one of those ancestors (e.g. a user's
   // HOME dir) happens to hold a stray npm install, a `claude`/`codex` shim
   // living there silently shadows the user's real, PATH-resolved install —
@@ -452,8 +445,8 @@ describe("preflight suite", () => {
     }
   });
 
-  // ---- end-to-end: probeCliAvailability resolves the real install, not a
-  // stray node_modules/.bin shim shadowing it on a polluted dev-run PATH ----
+  // End-to-end: probeCliAvailability resolves the real install, not a stray
+  // node_modules/.bin shim shadowing it on a polluted dev-run PATH.
 
   async function writeFakeBin(
     dir: string,

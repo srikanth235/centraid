@@ -8,9 +8,8 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { PricingWarmer } from "./pricing-warmer.js";
 
-// A minimal raw-LiteLLM shape the shared filter accepts. `claude-probe` is a
-// synthetic id so a refresh is observable via costForUsage without depending on
-// the real bundled snapshot.
+// `claude-probe` is a synthetic id so a refresh is observable via costForUsage
+// without depending on the real bundled snapshot.
 function rawCatalog(inputRate: number): Record<string, unknown> {
   return {
     "claude-probe": {
@@ -34,8 +33,7 @@ function freshCacheFile(): string {
 
 describe("pricing-warmer", () => {
   afterEach(() => {
-    // Reset the process-global catalog to the bundled snapshot for other suites
-    // by overlaying a known table (vitest isolates modules per file anyway).
+    // Reset the process-global catalog to the bundled snapshot for other suites.
     setPricingCatalog({ "reset-marker": { input_cost_per_token: 0 } });
   });
 
@@ -90,7 +88,6 @@ describe("pricing-warmer", () => {
 
     it("a failed refresh keeps the last-good table (never blanks a price)", async () => {
       const cacheFile = freshCacheFile();
-      // Seed a good table first.
       const warmer = new PricingWarmer({
         cacheFile,
         fetchImpl: async () => okResponse(JSON.stringify(rawCatalog(3e-6))),
@@ -100,7 +97,6 @@ describe("pricing-warmer", () => {
         costForUsage("claude-probe", { inputTokens: 1_000_000 })
       ).toBeCloseTo(3, 9);
 
-      // A subsequent failing fetch must not wipe the table.
       const failing = new PricingWarmer({
         cacheFile,
         fetchImpl: async () => {

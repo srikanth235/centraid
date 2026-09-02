@@ -1,7 +1,6 @@
-// The capture route's OCR adapter. Capture is deliberately not a second
-// recognition implementation: it invokes and awaits the stable Photo OCR
-// automation. Its generated handler owns model loading and inference; the
-// route keeps its honest 503 refusal shape when policy or model assets refuse.
+// Capture is deliberately not a second recognition implementation: it invokes
+// and awaits the stable Photo OCR automation, whose generated handler owns
+// model loading and inference.
 
 import { SYSTEM_CAPTURE_OCR_REF } from "../enrich/system-recognition.js";
 
@@ -45,7 +44,6 @@ function extractionFrom(output: unknown): OcrExtraction {
   };
 }
 
-/** Build capture OCR over the gateway's ordinary awaited automation fire. */
 export function makeCaptureOcrRecognizer(
   invoke: CaptureAutomationInvoker
 ): (input: Buffer, mediaType: string) => Promise<OcrExtraction> {

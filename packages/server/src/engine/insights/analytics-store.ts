@@ -1,6 +1,5 @@
 /*
- * Live `run_summary` VIEW, row-grain only — do not fabricate from
- * `conversation_digest` (#438). Archived-and-pruned runs drop out.
+ * Live `run_summary` VIEW, row-grain only — do not fabricate from `conversation_digest` (#438); archived-and-pruned runs drop out.
  * `ensureReady` re-prepares on vault switch.
  */
 

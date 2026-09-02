@@ -64,7 +64,6 @@ describe("changes-sse", () => {
         if (done) return;
         if (value) {
           buf += decoder.decode(value, { stream: true });
-          // SSE frames are separated by blank lines.
           const frames = buf.split("\n\n");
           buf = frames.pop() ?? "";
           for (const frame of frames) {

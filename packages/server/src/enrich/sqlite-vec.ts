@@ -1,11 +1,11 @@
-// The `sqlite-vec` loader (#721): the vault ships no native binaries, so the
-// gateway supplies the extension through its `loadExtensions` seam.
+// `sqlite-vec` loader (#721): the vault ships no native binaries, so the gateway
+// supplies the extension through its `loadExtensions` seam.
 //
-// SECURITY. `enableLoadExtension(true)` also makes SQL's `load_extension()`
-// callable on the handle `vault_sql` runs owner SQL on. Open and shut it in
-// three synchronous statements: never hoist the revoke, never make this async,
-// never add a second load site. Failure is a capability answer — callers ask
-// `hasSqliteVec` and fall back to `scanEmbeddings`; derived data never gates.
+// SECURITY. `enableLoadExtension(true)` also exposes SQL `load_extension()` on the
+// handle `vault_sql` runs owner SQL on — open and shut synchronously here: never
+// hoist the revoke, never make this async, never add a second load site. Failure
+// is a capability answer (`hasSqliteVec` → fallback to `scanEmbeddings`); derived
+// data never gates.
 
 import type { DatabaseSync } from "node:sqlite";
 

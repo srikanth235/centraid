@@ -1,12 +1,9 @@
 /*
- * The on-behalf-of cap (#599 decision 7; ownership since #726).
- *
- * An agent turn acts FOR an owner and is hard-capped at that owner's
- * authority in the vault — ownership: Sid's assistant must fail exactly
- * where Sid would. The owner and whether they own the vault travel on the
- * request scope (`vault-context.ts`), reach the agent credential in
- * `VaultPlane.agentBridgeFor`, and the vault's consent stage enforces the
- * cap and journals both principals.
+ * The on-behalf-of cap (#599 decision 7; ownership since #726): an agent turn
+ * acts FOR an owner and is hard-capped at that owner's authority — Sid's
+ * assistant must fail exactly where Sid would. The owner and vault-ownership
+ * travel on the request scope into `VaultPlane.agentBridgeFor`; the consent
+ * stage enforces the cap and journals both principals.
  */
 
 import crypto from "node:crypto";
@@ -179,7 +176,6 @@ describe("agent-owner-cap suite", () => {
   test("an automation with no owner behind it is uncapped, exactly as before", async () => {
     const vault = await plane();
 
-    // A scheduler fire enters a vault scope with no request and no owner.
     const result = await runWithVaultContext(
       { vaultId: vault.boot.vaultId },
       () => vault.agentBridgeFor("digest")

@@ -50,7 +50,6 @@ describe("log-store", () => {
 
     const out = await readLogs(workspace, { limit: 2 });
     expect(out).toHaveLength(2);
-    // Newest-first; the latest two are msg4 and msg3.
     expect(out[0]!.msg).toBe("msg4");
     expect(out[1]!.msg).toBe("msg3");
   });
@@ -132,7 +131,6 @@ describe("log-store", () => {
 
   test("append with empty array is a no-op", async () => {
     await appendLogs(workspace, []);
-    // File should not exist yet.
     const exists = await fs
       .stat(path.join(workspace, "logs.jsonl"))
       .then(() => true)
@@ -144,8 +142,7 @@ describe("log-store", () => {
     await appendLogs(workspace, [mk("info", "a", 1)]);
 
     const out = await readLogs(workspace, { limit: 999_999 });
-    // Hard cap is 500; with one entry, length is just 1 — but the call must
-    // not throw. We assert the value is bounded.
+    // Hard cap is 500; with one entry the value is just 1 — the point is the call must not throw and stays bounded.
     expect(out.length <= 500).toBeTruthy();
   });
 

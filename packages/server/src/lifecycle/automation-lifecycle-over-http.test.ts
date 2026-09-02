@@ -187,7 +187,6 @@ describe("automation-lifecycle-over-http scenarios", () => {
     expect(manifest.enabled).toBe(true);
   });
 
-  // ──── create-route WIRING (#656 1D) ──────────────────────────────────────
   // Which trigger shapes are legal is the manifest validator's law, owned by
   // `packages/server/src/automation/manifest/manifest.test.ts`. The tests below prove
   // only what the route itself does: the kind pre-check, the cron default, the
@@ -391,9 +390,8 @@ describe("automation-lifecycle-over-http scenarios", () => {
     // POST /centraid/_automations produces) publishes fine, then a follow-up
     // edit rewrites automation.json through the generic draft file-write route
     // (not the dedicated create route, which validates trigger/vault shapes on
-    // the way in). Before this fix, `validateManifestAt` never parsed
-    // `automation.json` itself, so this malformed edit rode straight through
-    // publish and only failed later at fire/schedule time.
+    // the way in). `validateManifestAt` must parse `automation.json` itself, or
+    // a malformed edit rides through publish and only fails at fire/schedule time.
     await openSession("s4");
     await putFiles(
       "digest-app",

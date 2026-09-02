@@ -1,15 +1,13 @@
-// The capability registry (#807): enrichment capabilities as versioned
-// CONTRACTS. A contract is input kind to output schema and says nothing about
-// how it is computed; apps declare a schema they consume, never an engine.
+// Enrichment capabilities as versioned CONTRACTS: input kind to output schema,
+// nothing about computation — apps declare a schema they consume, never an
+// engine (#807).
 //
 // WHY THE SCHEMA IS VERSIONED AND THE ID IS NOT. Manifests, policy rules,
-// consent rows and queue rows key on the id, so it must stay stable; the
-// returned shape is what moves, and `outputSchema` records it in the
-// `<name>@<version>` convention `parseModelId` already owns.
-//
-// `defaultTemplateId` is the built-in profile's implementation, not the only
-// one. Domains stay a closed union (#807) because they scope DATA SHAPE, not
-// apps — per-app differentiation is the policy cascade's job.
+// consent and queue rows key on the id, so it must stay stable; the returned
+// shape is what moves, recorded by `outputSchema` in the `<name>@<version>`
+// convention `parseModelId` owns. `defaultTemplateId` is the bundled
+// implementation, not the only one. Domains stay a closed union (#807): they
+// scope DATA SHAPE, not apps — per-app differentiation is the policy cascade's job.
 
 import { parseModelId } from "@centraid/vault";
 
@@ -21,8 +19,7 @@ export const CAPABILITY_INPUT_KINDS = [
   "text",
   "document",
   "audio-video",
-  // Its own shape (#816): no bytes read, no content item — a fact the vault
-  // already holds rather than material it must fetch.
+  // Its own shape (#816): no bytes read, no content item — a fact the vault already holds.
   "coordinate",
 ] as const;
 export type CapabilityInputKind = (typeof CAPABILITY_INPUT_KINDS)[number];
@@ -36,11 +33,7 @@ export interface CapabilityContract {
   readonly outputSchema: string;
   /** Blueprint app id of the bundled implementation. */
   readonly defaultTemplateId: string;
-  /**
-   * True iff the bundled manifest declares `enrich.delegateStep`. Binding a
-   * harness profile elsewhere is inert, so surfaces must say so instead of
-   * letting the choice look live. Pinned by `enricher-templates.test.ts`.
-   */
+  /** True iff the bundled manifest declares `enrich.delegateStep`. Binding a harness profile elsewhere is inert — surfaces must say so instead of letting the choice look live. Pinned by `enricher-templates.test.ts`. */
   readonly delegateCapable: boolean;
 }
 
@@ -78,9 +71,9 @@ export const ENRICH_CAPABILITIES: readonly CapabilityContract[] = [
     delegateCapable: false,
   },
   {
-    // `delegateCapable: false` is permanent, not "not yet" (#816): asking
-    // anyone else where a coordinate is means telling them. The contract names
-    // no engine, so a better local table still satisfies `place-names@1`.
+    // `delegateCapable: false` is permanent, not "not yet" (#816): asking anyone
+    // else where a coordinate is means telling them. The contract names no engine,
+    // so a better local table still satisfies `place-names@1`.
     id: "place-names",
     domain: "photos",
     input: "coordinate",

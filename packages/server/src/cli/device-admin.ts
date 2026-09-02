@@ -422,7 +422,6 @@ export async function commandDevices(
       return;
     }
 
-    // revoke
     const [target] = parsed.positional;
     if (!target)
       fail(

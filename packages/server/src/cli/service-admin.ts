@@ -224,8 +224,6 @@ function guiTarget(): string {
   return `gui/${uid}`;
 }
 
-// ──── macOS / launchd ─────────────────────────────────────────────────
-
 async function launchdInstall(parsed: ServiceArgs, fail: Fail): Promise<void> {
   const prepared = await buildSpec(parsed, fail);
   const spec = prepared.unit;
@@ -422,8 +420,6 @@ function launchdStatus(parsed: ServiceArgs, fail: Fail): void {
   );
 }
 
-// ──── Linux / systemd ──────────────────────────────────────────────────
-
 async function systemdInstall(parsed: ServiceArgs, fail: Fail): Promise<void> {
   const prepared = await buildSpec(parsed, fail);
   const spec = prepared.unit;
@@ -527,8 +523,6 @@ function systemdStatus(parsed: ServiceArgs, fail: Fail): void {
   ]);
   process.stdout.write(output);
 }
-
-// ──── dispatch ───────────────────────────────────────────────────────────
 
 export async function commandService(
   args: string[],

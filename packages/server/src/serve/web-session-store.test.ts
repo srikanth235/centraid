@@ -167,8 +167,8 @@ describe("web-session-store", () => {
       )
         .map((step) => step.detail)
         .join(" | ");
-    // Issue #659 G3: the sweep ran on every HTTP request against an unindexed
-    // expires_at, and the lookup scanned every live row.
+    // #659 G3: the sweep must never run per HTTP request, and the lookup must
+    // not scan live rows — expires_at is indexed for both.
     const sweepPlan = plan("SELECT 1 FROM web_sessions WHERE expires_at <= 0");
     const findPlan = plan(
       "SELECT 1 FROM web_sessions WHERE token_hash = 'x' AND expires_at > 0"

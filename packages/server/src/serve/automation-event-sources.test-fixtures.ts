@@ -1,8 +1,5 @@
-// Shared fixtures for the provider event-source cursor tests: the two
-// connection descriptors the adapters are driven with, and a `pollJson` stub
-// that hands back a scripted queue of provider responses (and fails loudly on
-// an unexpected extra request). Test-only module — imported by
-// automation-event-sources.test.ts / -github.test.ts, never shipped.
+// Test-only fixtures (never shipped): a `pollJson` stub handing back a scripted
+// queue of provider responses, failing loudly on an unexpected extra request.
 
 import { vi } from "vitest";
 

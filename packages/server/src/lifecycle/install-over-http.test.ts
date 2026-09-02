@@ -359,7 +359,6 @@ describe("install-over-http scenarios", () => {
     // rather than minting a second one.
     expect(body.alreadyInstalled).toBe(true);
 
-    // Still exactly one row in the listing (no duplicate).
     const rows = (await listApps()).filter((a) => a.id === "tasks");
     expect(rows).toHaveLength(1);
   });
@@ -422,7 +421,6 @@ describe("install-over-http scenarios", () => {
     const ids = (await listApps()).map((a) => a.id).sort();
     expect(ids).toContain("tasks"); // bundled, served in place
     expect(ids).toContain("myscratch"); // code-store
-    // No id appears twice.
     expect(new Set(ids).size).toBe(ids.length);
   });
 

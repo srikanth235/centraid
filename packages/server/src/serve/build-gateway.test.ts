@@ -850,7 +850,6 @@ describe("build-gateway scenarios", () => {
       };
       expect(after.current).toBe("gpt-5.5-mini");
 
-      // `model: null` clears the override.
       const cleared = await fetch(`${srv.url}/centraid/demo/_turn/model`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -899,7 +898,6 @@ describe("build-gateway scenarios", () => {
       // Default harness's key untouched — no cross-harness bleed.
       expect(gateway.prefs.getAllPrefs()["model.codex.ask"]).toBeUndefined();
 
-      // The round-trip agrees: GET reads back what PUT wrote.
       const after = (await (
         await fetch(`${srv.url}/centraid/demo/_turn/model`)
       ).json()) as {

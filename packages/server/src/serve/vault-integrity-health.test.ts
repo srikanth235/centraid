@@ -22,8 +22,7 @@ describe("vault-integrity-health", () => {
   });
 
   describe(createVaultIntegrityHealthProbe, () => {
-    // Issue #659 L6: an hourly full-file scan per vault does not scale with the
-    // vault or with the number of vaults, and it must not land during boot.
+    // Issue #659 L6: an hourly full-file scan per vault must not scale with vault count or land during boot.
     it("scans at most one vault per tick, so N vaults never line up into one scan", async () => {
       const scanned: string[] = [];
       const traced = (id: string): DatabaseSync => {
@@ -156,7 +155,6 @@ describe("vault-integrity-health", () => {
       });
       expect((await probe()).status).toBe("error");
       now = 30_000;
-      // Cached failure still surfaces even without re-running the scan.
       expect((await probe()).status).toBe("error");
     });
   });

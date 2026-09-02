@@ -41,14 +41,9 @@ const silentLogger = {
   error: () => undefined,
 };
 // The slowest file in the suite: every test bootstraps a real vault/daemon
-// layout on disk, so it is the most fsync-bound thing we run. It needs an
-// escalation ABOVE the 30s node-project default in @centraid/test-kit/vitest
-// (see the measurements there). Sizing: the slowest single test here measured
-// ~5.6s on a fast host; at the ~10x worst observed hosted-runner disk penalty
-// that is ~56s, so 60s. The earlier 15s budget blamed v8 coverage
-// instrumentation, which was the wrong variable — coverage runs in the ci lane
-// too and passes there — and 15s was duly still too small: this file timed out
-// twice in nightly run 29733737906 (102s wall for 13 tests vs 20s in ci).
+// layout on disk (fsync-bound). Sizing: the slowest single test is ~5.6s on a
+// fast host; at the ~10x worst hosted-runner disk penalty that is ~56s, so 60s
+// — above the 30s node-project default in @centraid/test-kit/vitest.
 vi.setConfig({ testTimeout: 60_000 });
 
 let dataDir: string;
@@ -166,8 +161,6 @@ describe("admin scenarios", () => {
     }) as typeof fetch;
   }
 
-  // ── devices admin ─────────────────────────────────────────────────────
-
   test("devices add / list / revoke, scoped by vault", async () => {
     const family = lastJson(
       await capture(() =>
@@ -231,7 +224,6 @@ describe("admin scenarios", () => {
       )
     );
     expect(revoked).toHaveProperty("revoked");
-    // Revoking an unknown device fails loudly.
     await expect(
       capture(() =>
         commandDevices(["revoke", "--data-dir", dataDir, "ep-gone"], fail)
@@ -306,8 +298,6 @@ describe("admin scenarios", () => {
     ).rejects.toThrow(/no vault named/u);
   });
 
-  // ── pair ──────────────────────────────────────────────────────────────
-
   test("pair needs the daemon endpoint identity, then mints a pasteable ticket", async () => {
     // Host custody key is required before the daemon handshake (auth-gated
     // endpointTicket, #568 item C) — empty data dir fails for that reason first.
@@ -320,11 +310,9 @@ describe("admin scenarios", () => {
     ).rejects.toThrow(/no gateway endpoint identity/u);
 
     const layout = daemonLayoutFor(dataDir);
-    // Bootstrap a vault the ticket can name.
     await capture(() =>
       commandVault(["create", "--data-dir", dataDir, "--name", "Family"], fail)
     );
-    // Key present but daemon unreachable → "daemon not running".
     new KeyStore(layout.keysDir).store("endpoint-key.bin", Buffer.alloc(32, 3));
     await expect(
       capture(() =>
@@ -388,7 +376,6 @@ describe("admin scenarios", () => {
     );
     expect(text).toMatch(/Pairing ticket for The owner/u);
     expect(text).toMatch(/Phone: scan this QR/u);
-    // Token still present and decodable.
     const token = text
       .split("\n")
       .map((l) => l.trim())
@@ -400,7 +387,6 @@ describe("admin scenarios", () => {
       kind: string;
     };
     expect(payload.kind).toBe("centraid-gw-pair");
-    // Terminal QR is multi-line block art.
     expect(text.split("\n").length).toBeGreaterThan(12);
     expect(text).toMatch(/[█▄▀ ]/u);
   });
@@ -424,7 +410,6 @@ describe("admin scenarios", () => {
     expect(parsed).toHaveProperty("vaultId");
     expect(parsed).toMatchObject({ vaultName: "Family" });
     expect(parsed.expiresAt).toBeTypeOf("string");
-    // The ticket itself still decodes to the same payload shape as the human path.
     const payload = JSON.parse(
       Buffer.from(parsed.ticket as string, "base64url").toString("utf8")
     ) as { kind: string; vaultName: string };
@@ -453,7 +438,6 @@ describe("admin scenarios", () => {
     );
     expect(first.ownerId).toBeTypeOf("string");
 
-    // Enroll a device so the vault is no longer empty.
     await capture(() =>
       commandDevices(
         ["add", "--data-dir", dataDir, "ep-first", "--vault", "Family"],
@@ -473,7 +457,7 @@ describe("admin scenarios", () => {
     );
     expect(second.ownerId).toBe(first.ownerId);
 
-    // Role flags died with the role lattice (#726).
+    // The retired --role flag: refusal is the pair contract after #726.
     await expect(
       commandPair(
         ["--data-dir", dataDir, "--vault", "Family", "--role", "admin"],
@@ -504,8 +488,6 @@ describe("admin scenarios", () => {
     expect(parsed.message).toBeTypeOf("string");
   });
 
-  // ── daemon device plane (deviceAccess + ticket redemption) ─────────────
-
   test("device plane: deviceKeyFor trusts only the in-process proof header", async () => {
     const layout = daemonLayoutFor(dataDir);
     await fs.mkdir(dataDir, { recursive: true });
@@ -513,7 +495,6 @@ describe("admin scenarios", () => {
       commandVault(["create", "--data-dir", dataDir, "--name", "Family"], fail)
     );
 
-    // Enroll a device out of band, then check the deviceAccess resolution.
     const registry = openVaultRegistry({
       rootDir: layout.vaultDir,
       keyStore: daemonKeyStore(layout.keysDir),

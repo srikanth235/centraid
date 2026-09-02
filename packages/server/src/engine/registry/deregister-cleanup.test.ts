@@ -115,8 +115,6 @@ describe("deregister-cleanup", () => {
     await fs.mkdir(externalDir, { recursive: true });
     await fs.writeFile(path.join(externalDir, "keep.txt"), "safe");
 
-    // Simulate a corrupt registry row whose path is not under appsDir.
-    // The defense-in-depth check should refuse.
     const entry: RegistryEntry = {
       id: "corrupt",
       path: externalDir,
@@ -181,8 +179,7 @@ describe("deregister-cleanup", () => {
 
     const result = await cleanupDeregisteredApp(appsDir, entry, logger);
 
-    // fs.rm with force:true treats ENOENT as success — that's the intended
-    // semantic: deregister stays idempotent even if disk state already drifted.
+    // fs.rm with force:true treats ENOENT as success — deregister stays idempotent even if disk state already drifted.
     expect(result).toStrictEqual({ kind: "removed" });
     expect(warnings).toHaveLength(0);
   });

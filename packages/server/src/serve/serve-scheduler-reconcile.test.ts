@@ -271,19 +271,17 @@ describe("serve-scheduler-reconcile scenarios", () => {
       ).turns;
       return runs.length > 0;
     };
-    // How long the TEST is willing to watch — not the claim. The two used to
-    // be the same 900/1000 ms, so every HTTP round trip this poll loop makes
-    // counted against the scheduler: on a coverage shard contending with
-    // three others the assertion read 1638 ms and failed a gateway that had
-    // done nothing wrong.
+    // How long the TEST is willing to watch — not the claim. The two are
+    // deliberately different: unifying them makes every HTTP round trip this
+    // poll loop makes count against the scheduler (on a contended shard the
+    // assertion read 1638 ms against a healthy gateway).
     await waitFor(async () => {
       return refreshRuns();
     }, 5_000);
 
     expect(runs).toHaveLength(1);
-    // "Well under a second" is a claim about the SCHEDULER: it reacted to the
-    // commit nudge instead of waiting for a periodic sweep. Measured on the
-    // turn's own recorded start, which is stamped server-side and owes
+    // A claim about the SCHEDULER — it reacted to the commit nudge, not a
+    // periodic sweep — measured on the turn's server-stamped start, owing
     // nothing to how fast this process could poll for it.
     expect(
       (runs[0]?.startedAt ?? Number.POSITIVE_INFINITY) - committedAt

@@ -1,13 +1,9 @@
 /*
- * The `share_edges` ROW — its shape and its one reader. A leaf on purpose:
- * the reducer (`share-coordinator.ts`), the durable applier
- * (`share-edge-store.ts`), both transports and every route that answers an
- * edge all need this type, and none of them should have to import a
- * transport to get it (#750 abstraction 5).
- *
- * The statuses live here as one union, not as strings sprinkled through
- * routes: which of them may follow which is `share-coordinator.ts`'s single
- * answer, and this module deliberately holds no transition logic at all.
+ * The `share_edges` ROW. A leaf on purpose: the reducer, the durable applier,
+ * both transports and every route that answers an edge need this type, and
+ * none of them should have to import a transport to get it (#750 abstraction 5).
+ * Statuses live here as one union — which may follow which is
+ * `share-coordinator.ts`'s single answer; this module holds no transition logic.
  */
 
 import type { ShareableItemType } from "@centraid/vault";

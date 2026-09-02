@@ -1,10 +1,9 @@
 /*
- * One-time gateway enrollment tickets (issues #555, #603, #726).
- *
- * A ticket is an INVITATION: it names the owner a joining device binds to
- * and the exact vault-id list the device lands in (no roles — access is
- * ownership). Redemption is a conditional DELETE, so concurrency is decided
- * by the affected row rather than an in-process mutex.
+ * One-time gateway enrollment tickets (#555, #603, #726). A ticket is an
+ * INVITATION: it names the owner a joining device binds to and the exact
+ * vault-id list the device lands in (no roles — access is ownership).
+ * Redemption is a conditional DELETE, so concurrency is decided by the
+ * affected row rather than an in-process mutex.
  */
 
 import crypto from "node:crypto";

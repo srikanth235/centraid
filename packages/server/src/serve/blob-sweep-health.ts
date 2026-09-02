@@ -1,7 +1,3 @@
-// blob-sweep health probe (#351, #367): last `reconcile()` outcome per vault
-// + custody-state counts. No s3 configured is ok — local-only is the default
-// topology.
-
 import type { HealthProbe } from "./health-registry.js";
 
 export interface BlobCustodyCounts {
@@ -17,7 +13,6 @@ export interface BlobSweepHealthVaultEntry {
   readonly s3Configured: () => boolean;
   /** `custodyStateCounts(db.vault)` — no tier I/O. */
   readonly counts: () => BlobCustodyCounts;
-  /** `db.blobs.sweepStatus()`. */
   readonly sweepStatus: () => {
     lastCompletedAt: string | null;
     lastError: string | null;
@@ -27,11 +22,8 @@ export interface BlobSweepHealthVaultEntry {
 
 export interface BlobSweepHealthOptions {
   readonly vaults: () => readonly BlobSweepHealthVaultEntry[];
-  /** Failure streak before "persistently failing". Default 3. */
   readonly persistentFailureStreak?: number;
-  /** Max age of last success before an s3 vault with backlog is stale. Default 1h. */
   readonly staleAfterMs?: number;
-  /** Clock override (tests). */
   readonly now?: () => number;
 }
 

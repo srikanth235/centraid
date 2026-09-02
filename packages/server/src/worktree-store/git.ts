@@ -1,6 +1,6 @@
-// System `git` binary (not a JS library): Electron already ships it, and the
-// system binary is the reference. Identity is forced to the Centraid harness
-// so the host's `~/.gitconfig` user.name/email never leak into app history.
+// System `git` binary (Electron ships it; the system binary is the reference),
+// not a JS library. Identity is forced to the Centraid harness so the host's
+// `~/.gitconfig` user.name/email never leak into app history.
 
 import { spawn } from "node:child_process";
 
@@ -56,8 +56,7 @@ export function runRaw(
   return new Promise<GitRunResult>((resolve, reject) => {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
-      // Force harness identity on every commit-producing call — `git -c user.*`
-      // on each commit is easier to forget on a new call site.
+      // Forced here, not per-commit `git -c user.*` — a new commit call site would forget it.
       GIT_AUTHOR_NAME: HARNESS_IDENTITY.name,
       GIT_AUTHOR_EMAIL: HARNESS_IDENTITY.email,
       GIT_COMMITTER_NAME: HARNESS_IDENTITY.name,

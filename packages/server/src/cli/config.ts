@@ -1,29 +1,10 @@
 /*
- * Daemon config-file loader for `centraid-gateway serve`.
- *
- * Shape (JSON):
- *
- *   {
- *     "dataDir": "/var/lib/centraid",
- *     "host": "0.0.0.0",
- *     "port": 8765,
- *     "harness": {
- *       "kind": "codex",
- *       "binPath": "/opt/homebrew/bin/codex",
- *       "extraArgs": ["--model", "<model-id>"]
- *     }
- *   }
- *
- * Every field is optional except `dataDir`. CLI flags
- * (`--host`/`--port`/`--data-dir`) override file fields. The `harness`
- * block is *seeded* into the gateway's identity DB on first boot so the
- * runtime's per-turn prefs loader picks it up unchanged.
- *
- * `harness.kind` accepts any registered `HarnessKind` — this file is also the
- * ONLY way to configure the custom `acp` kind, which has no default binary:
- *
- *   "harness": { "kind": "acp", "binPath": "/usr/local/bin/my-agent",
- *               "extraArgs": ["--acp"] }
+ * Daemon config-file loader for `centraid-gateway serve`. Every field is
+ * optional except `dataDir`; CLI flags (`--host`/`--port`/`--data-dir`)
+ * override file fields. The `harness` block is seeded into the gateway's
+ * identity DB on first boot. `harness.kind: "acp"` is configurable only here
+ * and REQUIRES `binPath` (no default binary), e.g.
+ * `{"kind":"acp","binPath":"/usr/local/bin/my-agent","extraArgs":["--acp"]}`.
  */
 
 import { promises as fs } from "node:fs";

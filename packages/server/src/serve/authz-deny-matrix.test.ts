@@ -18,35 +18,24 @@ import type { GatewayServeHandle } from "./serve.js";
 /**
  * THE DENY MATRIX, GENERATED FROM THE ROUTE TABLE (#892 Phase 2).
  *
- * `authz-matrix.smoke.test.ts` next door is a hand-written CASES list, and it is
- * good — but a hand-written list has exactly one failure mode, and it is the
- * only one that matters here: a route added tomorrow is not in it. The #890
- * audit's exhibit was three `transfer-policy` bypasses, and the shape they share
- * is that nothing enumerated the surface, so nothing could notice a hole in it.
+ * This suite enumerates `ROUTES` itself: a hand-written case list cannot notice
+ * a route added tomorrow, and an unenumerated surface is where holes live
+ * (#890's three `transfer-policy` bypasses shared exactly that shape). Every
+ * entry is probed with every principal below and must DENY — where deny means
+ * "does not answer 2xx": a 401, a 403 and a 404 are all refusals, and which one
+ * a route picks is its own business. An answer is a failure UNLESS the route is
+ * listed in `DELIBERATELY_PUBLIC` with a reason, so the default for a new route
+ * is closed and opening one is a reviewable diff line.
  *
- * This suite enumerates `ROUTES` itself. Every entry is probed with every
- * principal below and must DENY — where deny means "does not answer 2xx",
- * because a 401, a 403 and a 404 are all refusals and which one a route picks is
- * its own business. A route that answers is a failure UNLESS it is listed in
- * `DELIBERATELY_PUBLIC` with a reason, so the default for a new route is closed
- * and opening one is a reviewable line in a diff rather than an omission.
+ * THE PRINCIPALS:
  *
- * THE PRINCIPALS, and what each stands in for:
- *
- *   anonymous        no credential at all.
- *   forged bearer    a syntactically fine bearer the gateway does not honour.
- *                    This is also what a REVOKED PAIR and an EXPIRED GRANT look
- *                    like on the wire — the credential is presented and is no
- *                    longer good — which is why they are one principal here
- *                    rather than three fixtures of the same shape.
- *   proved device    a real control-session cookie (`WebControlSessions`
- *                    resolves it to `{plane:'device'}`). Not anonymous, not the
- *                    owner: the WRONG-AUTHORITY case, which is the one a
- *                    bearer-only matrix cannot see at all.
- *
- * A proved device is a legitimate principal for most of the product, so it is
- * asserted only against the gateway-wide admin surfaces, where #865 F2 already
- * decided it must be refused.
+ *   anonymous       no credential at all.
+ *   forged bearer   syntactically fine, not honoured — the wire signature of a
+ *                   revoked pair and an expired grant alike, hence one principal.
+ *   proved device   a real control-session cookie. Not anonymous, not the owner:
+ *                   the WRONG-AUTHORITY case a bearer-only matrix cannot see.
+ *                   A legitimate principal for most of the product, so asserted
+ *                   only against gateway-wide admin surfaces (#865 F2).
  */
 
 const ADMIN = "authz-deny-matrix-admin-token";
@@ -55,11 +44,9 @@ const SHELL_ORIGIN = "http://shell.local";
 const PROBE_TIMEOUT_MS = 5_000;
 
 /**
- * Routes that answer without a credential, each with the reason it must.
- *
- * This is the ONLY way a route escapes the matrix, and the reason is required
- * reading rather than decoration: "the pre-pairing handshake" is a decision
- * (#568 item C), and a future entry has to make an equally specific one.
+ * Routes that answer without a credential, each with the reason it must. The
+ * ONLY way a route escapes the matrix, and the reason is required reading: a
+ * future entry has to make an equally specific decision (#568 item C).
  */
 const DELIBERATELY_PUBLIC: Partial<Record<RouteName, string>> = {
   gatewayInfo:
@@ -122,22 +109,17 @@ describe("authz deny matrix (generated from ROUTES)", () => {
     if (dataDir) await fs.rm(dataDir, { recursive: true, force: true });
   });
 
-  // The generator having something to generate FROM is itself an assertion: an
-  // empty ROUTES import would make every `test.each` below vanish and the file
-  // report green (#556's shape, in miniature).
+  // The generator having something to generate FROM is an assertion: an empty
+  // ROUTES import would make every `test.each` vanish and the file report green.
   test("the route table is non-empty and every entry is probed", () => {
     expect(routeEntries.length).toBeGreaterThan(20);
     expect(routeEntries.every(([, route]) => route.startsWith("/"))).toBe(true);
   });
 
   /**
-   * Probe one route with one principal on every verb and reduce the answer to
-   * the two facts the assertions need.
-   *
-   * The reduction happens HERE, before any `expect`, on purpose: the
-   * deliberately-public routes make the verdict conditional on the route, and a
-   * conditional assertion inside the loop would mean a run that asserted nothing
-   * could still report green.
+   * Probe one route with one principal on every verb. The reduction to
+   * denied/answered happens HERE, before any `expect`: a conditional assertion
+   * inside the loop would let a run that asserted nothing report green.
    */
   async function probeAllVerbs(
     route: string,
@@ -204,9 +186,9 @@ describe("authz deny matrix (generated from ROUTES)", () => {
   );
 
   /**
-   * The wrong-authority case. A control session is a REAL principal — it is how
-   * the PWA reaches the gateway — so this is not "an attacker"; it is the member
-   * on a surface that must not hold gateway-wide operator powers (#865 F2).
+   * A control session is a REAL principal — how the PWA reaches the gateway —
+   * not "an attacker": the member on a surface that must not hold gateway-wide
+   * operator powers (#865 F2).
    */
   describe("a proved device identity", () => {
     const ADMIN_TIER = [
@@ -240,9 +222,8 @@ describe("authz deny matrix (generated from ROUTES)", () => {
   });
 
   test("every DELIBERATELY_PUBLIC entry names a real route and states why", () => {
-    // An allowlist whose entries can rot into names that no longer exist is a
-    // list that stops meaning anything — and the stale entry would keep looking
-    // like a reviewed decision.
+    // An allowlist entry that rots into a nonexistent route name would keep
+    // looking like a reviewed decision.
     for (const [name, reason] of Object.entries(DELIBERATELY_PUBLIC)) {
       expect(ROUTES).toHaveProperty(name);
       expect(reason.length).toBeGreaterThan(60);

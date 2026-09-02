@@ -1,9 +1,4 @@
-/*
- * Builder chat is the data-chat spine plus three seams: DRAFT-worktree cwd, a
- * unified authoring prompt, post-turn webhook minting. Ext changes are
- * DECLARED in the draft manifest and mirrored to the vault's draft band, so
- * preview data stays scratch until Publish (#141, #147, #286).
- */
+/** Builder chat: the data-chat spine plus three seams — DRAFT-worktree cwd, a unified authoring prompt, post-turn webhook minting. Ext changes are DECLARED in the draft manifest and mirrored to the vault's draft band, so preview data stays scratch until Publish (#141, #147, #286). */
 
 import { promises as fs } from "node:fs";
 import path from "node:path";

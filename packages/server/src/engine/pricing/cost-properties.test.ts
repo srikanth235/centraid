@@ -52,9 +52,7 @@ const usageArb = fc.record({
 });
 
 /**
- * Pricing cost formula properties (#532 core expansion).
- *
- * Model: cost is linear in each token bucket; missing rates/tokens count as 0;
+ * Pricing cost formula properties (#532 core expansion): cost is linear in each token bucket; missing rates/tokens count as 0;
  * cache-write prefers 5m rate over 1h; per-mtok view scales by 1e6.
  */
 describe("pricing cost property", () => {

@@ -1,14 +1,9 @@
 // Engine profiles (#807) bind a CAPABILITY to an ENGINE, named once so the
 // policy cascade, derivation stamps and Settings refer to one choice by id.
 //
-// THE BUILT-IN PROFILE IS DERIVED, NEVER STORED: computed from the capability
-// registry on every read, so no migration can let it drift from the shipped
-// engine. Its id repeats across capabilities on purpose — profile identity is
-// (capability, id). EGRESS IS LIKEWISE COMPUTED, never declared by a profile.
+// THE BUILT-IN PROFILE IS DERIVED, NEVER STORED: computed from the capability registry on every read, so no migration can let it drift from the shipped engine. Its id repeats across capabilities on purpose — profile identity is (capability, id). EGRESS IS LIKEWISE COMPUTED, never declared by a profile.
 //
-// WHERE THEY LIVE: gateway prefs under `enrich.profile.<id>`, one writer per
-// path (docs/config-ownership.md); the vault stores which profile PRODUCED a
-// value, never the binding.
+// WHERE THEY LIVE: gateway prefs under `enrich.profile.<id>`, one writer per path (docs/config-ownership.md); the vault stores which profile PRODUCED a value, never the binding.
 
 import type { EnrichEgressClass } from "@centraid/vault";
 import { BUILT_IN_PROFILE } from "@centraid/vault";
@@ -52,8 +47,7 @@ export interface EngineProfile {
   /** Computed from `engine`, never read from stored input. */
   readonly egress: EnrichEgressClass;
   readonly builtIn: boolean;
-  /** Without it a delegate profile with no shipped variant looks live while
-   *  the built-in engine runs. */
+  /** Without it a delegate profile with no shipped variant looks live while the built-in engine runs. */
   readonly delegateCapable: boolean;
 }
 
@@ -83,8 +77,7 @@ export function engineProfileEgress(
   return laneEgress(lane);
 }
 
-/** Structural refusals, not defaults, so no policy row or hand-edited pref can
- *  reach them (#807 Q3). */
+/** Structural refusals, not defaults, so no policy row or hand-edited pref can reach them (#807 Q3). */
 const DELEGATE_REFUSALS: Readonly<Record<string, string>> = {
   faces:
     'The "faces" capability has no delegate profile: face recognition is ' +
@@ -247,8 +240,7 @@ export function engineProfilesForCapability(
   );
 }
 
-/** The ONLY writer-side gate, deliberately stricter than the reader:
- *  everything the reader would silently drop is refused out loud. */
+/** The ONLY writer-side gate, deliberately stricter than the reader: everything the reader would silently drop is refused out loud. */
 export function validateEngineProfilePatch(
   patch: Record<string, unknown>
 ): string | undefined {

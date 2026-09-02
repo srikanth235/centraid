@@ -1,17 +1,4 @@
-/*
- * The vault assistant's system-prompt preamble (the shell-level Q&A
- * register). Composition mirrors the app chat route: the route builds this
- * preamble and the harness passes it through unchanged. Three parts:
- *
- *   1. the register — who the assistant is and how it must ground answers;
- *   2. the answer format — markdown, inline entity refs, and the typed
- *      fenced blocks the shell renderer draws (table / chart / stat);
- *   3. the vault map — schema DDL + ontology conventions, built live per
- *      turn by `@centraid/vault`'s buildAssistantContext (spliced in here).
- *
- * Provider-agnostic on purpose: nothing in here names a model or vendor —
- * the same text rides whichever harness spec the user configured.
- */
+/** Vault assistant's system-prompt preamble. Three parts: the register (who the assistant is, how it grounds answers), the answer format (markdown + the typed fenced blocks the shell renderer draws), and the vault map built live per turn by `@centraid/vault`'s buildAssistantContext. Provider-agnostic on purpose — nothing here names a model or vendor. */
 
 const REGISTER = `You are the owner's vault assistant. The vault is their personal data store — people, notes, documents, events, money, health, tasks — and you answer questions over it. You are talking to the one person whose data this is.
 
@@ -45,13 +32,7 @@ export interface AssistantLens {
   appDescription?: string;
 }
 
-/**
- * Assemble the assistant preamble around the live vault map. `vaultName`
- * personalizes the register; `context` is buildAssistantContext(db);
- * `lens` (the per-app ask register) biases the assistant toward one app's
- * domain without narrowing what it may read — it is still the owner
- * asking their own vault.
- */
+/** `lens` (the per-app ask register) biases the assistant toward one app's domain without narrowing what it may read — it is still the owner asking their own vault. */
 export function buildAssistantPrompt(
   vaultName: string,
   context: string,

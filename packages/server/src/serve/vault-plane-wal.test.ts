@@ -1,7 +1,3 @@
-// The vault plane as a durable pair of SQLite databases: who owns the WAL,
-// when it is checkpointed, how a batch of arrivals crosses one commit, what a
-// mid-batch journal failure leaves behind, and what survives a restart or a
-// stolen data directory.
 import { promises as fs } from "node:fs";
 import path from "node:path";
 

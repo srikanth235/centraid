@@ -1,10 +1,5 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
-// FORMAT.md restore rule 4 ("side-effect quarantine"): a vault dir adopted
-// from a backup restore carries `RESTORE_QUARANTINE.json`. Mounting it
-// parks the outbox (a plain SQL update, contained) and flags — but does
-// NOT auto-resolve — the automations gap (needs the code store + a git
-// publish, not a SQL update; see `vault-quarantine.ts`'s header).
 import path from "node:path";
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -44,7 +39,6 @@ describe("vault-quarantine", () => {
     return plane;
   }
 
-  /** Stage one outbox item + a standing grant, both live (not yet approved/drained). */
   function seedApprovedOutboxItem(plane: VaultPlane): {
     itemId: string;
     grantId: string;
@@ -82,8 +76,6 @@ describe("vault-quarantine", () => {
       throw new Error(`stage failed: ${JSON.stringify(staged)}`);
     const itemId = (staged as { output: { item_id: string } }).output.item_id;
 
-    // Simulate an owner approval + a standing grant — both live states the
-    // quarantine gesture must neutralize (park the item, revoke the grant).
     const grantId = crypto.randomUUID();
     plane.db.vault
       .prepare(
@@ -114,7 +106,6 @@ describe("vault-quarantine", () => {
       .run(previousEpisode, itemId);
     first.stop();
 
-    // Simulate `restoreSnapshot`'s marker having been adopted as a live vault.
     await fs.writeFile(
       path.join(dir, QUARANTINE_MARKER_FILE),
       JSON.stringify({ restoredAt: "2026-01-01T00:00:00.000Z", sourceSeq: 7 })
@@ -153,8 +144,6 @@ describe("vault-quarantine", () => {
       .get(grantId) as { revoked_at: string | null };
     expect(grant.revoked_at).not.toBeNull();
 
-    // The marker is deliberately left in place — automations were NOT
-    // auto-disabled, so this vault is not fully "resolved" yet.
     await expect(
       fs.readFile(path.join(dir, QUARANTINE_MARKER_FILE), "utf8")
     ).resolves.toBeTruthy();

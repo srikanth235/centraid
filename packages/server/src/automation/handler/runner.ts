@@ -1,10 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit the parent-side handler orchestrator is one message-pump — delegate/fetch/state/vault dispatch plus the #293 secret and #304 connection injection all share the one worker-boundary protocol, so splitting scatters the wire contract
-/**
- * Parent-side orchestrator for automation handlers (#98). Only
- * `delegateDispatcher` (the one billed rail) comes from the host; the rest of
- * the ctx surface is serviced here in-process. Every ctx call becomes one
- * `run_nodes` audit row, and there is NO runtime retry.
- */
+// Parent-side orchestrator for automation handlers (#98). Only
+// `delegateDispatcher` (the one billed rail) comes from the host; the rest of
+// the ctx surface is serviced here in-process. Every ctx call becomes one
+// `run_nodes` audit row, and there is NO runtime retry.
 
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -516,11 +514,8 @@ export async function runHandler(
     );
     let { spec } = substituted;
     const { injected } = substituted;
-    // Issue #865: the destination pin used to run ONLY when a placeholder was
-    // substituted, so a placeholder-free template bypassed the https/host-pin
-    // checks entirely — a blind egress rail. Every ctx.fetch rides the same
-    // validation regardless of injection; secret/connection substitution is
-    // untouched.
+    // The pin applies to EVERY ctx.fetch regardless of injection (#865) — a
+    // placeholder-free template must not bypass the https/host-pin checks.
     assertFetchDestination(spec.url);
     if (!injected) return fetchOnce(spec, true);
     assertInjectable(spec.url, spec.method ?? "GET", spec.body);

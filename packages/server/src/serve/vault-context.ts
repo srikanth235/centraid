@@ -1,9 +1,6 @@
-/*
- * Per-request vault context (#289). A client addresses a (gateway, vault) pair;
- * the handler chain runs inside this scope so deep provider callbacks land on
- * the right vault. There is no server-global active vault — background work
- * enters a scope explicitly via `runWithVaultContext`.
- */
+// Per-request vault context (#289): handler chains run inside a scope so deep
+// provider callbacks land on the right vault. There is no server-global active
+// vault — background work enters a scope explicitly via `runWithVaultContext`.
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import type * as TypeImport_rdfcd1 from "node:http";

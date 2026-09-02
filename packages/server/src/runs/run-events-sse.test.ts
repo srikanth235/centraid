@@ -1,10 +1,5 @@
 import crypto from "node:crypto";
-/*
- * SSE streaming for automation runs (#158): the
- * `GET /centraid/_automations/turn/events?turnId=` endpoint. Drives
- * `makeAutomationsRouteHandler` with a mock streaming req/res, a real
- * per-app run ledger over a tempdir, and a `RunEventBus` for the live path.
- */
+/** SSE streaming for automation runs (#158): `GET /centraid/_automations/turn/events?turnId=`. Drives `makeAutomationsRouteHandler` with a mock streaming req/res, a real per-app run ledger over a tempdir, and a `RunEventBus` for the live path. */
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
@@ -171,7 +166,6 @@ describe("run-events-sse", () => {
       { type: "turn.end" }
     >;
     expect(end.ok).toBe(true);
-    // No live subscriber should linger for a closed run.
     expect(bus.subscriberCount(runId)).toBe(0);
   });
 
@@ -179,7 +173,6 @@ describe("run-events-sse", () => {
     const runId = `${APP}/watch:${Date.now()}:beef0000`;
     const store = ledger();
     seedTurn(store, `${APP}/watch`, runId, 1);
-    // One item already running (opened, not closed) when the viewer joins.
     store.openItem({
       itemId: "n0",
       turnId: runId,
@@ -194,7 +187,6 @@ describe("run-events-sse", () => {
     );
     await handler(c.req, c.res);
 
-    // Replay: turn.start + the open node's start (no end yet). Still live.
     expect(c.events().map((e) => e.type)).toStrictEqual([
       "turn.start",
       "item.start",
@@ -202,7 +194,6 @@ describe("run-events-sse", () => {
     expect(c.ended()).toBe(false);
     expect(bus.subscriberCount(runId)).toBe(1);
 
-    // The fire finishes the node and the run — delivered live off the bus.
     bus.publish(runId, {
       type: "item.end",
       itemId: "n0",
@@ -224,18 +215,13 @@ describe("run-events-sse", () => {
   });
 
   test("a fire that fails before the ledger opens still closes via a bus turn.end", async () => {
-    // No insertRun: `fireAutomation` threw before the handler runner opened the
-    // ledger (bad ref / automation gone / dispatch setup failure). `run-now`
-    // already handed the caller this runId and the viewer subscribed, so without
-    // a terminal event the stream would hang. build-gateway's catch publishes a
-    // synthetic turn.end — this proves the SSE side honors it and closes.
+    // No insertRun: `fireAutomation` threw before the handler runner opened the ledger (bad ref / automation gone / dispatch failure). `run-now` already handed the caller this runId and the viewer subscribed, so without a terminal event the stream would hang — build-gateway's catch publishes a synthetic turn.end; this proves the SSE side honors it and closes.
     const runId = `${APP}/broken:${Date.now()}:dead0000`;
     const c = sseClient(
       `/centraid/_automations/turn/events?turnId=${encodeURIComponent(runId)}`
     );
     await handler(c.req, c.res);
 
-    // Synthetic turn.start written, no ledger nodes, still live on the bus.
     expect(c.events().map((e) => e.type)).toStrictEqual(["turn.start"]);
     expect(c.ended()).toBe(false);
     expect(bus.subscriberCount(runId)).toBe(1);

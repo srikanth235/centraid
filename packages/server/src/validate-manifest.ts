@@ -1,7 +1,6 @@
-// Gateway-side app-manifest validation (#137). `publishAndReconcile` and the
-// apps-store publish route both call `validateManifestAt` before a draft goes
-// live, so a structurally-broken or replay-unsafe app is rejected at publish
-// rather than at run/fire time.
+// Gateway-side app-manifest validation (#137): `publishAndReconcile` and the
+// apps-store publish route both call `validateManifestAt`, so a broken or
+// replay-unsafe app is rejected at publish, not at run/fire time.
 
 import { promises as fs } from "node:fs";
 import type * as TypeImport_g9tn66 from "node:fs";
@@ -62,14 +61,13 @@ export async function validateManifestAt(
   // Handlers run under #166 replay — lint for unsafe patterns (#167) at
   // publish, not silently mis-resumed at fire.
   if (manifest.kind === "automation") {
-    // PUT /centraid/_apps/<id>/files/<path> (builder trigger editor) does not
-    // validate automation.json — check here before linting handlers.
+    // The builder trigger editor (PUT /centraid/_apps/<id>/files/<path>) does not validate automation.json — check here before linting handlers.
     const manifestError = await validateAutomationManifestsAt(appDir);
     if (manifestError) return manifestError;
-    // Generated recognition handlers include audited third-party model/PDF
-    // code whose dead branches contain clocks/randomness. Only the reserved,
-    // read-only system lifecycle can set this flag; its human-owned entry
-    // source is linted before bundling in @centraid/server/automation's template suite.
+    // Generated recognition handlers embed audited third-party model/PDF code
+    // whose dead branches contain clocks/randomness. Only the reserved,
+    // read-only system lifecycle sets this flag; its human-owned entry source
+    // is linted before bundling in @centraid/server/automation's template suite.
     const handlerError = options.releaseManagedModelBundle
       ? undefined
       : await lintAutomationHandlersAt(appDir);

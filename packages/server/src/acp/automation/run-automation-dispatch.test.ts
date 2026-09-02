@@ -120,8 +120,6 @@ describe("run-automation-dispatch suite", () => {
     abortSignal: new AbortController().signal,
   };
 
-  // ──── zero-spawn seam ──────────────────────────────────────────────────────
-
   test("the dispatch surface exposes only ctx.delegate — no tool dispatcher, nothing eager", async () => {
     // The seam itself is the assertion: a vault-/state-only fire never touches
     // this surface, and there is no `toolDispatcher` for it to reach. Opening
@@ -164,8 +162,6 @@ describe("run-automation-dispatch suite", () => {
     ).rejects.toThrow(/did not provide a provider-egress consent controller/u);
     expect(stub.calls).toHaveLength(0);
   });
-
-  // ──── ctx.delegate ───────────────────────────────────────────────────────────
 
   test.each(ACP_KINDS)(
     "ctx.delegate on %s drives the registered harness",

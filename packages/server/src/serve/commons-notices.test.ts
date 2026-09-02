@@ -68,7 +68,6 @@ describe("commons notices", () => {
       grant.grantId
     );
     expect(current).toBeGreaterThan(0);
-    // The member accepted a MUCH smaller space than the one they now hold.
     const invitation = queueCommonsInvitation({
       seat: member.vault.vault,
       invitation: {

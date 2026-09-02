@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest";
 
 import { rgbaToThumbHash } from "./thumbhash.js";
 
-/** Solid opaque red 2×2 raster (RGBA). */
 function solid(
   w: number,
   h: number,
@@ -35,7 +34,6 @@ describe("thumbhash", () => {
     const hash = rgbaToThumbHash(8, 8, solid(8, 8, 255, 0, 0));
     expect(hash.length).toBeGreaterThanOrEqual(5);
     expect(hash.length).toBeLessThanOrEqual(25);
-    // Same input ⇒ identical bytes (the algorithm is pure).
     expect(
       Buffer.from(rgbaToThumbHash(8, 8, solid(8, 8, 255, 0, 0)))
     ).toStrictEqual(Buffer.from(hash));

@@ -1,10 +1,7 @@
 /**
- * Outbox fixture builders for the executor suite.
- *
- * These stage the two rows every drain test needs — a configured credential
- * and an approved item pointing at the pinned host — and read the resulting
- * row back. They take the plane explicitly rather than closing over suite
- * state, so they lift out of the test file unchanged.
+ * Outbox fixture builders for the executor suite: they take the plane
+ * explicitly rather than closing over suite state, so they lift out of the
+ * test file unchanged.
  */
 
 import type { VaultPlane } from "./vault-plane.js";

@@ -1,8 +1,4 @@
 import { mkdir, writeFile } from "node:fs/promises";
-// The dispatcher after #286 phase 2: declared-handler routing ONLY.
-// What must hold: manifest lookup + Ajv validation + worker hand-off work;
-// `_sql` and every other underscore name is just an unknown handler now;
-// describe returns the manifest (there is no per-app schema to read).
 import path from "node:path";
 
 import { assert, beforeEach, describe, expect, it } from "vitest";
@@ -71,8 +67,7 @@ describe("dispatcher", () => {
 
   describe("TypeScript handlers", () => {
     it("prefers a .ts handler over a .js of the same name", async () => {
-      // Both files exist for the declared `add_note`; the dispatcher probes
-      // `.ts` first, so the TS handler must be the one that runs.
+      // Both files exist; the dispatcher probes `.ts` first, so the TS handler must win.
       await writeFile(
         path.join(codeDir, "actions", "add_note.ts"),
         `interface Body { title: string }\n` +

@@ -4,20 +4,15 @@ export interface ReplicaIntentContext {
   intentId: string;
   appId: string;
   deviceId: string;
-  /**
-   * The owner the intent's device is bound to (#599). Carried
-   * beside the device id so an offline write replayed from a phone is
-   * attributable to the person, not just the hardware.
-   */
+  /** The owner the device is bound to (#599) — a replayed offline write is attributable to the person, not the hardware. */
   ownerId?: string;
 }
 
 const storage = new AsyncLocalStorage<ReplicaIntentContext>();
 
 /**
- * Bind an offline intent to the app action currently executing. The app
- * worker still uses the ordinary dispatcher; this host-only context lets its
- * `ctx.vault.invoke` call carry the durable intent id without trusting app
+ * Bind an offline intent to the app action currently executing. Host-only:
+ * lets `ctx.vault.invoke` carry the durable intent id without trusting app
  * input or broadening the worker protocol.
  */
 export function runWithReplicaIntent<T>(

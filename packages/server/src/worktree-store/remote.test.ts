@@ -54,13 +54,11 @@ describe("remote", () => {
     const remoteRoot = await makeTempRoot();
     const importRoot = await makeTempRoot();
     try {
-      // Build a source store with two published versions of one app.
       const source = new WorktreeStore({ root: sourceRoot });
       await source.init();
       await seedAndPublish(source, "s1", "todo", "v1");
       await seedAndPublish(source, "s2", "todo", "v2");
 
-      // Bare remote to receive the push (stands in for GitHub).
       const remoteBare = path.join(remoteRoot, "remote.git");
       await run(["init", "--bare", "-b", "main", remoteBare], {
         cwd: remoteRoot,
@@ -72,12 +70,10 @@ describe("remote", () => {
         exp.pushed.some((s) => s.includes("refs/heads/main"))
       ).toBeTruthy();
 
-      // The remote now has main + both tags.
       const remoteTags = await run(["tag", "--list"], { cwd: remoteBare });
       expect(remoteTags).toMatch(/todo\/v1/u);
       expect(remoteTags).toMatch(/todo\/v2/u);
 
-      // Import into a fresh gateway root, then init + serve.
       const imp = await importFromRemote(importRoot, remoteBare);
       expect(imp.bareDir).toBe(path.join(importRoot, "apps.git"));
 
@@ -92,7 +88,6 @@ describe("remote", () => {
       };
       expect(appJson.marker).toBe("v2");
 
-      // Version history travelled with the tags.
       const versions = await imported.listVersions("todo");
       expect(versions.map((v) => v.tag)).toStrictEqual(["todo/v2", "todo/v1"]);
     } finally {
@@ -116,7 +111,6 @@ describe("remote", () => {
       });
 
       await exportToRemote(source.bareRepoDir, remoteBare);
-      // Second publish + re-export must not fail on the existing remote.
       await seedAndPublish(source, "s2", "todo", "v2");
       const again = await exportToRemote(source.bareRepoDir, remoteBare);
       expect(again.remoteName).toBe("origin");

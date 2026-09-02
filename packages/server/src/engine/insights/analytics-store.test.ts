@@ -10,9 +10,7 @@ import { ledgerDbFileIn } from "../stores/ledger-db.test-fixtures.js";
 import { AnalyticsStore } from "./analytics-store.js";
 
 /*
- * `run_summary` is a VIEW over the ledger tables (turns ⋈ conversations +
- * dominant model from items) — so these tests seed through the ledger and
- * assert what the read-only lens derives. There is no write path to test.
+ * `run_summary` is a VIEW over the ledger tables, so tests seed through the ledger and assert what the read-only lens derives; there is no write path to test.
  */
 function setup(): { runs: ConversationStore; analytics: AnalyticsStore } {
   const dir = tempDirSync("centraid-analytics-");

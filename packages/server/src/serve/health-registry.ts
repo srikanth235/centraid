@@ -1,26 +1,14 @@
 // governance: allow-repo-hygiene file-size-limit (#679) component state, registry enumeration, failure induction, and snapshot aggregation form one health contract whose completeness is audited together
-/*
- * Component-level health for a self-hosted gateway. Uptime says "the
- * process answers"; this says WHICH subsystem stopped working and what
- * its last error was — the difference between "it broke" and a bug
- * report a self-hoster can act on.
- *
- * Two feeds converge here:
- *   - PUSH: subsystems mark themselves ok/degraded/error at their own
- *     success/failure points (outbox drain, scheduler reconcile, fires),
- *     and `loggerFor(component)` wraps a `RuntimeLogger` so existing
- *     `warn`/`error` calls land in the ring buffer as structured,
- *     component-tagged events without touching call sites.
- *   - PULL: `registerProbe` adds a check run at snapshot time for state
- *     nobody pushes (e.g. "are the vault planes mounted").
- *
- * Semantics chosen for v0:
- *   - a logged `warn` records an event but does NOT flip component
- *     status (transient warns must not leave a component sticky-red);
- *     a logged `error` flips it to error until the next explicit ok.
- *   - probe status wins for probed components — it reflects "now".
- *   - overall = worst component (error > degraded > ok).
- */
+// Component-level health for a self-hosted gateway: WHICH subsystem stopped
+// working and its last error, not just "the process answers". Two feeds —
+// PUSH: subsystems report at their own success/failure points, and
+// `loggerFor(component)` routes a wrapped RuntimeLogger's existing warn/error
+// calls here without touching call sites; PULL: `registerProbe` adds a
+// snapshot-time check for state nobody pushes. Semantics: a logged `warn`
+// records an event but does NOT flip component status (transient warns must
+// not leave a component sticky-red); a logged `error` flips it until the next
+// explicit ok; probe status wins for probed components ("now"); overall =
+// worst component (error > degraded > ok).
 
 import type { RuntimeLogger } from "@centraid/server/engine";
 
@@ -136,17 +124,15 @@ export interface HealthMetrics {
   outboxPending: number;
   /**
    * Live SSE subscriber count across every open run stream. Optional and
-   * commonly absent: it needs a global counter on `RunEventBus`, which a
-   * sibling change (the SSE subscriber cap) is adding — wire this up once
-   * that lands (see `build-gateway.ts`'s `setMetricsSource` call).
+   * commonly absent: needs a global `RunEventBus` counter wired via
+   * `build-gateway.ts`'s `setMetricsSource` call.
    */
   sseClients?: number;
   /**
-   * Mounted vault planes (#659). Present so `rssBytes` has a
-   * denominator: the per-plane memory RESERVATION is now flat in vault count,
-   * but each mounted plane still costs real resident memory (connection state,
-   * bootstrap DDL) that the pragmas do not bound. Without this, a household
-   * that grows from one vault to five looks like a leak.
+   * Mounted vault planes (#659). Present so `rssBytes` has a denominator: the
+   * per-plane memory RESERVATION is flat in vault count, but each mounted
+   * plane still costs real resident memory the pragmas do not bound — without
+   * this, a household growing from one vault to five looks like a leak.
    */
   mountedVaults?: number;
   /** Rolling event-loop delay window from `perf_hooks.monitorEventLoopDelay`. */
@@ -159,34 +145,31 @@ export interface HealthMetrics {
   /** Boot-time durability-barrier latency for one 4 KiB write. */
   storageFsyncMs?: number;
   /**
-   * Per-route request-duration percentiles (#659) — fixed-bucket
-   * histograms, so "which route is slow on THIS gateway" is answerable from a
-   * production health snapshot instead of only from a bench rig.
+   * Per-route request-duration percentiles (#659) — fixed-bucket histograms,
+   * so "which route is slow on THIS gateway" is answerable from a production
+   * snapshot, not only a bench rig.
    */
   routeLatency?: RouteLatencySummary[];
   /**
-   * Resolved hardware class (`constrained` | `standard`) and owner Resource
-   * mode (`auto` | `conserve` | `balanced` | `performance`) — #521.
-   * Present once `buildGateway` publishes them via the metrics source.
+   * Resolved hardware class and owner Resource mode (#521). Present once
+   * `buildGateway` publishes them via the metrics source.
    */
   hardwareProfileClass?: string;
   resourceMode?: string;
   /**
-   * Machine-readable resolved Resource profile (#528) — the host
-   * class, owner mode, detected host facts, and every resolved knob. Present
-   * once `buildGateway` publishes it via the metrics source; the string
-   * `hardwareProfileClass`/`resourceMode` fields above stay for compatibility.
+   * Machine-readable resolved Resource profile (#528): host class, owner mode,
+   * host facts, every resolved knob. Present once `buildGateway` publishes it
+   * via the metrics source; the string fields above stay for compatibility.
    */
   resourceProfile?: StructuredResourceProfile;
   /**
-   * Measured per-subsystem resource ACTUALS (#528) — replication,
-   * backup, sweep, worker-pool, and harness-run counts/bytes/busyMs, plus
-   * process CPU/RSS. Honest measured proxies only (no modeled energy).
-   * Present once `buildGateway` publishes it via the metrics source.
+   * Measured per-subsystem resource ACTUALS (#528) — honest measured proxies
+   * only, no modeled energy. Present once `buildGateway` publishes it via the
+   * metrics source.
    */
   resourceUsage?: ResourceUsageActuals;
   /**
-   * Host power-context posture (#528) — battery/mains/server, whether
+   * Host power-context posture (#528): battery/mains/server, whether
    * background work is being courteously deferred, and why. Present once
    * `buildGateway` publishes it via the metrics source.
    */
@@ -310,10 +293,9 @@ export class HealthRegistry {
   }
 
   /**
-   * Register the host's numeric-metrics source (#351 tier 3) — called
-   * once at `buildGateway()` time. Only `outboxPending`/`sseClients` come
-   * from here; `rssBytes`/`uptimeMs` are computed inside `snapshot()`
-   * itself, needing no host wiring at all.
+   * Register the host's numeric-metrics source (#351 tier 3), called once at
+   * `buildGateway()` time. Only `outboxPending`/`sseClients` come from here;
+   * `rssBytes`/`uptimeMs` are computed inside `snapshot()` itself.
    */
   setMetricsSource(source: MetricsSource): void {
     this.metricsSource = source;
@@ -353,9 +335,8 @@ export class HealthRegistry {
       return true;
     }
 
-    // Never silently starve WAL/outbox/backup work forever. Permit one caller
-    // through per max-age interval and retain a degraded health signal until
-    // event-loop pressure clears.
+    // Never silently starve WAL/outbox/backup work forever: permit one caller
+    // through per max-age interval, degraded until pressure clears.
     this.reportDegraded(
       "load-shed",
       formatLoadShedForcedPassDetail(p99, deferredMs)
@@ -365,13 +346,12 @@ export class HealthRegistry {
   }
 
   /**
-   * Owner-triggered "pause background work" control (#528). A
-   * `durationMs` of `undefined` pauses indefinitely ("until I resume").
-   * Callers validate the bound; this stores it verbatim. In-memory only —
-   * a restart resumes normally, and this NEVER touches durable prefs or
-   * flips a Resource mode. The returned window (and `shouldPauseBackgroundWork`)
-   * gate only the safe loops — vault sweeps and backup retention — never
-   * WAL/fsync durability, the consent outbox, or request-path work.
+   * Owner-triggered "pause background work" control (#528). `durationMs`
+   * `undefined` pauses indefinitely; callers validate the bound. In-memory
+   * only — NEVER touches durable prefs or flips a Resource mode. The returned
+   * window (and `shouldPauseBackgroundWork`) gates only the safe loops — vault
+   * sweeps and backup retention — never WAL/fsync durability, the consent
+   * outbox, or request-path work.
    */
   pauseBackgroundWork(durationMs?: number): BackgroundPauseState {
     this.backgroundPaused = true;

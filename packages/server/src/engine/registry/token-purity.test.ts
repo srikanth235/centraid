@@ -1,7 +1,5 @@
-// Token-purity scanner for authored app CSS (#686). The gateway
-// publish gate runs this over every `.css` in an app dir; these tests pin the
-// detection rules and — just as importantly — the instructiveness of the
-// messages, since an LLM app author reads them as its only feedback.
+// Token-purity scanner for authored app CSS (#686); the gateway publish gate runs this over every `.css` in an app dir.
+// These tests pin the detection rules and the instructiveness of the messages — an LLM app author reads them as its only feedback.
 
 import { describe, expect, test } from "vitest";
 

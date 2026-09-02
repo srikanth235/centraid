@@ -190,7 +190,6 @@ describe("conversation rehydration (issue #438 wave 3)", () => {
   it("windows and pages across the archive boundary, not just the live rows", async () => {
     const store = f.store();
     seedConversation(f.journal, "c1", "automation");
-    // Four old turns (which will be archived + pruned) and two live ones.
     for (let index = 0; index < 4; index += 1) {
       seedTurn(f.journal, {
         conversationId: "c1",
@@ -222,11 +221,10 @@ describe("conversation rehydration (issue #438 wave 3)", () => {
 
     // A 2-turn window opens on the LIVE tail and still knows older turns exist.
     const newest = await store.getSessionRehydrated(APP, "c1", { limit: 2 });
-    expect(newest?.messages).toHaveLength(4); // 2 turns × (user + ai)
+    expect(newest?.messages).toHaveLength(4);
     expect(newest?.hasMore).toBe(true);
     expect(newest?.oldestSeq).toBe(4);
 
-    // Paging back reaches turns that live only in the archive.
     const older = await store.getSessionRehydrated(APP, "c1", {
       limit: 2,
       beforeSeq: newest!.oldestSeq,
@@ -239,7 +237,6 @@ describe("conversation rehydration (issue #438 wave 3)", () => {
       )
     ).toBe(true);
 
-    // …and the oldest page reports the end of the thread.
     const oldest = await store.getSessionRehydrated(APP, "c1", {
       limit: 2,
       beforeSeq: older!.oldestSeq,
@@ -280,7 +277,7 @@ describe("conversation rehydration (issue #438 wave 3)", () => {
     });
 
     const before = store.getSession(APP, "c1");
-    expect(before?.messages.length).toBe(6); // 3 turns × (user + ai)
+    expect(before?.messages.length).toBe(6);
     const result = runConversationArchival(
       { journal: f.journal, blobSink: f.sink, custodyProven: () => true },
       { nowMs: now }
@@ -295,12 +292,10 @@ describe("conversation rehydration (issue #438 wave 3)", () => {
     expect(after?.hasArchivedHistory).toBe(true);
     expect(after?.archivedTurnCount).toBe(2);
     expect(after?.archiveUnavailable).toBeUndefined();
-    // Same message count + same payloads (ignoring the fromArchive marker).
     expect(after?.messages.length).toBe(before?.messages.length);
     expect(withoutMarker(after!.messages)).toStrictEqual(
       withoutMarker(before!.messages)
     );
-    // Archived turns carry the marker; the live head does not.
     const archivedText = after!.messages
       .filter((m) => (m.payload as { fromArchive?: boolean }).fromArchive)
       .map((m) => (m.payload as { text?: string }).text);
@@ -396,7 +391,7 @@ describe("conversation rehydration (issue #438 wave 3)", () => {
     const after = await store.getSessionRehydrated(APP, "c1");
     expect(after?.hasArchivedHistory).toBeUndefined(); // fast path — no pruned range
     expect(after?.archiveUnavailable).toBeUndefined();
-    expect(after?.messages.length).toBe(2); // user + ai, from live rows
+    expect(after?.messages.length).toBe(2);
     expect(f.reads).toStrictEqual([]); // the blob reader was never called
   });
 

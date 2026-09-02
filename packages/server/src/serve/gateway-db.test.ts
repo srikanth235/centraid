@@ -275,11 +275,9 @@ describe("gateway-db scenarios", () => {
   });
 
   /*
-   * Issue #568 item I. The previous darwin probe shelled out to
-   * `/usr/bin/stat -f '%T'`, which is the `ls -F` type indicator, not a
-   * filesystem type — it exited 0 with a value nothing could match and, worse,
-   * suppressed the `statfsSync` fallback. These cover the replacement, which
-   * reads the mount table's `f_fstypename` the way `/sbin/mount` prints it.
+   * #568 item I: `/usr/bin/stat -f '%T'` is the `ls -F` type indicator, not a
+   * filesystem type — never shell out to it for darwin detection. These cover
+   * the mount-table probe (`f_fstypename` as `/sbin/mount` prints it).
    */
   const MOUNT_TABLE = [
     "/dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)",

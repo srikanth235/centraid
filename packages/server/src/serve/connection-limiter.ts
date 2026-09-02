@@ -1,15 +1,8 @@
-/*
- * Per-connection rate gate + the auth-dead marker error (#304). A
- * sibling of `connection-broker.ts` so that file stays a single class (the
- * `ConnectionBroker` connection lifecycle); these helpers are self-contained
- * and carry no broker dependency.
- */
+// Per-connection rate gate + the auth-dead marker error (#304).
 
 /**
- * The credential is dead upstream — needs a new consent ceremony. A factory
- * (not a subclass) because it is never caught via `instanceof`; callers read
- * `.message`, and the stamped `name` gives it identity in logs. Keeping it a
- * plain `Error` also holds this file to one class.
+ * Factory, not an `instanceof`-caught subclass: callers read `.message`, and
+ * the stamped `name` gives it identity in logs.
  */
 export function authDeadError(message: string): Error {
   const err = new Error(message);
@@ -25,10 +18,9 @@ export function delay(ms: number): Promise<void> {
 }
 
 /**
- * Tiny per-connection rate gate: at most `maxConcurrent` injected requests
- * in flight and `minIntervalMs` between request STARTS, shared across every
- * fire on the connection — several automations on one Google connection
- * queue here instead of stampeding one quota (#304 decision 5).
+ * At most `maxConcurrent` in flight and `minIntervalMs` between request
+ * STARTS, shared across every fire on the connection — several automations on
+ * one connection queue here instead of stampeding one quota (#304 decision 5).
  */
 export class ConnectionLimiter {
   private inFlight = 0;

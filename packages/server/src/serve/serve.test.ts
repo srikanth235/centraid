@@ -175,10 +175,10 @@ describe("serve scenarios", () => {
       headers: { Authorization: `Bearer ${handle.token}` },
     });
     expect(res.status).toBe(200);
-    // Since #846 P8 the endpoint serves the shareable support bundle: one
-    // document, allowlist-by-construction. `logs` is a grouped histogram
-    // rather than a raw tail, and `storage` replaces `vaults` — same facts,
-    // minus the owner-authored vault name, which no policy emits.
+    // The endpoint serves the shareable support bundle (#846): one document,
+    // allowlist-by-construction. `logs` is a grouped histogram rather than a
+    // raw tail, and `storage` replaces `vaults` — same facts, minus the
+    // owner-authored vault name, which no policy emits.
     const body = (await res.json()) as {
       formatVersion: number;
       sharing: string;

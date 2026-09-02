@@ -1,9 +1,7 @@
 /*
- * The cursor-advance invariant (#541 review). The regression this
- * guards: reporting the source's LATEST durable id after returning only a
- * capped prefix, which counted the surplus as `skipped` and dropped every
- * webhook delivery past the 51st in one window — even though those rows were
- * still sitting in `trigger_ingress`.
+ * The cursor-advance invariant (#541 review): reporting the source's LATEST
+ * durable id after returning only a capped prefix counted the surplus as
+ * `skipped` — dropping webhook delivery for rows still sitting in ingress.
  */
 
 import { describe, expect, test } from "vitest";
@@ -77,7 +75,6 @@ describe("trigger-ingress-cursor", () => {
     expect(result.elements.at(-1)?.position).toBe("50");
     // NOT '60': rows 51..60 are still durable and undelivered.
     expect(result.positionJson).toBe("50");
-    // Surplus past the cap is not a gap, so nothing is reported as skipped.
     expect(result.skipped).toBeUndefined();
     expect(result.gapReason).toBeUndefined();
   });
@@ -164,7 +161,6 @@ describe("trigger-ingress-cursor", () => {
     );
     expect(result.skipped).toBe(7);
     expect(result.gapReason).toBe("ingress_retention");
-    // The surviving rows still ride through on the same read.
     expect(result.elements.map((element) => element.position)).toStrictEqual([
       "31",
       "32",

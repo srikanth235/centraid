@@ -1,10 +1,6 @@
 /*
- * Config shape for the offsite backup service (issue: backup provider
- * contract wiring). Threaded through `BuildGatewayOptions.backup` (see
- * `build-gateway.ts`) and the daemon's JSON config file (`cli/config.ts`)
- * under the same `"backup"` key, so a `centraid-gateway serve --config`
- * file and an in-process embed (the Electron desktop) describe the same
- * shape.
+ * One backup config shape for both the daemon JSON config file (`cli/config.ts`)
+ * and the in-process desktop embed — `BuildGatewayOptions.backup` (`build-gateway.ts`).
  */
 
 export interface LocalBackupProviderConfig {

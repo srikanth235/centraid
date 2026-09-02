@@ -1,16 +1,4 @@
-/*
- * [law:provider-egress-dispatch] — outbound provider work leaves centraid by
- * ONE road (#839): ACP dispatch. `runTurn` resolves a `HARNESSES` spec and
- * launches it through `harnessSpawnEnv`; an enrichment fire reaches it only
- * past `decideEnrichmentGate`. No host-path or shell file may open its own
- * road — no provider SDK, no bare fetch at a provider host, no dynamic import.
- *
- * Scope is the HOST; blueprint seats belong to `no-inference-client.test.ts`,
- * so that one law keeps one home (`scripts/lint-law-registry.mjs`).
- *
- * A TRIPWIRE, NOT A PROOF: aliases and computed specifiers dodge it, and the
- * SABOTAGE cases are what keep it from rotting into a green no-op.
- */
+/** [law:provider-egress-dispatch] — outbound provider work leaves centraid by ONE road (#839): ACP dispatch. `runTurn` resolves a `HARNESSES` spec and launches it through `harnessSpawnEnv`; an enrichment fire reaches it only past `decideEnrichmentGate`. No host-path or shell file may open its own road — no provider SDK, no bare fetch at a provider host, no dynamic import. Scope is the HOST; blueprint seats belong to `no-inference-client.test.ts`, so one law keeps one home (`scripts/lint-law-registry.mjs`). A TRIPWIRE, NOT A PROOF: aliases and computed specifiers dodge it, and the SABOTAGE cases are what keep it from rotting into a green no-op. */
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";

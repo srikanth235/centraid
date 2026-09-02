@@ -36,7 +36,6 @@ async function bootstrap(
 
 describe("turn-routes", () => {
   beforeEach(() => {
-    // Ensure leftover state from a previous test doesn't bleed in.
     workspace = "";
   });
 
@@ -46,9 +45,8 @@ describe("turn-routes", () => {
   });
 
   async function registerApp(appId: string): Promise<void> {
-    // Test apps are uploaded-mode shells — empty wrapper dir, no
-    // versions. The chat route surface doesn't read code, so we don't
-    // need to commit an actual version for these tests.
+    // Test apps are uploaded-mode shells — empty wrapper dir, no versions;
+    // the chat route surface doesn't read code, so no real version is needed.
     await runtime.registry.ensureUploaded(appId);
   }
 
@@ -242,7 +240,6 @@ describe("turn-routes", () => {
       .payload as {
       turnId: string;
     };
-    // Regenerate: same prompt, pointing retryOf at the first answer's turn.
     await (
       await post({
         conversationId: session.id,
@@ -252,7 +249,6 @@ describe("turn-routes", () => {
     ).text();
 
     const loaded = store.getSession("demo", session.id);
-    // The family collapses to one user + one ai row, with a 2-attempt pager.
     expect(loaded?.messages.length).toBe(2);
     const ai = loaded?.messages[1]!.payload as {
       retry?: {
@@ -298,7 +294,6 @@ describe("turn-routes", () => {
     expect(runs).toBe(1);
     expect(second).toMatch(/event: final/u);
     expect(second).toMatch(/"text":"answer once"/u);
-    // Only one turn was recorded — the replay never wrote a second row.
     expect(store.getSession("demo", session.id)?.messages.length).toBe(2);
   });
 
@@ -397,7 +392,6 @@ describe("turn-routes", () => {
     });
     await registerApp("demo");
     const session = store.createSession("demo", "");
-    // Pre-acquire the single slot so the route sees a saturated limiter.
     const release = limiter.tryAcquire();
     expect(release).toBeDefined();
     const res = await fetch(`${server.url}/centraid/demo/_turn`, {
@@ -412,7 +406,6 @@ describe("turn-routes", () => {
     expect(Number(res.headers.get("retry-after"))).toBeGreaterThan(0);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe("turn_busy");
-    // Releasing the slot lets the next turn through (200).
     release?.();
     const ok = await fetch(`${server.url}/centraid/demo/_turn`, {
       method: "POST",
@@ -457,7 +450,6 @@ describe("turn-routes", () => {
       return completeTurn(index + 1);
     };
     await completeTurn(0);
-    // Every turn ran to completion, so the count is back to zero.
     expect(limiter.count()).toBe(0);
   });
 
@@ -531,7 +523,6 @@ describe("turn-routes", () => {
     // promise we control; B's runner resolves immediately. If the locks
     // were module-shared, B would queue behind A and never complete.
 
-    // -- Setup runtime A: runner hangs on `releaseA`.
     let releaseA!: () => void;
     let aStarted = false;
     const aDone = new Promise<void>((resolve) => {
@@ -556,7 +547,6 @@ describe("turn-routes", () => {
     await runtimeA.bootstrap();
     await runtimeA.registry.ensureUploaded("demo");
 
-    // -- Setup runtime B: runner finishes instantly.
     const runnerB: ConversationRunner = {
       async run(input) {
         input.onEvent({ type: "final", text: "b-final" });
@@ -584,7 +574,6 @@ describe("turn-routes", () => {
         body: JSON.stringify({ conversationId: "w1", message: "a" }),
       }).then((r) => r.text());
 
-      // Wait until A's runner has entered the lock + started streaming.
       await vi.waitFor(() => {
         expect(aStarted).toBe(true);
       });
@@ -617,7 +606,6 @@ describe("turn-routes", () => {
       expect(bText).toMatch(/event: final/u);
       expect(bText).toMatch(/"text":"b-final"/u);
 
-      // Now release A and confirm it completes too.
       releaseA();
       const aText = await aResponsePromise;
       expect(aText).toMatch(/"text":"a-final"/u);
@@ -708,8 +696,6 @@ describe("turn-routes", () => {
     expect(seenPrompt).toMatch(/listNotes/u);
     expect(seenPrompt).not.toMatch(/manifest unavailable/u);
   });
-
-  // ────────── Ask-model picker (GET/PUT /centraid/<appId>/_turn/model) ──────────
 
   /** An in-memory `AskModelPrefs` fake — mirrors the gateway's prefs-store + catalog wiring. */
   function fakeAskModel(opts?: {
@@ -836,7 +822,7 @@ describe("turn-routes", () => {
       harnessKind: "codex",
       defaultModel: "gpt-5.5",
     });
-    askModel.current = "gpt-5.5-mini"; // pre-existing override
+    askModel.current = "gpt-5.5-mini";
     await bootstrapWithAskModel(askModel);
     await registerApp("demo");
 

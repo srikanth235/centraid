@@ -26,9 +26,7 @@ import { commandBackup } from "./backup-admin.js";
 import { daemonLayoutFor } from "./paths.js";
 
 // See admin.test.ts: real vault/daemon bootstrap per test, so this file is
-// fsync-bound and needs an escalation above the 30s node-project default.
-// It did not fail in nightly run 29733737906 but was the next closest thing
-// (11.0s in ci vs 65.8s in nightly, 6.0x), so it gets the same 60s budget.
+// fsync-bound and gets the same 60s escalation above the 30s node-project default.
 vi.setConfig({ testTimeout: 60_000 });
 
 class CliFailError extends Error {
@@ -239,8 +237,6 @@ describe("backup-admin", () => {
     ).rejects.toThrow(/not configured/u);
   });
 
-  // ── Issue #439 R2/R3 — lazy-by-default, --full, metered gate, restore-to-side ──
-
   /** A local provider that declares itself `metered-egress` (#439),
    *  standing in for a hosted home without a real remote server. The SAME
    *  instance must back both the `run` and `restore` calls — LocalBackupProvider
@@ -345,7 +341,6 @@ describe("backup-admin", () => {
       )
     ).rejects.toThrow(/metered-egress/u);
     expect(existsSync(destDir)).toBe(false);
-    // With --yes: the acknowledged restore runs to completion.
     const out = await capture(() =>
       commandBackup(
         [

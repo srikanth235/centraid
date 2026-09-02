@@ -181,7 +181,6 @@ describe(PowerContextMonitor, () => {
       },
     });
     m.applyClientPush({ onBattery: false });
-    // Desktop Mac: probe says no battery, so battery stays null (no chrome).
     expect(m.snapshot().battery).toBeNull();
   });
 

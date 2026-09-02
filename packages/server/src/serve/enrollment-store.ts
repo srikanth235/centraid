@@ -1,5 +1,5 @@
 /*
- * Gateway device enrollments (issues #555, #599, #726).
+ * Gateway device enrollments (#555, #599, #726).
  *
  * governance: allow-repo-hygiene file-size-limit (#608) cohesive enrollment aggregate owns atomic owner, device, ownership, checkpoint, and rename invariants
  *

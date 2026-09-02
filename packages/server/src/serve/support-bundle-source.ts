@@ -1,19 +1,14 @@
 /*
- * Live-gateway adapter for the shareable support bundle (#842). The one place
- * that reads live gateway state into a `SupportBundleInput`; kept separate so
- * the pure builder in `support-bundle.ts` stays trivially testable and its
- * "no network primitive" source scan means something.
- *
- * Second job, the one that makes the tripwire real: HARVESTING the literals
- * this machine considers sensitive — vault names, owner display name, seal
- * key and identity seed encodings, host bearer tokens. A redaction policy can
- * only refuse shapes it recognises; a literal hit in the serialized document
- * means the policy missed something. The value is removed either way and the
- * miss is counted in the bundle's own report.
- *
- * Parameter types are structural, not the concrete HealthRegistry/
- * GatewayLogStore/VaultRegistry classes: importing them would knot the serve
- * graph for no gain.
+ * Live-gateway adapter for the shareable support bundle (#842), kept separate
+ * so the pure builder in `support-bundle.ts` stays trivially testable and its
+ * "no network primitive" source scan means something. Second job, the one that
+ * makes the tripwire real: HARVESTING the literals this machine considers
+ * sensitive (vault names, owner display name, seal key/identity seed
+ * encodings, host bearer tokens) — a redaction policy can only refuse shapes
+ * it recognises, so a literal hit means the policy missed something; the value
+ * is removed either way and the miss counted in the bundle's own report.
+ * Parameter types are structural, not the concrete classes: importing them
+ * would knot the serve graph for no gain.
  */
 
 import { dbSizeBreakdown } from "@centraid/vault";
@@ -126,8 +121,7 @@ function keyEncodings(db: VaultDb | undefined): string[] {
   return out;
 }
 
-/** Read live gateway state into a bundle input, harvesting the sensitive
- *  literals the tripwire sweeps for. */
+/** Reads live gateway state into a bundle input, harvesting sensitive literals for the tripwire. */
 export async function collectSupportBundleInput(
   options: SupportBundleSourceOptions
 ): Promise<SupportBundleInput> {

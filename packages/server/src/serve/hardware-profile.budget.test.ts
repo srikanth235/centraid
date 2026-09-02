@@ -4,12 +4,9 @@ import { resolveGatewayHardwareProfile } from "./hardware-profile.js";
 import type { ResourceMode } from "./hardware-profile.js";
 
 /*
- * #528 Phase E ground-truth guard. This table was captured from the resolver
- * BEFORE the budget-preset refactor and must stay byte-identical on plain
- * hosts (no cgroup limit, no steal). It is the safety net proving the
- * "share of granted host" restructure changed the SHAPE, not the numbers.
- * Only cgroup/steal-constrained hosts (covered in hardware-profile.test.ts)
- * may resolve to smaller knobs.
+ * #528 Phase E ground-truth guard: this table must stay byte-identical on
+ * plain hosts (no cgroup limit, no steal) — only cgroup/steal-constrained
+ * hosts (hardware-profile.test.ts) may resolve to smaller knobs.
  */
 
 interface ResolvedKnobs {

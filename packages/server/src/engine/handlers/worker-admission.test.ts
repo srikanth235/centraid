@@ -19,7 +19,7 @@ function drain(): Promise<void> {
 describe("worker admission classes", () => {
   test("an interactive request leaves the queue before a background one", async () => {
     const admission = new WorkerAdmission(1, 8, 10_000);
-    await admission.acquire("interactive"); // occupies the only slot
+    await admission.acquire("interactive");
 
     const order: string[] = [];
     const first = admission

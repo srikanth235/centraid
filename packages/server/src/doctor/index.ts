@@ -1,14 +1,4 @@
-/*
- * The doctor integrity-scrub check library (#839) — barrel.
- *
- * Re-exports the reusable invariant checks and the scrub orchestrator so
- * in-package callers (the `doctor` CLI verb, the restore drill) import from one
- * stable surface.
- *
- * This list is exactly what callers import, not everything `integrity-checks`
- * defines: a barrel that re-exports what nothing imports is dead surface, and
- * knip says so. Widen it when a caller needs the symbol, not in anticipation.
- */
+/** Barrel so in-package callers import from one stable surface. Widen it only when a caller needs the symbol — knip flags dead re-exports. */
 
 export {
   checkCasRehash,

@@ -205,8 +205,6 @@ describe("vault enrichment cascade routes", () => {
     });
   });
 
-  // ── the egress-consent ledger (issue #807, Wave 3) ──────────────────────
-
   const postConsent = (base: string, body: unknown) =>
     fetch(`${base}/centraid/_vault/enrich/consent`, {
       method: "POST",

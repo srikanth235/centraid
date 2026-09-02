@@ -1,7 +1,4 @@
-/*
- * Host limits probe (#528): cgroup CPU/memory quota + CPU-steal sample at boot,
- * sizing the GRANTED host share. Any read failure → null = unconstrained host.
- */
+// Host limits probe (#528): any read failure → null = unconstrained host.
 
 import { readFileSync } from "node:fs";
 
@@ -9,26 +6,21 @@ import { defaultStealSampler } from "./power-context.js";
 import type { CpuStealSample } from "./power-context.js";
 
 export interface HostLimits {
-  /** cgroup CPU quota as fractional cores (quota/period), or null when unlimited/unknown. */
+  /** Fractional cores (quota/period), or null when unlimited/unknown. */
   cgroupCpuLimit: number | null;
-  /** cgroup memory limit in bytes, or null when unlimited/unknown. */
   cgroupMemoryLimitBytes: number | null;
-  /** Cumulative CPU steal% since host boot, or null off-Linux/unknown. */
+  /** Cumulative steal% since host boot, or null off-Linux/unknown. */
   stealPercent: number | null;
 }
 
 export interface HostLimitsReaders {
-  /** Read a file to text, or null on any error (missing/permission/etc.). */
   readText?: (path: string) => string | null;
-  /** One cumulative `/proc/stat` steal sample. */
   stealSample?: () => CpuStealSample | null;
   platform?: NodeJS.Platform;
 }
 
-// cgroup v2 unified hierarchy.
 const CGROUP_V2_CPU_MAX = "/sys/fs/cgroup/cpu.max";
 const CGROUP_V2_MEMORY_MAX = "/sys/fs/cgroup/memory.max";
-// cgroup v1 fallback (separate cpu / memory controllers).
 const CGROUP_V1_CPU_QUOTA = "/sys/fs/cgroup/cpu/cpu.cfs_quota_us";
 const CGROUP_V1_CPU_PERIOD = "/sys/fs/cgroup/cpu/cpu.cfs_period_us";
 const CGROUP_V1_MEMORY_LIMIT = "/sys/fs/cgroup/memory/memory.limit_in_bytes";

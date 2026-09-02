@@ -1,16 +1,5 @@
 import crypto from "node:crypto";
-/*
- * Unified chat runner (#141). One chat surface, both jobs:
- * a turn runs in the app's draft session worktree (native file edits stage
- * there) with the union of tools (the `centraid_*` dispatcher threaded via
- * `toolContext` alongside the harness's native file tools), the unified
- * system prompt (data preamble + builder authoring blocks), and post-turn
- * webhook minting surfaced once via a `webhooks` event.
- *
- * The real turn would spawn codex / claude, so we inject a fake `runTurn`
- * that records what it was handed and simulates the agent authoring an
- * automation with a pending webhook trigger.
- */
+/** A fake `runTurn` stands in for the real harness spawn: it records what it was handed and simulates the agent authoring an automation with a pending webhook trigger (#141). */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -93,23 +82,17 @@ describe("unified-conversation-runner", () => {
     );
     expect(captured?.input.cwd).toBe(expectedCwd);
 
-    // Union of tools: the `centraid_*` dispatcher is threaded for this app.
     expect(captured?.input.toolContext?.appId).toBe("notes");
     expect(captured?.input.toolContext?.dispatcher).toBe(dispatcher);
 
-    // Unified prompt: the route's data preamble is kept verbatim. An `app`
-    // kind adds no authoring contract since #799 — only an automation does.
+    // The route's data preamble is kept verbatim; an `app` kind adds no authoring contract (#799) — only an automation does.
     expect(captured!.input.extraSystemPrompt).toBe("BASE_DATA_PREAMBLE");
 
-    // The route reads `runKind` to persist its turns as `kind: 'build'` in the
-    // ledger (#181).
+    // The route reads `runKind` to persist its turns as `kind: 'build'` in the ledger (#181).
     expect(runner.runKind).toBe("build");
 
-    // Resume handle round-trips back to the route.
     expect(result?.harnessKind).toBe("codex");
     expect(result?.harnessSessionId).toBe("thread-1");
-
-    // Stream events flowed through.
     expect(events.some((e) => e.type === "final")).toBeTruthy();
   });
 
@@ -151,8 +134,7 @@ describe("unified-conversation-runner", () => {
       providerEgressConsent: allowProviderEgress,
       publicBaseUrl: () => "http://127.0.0.1:9999",
       runTurn: async (input): Promise<TurnResult> => {
-        // The agent authors an automation with a PENDING webhook trigger —
-        // it can't mint crypto-random credentials itself.
+        // The agent authors an automation with a PENDING webhook trigger — it can't mint crypto-random credentials itself.
         const autoDir = path.join(input.cwd, "automations", "notify");
         await fs.mkdir(autoDir, { recursive: true });
         await fs.writeFile(
@@ -199,7 +181,7 @@ describe("unified-conversation-runner", () => {
       /^http:\/\/127\.0\.0\.1:9999\/_centraid-hook\//u
     );
 
-    // The staged manifest no longer carries the plaintext secret — only a hash.
+    // The staged manifest carries only a hash of the secret, not the plaintext.
     const appDir = await store.snapshotSessionAppDir("chat-notes", "notes");
     const raw = await fs.readFile(
       path.join(appDir, "automations", "notify", "automation.json"),

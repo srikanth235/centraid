@@ -1,8 +1,7 @@
 import { promises as fs } from "node:fs";
-// Issue #167: the gateway publish gate (`validateManifestAt`) lints an
-// automation app's handler.js for replay-unsafe patterns, so a
-// nondeterministic handler is rejected at publish time rather than silently
-// mis-resumed under the #166 journal/replay runtime.
+// The publish gate (`validateManifestAt`) lints an automation app's handler.js
+// for replay-unsafe patterns so a nondeterministic handler is rejected at
+// publish, not silently mis-resumed by the journal/replay runtime (#167, #166).
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -76,8 +75,7 @@ describe("validate-automation-handler", () => {
   });
 
   test("does not lint handlers of a non-automation app", async () => {
-    // A regular app whose actions/queries are empty: no handler lint runs even if
-    // an automations/ dir with an unsafe handler happens to exist.
+    // No handler lint for a kind:"app" even if an automations/ dir with an unsafe handler exists.
     await fs.writeFile(
       path.join(dir, "app.json"),
       JSON.stringify({

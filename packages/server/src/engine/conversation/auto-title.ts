@@ -1,7 +1,6 @@
 /*
- * LLM auto-titles (#420). Fire-and-forget; caller passes a TIER token
- * (`fast`), never a model id; tool-less; user-rename-wins (apply only while
- * the stored title is still the exact `deriveTitle` output).
+ * LLM auto-titles (#420). Fire-and-forget; the caller passes a TIER token (`fast`), never a model id; tool-less;
+ * user-rename-wins (apply only while the stored title is still the exact `deriveTitle` output).
  */
 
 import { unrefTimer } from "../../lib/unref-timer.js";

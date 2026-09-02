@@ -1,20 +1,10 @@
 import crypto from "node:crypto";
 /*
- * Multi-client integration: prove that two independent HTTP clients
- * pointed at the same daemon see consistent gateway state. The "two
- * clients" stand in for desktop + mobile pointed at a shared standalone
- * gateway via the existing remote-gateway path.
- *
- * Scenario:
- *   1. An app is published onto the git-store `main` (#137).
- *   2. Client A fetches GET /centraid/_apps and sees it in the registry.
- *   3. Client B reads back the app's `index.html` via the `/centraid/<id>/`
- *      static-serve path (proves static serving works through the daemon
- *      from the live `main` worktree, not just the bearer check).
- *
- * No CLI spawn — we drive `serve()` in-process. The CLI smoke is
- * covered in `cli.test.ts`. This test focuses on the runtime contract
- * a second client expects after the gateway holds a published app.
+ * Two independent HTTP clients pointed at the same daemon (desktop + mobile on
+ * a shared standalone gateway) must see consistent gateway state: publish onto
+ * git-store `main` (#137), then verify client A sees it in the registry and
+ * client B reads it back through the `/centraid/<id>/` static-serve path.
+ * Drives `serve()` in-process; the CLI smoke lives in `cli.test.ts`.
  */
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -69,7 +59,6 @@ describe("serve-multiclient scenarios", () => {
   });
 
   test("two clients see the published app consistently in the registry + app plane", async () => {
-    // Client A: list — sees the app synced from `main`.
     const list = await fetch(`${handle.url}/centraid/_apps`, {
       headers: { Authorization: `Bearer ${handle.token}` },
     });
@@ -77,9 +66,8 @@ describe("serve-multiclient scenarios", () => {
     const apps = (await list.json()) as Array<{ id: string }>;
     expect(apps.some((a) => a.id === "multiclient-test")).toBeTruthy();
 
-    // Client B: describe the app — proves the daemon's `/centraid/<id>/`
-    // app plane resolves the live `main` worktree's manifest, not just the
-    // registry index.
+    // Proves the app plane resolves the live `main` worktree's manifest, not
+    // just the registry index.
     const described = await fetch(
       `${handle.url}/centraid/multiclient-test/_describe`,
       { headers: { Authorization: `Bearer ${handle.token}` } }

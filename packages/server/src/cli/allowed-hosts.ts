@@ -1,9 +1,7 @@
 /**
  * Operator Host allowlist helpers for non-loopback binds (#504 packaging).
- *
- * Loopback forms (localhost / 127.0.0.1 / ::1) are always accepted by
- * app-engine. Extra hostnames come from CLI flags and/or env so Docker
- * and host services can name the public Host clients will send.
+ * Loopback forms are always accepted by app-engine; extra hostnames come from
+ * CLI flags/env so Docker and host services can name the public Host.
  */
 
 /** Parse `CENTRAID_ALLOWED_HOSTS` (comma-separated hostnames, no ports). */

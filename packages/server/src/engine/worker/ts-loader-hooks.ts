@@ -1,6 +1,5 @@
-// Lets a handler worker import TypeScript: production runs compiled dist
-// under plain Node (runner.ts). `load` compiles via esbuild; `resolve` fills
-// extensionless/`.js` siblings.
+// Lets a handler worker import TypeScript: production runs compiled dist under plain Node (runner.ts).
+// `load` compiles via esbuild; `resolve` fills extensionless/`.js` siblings.
 
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";

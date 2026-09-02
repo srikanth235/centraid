@@ -1,9 +1,6 @@
 import { defineConfig } from "vitest/config";
 
-/**
- * Standalone Stryker test root (defineConfig, not defineProject).
- * Scheduler ledger contract + properties live in one file.
- */
+/** Standalone Stryker root — defineConfig, not defineProject. */
 export default defineConfig({
   test: {
     name: "@centraid/server/automation-mutation",

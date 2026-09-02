@@ -6,8 +6,6 @@
  *
  * Turn flow: launch (or warm reuse) → initialize → session resume|load|new →
  * pin mode/model → session/prompt → stopReason handling → warm park or kill.
- *
- * See ./stop-reason.ts, ./harness-errors.ts, ./session-warm.ts, ./turn-vault-tools.ts.
  */
 
 import { spawn } from "node:child_process";
@@ -218,7 +216,7 @@ export async function runAcpTurn(
     },
   });
 
-  // ──── Warm reuse ─────────────────────────────────────────────────────────
+  // Warm reuse
   if (input.prevSessionId) {
     const warm = takeWarmSlot(
       config.kind,

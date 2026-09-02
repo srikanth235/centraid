@@ -12,8 +12,7 @@ export interface PublishInput {
   sessionId: string;
   appId: string;
   message: string;
-  /** Runs post-rebase, pre-ff-merge (#144, #286), so it sees the tree about to
-   *  go live. Throwing aborts the publish: `main` never advances. */
+  /** Runs post-rebase, pre-ff-merge (#144, #286) so it sees the tree about to go live; throwing aborts the publish — `main` never advances. */
   beforeMerge?: (worktreeAppDir: string) => Promise<void>;
 }
 
@@ -26,8 +25,7 @@ export interface PublishResult {
 export interface RollbackInput {
   appId: string;
   versionTag: string;
-  // NO pre-merge hook, by design (#160 / #144): rollback is CODE-ONLY and
-  // leaves the ext band at its forward shape; a re-publish heals the drift.
+  // NO pre-merge hook, by design (#160 / #144): rollback is CODE-ONLY, leaves the ext band at its forward shape; a re-publish heals the drift.
 }
 
 export interface RollbackResult {

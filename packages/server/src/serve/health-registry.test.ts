@@ -42,7 +42,6 @@ describe(HealthRegistry, () => {
     registry.reportOk("outbox");
     snap = await registry.snapshot();
     outbox = snap.components.find((c) => c.component === "outbox");
-    // Recovers to ok but keeps the error history for diagnosis.
     expect(outbox?.status).toBe("ok");
     expect(outbox?.lastError).toBe("drain failed: boom");
     expect(outbox?.errorCount).toBe(1);
@@ -122,7 +121,6 @@ describe(HealthRegistry, () => {
     const comp = snap.components.find((c) => c.component === "vaults");
     expect(comp?.status).toBe("ok");
     expect(comp?.detail).toBe("2 vaults mounted");
-    // Error history survives the recovery.
     expect(comp?.lastError).toBe("mount failed");
   });
 
@@ -426,7 +424,6 @@ describe(HealthRegistry, () => {
       const before = (await registry.snapshot()).recentEvents.length;
       registry.resumeBackgroundWork();
       const after = (await registry.snapshot()).recentEvents.length;
-      // Idempotent: a second resume emits no further event.
       expect(after).toBe(before);
       expect((await registry.snapshot()).components).toContainEqual(
         expect.objectContaining({ component: "background-pause", status: "ok" })

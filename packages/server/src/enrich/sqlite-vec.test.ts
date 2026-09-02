@@ -1,9 +1,8 @@
-// The vector-extension loader (#721). Two properties are worth a test
-// and neither is "does sqlite-vec work": that a failed load is a CAPABILITY
-// ANSWER rather than a broken vault, and that the extension-loading permission
-// does not survive the load — the owner's `vault_sql` surface runs on this same
-// handle, so a reachable `load_extension()` would be arbitrary native code
-// execution behind a query box.
+// The two properties under test are security, not function (#721): a failed
+// load is a CAPABILITY ANSWER rather than a broken vault, and the
+// extension-loading permission does not survive the load — the owner's
+// `vault_sql` runs on this same handle, so a reachable `load_extension()`
+// would be arbitrary native code execution behind a query box.
 
 import { DatabaseSync } from "node:sqlite";
 
@@ -32,8 +31,7 @@ describe("sqlite-vec", () => {
       loadExtensions: (handle) => void loadSqliteVec(handle),
     });
     bootstrapVault(db, { ownerName: "Priya" });
-    // The owner's raw-SQL surface runs here. `load_extension` must be as
-    // unreachable as it is on a vault that never loaded anything.
+    // The owner's raw-SQL surface runs here — `load_extension` must be as unreachable as on a vault that never loaded anything.
     expect(() =>
       db.vault.prepare("SELECT load_extension('/tmp/anything')").get()
     ).toThrow(/not authorized/u);
@@ -52,9 +50,7 @@ describe("sqlite-vec", () => {
   });
 
   test("a handle that never allowed extensions reports unavailable instead of throwing", () => {
-    // The stand-in for a platform whose binary is missing: the load cannot
-    // succeed, and the caller must get `false` plus a reason, never an
-    // exception that would take the vault open down with it.
+    // Stand-in for a platform whose binary is missing: the caller must get `false` plus a reason, never an exception that takes the vault open down.
     const handle = new DatabaseSync(":memory:");
     const reasons: string[] = [];
     expect(loadSqliteVec(handle, (reason) => reasons.push(reason))).toBe(false);

@@ -1,13 +1,10 @@
 /*
- * Canonical daemon layout (#555). Desktop and headless hosts derive
- * the same tree. gateway.db is control state + process lock; keys/ is
- * custody; vault/ is sovereign state; cache/ is disposable; gateway-logs/
- * is diagnostics. A zero-vault gateway does not create vault/ or cache/.
+ * Canonical daemon layout (#555); desktop and headless hosts derive the same
+ * tree. gateway.db is control state + process lock, keys/ custody, vault/
+ * sovereign state, cache/ disposable, gateway-logs/ diagnostics.
  *
- * Callers name `gatewayDbFile` (or pass the open `GatewayDatabase`) directly:
- * there are no `devicesFile` / `pairingTicketsFile` / `webSessionsFile`
- * aliases, whose names described a loose-JSON layout this tree does not have
- * (#555, #568).
+ * Callers name `gatewayDbFile` directly — no loose-JSON layout aliases
+ * (`devicesFile`/`pairingTicketsFile`/`webSessionsFile`) (#555, #568).
  */
 
 import path from "node:path";
@@ -34,9 +31,8 @@ export function daemonLayoutFor(dataDir: string): DaemonLayout {
     modelCatalogFile: path.join(cacheDir, "model-catalog.json"),
     modelPricingFile: path.join(cacheDir, "model-pricing.json"),
     templatesCacheDir: path.join(cacheDir, "templates"),
-    // Mounting the vault registry (duaility §12): the daemon hosts one
-    // gateway holding N sovereign vaults, one subdirectory each — and,
-    // post-#280, each vault's whole app world.
+    // Mounting the vault registry (duaility §12): the daemon hosts one gateway
+    // holding N sovereign vaults, one subdirectory each, each vault's whole app world.
     vaultDir: path.join(abs, "vault"),
     logsDir: path.join(abs, "gateway-logs"),
     endpointKeyFile: path.join(abs, "keys", "endpoint-key.bin"),

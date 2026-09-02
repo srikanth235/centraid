@@ -1,8 +1,6 @@
 /*
- * Per-model token pricing (#90, #445). `items.cost_usd` freezes at write time;
- * the #445 backfill alone may rewrite frozen *estimated* costs, never
- * `'harness'`. Unknown is NULL — never 0, never a substituted ceiling. Stays
- * the single no-hardcoded-model-ids allowlisted seam.
+ * Per-model token pricing (#90, #445). `items.cost_usd` freezes at write time; only the #445 backfill may rewrite frozen *estimated* costs, never `'harness'`.
+ * Unknown is NULL — never 0, never a substituted ceiling. The single no-hardcoded-model-ids allowlisted seam.
  */
 
 import { lookupEntry } from "./pricing/catalog.js";

@@ -1,11 +1,9 @@
 /*
- * `gateway.db`'s DDL. Pre-1.0, this repo carries NO backward
- * compatibility for `gateway.db`: there are no legacy-generation migrations
- * here, on principle. `installGatewaySchema` is the single source of truth
- * for the current shape; a `gateway.db` written by an older generation is
- * expected to be erased and re-onboarded, not migrated in place. The
- * function below is pure over a `DatabaseSync` handle — no lock/lease
- * concerns belong here.
+ * `gateway.db`'s DDL. Pre-1.0 there are NO migrations, on principle: a
+ * gateway.db from an older generation is erased and re-onboarded, not
+ * migrated in place. `installGatewaySchema` is the single source of truth
+ * for the current shape and is pure over a `DatabaseSync` handle — no
+ * lock/lease concerns belong here.
  */
 
 import type { DatabaseSync } from "node:sqlite";

@@ -1,8 +1,5 @@
-/**
- * Shared error class for manifest validation. Lives in its own
- * module so the output-schema validator can reference it without
- * circularly depending on the main parser entrypoint.
- */
+// Own module so the output-schema validator can reference it without
+// circularly depending on the main parser entrypoint.
 
 export type ManifestValidationCode =
   | "invalid_json"

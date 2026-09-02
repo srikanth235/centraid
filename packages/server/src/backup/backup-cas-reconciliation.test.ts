@@ -84,8 +84,6 @@ describe("backup-cas-reconciliation", () => {
     });
   });
 
-  // ────────── issue #425 Wave 2: per-store reconciliation ──────────
-
   type CasCollect = NonNullable<
     Parameters<typeof runCasOnlyReconciliation>[0]["collect"]
   >;

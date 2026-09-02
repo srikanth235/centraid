@@ -42,11 +42,7 @@ export const WORKER_MAX_CONCURRENT = workerMaxConcurrentFromEnv();
 export const WORKER_MAX_QUEUE = 16;
 export const WORKER_MAX_QUEUE_WAIT_MS = 10_000;
 
-/**
- * Strict priority on the WAITING queue only (#883 C2) — no per-class
- * concurrency, no earlier refusal. The bounded queue and wait keep background
- * from starving: a loser gets a typed `busy`, not a silent wait.
- */
+// Strict priority for interactive waiters only (#883 C2) — no per-class concurrency; the bounded queue and wait give a loser a typed busy, not a silent starvation.
 export type WorkerAdmissionClass = "interactive" | "background";
 
 /** Absent means `interactive`: default to the one someone waits for. */

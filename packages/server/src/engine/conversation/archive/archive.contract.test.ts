@@ -19,7 +19,6 @@ import {
   seedConversation,
   seedTurn,
 } from "./test-fixtures.js";
-// ── prune-before-custody is structurally impossible ────────────────────────
 
 describe("custody-gated prune", () => {
   it("never deletes raw rows while custody is unproven, even across many runs", () => {
@@ -228,8 +227,6 @@ describe("custody-gated prune", () => {
   });
 });
 
-// ── segment round-trip ─────────────────────────────────────────────────────
-
 describe("segment round-trip", () => {
   it("decodes the archived segment back into byte-identical source rows", () => {
     const { journal } = openTempJournal();
@@ -282,8 +279,6 @@ describe("segment round-trip", () => {
     journal.close();
   });
 });
-
-// ── vacuum reclaims pages ───────────────────────────────────────────────────
 
 describe("page reclamation", () => {
   it("drops page_count after a custody-proven prune (incremental_vacuum)", () => {

@@ -1,18 +1,13 @@
 // governance: allow-repo-hygiene file-size-limit (#865) every escape case runs a real hostile handler in a real worker; splitting the lanes would scatter the one enforcement story.
 /**
- * ESCAPE TESTS for the handler sandbox (#842).
+ * ESCAPE TESTS for the handler sandbox (#842): every case runs a hostile
+ * handler in a REAL worker through the REAL runner entry point and asserts the
+ * refusal. Nothing here inspects the policy object — a test that only read the
+ * policy would prove nothing about enforcement.
  *
- * Every case here runs a genuinely hostile handler in a REAL worker thread
- * driven by the REAL runner entry point and asserts the refusal. A test that
- * only inspected the policy object would prove nothing about enforcement, so
- * nothing in this file inspects the policy: it opens files, opens sockets,
- * spawns processes, and reads the environment, and it fails if any of that
- * succeeds.
- *
- * The last block is the opposite: a CHARACTERIZATION pin recording what an
- * automation worker running with NO parent-chosen lane can still reach today.
- * It is deliberately green — its job is to make the residual reach visible and
- * make removing it a diff, not a discovery.
+ * The last block is a CHARACTERIZATION pin: what an automation worker with NO
+ * parent-chosen lane can still reach today. Deliberately green — removing the
+ * reach must be a diff, not a discovery.
  */
 
 import { writeFile } from "node:fs/promises";
@@ -35,15 +30,11 @@ const AUTOMATION_RUNNER = fileURLToPath(
 const CANARY_ENV = "CENTRAID_SANDBOX_CANARY";
 const CANARY_VALUE = "canary-value-that-must-not-be-readable";
 
-/**
- * Created eagerly at module scope rather than in a `beforeAll`: every worker in
- * this file is owned and terminated by the helper that spawned it, so the file
- * needs no lifecycle hooks at all — and a hook-free suite cannot leak a hostile
- * worker into a later test by forgetting to clean up.
- */
+/** Module scope, not `beforeAll`: each worker is terminated by the helper that
+ * spawned it, and a hook-free suite cannot leak a hostile worker by forgetting
+ * cleanup. */
 const dir = tempDirSync("sandbox-escape-");
 
-/** Write one handler module and return its absolute path. */
 async function handler(name: string, source: string): Promise<string> {
   const file = path.join(dir, name);
   await writeFile(file, source);
@@ -75,7 +66,6 @@ function awaitResult(worker: Worker, ms = 20_000): Promise<ResultMessage> {
   });
 }
 
-/** Run one handler through the real app-handler worker entry point. */
 async function runAppHandler(handlerFile: string): Promise<ResultMessage> {
   const worker = new Worker(APP_RUNNER, {
     workerData: { handlerFile, handlerKind: "query", args: { body: {} } },
@@ -117,7 +107,6 @@ async function runAutomationHandler(
   }
 }
 
-/** The refusal text, wherever the runner surfaced it. */
 function refusal(result: ResultMessage): string {
   if (result.ok === false) return String(result.error ?? "");
   const value = result.value as { denied?: unknown } | undefined;
@@ -404,8 +393,6 @@ describe("app-handler lane: process", () => {
   });
 
   test("process.argv and process.execArgv are redacted in the handler thread (#865)", async () => {
-    // They echo how the gateway was launched; each worker owns its own copy,
-    // so the parent's command line must not be visible from in here.
     const file = await handler(
       "argv.mjs",
       `export default async () => ({
@@ -444,10 +431,9 @@ describe("app-handler lane: the allowlist is not a blanket ban", () => {
   });
 });
 
-/** Fixed expected digest prefix — computed here so the test stays hermetic. */
+/** sha256("centraid") prefix — asserted rather than recomputed so a broken
+ * crypto import cannot make the test pass by agreeing with itself. */
 function createHashPrefix(): string {
-  // sha256("centraid") — asserted rather than recomputed so a broken crypto
-  // import cannot make the test pass by agreeing with itself.
   return "bbec0fe3";
 }
 
@@ -572,10 +558,7 @@ describe("an automation worker given no lane gets the strict floor", () => {
    * An automation worker handed NO `sandboxLane` still gets the strict floor
    * (#846): the filesystem outside every root, subprocesses, and the
    * environment are all refused. A handler that needs more asks for it in its
-   * manifest, where the ask is reviewable. Without these assertions an
-   * unsandboxed automation plane would contradict SECURITY.md's "app handlers
-   * are consent-scoped" framing — consent scopes the `ctx` rails, and an
-   * unsandboxed handler does not have to use them.
+   * manifest, where the ask is reviewable.
    */
   test("reads outside every root are refused with no lane requested", async () => {
     const file = await handler(
@@ -586,11 +569,9 @@ describe("an automation worker given no lane gets the strict floor", () => {
          catch (error) { return { denied: error.code ?? error.message }; }
        };`
     );
-    // No sandboxLane, which is exactly the shape the pin characterised.
     const result = await runAutomationHandler(file);
-    // Stronger than a caught error: the floor has no filesystem grant at all,
-    // so the STATIC `node:fs` import is refused while the module graph loads
-    // and the handler body never runs. Nothing is leaked because nothing ran.
+    // The floor has no filesystem grant at all: the STATIC `node:fs` import is
+    // refused at graph load, so the handler body never runs — nothing leaked.
     expect(result.ok).toBe(false);
     expect(result.value).toBeUndefined();
     expect(String(result.error)).toMatch(/filesystem grant|node:fs/u);
@@ -630,18 +611,13 @@ describe("an automation worker given no lane gets the strict floor", () => {
 
   test("the host-planted runtime dir survives the environment revocation", async () => {
     /*
-     * The bug an independent audit of #846 P9 caught, and the reason
-     * `sandboxRuntimeDir` exists at all.
-     *
-     * Every lane sets `environment: "denied"`, and `install.ts` replaces
-     * `process.env` with a frozen empty object BEFORE the handler's graph
-     * loads. The five recognition bundles read
-     * `CENTRAID_AUTOMATION_RUNTIME_DIR` at module top level to locate their
-     * weights, so flipping the default silently killed that override and sent
-     * every one of them to a `runtime/` directory that exists only in the
-     * source tree — a first-fire failure in exactly the deployment shape the
-     * docs describe. A path is not a capability, so the host resolves it and
-     * plants it on `globalThis` before installing the sandbox.
+     * Why `sandboxRuntimeDir` exists (audit of #846 P9): every lane freezes
+     * `process.env` BEFORE the handler graph loads, and the five recognition
+     * bundles read `CENTRAID_AUTOMATION_RUNTIME_DIR` at module top level — the
+     * freeze silently killed that override and pointed them at a `runtime/`
+     * directory that exists only in the source tree. A path is not a
+     * capability, so the host resolves it and plants it on `globalThis` before
+     * installing the sandbox.
      */
     const file = await handler(
       "planted-runtime-dir.mjs",
@@ -657,7 +633,6 @@ describe("an automation worker given no lane gets the strict floor", () => {
     expect(result.ok).toBe(true);
     expect(result.value).toStrictEqual({
       planted: "/opt/centraid-runtime",
-      // …while the environment itself is still gone.
       envIsEmpty: true,
       envOverride: null,
     });

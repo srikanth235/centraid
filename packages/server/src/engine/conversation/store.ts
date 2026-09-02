@@ -258,8 +258,6 @@ export class ConversationStore {
   }
 
   private ensureReady(): { db: DatabaseSync; stmts: PreparedStatements } {
-    // The provider may resolve a DIFFERENT handle across calls, so re-prepare
-    // on change and a vault switch needs no reconstruction.
     const db = this.provider();
     if (this.db === db && this.stmts) return { db, stmts: this.stmts };
     const stmts = prepare(db);
@@ -284,8 +282,6 @@ export class ConversationStore {
       throw error;
     }
   }
-
-  // ─── conversations ──────────────────────────────────────────────────
 
   createConversation(input: CreateConversationInput): Conversation {
     const { stmts } = this.ensureReady();
@@ -382,8 +378,6 @@ export class ConversationStore {
     return { ...conversationFromRaw(raw), messageCount: Number(raw.msg_count) };
   }
 
-  /** The ledger file is per VAULT, so `appId` scoping is a COLUMN filter,
-   *  never a file boundary (#280). */
   listConversationsMeta(userId: string, appId?: string): ConversationMeta[] {
     const { stmts } = this.ensureReady();
     const rows = stmts.listConversations.all(
@@ -937,8 +931,6 @@ export class ConversationStore {
       .run(conversationId, primaryKind, JSON.stringify(selected), now);
   }
 
-  // ─── turns ──────────────────────────────────────────────────────────
-
   insertTurn(input: InsertTurnInput): void {
     const { stmts } = this.ensureReady();
     const seqRow = stmts.maxSeq.get(input.conversationId) as { m: number };
@@ -1047,7 +1039,6 @@ export class ConversationStore {
     };
   }
 
-  /** ONE query, replacing `listItems` per turn while folding (#659). */
   listItemsByTurn(
     conversationId: string,
     range: TurnSeqRange = {}
@@ -1072,8 +1063,6 @@ export class ConversationStore {
     return byTurn;
   }
 
-  /** ONE query: the per-item lookup it replaces was overhead paid once per
-   *  rendered message (#659). */
   listAttachmentsByItem(
     conversationId: string,
     range: TurnSeqRange = {}
@@ -1215,8 +1204,6 @@ export class ConversationStore {
     }
   }
 
-  // ─── items ──────────────────────────────────────────────────────────
-
   insertMessageIn(input: InsertMessageInInput): string {
     const { stmts } = this.ensureReady();
     const itemId = input.itemId ?? randomUUID();
@@ -1319,8 +1306,6 @@ export class ConversationStore {
     return row?.text ?? undefined;
   }
 
-  // ─── attachments ────────────────────────────────────────────────────
-
   insertAttachment(input: InsertAttachmentInput): string {
     const { stmts } = this.ensureReady();
     const id = input.id ?? randomUUID();
@@ -1379,8 +1364,6 @@ export class ConversationStore {
       pruned: r.pruned_at !== null,
     }));
   }
-
-  // ─── automation state KV ────────────────────────────────────────────
 
   stateGet(
     automationId: string,

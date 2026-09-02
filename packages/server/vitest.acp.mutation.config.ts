@@ -1,6 +1,5 @@
 import { defineConfig } from "vitest/config";
 
-/** Standalone Stryker test root for agent-runtime low-priority helper. */
 export default defineConfig({
   test: {
     name: "@centraid/server/acp-mutation",

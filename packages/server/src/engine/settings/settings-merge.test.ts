@@ -20,9 +20,7 @@ describe(buildSettingsInject, () => {
   });
 
   it("bakes no surface-temperature attribute — dark has one ramp", () => {
-    // There is no such knob (#608, parity with the light theme): neither the
-    // boolean `coolCast` nor the three-position `surfaceTemp` may smear an
-    // attribute onto <html>.
+    // No such knob (#608, parity with the light theme): neither `coolCast` nor `surfaceTemp` may smear an attribute onto <html>.
     for (const v of ["cool", "neutral", "warm", true, "tepid"]) {
       expect(buildSettingsInject([{ surfaceTemp: v }]).dataAttrs).toStrictEqual(
         {}
@@ -59,9 +57,7 @@ describe(buildSettingsInject, () => {
 
   it("null in a later layer also falls through", () => {
     const out = buildSettingsInject([{ theme: "dark" }, { theme: null }]);
-    // null is intentionally treated as "no value" so the previous layer wins.
-    // (Removal at the source is the UserStore's setPrefs({k: null}) deletion,
-    //  not a layer-merge concern.)
+    // null is intentionally "no value" so the previous layer wins; removal at the source is the UserStore's setPrefs({k: null}), not a layer-merge concern.
     expect(out.dataAttrs.theme).toBe("dark");
   });
 

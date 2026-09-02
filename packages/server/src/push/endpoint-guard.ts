@@ -1,17 +1,4 @@
-/*
- * Push-endpoint SSRF guard (issue #865).
- *
- * A device-principal holder registers the Web-Push endpoint verbatim and the
- * gateway replays a POST to it on every vault commit — so an endpoint pointing
- * at loopback/LAN HTTPS targets is blind SSRF replayed automatically from the
- * gateway host. Every registered endpoint must resolve to public internet
- * space: https only, no credentials-in-URL, no private/loopback/link-local/
- * unique-local/CGNAT/Class-E addresses (IP-literal OR resolved via DNS),
- * fail-closed on resolution failure. Send-time is a sync IP-literal
- * backstop only — hostnames are not re-resolved, so a name that was public
- * at registration and later rebinds to loopback would still wake (named
- * residual, not a closed gap).
- */
+/** Push-endpoint SSRF guard (#865): the gateway replays a POST to every registered endpoint on each vault commit, so an endpoint pointing at loopback/LAN is blind SSRF replayed from the gateway host. Every registered endpoint must be https, credential-free, and resolve to public internet space (IP-literal or DNS), fail-closed. Send-time rechecks only IP literals — a name public at registration that later rebinds to loopback would still wake (residual in the #865 receipt). */
 
 import { promises as dns } from "node:dns";
 
@@ -32,13 +19,7 @@ function parseIpv4(text: string): Ipv4 | undefined {
   return [a!, b!, c!, d!];
 }
 
-/**
- * The reserved ranges a push endpoint must never point at (issue #865):
- * 0.0.0.0/8, RFC1918 10/8 + 172.16/12 + 192.168/16, loopback 127/8,
- * link-local 169.254/16, CGNAT 100.64/10 (RFC 6598), IETF protocol
- * assignments 192.0.0.0/24, and Class E 240/4. Cloud-metadata
- * 169.254.169.254 is inside link-local.
- */
+/** Reserved per #865: 0/8, RFC1918, loopback 127/8, link-local 169.254/16 (covers cloud-metadata 169.254.169.254), CGNAT 100.64/10, 192.0.0.0/24, Class E 240/4. */
 function ipv4IsReserved(parts: Ipv4): boolean {
   const [a, b, c] = parts;
   return (
@@ -62,8 +43,7 @@ function parseIpv6(text: string): readonly number[] | undefined {
   if (embedded) {
     const v4 = parseIpv4(embedded.groups!.tail!);
     if (!v4) return undefined;
-    // Rewrite the dotted tail as two hextexts so the "::" grammar sees pure
-    // hex groups (::ffff:192.168.0.1 → ::ffff:c0a8:1).
+    // Dotted tail → two hextexts so the "::" grammar sees pure hex groups.
     rest =
       text.slice(0, embedded.index + 1) +
       [
@@ -88,23 +68,14 @@ function parseIpv6(text: string): readonly number[] | undefined {
   if (!rear) return undefined;
   const total = head.length + rear.length;
   if (halves.length === 1 ? total !== 8 : total >= 8) return undefined;
-  // Expand the "::" fill between head and rear.
   return [...head, ...Array.from({ length: 8 - total }, () => 0), ...rear];
 }
 
-/**
- * The IPv6 equivalents of the ipv4IsReserved ranges (issue #865): :: and ::1,
- * the whole ::/96 block whose low 32 bits embed an IPv4 address (IPv4-mapped
- * ::ffff:0:0/96 and the deprecated IPv4-compatible form), NAT64 64:ff9b::/96,
- * link-local fe80::/10, unique-local fc00::/7, and multicast ff00::/8.
- */
+/** IPv6 reserved set (#865): ::, ::/96 (IPv4-embedded, incl. IPv4-mapped ::ffff:0:0/96 — a mapped literal is never a clean push target), NAT64 64:ff9b::/96, link-local fe80::/10, unique-local fc00::/7, multicast ff00::/8. */
 function ipv6IsReserved(groups: readonly number[]): boolean {
   const leadingZeros = (count: number): boolean =>
     groups.slice(0, count).every((group) => group === 0);
   if (groups.every((group) => group === 0)) return true;
-  // ::/96 embeds an IPv4 address in its low 32 bits (the deprecated
-  // IPv4-compatible form); ::ffff:0:0/96 is the IPv4-mapped form. Both are
-  // refused outright — a mapped literal is never a clean push target.
   if (leadingZeros(6)) return true;
   if (leadingZeros(5) && groups[5] === 0xffff) return true;
   if (groups[0] === 0x64 && groups[1] === 0xff9b) return true;
@@ -135,17 +106,7 @@ function ipIsReserved(literal: IpLiteral): boolean {
     : ipv6IsReserved(literal);
 }
 
-/**
- * Synchronous subset used at SEND time (issue #865): rows persisted before the
- * registration guard existed (or written by an older build) must not get a
- * wake POST when their endpoint is an obvious reserved-range IP literal or a
- * non-https scheme. Hostnames are not re-resolved here — DNS on every vault
- * commit would put a network round-trip on the wake path, and a name that
- * resolved public at registration can still rebind to loopback later
- * (DNS-rebinding TOCTOU). Real Web-Push endpoints are FCM/Mozilla, not
- * attacker DNS; the residual is named in the #865 receipt rather than
- * implied closed.
- */
+/** Send-time sync backstop (#865): refuse obvious reserved-range IP literals and non-https schemes. Hostnames are not re-resolved here — DNS on every vault commit would put a network round-trip on the wake path, and a name public at registration can rebind to loopback later (DNS-rebinding TOCTOU). */
 export function endpointHostIsPublicSync(endpoint: string): boolean {
   let url: URL;
   try {
@@ -159,10 +120,7 @@ export function endpointHostIsPublicSync(endpoint: string): boolean {
   return !(literal !== undefined && ipIsReserved(literal));
 }
 
-/**
- * Full registration-time check (issue #865). Throws with a device-readable
- * reason; the route maps every throw to 400 invalid_push_registration.
- */
+/** Registration-time check (#865): throws a device-readable reason; the route maps every throw to 400 invalid_push_registration. */
 export async function assertPublicPushEndpoint(
   endpoint: string
 ): Promise<void> {
