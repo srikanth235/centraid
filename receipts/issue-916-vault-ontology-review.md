@@ -112,6 +112,8 @@ Each is a fix plus the test that reproduces it.
 - **The placement gate had no minter, so every edge give parked.** `shareItemsToVault` now demands a live `share_authority` over each item — "a placement carries what the member agreed to, never the caller's word for it" — but a same-owner edge recorded the owner's agreement only in `gateway.db`, which the gate deliberately cannot read. New vault export `grantPlacementAuthority` (`grant/grant-authority.ts`, idempotent under the live-grant unique index, `granted_by` read from the vault's own `self_party_id` rather than threaded in) is called by `routes/edges-reconcile.ts` before it places, so the agreement is visible to the gate and to an audit reading only the vault.
 - **`share_commons_intent.grant_id` lost the foreign key the wave gave it**, for exactly the reason `share_commons_invitation.grant_id` has none: an intent is queued in the member's seat, and `queueCommonsIntent` states outright that a seat with no local `share_circle_grant` row is legal. The key made the ask depend on having projected the answer, and refused every parked intent on the commons rail.
 - **`core.entity_revision` joined `engineCascadeEntities()`** in `packages/server/src/serve/declared-writes.ts`. The pre-mutation snapshot is the engine's now, taken through generated triggers, so no action can declare it; `DECLARED ⊇ OBSERVED` stays a statement about the action.
+- **Four sharing-plane capabilities were left with no production caller and are deleted, not allowlisted.** `revokeAuthorityOverSubject`, `revokeAuthorityForPrincipal` and `listStandingShareAuthority` (`grant/grant-authority.ts`, with the `RevokedAuthorityRow` / `LIVE_AUTHORITY_COLUMNS` / `toAuthority` scaffolding that served only them) were the JavaScript revoke path the `core_entity_revoke_on_purge` trigger replaced — it sets `revoked_at` and `revoked_reason` in the same statement as the purge, so nothing calls the functions any more. `subjectRowExists` (`grant/authority-registry.ts`, with that file's now-unused `DatabaseSync` type import) served the purge sweep the composite foreign keys replaced. The property each enforced is enforced by the engine now, and a capability kept alive only by its own test is not a capability. `grantPlacementAuthority` stays; it has a real caller.
+- **Locker declared writes to `locker.item_history` in five actions of `packages/blueprints/apps/locker/app.json`.** The table is dropped, so each was a declared write that can never happen. Removed rather than repointed at `core.entity_revision`, for the same reason the previous bullet gives.
 - Residual `journal.db` prose was swept out of `packages/server`, `packages/vault`, `packages/client`, `packages/blueprints`, `tests/` and `packages/server/README.md` — every one of them a sentence stating a file boundary that no longer exists.
 
 ## Out of scope
@@ -607,6 +609,7 @@ packages/vault/src/enrich/leases.test.ts
 packages/vault/src/enrich/photo-search.ts
 packages/vault/src/enrich/similarity.ts
 packages/vault/src/golden-vault.test.ts
+packages/vault/src/grant/authority-registry.ts
 packages/vault/src/grant/channel.test.ts
 packages/vault/src/grant/device-trust.ts
 packages/vault/src/grant/fulfillment-edit.test.ts
