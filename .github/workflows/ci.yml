@@ -519,49 +519,15 @@ jobs:
       # `probe` field for exactly which half of the interval is fenced.
       - name: Send-to-first-token ceiling
         run: bun run perf:send-to-first-token
-      # THE PASS/FAIL ANSWER. Same suite the `coverage` pair scores, run without
-      # v8 instrumentation — which is where the 20 minutes lived. Floors are not
-      # evaluated here (no `--coverage`, so `vitest.config.ts`'s thresholds never
-      # engage); this job answers "did anything break", and only that.
-      - run: bun run test:suite
-      # #842 W0.3 — no file may report zero collected tests. A suite that throws
-      # while LOADING registers no test at all, so every counting gate — matrix
-      # minimumTests floors, the skip budget, the quarantine ledger, the coverage
-      # floors — sees a smaller universe rather than a violated one, and the suite
-      # reads as absent instead of red. It rides HERE as well as on the merged
-      # report because this is the earliest place the shape can be seen, and a
-      # collection error is a "do not merge" answer, not a coverage observation.
-      - name: No test file failed to collect
-        run: bun run test:collection-tripwire -- --require-report
-      # #656 Layer 5 / #842 W0.1 — the PR lane's total wall clock against the
-      # tighten-only ceiling in tests/budgets.json#suiteWallClock. It rides HERE, on the
-      # single-job uninstrumented suite, because that is the lane the ceiling was
-      # measured from ("Reseeded 2026-08-29 from CI verify") and the only one
-      # whose number means what the budget file says it means.
-      #
-      # It used to ride on `coverage`, and that was wrong for a reason worth
-      # stating so it is not undone: the metric sums per-file WALL SPANS, and the
-      # files inside a shard run CONCURRENTLY, so the sum inflates when workers
-      # timeshare a slow runner. #905 measured it — the same 1508 files scored
-      # 2370.5s uninstrumented and 2427.0s instrumented on one host (+2.4%, so
-      # instrumentation is not the variable), while the four-way sharded lane
-      # reported 3824.0s on a run whose shard 1 took 545s against main's 383s.
-      # Main passing the identical gate on the identical suite is the same fact
-      # from the other side. A budget that a slow runner can breach is a flake
-      # with a number, and it fails the lane that adds tests rather than the
-      # change that added them.
-      #
-      # The existence check is load-bearing: the script exits 0 with "not
-      # measured" when the artifact is absent, which is right on a laptop and
-      # wrong in the lane that enforces it.
-      - name: Suite wall-clock ceiling
-        run: |
-          set -euo pipefail
-          if [ ! -f artifacts/test-results/vitest.json ]; then
-            echo "::error title=Suite wall-clock unmeasured::artifacts/test-results/vitest.json is missing after test:suite; the wall-clock ceiling cannot be enforced, so this lane fails rather than passing silently."
-            exit 1
-          fi
-          bun run test:suite-wall-clock
+      # `bun run test:suite` — the uninstrumented serial run — no longer rides
+      # here. It was ~19 of this job's 24 minutes and re-ran the SAME projects the
+      # four `coverage-shard` legs already run, sharded, with coverage; the
+      # shards are the pass/fail answer as well as the floors (a failing test
+      # fails its shard). The serial run, its collection tripwire and the suite
+      # wall-clock ceiling (which #905 showed must be scored on a single unsharded
+      # runner) now ride on `candidate.yml`'s `suite` lane, on every push to
+      # main, where they block the promotion rather than the merge. The rung-2
+      # `pr-gate` ceiling is what forced the move: 24.2 min measured against 15.
 
       # #892 Phase 1 — the instrumented half, fanned out. `bun run coverage` on one
       # runner was 20m15s; four shards each score a quarter of the test files and the
@@ -677,15 +643,15 @@ jobs:
         env:
           CENTRAID_COVERAGE_SHARDS: "4"
         run: bun run coverage:merge
-      # The suite wall-clock ceiling used to ride here and now rides on `verify`
-      # — see the comment above that step. Short version: sharding DOES move the
-      # metric, because it sums per-file wall spans and a shard's files run
-      # concurrently, so this lane scored the runner rather than the suite.
+      # The suite wall-clock ceiling used to ride here, then on `verify`, and now
+      # rides on `candidate.yml`'s `suite` lane with the serial run it measures.
+      # It cannot come back here: sharding DOES move the metric, because it sums
+      # per-file wall spans and a shard's files run concurrently, so this lane
+      # scored the runner rather than the suite (#905).
       #
-      # Scored on the merged report as well as on `verify`'s own run: `verify`
-      # sees the uninstrumented suite and this sees the world the floors were
-      # measured against, and a collection error that appears only under
-      # instrumentation is exactly the shape #842 W0.3 was written for.
+      # On the merge gate the merged report is the only place the whole suite's
+      # shape can be seen, so the collection tripwire rides here: a collection
+      # error is a "do not merge" answer, not a coverage observation (#842 W0.3).
       - name: No test file failed to collect
         run: bun run test:collection-tripwire -- --require-report
       # #532 — changed-line coverage vs origin/main must be ≥80% (or approvedDeviation).

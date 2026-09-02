@@ -326,6 +326,15 @@
       "status": "gating"
     },
     {
+      "id": "suite",
+      "rung": 3,
+      "platform": "any",
+      "budgetMs": 2700000,
+      "qualities": ["correctness", "contracts", "durability", "concurrency"],
+      "surfaces": ["vault", "gateway", "protocol"],
+      "status": "gating"
+    },
+    {
       "id": "rust-supply-chain",
       "rung": 3,
       "platform": "any",

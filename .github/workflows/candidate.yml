@@ -567,6 +567,70 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
+  # #915 — the uninstrumented SERIAL suite, moved off rung 2 by the rung-2
+  # ceiling itself: the first measured PR gate was 24.2 min against 15, and
+  # `verify`'s `test:suite` was ~19 of them while re-running the same projects
+  # the four `coverage-shard` legs already run sharded with coverage. On the
+  # merge gate the shards are the pass/fail answer (a failing test fails its
+  # shard) as well as the floors. What only a single unsharded runner can
+  # produce is the SUITE WALL-CLOCK number: #905 showed the per-file span sum
+  # inflates under sharding (3,824 s sharded against 2,370 s serial for the
+  # same files), so the tighten-only ceiling in tests/budgets.json#suiteWallClock
+  # is scored here, on every push to main, where a test flood blocks the
+  # promotion minutes after the merge rather than the merge itself.
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+          cargo-cache: verify
+      - run: bun run build:ci:floored
+      - run: bun run test:suite
+      # #842 W0.3 — no file may report zero collected tests; the merge gate
+      # scores the same tripwire on the merged shard report.
+      - name: No test file failed to collect
+        run: bun run test:collection-tripwire -- --require-report
+      # #656 Layer 5 / #842 W0.1 — the tighten-only ceiling on the suite's summed
+      # per-file spans. The existence check is load-bearing: the script exits 0
+      # with "not measured" when the artifact is absent, which is right on a
+      # laptop and wrong in the lane that enforces it.
+      - name: Suite wall-clock ceiling
+        run: |
+          set -euo pipefail
+          if [ ! -f artifacts/test-results/vitest.json ]; then
+            echo "::error title=Suite wall-clock unmeasured::artifacts/test-results/vitest.json is missing after test:suite; the wall-clock ceiling cannot be enforced, so this lane fails rather than passing silently."
+            exit 1
+          fi
+          bun run test:suite-wall-clock
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: candidate-suite-report
+          path: artifacts/test-results/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: >
+          node scripts/test-report/write-evidence.mjs --lane suite --rung 3 --platform any --verdict auto --job-status ${{ job.status }} --started-at "$LANE_STARTED_AT" --budget-ms 2700000 --candidate ${{ github.sha }} --qualities correctness,contracts,durability,concurrency --surfaces vault-core,gateway,replica-sync
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: candidate-evidence-suite
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
   # #557 — SAST over the TS/Rust product code AND the workflow YAML itself (the
   # `actions` language finds injection and unpinned-ref classes actionlint does
   # not model). It ran on a weekly cron in `security.yml`; #915 moved it here so
@@ -685,6 +749,7 @@ jobs:
         desktop-e2e-macos,
         lane-gateway-package,
         mutation-full,
+        suite,
         codeql,
         rust-supply-chain,
       ]

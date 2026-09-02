@@ -523,7 +523,7 @@ Deterministic automation fires need no mock: their handlers run in-process again
 | `bun run test:fuzz:replay` | replay every committed crasher and the whole seed corpus (`scripts/fuzz/vitest.config.ts`); needs `bun run build` first |
 | `bun run test:join` | the protocol join lane with a JSON report at `artifacts/join/summary.json`; raise `CENTRAID_JOIN_SEATS` to widen it |
 | `bun run test:perf:pr` | Per-PR: gateway low-end budget gate (also verify CI step) |
-| `bun run test:suite` | the uninstrumented per-PR suite — the pass/fail answer (`ci.yml` **verify** job) |
+| `bun run test:suite` | the uninstrumented serial suite, plus the suite wall-clock ceiling it alone can measure (`candidate.yml` **suite** job, rung 3 — moved off `verify` by the rung-2 ceiling, #915); on the merge gate the sharded `coverage` pair is the pass/fail answer |
 | `bun run coverage` | unified suite + v8 report + floor enforcement, one runner (nightly, and local) |
 | `bun run coverage:shard` | one quarter of the suite under `vitest.shard.config.ts`, blob report only (`ci.yml` **coverage-shard** matrix) |
 | `bun run coverage:merge` | refuses a partial blob set, then merges and enforces every floor (`ci.yml` **coverage** job) |

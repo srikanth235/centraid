@@ -550,7 +550,23 @@ Every ruling below is also written where the next reader will look — mostly
 now standing in `tests/quality/classification-ratchet.json`, and this receipt is
 what approves it:
 
-#915 re-pins the governed classification payload after the Quality Ladder replaced tests/matrix.json with tests/claims.json. The 45-gate user-facing qualities panel retired into 45 claim ROWS: each keeps its id, owner, evidence selector, lane, knob and governance regime unchanged, and gains a declared severity (S1-S4, previously computed from the cell assessment) plus its demonstratedRed date and seed folded in from the matrix top-level block. No gate id was removed, no owner moved, and no date was bumped. The fingerprint is therefore renamed matrixGovernanceFingerprint -> claimsGovernanceFingerprint over the same content in a new shape, and the per-file fingerprint follows the file rename. Re-pinned once more on this branch after #903's spent replacesMinimumTestsFlow marker — and its paired approvedMinimumTestsDeviation, which waived by presence alone — were dropped from the mobile-sharing-reach flow: the rename that marker authorized has landed on main, so the predecessor it names no longer exists and test:ratchet failed on every PR opened against main. No claim row, owner, severity or demonstrated-red date moved.
+#915 re-pins the governed classification payload after the Quality Ladder replaced tests/matrix.json with tests/claims.json. The 45-gate user-facing qualities panel retired into 45 claim ROWS: each keeps its id, owner, evidence selector, lane, knob and governance regime unchanged, and gains a declared severity (S1-S4, previously computed from the cell assessment) plus its demonstratedRed date and seed folded in from the matrix top-level block. No gate id was removed, no owner moved, and no date was bumped. The fingerprint is therefore renamed matrixGovernanceFingerprint -> claimsGovernanceFingerprint over the same content in a new shape, and the per-file fingerprint follows the file rename. Re-pinned once more on this branch after #903's spent replacesMinimumTestsFlow marker — and its paired approvedMinimumTestsDeviation, which waived by presence alone — were dropped from the mobile-sharing-reach flow: the rename that marker authorized has landed on main, so the predecessor it names no longer exists and test:ratchet failed on every PR opened against main. No claim row, owner, severity or demonstrated-red date moved. Re-pinned again when the `suite` lane (rung 3, the serial suite and its wall-clock ceiling moved off `verify` by the rung-2 ceiling) was registered in the lane list; no claim row moved.
+
+49. **The serial suite is a promotion lane, not a merge lane.** The first time
+   the rung-2 wall-clock gate actually ran (see Verification) it read 24.2 min
+   against 15, and `verify`'s `bun run test:suite` was ~19 of them — a serial,
+   uninstrumented re-run of the same Vitest projects the four `coverage-shard`
+   legs already run in ~7 min each. On the merge gate the shards are the
+   pass/fail answer (a failing test fails its shard; shard 2 proved it twice
+   this session) as well as the floors, so `test:suite` left `verify` and became
+   `candidate.yml`'s `suite` lane, gating `promote` on every push to main. Two
+   things went with it because only a single unsharded runner can produce them
+   honestly: the suite wall-clock ceiling (#905: 3,824 s sharded against
+   2,370 s serial for the same files) and a second copy of the collection
+   tripwire (the merge gate keeps its own on the merged report). The ceiling's
+   number in `tests/budgets.json#suiteWallClock` is untouched; what moves is
+   when a test flood bites — at promotion, attributed to one commit, rather
+   than before the merge. Recorded as **G-suite-rung3** in `docs/decisions.md`.
 
 ## Verification
 
@@ -816,6 +832,21 @@ precisely the "a gate that never looked" failure this issue is about, shipped
 inside the fix for it. `.github/workflows/ci.yml` now checks out between the
 two steps. A sweep of every workflow job for the same shape — a `run:` that
 invokes a repo script from a job with no checkout — finds no second instance.
+
+**The rung-2 ceiling, measured for the first time, and what it moved.** With the
+checkout in place the wall-clock step ran and reported `24.2 min of the 15.0 min
+budget across 19 lane(s) — OVER. Longest single lane: verify at 24.2 min.` That
+is the gate doing the job it was written for, against this change's own merge
+diet. Per Decision 49, `bun run test:suite`, its collection tripwire and the
+suite wall-clock ceiling moved from `.github/workflows/ci.yml` (`verify`) to a
+new `suite` lane in `.github/workflows/candidate.yml`, registered in
+`tests/claims.json` (48 lanes) and named in `TESTING.md`, `docs/decisions.md`
+and the `tests/budgets.json#suiteWallClock` comment. Expected rung-2 span after
+the move: the longest remaining lane is `mobile-device-gate` at ~12 min, so
+≈ 12–13 min against 15 — the board's first real reading of that number is the
+next run of `check`.
+
+## Audit
 
 ## Audit
 
