@@ -60,7 +60,7 @@ jobs:
       # picked up straight from the checkout. Passing the flag explicitly only
       # creates a way to be wrong when a default changes.
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           languages: ${{ matrix.language }}
           # security-extended adds the lower-precision-but-real queries; the
@@ -68,7 +68,7 @@ jobs:
           queries: security-extended
 
       - name: Analyze
-        uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           category: /language:${{ matrix.language }}
 
@@ -96,7 +96,7 @@ jobs:
       # "'toolchain' is a required input" before installing anything. The other
       # four call sites in this repo already pass it — these two did not, so
       # this job has been failing on `main` since the pin landed.
-      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # stable
         with:
           toolchain: stable
       - run: cargo install cargo-audit --locked
