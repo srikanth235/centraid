@@ -349,7 +349,6 @@ describe("B6 Tally Commons across a real peer", () => {
       }).decision.accepted
     ).toBe(true);
     copyFileSync(backup.vaultPath, path.join(backupDir, "vault.db"));
-    copyFileSync(backup.journalPath, path.join(backupDir, "journal.db"));
     remote.vault = openVaultDb({ dir: backupDir, sealKey, identitySeed });
     remote.gateway = createGateway(remote.vault);
     registerTallyCommands(remote.gateway);

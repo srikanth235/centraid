@@ -30,7 +30,6 @@ import {
   VAULT_MIGRATIONS,
 } from "@centraid/vault";
 
-import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 /**
@@ -130,11 +129,9 @@ describe("restore-10gib.scale", () => {
           const seeded = openVaultDb({ dir: target, sealKey: YEAR3_SEAL_KEY });
           try {
             bootstrapVault(seeded, { ownerName: "Restore owner" });
-            ensureConversationLedger(seeded.journal);
             seedYear3Vault(
               {
                 vault: seeded.vault,
-                journal: seeded.journal,
                 sealCell: (entity, column, rowId, plaintext) =>
                   sealValue(
                     seeded.sealKey,
@@ -191,12 +188,9 @@ describe("restore-10gib.scale", () => {
       }
 
       db.vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-      db.journal.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 
       const vaultPath = path.join(sourceDir, "vault.db");
-      const journalPath = path.join(sourceDir, "journal.db");
       const vaultBytes = await readFile(vaultPath);
-      const journalBytes = await readFile(journalPath);
       const sourceVaultHash = createHash("sha256")
         .update(vaultBytes)
         .digest("hex");
@@ -209,14 +203,6 @@ describe("restore-10gib.scale", () => {
           absolutePath: vaultPath,
           sha256: sourceVaultHash,
           walGeneration: "33".repeat(16),
-          baseTickMs,
-        },
-        {
-          path: "journal.db",
-          kind: "db",
-          absolutePath: journalPath,
-          sha256: createHash("sha256").update(journalBytes).digest("hex"),
-          walGeneration: "44".repeat(16),
           baseTickMs,
         },
         ...blobShas.map((sha) => ({

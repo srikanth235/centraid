@@ -15,7 +15,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { isBlobUri } from "../blob/store.js";
-import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import type { ShareableItemType } from "./closure.js";
 
 interface ForeignKeyRow {
@@ -92,8 +91,7 @@ const ABSENT: RemovalResult = {
 export function deleteProjectedClosure(
   audience: DatabaseSync,
   itemType: ShareableItemType,
-  itemId: string,
-  now = new Date().toISOString()
+  itemId: string
 ): RemovalResult {
   if (itemType === "locker.item") {
     const removed = audience
@@ -102,13 +100,13 @@ export function deleteProjectedClosure(
     return removed > 0 ? { ...ABSENT, removed: true } : ABSENT;
   }
   if (itemType === "tally.group") {
-    return deleteTallyGroup(audience, itemId, now);
+    return deleteTallyGroup(audience, itemId);
   }
   if (itemType === "core.collection") {
-    return deleteCollection(audience, itemId, now);
+    return deleteCollection(audience, itemId);
   }
   if (itemType === "docs.folder") {
-    return deleteDocsFolder(audience, itemId, now);
+    return deleteDocsFolder(audience, itemId);
   }
   let contentId: string;
   if (itemType === "core.content_item") {
@@ -148,18 +146,13 @@ export function deleteProjectedClosure(
   // core.content_item is also the shared underlying row, so defer that state
   // until the live FK scan proves no receiver-owned wrapper still needs it.
   if (itemType !== "core.content_item")
-    scrubProjectedTarget(audience, itemType, itemId, now);
+    scrubProjectedTarget(audience, itemType, itemId);
   if (itemType === "media.asset") {
     const regions = audience
       .prepare("SELECT region_id FROM media_face_region WHERE asset_id = ?")
       .all(itemId) as Array<{ region_id: string }>;
     for (const region of regions)
-      scrubProjectedTarget(
-        audience,
-        "media.face_region",
-        region.region_id,
-        now
-      );
+      scrubProjectedTarget(audience, "media.face_region", region.region_id);
     // Face rows do not cascade from the asset. Their own clusters do, so
     // remove the regions before deleting the projected asset.
     audience
@@ -180,7 +173,7 @@ export function deleteProjectedClosure(
   }
   const contentItemRemoved = !isReferenced(audience, contentId);
   if (contentItemRemoved) {
-    scrubProjectedTarget(audience, "core.content_item", contentId, now);
+    scrubProjectedTarget(audience, "core.content_item", contentId);
     audience
       .prepare("DELETE FROM core_content_derivative WHERE content_id = ?")
       .run(contentId);
@@ -193,15 +186,13 @@ export function deleteProjectedClosure(
 
 /** Unshare is a privacy erasure, not the ordinary lifecycle purge: every local
  * enrichment request for a departing projection goes away, drained history
- * included. The explicit delete tightens `cleanupPolyRefs`'s "open only"
- * rule. */
+ * included — which is why it is explicit rather than left to the composite
+ * foreign key's cascade, whose `target_id` may only be nulled. */
 function scrubProjectedTarget(
   audience: DatabaseSync,
   targetType: string,
-  targetId: string,
-  now: string
+  targetId: string
 ): void {
-  cleanupPolyRefs(audience, now, targetType, targetId);
   audience
     .prepare(
       "DELETE FROM enrich_request WHERE target_type = ? AND target_id = ?"
@@ -211,8 +202,7 @@ function scrubProjectedTarget(
 
 function deleteDocsFolder(
   audience: DatabaseSync,
-  itemId: string,
-  now: string
+  itemId: string
 ): RemovalResult {
   const folders = audience
     .prepare(
@@ -247,8 +237,7 @@ function deleteDocsFolder(
     const result = deleteProjectedClosure(
       audience,
       "core.document",
-      document.target_id,
-      now
+      document.target_id
     );
     contentItemRemoved ||= result.contentItemRemoved;
     for (const sha of result.shas) shas.add(sha);
@@ -257,8 +246,8 @@ function deleteDocsFolder(
     "DELETE FROM core_concept WHERE concept_id = ?"
   );
   for (const folder of folders) {
-    scrubProjectedTarget(audience, "docs.folder", folder.concept_id, now);
-    scrubProjectedTarget(audience, "core.concept", folder.concept_id, now);
+    scrubProjectedTarget(audience, "docs.folder", folder.concept_id);
+    scrubProjectedTarget(audience, "core.concept", folder.concept_id);
     remove.run(folder.concept_id);
   }
   return {
@@ -270,8 +259,7 @@ function deleteDocsFolder(
 
 function deleteCollection(
   audience: DatabaseSync,
-  itemId: string,
-  now: string
+  itemId: string
 ): RemovalResult {
   const held = audience
     .prepare("SELECT 1 FROM core_collection WHERE collection_id = ?")
@@ -285,7 +273,7 @@ function deleteCollection(
   audience
     .prepare("DELETE FROM core_collection_entry WHERE collection_id = ?")
     .run(itemId);
-  scrubProjectedTarget(audience, "core.collection", itemId, now);
+  scrubProjectedTarget(audience, "core.collection", itemId);
   audience
     .prepare("DELETE FROM core_collection WHERE collection_id = ?")
     .run(itemId);
@@ -301,8 +289,7 @@ function deleteCollection(
     const result = deleteProjectedClosure(
       audience,
       entry.target_type,
-      entry.target_id,
-      now
+      entry.target_id
     );
     removedContent ||= result.contentItemRemoved;
     for (const sha of result.shas) shas.add(sha);
@@ -316,8 +303,7 @@ function deleteCollection(
 
 function deleteTallyGroup(
   audience: DatabaseSync,
-  itemId: string,
-  now: string
+  itemId: string
 ): RemovalResult {
   const group = audience
     .prepare("SELECT circle_id FROM tally_group WHERE group_id = ?")
@@ -332,8 +318,7 @@ function deleteTallyGroup(
     scrubProjectedTarget(
       audience,
       "tally.recurring_expense",
-      template.template_id,
-      now
+      template.template_id
     );
     audience
       .prepare(
@@ -349,15 +334,14 @@ function deleteTallyGroup(
     scrubProjectedTarget(
       audience,
       "tally.settlement",
-      settlement.settlement_id,
-      now
+      settlement.settlement_id
     );
   const expenses = audience
     .prepare("SELECT expense_id FROM tally_expense WHERE group_id = ?")
     .all(itemId) as Array<{ expense_id: string }>;
   for (const expense of expenses)
-    scrubProjectedTarget(audience, "tally.expense", expense.expense_id, now);
-  scrubProjectedTarget(audience, "tally.group", itemId, now);
+    scrubProjectedTarget(audience, "tally.expense", expense.expense_id);
+  scrubProjectedTarget(audience, "tally.group", itemId);
   audience
     .prepare("DELETE FROM tally_recurring_expense WHERE group_id = ?")
     .run(itemId);

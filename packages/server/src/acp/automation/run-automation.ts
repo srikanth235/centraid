@@ -28,7 +28,7 @@ export interface RunAutomationOptions {
   runId?: string;
   appsDir: string;
   /** The one per-vault run ledger (#280). */
-  journalDbFile: string;
+  ledgerDbFile: string;
   /** Required: a fire must not construct an unmetered door. */
   runTurn: RunTurnFn;
   codeAppsDir?: string;
@@ -150,7 +150,7 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         workdir: args.workdir,
         runId: args.runId,
         automationRef: args.automationRef,
-        journalDbFile: opts.journalDbFile,
+        ledgerDbFile: opts.ledgerDbFile,
         runTurn: opts.runTurn,
         harness: isHarnessKind(args.harnessKind) ? args.harnessKind : harness,
         // Provider-specific owner pins are cleared after the first rung.
@@ -187,7 +187,7 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         automationRef: opts.automationRef,
         runId,
         appsDir: opts.appsDir,
-        journalDbFile: opts.journalDbFile,
+        ledgerDbFile: opts.ledgerDbFile,
         ...(opts.codeAppsDir ? { codeAppsDir: opts.codeAppsDir } : {}),
         ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
         ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),

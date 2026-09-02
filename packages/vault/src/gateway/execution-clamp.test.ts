@@ -11,7 +11,7 @@ import { bootstrapVault, createGrant, enrollAgent } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
-import { evaluateConsent } from "./consent.js";
+import { evaluateAccess } from "./access.js";
 import { GatewayError } from "./types.js";
 import type { ExecutionScopeSpec, Identity } from "./types.js";
 
@@ -55,7 +55,7 @@ describe("execution-clamp", () => {
   }
 
   const readTask = (identity: Identity) =>
-    evaluateConsent(db.vault, identity, "core", "core_task", "read", PURPOSE);
+    evaluateAccess(db.vault, identity, "core", "core_task", "read", PURPOSE);
 
   test("no clamp leaves the durable grant exactly as the owner wrote it", () => {
     grant([{ schema: "core", verbs: "read", fieldMask: ["task_id", "title"] }]);
@@ -239,7 +239,7 @@ describe("execution-clamp", () => {
     ]);
     expect(readTask(identity)).toMatchObject({ decision: "allow" });
     expect(
-      evaluateConsent(db.vault, identity, "core", "core_task", "act", PURPOSE)
+      evaluateAccess(db.vault, identity, "core", "core_task", "act", PURPOSE)
     ).toMatchObject({
       decision: "deny",
     });

@@ -281,6 +281,12 @@ export interface HandlerReceipt {
 export interface HandlerCtx {
   db: DatabaseSync;
   identity: Identity;
+  /**
+   * The invocation this handler is running under (#916, review 5.2). A
+   * snapshot, a receipt and a replica change that cannot be joined to the
+   * command that caused them are three unrelated facts.
+   */
+  invocationId: string;
   input: Record<string, unknown>;
   /** Handlers making further consent checks must reuse THIS purpose. */
   purpose: string;
@@ -290,9 +296,10 @@ export interface HandlerCtx {
   cite: (citation: Citation) => void;
   /**
    * ONE receipt of this handler's own, beside the invocation's (#883). Queued
-   * like `cite`, never written here: journal.db is outside the vault
-   * transaction, so a receipt written in-handler would survive a rolled-back
-   * write and claim an authority the vault never granted.
+   * like `cite`, never written here: the audit band stamps the receipt chain
+   * (seq, prev-hash) after the handler returns, so writing one in-handler
+   * would break chain order. Since ONE FILE (#916) the receipt commits in the
+   * same transaction as the write, so a rolled-back write takes it with it.
    */
   receipt: (receipt: HandlerReceipt) => void;
   /**
@@ -303,7 +310,13 @@ export interface HandlerCtx {
   unseal: (
     entityType: string,
     entityId: string,
-    column: string
+    column: string,
+    /**
+     * A ciphertext to unseal instead of the row's current value — a
+     * pre-mutation SNAPSHOT of the same row (#916, D2). The additional data is
+     * the row's, so only a value that really came from this cell decrypts.
+     */
+    ciphertext?: string
   ) => string | null;
   blobs: HandlerBlobs;
 }
@@ -344,6 +357,15 @@ export interface CommandDefinition {
    * caller still receives the real value.
    */
   transcriptSensitive?: boolean;
+  /**
+   * THIS COMMAND ERASES (#916). A pre-mutation snapshot is the vault's memory
+   * of what a row said before; for a command whose whole purpose is that the
+   * row is FORGOTTEN — `media.forget_person`, a purge — a snapshot is a copy
+   * of exactly what the member asked to be destroyed, sitting where a later
+   * export would carry it out. The pipeline discards the capture instead of
+   * recording it.
+   */
+  erasure?: boolean;
 }
 
 export interface RevealRequest {
@@ -369,7 +391,7 @@ export interface RevealResult {
 
 export class GatewayError extends Error {
   constructor(
-    readonly stage: "identity" | "consent" | "contract" | "execution",
+    readonly stage: "identity" | "access" | "contract" | "execution",
     message: string
   ) {
     super(message);

@@ -6,6 +6,7 @@ import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import type { VaultDb } from "../db.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { Credential, InvokeOutcome } from "../gateway/types.js";
+import { fulfillmentAnswerFor } from "../grant/subject-registry.js";
 import { uuidv7 } from "../ids.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import { vaultIdentityPublicKey } from "../schema/vault-identity.js";
@@ -16,7 +17,11 @@ import type {
   WireClosure,
   ProjectedItem,
 } from "./closure.js";
-import { isShareableItemType } from "./closure.js";
+import {
+  isShareableItemType,
+  shareableItemTypeOfEntity,
+  shareOriginEntityType,
+} from "./closure.js";
 import type { CommonsOpChainFields } from "./commons-chain.js";
 import {
   attestCommonsCheckpointState,
@@ -46,6 +51,7 @@ import type { ShareVaultRef } from "./placement.js";
 import { unshareFromVault } from "./placement.js";
 import { projectShareClosure } from "./project-closure.js";
 import { readShareClosure } from "./read-closure.js";
+import { isSelfBinding } from "./self-binding.js";
 
 export type CommonsCapability = "read" | "read+write";
 export type CommonsDeparturePolicy =
@@ -115,8 +121,8 @@ export function ensureCommonsParty(
   db.prepare(
     `INSERT INTO core_party
        (party_id, kind, display_name, sort_name, birth_date,
-        avatar_content_id, created_at, updated_at, ontology_version)
-     VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?, '1.4')`
+        avatar_content_id, created_at, updated_at)
+     VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?)`
   ).run(member.partyId, displayName, displayName, now, now);
 }
 
@@ -219,7 +225,7 @@ export function createCommonsGrant(
       input.origin
         .prepare(
           `SELECT 1 AS n FROM core_share_origin
-            WHERE item_type = 'social.circle' AND item_id = ?
+            WHERE target_type = 'social.circle' AND target_id = ?
               AND shared_by LIKE 'commons:%'`
         )
         .get(circleId)
@@ -276,7 +282,12 @@ export function createCommonsGrant(
             input.now,
             member.capability
           );
-      if (member.vaultId) {
+      // A member's OWN vault is not a peer binding (#916, R9): the roster
+      // mirror leaves the member's own row out rather than failing.
+      if (
+        member.vaultId &&
+        !isSelfBinding(input.origin, member.partyId, member.vaultId)
+      ) {
         const publicKey =
           member.vaultPublicKey ??
           (member.vault?.identitySeed
@@ -319,6 +330,37 @@ export function createCommonsGrant(
         commonsGenesisHash(grantId),
         input.maxSizeBytes ?? null
       );
+    // THE ANSWER THE PLACEMENT RUNS UNDER (#916). A commons grant IS the
+    // member saying yes to sharing this container with these people, so it
+    // writes the `share_authority` row that says so — the same row every
+    // resolver and every placement gate reads. Without it the projection would
+    // be a placement nothing in the vault had agreed to.
+    const authority = input.origin.prepare(
+      `INSERT INTO share_authority
+         (authority_id, principal_kind, principal_id, subject_type, subject_id,
+          verb, duration, expires_at, decision, granted_at, granted_by)
+       VALUES (?, 'person', ?, ?, ?, ?, 'standing', NULL, 'granted', ?, ?)
+       ON CONFLICT DO NOTHING`
+    );
+    // `edit` ONLY where the subject registry declares an edit strategy (#825,
+    // ruling G-edit): a `read+write` member of a commons over `docs.folder`
+    // gets a `view` authority, because minting `edit` would publish a
+    // capability the write door refuses. The member's write capability still
+    // lives in `social_circle_member.capability` and travels the intent rail.
+    const editable =
+      fulfillmentAnswerFor(input.containerType, "edit") === "commons-routing";
+    for (const member of members.values()) {
+      if (member.partyId === input.ownerPartyId) continue;
+      authority.run(
+        uuidv7(),
+        member.partyId,
+        input.containerType,
+        input.containerId,
+        editable && member.capability === "read+write" ? "edit" : "view",
+        input.now,
+        input.ownerPartyId
+      );
+    }
     const memberState = input.origin.prepare(
       `INSERT INTO share_commons_member_state
          (grant_id, party_id, status, accepted_at)
@@ -615,15 +657,15 @@ function projectRoster(
     if (!party) continue;
     audience
       .prepare(
+        // No `ontology_version` (#916, ruling ONT-04) — see commons-bootstrap.
         `INSERT INTO core_party
            (party_id, kind, display_name, sort_name, birth_date,
-            avatar_content_id, created_at, updated_at, ontology_version)
-         VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)
+            avatar_content_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
          ON CONFLICT(party_id) DO UPDATE SET
            kind = excluded.kind, display_name = excluded.display_name,
            sort_name = excluded.sort_name, birth_date = excluded.birth_date,
-           updated_at = excluded.updated_at,
-           ontology_version = excluded.ontology_version`
+           updated_at = excluded.updated_at`
       )
       .run(
         sqlValue(party["party_id"]),
@@ -632,8 +674,7 @@ function projectRoster(
         sqlValue(party["sort_name"]),
         sqlValue(party["birth_date"]),
         sqlValue(party["created_at"]),
-        sqlValue(party["updated_at"]),
-        sqlValue(party["ontology_version"])
+        sqlValue(party["updated_at"])
       );
   }
   audience
@@ -656,10 +697,10 @@ function projectRoster(
   audience
     .prepare(
       `INSERT INTO core_share_origin
-         (item_type, item_id, origin_vault_id, origin_item_id,
+         (target_type, target_id, origin_vault_id, origin_item_id,
           shared_by, shared_at)
        VALUES ('social.circle', ?, ?, ?, ?, ?)
-       ON CONFLICT(item_type, item_id) DO UPDATE SET
+       ON CONFLICT(target_type, target_id) DO UPDATE SET
          origin_vault_id = excluded.origin_vault_id,
          origin_item_id = excluded.origin_item_id,
          shared_by = excluded.shared_by,
@@ -771,7 +812,17 @@ function projectRoster(
        (binding_id, party_id, vault_id, vault_public_key, linked_at, revoked_at)
      VALUES (?, ?, ?, ?, ?, ?)`
   );
-  for (const binding of bindings)
+  for (const binding of bindings) {
+    // The audience's OWN row in the roster is not a peer binding here (#916,
+    // R9): every vault is a peer of the others and of none of itself.
+    if (
+      isSelfBinding(
+        audience,
+        String(binding["party_id"]),
+        String(binding["vault_id"])
+      )
+    )
+      continue;
     insertBinding.run(
       sqlValue(binding["binding_id"]),
       sqlValue(binding["party_id"]),
@@ -780,6 +831,28 @@ function projectRoster(
       sqlValue(binding["linked_at"]),
       sqlValue(binding["revoked_at"])
     );
+  }
+  // THE SOURCE'S OWN IDENTITY (#916, R9). A vault holds no self-binding — a
+  // member is not their own peer — so the steward's row is absent from the
+  // rows copied above, and without it an audience cannot resolve the steward
+  // to a vault at all (its seat reads as "invited", and its chain has no key
+  // to verify against). It is stated here instead, from the source vault's own
+  // `core_vault`, and never overwrites a public key the audience already has.
+  const sourceSelf = source
+    .prepare("SELECT vault_id, self_party_id FROM core_vault LIMIT 1")
+    .get() as { vault_id: string; self_party_id: string | null } | undefined;
+  if (
+    sourceSelf?.self_party_id &&
+    !isSelfBinding(audience, sourceSelf.self_party_id, sourceSelf.vault_id)
+  )
+    audience
+      .prepare(
+        `INSERT INTO share_party_vault_binding
+           (binding_id, party_id, vault_id, vault_public_key, linked_at, revoked_at)
+         VALUES (?, ?, ?, NULL, ?, NULL)
+         ON CONFLICT(party_id, vault_id) DO UPDATE SET revoked_at = NULL`
+      )
+      .run(uuidv7(), sourceSelf.self_party_id, sourceSelf.vault_id, now);
   audience
     .prepare("DELETE FROM share_commons_receipt WHERE grant_id = ?")
     .run(grant.grantId);
@@ -883,6 +956,30 @@ function projectRoster(
 
 /** Invites without a vault are represented but receive no rows; joining later
  *  is snapshot-at-current-sequence plus tail. */
+/** Re-insert the control state a re-projection's grant delete cascaded away. */
+function restoreCarriedControlState(
+  seatDb: DatabaseSync,
+  carried: {
+    intents: Record<string, SQLInputValue>[];
+    cursors: Record<string, SQLInputValue>[];
+  }
+): void {
+  const reinsert = (table: string, rows: Record<string, SQLInputValue>[]) => {
+    for (const row of rows) {
+      const columns = Object.keys(row);
+      seatDb
+        .prepare(
+          `INSERT OR IGNORE INTO "${table}" (${columns
+            .map((column) => `"${column}"`)
+            .join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`
+        )
+        .run(...columns.map((column) => row[column] as SQLInputValue));
+    }
+  };
+  reinsert("share_commons_intent", carried.intents);
+  reinsert("share_commons_cursor", carried.cursors);
+}
+
 export function compileCommons(
   input: CompileCommonsInput
 ): CompiledCommonsSeat[] {
@@ -922,13 +1019,13 @@ export function compileCommons(
       seat.vault.vault
         .prepare(
           `INSERT INTO share_commons_lineage
-             (grant_id, item_type, item_id, origin_item_id)
+             (grant_id, target_type, target_id, origin_item_id)
            VALUES (?, ?, ?, ?)
-           ON CONFLICT(grant_id, item_type, item_id) DO NOTHING`
+           ON CONFLICT(grant_id, target_type, target_id) DO NOTHING`
         )
         .run(
           grant.grantId,
-          grant.containerType,
+          shareOriginEntityType(grant.containerType),
           grant.containerId,
           grant.containerId
         );
@@ -946,10 +1043,10 @@ export function compileCommons(
         seat.vault.vault
           .prepare(
             `INSERT INTO core_share_origin
-               (item_type, item_id, origin_vault_id, origin_item_id,
+               (target_type, target_id, origin_vault_id, origin_item_id,
                 shared_by, shared_at)
              VALUES (?, ?, ?, ?, ?, ?)
-             ON CONFLICT(item_type, item_id) DO UPDATE SET
+             ON CONFLICT(target_type, target_id) DO UPDATE SET
                origin_vault_id = excluded.origin_vault_id,
                origin_item_id = excluded.origin_item_id,
                shared_by = excluded.shared_by,
@@ -985,9 +1082,13 @@ export function compileCommons(
     const retained = seat.vault.vault
       .prepare(
         `SELECT 1 AS n FROM share_commons_retained
-          WHERE grant_id = ? AND item_type = ? AND item_id = ?`
+          WHERE grant_id = ? AND target_type = ? AND target_id = ?`
       )
-      .get(grant.grantId, grant.containerType, grant.containerId);
+      .get(
+        grant.grantId,
+        shareOriginEntityType(grant.containerType),
+        grant.containerId
+      );
     if (retained) {
       // Retained roots are receiver-authored: refresh control truth, but never
       // re-project or re-lineage them on later steward writes.
@@ -1118,13 +1219,29 @@ export function compileCommons(
     const nested = seatDb.isTransaction;
     seatDb.exec(nested ? "SAVEPOINT compile_commons_seat" : "BEGIN IMMEDIATE");
     let projection: ReturnType<typeof projectShareClosure>;
+    let carried: {
+      intents: Record<string, SQLInputValue>[];
+      cursors: Record<string, SQLInputValue>[];
+    } = { intents: [], cursors: [] };
     try {
       if (hasProjection) {
-        // The projected grant references the projected circle: drop that local
-        // roster snapshot first; `projectRoster` reinstates it.
-        seatDb
-          .prepare("DELETE FROM share_circle_grant WHERE grant_id = ?")
-          .run(grant.grantId);
+        //
+        // CONTROL STATE OUTLIVES THE ROW IT HANGS OFF (#916). A member's
+        // queued intents and its cursor are `ON DELETE CASCADE` from the grant
+        // row, so dropping and re-creating the grant — an implementation
+        // detail of re-projection — silently threw away requests the member
+        // had waiting for the steward to answer. They are carried across,
+        // which is what `preserveControlState` has always meant.
+        const heldIntents = seatDb
+          .prepare("SELECT * FROM share_commons_intent WHERE grant_id = ?")
+          .all(grant.grantId) as Record<string, SQLInputValue>[];
+        const heldCursors = seatDb
+          .prepare("SELECT * FROM share_commons_cursor WHERE grant_id = ?")
+          .all(grant.grantId) as Record<string, SQLInputValue>[];
+        carried = { intents: heldIntents, cursors: heldCursors };
+        // `removeCommonsFromSeat` drops the grant row itself, AFTER reading
+        // the lineage that hangs off it — deleting it here first cascaded the
+        // lineage away and left the scrub with nothing to remove (#916).
         removeCommonsFromSeat({
           seat: seat.vault,
           grantId: grant.grantId,
@@ -1140,16 +1257,17 @@ export function compileCommons(
             : undefined,
       });
       projectRoster(seatDb, input.steward.vault, grant, input.now);
+      restoreCarriedControlState(seatDb, carried);
       const lineage = seatDb.prepare(
         `INSERT INTO share_commons_lineage
-           (grant_id, item_type, item_id, origin_item_id)
+           (grant_id, target_type, target_id, origin_item_id)
          VALUES (?, ?, ?, ?)
-         ON CONFLICT(grant_id, item_type, item_id) DO NOTHING`
+         ON CONFLICT(grant_id, target_type, target_id) DO NOTHING`
       );
       for (const item of projection.items)
         lineage.run(
           grant.grantId,
-          item.itemType,
+          shareOriginEntityType(item.itemType),
           item.itemId,
           item.originItemId
         );
@@ -1898,9 +2016,9 @@ export function executeCommonsCommand(
   // Post-transfer intents to the old steward would append to its orphaned log;
   // refuse without appending.
   const localOwner = input.steward.vault
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string | null } | undefined;
-  if (localOwner?.owner_party_id !== grant.stewardPartyId)
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string | null } | undefined;
+  if (localOwner?.self_party_id !== grant.stewardPartyId)
     return {
       decision: {
         accepted: false,
@@ -2202,17 +2320,21 @@ export function retainCommonsItem(input: {
     .prepare(
       `SELECT l.grant_id FROM share_commons_lineage l
        JOIN share_circle_grant g ON g.grant_id = l.grant_id
-       WHERE l.item_type = ? AND l.item_id = ? AND g.revoked_at IS NULL
+       WHERE l.target_type = ? AND l.target_id = ? AND g.revoked_at IS NULL
        ORDER BY l.grant_id`
     )
-    .all(input.itemType, input.itemId) as { grant_id: string }[];
+    .all(shareOriginEntityType(input.itemType), input.itemId) as {
+    grant_id: string;
+  }[];
   if (active.length === 0) {
     const retained = input.seat
       .prepare(
         `SELECT grant_id FROM share_commons_retained
-          WHERE item_type = ? AND item_id = ? ORDER BY grant_id`
+          WHERE target_type = ? AND target_id = ? ORDER BY grant_id`
       )
-      .all(input.itemType, input.itemId) as { grant_id: string }[];
+      .all(shareOriginEntityType(input.itemType), input.itemId) as {
+      grant_id: string;
+    }[];
     if (retained.length === 0)
       throw new Error("item is not a resident Commons projection");
     return { retained: false, grantIds: retained.map((row) => row.grant_id) };
@@ -2220,9 +2342,11 @@ export function retainCommonsItem(input: {
   const provenance = input.seat
     .prepare(
       `SELECT shared_by FROM core_share_origin
-        WHERE item_type = ? AND item_id = ?`
+        WHERE target_type = ? AND target_id = ?`
     )
-    .get(input.itemType, input.itemId) as { shared_by: string } | undefined;
+    .get(shareOriginEntityType(input.itemType), input.itemId) as
+    | { shared_by: string }
+    | undefined;
   if (!provenance)
     throw new Error("item provenance does not belong to this Commons");
   const grantIds = active
@@ -2250,20 +2374,25 @@ export function retainCommonsItem(input: {
   try {
     const record = input.seat.prepare(
       `INSERT INTO share_commons_retained
-         (grant_id, item_type, item_id, retained_at)
+         (grant_id, target_type, target_id, retained_at)
        VALUES (?, ?, ?, ?)
-       ON CONFLICT(grant_id, item_type, item_id) DO NOTHING`
+       ON CONFLICT(grant_id, target_type, target_id) DO NOTHING`
     );
     for (const grantId of grantIds) {
-      record.run(grantId, input.itemType, input.itemId, input.now);
+      record.run(
+        grantId,
+        shareOriginEntityType(input.itemType),
+        input.itemId,
+        input.now
+      );
       input.seat
         .prepare(
           `DELETE FROM core_share_origin
             WHERE shared_by = ? AND EXISTS (
               SELECT 1 FROM share_commons_lineage l
                WHERE l.grant_id = ?
-                 AND l.item_type = core_share_origin.item_type
-                 AND l.item_id = core_share_origin.item_id
+                 AND l.target_type = core_share_origin.target_type
+                 AND l.target_id = core_share_origin.target_id
             )`
         )
         .run(`commons:${grantId}`, grantId);
@@ -2295,9 +2424,9 @@ export function removeCommonsFromSeat(input: {
     | undefined;
   const rows = input.seat.vault
     .prepare(
-      `SELECT item_type, item_id FROM share_commons_lineage WHERE grant_id = ?`
+      `SELECT target_type, target_id FROM share_commons_lineage WHERE grant_id = ?`
     )
-    .all(input.grantId) as { item_type: ShareableItemType; item_id: string }[];
+    .all(input.grantId) as { target_type: string; target_id: string }[];
   // Drop the control row FIRST so a Tally container may delete its circle
   // without the old grant's FK pinning it; intents/cursors/history remain.
   input.seat.vault
@@ -2315,7 +2444,7 @@ export function removeCommonsFromSeat(input: {
       input.seat.vault
         .prepare(
           `UPDATE core_share_origin SET shared_by = ?
-            WHERE item_type = 'social.circle' AND item_id = ?
+            WHERE target_type = 'social.circle' AND target_id = ?
               AND shared_by = ?`
         )
         .run(
@@ -2327,7 +2456,7 @@ export function removeCommonsFromSeat(input: {
       input.seat.vault
         .prepare(
           `DELETE FROM core_share_origin
-            WHERE item_type = 'social.circle' AND item_id = ?
+            WHERE target_type = 'social.circle' AND target_id = ?
               AND shared_by = ?`
         )
         .run(localGrant.circle_id, `commons:${input.grantId}`);
@@ -2341,10 +2470,10 @@ export function removeCommonsFromSeat(input: {
       .prepare(
         `SELECT l.grant_id FROM share_commons_lineage l
          JOIN share_circle_grant g ON g.grant_id = l.grant_id
-         WHERE l.item_type = ? AND l.item_id = ? AND g.revoked_at IS NULL
+         WHERE l.target_type = ? AND l.target_id = ? AND g.revoked_at IS NULL
          ORDER BY l.grant_id LIMIT 1`
       )
-      .get(row.item_type, row.item_id) as { grant_id: string } | undefined;
+      .get(row.target_type, row.target_id) as { grant_id: string } | undefined;
     if (remaining) {
       // Physical rows are deduped across grants: revoking removes only an
       // authorization edge — move its provenance slot to a still-authorizing
@@ -2352,23 +2481,25 @@ export function removeCommonsFromSeat(input: {
       input.seat.vault
         .prepare(
           `UPDATE core_share_origin SET shared_by = ?
-            WHERE item_type = ? AND item_id = ?`
+            WHERE target_type = ? AND target_id = ?`
         )
-        .run(`commons:${remaining.grant_id}`, row.item_type, row.item_id);
+        .run(`commons:${remaining.grant_id}`, row.target_type, row.target_id);
       continue;
     }
     const retained = input.seat.vault
       .prepare(
         `SELECT 1 AS n FROM share_commons_retained
-          WHERE item_type = ? AND item_id = ? LIMIT 1`
+          WHERE target_type = ? AND target_id = ? LIMIT 1`
       )
-      .get(row.item_type, row.item_id);
+      .get(row.target_type, row.target_id);
     if (retained) continue;
+    const itemType = shareableItemTypeOfEntity(row.target_type);
+    if (!itemType) continue;
     if (
       unshareFromVault({
         audience: input.seat,
-        itemType: row.item_type,
-        itemId: row.item_id,
+        itemType,
+        itemId: row.target_id,
       }).removed
     )
       removed += 1;
@@ -2463,6 +2594,39 @@ export function transferCommonsSteward(input: {
         .run(successor, current.grantId, current.lastSequence);
       if (changed.changes !== 1)
         throw new Error("commons stewardship changed concurrently");
+      // THE OUTGOING STEWARD'S ROOT BECOMES MANAGED (#916). While this vault
+      // was the steward its container was AUTHORED — no provenance row — and
+      // unshare rightly refuses to touch an authored row. After the handoff
+      // the successor owns the truth, so the root is marked as coming from
+      // them: the next compile can REPLACE it instead of deduping onto a copy
+      // that stops receiving the ledger. Stamped here rather than hoped for
+      // from a later compile that happens to run on the old steward.
+      const successorVaultId = db
+        .prepare(
+          `SELECT vault_id FROM share_party_vault_binding
+            WHERE party_id = ? AND revoked_at IS NULL
+            ORDER BY linked_at DESC LIMIT 1`
+        )
+        .get(successor) as { vault_id: string } | undefined;
+      if (successorVaultId)
+        db.prepare(
+          `INSERT INTO core_share_origin
+             (target_type, target_id, origin_vault_id, origin_item_id,
+              shared_by, shared_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(target_type, target_id) DO UPDATE SET
+             origin_vault_id = excluded.origin_vault_id,
+             origin_item_id = excluded.origin_item_id,
+             shared_by = excluded.shared_by,
+             shared_at = excluded.shared_at`
+        ).run(
+          shareOriginEntityType(current.containerType),
+          current.containerId,
+          successorVaultId.vault_id,
+          current.containerId,
+          `commons:${current.grantId}`,
+          Date.parse(input.now)
+        );
     },
   });
   return successor;

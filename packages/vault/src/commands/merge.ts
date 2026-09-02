@@ -8,9 +8,12 @@
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import {
-  PARTY_POINTER_REGISTRY,
-  POLY_REF_REGISTRY,
-} from "../schema/poly-refs.js";
+  citeMerge,
+  MERGEABLE,
+  MERGEABLE_ENTITIES,
+  mergeEntity,
+} from "./merge-fold.js";
+import type { MergeableEntity } from "./merge-fold.js";
 
 const MERGE_PARTY: CommandDefinition = {
   name: "core.merge_party",
@@ -46,7 +49,7 @@ const MERGE_PARTY: CommandDefinition = {
     },
     {
       name: "merged_is_not_the_owner",
-      sql: `SELECT count(*) AS n FROM core_vault WHERE owner_party_id = :merged_party_id`,
+      sql: `SELECT count(*) AS n FROM core_vault WHERE self_party_id = :merged_party_id`,
       column: "n",
       op: "eq",
       value: 0,
@@ -68,284 +71,103 @@ const MERGE_PARTY: CommandDefinition = {
   handler: mergeParty,
 };
 
-interface FkRef {
-  table: string;
-  column: string;
-  pk: string;
-}
-
-/** Every engine FK column referencing `core_party`, discovered live. */
-function partyFkColumns(ctx: HandlerCtx): FkRef[] {
-  const tables = ctx.db
-    .prepare(
-      `SELECT name FROM sqlite_master WHERE type = 'table'
-        AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%' AND name != 'core_party'`
-    )
-    .all() as { name: string }[];
-  const refs: FkRef[] = [];
-  for (const { name } of tables) {
-    const fks = ctx.db
-      .prepare(`PRAGMA foreign_key_list(${JSON.stringify(name)})`)
-      .all() as {
-      table: string;
-      from: string;
-      to: string | null;
-    }[];
-    for (const fk of fks) {
-      if (fk.table !== "core_party") continue;
-      const pkRow = (
-        ctx.db.prepare(`PRAGMA table_info(${JSON.stringify(name)})`).all() as {
-          name: string;
-          pk: number;
-        }[]
-      ).find((c) => c.pk === 1);
-      refs.push({ table: name, column: fk.from, pk: pkRow?.name ?? "rowid" });
-    }
-  }
-  return refs;
-}
-
-function laterIso(left: string | null, right: string | null): string | null {
-  if (!left) return right;
-  if (!right) return left;
-  return left >= right ? left : right;
-}
-
-/**
- * `people_profile.party_id` is UNIQUE, so the generic re-point would delete the
- * duplicate's cadence, last-contacted and colour: fold them first (#864).
- */
-function foldPeopleProfile(
-  ctx: HandlerCtx,
-  survivor: string,
-  merged: string
-): void {
-  type Profile = {
-    cadence_days: number;
-    last_contacted_at: string | null;
-    avatar_color: string | null;
-    role: string | null;
-    met: string | null;
-  };
-  const load = (partyId: string): Profile | undefined =>
-    ctx.db
-      .prepare(
-        `SELECT cadence_days, last_contacted_at, avatar_color, role, met
-           FROM people_profile WHERE party_id = ?`
-      )
-      .get(partyId) as Profile | undefined;
-  const kept = load(survivor);
-  const extra = load(merged);
-  if (!extra) return;
-  if (!kept) {
-    ctx.db
-      .prepare("UPDATE people_profile SET party_id = ? WHERE party_id = ?")
-      .run(survivor, merged);
-    return;
-  }
-  ctx.db
-    .prepare(
-      `UPDATE people_profile
-          SET cadence_days = ?, last_contacted_at = ?, avatar_color = ?,
-              role = ?, met = ?
-        WHERE party_id = ?`
-    )
-    .run(
-      kept.cadence_days > 0 ? kept.cadence_days : extra.cadence_days,
-      laterIso(kept.last_contacted_at, extra.last_contacted_at),
-      kept.avatar_color ?? extra.avatar_color,
-      kept.role ?? extra.role,
-      kept.met ?? extra.met,
-      survivor
-    );
-  ctx.db.prepare("DELETE FROM people_profile WHERE party_id = ?").run(merged);
-}
-
-/**
- * The FK-less party pointers, from the one registry that enumerates them
- * (`schema/poly-refs.ts`). Neither walk in `mergeParty` can reach these — there
- * is no foreign key for `PRAGMA foreign_key_list` to find, and no `core.party`
- * type column for the polymorphic sweep to match — so a merge that skipped them
- * would delete the folded-in party out from under a live pointer and break the
- * feature holding it, silently.
- *
- * A collision means the survivor already satisfies the constraint. What happens
- * to the loser is the registry's call, not this walk's: an ANSWER is dated shut
- * and kept, duplicate machinery is dropped. Revoking BEFORE re-pointing is also
- * the only order that works where the constraint covers live rows only.
- */
-function foldPartyPointers(
-  ctx: HandlerCtx,
-  survivor: string,
-  merged: string
-): { repointed: number; revoked: number; deduped: number } {
-  let repointed = 0;
-  let revoked = 0;
-  let deduped = 0;
-  for (const pointer of PARTY_POINTER_REGISTRY) {
-    const pk =
-      (
-        ctx.db
-          .prepare(`PRAGMA table_info(${JSON.stringify(pointer.table)})`)
-          .all() as { name: string; pk: number }[]
-      ).find((column) => column.pk === 1)?.name ?? "rowid";
-    const scope = pointer.predicate ? ` AND ${pointer.predicate}` : "";
-    const rows = ctx.db
-      .prepare(
-        `SELECT "${pk}" AS pk FROM "${pointer.table}"
-          WHERE "${pointer.column}" = ?${scope}`
-      )
-      .all(merged) as { pk: string | number }[];
-    for (const row of rows) {
-      try {
-        ctx.db
-          .prepare(
-            `UPDATE "${pointer.table}" SET "${pointer.column}" = ?
-              WHERE "${pk}" = ?`
-          )
-          .run(survivor, row.pk);
-        repointed += 1;
-      } catch {
-        if (pointer.collision === "revoke") {
-          ctx.db
-            .prepare(
-              `UPDATE "${pointer.table}"
-                  SET revoked_at = ?, "${pointer.column}" = ?
-                WHERE "${pk}" = ?`
-            )
-            .run(ctx.now, survivor, row.pk);
-          repointed += 1;
-          revoked += 1;
-        } else {
-          ctx.db
-            .prepare(`DELETE FROM "${pointer.table}" WHERE "${pk}" = ?`)
-            .run(row.pk);
-          deduped += 1;
-        }
-      }
-    }
-  }
-  return { repointed, revoked, deduped };
-}
-
 function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
     survivor_party_id: string;
     merged_party_id: string;
   };
-  const survivor = input.survivor_party_id;
-  const merged = input.merged_party_id;
-  let repointed = 0;
-  let deduped = 0;
-
-  foldPeopleProfile(ctx, survivor, merged);
-  const pointers = foldPartyPointers(ctx, survivor, merged);
-  repointed += pointers.repointed;
-  deduped += pointers.deduped;
-
-  for (const ref of partyFkColumns(ctx)) {
-    const rows = ctx.db
-      .prepare(
-        `SELECT "${ref.pk}" AS pk FROM "${ref.table}" WHERE "${ref.column}" = ?`
-      )
-      .all(merged) as { pk: string | number }[];
-    for (const row of rows) {
-      try {
-        ctx.db
-          .prepare(
-            `UPDATE "${ref.table}" SET "${ref.column}" = ? WHERE "${ref.pk}" = ?`
-          )
-          .run(survivor, row.pk);
-        repointed += 1;
-      } catch {
-        if (ref.table === "core_party_identifier") {
-          // A primary handle of this scheme already stands: demote, keep.
-          ctx.db
-            .prepare(
-              `UPDATE core_party_identifier SET party_id = ?, is_primary = 0 WHERE identifier_id = ?`
-            )
-            .run(survivor, row.pk);
-          repointed += 1;
-        } else if (ref.table === "social_contact_channel") {
-          // Same rule on the reach half (#883): a PREFERRED channel of this
-          // kind demotes rather than drops, while a collision on the VALUE is
-          // a genuine duplicate and falls through to the delete below.
-          try {
-            ctx.db
-              .prepare(
-                `UPDATE social_contact_channel SET party_id = ?, is_preferred = 0
-                  WHERE channel_id = ?`
-              )
-              .run(survivor, row.pk);
-            repointed += 1;
-          } catch {
-            ctx.db
-              .prepare(
-                `DELETE FROM social_contact_channel WHERE channel_id = ?`
-              )
-              .run(row.pk);
-            deduped += 1;
-          }
-        } else {
-          ctx.db
-            .prepare(`DELETE FROM "${ref.table}" WHERE "${ref.pk}" = ?`)
-            .run(row.pk);
-          deduped += 1;
-        }
-      }
-    }
-  }
-
-  // Polymorphic refs: same closed registry purge uses — no drift (#450).
-  for (const poly of POLY_REF_REGISTRY.flatMap((entry) =>
-    entry.pairs.map((pair) => ({ table: entry.table, ...pair }))
-  )) {
-    const pkRow = (
-      ctx.db
-        .prepare(`PRAGMA table_info(${JSON.stringify(poly.table)})`)
-        .all() as {
-        name: string;
-        pk: number;
-      }[]
-    ).find((c) => c.pk === 1);
-    const pk = pkRow?.name ?? "rowid";
-    const rows = ctx.db
-      .prepare(
-        `SELECT "${pk}" AS pk FROM "${poly.table}"
-          WHERE "${poly.typeCol}" = 'core.party' AND "${poly.idCol}" = ?`
-      )
-      .all(merged) as { pk: string | number }[];
-    for (const row of rows) {
-      try {
-        ctx.db
-          .prepare(
-            `UPDATE "${poly.table}" SET "${poly.idCol}" = ? WHERE "${pk}" = ?`
-          )
-          .run(survivor, row.pk);
-        repointed += 1;
-      } catch {
-        ctx.db
-          .prepare(`DELETE FROM "${poly.table}" WHERE "${pk}" = ?`)
-          .run(row.pk);
-        deduped += 1;
-      }
-    }
-  }
-  ctx.db.prepare("DELETE FROM core_party WHERE party_id = ?").run(merged);
-  ctx.wrote("core.party", survivor);
-  ctx.wrote("core.party", merged);
-  ctx.cite({
-    claim:
-      `party ${merged} folded into ${survivor}: ${repointed} reference(s) ` +
-      `re-pointed, ${deduped} duplicate relation(s) removed` +
-      (pointers.revoked
-        ? `, ${pointers.revoked} duplicate standing answer(s) revoked`
-        : ""),
-    entityType: "core.party",
-    entityId: survivor,
-  });
-  return { survivor_party_id: survivor, repointed, deduped };
+  const spec = MERGEABLE[0] as MergeableEntity;
+  const tally = mergeEntity(
+    ctx,
+    spec,
+    input.survivor_party_id,
+    input.merged_party_id
+  );
+  citeMerge(ctx, spec, input.survivor_party_id, input.merged_party_id, tally);
+  return {
+    survivor_party_id: input.survivor_party_id,
+    repointed: tally.repointed,
+    deduped: tally.deduped,
+  };
 }
+
+/**
+ * The same fold for every other entity that gets minted per observation
+ * (#916, review 2.2). One command rather than five near-identical ones: the
+ * walks are the registry's, so the only per-entity knowledge is the row above.
+ */
+const MERGE_ENTITY: CommandDefinition = {
+  name: "core.merge_entity",
+  ownerSchema: "core",
+  inputSchema: {
+    type: "object",
+    required: ["entity_type", "survivor_id", "merged_id"],
+    additionalProperties: false,
+    properties: {
+      entity_type: { type: "string", enum: [...MERGEABLE_ENTITIES] },
+      survivor_id: { type: "string", minLength: 1 },
+      merged_id: { type: "string", minLength: 1 },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["survivor_id", "repointed"],
+    properties: {
+      survivor_id: { type: "string" },
+      repointed: { type: "integer" },
+      deduped: { type: "integer" },
+      summed: { type: "integer" },
+    },
+  },
+  preconditions: [
+    {
+      name: "two_distinct_live_entities",
+      sql: `SELECT count(*) AS n FROM core_entity
+             WHERE entity_type = :entity_type
+               AND entity_id IN (:survivor_id, :merged_id)
+               AND :survivor_id != :merged_id`,
+      column: "n",
+      op: "eq",
+      value: 2,
+    },
+  ],
+  postconditions: [
+    {
+      name: "merged_entity_gone",
+      sql: `SELECT count(*) AS n FROM core_entity
+             WHERE entity_type = :entity_type AND entity_id = :merged_id`,
+      column: "n",
+      op: "eq",
+      value: 0,
+    },
+  ],
+  idempotency: "once",
+  risk: "high",
+  confirm: true,
+  handler: (ctx) => {
+    const input = ctx.input as {
+      entity_type: string;
+      survivor_id: string;
+      merged_id: string;
+    };
+    const spec = MERGEABLE.find((m) => m.entity === input.entity_type);
+    if (!spec) throw new Error(`${input.entity_type} cannot be merged`);
+    if (spec.entity === "core.party") {
+      const self = ctx.db
+        .prepare("SELECT count(*) AS n FROM core_vault WHERE self_party_id = ?")
+        .get(input.merged_id) as { n: number };
+      if (self.n > 0) throw new Error("the vault owner cannot be merged away");
+    }
+    const tally = mergeEntity(ctx, spec, input.survivor_id, input.merged_id);
+    citeMerge(ctx, spec, input.survivor_id, input.merged_id, tally);
+    return {
+      survivor_id: input.survivor_id,
+      repointed: tally.repointed,
+      deduped: tally.deduped,
+      summed: tally.summed,
+    };
+  },
+};
 
 // Convergence sweep (#310): handle→party resolution runs at import time only,
 // so per-source duplicates accumulate unsurfaced. Deterministic candidates
@@ -412,5 +234,6 @@ const FIND_DUPLICATES: CommandDefinition = {
 
 export function registerMergeCommands(gateway: Gateway): void {
   gateway.registerCommand(MERGE_PARTY);
+  gateway.registerCommand(MERGE_ENTITY);
   gateway.registerCommand(FIND_DUPLICATES);
 }

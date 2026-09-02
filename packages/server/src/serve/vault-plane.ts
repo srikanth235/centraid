@@ -4,7 +4,7 @@
  *
  * The gateway process is the SOLE holder of the vault connection. Apps reach
  * it only through `ctx.vault`, and the running app is resolved to its enrolled
- * `consent.app` credential HERE, host-side: no signing key ever crosses into a
+ * `access.app` credential HERE, host-side: no signing key ever crosses into a
  * handler worker. Consent, contracts, receipts and provenance are the vault
  * gateway's own pipeline; this module adds nothing and takes nothing away.
  */
@@ -14,7 +14,6 @@ import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
 import {
-  ensureConversationLedger,
   runConversationArchival,
   repriceLedger,
 } from "@centraid/server/engine";
@@ -69,8 +68,6 @@ import {
   registerTagCommands,
   registerDocumentCommands,
   registerEnrichCommands,
-  registerFinanceCommands,
-  registerHealthCommands,
   registerLockerCommands,
   registerKnowledgeCommands,
   registerLinkCommands,
@@ -82,7 +79,6 @@ import {
   registerSocialCommands,
   registerOutboxCommands,
   registerShareCommands,
-  registerJudgmentCommands,
   registerSyncCommands,
   registerTallyCommands,
   registerTaskCommands,
@@ -288,7 +284,7 @@ export interface ReviewEntry {
   actorKind: string | null;
   actor: string | null;
   /** The STANDING grant that auto-allowed this receipt; distinct from
-   *  `consent.access_grant` on the row (#552). */
+   *  `access.grant` on the row (#552). */
   grantId: string | null;
   context: { kind: "fill"; origin: string } | null;
 }
@@ -450,10 +446,6 @@ export class VaultPlane {
    * When the supplier THROWS the sweep fails safe: nothing deletes.
    */
   orphanGraceWindowMs?: () => Promise<number | undefined>;
-  /** The workspace serves the SAME `journal.db` connection the audit stream
-   *  uses; the ledger DDL is idempotent and never touches the audit ladder's
-   *  user_version, so ensuring lazily is safe. */
-  private ledgerReady = false;
   private personalFlag: boolean | undefined;
 
   constructor(options: VaultPlaneOptions) {
@@ -546,8 +538,6 @@ export class VaultPlane {
     registerScheduleCommands(this.gateway);
     registerTaskCommands(this.gateway);
     registerSocialCommands(this.gateway);
-    registerFinanceCommands(this.gateway);
-    registerHealthCommands(this.gateway);
     registerKnowledgeCommands(this.gateway);
     registerAttachmentCommands(this.gateway);
     registerTagCommands(this.gateway);
@@ -563,7 +553,6 @@ export class VaultPlane {
     registerEnrichCommands(this.gateway);
     registerOutboxCommands(this.gateway);
     registerShareCommands(this.gateway);
-    registerJudgmentCommands(this.gateway);
     registerAtlasCommands(this.gateway);
     // Handlers live in gateway memory, contract rows in the vault, so every
     // installed app's ext trios must be re-armed here (#286).
@@ -575,12 +564,6 @@ export class VaultPlane {
         ? `vault plane: bootstrapped a fresh vault at ${options.dir}`
         : `vault plane: recovered vault ${this.boot.vaultId} at ${options.dir}`
     );
-    if (existsSync(path.join(options.dir, "transcripts.db"))) {
-      this.logger.warn(
-        `vault plane: ignoring legacy transcripts.db at ${options.dir} — ` +
-          "the conversation ledger folded into journal.db"
-      );
-    }
     // FORMAT.md rule 4; the automations gap stays manual by design.
     this.quarantine = applyRestoreQuarantine(options.dir, this.db, this.logger);
     if ((this.quarantine?.outboxParked ?? 0) > 0) {
@@ -647,8 +630,8 @@ export class VaultPlane {
       vaultId: this.boot.vaultId,
       ownerPartyId: this.boot.ownerPartyId,
       appsDir: path.join(this.dir, "apps"),
-      journal: () => this.journalLedger(),
-      journalDbFile: path.join(this.dir, "journal.db"),
+      journal: () => this.ledger(),
+      ledgerDbFile: path.join(this.dir, "vault.db"),
       harnessSessionDir: path.join(this.cacheDir, "harness-sessions"),
     };
   }
@@ -657,14 +640,12 @@ export class VaultPlane {
     return path.join(this.dir, "code");
   }
 
-  private journalLedger(): DatabaseSync {
+  /** The ledger band of the one file (#916) — the same handle every other
+   *  band is served from; the vault composes the band when it opens. */
+  private ledger(): DatabaseSync {
     if (this.closed)
       throw new Error(`vault plane ${this.boot.vaultId} is stopped`);
-    if (!this.ledgerReady) {
-      ensureConversationLedger(this.db.journal);
-      this.ledgerReady = true;
-    }
-    return this.db.journal;
+    return this.db.vault;
   }
 
   rename(name: string): void {
@@ -705,7 +686,7 @@ export class VaultPlane {
   }
 
   enrollApp(appId: string): void {
-    const enrolled = ensureAppEnrolled(this.db, appId, { origin: "generated" });
+    const enrolled = ensureAppEnrolled(this.db, appId);
     if (enrolled.created)
       this.logger.info(`vault plane: enrolled app "${appId}"`);
   }
@@ -713,10 +694,11 @@ export class VaultPlane {
   /** Identity ONLY: declared scopes are granted by the install-time grant
    *  path (#434). */
   installApp(appId: string, displayName?: string): { created: boolean } {
-    const enrolled = ensureAppEnrolled(this.db, appId, {
-      origin: "installed",
-      ...(displayName ? { displayName } : {}),
-    });
+    const enrolled = ensureAppEnrolled(
+      this.db,
+      appId,
+      displayName ? { displayName } : {}
+    );
     if (enrolled.created)
       this.logger.info(`vault plane: installed app "${appId}"`);
     return { created: enrolled.created };
@@ -761,7 +743,7 @@ export class VaultPlane {
         revoked += 1;
         this.logger.info(
           `vault plane: revoked grant ${grant.grantId} for "${appId}" ` +
-            `(views ${result.viewsRevoked}, parked ${result.parkedDropped})`
+            `(parked ${result.parkedDropped})`
         );
       }
       markAppRevoked(this.db, app.appId);
@@ -819,7 +801,7 @@ export class VaultPlane {
 
   /** An app may request `ext.*` scopes only on its OWN band. */
   approveGrant(appId: string, request: GrantRequest): string {
-    const app = ensureAppEnrolled(this.db, appId, { origin: "generated" });
+    const app = ensureAppEnrolled(this.db, appId);
     const purpose = purposeConceptId(this.db, request.purpose);
     if (!purpose)
       throw new Error(`unknown purpose notation "${request.purpose}"`);
@@ -871,7 +853,7 @@ export class VaultPlane {
    *  top-up NEVER widens on its own afterwards: agents author their own
    *  manifests, so a re-publish would steer its own containment (#306). */
   ensureAppInstallGrant(appId: string, block: InstallScopeBlock): void {
-    const app = ensureAppEnrolled(this.db, appId, { origin: "generated" });
+    const app = ensureAppEnrolled(this.db, appId);
     this.ensureInstallGrant({
       plane: "app",
       appId,
@@ -998,9 +980,7 @@ export class VaultPlane {
     granteePartyId?: string;
   } {
     if (request.plane === "app") {
-      const app = ensureAppEnrolled(this.db, request.appId, {
-        origin: "generated",
-      });
+      const app = ensureAppEnrolled(this.db, request.appId);
       return { appId: app.appId };
     }
     const agent = ensureAgentEnrolled(this.db, request.appId, {
@@ -1295,11 +1275,11 @@ export class VaultPlane {
   }
 
   reviewFeed(limit = 50): ReviewEntry[] {
-    const window = this.db.journal
+    const window = this.db.audit
       .prepare(
         `SELECT r.receipt_id, r.action, r.object_type, r.object_id, r.decision, r.occurred_at,
                 r.detail_json, r.invocation_id, i.caller_id
-           FROM consent_receipt r
+           FROM access_receipt r
            LEFT JOIN agent_command_invocation i ON i.invocation_id = r.invocation_id
           WHERE r.action LIKE 'act %' OR r.action = 'reveal'
           ORDER BY r.receipt_id DESC LIMIT 500`
@@ -1501,22 +1481,22 @@ export class VaultPlane {
   private refineActorKind(actorId: string, actorKind: string): string {
     if (actorKind !== "ai_agent") return actorKind;
     const row = this.db.vault
-      .prepare("SELECT enrollment_key FROM consent_agent WHERE agent_id = ?")
+      .prepare("SELECT enrollment_key FROM access_agent WHERE agent_id = ?")
       .get(actorId) as { enrollment_key: string } | undefined;
     return row?.enrollment_key === "_assistant" ? "assistant" : "agent";
   }
 
   private rawActorKind(actorId: string): string | null {
     const agent = this.db.vault
-      .prepare("SELECT 1 AS x FROM consent_agent WHERE agent_id = ?")
+      .prepare("SELECT 1 AS x FROM access_agent WHERE agent_id = ?")
       .get(actorId) as { x: number } | undefined;
     if (agent) return "ai_agent";
     const app = this.db.vault
-      .prepare("SELECT 1 AS x FROM consent_app WHERE app_id = ?")
+      .prepare("SELECT 1 AS x FROM access_app WHERE app_id = ?")
       .get(actorId) as { x: number } | undefined;
     if (app) return "app";
     const device = this.db.vault
-      .prepare("SELECT 1 AS x FROM consent_device WHERE device_id = ?")
+      .prepare("SELECT 1 AS x FROM access_device WHERE device_id = ?")
       .get(actorId) as { x: number } | undefined;
     if (device) return "owner";
     return null;
@@ -1527,8 +1507,8 @@ export class VaultPlane {
     const row = this.db.vault
       .prepare(
         actorKind === "app"
-          ? "SELECT COALESCE(display_name, name) AS name FROM consent_app WHERE app_id = ?"
-          : `SELECT p.display_name AS name FROM consent_agent a
+          ? "SELECT COALESCE(display_name, name) AS name FROM access_app WHERE app_id = ?"
+          : `SELECT p.display_name AS name FROM access_agent a
                JOIN core_party p ON p.party_id = a.party_id WHERE a.agent_id = ?`
       )
       .get(actorId) as { name: string } | undefined;
@@ -1560,12 +1540,19 @@ export class VaultPlane {
       (
         this.db.vault
           .prepare(
-            `SELECT DISTINCT s.schema_name FROM consent_grant_scope s
-               JOIN consent_access_grant g ON g.grant_id = s.grant_id
+            // R10 (#916): one dotted `entity` column, so the schema half is
+            // the text before the dot — a whole-schema scope has no dot and
+            // is its own schema name.
+            `SELECT DISTINCT s.entity FROM access_grant_scope s
+               JOIN access_grant g ON g.grant_id = s.grant_id
               WHERE g.grantee_party_id = ? AND g.status = 'active' AND g.revoked_at IS NULL`
           )
-          .all(agent.partyId) as { schema_name: string }[]
-      ).map((r) => r.schema_name)
+          .all(agent.partyId) as { entity: string }[]
+      ).map((r) =>
+        r.entity.includes(".")
+          ? r.entity.slice(0, r.entity.indexOf("."))
+          : r.entity
+      )
     );
     // The owner's "no" binds the assistant too (#308 A4/B3).
     for (const t of listScopeTombstones(this.db, {
@@ -1707,7 +1694,6 @@ export class VaultPlane {
             throw new Error("invoke is handled by the group-commit queue");
           case "describe":
             return this.gateway.discover(this.ownerCredential);
-          case "query":
           case "parked":
           case "changes":
           case "resolve":
@@ -1715,7 +1701,7 @@ export class VaultPlane {
           case "authenticate":
           case "content":
             throw new GatewayError(
-              "consent",
+              "access",
               `seed generators read and invoke — vault op ${call.op} is not part of the scenario surface`
             );
           default:
@@ -1734,7 +1720,7 @@ export class VaultPlane {
   }
 
   /**
-   * The host attaches WHEN the grant went: `consent_access_grant.revoked_at`
+   * The host attaches WHEN the grant went: `access_grant.revoked_at`
    * records it, but the app cannot read that table — losing the grant is what
    * put it here. Absent when the refusal was never a revocation (a scope never
    * granted, a purpose the policy forbids); no caller may invent one.
@@ -1743,12 +1729,12 @@ export class VaultPlane {
     appId: string,
     result: VaultCallResult
   ): VaultCallResult {
-    if (result.ok || result.code !== "VAULT_CONSENT") return result;
+    if (result.ok || result.code !== "VAULT_ACCESS") return result;
     const app = lookupAppByName(this.db, appId);
     if (!app) return result;
     const row = this.db.vault
       .prepare(
-        `SELECT revoked_at FROM consent_access_grant
+        `SELECT revoked_at FROM access_grant
           WHERE app_id = ? AND revoked_at IS NOT NULL
           ORDER BY revoked_at DESC LIMIT 1`
       )
@@ -1833,13 +1819,6 @@ export class VaultPlane {
             );
           case "invoke":
             throw new Error("invoke is handled by the group-commit queue");
-          case "query":
-            return this.gateway.queryView(
-              cred,
-              String(call.payload.view ?? ""),
-              String(call.payload.purpose ?? ""),
-              app.appId
-            );
           case "describe":
             return this.gateway.discover(cred);
           case "parked":
@@ -1865,7 +1844,7 @@ export class VaultPlane {
             throw new Error("authenticate is handled on the async path above");
           case "changes":
             throw new GatewayError(
-              "consent",
+              "access",
               "the provenance feed is agent-plane — automations ride vault changes, apps do not"
             );
           case "content":
@@ -1978,18 +1957,13 @@ export class VaultPlane {
             );
           case "authenticate":
             throw new GatewayError(
-              "consent",
+              "access",
               "Locker authentication is an interactive app surface"
             );
           case "changes":
             return this.gateway.changes(
               cred,
               call.payload as unknown as ChangesRequest
-            );
-          case "query":
-            throw new GatewayError(
-              "consent",
-              "registered views belong to apps — automations read entities directly"
             );
           case "content":
             throw new Error("content op is handled on the async path above");
@@ -2001,21 +1975,6 @@ export class VaultPlane {
   }
 
   static readonly FALLBACK_CHECKPOINT_WAL_BYTES = 64 * 1024 * 1024;
-
-  /** The WAL COUNTS: those pages are the file's real occupancy. A missing
-   *  file counts zero, so an unmeasurable journal reads as under any limit
-   *  rather than archiving on a guess. */
-  private journalFileBytes(): number {
-    let total = 0;
-    for (const name of ["journal.db", "journal.db-wal"]) {
-      try {
-        total += statSync(path.join(this.dir, name)).size;
-      } catch {
-        /* absent file — zero bytes, not an error */
-      }
-    }
-    return total;
-  }
 
   walTick(): void {
     if (this.closed) return;
@@ -2029,11 +1988,10 @@ export class VaultPlane {
       // the WALs grow unboundedly for the whole gateway uptime.
       try {
         const wal = path.join(this.dir, "vault.db-wal");
-        const jwal = path.join(this.dir, "journal.db-wal");
         const oversized = (p: string) =>
           existsSync(p) &&
           statSync(p).size > VaultPlane.FALLBACK_CHECKPOINT_WAL_BYTES;
-        if (oversized(wal) || oversized(jwal)) {
+        if (oversized(wal)) {
           this.gateway.checkpoint(this.ownerCredential);
           this.logger.warn(
             "vault plane: WAL checkpointed by fallback (no wal shipper — backups are NOT capturing this vault)"
@@ -2049,14 +2007,10 @@ export class VaultPlane {
     try {
       const report = this.walShipper.tick();
       for (const brk of report.breaks) {
-        this.logger.warn(
-          `vault plane: wal generation break (${brk.db}: ${brk.reason})`
-        );
+        this.logger.warn(`vault plane: wal generation break (${brk.reason})`);
       }
       for (const err of report.errors) {
-        this.logger.warn(
-          `vault plane: wal capture error (${err.db}): ${err.message}`
-        );
+        this.logger.warn(`vault plane: wal capture error: ${err.message}`);
       }
     } catch (error) {
       this.logger.warn(
@@ -2073,7 +2027,7 @@ export class VaultPlane {
   }
 
   private setFallbackAutocheckpoint(enabled: boolean): void {
-    for (const db of [this.db.vault, this.db.journal]) {
+    for (const db of [this.db.vault, this.db.audit]) {
       const row = db.prepare("PRAGMA page_size").get() as
         | { page_size?: number }
         | undefined;
@@ -2217,7 +2171,7 @@ export class VaultPlane {
       // Over an owner limit the daily gate is bypassed and the window narrows
       // a rung per sweep (#544).
       const archiveDecision = decideJournalArchive({
-        journalBytes: this.journalFileBytes(),
+        journalBytes: vaultFileBytes(this.dir),
         limitBytes: this.journalLimitBytes(),
         rung: this.journalArchiveRung,
         dailyGateElapsed:
@@ -2254,9 +2208,8 @@ export class VaultPlane {
               "vault plane: journal archival hit its row cap — resuming next sweep"
             );
           }
-          ensureConversationLedger(this.db.journal);
           // Runs BEFORE archival so live rows get honest costs first (#445).
-          const repriced = repriceLedger(this.db.journal, {
+          const repriced = repriceLedger(this.db.vault, {
             cursor: this.repriceCursor,
           });
           this.repriceCursor = repriced.nextCursor;
@@ -2268,7 +2221,7 @@ export class VaultPlane {
           }
           const convArchival = runConversationArchival(
             {
-              journal: this.db.journal,
+              journal: this.db.vault,
               blobSink: {
                 ingestSync: (bytes) => this.db.blobs.ingestSync(bytes),
                 has: (sha) => this.db.blobs.hasSync(sha),
@@ -2287,15 +2240,14 @@ export class VaultPlane {
                 `turnsPruned=${convArchival.turnsPruned} vacuum=${convArchival.reclaim.mode}`
             );
           }
-          // ONE shared roll if EITHER engine wrote: the vault+journal
-          // generations must break TOGETHER, or a snapshot pairs a
-          // post-archival journal base with a pre-archival vault base.
+          // Both engines rewrite the one file through the WAL, so a roll
+          // absorbs the VACUUM into a fresh base (#408).
           if (
             archived.rowsArchived > 0 ||
             convArchival.segmentsWritten > 0 ||
             convArchival.segmentsPruned > 0
           ) {
-            this.walShipper?.rollGeneration("journal", "journal-archival", {
+            this.walShipper?.rollGeneration("journal-archival", {
               captureFirst: false,
             });
           }

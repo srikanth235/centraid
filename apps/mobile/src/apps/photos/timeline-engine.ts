@@ -58,7 +58,21 @@ const REPLICA_ENTITIES = [
   "core.content_item",
   "core.content_derivative",
   "media.asset_phash",
+  // The star is DERIVED (#916): `media_asset.favorite` is gone and the one
+  // truth is a flags-scheme `starred` tag on the asset — the same mechanism
+  // Docs, Locker and People already read (`docs-projection.ts`). Three more
+  // small tables, no mirror to keep in step.
+  "core.tag",
+  "core.concept",
+  "core.concept_scheme",
 ] as const;
+
+/** The scheme every owner flag lives in (`packages/vault/src/commands/flags.ts`). */
+const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
+const STARRED_NOTATION = "starred";
+/** Photos' star anchors on the ASSET — the entity Photos shows — not the
+ *  shared bytes underneath it (#916, rung nine). */
+const ASSET_TARGET_TYPE = "media.asset";
 
 function value<T>(row: ReplicaRow, key: string): T | undefined {
   return row[key] as T | undefined;
@@ -93,6 +107,9 @@ class PhotoTimelineEngine {
   #contentRows: ReplicaRow[] = [];
   #derivativeRows: ReplicaRow[] = [];
   #phashRows: ReplicaRow[] = [];
+  #tagRows: ReplicaRow[] = [];
+  #conceptRows: ReplicaRow[] = [];
+  #schemeRows: ReplicaRow[] = [];
   #deviceRows: PhotoAsset[] = [];
   #uploadByUri = new Map<string, UploadEntry>();
   #uploadSignature = "";
@@ -258,16 +275,20 @@ class PhotoTimelineEngine {
     if (!session) return;
     const generation = this.#generation;
     try {
-      const [assets, content, derivatives, phashes] = await Promise.all(
-        REPLICA_ENTITIES.map((entity) =>
-          session.read("photos", { entity, limit: 100_000 })
-        )
-      );
+      const [assets, content, derivatives, phashes, tags, concepts, schemes] =
+        await Promise.all(
+          REPLICA_ENTITIES.map((entity) =>
+            session.read("photos", { entity, limit: 100_000 })
+          )
+        );
       if (generation !== this.#generation) return;
       this.#assetRows = assets!.rows.map((row) => row.values);
       this.#contentRows = content!.rows.map((row) => row.values);
       this.#derivativeRows = derivatives!.rows.map((row) => row.values);
       this.#phashRows = phashes!.rows.map((row) => row.values);
+      this.#tagRows = tags!.rows.map((row) => row.values);
+      this.#conceptRows = concepts!.rows.map((row) => row.values);
+      this.#schemeRows = schemes!.rows.map((row) => row.values);
       this.#error = undefined;
       this.#replicaLoading = false;
       this.recompute();
@@ -443,6 +464,31 @@ class PhotoTimelineEngine {
         value<string>(row, "phash"),
       ])
     );
+    // No flags scheme, or no `starred` concept, means nothing has ever been
+    // starred in this vault — an honest empty set, not a missing join.
+    const flagsSchemeId = this.#schemeRows.find(
+      (row) => value<string>(row, "uri") === FLAGS_SCHEME_URI
+    );
+    const starredConceptId = flagsSchemeId
+      ? value<string>(
+          this.#conceptRows.find(
+            (row) =>
+              value<string>(row, "scheme_id") ===
+                value<string>(flagsSchemeId, "scheme_id") &&
+              value<string>(row, "notation") === STARRED_NOTATION
+          ) ?? {},
+          "concept_id"
+        )
+      : undefined;
+    const favoriteAssets = new Set<string>();
+    if (starredConceptId !== undefined) {
+      for (const tag of this.#tagRows) {
+        if (value<string>(tag, "target_type") !== ASSET_TARGET_TYPE) continue;
+        if (value<string>(tag, "concept_id") !== starredConceptId) continue;
+        const target = value<string>(tag, "target_id");
+        if (target) favoriteAssets.add(target);
+      }
+    }
     const remote = this.#assetRows.flatMap<PhotoAsset>((asset) => {
       const contentId = value<string>(asset, "content_id");
       const assetId = value<string>(asset, "asset_id");
@@ -495,7 +541,7 @@ class PhotoTimelineEngine {
           durationS: value<number>(asset, "duration_s"),
           fileSize: value<number>(item!, "byte_size"),
           exif: parseExif(exifJson),
-          favorite: value<number>(asset, "favorite") === 1,
+          favorite: favoriteAssets.has(assetId),
           archived: Boolean(value<string>(asset, "archived_at")),
           deleted: Boolean(value<string>(asset, "deleted_at")),
           purgeAt:

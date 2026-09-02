@@ -33,7 +33,7 @@ export interface LocalVaultUsageDTO {
 export interface StorageLimitsDTO {
   totalLimitBytes: number | null;
   warnAtPercent: number;
-  /** journal.db size triggering early archival; null = off. */
+  /** vault.db size triggering early ledger/audit archival; null = off. */
   journalLimitBytes: number | null;
 }
 

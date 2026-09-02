@@ -106,7 +106,6 @@ type WorkerMessage =
         | "read"
         | "search"
         | "invoke"
-        | "query"
         | "describe"
         | "parked"
         | "changes"
@@ -247,13 +246,12 @@ const runs = {
 };
 
 // The worker carries capability, never a key: the parent resolves this
-// automation to its enrolled `consent.agent` credential host-side.
+// automation to its enrolled `access.agent` credential host-side.
 function vaultCall(
   op:
     | "read"
     | "search"
     | "invoke"
-    | "query"
     | "describe"
     | "parked"
     | "changes"
@@ -275,9 +273,6 @@ const vault = {
   },
   invoke(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("invoke", request);
-  },
-  query(view: string, purpose: string): Promise<unknown> {
-    return vaultCall("query", { view, purpose });
   },
   describe(): Promise<unknown> {
     return vaultCall("describe", {});

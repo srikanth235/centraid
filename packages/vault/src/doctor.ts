@@ -2,16 +2,17 @@
  * `vault doctor` — the structural invariant sweep over a LIVE vault (#892).
  *
  * `restore-check.ts` answers "is this directory a sound restore?"; this answers
- * "is this vault internally consistent right now?" over an already-open pair, so
+ * "is this vault internally consistent right now?" over an already-open handle, so
  * it can ride at the end of any harness that touched a vault. That is what turns
  * the existing suite into a data-corruption detector.
  *
- * Four classes. `integrity` and `foreign-keys` are the references SQLite knows
- * about. `poly-refs` are the ones it does not: a `(target_type, target_id)` pair
- * is a logical FK #441 had to sweep by hand, and hand-swept means missable — an
- * orphan vector resurfaces deleted content in search. It walks the same registry
- * the purge does, so the two can never disagree about the set. `blobs` catches
- * custody rows naming content with no location.
+ * Three classes. `integrity` and `foreign-keys` are what SQLite knows about —
+ * and since the entity supertype landed (#916) that is EVERY pointer: the
+ * polymorphic `(target_type, target_id)` pairs the old sweep had to walk by
+ * hand are composite foreign keys into `core_entity`, so `PRAGMA
+ * foreign_key_check` is the check and a hand-written registry walk could only
+ * disagree with the engine. `blobs` catches custody rows naming content with
+ * no location.
  *
  * Findings carry a count and a sample, never rows: this ends up in CI logs.
  */
@@ -19,15 +20,10 @@ import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { POLY_REF_REGISTRY } from "./schema/poly-refs.js";
-import { resolveEntity } from "./schema/tables.js";
-
-export type DoctorClass = "integrity" | "foreign-keys" | "poly-refs" | "blobs";
+export type DoctorClass = "integrity" | "foreign-keys" | "blobs";
 
 export interface DoctorFinding {
   class: DoctorClass;
-  /** Which file the finding is in. */
-  file: "vault" | "journal";
   /** One line naming the invariant that does not hold. */
   detail: string;
   /** How many rows are implicated. */
@@ -41,7 +37,7 @@ export interface DoctorReport {
   findings: DoctorFinding[];
   /** What was actually looked at, so a vacuous pass is visible as one. */
   checked: {
-    polyRefPairs: number;
+    foreignKeys: number;
     tablesWithBlobRefs: number;
   };
 }
@@ -57,10 +53,7 @@ function tableExists(db: DatabaseSync, table: string): boolean {
   return row !== undefined;
 }
 
-function checkIntegrity(
-  db: DatabaseSync,
-  file: "vault" | "journal"
-): DoctorFinding[] {
+function checkIntegrity(db: DatabaseSync): DoctorFinding[] {
   const findings: DoctorFinding[] = [];
   const integrity = db.prepare("PRAGMA integrity_check").get() as
     | { integrity_check?: string }
@@ -69,7 +62,6 @@ function checkIntegrity(
   if (verdict !== "ok") {
     findings.push({
       class: "integrity",
-      file,
       detail: `PRAGMA integrity_check returned "${verdict}"`,
       count: 1,
       sample: [],
@@ -81,7 +73,6 @@ function checkIntegrity(
   if (violations.length > 0) {
     findings.push({
       class: "foreign-keys",
-      file,
       detail: "PRAGMA foreign_key_check reported violations",
       count: violations.length,
       sample: [
@@ -92,76 +83,21 @@ function checkIntegrity(
   return findings;
 }
 
-/**
- * Orphaned polymorphic pointers. A `type` this build does not recognise is NOT a
- * finding (an ext band or a newer vault may carry one); a recognised type
- * pointing at a missing row is the #441 failure exactly.
- */
-function checkPolyRefs(
-  vault: DatabaseSync,
-  journal: DatabaseSync
-): { findings: DoctorFinding[]; pairs: number } {
-  const findings: DoctorFinding[] = [];
-  let pairs = 0;
-  for (const entry of POLY_REF_REGISTRY) {
-    if (!tableExists(vault, entry.table)) continue;
-    for (const pair of entry.pairs) {
-      pairs += 1;
-      const rows = vault
-        .prepare(
-          `SELECT DISTINCT "${pair.typeCol}" AS t, "${pair.idCol}" AS i
-             FROM "${entry.table}"
-            WHERE "${pair.typeCol}" IS NOT NULL AND "${pair.idCol}" IS NOT NULL`
-        )
-        .all() as { t: string; i: string }[];
-      const orphans: string[] = [];
-      // One prepared lookup per target table rather than per row: a populated
-      // vault has orders of magnitude more pointers than pointed-at tables.
-      const resolved = new Map<
-        string,
-        { db: DatabaseSync; sql: string } | null
-      >();
-      for (const row of rows) {
-        let target = resolved.get(row.t);
-        if (target === undefined) {
-          const ref = resolveEntity(row.t, vault);
-          const db = ref?.file === "journal" ? journal : vault;
-          // `null` covers both "an unknown logical type" — an ext band or a
-          // newer schema, which this build cannot call wrong — and "a known
-          // type whose table this vault does not have".
-          target =
-            ref && tableExists(db, ref.physical)
-              ? {
-                  db,
-                  sql: `SELECT 1 AS x FROM "${ref.physical}" WHERE "${primaryKeyOf(db, ref.physical) ?? "rowid"}" = ?`,
-                }
-              : null;
-          resolved.set(row.t, target);
-        }
-        if (!target) continue;
-        const live = target.db.prepare(target.sql).get(row.i);
-        if (!live) orphans.push(`${row.t}:${row.i}`);
-      }
-      if (orphans.length > 0) {
-        findings.push({
-          class: "poly-refs",
-          file: "vault",
-          detail: `${entry.table}.(${pair.typeCol}, ${pair.idCol}) points at rows that no longer exist`,
-          count: orphans.length,
-          sample: orphans.slice(0, SAMPLE_LIMIT),
-        });
-      }
-    }
+/** How many real foreign keys the engine was asked about, so a vacuous pass
+ * is visible as one. */
+function foreignKeyCount(vault: DatabaseSync): number {
+  const tables = vault
+    .prepare(
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`
+    )
+    .all() as { name: string }[];
+  let total = 0;
+  for (const table of tables) {
+    total += vault
+      .prepare(`PRAGMA foreign_key_list("${table.name}")`)
+      .all().length;
   }
-  return { findings, pairs };
-}
-
-function primaryKeyOf(db: DatabaseSync, physical: string): string | undefined {
-  const cols = db.prepare(`PRAGMA table_info("${physical}")`).all() as {
-    name: string;
-    pk: number;
-  }[];
-  return cols.find((column) => column.pk === 1)?.name;
+  return total;
 }
 
 /**
@@ -203,7 +139,6 @@ function checkBlobs(vault: DatabaseSync): {
   if (orphans.length > 0) {
     findings.push({
       class: "blobs",
-      file: "vault",
       detail:
         "blob_custody_state names content with no blob_replica row — the vault claims custody of bytes it has no location for",
       count: orphans.length,
@@ -214,21 +149,17 @@ function checkBlobs(vault: DatabaseSync): {
 }
 
 /** Read-only by construction — every statement is a `PRAGMA` or a `SELECT`. */
-export function vaultDoctor(pair: {
-  vault: DatabaseSync;
-  journal: DatabaseSync;
-}): DoctorReport {
-  const findings: DoctorFinding[] = [
-    ...checkIntegrity(pair.vault, "vault"),
-    ...checkIntegrity(pair.journal, "journal"),
-  ];
-  const poly = checkPolyRefs(pair.vault, pair.journal);
+export function vaultDoctor(pair: { vault: DatabaseSync }): DoctorReport {
+  const findings: DoctorFinding[] = [...checkIntegrity(pair.vault)];
   const blobs = checkBlobs(pair.vault);
-  findings.push(...poly.findings, ...blobs.findings);
+  findings.push(...blobs.findings);
   return {
     ok: findings.length === 0,
     findings,
-    checked: { polyRefPairs: poly.pairs, tablesWithBlobRefs: blobs.tables },
+    checked: {
+      foreignKeys: foreignKeyCount(pair.vault),
+      tablesWithBlobRefs: blobs.tables,
+    },
   };
 }
 
@@ -236,14 +167,14 @@ export function vaultDoctor(pair: {
 export function formatDoctorReport(report: DoctorReport): string {
   if (report.ok) {
     return (
-      `vault doctor: clean — ${report.checked.polyRefPairs} polymorphic reference pair(s) ` +
+      `vault doctor: clean — ${report.checked.foreignKeys} foreign key(s) ` +
       `and ${report.checked.tablesWithBlobRefs} blob table(s) checked`
     );
   }
   const lines = [`vault doctor: ${report.findings.length} finding(s)`];
   for (const finding of report.findings) {
     lines.push(
-      `  [${finding.class}] ${finding.file}: ${finding.detail} (${finding.count})` +
+      `  [${finding.class}] ${finding.detail} (${finding.count})` +
         (finding.sample.length ? ` e.g. ${finding.sample.join(", ")}` : "")
     );
   }
@@ -256,14 +187,13 @@ export function formatDoctorReport(report: DoctorReport): string {
  */
 export function assertVaultHealthy(pair: {
   vault: DatabaseSync;
-  journal: DatabaseSync;
 }): DoctorReport {
   const report = vaultDoctor(pair);
   if (!report.ok) throw new Error(formatDoctorReport(report));
   return report;
 }
 
-/** Every `vault.db` under a root, with its sibling journal. */
+/** Every directory under a root that holds a `vault.db`. */
 function vaultPairsUnder(root: string, depth = 4): string[] {
   if (depth < 0 || !existsSync(root)) return [];
   const found: string[] = [];
@@ -281,20 +211,15 @@ function vaultPairsUnder(root: string, depth = 4): string[] {
   return found;
 }
 
-/** Open one vault pair read-only and run the sweep over it. */
+/** Open one vault read-only and run the sweep over it. */
 function inspectVaultDir(dir: string): DoctorReport {
   const vault = new DatabaseSync(path.join(dir, "vault.db"), {
     readOnly: true,
   });
-  const journalPath = path.join(dir, "journal.db");
-  const journal = existsSync(journalPath)
-    ? new DatabaseSync(journalPath, { readOnly: true })
-    : new DatabaseSync(":memory:");
   try {
-    return vaultDoctor({ vault, journal });
+    return vaultDoctor({ vault });
   } finally {
     vault.close();
-    journal.close();
   }
 }
 

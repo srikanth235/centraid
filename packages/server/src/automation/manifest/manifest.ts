@@ -168,7 +168,7 @@ export interface ManifestVaultScope {
 
 /**
  * The automation's requested vault access (duaility §12). Fires authenticate
- * as an enrolled `consent.agent`; this block is a *request* the owner approves
+ * as an enrolled `access.agent`; this block is a *request* the owner approves
  * into a grant on the agent's party — never a grant by itself. Until
  * approval every `ctx.vault` call is a receipted deny.
  */
@@ -388,7 +388,8 @@ const TRIGGER_CURSOR_DENIED_TABLES = new Set([
 /**
  * Shared authoring/runtime loop guard for cursor-targeted vault entities.
  *
- * The denied names are runtime ledger tables — they live in `journal.db` and
+ * The denied names are runtime ledger tables — they are the ledger band
+ * of `vault.db` (#916) and
  * are only ever referenced bare. A QUALIFIED entity is a user's own vault
  * table: `inventory.items`, `shop.attachments`, and `crm.conversations` are
  * ordinary data and must stay watchable.

@@ -25,18 +25,13 @@ import { openVaultRegistry } from "./vault-registry.js";
 describe("vault-plane WAL ownership + durability", () => {
   const fixture = usePlaneFixture();
 
-  test("fresh bootstrap checkpoints both WALs before the shipper attaches", async () => {
+  test("fresh bootstrap checkpoints the WAL before the shipper attaches", async () => {
     const dir = await tempDir("fresh-bootstrap-wal-");
     fixture.openPlane(dir);
-    await Promise.all(
-      ["vault.db-wal", "journal.db-wal"].map(async (name) => {
-        const size = await fs
-          .stat(path.join(dir, name))
-          .then((stat) => stat.size)
-          .catch(() => 0);
-        expect(size, name).toBeLessThanOrEqual(32 * 1024);
-      })
-    );
+    // ONE FILE (#916): one database, one WAL. No `.catch(() => 0)` — that
+    // would let a missing file pass as a checkpointed one.
+    const size = (await fs.stat(path.join(dir, "vault.db-wal"))).size;
+    expect(size).toBeLessThanOrEqual(32 * 1024);
   });
 
   test("a protector-backed gateway reopens real sealed rows while a copied data dir cannot", async () => {
@@ -140,7 +135,7 @@ describe("vault-plane WAL ownership + durability", () => {
     const tick = vi.spyOn(shipper, "tick");
     const close = vi.spyOn(shipper, "close");
     const autocheckpointPages = () =>
-      [plane.db.vault, plane.db.journal].map((db) => {
+      [plane.db.vault, plane.db.audit].map((db) => {
         const row = db.prepare("PRAGMA wal_autocheckpoint").get() as Record<
           string,
           number
@@ -213,7 +208,7 @@ describe("vault-plane WAL ownership + durability", () => {
       n: 10,
     });
     expect({
-      ...plane.db.journal
+      ...plane.db.audit
         .prepare(
           `SELECT count(*) AS n FROM agent_command_invocation
           WHERE invocation_id LIKE 'queue-real-%' AND status = 'executed'`
@@ -226,8 +221,8 @@ describe("vault-plane WAL ownership + durability", () => {
     const dir = await tempDir();
     const plane = fixture.openPlane(dir);
     const calendarId = seedCalendar(plane);
-    plane.db.journal.exec(`CREATE TEMP TRIGGER fail_one_queued_receipt
-    BEFORE INSERT ON consent_receipt
+    plane.db.audit.exec(`CREATE TEMP TRIGGER fail_one_queued_receipt
+    BEFORE INSERT ON access_receipt
     WHEN NEW.invocation_id = 'queue-fail'
     BEGIN
       SELECT RAISE(ABORT, 'synthetic queued journal failure');
@@ -286,7 +281,7 @@ describe("vault-plane WAL ownership + durability", () => {
       { invocation_id: "queue-fail", journal_finalized_at: null },
     ]);
     expect(
-      plane.db.journal
+      plane.db.audit
         .prepare(
           `SELECT invocation_id FROM agent_command_invocation
           WHERE invocation_id LIKE 'queue-ok-%' AND status = 'executed'

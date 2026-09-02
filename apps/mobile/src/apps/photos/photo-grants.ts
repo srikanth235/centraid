@@ -62,8 +62,8 @@ export function usePhotoGrantEntry(
   const [visible, setVisible] = useState(false);
 
   const ownerPartyId =
-    typeof vault.rows[0]?.owner_party_id === "string"
-      ? vault.rows[0].owner_party_id
+    typeof vault.rows[0]?.self_party_id === "string"
+      ? vault.rows[0].self_party_id
       : undefined;
 
   return {

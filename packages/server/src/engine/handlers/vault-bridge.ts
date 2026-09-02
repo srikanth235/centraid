@@ -8,7 +8,6 @@ export type VaultOp =
   | "read"
   | "search"
   | "invoke"
-  | "query"
   | "describe"
   | "parked"
   | "changes"

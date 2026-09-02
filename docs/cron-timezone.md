@@ -18,6 +18,20 @@ Cron triggers store an optional IANA timezone. The fire zone is resolved in thre
 
 Absent `tz` therefore keeps every existing automation firing at the same wall-clock minute it always did. There is no migration shim.
 
+## Supported RRULE subset
+
+The expander honours `FREQ` (`DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY`), `INTERVAL`, `COUNT`, `UNTIL`, and `BYDAY` — the last steering `WEEKLY` expansion only. **Everything else is refused, never dropped.** `inspectRrule` returns `{ ok: false, reason: 'unsupported-part' | 'unsupported-freq' | 'malformed', … }` for `BYSETPOS`, `BYMONTHDAY`, `BYMONTH`, `BYYEARDAY`, `BYWEEKNO`, `BYHOUR`/`BYMINUTE`/`BYSECOND`, sub-daily `FREQ`, and `WKST` naming a day other than `SU` when `INTERVAL > 1`. A dropped part is a rule that means something else wearing the same face: `FREQ=MONTHLY;BYSETPOS=-1` used to expand to the anchor day and fire "last Friday of the month" on the wrong date forever.
+
+`WKST` is refused rather than implemented: it only changes an expansion when a period spans more than one week, and the engine's week starts on Sunday, so the cases that would differ are the cases it refuses.
+
+Three call shapes, one parser (`packages/core/src/time/rrule-support.ts`):
+
+| Caller | Uses | On a refused rule |
+| --- | --- | --- |
+| Write boundary (vault command, importer) | `assertSupportedRrule` | throws `UnsupportedRruleError` carrying the typed refusal, so the member sees it where they wrote it |
+| A surface that can report | `inspectRrule` | reads `reason`/`part`; `rruleRefusalMessage` renders the sentence |
+| Read surfaces (summary, expansion) | `parseRrule` / `expandRecurrence` | `null` / no occurrences — never a plausible series that means something else |
+
 ## Validation
 
 Unknown IANA names are rejected at **manifest validation** (create/patch of `automation.json`), not at fire time. The gateway default is validated when written from Settings (unknown names are refused and the pref is not updated).
@@ -61,6 +75,7 @@ The cost is the other half of the same coin: a device far enough behind never fi
 | Concern | Location |
 | --- | --- |
 | Civil time + recurrence + exception expansion | `packages/core/src/time/` |
+| RRULE parsing + the refusal contract | `packages/core/src/time/rrule-support.ts` |
 | Blueprint runtime surface | `packages/server/src/engine/worker/runner.ts` (`ctx.time`) |
 | Resolution + wall-clock extraction | `packages/server/src/automation/cron-timezone.ts` |
 | Matcher | `packages/server/src/automation/fire/cron-match.ts` |

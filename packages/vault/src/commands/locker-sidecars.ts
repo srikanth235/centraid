@@ -8,7 +8,6 @@ import { templateFor } from "./locker-types.js";
 export const LOCKER_FIELD_TYPE = "locker.item_field";
 export const LOCKER_ADDRESS_TYPE = "locker.item_address";
 export const LOCKER_PASSKEY_TYPE = "locker.item_passkey";
-export const LOCKER_HISTORY_TYPE = "locker.item_history";
 
 export const FIELD_KINDS = ["text", "sealed", "url", "date", "otp"] as const;
 
@@ -252,37 +251,4 @@ export function writePasskey(
       ctx.now
     );
   ctx.wrote(LOCKER_PASSKEY_TYPE, itemId);
-}
-
-/** `password` arrives as PLAINTEXT and is sealed by the sweep against THIS
- *  row's id — copying the item's ciphertext would bind it to the wrong cell
- *  (the AAD is `table.column:rowid`). */
-export function recordHistory(
-  ctx: HandlerCtx,
-  itemId: string,
-  input: {
-    operation: string;
-    title?: string | null;
-    previousPassword?: string | null;
-    changed: Record<string, unknown>;
-  }
-): string {
-  const revisionId = ctx.newId();
-  ctx.db
-    .prepare(
-      `INSERT INTO locker_item_history
-         (revision_id, item_id, operation, title, password, changed_json, recorded_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      revisionId,
-      itemId,
-      input.operation,
-      input.title ?? null,
-      input.previousPassword ?? null,
-      JSON.stringify(input.changed),
-      ctx.now
-    );
-  ctx.wrote(LOCKER_HISTORY_TYPE, revisionId);
-  return revisionId;
 }

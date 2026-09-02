@@ -215,7 +215,7 @@ export class AutomationTriggerStore {
   } {
     const db = this.dbProvider();
     // SAVEPOINT (not BEGIN) so this nests safely inside a caller's transaction
-    // — journal.db is one connection shared with the conversation store.
+    // — vault.db is one connection shared with the conversation store.
     db.prepare("SAVEPOINT append_ingress").run();
     try {
       const result = db

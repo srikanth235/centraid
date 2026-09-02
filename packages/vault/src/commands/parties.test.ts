@@ -166,8 +166,8 @@ describe("parties", () => {
     const now = new Date().toISOString();
     db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES ('agent-party', 'agent', 'assistant', ?, ?, '1.1')`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES ('agent-party', 'agent', 'assistant', ?, ?)`
       )
       .run(now, now);
     const refused = invoke("core.update_party", {

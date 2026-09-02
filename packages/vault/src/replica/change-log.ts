@@ -18,11 +18,11 @@ export const REPLICA_RETENTION_MAX_ENTRIES = 100_000;
  * is covered here.
  */
 export const REPLICA_COMPACTION_HELD_ENTITIES: readonly string[] = [
-  "consent.app",
-  "consent.app_ext",
-  "consent.access_grant",
-  "consent.grant_scope",
-  "consent.policy",
+  "access.app",
+  "access.app_ext",
+  "access.grant",
+  "access.grant_scope",
+  "access.policy",
 ];
 
 // A sweep reads at most `excess + MARGIN` oldest entries, capped: work is
@@ -113,7 +113,7 @@ function sqlString(value: string): string {
 function triggerSpecs(vault: DatabaseSync): EntityTriggerSpec[] {
   const specs = listVaultEntities(vault).flatMap((logical) => {
     const ref = resolveEntity(logical, vault);
-    if (!ref || ref.file !== "vault") return [];
+    if (!ref) return [];
     // One catalog read feeds identity and projection both; a second PRAGMA
     // per table costs real cold-open time.
     const columns = vault

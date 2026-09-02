@@ -246,10 +246,16 @@ export class PushWakeRelay {
     let due: ReturnType<typeof computeDueReminders>;
     let next: string | null | undefined;
     try {
-      due = computeDueReminders(plane.db, now.toISOString()).filter(
-        (reminder) => !seen.has(reminder.key)
+      due = computeDueReminders(
+        plane.gateway,
+        plane.ownerCredential,
+        now.toISOString()
+      ).filter((reminder) => !seen.has(reminder.key));
+      next = nextReminderFireAt(
+        plane.gateway,
+        plane.ownerCredential,
+        now.toISOString()
       );
-      next = nextReminderFireAt(plane.db, now.toISOString());
     } catch (error) {
       // Plane/tests may close the vault after stop(); never surface a
       // closed-DB timer as an unhandled exception (vitest fails the suite).

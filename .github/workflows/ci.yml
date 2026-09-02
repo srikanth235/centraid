@@ -344,6 +344,10 @@ jobs:
       # contracts, and every law in the registry is wired to a real enforcer.
       - run: bun run lint:engine-conformance
       - run: bun run lint:law-registry
+      # The vault registry is an allow-list from outside the vault too: raw SQL
+      # naming a physical vault table lives in packages/vault or in an entry of
+      # the linter's allow-list with a reason (review lens 8.1).
+      - run: bun run lint:vault-sql
       # Quality knobs and schema exports ratchet — tighten-only vs origin/main.
       - run: bun run lint:quality-knobs
       - run: bun run lint:schema-export

@@ -197,7 +197,7 @@ export default async function people({ ctx }: HandlerArgs) {
     };
   } catch (error) {
     const e = error as { code?: string; message?: string };
-    if (e.code === "VAULT_CONSENT") {
+    if (e.code === "VAULT_ACCESS") {
       return {
         people: [],
         proposals: [],

@@ -15,7 +15,8 @@ import type {
   ConversationRunner,
   TurnResumePlan,
 } from "../conversation/runner.js";
-import { makeJournalDbProvider } from "../stores/gateway-db.js";
+import { makeLedgerDbProvider } from "../stores/gateway-db.js";
+import { ledgerDbFileIn } from "../stores/ledger-db.test-fixtures.js";
 import {
   driveTurnOverSse,
   parseTurnAttachmentRefs,
@@ -173,16 +174,16 @@ describe("driveTurnOverSse recovery hydration", () => {
     const dir = await tempDir("centraid-turn-recovery-");
     const appsDir = path.join(dir, "apps");
     const appDir = path.join(appsDir, "notes");
-    const journalDbFile = path.join(dir, "journal.db");
+    const ledgerDbFile = ledgerDbFileIn(dir);
     const harnessSessionDir = path.join(dir, "harness-sessions");
     await fs.mkdir(appDir, { recursive: true });
-    const journal = makeJournalDbProvider(journalDbFile);
+    const journal = makeLedgerDbProvider(ledgerDbFile);
     const history = new ConversationHistoryStore(() => ({
       vaultId: "vault-test",
       ownerPartyId: "owner",
       appsDir,
       journal,
-      journalDbFile,
+      ledgerDbFile,
       harnessSessionDir,
     }));
     const conversation = history.createSession("notes");
@@ -251,16 +252,16 @@ describe("driveTurnOverSse recovery hydration", () => {
     const dir = await tempDir("centraid-turn-perrung-");
     const appsDir = path.join(dir, "apps");
     const appDir = path.join(appsDir, "notes");
-    const journalDbFile = path.join(dir, "journal.db");
+    const ledgerDbFile = ledgerDbFileIn(dir);
     const harnessSessionDir = path.join(dir, "harness-sessions");
     await fs.mkdir(appDir, { recursive: true });
-    const journal = makeJournalDbProvider(journalDbFile);
+    const journal = makeLedgerDbProvider(ledgerDbFile);
     const history = new ConversationHistoryStore(() => ({
       vaultId: "vault-test",
       ownerPartyId: "owner",
       appsDir,
       journal,
-      journalDbFile,
+      ledgerDbFile,
       harnessSessionDir,
     }));
     const conversation = history.createSession("notes");
@@ -319,16 +320,16 @@ describe("driveTurnOverSse recovery hydration", () => {
     const dir = await tempDir("centraid-turn-stale-");
     const appsDir = path.join(dir, "apps");
     const appDir = path.join(appsDir, "notes");
-    const journalDbFile = path.join(dir, "journal.db");
+    const ledgerDbFile = ledgerDbFileIn(dir);
     const harnessSessionDir = path.join(dir, "harness-sessions");
     await fs.mkdir(appDir, { recursive: true });
-    const journal = makeJournalDbProvider(journalDbFile);
+    const journal = makeLedgerDbProvider(ledgerDbFile);
     const history = new ConversationHistoryStore(() => ({
       vaultId: "vault-test",
       ownerPartyId: "owner",
       appsDir,
       journal,
-      journalDbFile,
+      ledgerDbFile,
       harnessSessionDir,
     }));
     const conversation = history.createSession("notes");
@@ -389,20 +390,20 @@ describe("driveTurnOverSse recovery hydration", () => {
     const dir = await tempDir("centraid-turn-artifacts-");
     const appsDir = path.join(dir, "apps");
     const appDir = path.join(appsDir, "notes");
-    const journalDbFile = path.join(dir, "journal.db");
+    const ledgerDbFile = ledgerDbFileIn(dir);
     const harnessSessionDir = path.join(dir, "harness-sessions");
     await fs.mkdir(path.join(appDir, "subdir"), { recursive: true });
     const huge = path.join(appDir, "huge.bin");
     const handle = await fs.open(huge, "w");
     await handle.truncate(26 * 1024 * 1024); // sparse — over the 25 MiB cap
     await handle.close();
-    const journal = makeJournalDbProvider(journalDbFile);
+    const journal = makeLedgerDbProvider(ledgerDbFile);
     const history = new ConversationHistoryStore(() => ({
       vaultId: "vault-test",
       ownerPartyId: "owner",
       appsDir,
       journal,
-      journalDbFile,
+      ledgerDbFile,
       harnessSessionDir,
     }));
     const conversation = history.createSession("notes");

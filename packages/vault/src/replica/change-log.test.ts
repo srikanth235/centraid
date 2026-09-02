@@ -122,13 +122,13 @@ describe("change-log", () => {
     vault
       .prepare(
         `INSERT INTO core_party
-         (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES ('credential-party', 'agent', 'Credential agent', ?, ?, '1.3')`
+         (party_id, kind, display_name, created_at, updated_at)
+       VALUES ('credential-party', 'agent', 'Credential agent', ?, ?)`
       )
       .run(now, now);
     vault
       .prepare(
-        `INSERT INTO consent_app
+        `INSERT INTO access_app
          (app_id, name, display_name, signing_key, status, origin, risk_ceiling, installed_at)
        VALUES ('credential-app', 'credential-app', 'Before app', 'signing-never-log',
                'active', 'installed', 'low', ?)`
@@ -136,7 +136,7 @@ describe("change-log", () => {
       .run(now);
     vault
       .prepare(
-        `INSERT INTO consent_agent
+        `INSERT INTO access_agent
          (agent_id, party_id, enrollment_key, model_ref, version, enrolled_at, status)
        VALUES ('credential-agent', 'credential-party', 'host-never-log',
                'tier:fast', '1', ?, 'active')`
@@ -144,7 +144,7 @@ describe("change-log", () => {
       .run(now);
     vault
       .prepare(
-        `INSERT INTO consent_device
+        `INSERT INTO access_device
          (device_id, owner_party_id, name, public_key, enrolled_at)
        VALUES ('credential-device', 'credential-party', 'Before device',
                'public-never-log', ?)`
@@ -154,17 +154,17 @@ describe("change-log", () => {
 
     vault
       .prepare(
-        `UPDATE consent_app SET display_name = 'After app' WHERE app_id = 'credential-app'`
+        `UPDATE access_app SET display_name = 'After app' WHERE app_id = 'credential-app'`
       )
       .run();
     vault
       .prepare(
-        `UPDATE consent_agent SET model_ref = 'tier:smart' WHERE agent_id = 'credential-agent'`
+        `UPDATE access_agent SET model_ref = 'tier:smart' WHERE agent_id = 'credential-agent'`
       )
       .run();
     vault
       .prepare(
-        `UPDATE consent_device SET name = 'After device' WHERE device_id = 'credential-device'`
+        `UPDATE access_device SET name = 'After device' WHERE device_id = 'credential-device'`
       )
       .run();
 
@@ -175,14 +175,14 @@ describe("change-log", () => {
         JSON.parse(change.oldValuesJson ?? "{}") as object,
       ])
     );
-    expect(old.get("consent.app")).toMatchObject({
+    expect(old.get("access.app")).toMatchObject({
       display_name: "Before app",
     });
-    expect(old.get("consent.app")).not.toHaveProperty("signing_key");
-    expect(old.get("consent.agent")).toMatchObject({ model_ref: "tier:fast" });
-    expect(old.get("consent.agent")).not.toHaveProperty("enrollment_key");
-    expect(old.get("consent.device")).toMatchObject({ name: "Before device" });
-    expect(old.get("consent.device")).not.toHaveProperty("public_key");
+    expect(old.get("access.app")).not.toHaveProperty("signing_key");
+    expect(old.get("access.agent")).toMatchObject({ model_ref: "tier:fast" });
+    expect(old.get("access.agent")).not.toHaveProperty("enrollment_key");
+    expect(old.get("access.device")).toMatchObject({ name: "Before device" });
+    expect(old.get("access.device")).not.toHaveProperty("public_key");
     expect(JSON.stringify(changes)).not.toMatch(
       /signing-never-log|host-never-log|public-never-log/u
     );
@@ -480,7 +480,7 @@ describe("change-log", () => {
     const epoch = currentReplicaLogState(vault).epoch;
     for (const op of ["insert", "update", "update"] as const) {
       appendReplicaChange(vault, {
-        entity: "consent.access_grant",
+        entity: "access.grant",
         rowId: "grant-1",
         op,
       });
@@ -507,9 +507,9 @@ describe("change-log", () => {
         since: { epoch, seq: result.floor.seq },
       }).changes.map((change) => `${change.entity}:${change.seq}`)
     ).toStrictEqual([
-      "consent.access_grant:1",
-      "consent.access_grant:2",
-      "consent.access_grant:3",
+      "access.grant:1",
+      "access.grant:2",
+      "access.grant:3",
       "core.party:5",
     ]);
   });

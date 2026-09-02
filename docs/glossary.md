@@ -6,10 +6,10 @@ Authoritative product vocabulary. Prefer these terms in code, docs, commits, and
 
 | Term | Meaning | Code |
 | --- | --- | --- |
-| **conversation** | Durable thread. Single-kind: `kind ∈ {chat, build, automation}`. | `packages/server/src/engine/conversation/schema.ts`; tables in `gateway-db.ts` |
+| **conversation** | Durable thread. Single-kind: `kind ∈ {chat, build, automation}`. | `packages/server/src/engine/conversation/schema.ts`; tables in `packages/vault/src/schema/ledger.ts` |
 | **turn** | One execution under a conversation (`conversation_id` NOT NULL, FK, CASCADE). One reply round for chat; one compile/fire / `ctx.delegate` round for automation. | same |
 | **item** | Ordered trace element under a turn. `kind ∈ {message_in, step, tool, delegate}`. Inbound is `message_in` ordinal 0. | same |
-| **run_summary** | Derived VIEW over the ledger for Insights — not a separate write path. | `packages/server/src/engine/stores/gateway-db.ts` |
+| **run_summary** | Derived VIEW over the ledger band for Insights — not a separate write path. | `packages/vault/src/schema/ledger.ts` |
 
 There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automation is a conversation whose other side is a deterministic script; its transcript is the same ledger.
 
@@ -27,7 +27,7 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 
 "Chat" remains fine in **UI copy** ("Ask your vault") and when `conversation.kind === 'chat'`.
 
-Schema names follow the same one-axis rule: **a table never repeats its schema name**. The plane's central table is named for what one row represents (`consent.agent` → `consent_agent`, `media.asset` → `media_asset`), not by stuttering the plane (`agent.agent` → `agent_agent`, `media.media_asset` → `media_media_asset`).
+Schema names follow the same one-axis rule: **a table never repeats its schema name**. The plane's central table is named for what one row represents (`access.agent` → `access_agent`, `media.asset` → `media_asset`), not by stuttering the plane (`agent.agent` → `agent_agent`, `media.media_asset` → `media_media_asset`).
 
 ## Core product nouns
 
@@ -35,7 +35,7 @@ Schema names follow the same one-axis rule: **a table never repeats its schema n
 | --- | --- | --- |
 | **superapp** | What Centraid is: a personal, local-first superapp — one shell wrapping many first-party apps whose content characters could not be more different. The container for every noun below. Not a builder, platform, or host for anyone else's apps ([#799](https://github.com/srikanth235/centraid/issues/799); [decisions.md](decisions.md#product-positioning)). | the shell in `packages/client/src/react/shell/`; the catalogue in `packages/blueprints/apps/` |
 | **system app** | One of the bundled first-party apps the superapp ships (Tasks, Agenda, Tally, People, Notes, Docs, Locker, Photos). Every app is a system app — there is no other kind. | `packages/blueprints/apps/<app>/`; registry `inlineApps.ts` |
-| **vault** | Sovereign personal ontology for one owner. Unit of custody: `vault.db` + `journal.db` (+ apps/, code/, …). | `packages/vault`; on-disk under `vault/<vaultId>/` |
+| **vault** | Sovereign personal ontology for one owner. Unit of custody: `vault.db` (+ blobs/, apps/, code/, …) — one SQLite file holding the model and its two append-only bands ([#916](https://github.com/srikanth235/centraid/issues/916)). | `packages/vault`; on-disk under `vault/<vaultId>/` |
 | **gateway** | Host-agnostic backend that mounts vaults, serves HTTP, runs automations and harness turns. The same core runs under the desktop-controlled local daemon or as the standalone `centraid-gateway` daemon. | `packages/server` — `buildGateway()`, `serve()` |
 | **app** | Installed projection over the vault. Code serves from the release (UI blueprints) or cloned automation sources. Declared handlers in `app.json`. | `packages/server/src/engine`, `packages/blueprints` |
 | **inline app** | An app rendered as a React route **inside the shell** — no iframe, no bridge, replica-backed, offline-capable. Since #799 this is the _only_ DOM render path, so "inline" is a description of the mechanism rather than a contrast with a second one; the qualifier survives because the code identifiers do (`inlineApps.ts`, `app-inline.tsx`, `InlineAppRoute.tsx`). | `packages/client/src/react/shell/routes/InlineAppRoute.tsx`; registry `inlineApps.ts`; `packages/blueprints/apps/<app>/app-inline.tsx` |
@@ -43,7 +43,7 @@ Schema names follow the same one-axis rule: **a table never repeats its schema n
 | **automation** | Headless conversation + manifest + handler that fires on schedule, webhook, condition, or vault data change. | `packages/server/src/automation` |
 | **harness** | An installed model-capable CLI Centraid can drive for a turn, such as `codex`, `claude-code`, or `opencode`. Code and wire identifiers use `Harness*`; Settings keeps the market-facing label **Agents**. | `packages/server/src/acp/registry.ts`; `docs/harnesses.md` |
 | **delegate** | A bounded judgment step requested by a handler through `ctx.delegate`; recorded as an item with `kind='delegate'`. It is an act, not a principal. | `packages/server/src/automation/handler/ctx.ts`; `packages/server/src/acp/automation/run-automation-live-dispatch.ts` |
-| **agent** | An autonomous L2 principal with an enrolled credential. Never a harness, model call, handler rail, or ledger item kind. | `consent_agent`; `packages/vault/src/schema/consent.ts` |
+| **agent** | An autonomous L2 principal with an enrolled credential. Never a harness, model call, handler rail, or ledger item kind. | `access_agent`; `packages/vault/src/schema/access.ts` |
 | **adapter** | A first-party npm shim that makes a CLI without a native ACP mode speak ACP. No other integration or persistence field uses this word. | `AcpAdapterSpec`; `packages/server/src/acp/backends/acp/adapter-bin.ts` |
 | **provider** | The external vendor that receives egress. Use only in egress/consent/model-vendor language, never as the installed CLI's name. | `ProviderEgressConsentController` |
 | **Notifications** | The owner-facing projection that unifies open **decisions** with informational **notices**. It owns no second copy of decision state. | `GET /centraid/_vault/notifications`; `VaultPlane.notificationsSummary()` |
@@ -53,8 +53,13 @@ Schema names follow the same one-axis rule: **a table never repeats its schema n
 | **gateway health** | Live gateway/component **status** — never a Notifications notice (#665). Status is not something the owner can resolve by acting on a card; it lives on the Gateway page (status card, Components tab, durable Alerts history) plus the desktop's threshold-gated OS notification. | `apps/desktop/src/main/gateway-monitor.ts`; `gateway-outage-log-core.ts`; `AlertHistoryPanel` |
 | **wake** | Content-free APNs/FCM/Web Push signal that tells a client to fetch locally. A wake never carries a Notifications headline or vault content. | `PushWakeRelay` |
 | **handler** | Declared query (read) or action (write) in `app.json`, validated by Ajv, run in a worker with `ctx.vault`. | `packages/server/src/engine/handlers/` |
-| **consent / grant** | Owner-signed permission for an app or device to touch vault scopes. App and device scope grants are **strategy machinery beneath manifests**; a member's standing authority answers live in the one authority table ([#883](https://github.com/srikanth235/centraid/issues/883)). | `packages/vault` consent gateway |
-| **journal** | `journal.db` — audit/receipt stream **and** conversation ledger bands. | vault package + app-engine `gateway-db.ts` |
+| **consent / grant** | Owner-signed permission for an app or device to touch vault scopes. App and device scope grants are **strategy machinery beneath manifests**; a member's standing authority answers live in the one authority table ([#883](https://github.com/srikanth235/centraid/issues/883)). | `packages/vault` access gateway |
+| **access plane** | The vault schema that answers "may this actor reach this data" — apps, agents, devices, grants, scopes, tombstones, policy. Named `consent` until [#916](https://github.com/srikanth235/centraid/issues/916): the plane decides access, and consent is one of the answers it records. The gateway stage that asks it is `evaluateAccess`; a refusal is `GatewayError("access", …)`. | `packages/vault/src/schema/access.ts`, `packages/vault/src/gateway/access.ts` |
+| **audit band** | The append-only evidence tables inside `vault.db` — `access_provenance`, `access_receipt`, `agent_command_invocation / invocation_check / evidence / explanation`. Append-only by trigger, excluded from export/replica/support bundle by band, retained 365 days. Do **not** call it "the journal". | `packages/vault/src/schema/audit.ts` |
+| **ledger band** | The conversation ledger inside `vault.db` — conversations, turns, items, attachments, automation state, archive and digest rows. Same file, same exclusions, 90-day retention window. | `packages/vault/src/schema/ledger.ts` |
+| **self party** | The vault's own `core_party` row — the person as **data** (`core_vault.self_party_id`). It confers nothing: authority is gateway-side (owner + device + `share_authority`). Never "owner party" ([#916](https://github.com/srikanth235/centraid/issues/916), ruling ONT-05). | `core_vault.self_party_id`; see [Owners](#owners-gateway-726) |
+| **entity / supertype** | Every ontology row is also a row of `core_entity(entity_type, entity_id)`, so an id is unique across the model and every `(type, id)` pointer is a composite foreign key the engine cascades. An entity is a thing the owner can name, share, trash and purge. | `packages/vault/src/schema/entity.ts` |
+| **projection** (vault) | A row that is a **part** of an entity rather than an entity — an expense split, a memory member, a phash — keyed by its parent and holding no supertype row of its own. Declared in the registry; nine exist. Distinct from a _projection_ in the app sense (a rebuildable view over the model). | `entityDeclaration().projectionOf`; `entity-catalog.ts` |
 | **replica** | Consent-scoped, read-mostly device copy; intents for offline writes; gateway is sole canonical writer. | `packages/vault` replica schema; `packages/client/src/replica/` |
 | **pending-write overlay** | The durable local read law `replica ⊕ outbox`. A stable projected row survives reload/restart and carries queued/sending/parked/denied/conflict/failed status until canonical execution or explicit discard. Never “optimistic state” owned by an app component. | `packages/blueprints/apps/_shared/pending-overlay.ts`; per-app `pending-projection.ts` |
 | **pairing** | One-time ticket ceremony that enrolls a device key to one or more vaults over the tunnel; each vault remains an independent binding. | `packages/server` pairing/enrollment stores; `packages/tunnel` |
@@ -74,7 +79,7 @@ Schema names follow the same one-axis rule: **a table never repeats its schema n
 | **egress class** | Where an engine's work happens — `on-device`, `gateway` (the member's own infrastructure, not egress), or `provider`. Computed from the engine, never user-set, and the axis egress consent is keyed on. | `packages/vault/src/enrich/egress-consent.ts`; `packages/server/src/enrich/engine-profiles.ts` |
 | **policy cascade** | The scoped enrichment rules — vault, domain, collection, item — stating per capability whether it is enabled, which engine profile runs it, and its trigger. `NULL` inherits, most specific wins, and one resolver folds it inside the gate. | `packages/vault/src/enrich/policy-rules.ts`; `packages/server/src/automation/fire/enrich-resolve.ts` |
 | **design tokens** | Shared colors, type, spacing, icons across desktop/web/mobile. | `packages/design` |
-| **receipt** | (1) Vault write receipt id from consent pipeline; (2) repo `receipts/issue-N-*.md` for issue work. | context-dependent |
+| **receipt** | (1) Vault write receipt id from the access pipeline; (2) repo `receipts/issue-N-*.md` for issue work. | context-dependent |
 | **prefs** | Device-level gateway preferences in `gateway.db` — harness, theme, etc. Not the vault owner identity. | `GatewayDatabase.prefRows()` / `setPref()` |
 
 ## Hosts and clients
@@ -146,7 +151,7 @@ The five layers still apply, corrected at L3:
 - **L1 authentication** — devices proving iroh EndpointIds — the only cryptographically provable layer.
 - **L2 principals** — owners and agents.
 - **L3 authorization** — was `(member, vault) → role`; now `vault_owners(vault_id, owner_id)`. Ownership, not a lattice.
-- **L4 attribution** — the journal records the acting owner (and the agent when one acted) whenever a principal is known; scheduler-fired automations carry none.
+- **L4 attribution** — the audit band records the acting owner (and the agent when one acted) whenever a principal is known; scheduler-fired automations carry none.
 
 **D2 vocabulary (binding):**
 
@@ -182,7 +187,7 @@ Invariants:
 - **Auto-founding** enrolls the founding owner with no prompt (#603): a fresh data dir gets **Personal**, recorded in `vault_owners` for that owner in one transaction. `Shared` is created later only when an owner explicitly asks for another vault; nothing on its record says "sharing".
 - **Sharing is residency, not filtering.** Data crosses only by projection into another vault, under a standing **grant** (#825): a `view` grant re-projects the origin's rows on change, and commons reconciles a circle's container into every joined member's vault as the `edit` strategy. No one queries another person's vault.
 
-One deliberate mapping, simplified by #726: a device's trust (`full`/`readonly`) is a **capability mirror**, not ownership. Ownership is binary — an owner owns a vault or does not, no partial grade — so every enrolled device lands `full`; device attenuation is the separate `grant_profile_json` mask, orthogonal to trust. Since [#883](https://github.com/srikanth235/centraid/issues/883) that trust is a `device`-principal row of the one authority table rather than a `consent_device.trust` column — `consent_device` is identity, the plane carries the answer.
+One deliberate mapping, simplified by #726: a device's trust (`full`/`readonly`) is a **capability mirror**, not ownership. Ownership is binary — an owner owns a vault or does not, no partial grade — so every enrolled device lands `full`; device attenuation is the separate `grant_profile_json` mask, orthogonal to trust. Since [#883](https://github.com/srikanth235/centraid/issues/883) that trust is a `device`-principal row of the one authority table rather than an `access_device.trust` column — `access_device` is identity, the plane carries the answer.
 
 ## Sharing: the grant plane, commons, links, and the peer plane (#726, #731, #825)
 
@@ -217,7 +222,7 @@ Two retired vocabularies, historical only. **lend** — #726's live edges, borro
 | --- | --- |
 | "app builder" / "personal app builder" for the product | **superapp** — #799 retired the authoring and serving planes; the product is one shell wrapping the bundled first-party apps. "Builder" survives only for the **automation compiler** (the headless compile harness in [blueprints](../packages/blueprints/README.md)), never for the product |
 | "platform" for Centraid | **superapp** — a platform hosts other people's software; Centraid ships its own and nothing else |
-| "third-party app" / "user-built app" / "generated app" | **system app** — there is one kind of app and this repo ships all of them. `consent.app.origin` still declares `CHECK (origin IN ('installed','generated'))`, but nothing writes `'generated'` since #799 — it is a dead schema value awaiting a migration, not a product noun |
+| "third-party app" / "user-built app" / "generated app" | **system app** — there is one kind of app and this repo ships all of them. `access.app.origin` declares `CHECK (origin IN ('installed'))` — the dead `'generated'` value left the vocabulary in [#916](https://github.com/srikanth235/centraid/issues/916), because an app has had one door since #799 |
 | "served app" | Retired vocabulary (#799). An app used to be renderable as an **opaque, same-origin iframe document** the gateway baked and served under the blueprint CSP. The mobile WebView cover, the desktop/PWA iframe host, the builder that authored for it, and the gateway's UI-byte serving are all gone; the gateway serves an app's **data**, never its bytes. Say **system app** (or **inline app** for the render mechanism) |
 | "code store" for where an app's UI lives | there isn't one — bundled app UI compiles from `packages/blueprints/apps/` into the client release. `vault/<id>/code/` holds **cloned automation sources** only |
 | "enrichment service" / "ML sidecar" | **recognition automation** — the handler itself owns model execution |

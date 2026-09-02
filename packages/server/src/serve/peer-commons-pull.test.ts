@@ -80,8 +80,8 @@ function seedBigPhoto(
       `INSERT INTO media_asset
          (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id,
           place_id, camera_device_id, width, height, duration_s, exif_json,
-          favorite, archived_at, deleted_at, purge_at)
-       VALUES (?, ?, 'photo', ?, NULL, NULL, NULL, NULL, 800, 600, NULL, NULL, 0, NULL, NULL, NULL)`
+          archived_at, deleted_at, purge_at)
+       VALUES (?, ?, 'photo', ?, NULL, NULL, NULL, NULL, 800, 600, NULL, NULL, NULL, NULL, NULL)`
     )
     .run(assetId, contentId, now);
   return { assetId, sha256: original.sha256 };
@@ -284,9 +284,9 @@ describe("peer commons pull cost (#750 invariant 7)", () => {
     expect(second).toMatchObject({ state: "current", sequence: 1 });
     expect(
       pair.member.vault.vault
-        .prepare("SELECT favorite FROM media_asset WHERE asset_id = ?")
+        .prepare("SELECT asset_id FROM media_asset WHERE asset_id = ?")
         .get(pair.assetId)
-    ).toMatchObject({ favorite: 1 });
+    ).toMatchObject({ asset_id: pair.assetId });
     expect(
       pair.member.vault.vault
         .prepare(

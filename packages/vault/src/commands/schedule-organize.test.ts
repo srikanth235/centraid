@@ -65,8 +65,8 @@ describe("schedule organization commands", () => {
     db.vault
       .prepare(
         `INSERT INTO core_party
-          (party_id, kind, display_name, created_at, updated_at, ontology_version)
-         VALUES (?, 'person', 'Asha', ?, ?, '1.4')`
+          (party_id, kind, display_name, created_at, updated_at)
+         VALUES (?, 'person', 'Asha', ?, ?)`
       )
       .run(guestId, new Date().toISOString(), new Date().toISOString());
 
@@ -126,18 +126,29 @@ describe("schedule organization commands", () => {
         }).status
       ).toBe("executed");
     }
+    // THE KEY IS THE SERIES-LOCAL WALL CLOCK (#916, R5): the series runs in
+    // Asia/Kolkata, so 03:30Z is 09:00 there — and that, not the instant, is
+    // what identifies the occurrence across an edit that moves the series.
     const rows = db.vault
       .prepare(
-        `SELECT original_start, action, override_json
+        `SELECT original_start_local, recurrence_semantics, action, override_json
            FROM schedule_recurrence_exception
-          WHERE target_id = ? ORDER BY original_start`
+          WHERE target_id = ? ORDER BY original_start_local`
       )
       .all(eventId) as {
-      original_start: string;
+      original_start_local: string;
+      recurrence_semantics: string;
       action: string;
       override_json: string;
     }[];
     expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.original_start_local)).toStrictEqual([
+      "2026-07-13T09:00:00",
+      "2026-07-20T09:00:00",
+    ]);
+    expect(rows.every((row) => row.recurrence_semantics === "zoned")).toBe(
+      true
+    );
     expect(JSON.parse(rows[1]!.override_json)).toMatchObject({
       scope: "future",
       start: "2026-07-20T04:30:00.000Z",
@@ -150,8 +161,8 @@ describe("schedule organization commands", () => {
     db.vault
       .prepare(
         `INSERT INTO core_party
-          (party_id, kind, display_name, created_at, updated_at, ontology_version)
-         VALUES (?, 'person', 'Asha', ?, ?, '1.4')`
+          (party_id, kind, display_name, created_at, updated_at)
+         VALUES (?, 'person', 'Asha', ?, ?)`
       )
       .run(guestId, new Date().toISOString(), new Date().toISOString());
 
@@ -175,9 +186,9 @@ describe("schedule organization commands", () => {
     const row = db.vault
       .prepare(
         `SELECT override_json FROM schedule_recurrence_exception
-          WHERE target_id = ? AND original_start = ?`
+          WHERE target_id = ? AND original_start_local = ?`
       )
-      .get(eventId, "2026-07-13T03:30:00.000Z") as { override_json: string };
+      .get(eventId, "2026-07-13T09:00:00") as { override_json: string };
     expect(JSON.parse(row.override_json)).toMatchObject({
       scope: "occurrence",
       summary: "Planning (moved)",
@@ -276,14 +287,14 @@ describe("schedule organization commands", () => {
         section_id: sectionId,
         sort_order: 7,
         recurrence_anchor: "completion",
-        recurrence_tz: "Asia/Kolkata",
+        tz: "Asia/Kolkata",
       }).status
     ).toBe("executed");
     expect(
       db.vault
         .prepare(
           `SELECT project_id, section_id, sort_order, recurrence_anchor,
-                  recurrence_tz FROM schedule_task WHERE task_id = ?`
+                  tz FROM schedule_task WHERE task_id = ?`
         )
         .get(taskId)
     ).toMatchObject({
@@ -291,7 +302,7 @@ describe("schedule organization commands", () => {
       section_id: sectionId,
       sort_order: 7,
       recurrence_anchor: "completion",
-      recurrence_tz: "Asia/Kolkata",
+      tz: "Asia/Kolkata",
     });
   });
 
@@ -309,7 +320,7 @@ describe("schedule organization commands", () => {
         clear_project: true,
         sort_order: 0,
         recurrence_anchor: "completion",
-        recurrence_tz: "Asia/Kolkata",
+        tz: "Asia/Kolkata",
       }).status
     ).toBe("executed");
 

@@ -10,7 +10,8 @@ import { tempDir, tempDirSync } from "@centraid/test-kit/temp-dir";
 import { ConversationHistoryStore } from "../conversation/history.ts";
 import type { ConversationRunner } from "../conversation/runner.ts";
 import { Runtime } from "../runtime.ts";
-import { makeJournalDbProvider } from "../stores/gateway-db.ts";
+import { makeLedgerDbProvider } from "../stores/gateway-db.ts";
+import { ledgerDbFileIn } from "../stores/ledger-db.test-fixtures.js";
 import type { WorkspaceProvider } from "../stores/vault-workspace.ts";
 import { startRuntimeHttpServer } from "./http-server.ts";
 import type { RuntimeHttpServerHandle } from "./http-server.ts";
@@ -63,15 +64,15 @@ describe("turn-routes", () => {
     const dir = tempDirSync(`centraid-chat-history-${crypto.randomUUID()}-`);
     mkdirSync(path.join(dir, "apps"), { recursive: true });
     // One cached journal provider for this dir (mirrors history.test.ts's
-    // `journalFor`) — a fresh `makeJournalDbProvider` per `workspace()` call
+    // `journalFor`) — a fresh `makeLedgerDbProvider` per `workspace()` call
     // opens a second handle onto the same sqlite file and the turn hangs.
-    const journal = makeJournalDbProvider(path.join(dir, "journal.db"));
+    const journal = makeLedgerDbProvider(ledgerDbFileIn(dir));
     const workspaceLocal: WorkspaceProvider = () => ({
       vaultId: "vault-test",
       ownerPartyId: "test-user",
       appsDir: path.join(dir, "apps"),
       journal,
-      journalDbFile: path.join(dir, "journal.db"),
+      ledgerDbFile: ledgerDbFileIn(dir),
       harnessSessionDir: path.join(dir, "harness-sessions"),
     });
     return new ConversationHistoryStore(workspaceLocal);

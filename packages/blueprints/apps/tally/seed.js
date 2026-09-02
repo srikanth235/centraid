@@ -27,7 +27,7 @@ export default async function seedHandler({ input, log, ctx }) {
     purpose: PURPOSE,
     limit: 1,
   });
-  const me = vaultRow.rows?.[0]?.owner_party_id;
+  const me = vaultRow.rows?.[0]?.self_party_id;
   if (!me) throw new Error("vault has no owner party");
 
   const maya = await invoke("tally.add_friend", { name: "Maya" });

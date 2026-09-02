@@ -326,9 +326,9 @@ describe("knowledge", () => {
 
   test("create_note writes provenance for the note", () => {
     const { note_id } = createNote({ title: "Receipted", body_text: "x" });
-    const prov = db.journal
+    const prov = db.audit
       .prepare(
-        `SELECT count(*) AS n FROM consent_provenance
+        `SELECT count(*) AS n FROM access_provenance
         WHERE entity_type='knowledge.note' AND entity_id=? AND prov_activity='command.knowledge.create_note'`
       )
       .get(note_id) as { n: number };

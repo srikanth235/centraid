@@ -10,6 +10,8 @@
 // over the wire, projected into a member seat, or included in a bootstrap
 // frame — they are this device's own observations about its own syncing.
 
+import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+
 export const COMMONS_RESILIENCE_DDL = `
 -- Per (grant, member vault) record of contact with that grant's steward, plus
 -- the cheap local counters the fixed-window-sync decision needs. One row is
@@ -60,8 +62,9 @@ CREATE TABLE share_commons_device_reach (
   row_id             INTEGER PRIMARY KEY CHECK (row_id = 1),
   last_round_trip_at TEXT,
   round_trips        INTEGER NOT NULL DEFAULT 0 CHECK (round_trips >= 0),
-  updated_at         TEXT NOT NULL
+  updated_at         TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
+${touchUpdatedAt("share_commons_device_reach", "row_id")}
 
 -- Replica-export recovery lineage. The superseded grant is NEVER deleted: its
 -- ops, receipts and projected rows stay exactly where they were. This row is

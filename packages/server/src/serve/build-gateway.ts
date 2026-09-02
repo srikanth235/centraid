@@ -78,7 +78,7 @@ import {
   generateConversationTitle,
   makeConversationRouteHandler,
   makeConversationRunnerCore,
-  makeJournalDbProvider,
+  makeLedgerDbProvider,
   makeUserStoreRouteHandler,
   resolveSubsystemModel,
   resolveSubsystemHarnessLadder,
@@ -126,9 +126,9 @@ import {
   SYSTEM_RECOGNITION_TEMPLATE_IDS,
 } from "../enrich/system-recognition.js";
 import {
-  closeJournalConversationStores,
-  journalConversationStore,
-} from "../journal-stores.js";
+  closeLedgerConversationStores,
+  ledgerConversationStore,
+} from "../ledger-stores.js";
 import { unrefTimer } from "../lib/unref-timer.js";
 import {
   resolveAutomationAnchors,
@@ -1098,7 +1098,7 @@ export async function buildGateway(
   const journalStoreFor = (vaultId: string): ConversationStore => {
     const plane = vaultRegistry.get(vaultId);
     if (!plane) throw new Error(`gateway: unknown vault "${vaultId}"`);
-    return journalConversationStore(plane.workspace.journalDbFile);
+    return ledgerConversationStore(plane.workspace.ledgerDbFile);
   };
 
   const schedulerLedgers = new Map<string, automation.SchedulerLedgerStore>();
@@ -1172,7 +1172,6 @@ export async function buildGateway(
         vaultRegistry.planesList().map((p) => ({
           vaultId: p.boot.vaultId,
           vault: p.db.vault,
-          journal: p.db.journal,
         })),
       startupGraceMs: 5 * 60_000,
     })
@@ -1779,7 +1778,7 @@ export async function buildGateway(
         // MEMOIZED deliberately: a data-triggered automation can fire every
         // few seconds, and a fresh provider per fire would leak an unclosed
         // `DatabaseSync` (64 MiB mapping + an fd) each time.
-        const ledger = journalConversationStore(ws.journalDbFile);
+        const ledger = ledgerConversationStore(ws.ledgerDbFile);
         const prior = ledger.getTurn(opts.runId);
         if (prior?.endedAt !== undefined) return { turnId: runId };
         // An interrupted turn retries under the SAME run id: cascading removes
@@ -1799,7 +1798,7 @@ export async function buildGateway(
         automationRef,
         runId,
         appsDir: ws.appsDir,
-        journalDbFile: ws.journalDbFile,
+        ledgerDbFile: ws.ledgerDbFile,
         runTurn: accountedRunTurn,
         codeAppsDir: host.codeAppsDir(),
         vaultFor: async (appId: string, ref: string) => {
@@ -1982,7 +1981,11 @@ export async function buildGateway(
         const meta = await readBundledAppMeta(bundledAppDir(appId));
         plane.installApp(appId, meta.name);
       });
-      await forEachSequentially(plane.installedAppIds(), async (appId) => {
+      // Over `bundledAppIds`, NOT over what the vault says is enrolled: every
+      // enrolled app now reads as `origin = 'installed'` (#916, ruling ONT-07),
+      // and a store app or a recognition recipe has no bundle directory to
+      // read declared scopes from.
+      await forEachSequentially(bundledAppIds, async (appId) => {
         await requireRuntime().registry.ensureUploaded(appId);
         await grantDeclaredBundledScopes(plane, appId);
       });
@@ -2014,7 +2017,7 @@ export async function buildGateway(
         vaultRegistry.enrollApp(appId);
         await grantDeclaredAppScopes(plane, host.store, appId);
       });
-      await forEachSequentially(plane.installedAppIds(), async (appId) => {
+      await forEachSequentially(bundledAppIds, async (appId) => {
         await requireRuntime().registry.ensureUploaded(appId);
         await grantDeclaredBundledScopes(plane, appId);
       });
@@ -2215,7 +2218,7 @@ export async function buildGateway(
 
           await runHeadlessAutomationCompile({
             runner: automationCompileRunner,
-            journalDbFile: workspace.journalDbFile,
+            ledgerDbFile: workspace.ledgerDbFile,
             harnessSessionDir: workspace.harnessSessionDir,
             dataDir: workspace.appsDir,
             appId: parsed.appId,
@@ -2370,7 +2373,8 @@ export async function buildGateway(
       // Bundled code is read-only, so the name lands on the enrollment record
       // (#434); false lets the meta route fall through to app.json.
       renameBundledApp: (appId, name) => {
-        if (!plane.installedAppIds().has(appId)) return false;
+        if (!bundledAppIds.has(appId) || !plane.installedAppIds().has(appId))
+          return false;
         plane.setAppLabel(appId, name);
         return true;
       },
@@ -2390,7 +2394,7 @@ export async function buildGateway(
           labels?: { note: string }
         ): void => {
           recordFailedAutomationCompile({
-            journalDbFile: workspace.journalDbFile,
+            ledgerDbFile: workspace.ledgerDbFile,
             automationRef: row.ref,
             appId: row.ownerApp,
             automationName: row.name,
@@ -2468,7 +2472,7 @@ export async function buildGateway(
               row,
               steering,
               revisionTurnId,
-              journalDbFile: workspace.journalDbFile,
+              ledgerDbFile: workspace.ledgerDbFile,
               harnessSessionDir: workspace.harnessSessionDir,
               runTurn: accountedRunTurn,
               harnessPrefs,
@@ -2652,32 +2656,40 @@ export async function buildGateway(
           await deregisterAndCleanup(appId);
           await reconcileScheduler(vaultId);
         },
+        // BUNDLED ONLY. `access_app.origin` is a one-value vocabulary since
+        // #916 (ruling ONT-07), so the enrollment row no longer says whether
+        // an app came with Centraid or was written in the app store — the
+        // bundle manifest does. Without this filter a store app's own
+        // `app.json` identity is shadowed by a bundled row that has none.
         bundledApps: async () =>
           Promise.all(
-            plane.installedApps().map(async ({ name, label }) => {
-              const meta = await readBundledAppMeta(bundledAppDir(name));
-              return {
-                id: name,
-                name: label ?? meta.name ?? name,
-                ...(meta.description === undefined
-                  ? {}
-                  : { description: meta.description }),
-                kind: "app" as const,
-                ...(meta.iconKey === undefined
-                  ? {}
-                  : { iconKey: meta.iconKey }),
-                ...(meta.colorKey === undefined
-                  ? {}
-                  : { colorKey: meta.colorKey }),
-              };
-            })
+            plane
+              .installedApps()
+              .filter(({ name }) => bundledAppIds.has(name))
+              .map(async ({ name, label }) => {
+                const meta = await readBundledAppMeta(bundledAppDir(name));
+                return {
+                  id: name,
+                  name: label ?? meta.name ?? name,
+                  ...(meta.description === undefined
+                    ? {}
+                    : { description: meta.description }),
+                  kind: "app" as const,
+                  ...(meta.iconKey === undefined
+                    ? {}
+                    : { iconKey: meta.iconKey }),
+                  ...(meta.colorKey === undefined
+                    ? {}
+                    : { colorKey: meta.colorKey }),
+                };
+              })
           ),
         ext,
       }),
       makeLifecycleRouteHandler(lifecycleOpts),
       makeAutomationsRouteHandler({
         store,
-        journalDbFile: workspace.journalDbFile,
+        ledgerDbFile: workspace.ledgerDbFile,
         analytics: analyticsStore,
         insights: insightsStore,
         runAutomation: ({ automationRef, turnId }) => {
@@ -2738,7 +2750,7 @@ export async function buildGateway(
             row,
             turnId,
             message,
-            journalDbFile: workspace.journalDbFile,
+            ledgerDbFile: workspace.ledgerDbFile,
             harnessSessionDir: workspace.harnessSessionDir,
             runner: automationConversationRunnerFor(
               executionScopeBlock(row.manifest.vault)
@@ -2808,7 +2820,7 @@ export async function buildGateway(
     const plane = vaultRegistry.get(vaultId);
     if (!plane) throw new Error(`gateway: unknown vault "${vaultId}"`);
     const store = new AutomationTriggerStore(
-      makeJournalDbProvider(plane.workspace.journalDbFile)
+      makeLedgerDbProvider(plane.workspace.ledgerDbFile)
     );
     triggerStores.set(vaultId, store);
     return store;
@@ -3531,8 +3543,8 @@ export async function buildGateway(
     // conversation-scoped and FK-backed — hence one hidden build conversation
     // per vault, so a durable receipt exists before any text egresses.
     const captureConversationId = "centraid:capture-classifier";
-    const captureLedger = journalConversationStore(
-      currentWorkspace().journalDbFile
+    const captureLedger = ledgerConversationStore(
+      currentWorkspace().ledgerDbFile
     );
     if (!captureLedger.getConversation(captureConversationId)) {
       captureLedger.createConversation({
@@ -4153,6 +4165,7 @@ export async function buildGateway(
     enrollments: enrollmentStore,
     links: vaultLinksStore,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+    partyIdFor: (vaultId) => vaultRegistry.get(vaultId)?.boot.ownerPartyId,
   });
   const commonsHandler = makeCommonsRouteHandler({
     enrollments: enrollmentStore,
@@ -4293,6 +4306,7 @@ export async function buildGateway(
     db: gatewayDatabase,
     links: vaultLinksStore,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+    partyIdFor: (vaultId) => vaultRegistry.get(vaultId)?.boot.ownerPartyId,
     commonsVaults: () =>
       vaultRegistry.planesList().map((plane) => ({
         vaultId: plane.boot.vaultId,
@@ -4659,9 +4673,9 @@ export async function buildGateway(
     await Promise.all(lockTails);
     const journalFiles = vaultRegistry
       .planesList()
-      .map((plane) => plane.workspace.journalDbFile);
+      .map((plane) => plane.workspace.ledgerDbFile);
     vaultRegistry.stop();
-    closeJournalConversationStores(journalFiles);
+    closeLedgerConversationStores(journalFiles);
     performanceMonitor.close();
     gatewayDatabase.close();
   };

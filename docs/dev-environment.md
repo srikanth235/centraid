@@ -152,6 +152,12 @@ The failure report changed too, and that matters as much as the clock: every gat
 
 Tier 0 is scoped to **staged files** on purpose. A repo-wide gate at commit time fires on debt in files you never opened, and a gate that fires for someone else's mess is one people learn to bypass.
 
+### Reaching the vault from outside it
+
+`bun run lint:vault-sql` (tier 1, in `check:push`, and a step of the CI `static` job) fails when a file outside `packages/vault` names a physical vault table in raw SQL. The gateway is where consent is resolved, a receipt is written, and trashed rows are filtered out; a `SELECT … FROM core_event` written anywhere else walks past all three, and nothing in the type system notices. The vocabulary is **read from** `packages/vault/src/schema/entity-catalog.ts`, so a table added tomorrow is covered the day it is declared, and the plane machinery that legitimately owns tables outside the vault (replica, share/commons, broker, notices, doctor, restore, quarantine) is named in `ALLOW_LIST` in [`scripts/lint-vault-sql.mjs`](../scripts/lint-vault-sql.mjs) with one clause each. An allow-list entry whose file has stopped speaking SQL fails too — a standing allowance nothing needs is a permission slip for the next file that moves in.
+
+It went green the way it was meant to (review lens 8.1): the three life-data readers that used to fail it — `packages/server/src/brief/daily-brief.ts`, `packages/server/src/reminders/due-reminders.ts` and `packages/server/src/enrich/semantic-search.ts` — moved behind the gateway rather than onto the allow-list.
+
 ### Escape hatches
 
 ```sh

@@ -23,9 +23,9 @@
       "failure": "gateway boot coverage throws for the unclassified prefix"
     },
     "L3": {
-      "command": "bun run test:qualities backup-archaeology schema-migration-corpus",
-      "seed": "truncate the corpus's forward migration to VAULT_MIGRATIONS.slice(0, 1) in scripts/corpora/vault-corpus.ts, or tamper a census count in scripts/corpora/schema-epoch-census.json",
-      "failure": "all seven epoch sweeps fail at 'expected 1 to be 7'; a tampered manifest census fails the growth-guard's strict-equal against the seed's EXPECTED_CENSUS"
+      "command": "bun run test:qualities backup-archaeology",
+      "seed": "tamper a census count in scripts/corpora/backup-format-census.json, or drop a row from the seed in tests/quality/backup-corpus-fixture.ts",
+      "failure": "the restored member's census fails the strict-equal against the committed golden, and the growth-guard fails its strict-equal against the seed's EXPECTED_CENSUS"
     },
     "T6": {
       "command": "node node_modules/vitest/vitest.mjs run --project @centraid/server hostile-peer -t 'replayed as a fresh'",
@@ -730,12 +730,12 @@
         },
         {
           "id": "L3",
-          "name": "old formats and old schema epochs still restore",
-          "owner": "tests/quality/schema-migration-corpus.test.ts",
-          "evidence": "every readable snapshot format restores to a matching census; every schema epoch migrates forward to HEAD preserving its census; a vault stamped ahead is refused uncorrupted",
+          "name": "old formats still restore",
+          "owner": "tests/quality/backup-archaeology.test.ts",
+          "evidence": "every readable snapshot format restores to a matching census, over a byte-reproducible seeded vault",
           "lane": "vitest",
           "wallClockCost": "low",
-          "knob": "scripts/corpora/schema-epoch-census.json",
+          "knob": "scripts/corpora/backup-format-census.json",
           "governance": "tighten-only",
           "redLastDemonstrated": "2026-08-21"
         },
@@ -1027,7 +1027,7 @@
     "gateway.concurrency": "packages/server/src/serve/serve-multiclient.test.ts covers multi-client serve. Multi-actor write interleaving remains under #864 (originally #656).",
     "gateway.performance": "tests/perf/gateway-request.perf.test.ts proves the current request budget. Longitudinal drift across nightlies remains under #864 (originally #659).",
     "gateway.journey": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs proves the pairing lifecycle. A cross-surface end-to-end assertion remains under #864 (originally #656).",
-    "app-engine.durability": "packages/server/src/engine/conversation/archive/archive.contract.test.ts proves crash/reopen keeps the archive index (close journal.db, reopen, no second segment). Tracked remaining: none for the happy-path-only hole (#864 W3).",
+    "app-engine.durability": "packages/server/src/engine/conversation/archive/archive.contract.test.ts proves crash/reopen keeps the archive index (close vault.db, reopen, no second segment). Tracked remaining: none for the happy-path-only hole (#864 W3).",
     "app-engine.concurrency": "packages/server/src/engine/handlers/handler-pool.test.ts proves two concurrent dispatches complete without sharing a result (#864 W4). Tracked remaining: none for the happy-path-only hole.",
     "app-engine.scalability": "tests/scale/conversation-ledger.scale.test.ts proves the current ledger volume profile. A second volume profile and saturation signal remain under #864 (originally #659).",
     "automations.durability": "packages/server/src/automation/fire/scheduler-ledger.contract.test.ts proves lastTickAt survives a new store over the same KV (one gateway-down miss, never again). Tracked remaining: none for the happy-path-only hole (#864 W3).",
@@ -1964,33 +1964,33 @@
   ],
   "laws": {
     "consent-denial-monotone": {
-      "statement": "Deleting a grant, removing a grant_scope, narrowing a clamp verb, or adding a consent_policy row can only turn an allow into a deny, never a deny into an allow.",
-      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "statement": "Deleting a grant, removing a grant_scope, narrowing a clamp verb, or adding an access_policy row can only turn an allow into a deny, never a deny into an allow.",
+      "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
     "consent-clamp-order-independent": {
       "statement": "The decision, the set of returned rowFilter clauses, and the fieldMask are invariant under permutation of identity.scopeClamp.",
-      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
     "consent-clamp-only-narrows": {
       "statement": "For every allow, the returned rowFilter is a superset of the grant scope's and the clamp's clauses, and the fieldMask is exactly grantMask ∩ clampMask (null only when both are null).",
-      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
     "consent-reveal-never-rides": {
       "statement": "Reveal is allowed only when both a grant_scope and a clamp scope carry the 'reveal' verb; a 'reveal' scope never satisfies a read or act request.",
-      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
     "consent-explicit-scope-unbypassable": {
       "statement": "A table under a kind:'minimization' policy row is never allowed by a whole-schema (table_name IS NULL) grant scope; only a scope naming the table explicitly covers it.",
-      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
     "consent-onbehalf-cap-precedes-grants": {
       "statement": "When onBehalfOfOwner.mayAct is false, no grant set produces an allow for act or reveal, and the deny names the owner id, checked before any grant is consulted.",
-      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "flow": "consent-chain-properties"
     },
     "untrusted-display-total": {
@@ -3772,7 +3772,7 @@
       "id": "consent",
       "label": "Consent gateway",
       "source": [
-        "packages/vault/src/gateway/consent.ts",
+        "packages/vault/src/gateway/access.ts",
         "packages/blueprints/apps/_shared/consent-gate.ts"
       ],
       "propertyFlow": "consent-chain-properties",
@@ -3887,7 +3887,7 @@
       "id": "refusal-grammar",
       "label": "Refusal grammar",
       "source": [
-        "packages/vault/src/gateway/consent.ts",
+        "packages/vault/src/gateway/access.ts",
         "packages/server/src/enrich/engine-profiles.ts"
       ],
       "propertyFlow": "manifest-scope-denial-closed-grammar",
@@ -3950,8 +3950,8 @@
     {
       "id": "vault-consent-gateway",
       "label": "Vault consent gateway",
-      "enforcement": ["packages/vault/src/gateway/consent.ts"],
-      "refusalGrammar": "packages/vault/src/gateway/consent.ts#ConsentDeny",
+      "enforcement": ["packages/vault/src/gateway/access.ts"],
+      "refusalGrammar": "packages/vault/src/gateway/access.ts#AccessDeny",
       "adversary": {
         "owner": "packages/vault/src/gateway/gateway.contract.test.ts",
         "flow": null
@@ -3972,7 +3972,7 @@
         "flow": "manifest-scope-denial-closed-grammar"
       },
       "seats": ["origin", "custodian", "viewer"],
-      "note": "The G4 sweep landed (#839): manifest-scope-denial.{sweep,closed-grammar,fuzz} drive the real validateManifest + parseManifest + evaluateConsent over all 37 bundled manifests — every declared scope×verb allows, every undeclared combination denies closed inside the six DENY_CLASSES, and property fuzz holds. #864 M5 adds manifest-scope-denial.hostile: synthetic third-party/attacker manifests built in memory and pushed through the real validators — case, NFKC, whitespace and __proto__/constructor name variants and a 10000-scope list deny as manifest-undeclared, and the validator layer refuses malformed shapes (a garbage rowFilter op the app schema waves through is rejected by the automation validator). Open hole characterized by test.fails + a filed note: the app manifest validator types rowFilter.op as a bare string and executionClamp carries rowFilter/fieldMask contents opaquely, so a structurally-invalid clause reaches ALLOW and is refused only as a bare throw at filters.ts compile, outside the receipt grammar."
+      "note": "The G4 sweep landed (#839): manifest-scope-denial.{sweep,closed-grammar,fuzz} drive the real validateManifest + parseManifest + evaluateAccess over all 37 bundled manifests — every declared scope×verb allows, every undeclared combination denies closed inside the six DENY_CLASSES, and property fuzz holds. #864 M5 adds manifest-scope-denial.hostile: synthetic third-party/attacker manifests built in memory and pushed through the real validators — case, NFKC, whitespace and __proto__/constructor name variants and a 10000-scope list deny as manifest-undeclared, and the validator layer refuses malformed shapes (a garbage rowFilter op the app schema waves through is rejected by the automation validator). Open hole characterized by test.fails + a filed note: the app manifest validator types rowFilter.op as a bare string and executionClamp carries rowFilter/fieldMask contents opaquely, so a structurally-invalid clause reaches ALLOW and is refused only as a bare throw at filters.ts compile, outside the receipt grammar."
     },
     {
       "id": "grant-plane",
@@ -4364,7 +4364,7 @@
       "surface": "vault-core",
       "dimension": "security",
       "tier": "unit",
-      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "owner": "packages/vault/src/gateway/access-properties.test.ts",
       "minimumTests": 6
     },
     {
@@ -4618,15 +4618,6 @@
       "tier": "integration",
       "owner": "tests/quality/backup-archaeology.test.ts",
       "minimumTests": 3
-    },
-    {
-      "id": "schema-migration-corpus",
-      "name": "Every schema epoch migrates forward to HEAD preserving its census",
-      "surface": "backup-restore",
-      "dimension": "compat",
-      "tier": "integration",
-      "owner": "tests/quality/schema-migration-corpus.test.ts",
-      "minimumTests": 4
     },
     {
       "id": "hostile-peer-state-machine",

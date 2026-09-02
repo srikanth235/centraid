@@ -129,7 +129,7 @@ describe("recover-reconcile", () => {
     const report = await reconcileAdoptedInventory({
       vaultDir: dir,
       remoteShas: new Set(), // the provider holds nothing
-      snapshotEntries: ["vault.db", "journal.db"], // snapshot carries NO blobs
+      snapshotEntries: ["vault.db"], // snapshot carries NO blobs
       materialize: async (shas) => {
         materializeCalls++;
         return shas;

@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { VaultBridge } from "@centraid/server/engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../../engine/stores/ledger-db.test-fixtures.js";
 import { isBrokerReadOnlyPost } from "../handler/runner.js";
 import { validateManifest } from "../manifest/manifest.js";
 import type { Manifest } from "../manifest/manifest.js";
@@ -93,11 +94,11 @@ describe("connector manifest contract", () => {
 
 describe("connector runtime gates", () => {
   let appsDir: string;
-  let journalDbFile: string;
+  let ledgerDbFile: string;
 
   beforeEach(async () => {
     appsDir = await tempDir("centraid-connector-");
-    journalDbFile = path.join(appsDir, "journal.db");
+    ledgerDbFile = ledgerDbFileIn(appsDir);
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -136,7 +137,7 @@ describe("connector runtime gates", () => {
        };`
     );
     const { outcome } = await runFire(
-      { automationRef: "mail/pull", appsDir, journalDbFile },
+      { automationRef: "mail/pull", appsDir, ledgerDbFile },
       { openDispatch: openDispatch() }
     );
     expect(outcome.ok).toBe(true);
@@ -158,7 +159,7 @@ describe("connector runtime gates", () => {
       {
         automationRef: "mail/pull",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         vaultFor: () => paused,
       },
       { openDispatch: openDispatch() }
@@ -176,14 +177,14 @@ describe("connector runtime gates", () => {
     await writeConnector(`export default async () => ({ ran: true });`);
     const deny: VaultBridge = async () => ({
       ok: false,
-      code: "VAULT_CONSENT",
+      code: "VAULT_ACCESS",
       error: "deny (receipt r1): no active grant",
     });
     const { outcome } = await runFire(
       {
         automationRef: "mail/pull",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         vaultFor: () => deny,
       },
       { openDispatch: openDispatch() }
@@ -255,7 +256,7 @@ describe("connector runtime gates", () => {
       {
         automationRef: "mail/pull",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         vaultFor: () => bridge,
       },
       { openDispatch: openDispatch() }
@@ -356,7 +357,7 @@ describe("connector runtime gates", () => {
       const automationRef = ["mail-personal/pull", "mail-work/pull"][index];
       if (!automationRef) return;
       const { outcome } = await runFire(
-        { automationRef, appsDir, journalDbFile, vaultFor: () => bridge },
+        { automationRef, appsDir, ledgerDbFile, vaultFor: () => bridge },
         { openDispatch: openDispatch() }
       );
       expect(outcome.ok).toBe(true);
@@ -405,7 +406,7 @@ describe("connector runtime gates", () => {
       {
         automationRef: "mail/pull",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         vaultFor: () => bridge,
       },
       { openDispatch: openDispatch() }
@@ -464,7 +465,7 @@ describe("connector runtime gates", () => {
       {
         automationRef: "mail/pull",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         vaultFor: () => bridge,
       },
       { openDispatch: openDispatch() }
@@ -517,7 +518,7 @@ describe("connector runtime gates", () => {
       {
         automationRef: "mail/pull",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         vaultFor: () => bridge,
       },
       { openDispatch: openDispatch() }
@@ -584,7 +585,7 @@ describe("connector runtime gates", () => {
       {
         automationRef: "mail/pull",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         vaultFor: () => bridge,
       },
       { openDispatch: openDispatch() }
@@ -598,11 +599,11 @@ describe("connector runtime gates", () => {
 
 describe("connector secrets (issue #293)", () => {
   let appsDir: string;
-  let journalDbFile: string;
+  let ledgerDbFile: string;
 
   beforeEach(async () => {
     appsDir = await tempDir("centraid-secrets-");
-    journalDbFile = path.join(appsDir, "journal.db");
+    ledgerDbFile = ledgerDbFileIn(appsDir);
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -692,7 +693,7 @@ describe("connector secrets (issue #293)", () => {
         {
           automationRef: "mail/pull",
           appsDir,
-          journalDbFile,
+          ledgerDbFile,
           vaultFor: () => bridge,
         },
         { openDispatch: noDispatch }
@@ -742,7 +743,7 @@ describe("connector secrets (issue #293)", () => {
       {
         automationRef: "mail/pull",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         vaultFor: () => bridge,
       },
       { openDispatch: noDispatch }
@@ -775,7 +776,7 @@ describe("connector secrets (issue #293)", () => {
       {
         automationRef: "mail/pull",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         vaultFor: () => bridge,
       },
       { openDispatch: noDispatch }
@@ -803,7 +804,7 @@ describe("connector secrets (issue #293)", () => {
       { requires: {}, connector: undefined, vault: undefined }
     );
     const { outcome } = await runFire(
-      { automationRef: "mail/pull", appsDir, journalDbFile },
+      { automationRef: "mail/pull", appsDir, ledgerDbFile },
       { openDispatch: noDispatch }
     );
     expect(outcome.ok).toBe(true);
@@ -828,7 +829,7 @@ describe("connector secrets (issue #293)", () => {
       if (call.op === "reveal") {
         return {
           ok: false,
-          code: "VAULT_CONSENT",
+          code: "VAULT_ACCESS",
           error: "deny (receipt r9): no revealable row",
         };
       }
@@ -846,7 +847,7 @@ describe("connector secrets (issue #293)", () => {
       {
         automationRef: "mail/pull",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         vaultFor: () => bridge,
       },
       { openDispatch: noDispatch }
@@ -865,11 +866,11 @@ describe("connector secrets (issue #293)", () => {
 
 describe("broker-injected connection credentials (issue #304)", () => {
   let appsDir: string;
-  let journalDbFile: string;
+  let ledgerDbFile: string;
 
   beforeEach(async () => {
     appsDir = await tempDir("centraid-connauth-");
-    journalDbFile = path.join(appsDir, "journal.db");
+    ledgerDbFile = ledgerDbFileIn(appsDir);
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -949,7 +950,7 @@ describe("broker-injected connection credentials (issue #304)", () => {
           {
             automationRef: "mail/pull",
             appsDir,
-            journalDbFile,
+            ledgerDbFile,
             vaultFor: () => activeBridge,
             resolveConnection: async () => ({
               values: { access_token: "tok-live-1" },
@@ -992,7 +993,7 @@ describe("broker-injected connection credentials (issue #304)", () => {
           {
             automationRef: "mail/pull",
             appsDir,
-            journalDbFile,
+            ledgerDbFile,
             vaultFor: () => activeBridge,
             resolveConnection: async () => ({
               values: { access_token: "tok-live-2" },
@@ -1039,7 +1040,7 @@ describe("broker-injected connection credentials (issue #304)", () => {
           {
             automationRef: "mail/pull",
             appsDir,
-            journalDbFile,
+            ledgerDbFile,
             vaultFor: () => activeBridge,
             resolveConnection: async () => ({
               values: { access_token: "tok-stale" },
@@ -1084,7 +1085,7 @@ describe("broker-injected connection credentials (issue #304)", () => {
           {
             automationRef: "mail/pull",
             appsDir,
-            journalDbFile,
+            ledgerDbFile,
             vaultFor: () => activeBridge,
             resolveConnection: async () => ({
               values: { api_key: "ghp-revoked" },
@@ -1130,7 +1131,7 @@ describe("broker-injected connection credentials (issue #304)", () => {
           {
             automationRef: "mail/pull",
             appsDir,
-            journalDbFile,
+            ledgerDbFile,
             vaultFor: () => activeBridge,
             fetchRetryDelaysMs: [1, 1],
             resolveConnection: async () => ({
@@ -1153,7 +1154,7 @@ describe("broker-injected connection credentials (issue #304)", () => {
       {
         automationRef: "mail/pull",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         vaultFor: () => activeBridge,
         resolveConnection: async () => ({
           refused:
@@ -1185,7 +1186,7 @@ describe("broker-injected connection credentials (issue #304)", () => {
       {
         automationRef: "mail/pull",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         vaultFor: () => activeBridge,
         // No resolveConnection at all — the harness-ambient lane.
       },
@@ -1201,11 +1202,11 @@ describe("broker-injected connection credentials (issue #304)", () => {
 
 describe("read-only ceiling on injected fetches (issue #304 phase 5)", () => {
   let appsDir: string;
-  let journalDbFile: string;
+  let ledgerDbFile: string;
 
   beforeEach(async () => {
     appsDir = await tempDir("centraid-ro-");
-    journalDbFile = path.join(appsDir, "journal.db");
+    ledgerDbFile = ledgerDbFileIn(appsDir);
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -1260,7 +1261,7 @@ describe("read-only ceiling on injected fetches (issue #304 phase 5)", () => {
       {
         automationRef: "mail/pull",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         vaultFor: () => activeBridge,
         resolveConnection: async () => ({
           values: { access_token: "tok" },
@@ -1328,7 +1329,7 @@ describe("read-only ceiling on injected fetches (issue #304 phase 5)", () => {
       {
         automationRef: "mail/pull",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         vaultFor: () => activeBridge,
         resolveConnection: async () => ({
           values: { api_key: "lin_api_test" },
@@ -1375,7 +1376,7 @@ describe("read-only ceiling on injected fetches (issue #304 phase 5)", () => {
         {
           automationRef: "mail/pull",
           appsDir,
-          journalDbFile,
+          ledgerDbFile,
           vaultFor: () => activeBridge,
           resolveConnection: async () => ({
             values: { access_token: "tok" },
@@ -1396,11 +1397,11 @@ describe("read-only ceiling on injected fetches (issue #304 phase 5)", () => {
 
 describe("placeholder-free fetches ride the destination pin (issue #865)", () => {
   let appsDir: string;
-  let journalDbFile: string;
+  let ledgerDbFile: string;
 
   beforeEach(async () => {
     appsDir = await tempDir("centraid-ssrf-");
-    journalDbFile = path.join(appsDir, "journal.db");
+    ledgerDbFile = ledgerDbFileIn(appsDir);
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -1480,7 +1481,7 @@ describe("placeholder-free fetches ride the destination pin (issue #865)", () =>
           {
             automationRef: "mail/pull",
             appsDir,
-            journalDbFile,
+            ledgerDbFile,
             vaultFor: () => activeBridge,
             resolveConnection: async () => ({
               values: { access_token: "tok" },
@@ -1514,7 +1515,7 @@ describe("placeholder-free fetches ride the destination pin (issue #865)", () =>
       {
         automationRef: "mail/pull",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         vaultFor: () => activeBridge,
       },
       { openDispatch: noDispatch }
@@ -1543,7 +1544,7 @@ describe("placeholder-free fetches ride the destination pin (issue #865)", () =>
           {
             automationRef: "mail/pull",
             appsDir,
-            journalDbFile,
+            ledgerDbFile,
             vaultFor: () => activeBridge,
           },
           { openDispatch: noDispatch }

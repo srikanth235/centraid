@@ -27,12 +27,18 @@ export const REPLICA_LOCAL_SEARCH: Readonly<
     deletedColumn: "deleted_at",
   },
   "core.transaction": { columns: ["description"] },
-  "people.profile": { columns: ["role", "nickname"] },
+  "people.profile": {
+    columns: ["role", "nickname"],
+    deletedColumn: "deleted_at",
+  },
   "locker.item": {
     columns: ["title", "username", "url"],
     deletedColumn: "deleted_at",
   },
-  "tally.expense": { columns: ["description"] },
+  "tally.expense": {
+    columns: ["description"],
+    deletedColumn: "deleted_at",
+  },
 };
 
 export function replicaLocalSearchSpec(entity: string): ReplicaLocalSearchSpec {

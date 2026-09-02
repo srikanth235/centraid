@@ -102,7 +102,6 @@ export async function commandDoctor(args: string[], fail: Fail): Promise<void> {
       const vaults: DoctorVaultTarget[] = planes.map((plane) => ({
         vaultId: plane.boot.vaultId,
         vault: plane.db.vault,
-        journal: plane.db.journal,
         local: plane.db.blobs.local,
         casRoot: path.join(plane.dir, "blobs"),
       }));

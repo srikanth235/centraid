@@ -147,9 +147,8 @@ describe("grant/channel", () => {
     origin.vault
       .prepare(
         `INSERT INTO core_party
-           (party_id, kind, display_name, sort_name, created_at, updated_at,
-            ontology_version)
-         VALUES (?, 'person', 'Vik', 'Vik', ?, ?, '1.4')`
+           (party_id, kind, display_name, sort_name, created_at, updated_at)
+         VALUES (?, 'person', 'Vik', 'Vik', ?, ?)`
       )
       .run(partyId, now, now);
     pendingInvitation(origin.vault, partyId, null, now);

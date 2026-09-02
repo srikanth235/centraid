@@ -17,7 +17,6 @@ import {
   VAULT_MIGRATIONS,
 } from "@centraid/vault";
 
-import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 // Photos-specific companion to large-vault.scale.test.ts (issue #721 C1):
@@ -79,10 +78,8 @@ describe("photos-timeline.scale", () => {
         const seeded = openVaultDb({ dir: target, sealKey: YEAR3_SEAL_KEY });
         try {
           bootstrapVault(seeded, { ownerName: "Photos scale owner" });
-          ensureConversationLedger(seeded.journal);
           seedYear3Vault(
             {
-              journal: seeded.journal,
               sealCell: (entity, column, rowId, plaintext) =>
                 sealValue(
                   seeded.sealKey,

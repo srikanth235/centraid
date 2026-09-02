@@ -185,7 +185,7 @@ export interface RecordTurnInput {
 
 export class ConversationHistoryStore {
   private readonly workspace: WorkspaceProvider;
-  /** ONE store over the ACTIVE vault's journal.db: the provider resolves per
+  /** ONE store over the ACTIVE vault's vault.db: the provider resolves per
    *  call, so a vault switch needs no reconstruction here. */
   private readonly store: ConversationStore;
   private readonly blobs: BlobStore;

@@ -9,7 +9,6 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { seedYear3Vault } from "@centraid/test-kit/year3-vault";
 import { sealAad, sealValue } from "@centraid/vault";
 
-import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
 import { serve } from "../../packages/server/src/serve/serve.js";
 import type { GatewayServeHandle } from "../../packages/server/src/serve/serve.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
@@ -120,11 +119,9 @@ describe("gateway-request-volume.perf", () => {
     const seedStarted = performance.now();
     // The conversation ledger lives in the journal DB and is created lazily by
     // the conversation store; the fixture writes turns straight into it.
-    ensureConversationLedger(plane.db.journal);
     seedYear3Vault(
       {
         vault: plane.db.vault,
-        journal: plane.db.journal,
         sealCell: (entity, column, rowId, plaintext) =>
           sealValue(
             plane.db.sealKey,

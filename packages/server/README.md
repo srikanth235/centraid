@@ -31,7 +31,7 @@ console.log(handle.url, handle.token);
 
 There is no bootstrap option to pass (issue #603 removed `initVaultName`). If `vaultDir` holds no vault, `buildGateway()` **auto-founds** one marked `Personal` vault synchronously at construction, and enrols the host device as `admin` on it. Shared vaults are created later by an explicit owner action. If it already holds vault directories, nothing is created and the data dir is left exactly as found; a directory that fails to mount still counts, so corruption can never make an existing gateway look fresh.
 
-`paths` is the only required option (see `GatewayPaths` in `src/paths.ts`); `vaultDir` is its required field. Post-#280 the vault is the unit — everything personal (apps, code, conversation ledger, run history) lives inside `<vaultDir>/<vaultId>/`; gateway-level preferences, enrollments, tickets, and backup/storage state live in `gateway.db`, while disposable catalogs live under `cache/`. There is no `identity.sqlite` or `analytics.sqlite`: the vault owner IS the user, and the run rollup is now the `run_summary` view inside each vault's `journal.db`. There is no `secrets` injection: the gateway is auth-agnostic about the harness — codex and Claude Code each own their own auth (`codex login` / `claude login` on the gateway host). Supply `appsStoreRoot` to opt into the git store backend (the desktop does); omit it for the legacy tarball-upload backend (what the standalone CLI below uses).
+`paths` is the only required option (see `GatewayPaths` in `src/paths.ts`); `vaultDir` is its required field. Post-#280 the vault is the unit — everything personal (apps, code, conversation ledger, run history) lives inside `<vaultDir>/<vaultId>/`; gateway-level preferences, enrollments, tickets, and backup/storage state live in `gateway.db`, while disposable catalogs live under `cache/`. There is no `identity.sqlite` or `analytics.sqlite`: the vault owner IS the user, and the run rollup is now the `run_summary` view inside each vault's `vault.db`. There is no `secrets` injection: the gateway is auth-agnostic about the harness — codex and Claude Code each own their own auth (`codex login` / `claude login` on the gateway host). Supply `appsStoreRoot` to opt into the git store backend (the desktop does); omit it for the legacy tarball-upload backend (what the standalone CLI below uses).
 
 ## `centraid-gateway` CLI — standalone daemon
 
@@ -93,13 +93,16 @@ Desktop, the CLI, and the OS service use this identical shape (see `daemonLayout
   gateway-logs/          — diagnostic JSONL logs
   vault/                 — vault registry root: one subdirectory per vault
     <vaultId>/
-      vault.db           — the ontology schemas (one ACID boundary)
-      journal.db         — audit stream + conversation ledger + run_summary view
+      vault.db           — the ONE sovereign file (#916): the ontology
+                           schemas plus the append-only audit band and the
+                           conversation ledger band (with the run_summary
+                           view) — one ACID boundary for a write and its
+                           receipt
       apps/              — per-app DATA (logs, settings, attachment blobs)
       code/              — app code git store (apps.git + worktrees/)
 ```
 
-`vault/` contains content only. Backups are provider snapshots plus the passphrase-wrapped recovery kit; copying a live SQLite/WAL tree is not a backup. The run rollup that feeds Insights is the `run_summary` VIEW inside `journal.db`, not a separate file.
+`vault/` contains content only. Backups are provider snapshots plus the passphrase-wrapped recovery kit; copying a live SQLite/WAL tree is not a backup. The run rollup that feeds Insights is the `run_summary` VIEW inside `vault.db`'s ledger band, not a separate file.
 
 ## v0 scope and gaps
 

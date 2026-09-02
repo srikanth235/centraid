@@ -17,10 +17,10 @@ import { assertTextBodyWithinBudget } from "./inline-body-guard.js";
 function actorPartyId(ctx: HandlerCtx): string {
   if (ctx.identity.partyId) return ctx.identity.partyId;
   const owner = ctx.db
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string | null } | undefined;
-  if (!owner?.owner_party_id) throw new Error("vault has no owner");
-  return owner.owner_party_id;
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string | null } | undefined;
+  if (!owner?.self_party_id) throw new Error("vault has no owner");
+  return owner.self_party_id;
 }
 
 /** `:scheme` as the channel axis names it — `tel` is `phone` on a channel. */
@@ -407,7 +407,7 @@ const MARK_THREAD_READ: CommandDefinition = {
       name: "owner_cursor_stamped",
       sql: `SELECT count(*) AS n FROM social_thread_participant tp
              WHERE tp.thread_id = :thread_id AND tp.last_read_at = :read_at
-               AND tp.party_id = (SELECT owner_party_id FROM core_vault LIMIT 1)`,
+               AND tp.party_id = (SELECT self_party_id FROM core_vault LIMIT 1)`,
       column: "n",
       op: "eq",
       value: 1,
@@ -423,9 +423,9 @@ const MARK_THREAD_READ: CommandDefinition = {
 function markThreadRead(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { thread_id: string; read_at: string };
   const owner = ctx.db
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
     .get() as {
-    owner_party_id: string;
+    self_party_id: string;
   };
   // The owner reads their own inbox: a missing participant row means the
   // owner simply hasn't spoken in this thread yet — joining as a silent
@@ -434,9 +434,7 @@ function markThreadRead(ctx: HandlerCtx): Record<string, unknown> {
     .prepare(
       "SELECT tp_id FROM social_thread_participant WHERE thread_id = ? AND party_id = ?"
     )
-    .get(input.thread_id, owner.owner_party_id) as
-    | { tp_id: string }
-    | undefined;
+    .get(input.thread_id, owner.self_party_id) as { tp_id: string } | undefined;
   if (existing) {
     ctx.db
       .prepare(
@@ -451,7 +449,7 @@ function markThreadRead(ctx: HandlerCtx): Record<string, unknown> {
         `INSERT INTO social_thread_participant (tp_id, thread_id, party_id, handle, joined_at, muted, last_read_at)
          VALUES (?, ?, ?, NULL, ?, 0, ?)`
       )
-      .run(tpId, input.thread_id, owner.owner_party_id, ctx.now, input.read_at);
+      .run(tpId, input.thread_id, owner.self_party_id, ctx.now, input.read_at);
     ctx.wrote("social.thread_participant", tpId);
   }
   return { thread_id: input.thread_id };

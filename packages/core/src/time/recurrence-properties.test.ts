@@ -17,12 +17,8 @@ import { describe, expect, test } from "vitest";
 import { fc } from "@centraid/test-kit/fast-check";
 
 import { describeRecurrence } from "./recurrence-summary.js";
-import {
-  canonicalizeRrule,
-  expandRecurrence,
-  parseRrule,
-  rruleLine,
-} from "./recurrence.js";
+import { expandRecurrence } from "./recurrence.js";
+import { canonicalizeRrule, parseRrule, rruleLine } from "./rrule-support.js";
 
 const FREQS = ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] as const;
 const DAYS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
@@ -114,7 +110,7 @@ describe("rrule normalisation", () => {
     expect(parseRrule("FREQ=DAILY;COUNT=x")?.count).toBeUndefined();
   });
 
-  test("BYDAY keeps only the seven ICS day tokens and drops an all-junk list", () => {
+  test("a BYDAY of ICS day tokens parses to exactly those days", () => {
     fc.assert(
       fc.property(
         fc.uniqueArray(fc.constantFrom(...DAYS), {
@@ -122,15 +118,38 @@ describe("rrule normalisation", () => {
           maxLength: 7,
         }),
         (days) => {
-          const parsed = parseRrule(
-            `FREQ=WEEKLY;BYDAY=${[...days, "XX", "1MO"].join(",")}`
-          );
-          expect(parsed?.byDay).toStrictEqual(days);
+          expect(
+            parseRrule(`FREQ=WEEKLY;BYDAY=${days.join(",")}`)?.byDay
+          ).toStrictEqual(days);
         }
       ),
       { numRuns: 80, seed: 65614 }
     );
-    expect(parseRrule("FREQ=WEEKLY;BYDAY=XX,YY")?.byDay).toBeUndefined();
+  });
+
+  test("a BYDAY carrying anything else is refused, never filtered down to a rule that parses and means something else", () => {
+    fc.assert(
+      fc.property(
+        fc.uniqueArray(fc.constantFrom(...DAYS), {
+          minLength: 1,
+          maxLength: 7,
+        }),
+        fc.constantFrom("XX", "1MO", "-1FR", "+2WE", ""),
+        (days, intruder) => {
+          expect(
+            parseRrule(`FREQ=WEEKLY;BYDAY=${[...days, intruder].join(",")}`)
+          ).toBeNull();
+        }
+      ),
+      { numRuns: 80, seed: 65614 }
+    );
+    expect(parseRrule("FREQ=WEEKLY;BYDAY=XX,YY")).toBeNull();
+  });
+
+  test("BYDAY outside WEEKLY is refused: only weekly expansion reads days, so a monthly rule may not carry them", () => {
+    for (const freq of ["DAILY", "MONTHLY", "YEARLY"]) {
+      expect(parseRrule(`FREQ=${freq};BYDAY=MO`), freq).toBeNull();
+    }
   });
 
   test("describeRecurrence is defined exactly when the rule parses", () => {

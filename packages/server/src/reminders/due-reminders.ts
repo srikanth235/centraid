@@ -10,9 +10,95 @@
 // Tally recurring materialization previews and outstanding household pairing
 // tickets ride the same feed so mobile categories for those kinds can fire.
 
-import { expandRecurrence } from "@centraid/core/time";
+import { expandRecurrence, inspectRrule } from "@centraid/core/time";
 import type { RecurrenceSemantics } from "@centraid/core/time";
-import type { VaultDb } from "@centraid/vault";
+import type { Credential, ReadRequest, ReadResult } from "@centraid/vault";
+
+/*
+ * THROUGH THE GATEWAY (#916, review-A 8.1). Reminders are life data, so every
+ * read below is a `gateway.read` under a declared purpose — consent resolved,
+ * receipt written — and never SQL against a physical table. The one join the
+ * old query did (`core_event` × `schedule_event_ext`) is folded here over two
+ * windowed reads; `bun run lint:vault-sql` is what keeps it that way.
+ */
+
+/** The gateway surface the reminder feed needs — the whole of it. */
+export interface ReminderVaultReader {
+  read: (cred: Credential, request: ReadRequest) => ReadResult;
+}
+
+/** DPV purpose every read below declares; it lands on each receipt. */
+const PURPOSE = "dpv:ServiceProvision";
+
+function rowsOf<T>(result: ReadResult): T[] {
+  return (result.rows ?? []) as unknown as T[];
+}
+
+interface EventExtRow {
+  event_id: string;
+  reminders_json: string;
+}
+
+interface EventCoreRow {
+  event_id: string;
+  summary: string;
+  dtstart: string;
+  rrule: string | null;
+  start_tz: string | null;
+  recurrence_semantics: string | null;
+}
+
+/** The live reminder-bearing events, one read per table, joined here. */
+function reminderEvents(
+  vault: ReminderVaultReader,
+  cred: Credential
+): EventReminderRow[] {
+  const read = (request: ReadRequest): ReadResult =>
+    vault.read(cred, { purpose: PURPOSE, ...request });
+  const exts = rowsOf<EventExtRow>(
+    read({
+      entity: "schedule.event_ext",
+      where: [{ column: "reminders_json", op: "not-null" }],
+    })
+  );
+  if (exts.length === 0) return [];
+  const remindersByEvent = new Map(
+    exts.map((ext) => [ext.event_id, ext.reminders_json] as const)
+  );
+  // Trash is invisible, not merely un-listed (#916, review-A 8.2).
+  return rowsOf<EventCoreRow>(
+    read({
+      entity: "core.event",
+      where: [
+        { column: "event_id", op: "in", value: [...remindersByEvent.keys()] },
+        { column: "status", op: "ne", value: "cancelled" },
+        { column: "deleted_at", op: "is-null" },
+      ],
+    })
+  ).flatMap((event) => {
+    const remindersJson = remindersByEvent.get(event.event_id);
+    return remindersJson === undefined ? [] : [{ ...event, remindersJson }];
+  });
+}
+
+/** The live, reminder-bearing tasks. */
+function reminderTasks(
+  vault: ReminderVaultReader,
+  cred: Credential
+): TaskReminderRow[] {
+  return rowsOf<TaskReminderRow>(
+    vault.read(cred, {
+      entity: "schedule.task",
+      purpose: PURPOSE,
+      where: [
+        { column: "status", op: "in", value: ["needs-action", "in-process"] },
+        { column: "deleted_at", op: "is-null" },
+        { column: "due_at", op: "not-null" },
+        { column: "remind_before_min", op: "not-null" },
+      ],
+    })
+  );
+}
 
 export interface DueReminder {
   /** Stable per-reminder id: de-dup key for the poller. */
@@ -50,7 +136,7 @@ interface EventReminderRow {
   rrule: string | null;
   start_tz: string | null;
   recurrence_semantics: string | null;
-  reminders_json: string;
+  remindersJson: string;
 }
 
 function occurrenceStarts(
@@ -61,6 +147,8 @@ function occurrenceStarts(
   if (!event.rrule) {
     return [{ at: event.dtstart, originalStart: event.dtstart }];
   }
+  // A refused rule names no occurrence; the fallback below would misfire.
+  if (!inspectRrule(event.rrule).ok) return [];
   const semantics = (event.recurrence_semantics ??
     "zoned") as RecurrenceSemantics;
   const instances = expandRecurrence({
@@ -107,7 +195,8 @@ function parseReminders(json: string): { minutes_before: number }[] {
  * directly unit-testable.
  */
 export function computeDueReminders(
-  db: VaultDb,
+  vault: ReminderVaultReader,
+  cred: Credential,
   nowIso: string,
   staleAfterMinutes = DEFAULT_STALE_AFTER_MINUTES,
   pendingInvitations: readonly PendingInvitation[] = []
@@ -115,13 +204,10 @@ export function computeDueReminders(
   const now = Date.parse(nowIso);
   const out: DueReminder[] = [];
 
-  const taskRows = db.vault
-    .prepare(
-      `SELECT task_id, title, due_at, remind_before_min FROM schedule_task
-        WHERE status IN ('needs-action','in-process')
-          AND due_at IS NOT NULL AND remind_before_min IS NOT NULL`
-    )
-    .all() as unknown as TaskReminderRow[];
+  // Trash is invisible, not merely un-listed (#916, review-A 8.2): every read
+  // here clamps `deleted_at IS NULL`, or a task the owner threw away keeps
+  // ringing until its purge lapses.
+  const taskRows = reminderTasks(vault, cred);
   for (const t of taskRows) {
     const dueMs = Date.parse(t.due_at);
     if (Number.isNaN(dueMs)) continue;
@@ -139,18 +225,9 @@ export function computeDueReminders(
     }
   }
 
-  const eventRows = db.vault
-    .prepare(
-      `SELECT e.event_id AS event_id, e.summary AS summary, e.dtstart AS dtstart,
-              e.rrule AS rrule, e.start_tz AS start_tz,
-              e.recurrence_semantics AS recurrence_semantics,
-              x.reminders_json AS reminders_json
-         FROM core_event e JOIN schedule_event_ext x ON x.event_id = e.event_id
-        WHERE e.status != 'cancelled' AND x.reminders_json IS NOT NULL`
-    )
-    .all() as unknown as EventReminderRow[];
+  const eventRows = reminderEvents(vault, cred);
   for (const e of eventRows) {
-    const leads = parseReminders(e.reminders_json);
+    const leads = parseReminders(e.remindersJson);
     if (leads.length === 0) continue;
     const maxLead = Math.max(...leads.map((lead) => lead.minutes_before));
     const rangeFrom = new Date(now - staleAfterMinutes * 60_000).toISOString();
@@ -182,28 +259,27 @@ export function computeDueReminders(
   const day = nowIso.slice(0, 10);
   const rangeFrom = `${day}T00:00:00.000Z`;
   const rangeTo = new Date(Date.parse(rangeFrom) + 86_400_000).toISOString();
-  const templates = db.vault
-    .prepare(
-      `SELECT template_id, description, rrule, anchor_start, time_zone,
-              last_materialized_start
-         FROM tally_recurring_expense
-        WHERE status = 'active'`
-    )
-    .all() as Array<{
+  const templates = rowsOf<{
     template_id: string;
     description: string;
     rrule: string;
     anchor_start: string;
-    time_zone: string;
+    tz: string;
     last_materialized_start: string | null;
-  }>;
+  }>(
+    vault.read(cred, {
+      entity: "tally.recurring_expense",
+      purpose: PURPOSE,
+      where: [{ column: "status", op: "eq", value: "active" }],
+    })
+  );
   for (const template of templates) {
     const next = expandRecurrence({
       rrule: template.rrule,
       start: template.anchor_start,
       rangeFrom,
       rangeTo,
-      timeZone: template.time_zone,
+      timeZone: template.tz,
       maxInstances: 2,
     })[0];
     if (!next) continue;
@@ -214,13 +290,23 @@ export function computeDueReminders(
       continue;
     }
     const spentOn = next.start.slice(0, 10);
-    const already = db.vault
-      .prepare(
-        `SELECT 1 AS n FROM tally_expense
-          WHERE recurring_template_id = ? AND spent_on = ? AND deleted_at IS NULL`
-      )
-      .get(template.template_id, spentOn);
-    if (already) continue;
+    const already = rowsOf<{ expense_id: string }>(
+      vault.read(cred, {
+        entity: "tally.expense",
+        purpose: PURPOSE,
+        where: [
+          {
+            column: "recurring_template_id",
+            op: "eq",
+            value: template.template_id,
+          },
+          { column: "spent_on", op: "eq", value: spentOn },
+          { column: "deleted_at", op: "is-null" },
+        ],
+        limit: 1,
+      })
+    );
+    if (already.length > 0) continue;
     const at = next.start.includes("T")
       ? next.start.endsWith("Z") || /[+-]\d{2}:\d{2}$/u.test(next.start)
         ? next.start
@@ -260,34 +346,20 @@ export function computeDueReminders(
 
 /** Earliest future fire instant, used by the gateway's durable wake scheduler. */
 export function nextReminderFireAt(
-  db: VaultDb,
+  vault: ReminderVaultReader,
+  cred: Credential,
   nowIso: string
 ): string | undefined {
   const now = Date.parse(nowIso);
   let next = Number.POSITIVE_INFINITY;
-  const taskRows = db.vault
-    .prepare(
-      `SELECT task_id, title, due_at, remind_before_min FROM schedule_task
-        WHERE status IN ('needs-action','in-process')
-          AND due_at IS NOT NULL AND remind_before_min IS NOT NULL`
-    )
-    .all() as unknown as TaskReminderRow[];
+  const taskRows = reminderTasks(vault, cred);
   for (const task of taskRows) {
     const fireAt = Date.parse(task.due_at) - task.remind_before_min * 60_000;
     if (Number.isFinite(fireAt) && fireAt > now && fireAt < next) next = fireAt;
   }
-  const eventRows = db.vault
-    .prepare(
-      `SELECT e.event_id AS event_id, e.summary AS summary,
-              e.dtstart AS dtstart, e.rrule AS rrule, e.start_tz AS start_tz,
-              e.recurrence_semantics AS recurrence_semantics,
-              x.reminders_json AS reminders_json
-         FROM core_event e JOIN schedule_event_ext x ON x.event_id = e.event_id
-        WHERE e.status != 'cancelled' AND x.reminders_json IS NOT NULL`
-    )
-    .all() as unknown as EventReminderRow[];
+  const eventRows = reminderEvents(vault, cred);
   for (const event of eventRows) {
-    const leads = parseReminders(event.reminders_json);
+    const leads = parseReminders(event.remindersJson);
     if (leads.length === 0) continue;
     const rangeTo = new Date(now + 120 * 86_400_000).toISOString();
     for (const occurrence of occurrenceStarts(event, nowIso, rangeTo)) {

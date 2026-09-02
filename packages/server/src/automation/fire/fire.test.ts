@@ -15,12 +15,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   ConversationHistoryStore,
   ConversationStore,
-  makeJournalDbProvider,
+  makeLedgerDbProvider,
   setPricingCatalog,
 } from "@centraid/server/engine";
 import type { AutomationTurnStreamEvent } from "@centraid/server/engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../../engine/stores/ledger-db.test-fixtures.js";
 import type { Manifest } from "../manifest/manifest.js";
 import { runFire } from "./fire.js";
 import type { DispatchSurface, OpenDispatchArgs } from "./fire.js";
@@ -72,11 +73,11 @@ function stubDispatch(opened: OpenDispatchArgs[], closes: { n: number }) {
 
 describe(runFire, () => {
   let appsDir: string;
-  let journalDbFile: string;
+  let ledgerDbFile: string;
 
   beforeEach(async () => {
     appsDir = await tempDir("centraid-fire-");
-    journalDbFile = path.join(appsDir, "journal.db");
+    ledgerDbFile = ledgerDbFileIn(appsDir);
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -88,7 +89,7 @@ describe(runFire, () => {
     const closes = { n: 0 };
 
     const { outcome, record } = await runFire(
-      { automationRef: "notes/digest", appsDir, journalDbFile },
+      { automationRef: "notes/digest", appsDir, ledgerDbFile },
       { openDispatch: stubDispatch(opened, closes) }
     );
 
@@ -120,7 +121,7 @@ describe(runFire, () => {
       {
         automationRef: "notes/digest",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         rearm: (request) => void requests.push(request),
       },
       { openDispatch: stubDispatch([], { n: 0 }) }
@@ -128,7 +129,7 @@ describe(runFire, () => {
     expect(requests).toStrictEqual([
       { automationRef: "notes/digest", completedRunId: record.runId },
     ]);
-    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     expect(store.getTurn(record.runId)?.endedAt).not.toBeNull();
     store.close();
   });
@@ -141,7 +142,7 @@ describe(runFire, () => {
       {
         automationRef: "notes/digest",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         runId: "failover-attempt",
         harnessKind: "copilot",
         note: notice,
@@ -150,7 +151,7 @@ describe(runFire, () => {
       { openDispatch: stubDispatch([], { n: 0 }) }
     );
 
-    const journal = makeJournalDbProvider(journalDbFile);
+    const journal = makeLedgerDbProvider(ledgerDbFile);
     const store = new ConversationStore(journal);
     expect(store.listItems(record.runId)).toStrictEqual(
       expect.arrayContaining([
@@ -168,7 +169,7 @@ describe(runFire, () => {
       ownerPartyId: "",
       appsDir,
       journal,
-      journalDbFile,
+      ledgerDbFile,
       harnessSessionDir: path.join(appsDir, "harness-sessions"),
     }));
     expect(history.getSession("notes", "notes/digest")?.messages).toStrictEqual(
@@ -195,7 +196,7 @@ describe(runFire, () => {
     const opened: OpenDispatchArgs[] = [];
     const closes = { n: 0 };
     const { outcome, record } = await runFire(
-      { automationRef: "notes/clock", appsDir, journalDbFile },
+      { automationRef: "notes/clock", appsDir, ledgerDbFile },
       { openDispatch: stubDispatch(opened, closes) }
     );
     expect(outcome.ok).toBe(true);
@@ -230,7 +231,7 @@ describe(runFire, () => {
       {
         automationRef: "notes/flow",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         onRunEvent: (ev) => events.push(ev),
       },
       { openDispatch: dispatch }
@@ -307,7 +308,7 @@ describe(runFire, () => {
       {
         automationRef: "notes/ask",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         harnessKind: "codex",
         model: "a-capable-model",
         onRunEvent: (ev) => events.push(ev),
@@ -330,7 +331,7 @@ describe(runFire, () => {
 
     // The usage event was persisted onto the delegate node's ledger row, so the
     // run's token rollup is accurate.
-    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     const delegateNode = store
       .listItems(record.runId)
       .find((n) => n.kind === "delegate");
@@ -406,10 +407,10 @@ describe(runFire, () => {
       });
 
     const { record } = await runFire(
-      { automationRef: "notes/parallel", appsDir, journalDbFile },
+      { automationRef: "notes/parallel", appsDir, ledgerDbFile },
       { openDispatch: dispatch }
     );
-    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     const tools = store
       .listItems(record.runId)
       .filter((item) => item.kind === "tool")
@@ -454,10 +455,10 @@ describe(runFire, () => {
       });
 
     const { record } = await runFire(
-      { automationRef: "notes/late-error", appsDir, journalDbFile },
+      { automationRef: "notes/late-error", appsDir, ledgerDbFile },
       { openDispatch: dispatch }
     );
-    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     expect(
       store.listItems(record.runId).find((item) => item.kind === "delegate")
         ?.rawJson
@@ -495,13 +496,13 @@ describe(runFire, () => {
       {
         automationRef: "notes/priced",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         harnessKind: "codex",
         model: "priced-fixture-model",
       },
       { openDispatch: dispatch }
     );
-    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     const item = store
       .listItems(record.runId)
       .find((entry) => entry.kind === "delegate");
@@ -547,12 +548,12 @@ describe(runFire, () => {
       {
         automationRef: "notes/unmodelled",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         harnessKind: "acp",
       },
       { openDispatch: dispatch }
     );
-    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     const delegateItem = store
       .listItems(record.runId)
       .find((item) => item.kind === "delegate");
@@ -589,7 +590,7 @@ describe(runFire, () => {
       {
         automationRef: "notes/main",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         harnessKind: "codex",
         resolveNestedRuntime: async (ref) =>
           ref === "notes/recover"
@@ -610,7 +611,7 @@ describe(runFire, () => {
       ["notes/main", "codex", undefined],
       ["notes/recover", "claude-code", "recovery-model"],
     ]);
-    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     expect(store.getConversation("notes/main")?.harnessKind).toBe("codex");
     expect(store.getConversation("notes/recover")?.harnessKind).toBe(
       "claude-code"
@@ -640,7 +641,7 @@ describe(runFire, () => {
       {
         automationRef: "notes/settle",
         appsDir,
-        journalDbFile,
+        ledgerDbFile,
         harnessKind: "codex",
       },
       { openDispatch: dispatch }
@@ -650,7 +651,7 @@ describe(runFire, () => {
     // must not be rewritten to failed (that would cascade onFailure).
     expect(outcome.ok).toBe(true);
 
-    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     const turn = store.getTurn(record.runId);
     // The failed transaction rolled its own finishTurn back; the turn is still
     // settled durably rather than left running forever.

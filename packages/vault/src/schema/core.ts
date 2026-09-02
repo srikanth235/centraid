@@ -4,21 +4,41 @@
 // physical ones. All tables STRICT; PKs are TEXT UUIDv7; money is fixed-scale
 // INTEGER minor units; timestamps are TEXT ISO-8601 UTC.
 //
-// Cross-file references (into journal.db, e.g. link.provenance_id →
-// consent.provenance) carry no REFERENCES clause — the gateway enforces them
-// (§10 S4), exactly like polymorphic (type,id) pairs.
+// References into the AUDIT BAND (e.g. link.provenance_id → access.provenance)
+// carry no REFERENCES clause — the gateway enforces them (§10 S4). The audit
+// band is append-only and outlives its subjects, so a pointer into it is a
+// VALUE, not a key (#916; see `audit.ts`).
 
+import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+
+// THE SELF PARTY, AND WHERE AUTHORITY IS NOT (#916, ruling ONT-05).
+// `core_vault`'s party column is the vault's OWN party: the person as DATA,
+// the row every "who is this vault about" question resolves to. It confers
+// nothing. Authority is gateway-side (`vault_owners(vault_id, owner_id)`,
+// #726) and, for everything the member has answered about, in
+// `share_authority`. NO PARTY COLUMN ANYWHERE IN THIS FILE CONFERS
+// PERMISSION: `access_device.owner_party_id`,
+// `access_grant.granted_by_party_id`, `core_collection.
+// owner_party_id` and their kin are ATTRIBUTION — who this is about, who did
+// it — which is why only the one column that read as a permission claim was
+// renamed: `owner_party_id` -> `self_party_id`.
 export const CORE_DDL = `
 CREATE TABLE core_vault (
   vault_id        TEXT PRIMARY KEY,
-  owner_party_id  TEXT REFERENCES core_party(party_id),
+  -- The vault's OWN party — the person as DATA (#916, ruling ONT-05). It
+  -- confers nothing; see the header.
+  self_party_id   TEXT REFERENCES core_party(party_id),
   display_name    TEXT NOT NULL,
-  status          TEXT NOT NULL CHECK (status IN ('active','locked','exported')),
+  -- No 'exported' (#916, ONT-07): nothing ever set it, and a vault that has
+  -- been exported is still active — an export is a copy, not a state change.
+  status          TEXT NOT NULL CHECK (status IN ('active','locked')),
   base_currency   TEXT NOT NULL CHECK (length(base_currency) = 3),
   settings_json   TEXT NOT NULL CHECK (json_valid(settings_json)),
-  created_at      TEXT NOT NULL
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  FOREIGN KEY (vault_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
-CREATE INDEX IF NOT EXISTS idx_vault_owner_party ON core_vault(owner_party_id);
+CREATE INDEX IF NOT EXISTS idx_vault_self_party ON core_vault(self_party_id);
 
 CREATE TABLE core_party (
   party_id          TEXT PRIMARY KEY,
@@ -28,23 +48,50 @@ CREATE TABLE core_party (
   birth_date        TEXT,
   avatar_content_id TEXT REFERENCES core_content_item(content_id),
   created_at        TEXT NOT NULL,
-  updated_at        TEXT NOT NULL,
-  ontology_version  TEXT NOT NULL
+  updated_at        TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  -- No \`ontology_version\` (#916, ruling ONT-04): the ontology version is a
+  -- property of the FILE (\`PRAGMA user_version\`) and of the CONTRACT
+  -- (\`agent_command.ontology_version\`), never of a row.
+  -- THE TRASH PAIR (#916, owner decision D1). A person the member no longer
+  -- keeps was previously undeletable: \`erasePurgedPerson\` walked foreign keys
+  -- by nullability and deleted whatever it could reach, which destroyed OTHER
+  -- people's expense splits and wrote no provenance. A party is now trashed
+  -- and then PURGED like every other kind — the purge is one hard DELETE, the
+  -- supertype cascade takes the pointers with it, and every REMAINING foreign
+  -- key onto \`core_party\` is what refuses the purge while the person is still
+  -- referenced. See \`entity-catalog.ts\` for the per-column audit of which of
+  -- those keys were relaxed to ON DELETE SET NULL and which hold the line.
+  deleted_at        TEXT,
+  purge_at          TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
+  FOREIGN KEY (party_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_party_avatar_content ON core_party(avatar_content_id);
+CREATE INDEX IF NOT EXISTS core_party_purge_idx
+  ON core_party(purge_at) WHERE purge_at IS NOT NULL;
 
 CREATE TABLE core_party_identifier (
   identifier_id TEXT PRIMARY KEY,
   party_id      TEXT NOT NULL REFERENCES core_party(party_id),
-  scheme        TEXT NOT NULL CHECK (scheme IN ('email','tel','url','did','handle','iban','other')),
+  -- No 'email'/'tel' (#883, ruling O-contact): an address you can REACH a
+  -- person at is a \`social.contact_channel\`, not an identity register entry.
+  scheme        TEXT NOT NULL CHECK (scheme IN ('url','did','handle','iban','other')),
   value         TEXT NOT NULL,
   label         TEXT,
   is_primary    INTEGER NOT NULL CHECK (is_primary IN (0,1)),
   verified_at   TEXT,
   valid_from    TEXT NOT NULL,
   valid_to      TEXT,
-  UNIQUE (scheme, value)
+  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  FOREIGN KEY (identifier_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
+  -- No UNIQUE (scheme, value) (#916, R3 / review 2.3). The constraint covered
+  -- HISTORICAL rows too, so an address one person stopped using could never be
+  -- recorded for the person who now holds it — and identity merge could not
+  -- move an identifier without first end-dating and deleting it. Uniqueness is
+  -- a claim about what is TRUE NOW, so it is a partial index over the live
+  -- rows and nothing else.
 ) STRICT;
+CREATE UNIQUE INDEX IF NOT EXISTS core_party_identifier_live_idx
+  ON core_party_identifier(scheme, value) WHERE valid_to IS NULL;
 CREATE UNIQUE INDEX idx_party_identifier_primary
   ON core_party_identifier(party_id, scheme) WHERE is_primary = 1;
 
@@ -58,9 +105,14 @@ CREATE TABLE core_place (
   address_json    TEXT CHECK (address_json IS NULL OR json_valid(address_json)),
   tz              TEXT,
   parent_place_id TEXT REFERENCES core_place(place_id),
-  created_at      TEXT NOT NULL
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  FOREIGN KEY (place_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_place_parent_place ON core_place(parent_place_id);
+-- #916, R12 / review 10.3: \`findOrCreatePlaceTx\` looks a place up by rounded
+-- coordinate on every photo import and had no index to do it with.
+CREATE INDEX IF NOT EXISTS core_place_coords_idx ON core_place(geo_lat, geo_lng);
 
 CREATE TABLE core_event (
   event_id           TEXT PRIMARY KEY,
@@ -70,16 +122,39 @@ CREATE TABLE core_event (
   dtstart            TEXT NOT NULL,
   dtend              TEXT CHECK (dtend IS NULL OR dtend >= dtstart),
   start_tz           TEXT,
+  end_tz             TEXT,
+  -- Moved here from TIME_ORGANIZE_DDL's ALTER (#916): the two CHECKs below
+  -- read it, and a table-level CHECK cannot name a column a later statement
+  -- adds. Two zones are real — an event may start in one and end in another —
+  -- so \`core_event\` keeps a PAIR while every other table settled on \`tz\`
+  -- (#916, R4).
+  recurrence_semantics TEXT NOT NULL DEFAULT 'zoned'
+    CHECK (recurrence_semantics IN ('zoned','floating','all-day')),
   rrule              TEXT,
   status             TEXT NOT NULL CHECK (status IN ('confirmed','tentative','cancelled')),
   location_place_id  TEXT REFERENCES core_place(place_id),
-  organizer_party_id TEXT REFERENCES core_party(party_id),
+  -- ATTRIBUTION, not authority: who convened the event. The event survives the
+  -- organizer's purge unattributed rather than blocking it (#916, D1).
+  organizer_party_id TEXT REFERENCES core_party(party_id) ON DELETE SET NULL,
   sequence           INTEGER NOT NULL,
   created_at         TEXT NOT NULL,
-  updated_at         TEXT NOT NULL
+  updated_at         TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  -- WHAT dtstart MEANS SWITCHES ON recurrence_semantics (#916, R2 / review
+  -- 3.3), and until now nothing said so in the file. 'zoned' means dtstart is
+  -- a real INSTANT expanded in start_tz, so both halves must be there: a zone
+  -- to expand in, and a UTC-suffixed timestamp to expand from. 'floating' and
+  -- 'all-day' mean a wall clock with no zone, and neither is required.
+  deleted_at         TEXT,
+  purge_at           TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
+  CHECK (recurrence_semantics <> 'zoned' OR start_tz IS NOT NULL),
+  CHECK (recurrence_semantics <> 'zoned' OR substr(dtstart, -1) = 'Z'),
+  FOREIGN KEY (event_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_event_location_place ON core_event(location_place_id);
 CREATE INDEX IF NOT EXISTS idx_event_organizer_party ON core_event(organizer_party_id);
+-- #916, R12 / review 10.3: the daily brief reads every event by date range.
+CREATE INDEX IF NOT EXISTS core_event_dtstart_idx ON core_event(dtstart);
+CREATE INDEX IF NOT EXISTS idx_event_purge_at ON core_event(purge_at);
 
 CREATE TABLE core_account (
   account_id           TEXT PRIMARY KEY,
@@ -91,7 +166,8 @@ CREATE TABLE core_account (
   external_ref         TEXT,
   is_asset             INTEGER NOT NULL CHECK (is_asset IN (0,1)),
   opened_at            TEXT,
-  closed_at            TEXT
+  closed_at            TEXT,
+  FOREIGN KEY (account_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_account_owner_party ON core_account(owner_party_id);
 CREATE INDEX IF NOT EXISTS idx_account_institution_party ON core_account(institution_party_id);
@@ -100,7 +176,9 @@ CREATE TABLE core_transaction (
   txn_id                TEXT PRIMARY KEY,
   account_id            TEXT NOT NULL REFERENCES core_account(account_id),
   posted_at             TEXT NOT NULL,
-  amount_minor          INTEGER NOT NULL,
+  -- A magnitude, never a signed number (#916, R2 / review 10.2): \`direction\`
+  -- is the sign, and a negative debit meant two contradicting answers.
+  amount_minor          INTEGER NOT NULL CHECK (amount_minor > 0),
   currency              TEXT NOT NULL CHECK (length(currency) = 3),
   direction             TEXT NOT NULL CHECK (direction IN ('debit','credit')),
   status                TEXT NOT NULL CHECK (status IN ('pending','posted','void')),
@@ -108,7 +186,16 @@ CREATE TABLE core_transaction (
   counterparty_party_id TEXT REFERENCES core_party(party_id),
   description           TEXT,
   category_concept_id   TEXT REFERENCES core_concept(concept_id),
-  external_id           TEXT UNIQUE
+  -- GLOBAL uniqueness, deliberately (#916, R2 / review 2.3). The right key is
+  -- (connection_id, external_id) — two connectors may legitimately mint the
+  -- same provider id — but \`core_transaction\` carries no connection column:
+  -- the connector that imported a row is recorded in \`sync_external_entity\`,
+  -- not on the row. Narrowing the key would mean adding a column no writer
+  -- fills, so the key stays global until a transaction knows its connection.
+  external_id           TEXT UNIQUE,
+  created_at            TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  updated_at            TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  FOREIGN KEY (txn_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_transaction_account ON core_transaction(account_id);
 CREATE INDEX IF NOT EXISTS idx_transaction_counterparty_party ON core_transaction(counterparty_party_id);
@@ -122,14 +209,18 @@ CREATE TABLE core_content_item (
   byte_size        INTEGER NOT NULL CHECK (byte_size >= 0),
   title            TEXT,
   language         TEXT,
-  creator_party_id TEXT REFERENCES core_party(party_id),
-  origin_device_id TEXT REFERENCES consent_device(device_id),
+  creator_party_id TEXT REFERENCES core_party(party_id) ON DELETE SET NULL,
+  origin_device_id TEXT REFERENCES access_device(device_id),
   deleted_at       TEXT,
   purge_at         TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
-  created_at       TEXT NOT NULL
+  created_at       TEXT NOT NULL,
+  updated_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  FOREIGN KEY (content_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_content_item_creator_party ON core_content_item(creator_party_id);
 CREATE INDEX IF NOT EXISTS idx_content_item_origin_device ON core_content_item(origin_device_id);
+CREATE INDEX IF NOT EXISTS core_content_item_purge_idx
+  ON core_content_item(purge_at) WHERE purge_at IS NOT NULL;
 
 -- A document's identity is separate from its bytes (issue #352): the
 -- wrapper is the row apps and links address; current_content_id repoints on
@@ -142,11 +233,14 @@ CREATE TABLE core_document (
   title               TEXT NOT NULL,
   current_content_id  TEXT NOT NULL REFERENCES core_content_item(content_id),
   created_at          TEXT NOT NULL,
-  updated_at          TEXT NOT NULL,
+  updated_at          TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   deleted_at          TEXT,
-  purge_at            TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
+  purge_at            TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
+  FOREIGN KEY (document_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_document_current_content ON core_document(current_content_id);
+CREATE INDEX IF NOT EXISTS core_document_purge_idx
+  ON core_document(purge_at) WHERE purge_at IS NOT NULL;
 
 CREATE TABLE core_attachment (
   attachment_id TEXT PRIMARY KEY,
@@ -155,7 +249,10 @@ CREATE TABLE core_attachment (
   content_id    TEXT NOT NULL REFERENCES core_content_item(content_id),
   role          TEXT NOT NULL CHECK (role IN ('photo','manual','receipt','warranty','contract','embed','other')),
   is_primary    INTEGER NOT NULL CHECK (is_primary IN (0,1)),
-  created_at    TEXT NOT NULL
+  created_at    TEXT NOT NULL,
+  FOREIGN KEY (attachment_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE,
+  FOREIGN KEY (target_type, target_id)
+    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_attachment_content ON core_attachment(content_id);
 CREATE INDEX IF NOT EXISTS idx_attachment_target ON core_attachment(target_type, target_id);
@@ -167,43 +264,14 @@ CREATE TABLE core_activity (
   started_at        TEXT NOT NULL,
   ended_at          TEXT CHECK (ended_at IS NULL OR ended_at >= started_at),
   location_place_id TEXT REFERENCES core_place(place_id),
-  source_app_id     TEXT REFERENCES consent_app(app_id),
-  created_at        TEXT NOT NULL
+  source_app_id     TEXT REFERENCES access_app(app_id),
+  created_at        TEXT NOT NULL,
+  FOREIGN KEY (activity_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_activity_actor_party ON core_activity(actor_party_id);
 CREATE INDEX IF NOT EXISTS idx_activity_kind_concept ON core_activity(kind_concept_id);
 CREATE INDEX IF NOT EXISTS idx_activity_location_place ON core_activity(location_place_id);
 CREATE INDEX IF NOT EXISTS idx_activity_source_app ON core_activity(source_app_id);
-
-CREATE TABLE core_observation (
-  observation_id   TEXT PRIMARY KEY,
-  subject_party_id TEXT NOT NULL REFERENCES core_party(party_id),
-  code             TEXT NOT NULL,
-  value_num        REAL,
-  value_text       TEXT,
-  unit             TEXT,
-  observed_at      TEXT NOT NULL,
-  effective_start  TEXT,
-  effective_end    TEXT CHECK (effective_end IS NULL OR effective_end >= effective_start),
-  statistic        TEXT CHECK (statistic IN ('average','median','minimum','maximum','sum')),
-  modality         TEXT CHECK (modality IN ('sensed','self_reported','derived')),
-  status           TEXT NOT NULL CHECK (status IN ('final','amended','entered-in-error')),
-  device_id        TEXT REFERENCES consent_device(device_id),
-  activity_id      TEXT REFERENCES core_activity(activity_id),
-  CHECK (value_num IS NOT NULL OR value_text IS NOT NULL)
-) STRICT;
-CREATE INDEX IF NOT EXISTS idx_observation_subject_party ON core_observation(subject_party_id);
-CREATE INDEX IF NOT EXISTS idx_observation_device ON core_observation(device_id);
-CREATE INDEX IF NOT EXISTS idx_observation_activity ON core_observation(activity_id);
-
-CREATE TABLE core_observation_component (
-  component_id   TEXT PRIMARY KEY,
-  observation_id TEXT NOT NULL REFERENCES core_observation(observation_id),
-  code           TEXT NOT NULL,
-  value_num      REAL NOT NULL,
-  unit           TEXT NOT NULL
-) STRICT;
-CREATE INDEX IF NOT EXISTS idx_observation_component_observation ON core_observation_component(observation_id);
 
 CREATE TABLE core_link (
   link_id             TEXT PRIMARY KEY,
@@ -215,16 +283,37 @@ CREATE TABLE core_link (
   valid_from          TEXT NOT NULL,
   valid_to            TEXT,
   asserted_by         TEXT NOT NULL CHECK (asserted_by IN ('owner','app','agent','import')),
-  provenance_id       TEXT -- → consent.provenance (journal.db); gateway-enforced
+  -- → access.provenance, in the append-only audit band. A VALUE, not a key:
+  -- the audit outlives its subject (#916).
+  provenance_id       TEXT,
+  updated_at          TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  FOREIGN KEY (link_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE,
+  FOREIGN KEY (from_type, from_id)
+    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE,
+  FOREIGN KEY (to_type, to_id)
+    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
 ) STRICT;
+-- ONE LIVE EDGE per (from, to, relation) (#916, R2 / review 10.2). Nothing
+-- stopped the same relation being asserted twice between the same two rows, so
+-- a re-import or a double tap drew a second edge that every reader then
+-- counted, and \`core.merge_party\` could fold two parties into one and leave
+-- the survivor holding two identical links. Partial on the LIVE rows: an
+-- end-dated edge is history, and history repeats.
+CREATE UNIQUE INDEX IF NOT EXISTS core_link_live_edge_idx
+  ON core_link(from_type, from_id, to_type, to_id, relation_concept_id)
+  WHERE valid_to IS NULL;
 CREATE INDEX IF NOT EXISTS idx_link_relation_concept ON core_link(relation_concept_id);
+CREATE INDEX IF NOT EXISTS idx_link_from ON core_link(from_type, from_id);
+CREATE INDEX IF NOT EXISTS idx_link_to ON core_link(to_type, to_id);
 
 CREATE TABLE core_concept_scheme (
   scheme_id TEXT PRIMARY KEY,
   uri       TEXT NOT NULL UNIQUE,
   title     TEXT NOT NULL,
   publisher TEXT,
-  version   TEXT NOT NULL
+  version   TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  FOREIGN KEY (scheme_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 
 CREATE TABLE core_concept (
@@ -235,7 +324,10 @@ CREATE TABLE core_concept (
   alt_labels_json    TEXT CHECK (alt_labels_json IS NULL OR json_valid(alt_labels_json)),
   broader_concept_id TEXT REFERENCES core_concept(concept_id),
   definition         TEXT,
-  UNIQUE (scheme_id, notation)
+  created_at         TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  updated_at         TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  UNIQUE (scheme_id, notation),
+  FOREIGN KEY (concept_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_concept_broader_concept ON core_concept(broader_concept_id);
 
@@ -244,10 +336,14 @@ CREATE TABLE core_tag (
   target_type        TEXT NOT NULL,
   target_id          TEXT NOT NULL,
   concept_id         TEXT NOT NULL REFERENCES core_concept(concept_id),
-  tagged_by_party_id TEXT REFERENCES core_party(party_id),
+  tagged_by_party_id TEXT REFERENCES core_party(party_id) ON DELETE SET NULL,
   confidence         REAL CHECK (confidence BETWEEN 0 AND 1),
   tagged_at          TEXT NOT NULL,
-  UNIQUE (target_type, target_id, concept_id)
+  updated_at         TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  UNIQUE (target_type, target_id, concept_id),
+  FOREIGN KEY (tag_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE,
+  FOREIGN KEY (target_type, target_id)
+    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_tag_concept ON core_tag(concept_id);
 CREATE INDEX IF NOT EXISTS idx_tag_tagged_by_party ON core_tag(tagged_by_party_id);
@@ -264,7 +360,9 @@ CREATE TABLE core_collection (
   cover_content_id     TEXT REFERENCES core_content_item(content_id),
   parent_collection_id TEXT REFERENCES core_collection(collection_id),
   sort_order           INTEGER NOT NULL,
-  created_at           TEXT NOT NULL
+  created_at           TEXT NOT NULL,
+  updated_at           TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  FOREIGN KEY (collection_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_collection_owner_party ON core_collection(owner_party_id);
 CREATE INDEX IF NOT EXISTS idx_collection_cover_content ON core_collection(cover_content_id);
@@ -277,8 +375,28 @@ CREATE TABLE core_collection_entry (
   target_id     TEXT NOT NULL,
   position      INTEGER NOT NULL,
   added_at      TEXT NOT NULL,
-  UNIQUE (collection_id, target_type, target_id)
+  UNIQUE (collection_id, target_type, target_id),
+  FOREIGN KEY (entry_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE,
+  FOREIGN KEY (target_type, target_id)
+    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
 ) STRICT;
+-- Membership is asked target-first ("which collections hold this photo?") as
+-- often as collection-first (#883).
+CREATE INDEX IF NOT EXISTS idx_collection_entry_target
+  ON core_collection_entry(target_type, target_id);
+
+${touchUpdatedAt("core_vault", "vault_id")}
+${touchUpdatedAt("core_party", "party_id")}
+${touchUpdatedAt("core_party_identifier", "identifier_id")}
+${touchUpdatedAt("core_place", "place_id")}
+${touchUpdatedAt("core_event", "event_id")}
+${touchUpdatedAt("core_transaction", "txn_id")}
+${touchUpdatedAt("core_content_item", "content_id")}
+${touchUpdatedAt("core_document", "document_id")}
+${touchUpdatedAt("core_link", "link_id")}
+${touchUpdatedAt("core_concept", "concept_id")}
+${touchUpdatedAt("core_tag", "tag_id")}
+${touchUpdatedAt("core_collection", "collection_id")}
 `;
 
 // Standoff anchor for inline references (#282). An anchor is a LOCATOR
@@ -289,16 +407,16 @@ CREATE TABLE core_collection_entry (
 // them. One anchor per link (an inline mention IS one edge); no independent
 // lifecycle: resolution only considers live links, so anchors of ended links
 // are simply never resolved, and the dangling-link sweep needs no extension.
-// Ships as its own migration step — CORE_DDL is v1 and already applied.
-// IF NOT EXISTS keeps the step re-runnable (the v3 test rewinds and replays
-// the ladder), matching v3's guarded-insert style.
 export const LINK_ANCHOR_DDL = `
-CREATE TABLE IF NOT EXISTS core_link_anchor (
+CREATE TABLE core_link_anchor (
   anchor_id     TEXT PRIMARY KEY,
   link_id       TEXT NOT NULL UNIQUE REFERENCES core_link(link_id),
   selector_json TEXT NOT NULL CHECK (json_valid(selector_json)),
-  created_at    TEXT NOT NULL
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  FOREIGN KEY (anchor_id) REFERENCES core_entity(entity_id) ON DELETE CASCADE
 ) STRICT;
+${touchUpdatedAt("core_link_anchor", "anchor_id")}
 `;
 
 // Share-by-placement provenance (#599 decision 11). Sharing is
@@ -312,9 +430,9 @@ CREATE TABLE IF NOT EXISTS core_link_anchor (
 // intra-vault semantics everywhere. Sharing is a vault-BOUNDARY concept and
 // gets its own record.
 //
-// `(item_type, item_id)` is the projected row in THIS vault, registered in the
-// polymorphic-reference registry (schema/poly-refs.ts) so a purge of the
-// projected row takes the provenance with it. `origin_item_id` is the same
+// `(target_type, target_id)` is the projected row in THIS vault, a real
+// composite foreign key into the entity supertype, so a purge of the projected
+// row takes the provenance with it by cascade. `origin_item_id` is the same
 // uuidv7 whenever the audience did not already hold the bytes — projected rows
 // reuse the origin id (ids are globally unique), and the two columns diverge
 // only when an idempotent re-share dedupes onto a row the audience already had
@@ -324,30 +442,23 @@ CREATE TABLE IF NOT EXISTS core_link_anchor (
 // gateway-plane boundary machinery on the same clock as `blob_orphan.
 // first_orphaned_at`, not owner-facing life data. One share record per
 // projected row — a re-share by a second member keeps the FIRST placement.
-//
-// `shared_by_member` is the HISTORICAL v1 column name. The member-principal
-// layer is gone in #726, but the base rung is immutable because existing
-// vaults already carry `user_version = 1`. SHARE_ORIGIN_ATTRIBUTION_DDL below
-// performs the forward rename to `shared_by`; the stored value needs no rewrite
-// because it was always an attribution (an owner id or `peer:<vaultId>`), not a
-// foreign-keyed member principal.
-//
-// Ships in its own DDL constant so the step stays re-runnable (IF NOT EXISTS),
-// matching LINK_ANCHOR_DDL's style.
+// `shared_by` is an attribution (an owner id or `peer:<vaultId>`), never a
+// foreign-keyed principal.
 export const SHARE_ORIGIN_DDL = `
-CREATE TABLE IF NOT EXISTS core_share_origin (
-  item_type        TEXT NOT NULL,
-  item_id          TEXT NOT NULL,
+CREATE TABLE core_share_origin (
+  -- \`target_*\`, the one name a polymorphic pair has in this vault (#916).
+  target_type      TEXT NOT NULL,
+  target_id        TEXT NOT NULL,
   origin_vault_id  TEXT NOT NULL,
   origin_item_id   TEXT NOT NULL,
-  shared_by_member TEXT NOT NULL,
+  shared_by        TEXT NOT NULL,
   shared_at        INTEGER NOT NULL,
-  PRIMARY KEY (item_type, item_id)
+  created_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  updated_at       TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  PRIMARY KEY (target_type, target_id),
+  FOREIGN KEY (target_type, target_id)
+    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_share_origin_vault ON core_share_origin(origin_vault_id);
-`;
-
-/** Forward upgrade for #726: preserve every v1 placement attribution. */
-export const SHARE_ORIGIN_ATTRIBUTION_DDL = `
-ALTER TABLE core_share_origin RENAME COLUMN shared_by_member TO shared_by;
+${touchUpdatedAt("core_share_origin", ["target_type", "target_id"])}
 `;

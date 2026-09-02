@@ -27,31 +27,23 @@
               <tr>
                 <th>File</th>
                 <th>What it holds</th>
-                <th>Why it's separate</th>
+                <th>Why it is shaped that way</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td>vault.db</td>
                 <td>
-                  Every schema of the ontology — canonical core, consent plane, agent plane, sync
-                  spine, and all life domains — in one ACID boundary.
+                  Everything the vault knows — canonical core, access plane, agent plane, sync
+                  spine and all life domains, plus two append-only bands beside them: the
+                  <b>audit band</b> (receipts, provenance, command invocations, checks, evidence)
+                  and the <b>ledger band</b> (chat, automation and workspace transcripts).
                 </td>
                 <td>
-                  One transaction commits provenance, core rows and domain rows together; all
-                  foreign keys stay engine-enforced.
-                </td>
-              </tr>
-              <tr>
-                <td>journal.db</td>
-                <td>
-                  The append-only audit stream — receipts, provenance, command invocations, checks,
-                  evidence — plus the conversation ledger (chat, automation and workspace
-                  transcripts).
-                </td>
-                <td>
-                  Both bands grow orders of magnitude faster than the model and never roll back a
-                  domain write — keeping them out keeps the sovereign asset small.
+                  One file, one ACID boundary: a transaction commits the command, the rows and the
+                  receipt together, and every reference stays engine-enforced. The two bands are
+                  excluded from exports and device replicas by band, and each declares its own
+                  retention window, so the record stays small without a second file.
                 </td>
               </tr>
               <tr>
@@ -82,14 +74,14 @@
         </div>
         <div class="prose r" style="--d: 0.24s">
           <p>
-            A gateway can mount <b>many vaults</b> — each a subdirectory with its own pair of
-            databases, its own identity row, its own grants. Devices are enrolled per-vault, and
+            A gateway can mount <b>many vaults</b> — each a subdirectory with its own database,
+            its own identity row, its own grants. Devices are enrolled per-vault, and
             every request addresses a (gateway, vault) pair explicitly. Export is honest: copy the
             directory, verify hashes, done.
           </p>
           <p>
-            Only <code>journal.db</code> grows without a natural ceiling, and it's kept bounded
-            without ever dropping history. Idle conversations are <b>digested</b>, their turn-ranges
+            Only the two append-only bands grow without a natural ceiling, and they are kept
+            bounded without ever dropping history. Idle conversations are <b>digested</b>, their turn-ranges
             serialized into sealed gzip segments and archived to the same content-addressed store
             every blob uses — through the same vault blob door. The raw rows are pruned
             <i>only</i> behind a <b>custody latch</b>: once the segment is provably replicated, or,

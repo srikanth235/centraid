@@ -44,7 +44,7 @@ interface VaultOutcome {
   message?: string;
   invocationId?: string;
   receiptId?: string;
-  /** Machine code on a denial/error path (e.g. `VAULT_CONSENT`). */
+  /** Machine code on a denial/error path (e.g. `VAULT_ACCESS`). */
   code?: string;
 }
 

@@ -80,16 +80,16 @@ describe("backup-service-restore", () => {
       logger: silentLogger,
       provider: wrapProvider ? wrapProvider(realProvider) : realProvider,
       assembleEntries: ({ plane }) => {
-        const bases = plane.walShipper!.currentBases();
+        const base = plane.walShipper!.currentBase()!;
         return Promise.resolve([
-          ...bases.map((base) => ({
-            path: WAL_DB_FILES[base.db],
+          {
+            path: WAL_DB_FILES.vault,
             kind: "db" as const,
             absolutePath: base.file,
             sha256: base.sha256,
             walGeneration: base.generation,
             baseTickMs: base.createdAtMs,
-          })),
+          },
           ...(includeBlobEntry
             ? [
                 {

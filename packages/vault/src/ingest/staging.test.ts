@@ -307,9 +307,9 @@ describe("staging", () => {
       )
       .get() as { n: number };
     expect(party.n).toBe(1);
-    const prov = db.journal
+    const prov = db.audit
       .prepare(
-        `SELECT count(*) AS n FROM consent_provenance WHERE prov_activity = 'import.takeout'`
+        `SELECT count(*) AS n FROM access_provenance WHERE prov_activity = 'import.takeout'`
       )
       .get() as { n: number };
     expect(prov.n).toBeGreaterThanOrEqual(2);

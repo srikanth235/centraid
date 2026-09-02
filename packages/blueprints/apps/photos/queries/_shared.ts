@@ -1,13 +1,19 @@
 /**
- * Shared bounded joins for the photos queries. FAVORITE IS NOT JOINED HERE:
- * it is a first-class `favorite` column on media.asset (#419), never a tag.
+ * Shared bounded joins for the photos queries. FAVORITE IS DERIVED HERE (#916):
+ * the star is the flags-scheme `starred` tag on `media.asset` — the same
+ * SCHEME Docs, Locker and People read, each anchored on its own subject — not a
+ * mirrored column. The `media_asset.favorite` column is gone, so a photo's star
+ * is one row in one place, and there is nothing to keep in step.
  * NOT a query — the dispatcher resolves names straight to `queries/<name>.js`.
  */
 
 import {
+  FLAGS_SCHEME_URI,
+  STARRED_NOTATION,
   TAGS_SCHEME_URI,
   conceptsInScheme,
   findScheme,
+  findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
 
 interface SrcContent {
@@ -137,12 +143,24 @@ export async function readAssetJoins({
       (c) => [c.concept_id, c.pref_label ?? c.notation] as const
     )
   );
+  // No flags scheme or no `starred` concept yet ⇒ nothing is starred. A vault
+  // mints both the first time something is starred, so their absence is an
+  // honest "none", never an error.
+  const starredConcept = findSchemeConcept(
+    schemeRows,
+    conceptRows,
+    FLAGS_SCHEME_URI,
+    STARRED_NOTATION
+  );
   const tagsByAsset = new Map<
     string,
     Array<{ tag_id: string; label: string }>
   >();
-  if (tagsScheme && assetIds.length > 0) {
-    const labelTags = await ctx.vault.read({
+  const favoriteAssets = new Set<string>();
+  // ONE read over the windowed assets' tags, then split by scheme: the label
+  // rail and the star are two readings of the same rows.
+  if (assetIds.length > 0) {
+    const assetTags = await ctx.vault.read({
       entity: "core.tag",
       where: [
         { column: "target_type", op: "eq", value: "media.asset" },
@@ -150,7 +168,11 @@ export async function readAssetJoins({
       ],
       purpose,
     });
-    for (const t of (labelTags.rows ?? []) as unknown as TagRow[]) {
+    for (const t of (assetTags.rows ?? []) as unknown as TagRow[]) {
+      if (starredConcept && t.concept_id === starredConcept.concept_id) {
+        favoriteAssets.add(t.target_id);
+        continue;
+      }
       const label = labelConceptById.get(t.concept_id);
       if (!label) continue; // from another scheme
       if (!tagsByAsset.has(t.target_id)) tagsByAsset.set(t.target_id, []);
@@ -162,5 +184,5 @@ export async function readAssetJoins({
     custodyRows.map((c) => [c.content_id, c.custody_state] as const)
   );
 
-  return { tagsByAsset, custodyByContent };
+  return { tagsByAsset, favoriteAssets, custodyByContent };
 }

@@ -58,8 +58,8 @@ function addParty(steward: VaultDb, seat: Seat, now: string): void {
     .prepare(
       `INSERT INTO core_party
        (party_id, kind, display_name, sort_name, birth_date,
-        avatar_content_id, created_at, updated_at, ontology_version)
-       VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?, '1.4')`
+        avatar_content_id, created_at, updated_at)
+       VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?)`
     )
     .run(
       seat.boot.ownerPartyId,
@@ -344,7 +344,6 @@ describe("B6 Tally Commons flagship", () => {
       true
     );
     copyFileSync(backup.vaultPath, path.join(backupDir, "vault.db"));
-    copyFileSync(backup.journalPath, path.join(backupDir, "journal.db"));
     const restoredDb = openVaultDb({
       dir: backupDir,
       sealKey: bobSealKey,

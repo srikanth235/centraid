@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
-import { makeJournalDbProvider } from "../stores/gateway-db.js";
+import { makeLedgerDbProvider } from "../stores/gateway-db.js";
+import { ledgerDbFileIn } from "../stores/ledger-db.test-fixtures.js";
 import { ConversationHistoryStore } from "./history.js";
 import {
   compileHydrationPlan,
@@ -17,14 +18,14 @@ async function newHistory(): Promise<ConversationHistoryStore> {
   const dir = await tempDir("centraid-hydration-");
   const appsDir = path.join(dir, "apps");
   await fs.mkdir(path.join(appsDir, "notes"), { recursive: true });
-  const journalDbFile = path.join(dir, "journal.db");
-  const journal = makeJournalDbProvider(journalDbFile);
+  const ledgerDbFile = ledgerDbFileIn(dir);
+  const journal = makeLedgerDbProvider(ledgerDbFile);
   return new ConversationHistoryStore(() => ({
     vaultId: "vault-test",
     ownerPartyId: "owner",
     appsDir,
     journal,
-    journalDbFile,
+    ledgerDbFile,
     harnessSessionDir: path.join(dir, "harness-sessions"),
   }));
 }

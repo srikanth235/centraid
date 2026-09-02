@@ -17,22 +17,16 @@ function requireDir(db: VaultDb, action: string): string {
 }
 
 /** With a WAL shipper (#408) MUST NOT be called directly (I2). Hosts use `WalShipper.checkpointNow()`. */
-export function checkpointVault(db: VaultDb): {
-  vault: string;
-  journal: string;
-} {
+export function checkpointVault(db: VaultDb): { vault: string } {
   requireDir(db, "checkpoint");
   try {
+    // ONE FILE (#916): the audit band is in `vault.db`, so there is one WAL to
+    // truncate and no ordering between two of them to get wrong.
     db.vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
   } catch (error) {
     throw asVaultDiskFullError("vault WAL checkpoint", error);
   }
-  try {
-    db.journal.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-  } catch (error) {
-    throw asVaultDiskFullError("journal WAL checkpoint", error);
-  }
-  return { vault: "truncated", journal: "truncated" };
+  return { vault: "truncated" };
 }
 
 /** Streamed SHA-256; must match `shasum -a 256` — do not hash a latin1 string. */
@@ -54,9 +48,7 @@ export function sha256File(file: string): string {
 
 export interface BackupResult {
   vaultPath: string;
-  journalPath: string;
   vaultSha256: string;
-  journalSha256: string;
   blobsCopied: number;
   receiptId: string;
 }
@@ -64,29 +56,21 @@ export interface BackupResult {
 export function backupVault(db: VaultDb, destDir: string): BackupResult {
   requireDir(db, "backup");
   const vaultPath = path.join(destDir, "vault.backup.db");
-  const journalPath = path.join(destDir, "journal.backup.db");
-  for (const p of [vaultPath, journalPath]) rmSync(p, { force: true });
+  rmSync(vaultPath, { force: true });
+  // One file carries the life data and its evidence, so one copy is the whole
+  // backup — and the two halves can no longer be copied at different instants.
   db.vault.exec(`VACUUM INTO '${vaultPath.replaceAll("'", "''")}'`);
-  db.journal.exec(`VACUUM INTO '${journalPath.replaceAll("'", "''")}'`);
   const vaultSha256 = sha256File(vaultPath);
-  const journalSha256 = sha256File(journalPath);
   const { copied } = db.blobs.exportTo(destDir);
-  const receiptId = writeReceipt(db.journal, {
+  const receiptId = writeReceipt(db.audit, {
     grantId: null,
     invocationId: null,
-    action: "act consent.backup_vault",
+    action: "act access.backup_vault",
     objectType: "core.vault",
     objectId: null,
     purpose: null,
     decision: "allow",
-    detail: { vaultSha256, journalSha256, destDir, blobsCopied: copied },
+    detail: { vaultSha256, destDir, blobsCopied: copied },
   });
-  return {
-    vaultPath,
-    journalPath,
-    vaultSha256,
-    journalSha256,
-    blobsCopied: copied,
-    receiptId,
-  };
+  return { vaultPath, vaultSha256, blobsCopied: copied, receiptId };
 }

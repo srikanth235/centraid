@@ -25,7 +25,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { ConversationStore } from "../../packages/server/src/engine/conversation/store.js";
-import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
 import {
   completeEnrichmentLease,
   enrichmentQueueDepth,
@@ -255,8 +254,7 @@ async function replicaProcessDeathMidSend(
  */
 function automationWorkerDeathHoldingClaim(chaos: ComponentChaosWorld): void {
   const plane = chaos.plane();
-  ensureConversationLedger(plane.db.journal);
-  const store = new ConversationStore(() => plane.db.journal);
+  const store = new ConversationStore(() => plane.db.audit);
   const conversationId = "chaos-automation";
   store.createConversation({
     id: conversationId,
@@ -313,7 +311,7 @@ function automationWorkerDeathHoldingClaim(chaos: ComponentChaosWorld): void {
 
   // BOUNDED RESOURCE USE: a chain of deaths leaves one row, not a pile.
   const rows = (
-    plane.db.journal
+    plane.db.audit
       .prepare("SELECT count(*) AS n FROM conversation_turn_locks")
       .get() as { n: number }
   ).n;

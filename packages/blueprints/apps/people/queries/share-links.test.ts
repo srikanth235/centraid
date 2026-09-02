@@ -40,7 +40,7 @@ const ROWS: Record<string, Array<Record<string, unknown>>> = {
     { party_id: "party-linked", display_name: "Priya" },
     { party_id: "party-alone", display_name: "Sam" },
   ],
-  "core.vault": [{ owner_party_id: "party-owner" }],
+  "core.vault": [{ self_party_id: "party-owner" }],
   "share.party_vault_binding": [
     {
       binding_id: "binding-1",
@@ -102,7 +102,7 @@ function ctxOf(shareDenied: boolean) {
   >(async ({ entity }) => {
     if (shareDenied && SHARE_ENTITIES.has(entity))
       throw Object.assign(new Error("scope awaiting owner approval"), {
-        code: "VAULT_CONSENT",
+        code: "VAULT_ACCESS",
       });
     return { rows: ROWS[entity] ?? [] };
   });

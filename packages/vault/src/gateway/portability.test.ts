@@ -112,16 +112,26 @@ describe("portability", () => {
     seedLife();
     const first = gw.exportVault(owner);
     expect(first.artifact.verifyHash).toMatch(/^[0-9a-f]{64}$/u);
-    const jobs = db.vault
+    // The export's record is its RECEIPT (#916, ruling ONT-06): the
+    // export-job table was a second copy of it and left the ontology.
+    const receipt = db.audit
       .prepare(
-        "SELECT verify_hash, completed_at FROM consent_export_job WHERE export_id = ?"
+        "SELECT object_type, object_id, detail_json FROM access_receipt WHERE receipt_id = ?"
       )
-      .get(first.exportId) as {
-      verify_hash: string;
-      completed_at: string | null;
+      .get(first.receiptId) as {
+      object_type: string;
+      object_id: string;
+      detail_json: string | null;
     };
-    expect(jobs.verify_hash).toBe(first.artifact.verifyHash);
-    expect(jobs.completed_at).not.toBeNull();
+    expect(receipt.object_type).toBe("core.vault");
+    expect(
+      (JSON.parse(receipt.detail_json ?? "{}") as { exportId?: string })
+        .exportId
+    ).toBe(first.exportId);
+    expect(
+      (JSON.parse(receipt.detail_json ?? "{}") as { verifyHash?: string })
+        .verifyHash
+    ).toBe(first.artifact.verifyHash);
 
     // Rebuild a fresh vault from the artifact — identities intact.
     const restored = openVaultDb();
@@ -154,13 +164,32 @@ describe("portability", () => {
 
   test("portable restore retains every Commons truth and mechanics table", () => {
     const now = "2026-08-10T00:00:00.000Z";
+    // A REAL document to share (#916): a commons lineage row's
+    // `(target_type, target_id)` is a composite foreign key into the entity
+    // supertype, so a made-up container id is refused at the statement.
+    const documentId = uuidv7();
+    const contentId = uuidv7();
+    db.vault
+      .prepare(
+        `INSERT INTO core_content_item
+           (content_id, media_type, content_uri, sha256, byte_size, created_at)
+         VALUES (?, 'text/plain', 'data:text/plain,x', ?, 1, ?)`
+      )
+      .run(contentId, `sha-${contentId}`.padEnd(64, "0"), now);
+    db.vault
+      .prepare(
+        `INSERT INTO core_document
+           (document_id, title, current_content_id, created_at, updated_at)
+         VALUES (?, 'Portable plan', ?, ?, ?)`
+      )
+      .run(documentId, contentId, now, now);
     const grant = createCommonsGrant({
       origin: db.vault,
       ownerPartyId: boot.ownerPartyId,
       ownerVaultId: boot.vaultId,
       ownerVault: db,
       containerType: "core.document",
-      containerId: uuidv7(),
+      containerId: documentId,
       members: [],
       now,
     });
@@ -201,17 +230,17 @@ describe("portability", () => {
     db.vault
       .prepare(
         `INSERT INTO share_commons_lineage
-           (grant_id, item_type, item_id, origin_item_id)
+           (grant_id, target_type, target_id, origin_item_id)
          VALUES (?, 'core.document', ?, ?)`
       )
       .run(grant.grantId, grant.containerId, grant.containerId);
     db.vault
       .prepare(
         `INSERT INTO share_commons_retained
-           (grant_id, item_type, item_id, retained_at)
-         VALUES (?, 'core.document', 'retained-portable-item', ?)`
+           (grant_id, target_type, target_id, retained_at)
+         VALUES (?, 'core.document', ?, ?)`
       )
-      .run(grant.grantId, now);
+      .run(grant.grantId, documentId, now);
     queueCommonsIntent({
       seat: db.vault,
       intentId: "portable-intent",
@@ -240,6 +269,23 @@ describe("portability", () => {
         grant.containerId,
         now
       );
+
+    // A BINDING IS ABOUT SOMEONE ELSE (#916, R9): a vault holds no row for
+    // its own party at its own vault, so the peer is stated explicitly.
+    const peerPartyId = uuidv7();
+    db.vault
+      .prepare(
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+         VALUES (?, 'person', 'Peer', ?, ?)`
+      )
+      .run(peerPartyId, now, now);
+    db.vault
+      .prepare(
+        `INSERT INTO share_party_vault_binding
+           (binding_id, party_id, vault_id, vault_public_key, linked_at, revoked_at)
+         VALUES (?, ?, 'remote-vault', NULL, ?, NULL)`
+      )
+      .run(uuidv7(), peerPartyId, now);
 
     const { artifact } = gw.exportVault(owner);
     const commonsEntities = [

@@ -3,7 +3,11 @@ import { afterEach, describe, expect, test } from "vitest";
 import { registerDocumentCommands } from "../commands/documents.js";
 import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
-import { closeOpenVaults, household } from "./placement-fixture.js";
+import {
+  closeOpenVaults,
+  household,
+  placementAuthority,
+} from "./placement-fixture.js";
 import { shareItemsToVault, unshareFromVault } from "./placement.js";
 
 describe("Docs folder placement", () => {
@@ -54,6 +58,7 @@ describe("Docs folder placement", () => {
       itemType: "docs.folder",
       itemIds: [trip],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "docs.folder", [trip]),
     });
     expect(shared.items[0]!.itemId).toBe(trip);
     expect(
@@ -80,6 +85,7 @@ describe("Docs folder placement", () => {
       itemType: "docs.folder",
       itemIds: [trip],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "docs.folder", [trip]),
     });
     expect(
       audience.vault

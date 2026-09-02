@@ -23,8 +23,23 @@ let db: VaultDb;
 const T0 = "2026-07-15T00:00:00.000Z";
 
 describe("leases", () => {
+  /** A REAL content item to request enrichment OF (#916): the request's
+   *  `(entity_type, entity_id)` is a composite foreign key into the entity
+   *  supertype, so a ghost id is refused at the statement. */
+  const seedContent = (contentId: string): void => {
+    db.vault
+      .prepare(
+        `INSERT OR IGNORE INTO core_content_item
+           (content_id, media_type, content_uri, sha256, byte_size, created_at)
+         VALUES (?, 'application/octet-stream', 'file:///x', ?, 1, ?)`
+      )
+      .run(contentId, `sha-${contentId}`.padEnd(64, "0"), T0);
+  };
+
   beforeEach(() => {
     db = openVaultDb();
+    for (const contentId of ["video-1", "video-2", "doc-1"])
+      seedContent(contentId);
     queueDeviceEnrichmentRequest(db.vault, {
       requestId: "poster-1",
       entityType: "core.content_item",
@@ -172,7 +187,10 @@ describe("leases", () => {
       .prepare(
         `INSERT INTO core_content_item
          (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES ('doc-1', 'application/pdf', 'blob:doc', ?, 10, ?)`
+       VALUES ('doc-1', 'application/pdf', 'blob:doc', ?, 10, ?)
+       ON CONFLICT(content_id) DO UPDATE SET
+         media_type = excluded.media_type, content_uri = excluded.content_uri,
+         sha256 = excluded.sha256, byte_size = excluded.byte_size`
       )
       .run("c".repeat(64), T0);
     db.vault

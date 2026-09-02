@@ -72,7 +72,6 @@ describe("atlas", () => {
         display_name: name,
         created_at: now,
         updated_at: now,
-        ontology_version: "1.3",
       },
     });
     expect(out.status).toBe("executed");
@@ -303,9 +302,9 @@ describe("atlas", () => {
     expect(change).toBeDefined();
 
     // Operator provenance: agent_kind='owner', a distinguishable atlas activity.
-    const prov = db.journal
+    const prov = db.audit
       .prepare(
-        `SELECT prov_activity, agent_kind FROM consent_provenance
+        `SELECT prov_activity, agent_kind FROM access_provenance
         WHERE entity_type = 'core.concept_scheme' AND entity_id = 'S1'`
       )
       .get() as { prov_activity: string; agent_kind: string } | undefined;

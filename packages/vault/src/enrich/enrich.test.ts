@@ -960,9 +960,9 @@ describe("enrich", () => {
       });
       expect(tooSmallCap.status).toBe("too-large");
 
-      const receipts = db.journal
+      const receipts = db.audit
         .prepare(
-          `SELECT count(*) AS n FROM consent_receipt WHERE detail_json LIKE '%agent-content%'`
+          `SELECT count(*) AS n FROM access_receipt WHERE detail_json LIKE '%agent-content%'`
         )
         .get() as { n: number };
       expect(receipts.n).toBeGreaterThanOrEqual(4);
@@ -1107,6 +1107,15 @@ describe("enrich", () => {
     });
 
     test("a gateway backstop cannot drain a live device lease but may resume after expiry", () => {
+      // A REAL content item (#916): the request's (entity_type, entity_id) is
+      // a composite foreign key into the entity supertype.
+      db.vault
+        .prepare(
+          `INSERT OR IGNORE INTO core_content_item
+             (content_id, media_type, content_uri, sha256, byte_size, created_at)
+           VALUES ('pdf-content', 'application/pdf', 'file:///x', ?, 1, '2026-01-01T00:00:00.000Z')`
+        )
+        .run("d".repeat(64));
       queueDeviceEnrichmentRequest(db.vault, {
         requestId: "pdf-device-job",
         entityType: "core.content_item",

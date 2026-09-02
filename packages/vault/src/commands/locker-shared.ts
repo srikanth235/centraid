@@ -39,8 +39,8 @@ export function setTags(
     )
     .run(LOCKER_ITEM_TYPE, itemId, schemeId);
   const owner = ctx.db
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string | null } | undefined;
+    .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+    .get() as { self_party_id: string | null } | undefined;
   const seen = new Set<string>();
   for (const raw of tags) {
     const tag = String(raw).trim();
@@ -73,7 +73,7 @@ export function setTags(
         LOCKER_ITEM_TYPE,
         itemId,
         conceptId,
-        owner?.owner_party_id ?? null,
+        owner?.self_party_id ?? null,
         ctx.now
       );
     ctx.wrote("core.tag", tagId);

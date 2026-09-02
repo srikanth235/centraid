@@ -154,7 +154,7 @@ describe("commons deterministic simulation", () => {
         "grant_propagate",
         "park_confirmable",
         "settle_parked",
-        "revoke_consent_grant",
+        "revoke_access_grant",
         // "The origin is the sole author" is empty unless something contested it.
         "grant_tamper_healed",
         // The precondition of the severance defect (#846).

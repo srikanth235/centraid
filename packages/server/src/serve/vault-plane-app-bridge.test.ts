@@ -179,8 +179,8 @@ describe("vault-plane app bridge", () => {
     const executed = outcome.result as { status: string; receiptId: string };
     expect(executed.status).toBe("executed");
     expect(plane.listParked()).toHaveLength(0);
-    const receipt = plane.db.journal
-      .prepare("SELECT detail_json FROM consent_receipt WHERE receipt_id = ?")
+    const receipt = plane.db.audit
+      .prepare("SELECT detail_json FROM access_receipt WHERE receipt_id = ?")
       .get(executed.receiptId) as { detail_json: string };
     expect(JSON.parse(receipt.detail_json).risk).toBe("medium");
     const events = plane.db.vault
@@ -272,9 +272,9 @@ describe("vault-plane app bridge", () => {
       { summary: "Cross-plane standup" },
     ]);
     // The write is receipted and attributed to the app, not the owner.
-    const receipts = plane.db.journal
+    const receipts = plane.db.audit
       .prepare(
-        `SELECT decision FROM consent_receipt WHERE action = 'act schedule.propose_event' AND decision = 'allow'`
+        `SELECT decision FROM access_receipt WHERE action = 'act schedule.propose_event' AND decision = 'allow'`
       )
       .all();
     expect(receipts).toHaveLength(1);

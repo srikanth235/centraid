@@ -16,7 +16,6 @@ import { createServer } from "node:http";
 import type { AddressInfo, Server } from "node:net";
 import path from "node:path";
 
-import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
 import { handleReplicaIntent } from "../../packages/server/src/routes/replica-intent-route.js";
 import { openVaultPlane } from "../../packages/server/src/serve/vault-plane.js";
 import type { VaultPlane } from "../../packages/server/src/serve/vault-plane.js";
@@ -106,7 +105,6 @@ export async function openComponentChaosWorld(): Promise<ComponentChaosWorld> {
     restartGateway: () => {
       plane.stop();
       plane = openPlane();
-      ensureConversationLedger(plane.db.journal);
     },
     setBackend: (mode) => backend.setMode(mode),
     openOutbox: () => {

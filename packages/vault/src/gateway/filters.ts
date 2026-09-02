@@ -1,5 +1,5 @@
 // Row filters and field masks (S2). Row filters are the ODRL-constraint rows
-// stored in consent.grant_scope.row_filter_json; the gateway compiles them to
+// stored in access.grant_scope.row_filter_json; the gateway compiles them to
 // parameterized SQL against columns validated via PRAGMA table_info — no
 // caller-supplied string ever becomes SQL text.
 
@@ -238,7 +238,7 @@ export function scalarPrimaryKeyColumn(
 }
 
 /**
- * Column allow-list from consent.grant_scope.field_mask_json — minimization
+ * Column allow-list from access.grant_scope.field_mask_json — minimization
  * by default (§03). Returns the SELECT list; a mask never widens past real
  * columns, and an empty intersection fails closed.
  */

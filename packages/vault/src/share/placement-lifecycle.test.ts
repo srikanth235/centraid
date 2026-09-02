@@ -14,6 +14,7 @@ import {
   household,
   reclaimOrphans,
   seedPhoto,
+  placementAuthority,
 } from "./placement-fixture.js";
 import {
   readShareOrigin,
@@ -46,6 +47,7 @@ describe("placement-lifecycle suite", () => {
         itemType: "media.asset",
         itemIds: [photo.assetId],
         sharedBy: "member-priya",
+        authority: placementAuthority(origin, "media.asset", [photo.assetId]),
       })
     ).toThrow("injected mid-share failure");
     audience.vault.prepare = realPrepare;
@@ -129,6 +131,7 @@ describe("placement-lifecycle suite", () => {
       itemType: "media.asset",
       itemIds: [photo.assetId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
     const originalIno = statSync(casPath(origin, photo.sha256)).ino;
 
@@ -193,6 +196,7 @@ describe("placement-lifecycle suite", () => {
         itemType: "media.asset",
         itemIds: [photo.assetId],
         sharedBy: "member-sid",
+        authority: placementAuthority(origin, "media.asset", [photo.assetId]),
       });
 
     share();
@@ -244,6 +248,7 @@ describe("placement-lifecycle suite", () => {
       itemType: "media.asset",
       itemIds: [photo.assetId],
       sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
 
     // The owner trashes the photo out of their OWN library: rows gone, so the
@@ -297,6 +302,7 @@ describe("placement-lifecycle suite", () => {
         itemType: "media.asset",
         itemIds: ["missing"],
         sharedBy: "member-priya",
+        authority: placementAuthority(origin, "media.asset", ["missing"]),
       })
     ).toThrow(/is not in the origin vault/u);
     expect(audience.blobs.local.listSync()).toStrictEqual([]);
@@ -314,6 +320,7 @@ describe("placement-lifecycle suite", () => {
         itemType: "media.asset",
         itemIds: [photo.assetId],
         sharedBy: "member-priya",
+        authority: placementAuthority(origin, "media.asset", [photo.assetId]),
       })
     ).toThrow(/into itself/u);
   });

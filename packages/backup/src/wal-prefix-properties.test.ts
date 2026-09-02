@@ -13,13 +13,12 @@ import {
   newWalGeneration,
   walDbPrefix,
   walGroupCloserKey,
-  walPairMarkerKey,
-  walPairMarkerPrefix,
-  walPairMarkerRootPrefix,
   walSegmentKey,
   walSegmentPrefix,
+  walTickMarkerKey,
+  walTickMarkerPrefix,
+  walTickMarkerRootPrefix,
 } from "./wal-format.js";
-import type { WalDbName } from "./wal-format.js";
 
 /**
  * WAL prefix soundness (L2) and generation minting.
@@ -40,7 +39,7 @@ describe("WAL list prefixes (L2)", () => {
         ).toBe(true);
         // Soundness: a prefix covers the key if and only if it is the same
         // stream — no other listing may sweep it up.
-        const sameStream = a.db === b.db && a.generation === b.generation;
+        const sameStream = a.generation === b.generation;
         expect(key.startsWith(walSegmentPrefix(b.db, b.generation))).toBe(
           sameStream
         );
@@ -69,18 +68,23 @@ describe("WAL list prefixes (L2)", () => {
     );
   });
 
-  test("the db prefix covers that database's keys and not the other's", () => {
+  test("the db prefix covers every stream key and no tick marker", () => {
     fc.assert(
-      fc.property(segmentAddr, (addr) => {
-        const other: WalDbName = addr.db === "vault" ? "journal" : "vault";
+      fc.property(segmentAddr, hex32, (addr, generation) => {
         const key = walSegmentKey(addr);
         expect(key.startsWith(walDbPrefix(addr.db))).toBe(true);
-        expect(key.startsWith(walDbPrefix(other))).toBe(false);
         expect(
           walSegmentPrefix(addr.db, addr.generation).startsWith(
             walDbPrefix(addr.db)
           )
         ).toBe(true);
+        // GC sweeps segments by this prefix — markers live outside it, or a
+        // generation sweep would take the proof of its own tip with it.
+        expect(
+          walTickMarkerKey({ generation, tickMs: 1 }).startsWith(
+            walDbPrefix(addr.db)
+          )
+        ).toBe(false);
       }),
       { numRuns: 40, seed: 53266 }
     );
@@ -89,33 +93,24 @@ describe("WAL list prefixes (L2)", () => {
   test("prefixes refuse a generation that is not a generation", () => {
     // A prefix built from a non-generation matches nothing, and a LIST that
     // returns nothing is indistinguishable from an idle stream — the exact
-    // ambiguity the pair marker exists to remove. So it must fail loudly.
+    // ambiguity the tick marker exists to remove. So it must fail loudly.
     fc.assert(
-      fc.property(dbName, notGeneration, hex32, (db, bad, good) => {
+      fc.property(dbName, notGeneration, (db, bad) => {
         expect(() => walSegmentPrefix(db, bad)).toThrow(/wal generation/u);
         expect(() => walSegmentPrefix(db, bad, 0)).toThrow(/wal generation/u);
-        expect(() => walPairMarkerPrefix(bad, good)).toThrow(
-          /generation pair/u
-        );
-        expect(() => walPairMarkerPrefix(good, bad)).toThrow(
-          /generation pair/u
-        );
+        expect(() => walTickMarkerPrefix(bad)).toThrow(/wal generation/u);
       }),
       { numRuns: 40, seed: 53267 }
     );
   });
 
-  test("the pair-marker root prefix covers markers and only markers", () => {
+  test("the tick-marker root prefix covers markers and only markers", () => {
     fc.assert(
-      fc.property(hex32, hex32, segmentAddr, (v, j, seg) => {
-        const markerKey = walPairMarkerKey({
-          vaultGeneration: v,
-          journalGeneration: j,
-          tickMs: 1,
-        });
-        const root = walPairMarkerRootPrefix();
+      fc.property(hex32, segmentAddr, (generation, seg) => {
+        const markerKey = walTickMarkerKey({ generation, tickMs: 1 });
+        const root = walTickMarkerRootPrefix();
         expect(markerKey.startsWith(root)).toBe(true);
-        expect(walPairMarkerPrefix(v, j).startsWith(root)).toBe(true);
+        expect(walTickMarkerPrefix(generation).startsWith(root)).toBe(true);
         // GC discovers markers by this prefix — it must never sweep segments.
         expect(walSegmentKey(seg).startsWith(root)).toBe(false);
         expect(
@@ -131,18 +126,16 @@ describe("WAL list prefixes (L2)", () => {
     );
   });
 
-  test("a pair prefix is specific to its ORDERED generation pair", () => {
+  test("a marker prefix is specific to its generation", () => {
     fc.assert(
-      fc.property(hex32, hex32, (v, j) => {
-        fc.pre(v !== j);
-        expect(walPairMarkerPrefix(v, j)).not.toBe(walPairMarkerPrefix(j, v));
-        const key = walPairMarkerKey({
-          vaultGeneration: v,
-          journalGeneration: j,
-          tickMs: 2,
-        });
-        expect(key.startsWith(walPairMarkerPrefix(v, j))).toBe(true);
-        expect(key.startsWith(walPairMarkerPrefix(j, v))).toBe(false);
+      fc.property(hex32, hex32, (a, b) => {
+        fc.pre(a !== b);
+        const key = walTickMarkerKey({ generation: a, tickMs: 2 });
+        expect(key.startsWith(walTickMarkerPrefix(a))).toBe(true);
+        // A restore believes marker positions ABSOLUTELY, so a prefix that
+        // swept another generation's markers would apply its offsets to a
+        // different stream.
+        expect(key.startsWith(walTickMarkerPrefix(b))).toBe(false);
       }),
       { numRuns: 32, seed: 53269 }
     );

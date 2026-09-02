@@ -117,7 +117,7 @@ export const CHANGE_TABLES = [
   "core.concept_scheme",
   "core.link",
   "blob.custody_state",
-  "consent.provenance",
+  "access.provenance",
 ];
 
 interface DriveResult {

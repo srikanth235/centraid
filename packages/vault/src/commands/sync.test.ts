@@ -677,7 +677,7 @@ describe("sync", () => {
       expect(row.access_token).toMatch(/^sealed:v1:/u);
 
       // The append-only journal carries hash tokens, never the capability.
-      const journal = db.journal
+      const journal = db.audit
         .prepare("SELECT input_json FROM agent_command_invocation")
         .all() as { input_json: string }[];
       expect(JSON.stringify(journal)).not.toContain("cap-for-original");
@@ -729,7 +729,7 @@ describe("sync", () => {
       expect(row.cred_kind).toBe("oauth2");
 
       // The append-only journal never carries the plaintext (sealedInput).
-      const journal = db.journal
+      const journal = db.audit
         .prepare(
           "SELECT input_json FROM agent_command_invocation ORDER BY rowid DESC LIMIT 1"
         )
@@ -827,14 +827,13 @@ describe("sync", () => {
         },
         purpose: "dpv:ServiceProvision",
       });
-      expect({
-        ...(db.vault
-          .prepare("SELECT auth_note, updated_at FROM sync_connection_health")
-          .get() as Record<string, unknown>),
-      }).toStrictEqual({
-        auth_note: "refresh still refused (invalid_grant)",
-        updated_at: "2026-01-02T03:04:05.000Z",
-      });
+      // The note is what the member reads; `updated_at` is stamped by the
+      // touch trigger every table gained in #916, so it MOVES on any write.
+      const health = db.vault
+        .prepare("SELECT auth_note, updated_at FROM sync_connection_health")
+        .get() as { auth_note: string; updated_at: string };
+      expect(health.auth_note).toBe("refresh still refused (invalid_grant)");
+      expect(health.updated_at > "2026-01-02T03:04:05.000Z").toBe(true);
       gw.invoke(owner, {
         command: "sync.set_connection_status",
         input: { connection_id: connectionId, status: "active" },

@@ -6,8 +6,9 @@ import { describe, expect, test } from "vitest";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { openVaultDb } from "../db.js";
+import { AUDIT_BAND_TABLES } from "./audit.js";
+import { LEDGER_BAND_TABLES } from "./ledger.js";
 import {
-  JOURNAL_MIGRATIONS,
   migrate,
   ONTOLOGY_VERSION,
   VAULT_MIGRATIONS,
@@ -19,43 +20,43 @@ import {
   userVersionOf,
 } from "./migrate.test-helpers.js";
 import { listVaultEntities, resolveEntity } from "./tables.js";
-import { touchUpdatedAt } from "./updated-at.js";
 
 describe("schema/migrate", () => {
-  test("ontology contract version stamps 1.4 (issue #450 canonical consolidation)", () => {
-    expect(ONTOLOGY_VERSION).toBe("1.4");
+  test("the ontology contract version is the file-and-contract version (ONT-04)", () => {
+    // Not a per-row stamp (#916): `core_party` does not carry it, and the one
+    // table that does — `agent_command` — is the one the gateway checks for
+    // equality.
+    expect(ONTOLOGY_VERSION).toBe("1.0");
+    const db = openVaultDb();
+    expect(columnNames(db.vault, "core_party")).not.toContain(
+      "ontology_version"
+    );
+    expect(columnNames(db.vault, "agent_command")).toContain(
+      "ontology_version"
+    );
+    db.close();
   });
 
-  test("migrations create every table in the registry, in both files", () => {
+  test("the baseline creates every registered table, and both bands", () => {
     const db = openVaultDb();
-    const names = (dbFile: typeof db.vault) =>
-      new Set(
-        (
-          dbFile
-            .prepare(
-              `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`
-            )
-            .all() as {
-            name: string;
-          }[]
-        ).map((r) => r.name)
-      );
-    const vaultTables = names(db.vault);
-    const journalTables = names(db.journal);
+    const tables = new Set(
+      (
+        db.vault
+          .prepare(
+            `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`
+          )
+          .all() as { name: string }[]
+      ).map((r) => r.name)
+    );
     for (const logical of listVaultEntities()) {
       const ref = resolveEntity(logical);
       expect(ref, logical).toBeDefined();
-      expect(vaultTables.has(ref?.physical ?? ""), logical).toBe(true);
+      expect(tables.has(ref?.physical ?? ""), logical).toBe(true);
     }
-    for (const logical of [
-      "consent.receipt",
-      "consent.provenance",
-      "agent.command_invocation",
-      "agent.evidence",
-    ]) {
-      const ref = resolveEntity(logical);
-      expect(ref?.file).toBe("journal");
-      expect(journalTables.has(ref?.physical ?? ""), logical).toBe(true);
+    // ONE FILE (#916): the audit band and the conversation ledger are bands of
+    // vault.db, not a sibling database.
+    for (const physical of [...AUDIT_BAND_TABLES, ...LEDGER_BAND_TABLES]) {
+      expect(tables.has(physical), physical).toBe(true);
     }
     db.close();
   });
@@ -87,10 +88,10 @@ describe("schema/migrate", () => {
     const now = new Date().toISOString();
     db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES ('updated-party', 'person', 'Updated', ?, ?, ?)`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES ('updated-party', 'person', 'Updated', ?, ?)`
       )
-      .run(now, now, ONTOLOGY_VERSION);
+      .run(now, now);
     db.vault
       .prepare(
         `INSERT INTO people_profile
@@ -144,15 +145,16 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("fresh vaults apply the composed baseline plus every rung above it", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(7);
+  test("ONE rung: a fresh vault is the baseline and stops at user_version 1", () => {
+    expect(VAULT_MIGRATIONS).toHaveLength(1);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(7);
+    expect(version.user_version).toBe(1);
     for (const table of [
       "locker_auth_credential",
+      "core_entity",
       "core_entity_revision",
       "social_contact_channel",
       "notifications_notice",
@@ -160,6 +162,9 @@ describe("schema/migrate", () => {
       "share_authority",
       "share_delivery_config",
       "share_fulfillment",
+      "access_provenance",
+      "access_receipt",
+      "conversations",
     ]) {
       expect(
         db.vault
@@ -170,25 +175,40 @@ describe("schema/migrate", () => {
         table
       ).toBeTruthy();
     }
-    expect(
-      db.vault
-        .prepare(
-          `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'people_merge'`
-        )
-        .get()
-    ).toBeUndefined();
-    // Rung six drops what it supersedes on the fresh path too (#883).
-    for (const dropped of ["share_grant", "enrich_consent"]) {
+    // A baseline states the shape it wants; it does not create a store it then
+    // has to drop. Nothing below was ever in a v0 file (#916).
+    for (const gone of [
+      "people_merge",
+      "share_grant",
+      "enrich_consent",
+      "consent_app",
+      "locker_item_history",
+      "social_contact_card",
+      "tally_expense_receipt",
+      "core_observation",
+      "agent_correction",
+      "agent_judgment",
+      "schedule_availability_rule",
+      "health_vital",
+      "finance_budget",
+      "home_asset_item",
+      "business_client",
+    ]) {
       expect(
         db.vault
           .prepare(
             `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`
           )
-          .get(dropped),
-        dropped
+          .get(gone),
+        gone
       ).toBeUndefined();
     }
-    expect(columnNames(db.vault, "consent_device")).not.toContain("trust");
+    expect(columnNames(db.vault, "access_device")).not.toContain("trust");
+    expect(columnNames(db.vault, "media_asset")).not.toContain("favorite");
+    expect(columnNames(db.vault, "core_vault")).toContain("self_party_id");
+    expect(columnNames(db.vault, "access_policy")).not.toContain(
+      "residency_region"
+    );
     db.close();
   });
 
@@ -221,149 +241,6 @@ describe("schema/migrate", () => {
         )
         .get()
     ).toBeTruthy();
-    db.close();
-  });
-
-  // Rung two (#821). The v1 shape is verbatim rather than reconstructed from
-  // the current DDL: the point is a file this build did NOT create. Only the
-  // two tables the rung touches are needed — `migrate()` starts at
-  // user_version 1, so the baseline rung never runs.
-  const V1_PEOPLE_DDL = `
-CREATE TABLE core_party (
-  party_id     TEXT PRIMARY KEY,
-  kind         TEXT NOT NULL,
-  display_name TEXT NOT NULL
-) STRICT;
-CREATE TABLE people_profile (
-  profile_id        TEXT PRIMARY KEY,
-  party_id          TEXT NOT NULL UNIQUE REFERENCES core_party(party_id),
-  role              TEXT,
-  avatar_color      TEXT,
-  cadence_days      INTEGER NOT NULL CHECK (cadence_days > 0),
-  last_contacted_at TEXT,
-  met               TEXT,
-  created_at        TEXT NOT NULL,
-  updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  deleted_at        TEXT,
-  purge_at          TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
-) STRICT;
-CREATE INDEX people_profile_purge_idx ON people_profile(purge_at);
-${touchUpdatedAt("people_profile", "profile_id")}
-`;
-
-  test("rung two upgrades a v1 vault's cadence floor without disturbing its rows", () => {
-    const db = new DatabaseSync(":memory:");
-    db.exec("PRAGMA foreign_keys = ON");
-    db.exec(V1_PEOPLE_DDL);
-    db.exec("PRAGMA user_version = 1");
-    db.exec(
-      `INSERT INTO core_party (party_id, kind, display_name)
-       VALUES ('party-live', 'person', 'Live'), ('party-trashed', 'person', 'Trashed')`
-    );
-    db.exec(
-      `INSERT INTO people_profile
-         (profile_id, party_id, role, avatar_color, cadence_days,
-          last_contacted_at, met, created_at, updated_at, deleted_at, purge_at)
-       VALUES
-         ('profile-live', 'party-live', 'friend', 'hue-3', 30,
-          '2024-05-01T00:00:00.000Z', 'conference',
-          '2024-01-01T00:00:00.000Z', '2024-02-02T00:00:00.000Z', NULL, NULL),
-         ('profile-trashed', 'party-trashed', NULL, NULL, 7,
-          NULL, NULL,
-          '2024-01-03T00:00:00.000Z', '2024-02-04T00:00:00.000Z',
-          '2024-06-01T00:00:00.000Z', '2024-07-01T00:00:00.000Z')`
-    );
-    // The old floor really is the old floor.
-    expect(() =>
-      db.exec(
-        `INSERT INTO people_profile (profile_id, party_id, cadence_days, created_at)
-         VALUES ('profile-zero-pre', 'party-live', 0, '2024-01-01T00:00:00.000Z')`
-      )
-    ).toThrow(/CHECK/u);
-
-    const readAll = (): unknown[] =>
-      db
-        .prepare(`SELECT * FROM people_profile ORDER BY profile_id`)
-        .all() as unknown[];
-    const before = readAll();
-
-    // Stops at rung two: this file holds only the two people tables, and rung
-    // three reads the commons plane.
-    migrate(db, VAULT_MIGRATIONS.slice(0, 2));
-
-    expect(
-      (db.prepare("PRAGMA user_version").get() as { user_version: number })
-        .user_version
-    ).toBe(2);
-    // Every column of every pre-existing row survives the rebuild.
-    expect(readAll()).toStrictEqual(before);
-
-    // The relaxed floor is real; negatives are still refused.
-    db.exec(
-      `INSERT INTO core_party (party_id, kind, display_name)
-       VALUES ('party-never', 'person', 'Never')`
-    );
-    db.exec(
-      `INSERT INTO people_profile (profile_id, party_id, cadence_days, created_at)
-       VALUES ('profile-never', 'party-never', 0, '2024-01-01T00:00:00.000Z')`
-    );
-    expect(
-      (
-        db
-          .prepare(
-            `SELECT cadence_days FROM people_profile WHERE profile_id = 'profile-never'`
-          )
-          .get() as { cadence_days: number }
-      ).cadence_days
-    ).toBe(0);
-    db.exec(
-      `INSERT INTO core_party (party_id, kind, display_name)
-       VALUES ('party-bad', 'person', 'Bad')`
-    );
-    expect(() =>
-      db.exec(
-        `INSERT INTO people_profile (profile_id, party_id, cadence_days, created_at)
-         VALUES ('profile-bad', 'party-bad', -1, '2024-01-01T00:00:00.000Z')`
-      )
-    ).toThrow(/CHECK/u);
-
-    // The rebuild restored the trigger the DROP took with it…
-    db.exec(
-      `UPDATE people_profile SET role = 'colleague' WHERE profile_id = 'profile-live'`
-    );
-    expect(
-      (
-        db
-          .prepare(
-            `SELECT updated_at FROM people_profile WHERE profile_id = 'profile-live'`
-          )
-          .get() as { updated_at: string }
-      ).updated_at
-    ).not.toBe("2024-02-02T00:00:00.000Z");
-    // …the purge index…
-    expect(
-      db
-        .prepare(
-          `SELECT 1 FROM sqlite_master
-           WHERE type = 'index' AND name = 'people_profile_purge_idx'`
-        )
-        .get()
-    ).toBeDefined();
-    // …and the foreign key onto the party spine.
-    expect(() =>
-      db.exec(
-        `INSERT INTO people_profile (profile_id, party_id, cadence_days, created_at)
-         VALUES ('profile-orphan', 'party-missing', 1, '2024-01-01T00:00:00.000Z')`
-      )
-    ).toThrow(/FOREIGN KEY/u);
-    // No scaffolding table left behind.
-    expect(
-      db
-        .prepare(
-          `SELECT 1 FROM sqlite_master WHERE name = 'people_profile_new'`
-        )
-        .get()
-    ).toBeUndefined();
     db.close();
   });
 
@@ -456,8 +333,8 @@ ${touchUpdatedAt("people_profile", "profile_id")}
     expect(() =>
       db.vault
         .prepare(
-          `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-         VALUES ('p1', 'alien', 'X', 't', 't', '1.1')`
+          `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+         VALUES ('p1', 'alien', 'X', 't', 't')`
         )
         .run()
     ).toThrow(/CHECK/u);
@@ -473,10 +350,10 @@ ${touchUpdatedAt("people_profile", "profile_id")}
     const now = new Date().toISOString();
     db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-         VALUES ('cad-party', 'person', 'Never', ?, ?, ?)`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+         VALUES ('cad-party', 'person', 'Never', ?, ?)`
       )
-      .run(now, now, ONTOLOGY_VERSION);
+      .run(now, now);
     const insertCadence = (profileId: string, days: number): void => {
       db.vault
         .prepare(
@@ -501,89 +378,119 @@ ${touchUpdatedAt("people_profile", "profile_id")}
   });
 
   test("extend-don't-fork: extension FK uniqueness prevents two extensions of one core row", () => {
+    // `health.workout` used to be the example; it left the ontology in rung
+    // eight (#916, ruling ONT-06), so R02 is demonstrated on the extension
+    // that carries the most traffic instead — a profile decorates exactly one
+    // party, and a second one is unrepresentable.
     const db = openVaultDb();
     const now = new Date().toISOString();
     db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES ('p1', 'person', 'Owner', ?, ?, '1.1')`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES ('p1', 'person', 'Owner', ?, ?)`
       )
       .run(now, now);
     db.vault
       .prepare(
-        `INSERT INTO core_concept_scheme (scheme_id, uri, title, version) VALUES ('s1', 'urn:x', 'Kinds', '1')`
-      )
-      .run();
-    db.vault
-      .prepare(
-        `INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label) VALUES ('k1', 's1', 'run', 'Run')`
-      )
-      .run();
-    db.vault
-      .prepare(
-        `INSERT INTO core_activity (activity_id, actor_party_id, kind_concept_id, started_at, created_at)
-       VALUES ('a1', 'p1', 'k1', ?, ?)`
+        `INSERT INTO people_profile (profile_id, party_id, cadence_days, created_at, updated_at)
+         VALUES ('pf1', 'p1', 30, ?, ?)`
       )
       .run(now, now);
-    db.vault
-      .prepare(
-        `INSERT INTO health_workout (workout_id, activity_id, sport_concept_id) VALUES ('w1', 'a1', 'k1')`
-      )
-      .run();
     expect(() =>
       db.vault
         .prepare(
-          `INSERT INTO health_workout (workout_id, activity_id, sport_concept_id) VALUES ('w2', 'a1', 'k1')`
+          `INSERT INTO people_profile (profile_id, party_id, cadence_days, created_at, updated_at)
+           VALUES ('pf2', 'p1', 30, ?, ?)`
         )
-        .run()
+        .run(now, now)
     ).toThrow(/UNIQUE/u);
     db.close();
   });
 
-  // Use JOURNAL_MIGRATIONS: vault FTS needs openVaultDb's custom SQL function,
-  // so a bare DatabaseSync cannot run VAULT_MIGRATIONS directly.
+  // A scratch ladder rather than VAULT_MIGRATIONS: the vault's FTS triggers
+  // need `openVaultDb`'s custom SQL function, so a bare handle cannot run the
+  // baseline directly, and what is under test is `migrate()` itself.
+  const SCRATCH: readonly string[] = [
+    "CREATE TABLE scratch_one (x TEXT) STRICT;",
+    "CREATE TABLE scratch_two (x TEXT) STRICT;",
+  ];
+
   test("migrate: no-op guard does not fire for a fresh (behind) or already-migrated (equal) db", () => {
     const db = new DatabaseSync(":memory:");
-    // behind: fresh file, version 0 < migrations.length
-    expect(() => migrate(db, JOURNAL_MIGRATIONS)).not.toThrow();
+    expect(() => migrate(db, SCRATCH)).not.toThrow();
     const afterFresh = db.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(afterFresh.user_version).toBe(JOURNAL_MIGRATIONS.length);
-    // equal: re-running against the now fully-migrated db is a no-op, not a throw
-    expect(() => migrate(db, JOURNAL_MIGRATIONS)).not.toThrow();
+    expect(afterFresh.user_version).toBe(SCRATCH.length);
+    expect(() => migrate(db, SCRATCH)).not.toThrow();
     const afterReplay = db.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(afterReplay.user_version).toBe(JOURNAL_MIGRATIONS.length);
+    expect(afterReplay.user_version).toBe(SCRATCH.length);
     db.close();
   });
 
   test("migrate: user_version ahead of the ladder throws VaultSchemaAheadError with both versions", () => {
     const db = new DatabaseSync(":memory:");
-    migrate(db, JOURNAL_MIGRATIONS);
-    db.exec(`PRAGMA user_version = ${JOURNAL_MIGRATIONS.length + 3}`);
+    migrate(db, SCRATCH);
+    db.exec(`PRAGMA user_version = ${SCRATCH.length + 3}`);
     let caught: unknown;
     try {
-      migrate(db, JOURNAL_MIGRATIONS);
+      migrate(db, SCRATCH);
     } catch (error) {
       caught = error;
     }
     expect(caught).toBeInstanceOf(VaultSchemaAheadError);
     const err = caught as VaultSchemaAheadError;
-    expect(err.fileVersion).toBe(JOURNAL_MIGRATIONS.length + 3);
-    expect(err.knownVersion).toBe(JOURNAL_MIGRATIONS.length);
+    expect(err.fileVersion).toBe(SCRATCH.length + 3);
+    expect(err.knownVersion).toBe(SCRATCH.length);
     expect(err.message).toMatch(/newer version of Centraid/u);
     db.close();
   });
 
-  test("migrate: the guard also applies to journal.db migrations, not just vault.db", () => {
-    const db = new DatabaseSync(":memory:");
-    migrate(db, JOURNAL_MIGRATIONS);
-    db.exec(`PRAGMA user_version = ${JOURNAL_MIGRATIONS.length + 1}`);
-    expect(() => migrate(db, JOURNAL_MIGRATIONS)).toThrow(
-      VaultSchemaAheadError
+  test("a fresh file on disk reopens with no second rung and no schema drift", () => {
+    // ONE BASELINE (#916): "reopen is a no-op" is the whole compatibility
+    // story a v0 file has. On a REAL file — the replay above re-runs `migrate`
+    // on a handle that never left the process.
+    const dir = tempDirSync();
+    const first = openVaultDb({ dir });
+    const shapeOf = (db: ReturnType<typeof openVaultDb>): string =>
+      JSON.stringify(
+        db.vault
+          .prepare(
+            `SELECT type, name, tbl_name, sql FROM sqlite_schema
+             WHERE name NOT LIKE 'sqlite_%'
+             ORDER BY type, name, tbl_name`
+          )
+          .all()
+      );
+    const before = shapeOf(first);
+    first.close();
+
+    const vaultFile = path.join(dir, "vault.db");
+    expect(userVersionOf(vaultFile)).toBe(1);
+
+    const second = openVaultDb({ dir });
+    expect(userVersionOf(vaultFile)).toBe(1);
+    expect(shapeOf(second)).toBe(before);
+    second.close();
+  });
+
+  test("a fresh baseline satisfies its own foreign keys", () => {
+    // Thirteen pointer pairs became composite keys (#916) and bootstrap is
+    // the first writer to travel them; `foreign_key_check` is the engine's own
+    // verdict on every row the baseline leaves behind.
+    const db = openVaultDb();
+    expect(db.vault.prepare("PRAGMA foreign_key_check").all()).toStrictEqual(
+      []
     );
+    expect(
+      (
+        db.vault.prepare("PRAGMA foreign_keys").get() as {
+          foreign_keys: number;
+        }
+      ).foreign_keys
+    ).toBe(1);
     db.close();
   });
 

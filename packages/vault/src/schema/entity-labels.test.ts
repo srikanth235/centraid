@@ -7,7 +7,6 @@ import { describe, expect, test } from "vitest";
 import { ATLAS_KIND_FRIENDLY, atlasTablesByLogical } from "./atlas.js";
 import { assertFtsSpecsRegistered } from "./fts.js";
 import {
-  JOURNAL_ENTITIES,
   VAULT_ENTITIES,
   assertRegistryLabels,
   assertVaultRegistryLabels,
@@ -30,7 +29,10 @@ describe("entity labels", () => {
 
   test("an entity with no label fails validation", () => {
     expect(() =>
-      assertRegistryLabels({ scratch: { nameless: { label: "" } } }, "vault")
+      assertRegistryLabels(
+        { scratch: { nameless: { label: "", lifecycle: "machinery" } } },
+        "vault"
+      )
     ).toThrow(/scratch\.nameless has no label/u);
   });
 
@@ -39,8 +41,8 @@ describe("entity labels", () => {
       assertRegistryLabels(
         {
           scratch: {
-            first: { label: "Tasks" },
-            second: { label: "Tasks" },
+            first: { label: "Tasks", lifecycle: "machinery" },
+            second: { label: "Tasks", lifecycle: "machinery" },
           },
         },
         "vault"
@@ -51,7 +53,11 @@ describe("entity labels", () => {
   test("a blurb is left out rather than fabricated empty", () => {
     expect(() =>
       assertRegistryLabels(
-        { scratch: { thing: { label: "Things", blurb: "  " } } },
+        {
+          scratch: {
+            thing: { label: "Things", blurb: "  ", lifecycle: "mutable" },
+          },
+        },
         "vault"
       )
     ).toThrow(/empty blurb/u);
@@ -64,10 +70,6 @@ describe("entity labels", () => {
         if (entry.packKind !== "machinery") continue;
         expect(declaration.blurb, `${schema}.${table}`).toBeUndefined();
       }
-    }
-    for (const entities of Object.values(JOURNAL_ENTITIES)) {
-      for (const declaration of Object.values(entities))
-        expect(declaration.blurb).toBeUndefined();
     }
   });
 

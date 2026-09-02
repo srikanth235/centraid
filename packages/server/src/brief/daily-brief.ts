@@ -1,6 +1,33 @@
+/*
+ * THE MORNING VIEW GOES THROUGH THE GATEWAY (#916, review-A 8.1). This is
+ * LIFE DATA — events, tasks, photos, money — so it is read the way an app
+ * reads it: `gateway.read` per entity, under a declared purpose, with consent
+ * resolved and a receipt written. Nothing here prepares SQL against a physical
+ * table, which is what `bun run lint:vault-sql` enforces.
+ *
+ * The four joins the old SQL did are folded HERE instead, over windowed reads.
+ * That is the price of the boundary and it is the right one: a brief is a
+ * handful of rows a day, and the alternative was a reader with no consent
+ * check, no receipt, and — until #916 — no soft-delete filter either.
+ */
+
 import { expandRecurrence } from "@centraid/core/time";
 import type { RecurrenceSemantics } from "@centraid/core/time";
-import type { VaultDb } from "@centraid/vault";
+import type { Credential, ReadRequest, ReadResult } from "@centraid/vault";
+
+/** The gateway surface a brief needs — the whole of it. */
+export interface BriefVaultReader {
+  read: (cred: Credential, request: ReadRequest) => ReadResult;
+}
+
+/** DPV purpose every read below declares; it lands on each receipt. */
+const PURPOSE = "dpv:ServiceProvision";
+
+/** Tasks are ordered by due date then priority, and `OrderBy` names ONE
+ *  column — so the window is read wide and the tiebreak folded here. */
+const TASK_WINDOW = 64;
+const TASK_SHELF = 8;
+const EVENT_SHELF = 8;
 
 export interface DailyBrief {
   date: string;
@@ -20,21 +47,55 @@ interface EventRow {
   recurrence_semantics: RecurrenceSemantics;
 }
 
+interface TaskRow {
+  task_id: string;
+  title: string;
+  due_at: string;
+  priority?: number | null;
+}
+
+interface ExpenseRow {
+  expense_id: string;
+  settlement_currency?: string | null;
+}
+
+interface PartyAmountRow {
+  expense_id: string;
+  party_id: string;
+  paid_minor?: number | null;
+  share_minor?: number | null;
+}
+
+interface SettlementRow {
+  from_party: string;
+  to_party: string;
+  amount_minor: number;
+}
+
+function rowsOf<T>(result: ReadResult): T[] {
+  return (result.rows ?? []) as unknown as T[];
+}
+
 /** One content-minimized, read-only morning view over the four daily domains. */
 export function buildDailyBrief(
-  db: VaultDb,
+  vault: BriefVaultReader,
+  cred: Credential,
   input: { date: string; from: string; to: string; timeZone: string }
 ): DailyBrief {
-  const events = (
-    db.vault
-      .prepare(
-        `SELECT event_id, summary, dtstart, rrule, start_tz,
-                recurrence_semantics
-           FROM core_event
-          WHERE status <> 'cancelled'
-          ORDER BY dtstart`
-      )
-      .all() as unknown as EventRow[]
+  const read = (request: ReadRequest): ReadResult =>
+    vault.read(cred, { purpose: PURPOSE, ...request });
+
+  // Every live event, because a recurrence that started years ago can land
+  // inside today's window; the expansion below is what narrows it.
+  const events = rowsOf<EventRow>(
+    read({
+      entity: "core.event",
+      where: [
+        { column: "status", op: "ne", value: "cancelled" },
+        { column: "deleted_at", op: "is-null" },
+      ],
+      orderBy: { column: "dtstart", dir: "asc" },
+    })
   )
     .flatMap((event) => {
       if (!event.rrule) {
@@ -57,79 +118,127 @@ export function buildDailyBrief(
       }));
     })
     .toSorted((left, right) => left.at.localeCompare(right.at))
-    .slice(0, 8);
-  const tasks = (
-    db.vault
-      .prepare(
-        `SELECT task_id AS id, title, due_at AS dueAt
-           FROM schedule_task
-          WHERE status IN ('needs-action','in-process')
-            AND due_at IS NOT NULL AND due_at < ?
-          ORDER BY due_at, priority DESC LIMIT 8`
-      )
-      .all(input.to) as unknown as Array<{
-      id: string;
-      title: string;
-      dueAt: string;
-    }>
-  ).map((row) => row);
-  const photo = db.vault
-    .prepare(
-      `SELECT COUNT(*) AS n FROM media_asset
-        WHERE deleted_at IS NULL AND archived_at IS NULL
-          AND COALESCE(captured_at, '') >= ? AND captured_at < ?`
+    .slice(0, EVENT_SHELF);
+
+  const tasks = rowsOf<TaskRow>(
+    read({
+      entity: "schedule.task",
+      where: [
+        {
+          column: "status",
+          op: "in",
+          value: ["needs-action", "in-process"],
+        },
+        { column: "deleted_at", op: "is-null" },
+        { column: "due_at", op: "not-null" },
+        { column: "due_at", op: "lt", value: input.to },
+      ],
+      orderBy: { column: "due_at", dir: "asc" },
+      limit: TASK_WINDOW,
+    })
+  )
+    .toSorted(
+      (left, right) =>
+        left.due_at.localeCompare(right.due_at) ||
+        (right.priority ?? 0) - (left.priority ?? 0)
     )
-    .get(input.from, input.to) as { n: number };
-  const vault = db.vault
-    .prepare("SELECT owner_party_id, base_currency FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string; base_currency: string };
-  const expenses = db.vault
-    .prepare(
-      `SELECT e.amount_minor, e.paid_by, COALESCE(s.share_minor, 0) AS owner_share
-         FROM tally_expense e
-         LEFT JOIN tally_expense_split s
-           ON s.expense_id = e.expense_id AND s.party_id = ?
-        WHERE e.deleted_at IS NULL`
-    )
-    .all(vault.owner_party_id) as unknown as Array<{
-    amount_minor: number;
-    paid_by: string;
-    owner_share: number;
-  }>;
-  let balanceMinor = expenses.reduce(
-    (sum, row) =>
-      sum +
-      (row.paid_by === vault.owner_party_id ? row.amount_minor : 0) -
-      row.owner_share,
-    0
-  );
-  const settlements = db.vault
-    .prepare(
-      `SELECT from_party, to_party, amount_minor FROM tally_settlement
-        WHERE deleted_at IS NULL AND (from_party = ? OR to_party = ?)`
-    )
-    .all(vault.owner_party_id, vault.owner_party_id) as unknown as Array<{
-    from_party: string;
-    to_party: string;
-    amount_minor: number;
-  }>;
-  for (const settlement of settlements) {
-    balanceMinor +=
-      settlement.from_party === vault.owner_party_id
-        ? settlement.amount_minor
-        : -settlement.amount_minor;
-  }
-  const currency =
-    typeof vault.base_currency === "string" &&
-    /^[A-Za-z]{3}$/u.test(vault.base_currency)
-      ? vault.base_currency.toUpperCase()
+    .slice(0, TASK_SHELF)
+    .map((task) => ({
+      id: task.task_id,
+      title: task.title,
+      dueAt: task.due_at,
+    }));
+
+  const newPhotos = rowsOf<{ asset_id: string }>(
+    read({
+      entity: "media.asset",
+      where: [
+        { column: "deleted_at", op: "is-null" },
+        { column: "archived_at", op: "is-null" },
+        { column: "captured_at", op: "gte", value: input.from },
+        { column: "captured_at", op: "lt", value: input.to },
+      ],
+    })
+  ).length;
+
+  const vaultRow = rowsOf<{
+    self_party_id: string;
+    base_currency?: string | null;
+  }>(read({ entity: "core.vault", limit: 1 }))[0];
+  const selfPartyId = vaultRow?.self_party_id ?? "";
+  const declared = vaultRow?.base_currency;
+  const baseCurrency =
+    typeof declared === "string" && /^[A-Za-z]{3}$/u.test(declared)
+      ? declared.toUpperCase()
       : "USD";
+
+  /*
+   * What this seat is owed, in ONE currency (#916, review-A 4.2). The fold
+   * read `tally_expense.paid_by` — the PRINCIPAL payer — so a multi-payer
+   * expense credited the whole amount to one person; `tally.expense_payer`
+   * carries the whole payer set (one degenerate row when there is one payer).
+   * An expense settling in another currency is EXCLUDED, not folded: there is
+   * no rate here that is not already applied, and adding minor units across
+   * currencies is worse than reporting the base-currency position.
+   * `tally.settlement` carries no currency, so it is base-currency by
+   * construction.
+   */
+  const expenses = rowsOf<ExpenseRow>(
+    read({
+      entity: "tally.expense",
+      where: [{ column: "deleted_at", op: "is-null" }],
+    })
+  );
+  const baseCurrencyExpenses = new Set(
+    expenses
+      .filter((e) => (e.settlement_currency ?? baseCurrency) === baseCurrency)
+      .map((e) => e.expense_id)
+  );
+  let balanceMinor = 0;
+  if (baseCurrencyExpenses.size > 0 && selfPartyId !== "") {
+    const expenseIds = [...baseCurrencyExpenses];
+    for (const payer of rowsOf<PartyAmountRow>(
+      read({
+        entity: "tally.expense_payer",
+        where: [
+          { column: "party_id", op: "eq", value: selfPartyId },
+          { column: "expense_id", op: "in", value: expenseIds },
+        ],
+      })
+    ))
+      balanceMinor += payer.paid_minor ?? 0;
+    for (const split of rowsOf<PartyAmountRow>(
+      read({
+        entity: "tally.expense_split",
+        where: [
+          { column: "party_id", op: "eq", value: selfPartyId },
+          { column: "expense_id", op: "in", value: expenseIds },
+        ],
+      })
+    ))
+      balanceMinor -= split.share_minor ?? 0;
+  }
+
+  if (selfPartyId !== "") {
+    for (const settlement of rowsOf<SettlementRow>(
+      read({
+        entity: "tally.settlement",
+        where: [{ column: "deleted_at", op: "is-null" }],
+      })
+    )) {
+      if (settlement.from_party === selfPartyId)
+        balanceMinor += settlement.amount_minor;
+      else if (settlement.to_party === selfPartyId)
+        balanceMinor -= settlement.amount_minor;
+    }
+  }
+
   return {
     date: input.date,
     events,
     tasks,
-    newPhotos: photo.n,
+    newPhotos,
     balanceMinor,
-    currency,
+    currency: baseCurrency,
   };
 }

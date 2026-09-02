@@ -2,15 +2,15 @@
  * Backup-format archaeology corpus (umbrella #842, slice B3, W1.4).
  *
  * For every backup snapshot format the corpus covers, a deterministically
- * seeded vault/journal pair is sealed through the REAL backup engine and
- * restored with TODAY's code, and the restored plaintext census must match the
- * committed golden. This is the "can we still read ourselves" guarantee: the
- * day the reader stops opening a format's bytes, the restore throws here.
+ * seeded vault is sealed through the REAL backup engine and restored with
+ * TODAY's code, and the restored plaintext census must match the committed
+ * golden. This is the "can we still read ourselves" guarantee: the day the
+ * reader stops opening a format's bytes, the restore throws here.
  *
  * Today the format string is pre-release ('centraid-snapshot/2') and is the
  * only readable AND writable format, so the member is sealed live rather than
  * frozen as a >5 MB binary golden (a schema-only vault already exceeds the
- * repo-hygiene ceiling — see scripts/corpora/vault-corpus.ts). The growth-guard
+ * repo-hygiene ceiling — see ./backup-corpus-fixture.ts). The growth-guard
  * enforces that every currently-readable format is a corpus member and that the
  * set only grows; scripts/corpora/backup-format-census.json documents how a
  * format bump adds (and never removes) a member.
@@ -35,15 +35,18 @@ import {
 } from "@centraid/backup";
 import type { SourceEntry } from "@centraid/backup";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { ONTOLOGY_VERSION, verifyRestoredPair } from "@centraid/vault";
+import {
+  ONTOLOGY_VERSION,
+  VAULT_MIGRATIONS,
+  verifyRestoredPair,
+} from "@centraid/vault";
 
 import manifest from "../../scripts/corpora/backup-format-census.json";
 import {
   EXPECTED_CENSUS,
-  VAULT_LADDER_LENGTH,
-  buildHeadPair,
-  censusPair,
-} from "../../scripts/corpora/vault-corpus.js";
+  buildCorpusVault,
+  censusVault,
+} from "./backup-corpus-fixture.js";
 
 const FIXED_BASE_TICK_MS = 1_752_480_000_000;
 const FIXED_WAL_GENERATION = "ab".repeat(16);
@@ -51,14 +54,14 @@ const VAULT_ID = "corpus-archaeology-vault";
 
 const APP_META: Record<string, string> = {
   gatewayVersion: "0.1.0",
-  vaultUserVersion: String(VAULT_LADDER_LENGTH),
+  vaultUserVersion: String(VAULT_MIGRATIONS.length),
   ontologyVersion: ONTOLOGY_VERSION,
   sourceInstanceId: "corpus-archaeology",
 };
 
 const CURRENT = {
   gatewayVersion: "0.1.0",
-  vaultUserVersion: String(VAULT_LADDER_LENGTH),
+  vaultUserVersion: String(VAULT_MIGRATIONS.length),
   ontologyVersion: ONTOLOGY_VERSION,
 };
 
@@ -68,15 +71,15 @@ async function fileSha256(file: string): Promise<string> {
     .digest("hex");
 }
 
-/** Seal a built pair into a fresh LocalBackupProvider store; returns the pieces a restore needs. */
-async function sealHeadPair(): Promise<{
+/** Seal a built member into a fresh LocalBackupProvider store; returns the pieces a restore needs. */
+async function sealCorpusVault(): Promise<{
   provider: LocalBackupProvider;
   targetId: string;
   keyring: Awaited<ReturnType<typeof createKeyring>>;
   format: string;
 }> {
   const sourceDir = await tempDir("archaeology-source-");
-  const paths = buildHeadPair(sourceDir);
+  const paths = buildCorpusVault(sourceDir);
 
   const storeDir = await tempDir("archaeology-store-");
   const provider = new LocalBackupProvider({ rootDir: storeDir });
@@ -90,14 +93,6 @@ async function sealHeadPair(): Promise<{
       kind: "db",
       absolutePath: paths.vaultFile,
       sha256: await fileSha256(paths.vaultFile),
-      walGeneration: FIXED_WAL_GENERATION,
-      baseTickMs: FIXED_BASE_TICK_MS,
-    },
-    {
-      path: "journal.db",
-      kind: "db",
-      absolutePath: paths.journalFile,
-      sha256: await fileSha256(paths.journalFile),
       walGeneration: FIXED_WAL_GENERATION,
       baseTickMs: FIXED_BASE_TICK_MS,
     },
@@ -129,7 +124,7 @@ describe("backup-format archaeology corpus", () => {
   });
 
   test("a sealed member restores with today's code to the committed census", async () => {
-    const { provider, targetId, keyring, format } = await sealHeadPair();
+    const { provider, targetId, keyring, format } = await sealCorpusVault();
     // The member seals as the current format, which the corpus covers.
     expect(format).toBe(SNAPSHOT_FORMAT_V2);
     expect(manifest.formats).toContain(format);
@@ -144,34 +139,24 @@ describe("backup-format archaeology corpus", () => {
       destDir,
       current: CURRENT,
     });
-    expect(result.walReplay?.perDb.vault.integrityCheck).toBe("ok");
-    expect(result.walReplay?.perDb.journal.integrityCheck).toBe("ok");
+    expect(result.walReplay?.integrityCheck).toBe("ok");
 
     const report = verifyRestoredPair(destDir);
     expect(report.vault.integrity).toBe("ok");
-    expect(report.journal.integrity).toBe("ok");
     expect(report.vault.foreignKeyViolations).toBe(0);
-    expect(report.journal.foreignKeyViolations).toBe(0);
     expect(report.danglingReceipts).toStrictEqual([]);
 
     // The restored plaintext census matches the golden — we can still read the bytes.
-    expect(censusPair(destDir)).toStrictEqual(manifest.expectedCensus);
+    expect(censusVault(destDir)).toStrictEqual(manifest.expectedCensus);
   });
 
   test("the sealed source vault is deterministic (byte-identical across builds)", async () => {
     const a = await tempDir("archaeology-det-a-");
     const b = await tempDir("archaeology-det-b-");
-    const pa = buildHeadPair(a);
-    const pb = buildHeadPair(b);
-    const compared = await Promise.all(
-      (["vault.db", "journal.db"] as const).map(async (name) => {
-        const [ba, bb] = await Promise.all([
-          readFile(path.join(pa.dir, name)),
-          readFile(path.join(pb.dir, name)),
-        ]);
-        return ba.equals(bb);
-      })
-    );
-    expect(compared).toStrictEqual([true, true]);
+    const [ba, bb] = await Promise.all([
+      readFile(buildCorpusVault(a).vaultFile),
+      readFile(buildCorpusVault(b).vaultFile),
+    ]);
+    expect(ba.equals(bb)).toBe(true);
   });
 });

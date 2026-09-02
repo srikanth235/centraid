@@ -1,4 +1,4 @@
-// Real journal.db rows, seeded with old timestamps, archived, verified.
+// Real audit-band rows, seeded with old timestamps, archived, verified.
 // No mocks: `openVaultDb({})` (in-memory) gives a real DatabaseSync pair and
 // a real BlobCustody backed by MemoryBlobStore, so `ingestSync`/`getSync`
 // exercise the exact CAS path a real vault uses.
@@ -27,9 +27,9 @@ function seedProvenance(
   args: { entityId: string; occurredAt: string; prevProvId?: string | null }
 ): string {
   const provId = uuidv7();
-  db.journal
+  db.audit
     .prepare(
-      `INSERT INTO consent_provenance
+      `INSERT INTO access_provenance
          (prov_id, entity_type, entity_id, prov_activity, agent_kind, agent_id, used_json, occurred_at, prev_prov_id, signature)
        VALUES (?, 'knowledge.note', ?, 'create', 'owner', 'owner-device', NULL, ?, ?, NULL)`
     )
@@ -54,41 +54,41 @@ function seedInvocationCluster(
   // receipt_id NULL, then the receipt (which can reference the now-live
   // invocation), then back-fill the invocation's receipt_id — exactly the
   // real write path in gateway/execution.ts (requested → receipted).
-  db.journal
+  db.audit
     .prepare(
       `INSERT INTO agent_command_invocation
          (invocation_id, command_id, caller_id, grant_id, input_json, status, requested_at, executed_at, receipt_id)
        VALUES (?, 'cmd-1', 'agent-1', NULL, '{}', 'executed', ?, ?, NULL)`
     )
     .run(invocationId, args.requestedAt, args.receiptAt);
-  db.journal
+  db.audit
     .prepare(
-      `INSERT INTO consent_receipt
+      `INSERT INTO access_receipt
          (receipt_id, grant_id, invocation_id, action, object_type, object_id, purpose_concept_id, decision, occurred_at, hash, detail_json)
        VALUES (?, NULL, ?, 'act knowledge.create_note', 'knowledge.note', NULL, NULL, 'allow', ?, ?, NULL)`
     )
     .run(receiptId, invocationId, args.receiptAt, sha256Hex(receiptId));
-  db.journal
+  db.audit
     .prepare(
       "UPDATE agent_command_invocation SET receipt_id = ? WHERE invocation_id = ?"
     )
     .run(receiptId, invocationId);
   const checkId = uuidv7();
-  db.journal
+  db.audit
     .prepare(
       `INSERT INTO agent_invocation_check (check_id, invocation_id, phase, predicate, passed, observed_json, checked_at)
        VALUES (?, ?, 'pre', 'p', 1, NULL, ?)`
     )
     .run(checkId, invocationId, args.requestedAt);
   const evidenceId = uuidv7();
-  db.journal
+  db.audit
     .prepare(
       `INSERT INTO agent_evidence (evidence_id, invocation_id, claim, entity_type, entity_id, prov_id, weight)
        VALUES (?, ?, 'claim', 'knowledge.note', 'note-1', NULL, NULL)`
     )
     .run(evidenceId, invocationId);
   const explanationId = uuidv7();
-  db.journal
+  db.audit
     .prepare(
       `INSERT INTO agent_explanation (explanation_id, invocation_id, audience, summary, generated_at)
        VALUES (?, ?, 'owner', 'summary', ?)`
@@ -98,7 +98,7 @@ function seedInvocationCluster(
 }
 
 describe("journal-archive", () => {
-  test("archives old provenance rows into a CAS segment and drops them from journal.db", () => {
+  test("archives old provenance rows into a CAS segment and drops them from vault.db", () => {
     const db = openVaultDb({});
     const oldId = seedProvenance(db, {
       entityId: "note-1",
@@ -117,8 +117,8 @@ describe("journal-archive", () => {
     expect(manifest.stream).toBe("provenance");
     expect(manifest.rowCount).toBe(1);
 
-    const remaining = db.journal
-      .prepare("SELECT prov_id FROM consent_provenance")
+    const remaining = db.audit
+      .prepare("SELECT prov_id FROM access_provenance")
       .all() as {
       prov_id: string;
     }[];
@@ -126,9 +126,9 @@ describe("journal-archive", () => {
 
     const segment = readArchivedSegment(db, manifest);
     expect(segment.stream).toBe("provenance");
-    expect(segment.rows.consent_provenance).toHaveLength(1);
+    expect(segment.rows.access_provenance).toHaveLength(1);
     expect(
-      (segment.rows.consent_provenance![0] as { prov_id: string }).prov_id
+      (segment.rows.access_provenance![0] as { prov_id: string }).prov_id
     ).toBe(oldId);
 
     const verification = verifyArchivedSegment(db, manifest);
@@ -159,8 +159,8 @@ describe("journal-archive", () => {
 
     expect(result.rowsArchived).toBe(0);
     expect(result.manifests).toHaveLength(0);
-    const remaining = db.journal
-      .prepare("SELECT prov_id FROM consent_provenance")
+    const remaining = db.audit
+      .prepare("SELECT prov_id FROM access_provenance")
       .all();
     expect(remaining).toHaveLength(2);
   });
@@ -186,15 +186,15 @@ describe("journal-archive", () => {
 
     for (const table of [
       "agent_command_invocation",
-      "consent_receipt",
+      "access_receipt",
       "agent_invocation_check",
       "agent_evidence",
       "agent_explanation",
     ]) {
-      const rows = db.journal.prepare(`SELECT * FROM ${table}`).all();
+      const rows = db.audit.prepare(`SELECT * FROM ${table}`).all();
       expect(rows).toHaveLength(1); // only the fresh cluster survives
     }
-    const survivingInvocation = db.journal
+    const survivingInvocation = db.audit
       .prepare("SELECT invocation_id FROM agent_command_invocation")
       .get() as { invocation_id: string };
     expect(survivingInvocation.invocation_id).toBe(fresh.invocationId);
@@ -220,7 +220,7 @@ describe("journal-archive", () => {
     const result = runJournalArchival(db, { windowDays: 90 });
 
     expect(result.rowsArchived).toBe(0);
-    const invocations = db.journal
+    const invocations = db.audit
       .prepare("SELECT * FROM agent_command_invocation")
       .all();
     expect(invocations).toHaveLength(1);
@@ -257,7 +257,7 @@ describe("journal-archive", () => {
       first.manifests[0]!.manifestId
     );
 
-    const all = listArchiveManifests(db.journal, "provenance");
+    const all = listArchiveManifests(db.audit, "provenance");
     expect(all.map((m) => m.manifestId)).toStrictEqual([
       first.manifests[0]!.manifestId,
       second.manifests[0]!.manifestId,
@@ -272,12 +272,12 @@ describe("journal-archive", () => {
     const manifest = result.manifests[0]!;
 
     // Simulate tampering: flip the stored row_count after the fact.
-    db.journal
+    db.audit
       .prepare(
-        "UPDATE journal_archive_manifest SET row_count = row_count + 1 WHERE manifest_id = ?"
+        "UPDATE audit_archive_manifest SET row_count = row_count + 1 WHERE manifest_id = ?"
       )
       .run(manifest.manifestId);
-    const tampered = findArchiveManifest(db.journal, manifest.manifestId)!;
+    const tampered = findArchiveManifest(db.audit, manifest.manifestId)!;
 
     const verification = verifyArchivedSegment(db, tampered);
     expect(verification.ok).toBe(false);
@@ -309,8 +309,8 @@ describe("journal-archive", () => {
     expect(first.capped).toBe(true);
     expect(
       (
-        db.journal
-          .prepare("SELECT count(*) AS n FROM consent_provenance")
+        db.audit
+          .prepare("SELECT count(*) AS n FROM access_provenance")
           .get() as { n: number }
       ).n
     ).toBe(4);
@@ -321,14 +321,14 @@ describe("journal-archive", () => {
     expect(third.capped).toBe(false);
     expect(
       (
-        db.journal
-          .prepare("SELECT count(*) AS n FROM consent_provenance")
+        db.audit
+          .prepare("SELECT count(*) AS n FROM access_provenance")
           .get() as { n: number }
       ).n
     ).toBe(0);
     // Every run's segment is still verifiable — a bounded run is a normal
     // run, not a partial one.
-    for (const manifest of listArchiveManifests(db.journal, "provenance"))
+    for (const manifest of listArchiveManifests(db.audit, "provenance"))
       expect(verifyArchivedSegment(db, manifest).ok).toBe(true);
   });
 
@@ -344,7 +344,7 @@ describe("journal-archive", () => {
     });
     // The old invocation now ALSO points at the young invocation's receipt:
     // archiving it would delete a receipt a live invocation still references.
-    db.journal
+    db.audit
       .prepare(
         "UPDATE agent_command_invocation SET receipt_id = ? WHERE invocation_id = ?"
       )
@@ -355,11 +355,126 @@ describe("journal-archive", () => {
     expect(result.rowsArchived).toBe(0);
     expect(
       (
-        db.journal
+        db.audit
           .prepare("SELECT count(*) AS n FROM agent_command_invocation")
           .get() as { n: number }
       ).n
     ).toBe(2);
+  });
+
+  // ── #916 C1: the file does not grow forever ────────────────────────────
+  //
+  // With one file, "the journal is separate so its size is its own problem"
+  // stopped being an answer: an evidence row past its window has to LEAVE the
+  // live vault, or every member's vault grows without bound. These prove the
+  // rows are gone from the live tables — not merely copied somewhere.
+
+  test("C1: audit rows past the window leave the LIVE file, and stay readable from CAS", () => {
+    const db = openVaultDb({});
+    for (let i = 0; i < 5; i += 1)
+      seedProvenance(db, {
+        entityId: `note-${i}`,
+        occurredAt: daysAgoIso(400 + i),
+      });
+    seedProvenance(db, { entityId: "recent", occurredAt: daysAgoIso(1) });
+    const before = (
+      db.audit.prepare("SELECT count(*) AS n FROM access_provenance").get() as {
+        n: number;
+      }
+    ).n;
+    expect(before).toBe(6);
+
+    // No windowDays: the default is the band's own declared retention.
+    const result = runJournalArchival(db);
+    expect(result.rowsArchived).toBe(5);
+
+    const live = db.audit
+      .prepare("SELECT entity_id FROM access_provenance")
+      .all() as { entity_id: string }[];
+    expect(live.map((row) => row.entity_id)).toStrictEqual(["recent"]);
+
+    // Sealed, not lost: the segment reads back with every archived row.
+    const manifest = result.manifests.find((m) => m.stream === "provenance");
+    expect(manifest).toBeDefined();
+    const segment = readArchivedSegment(db, manifest!);
+    expect(segment.rows.access_provenance).toHaveLength(5);
+  });
+
+  test("C1: the archive pass's door is shut again — an ordinary delete is still refused", () => {
+    const db = openVaultDb({});
+    seedProvenance(db, { entityId: "old", occurredAt: daysAgoIso(400) });
+    seedProvenance(db, { entityId: "recent", occurredAt: daysAgoIso(1) });
+    runJournalArchival(db);
+    expect(
+      (
+        db.audit
+          .prepare("SELECT count(*) AS n FROM audit_archive_pass")
+          .get() as { n: number }
+      ).n
+    ).toBe(0);
+    expect(() =>
+      db.audit.prepare("DELETE FROM access_provenance").run()
+    ).toThrow(/append-only/u);
+  });
+
+  test("C1: the ledger band prunes behind its custody latch, and holds what is not durable", () => {
+    const db = openVaultDb({});
+    const conversationId = uuidv7();
+    const at = Date.parse(daysAgoIso(200));
+    db.audit
+      .prepare(
+        `INSERT INTO conversations (id, kind, user_id, created_at, updated_at)
+         VALUES (?, 'chat', 'owner', ?, ?)`
+      )
+      .run(conversationId, at, at);
+    const insertTurn = db.audit.prepare(
+      `INSERT INTO turns (id, conversation_id, seq, trigger, started_at)
+       VALUES (?, ?, ?, 'manual', ?)`
+    );
+    for (let seq = 1; seq <= 4; seq += 1)
+      insertTurn.run(uuidv7(), conversationId, seq, at);
+
+    const archiveRow = (args: {
+      seqFrom: number;
+      seqTo: number;
+      sha: string;
+    }): void => {
+      db.audit
+        .prepare(
+          `INSERT INTO conversation_archive
+             (id, conversation_id, seq_from, seq_to, from_time, to_time, turn_count,
+              item_count, segment_sha256, segment_bytes, plaintext_bytes, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 1, 1, ?)`
+        )
+        .run(
+          uuidv7(),
+          conversationId,
+          args.seqFrom,
+          args.seqTo,
+          at,
+          at,
+          args.seqTo - args.seqFrom + 1,
+          args.sha,
+          at
+        );
+    };
+    // Turns 1–2: the segment is really in this vault's store.
+    const durable = db.blobs.ingestSync(Buffer.from("segment-bytes"));
+    archiveRow({ seqFrom: 1, seqTo: 2, sha: durable.sha256 });
+    // Turns 3–4: an archive row naming bytes nobody has.
+    archiveRow({ seqFrom: 3, seqTo: 4, sha: sha256Hex("not-here") });
+
+    const result = runJournalArchival(db);
+    expect(result.ledger.segmentsPruned).toBe(1);
+    expect(result.ledger.turnsPruned).toBe(2);
+    expect(result.ledger.heldForCustody).toBe(1);
+    const seqs = (
+      db.audit.prepare("SELECT seq FROM turns ORDER BY seq").all() as {
+        seq: number;
+      }[]
+    ).map((row) => row.seq);
+    // The only copy of a conversation is never deleted on a promise.
+    expect(seqs).toStrictEqual([3, 4]);
   });
 
   test("rejects a non-positive run cap", () => {

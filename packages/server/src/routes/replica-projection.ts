@@ -100,11 +100,11 @@ export interface ReplicaProjectedPage {
 // middle transition too. Retention compaction therefore may not fold these
 // entries away — `REPLICA_COMPACTION_HELD_ENTITIES` covers exactly this set.
 export const SHAPE_CONTROL_ENTITIES = new Set([
-  "consent.app",
-  "consent.app_ext",
-  "consent.access_grant",
-  "consent.grant_scope",
-  "consent.policy",
+  "access.app",
+  "access.app_ext",
+  "access.grant",
+  "access.grant_scope",
+  "access.policy",
 ]);
 
 const WIRE_OUTCOMES = new Set([
@@ -199,7 +199,7 @@ function appMatches(
   return (
     preparedStatement(
       db,
-      `SELECT 1 AS matched FROM consent_app WHERE app_id = ? AND name = ? LIMIT 1`
+      `SELECT 1 AS matched FROM access_app WHERE app_id = ? AND name = ? LIMIT 1`
     ).get(appId, access.appId) !== undefined
   );
 }
@@ -238,8 +238,8 @@ function shapeControlChange(
       preparedStatement(
         db,
         `SELECT 1 AS matched
-             FROM consent_access_grant g
-             JOIN consent_app a ON a.app_id = g.app_id
+             FROM access_grant g
+             JOIN access_app a ON a.app_id = g.app_id
             WHERE g.purpose_concept_id = ? AND a.status = 'active'
               AND g.status = 'active' AND g.revoked_at IS NULL
               AND (g.expires_at IS NULL OR g.expires_at > ?)${restriction}
@@ -252,35 +252,30 @@ function shapeControlChange(
     );
   }
   if (!SHAPE_CONTROL_ENTITIES.has(change.entity)) return false;
-  if (change.entity === "consent.policy") {
-    const after = currentRow(db, "consent_policy", "policy_id", change.rowId);
+  if (change.entity === "access.policy") {
+    const after = currentRow(db, "access_policy", "policy_id", change.rowId);
     return [before, after].some(
       (row) =>
         typeof row?.effective_from === "string" && row.effective_from <= now
     );
   }
-  if (change.entity === "consent.app") {
-    const after = currentRow(db, "consent_app", "app_id", change.rowId);
+  if (change.entity === "access.app") {
+    const after = currentRow(db, "access_app", "app_id", change.rowId);
     return [before, after].some(
       (row) =>
         row?.status === "active" && appMatches(db, access, row.app_id, row.name)
     );
   }
-  if (change.entity === "consent.access_grant") {
-    const after = currentRow(
-      db,
-      "consent_access_grant",
-      "grant_id",
-      change.rowId
-    );
+  if (change.entity === "access.grant") {
+    const after = currentRow(db, "access_grant", "grant_id", change.rowId);
     return [before, after].some(
       (row) => activeAt(row, now) && grantMatches(db, access, row)
     );
   }
-  if (change.entity === "consent.grant_scope") {
+  if (change.entity === "access.grant_scope") {
     const after = currentRow(
       db,
-      "consent_grant_scope",
+      "access_grant_scope",
       "scope_id",
       change.rowId
     );
@@ -289,7 +284,7 @@ function shapeControlChange(
         (value): value is string => typeof value === "string"
       )
     )) {
-      const grant = currentRow(db, "consent_access_grant", "grant_id", grantId);
+      const grant = currentRow(db, "access_grant", "grant_id", grantId);
       if (activeAt(grant, now) && grantMatches(db, access, grant)) return true;
     }
     return false;

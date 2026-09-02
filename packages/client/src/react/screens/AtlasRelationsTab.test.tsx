@@ -47,7 +47,7 @@ describe("AtlasRelationsTab", () => {
       expect(nodeEl(el, "knowledge_note")).not.toBeNull();
       expect(nodeEl(el, "locker_item")).not.toBeNull();
       // reachable machinery renders; unreachable machinery is hidden
-      expect(nodeEl(el, "consent_device")).not.toBeNull();
+      expect(nodeEl(el, "access_device")).not.toBeNull();
       expect(nodeEl(el, "sync_connection")).toBeNull();
       // FK edges present; self-reference and hidden-kind edges excluded —
       // 9 − 1 self-ref − 1 hidden endpoint = 7
@@ -82,7 +82,7 @@ describe("AtlasRelationsTab", () => {
     it("weights live edges by fill — a 41k-row spine outweighs a 742-row column", async () => {
       const el = await mountTab(makeGraph());
       const spine = el.querySelector<SVGPathElement>(
-        '[data-testid="atlas-edge"][data-from="health_vital"][data-to="core_observation"]'
+        '[data-testid="atlas-edge"][data-from="media_asset"][data-to="core_content_item"]'
       );
       const note = el.querySelector<SVGPathElement>(
         '[data-testid="atlas-edge"][data-from="knowledge_note"][data-to="core_party"][data-ghost="false"]'
@@ -117,15 +117,15 @@ describe("AtlasRelationsTab", () => {
 
     it("re-centres on click: hop rings change but bearings never move", async () => {
       const el = await mountTab(makeGraph());
-      const vitalBefore = nodeEl(el, "health_vital");
+      const vitalBefore = nodeEl(el, "media_asset");
       const noteBearing = nodeEl(el, "knowledge_note")?.dataset.bearing;
       expect(vitalBefore?.dataset.hop).toBe("2"); // 2 hops from core_party
 
-      await fire(nodeEl(el, "core_observation"), "click");
+      await fire(nodeEl(el, "core_content_item"), "click");
 
-      expect(orreryCenter(el)).toBe("core_observation");
-      // health_vital is now one hop from the new centre
-      expect(nodeEl(el, "health_vital")?.dataset.hop).toBe("1");
+      expect(orreryCenter(el)).toBe("core_content_item");
+      // media_asset is now one hop from the new centre
+      expect(nodeEl(el, "media_asset")?.dataset.hop).toBe("1");
       // …but knowledge_note's bearing is unchanged — the compass never spins
       expect(nodeEl(el, "knowledge_note")?.dataset.bearing).toBe(noteBearing);
     });
@@ -162,60 +162,60 @@ describe("AtlasRelationsTab", () => {
     it("shows the edge readout in the fixed side panel on hover", async () => {
       const el = await mountTab(makeGraph());
       const hit = el.querySelector(
-        '[data-testid="atlas-edge-hit"][data-from="health_vital"][data-to="core_observation"]'
+        '[data-testid="atlas-edge-hit"][data-from="media_asset"][data-to="core_content_item"]'
       );
       await fire(hit, "mouseover");
       const readout = el.querySelector('[data-testid="atlas-readout"]');
-      expect(readout?.textContent).toContain("core_observation");
+      expect(readout?.textContent).toContain("core_content_item");
       expect(readout?.textContent).toContain("41,230");
     });
 
     // ── Human-language layer ───────────────────────────────────────────────────
     it("node readout leads with the friendly name + blurb, keeping the SQL name", async () => {
       const el = await mountTab(makeGraph());
-      // core_observation carries a curated friendly name + blurb in the fixture
-      await fire(nodeEl(el, "core_observation"), "mouseover");
+      // core_content_item carries a curated friendly name + blurb in the fixture
+      await fire(nodeEl(el, "core_content_item"), "mouseover");
       const readout = el.querySelector('[data-testid="atlas-readout"]');
-      expect(readout?.textContent).toContain("Observations");
-      expect(readout?.textContent).toContain("core_observation");
+      expect(readout?.textContent).toContain("Content items");
+      expect(readout?.textContent).toContain("core_content_item");
       expect(
         el.querySelector('[data-testid="atlas-node-blurb"]')?.textContent
-      ).toContain("Point-in-time readings");
+      ).toContain("The stored bytes behind");
     });
 
     it("a machinery kind with no blurb omits the blurb line cleanly", async () => {
       const el = await mountTab(makeGraph());
-      // consent_device is machinery (standard-only; no blurb in the fixture)
+      // access_device is machinery (standard-only; no blurb in the fixture)
       await setLevel(el, "standard");
-      await fire(nodeEl(el, "consent_device"), "mouseover");
+      await fire(nodeEl(el, "access_device"), "mouseover");
       expect(el.querySelector('[data-testid="atlas-node-blurb"]')).toBeNull();
       const readout = el.querySelector('[data-testid="atlas-readout"]');
-      expect(readout?.textContent).toContain("consent_device");
+      expect(readout?.textContent).toContain("access_device");
     });
 
     it("edge readout speaks a plain sentence with friendly names, keeping physical names", async () => {
       const el = await mountTab(makeGraph());
       const hit = el.querySelector(
-        '[data-testid="atlas-edge-hit"][data-from="health_vital"][data-to="core_observation"]'
+        '[data-testid="atlas-edge-hit"][data-from="media_asset"][data-to="core_content_item"]'
       );
       await fire(hit, "mouseover");
       const lede = el.querySelector('[data-testid="atlas-edge-lede"]');
-      expect(lede?.textContent).toContain("Vitals");
-      expect(lede?.textContent).toContain("Observations");
+      expect(lede?.textContent).toContain("Photos");
+      expect(lede?.textContent).toContain("Content items");
       expect(lede?.textContent).toContain("point to");
       const readout = el.querySelector('[data-testid="atlas-readout"]');
-      expect(readout?.textContent).toContain("health_vital");
-      expect(readout?.textContent).toContain("core_observation");
+      expect(readout?.textContent).toContain("media_asset");
+      expect(readout?.textContent).toContain("core_content_item");
       expect(readout?.textContent).toContain("41,230");
     });
 
     it("breadcrumb shows friendly names, not the SQL keys the trail holds", async () => {
       const el = await mountTab(makeGraph());
-      await fire(nodeEl(el, "core_observation"), "click");
+      await fire(nodeEl(el, "core_content_item"), "click");
       const crumb = (physical: string): HTMLElement | null =>
         el.querySelector<HTMLElement>(`button[data-physical="${physical}"]`);
       expect(crumb("core_party")?.textContent).toBe("People");
-      expect(crumb("core_observation")?.textContent).toBe("Observations");
+      expect(crumb("core_content_item")?.textContent).toBe("Content items");
       // the "Back to …" button also reads the friendly root name
       expect(
         el.querySelector('[data-testid="atlas-recenter"]')?.textContent
@@ -273,7 +273,7 @@ describe("AtlasRelationsTab", () => {
     // ── Question chips ─────────────────────────────────────────────────────────
     it("question chips light a lens on the chart and clear on a second click", async () => {
       const el = await mountTab(makeGraph());
-      // the "unused" lens lights consent_device (target-only machinery);
+      // the "unused" lens lights access_device (target-only machinery);
       // machinery only shows at standard
       await setLevel(el, "standard");
       const cls = (p: string): string =>
@@ -286,23 +286,23 @@ describe("AtlasRelationsTab", () => {
       // connected — the centre's hop-1 neighbours lit, farther kinds dimmed
       await fire(chip("connected"), "click");
       expect(chip("connected")?.getAttribute("aria-pressed")).toBe("true");
-      expect(cls("core_observation")).toContain("nodeHot"); // 1 hop from core_party
-      expect(cls("health_vital")).toContain("nodeDim"); // 2 hops
+      expect(cls("core_content_item")).toContain("nodeHot"); // 1 hop from core_party
+      expect(cls("media_asset")).toContain("nodeDim"); // 2 hops
       // second click clears the lens
       await fire(chip("connected"), "click");
       expect(chip("connected")?.getAttribute("aria-pressed")).toBe("false");
-      expect(cls("health_vital")).not.toContain("nodeDim");
+      expect(cls("media_asset")).not.toContain("nodeDim");
 
       // heaviest — the busiest kinds lit, a small one dimmed
       await fire(chip("heaviest"), "click");
-      expect(cls("core_observation")).toContain("nodeHot");
+      expect(cls("core_content_item")).toContain("nodeHot");
       expect(cls("knowledge_note")).toContain("nodeDim");
       await fire(chip("heaviest"), "click"); // clear
 
       // unused — a target-only kind (unknown row count) lit, a populated kind dimmed
       await fire(chip("unused"), "click");
-      expect(cls("consent_device")).toContain("nodeHot");
-      expect(cls("health_vital")).toContain("nodeDim");
+      expect(cls("access_device")).toContain("nodeHot");
+      expect(cls("media_asset")).toContain("nodeDim");
     });
 
     // ── Pan/zoom camera ───────────────────────────────────────────────────────
@@ -350,8 +350,8 @@ describe("AtlasRelationsTab", () => {
       await fire(el.querySelector('[data-testid="atlas-zoom-in"]'), "click");
       expect(scaleOf(el)).toBeGreaterThan(1);
 
-      await fire(nodeEl(el, "core_observation"), "click");
-      expect(orreryCenter(el)).toBe("core_observation");
+      await fire(nodeEl(el, "core_content_item"), "click");
+      expect(orreryCenter(el)).toBe("core_content_item");
       expect(viewportTransform(el)).toBe(
         "translate(0.000 0.000) scale(1.0000)"
       );
@@ -363,15 +363,15 @@ describe("AtlasRelationsTab", () => {
       const g = makeGraph({
         nodes: [
           node("core_party", "core", "ontology", { friendly: "People" }),
-          node("core_observation", "core", "ontology", {
-            friendly: "Observations",
+          node("core_content_item", "core", "ontology", {
+            friendly: "Content items",
           }),
           node("knowledge_note", "knowledge", "ontology"),
           node("knowledge_tag", "knowledge", "ontology"), // empty: no rows, no live edge
-          node("consent_device", "consent", "machinery"), // plumbing
+          node("access_device", "consent", "machinery"), // plumbing
         ],
         fkEdges: [
-          edge("core_observation", "subject_party_id", "core_party", {
+          edge("core_content_item", "creator_party_id", "core_party", {
             childRows: 100,
             fill: 100,
           }),
@@ -390,11 +390,11 @@ describe("AtlasRelationsTab", () => {
       // the dial lands on simple by default
       expect(dialLevel(el)).toBe("simple");
       // kinds carrying data show…
-      expect(nodeEl(el, "core_observation")).not.toBeNull();
+      expect(nodeEl(el, "core_content_item")).not.toBeNull();
       expect(nodeEl(el, "knowledge_note")).not.toBeNull();
       // …the provably-empty ontology kind and the machinery kind are hidden
       expect(nodeEl(el, "knowledge_tag")).toBeNull();
-      expect(nodeEl(el, "consent_device")).toBeNull();
+      expect(nodeEl(el, "access_device")).toBeNull();
     });
 
     it("Everything reveals unreachable machinery and surfaces the physical SQL sublabels", async () => {
@@ -416,14 +416,14 @@ describe("AtlasRelationsTab", () => {
 
     it("turning the dial preserves the centre and the camera (no reframe)", async () => {
       const el = await mountTab(makeGraph());
-      await fire(nodeEl(el, "core_observation"), "click");
+      await fire(nodeEl(el, "core_content_item"), "click");
       await fire(el.querySelector('[data-testid="atlas-zoom-in"]'), "click");
       const cameraBefore = viewportTransform(el);
-      expect(orreryCenter(el)).toBe("core_observation");
+      expect(orreryCenter(el)).toBe("core_content_item");
       expect(scaleOf(el)).toBeGreaterThan(1);
 
       await setLevel(el, "everything");
-      expect(orreryCenter(el)).toBe("core_observation");
+      expect(orreryCenter(el)).toBe("core_content_item");
       expect(viewportTransform(el)).toBe(cameraBefore);
     });
 

@@ -15,7 +15,7 @@ import type { VaultDb } from "../db.js";
 import { uuidv7 } from "../ids.js";
 import { ONTOLOGY_VERSION } from "../schema/migrate.js";
 import { isSealedValue } from "../schema/sealed.js";
-import type { ConsentAllow } from "./consent.js";
+import type { AccessAllow } from "./access.js";
 import type { CommandRow } from "./contract.js";
 import {
   assertInvocationIdentity,
@@ -25,8 +25,7 @@ import {
   runContractAndExecute,
   sealWrites,
   setInvocationStatus,
-  sweepDanglingLinks,
-  validatePolymorphicWrites,
+  polymorphicDenial,
 } from "./execution.js";
 import type { RegisteredCommand } from "./execution.js";
 import type { Identity } from "./types.js";
@@ -35,7 +34,7 @@ import { GatewayError } from "./types.js";
 let db: VaultDb;
 let boot: BootstrapResult;
 let identity: Identity;
-let consent: ConsentAllow;
+let consent: AccessAllow;
 
 describe("execution", () => {
   beforeEach(() => {
@@ -87,60 +86,72 @@ describe("execution", () => {
     expect(pkColumn(db.vault, "core_tag")).toBe("tag_id");
   });
 
-  test("validatePolymorphicWrites accepts a live target and rejects a dead one", () => {
-    const tagId = uuidv7();
+  // THE ENGINE IS THE CHECK (#916, adversarial BUG-10). `POLY_RULES` covered
+  // five of fifteen mechanisms and validated after the fact; every (type, id)
+  // pair is a composite foreign key into `core_entity` now, so the refusal
+  // happens at the statement — for all fifteen, including the ones the
+  // hand-written list never mentioned.
+  test("a tag at a row that does not exist is refused by the engine", () => {
     const conceptId = Object.values(boot.concepts)[0] as string;
-    db.vault
-      .prepare(
-        `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_at)
-       VALUES (?, 'core.party', ?, ?, ?)`
-      )
-      .run(tagId, boot.ownerPartyId, conceptId, new Date().toISOString());
     expect(() =>
-      validatePolymorphicWrites(db.vault, [
-        { entityType: "core.tag", entityId: tagId },
-      ])
-    ).not.toThrow();
-
-    const deadId = uuidv7();
-    db.vault
-      .prepare(
-        `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_at)
-       VALUES (?, 'core.party', 'no-such-party', ?, ?)`
-      )
-      .run(deadId, conceptId, new Date().toISOString());
-    expect(() =>
-      validatePolymorphicWrites(db.vault, [
-        { entityType: "core.tag", entityId: deadId },
-      ])
-    ).toThrow(/does not resolve to a live row/u);
+      db.vault
+        .prepare(
+          `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_at)
+         VALUES (?, 'core.party', 'no-such-party', ?, ?)`
+        )
+        .run(uuidv7(), conceptId, new Date().toISOString())
+    ).toThrow(/FOREIGN KEY/iu);
   });
 
-  test("validatePolymorphicWrites rejects an unknown entity name in the type column", () => {
-    const tagId = uuidv7();
+  test("an unknown entity name in a type column is refused too", () => {
     const conceptId = Object.values(boot.concepts)[0] as string;
-    db.vault
-      .prepare(
-        `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_at)
-       VALUES (?, 'evil.table', 'x', ?, ?)`
-      )
-      .run(tagId, conceptId, new Date().toISOString());
     expect(() =>
-      validatePolymorphicWrites(db.vault, [
-        { entityType: "core.tag", entityId: tagId },
-      ])
-    ).toThrow(/unknown entity/u);
+      db.vault
+        .prepare(
+          `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_at)
+         VALUES (?, 'evil.table', 'x', ?, ?)`
+        )
+        .run(uuidv7(), conceptId, new Date().toISOString())
+    ).toThrow(/FOREIGN KEY/iu);
   });
 
-  test("sweepDanglingLinks end-dates live links when a hard-deleted entity is written", () => {
+  test("a mechanism POLY_RULES never covered is refused as well", () => {
+    // `enrich_embedding` had `preconditions: []` and no entry in the rules, so
+    // a ghost id went in and stayed.
+    expect(() =>
+      db.vault
+        .prepare(
+          `INSERT INTO enrich_embedding
+             (embedding_id, target_type, target_id, model, dim, vector, created_at)
+           VALUES (?, 'core.document', ?, 'fake@1', 1, x'00', ?)`
+        )
+        .run(uuidv7(), uuidv7(), new Date().toISOString())
+    ).toThrow(/FOREIGN KEY/iu);
+  });
+
+  test("polymorphicDenial turns the engine's complaint into a readable denial", () => {
+    const denial = polymorphicDenial(
+      db.vault,
+      [{ entityType: "core.tag", entityId: "tag-1" }],
+      new Error("FOREIGN KEY constraint failed")
+    );
+    expect(denial).toContain("core.tag tag-1");
+    expect(denial).toContain("core_entity");
+    // Not every failure is a polymorphic one.
+    expect(
+      polymorphicDenial(db.vault, [], new Error("UNIQUE constraint failed"))
+    ).toBeNull();
+  });
+
+  test("a purged endpoint takes its relation with it (#916 supersedes #272)", () => {
     const partyId = uuidv7();
     const now = new Date().toISOString();
     db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES (?, 'person', 'Temp', ?, ?, ?)`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES (?, 'person', 'Temp', ?, ?)`
       )
-      .run(partyId, now, now, "1.4");
+      .run(partyId, now, now);
     const relationConcept = Object.values(boot.concepts)[0] as string;
     const linkId = uuidv7();
     db.vault
@@ -150,20 +161,14 @@ describe("execution", () => {
        VALUES (?, 'core.party', ?, 'core.party', ?, ?, ?, 'owner')`
       )
       .run(linkId, partyId, boot.ownerPartyId, relationConcept, now);
-    // Simulate the hard delete the handler already performed, then sweep.
     db.vault.prepare("DELETE FROM core_party WHERE party_id = ?").run(partyId);
-    const writes = [{ entityType: "core.party", entityId: partyId }];
-    sweepDanglingLinks(db.vault, writes, now);
-    const link = db.vault
-      .prepare("SELECT valid_to FROM core_link WHERE link_id = ?")
-      .get(linkId) as {
-      valid_to: string | null;
-    };
-    expect(link.valid_to).toBe(now);
-    expect(writes).toContainEqual({
-      entityType: "core.link",
-      entityId: linkId,
-    });
+    // End-dating kept an edge naming a row that is not there, and let an id
+    // reused later inherit a relation nobody drew. The cascade deletes it.
+    expect(
+      db.vault
+        .prepare("SELECT count(*) AS n FROM core_link WHERE link_id = ?")
+        .get(linkId)
+    ).toMatchObject({ n: 0 });
   });
 
   test("insertInvocation / assertInvocationIdentity / setInvocationStatus journal the bracket", () => {
@@ -230,7 +235,7 @@ describe("execution", () => {
     ).toThrow(GatewayError);
 
     setInvocationStatus(db, invocationId, "executed");
-    const row = db.journal
+    const row = db.audit
       .prepare(
         "SELECT status FROM agent_command_invocation WHERE invocation_id = ?"
       )
@@ -290,7 +295,7 @@ describe("execution", () => {
     expect(outcome.status).toBe("failed");
     assert(outcome.status === "failed");
     expect(outcome.reason).toContain("contract version 0.9 not served");
-    const checks = db.journal
+    const checks = db.audit
       .prepare(
         `SELECT count(*) AS n FROM agent_invocation_check WHERE invocation_id = ?`
       )
@@ -331,6 +336,7 @@ describe("execution", () => {
           sealedInput: [],
           unseals: [],
           transcriptSensitive: false,
+          erasure: false,
         },
       ],
     ]);
@@ -401,6 +407,7 @@ describe("execution", () => {
           sealedInput: [],
           unseals: [],
           transcriptSensitive: false,
+          erasure: false,
         },
       ],
     ]);
@@ -433,7 +440,7 @@ describe("execution", () => {
     assert(outcome.status === "failed");
     expect(outcome.reason).toBe("precondition refused");
     expect(handlerRan).toBe(false);
-    const preCheck = db.journal
+    const preCheck = db.audit
       .prepare(
         `SELECT passed FROM agent_invocation_check WHERE invocation_id = ? AND phase = 'pre'`
       )
@@ -492,6 +499,7 @@ describe("execution", () => {
           sealedInput: [],
           unseals: [],
           transcriptSensitive: false,
+          erasure: false,
         },
       ],
     ]);
@@ -529,7 +537,7 @@ describe("execution", () => {
       n: number;
     };
     expect(tags.n).toBe(0);
-    const status = db.journal
+    const status = db.audit
       .prepare(
         "SELECT status FROM agent_command_invocation WHERE invocation_id = ?"
       )
@@ -578,6 +586,7 @@ describe("execution", () => {
           sealedInput: [],
           unseals: [],
           transcriptSensitive: false,
+          erasure: false,
         },
       ],
     ]);

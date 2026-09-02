@@ -26,6 +26,28 @@ const SHAREABLE_ITEM_TYPES: readonly ShareableItemType[] = [
   "media.asset",
 ];
 
+/**
+ * The ENTITY a shareable item is. `docs.folder` is Docs' word for a
+ * `core.concept`, and `core_share_origin.(target_type, target_id)` is a
+ * composite foreign key into the entity supertype (#916), so provenance names
+ * the entity rather than the app's word for it.
+ */
+export function shareOriginEntityType(itemType: ShareableItemType): string {
+  return itemType === "docs.folder" ? "core.concept" : itemType;
+}
+
+/**
+ * The inverse of `shareOriginEntityType`, for the sweeps that read provenance
+ * back. In the share plane a projected `core.concept` is a Docs folder: no
+ * other kind of concept crosses a vault boundary.
+ */
+export function shareableItemTypeOfEntity(
+  entityType: string
+): ShareableItemType | undefined {
+  if (entityType === "core.concept") return "docs.folder";
+  return isShareableItemType(entityType) ? entityType : undefined;
+}
+
 export function isShareableItemType(value: string): value is ShareableItemType {
   return (SHAREABLE_ITEM_TYPES as readonly string[]).includes(value);
 }
@@ -73,7 +95,6 @@ export interface MediaAssetRow {
   height: number | null;
   duration_s: number | null;
   exif_json: string | null;
-  favorite: number;
   archived_at: string | null;
   deleted_at: string | null;
   purge_at: string | null;
@@ -112,6 +133,7 @@ export interface WireTallyGroup {
   payers: WireRow[];
   settlements: WireRow[];
   recurring: WireRow[];
+  recurringSplits: WireRow[];
   exceptions: WireRow[];
   receipts: WireRow[];
   lineItems: WireRow[];

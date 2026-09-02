@@ -1,5 +1,5 @@
 /*
- * Aggregates over three sources in the vault's `journal.db` (#514):
+ * Aggregates over three sources in the vault's `vault.db` (#514):
  *   · LIVE — `run_summary` (VIEW: finished turns ⋈ conversations)
  *   · COST PROVENANCE — `items.cost_source` ('harness' | 'estimated')
  *   · ARCHIVED — `conversation_digest` rollups after prune (#438)

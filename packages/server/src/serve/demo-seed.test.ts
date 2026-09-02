@@ -91,14 +91,14 @@ describe("demo-seed", () => {
       expect(rows, `${appId} seeded rows`).toBeGreaterThan(0);
 
     // Provenance may hold several rows per entity; the registry exactly one.
-    const provCounts = plane.db.journal
+    const provCounts = plane.db.audit
       .prepare(
         `SELECT count(DISTINCT entity_type || ':' || entity_id) AS n
-           FROM consent_provenance WHERE prov_activity = 'seed.demo'`
+           FROM access_provenance WHERE prov_activity = 'seed.demo'`
       )
       .get() as { n: number };
     const registered = plane.db.vault
-      .prepare("SELECT count(*) AS n FROM consent_seed_row")
+      .prepare("SELECT count(*) AS n FROM access_seed_row")
       .get() as {
       n: number;
     };
@@ -141,8 +141,16 @@ describe("demo-seed", () => {
     expect(
       count("SELECT count(*) AS n FROM media_asset WHERE kind = 'video'")
     ).toBe(1);
+    // The star is a flags-scheme tag on the asset since #916, not a column.
     expect(
-      count("SELECT count(*) AS n FROM media_asset WHERE favorite = 1")
+      count(
+        `SELECT count(*) AS n FROM core_tag t
+           JOIN core_concept c ON c.concept_id = t.concept_id
+           JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+          WHERE t.target_type = 'media.asset'
+            AND c.notation = 'starred'
+            AND s.uri = 'https://centraid.dev/schemes/flags'`
+      )
     ).toBe(2);
     expect(
       count(

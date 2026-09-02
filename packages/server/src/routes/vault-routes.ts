@@ -1035,18 +1035,14 @@ export function makeVaultRouteHandler(
         segments.length === 2
       ) {
         if (segments[1] === "stats") {
-          return sendJson(
-            res,
-            200,
-            atlasCensus(plane.db.vault, plane.db.journal)
-          );
+          return sendJson(res, 200, atlasCensus(plane.db.vault));
         }
         if (segments[1] === "graph") {
           // core_link aggregation stays a SEPARATE collection: FK ≠ core_link.
           return sendJson(res, 200, atlasGraph(plane.db.vault));
         }
         if (segments[1] === "pulse") {
-          return sendJson(res, 200, atlasPulse(plane.db.journal));
+          return sendJson(res, 200, atlasPulse(plane.db.vault));
         }
       }
 

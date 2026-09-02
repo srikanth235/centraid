@@ -98,9 +98,8 @@ describe("serve/grant-fulfillment", () => {
     priya.vault.vault
       .prepare(
         `INSERT INTO core_party
-           (party_id, kind, display_name, sort_name, created_at, updated_at,
-            ontology_version)
-         VALUES (?, 'person', 'Ravi', 'Ravi', ?, ?, '1.4')`
+           (party_id, kind, display_name, sort_name, created_at, updated_at)
+         VALUES (?, 'person', 'Ravi', 'Ravi', ?, ?)`
       )
       .run(raviParty, now, now);
     priya.vault.vault
@@ -183,9 +182,8 @@ describe("serve/grant-fulfillment", () => {
     const nilaParty = uuidv7();
     const addParty = priya.vault.vault.prepare(
       `INSERT INTO core_party
-         (party_id, kind, display_name, sort_name, created_at, updated_at,
-          ontology_version)
-       VALUES (?, 'person', ?, ?, ?, ?, '1.4')`
+         (party_id, kind, display_name, sort_name, created_at, updated_at)
+       VALUES (?, 'person', ?, ?, ?, ?)`
     );
     addParty.run(raviParty, "Ravi", "Ravi", now, now);
     addParty.run(nilaParty, "Nila", "Nila", now, now);
@@ -253,9 +251,8 @@ describe("serve/grant-fulfillment", () => {
     priya.vault.vault
       .prepare(
         `INSERT INTO core_party
-           (party_id, kind, display_name, sort_name, created_at, updated_at,
-            ontology_version)
-         VALUES (?, 'person', 'Ravi', 'Ravi', ?, ?, '1.4')`
+           (party_id, kind, display_name, sort_name, created_at, updated_at)
+         VALUES (?, 'person', 'Ravi', 'Ravi', ?, ?)`
       )
       .run(raviParty, now, now);
     priya.vault.vault
@@ -347,9 +344,8 @@ describe("serve/grant-fulfillment", () => {
     priya.vault.vault
       .prepare(
         `INSERT INTO core_party
-           (party_id, kind, display_name, sort_name, created_at, updated_at,
-            ontology_version)
-         VALUES (?, 'person', 'Ravi', 'Ravi', ?, ?, '1.4')`
+           (party_id, kind, display_name, sort_name, created_at, updated_at)
+         VALUES (?, 'person', 'Ravi', 'Ravi', ?, ?)`
       )
       .run(raviParty, now, now);
     priya.vault.vault

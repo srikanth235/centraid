@@ -444,7 +444,7 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
       ]);
     const attendeeRows = (attendeesRes.rows ?? []) as unknown as RawAttendee[];
     const mePartyId =
-      ((vaultRes.rows ?? [])[0]?.owner_party_id as string | undefined) ?? null;
+      ((vaultRes.rows ?? [])[0]?.self_party_id as string | undefined) ?? null;
     const attendeePartyIds = [
       ...new Set(attendeeRows.map((a) => a.party_id)),
     ].filter(Boolean);

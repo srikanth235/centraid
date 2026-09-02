@@ -291,7 +291,7 @@ describe("search", () => {
     test("non-indexed entity is a contract error, not a scan", () => {
       expect(() =>
         gw.search(owner, {
-          entity: "health.vital",
+          entity: "media.asset",
           query: "x",
           purpose: PURPOSE,
         })
@@ -324,9 +324,9 @@ describe("search", () => {
           purpose: PURPOSE,
         })
       ).toThrow(/deny/u);
-      const deny = db.journal
+      const deny = db.audit
         .prepare(
-          `SELECT count(*) AS n FROM consent_receipt WHERE decision='deny' AND action='search'`
+          `SELECT count(*) AS n FROM access_receipt WHERE decision='deny' AND action='search'`
         )
         .get() as { n: number };
       expect(deny.n).toBe(1);

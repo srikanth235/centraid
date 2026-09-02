@@ -28,8 +28,8 @@ bootstrapVault(db, { ownerName: "Perf owner" });
 // journalled write in the real durability posture — not a bare INSERT.
 const insert = db.vault.prepare(
   `INSERT INTO core_party
-     (party_id, kind, display_name, created_at, updated_at, ontology_version)
-   VALUES (?, 'person', ?, ?, ?, '1.2')`
+     (party_id, kind, display_name, created_at, updated_at)
+   VALUES (?, 'person', ?, ?, ?)`
 );
 for (let index = 0; index < writes; index += 1) {
   db.vault.exec("BEGIN IMMEDIATE");

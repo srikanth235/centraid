@@ -35,7 +35,7 @@ function sealedEntities(db: VaultDb): string[] {
   try {
     const rows = db.vault
       .prepare(
-        `SELECT app_id, table_name, spec_json FROM consent_app_ext WHERE band = 'live'`
+        `SELECT app_id, table_name, spec_json FROM access_app_ext WHERE band = 'live'`
       )
       .all() as { app_id: string; table_name: string; spec_json: string }[];
     for (const row of rows) {
@@ -56,6 +56,81 @@ export interface ResealResult {
   oldFingerprint: string;
   newFingerprint: string;
   receiptId: string;
+}
+
+/**
+ * The sweep itself: decrypt every sealed cell (live band + ext band) and every
+ * sealed staged payload field with `fromKey`, re-encrypt with `toKey`. Caller
+ * owns the transaction, the key files and the fingerprint stamp.
+ *
+ * TWO callers, one sweep (#630): the `key rotate` gesture below, and the
+ * portable import, which re-seals an incoming bundle's ciphertext under the
+ * TARGET vault's own key rather than installing a foreign one. A second copy
+ * of this walk would be a second place to forget an entity, and a forgotten
+ * entity is a column of GCM garbage discovered at reveal time.
+ */
+export function resealSealedCells(
+  db: VaultDb,
+  fromKey: Buffer,
+  toKey: Buffer
+): { cells: number; staged: number } {
+  let cells = 0;
+  let staged = 0;
+  // Live band: canonical AND ext-band sealed columns.
+  for (const entity of sealedEntities(db)) {
+    const cols = sealedColumnsOf(entity, db.vault);
+    if (cols.length === 0) continue;
+    const ref = resolveEntity(entity, db.vault);
+    if (!ref) continue;
+    const pk = pkColumn(db.vault, ref.physical);
+    const select = cols.map((c) => `"${c}"`).join(", ");
+    const rows = db.vault
+      .prepare(`SELECT "${pk}" AS __pk, ${select} FROM "${ref.physical}"`)
+      .all() as Record<string, unknown>[];
+    for (const row of rows) {
+      const id = String(row["__pk"]);
+      for (const col of cols) {
+        const value = row[col];
+        if (!isSealedValue(value)) continue;
+        const aad = sealAad(ref.physical, col, id);
+        db.vault
+          .prepare(
+            `UPDATE "${ref.physical}" SET "${col}" = ? WHERE "${pk}" = ?`
+          )
+          .run(sealValue(toKey, aad, unsealValue(fromKey, aad, value)), id);
+        cells += 1;
+      }
+    }
+  }
+  // Draft band: staged import rows.
+  for (const entityType of Object.keys(SEALED_PAYLOAD_FIELDS)) {
+    const fields = sealedPayloadFieldsOf(entityType);
+    const rows = db.vault
+      .prepare(
+        `SELECT row_id, payload_json FROM sync_import_row WHERE entity_type = ?`
+      )
+      .all(entityType) as { row_id: string; payload_json: string }[];
+    for (const row of rows) {
+      const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
+      let changed = false;
+      for (const field of fields) {
+        const v = payload[field];
+        if (!isSealedValue(v)) continue;
+        const aad = payloadAad(row.row_id, field);
+        payload[field] = sealValue(toKey, aad, unsealValue(fromKey, aad, v));
+        changed = true;
+        staged += 1;
+      }
+      if (changed) {
+        db.vault
+          .prepare(
+            `UPDATE sync_import_row SET payload_json = ? WHERE row_id = ?`
+          )
+          .run(JSON.stringify(payload), row.row_id);
+      }
+    }
+  }
+  return { cells, staged };
 }
 
 /** Rotate the DEK atomically. Owner/admin gesture only — not a registered command. */
@@ -85,60 +160,11 @@ export function resealVaultKey(
   let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   try {
     replicaCommit = beginReplicaCommit(db.vault);
-    // Live band: canonical AND ext-band sealed columns.
-    for (const entity of sealedEntities(db)) {
-      const cols = sealedColumnsOf(entity, db.vault);
-      if (cols.length === 0) continue;
-      const ref = resolveEntity(entity, db.vault);
-      if (!ref || ref.file !== "vault") continue;
-      const pk = pkColumn(db.vault, ref.physical);
-      const select = cols.map((c) => `"${c}"`).join(", ");
-      const rows = db.vault
-        .prepare(`SELECT "${pk}" AS __pk, ${select} FROM "${ref.physical}"`)
-        .all() as Record<string, unknown>[];
-      for (const row of rows) {
-        const id = String(row["__pk"]);
-        for (const col of cols) {
-          const value = row[col];
-          if (!isSealedValue(value)) continue;
-          const aad = sealAad(ref.physical, col, id);
-          db.vault
-            .prepare(
-              `UPDATE "${ref.physical}" SET "${col}" = ? WHERE "${pk}" = ?`
-            )
-            .run(sealValue(newKey, aad, unsealValue(oldKey, aad, value)), id);
-          resealedCells += 1;
-        }
-      }
-    }
-    // Draft band: staged import rows.
-    for (const entityType of Object.keys(SEALED_PAYLOAD_FIELDS)) {
-      const fields = sealedPayloadFieldsOf(entityType);
-      const rows = db.vault
-        .prepare(
-          `SELECT row_id, payload_json FROM sync_import_row WHERE entity_type = ?`
-        )
-        .all(entityType) as { row_id: string; payload_json: string }[];
-      for (const row of rows) {
-        const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
-        let changed = false;
-        for (const field of fields) {
-          const v = payload[field];
-          if (!isSealedValue(v)) continue;
-          const aad = payloadAad(row.row_id, field);
-          payload[field] = sealValue(newKey, aad, unsealValue(oldKey, aad, v));
-          changed = true;
-          resealedStaged += 1;
-        }
-        if (changed) {
-          db.vault
-            .prepare(
-              `UPDATE sync_import_row SET payload_json = ? WHERE row_id = ?`
-            )
-            .run(JSON.stringify(payload), row.row_id);
-        }
-      }
-    }
+    ({ cells: resealedCells, staged: resealedStaged } = resealSealedCells(
+      db,
+      oldKey,
+      newKey
+    ));
     // Fingerprint flips with the data, same transaction.
     stampSealKeyFingerprint(db.vault, newKey);
     endReplicaCommit(db.vault, replicaCommit);
@@ -152,7 +178,7 @@ export function resealVaultKey(
   if (keyFile) renameSync(`${keyFile}.next`, keyFile);
   db.sealKey.set(newKey);
 
-  const receiptId = writeReceipt(db.journal, {
+  const receiptId = writeReceipt(db.audit, {
     grantId: null,
     invocationId: null,
     action: "key.rotate",

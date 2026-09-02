@@ -127,18 +127,18 @@ describe("sealed", () => {
     addLogin(password);
     const tables = [
       "agent_command_invocation",
-      "consent_receipt",
-      "consent_provenance",
+      "access_receipt",
+      "access_provenance",
     ];
     for (const table of tables) {
-      const rows = db.journal.prepare(`SELECT * FROM ${table}`).all() as Record<
+      const rows = db.audit.prepare(`SELECT * FROM ${table}`).all() as Record<
         string,
         unknown
       >[];
       const dump = JSON.stringify(rows);
       expect(dump).not.toContain(password);
     }
-    const inv = db.journal
+    const inv = db.audit
       .prepare(
         `SELECT input_json FROM agent_command_invocation ORDER BY invocation_id DESC LIMIT 1`
       )
@@ -161,9 +161,9 @@ describe("sealed", () => {
       purpose: PURPOSE,
     });
     expect(revealed.values.password).toBe("pw-for-reveal");
-    const receipt = db.journal
+    const receipt = db.audit
       .prepare(
-        "SELECT action, object_type, object_id, decision, detail_json FROM consent_receipt WHERE receipt_id = ?"
+        "SELECT action, object_type, object_id, decision, detail_json FROM access_receipt WHERE receipt_id = ?"
       )
       .get(revealed.receiptId) as {
       action: string;
@@ -196,9 +196,9 @@ describe("sealed", () => {
         purpose: PURPOSE,
       })
     ).toThrow(/absolute HTTP origin/u);
-    const denied = db.journal
+    const denied = db.audit
       .prepare(
-        `SELECT decision, detail_json FROM consent_receipt ORDER BY rowid DESC LIMIT 1`
+        `SELECT decision, detail_json FROM access_receipt ORDER BY rowid DESC LIMIT 1`
       )
       .get() as { decision: string; detail_json: string };
     expect(denied.decision).toBe("deny");
@@ -346,8 +346,8 @@ describe("sealed", () => {
     const output = (out as { output: { code: string; period: number } }).output;
     expect([before, after]).toContain(output.code);
     expect(output.period).toBe(30);
-    const receipt = db.journal
-      .prepare("SELECT detail_json FROM consent_receipt WHERE receipt_id = ?")
+    const receipt = db.audit
+      .prepare("SELECT detail_json FROM access_receipt WHERE receipt_id = ?")
       .get((out as { receiptId: string }).receiptId) as { detail_json: string };
     expect(JSON.parse(receipt.detail_json).unsealed).toStrictEqual([
       "locker.item.otp_seed",

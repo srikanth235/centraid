@@ -9,7 +9,6 @@ import { describe, expect, test } from "vitest";
 import {
   ASSISTANT_APP_ID,
   ConversationHistoryStore,
-  ensureConversationLedger,
 } from "@centraid/server/engine";
 import {
   isSealedValue,
@@ -382,11 +381,9 @@ describe("issue #679 user-facing quality gates", () => {
       year3FixtureCacheKey(first, 5)
     );
     const db = await createTestVault();
-    ensureConversationLedger(db.journal);
     seedYear3Vault(
       {
         vault: db.vault,
-        journal: db.journal,
         sealCell: (entity, column, rowId, plaintext) =>
           sealValue(
             db.sealKey,
@@ -405,7 +402,7 @@ describe("issue #679 user-facing quality gates", () => {
     ).toBe(11);
     expect(
       (
-        db.journal.prepare("SELECT count(*) AS n FROM turns").get() as {
+        db.audit.prepare("SELECT count(*) AS n FROM turns").get() as {
           n: number;
         }
       ).n
@@ -476,7 +473,7 @@ describe("issue #679 user-facing quality gates", () => {
       ).toMatchObject({ n: 1 });
       const invocationId = (parked as { invocationId: string }).invocationId;
       expect(
-        plane.db.journal
+        plane.db.audit
           .prepare(
             "SELECT status FROM agent_command_invocation WHERE invocation_id = ?"
           )
@@ -484,9 +481,9 @@ describe("issue #679 user-facing quality gates", () => {
       ).toMatchObject({ status: "proposed" });
       expect(plane.confirmParked(invocationId, true).status).toBe("executed");
       expect(
-        plane.db.journal
+        plane.db.audit
           .prepare(
-            "SELECT decision FROM consent_receipt WHERE invocation_id = ?"
+            "SELECT decision FROM access_receipt WHERE invocation_id = ?"
           )
           .get(invocationId)
       ).toMatchObject({ decision: "allow" });
@@ -547,7 +544,7 @@ describe("issue #679 user-facing quality gates", () => {
           automationRef: "quality/consent",
           runId: "quality-consent-fire",
           appsDir: plane.db.dir,
-          journalDbFile: path.join(plane.db.dir, "journal.db"),
+          ledgerDbFile: path.join(plane.db.dir, "vault.db"),
           codeAppsDir,
           harnessKind: HARNESS_KINDS[0],
           triggerKind: "scheduled",
@@ -569,10 +566,10 @@ describe("issue #679 user-facing quality gates", () => {
       ).toMatchObject({ n: 1 });
       const automationAgent = plane.db.vault
         .prepare(
-          "SELECT agent_id FROM consent_agent WHERE enrollment_key = 'quality'"
+          "SELECT agent_id FROM access_agent WHERE enrollment_key = 'quality'"
         )
         .get() as { agent_id: string };
-      const proposed = plane.db.journal
+      const proposed = plane.db.audit
         .prepare(
           `SELECT invocation_id, status FROM agent_command_invocation
             WHERE caller_id = ?
@@ -669,16 +666,15 @@ describe("issue #679 user-facing quality gates", () => {
 
   test("F1: every harness turn, harness tool, and automation trigger persists through conversation/turn/item", async () => {
     const db = await createTestVault();
-    ensureConversationLedger(db.journal);
     const owner = db.vault
-      .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-      .get() as { owner_party_id: string };
+      .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+      .get() as { self_party_id: string };
     const history = new ConversationHistoryStore(() => ({
       vaultId: "quality-ledger",
-      ownerPartyId: owner.owner_party_id,
+      ownerPartyId: owner.self_party_id,
       appsDir: path.join(db.dir, "apps"),
-      journal: () => db.journal,
-      journalDbFile: path.join(db.dir, "journal.db"),
+      journal: () => db.audit,
+      ledgerDbFile: path.join(db.dir, "vault.db"),
       harnessSessionDir: path.join(db.dir, "harness-sessions"),
     }));
     const starts: Array<{
@@ -820,7 +816,7 @@ describe("issue #679 user-facing quality gates", () => {
             automationRef: `quality/${automationId}`,
             runId,
             appsDir: db.dir,
-            journalDbFile: path.join(db.dir, "journal.db"),
+            ledgerDbFile: path.join(db.dir, "vault.db"),
             codeAppsDir,
             harnessKind,
             triggerKind: "scheduled",
@@ -837,7 +833,7 @@ describe("issue #679 user-facing quality gates", () => {
         expect(fire.outcome.ok, triggerKind).toBe(true);
       }
     );
-    const persisted = db.journal
+    const persisted = db.audit
       .prepare(
         `SELECT c.harness_kind, t.trigger_origin, i.name
            FROM conversations c
@@ -890,11 +886,9 @@ describe("issue #679 user-facing quality gates", () => {
       enableWalShipper: false,
     });
     const db = t3Plane.db;
-    ensureConversationLedger(db.journal);
     seedYear3Vault(
       {
         vault: db.vault,
-        journal: db.journal,
         sealCell: (entity, column, rowId, plaintext) =>
           sealValue(
             db.sealKey,
@@ -909,11 +903,11 @@ describe("issue #679 user-facing quality gates", () => {
       Object.keys(profile.sealedSentinels).toSorted(compareStrings)
     ).toStrictEqual(declared.toSorted(compareStrings));
     const device = db.vault
-      .prepare("SELECT device_id, public_key FROM consent_device LIMIT 1")
+      .prepare("SELECT device_id, public_key FROM access_device LIMIT 1")
       .get() as { device_id: string; public_key: string };
     const ownerParty = db.vault
-      .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-      .get() as { owner_party_id: string };
+      .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+      .get() as { self_party_id: string };
     const gateway = createGateway(db);
     registerLockerCommands(gateway);
     const sqlArtifacts = [
@@ -967,7 +961,7 @@ describe("issue #679 user-facing quality gates", () => {
       kind: "owner-device",
       callerId: device.device_id,
       provAgentKind: "owner",
-      partyId: ownerParty.owner_party_id,
+      partyId: ownerParty.self_party_id,
       mayAct: true,
     });
     const credential = {
@@ -1051,8 +1045,8 @@ describe("issue #679 user-facing quality gates", () => {
       reader.readRows("locker.item_passkey"),
     ]);
     const backupArtifact = checkpointVault(db);
-    const receipts = db.journal.prepare("SELECT * FROM consent_receipt").all();
-    const invocationArtifact = db.journal
+    const receipts = db.audit.prepare("SELECT * FROM access_receipt").all();
+    const invocationArtifact = db.audit
       .prepare(
         "SELECT input_json FROM agent_command_invocation WHERE invocation_id = ?"
       )
@@ -1071,7 +1065,7 @@ describe("issue #679 user-facing quality gates", () => {
         kind: "owner-device",
         callerId: device.device_id,
         provAgentKind: "owner",
-        partyId: ownerParty.owner_party_id,
+        partyId: ownerParty.self_party_id,
         mayAct: true,
       },
       connectionId,
@@ -1103,10 +1097,10 @@ describe("issue #679 user-facing quality gates", () => {
       .join("\n");
     const workspace = {
       vaultId: "quality-t3",
-      ownerPartyId: ownerParty.owner_party_id,
+      ownerPartyId: ownerParty.self_party_id,
       appsDir: path.join(t3Dir, "apps"),
-      journal: () => db.journal,
-      journalDbFile: path.join(t3Dir, "journal.db"),
+      journal: () => db.audit,
+      ledgerDbFile: path.join(t3Dir, "vault.db"),
       harnessSessionDir: path.join(t3Dir, "harness-sessions"),
     };
     const conversationStore = new ConversationHistoryStore(() => workspace);

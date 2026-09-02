@@ -172,7 +172,7 @@ export function commonsPartyForVault(input: {
     | undefined;
   if (bound) return bound.partyId;
   const local = input.steward
-    .prepare("SELECT owner_party_id AS ownerPartyId FROM core_vault LIMIT 1")
+    .prepare("SELECT self_party_id AS ownerPartyId FROM core_vault LIMIT 1")
     .get() as { ownerPartyId: string | null } | undefined;
   return local?.ownerPartyId ?? undefined;
 }
@@ -263,7 +263,7 @@ export function decideCommonsIntent(
   ): CommonsIntentDecisionResult => {
     const status =
       readIntentRow(found.seat.vault, input.intentId)?.status ?? found.status;
-    const receiptId = writeReceipt(input.steward.journal, {
+    const receiptId = writeReceipt(input.steward.audit, {
       grantId: grant.grantId,
       // NOT the intent id: `invocation_id` is a foreign key into
       // `agent_command_invocation`, and a decision is not an invocation.

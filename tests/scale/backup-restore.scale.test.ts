@@ -74,8 +74,8 @@ describe("backup-restore.scale", () => {
 
     const insertParty = db.vault.prepare(
       `INSERT INTO core_party
-       (party_id, kind, display_name, created_at, updated_at, ontology_version)
-     VALUES (?, 'person', ?, ?, ?, '1.2')`
+       (party_id, kind, display_name, created_at, updated_at)
+     VALUES (?, 'person', ?, ?, ?)`
     );
     const insertContent = db.vault.prepare(
       `INSERT INTO core_content_item
@@ -107,12 +107,9 @@ describe("backup-restore.scale", () => {
     // (WAL mode + autocheckpoint=0 means uncheckpointed frames otherwise live
     // only in -wal). No writer touches the db after this, so its bytes are stable.
     db.vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-    db.journal.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 
     const vaultPath = path.join(sourceDir, "vault.db");
-    const journalPath = path.join(sourceDir, "journal.db");
     const vaultBytes = await readFile(vaultPath);
-    const journalBytes = await readFile(journalPath);
     const sourceVaultHash = createHash("sha256")
       .update(vaultBytes)
       .digest("hex");
@@ -125,14 +122,6 @@ describe("backup-restore.scale", () => {
         absolutePath: vaultPath,
         sha256: sourceVaultHash,
         walGeneration: "11".repeat(16),
-        baseTickMs,
-      },
-      {
-        path: "journal.db",
-        kind: "db",
-        absolutePath: journalPath,
-        sha256: createHash("sha256").update(journalBytes).digest("hex"),
-        walGeneration: "22".repeat(16),
         baseTickMs,
       },
       ...blobShas.map((sha) => ({

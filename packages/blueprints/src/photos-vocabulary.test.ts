@@ -3,7 +3,7 @@
 //
 // HOW THE SCAN TELLS COPY FROM CODE: (1) comments stripped by a quote-aware
 // state machine so `//` inside strings survives; (2) the offence regex is
-// edge-bounded — prose matches, `x.vault.read`/`vaultDenied`/`VAULT_CONSENT`
+// edge-bounded — prose matches, `x.vault.read`/`vaultDenied`/`VAULT_ACCESS`
 // never do. Only .ts/.tsx/.html scanned; app.json excluded on purpose (it is
 // the machine-readable contract, not copy).
 import fs from "node:fs";
@@ -116,7 +116,7 @@ describe("Photos app vocabulary (#599)", () => {
       offences("await ctx.vault.read({ entity: 'media.asset' })")
     ).toStrictEqual([]);
     expect(offences("const denied = data?.vaultDenied;")).toStrictEqual([]);
-    expect(offences("if (e.code === 'VAULT_CONSENT') return;")).toStrictEqual(
+    expect(offences("if (e.code === 'VAULT_ACCESS') return;")).toStrictEqual(
       []
     );
     // Comments: stripped before the scan, both forms.

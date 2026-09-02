@@ -15,6 +15,28 @@ import {
 const T0 = "2026-07-15T00:00:00.000Z";
 const T1 = "2026-07-16T00:00:00.000Z";
 
+/**
+ * A REAL asset to stamp (#916): `(target_type, target_id)` is a composite
+ * foreign key into `core_entity` now, so a derivation cannot be stamped for a
+ * row that does not exist — which is what a ghost stamp always was.
+ */
+function seedAsset(db: VaultDb, assetId: string): void {
+  const contentId = `content-${assetId}`;
+  db.vault
+    .prepare(
+      `INSERT OR IGNORE INTO core_content_item
+         (content_id, media_type, content_uri, sha256, byte_size, created_at)
+       VALUES (?, 'image/jpeg', 'file:///x', ?, 1, '2026-01-01T00:00:00.000Z')`
+    )
+    .run(contentId, `sha-${assetId}`.padEnd(64, "0"));
+  db.vault
+    .prepare(
+      `INSERT OR IGNORE INTO media_asset (asset_id, content_id, kind, captured_at)
+       VALUES (?, ?, 'photo', '2026-01-01T00:00:00.000Z')`
+    )
+    .run(assetId, contentId);
+}
+
 function stamp(
   db: VaultDb,
   targetId: string,
@@ -27,6 +49,7 @@ function stamp(
     now?: string;
   } = {}
 ): void {
+  seedAsset(db, targetId);
   stampDerivation(db.vault, {
     targetType: "media.asset",
     targetId,

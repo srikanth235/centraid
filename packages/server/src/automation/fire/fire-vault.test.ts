@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { VaultBridge, VaultCall } from "@centraid/server/engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../../engine/stores/ledger-db.test-fixtures.js";
 import type { Manifest } from "../manifest/manifest.js";
 import { runFire } from "./fire.js";
 import type { DispatchSurface } from "./fire.js";
@@ -105,7 +106,7 @@ describe("runFire + ctx.vault", () => {
           automationRef: "notes/filer",
           runId: "run-fixed",
           appsDir: dataDir,
-          journalDbFile: path.join(dataDir, "journal.db"),
+          ledgerDbFile: ledgerDbFileIn(dataDir),
           codeAppsDir: appsDir,
           vaultFor: (appId) => {
             bridgeApps.push(appId);
@@ -162,7 +163,7 @@ describe("runFire + ctx.vault", () => {
       {
         automationRef: "notes/blind",
         appsDir,
-        journalDbFile: path.join(appsDir, "journal.db"),
+        ledgerDbFile: ledgerDbFileIn(appsDir),
       },
       { openDispatch: stubDispatch }
     );
@@ -187,19 +188,19 @@ describe("runFire + ctx.vault", () => {
     );
     const deny: VaultBridge = async () => ({
       ok: false,
-      code: "VAULT_CONSENT",
+      code: "VAULT_ACCESS",
       error: "deny (receipt r9): no active grant",
     });
     const { outcome } = await runFire(
       {
         automationRef: "notes/denied",
         appsDir,
-        journalDbFile: path.join(appsDir, "journal.db"),
+        ledgerDbFile: ledgerDbFileIn(appsDir),
         vaultFor: () => deny,
       },
       { openDispatch: stubDispatch }
     );
     expect(outcome.ok).toBe(true);
-    expect(outcome.output).toMatchObject({ code: "VAULT_CONSENT" });
+    expect(outcome.output).toMatchObject({ code: "VAULT_ACCESS" });
   });
 });

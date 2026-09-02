@@ -1,0 +1,861 @@
+{
+  "label": "issue-916",
+  "frozenAt": "2026-01-01T00:00:00.000Z",
+  "ontologyVersion": "1.0",
+  "userVersion": 1,
+  "tables": {
+    "access_device": {
+      "columns": [
+        "device_id",
+        "enrolled_at",
+        "last_seen_at",
+        "name",
+        "owner_party_id",
+        "platform",
+        "public_key",
+        "sync_cursor"
+      ],
+      "primaryKey": "device_id",
+      "rows": 1,
+      "digests": {
+        "01a06197-3d95-7308-9e5b-8e069e992a20": "aef74d5969751836"
+      }
+    },
+    "core_concept": {
+      "columns": [
+        "alt_labels_json",
+        "broader_concept_id",
+        "concept_id",
+        "created_at",
+        "definition",
+        "notation",
+        "pref_label",
+        "scheme_id",
+        "updated_at"
+      ],
+      "primaryKey": "concept_id",
+      "rows": 19,
+      "digests": {
+        "01a06197-3d74-769c-add4-2165b21a8d6a": "fedf5aadde1c79eb",
+        "01a06197-3d75-759f-aeda-dddd8acfc78a": "1e386df2bb444879",
+        "01a06197-3d77-70e4-a92d-0ed471e363e7": "08ecd8bc718103a6",
+        "01a06197-3d79-773b-bd51-617f5974fe36": "ae2c6a6fb553a6f0",
+        "01a06197-3d7a-749f-9fba-c49a6852d623": "104a0ecaa8b13d17",
+        "01a06197-3d7b-7268-80b3-4efacc713b60": "2c4f0518cd3e6da9",
+        "01a06197-3d7d-7083-82d5-3067ad1843fc": "8b01d8ddd2b30ac7",
+        "01a06197-3d7e-73b1-8869-7b0a7682f704": "20d40d543e47d85d",
+        "01a06197-3d7f-755c-ae3a-dd6ae5efe794": "73d728205ed87740",
+        "01a06197-3d81-73a8-b002-a35c7dd87f76": "834c00dce1a90ed4",
+        "01a06197-3d82-767d-856f-0f656fabf2f2": "f2743b706d0573a1",
+        "01a06197-3d84-7223-a627-ae8372b0ab30": "c0bd950e4b669c87",
+        "01a06197-3d85-761a-a7e3-1b0ba1bbfdbe": "fb442f740ae361eb",
+        "01a06197-3d86-77ea-8818-4f6ec69e6d7b": "a8bf77f40bc0102b",
+        "01a06197-3d88-71d5-bb02-cdc73d6264b9": "57b36b87c5a9c602",
+        "01a06197-3d89-7238-82f0-17fb3072f2cd": "ba4edeea25dd73cb",
+        "01a06197-3d8a-752e-91b2-41a01094acfc": "ff08a9465f9df3b6",
+        "01a06197-3d8c-768f-93a2-95d4bd91b2ef": "ba36e470fa3a10ba",
+        "01a06197-3d8d-725a-822c-7753cdd77666": "dbb28d6389a46802"
+      }
+    },
+    "core_concept_scheme": {
+      "columns": [
+        "created_at",
+        "publisher",
+        "scheme_id",
+        "title",
+        "uri",
+        "version"
+      ],
+      "primaryKey": "scheme_id",
+      "rows": 7,
+      "digests": {
+        "01a06197-3d6a-77cd-9c1c-82213d8cee3d": "5d596298636170b3",
+        "01a06197-3d6d-7025-a6fb-c8369e3e4bbc": "6b2fa26ab62fb641",
+        "01a06197-3d6e-70af-afb8-fb40f243e148": "5c8a3f5ad2dec1a5",
+        "01a06197-3d70-776e-b084-5912800310c8": "782b945266cc95de",
+        "01a06197-3d71-7628-928a-1dcb018b8d7a": "d1da81f28ee1e80d",
+        "01a06197-3d72-76e3-92be-8cd5a0b561aa": "ea16e1d946f6cb71",
+        "01a06197-3d73-77cc-a9e4-67974b540477": "7c8f0ca14e2ce7e0"
+      }
+    },
+    "core_content_item": {
+      "columns": [
+        "byte_size",
+        "content_id",
+        "content_uri",
+        "created_at",
+        "creator_party_id",
+        "deleted_at",
+        "language",
+        "media_type",
+        "origin_device_id",
+        "purge_at",
+        "sha256",
+        "title",
+        "updated_at"
+      ],
+      "primaryKey": "content_id",
+      "rows": 5,
+      "digests": {
+        "1525778b-95af-77c2-848c-7ff59a596800": "acde9eb48e1f42f2",
+        "48019079-aa53-7b94-8c14-6bd50edcbf75": "d2dc13fef02c133a",
+        "71cf4264-0362-7c8a-8566-71fae28991d1": "764a0e2e1a941d89",
+        "9832d112-26be-77ae-847b-9227aaabdd9a": "cc2d87e9f43eed7f",
+        "fbd3e3c1-c78b-7aed-860b-ed62be325c67": "15236364279a309c"
+      }
+    },
+    "core_document": {
+      "columns": [
+        "created_at",
+        "current_content_id",
+        "deleted_at",
+        "document_id",
+        "purge_at",
+        "title",
+        "updated_at"
+      ],
+      "primaryKey": "document_id",
+      "rows": 3,
+      "digests": {
+        "3c988275-0890-798e-8948-134d42acb537": "f9c855690dfd3e97",
+        "6c03c4d6-035a-760d-8fa4-185ed6fdf613": "30b672e21effac3b",
+        "ea55c06b-f320-745c-8d67-50772b32a316": "c7028623d3f796d1"
+      }
+    },
+    "core_entity": {
+      "columns": ["created_at", "entity_id", "entity_type"],
+      "primaryKey": "entity_id",
+      "rows": 40,
+      "digests": {
+        "01a06197-3d6a-77cd-9c1c-82213d8cee3d": "c24de56ff7be0e1b",
+        "01a06197-3d6d-7025-a6fb-c8369e3e4bbc": "3dbaf8893ebdc998",
+        "01a06197-3d6e-70af-afb8-fb40f243e148": "71c279f49e0416fb",
+        "01a06197-3d70-776e-b084-5912800310c8": "ddb5dee8b3f38e42",
+        "01a06197-3d71-7628-928a-1dcb018b8d7a": "d938ed8426159357",
+        "01a06197-3d72-76e3-92be-8cd5a0b561aa": "a1a2c40f86990063",
+        "01a06197-3d73-77cc-a9e4-67974b540477": "cb99c9d7b61f5a3a",
+        "01a06197-3d74-769c-add4-2165b21a8d6a": "ca233f9842b1c5e9",
+        "01a06197-3d75-759f-aeda-dddd8acfc78a": "614c626e239e2b2b",
+        "01a06197-3d77-70e4-a92d-0ed471e363e7": "72e8ee75cfa1bbab",
+        "01a06197-3d79-773b-bd51-617f5974fe36": "7ecf2944ec1b2a98",
+        "01a06197-3d7a-749f-9fba-c49a6852d623": "85593eaf373f308f",
+        "01a06197-3d7b-7268-80b3-4efacc713b60": "da673cb088804121",
+        "01a06197-3d7d-7083-82d5-3067ad1843fc": "3403e4fbc1b40ca1",
+        "01a06197-3d7e-73b1-8869-7b0a7682f704": "a547c3e94bef9232",
+        "01a06197-3d7f-755c-ae3a-dd6ae5efe794": "6def4a40fc881068",
+        "01a06197-3d81-73a8-b002-a35c7dd87f76": "4f5a5fc8124cb83c",
+        "01a06197-3d82-767d-856f-0f656fabf2f2": "5f442cb7e27a4869",
+        "01a06197-3d84-7223-a627-ae8372b0ab30": "0d2ae3c4b8ed9b8f",
+        "01a06197-3d85-761a-a7e3-1b0ba1bbfdbe": "1bda652b41f739de",
+        "01a06197-3d86-77ea-8818-4f6ec69e6d7b": "2296599f386810dc",
+        "01a06197-3d88-71d5-bb02-cdc73d6264b9": "b55a2374bdb319b4",
+        "01a06197-3d89-7238-82f0-17fb3072f2cd": "6affb05e503319a4",
+        "01a06197-3d8a-752e-91b2-41a01094acfc": "817f2afccc24f884",
+        "01a06197-3d8c-768f-93a2-95d4bd91b2ef": "bcbe3b4d9ebb6179",
+        "01a06197-3d8d-725a-822c-7753cdd77666": "621f6234847816aa",
+        "01a06197-3d8f-739e-b2f8-bc28cc16722d": "123505beeb3f4b06",
+        "01a06197-3d90-73ba-8d2f-60eb15807200": "b089c0239aeee638",
+        "01a06197-3d94-72a8-8100-e2582132fa89": "c717cd43c4d33d55",
+        "1525778b-95af-77c2-848c-7ff59a596800": "e7caeecb99593ba6",
+        "3c988275-0890-798e-8948-134d42acb537": "0ca48cd91327bdf3",
+        "48019079-aa53-7b94-8c14-6bd50edcbf75": "8dbf3ca433a37bed",
+        "5ed0d850-ae61-72f1-8ea3-fbceecbe2d3f": "80b8233139c7b6f4",
+        "6c03c4d6-035a-760d-8fa4-185ed6fdf613": "0bbecd3cc8ac2412",
+        "71cf4264-0362-7c8a-8566-71fae28991d1": "b2b6869f46390fe2",
+        "9220db93-1641-7007-8439-6c89d591e91c": "129851e3391ec998",
+        "9832d112-26be-77ae-847b-9227aaabdd9a": "4cdb08b14d19d1d1",
+        "9e12757e-aba4-7f78-8fd8-1cb156c2a193": "3fd04134b06a63fe",
+        "ea55c06b-f320-745c-8d67-50772b32a316": "25d0571ff0d7e717",
+        "fbd3e3c1-c78b-7aed-860b-ed62be325c67": "2aa96496afc7ba43"
+      }
+    },
+    "core_entity_kind": {
+      "columns": ["kind"],
+      "primaryKey": "kind",
+      "rows": 51,
+      "digests": {
+        "core.account": "66c1385ed428ec33",
+        "core.activity": "d64edf6ef1677b06",
+        "core.attachment": "6258dcbc7a9cecd2",
+        "core.collection": "77165794d885dd38",
+        "core.collection_entry": "8730949e9dd95ad4",
+        "core.concept": "2a70597e7ebd55b8",
+        "core.concept_scheme": "91a9e5a74f890d7c",
+        "core.content_derivative": "6ccaa5aef262a631",
+        "core.content_item": "da6e73d75a6cf0cc",
+        "core.document": "3e6ea155790bb53c",
+        "core.entity_revision": "f9d3c67c0940bbab",
+        "core.event": "a6d7da146076258a",
+        "core.link": "d54bfe7c6e4673f0",
+        "core.link_anchor": "314ea6ef36d3bde9",
+        "core.party": "0ec2863cb92a70aa",
+        "core.party_identifier": "f8b675389ff90b09",
+        "core.place": "4a627ae047daa4b4",
+        "core.tag": "74e77c73b5b30a5c",
+        "core.transaction": "aa884b1eaecc75dd",
+        "core.vault": "6c6b74601a8b6d83",
+        "knowledge.annotation": "01488d0c6b5a5f63",
+        "knowledge.note": "524dd2da5ee1e330",
+        "locker.item": "16135607e669469f",
+        "locker.item_address": "b22f1e19710a6e2b",
+        "locker.item_field": "71bbfb2e66a621c0",
+        "media.asset": "94a580b50bff593e",
+        "media.face_region": "c0c476ea96acf14d",
+        "media.memory": "125addca963eaf9b",
+        "people.important_date": "517202f5a1b0762f",
+        "people.profile": "328cb2fe2c5b98ee",
+        "schedule.attendee": "7cc40e0a4cde7eb6",
+        "schedule.calendar": "71ef4c1a778172ab",
+        "schedule.event_ext": "4ff46dfb6cf0b6d8",
+        "schedule.project": "59931d8a2575bc19",
+        "schedule.recurrence_exception": "5d549e50ece28390",
+        "schedule.section": "32699e59371d5b0a",
+        "schedule.task": "c5e43be553959272",
+        "social.circle": "63f54be327a4c4af",
+        "social.circle_member": "4447f201110d53eb",
+        "social.contact_channel": "6e58b0e80a12cb4c",
+        "social.message": "c5801dafa3f82a84",
+        "social.thread": "3d1b901409cbe842",
+        "social.thread_participant": "8d29633d8bcf08b0",
+        "tally.expense": "6eacb358bfcffc56",
+        "tally.expense_line_item": "633341f648cb9562",
+        "tally.friend": "e712ea8c2041ce08",
+        "tally.group": "ab0b44d8e20c2a21",
+        "tally.nudge": "63ff53a8d8670be8",
+        "tally.obligation": "c48a2e65487093af",
+        "tally.recurring_expense": "0fc9993785ce6e56",
+        "tally.settlement": "abb0064b0bbb7898"
+      }
+    },
+    "core_link": {
+      "columns": [
+        "asserted_by",
+        "from_id",
+        "from_type",
+        "link_id",
+        "provenance_id",
+        "relation_concept_id",
+        "to_id",
+        "to_type",
+        "updated_at",
+        "valid_from",
+        "valid_to"
+      ],
+      "primaryKey": "link_id",
+      "rows": 1,
+      "digests": {
+        "9220db93-1641-7007-8439-6c89d591e91c": "edc49b8a02913296"
+      }
+    },
+    "core_party": {
+      "columns": [
+        "avatar_content_id",
+        "birth_date",
+        "created_at",
+        "deleted_at",
+        "display_name",
+        "kind",
+        "party_id",
+        "purge_at",
+        "sort_name",
+        "updated_at"
+      ],
+      "primaryKey": "party_id",
+      "rows": 1,
+      "digests": {
+        "01a06197-3d8f-739e-b2f8-bc28cc16722d": "04a597a6c069f368"
+      }
+    },
+    "core_vault": {
+      "columns": [
+        "base_currency",
+        "created_at",
+        "display_name",
+        "self_party_id",
+        "settings_json",
+        "status",
+        "updated_at",
+        "vault_id"
+      ],
+      "primaryKey": "vault_id",
+      "rows": 1,
+      "digests": {
+        "01a06197-3d90-73ba-8d2f-60eb15807200": "99b19db7ccc9d5a1"
+      }
+    },
+    "enrich_policy": {
+      "columns": ["domain", "tier", "updated_at"],
+      "primaryKey": "domain",
+      "rows": 2,
+      "digests": {
+        "docs": "4e9ed7297300767b",
+        "photos": "60e2bcf04133500c"
+      }
+    },
+    "fts_conversation_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_conversation_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 2,
+      "digests": {
+        "1": "6875ddfe71b8a067",
+        "10": "51abfc908b71d439"
+      }
+    },
+    "fts_core_collection_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_core_collection_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 2,
+      "digests": {
+        "1": "6875ddfe71b8a067",
+        "10": "51abfc908b71d439"
+      }
+    },
+    "fts_core_content_item": {
+      "columns": ["content_id", "title"],
+      "primaryKey": null,
+      "rows": 5,
+      "digests": {}
+    },
+    "fts_core_content_item_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_core_content_item_content": {
+      "columns": ["c0", "c1", "id"],
+      "primaryKey": "id",
+      "rows": 5,
+      "digests": {
+        "1": "81d45493fbe5cf95",
+        "2": "24a628db6bfec653",
+        "3": "eeae568135c497d7",
+        "4": "4262d7ea3a395aa6",
+        "5": "d70d697cb06244bc"
+      }
+    },
+    "fts_core_content_item_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 7,
+      "digests": {
+        "1": "bcaeea0a10b07374",
+        "10": "d723b071b9250792",
+        "137438953473": "b3c148f4264f203e",
+        "274877906945": "a3d319b91f69f02f",
+        "412316860417": "36e59be44c96d60a",
+        "549755813889": "06978f40f4db4b86",
+        "687194767361": "8e471fc1254b4167"
+      }
+    },
+    "fts_core_content_item_docsize": {
+      "columns": ["id", "sz"],
+      "primaryKey": "id",
+      "rows": 5,
+      "digests": {
+        "1": "ae8bc72a6041a6d7",
+        "2": "acacd3565d49ce75",
+        "3": "bffc566b4b5f6d2a",
+        "4": "ccb39c045a544d59",
+        "5": "6314a0ba7a868dee"
+      }
+    },
+    "fts_core_content_item_idx": {
+      "columns": ["pgno", "segid", "term"],
+      "primaryKey": null,
+      "rows": 5,
+      "digests": {}
+    },
+    "fts_core_document": {
+      "columns": ["body", "document_id", "title"],
+      "primaryKey": null,
+      "rows": 3,
+      "digests": {}
+    },
+    "fts_core_document_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_core_document_content": {
+      "columns": ["c0", "c1", "c2", "id"],
+      "primaryKey": "id",
+      "rows": 3,
+      "digests": {
+        "1": "c6de3b3dac59df2a",
+        "2": "cdd282009c6e6e9c",
+        "3": "37f6f81f5482cbe9"
+      }
+    },
+    "fts_core_document_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 5,
+      "digests": {
+        "1": "36780b5128c9dbf5",
+        "10": "50ad03368055a4e9",
+        "137438953473": "b3c148f4264f203e",
+        "274877906945": "a3d319b91f69f02f",
+        "412316860417": "36e59be44c96d60a"
+      }
+    },
+    "fts_core_document_docsize": {
+      "columns": ["id", "sz"],
+      "primaryKey": "id",
+      "rows": 3,
+      "digests": {
+        "1": "6bd2f8140798d45d",
+        "2": "93451cf819c35403",
+        "3": "87dce826e9d08260"
+      }
+    },
+    "fts_core_document_idx": {
+      "columns": ["pgno", "segid", "term"],
+      "primaryKey": null,
+      "rows": 3,
+      "digests": {}
+    },
+    "fts_core_event_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_core_event_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 2,
+      "digests": {
+        "1": "6875ddfe71b8a067",
+        "10": "51abfc908b71d439"
+      }
+    },
+    "fts_core_party": {
+      "columns": ["display_name", "party_id", "sort_name"],
+      "primaryKey": null,
+      "rows": 1,
+      "digests": {}
+    },
+    "fts_core_party_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_core_party_content": {
+      "columns": ["c0", "c1", "c2", "id"],
+      "primaryKey": "id",
+      "rows": 1,
+      "digests": {
+        "1": "f20e065f04867dbe"
+      }
+    },
+    "fts_core_party_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 3,
+      "digests": {
+        "1": "b971559c74d47363",
+        "10": "ef3a0569b23f80b4",
+        "137438953473": "a16b09acfc9c887e"
+      }
+    },
+    "fts_core_party_docsize": {
+      "columns": ["id", "sz"],
+      "primaryKey": "id",
+      "rows": 1,
+      "digests": {
+        "1": "1ae6e31775d04da8"
+      }
+    },
+    "fts_core_party_idx": {
+      "columns": ["pgno", "segid", "term"],
+      "primaryKey": null,
+      "rows": 1,
+      "digests": {}
+    },
+    "fts_core_place_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_core_place_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 2,
+      "digests": {
+        "1": "6875ddfe71b8a067",
+        "10": "51abfc908b71d439"
+      }
+    },
+    "fts_core_transaction_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_core_transaction_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 2,
+      "digests": {
+        "1": "6875ddfe71b8a067",
+        "10": "51abfc908b71d439"
+      }
+    },
+    "fts_knowledge_annotation_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_knowledge_annotation_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 2,
+      "digests": {
+        "1": "6875ddfe71b8a067",
+        "10": "51abfc908b71d439"
+      }
+    },
+    "fts_knowledge_note": {
+      "columns": ["body", "note_id", "title"],
+      "primaryKey": null,
+      "rows": 2,
+      "digests": {}
+    },
+    "fts_knowledge_note_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_knowledge_note_content": {
+      "columns": ["c0", "c1", "c2", "id"],
+      "primaryKey": "id",
+      "rows": 2,
+      "digests": {
+        "1": "9d61fe53cb4dce78",
+        "2": "ca4f27208498e06d"
+      }
+    },
+    "fts_knowledge_note_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 4,
+      "digests": {
+        "1": "ec4a47bb188efed6",
+        "10": "d76edd35d98a2bcd",
+        "137438953473": "1fe699dc0d7d1f34",
+        "274877906945": "43a83d57ae830f73"
+      }
+    },
+    "fts_knowledge_note_docsize": {
+      "columns": ["id", "sz"],
+      "primaryKey": "id",
+      "rows": 2,
+      "digests": {
+        "1": "6bd2f8140798d45d",
+        "2": "93451cf819c35403"
+      }
+    },
+    "fts_knowledge_note_idx": {
+      "columns": ["pgno", "segid", "term"],
+      "primaryKey": null,
+      "rows": 2,
+      "digests": {}
+    },
+    "fts_locker_item_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_locker_item_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 2,
+      "digests": {
+        "1": "6875ddfe71b8a067",
+        "10": "51abfc908b71d439"
+      }
+    },
+    "fts_people_profile_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_people_profile_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 2,
+      "digests": {
+        "1": "6875ddfe71b8a067",
+        "10": "51abfc908b71d439"
+      }
+    },
+    "fts_schedule_project_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_schedule_project_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 2,
+      "digests": {
+        "1": "6875ddfe71b8a067",
+        "10": "51abfc908b71d439"
+      }
+    },
+    "fts_schedule_task_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_schedule_task_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 2,
+      "digests": {
+        "1": "6875ddfe71b8a067",
+        "10": "51abfc908b71d439"
+      }
+    },
+    "fts_social_circle_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_social_circle_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 2,
+      "digests": {
+        "1": "6875ddfe71b8a067",
+        "10": "51abfc908b71d439"
+      }
+    },
+    "fts_social_message_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_social_message_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 2,
+      "digests": {
+        "1": "6875ddfe71b8a067",
+        "10": "51abfc908b71d439"
+      }
+    },
+    "fts_social_thread_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_social_thread_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 2,
+      "digests": {
+        "1": "6875ddfe71b8a067",
+        "10": "51abfc908b71d439"
+      }
+    },
+    "fts_tally_expense_config": {
+      "columns": ["k", "v"],
+      "primaryKey": "k",
+      "rows": 1,
+      "digests": {
+        "version": "c633bc52cd068ddc"
+      }
+    },
+    "fts_tally_expense_data": {
+      "columns": ["block", "id"],
+      "primaryKey": "id",
+      "rows": 2,
+      "digests": {
+        "1": "6875ddfe71b8a067",
+        "10": "51abfc908b71d439"
+      }
+    },
+    "knowledge_note": {
+      "columns": [
+        "author_party_id",
+        "body_content_id",
+        "created_at",
+        "deleted_at",
+        "format",
+        "note_id",
+        "pinned",
+        "purge_at",
+        "title",
+        "updated_at"
+      ],
+      "primaryKey": "note_id",
+      "rows": 2,
+      "digests": {
+        "5ed0d850-ae61-72f1-8ea3-fbceecbe2d3f": "703aab6f888d9196",
+        "9e12757e-aba4-7f78-8fd8-1cb156c2a193": "68f48a2f70178e08"
+      }
+    },
+    "replica_change": {
+      "columns": [
+        "changed_at",
+        "commit_id",
+        "entity",
+        "epoch",
+        "old_values_json",
+        "op",
+        "prior_old_values_json",
+        "prior_op",
+        "row_id",
+        "seq"
+      ],
+      "primaryKey": "seq",
+      "rows": 44,
+      "digests": {
+        "1": "5671430fa7a84f69",
+        "2": "8fc842e01a987bc2",
+        "3": "9cb1c23fcb17e530",
+        "4": "4e480ce40834888a",
+        "5": "e2ecc4bd3aa15ad7",
+        "6": "68ecd8797bd626f8",
+        "7": "0e6e14faa335b1e3",
+        "8": "76aa41e8b53795e3",
+        "9": "760dc2f8ef83900c",
+        "10": "33816c10310ada89",
+        "11": "192c1800d5be27e7",
+        "12": "d53802ea88b44347",
+        "13": "53dc5ab6b082784c",
+        "14": "d807693bafc9d129",
+        "15": "19423f006e769829",
+        "16": "33bd0ec0d87b0a46",
+        "17": "706e56d895c432c8",
+        "18": "ec983b90f13fb7ca",
+        "19": "177918ff8abacf03",
+        "20": "e41272990e991a7b",
+        "21": "421a62659301fbb5",
+        "22": "8a9199b0cf53bd4d",
+        "23": "a43aba124473cd80",
+        "24": "df1b7d48cec7fbbb",
+        "25": "a6bbb849f741e286",
+        "26": "e30c4b71c5470f1b",
+        "27": "8d781703a7545bc2",
+        "28": "8600db4b9f4f57d8",
+        "29": "37f9fb7443202e1e",
+        "30": "82e6630e18d24a32",
+        "31": "a8b46dde193e719d",
+        "32": "f46c2b0c24cf9f93",
+        "33": "40ea18aadc61e4a5",
+        "34": "04e019090426df6b",
+        "35": "a1b1954e3bb39eb2",
+        "36": "45292231d5cd3f97",
+        "37": "8bbca453e9483da8",
+        "38": "db083f58894bcf11",
+        "39": "e6ec8ea6edd43ba9",
+        "40": "78c0437be11be263",
+        "41": "b9b22979a579b50b",
+        "42": "3f45ec4d674dad75",
+        "43": "aa40441b69c7814f",
+        "44": "9d71adad929b6814"
+      }
+    },
+    "schedule_calendar": {
+      "columns": [
+        "calendar_id",
+        "color",
+        "created_at",
+        "default_tz",
+        "external_uri",
+        "name",
+        "owner_party_id",
+        "visibility"
+      ],
+      "primaryKey": "calendar_id",
+      "rows": 1,
+      "digests": {
+        "01a06197-3d94-72a8-8100-e2582132fa89": "e53f6881eaeaab72"
+      }
+    },
+    "share_authority": {
+      "columns": [
+        "authority_id",
+        "decision",
+        "duration",
+        "expires_at",
+        "granted_at",
+        "granted_by",
+        "principal_id",
+        "principal_kind",
+        "receipt_id",
+        "revoked_at",
+        "revoked_reason",
+        "subject_id",
+        "subject_type",
+        "verb"
+      ],
+      "primaryKey": "authority_id",
+      "rows": 1,
+      "digests": {
+        "01a06197-3d97-73a1-bc36-0098fa4f1bed": "3cfb4b9d079fca34"
+      }
+    }
+  }
+}

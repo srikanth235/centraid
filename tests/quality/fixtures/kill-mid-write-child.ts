@@ -3,7 +3,6 @@ import { readdirSync } from "node:fs";
 import path from "node:path";
 
 import { ConversationStore } from "../../../packages/server/src/engine/conversation/store.js";
-import { ensureConversationLedger } from "../../../packages/server/src/engine/stores/gateway-db.js";
 import { buildGateway } from "../../../packages/server/src/serve/build-gateway.js";
 
 const [root, faultPoint, mode = "crash"] = process.argv.slice(2);
@@ -19,7 +18,6 @@ if (mode !== "recover") await gateway.start("http://127.0.0.1");
 const vaultId = gateway.vaults.defaultVaultId();
 const plane = gateway.vaults.get(vaultId)!;
 const db = plane.db;
-ensureConversationLedger(db.journal);
 
 const conversationId = `quality-${faultPoint}`;
 
@@ -52,12 +50,12 @@ function collectStrayTemps(dir: string): string[] {
 if (mode === "recover") {
   const integrity = {
     vault: db.vault.prepare("PRAGMA integrity_check").get(),
-    journal: db.journal.prepare("PRAGMA integrity_check").get(),
+    journal: db.audit.prepare("PRAGMA integrity_check").get(),
   };
   const strayTemps = collectStrayTemps(root);
   let observation: unknown;
   if (faultPoint === "journal-after-append") {
-    observation = db.journal
+    observation = db.audit
       .prepare(
         `SELECT count(DISTINCT t.id) AS turns, count(i.id) AS items
            FROM turns t JOIN items i ON i.turn_id = t.id
@@ -80,10 +78,10 @@ if (mode === "recover") {
       )
       .get();
   } else if (faultPoint === "automation-after-claim") {
-    const store = new ConversationStore(() => db.journal);
+    const store = new ConversationStore(() => db.audit);
     observation = {
       conversations: (
-        db.journal
+        db.audit
           .prepare("SELECT count(*) AS n FROM conversations WHERE id = ?")
           .get(conversationId) as { n: number }
       ).n,
@@ -106,7 +104,7 @@ if (faultPoint === "journal-after-append") {
     "quality crash append"
   );
   // Stable id lets recovery query the exact acknowledged append.
-  db.journal
+  db.audit
     .prepare("UPDATE conversations SET id = ? WHERE id = ?")
     .run(conversationId, session.id);
   gateway.conversationHistoryStore.recordTurn("_assistant", {
@@ -143,7 +141,7 @@ if (faultPoint === "journal-after-append") {
     throw new Error(`checkpoint canary was not acknowledged: ${result.status}`);
   // The named seam is immediately before the production checkpoint call.
 } else if (faultPoint === "automation-after-claim") {
-  const store = new ConversationStore(() => db.journal);
+  const store = new ConversationStore(() => db.audit);
   store.createConversation({
     id: conversationId,
     kind: "automation",

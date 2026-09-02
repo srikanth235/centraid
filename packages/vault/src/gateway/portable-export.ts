@@ -24,8 +24,12 @@
 //    on the artifact, which cannot prove a table outside the walk is empty.
 //  - Key custody stays OUT (#726 P1, #750): the seed and its public-key PIN
 //    belong to the recovery kit ("this same vault, elsewhere"), while a bundle
-//    restores a NEW vault that mints its own identity. Only the DEK is carried,
-//    because canonical rows keep sealed ciphertext.
+//    restores a NEW vault that mints its own identity. The DEK is not carried
+//    in the clear either (#630, closing review-A 10.1): sealed cells ride as
+//    ciphertext, and the key leaves ONLY inside `custody/recovery-kit.json`,
+//    password-wrapped, and only when the owner supplies a passphrase. Without
+//    one the manifest says `sealed: "ciphertext-only"` and the bundle opens no
+//    secrets anywhere.
 //  - Pre-release on-disk shapes are reset, not migrated: a bundle from an older
 //    build may hold values this build's CHECKs refuse, and that is deliberate
 //    (#750).
@@ -55,13 +59,14 @@
 // record that a password was ever rotated. Each is a fact the owner entered.
 // Registration in schema/tables.ts is the whole fix — the `SELECT *` walk
 // carries the new `locker_item` columns and the sidecars' sealed cells, which
-// stay CIPHERTEXT: the bundle carries the DEK, never plaintext.
+// stay CIPHERTEXT: the bundle never carries plaintext, and since #630 never
+// carries the DEK in the clear either — see the custody bullet above.
 
 // Schema/export audit #883: the legacy authority stores fold into one table
 // and the SET of decisions carried is unchanged — only where they live.
 // `share.authority` and `share.delivery_config` enter the walk; `share.grant`
 // and `enrich.consent` leave it with the tables rung six drops. The member's
-// device trust moves out of `consent_device.trust` into a row of its own, so
+// device trust moves out of `access_device.trust` into a row of its own, so
 // that table's `SELECT *` narrows by exactly the value that moved. No adapter,
 // no content bytes. Watch `share_delivery_config`: dropping it would silently
 // reset a per-grant size ceiling to the vault-wide default, which is why it is
@@ -93,7 +98,6 @@ import {
   writeZipEntries,
 } from "../ingest/zip.js";
 import type { ZipEntry } from "../ingest/zip.js";
-import { sealKeyFileFor, writeSealKeyFile } from "../schema/sealed.js";
 import {
   canonicalJson,
   exportVault,
@@ -106,6 +110,12 @@ import {
   exportTransactionsCsv,
   exportVcards,
 } from "./portable-adapters.js";
+import {
+  PORTABLE_CUSTODY_KIT_PATH,
+  custodyKitSealKey,
+  parsePortableCustodyKit,
+  wrapPortableCustodyKit,
+} from "./portable-custody.js";
 import type { Identity } from "./types.js";
 
 export interface PortableManifestFile {
@@ -121,6 +131,13 @@ export interface PortableManifest {
   vaultId: string;
   ontologyVersion: string;
   canonicalVerifyHash: string;
+  /**
+   * What this bundle can do with the vault's secrets (#630):
+   *  - `ciphertext-only` — sealed cells are here, nothing that opens them is.
+   *  - `recovery-kit` — a password-wrapped `custody/recovery-kit.json` rides
+   *    along; the passphrase is the owner's, held nowhere in the file.
+   */
+  sealed: "ciphertext-only" | "recovery-kit";
   includes: readonly [
     "documents-and-versions",
     "folders",
@@ -143,9 +160,19 @@ function hash(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+export interface PortableExportOptions {
+  /**
+   * Owner-chosen passphrase for the custody kit. Absent → the bundle carries
+   * no key at all, and an import of its sealed cells is refused (as it should
+   * be: there is nothing to open them with).
+   */
+  passphrase?: string;
+}
+
 export async function exportPortableVault(
   db: VaultDb,
-  owner: Identity
+  owner: Identity,
+  options: PortableExportOptions = {}
 ): Promise<PortableExport> {
   // Keep this owner in the schema/export ratchet — see the header.
   const canonical = exportVault(db, owner);
@@ -154,14 +181,38 @@ export async function exportPortableVault(
       `portable export refused a partial canonical artifact: ${canonical.artifact.skippedTables.map((item) => item.entity).join(", ")}`
     );
   }
+  const vault = db.vault
+    .prepare("SELECT vault_id FROM core_vault LIMIT 1")
+    .get() as { vault_id: string };
+  const passphrase = options.passphrase ?? "";
   const files: ZipEntry[] = [
     {
       name: "canonical/vault.json",
       data: Buffer.from(canonicalJson(canonical.artifact), "utf8"),
     },
-    // Canonical rows keep sealed ciphertext, so blank-machine portability
-    // needs the exact DEK. Manifest-hashed; no plaintext reaches the surface.
-    { name: "custody/seal-key.bin", data: Buffer.from(db.sealKey) },
+    // Canonical rows keep sealed CIPHERTEXT and the bundle carries no key in
+    // the clear. With a passphrase the DEK rides password-wrapped, so the
+    // header's promise holds literally: no plaintext reaches the surface.
+    ...(passphrase.length > 0
+      ? [
+          {
+            name: PORTABLE_CUSTODY_KIT_PATH,
+            data: Buffer.from(
+              `${canonicalJson(
+                wrapPortableCustodyKit(
+                  {
+                    vaultId: vault.vault_id,
+                    sealKey: db.sealKey,
+                    createdAt: canonical.artifact.exportedAt,
+                  },
+                  passphrase
+                )
+              )}\n`,
+              "utf8"
+            ),
+          },
+        ]
+      : []),
     {
       name: "adapters/calendar.ics",
       data: Buffer.from(exportIcs(db), "utf8"),
@@ -199,9 +250,6 @@ export async function exportPortableVault(
       throw new Error(`portable export content hash mismatch: ${row.sha256}`);
     files.push({ name: `content/${row.sha256}`, data: bytes });
   }, Promise.resolve());
-  const vault = db.vault
-    .prepare("SELECT vault_id FROM core_vault LIMIT 1")
-    .get() as { vault_id: string };
   const manifestFiles: PortableManifestFile[] = files.map((file) => ({
     path: file.name,
     sha256: hash(file.data),
@@ -220,6 +268,7 @@ export async function exportPortableVault(
     vaultId: vault.vault_id,
     ontologyVersion: canonical.artifact.ontologyVersion,
     canonicalVerifyHash: canonical.artifact.verifyHash,
+    sealed: passphrase.length > 0 ? "recovery-kit" : "ciphertext-only",
     includes: [
       "documents-and-versions",
       "folders",
@@ -281,10 +330,27 @@ export function verifyPortableVault(bytes: Buffer): PortableManifest {
   return manifest;
 }
 
+export interface PortableImportOptions {
+  replaceBootstrap?: boolean;
+  /**
+   * Passphrase for the bundle's `custody/recovery-kit.json`. Required whenever
+   * the bundle carries sealed values; the unwrapped key is used to RE-SEAL them
+   * under this vault's own key and is never installed here.
+   */
+  passphrase?: string;
+}
+
+/**
+ * Restore a bundle. Secrets are the load-bearing part (#630):
+ *  - a bundle whose sealed cells have no kit is refused before any row lands;
+ *  - a kit without its passphrase is refused the same way;
+ *  - with both, the source key is unwrapped in memory, every sealed cell is
+ *    re-sealed under THIS vault's key, and the source key is dropped.
+ */
 export function importPortableVault(
   db: VaultDb,
   bytes: Buffer,
-  options: { replaceBootstrap?: boolean } = {}
+  options: PortableImportOptions = {}
 ): { imported: number; blobs: number } {
   verifyPortableVault(bytes);
   const entries = readZipEntries(bytes);
@@ -292,25 +358,38 @@ export function importPortableVault(
     (entry) => entry.name === "canonical/vault.json"
   );
   if (!canonical) throw new Error("portable export has no canonical artifact");
-  const artifact = JSON.parse(canonical.data.toString("utf8")) as VaultExport;
-  const portableSealKey = entries.find(
-    (entry) => entry.name === "custody/seal-key.bin"
-  )?.data;
-  if (!portableSealKey || portableSealKey.length !== db.sealKey.length)
-    throw new Error("portable export has no valid seal-key custody artifact");
-  const priorSealKey = Buffer.from(db.sealKey);
-  portableSealKey.copy(db.sealKey);
-  if (db.dir !== ":memory:")
-    writeSealKeyFile(sealKeyFileFor(db.dir), db.sealKey, db.keyStore);
-  let result: { imported: number };
-  try {
-    result = importVaultExport(db, artifact, options);
-  } catch (error) {
-    priorSealKey.copy(db.sealKey);
-    if (db.dir !== ":memory:")
-      writeSealKeyFile(sealKeyFileFor(db.dir), db.sealKey, db.keyStore);
-    throw error;
+  if (entries.some((entry) => entry.name === "custody/seal-key.bin")) {
+    // Pre-#630 bundles shipped the DEK in the clear beside the ciphertext it
+    // opens. Accepting one would keep that artifact alive and useful.
+    throw new Error(
+      "portable import refused: this bundle carries a plaintext seal key (custody/seal-key.bin), which is no longer accepted — re-export with a passphrase to get a password-wrapped recovery kit"
+    );
   }
+  const artifact = JSON.parse(canonical.data.toString("utf8")) as VaultExport;
+  const kitEntry = entries.find(
+    (entry) => entry.name === PORTABLE_CUSTODY_KIT_PATH
+  );
+  const passphrase = options.passphrase ?? "";
+  let sourceSealKey: Buffer | undefined;
+  if (kitEntry) {
+    if (passphrase.length === 0)
+      throw new Error(
+        "portable import refused: this bundle's seal key is in a password-wrapped recovery kit — supply the passphrase it was exported with. Nothing was written."
+      );
+    sourceSealKey = custodyKitSealKey(
+      parsePortableCustodyKit(
+        JSON.parse(kitEntry.data.toString("utf8")),
+        passphrase
+      )
+    );
+  }
+  // `importVaultExport` refuses sealed values with no key, before any write.
+  const result = importVaultExport(db, artifact, {
+    ...(options.replaceBootstrap === undefined
+      ? {}
+      : { replaceBootstrap: options.replaceBootstrap }),
+    ...(sourceSealKey ? { sourceSealKey } : {}),
+  });
   let blobs = 0;
   for (const entry of entries) {
     const match = /^content\/(?<sha>[a-f0-9]{64})$/u.exec(entry.name);

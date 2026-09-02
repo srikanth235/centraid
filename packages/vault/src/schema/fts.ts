@@ -215,13 +215,52 @@ const SPEC_PATCHES: Readonly<Record<string, Partial<FtsEntitySpec>>> = {
       { name: "role", kind: "column" },
       { name: "nickname", kind: "column" },
     ],
+    // #916, R11 / review 9.1: both tables carry the trash pair and neither
+    // declared it here, so a trashed profile and a trashed expense stayed
+    // findable — search was the one surface the trash did not reach.
+    deletedColumn: "deleted_at",
   },
+  "tally.expense": { deletedColumn: "deleted_at" },
 };
 
-/** The baseline minus what #883 retired, plus its patches. */
-const SPECS: readonly FtsEntitySpec[] = BASELINE_SPECS.filter(
-  (spec) => !RETIRED_ENTITIES.has(spec.entity)
-).map((spec) => ({ ...spec, ...SPEC_PATCHES[spec.entity] }));
+/**
+ * Surfaces the pre-#916 schema never indexed (ruling ONT-12): search coverage
+ * was by touch, so the names of an album, a notebook, a task project and a
+ * circle were unfindable while the things inside them were not. Kept as its
+ * own list rather than folded into `BASELINE_SPECS` so the ruling stays
+ * legible next to what it added; both feed `SPECS` and the one baseline
+ * creates every index in it.
+ */
+const ADDED_SPECS: readonly FtsEntitySpec[] = [
+  {
+    entity: "core.collection",
+    idColumn: "collection_id",
+    columns: [{ name: "name", kind: "column" }],
+  },
+  {
+    entity: "core.place",
+    idColumn: "place_id",
+    columns: [{ name: "name", kind: "column" }],
+  },
+  {
+    entity: "schedule.project",
+    idColumn: "project_id",
+    columns: [{ name: "name", kind: "column" }],
+  },
+  {
+    entity: "social.circle",
+    idColumn: "circle_id",
+    columns: [{ name: "name", kind: "column" }],
+  },
+];
+
+/** The baseline minus what #883 retired, plus its patches and #916's additions. */
+const SPECS: readonly FtsEntitySpec[] = [
+  ...BASELINE_SPECS.filter((spec) => !RETIRED_ENTITIES.has(spec.entity)).map(
+    (spec) => ({ ...spec, ...SPEC_PATCHES[spec.entity] })
+  ),
+  ...ADDED_SPECS,
+];
 
 /** What the gateway needs to run (and consent-clamp) a search. */
 export interface SearchableEntity {
@@ -422,38 +461,22 @@ ${backfillStatement(spec)}
 }
 
 /**
- * Migration rung: shadow tables, sync triggers, and a backfill of whatever
- * rows a pre-index vault already holds (a no-op on fresh files).
+ * Every live index: shadow table, sync triggers, and a backfill that selects
+ * nothing on a fresh file.
+ *
+ * Built from `SPECS` — the PATCHED registry — not from `BASELINE_SPECS`
+ * (#916). Trigger bodies are static DDL, so a spec change used to reach a file
+ * only by a rung dropping and re-creating the index; with the shape stated in
+ * the baseline instead, the index a patch describes is simply the index a
+ * fresh file gets. `BASELINE_SPECS` stays the place a spec is WRITTEN, and
+ * `SPEC_PATCHES`/`ADDED_SPECS` the place later decisions amend it, so the
+ * history of each decision stays legible next to it.
  */
-export const FTS_DDL: string = BASELINE_SPECS.map(entityDdl).join("\n");
+export const FTS_DDL: string = SPECS.map(entityDdl).join("\n");
 
 const SPEC_BY_ENTITY: ReadonlyMap<string, FtsEntitySpec> = new Map(
   SPECS.map((s) => [s.entity, s])
 );
-
-/**
- * One entity's shadow table, triggers and backfill, from the LIVE spec. Rung
- * seven re-generates an index whose spec changed: trigger bodies are static
- * DDL, reachable only by dropping and re-creating them (#883).
- */
-export function ftsEntityDdl(entity: string): string {
-  const spec = SPEC_BY_ENTITY.get(entity);
-  if (!spec) throw new Error(`not a searchable entity: ${entity}`);
-  return entityDdl(spec);
-}
-
-/**
- * Drop one entity's shadow table and its sync triggers. Takes the logical name
- * rather than a spec so a RETIRED entity — one whose base table is going away
- * in the same rung — can still be cleaned up after it has left `SPECS`.
- */
-export function ftsDropDdl(entity: string): string {
-  const fts = `fts_${physical(entity)}`;
-  return `DROP TRIGGER IF EXISTS ${fts}_ai;
-DROP TRIGGER IF EXISTS ${fts}_au;
-DROP TRIGGER IF EXISTS ${fts}_ad;
-DROP TABLE IF EXISTS ${fts};`;
-}
 
 /**
  * Rebuild path (#367). FTS5's own `('rebuild')` re-derives only from what fts5

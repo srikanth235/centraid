@@ -56,7 +56,7 @@ export const GRANT_ACTION_WEIGHTS = {
   grant_propagate: 6,
   park_confirmable: 7,
   settle_parked: 7,
-  revoke_consent_grant: 4,
+  revoke_access_grant: 4,
 } as const;
 
 export type GrantActionName = keyof typeof GRANT_ACTION_WEIGHTS;
@@ -359,7 +359,7 @@ function consentRevokeAction(world: World, seat: Seat): void {
     }
   agent.consentGrantId = freshConsentGrant(seat, agent.agentPartyId);
   checkParked(world, seat.index);
-  world.trace.push(`#${world.step} revoke_consent_grant seat=${seat.index}`);
+  world.trace.push(`#${world.step} revoke_access_grant seat=${seat.index}`);
 }
 
 /** G2: settled payloads stay gone; a reappearance is an UNPARK, which no verb offers. */
@@ -440,7 +440,7 @@ export function runGrantAction(
     case "settle_parked":
       settleAction(world, rng, reachable);
       break;
-    case "revoke_consent_grant":
+    case "revoke_access_grant":
       if (seat) consentRevokeAction(world, seat);
       break;
   }

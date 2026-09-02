@@ -63,6 +63,7 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
       db,
       links,
       vaultFor: () => undefined,
+      partyIdFor: () => "edge-party",
       dial: () => undefined,
     });
     await sweep.runOnce();
@@ -77,6 +78,7 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
       db,
       links,
       vaultFor: () => undefined,
+      partyIdFor: () => "edge-party",
       dial: () => undefined,
       announceRoutes: async () => {
         announced += 1;
@@ -98,6 +100,7 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
       db,
       links,
       vaultFor: () => undefined,
+      partyIdFor: () => "edge-party",
       dial: () => undefined,
       idleIntervalMs: 10,
       activeIntervalMs: 10,
@@ -125,6 +128,7 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
     const sweep = createPeerPlaneSweep({
       db,
       links,
+      partyIdFor: () => "edge-party",
       vaultFor: () => {
         calls += 1;
         throw new Error("simulated db failure");

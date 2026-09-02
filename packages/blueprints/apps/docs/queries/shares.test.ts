@@ -157,7 +157,7 @@ function ctxOf(shareDenied: boolean) {
   >(async ({ entity }) => {
     if (shareDenied && SHARE_ENTITIES.has(entity))
       throw Object.assign(new Error("scope awaiting owner approval"), {
-        code: "VAULT_CONSENT",
+        code: "VAULT_ACCESS",
       });
     return { rows: ROWS[entity] ?? [] };
   });

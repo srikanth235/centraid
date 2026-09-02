@@ -492,7 +492,7 @@ describe("access: the history of every auth, reveal and fill (#872)", () => {
 
   it("names the three kinds, newest first, and carries a fill's page origin", async () => {
     const { default: access } = await import("./queries/access.ts");
-    const ctx = ctxOf({ "consent.receipt": receipts });
+    const ctx = ctxOf({ "access.receipt": receipts });
     const result = await access({ input: {}, ctx });
     expect(result.entries.map((entry) => entry.kind)).toStrictEqual([
       "fill",
@@ -506,7 +506,7 @@ describe("access: the history of every auth, reveal and fill (#872)", () => {
 
   it("lists a refusal like an allowance — the boundary receipts both", async () => {
     const { default: access } = await import("./queries/access.ts");
-    const ctx = ctxOf({ "consent.receipt": receipts });
+    const ctx = ctxOf({ "access.receipt": receipts });
     const result = await access({ input: {}, ctx });
     expect(result.entries[2]).toMatchObject({
       kind: "auth",
@@ -517,10 +517,10 @@ describe("access: the history of every auth, reveal and fill (#872)", () => {
 
   it("narrows the read to Locker's own object types, and to one item when asked", async () => {
     const { default: access } = await import("./queries/access.ts");
-    const ctx = ctxOf({ "consent.receipt": receipts });
+    const ctx = ctxOf({ "access.receipt": receipts });
     await access({ input: { item_id: "item-1" }, ctx });
     expect(
-      ctx.calls.find((call) => call.entity === "consent.receipt")?.where
+      ctx.calls.find((call) => call.entity === "access.receipt")?.where
     ).toStrictEqual([
       {
         column: "object_type",
@@ -533,10 +533,7 @@ describe("access: the history of every auth, reveal and fill (#872)", () => {
 
   it("is behind the lock: a locked session gets no history", async () => {
     const { default: access } = await import("./queries/access.ts");
-    const ctx = ctxOf(
-      { "consent.receipt": receipts },
-      { authenticated: false }
-    );
+    const ctx = ctxOf({ "access.receipt": receipts }, { authenticated: false });
     const result = await access({ input: {}, ctx });
     expect(result).toMatchObject({ entries: [], authRequired: true });
     expect(ctx.calls).toStrictEqual([]);

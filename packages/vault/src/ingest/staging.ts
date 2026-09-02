@@ -282,7 +282,7 @@ export function stageCandidates(
     throw error;
   }
   const { batchId, counts } = staged;
-  const receiptId = writeReceipt(db.journal, {
+  const receiptId = writeReceipt(db.audit, {
     grantId: null,
     invocationId: null,
     action: "act sync.stage_import",
@@ -415,7 +415,7 @@ export function applyBatchTx(
     const cols = sealedColumnsOf(entityType);
     if (cols.length === 0) return;
     const ref = resolveEntity(entityType, vault);
-    if (!ref || ref.file !== "vault") return;
+    if (!ref) return;
     const pk = pkColumn(vault, ref.physical);
     const live = vault
       .prepare(
@@ -605,7 +605,7 @@ export function publishBatch(
   const activity = `import.${applied.kind.replace(/^file\./u, "")}`;
   for (const write of applied.provenanced) {
     writeProvenance(
-      db.journal,
+      db.audit,
       owner,
       write.type,
       write.id,
@@ -614,7 +614,7 @@ export function publishBatch(
       "import"
     );
   }
-  const receiptId = writeReceipt(db.journal, {
+  const receiptId = writeReceipt(db.audit, {
     grantId: null,
     invocationId: null,
     action: "act sync.publish_import",
@@ -666,7 +666,7 @@ export function discardBatch(
     db.vault.exec("ROLLBACK");
     throw error;
   }
-  const receiptId = writeReceipt(db.journal, {
+  const receiptId = writeReceipt(db.audit, {
     grantId: null,
     invocationId: null,
     action: "act sync.discard_import",

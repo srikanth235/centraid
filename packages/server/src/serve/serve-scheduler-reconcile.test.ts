@@ -222,7 +222,7 @@ describe("serve-scheduler-reconcile scenarios", () => {
     // Publishing awaits reconciliation, including the fresh watcher's
     // no-history cursor bootstrap, before the app is considered live.
     const plane = handle.vaults.current();
-    const cursor = plane.db.journal
+    const cursor = plane.db.audit
       .prepare(
         `SELECT position_json FROM automation_trigger_cursor
         WHERE automation_id = 'brief/brief' AND trigger_index = 0`
@@ -237,9 +237,9 @@ describe("serve-scheduler-reconcile scenarios", () => {
     });
     expect(outcome.status).toBe("executed");
     expect(
-      plane.db.journal
+      plane.db.audit
         .prepare(
-          `SELECT count(*) AS n FROM consent_provenance WHERE entity_type = 'core.party'`
+          `SELECT count(*) AS n FROM access_provenance WHERE entity_type = 'core.party'`
         )
         .get()
     ).toMatchObject({ n: 1 });
@@ -308,9 +308,9 @@ describe("serve-scheduler-reconcile scenarios", () => {
       purpose: "dpv:ServiceProvision",
     });
     expect(missed.status).toBe("executed");
-    const missedProv = droppedPlane.db.journal
+    const missedProv = droppedPlane.db.audit
       .prepare(
-        `SELECT prov_id FROM consent_provenance
+        `SELECT prov_id FROM access_provenance
         WHERE entity_type = 'core.party' ORDER BY prov_id DESC LIMIT 1`
       )
       .get() as { prov_id: string };
@@ -329,7 +329,7 @@ describe("serve-scheduler-reconcile scenarios", () => {
     expect(runs).toHaveLength(10);
     const recoveredCursor = handle.vaults
       .current()
-      .db.journal.prepare(
+      .db.audit.prepare(
         `SELECT position_json FROM automation_trigger_cursor
         WHERE automation_id = 'brief/brief' AND trigger_index = 0`
       )

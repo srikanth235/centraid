@@ -62,8 +62,19 @@ CREATE TABLE IF NOT EXISTS outbox_item (
   result_json          TEXT CHECK (result_json IS NULL OR json_valid(result_json)),
   published_message_id TEXT REFERENCES social_message(message_id),
   note                 TEXT,
-  CHECK ((target_type IS NULL) = (target_id IS NULL))
+  CHECK ((target_type IS NULL) = (target_id IS NULL)),
+  -- A REAL reference (#916, E1). This was an audit value — "the row this was
+  -- about" — and that reading is wrong for a queue: an item still PENDING when
+  -- its subject is purged would drain afterwards and publish an artifact about
+  -- a row the member deleted. The pair is a composite key into the entity
+  -- supertype and cascades, so a purge empties the queue of anything about it.
+  -- A NULL pair (an outbound write with no canonical subject) satisfies a
+  -- composite foreign key by definition, which is the right reading.
+  FOREIGN KEY (target_type, target_id)
+    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_outbox_item_target
+  ON outbox_item(target_type, target_id);
 CREATE INDEX IF NOT EXISTS idx_outbox_item_status ON outbox_item(status, staged_at);
 CREATE INDEX IF NOT EXISTS idx_outbox_item_connection ON outbox_item(connection_id);
 CREATE INDEX IF NOT EXISTS idx_outbox_item_recipient_party ON outbox_item(recipient_party_id);

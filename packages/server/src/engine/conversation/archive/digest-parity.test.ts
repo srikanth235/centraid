@@ -5,7 +5,6 @@ import { createHash } from "node:crypto";
 // InsightsStore over the same journal handle. `recent` is live-only by design,
 // so this compares the aggregate surfaces the issue names: kpis, bySource,
 // byModel.
-import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
 import { describe, expect, it } from "vitest";
@@ -13,10 +12,8 @@ import { describe, expect, it } from "vitest";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { InsightsStore } from "../../insights/insights-store.js";
-import {
-  makeJournalDbProvider,
-  openJournalDb,
-} from "../../stores/gateway-db.js";
+import { makeLedgerDbProvider, openLedgerDb } from "../../stores/gateway-db.js";
+import { ledgerDbFileIn } from "../../stores/ledger-db.test-fixtures.js";
 import { runConversationArchival } from "./index.js";
 import type { BlobSink } from "./types.js";
 
@@ -104,8 +101,8 @@ function seedFinishedTurn(
 describe("digest parity with pre-archive rollups", () => {
   it("kpis / bySource / byModel are identical before archive and after prune", () => {
     const dir = tempDirSync("centraid-digest-parity-");
-    const dbPath = path.join(dir, "journal.db");
-    const journal = openJournalDb(dbPath);
+    const dbPath = ledgerDbFileIn(dir);
+    const journal = openLedgerDb(dbPath);
     const blobSink = new MemoryBlobSink();
 
     // Two automation threads + one chat thread, all with aged runs. Automation
@@ -234,7 +231,7 @@ describe("digest parity with pre-archive rollups", () => {
       model: "haiku",
     });
 
-    const insights = new InsightsStore(makeJournalDbProvider(dbPath));
+    const insights = new InsightsStore(makeLedgerDbProvider(dbPath));
     // A window wide enough to include every aged run in BOTH the live and the
     // digest arms (their span reaches back ~160d).
     const opts = { windowDays: 400 };

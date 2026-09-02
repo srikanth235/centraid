@@ -370,9 +370,9 @@ export async function sweepPeerCommons(input: {
       if (progressed >= input.limit) break;
       const grant = readCommonsGrant(local.db.vault, row.grant_id);
       const localOwner = local.db.vault
-        .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-        .get() as { owner_party_id: string } | undefined;
-      if (localOwner?.owner_party_id === grant.stewardPartyId) continue;
+        .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+        .get() as { self_party_id: string } | undefined;
+      if (localOwner?.self_party_id === grant.stewardPartyId) continue;
       const stewardId = stewardVaultId(local.db, grant.grantId);
       const link = stewardId
         ? input.links.peerForVault(stewardId, local.vaultId)

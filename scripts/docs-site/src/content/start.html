@@ -60,9 +60,9 @@
           <p>
             First launch asks exactly two things — what to call you, and an accent color. Behind
             that one screen the gateway mints your first <b>vault</b>: a directory on your disk
-            holding <code>vault.db</code> (the canonical record of your life, on one shared
-            ontology) and <code>journal.db</code> (the append-only audit trail). Every app you
-            install, every automation you run, every agent you talk to works against that pair.
+            holding <code>vault.db</code> — the canonical record of your life on one shared
+            ontology, with the append-only audit trail as a band inside the same file. Every app you
+            install, every automation you run, every agent you talk to works against it.
           </p>
           <p>
             The shell lands on <b>Home</b>: your apps as a grid, and a sidebar with your profile and
@@ -285,11 +285,11 @@
       <!-- 08 BACKUP -->
       <section class="sec wrap" id="backup">
         <p class="eyebrow r">§08 · back up the keys</p>
-        <h2 class="r" style="--d: 0.06s">Two files are the vault. <em>One key seals it.</em></h2>
+        <h2 class="r" style="--d: 0.06s">One file is the vault. <em>One key seals it.</em></h2>
         <div class="prose r" style="--d: 0.12s">
           <p>
-            Backing up a vault is copying its directory — <code>vault.db</code> and
-            <code>journal.db</code> travel as ordinary files. But secrets (passwords in Locker,
+            Backing up a vault is copying its directory — <code>vault.db</code> travels as an
+            ordinary file. But secrets (passwords in Locker,
             OAuth tokens, card numbers) are <b>sealed</b>: encrypted at rest under a key that
             deliberately lives <i>outside</i> the vault directory, so a copied backup can't reveal
             them. That key is yours to custody:

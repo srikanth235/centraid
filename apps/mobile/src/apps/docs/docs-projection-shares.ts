@@ -81,8 +81,8 @@ export function originsByDocument(
   );
   return new Map(
     rows.origins.flatMap((origin) => {
-      if (str(origin, "item_type") !== DOCUMENT_TARGET_TYPE) return [];
-      const itemId = str(origin, "item_id");
+      if (str(origin, "target_type") !== DOCUMENT_TARGET_TYPE) return [];
+      const itemId = str(origin, "target_id");
       const vaultId = str(origin, "origin_vault_id");
       if (!itemId || !vaultId) return [];
       const partyId = partyByVault.get(vaultId) ?? null;

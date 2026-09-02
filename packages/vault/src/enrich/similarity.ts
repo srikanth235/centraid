@@ -118,3 +118,67 @@ export function scanEmbeddings(
       limit
     ) as unknown as SemanticHit[];
 }
+
+export interface RankEmbeddingsOptions {
+  model: string;
+  vector: readonly number[];
+  /** Restrict to these logical entity types; omitted means every type. */
+  entityTypes?: readonly string[];
+  /** REQUIRED: no default, so omission cannot request the library. */
+  limit: number;
+  /**
+   * Best-scoring embeddings carried past the caller's own liveness filter. A
+   * stated bound, not an assumption that trash is rare.
+   */
+  candidates?: number;
+}
+
+/**
+ * The `sqlite-vec` ranker, SQL-side and BOUNDED — the same shape
+ * `scanEmbeddings` answers, so the two engines give ONE answer (#883 C2).
+ *
+ * It lives here rather than in the server because raw SQL over a vault table
+ * belongs to the vault: `lint:vault-sql` is the rule, and the ranking clause
+ * has to move with the column it reads. `vec_distance_cosine` is a distance,
+ * so the score it returns is `1 - distance` — the same number
+ * `scanEmbeddings` produces with `vault_cosine`.
+ *
+ * `dim = ?` is load-bearing: `vec_distance_cosine` RAISES on a mismatched
+ * width, turning a search into an error, where the scan ranker scores it 0.
+ * The caller is responsible for having the extension loaded.
+ */
+export function rankEmbeddingsWithVec(
+  vault: DatabaseSync,
+  options: RankEmbeddingsOptions
+): SemanticHit[] {
+  const limit = Math.max(1, Math.trunc(options.limit));
+  const candidates = Math.max(limit, Math.trunc(options.candidates ?? limit));
+  const types = options.entityTypes?.length
+    ? ` AND target_type IN (${options.entityTypes.map(() => "?").join(",")})`
+    : "";
+  const rows = vault
+    .prepare(
+      `SELECT target_type AS "entityType", target_id AS "entityId",
+              vec_distance_cosine(vector, ?) AS distance
+         FROM enrich_embedding
+        WHERE model = ? AND dim = ?${types}
+        ORDER BY distance
+        LIMIT ?`
+    )
+    .all(
+      encodeVector(options.vector),
+      options.model,
+      options.vector.length,
+      ...(options.entityTypes ?? []),
+      candidates
+    ) as unknown as {
+    entityType: string;
+    entityId: string;
+    distance: number;
+  }[];
+  return rows.map((row) => ({
+    entityType: row.entityType,
+    entityId: row.entityId,
+    score: 1 - row.distance,
+  }));
+}

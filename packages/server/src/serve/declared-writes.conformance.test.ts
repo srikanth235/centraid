@@ -264,8 +264,13 @@ describe("declared-writes.conformance", () => {
     ).toBe(true);
     // An ALWAYS set that swallowed the conditional cascades is worse than one
     // that went empty.
-    expect(always.has("consent.receipt")).toBe(true);
-    expect(always.has("consent.app")).toBe(true);
+    expect(always.has("access.app")).toBe(true);
+    // #916 ruling ONT-revisions: the pre-mutation snapshot is the engine's,
+    // taken through generated triggers, so no action declares it.
+    expect(always.has("core.entity_revision")).toBe(true);
+    // The audit band is band-excluded (#916): a receipt write has no logical
+    // name, so it cannot be declared and cannot be observed.
+    expect(entityForPhysical("access_receipt", entities)).toBeUndefined();
     expect(always.has("core.link")).toBe(false);
     expect(always.has("schedule.task")).toBe(false);
     expect(conditional["poly-refs"].has("core.link")).toBe(true);
@@ -372,17 +377,17 @@ describe("declared-writes.conformance", () => {
   test("an undeclared write goes red — the gate can fail", () => {
     // SABOTAGE, over a real observation: take the first corpus action's shape
     // and remove one entity from its declaration. The comparison must name it.
-    const cascade = new Set(["consent.receipt", "core.link"]);
+    const cascade = new Set(["access.receipt", "core.link"]);
     const honest = conformDeclaredWrites({
       declared: ["knowledge.note", "core.content_item"],
-      observed: ["knowledge.note", "core.content_item", "consent.receipt"],
+      observed: ["knowledge.note", "core.content_item", "access.receipt"],
       engineCascade: cascade,
     });
     expect(honest.undeclared).toStrictEqual([]);
 
     const sabotaged = conformDeclaredWrites({
       declared: ["knowledge.note"],
-      observed: ["knowledge.note", "core.content_item", "consent.receipt"],
+      observed: ["knowledge.note", "core.content_item", "access.receipt"],
       engineCascade: cascade,
     });
     expect(sabotaged.undeclared).toStrictEqual(["core.content_item"]);

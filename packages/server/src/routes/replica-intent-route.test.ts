@@ -555,10 +555,8 @@ describe("replica-intent-route suite", () => {
         context.access.deviceId
       )
     ).not.toHaveProperty("output");
-    const liveReceipt = vault.db.journal
-      .prepare(
-        `SELECT detail_json FROM consent_receipt WHERE invocation_id = ?`
-      )
+    const liveReceipt = vault.db.audit
+      .prepare(`SELECT detail_json FROM access_receipt WHERE invocation_id = ?`)
       .get(replicaInvocationId(liveBody.intentId, 0)) as {
       detail_json: string;
     };
@@ -574,8 +572,8 @@ describe("replica-intent-route suite", () => {
     const { vault, rawResults, dispatch, context } =
       await bridgeFinalizationFixture();
 
-    vault.db.journal.exec(`CREATE TEMP TRIGGER fail_replica_finalization_receipt
-    BEFORE INSERT ON consent_receipt BEGIN
+    vault.db.audit.exec(`CREATE TEMP TRIGGER fail_replica_finalization_receipt
+    BEFORE INSERT ON access_receipt BEGIN
       SELECT RAISE(ABORT, 'synthetic bridge finalization failure');
     END`);
     const input = { title: "ambiguous bridge task" };
@@ -643,7 +641,7 @@ describe("replica-intent-route suite", () => {
       )
     ).toStrictEqual({ n: 1 });
 
-    vault.db.journal.exec("DROP TRIGGER fail_replica_finalization_receipt");
+    vault.db.audit.exec("DROP TRIGGER fail_replica_finalization_receipt");
     const retried = response();
     await handleReplicaIntent(request(body), retried.res, context);
 
@@ -678,9 +676,9 @@ describe("replica-intent-route suite", () => {
     ).toBeUndefined();
     expect(
       plainSqliteRow(
-        vault.db.journal
+        vault.db.audit
           .prepare(
-            `SELECT count(*) AS n FROM consent_receipt WHERE invocation_id = ?`
+            `SELECT count(*) AS n FROM access_receipt WHERE invocation_id = ?`
           )
           .get(ambiguousMarker.invocation_id)
       )
@@ -707,8 +705,8 @@ describe("replica-intent-route suite", () => {
       replicaInvocationId(multiBody.intentId, 0),
       replicaInvocationId(multiBody.intentId, 1),
     ];
-    vault.db.journal.exec(`CREATE TEMP TRIGGER fail_second_replica_finalization
-    BEFORE INSERT ON consent_receipt
+    vault.db.audit.exec(`CREATE TEMP TRIGGER fail_second_replica_finalization
+    BEFORE INSERT ON access_receipt
     WHEN NEW.invocation_id = '${multiInvocationIds[1]}'
     BEGIN
       SELECT RAISE(ABORT, 'synthetic second invocation finalization failure');
@@ -768,7 +766,7 @@ describe("replica-intent-route suite", () => {
       { title: `${multiInput.title} second`, n: 1 },
     ]);
 
-    vault.db.journal.exec("DROP TRIGGER fail_second_replica_finalization");
+    vault.db.audit.exec("DROP TRIGGER fail_second_replica_finalization");
     const multiRetry = response();
     await handleReplicaIntent(request(multiBody), multiRetry.res, context);
     expect(multiRetry.res.statusCode).toBe(200);
@@ -790,9 +788,9 @@ describe("replica-intent-route suite", () => {
       { title: `${multiInput.title} first`, n: 1 },
       { title: `${multiInput.title} second`, n: 1 },
     ]);
-    const multiReceipts = vault.db.journal
+    const multiReceipts = vault.db.audit
       .prepare(
-        `SELECT invocation_id, count(*) AS n FROM consent_receipt
+        `SELECT invocation_id, count(*) AS n FROM access_receipt
         WHERE invocation_id IN (?, ?) GROUP BY invocation_id`
       )
       .all(...multiInvocationIds) as unknown as Array<{
@@ -884,9 +882,9 @@ describe("replica-intent-route suite", () => {
     ).toBeUndefined();
     expect(
       plainSqliteRow(
-        vault.db.journal
+        vault.db.audit
           .prepare(
-            `SELECT count(*) AS n FROM consent_receipt WHERE invocation_id = ?`
+            `SELECT count(*) AS n FROM access_receipt WHERE invocation_id = ?`
           )
           .get(replicaInvocationId(postInvokeBody.intentId, 0))
       )

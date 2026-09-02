@@ -1,101 +1,92 @@
-// The schema ladder for vault.db and journal.db. `migrate()` applies rungs
-// transactionally and stamps `PRAGMA user_version`; that number is load-bearing
-// beyond this file — it is the downgrade guard (`VaultSchemaAheadError`) and
-// the "schema version this build understands" the backup/recovery provenance
-// reports from `VAULT_MIGRATIONS.length`.
+// The schema for vault.db — ONE file, ONE baseline, no ladder.
 //
-// Rung one is the baseline: every owner table's DDL in dependency order. A
-// fresh file still walks EVERY later rung, most as faithful no-ops (`IF NOT
-// EXISTS` creates, backfills that select nothing), so both paths land on the
-// same shape and version. Rungs five, six and seven are the exceptions that
-// prove the rule: they create what the baseline does not, or drop what it
-// still does, and a fresh file reaches the shape by walking each exactly once.
-// THE BASELINE TEXT IS HISTORY — a store this build no longer wants is still
-// created by rung one and dropped by the rung that replaces it (#883).
+// v0 has no vaults in the field, so there is nothing to walk forward from: a
+// rung that reconstructs a shape the baseline can simply state is
+// compatibility code for a compatibility problem nobody has. `VAULT_MIGRATIONS`
+// therefore holds exactly one entry — every owner table's DDL in dependency
+// order — and a fresh file lands on `PRAGMA user_version = 1`.
+//
+// That number stays load-bearing beyond this file: it is the downgrade guard
+// (`VaultSchemaAheadError`) and the "schema version this build understands"
+// the backup/recovery provenance reports from `VAULT_MIGRATIONS.length`. The
+// first shipped release that must reach an existing file adds rung two — and
+// the baseline text becomes history at that moment, not before.
 
 import type { DatabaseSync } from "node:sqlite";
 
+import { ACCESS_DDL, ACCESS_INSTALL_MEMORY_DDL } from "./access.js";
 import { AGENT_DDL } from "./agent.js";
-import { SHARE_AUTHORITY_MIGRATION_DDL } from "./authority.js";
+import { AUDIT_DDL } from "./audit.js";
+import { SHARE_AUTHORITY_DDL } from "./authority.js";
 import { BLOB_TRANSFER_DDL } from "./blob-transfer.js";
 import { BLOB_DDL } from "./blob.js";
 import { COMMONS_RESILIENCE_DDL } from "./commons-resilience.js";
-import { CONSENT_DDL, CONSENT_INSTALL_MEMORY_DDL } from "./consent.js";
-import {
-  CORE_DDL,
-  LINK_ANCHOR_DDL,
-  SHARE_ORIGIN_ATTRIBUTION_DDL,
-  SHARE_ORIGIN_DDL,
-} from "./core.js";
-import {
-  HEALTH_DDL,
-  FINANCE_DDL,
-  SCHEDULE_DDL,
-} from "./domains-health-finance-schedule.js";
-import { HOME_DDL, BUSINESS_DDL } from "./domains-home-business.js";
+import { CORE_DDL, LINK_ANCHOR_DDL, SHARE_ORIGIN_DDL } from "./core.js";
 import {
   LOCKER_ADDRESS_DDL,
   LOCKER_ALIAS_DDL,
   LOCKER_AUTH_DDL,
   LOCKER_DDL,
   LOCKER_FIELD_DDL,
-  LOCKER_HISTORY_DDL,
   LOCKER_PASSKEY_DDL,
 } from "./domains-locker.js";
-import {
-  PEOPLE_DDL,
-  PEOPLE_PROFILE_CADENCE_FLOOR_DDL,
-  PEOPLE_PROFILE_LIFECYCLE_DDL,
-} from "./domains-people.js";
+import { PEOPLE_DDL } from "./domains-people.js";
+import { SCHEDULE_DDL } from "./domains-schedule.js";
 import {
   SOCIAL_DDL,
   KNOWLEDGE_DDL,
   MEDIA_DDL,
 } from "./domains-social-knowledge-media.js";
-import { TALLY_DDL, TALLY_RECEIPT_DDL } from "./domains-tally.js";
+import { TALLY_DDL, TALLY_LINE_ITEM_DDL } from "./domains-tally.js";
 import { ENRICH_DDL } from "./enrich.js";
 import { ENTITY_REVISIONS_DDL } from "./entity-revisions.js";
+import {
+  CORE_ENTITY_DDL,
+  ENTITY_PURGE_REVOKE_DDL,
+  refreshEntityTriggers,
+} from "./entity.js";
 import { APP_EXT_DDL } from "./ext.js";
 import { FTS_DDL, assertFtsSpecsRegistered } from "./fts.js";
-import { JOURNAL_DDL, JOURNAL_PROVENANCE_TIME_INDEX_DDL } from "./journal.js";
+import { LEDGER_DDL } from "./ledger.js";
 import { RENAME_INBOX_NOTICE_DDL } from "./notifications.js";
 import { OUTBOX_DDL } from "./outbox.js";
-import { ONTOLOGY_RECONCILE_MIGRATION_DDL } from "./reconcile.js";
 import { REPLICA_DDL } from "./replica.js";
 import { SEED_DDL } from "./seed.js";
 import { SHARE_COMMONS_DDL } from "./share-commons.js";
-import {
-  SHARE_FULFILLMENT_DELIVERY_MEMORY_DDL,
-  SHARE_GRANT_BACKFILL_DDL,
-  SHARE_GRANT_DDL,
-} from "./share-grant.js";
-import {
-  SYNC_CREDENTIAL_DDL,
-  SYNC_CREDENTIAL_REFRESH_CAPABILITY_DDL,
-  SYNC_DDL,
-} from "./sync.js";
+import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from "./sync.js";
 import { assertVaultRegistryLabels } from "./tables.js";
 import { TIME_ORGANIZE_DDL } from "./time-organize.js";
 
 /**
- * Ontology contract version stamped on rows (rule R07). Bumped to 1.4 for
- * #450's canonical People consolidation, target-pair convention, and
- * cross-table invariant guards.
+ * The ontology contract version — a FILE-AND-CONTRACT property, never a
+ * per-row stamp (#916, ruling ONT-04).
+ *
+ * Two numbers answer two different questions and neither is the other:
+ *   - `PRAGMA user_version` is the FILE's SHAPE. It is what the downgrade
+ *     guard reads, and on a v0 file it is 1.
+ *   - This constant is the CONTRACT the gateway serves. It lives on
+ *     `agent_command.ontology_version`, and `gateway/execution.ts` refuses a
+ *     command whose contract is not EQUAL to it.
+ *
+ * Rule R07 was read for four releases as "stamp every row"; two tables carried
+ * the column, nothing checked the one on `core_party`, and a stamp two tables
+ * carry is a vestige rather than a version scheme. The column is gone — the
+ * version is a property of the file and of the contract, and asking a row what
+ * ontology it belongs to has no answer worth storing.
+ *
+ * "1.0" is the v0 ontology as #916 closed it: health and finance out, the self
+ * party, the lifecycle declaration, one polymorphic spelling, the entity
+ * supertype, the access plane, and the audit and ledger bands in the one file.
  */
-export const ONTOLOGY_VERSION = "1.4";
+export const ONTOLOGY_VERSION = "1.0";
 
 // Composition order is dependency order:
-//   - CORE first (everything references the spine), anchors ride with it;
-//   - SHARE_ORIGIN_DDL then its forward rename (shared_by_member -> shared_by,
-//     ex-#726 rung two) run back to back: SQLite's ALTER TABLE RENAME
-//     COLUMN rewrites the stored sqlite_schema `sql` text in place, so a fresh
-//     database ends up with a `core_share_origin` whose column has always
-//     been `shared_by` — composing the two here (rather than hand-editing the
-//     CREATE TABLE to skip the rename) keeps this file mechanism-only and
-//     leaves the DDL modules untouched;
-//   - the consent plane (apps, grants, install memory, the seed registry,
-//     the ext-band registry) before anything that enrolls or scopes;
-//   - the agent plane's model tables;
+//   - CORE first (everything references the spine), and the entity supertype
+//     with it: every ontology table carries a foreign key into `core_entity`;
+//   - the access plane (apps, grants, install memory, the seed registry, the
+//     ext-band registry) before anything that enrolls or scopes;
+//   - the agent plane's model tables, then the AUDIT band it writes into —
+//     `core_entity_revision` names an invocation, so the band precedes it;
 //   - the sync spine before the domains (locker's connection anchor FKs it),
 //     with its credential/health sidecars;
 //   - the domains (extensions hold FKs into core; locker's alias sidecar and
@@ -108,46 +99,43 @@ export const ONTOLOGY_VERSION = "1.4";
 //   - BLOB_DDL dead last: it re-creates the document's FTS sync with the
 //     derivative-aware body expression (extracted text feeds the owning
 //     document's row), overriding the generated triggers by name;
-//   - the Commons control plane (ex-#731 rung three) and, composed with
-//     it, the local-only resilience/instrumentation tables that hang off it:
-//     steward-contact state, this device's own link evidence, and recovery
-//     lineage. `SHARE_COMMONS_DDL` alters `social_circle_member` (added by
-//     SOCIAL_DDL above) so it must run after the domains.
+//   - the Commons control plane and, composed with it, the local-only
+//     resilience/instrumentation tables that hang off it. `SHARE_COMMONS_DDL`
+//     alters `social_circle_member` (added by SOCIAL_DDL above) so it must run
+//     after the domains;
+//   - the LEDGER band last of the machinery: it is engine-owned store code
+//     over vault-owned tables and nothing in the ontology references it.
 export const VAULT_MIGRATIONS: readonly string[] = [
   [
     CORE_DDL,
+    CORE_ENTITY_DDL,
     LINK_ANCHOR_DDL,
     SHARE_ORIGIN_DDL,
-    SHARE_ORIGIN_ATTRIBUTION_DDL,
-    CONSENT_DDL,
-    CONSENT_INSTALL_MEMORY_DDL,
+    ACCESS_DDL,
+    ACCESS_INSTALL_MEMORY_DDL,
     SEED_DDL,
     APP_EXT_DDL,
     AGENT_DDL,
+    AUDIT_DDL,
     SYNC_DDL,
     SYNC_CREDENTIAL_DDL,
-    HEALTH_DDL,
-    FINANCE_DDL,
     SCHEDULE_DDL,
     SOCIAL_DDL,
     KNOWLEDGE_DDL,
     MEDIA_DDL,
-    HOME_DDL,
-    BUSINESS_DDL,
     PEOPLE_DDL,
-    PEOPLE_PROFILE_LIFECYCLE_DDL,
     LOCKER_DDL,
     LOCKER_AUTH_DDL,
     LOCKER_ALIAS_DDL,
     // Locker's remaining sidecars (#872), all FK'd to `locker_item` so they
-    // follow it in the baseline: custom fields and sections, extra addresses,
-    // the passkey slot, and the durable item/password history.
+    // follow it: custom fields and sections, extra addresses, and the passkey
+    // slot. The durable item/password history is `core_entity_revision`
+    // (#916, owner decision D2).
     LOCKER_FIELD_DDL,
     LOCKER_ADDRESS_DDL,
-    LOCKER_PASSKEY_DDL,
-    LOCKER_HISTORY_DDL,
     TALLY_DDL,
-    TALLY_RECEIPT_DDL,
+    TALLY_LINE_ITEM_DDL,
+    LOCKER_PASSKEY_DDL,
     ENTITY_REVISIONS_DDL,
     TIME_ORGANIZE_DDL,
     ENRICH_DDL,
@@ -161,57 +149,14 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     RENAME_INBOX_NOTICE_DDL,
     SHARE_COMMONS_DDL,
     COMMONS_RESILIENCE_DDL,
-    // The grant plane (#825) after the commons plane it is restated
-    // from: `granted_by` references `core_party`, and rung three's backfill
-    // reads `share_circle_grant` and the roster.
-    SHARE_GRANT_DDL,
+    // The authority plane's table before the trigger that revokes into it
+    // (#916, E2).
+    SHARE_AUTHORITY_DDL,
+    // A trigger ON `core_entity` that writes to `share_authority` and
+    // `share_circle_grant`, so both must exist (#916, E2).
+    ENTITY_PURGE_REVOKE_DDL,
+    LEDGER_DDL,
   ].join("\n"),
-  // Rung two (#821): the vault-preserving people_profile rebuild that
-  // carries the relaxed `cadence_days >= 0` CHECK to files created before it.
-  // See `PEOPLE_PROFILE_CADENCE_FLOOR_DDL` for why a rebuild, and for how the
-  // rung handles foreign keys inside the runner's transaction.
-  PEOPLE_PROFILE_CADENCE_FLOOR_DDL,
-  // Rung three (#825): the grant plane reaches files stamped before it. `IF
-  // NOT EXISTS` throughout, so a fresh file walks it as a no-op create plus a
-  // backfill over an empty `share_circle_grant`.
-  SHARE_GRANT_BACKFILL_DDL,
-  // Rung four (#846): `share_fulfillment.delivered_at`, the durable memory of
-  // delivery revocation reads instead of inferring it from `state`. A rebuild
-  // rather than ADD COLUMN, so it is also a no-op on a fresh file.
-  SHARE_FULFILLMENT_DELIVERY_MEMORY_DDL,
-  // Rung five (issue #865): `sync_connection_credential.refresh_capability`,
-  // the Worker-minted HMAC a stored Assist refresh token is redeemable with.
-  // A plain ADD COLUMN rung — unlike rung four there is no baseline copy of
-  // this column, so both fresh and stamped files reach the same shape by
-  // walking exactly this ALTER once.
-  SYNC_CREDENTIAL_REFRESH_CAPABILITY_DDL,
-  // Rung six (issue #883): the one authority plane. `share_grant`,
-  // `enrich_consent` and `consent_device.trust` fold into `share_authority`
-  // and are dropped in the same pass — a superseded store is never carried
-  // beside its replacement. Like rung five there is no baseline copy, so fresh
-  // and stamped files both reach the shape by walking exactly this rung once;
-  // see `schema/authority.ts` for the column-for-column mapping and for why
-  // `share_fulfillment` and `consent_device` are rebuilt rather than altered.
-  SHARE_AUTHORITY_MIGRATION_DDL,
-  // Rung seven (issue #883): the ontology reconciliation. Reachability leaves
-  // the identity register for `social_contact_channel`, `social_contact_card`
-  // and `tally_expense_receipt` fold onto the party spine and the attachment
-  // spine, Tasks and Agenda gain the trash pair, the thirteen tables missing an
-  // `updated_at` trigger get one, and `home.*`/`business.*` leave the ontology
-  // for proposal #885. Like rungs five and six there is no baseline copy of any
-  // of it, so fresh and stamped files both reach the shape by walking exactly
-  // this rung once; see `schema/reconcile.ts` for the per-store landing and for
-  // why the rung REFUSES rather than drops where a row would have nowhere to go.
-  ONTOLOGY_RECONCILE_MIGRATION_DDL,
-];
-
-export const JOURNAL_MIGRATIONS: readonly string[] = [
-  JOURNAL_DDL,
-  // Journal rung two (#883): the provenance stream's time index. journal.db has
-  // its own ladder and its own `user_version`; a vault.db rung can never reach
-  // it, which is why this is a second rung here rather than a statement in the
-  // vault's rung seven.
-  JOURNAL_PROVENANCE_TIME_INDEX_DDL,
 ];
 
 /**
@@ -226,6 +171,12 @@ export function migrateVault(db: DatabaseSync): void {
   assertVaultRegistryLabels();
   assertFtsSpecsRegistered();
   migrate(db, VAULT_MIGRATIONS);
+  // Registry-generated, like the replica's triggers and for the same reason:
+  // an entity added to the catalog must reach the file without a rung, and no
+  // DDL module should name a primary key by hand (#916). Cheap on a warm open
+  // — it returns after two counts when the file already agrees with the
+  // registry.
+  refreshEntityTriggers(db);
 }
 
 function currentVersion(db: DatabaseSync): number {

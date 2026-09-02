@@ -16,8 +16,8 @@ import {
   resolveBrowseTable,
 } from "../schema/atlas-browse.js";
 import { packKindOf } from "../schema/atlas.js";
-import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import { sealedColumnsOf } from "../schema/sealed.js";
+import { entityDeclaration } from "../schema/tables.js";
 
 export const ATLAS_OWNER_SCHEMA = "atlas";
 
@@ -67,12 +67,48 @@ function guardWriteTarget(
   };
 }
 
+/**
+ * Browse may not be the one UPDATE path an append-only table has (#916,
+ * ruling ONT-08). The registry declares what a row's life may be; a table
+ * whose rows are written once is corrected by writing another row, and a
+ * generic editor that quietly ignored that declaration would make the
+ * declaration untrue by being used. The refusal is registry-driven — nothing
+ * here lists tables — and rides the pipeline, so it lands in the receipt with
+ * its reason like any other denial.
+ *
+ * Insert and delete stay open: appending is what an append-only table is for,
+ * and delete is the purge path the poly-ref sweep already backs.
+ */
+function refuseAppendOnly(table: string, logical: string): void {
+  if (entityDeclaration(logical)?.lifecycle !== "append-only") return;
+  throw new Error(
+    `${table} is append-only — its rows are written once and corrected by writing another row, never edited in place (issue #916, ruling ONT-08)`
+  );
+}
+
 /** Engine-FK-dependents refusal — the route turns it into a 409. */
 export interface AtlasDependentsRefusal {
-  code: "has_dependents";
+  /**
+   * `owns_lifecycle` is the refusal Browse owes a row that is the HEAD of
+   * something (#916, adversarial BUG-11): a document owns the content item it
+   * points at, so deleting the row here would orphan bytes no sweep reclaims.
+   * Its own command knows how to release them; Browse does not.
+   */
+  code: "has_dependents" | "owns_lifecycle";
   dependents: ReturnType<typeof browseDependents>["dependents"];
   totalRows: number;
 }
+
+/**
+ * Rows whose delete releases something ELSE, and so belongs to the domain
+ * command rather than to Browse. The forward foreign key points AT the owned
+ * row, so the engine has nothing to refuse on its own.
+ */
+const OWNS_LIFECYCLE: Readonly<Record<string, { table: string }>> = {
+  "core.document": { table: "core_content_item" },
+  "media.asset": { table: "core_content_item" },
+  "knowledge.note": { table: "core_content_item" },
+};
 
 export class AtlasDeleteBlockedError extends Error {
   constructor(readonly payload: AtlasDependentsRefusal) {
@@ -181,6 +217,7 @@ function updateRow(): CommandDefinition {
         if (target.pks.includes(col))
           throw new Error(`${input.table}: the primary key is immutable`);
       }
+      refuseAppendOnly(input.table, target.logical);
       const { where, bind } = pkWhere(input.table, target.pks, input.id);
       const result = ctx.db
         .prepare(
@@ -236,17 +273,37 @@ function deleteRow(): CommandDefinition {
           totalRows: deps.totalRows,
         });
       }
+      // A ROW THAT OWNS A LIFECYCLE IS NOT A ROW BROWSE MAY DELETE (#916,
+      // adversarial BUG-11). Deleting a document here left the content item it
+      // exclusively owned with no referrer, no trash pair, and bytes nothing
+      // would ever reclaim — the forward foreign key points AT the content, so
+      // the engine had nothing to say. Browse edits rows; the domain command
+      // is what knows the row is the head of something.
+      const owned = OWNS_LIFECYCLE[target.logical];
+      if (owned) {
+        throw new AtlasDeleteBlockedError({
+          code: "owns_lifecycle",
+          dependents: [
+            {
+              table: owned.table,
+              via: `${target.physical} owns the row it points at`,
+              count: 1,
+              mechanism: "fk",
+            },
+          ],
+          totalRows: 1,
+        });
+      }
       const { where, bind } = pkWhere(input.table, target.pks, input.id);
       const result = ctx.db
         .prepare(`DELETE FROM "${target.physical}" WHERE ${where}`)
         .run(...bind);
       if (Number(result.changes) === 0)
         throw new Error(`${input.table}: no row ${input.id}`);
-      // Sweep polymorphic pointers at the just-deleted row as a purge would
-      // (#441) so a Browse delete never leaves the orphans A1 exists to
-      // prevent. (Pipeline sweep covers core_link; cleanupPolyRefs is
-      // idempotent over it.)
-      cleanupPolyRefs(ctx.db, ctx.now, target.logical, input.id);
+      // Every polymorphic pointer at the just-deleted row is a composite
+      // foreign key into `core_entity` since #916, so the engine sweeps what
+      // #441 had to sweep by hand — and refuses the delete outright when a
+      // dependent is RESTRICTed rather than leaving an orphan.
       ctx.wrote(target.logical, input.id);
       return { id: input.id, sweptDependents: deps.dependents };
     },

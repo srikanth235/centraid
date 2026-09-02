@@ -422,8 +422,8 @@ describe("outbox", () => {
     test("stage resolves the wire address to a known party and validates subject refs", () => {
       db.vault
         .prepare(
-          `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-         VALUES ('p-ravi', 'person', 'Ravi', 't', 't', '1.1')`
+          `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+         VALUES ('p-ravi', 'person', 'Ravi', 't', 't')`
         )
         .run();
       db.vault

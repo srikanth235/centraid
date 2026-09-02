@@ -131,9 +131,9 @@ function insertPhoto(seat: Seat, label: string): string {
       `INSERT INTO media_asset
          (asset_id, content_id, kind, captured_at, tz_offset_min,
           capture_group_id, place_id, camera_device_id, width, height,
-          duration_s, exif_json, favorite, archived_at, deleted_at, purge_at)
+          duration_s, exif_json, archived_at, deleted_at, purge_at)
        VALUES (?, ?, 'photo', ?, NULL, NULL, NULL, NULL, 800, 600, NULL, NULL,
-               0, NULL, NULL, NULL)`
+               NULL, NULL, NULL)`
     )
     .run(assetId, contentId, NOW);
   return assetId;
@@ -185,14 +185,14 @@ export function originTitles(slot: ShareSlot): string[] {
 export function projectedAlbumId(slot: ShareSlot): string | undefined {
   const row = slot.audience.db.vault
     .prepare(
-      `SELECT item_id FROM core_share_origin
-        WHERE item_type = 'core.collection' AND origin_vault_id = ?
+      `SELECT target_id FROM core_share_origin
+        WHERE target_type = 'core.collection' AND origin_vault_id = ?
           AND origin_item_id = ?`
     )
     .get(slot.origin.vaultId, slot.album.albumId) as
-    | { item_id: string }
+    | { target_id: string }
     | undefined;
-  return row?.item_id;
+  return row?.target_id;
 }
 
 /** `undefined` when the audience holds no projection. */
@@ -209,7 +209,7 @@ export function projectionRowCount(slot: ShareSlot): number {
     slot.audience.db.vault
       .prepare(
         `SELECT COUNT(*) AS n FROM core_share_origin
-          WHERE item_type = 'core.collection' AND origin_vault_id = ?
+          WHERE target_type = 'core.collection' AND origin_vault_id = ?
             AND origin_item_id = ?`
       )
       .get(slot.origin.vaultId, slot.album.albumId) as { n: number }
@@ -313,7 +313,7 @@ export function buildGrantPlane(
 export function bindSlotChannel(
   slot: ShareSlot,
   live: boolean
-): "bound" | "conflict" | "revoked" | "absent" {
+): "bound" | "conflict" | "self" | "revoked" | "absent" {
   const origin = slot.origin.db.vault;
   if (live) {
     const outcome = bindPartyToVault(origin, {

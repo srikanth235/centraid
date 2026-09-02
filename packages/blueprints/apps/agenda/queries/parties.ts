@@ -1,7 +1,7 @@
 /**
  * The invite directory: the people the create-event picker can invite as
  * attendees. Just canonical `core.party` rows of kind `person`, projected to
- * `{ party_id, name, is_you }` with the owner (the vault's `owner_party_id`)
+ * `{ party_id, name, is_you }` with the owner (the vault's `self_party_id`)
  * sorted first and flagged — the app holds no roster of its own. Agents, orgs
  * and groups are left out: an invitation is a commitment asked of a person.
  *
@@ -28,7 +28,7 @@ export default async function partiesHandler({ ctx }: HandlerArgs) {
       }),
     ]);
     const me =
-      ((vaultRes.rows ?? [])[0]?.owner_party_id as string | undefined) ?? null;
+      ((vaultRes.rows ?? [])[0]?.self_party_id as string | undefined) ?? null;
     const parties = ((partiesRes.rows ?? []) as unknown as RawParty[])
       .map((p) => ({
         party_id: p.party_id,

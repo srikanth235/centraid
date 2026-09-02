@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../../engine/stores/ledger-db.test-fixtures.js";
 import type { Manifest } from "../manifest/manifest.js";
 import type { EnrichLane, EnrichTier } from "./enrich-gate.js";
 import { runFire } from "./fire.js";
@@ -40,11 +41,11 @@ function enricherManifest(lane: EnrichLane): Manifest {
 
 describe("enrichment refusal, as the host receives it", () => {
   let appsDir: string;
-  let journalDbFile: string;
+  let ledgerDbFile: string;
 
   beforeEach(async () => {
     appsDir = await tempDir("centraid-enrich-refusal-");
-    journalDbFile = path.join(appsDir, "journal.db");
+    ledgerDbFile = ledgerDbFileIn(appsDir);
     const dir = path.join(appsDir, "photos", "automations", "face-finder");
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(
@@ -71,7 +72,7 @@ describe("enrichment refusal, as the host receives it", () => {
       {
         appsDir,
         automationRef: "photos/face-finder",
-        journalDbFile,
+        ledgerDbFile,
         resolveEnrichPolicy: () => tier,
       },
       { openDispatch: dispatch }

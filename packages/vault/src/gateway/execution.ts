@@ -23,6 +23,7 @@ import {
   readDurableParkedDenial,
   readDurableParkedPayload,
 } from "../replica/parked.js";
+import { ENTITY_POINTERS } from "../schema/entity-refs.js";
 import { ONTOLOGY_VERSION } from "../schema/migrate.js";
 import {
   isSealedValue,
@@ -37,8 +38,8 @@ import {
 } from "../schema/sealed.js";
 import { SEED_DEMO_ACTIVITY } from "../schema/seed.js";
 import { resolveEntity } from "../schema/tables.js";
-import type { ConsentAllow } from "./consent.js";
-import { evaluateConditions, judgmentVeto } from "./contract.js";
+import type { AccessAllow } from "./access.js";
+import { evaluateConditions } from "./contract.js";
 import type { CommandRow } from "./contract.js";
 import {
   actingOwnerDetail,
@@ -47,6 +48,11 @@ import {
   writeReceipt,
 } from "./evidence.js";
 import { validateJson } from "./json-schema.js";
+import {
+  closeRevisionCapture,
+  drainRevisionCapture,
+  openRevisionCapture,
+} from "./revision-capture.js";
 import type {
   Citation,
   CommandDefinition,
@@ -65,6 +71,8 @@ export interface RegisteredCommand {
   sealedInput: readonly string[];
   unseals: readonly string[];
   transcriptSensitive: boolean;
+  /** No pre-mutation snapshot: the point of the command is that it is gone. */
+  erasure: boolean;
 }
 
 interface InvocationTransaction {
@@ -105,30 +113,38 @@ function rollbackInvocationTransaction(
   transaction.open = false;
 }
 
-// Polymorphic (type, id) pairs no FK can express: a row written here must
-// point at live rows, or the whole invocation rolls back.
-const POLY_RULES: Record<string, { pk: string; refs: [string, string][] }> = {
-  "core.link": {
-    pk: "link_id",
-    refs: [
-      ["from_type", "from_id"],
-      ["to_type", "to_id"],
-    ],
-  },
-  "core.attachment": {
-    pk: "attachment_id",
-    refs: [["target_type", "target_id"]],
-  },
-  "core.tag": { pk: "tag_id", refs: [["target_type", "target_id"]] },
-  "core.collection_entry": {
-    pk: "entry_id",
-    refs: [["target_type", "target_id"]],
-  },
-  "knowledge.annotation": {
-    pk: "annotation_id",
-    refs: [["target_type", "target_id"]],
-  },
-};
+/**
+ * THE ENGINE IS THE CHECK NOW (#916, adversarial BUG-10).
+ *
+ * `POLY_RULES` listed five of the fifteen polymorphic mechanisms and validated
+ * their targets here, after the fact, by hand — so `enrich.upsert_embedding`
+ * accepted a ghost id and `atlas.insert` could write a `core.share_origin` row
+ * at a row that did not exist. Every `(type, id)` pair is a composite FOREIGN
+ * KEY into `core_entity` since rung ten, so the engine refuses the write at
+ * the statement, for all fifteen, and `polymorphicDenial` below turns its
+ * one-line complaint back into something a member can act on.
+ */
+export function polymorphicDenial(
+  vault: DatabaseSync,
+  writes: { entityType: string; entityId: string }[],
+  error: unknown
+): string | null {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!/FOREIGN KEY constraint failed/iu.test(message)) return null;
+  // Name the pair the caller most likely got wrong: the last entity written.
+  const write = writes.at(-1);
+  const named = write ? `${write.entityType} ${write.entityId}: ` : "";
+  const pairs = [...ENTITY_POINTERS]
+    .filter((pointer) => resolveEntity(pointer.table, vault) !== undefined)
+    .map((pointer) => pointer.table);
+  return (
+    `${named}a polymorphic pointer names an entity that does not exist. ` +
+    `Every (type, id) pair is a foreign key into core_entity — the pair has to ` +
+    `name a live row of a registered entity` +
+    (pairs.length > 0 ? "" : "") +
+    "."
+  );
+}
 
 export function pkColumn(vault: DatabaseSync, physical: string): string {
   const rows = vault
@@ -138,51 +154,6 @@ export function pkColumn(vault: DatabaseSync, physical: string): string {
     pk: number;
   }[];
   return rows.find((r) => r.pk === 1)?.name ?? "rowid";
-}
-
-/**
- * THE one place a hard delete end-dates live links (#272): no delete command
- * carries its own sweep, and soft deletes keep theirs. Swept ids join `writes`
- * so S5 stamps them; the link row survives with `valid_to`.
- */
-export function sweepDanglingLinks(
-  vault: DatabaseSync,
-  writes: { entityType: string; entityId: string }[],
-  now: string
-): void {
-  // Handler writes only: the loop appends swept ids here and must not rescan.
-  const handlerWrites = writes.length;
-  for (let i = 0; i < handlerWrites; i += 1) {
-    const write = writes[i];
-    if (!write || write.entityType === "core.link") continue;
-    const ref = resolveEntity(write.entityType, vault);
-    if (!ref || ref.file !== "vault") continue;
-    const pk = pkColumn(vault, ref.physical);
-    const live = vault
-      .prepare(`SELECT 1 AS x FROM "${ref.physical}" WHERE "${pk}" = ?`)
-      .get(write.entityId);
-    if (live) continue;
-    const dangling = vault
-      .prepare(
-        `SELECT link_id FROM core_link
-          WHERE valid_to IS NULL
-            AND ((from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?))`
-      )
-      .all(
-        write.entityType,
-        write.entityId,
-        write.entityType,
-        write.entityId
-      ) as {
-      link_id: string;
-    }[];
-    for (const row of dangling) {
-      vault
-        .prepare("UPDATE core_link SET valid_to = ? WHERE link_id = ?")
-        .run(now, row.link_id);
-      writes.push({ entityType: "core.link", entityId: row.link_id });
-    }
-  }
 }
 
 /** Every write passes here: sealed columns are ciphertext BEFORE commit (#293). */
@@ -195,7 +166,7 @@ export function sealWrites(
     const cols = sealedColumnsOf(write.entityType, db.vault);
     if (cols.length === 0) continue;
     const ref = resolveEntity(write.entityType, db.vault);
-    if (!ref || ref.file !== "vault") continue;
+    if (!ref) continue;
     const pk = pkColumn(db.vault, ref.physical);
     const select = cols.map((c) => `"${c}"`).join(", ");
     const row = db.vault
@@ -228,42 +199,6 @@ export function sealWrites(
   if (sealedAny) stampSealKeyFingerprint(db.vault, db.sealKey);
 }
 
-/** Throws to roll back. */
-export function validatePolymorphicWrites(
-  vault: DatabaseSync,
-  writes: { entityType: string; entityId: string }[]
-): void {
-  for (const write of writes) {
-    const rule = POLY_RULES[write.entityType];
-    if (!rule) continue;
-    const table = resolveEntity(write.entityType, vault);
-    if (!table) continue;
-    const row = vault
-      .prepare(`SELECT * FROM "${table.physical}" WHERE "${rule.pk}" = ?`)
-      .get(write.entityId) as Record<string, unknown> | undefined;
-    if (!row) continue; // deleted within the same command
-    for (const [typeCol, idCol] of rule.refs) {
-      const logical = String(row[typeCol]);
-      const id = String(row[idCol]);
-      const target = resolveEntity(logical, vault);
-      if (!target || target.file !== "vault") {
-        throw new Error(
-          `${write.entityType}.${typeCol} names unknown entity "${logical}"`
-        );
-      }
-      const pk = pkColumn(vault, target.physical);
-      const live = vault
-        .prepare(`SELECT 1 AS x FROM "${target.physical}" WHERE "${pk}" = ?`)
-        .get(id);
-      if (!live) {
-        throw new Error(
-          `${write.entityType} ${write.entityId}: (${logical}, ${id}) does not resolve to a live row`
-        );
-      }
-    }
-  }
-}
-
 export function insertInvocation(
   db: VaultDb,
   request: InvokeRequest,
@@ -275,7 +210,7 @@ export function insertInvocation(
   sealedInput: readonly string[] = []
 ): string {
   const invocationId = fixedId ?? request.invocationId ?? uuidv7();
-  db.journal
+  db.audit
     .prepare(
       `INSERT INTO agent_command_invocation (invocation_id, command_id, caller_id, grant_id, input_json, status, requested_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -313,7 +248,7 @@ export function assertInvocationIdentity(
   callerId: string,
   grantId: string | null
 ): boolean {
-  const existing = db.journal
+  const existing = db.audit
     .prepare(
       `SELECT command_id, caller_id, grant_id
          FROM agent_command_invocation
@@ -341,7 +276,7 @@ export function setInvocationStatus(
   invocationId: string,
   status: string
 ): void {
-  db.journal
+  db.audit
     .prepare(
       "UPDATE agent_command_invocation SET status = ? WHERE invocation_id = ?"
     )
@@ -372,7 +307,7 @@ function receiptOutput(
 ): unknown {
   if (!receiptId) return null;
   const receipt = journal
-    .prepare("SELECT detail_json FROM consent_receipt WHERE receipt_id = ?")
+    .prepare("SELECT detail_json FROM access_receipt WHERE receipt_id = ?")
     .get(receiptId) as { detail_json: string | null } | undefined;
   if (!receipt?.detail_json) return null;
   return (
@@ -399,14 +334,14 @@ export function replayInvocation(
       : finalizeOrdinaryInvocationCommit(db, invocationId, {
           deferSettlement: options.deferCommitSettlement,
         });
-    const output = receiptOutput(db.journal, finalized.receiptId);
+    const output = receiptOutput(db.audit, finalized.receiptId);
     return {
       status: "replayed",
       invocationId,
       output,
     };
   }
-  const row = db.journal
+  const row = db.audit
     .prepare(
       "SELECT status, receipt_id FROM agent_command_invocation WHERE invocation_id = ?"
     )
@@ -417,14 +352,14 @@ export function replayInvocation(
     return {
       status: "replayed",
       invocationId,
-      output: receiptOutput(db.journal, row.receipt_id),
+      output: receiptOutput(db.audit, row.receipt_id),
     };
   }
   if (row && (row.status === "failed" || row.status === "rolled_back")) {
-    const receipt = db.journal
+    const receipt = db.audit
       .prepare(
         `SELECT receipt_id, detail_json
-           FROM consent_receipt
+           FROM access_receipt
           WHERE invocation_id = ? AND decision = 'deny'
           ORDER BY occurred_at DESC, receipt_id DESC
           LIMIT 1`
@@ -467,7 +402,7 @@ export function runContractAndExecute(
   identity: Identity,
   request: InvokeRequest,
   command: CommandRow,
-  consent: ConsentAllow,
+  access: AccessAllow,
   invocationId: string,
   confirmation?: Record<string, unknown>,
   onProvenanceCommitted?: (entityTypes: readonly string[]) => void,
@@ -487,8 +422,8 @@ export function runContractAndExecute(
     detail: Record<string, unknown>
   ): InvokeOutcome => {
     setInvocationStatus(db, invocationId, "failed");
-    const receiptId = writeReceipt(db.journal, {
-      grantId: consent.grantId,
+    const receiptId = writeReceipt(db.audit, {
+      grantId: access.grantId,
       invocationId,
       action: `act ${command.name}`,
       objectType: "agent.command",
@@ -498,7 +433,7 @@ export function runContractAndExecute(
       detail: { ...detail, risk: command.risk },
     });
     writeExplanation(
-      db.journal,
+      db.audit,
       invocationId,
       `${command.name} did not run: ${predicate}.`
     );
@@ -544,19 +479,11 @@ export function runContractAndExecute(
       errors: schemaErrors,
     });
   }
-  const veto = judgmentVeto(db.vault, command.name, command.owner_schema);
-  if (veto) {
-    writeCheck(db.journal, invocationId, "pre", `judgment:${veto}`, false);
-    return denyContract(`vetoed by judgment ${veto}`, {
-      stage: "contract",
-      judgment: veto,
-    });
-  }
   const preSpecs = JSON.parse(command.preconditions_json) as ConditionSpec[];
   const preResults = evaluateConditions(db.vault, preSpecs, request.input);
   for (const result of preResults) {
     writeCheck(
-      db.journal,
+      db.audit,
       invocationId,
       "pre",
       result.predicate,
@@ -600,6 +527,7 @@ export function runContractAndExecute(
   const ctx: HandlerCtx = {
     db: db.vault,
     identity,
+    invocationId,
     input: request.input,
     purpose,
     now: nowIso(),
@@ -607,23 +535,31 @@ export function runContractAndExecute(
     wrote: (entityType, entityId) => writes.push({ entityType, entityId }),
     cite: (citation) => citations.push(citation),
     receipt: (receipt) => handlerReceipts.push(receipt),
-    unseal: (entityType, entityId, column) => {
+    unseal: (entityType, entityId, column, ciphertext) => {
       const cell = `${entityType}.${column}`;
       if (!registered.unseals.includes(cell)) {
         throw new Error(`${command.name} does not declare unseal of ${cell}`);
       }
       const ref = resolveEntity(entityType, db.vault);
-      if (!ref || ref.file !== "vault")
-        throw new Error(`unknown entity ${entityType}`);
-      const pk = pkColumn(db.vault, ref.physical);
-      const row = db.vault
-        .prepare(
-          `SELECT "${column}" AS v FROM "${ref.physical}" WHERE "${pk}" = ?`
-        )
-        .get(entityId) as { v: unknown } | undefined;
-      if (!row || row.v == null) return null;
+      if (!ref) throw new Error(`unknown entity ${entityType}`);
+      // A stored ciphertext may be handed in (#916, D2): a pre-mutation
+      // SNAPSHOT of this same row holds the previous value under the same
+      // additional data, which is what lets Locker history be revisions
+      // rather than a second history table.
+      let stored: unknown = ciphertext;
+      if (stored === undefined) {
+        const pk = pkColumn(db.vault, ref.physical);
+        stored = (
+          db.vault
+            .prepare(
+              `SELECT "${column}" AS v FROM "${ref.physical}" WHERE "${pk}" = ?`
+            )
+            .get(entityId) as { v: unknown } | undefined
+        )?.v;
+      }
+      if (stored == null) return null;
       unsealed.add(cell);
-      const value = String(row.v);
+      const value = String(stored);
       return isSealedValue(value)
         ? unsealValue(
             db.sealKey,
@@ -666,14 +602,26 @@ export function runContractAndExecute(
   let output!: Record<string, unknown>;
   let audit!: ReplicaInvocationAudit;
   let postResults: ReturnType<typeof evaluateConditions> = [];
+  // OUTSIDE the transaction (#916): the capture triggers are TEMP objects, and
+  // creating them inside a transaction that later rolls back would take them
+  // with it.
+  openRevisionCapture(db.vault);
   const vaultTransaction = beginInvocationTransaction(db.vault);
   let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   try {
     replicaCommit = beginReplicaCommit(db.vault);
     output = handler(ctx);
-    validatePolymorphicWrites(db.vault, writes);
-    // After validation, deliberately: a swept link points at the deleted row.
-    sweepDanglingLinks(db.vault, writes, ctx.now);
+    // BEFORE `sealWrites`, and then the gate closes (#916): sealing REWRITES
+    // the cells the handler just wrote, so a capture still open would take the
+    // pre-seal row — the plaintext — as its snapshot. What a revision holds is
+    // the row as the command FOUND it, which was already ciphertext at rest.
+    if (!registered.erasure)
+      drainRevisionCapture(db.vault, {
+        invocationId,
+        actorPartyId: identity.partyId ?? null,
+        now: ctx.now,
+      });
+    closeRevisionCapture(db.vault);
     // Same transaction, so no committed row ever holds a clear secret (#293).
     sealWrites(db, writes);
     const postSpecs = JSON.parse(
@@ -686,9 +634,10 @@ export function runContractAndExecute(
     const failedPost = postResults.find((r) => !r.passed);
     if (failedPost) {
       rollbackInvocationTransaction(db.vault, vaultTransaction);
+      closeRevisionCapture(db.vault);
       for (const r of postResults)
         writeCheck(
-          db.journal,
+          db.audit,
           invocationId,
           "post",
           r.predicate,
@@ -699,8 +648,8 @@ export function runContractAndExecute(
       // Same split as the precondition path: friendly for the app, raw in the
       // receipt detail.
       const friendly = failedPost.message ?? failedPost.predicate;
-      const receiptId = writeReceipt(db.journal, {
-        grantId: consent.grantId,
+      const receiptId = writeReceipt(db.audit, {
+        grantId: access.grantId,
         invocationId,
         action: `act ${command.name}`,
         objectType: "agent.command",
@@ -714,7 +663,7 @@ export function runContractAndExecute(
         },
       });
       writeExplanation(
-        db.journal,
+        db.audit,
         invocationId,
         `${command.name} rolled back: ${friendly}.`
       );
@@ -730,7 +679,7 @@ export function runContractAndExecute(
     // unpurgeable and visible to triggers (#290).
     if (request.demo) {
       const seedStmt = db.vault.prepare(
-        `INSERT INTO consent_seed_row (seed_id, app_id, target_type, target_id, seeded_at)
+        `INSERT INTO access_seed_row (seed_id, app_id, target_type, target_id, seeded_at)
          VALUES (?, ?, ?, ?, ?)
          ON CONFLICT (target_type, target_id) DO NOTHING`
       );
@@ -764,7 +713,7 @@ export function runContractAndExecute(
       commandName: command.name,
       agentId: identity.callerId,
       agentKind: identity.provAgentKind,
-      grantId: consent.grantId,
+      grantId: access.grantId,
       purpose,
       preconditionCount: preResults.length,
       postChecks: postResults.map((result) => ({
@@ -800,16 +749,18 @@ export function runContractAndExecute(
     });
     endReplicaCommit(db.vault, replicaCommit);
     commitInvocationTransaction(db.vault, vaultTransaction);
+    closeRevisionCapture(db.vault);
     if (!options.deferReplicaNotify) notifyReplicaCommit(db.vault);
   } catch (error) {
     rollbackInvocationTransaction(db.vault, vaultTransaction);
+    closeRevisionCapture(db.vault);
     setInvocationStatus(db, invocationId, "failed");
     // A message echoing its input would put a secret in the journal (#298).
     const reason = scrub(
       error instanceof Error ? error.message : String(error)
     );
-    const receiptId = writeReceipt(db.journal, {
-      grantId: consent.grantId,
+    const receiptId = writeReceipt(db.audit, {
+      grantId: access.grantId,
       invocationId,
       action: `act ${command.name}`,
       objectType: "agent.command",
@@ -819,7 +770,7 @@ export function runContractAndExecute(
       detail: { stage: "execution", error: reason, risk: command.risk },
     });
     writeExplanation(
-      db.journal,
+      db.audit,
       invocationId,
       `${command.name} failed during execution: ${reason}.`
     );
@@ -838,7 +789,7 @@ export function runContractAndExecute(
   // After the write they describe is durable and after the invocation's, so
   // the stream reads in the order facts became true.
   for (const receipt of handlerReceipts)
-    writeReceipt(db.journal, {
+    writeReceipt(db.audit, {
       grantId: receipt.grantId,
       invocationId,
       action: receipt.action,

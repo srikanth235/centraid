@@ -81,7 +81,7 @@ export default async function faces({ input, ctx }: HandlerArgs) {
     };
   } catch (error) {
     const e = error as { code?: string; message?: string };
-    if (e.code === "VAULT_CONSENT") {
+    if (e.code === "VAULT_ACCESS") {
       return { status: 200, body: { denied: true, reason: e.message } };
     }
     return {

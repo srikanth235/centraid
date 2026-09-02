@@ -67,7 +67,10 @@ const CONSENT_SELECT = `SELECT verb AS capability, principal_id AS egress,
     granted_at AS decided_at, receipt_id AS receipt_id
   FROM share_authority
   WHERE principal_kind = 'harness' AND subject_type = '${ENRICH_SUBJECT_TYPE}'
-    AND revoked_at IS NULL`;
+    AND revoked_at IS NULL
+    -- An answer past its own end date is no longer an answer (#916, review
+    -- 6.1): \`expires_at\` used to be written and never read.
+    AND (expires_at IS NULL OR expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
 
 /**
  * Replace any previous answer for the same key; the caller owns the

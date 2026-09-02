@@ -142,8 +142,8 @@ export default function ShareSheet({
   }, [visible]);
 
   const ownerPartyId =
-    typeof vault.rows[0]?.owner_party_id === "string"
-      ? vault.rows[0].owner_party_id
+    typeof vault.rows[0]?.self_party_id === "string"
+      ? vault.rows[0].self_party_id
       : undefined;
   const destinations = nativeShareTargets({
     sourceVaultId,

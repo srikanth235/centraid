@@ -125,8 +125,8 @@ describe("schedule", () => {
     db.vault
       .prepare(
         `INSERT INTO core_party
-         (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES (?, 'person', 'Asha', '2026-07-01T00:00:00Z', '2026-07-01T00:00:00Z', '1.4')`
+         (party_id, kind, display_name, created_at, updated_at)
+       VALUES (?, 'person', 'Asha', '2026-07-01T00:00:00Z', '2026-07-01T00:00:00Z')`
       )
       .run(otherPartyId);
 

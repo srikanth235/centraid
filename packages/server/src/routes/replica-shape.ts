@@ -10,14 +10,14 @@ import {
   compileFilters,
   compileReplicaHistoricalFilters,
   currentReplicaLogState,
-  evaluateConsent,
+  evaluateAccess,
   listVaultEntities,
   readReplicaRow,
   readReplicaRows,
   replicaUnavailableColumnsOf,
   resolveEntity,
 } from "@centraid/vault";
-import type { FilterClause, ConsentAllow, ReplicaRow } from "@centraid/vault";
+import type { FilterClause, AccessAllow, ReplicaRow } from "@centraid/vault";
 
 import { readGrantees } from "./replica-grantees.js";
 import { preparedStatement } from "./sql-statement-cache.js";
@@ -153,7 +153,7 @@ function quoteIdentifier(value: string): string {
 function alternativeFor(
   db: DatabaseSync,
   physical: string,
-  scope: Pick<ConsentAllow, "rowFilter" | "fieldMask">,
+  scope: Pick<AccessAllow, "rowFilter" | "fieldMask">,
   columns: TableColumn[],
   keyColumns: string[],
   unavailable: Set<string>,
@@ -477,11 +477,12 @@ export function buildReplicaShapes(
     const purpose = grantee.purpose;
     const entities: ReplicaEntityShape[] = [];
     for (const entity of listVaultEntities(db)) {
+      // ONE file (#916): every entity `resolveEntity` names lives in it.
       const ref = resolveEntity(entity, db);
-      if (!ref || ref.file !== "vault") continue;
-      let effective: ConsentAllow;
+      if (!ref) continue;
+      let effective: AccessAllow;
       try {
-        const decision = evaluateConsent(
+        const decision = evaluateAccess(
           db,
           {
             kind: "app",

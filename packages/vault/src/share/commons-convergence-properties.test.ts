@@ -7,6 +7,7 @@ import { registerTallyCommands } from "../commands/tally.js";
 import type { VaultDb } from "../db.js";
 import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
+import { uuidv7 } from "../ids.js";
 import {
   applyCommonsBootstrap,
   exportCommonsBootstrap,
@@ -96,8 +97,8 @@ function addAudienceOwnerAsParty(input: {
     .prepare(
       `INSERT INTO core_party
          (party_id, kind, display_name, sort_name, birth_date,
-          avatar_content_id, created_at, updated_at, ontology_version)
-       VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?, '1.4')`
+          avatar_content_id, created_at, updated_at)
+       VALUES (?, 'person', ?, ?, NULL, NULL, ?, ?)`
     )
     .run(input.partyId, input.displayName, input.displayName, NOW, NOW);
 }
@@ -243,6 +244,39 @@ describe("commons ordered-convergence property", () => {
                 now: NOW,
               }),
             };
+            // A CURSOR HANGS OFF A GRANT (#916): the audience seat tracks a
+            // grant it HOLDS, so `share_commons_cursor.grant_id` is a real
+            // foreign key. The seat's own copy of each grant row is what a
+            // real projection would have left behind.
+            const audienceCircle = uuidv7();
+            audience.vault
+              .prepare(
+                `INSERT OR IGNORE INTO core_party
+                   (party_id, kind, display_name, created_at, updated_at)
+                 VALUES (?, 'person', 'Origin owner', ?, ?)`
+              )
+              .run(originBoot.ownerPartyId, NOW, NOW);
+            audience.vault
+              .prepare(
+                `INSERT INTO social_circle (circle_id, owner_party_id, name, kind)
+                 VALUES (?, ?, 'Convergence', 'custom')`
+              )
+              .run(audienceCircle, originBoot.ownerPartyId);
+            for (const key of ["a", "b"] as const)
+              audience.vault
+                .prepare(
+                  `INSERT INTO share_circle_grant
+                     (grant_id, circle_id, container_type, container_id, plane,
+                      steward_party_id, created_at, chain_head_hash)
+                   VALUES (?, ?, 'media.asset', ?, 'commons', ?, ?, '')`
+                )
+                .run(
+                  grants[key].grantId,
+                  audienceCircle,
+                  uuidv7(),
+                  originBoot.ownerPartyId,
+                  NOW
+                );
             const expectedLast: Record<GrantKey, number> = { a: 0, b: 0 };
             const appended = schedule.map((grantKey) => {
               const sequence = appendCommonsOperation({

@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { openJournalDb } from "../../stores/gateway-db.js";
+import { openLedgerDb } from "../../stores/gateway-db.js";
 import {
   runConversationArchival,
   readArchivedConversationSegment,
@@ -200,7 +200,7 @@ describe("custody-gated prune", () => {
     expect(blobSink.has(sha)).toBe(true);
     journal.close();
 
-    const reopened = openJournalDb(dbPath);
+    const reopened = openLedgerDb(dbPath);
     const afterCrash = runConversationArchival(
       { journal: reopened, blobSink, custodyProven: () => false },
       { nowMs: now }

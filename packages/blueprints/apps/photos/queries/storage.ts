@@ -67,7 +67,7 @@ export default async function storageHandler({ ctx }: HandlerArgs) {
   } catch (error) {
     const empty: StorageRollup = { computedAt: null, buckets: zeroBuckets() };
     const e = error as { code?: string; message?: string };
-    if (e.code === "VAULT_CONSENT")
+    if (e.code === "VAULT_ACCESS")
       return {
         rollup: empty,
         vaultDenied: { code: e.code, message: e.message },

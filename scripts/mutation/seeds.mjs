@@ -205,8 +205,10 @@ export const MUTATION_SEEDS = [
     report: "artifacts/mutation/time-engine-report.json",
     watch: [
       "packages/core/src/time/recurrence.ts",
+      "packages/core/src/time/rrule-support.ts",
       "packages/core/src/time/timezone.ts",
       "packages/core/src/time/recurrence.test.ts",
+      "packages/core/src/time/rrule-support.test.ts",
       "packages/core/src/time/recurrence-properties.test.ts",
       "packages/core/src/time/recurrence-lifecycle-properties.test.ts",
       "packages/core/src/time/timezone-properties.test.ts",

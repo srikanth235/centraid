@@ -17,7 +17,6 @@ import {
   VAULT_MIGRATIONS,
 } from "@centraid/vault";
 
-import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/large-vault.scale.test.ts";
@@ -58,11 +57,9 @@ describe("large-vault.scale", () => {
         const seeded = openVaultDb({ dir: target, sealKey: YEAR3_SEAL_KEY });
         try {
           bootstrapVault(seeded, { ownerName: "Scale owner" });
-          ensureConversationLedger(seeded.journal);
           seedYear3Vault(
             {
               vault: seeded.vault,
-              journal: seeded.journal,
               sealCell: (entity, column, rowId, plaintext) =>
                 sealValue(
                   seeded.sealKey,
@@ -84,8 +81,8 @@ describe("large-vault.scale", () => {
     const db = openVaultDb({ dir: workingDir, sealKey: YEAR3_SEAL_KEY });
     onTestFinished(() => db.close());
     const owner = db.vault
-      .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-      .get() as { owner_party_id: string };
+      .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
+      .get() as { self_party_id: string };
     const insertContent = db.vault.prepare(
       `INSERT INTO core_content_item
          (content_id, media_type, content_uri, sha256, byte_size, title,
@@ -140,7 +137,7 @@ describe("large-vault.scale", () => {
       );
       insertNote.run(
         id("scale-note", index),
-        owner.owner_party_id,
+        owner.self_party_id,
         `Scale note ${index}`,
         contentId,
         index % 50 === 0 ? 1 : 0,

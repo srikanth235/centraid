@@ -282,15 +282,15 @@ export function makeCommonsRouteHandler(deps: CommonsRouteDeps): RouteHandler {
         return sendJson(res, 200, {
           items: actor.vault
             .prepare(
-              `SELECT l.grant_id AS grantId, l.item_type AS itemType,
-                      l.item_id AS itemId, l.origin_item_id AS originItemId
+              `SELECT l.grant_id AS grantId, l.target_type AS itemType,
+                      l.target_id AS itemId, l.origin_item_id AS originItemId
                  FROM share_commons_lineage l
                  JOIN share_circle_grant g ON g.grant_id = l.grant_id
                  JOIN core_share_origin o
-                   ON o.item_type = l.item_type AND o.item_id = l.item_id
+                   ON o.target_type = l.target_type AND o.target_id = l.target_id
                   AND o.shared_by = 'commons:' || l.grant_id
                 WHERE g.revoked_at IS NULL
-                ORDER BY l.grant_id, l.item_type, l.item_id`
+                ORDER BY l.grant_id, l.target_type, l.target_id`
             )
             .all(),
         });

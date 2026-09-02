@@ -175,8 +175,8 @@ export function recordReplicaIntentOutcomeInTransaction(
       );
   }
   // A terminal device outcome proves protocol dedupe, but it does not prove
-  // journal.db survived the post-canonical crash window. Reclaim only a
-  // marker whose atomic journal repair has been verified and proof-stamped.
+  // the audit band survived the post-canonical crash window. Reclaim only a
+  // marker whose atomic audit repair has been verified and proof-stamped.
   if (TERMINAL.has(input.status)) {
     vault
       .prepare(

@@ -41,7 +41,7 @@ import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
  * | Dimension            | Year-3 | Seeded here |
  * | -------------------- | ------ | ----------- |
  * | Mounted vaults       | 5      | 5 (`VAULT_COUNT`) |
- * | SQLite handles open  | 10     | 10 — `vault.db` + `journal.db` per vault |
+ * | SQLite handles open  | 5      | 5 — one `vault.db` per vault (ONE FILE, #916) |
  * | Rows per vault       | n/a    | bootstrap only — see below |
  *
  * Five is the declared year-3 vault count for one household: the gateway
@@ -60,7 +60,7 @@ import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 const OWNER = "tests/scale/multi-vault-footprint.scale.test.ts";
 
 const VAULT_COUNT = 5;
-const VAULT_DB_FILES = 2;
+const VAULT_DB_FILES = 1;
 
 // The host ceiling: one default vault's worth of memory for the WHOLE gateway,
 // however many planes it mounts. Choosing DEFAULT_VAULT_FOOTPRINT as the total
@@ -75,14 +75,13 @@ interface FilePragmas {
   cacheBytes: number;
 }
 
-/** Read the two reservation pragmas off both handles of one vault. */
+/**
+ * Read the two reservation pragmas off the vault's handle. ONE FILE (#916):
+ * `db.audit` is an alias of `db.vault`, so there is exactly one handle per
+ * vault and measuring both names would double-count the same reservation.
+ */
 function pragmasOf(db: VaultDb, index: number): FilePragmas[] {
-  return (
-    [
-      ["vault.db", db.vault],
-      ["journal.db", db.journal],
-    ] as const
-  ).map(([name, handle]) => ({
+  return ([["vault.db", db.vault]] as const).map(([name, handle]) => ({
     label: `vault-${index}/${name}`,
     mmapBytes: (
       handle.prepare("PRAGMA mmap_size").get() as { mmap_size: number }

@@ -16,9 +16,10 @@
 //
 // The dependent preview is the shared seam with Part A: engine FKs are found
 // by a reverse `PRAGMA foreign_key_list` walk, and the polymorphic `(type,id)`
-// mechanisms — invisible to the engine — by the A1 `POLY_REF_REGISTRY`. That
-// is the acceptance criterion "counts polymorphic dependents via the registry,
-// not only engine FKs".
+// mechanisms — engine keys since #916's rung ten, but keyed on `core_entity`,
+// so a reverse walk cannot name them — by `ENTITY_POINTERS`. That is the
+// acceptance criterion "counts polymorphic dependents via the registry, not
+// only engine FKs".
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -135,7 +136,7 @@ export function resolveBrowseTable(
   logical: string
 ): EntityRef {
   const ref = resolveEntity(logical, vault);
-  if (!ref || ref.file !== "vault") {
+  if (!ref) {
     throw new BrowseError("unknown_table", `unknown vault table "${logical}"`);
   }
   return ref;
@@ -176,19 +177,17 @@ export interface BrowseTableEntry {
  * bands below by the caller. Derived from `atlasTables()`; never hand-listed.
  */
 export function browseTableList(vault: DatabaseSync): BrowseTableEntry[] {
-  return atlasTables()
-    .filter((e) => e.file === "vault")
-    .map((e) => ({
-      logical: e.logical,
-      physical: e.physical,
-      pack: e.pack,
-      packLabel: e.packLabel,
-      packKind: e.packKind,
-      label: e.label,
-      rows: countRows(vault, e.physical),
-      machinery: e.packKind === "machinery",
-      singlePk: primaryKeyColumns(vault, e.physical).length === 1,
-    }));
+  return atlasTables().map((e) => ({
+    logical: e.logical,
+    physical: e.physical,
+    pack: e.pack,
+    packLabel: e.packLabel,
+    packKind: e.packKind,
+    label: e.label,
+    rows: countRows(vault, e.physical),
+    machinery: e.packKind === "machinery",
+    singlePk: primaryKeyColumns(vault, e.physical).length === 1,
+  }));
 }
 
 // ───────────────────────────────────────────────────────────────────────────

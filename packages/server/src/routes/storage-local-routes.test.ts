@@ -63,7 +63,7 @@ describe("storage-local-routes", () => {
     const storageDir = path.join(root, "storage");
     const vaultDir = path.join(root, "vaults", "v1");
     await fs.mkdir(path.join(vaultDir, "blobs"), { recursive: true });
-    await fs.writeFile(path.join(vaultDir, "journal.db"), "j".repeat(2048));
+    await fs.writeFile(path.join(vaultDir, "vault.db"), "j".repeat(2048));
     await fs.writeFile(path.join(vaultDir, "blobs", "a.bin"), "b".repeat(4096));
 
     const storageConnections = await openStorageConnectionStore(storageDir);
@@ -108,7 +108,7 @@ describe("storage-local-routes", () => {
     const byComponent = new Map(
       vault.components.map((c) => [c.component, c.bytes])
     );
-    expect(byComponent.get("ledger")).toBe(2048);
+    expect(byComponent.get("vault-db")).toBe(2048);
     expect(byComponent.get("attachments")).toBe(4096);
     expect(body.components.some((c) => c.component === "cache")).toBe(true);
     expect(body.disk).toStrictEqual({ freeBytes: 500, totalBytes: 5000 });

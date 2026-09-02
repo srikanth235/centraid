@@ -23,6 +23,8 @@ import type { PendingShareEffect } from "./share-effects.js";
 export interface ShareEffectDeps {
   db: GatewayDatabase;
   vaultFor: (vaultId: string) => ShareVaultRef | undefined;
+  /** The vault's own party — the principal an edge placement runs as (#916). */
+  partyIdFor: (vaultId: string) => string | undefined;
   share?: typeof shareItemsToVault;
   move?: typeof moveOutOfVault;
 }
@@ -69,6 +71,7 @@ export function runShareEffect(
       facts,
       origin,
       audience,
+      audiencePartyId: deps.partyIdFor(row.audience_vault_id) ?? "",
       share: deps.share ?? shareItemsToVault,
       move: deps.move ?? moveOutOfVault,
     });

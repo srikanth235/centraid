@@ -78,10 +78,10 @@ function world() {
       )
       .get(intentId) as { status: string; reason: string | null } | undefined;
   const receipts = () =>
-    seats.priya.db.journal
+    seats.priya.db.audit
       .prepare(
         `SELECT action, object_type, object_id, decision, detail_json
-           FROM consent_receipt WHERE object_type = 'share.commons'
+           FROM access_receipt WHERE object_type = 'share.commons'
           ORDER BY receipt_id`
       )
       .all() as {

@@ -32,6 +32,7 @@ import {
 } from "@centraid/vault";
 import type { WalShipper, WalShipperOptions } from "@centraid/vault";
 
+import { ledgerDbFileIn } from "../engine/stores/ledger-db.test-fixtures.js";
 import { HealthRegistry } from "../serve/health-registry.js";
 import { openVaultPlane } from "../serve/vault-plane.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
@@ -122,7 +123,7 @@ describe("wal", () => {
     plane.db.vault.exec(
       "CREATE TABLE _wale2e_probe (id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT)"
     );
-    plane.db.journal.exec(
+    plane.db.audit.exec(
       "CREATE TABLE _wale2e_jprobe (id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT)"
     );
     const config: BackupConfig = {
@@ -189,8 +190,8 @@ describe("wal", () => {
     return rows * (payload.length + 8);
   }
 
-  function walSize(plane: VaultPlane, file: "vault.db" | "journal.db"): number {
-    const p = path.join(plane.dir, `${file}-wal`);
+  function walSize(plane: VaultPlane): number {
+    const p = path.join(plane.dir, "vault.db-wal");
     return existsSync(p) ? statSync(p).size : 0;
   }
 
@@ -210,17 +211,16 @@ describe("wal", () => {
 
   function receiptCount(db: DatabaseSync): number {
     return (
-      db.prepare("SELECT COUNT(*) AS n FROM consent_receipt").get() as {
+      db.prepare("SELECT COUNT(*) AS n FROM access_receipt").get() as {
         n: number;
       }
     ).n;
   }
 
-  function openRestored(
-    destDir: string,
-    file: "vault.db" | "journal.db"
-  ): DatabaseSync {
-    const db = new DatabaseSync(path.join(destDir, file), { readOnly: true });
+  function openRestored(destDir: string): DatabaseSync {
+    const db = new DatabaseSync(path.join(destDir, "vault.db"), {
+      readOnly: true,
+    });
     cleanups.push(() => db.close());
     return db;
   }
@@ -314,14 +314,9 @@ describe("wal", () => {
     expect(rows[0]!.format).toBe(SNAPSHOT_FORMAT_V2);
     const manifest = await openNewestManifest(f);
     const dbEntries = manifest.entries.filter((e) => e.kind === "db");
-    expect(dbEntries.map((e) => e.path).sort()).toStrictEqual([
-      "journal.db",
-      "vault.db",
-    ]);
-    for (const entry of dbEntries) {
-      expect(entry.walGeneration).toMatch(/^[0-9a-f]{32}$/u);
-      expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/u);
-    }
+    expect(dbEntries.map((e) => e.path)).toStrictEqual(["vault.db"]);
+    expect(dbEntries[0]!.walGeneration).toMatch(/^[0-9a-f]{32}$/u);
+    expect(dbEntries[0]!.sha256).toMatch(/^[0-9a-f]{64}$/u);
 
     invoke(f.plane, "schedule.add_task", {
       title: "Pay the invoice (post-manifest)",
@@ -335,7 +330,7 @@ describe("wal", () => {
     expect(f.shipper.listUploadable()).toHaveLength(0); // and the local copies drained
 
     const dest = await restoreTo(f);
-    const rv = openRestored(dest, "vault.db");
+    const rv = openRestored(dest);
     expect(vaultTitles(rv)).toStrictEqual(vaultTitles(f.plane.db.vault));
     expect(vaultTitles(rv)).toContain("Pay the invoice (post-manifest)");
     expect(probeCount(rv, "_wale2e_probe")).toBe(
@@ -343,14 +338,12 @@ describe("wal", () => {
     );
     const report = verifyRestoredPair(dest);
     expect(report.vault.integrity).toBe("ok");
-    expect(report.journal.integrity).toBe("ok");
     expect(report.vault.foreignKeyViolations).toBe(0);
-    expect(report.journal.foreignKeyViolations).toBe(0);
     expect(report.receiptsChecked).toBeGreaterThan(0);
     expect(report.danglingReceipts).toStrictEqual([]);
   }, 30_000);
 
-  test("PITR through the service: each captured tick restores exactly that instant for BOTH databases", async () => {
+  test("PITR through the service: each captured tick restores exactly that instant", async () => {
     const f = await fx();
     await f.service.runBackup(f.vaultId);
 
@@ -365,7 +358,7 @@ describe("wal", () => {
     for (let i = 0; i < 3; i++) {
       invoke(f.plane, "schedule.add_task", { title: `pitr-task-${i}` });
       insertVault(f.plane, 10, 150, `pitr-${i}`);
-      f.plane.db.journal
+      f.plane.db.audit
         .prepare("INSERT INTO _wale2e_jprobe (v) VALUES (?)")
         .run(`jrow-${i}-${"y".repeat(100)}`);
       const report = f.shipper.tick();
@@ -374,8 +367,8 @@ describe("wal", () => {
         tickMs: report.tickMs,
         titles: vaultTitles(f.plane.db.vault),
         probe: probeCount(f.plane.db.vault, "_wale2e_probe"),
-        jprobe: probeCount(f.plane.db.journal, "_wale2e_jprobe"),
-        receipts: receiptCount(f.plane.db.journal),
+        jprobe: probeCount(f.plane.db.audit, "_wale2e_jprobe"),
+        receipts: receiptCount(f.plane.db.audit),
       });
     }
     await f.service.drainWal();
@@ -384,12 +377,13 @@ describe("wal", () => {
 
     await forEachSequentially(points, async (point) => {
       const dest = await restoreTo(f, { pointInTimeMs: point.tickMs });
-      const rv = openRestored(dest, "vault.db");
-      const rj = openRestored(dest, "journal.db");
+      const rv = openRestored(dest);
       expect(vaultTitles(rv)).toStrictEqual(point.titles);
       expect(probeCount(rv, "_wale2e_probe")).toBe(point.probe);
-      expect(probeCount(rj, "_wale2e_jprobe")).toBe(point.jprobe);
-      expect(receiptCount(rj)).toBe(point.receipts);
+      // The audit band rides the SAME file, so its rows and the life rows they
+      // receipt can never land on two different instants.
+      expect(probeCount(rv, "_wale2e_jprobe")).toBe(point.jprobe);
+      expect(receiptCount(rv)).toBe(point.receipts);
     });
   }, 30_000);
 
@@ -399,7 +393,7 @@ describe("wal", () => {
    * child checkpoint too, which the pre-capture detectors catch before anything
    * ships; `false` leaves its frames in the WAL, where the danger is timing.
    */
-  async function foreignJournalWriter(
+  async function foreignVaultWriter(
     plane: VaultPlane,
     opts: { rows: number; marker: string; checkpoint: boolean }
   ): Promise<{ run: () => void }> {
@@ -429,7 +423,7 @@ describe("wal", () => {
       run: () => {
         const child = spawnSync(
           process.execPath,
-          [script, path.join(plane.dir, "journal.db")],
+          [script, ledgerDbFileIn(plane.dir)],
           {
             encoding: "utf8",
             timeout: 30_000,
@@ -448,46 +442,44 @@ describe("wal", () => {
     invoke(f.plane, "schedule.add_task", { title: "before-the-race" });
     await f.service.runBackup(f.vaultId);
     await f.service.drainWal();
-    const genBefore = f.shipper.status().dbs.journal!.generation;
+    const genBefore = f.shipper.status().stream!.generation;
     const seqBefore = (await f.service.status())[f.vaultId]!.lastSeq!;
 
     // Hooking `prepare()` is what makes the window reachable at all: the tick
     // is synchronous, so anything awaited would land after it.
-    const writer = await foreignJournalWriter(f.plane, {
+    const writer = await foreignVaultWriter(f.plane, {
       rows: 200,
       marker: "raced",
       checkpoint: false,
     });
-    const journal = f.plane.db.journal;
-    const realPrepare = journal.prepare.bind(journal);
+    const vault = f.plane.db.vault;
+    const realPrepare = vault.prepare.bind(vault);
     let raced = 0;
-    journal.prepare = ((sql: string) => {
+    vault.prepare = ((sql: string) => {
       if (raced === 0 && sql.includes("wal_checkpoint(TRUNCATE)")) {
         raced += 1;
         writer.run();
       }
       return realPrepare(sql);
-    }) as typeof journal.prepare;
+    }) as typeof vault.prepare;
 
     let report;
     try {
       report = f.shipper.checkpointNow();
     } finally {
-      journal.prepare = realPrepare;
+      vault.prepare = realPrepare;
     }
     expect(raced).toBe(1);
     expect(report.errors).toStrictEqual([]);
-    expect(probeCount(f.plane.db.journal, "_wale2e_foreign")).toBe(200);
+    expect(probeCount(f.plane.db.vault, "_wale2e_foreign")).toBe(200);
 
-    // Healed the only way it can be: a fresh base pair, cloned from the main
-    // files the frames were folded into.
+    // Healed the only way it can be: a fresh base, cloned from the main file
+    // the frames were folded into.
     expect(report.breaks).toStrictEqual([
-      { db: "journal", reason: "checkpoint-raced-writer" },
-      { db: "vault", reason: "coordinated:checkpoint-raced-writer" },
+      { reason: "checkpoint-raced-writer" },
     ]);
-    const journalAfter = f.shipper.status().dbs.journal!;
-    expect(journalAfter.generation).not.toBe(genBefore);
-    expect(f.shipper.basesCoordinated()).toBe(true);
+    expect(f.shipper.status().stream!.generation).not.toBe(genBefore);
+    expect(f.shipper.baseReady()).toBe(true);
 
     await f.service.runBackup(f.vaultId);
     expect((await f.service.status())[f.vaultId]!.lastSeq).toBe(seqBefore + 1);
@@ -496,29 +488,26 @@ describe("wal", () => {
     // Without the detection this carries NONE of the child's rows, reports no
     // damage, and verifies green.
     const dest = await restoreTo(f);
-    const rj = openRestored(dest, "journal.db");
-    expect(probeCount(rj, "_wale2e_foreign")).toBe(200);
-    const rv = openRestored(dest, "vault.db");
+    const rv = openRestored(dest);
+    expect(probeCount(rv, "_wale2e_foreign")).toBe(200);
     expect(vaultTitles(rv)).toContain("before-the-race");
-    const pair = verifyRestoredPair(dest);
-    expect(pair.vault.integrity).toBe("ok");
-    expect(pair.journal.integrity).toBe("ok");
-    expect(pair.danglingReceipts).toStrictEqual([]);
+    const restored = verifyRestoredPair(dest);
+    expect(restored.vault.integrity).toBe("ok");
+    expect(restored.danglingReceipts).toStrictEqual([]);
   }, 45_000);
 
-  test("G5 multi-process: a real child process checkpointing journal.db breaks the generation, re-bases, and restores CORRECTLY", async () => {
+  test("G5 multi-process: a real child process checkpointing vault.db breaks the generation, re-bases, and restores CORRECTLY", async () => {
     const f = await fx();
     invoke(f.plane, "schedule.add_task", { title: "before-foreign-writer" });
     await f.service.runBackup(f.vaultId);
     await f.service.drainWal();
-    const genBefore = f.shipper.status().dbs.journal!.generation;
-    const vaultGenBefore = f.shipper.status().dbs.vault!.generation;
+    const genBefore = f.shipper.status().stream!.generation;
     const seqBefore = (await f.service.status())[f.vaultId]!.lastSeq!;
 
     // Lands BEFORE the next tick, so the pre-capture detectors break before a
     // byte ships. A commit inside the capture→checkpoint window is a different
     // failure, tested above.
-    const writer = await foreignJournalWriter(f.plane, {
+    const writer = await foreignVaultWriter(f.plane, {
       rows: 1500,
       marker: "foreign",
       checkpoint: true,
@@ -526,21 +515,12 @@ describe("wal", () => {
     writer.run();
 
     const report = f.shipper.tick();
-    expect(report.breaks.map((b) => b.db)).toContain("journal");
-    const journalAfter = f.shipper.status().dbs.journal!;
-    expect(journalAfter.generation).not.toBe(genBefore);
-    expect(journalAfter.basePending).toBe(true);
-
-    // The VAULT re-bases with it (#408): a journal-only break leaves receipts
-    // for vault rows living only in the vault's SEGMENTS.
-    expect(report.breaks.map((b) => b.db).sort()).toStrictEqual([
-      "journal",
-      "vault",
-    ]);
-    expect(f.shipper.status().dbs.vault!.generation).not.toBe(vaultGenBefore);
-    expect(f.shipper.basesCoordinated()).toBe(true);
-    const bases = f.shipper.currentBases();
-    expect(bases[0]!.createdAtMs).toBe(bases[1]!.createdAtMs);
+    expect(report.breaks).toHaveLength(1);
+    expect(report.breaks[0]!.reason).toMatch(/without-our-checkpoint/u);
+    const after = f.shipper.status().stream!;
+    expect(after.generation).not.toBe(genBefore);
+    expect(after.basePending).toBe(true);
+    expect(f.shipper.baseReady()).toBe(true);
 
     await f.service.runBackup(f.vaultId);
     expect((await f.service.status())[f.vaultId]!.lastSeq).toBe(seqBefore + 1);
@@ -548,7 +528,9 @@ describe("wal", () => {
     // Degraded, not error (#411): correctness held, the stream self-re-based.
     const foreignTarget = (await f.service.status())[f.vaultId]!;
     expect(foreignTarget.walForeignCheckpointCount).toBeGreaterThanOrEqual(1);
-    expect(foreignTarget.walLastForeignCheckpoint?.db).toBe("journal");
+    expect(foreignTarget.walLastForeignCheckpoint?.reason).toMatch(
+      /without-our-checkpoint/u
+    );
     const foreignSnap = await f.health.snapshot();
     const foreignBackups = foreignSnap.components.find(
       (c) => c.component === "backups"
@@ -556,31 +538,22 @@ describe("wal", () => {
     expect(foreignBackups?.status).toBe("degraded");
     expect(foreignBackups?.detail).toMatch(/foreign checkpoint/u);
     const manifest = await openNewestManifest(f);
-    const journalEntry = manifest.entries.find(
-      (e) => e.kind === "db" && e.path === "journal.db"
-    )!;
     const vaultEntry = manifest.entries.find(
       (e) => e.kind === "db" && e.path === "vault.db"
     )!;
-    expect(journalEntry.walGeneration).toBe(journalAfter.generation);
-    expect(vaultEntry.walGeneration).toBe(
-      f.shipper.status().dbs.vault!.generation
-    );
-    // Restore refuses a pair whose base ticks disagree.
-    expect(journalEntry.baseTickMs).toBe(vaultEntry.baseTickMs);
-    expect(journalEntry.baseTickMs).toBeGreaterThan(0);
-    expect(f.shipper.status().dbs.journal!.basePending).toBe(false);
+    expect(vaultEntry.walGeneration).toBe(after.generation);
+    // The base's own instant: restore refuses an entry that cannot state it.
+    expect(vaultEntry.baseTickMs).toBeGreaterThan(0);
+    expect(f.shipper.status().stream!.basePending).toBe(false);
     await f.service.drainWal();
 
     const dest = await restoreTo(f);
-    const rj = openRestored(dest, "journal.db");
-    expect(probeCount(rj, "_wale2e_foreign")).toBe(1500);
-    const rv = openRestored(dest, "vault.db");
+    const rv = openRestored(dest);
+    expect(probeCount(rv, "_wale2e_foreign")).toBe(1500);
     expect(vaultTitles(rv)).toContain("before-foreign-writer");
-    const pair = verifyRestoredPair(dest);
-    expect(pair.vault.integrity).toBe("ok");
-    expect(pair.journal.integrity).toBe("ok");
-    expect(pair.danglingReceipts).toStrictEqual([]);
+    const restored = verifyRestoredPair(dest);
+    expect(restored.vault.integrity).toBe("ok");
+    expect(restored.danglingReceipts).toStrictEqual([]);
   }, 45_000);
 
   /** "The network is down" — the only test double in this suite. */
@@ -604,20 +577,15 @@ describe("wal", () => {
 
   test("offline: segments accumulate across groups, the WAL stays checkpoint-bounded, and everything drains on reconnect with NO generation break", async () => {
     const f = await fx({ provider: offlineProvider() });
-    f.shipper.tick(); // first-run: mint the generations before going "offline"
-    const gen0 = {
-      vault: f.shipper.status().dbs.vault!.generation,
-      journal: f.shipper.status().dbs.journal!.generation,
-    };
+    f.shipper.tick(); // first-run: mint the generation before going "offline"
+    const gen0 = f.shipper.status().stream!.generation;
 
     const reports: ReturnType<typeof f.shipper.tick>[] = [];
     await forEachSequentially(Array.from({ length: 6 }), async (_, i) => {
       invoke(f.plane, "schedule.add_task", { title: `offline-task-${i}` });
       insertVault(f.plane, 30, 400, `offline-${i}`); // ~12KB > threshold ⇒ rollover
       reports.push(f.shipper.tick());
-      expect(walSize(f.plane, "vault.db")).toBeLessThanOrEqual(
-        2 * WAL_THRESHOLD
-      );
+      expect(walSize(f.plane)).toBeLessThanOrEqual(2 * WAL_THRESHOLD);
       await f.service.drainWal(); // fails inside (offline), never throws, never deletes
     });
     expect(reports.flatMap((r) => r.breaks)).toStrictEqual([]);
@@ -625,12 +593,10 @@ describe("wal", () => {
 
     expect(Object.keys(await f.service.status())).toHaveLength(0);
     const local = f.shipper.listUploadable();
-    const vaultGroups = new Set(
-      local
-        .filter((i) => i.kind === "segment" && i.addr!.db === "vault")
-        .map((i) => i.addr!.group)
+    const groups = new Set(
+      local.filter((i) => i.kind === "segment").map((i) => i.addr!.group)
     );
-    expect(vaultGroups.size).toBeGreaterThanOrEqual(3);
+    expect(groups.size).toBeGreaterThanOrEqual(3);
     expect(
       local.filter((i) => i.kind === "closer").length
     ).toBeGreaterThanOrEqual(3);
@@ -646,12 +612,11 @@ describe("wal", () => {
     await service2.drainWal();
     expect(f.shipper.listUploadable()).toHaveLength(0); // local dir drained
 
-    expect(f.shipper.status().dbs.vault!.generation).toBe(gen0.vault);
-    expect(f.shipper.status().dbs.journal!.generation).toBe(gen0.journal);
+    expect(f.shipper.status().stream!.generation).toBe(gen0);
 
     const dest = path.join(await tempDir("wal-e2e-dest"), "restored");
     await service2.restore({ vaultId: f.vaultId, destDir: dest });
-    const rv = openRestored(dest, "vault.db");
+    const rv = openRestored(dest);
     expect(vaultTitles(rv)).toStrictEqual(vaultTitles(f.plane.db.vault));
     expect(probeCount(rv, "_wale2e_probe")).toBe(
       probeCount(f.plane.db.vault, "_wale2e_probe")
@@ -674,7 +639,7 @@ describe("wal", () => {
       walShipper: { baseIntervalMs: DAY_MS, localBudgetBytes: LOCAL_BUDGET },
     });
     f.shipper.tick(); // first run: mint the generations before the outage
-    const gen0 = f.shipper.status().dbs.vault!.generation;
+    const gen0 = f.shipper.status().stream!.generation;
 
     const DAYS = 4;
     const TICKS_PER_DAY = 6; // one every four hours
@@ -691,7 +656,7 @@ describe("wal", () => {
           invoke(f.plane, "schedule.add_task", { title });
           written.push(title);
           insertVault(f.plane, 30, 400, title); // ~12 KB > threshold ⇒ a rollover every tick
-          f.plane.db.journal
+          f.plane.db.audit
             .prepare("INSERT INTO _wale2e_jprobe (v) VALUES (?)")
             .run(`${title}-${"y".repeat(200)}`);
           clock += 4 * HOUR_MS;
@@ -699,13 +664,9 @@ describe("wal", () => {
 
           // (1) CHECKPOINT-BOUNDED: stage 1 is local disk, so checkpointing
           // never waits on the network. A day-boundary tick ends by writing the
-          // break's consent receipt AFTER both base clones, so journal.db
-          // carries a CONSTANT few frames until the next tick captures them.
-          maxWal = Math.max(
-            maxWal,
-            walSize(f.plane, "vault.db"),
-            walSize(f.plane, "journal.db")
-          );
+          // break's consent receipt AFTER the base clone, so the WAL carries a
+          // CONSTANT few frames until the next tick captures them.
+          maxWal = Math.max(maxWal, walSize(f.plane));
           // (2) The budget holds WITHOUT firing: each daily roll drops the
           // superseded generation's segments, so the footprint tracks ONE day.
           maxLocal = Math.max(maxLocal, f.shipper.status().localBytes);
@@ -750,30 +711,28 @@ describe("wal", () => {
         invoke(f.plane, "schedule.add_task", { title });
         written.push(title);
         insertVault(f.plane, 30, 400, title);
-        f.plane.db.journal
+        f.plane.db.audit
           .prepare("INSERT INTO _wale2e_jprobe (v) VALUES (?)")
           .run(`${title}-${"y".repeat(200)}`);
         clock += 4 * HOUR_MS;
         reports.push(f.shipper.tick());
-        expect(walSize(f.plane, "vault.db")).toBeLessThanOrEqual(
-          2 * WAL_THRESHOLD
-        );
+        expect(walSize(f.plane)).toBeLessThanOrEqual(2 * WAL_THRESHOLD);
         await f.service.drainWal();
       }
     );
 
     const breaks = reports.flatMap((r) => r.breaks);
     const cadence = breaks.filter((b) => /base-cadence/u.test(b.reason));
-    const vaultRolls = cadence.filter((b) => b.db === "vault").length;
+    const vaultRolls = cadence.length;
     expect(vaultRolls).toBeGreaterThanOrEqual(DAYS - 1); // one per day-boundary crossed
     expect(vaultRolls).toBeLessThanOrEqual(DAYS);
     expect(breaks).toHaveLength(cadence.length); // no local-budget, no detector break
-    expect(f.shipper.status().dbs.vault!.generation).not.toBe(gen0);
-    expect(f.shipper.basesCoordinated()).toBe(true);
+    expect(f.shipper.status().stream!.generation).not.toBe(gen0);
+    expect(f.shipper.baseReady()).toBe(true);
 
     expect(Object.keys(await f.service.status())).toHaveLength(0);
     expect(f.shipper.listUploadable().length).toBeGreaterThan(0);
-    expect(f.shipper.status().dbs.vault!.basePending).toBe(true);
+    expect(f.shipper.status().stream!.basePending).toBe(true);
 
     const service2 = new BackupService({
       config: f.config,
@@ -788,35 +747,32 @@ describe("wal", () => {
     await service2.drainWal();
 
     expect(f.shipper.listUploadable()).toHaveLength(0);
-    expect(f.shipper.status().dbs.vault!.basePending).toBe(false);
-    expect(f.shipper.status().dbs.journal!.basePending).toBe(false);
+    expect(f.shipper.status().stream!.basePending).toBe(false);
 
     // (6) Zero data loss. PITR *depth* into the outage is the documented trade
     // — each daily roll drops the never-registered predecessor's segments — but
     // the roll's fresh base clone carries every row.
     const dest = path.join(await tempDir("wal-e2e-dest"), "restored");
     await service2.restore({ vaultId: f.vaultId, destDir: dest });
-    const rv = openRestored(dest, "vault.db");
-    const rj = openRestored(dest, "journal.db");
+    const rv = openRestored(dest);
     const titles = vaultTitles(rv);
     for (const title of written) expect(titles).toContain(title);
     expect(titles).toStrictEqual(vaultTitles(f.plane.db.vault));
     expect(probeCount(rv, "_wale2e_probe")).toBe(
       probeCount(f.plane.db.vault, "_wale2e_probe")
     );
-    expect(probeCount(rj, "_wale2e_jprobe")).toBe(
+    expect(probeCount(rv, "_wale2e_jprobe")).toBe(
       DAYS * TICKS_PER_DAY + TAIL_TICKS
     );
-    const pair = verifyRestoredPair(dest);
-    expect(pair.vault.integrity).toBe("ok");
-    expect(pair.journal.integrity).toBe("ok");
-    expect(pair.danglingReceipts).toStrictEqual([]);
+    const restored = verifyRestoredPair(dest);
+    expect(restored.vault.integrity).toBe("ok");
+    expect(restored.danglingReceipts).toStrictEqual([]);
     await service2.runRestoreVerify(f.vaultId); // and the G9 job agrees
   }, 120_000);
 
   /** ROWS, not file bytes: a restored database's bytes are never identical to
    *  the live one's, so only rows can answer "did PITR reproduce this state". */
-  function contentDigest(vault: DatabaseSync, journal: DatabaseSync): string {
+  function contentDigest(vault: DatabaseSync): string {
     const col = (db: DatabaseSync, sql: string): string[] =>
       (db.prepare(sql).all() as Record<string, unknown>[]).map((r) =>
         String(Object.values(r)[0])
@@ -827,10 +783,10 @@ describe("wal", () => {
         JSON.stringify({
           tasks: col(vault, "SELECT title FROM schedule_task ORDER BY title"),
           probe: col(vault, "SELECT v FROM _wale2e_probe ORDER BY id"),
-          jprobe: col(journal, "SELECT v FROM _wale2e_jprobe ORDER BY id"),
+          jprobe: col(vault, "SELECT v FROM _wale2e_jprobe ORDER BY id"),
           receipts: col(
-            journal,
-            "SELECT receipt_id FROM consent_receipt ORDER BY receipt_id"
+            vault,
+            "SELECT receipt_id FROM access_receipt ORDER BY receipt_id"
           ),
         })
       )
@@ -851,18 +807,18 @@ describe("wal", () => {
     for (let i = 0; i < 8; i++) {
       invoke(f.plane, "schedule.add_task", { title: `pitr-arb-${i}` });
       insertVault(f.plane, 12, 220, `arb-${i}`);
-      f.plane.db.journal
+      f.plane.db.audit
         .prepare("INSERT INTO _wale2e_jprobe (v) VALUES (?)")
         .run(`arb-${i}-${"y".repeat(160)}`);
       clock += 10 * 60 * 1000; // ten minutes between ticks — room for an arbitrary instant
       const report = f.shipper.tick();
       expect(report.errors).toStrictEqual([]);
       expect(report.breaks).toStrictEqual([]); // a break would write a receipt and move the digest
-      // Taken before the next round's writes, so the live pair IS the restore
-      // point this tick captured.
+      // Taken before the next round's writes, so the live database IS the
+      // restore point this tick captured.
       points.push({
         tickMs: report.tickMs,
-        digest: contentDigest(f.plane.db.vault, f.plane.db.journal),
+        digest: contentDigest(f.plane.db.vault),
         rows: probeCount(f.plane.db.vault, "_wale2e_probe"),
       });
     }
@@ -880,26 +836,20 @@ describe("wal", () => {
       expect(t).toBeLessThan(next.tickMs);
 
       const dest = await restoreTo(f, { pointInTimeMs: t });
-      const rv = openRestored(dest, "vault.db");
-      const rj = openRestored(dest, "journal.db");
-      expect(contentDigest(rv, rj)).toBe(at.digest);
+      const rv = openRestored(dest);
+      expect(contentDigest(rv)).toBe(at.digest);
       // The newest restore point at or before `t`, and NOT the rows committed
       // after it (they exist, and they are excluded).
       expect(probeCount(rv, "_wale2e_probe")).toBe(at.rows);
       expect(next.rows).toBeGreaterThan(at.rows);
-      expect(contentDigest(rv, rj)).not.toBe(next.digest);
+      expect(contentDigest(rv)).not.toBe(next.digest);
       expect(verifyRestoredPair(dest).danglingReceipts).toStrictEqual([]);
     });
 
     // An instant BEFORE the first tick is the floor of the ladder, not an error.
     const early = await restoreTo(f, { pointInTimeMs: points[0]!.tickMs - 1 });
     expect(verifyRestoredPair(early).vault.integrity).toBe("ok");
-    expect(
-      contentDigest(
-        openRestored(early, "vault.db"),
-        openRestored(early, "journal.db")
-      )
-    ).not.toBe(points[0]!.digest);
+    expect(contentDigest(openRestored(early))).not.toBe(points[0]!.digest);
   }, 60_000);
 
   async function anchoredGenerations(f: Fx): Promise<Set<string>> {
@@ -934,49 +884,35 @@ describe("wal", () => {
     });
     invoke(f.plane, "schedule.add_task", { title: "anchored" });
     await f.service.runBackup(f.vaultId);
-    const gen0 = f.shipper.status().dbs.vault!.generation;
+    const gen0 = f.shipper.status().stream!.generation;
     await expect(anchoredGenerations(f)).resolves.toContain(gen0);
-    expect(f.shipper.pendingBases()).toStrictEqual([]); // a manifest names it — correctly cleared
+    expect(f.shipper.pendingBase()).toBeNull(); // a manifest names it — correctly cleared
 
     insertVault(f.plane, 20, 200, "post-roll");
-    f.shipper.rollGeneration("vault", "test-roll");
-    const gen1 = f.shipper.status().dbs.vault!.generation;
-    const jgen1 = f.shipper.status().dbs.journal!.generation;
+    f.shipper.rollGeneration("test-roll");
+    const gen1 = f.shipper.status().stream!.generation;
     expect(gen1).not.toBe(gen0);
-    expect(
-      f.shipper
-        .pendingBases()
-        .map((b) => b.db)
-        .sort()
-    ).toStrictEqual(["journal", "vault"]);
+    expect(f.shipper.pendingBase()).not.toBeNull();
 
     registerNothing = true;
     await f.service.runBackup(f.vaultId);
 
     const anchored = await anchoredGenerations(f);
     expect(anchored.has(gen1)).toBe(false);
-    expect(anchored.has(jgen1)).toBe(false);
-    expect(f.shipper.status().dbs.vault!.basePending).toBe(true);
-    expect(f.shipper.status().dbs.journal!.basePending).toBe(true);
-    expect(
-      f.shipper
-        .pendingBases()
-        .map((b) => b.generation)
-        .sort((a, b) => Number(a) - Number(b))
-    ).toStrictEqual([gen1, jgen1].sort((a, b) => Number(a) - Number(b)));
+    expect(f.shipper.status().stream!.basePending).toBe(true);
+    expect(f.shipper.pendingBase()?.generation).toBe(gen1);
     expect(f.logs.some((l) => /no manifest anchors/u.test(l))).toBe(true);
 
-    // The retry heals it the moment a manifest names the pair, and only then.
+    // The retry heals it the moment a manifest names the base, and only then.
     registerNothing = false;
     await f.service.runBackup(f.vaultId);
     const healed = await anchoredGenerations(f);
     expect(healed.has(gen1)).toBe(true);
-    expect(healed.has(jgen1)).toBe(true);
-    expect(f.shipper.pendingBases()).toStrictEqual([]);
+    expect(f.shipper.pendingBase()).toBeNull();
 
     await f.service.drainWal();
     const dest = await restoreTo(f);
-    const rv = openRestored(dest, "vault.db");
+    const rv = openRestored(dest);
     expect(vaultTitles(rv)).toContain("anchored");
     expect(probeCount(rv, "_wale2e_probe")).toBe(
       probeCount(f.plane.db.vault, "_wale2e_probe")
@@ -984,7 +920,7 @@ describe("wal", () => {
     expect(verifyRestoredPair(dest).danglingReceipts).toStrictEqual([]);
   }, 45_000);
 
-  test("a no-change run whose PREVIOUS manifest still anchors the live pair DOES clear the base (no pending livelock)", async () => {
+  test("a no-change run whose PREVIOUS manifest still anchors the live base DOES clear it (no pending livelock)", async () => {
     // The other direction: a base wrongly left PENDING is dropped by the next
     // generation break, taking the un-drained tail of a generation a manifest
     // DOES name. So the gate is "no MANIFEST ⇒ never clear", never "no row".
@@ -1000,9 +936,8 @@ describe("wal", () => {
     // the provider holds a good anchor — the on-disk state a crash between
     // `registerSnapshot` and the shipper's state write leaves behind.
     insertVault(f.plane, 20, 200, "pre-crash");
-    f.shipper.rollGeneration("vault", "test-roll");
-    const gen = f.shipper.status().dbs.vault!.generation;
-    const jgen = f.shipper.status().dbs.journal!.generation;
+    f.shipper.rollGeneration("test-roll");
+    const gen = f.shipper.status().stream!.generation;
     const provider = openLocalBackupProvider({ rootDir: f.providerDir });
     const keyring = fixtureKeyring(f);
     const entries = await assembleSourceEntries({
@@ -1025,20 +960,13 @@ describe("wal", () => {
     });
     const anchored = await anchoredGenerations(f);
     expect(anchored.has(gen)).toBe(true); // the provider HAS the anchor…
-    expect(anchored.has(jgen)).toBe(true);
-    expect(
-      f.shipper
-        .pendingBases()
-        .map((b) => b.db)
-        .sort()
-    ).toStrictEqual(["journal", "vault"]); // …the shipper doesn't know
+    expect(f.shipper.pendingBase()).not.toBeNull(); // …the shipper doesn't know
 
     // A run registering nothing must still clear the flag: the anchor exists.
     registerNothing = true;
     await f.service.runBackup(f.vaultId);
-    expect(f.shipper.status().dbs.vault!.basePending).toBe(false);
-    expect(f.shipper.status().dbs.journal!.basePending).toBe(false);
-    expect(f.shipper.pendingBases()).toStrictEqual([]);
+    expect(f.shipper.status().stream!.basePending).toBe(false);
+    expect(f.shipper.pendingBase()).toBeNull();
   }, 45_000);
 
   test("G9 restore-verify: succeeds against a real snapshot+segments, THROWS loudly on a damaged remote segment, and stales at 14 days", async () => {
@@ -1154,11 +1082,11 @@ describe("wal", () => {
     ).toBe("ok");
 
     // The app-uninstall shape: the command row goes, its receipts stay. The
-    // restored pair then carries a receipt pointing at nothing — a signal for
+    // restore then carries a receipt pointing at nothing — a signal for
     // human review, NOT a failed restore.
-    const { object_id: commandId } = f.plane.db.journal
+    const { object_id: commandId } = f.plane.db.audit
       .prepare(
-        `SELECT object_id FROM consent_receipt
+        `SELECT object_id FROM access_receipt
         WHERE object_type = 'agent.command' AND object_id IS NOT NULL AND decision = 'allow'
         LIMIT 1`
       )
@@ -1220,12 +1148,12 @@ describe("wal", () => {
     expect(evaluate(target).status).toBe("ok");
   }, 45_000);
 
-  test("G8: with a second journal connection appending between gateway writes, every PITR point restores with ZERO dangling receipts", async () => {
+  test("with a SECOND connection appending between gateway writes, every PITR point restores with ZERO dangling receipts", async () => {
     const f = await fx();
     await f.service.runBackup(f.vaultId);
 
-    // The tolerated journal multi-writer case: own connection, no autocheckpoint.
-    const second = new DatabaseSync(path.join(f.plane.dir, "journal.db"));
+    // The tolerated multi-writer case: own connection, no autocheckpoint.
+    const second = new DatabaseSync(ledgerDbFileIn(f.plane.dir));
     cleanups.push(() => second.close());
     second.exec("PRAGMA busy_timeout = 10000");
     second.exec("PRAGMA wal_autocheckpoint = 0");
@@ -1237,14 +1165,14 @@ describe("wal", () => {
     const points: { tickMs: number; ledger: number; titles: string[] }[] = [];
     for (let i = 0; i < 6; i++) {
       append.run(`pre-${i}-${"z".repeat(120)}`);
-      invoke(f.plane, "schedule.add_task", { title: `g8-task-${i}` }); // vault row + journal receipt
+      invoke(f.plane, "schedule.add_task", { title: `g8-task-${i}` }); // life row + its receipt
       append.run(`post-${i}-${"z".repeat(120)}`);
       const report = f.shipper.tick();
       expect(report.breaks).toStrictEqual([]);
       expect(report.errors).toStrictEqual([]);
       points.push({
         tickMs: report.tickMs,
-        ledger: probeCount(f.plane.db.journal, "_wale2e_ledger"),
+        ledger: probeCount(f.plane.db.audit, "_wale2e_ledger"),
         titles: vaultTitles(f.plane.db.vault),
       });
     }
@@ -1254,22 +1182,20 @@ describe("wal", () => {
       [points[1]!, points[3]!, points[5]!],
       async (point) => {
         const dest = await restoreTo(f, { pointInTimeMs: point.tickMs });
-        const pair = verifyRestoredPair(dest);
-        expect(pair.vault.integrity).toBe("ok");
-        expect(pair.journal.integrity).toBe("ok");
-        expect(pair.receiptsChecked).toBeGreaterThan(0);
-        expect(pair.danglingReceipts).toStrictEqual([]); // the G8 acceptance criterion
-        const rv = openRestored(dest, "vault.db");
-        const rj = openRestored(dest, "journal.db");
+        const restored = verifyRestoredPair(dest);
+        expect(restored.vault.integrity).toBe("ok");
+        expect(restored.receiptsChecked).toBeGreaterThan(0);
+        expect(restored.danglingReceipts).toStrictEqual([]);
+        const rv = openRestored(dest);
         expect(vaultTitles(rv)).toStrictEqual(point.titles);
-        expect(probeCount(rj, "_wale2e_ledger")).toBe(point.ledger);
+        expect(probeCount(rv, "_wale2e_ledger")).toBe(point.ledger);
       }
     );
 
     // A lost segment tail is indistinguishable from an idle vault inside the
-    // stream itself; only the pair markers can tell. Every PITR point must still
-    // come back with zero dangling receipts — the pair walks back to the newest
-    // tick the vault can PROVE it reached.
+    // stream itself; only the tick markers can tell. Every PITR point must still
+    // come back with zero dangling receipts — the restore walks back to the
+    // newest tick the vault can PROVE it reached.
     const targetId = (await f.service.status())[f.vaultId]!.targetId;
     const vaultSegments = (await walObjectFiles(f, targetId))
       .filter((file) => /wal[/\\]vault[/\\]/u.test(file))
@@ -1282,13 +1208,12 @@ describe("wal", () => {
 
     await forEachSequentially(points, async (point) => {
       const dest = await restoreTo(f, { pointInTimeMs: point.tickMs });
-      const pair = verifyRestoredPair(dest);
-      expect(pair.vault.integrity).toBe("ok");
-      expect(pair.journal.integrity).toBe("ok");
-      expect(pair.danglingReceipts).toStrictEqual([]);
-      // The ledger never runs ahead of the vault state it is paired with.
-      const rj = openRestored(dest, "journal.db");
-      expect(probeCount(rj, "_wale2e_ledger")).toBeLessThanOrEqual(
+      const restored = verifyRestoredPair(dest);
+      expect(restored.vault.integrity).toBe("ok");
+      expect(restored.danglingReceipts).toStrictEqual([]);
+      // The ledger band never runs ahead of the life rows it sits beside.
+      const rv = openRestored(dest);
+      expect(probeCount(rv, "_wale2e_ledger")).toBeLessThanOrEqual(
         point.ledger
       );
     });
@@ -1311,8 +1236,8 @@ describe("wal", () => {
     ).toBeUndefined();
 
     // An empty listing is indistinguishable from "never wrote anything" unless
-    // the pair marker vouches for what shipped. Without it (the pair marker)
-    // verify would report OK over hours that cannot restore.
+    // the tick marker vouches for what shipped. Without it, verify would report
+    // OK over hours that cannot restore.
     const state = (await f.service.status())[f.vaultId]!;
     const vaultSegments = (await walObjectFiles(f, state.targetId))
       .filter((file) => /wal[/\\]vault[/\\]/u.test(file))
@@ -1321,14 +1246,14 @@ describe("wal", () => {
     await forEachSequentially(vaultSegments, async (file) => fs.rm(file));
 
     await expect(f.service.runRestoreVerify(f.vaultId)).rejects.toThrow(
-      /not restorable at their newest registered point/u
+      /not restorable at its newest registered point/u
     );
     expect(
       (await f.service.status())[f.vaultId]!.lastRestoreVerifyError
-    ).toMatch(/not restorable at their newest registered point/u);
+    ).toMatch(/not restorable at its newest registered point/u);
 
-    // The scheduled verifier plans the same coordinated cut restore does: a
-    // per-stream hole check can never trip on an empty listing.
+    // The scheduled verifier plans the same marked cut restore does: a hole
+    // check alone can never trip on an empty listing.
     const verify = await f.service.runVerify(f.vaultId);
     expect(verify!.missing.some((m) => /cannot be reassembled/u.test(m))).toBe(
       true
@@ -1348,9 +1273,7 @@ describe("wal", () => {
     await f.service.drainWal();
 
     const drained = drainedBytes(f.logs, logMark);
-    const dbBytes =
-      statSync(path.join(f.plane.dir, "vault.db")).size +
-      statSync(path.join(f.plane.dir, "journal.db")).size;
+    const dbBytes = statSync(path.join(f.plane.dir, "vault.db")).size;
     console.log(
       `[wal-e2e measurement] payload=${payloadBytes}B drained=${drained.bytes}B ` +
         `(${drained.objects} object(s)) liveDbs=${dbBytes}B ` +
@@ -1392,7 +1315,7 @@ describe("wal", () => {
           put: async (key, data) => {
             if (blocked.on && key.startsWith("wal/tick/")) {
               throw new Error(
-                "simulated drain interruption before the pair marker landed"
+                "simulated drain interruption before the tick marker landed"
               );
             }
             return store.put(key, data);
@@ -1414,7 +1337,7 @@ describe("wal", () => {
     );
   }
 
-  test("deleting ONLY the pair markers is DETECTED — restore degrades coherently, and says so", async () => {
+  test("deleting ONLY the tick markers is DETECTED — restore degrades coherently, and says so", async () => {
     const f = await fx();
     invoke(f.plane, "schedule.add_task", { title: "before-marker-loss" });
     await f.service.runBackup(f.vaultId);
@@ -1431,9 +1354,8 @@ describe("wal", () => {
     await f.service.runBackup(f.vaultId);
     const manifest = await openNewestManifest(f);
     const dbEntries = manifest.entries.filter((e) => e.kind === "db");
-    const tip = dbEntries[0]!.walTipTickMs!;
-    expect(tip).toBeGreaterThan(0);
-    expect(dbEntries.map((e) => e.walTipTickMs)).toStrictEqual([tip, tip]);
+    expect(dbEntries).toHaveLength(1);
+    expect(dbEntries[0]!.walTipTickMs!).toBeGreaterThan(0);
 
     await f.service.runRestoreVerify(f.vaultId); // healthy while the markers exist
     expect(
@@ -1441,7 +1363,7 @@ describe("wal", () => {
     ).toBeUndefined();
 
     // Every segment and closer survives. With nothing vouching for what shipped,
-    // a restore falls back to the base pair — coherent and SILENTLY hours stale.
+    // a restore falls back to the base — coherent and SILENTLY hours stale.
     // The manifest's tip is what makes that loud.
     const state = (await f.service.status())[f.vaultId]!;
     const markers = await markerObjectFiles(f, state.targetId);
@@ -1453,22 +1375,51 @@ describe("wal", () => {
     expect((await walObjectFiles(f, state.targetId)).length).toBeGreaterThan(0); // segments intact
 
     const verify = await f.service.runVerify(f.vaultId);
-    expect(verify!.missing.some((m) => /pair marker/u.test(m))).toBe(true);
+    expect(verify!.missing.some((m) => /tick marker/u.test(m))).toBe(true);
 
     await expect(f.service.runRestoreVerify(f.vaultId)).rejects.toThrow(
-      /not restorable at their newest registered point/u
+      /not restorable at its newest registered point/u
     );
 
-    // The restore still SUCCEEDS at the older coordinated point (G6: degrade,
+    // The restore still SUCCEEDS at the older provable point (G6: degrade,
     // never refuse) — it is simply no longer silent about it.
     const dest = await restoreTo(f);
-    const pair = verifyRestoredPair(dest);
-    expect(pair.vault.integrity).toBe("ok");
-    expect(pair.journal.integrity).toBe("ok");
-    expect(pair.danglingReceipts).toStrictEqual([]);
-    const rv = openRestored(dest, "vault.db");
-    expect(vaultTitles(rv)).toContain("before-marker-loss"); // the base pair survived
+    const restored = verifyRestoredPair(dest);
+    expect(restored.vault.integrity).toBe("ok");
+    expect(restored.danglingReceipts).toStrictEqual([]);
+    const rv = openRestored(dest);
+    expect(vaultTitles(rv)).toContain("before-marker-loss"); // the base survived
   }, 60_000);
+
+  test("a generation break RESETS the confirmed tip — a fresh stream is never held to the old one's", async () => {
+    // The tip is keyed by GENERATION (backup-state `walMarkerTips`). Carrying
+    // the old stream's tick into a manifest for a fresh base would demand a
+    // marker the new stream never shipped, and every later verification would
+    // read the store as lossy.
+    const f = await fx();
+    invoke(f.plane, "schedule.add_task", { title: "before-the-roll" });
+    await f.service.runBackup(f.vaultId);
+    insertVault(f.plane, 10, 200, "pre-roll");
+    f.plane.walTick();
+    await f.service.drainWal();
+    await f.service.runBackup(f.vaultId);
+    const beforeRoll = (await openNewestManifest(f)).entries.find(
+      (e) => e.kind === "db"
+    )!;
+    expect(beforeRoll.walTipTickMs).toBeGreaterThan(0);
+
+    f.shipper.rollGeneration("test-roll");
+    const rolled = f.shipper.status().stream!.generation;
+    await f.service.runBackup(f.vaultId);
+    const afterRoll = (await openNewestManifest(f)).entries.find(
+      (e) => e.kind === "db"
+    )!;
+    expect(afterRoll.walGeneration).toBe(rolled);
+    expect(afterRoll.walGeneration).not.toBe(beforeRoll.walGeneration);
+    // Nothing has been shipped under the new generation yet, so there is no
+    // confirmed marker to hold the store to.
+    expect(afterRoll.walTipTickMs).toBeUndefined();
+  }, 45_000);
 
   test("an INTERRUPTED drain (segments up, marker not) does NOT flap the check red", async () => {
     // The manifest's tip names only CONFIRMED markers, so a drain dying between

@@ -138,37 +138,24 @@ export async function assembleSourceEntries(
       "backup: vault has no WAL shipper (in-memory vault?) — nothing to snapshot"
     );
   }
-  const bases = shipper.currentBases();
-  if (bases.length < 2) {
+  const base = shipper.currentBase();
+  if (!base) {
     throw new Error(
-      `backup: only ${bases.length}/2 database base(s) are pinned (busy checkpoint on first run?) — retrying later instead of registering a partial snapshot`
+      "backup: the vault base is not pinned (busy checkpoint on first run?) — retrying later instead of registering a partial snapshot"
     );
   }
-  // The two bases MUST be from ONE tick: a busy checkpoint can defer the
-  // coordinated break, and a mixed pair has no coordinated restore point — the
-  // newer base holds receipts for rows living only in the older one's SEGMENTS.
-  if (bases[0]!.createdAtMs !== bases[1]!.createdAtMs) {
-    throw new Error(
-      `backup: the two database bases are from different ticks (` +
-        bases.map((b) => `${b.db} @ ${b.createdAtMs}`).join(", ") +
-        ") — a coordinated generation break is still pending; retrying later instead of " +
-        "registering an uncoordinated base pair"
-    );
-  }
-  for (const base of bases) {
-    entries.push({
-      path: WAL_DB_FILES[base.db],
-      kind: "db",
-      absolutePath: base.file,
-      sha256: base.sha256,
-      walGeneration: base.generation,
-      baseTickMs: base.createdAtMs,
-      // A floor: without it a deleted `wal/tick/` prefix is silent.
-      ...(opts.walTipTickMs === undefined
-        ? {}
-        : { walTipTickMs: opts.walTipTickMs }),
-    });
-  }
+  entries.push({
+    path: WAL_DB_FILES.vault,
+    kind: "db",
+    absolutePath: base.file,
+    sha256: base.sha256,
+    walGeneration: base.generation,
+    baseTickMs: base.createdAtMs,
+    // A floor: without it a deleted `wal/tick/` prefix is silent.
+    ...(opts.walTipTickMs === undefined
+      ? {}
+      : { walTipTickMs: opts.walTipTickMs }),
+  });
 
   // Remote-primary snapshots only bytes lacking replica evidence.
   const remotePrimary = readBlobStoreSettings(plane.db.vault).kind === "s3";
@@ -178,9 +165,9 @@ export async function assembleSourceEntries(
     const replicated = new ReplicaIndex(plane.db.vault).all();
     for (const sha of liveBlobShasCached(plane.db.vault))
       if (!replicated.has(sha)) pending.add(sha);
-    for (const sha of archivedSegmentShas(plane.db.journal))
+    for (const sha of archivedSegmentShas(plane.db.vault))
       if (!replicated.has(sha)) pending.add(sha);
-    for (const sha of conversationArchiveShas(plane.db.journal))
+    for (const sha of conversationArchiveShas(plane.db.vault))
       if (!replicated.has(sha)) pending.add(sha);
   }
   entries.push(...(await listBlobEntries(plane.dir, pending)));

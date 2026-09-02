@@ -2,6 +2,8 @@
 // vault.db so backup/restore retains the relationship; the gateway compiles
 // these rows into transport and projection mechanics after every mount.
 
+import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
+
 export const SHARE_COMMONS_DDL = `
 ALTER TABLE social_circle_member ADD COLUMN capability TEXT NOT NULL DEFAULT 'read'
   CHECK (capability IN ('read','read+write'));
@@ -18,6 +20,27 @@ CREATE TABLE share_party_vault_binding (
 CREATE UNIQUE INDEX share_party_vault_binding_live_party
   ON share_party_vault_binding(party_id) WHERE revoked_at IS NULL;
 
+-- A BINDING IS ABOUT SOMEONE ELSE (#916, R9 / review 6.5). The table says
+-- "this person is reachable at that vault", and nothing stopped it recording
+-- the member's own party at the member's own vault — a self-binding that makes
+-- the member their own peer, so a share to them would be delivered by the
+-- transport to the file it came from. SQLite cannot express "different from a
+-- value in another table" in a CHECK, so it is a pair of triggers.
+CREATE TRIGGER share_party_vault_binding_not_self_ai
+BEFORE INSERT ON share_party_vault_binding
+WHEN NEW.vault_id = (SELECT vault_id FROM core_vault LIMIT 1)
+  OR NEW.party_id = (SELECT self_party_id FROM core_vault LIMIT 1)
+BEGIN
+  SELECT RAISE(ABORT, 'share.party_vault_binding: a binding names another party''s vault, never this vault or its self party');
+END;
+CREATE TRIGGER share_party_vault_binding_not_self_au
+BEFORE UPDATE OF party_id, vault_id ON share_party_vault_binding
+WHEN NEW.vault_id = (SELECT vault_id FROM core_vault LIMIT 1)
+  OR NEW.party_id = (SELECT self_party_id FROM core_vault LIMIT 1)
+BEGIN
+  SELECT RAISE(ABORT, 'share.party_vault_binding: a binding names another party''s vault, never this vault or its self party');
+END;
+
 CREATE TABLE share_circle_grant (
   grant_id          TEXT PRIMARY KEY,
   circle_id         TEXT NOT NULL REFERENCES social_circle(circle_id),
@@ -30,6 +53,9 @@ CREATE TABLE share_circle_grant (
   steward_party_id  TEXT NOT NULL REFERENCES core_party(party_id),
   created_at        TEXT NOT NULL,
   revoked_at        TEXT,
+  -- 'container-purged' when the trigger on \`core_entity\` ended it (#916, E2);
+  -- NULL for an ordinary revoke, where the receipt is the reason.
+  revoked_reason    TEXT,
   last_sequence     INTEGER NOT NULL DEFAULT 0 CHECK (last_sequence >= 0),
   checkpoint_sequence INTEGER NOT NULL DEFAULT 0 CHECK (checkpoint_sequence >= 0),
   checkpoint_json   TEXT CHECK (checkpoint_json IS NULL OR json_valid(checkpoint_json)),
@@ -114,42 +140,61 @@ CREATE TABLE share_commons_receipt (
 ) STRICT;
 
 CREATE TABLE share_commons_cursor (
-  grant_id        TEXT NOT NULL,
+  grant_id        TEXT NOT NULL
+    REFERENCES share_circle_grant(grant_id) ON DELETE CASCADE,
   member_vault_id TEXT NOT NULL,
   sequence        INTEGER NOT NULL DEFAULT 0 CHECK (sequence >= 0),
-  updated_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   PRIMARY KEY (grant_id, member_vault_id)
 ) STRICT;
 
 -- What a member seat has PROVEN about its steward's history. Compaction may
 -- drop the verbose ops behind it; the proven point must outlive them.
 CREATE TABLE share_commons_verified (
-  grant_id   TEXT PRIMARY KEY,
+  grant_id   TEXT PRIMARY KEY
+    REFERENCES share_circle_grant(grant_id) ON DELETE CASCADE,
   sequence   INTEGER NOT NULL CHECK (sequence >= 0),
   op_hash    TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
 
 CREATE TABLE share_commons_lineage (
-  grant_id       TEXT NOT NULL,
-  item_type      TEXT NOT NULL,
-  item_id        TEXT NOT NULL,
+  grant_id       TEXT NOT NULL
+    REFERENCES share_circle_grant(grant_id) ON DELETE CASCADE,
+  -- \`target_*\`, the one name a polymorphic pair has in this vault (#916),
+  -- and a real composite key into the entity supertype.
+  target_type    TEXT NOT NULL,
+  target_id      TEXT NOT NULL,
   origin_item_id TEXT NOT NULL,
-  PRIMARY KEY (grant_id, item_type, item_id)
+  PRIMARY KEY (grant_id, target_type, target_id),
+  FOREIGN KEY (target_type, target_id)
+    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX share_commons_lineage_item
-  ON share_commons_lineage(item_type, item_id);
+  ON share_commons_lineage(target_type, target_id);
 
 CREATE TABLE share_commons_retained (
-  grant_id    TEXT NOT NULL,
-  item_type   TEXT NOT NULL,
-  item_id     TEXT NOT NULL,
+  grant_id    TEXT NOT NULL
+    REFERENCES share_circle_grant(grant_id) ON DELETE CASCADE,
+  target_type TEXT NOT NULL,
+  target_id   TEXT NOT NULL,
   retained_at TEXT NOT NULL,
-  PRIMARY KEY (grant_id, item_type, item_id)
+  PRIMARY KEY (grant_id, target_type, target_id),
+  FOREIGN KEY (target_type, target_id)
+    REFERENCES core_entity(entity_type, entity_id) ON DELETE CASCADE
 ) STRICT;
+CREATE INDEX share_commons_retained_item
+  ON share_commons_retained(target_type, target_id);
 
 CREATE TABLE share_commons_intent (
   intent_id       TEXT PRIMARY KEY,
+  -- NO FOREIGN KEY, deliberately (#916), for the same reason
+  -- share_commons_invitation.grant_id has none: an intent is queued in the
+  -- MEMBER seat, and queueCommonsIntent states outright that a seat with no
+  -- local share_circle_grant row is legal -- no local grant row means 0, an
+  -- unobserved history is honestly all-stale. A key here would make the ASK
+  -- depend on having already projected the ANSWER, which is precisely the
+  -- state a member queues an intent from.
   grant_id        TEXT NOT NULL,
   actor_party_id  TEXT NOT NULL,
   command         TEXT NOT NULL,
@@ -181,6 +226,11 @@ CREATE INDEX share_commons_intent_open
 -- transmitted or applied until the receiving vault owner explicitly accepts.
 CREATE TABLE share_commons_invitation (
   invitation_id     TEXT PRIMARY KEY,
+  -- NO FOREIGN KEY, deliberately (#916, W2a). An invitation is queued in the
+  -- RECEIVING vault, which does not hold the grant yet — holding it is what
+  -- accepting the invitation DOES. A key here would make the ask depend on the
+  -- answer. Same reading as \`member_party_id\` (schema/party-pointers.ts): a
+  -- row the receiver may not have yet.
   grant_id          TEXT NOT NULL,
   steward_vault_id  TEXT NOT NULL,
   member_vault_id   TEXT,
@@ -200,4 +250,6 @@ CREATE TABLE share_commons_invitation (
 CREATE INDEX share_commons_invitation_pending
   ON share_commons_invitation(member_vault_id, created_at)
   WHERE status = 'pending';
+${touchUpdatedAt("share_commons_cursor", ["grant_id", "member_vault_id"])}
+${touchUpdatedAt("share_commons_verified", "grant_id")}
 `;

@@ -59,7 +59,7 @@ describe("replica-shape suite", () => {
     signingKey: string;
   } {
     const app = vault.db.vault
-      .prepare(`SELECT app_id, signing_key FROM consent_app WHERE name = ?`)
+      .prepare(`SELECT app_id, signing_key FROM access_app WHERE name = ?`)
       .get(name) as { app_id: string; signing_key: string };
     return { kind: "app", appId: app.app_id, signingKey: app.signing_key };
   }
@@ -133,14 +133,14 @@ describe("replica-shape suite", () => {
     vault.approveGrant("credential-auditor", {
       purpose: "dpv:ServiceProvision",
       scopes: [
-        { schema: "consent", table: "app", verbs: "read" },
-        { schema: "consent", table: "agent", verbs: "read" },
-        { schema: "consent", table: "device", verbs: "read" },
+        { schema: "access", table: "app", verbs: "read" },
+        { schema: "access", table: "agent", verbs: "read" },
+        { schema: "access", table: "device", verbs: "read" },
       ],
     });
     vault.db.vault
       .prepare(
-        `INSERT INTO consent_device
+        `INSERT INTO access_device
          (device_id, owner_party_id, name, public_key, enrolled_at)
        VALUES ('credential-device', ?, 'Credential device', 'public-never-replicate',
                '2026-07-15T00:00:00.000Z')`
@@ -149,14 +149,14 @@ describe("replica-shape suite", () => {
     vault.db.vault
       .prepare(
         `INSERT INTO core_party
-         (party_id, kind, display_name, created_at, updated_at, ontology_version)
+         (party_id, kind, display_name, created_at, updated_at)
        VALUES ('credential-agent-party', 'agent', 'Credential agent',
-               '2026-07-15T00:00:00.000Z', '2026-07-15T00:00:00.000Z', '1.3')`
+               '2026-07-15T00:00:00.000Z', '2026-07-15T00:00:00.000Z')`
       )
       .run();
     vault.db.vault
       .prepare(
-        `INSERT INTO consent_agent
+        `INSERT INTO access_agent
          (agent_id, party_id, enrollment_key, model_ref, version, enrolled_at, status)
        VALUES ('credential-agent', 'credential-agent-party', 'host-never-replicate',
                'tier:fast', '1', '2026-07-15T00:00:00.000Z', 'active')`
@@ -170,9 +170,9 @@ describe("replica-shape suite", () => {
     })[0]!;
     const wire = replicaShapesWire([shape])[0]!;
     for (const [entityName, credential] of [
-      ["consent.app", "signing_key"],
-      ["consent.agent", "enrollment_key"],
-      ["consent.device", "public_key"],
+      ["access.app", "signing_key"],
+      ["access.agent", "enrollment_key"],
+      ["access.device", "public_key"],
     ] as const) {
       const entity = wire.entities.find(
         (candidate) => candidate.entity === entityName
@@ -186,13 +186,13 @@ describe("replica-shape suite", () => {
 
     const app = vault.db.vault
       .prepare(
-        `SELECT app_id FROM consent_app WHERE name = 'credential-auditor'`
+        `SELECT app_id FROM access_app WHERE name = 'credential-auditor'`
       )
       .get() as { app_id: string };
     for (const [entity, rowId, credential] of [
-      ["consent.app", app.app_id, "signing_key"],
-      ["consent.agent", "credential-agent", "enrollment_key"],
-      ["consent.device", "credential-device", "public_key"],
+      ["access.app", app.app_id, "signing_key"],
+      ["access.agent", "credential-agent", "enrollment_key"],
+      ["access.device", "credential-device", "public_key"],
     ] as const) {
       const row = readReplicaRow(vault.db.vault, entity, rowId)!;
       expect(row.values, entity).not.toHaveProperty(credential);
@@ -208,7 +208,7 @@ describe("replica-shape suite", () => {
       purpose: "dpv:ServiceProvision",
       scopes: [
         {
-          schema: "consent",
+          schema: "access",
           table: "app",
           verbs: "read",
           rowFilter: [
@@ -221,7 +221,7 @@ describe("replica-shape suite", () => {
       purpose: "dpv:ServiceProvision",
       scopes: [
         {
-          schema: "consent",
+          schema: "access",
           table: "app",
           verbs: "read",
           fieldMask: ["signing_key"],
@@ -235,7 +235,7 @@ describe("replica-shape suite", () => {
         rememberDevice: true,
         appId,
       })[0]!;
-      expect(shape.entityMap.has("consent.app"), appId).toBe(false);
+      expect(shape.entityMap.has("access.app"), appId).toBe(false);
       expect(JSON.stringify(replicaShapesWire([shape])), appId).not.toContain(
         "signing_key"
       );
@@ -802,15 +802,18 @@ describe("replica-shape suite", () => {
       .run(vault.boot.ownerPartyId);
     vault.db.vault
       .prepare(
-        `INSERT INTO tally_group (group_id, circle_id, icon, color, created_at)
-       VALUES ('group-secret', 'circle-secret', 'trip', 'blue', ?)`
+        `INSERT INTO tally_group
+         (group_id, circle_id, icon, color, currency, created_at)
+       VALUES ('group-secret', 'circle-secret', 'trip', 'blue', 'USD', ?)`
       )
       .run(now);
     vault.db.vault
       .prepare(
         `INSERT INTO tally_expense
-         (expense_id, group_id, description, amount_minor, paid_by, spent_on, category, created_at)
-       VALUES ('expense-secret', 'group-secret', 'Dinner', 100, ?, '2026-07-15', 'food', ?)`
+         (expense_id, group_id, description, amount_minor, currency, paid_by,
+          spent_on, category, created_at)
+       VALUES ('expense-secret', 'group-secret', 'Dinner', 100, 'USD', ?,
+               '2026-07-15', 'food', ?)`
       )
       .run(vault.boot.ownerPartyId, now);
     vault.db.vault
@@ -976,12 +979,7 @@ describe("replica-shape suite", () => {
 
     const asset = byEntity.get("media.asset")!;
     expect(asset.columns).toStrictEqual(
-      expect.arrayContaining([
-        "favorite",
-        "archived_at",
-        "tz_offset_min",
-        "captured_at",
-      ])
+      expect.arrayContaining(["archived_at", "tz_offset_min", "captured_at"])
     );
     const content = byEntity.get("core.content_item")!;
     expect(content.columns).toStrictEqual(

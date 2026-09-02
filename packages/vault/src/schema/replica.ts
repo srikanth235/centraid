@@ -1,17 +1,20 @@
-// The durable replica protocol band (#406), in vault.db so a base-table
+// The durable replica protocol band (#406), in the vault file so a base-table
 // mutation and its change entry share one transaction. `refreshReplicaTriggers`
 // generates the per-entity triggers from the logical registry, which keeps this
 // DDL free of primary-key names and covers live ext tables.
+
+import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
 /**
  * Build-time replica contract epoch, deliberately independent of PRAGMA
  * user_version: any incompatible wire/trigger change bumps it and rotates
  * every cursor. An invalidation number, not a migration ladder.
  */
-// ONE rotation for the whole of #883's schema wave, not one per rung: a seat
-// that re-bootstraps reaches the target shape whether one rung or two produced
-// it, so a second bump would only re-invalidate what is already invalid.
-export const REPLICA_SCHEMA_EPOCH = 3;
+// 1 is the v0 contract. `core_entity` is NOT replicated: it is declared local
+// (schema/local-tables.ts) because a replica re-derives it from the entity
+// rows through the same membership triggers. The `audit` and `ledger`
+// machinery bands are excluded by band and never ship to a seat.
+export const REPLICA_SCHEMA_EPOCH = 1;
 
 export const REPLICA_DDL = `
 CREATE TABLE IF NOT EXISTS replica_meta (
@@ -87,26 +90,27 @@ CREATE TABLE IF NOT EXISTS replica_intent_outcome (
   reason        TEXT,
   conflict_json TEXT CHECK (conflict_json IS NULL OR json_valid(conflict_json)),
   created_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL
+  updated_at    TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_replica_intent_device_status
   ON replica_intent_outcome(device_id, status, updated_at);
+${touchUpdatedAt("replica_intent_outcome", "intent_id")}
 
--- Canonical invocation commit receipts close the cross-database crash gap:
--- vault.db mutations and this row commit together, before journal.db can be
--- advanced to executed. A retry whose journal row is still checked (or is
--- absent) therefore replays this receipt instead of running the command a
--- second time. This is internal protocol state, not a replica-visible entity.
+-- Canonical invocation commit receipts. The mutation, this row and the audit
+-- band's invocation now share ONE file and ONE transaction (#916), so the
+-- cross-database crash gap this closed cannot reopen; the receipt stays as the
+-- replay marker for a crash BETWEEN the write and the audit finalisation, and
+-- it is internal protocol state, not a replica-visible entity.
 CREATE TABLE IF NOT EXISTS replica_invocation_commit (
   invocation_id       TEXT PRIMARY KEY,
   command_id          TEXT NOT NULL,
   intent_id           TEXT,
   -- Redacted/non-secret post-check + S5 reconstruction material. This row is
-  -- in the canonical transaction, so replay can finish journal.db without
-  -- re-entering the command handler after a cross-database crash.
+  -- in the canonical transaction, so replay can finish the audit band without
+  -- re-entering the command handler after a crash.
   audit_json          TEXT NOT NULL CHECK (json_valid(audit_json)),
   committed_at        TEXT NOT NULL,
-  -- Set only after one atomic journal transaction has verified checks,
+  -- Set only after one atomic audit-band transaction has verified checks,
   -- provenance, receipt, evidence, explanation, and executed status.
   journal_finalized_at TEXT
 ) STRICT;

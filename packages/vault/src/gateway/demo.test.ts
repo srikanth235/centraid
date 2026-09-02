@@ -75,9 +75,9 @@ describe("demo", () => {
       expect(outcome.status).toBe("executed");
       const taskId = (outcome as { output: { task_id: string } }).output
         .task_id;
-      const prov = db.journal
+      const prov = db.audit
         .prepare(
-          `SELECT prov_activity, used_json FROM consent_provenance
+          `SELECT prov_activity, used_json FROM access_provenance
           WHERE entity_type = 'schedule.task' AND entity_id = ?`
         )
         .get(taskId) as { prov_activity: string; used_json: string };
@@ -88,7 +88,7 @@ describe("demo", () => {
       });
       const seed = db.vault
         .prepare(
-          `SELECT app_id FROM consent_seed_row WHERE target_type = 'schedule.task' AND target_id = ?`
+          `SELECT app_id FROM access_seed_row WHERE target_type = 'schedule.task' AND target_id = ?`
         )
         .get(taskId) as { app_id: string };
       expect(seed.app_id).toBe("tasks");
@@ -116,7 +116,7 @@ describe("demo", () => {
       expect(outcome.status).toBe("denied");
       expect((outcome as { reason: string }).reason).toMatch(/owner-only/u);
       const rows = db.vault
-        .prepare("SELECT count(*) AS n FROM consent_seed_row")
+        .prepare("SELECT count(*) AS n FROM access_seed_row")
         .get() as {
         n: number;
       };
@@ -128,14 +128,14 @@ describe("demo", () => {
       expect(outcome.status).toBe("executed");
       const taskId = (outcome as { output: { task_id: string } }).output
         .task_id;
-      const prov = db.journal
+      const prov = db.audit
         .prepare(
-          `SELECT prov_activity FROM consent_provenance WHERE entity_type = 'schedule.task' AND entity_id = ?`
+          `SELECT prov_activity FROM access_provenance WHERE entity_type = 'schedule.task' AND entity_id = ?`
         )
         .get(taskId) as { prov_activity: string };
       expect(prov.prov_activity).toBe("command.schedule.add_task");
       const rows = db.vault
-        .prepare("SELECT count(*) AS n FROM consent_seed_row")
+        .prepare("SELECT count(*) AS n FROM access_seed_row")
         .get() as {
         n: number;
       };
@@ -195,13 +195,13 @@ describe("demo", () => {
       }[];
       expect(left.map((r) => r.title)).toStrictEqual(["Keep me"]);
       expect(gw.demoStatus(owner)).toStrictEqual([]);
-      const receipt = db.journal
-        .prepare(`SELECT detail_json FROM consent_receipt WHERE receipt_id = ?`)
+      const receipt = db.audit
+        .prepare(`SELECT detail_json FROM access_receipt WHERE receipt_id = ?`)
         .get(result.receiptId) as { detail_json: string };
       expect(JSON.parse(receipt.detail_json)).toMatchObject({ purged: 2 });
-      const purgeProv = db.journal
+      const purgeProv = db.audit
         .prepare(
-          `SELECT count(*) AS n FROM consent_provenance WHERE prov_activity = 'seed.purge'`
+          `SELECT count(*) AS n FROM access_provenance WHERE prov_activity = 'seed.purge'`
         )
         .get() as { n: number };
       expect(purgeProv.n).toBe(2);

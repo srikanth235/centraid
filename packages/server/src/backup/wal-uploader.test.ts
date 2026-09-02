@@ -1,14 +1,9 @@
 import { describe, expect, test } from "vitest";
 
 import type { VaultPlane } from "../serve/vault-plane.js";
-import { discardWalFiles, walPairKey } from "./wal-uploader.js";
+import { discardWalFiles } from "./wal-uploader.js";
 
 describe("wal-uploader", () => {
-  test("walPairKey joins vault and journal generations", () => {
-    expect(walPairKey("g1", "g2")).toBe("g1-g2");
-    expect(walPairKey("abc", "abc")).toBe("abc-abc");
-  });
-
   test("discardWalFiles is a no-op when the plane has no shipper", () => {
     const plane = { walShipper: null } as unknown as VaultPlane;
     expect(discardWalFiles(plane)).toStrictEqual({
@@ -19,27 +14,19 @@ describe("wal-uploader", () => {
     });
   });
 
-  test("discardWalFiles notes discarded streams before counting items", () => {
-    const holed: string[] = [];
-    const uploaded: Array<{ kind: string }> = [];
+  test("discardWalFiles holes the stream BEFORE deleting the files it drops", () => {
+    const events: string[] = [];
     const items = [
-      {
-        kind: "segment" as const,
-        addr: { db: "vault" as const },
-        file: "/tmp/a",
-      },
-      {
-        kind: "closer" as const,
-        closer: { db: "journal" as const },
-        file: "/tmp/b",
-      },
-      { kind: "pair-marker" as const, marker: {}, file: "/tmp/c" },
+      { kind: "segment" as const, addr: { db: "vault" as const }, file: "/a" },
+      { kind: "closer" as const, closer: { db: "vault" as const }, file: "/b" },
+      { kind: "marker" as const, marker: {}, file: "/c" },
     ];
     const plane = {
       walShipper: {
         listUploadable: () => items,
-        noteStreamDiscarded: (db: string) => holed.push(db),
-        noteUploaded: (item: { kind: string }) => uploaded.push(item),
+        noteStreamDiscarded: () => events.push("holed"),
+        noteUploaded: (item: { kind: string }) =>
+          events.push(`dropped:${item.kind}`),
       },
     } as unknown as VaultPlane;
     const result = discardWalFiles(plane);
@@ -49,15 +36,25 @@ describe("wal-uploader", () => {
       discarded: 3,
       markerTips: {},
     });
-    // Segment → vault, closer → journal, pair-marker → both. The production
-    // shipper uses a Set of dbs, so duplicates collapse before noteStreamDiscarded.
-    expect([...new Set(holed)].sort()).toStrictEqual(["journal", "vault"]);
-    expect(holed).toContain("vault");
-    expect(holed).toContain("journal");
-    expect(uploaded.map((i) => i.kind)).toStrictEqual([
-      "segment",
-      "closer",
-      "pair-marker",
+    // The reverse order loses the files while state still calls the base sound.
+    expect(events).toStrictEqual([
+      "holed",
+      "dropped:segment",
+      "dropped:closer",
+      "dropped:marker",
     ]);
+  });
+
+  test("nothing to drop leaves the stream unholed", () => {
+    const events: string[] = [];
+    const plane = {
+      walShipper: {
+        listUploadable: () => [],
+        noteStreamDiscarded: () => events.push("holed"),
+        noteUploaded: () => events.push("uploaded"),
+      },
+    } as unknown as VaultPlane;
+    expect(discardWalFiles(plane).discarded).toBe(0);
+    expect(events).toStrictEqual([]);
   });
 });

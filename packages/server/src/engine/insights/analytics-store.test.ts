@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { ConversationStore } from "../conversation/store.js";
-import { makeJournalDbProvider } from "../stores/gateway-db.js";
+import { makeLedgerDbProvider } from "../stores/gateway-db.js";
+import { ledgerDbFileIn } from "../stores/ledger-db.test-fixtures.js";
 import { AnalyticsStore } from "./analytics-store.js";
 
 /*
@@ -16,7 +16,7 @@ import { AnalyticsStore } from "./analytics-store.js";
  */
 function setup(): { runs: ConversationStore; analytics: AnalyticsStore } {
   const dir = tempDirSync("centraid-analytics-");
-  const ledger = makeJournalDbProvider(path.join(dir, "journal.db"));
+  const ledger = makeLedgerDbProvider(ledgerDbFileIn(dir));
   return {
     runs: new ConversationStore(ledger),
     analytics: new AnalyticsStore(ledger),

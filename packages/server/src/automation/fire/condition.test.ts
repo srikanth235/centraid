@@ -102,13 +102,13 @@ describe(readConditionCursor, () => {
         purpose: "dpv:Billing",
         vault: async () => ({
           ok: false,
-          code: "VAULT_CONSENT",
+          code: "VAULT_ACCESS",
           error: "deny (receipt r1)",
         }),
         limit: 50,
         now: new Date(1_000),
       })
-    ).rejects.toThrow(/VAULT_CONSENT/u);
+    ).rejects.toThrow(/VAULT_ACCESS/u);
     await expect(
       readConditionCursor({
         automationRef: "not-a-ref",
@@ -225,13 +225,13 @@ describe(readDataCursor, () => {
         purpose: "dpv:Billing",
         vault: async () => ({
           ok: false,
-          code: "VAULT_CONSENT",
+          code: "VAULT_ACCESS",
           error: "deny (receipt r1)",
         }),
         limit: 50,
         now: new Date(1_000),
       })
-    ).rejects.toThrow(/VAULT_CONSENT/u);
+    ).rejects.toThrow(/VAULT_ACCESS/u);
     await expect(
       readDataCursor({
         automationRef: "nope",

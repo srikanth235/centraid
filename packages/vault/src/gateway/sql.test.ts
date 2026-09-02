@@ -84,9 +84,9 @@ describe("sql", () => {
       expect(result.rows.map((r) => r.display_name)).toContain("Priya");
       expect(result.columns).toStrictEqual(["display_name"]);
       expect(result.receiptId).toBeTruthy();
-      const receipt = db.journal
+      const receipt = db.audit
         .prepare(
-          `SELECT decision, object_type FROM consent_receipt WHERE receipt_id = ?`
+          `SELECT decision, object_type FROM access_receipt WHERE receipt_id = ?`
         )
         .get(result.receiptId) as { decision: string; object_type: string };
       // node:sqlite hands back null-prototype rows; spreading compares the column
@@ -139,9 +139,9 @@ describe("sql", () => {
         signingKey: app.signingKey,
       };
       expect(() => gw.sql(cred, { sql: "SELECT 1" })).toThrow(/owner/u);
-      const deny = db.journal
+      const deny = db.audit
         .prepare(
-          `SELECT decision FROM consent_receipt WHERE object_type = 'vault.sql' ORDER BY receipt_id DESC LIMIT 1`
+          `SELECT decision FROM access_receipt WHERE object_type = 'vault.sql' ORDER BY receipt_id DESC LIMIT 1`
         )
         .get() as { decision: string };
       expect(deny.decision).toBe("deny");

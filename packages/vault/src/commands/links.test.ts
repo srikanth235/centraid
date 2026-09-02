@@ -277,17 +277,21 @@ describe("links", () => {
       )
       .run(noteId);
     gw.sweep(owner);
-    const row = liveLink(linkId);
-    expect(row).toBeDefined(); // ended, not erased
-    expect(row?.valid_to).not.toBeNull();
+    // THE RELATION GOES WITH ITS ENDPOINT (#916, superseding #272). End-dating
+    // kept an edge naming a row that is not there: it still showed in history,
+    // and an id reused later inherited a relation nobody drew. Both endpoints
+    // are composite foreign keys into `core_entity` now, so the purge cascades
+    // the edge away.
+    expect(liveLink(linkId)).toBeUndefined();
 
-    // The sweep stamped provenance for the end-dated link like any write.
-    const prov = db.journal
+    // The purge of the note it hung off is what the trail records.
+    const prov = db.audit
       .prepare(
-        `SELECT count(*) AS n FROM consent_provenance
-        WHERE entity_type = 'core.link' AND entity_id = ?`
+        `SELECT count(*) AS n FROM access_provenance
+        WHERE entity_type = 'knowledge.note' AND entity_id = ?
+          AND prov_activity = 'sweep.purge'`
       )
-      .get(linkId) as { n: number };
+      .get(noteId) as { n: number };
     expect(prov.n).toBeGreaterThan(0);
   });
 

@@ -17,11 +17,14 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { uuidv7 } from "../ids.js";
 import { ensureCommonsParty } from "./commons.js";
+import { isSelfBinding } from "./self-binding.js";
 
 export type PartyVaultBindOutcome =
   | "bound"
   /** Party already holds a LIVE binding to a DIFFERENT vault; left alone. */
-  | "conflict";
+  | "conflict"
+  /** This vault or its own party: a member is not their own peer (#916, R9). */
+  | "self";
 
 export type PartyVaultRevokeOutcome = "revoked" | "absent";
 
@@ -61,6 +64,7 @@ export function bindPartyToVault(
     displayName?: string;
   }
 ): PartyVaultBindOutcome {
+  if (isSelfBinding(db, input.partyId, input.vaultId)) return "self";
   const live = livePartyVaultBinding(db, input.partyId);
   // One live vault per person: keep the standing binding, report the clash.
   // Re-pointing silently rewrites who this person "is"; inserting hits the

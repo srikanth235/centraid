@@ -99,9 +99,9 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
 
     test("a declared rowFilter/fieldMask reaches the allow decision intact", () => {
       // Manifests anchoring a schema-wide read attenuate it: people and tally
-      // to their own entity type, locker (#872) `consent.receipt` to its own
+      // to their own entity type, locker (#872) `access.receipt` to its own
       // object types. That last matters most — the gateway's structural
-      // per-entity guard covers `consent.provenance` only, so here the
+      // per-entity guard covers `access.provenance` only, so here the
       // rowFilter IS the boundary.
       const anchored = MANIFESTS.filter((manifest) =>
         manifest.scopes.some((scope) => scope.rowFilter !== undefined)

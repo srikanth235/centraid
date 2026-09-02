@@ -15,18 +15,18 @@ import {
 import {
   isWalGeneration,
   parseWalCloserKey,
-  parseWalPairMarkerKey,
   parseWalSegmentKey,
+  parseWalTickMarkerKey,
   walGroupCloserKey,
-  walPairMarkerKey,
   walSegmentKey,
+  walTickMarkerKey,
 } from "./wal-format.js";
 import type { WalGroupCloser, WalSegmentAddress } from "./wal-format.js";
 
 /**
  * WAL addressing properties (#532 core expansion).
  *
- * Model: segment / closer / pair-marker keys are injective encodings of their
+ * Model: segment / closer / tick-marker keys are injective encodings of their
  * address fields — parse(encode(x)) === x for every valid address.
  */
 describe("WAL address property", () => {
@@ -53,21 +53,15 @@ describe("WAL address property", () => {
     );
   });
 
-  test("pair marker key round-trips", () => {
+  test("tick marker key round-trips", () => {
     fc.assert(
       fc.property(
         hex32,
-        hex32,
         fc.integer({ min: 0, max: 9_999_999_999_999 }),
-        (vaultGeneration, journalGeneration, tickMs) => {
-          const key = walPairMarkerKey({
-            vaultGeneration,
-            journalGeneration,
-            tickMs,
-          });
-          expect(parseWalPairMarkerKey(key)).toStrictEqual({
-            vaultGeneration,
-            journalGeneration,
+        (generation, tickMs) => {
+          const key = walTickMarkerKey({ generation, tickMs });
+          expect(parseWalTickMarkerKey(key)).toStrictEqual({
+            generation,
             tickMs,
           });
         }
@@ -83,7 +77,7 @@ describe("WAL address property", () => {
         const closerKey = walGroupCloserKey(closer);
         expect(parseWalCloserKey(segKey)).toBeNull();
         expect(parseWalSegmentKey(closerKey)).toBeNull();
-        expect(parseWalPairMarkerKey(segKey)).toBeNull();
+        expect(parseWalTickMarkerKey(segKey)).toBeNull();
       }),
       { numRuns: 24, seed: 53253 }
     );
@@ -125,7 +119,7 @@ describe("WAL address property", () => {
         fc.pre(!s.startsWith("wal/"));
         expect(parseWalSegmentKey(s)).toBeNull();
         expect(parseWalCloserKey(s)).toBeNull();
-        expect(parseWalPairMarkerKey(s)).toBeNull();
+        expect(parseWalTickMarkerKey(s)).toBeNull();
       }),
       { numRuns: 32, seed: 53257 }
     );
@@ -175,33 +169,24 @@ describe("WAL encoder totality (L1)", () => {
     );
   });
 
-  test("a pair-marker key that is emitted always parses back to the same address", () => {
+  test("a tick-marker key that is emitted always parses back to the same address", () => {
     fc.assert(
       fc.property(
         fc.tuple(
           hex32,
-          hex32,
           fc.integer({ min: 0, max: 9_999_999_999_999 }),
-          fc.constantFrom("none", "vault", "journal", "tick"),
+          fc.constantFrom("none", "generation", "tick"),
           notGeneration,
           notNonNegativeInt
         ),
-        ([
-          vaultGeneration,
-          journalGeneration,
-          tickMs,
-          field,
-          badGen,
-          badTick,
-        ]) => {
+        ([generation, tickMs, field, badGen, badTick]) => {
           const subject = {
-            vaultGeneration: field === "vault" ? badGen : vaultGeneration,
-            journalGeneration: field === "journal" ? badGen : journalGeneration,
+            generation: field === "generation" ? badGen : generation,
             tickMs: field === "tick" ? badTick : tickMs,
           };
-          const key = emitted(walPairMarkerKey, subject);
+          const key = emitted(walTickMarkerKey, subject);
           expect(
-            key === null ? subject : parseWalPairMarkerKey(key)
+            key === null ? subject : parseWalTickMarkerKey(key)
           ).toStrictEqual(subject);
         }
       ),
@@ -261,7 +246,7 @@ describe("WAL address domain boundaries", () => {
 
   test("a closer at group 0 is addressable but one at offset 0 is refused", () => {
     const closer: WalGroupCloser = {
-      db: "journal",
+      db: "vault",
       generation,
       group: 0,
       endOffset: 1,
@@ -276,13 +261,9 @@ describe("WAL address domain boundaries", () => {
     );
   });
 
-  test("a pair marker at tick 0 is addressable", () => {
-    const marker = {
-      vaultGeneration: generation,
-      journalGeneration: "f".repeat(32),
-      tickMs: 0,
-    };
-    expect(parseWalPairMarkerKey(walPairMarkerKey(marker))).toStrictEqual(
+  test("a tick marker at tick 0 is addressable", () => {
+    const marker = { generation, tickMs: 0 };
+    expect(parseWalTickMarkerKey(walTickMarkerKey(marker))).toStrictEqual(
       marker
     );
   });
@@ -349,25 +330,17 @@ describe("WAL refusals name the field they refused (L3)", () => {
     );
   });
 
-  test("pair-marker refusals identify the generation pair and the tick", () => {
-    const marker = {
-      vaultGeneration: generation,
-      journalGeneration: "b".repeat(32),
-      tickMs: 5,
-    };
-    // Either generation alone is enough to refuse the pair: a marker naming a
-    // generation that cannot exist would be listed under a base pair no
-    // restore can ever match.
-    expect(() => walPairMarkerKey({ ...marker, vaultGeneration: "x" })).toThrow(
-      /generation pair/u
+  test("tick-marker refusals identify the generation and the tick", () => {
+    const marker = { generation, tickMs: 5 };
+    // A marker naming a generation that cannot exist would be listed under a
+    // base no restore can ever match.
+    expect(() => walTickMarkerKey({ ...marker, generation: "x" })).toThrow(
+      /generation/u
     );
-    expect(() =>
-      walPairMarkerKey({ ...marker, journalGeneration: "x" })
-    ).toThrow(/generation pair/u);
-    expect(() => walPairMarkerKey({ ...marker, tickMs: -1 })).toThrow(
+    expect(() => walTickMarkerKey({ ...marker, tickMs: -1 })).toThrow(
       /marker tick/u
     );
-    expect(() => walPairMarkerKey({ ...marker, tickMs: 1.5 })).toThrow(
+    expect(() => walTickMarkerKey({ ...marker, tickMs: 1.5 })).toThrow(
       /marker tick/u
     );
   });

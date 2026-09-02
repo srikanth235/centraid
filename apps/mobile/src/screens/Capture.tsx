@@ -120,7 +120,7 @@ export default function CaptureScreen({
         });
       } else {
         const selectedGroup = groupId || String(groups.rows[0]?.group_id ?? "");
-        const ownerPartyId = String(vault.rows[0]?.owner_party_id ?? "");
+        const ownerPartyId = String(vault.rows[0]?.self_party_id ?? "");
         if (!selectedGroup || !ownerPartyId || !preview.amountMinor)
           throw new Error("Choose a group and enter an amount.");
         result = await session.write("tally", {

@@ -34,15 +34,15 @@ function auth(extra: Record<string, string> = {}): Record<string, string> {
   return { Authorization: `Bearer ${handle.token}`, ...extra };
 }
 
-/** The DEFAULT vault's journal — a gateway auto-founds one personal vault (#603). */
-async function journalDbPath(): Promise<string> {
+/** The DEFAULT vault's one file (#603, #916): the ledger band lives here too. */
+async function vaultDbPath(): Promise<string> {
   const vaultId = handle.vaults.defaultVaultId();
   const entries = await fs.readdir(dataDir, { recursive: true });
   const relative = entries.find(
-    (entry) => entry.endsWith("journal.db") && entry.includes(vaultId)
+    (entry) => entry.endsWith("vault.db") && entry.includes(vaultId)
   );
   if (!relative)
-    throw new Error(`journal.db for vault ${vaultId} was not created`);
+    throw new Error(`vault.db for vault ${vaultId} was not created`);
   return path.join(dataDir, relative);
 }
 
@@ -179,7 +179,7 @@ describe("webhook-route-over-http scenarios", () => {
 
     await vi.waitFor(
       async () => {
-        const db = new DatabaseSync(await journalDbPath(), { readOnly: true });
+        const db = new DatabaseSync(await vaultDbPath(), { readOnly: true });
         try {
           expect(
             (
@@ -205,7 +205,7 @@ describe("webhook-route-over-http scenarios", () => {
 
     await vi.waitFor(
       async () => {
-        const db = new DatabaseSync(await journalDbPath(), { readOnly: true });
+        const db = new DatabaseSync(await vaultDbPath(), { readOnly: true });
         try {
           const direct = db
             .prepare(

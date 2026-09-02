@@ -56,15 +56,13 @@ describe("golden vaults", () => {
       tables: VaultSnapshot;
     };
 
-    /** Inflate the frozen pair into a scratch dir and open it. */
+    /** Inflate the frozen file into a scratch dir and open it. */
     const openGolden = () => {
       const work = tempDirSync(`centraid-golden-${label}-`);
-      for (const file of ["vault.db", "journal.db"]) {
-        writeFileSync(
-          path.join(work, file),
-          gunzipSync(readFileSync(path.join(dir, `${file}.gz`)))
-        );
-      }
+      writeFileSync(
+        path.join(work, "vault.db"),
+        gunzipSync(readFileSync(path.join(dir, "vault.db.gz")))
+      );
       // `openVaultDb` migrates on open — that IS the upgrade under test.
       return { work, db: openVaultDb({ dir: work }) };
     };

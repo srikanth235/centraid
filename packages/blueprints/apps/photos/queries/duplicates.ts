@@ -130,7 +130,7 @@ export default async function duplicatesHandler({ ctx }: HandlerArgs) {
     return { clusters };
   } catch (error) {
     const e = error as { code?: string; message?: string };
-    if (e.code === "VAULT_CONSENT") {
+    if (e.code === "VAULT_ACCESS") {
       return {
         clusters: [],
         vaultDenied: { code: e.code, message: e.message },

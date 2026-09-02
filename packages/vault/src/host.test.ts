@@ -76,14 +76,14 @@ describe("host", () => {
     expect(lookupAppByName(db, "never-registered")).toBeUndefined();
     // `name` stays the enrollment slug — a wide swath of the desktop renderer
     // key-equates it to the app id — but the raw slug still self-heals onto
-    // `consent_app.display_name` (surfaced via a parked invocation's
+    // `access_app.display_name` (surfaced via a parked invocation's
     // `caller`, never through `.name`).
     expect(first.name).toBe("expense-tracker");
     // node:sqlite hands back null-prototype rows; spreading compares the column
     // data (which is the contract) without asserting the driver's prototype.
     expect({
       ...db.vault
-        .prepare("SELECT display_name FROM consent_app WHERE app_id = ?")
+        .prepare("SELECT display_name FROM access_app WHERE app_id = ?")
         .get(first.appId),
     }).toStrictEqual({ display_name: "Expense Tracker" });
   });

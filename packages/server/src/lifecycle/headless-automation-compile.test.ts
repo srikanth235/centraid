@@ -7,7 +7,7 @@ import { validateManifest } from "@centraid/server/automation";
 import {
   ConversationStore,
   ProviderEgressConsentStore,
-  makeJournalDbProvider,
+  makeLedgerDbProvider,
 } from "@centraid/server/engine";
 import type {
   ConversationRunner,
@@ -15,6 +15,7 @@ import type {
 } from "@centraid/server/engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { ledgerDbFileIn } from "../engine/stores/ledger-db.test-fixtures.js";
 import type { ResolvedAutomationAnchor } from "./automation-anchor-scopes.js";
 import {
   HEADLESS_COMPILE_WORK_ORDER,
@@ -70,12 +71,12 @@ describe("headless-automation-compile suite", () => {
   ) {
     const dir = await tempDir("centraid-headless-compile-");
     dirs.push(dir);
-    const journalDbFile = path.join(dir, "journal.db");
+    const ledgerDbFile = ledgerDbFileIn(dir);
     const onSuccess = vi.fn<CompileSuccess>().mockResolvedValue(undefined);
     const onFailure = vi.fn<CompileFailure>().mockResolvedValue(undefined);
     await runHeadlessAutomationCompile({
       runner,
-      journalDbFile,
+      ledgerDbFile,
       harnessSessionDir: path.join(dir, "sessions"),
       dataDir: path.join(dir, "apps"),
       appId: "digest",
@@ -90,7 +91,7 @@ describe("headless-automation-compile suite", () => {
       runId: "compile-1",
     });
     return {
-      store: new ConversationStore(makeJournalDbProvider(journalDbFile)),
+      store: new ConversationStore(makeLedgerDbProvider(ledgerDbFile)),
       onSuccess,
       onFailure,
     };
@@ -281,9 +282,9 @@ describe("headless-automation-compile suite", () => {
     it("settles a reserved compile turn when instruction revision fails first", async () => {
       const dir = await tempDir("centraid-failed-revision-compile-");
       dirs.push(dir);
-      const journalDbFile = path.join(dir, "journal.db");
+      const ledgerDbFile = ledgerDbFileIn(dir);
       recordFailedAutomationCompile({
-        journalDbFile,
+        ledgerDbFile,
         automationRef: "digest/main",
         appId: "digest",
         automationName: "Daily digest",
@@ -292,7 +293,7 @@ describe("headless-automation-compile suite", () => {
         harnessKind: "claude-code",
       });
 
-      const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+      const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
       expect(store.getTurn("compile-reserved")).toMatchObject({
         conversationId: "digest/main",
         triggerKind: "compile",
@@ -386,18 +387,18 @@ describe("headless-automation-compile suite", () => {
     it("denies an unattended compile whose harness the user never authored", async () => {
       const dir = await tempDir("centraid-headless-compile-consent-");
       dirs.push(dir);
-      const journalDbFile = path.join(dir, "journal.db");
+      const ledgerDbFile = ledgerDbFileIn(dir);
       const run = vi.fn<ConversationRunner["run"]>();
       // The live automations ladder does not contain claude-code, so a manifest
       // pin naming it is not consent for unattended egress (#567).
       const consent = new ProviderEgressConsentStore(
-        makeJournalDbProvider(journalDbFile),
+        makeLedgerDbProvider(ledgerDbFile),
         () => false
       );
       const onFailure = vi.fn<CompileFailure>().mockResolvedValue(undefined);
       await runHeadlessAutomationCompile({
         runner: { run },
-        journalDbFile,
+        ledgerDbFile,
         harnessSessionDir: path.join(dir, "sessions"),
         dataDir: path.join(dir, "apps"),
         appId: "digest",
@@ -417,7 +418,7 @@ describe("headless-automation-compile suite", () => {
       expect(onFailure).toHaveBeenCalledWith(
         expect.stringContaining("claude-code")
       );
-      const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+      const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
       const turn = store.getTurn("compile-consent");
       expect(turn?.ok).toBe(false);
       expect(turn?.error).toContain("no consent is recorded");
@@ -427,13 +428,13 @@ describe("headless-automation-compile suite", () => {
     it("fails closed before dispatch when the host omits the consent controller", async () => {
       const dir = await tempDir("centraid-headless-compile-no-consent-");
       dirs.push(dir);
-      const journalDbFile = path.join(dir, "journal.db");
+      const ledgerDbFile = ledgerDbFileIn(dir);
       const run = vi.fn<ConversationRunner["run"]>();
       const onFailure = vi.fn<CompileFailure>().mockResolvedValue(undefined);
 
       await runHeadlessAutomationCompile({
         runner: { run },
-        journalDbFile,
+        ledgerDbFile,
         harnessSessionDir: path.join(dir, "sessions"),
         dataDir: path.join(dir, "apps"),
         appId: "digest",
@@ -453,7 +454,7 @@ describe("headless-automation-compile suite", () => {
       expect(onFailure).toHaveBeenCalledWith(
         expect.stringContaining("consent controller")
       );
-      const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+      const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
       const turn = store.getTurn("compile-no-consent-controller");
       expect(turn?.ok).toBe(false);
       expect(turn?.error).toContain("consent controller");
@@ -463,18 +464,18 @@ describe("headless-automation-compile suite", () => {
     it("lets a ladder-member harness compile unattended without a prompt", async () => {
       const dir = await tempDir("centraid-headless-compile-consented-");
       dirs.push(dir);
-      const journalDbFile = path.join(dir, "journal.db");
+      const ledgerDbFile = ledgerDbFileIn(dir);
       const run = vi.fn<ConversationRunner["run"]>(async (input) => {
         input.onEvent({ type: "final", text: "Files ready." });
         return { harnessKind: "claude-code" };
       });
       const consent = new ProviderEgressConsentStore(
-        makeJournalDbProvider(journalDbFile),
+        makeLedgerDbProvider(ledgerDbFile),
         () => true
       );
       await runHeadlessAutomationCompile({
         runner: { run },
-        journalDbFile,
+        ledgerDbFile,
         harnessSessionDir: path.join(dir, "sessions"),
         dataDir: path.join(dir, "apps"),
         appId: "digest",
@@ -490,7 +491,7 @@ describe("headless-automation-compile suite", () => {
       });
 
       expect(run).toHaveBeenCalledOnce();
-      const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+      const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
       expect(store.getTurn("compile-consented")?.ok).toBe(true);
       store.close();
       expect(consent.has("digest/main", "claude-code", "automations")).toBe(

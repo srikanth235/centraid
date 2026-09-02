@@ -39,8 +39,8 @@ describe("social", () => {
     const now = new Date().toISOString();
     db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES (?, 'person', 'Ravi Kumar', ?, ?, '1.1')`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES (?, 'person', 'Ravi Kumar', ?, ?)`
       )
       .run(raviId, now, now);
     db.vault
@@ -238,8 +238,8 @@ describe("social", () => {
     const now = new Date().toISOString();
     db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES (?, 'person', 'Impostor', ?, ?, '1.1')`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES (?, 'person', 'Impostor', ?, ?)`
       )
       .run(other, now, now);
     const outcome = gw.invoke(owner, {
@@ -404,8 +404,8 @@ describe("social", () => {
     const now = new Date().toISOString();
     db.vault
       .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES (?, 'org', 'Acme Studio', ?, ?, '1.1')`
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES (?, 'org', 'Acme Studio', ?, ?)`
       )
       .run(orgId, now, now);
     registerLinkCommands(gw);

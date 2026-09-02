@@ -353,106 +353,72 @@ describe("media", () => {
     expect(again.status).toBe("failed");
   });
 
-  test("favorite and archive are first-class asset columns (issue #419)", () => {
+  test("the star is one tag on the asset; archive stays a column (#916)", () => {
     const { asset_id } = addAsset({ data_uri: PIXEL });
-    const state = () =>
-      db.vault
-        .prepare(
-          "SELECT favorite, archived_at FROM media_asset WHERE asset_id = ?"
-        )
-        .get(asset_id) as { favorite: number; archived_at: string | null };
-    // Fresh assets are unfavorited and unarchived.
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
-    expect({ ...state() }).toStrictEqual({ favorite: 0, archived_at: null });
-
-    // update_asset stays the general editor; set_favorite is the focused toggle.
-    expect(invoke("media.update_asset", { asset_id, favorite: 1 }).status).toBe(
-      "executed"
-    );
-    expect(state().favorite).toBe(1);
-    expect(invoke("media.set_favorite", { asset_id, favorite: 1 }).status).toBe(
-      "executed"
-    );
-    expect(state().favorite).toBe(1); // idempotent
-    expect(invoke("media.set_favorite", { asset_id, favorite: 0 }).status).toBe(
-      "executed"
-    );
-    expect(state().favorite).toBe(0);
-
-    // Archive is a nullable timestamp; toggling on stamps it, off clears it.
-    expect(invoke("media.set_archived", { asset_id, archived: 1 }).status).toBe(
-      "executed"
-    );
-    expect(state().archived_at).not.toBeNull();
-    expect(invoke("media.set_archived", { asset_id, archived: 0 }).status).toBe(
-      "executed"
-    );
-    expect(state().archived_at).toBeNull();
-  });
-
-  test("favoriting a photo writes the starred flags tag on its content item (issue #441 A2.1)", () => {
-    const { asset_id, content_id } = addAsset({ data_uri: PIXEL });
-
-    // The #274 "everything I starred" query: a live flags-scheme starred tag on
-    // the canonical content item. Docs/Locker/People all appear in it — a photo
-    // must too once favorited.
-    const starredContentIds = () =>
+    // ONE TRUTH (#916). There was a `media_asset.favorite` column AND a
+    // `starred` flags tag on the asset's CONTENT ITEM, kept in step by a
+    // mirror helper every writer had to remember; the importers and the share
+    // projection did not. The column is gone and the tag anchors on
+    // `media.asset` — the entity Photos shows, and the one a member points at.
+    const starred = () =>
       (
         db.vault
           .prepare(
             `SELECT t.target_id AS id FROM core_tag t
              JOIN core_concept c ON c.concept_id = t.concept_id
              JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-            WHERE t.target_type = 'core.content_item'
+            WHERE t.target_type = 'media.asset'
               AND s.uri = 'https://centraid.dev/schemes/flags'
               AND c.notation = 'starred'`
           )
           .all() as { id: string }[]
-      ).map((r) => r.id);
+      ).map((row) => row.id);
+    const archivedAt = () =>
+      (
+        db.vault
+          .prepare("SELECT archived_at FROM media_asset WHERE asset_id = ?")
+          .get(asset_id) as { archived_at: string | null }
+      ).archived_at;
 
-    expect(starredContentIds()).not.toContain(content_id);
+    expect(starred()).not.toContain(asset_id);
+    expect(archivedAt()).toBeNull();
 
-    // Favorite via the focused toggle → the tag appears.
-    expect(invoke("media.set_favorite", { asset_id, favorite: 1 }).status).toBe(
-      "executed"
-    );
-    expect(starredContentIds()).toContain(content_id);
-
-    // Unfavorite → the tag is gone.
-    expect(invoke("media.set_favorite", { asset_id, favorite: 0 }).status).toBe(
-      "executed"
-    );
-    expect(starredContentIds()).not.toContain(content_id);
-
-    // Reverse-direction agreement holds across 0/1 cycles: column and tag never
-    // disagree (the postcondition would have failed the invoke otherwise).
-    const agrees = () => {
-      const row = db.vault
-        .prepare(
-          `SELECT (a.favorite = 1) = EXISTS(
-                  SELECT 1 FROM core_tag t
-                    JOIN core_concept c ON c.concept_id = t.concept_id
-                    JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-                   WHERE t.target_type = 'core.content_item' AND t.target_id = a.content_id
-                     AND s.uri = 'https://centraid.dev/schemes/flags' AND c.notation = 'starred'
-                ) AS ok FROM media_asset a WHERE a.asset_id = ?`
-        )
-        .get(asset_id) as { ok: number };
-      return row.ok === 1;
-    };
-    for (const fav of [1, 0, 1, 0]) {
-      expect(
-        invoke("media.set_favorite", { asset_id, favorite: fav }).status
-      ).toBe("executed");
-      expect(agrees()).toBe(true);
-    }
-
-    // The general editor path (update_asset) mirrors too.
+    // update_asset stays the general editor; set_favorite is the focused toggle.
     expect(invoke("media.update_asset", { asset_id, favorite: 1 }).status).toBe(
       "executed"
     );
-    expect(starredContentIds()).toContain(content_id);
+    expect(starred()).toContain(asset_id);
+    expect(invoke("media.set_favorite", { asset_id, favorite: 1 }).status).toBe(
+      "executed"
+    );
+    expect(starred().filter((id) => id === asset_id)).toHaveLength(1);
+    expect(invoke("media.set_favorite", { asset_id, favorite: 0 }).status).toBe(
+      "executed"
+    );
+    expect(starred()).not.toContain(asset_id);
+
+    // Archive is a nullable timestamp; toggling on stamps it, off clears it.
+    expect(invoke("media.set_archived", { asset_id, archived: 1 }).status).toBe(
+      "executed"
+    );
+    expect(archivedAt()).not.toBeNull();
+    expect(invoke("media.set_archived", { asset_id, archived: 0 }).status).toBe(
+      "executed"
+    );
+    expect(archivedAt()).toBeNull();
+  });
+
+  test("a TRASHED asset can be neither starred nor archived (#916)", () => {
+    const { asset_id } = addAsset({ data_uri: PIXEL });
+    expect(invoke("media.delete_asset", { asset_id }).status).toBe("executed");
+    // Photos could star and archive a photograph the member had already
+    // thrown away: the precondition asked only that the row exist.
+    expect(invoke("media.set_favorite", { asset_id, favorite: 1 }).status).toBe(
+      "failed"
+    );
+    expect(invoke("media.set_archived", { asset_id, archived: 1 }).status).toBe(
+      "failed"
+    );
   });
 
   test("add_asset carries tz_offset_min and a device thumbhash onto the asset", () => {

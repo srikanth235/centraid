@@ -104,8 +104,12 @@ function input(
         vaultId: "vault-0198abcd",
         name: "Priya's private vault",
         vaultDbBytes: 84_000_000,
-        journalDbBytes: 6_200_000,
-        tableRowCounts: { core_content_item: 41_233, locker_item: 87 },
+        tableRowCounts: {
+          core_content_item: 41_233,
+          locker_item: 87,
+          access_receipt: 9_104,
+          items: 2_311,
+        },
       },
     ],
     config: {
@@ -192,7 +196,6 @@ describe("support bundle — redaction", () => {
     });
     expect(JSON.stringify(bundle)).not.toContain("laptop");
     expect(Object.keys(bundle.storage[0] ?? {}).toSorted()).toStrictEqual([
-      "journalDbBytes",
       "tableRowCounts",
       "vaultDbBytes",
       "vaultId",
@@ -259,6 +262,36 @@ describe("support bundle — usefulness", () => {
     // Most leaves survive. A bundle that redacts everything is a blank page.
     expect(rendered.bundle.redaction.leaves).toBeGreaterThan(30);
     expect(redactedFraction).toBeLessThan(0.5);
+  });
+
+  // C2 (#916): the audit and ledger bands are bands of `vault.db` now, so the
+  // one file's table breakdown names `access_receipt`, `items` and `turns`.
+  // A count is a diagnostic; a cell is the owner's evidence and the owner's
+  // conversation. The bundle carries the former and has no path to the latter.
+  test("the audit and ledger bands contribute counts, never row contents", () => {
+    const bundle = buildSupportBundle(
+      input({
+        storage: [
+          {
+            vaultId: "vault-0198abcd",
+            name: "Priya's private vault",
+            vaultDbBytes: 84_000_000,
+            tableRowCounts: { access_receipt: 9_104, items: 2_311 },
+          },
+        ],
+      })
+    );
+    const storage = bundle.storage[0] as {
+      tableRowCounts: Record<string, unknown>;
+    };
+    expect(storage.tableRowCounts["access_receipt"]).toBe(9_104);
+    expect(storage.tableRowCounts["items"]).toBe(2_311);
+    // Counts and bytes only — the emitter has no branch that reads a row.
+    expect(Object.keys(storage).toSorted()).toStrictEqual([
+      "tableRowCounts",
+      "vaultDbBytes",
+      "vaultId",
+    ]);
   });
 
   test("it states its own sharing rule and what it does not contain", () => {

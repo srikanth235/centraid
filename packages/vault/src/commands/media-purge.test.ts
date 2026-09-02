@@ -135,11 +135,14 @@ describe("media: purge_asset", () => {
         asset.asset_id
       )
     ).toBe(0);
-    // A link onto a purged row END-DATES rather than dangling (#272).
-    const link = db.vault
-      .prepare("SELECT valid_to FROM core_link WHERE link_id = 'link-1'")
-      .get() as { valid_to: string | null };
-    expect(link.valid_to).not.toBeNull();
+    // THE RELATION GOES WITH ITS ENDPOINT (#916, superseding #272): an
+    // end-dated edge onto a purged row still named it, and let an id reused
+    // later inherit a relation nobody drew.
+    expect(
+      db.vault
+        .prepare("SELECT valid_to FROM core_link WHERE link_id = 'link-1'")
+        .get()
+    ).toBeUndefined();
   });
 
   test("purging hands the bytes to the next sweep, not to nobody", () => {

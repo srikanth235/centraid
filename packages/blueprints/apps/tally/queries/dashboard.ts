@@ -5,7 +5,7 @@
  * The dashboard, and the shared balance engine every Tally query reads through.
  * Balances are DERIVED here, never stored: loadTally() pulls the ground facts
  * in a handful of bounded reads, and pairwise()/groupNet() fold them into net
- * positions. The owner is the vault's owner_party_id — the implicit `me`;
+ * positions. The owner is the vault's self_party_id — the implicit `me`;
  * everyone else is a canonical core.party carried by a tally_friend row. All
  * money is INTEGER minor units. A consent denial is a first-class outcome the
  * UI renders as the access state.
@@ -236,7 +236,7 @@ export async function loadTally(
   ]);
 
   const vaultRow = (vaultRes.rows ?? [])[0] ?? {};
-  const me = (vaultRow.owner_party_id as string | undefined) ?? null;
+  const me = (vaultRow.self_party_id as string | undefined) ?? null;
   const currency = (vaultRow.base_currency as string | undefined) ?? "USD";
 
   const friends = (friendsRes.rows ?? []) as unknown as FriendRow[];

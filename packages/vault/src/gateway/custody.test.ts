@@ -17,7 +17,7 @@ import { bootstrapVault } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
 import { sharedDiskFullTracker, VaultDiskFullError } from "../errors.js";
-import { backupVault, checkpointVault, sha256File } from "./custody.js";
+import { backupVault, checkpointVault } from "./custody.js";
 
 let root: string;
 let vaultDir: string;
@@ -47,7 +47,6 @@ describe("custody", () => {
 
     expect(result.vaultPath).toBe(path.join(destDir, "vault.backup.db"));
     expect(existsSync(result.vaultPath)).toBe(true);
-    expect(existsSync(result.journalPath)).toBe(true);
     expect(result.blobsCopied).toBe(1);
     expect(existsSync(path.join(destDir, "blobs"))).toBe(true);
     expect(result.receiptId).toBeTruthy();
@@ -58,7 +57,6 @@ describe("custody", () => {
       .update(readFileSync(result.vaultPath))
       .digest("hex");
     expect(result.vaultSha256).toBe(rawHash);
-    expect(sha256File(result.journalPath)).toBe(result.journalSha256);
 
     // The copy is a real, independently openable SQLite file carrying the
     // vault's own row — not just bytes that happen to exist.
@@ -73,10 +71,10 @@ describe("custody", () => {
     }
 
     // The receipt landed in the journal (appended, not overwritten).
-    const receiptRow = db.journal
-      .prepare("SELECT action FROM consent_receipt WHERE receipt_id = ?")
+    const receiptRow = db.audit
+      .prepare("SELECT action FROM access_receipt WHERE receipt_id = ?")
       .get(result.receiptId) as { action: string } | undefined;
-    expect(receiptRow?.action).toBe("act consent.backup_vault");
+    expect(receiptRow?.action).toBe("act access.backup_vault");
   });
 
   test("backupVault refuses an in-memory vault (no files to copy)", () => {

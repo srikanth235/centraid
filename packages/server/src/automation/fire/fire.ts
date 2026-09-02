@@ -9,7 +9,7 @@ import path from "node:path";
 
 import {
   ConversationStore,
-  makeJournalDbProvider,
+  makeLedgerDbProvider,
 } from "@centraid/server/engine";
 import type {
   AutomationTriggerKind,
@@ -84,7 +84,7 @@ export interface RunFireOptions {
   automationRef: string;
   runId?: string;
   appsDir: string;
-  journalDbFile: string;
+  ledgerDbFile: string;
   /** Per-app CODE folders (#137); defaults to `appsDir` in the flat layout. */
   codeAppsDir?: string;
   /** Bound to THAT app's enrolled agent credential, so a cross-app cascade acts
@@ -195,7 +195,7 @@ export async function runFire(
   }
 
   const runsStore = new ConversationStore(
-    makeJournalDbProvider(opts.journalDbFile)
+    makeLedgerDbProvider(opts.ledgerDbFile)
   );
   const runId =
     opts.runId ??
@@ -566,7 +566,7 @@ export async function runFire(
             {
               automationRef: next.ref,
               appsDir: opts.appsDir,
-              journalDbFile: opts.journalDbFile,
+              ledgerDbFile: opts.ledgerDbFile,
               ...(opts.codeAppsDir ? { codeAppsDir: opts.codeAppsDir } : {}),
               ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
               ...((nestedRuntime?.harnessKind ?? opts.harnessKind)

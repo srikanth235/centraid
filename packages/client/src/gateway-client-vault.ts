@@ -298,7 +298,7 @@ export async function approveVaultGrant(input: {
 
 export async function revokeVaultGrant(input: {
   grantId: string;
-}): Promise<{ viewsRevoked: number; parkedDropped: number }> {
+}): Promise<{ parkedDropped: number }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(
     baseUrl,

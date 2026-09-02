@@ -1,6 +1,6 @@
 /*
  * `vault-integrity` health component (#374, #659): `PRAGMA quick_check` over
- * both `vault.db` and `journal.db`. It is a FULL file scan, never a per-tick
+ * `vault.db`, the one file (#916). It is a FULL file scan, never a per-tick
  * read — so a vault is re-checked on a size-scaled interval (1h floor, a day at
  * the ceiling), at most `maxChecksPerTick` vaults land in one tick, and nothing
  * is scanned during the startup grace, keeping a full read off the boot path.
@@ -13,7 +13,6 @@ import type { ComponentStatus, HealthProbe } from "./health-registry.js";
 export interface VaultIntegrityEntry {
   readonly vaultId: string;
   readonly vault: DatabaseSync;
-  readonly journal: DatabaseSync;
 }
 
 export interface VaultIntegrityHealthOptions {
@@ -61,7 +60,7 @@ export function integrityIntervalFor(bytes: number, floorMs: number): number {
 /** `ok` iff the sole result row is literally `'ok'`. */
 function runQuickCheck(
   db: DatabaseSync,
-  file: "vault.db" | "journal.db",
+  file: "vault.db",
   maxLines: number
 ): { ok: boolean; lines: string[] } {
   try {
@@ -117,18 +116,11 @@ export function createVaultIntegrityHealthProbe(
       if (withinStartupGrace || checkedNow >= maxChecksPerTick) continue;
       checkedNow += 1;
       const vaultCheck = runQuickCheck(entry.vault, "vault.db", maxLines);
-      const journalCheck = runQuickCheck(entry.journal, "journal.db", maxLines);
-      const ok = vaultCheck.ok && journalCheck.ok;
-      const lines = [...vaultCheck.lines, ...journalCheck.lines].slice(
-        0,
-        maxLines
-      );
+      const ok = vaultCheck.ok;
+      const lines = vaultCheck.lines.slice(0, maxLines);
       // Size scaling is for HEALTHY vaults only; a failing one uses the floor.
       const nextIntervalMs = ok
-        ? integrityIntervalFor(
-            fileBytes(entry.vault) + fileBytes(entry.journal),
-            intervalMs
-          )
+        ? integrityIntervalFor(fileBytes(entry.vault), intervalMs)
         : intervalMs;
       cache.set(entry.vaultId, {
         ok,
