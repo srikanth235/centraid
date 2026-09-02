@@ -134,6 +134,7 @@ Two defects in [#892](https://github.com/srikanth235/centraid/issues/892)'s own 
 - [x] Assert the return to the group screen after the commit, rather than blind-tapping the band
 - [x] Stop racing the gateway's own reply deadline with a wait of exactly the same length
 - [x] Deadline the app-query door too, which had none and so hung the offline commit forever
+- [x] Mark the return by the band, not by a hero sentence only the online screen owes
 - [x] Spend one spawn on Notes' three adjacent read and write chunks
 
 ### U — the merged tree's own three client-e2e failures
@@ -156,6 +157,7 @@ Where each checked item lands, then the reasoning behind it:
 - Assert the return to the group screen after the commit, rather than blind-tapping the band — same section; `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
 - Stop racing the gateway's own reply deadline with a wait of exactly the same length — same section; same file.
 - Deadline the app-query door too, which had none and so hung the offline commit forever — same section; `apps/mobile/src/lib/gateway.ts`.
+- Mark the return by the band, not by a hero sentence only the online screen owes — same section; `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
 - Give Tally's commit a handle, since its label and the screen title are the same words — same section; `apps/mobile/src/kit/test-ids.ts`, `apps/mobile/src/apps/tally/TallyAddScreen.tsx`, `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`.
 - Spend one spawn on Notes' three adjacent read and write chunks — same section; `tests/agent-e2e-mobile/flows/notes-library.mjs`.
 - Disambiguate the Household sharing panel's headings, which the merge made ambiguous page-wide — "U — three failures the merge produced and nothing before it could have"; `apps/desktop/tests/e2e/household.spec.ts`.
@@ -777,6 +779,12 @@ What that leaves is a claim, not a flow bug. `native-v0-resilience` exists to pr
 **What the dump does and does not contain, which narrows it.** The failure hierarchy lists `id:tally-add-commit`, and that control sits BELOW the foot — so the digest carries below-fold nodes rather than only the visible window. The absence of a reconcile line and of any refusal sentence is therefore real, not an artefact of where the screen happened to be scrolled. Nothing was logged either: the only `ReactNativeJS` line anywhere near the commit is a tunnel notice, and `surfaceWriteFailure` would have spoken.
 
 So: the button is still there, no refusal is drawn, no status is posted, no error is logged, and the screen does not leave. `commit` returning early at `!verdict.ok` would leave a refusal (every `refuse()` but one passes a non-empty string) and `issueTallyWrite` failing would log. The reading most consistent with all four observations is that `await session.write("tally", …)` never resolves while the radio is off — a write that hangs instead of queueing. That is a hypothesis and is labelled one; what is established is the four observations above.
+
+**The deadline fix landed, and the evidence is the screen itself.** Run 33573882728 fails at the same assertion, but the digest under it is no longer the composer — it is the GROUP LEDGER: "Group ledger", "MEMBERS", "4 members · the owner is always a member", "LEDGER", "5 expenses · newest first", and the seeded rows down to "Ski rentals · Chris paid $92.00". The commit landed and the route popped. What remains is that the marker chosen for the arrival was wrong.
+
+`GROUP_HERO_SUB` is the hero's sentence about a DERIVED balance, and the hero is exactly what the group route cannot draw with the gateway unreachable — the figure has nowhere to come from. It asserted clean earlier in the journey because the phone was still online then. So the wait was asking the offline screen for something it never owed.
+
+The band is the marker instead: `hideBand` is the whole difference between the composer and the group route, so `id: tally-band` says one thing and only one thing — the composer left — and it is equally true online and off.
 
 **THE ACTUAL CAUSE, and a correction to the paragraph below it.** The 60s wait did not help: run 33570760531 tapped the commit at 23:39:01 and failed at 23:40:02, a full minute later. That also exposes the flaw in the reasoning that produced the 60s — a step always fails at exactly its own timeout, so "failed at exactly 20s" was never evidence that the 20s deadline was what elapsed. It was circular, and the paragraph below is left standing as written with this correction over it.
 

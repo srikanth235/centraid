@@ -415,14 +415,21 @@ ${DISMISS_KEYBOARD_ONBOARDING}
 # failed here at 22:56:38, to the second. The write was queueing as the flow
 # gave up on it.
 #
-# 60s, because the commit can pay that deadline TWICE: issueTallyWrite awaits
-# refreshTally() before it returns, and that is a second gateway read which is
-# just as unreachable. 20 + 20 plus the outbox write, the pop and the render.
-# extendedWaitUntil returns as soon as the screen arrives, so the ceiling costs
-# nothing when the write settles sooner. Nothing is loosened: the assertion is
-# the same one, sized to a documented product timeout instead of racing it.
+# THE BAND IS THE MARKER, because hideBand is the whole difference. The group
+# hero's sentence was the first choice and it is only true ONLINE: the hero
+# states a DERIVED balance, and offline that figure cannot be read, so the
+# route draws its title, MEMBERS and LEDGER without it. Run 33573882728 proves
+# the point from the other side — the digest at that failure is the group
+# ledger, seeded expenses and all, so the commit HAD landed and the flow was
+# asserting a sentence the offline screen never owed it.
+#
+# The band cannot be on the composer (hideBand) and is always on the group
+# route, online or off, so it says exactly one thing: the composer left. 60s
+# because the write settles behind a gateway deadline; extendedWaitUntil
+# returns on arrival, so the ceiling costs nothing when it settles sooner.
 - extendedWaitUntil:
-    visible: "${GROUP_HERO_SUB}"
+    visible:
+      id: "tally-band"
     timeout: 60000
 # Waiting is the band's fourth place and the one surface that reads the durable
 # outbox rather than the gateway. Its key is contrib — the label "Waiting" is
