@@ -58,6 +58,7 @@ const BASE: DriveDoc = {
   tags: [],
   custody_state: "replicated",
   shared_with: [],
+  shared_from: null,
 };
 
 /** The row exactly as the outbox hands it to the drive: a projected upsert of

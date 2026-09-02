@@ -7,9 +7,11 @@ import { describe, expect, it } from "vitest";
 import { isOverdue } from "@centraid/blueprints/apps/people/format";
 import type { PersonRow } from "@centraid/blueprints/apps/people/types";
 
+// The pure module, not the component: this suite runs in the node environment
+// and `PersonAvatar.tsx` pulls React Native's Flow-typed entry.
+import { avatarFill } from "../../kit/components/person-avatar-fill";
 import {
   applyRosterFilter,
-  avatarFill,
   projectDashboard,
   projectPersonDetail,
   projectRoster,

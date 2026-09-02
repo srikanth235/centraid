@@ -9,6 +9,7 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { bootstrapVault } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { writeReceipt } from "../gateway/evidence.js";
 import { uuidv7 } from "../ids.js";
 import {
   deleteReplicaIntentOutcomesForDevice,
@@ -202,6 +203,47 @@ describe("replica invocation commit receipt", () => {
       expect(
         readReplicaInvocationCommit(db.vault, "invocation-reopen")
       ).toBeUndefined();
+    } finally {
+      db?.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("repairs a marker whose handler wrote its own receipt beside the invocation's", () => {
+    // `HandlerCtx.receipt` grants every handler ONE receipt of its own (#883),
+    // and `share.grant` takes it. Reading every receipt on the invocation
+    // counted that one as corruption, so sharing a document left a marker no
+    // reopen could repair — and the vault then refused to open at all.
+    const dir = tempVaultDir();
+    let db: VaultDb | undefined;
+    try {
+      db = openVaultDb({ dir });
+      recordJournalPrefix(db, "invocation-handler-receipt");
+      recordCommit(db, "invocation-handler-receipt");
+      writeReceipt(db.journal, {
+        grantId: null,
+        invocationId: "invocation-handler-receipt",
+        action: "act test.command",
+        objectType: "share.authority",
+        objectId: "authority-1",
+        purpose: "dpv:ServiceProvision",
+        decision: "allow",
+        detail: { decisionRecorded: "granted" },
+      });
+      db.close();
+      db = undefined;
+
+      db = openVaultDb({ dir });
+      expect(
+        readReplicaInvocationCommit(db.vault, "invocation-handler-receipt")
+      ).toBeUndefined();
+      expect(
+        db.journal
+          .prepare(
+            `SELECT status FROM agent_command_invocation WHERE invocation_id = ?`
+          )
+          .get("invocation-handler-receipt")
+      ).toMatchObject({ status: "executed" });
     } finally {
       db?.close();
       rmSync(dir, { recursive: true, force: true });

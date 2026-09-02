@@ -60,7 +60,15 @@ export function standingGrant(
 export function stubDoor(overrides: Partial<GrantDoor> = {}): GrantDoor {
   return {
     subjects: () => Promise.resolve({ readable: true, offers: OFFERS }),
-    forParty: () => Promise.resolve({ known: true, channel: null, grants: [] }),
+    // A LINKED person is the baseline, because since #903 that is the only
+    // person who can be granted at all; `channel: null` is the exception the
+    // never-reached tests opt into, not the default every other test inherits.
+    forParty: () =>
+      Promise.resolve({
+        known: true,
+        channel: { state: "live" as const, vaultId: "vault-priya" },
+        grants: [],
+      }),
     forAudience: () => Promise.resolve({ known: true, grants: [] }),
     forSubject: () => Promise.resolve([]),
     create: () => Promise.resolve({ ok: true, outcome: "created" as const }),

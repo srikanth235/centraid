@@ -62,9 +62,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      # A manual run has no diff for paths-filter to read, so every lane `if:`
-      # also accepts `all`. Lanes stay explicit about this rather than the
-      # filter lying about what changed.
+      # A manual run has no diff for paths-filter to read, so every READ of a
+      # filter output also accepts `all`. Lanes stay explicit about this rather
+      # than the filter lying about what changed. "Every read", not "every lane
+      # `if:`" — which is how this was worded, and how `client-e2e`'s two `with:`
+      # inputs came to be the one pair without the fallback. `lint:path-filters`
+      # checks the reads now instead of the wording promising it.
       all: ${{ github.event_name == 'workflow_dispatch' }}
       web: ${{ steps.filter.outputs.web }}
       desktop: ${{ steps.filter.outputs.desktop }}
@@ -253,6 +256,11 @@ jobs:
       # counts `skipped` as a pass, so a path no filter names merges green and
       # unexercised. Every workspace package, app and top-level directory must be
       # claimed by a filter or ledgered with the always-on job that covers it.
+      # It also checks the escape hatch: a read of a filter output without the
+      # `|| …outputs.all == 'true'` fallback is dead on a `workflow_dispatch`
+      # run, where the filter step is skipped and every output is the empty
+      # string — so the one control that forces a full run leaves that lane
+      # skipped, which is a pass.
       - run: bun run lint:path-filters
       # #545 D9 — shellcheck governance hooks + coverage-scope self-test.
       - name: Install shellcheck (governance shell lane)
@@ -273,6 +281,18 @@ jobs:
       # input it never verifies. The flows themselves run nightly, but linting
       # their source is offline and fast, so it gates on the per-PR loop.
       - run: bun run lint:e2e-flows
+      # #905 Part 2 — the shell↔app conformance manifest. Four tables in three
+      # trees decide whether a launcher tile reaches a screen (the registry, the
+      # launcher catalog, Home's navigate switch, the deep-link table) and
+      # nothing linked them; `buildLauncherItems` drops an unmapped app id
+      # SILENTLY. This holds all four against
+      # `apps/mobile/app-conformance.json`, which is also what makes app #9
+      # covered the day it registers instead of the day someone remembers it.
+      - run: bun run lint:app-conformance
+      # Every device flow names what merges wrongly if it passes when it should
+      # not. `cold-start` is why: it asserted a marker that renders in both of
+      # Home's branches, and passed against a Home with no launcher tiles at all.
+      - run: bun run lint:e2e-claims
 
   # #782 — the ~19 gates in `check:push` that had NO CI job at all. They ran
   # only on a developer's machine, and receipts (#765, #731) show `check:push`
@@ -309,6 +329,9 @@ jobs:
       # are the machine-checkable half of it (docs/design-machinery.md).
       - run: bun run lint:design-tokens
       - run: bun run lint:mobile-design
+      # A virtualized list that anchors by default swallows rows arriving
+      # from another device (#903); every FlashList states its anchoring.
+      - run: bun run lint:list-anchoring
       - run: bun run lint:logical-insets
       - run: bun run lint:hairline
       - run: bun run lint:aria-labels
@@ -482,6 +505,35 @@ jobs:
       # collection error is a "do not merge" answer, not a coverage observation.
       - name: No test file failed to collect
         run: bun run test:collection-tripwire -- --require-report
+      # #656 Layer 5 / #842 W0.1 — the PR lane's total wall clock against the
+      # tighten-only ceiling in tests/suite-wall-clock.json. It rides HERE, on the
+      # single-job uninstrumented suite, because that is the lane the ceiling was
+      # measured from ("Reseeded 2026-08-29 from CI verify") and the only one
+      # whose number means what the budget file says it means.
+      #
+      # It used to ride on `coverage`, and that was wrong for a reason worth
+      # stating so it is not undone: the metric sums per-file WALL SPANS, and the
+      # files inside a shard run CONCURRENTLY, so the sum inflates when workers
+      # timeshare a slow runner. #905 measured it — the same 1508 files scored
+      # 2370.5s uninstrumented and 2427.0s instrumented on one host (+2.4%, so
+      # instrumentation is not the variable), while the four-way sharded lane
+      # reported 3824.0s on a run whose shard 1 took 545s against main's 383s.
+      # Main passing the identical gate on the identical suite is the same fact
+      # from the other side. A budget that a slow runner can breach is a flake
+      # with a number, and it fails the lane that adds tests rather than the
+      # change that added them.
+      #
+      # The existence check is load-bearing: the script exits 0 with "not
+      # measured" when the artifact is absent, which is right on a laptop and
+      # wrong in the lane that enforces it.
+      - name: Suite wall-clock ceiling
+        run: |
+          set -euo pipefail
+          if [ ! -f artifacts/test-results/vitest.json ]; then
+            echo "::error title=Suite wall-clock unmeasured::artifacts/test-results/vitest.json is missing after test:suite; the wall-clock ceiling cannot be enforced, so this lane fails rather than passing silently."
+            exit 1
+          fi
+          bun run test:suite-wall-clock
 
   # #892 Phase 1 — the instrumented half, fanned out. `bun run coverage` on one
   # runner was 20m15s; four shards each score a quarter of the test files and the
@@ -561,23 +613,11 @@ jobs:
         env:
           CENTRAID_COVERAGE_SHARDS: "4"
         run: bun run coverage:merge
-      # #656 Layer 5 / #842 W0.1 — the PR lane's total wall clock against the
-      # tighten-only ceiling in tests/suite-wall-clock.json. The ceiling shipped
-      # with #656 but no lane ever ran the gate, so the one budget that pushes
-      # BACK on test-flooding had never fenced a PR. It sums PER-FILE durations,
-      # not the run's elapsed time, so sharding does not move it: the ceiling
-      # still prices the work the suite asks for, which is the thing an added test
-      # increases. The existence check is load-bearing: the script exits 0 with
-      # "not measured" when the artifact is absent, which is right on a laptop and
-      # wrong in the lane that enforces it.
-      - name: Suite wall-clock ceiling
-        run: |
-          set -euo pipefail
-          if [ ! -f artifacts/test-results/vitest.json ]; then
-            echo "::error title=Suite wall-clock unmeasured::artifacts/test-results/vitest.json is missing after the shard merge; the wall-clock ceiling cannot be enforced, so this lane fails rather than passing silently."
-            exit 1
-          fi
-          bun run test:suite-wall-clock
+      # The suite wall-clock ceiling used to ride here and now rides on `verify`
+      # — see the comment above that step. Short version: sharding DOES move the
+      # metric, because it sums per-file wall spans and a shard's files run
+      # concurrently, so this lane scored the runner rather than the suite.
+      #
       # Scored on the merged report as well as on `verify`'s own run: `verify`
       # sees the uninstrumented suite and this sees the world the floors were
       # measured against, and a collection error that appears only under
@@ -798,13 +838,29 @@ jobs:
   # ---------------------------------------------------------------------------
 
   # Big enough to keep their own files, invoked via `workflow_call`.
+  # The `all` escape hatch has to reach the INPUTS, not just the `if:`. These two
+  # `with:` lines were the only place in this file where a `changes` output is
+  # read outside an `if:`, and they were the only two that did not carry the
+  # `|| all` fallback — so a `workflow_dispatch` run (where the paths-filter step
+  # is skipped and every output is the empty string) started this caller and
+  # handed it `web: false, desktop: false`. Both inner jobs took their own
+  # `if: inputs.web` / `if: inputs.desktop` and skipped; the lane finished in 0s
+  # having run nothing, and `check` counted it as satisfied. The one way to force
+  # a full run on `main` was also the one way this lane could not be exercised.
+  # `lint:path-filters` now fails on a `changes` output read without the fallback.
+  #
+  # The gate is `web || desktop` rather than `client`: `client` is a superset (it
+  # also matches `packages/server/**`), which was deliberate while `boot-smoke`
+  # lived in this lane and had to run for gateway-only PRs. #892 Phase 1 moved
+  # `boot-smoke` into `verify`, so nothing gated on `client` remains here and a
+  # server-only PR was spinning up a caller whose every job skips.
   client-e2e:
     needs: changes
-    if: needs.changes.outputs.client == 'true' || needs.changes.outputs.all == 'true'
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.desktop == 'true' || needs.changes.outputs.all == 'true'
     uses: ./.github/workflows/lane-client-e2e.yml
     with:
-      web: ${{ needs.changes.outputs.web == 'true' }}
-      desktop: ${{ needs.changes.outputs.desktop == 'true' }}
+      web: ${{ needs.changes.outputs.web == 'true' || needs.changes.outputs.all == 'true' }}
+      desktop: ${{ needs.changes.outputs.desktop == 'true' || needs.changes.outputs.all == 'true' }}
 
   gateway-package:
     needs: changes
@@ -899,12 +955,35 @@ jobs:
   # It runs the RELEASE artifact (#890 W1), so none of the dev-client machinery
   # — Metro, the dev launcher, the bundle prewarm, the developer-menu sheet —
   # exists on this path.
+  #
+  # TWO LEGS ON TWO EMULATORS (#905). In sequence the critical five measured
+  # ~795s against the suite's 720s deadline (run 33582899886), so the fifth
+  # member was starved on every run. No member was dropped and no assertion was
+  # loosened; the five are split across two matrix legs that each pair
+  # themselves, so the gate's wall time is the slower leg. The cost is one extra
+  # pairing per run, and it is accepted — see flows/pr-gate-budget.md. ONE job
+  # with a matrix rather than two jobs, so `check`'s `needs:` still names one
+  # lane, the roster still declares ONE blocking mobile device lane, and both
+  # committed leg scripts sit literally inside this job block where
+  # scripts/lint-e2e-wiring.mjs reads them.
   mobile-device-gate:
     needs: changes
     if: needs.changes.outputs.mobile == 'true' || needs.changes.outputs.all == 'true'
     runs-on: ubuntu-latest
-    # The SUITE's own budget is 12 minutes warm (flows/pr-gate-budget.md) and is
-    # what fails a slow run, because it fails while evidence can still be written.
+    strategy:
+      # Both legs always report. A red paired leg tells you nothing about
+      # whether the app still cold-starts, and cancelling the sibling would
+      # throw away the half of the gate that was still answering.
+      fail-fast: false
+      matrix:
+        include:
+          - leg: paired
+            script: apps/mobile/scripts/android-emulator-pr-gate.sh
+          - leg: resilience
+            script: apps/mobile/scripts/android-emulator-pr-gate-resilience.sh
+    # The SUITE's own budget is 12 minutes warm, now PER LEG
+    # (flows/pr-gate-budget.md), and is what fails a slow run, because it fails
+    # while evidence can still be written.
     # This is an outer backstop only and must stay well above suite + a cold
     # gradle release build, or a cancelled job destroys the verdicts (#557:
     # cancelled counts as red, with nothing to read).
@@ -1007,9 +1086,16 @@ jobs:
           restore-keys: |
             android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-
             android-gradle-${{ runner.os }}-
+      # Restore-then-save, for the reason already written above the apk and
+      # gradle caches and not applied to this one: `actions/cache` declares
+      # `post-if: success()`, so on a red lane the snapshot never saves and every
+      # run pays the ~2-minute create — the warm path stays unreachable until the
+      # greenness the cache exists to help deliver. `Post AVD cache` reported
+      # `skipped` on every red run while `Create AVD + snapshot` ran on every one,
+      # which is that same fact stated twice in the logs.
       - name: AVD cache
         id: avd_cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.android/avd/*
@@ -1033,7 +1119,15 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: false
           script: echo "Generated AVD snapshot for caching."
-      - name: Run the critical five on the release artifact
+      - name: Save the AVD snapshot
+        if: steps.avd_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-x86_64-google_apis-pixel6-r4096-c4-v1
+      - name: Run this leg of the critical five on the release artifact
         id: emu
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         env:
@@ -1050,7 +1144,19 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
           disable-animations: true
-          script: bash apps/mobile/scripts/android-emulator-pr-gate.sh
+          # The leg's committed script. Both paths appear literally in the
+          # matrix above, which is where the wiring linter reads them from.
+          script: bash ${{ matrix.script }}
+      # The gateway's side of a red run. The phone is mute about its replica —
+      # nothing on that path logs and the release artifact carries no debugger —
+      # so whether a clone was ever ASKED FOR is only knowable from here. Failure
+      # only: a green run has nothing to explain, and this is CI output rather
+      # than an artifact because the artifact store is not reachable to everyone
+      # who has to read it. `ci-gateway.mjs` traces method, path and status for
+      # the replica surface alone and never for enrollment.
+      - name: What the gateway served
+        if: failure()
+        run: tail -n 200 /tmp/centraid-mobile-gateway.log || true
       # The harness rm -rf's this in a finally; this is belt-and-braces against a
       # run that dies before the finally, so a crash mid-pairing cannot ship a
       # live enrollment capability in the uploaded artifact.
@@ -1062,13 +1168,62 @@ jobs:
               -path '*/maestro-debug/*-configure-gateway' \
               -prune -exec rm -rf {} +
           fi
+      # BANK WHAT THIS RUN COMPILED. Until now only `mobile-canary` saved, so a
+      # PR could restore a shell only if main had already built that exact
+      # `apk_key` — and the key names the JS bundle, so any PR touching JS
+      # missed it and paid a full cold release build inside this job. On
+      # 0655a1b7 and again on 60732d30 the restore was a 0s miss and the build
+      # cost 16m21s of a 27m job.
+      #
+      # Saving here does not help the push that paid for it; it helps the NEXT
+      # push on the same branch, which is the common shape — a receipt edit, a
+      # doc fix, a workflow tweak, none of which move the JS fingerprint. Actions
+      # cache scoping keeps a branch's entry to that branch and its children, so
+      # this cannot serve a stale shell to main or to an unrelated PR.
+      #
+      # `if: always()` and gated on `built` for the same reason the canary's is:
+      # a red suite still leaves the next push a warm build, and a run that
+      # restored rather than compiled has nothing new to bank.
+      #
+      # BOTH LEGS SAVE THE SAME KEYS, and that is safe rather than lucky (#905).
+      # On a cold cache each leg compiles and each reaches this step with the
+      # identical apk / gradle key. `actions/cache/save` wraps its whole body in
+      # `catch (error) { utils.logWarning(...) }` (src/saveImpl.ts at the pinned
+      # v6.1.0), so the second reservation loses, logs a warning, and the step
+      # still exits 0 — the same shape the AVD snapshot save has always had.
+      - name: Save the built Android app
+        if: always() && steps.emu.outputs.built == 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e-android
+          key: android-release-${{ runner.os }}-${{ steps.native_android.outputs.apk_key }}
+      - name: Save the Android gradle build directory
+        if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            apps/mobile/android/app/build
+            apps/mobile/android/build
+            ~/.gradle/caches
+          key: android-gradle-${{ runner.os }}-${{ steps.native_android.outputs.hash }}-${{ github.sha }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: mobile-device-gate-runs
+          name: mobile-device-gate-runs-${{ matrix.leg }}
           path: tests/agent-e2e-mobile/runs/
           retention-days: 7
           if-no-files-found: ignore
+      # #905 — the ledger the harness appended on THIS runner, uploaded red or
+      # green: without it the observed p95 every suite budget must be re-derived
+      # from (tests/agent-e2e-mobile/ledger/README.md) never leaves the runner.
+      - name: Upload the mobile run ledger
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mobile-run-ledger-pr-gate-${{ matrix.leg }}
+          path: tests/agent-e2e-mobile/ledger/durations.json
+          retention-days: 30
+          if-no-files-found: warn
 
   docs:
     needs: changes

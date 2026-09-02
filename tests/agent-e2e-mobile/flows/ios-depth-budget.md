@@ -15,7 +15,7 @@ iOS is the **depth** platform, not a second copy of Android's roster ([D1](../..
 | Component | Minutes | Where the number comes from |
 | --- | --- | --- |
 | Fresh pairing (`pairing-canary`) | 4 | `lib/harness.mjs`: "Fresh pairing is the slowest legitimate chunk (~4 minutes on the reviewed CI runner)". |
-| `native-v0-resilience` | 5 | Its `minimumTests` floor is 13 declared checks across every cover plus a process restart — the heaviest single journey in the roster, priced at four navigation units plus the restart. |
+| `native-v0-resilience` | 5 | On iOS the flow is the Settings hop through the all-apps sheet plus a process restart — the airplane arc is Android's, and the covers-open claim is held off the device entirely ([G-device-only-gate](../../../docs/decisions.md#the-pr-gate-loop-892)). Priced at four navigation units plus the restart; its `minimumTests` floor of 13 is a floor rather than a ceiling, and the flow's declared checks still clear it. |
 | `locker-gate`, `photos-permissions` | 3 | ~1.15 each at `home-apps-budget.md`'s per-journey rate, plus `locker-gate`'s own restart. |
 | `cold-start` | 5 | Eight per-launch cold starts. On a release artifact each is a real app launch rather than a bundle fetch, which is the point of the probe and also why it is no longer the ~43-second figure the dev client produced. |
 | `scroll-frames` | 4 | Eight flings each on two surfaces, plus arming and reading the frame probe. |

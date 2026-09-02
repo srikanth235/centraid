@@ -32,6 +32,7 @@ import AppHeader from "../../kit/components/AppHeader";
 import { useTheme } from "../../kit/theme";
 import { resolveAppMeta } from "../../lib/gateway";
 import type { TallyShellNavigation } from "../../navigation";
+import VaultBar from "../../screens/home/VaultBar";
 import { resolveTallyMoreRoute } from "./tally-band";
 import type { TallyBandDestinationKey, TallyMoreRowKey } from "./tally-band";
 import TallyBand from "./TallyBand";
@@ -128,6 +129,10 @@ export default function TallyScreen({
 
   return (
     <View style={frame}>
+      {/* The vault lockup on every route (see `VaultBar`): which vault, which
+          gateway, and the product's two global verbs. Above the app's own
+          header, which names the ROUTE — a different question. */}
+      <VaultBar />
       <AppHeader
         title={denied ? shelfLabel(null) : shelfLabel(shelf)}
         subtitle={

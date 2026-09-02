@@ -9,8 +9,6 @@ import { Image } from "expo-image";
 import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
-import { readableName } from "@centraid/blueprints/apps/photos/place-map";
-import { PLACE_UNNAMED } from "@centraid/blueprints/apps/photos/shared-copy";
 import { radii } from "@centraid/design";
 
 import Icon from "../../kit/components/Icon";
@@ -28,7 +26,7 @@ import type {
   CollectionSectionKey,
   CollectionTile,
 } from "./photos-collections";
-import { placeCardKey } from "./places-model";
+import { placeCells } from "./places-model";
 import { onThisDay } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
 
@@ -252,22 +250,7 @@ export default function PhotosCollectionsView({
     return buildCollectionSections({
       assets,
       albums,
-      places: places.rows.flatMap((row) => {
-        const key = placeCardKey(row);
-        return key === null
-          ? []
-          : [
-              {
-                placeId: String(row.place_id),
-                key,
-                // `readableName`, like the shelf and the map: a coordinate
-                // pair is not a name, and must never print as one (#816).
-                name:
-                  readableName(row.name == null ? null : String(row.name)) ??
-                  PLACE_UNNAMED,
-              },
-            ];
-      }),
+      places: placeCells(places.rows),
       people: [...byParty.entries()].map(([partyId, entry]) => ({
         partyId,
         ...entry,

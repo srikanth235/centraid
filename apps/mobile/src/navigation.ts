@@ -49,7 +49,17 @@ export type PhotosStackParamList = {
 
 export type DocsStackParamList = {
   // Same longhand as `PhotosHome.destination` (import boundary); `DocsScreen.tsx` band handler pins the two.
-  DocsHome: { destination?: "all" | "folders" | "due" | "search" } | undefined;
+  DocsHome:
+    | {
+        destination?:
+          | "all"
+          | "folders"
+          | "starred"
+          | "shared"
+          | "due"
+          | "search";
+      }
+    | undefined;
   // Name rides along so the app bar need not wait a replica round-trip.
   DocsFolder: { folderId: string; folderName: string };
   // One read route: reading view for kinds Docs can set, facts panel for kinds it cannot.
@@ -65,7 +75,6 @@ export type DocsStackParamList = {
   DocsUpload: undefined;
   DocsScan: undefined;
   DocsRecent: undefined;
-  DocsStarred: undefined;
   DocsTrash: undefined;
   DocsStorage: undefined;
 };
@@ -145,14 +154,10 @@ export type AgendaStackParamList = {
 };
 
 export type SettingsStackParamList = {
-  Settings: undefined;
+  /** Not `Settings` — the root stack owns that name for the navigator. */
+  SettingsHome: undefined;
   Approvals: undefined;
-  // A tapped `centraid://commons-invite` link lands HERE with the claim it
-  // carried (`deep-links.ts`), because Sharing is where an invitation is
-  // redeemed; pasting one is the same door. `claimToken` is a ONE-TIME secret
-  // riding a route param, so `Sharing.tsx` clears both the moment it has read
-  // them — nothing may persist a navigation state still holding it.
-  Sharing: { stewardVaultId?: string; claimToken?: string } | undefined;
+  Sharing: undefined;
   PhoneStorage: { signalCause?: string } | undefined;
   // Frame screen, never Photos stack (#712): policy also covers Docs scans and Notes attachments.
   BackupHealth: { signalCause?: string } | undefined;

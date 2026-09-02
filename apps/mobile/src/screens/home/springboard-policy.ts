@@ -108,6 +108,45 @@ export function tileEarnsGrid(
 }
 
 /**
+ * Every tile `unknown` — no replica session, no grant, or every read failed.
+ * The whole springboard's verdict, not one app's, and that is why it is a
+ * separate question from `tileEarnsGrid`: demoting ONE unreadable tile beside
+ * readable neighbours is right, demoting them ALL leaves a launcher with no
+ * tiles. `springboardState` returns `content` here precisely so the screen does
+ * not claim the vault is empty — and the grid it chose then rendered nothing
+ * anyway (#905).
+ */
+export function everyTileUnreadable(
+  tiles: readonly Pick<TileData, "status">[]
+): boolean {
+  return tiles.length > 0 && tiles.every((tile) => tile.status === "unknown");
+}
+
+/**
+ * Which apps the grid shows, and which fall to first moves. It lived inline in
+ * `Home.tsx` until #905 — which is why the defect above had no test at any
+ * tier, a renderer being the only way to reach it. Generic over the item so
+ * this file keeps its no-React promise; `LauncherItem` fits structurally.
+ */
+export function gridMembership<Item extends { meta: { id: string } }>(
+  items: readonly Item[],
+  tiles: ReadonlyMap<
+    string,
+    Pick<TileData, "status"> & { body: Pick<TileBody, "kind"> }
+  >
+): { earned: Item[]; idleIds: string[] } {
+  const unreadable = everyTileUnreadable([...tiles.values()]);
+  const earned: Item[] = [];
+  const idleIds: string[] = [];
+  for (const item of items) {
+    const tile = tiles.get(item.meta.id);
+    if (!tile || unreadable || tileEarnsGrid(tile)) earned.push(item);
+    else idleIds.push(item.meta.id);
+  }
+  return { earned, idleIds };
+}
+
+/**
  * Sums ONLY counts a read actually returned: a withheld count (Locker) is
  * omitted, never treated as zero, and a capped count contributes its ceiling —
  * which is why `HomeStatusLine` says "at least" when anything capped. The one

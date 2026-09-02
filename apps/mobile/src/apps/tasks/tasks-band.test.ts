@@ -12,6 +12,7 @@ import {
   MORE_SHELVES,
 } from "@centraid/blueprints/apps/tasks/shelves";
 
+import { resolveIconName } from "../../kit/components/icon-resolver";
 import {
   BAND_CAPSULE,
   TASKS_BAND_DESTINATIONS,
@@ -41,7 +42,7 @@ describe("the band Tasks claims", () => {
   it("gives every tab a label — a glyph alone is not a name", () => {
     for (const destination of TASKS_BAND_DESTINATIONS) {
       expect(destination.label.length).toBeGreaterThan(0);
-      expect(destination.icon.length).toBeGreaterThan(0);
+      expect(() => resolveIconName(destination.icon)).not.toThrow();
     }
   });
 
@@ -71,10 +72,10 @@ describe("the More sheet", () => {
     }
   });
 
-  it("labels every row and gives it a glyph", () => {
+  it("labels every row and gives it a glyph the registry actually ships", () => {
     for (const row of TASKS_MORE_ROWS) {
       expect(row.label.length).toBeGreaterThan(0);
-      expect(row.icon.length).toBeGreaterThan(0);
+      expect(() => resolveIconName(row.icon)).not.toThrow();
     }
   });
 });

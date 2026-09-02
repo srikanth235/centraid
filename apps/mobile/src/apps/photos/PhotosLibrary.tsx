@@ -7,6 +7,7 @@ import React, { memo, useCallback, useMemo, useState } from "react";
 import { Alert, Modal, Pressable, View } from "react-native";
 
 import Icon from "../../kit/components/Icon";
+import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import Tappable from "../../kit/components/Tappable";
@@ -331,6 +332,7 @@ export default function PhotosLibrary({
         album cover at once, and nesting a list inside a ScrollView would have
         done the same thing while adding a scroll conflict. */}
       <FlashList
+        maintainVisibleContentPosition={NEWEST_FIRST_ANCHORING}
         data={albumRows}
         numColumns={2}
         keyExtractor={(row) => String(row.album.__rowId)}

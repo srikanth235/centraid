@@ -105,7 +105,66 @@ const gateway = await buildGateway({
 runtime.gateway = gateway;
 await gateway.start(`http://127.0.0.1:${port}`);
 
+/*
+ * WHAT THE PHONE ACTUALLY ASKED FOR (#905 O follow-up).
+ *
+ * A library that draws its empty state over a vault holding rows is either a
+ * clone that never arrived or a read that cannot see one, and the device is
+ * mute about which: nothing on the replica path logs, and the release artifact
+ * carries no debugger. From here the difference is plain — a bootstrap request
+ * that never appears is the first case, one that answers 200 is the second.
+ *
+ * The Iroh endpoint forwards into this same listener, so a paired phone's
+ * requests pass through here exactly as a loopback client's do.
+ *
+ * Method, path and status only, and never for the enrollment surface: a pairing
+ * ticket is a live capability and this log is printed into CI output. Those
+ * surfaces are `/centraid/_gateway/tunnel/pair` and `/_gateway/devices/ticket`,
+ * both OUTSIDE `_vault`, so the whole vault plane traces without exposing one.
+ *
+ * EVERY vault surface, not the four of the data path (#905). Naming only
+ * replica/changes/scopes/demo answered "did it fetch rows" and nothing else:
+ * the phone speaks sixteen other surfaces here — status, vaults, grants,
+ * notifications — so a run where it reached the gateway and a run where the
+ * tunnel never came up produced the same empty trace. They are different bugs.
+ */
+const TRACED = /^\/centraid\/_vault\//u;
+
+/*
+ * The SIZE is the row count's shadow, and it is the whole question: a 200 on a
+ * bootstrap page proves the phone asked and the gateway answered, never that
+ * the answer carried anything. An empty page and a full one differ by orders of
+ * magnitude here.
+ *
+ * Counted rather than read off `content-length`, which the first run of this
+ * trace showed is absent on every one of these responses — the header is set
+ * for some routes and not others, and a diagnostic that prints `?B` for the one
+ * question it exists to answer is no diagnostic. `write`/`end` are wrapped
+ * because they are the only place the byte count is certain.
+ */
+function countBytes(response) {
+  const counter = { total: 0 };
+  for (const method of ["write", "end"]) {
+    const original = response[method].bind(response);
+    response[method] = (chunk, ...rest) => {
+      if (chunk) counter.total += Buffer.byteLength(chunk);
+      return original(chunk, ...rest);
+    };
+  }
+  return counter;
+}
+
 const server = http.createServer((request, response) => {
+  const startedAt = Date.now();
+  const target = (request.url ?? "/").split("?")[0];
+  if (TRACED.test(target)) {
+    const counter = countBytes(response);
+    response.on("finish", () =>
+      logger.info(
+        `${request.method} ${target} -> ${response.statusCode} ${counter.total}B in ${Date.now() - startedAt}ms`
+      )
+    );
+  }
   void gateway
     .composedHandler(request, response)
     .then((handled) => {

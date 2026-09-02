@@ -136,8 +136,8 @@ describe("Docs, on the real React Native host tree", () => {
     expect(tabs.map((tab) => tab.props.accessibilityLabel)).toStrictEqual([
       "All",
       "Folders",
-      "Coming due",
-      "Search",
+      "Starred",
+      "Shared",
       "More",
     ]);
     // EXACTLY ONE lit place. Two lit tabs is precisely the defect a props-echo
@@ -203,6 +203,79 @@ describe("Docs, on the real React Native host tree", () => {
     expect(navigated.calls).toStrictEqual([
       ["DocumentRead", { documentId: "d1" }],
     ]);
+  });
+
+  it("draws the Shared shelf led by who sent each document, newest arrival first", () => {
+    seedDocuments([
+      { id: "d1", title: "Tahoe packing list" },
+      { id: "d2", title: "Boiler warranty" },
+      { id: "d3", title: "My own notes" },
+    ]);
+    // Two placements and one ordinary document: only what ARRIVED is a row
+    // here, and the one whose origin vault no binding names stays unnamed
+    // rather than wearing a truncated id.
+    replicaRows.byEntity.set("core.share_origin", [
+      {
+        __rowId: "o1",
+        item_type: "core.document",
+        item_id: "d1",
+        origin_vault_id: "vault-alice",
+        origin_item_id: "far-away-1",
+        shared_at: Date.parse("2026-08-31T13:42:06.358Z"),
+      },
+      {
+        __rowId: "o2",
+        item_type: "core.document",
+        item_id: "d2",
+        origin_vault_id: "vault-stranger",
+        origin_item_id: "far-away-2",
+        shared_at: Date.parse("2026-08-02T09:00:00.000Z"),
+      },
+    ]);
+    replicaRows.byEntity.set("share.party_vault_binding", [
+      {
+        __rowId: "b1",
+        party_id: "party-alice",
+        vault_id: "vault-alice",
+        revoked_at: null,
+      },
+    ]);
+    replicaRows.byEntity.set("core.party", [
+      { __rowId: "p1", party_id: "party-alice", display_name: "Alice" },
+    ]);
+
+    const screen = mountDocs("shared");
+    const rows = screen
+      .getAllByRole("button")
+      .map((node) => node.props.accessibilityLabel as string);
+    expect(rows).toContain("Tahoe packing list");
+    expect(rows).toContain("Boiler warranty");
+    expect(rows).not.toContain("My own notes");
+
+    // The lead line names the sender, and the unnamed vault says so plainly.
+    const said = screen.root.findAll(
+      (node) => typeof node.props.children === "string"
+    );
+    const texts = said.map((node) => node.props.children as string);
+    expect(texts.some((line) => line.startsWith("Alice · "))).toBe(true);
+    expect(texts.some((line) => line.startsWith("Another vault · "))).toBe(
+      true
+    );
+    expect(texts).toContain("2 documents · each stays while its share stands");
+  });
+
+  it("draws its own empty, never the drive's — a full drive with nothing shared", () => {
+    // The seam answers an unseeded entity with zero rows and no error, which
+    // is a genuine "nothing arrived". The shelf must say THAT and not inherit
+    // All's sentences, which would tell a member with four documents that
+    // their drive is empty.
+    seedDocuments([{ id: "d1", title: "Lease agreement" }]);
+    const screen = mountDocs("shared");
+    const texts = screen.root
+      .findAll((node) => typeof node.props.children === "string")
+      .map((node) => node.props.children as string);
+    expect(texts).toContain("Nothing has been shared with you yet");
+    expect(texts).not.toContain("Lease agreement");
   });
 
   it("gives the frame a real flex-1 body so the band cannot overlap the drive", () => {

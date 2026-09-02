@@ -16,6 +16,7 @@ import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 
+import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { Text } from "../../kit/components/NativeText";
 import {
   PHOTO_TILE_HANDLES,
@@ -380,6 +381,7 @@ export default function PhotoTimeline({
     >
       <View style={styles.fill} testID={TEST_IDS.photos.grid}>
         <FlashList
+          maintainVisibleContentPosition={NEWEST_FIRST_ANCHORING}
           initialScrollIndex={initialLanding}
           ref={list}
           data={rows}

@@ -460,6 +460,16 @@ jobs:
           path: tests/agent-e2e-mobile/runs/
           retention-days: 7
           if-no-files-found: ignore
+      # #905 — the ledger this runner appended, uploaded red or green; nothing
+      # else carries the observed durations off the runner.
+      - name: Upload the mobile run ledger
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mobile-run-ledger-nightly-ios
+          path: tests/agent-e2e-mobile/ledger/durations.json
+          retention-days: 30
+          if-no-files-found: warn
 
   # #496 PC1 / #630 — Android runs the same eight native blueprint covers as
   # iOS. Flake budget:
@@ -585,9 +595,16 @@ jobs:
       # already settled. The key pins every AVD-shaping input — bump the trailing
       # -vN to invalidate after an emulator/image bump. Distinct from the apk
       # cache (different key, different path); both can hit independently.
+      # Restore-then-save, for the reason already written above the apk and
+      # gradle caches and not applied to this one: `actions/cache` declares
+      # `post-if: success()`, so on a red lane the snapshot never saves and every
+      # run pays the ~2-minute create — the warm path stays unreachable until the
+      # greenness the cache exists to help deliver. `Post AVD cache` reported
+      # `skipped` on every red run while `Create AVD + snapshot` ran on every one,
+      # which is that same fact stated twice in the logs.
       - name: AVD cache
         id: avd_cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.android/avd/*
@@ -610,6 +627,14 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: false
           script: echo "Generated AVD snapshot for caching."
+      - name: Save the AVD snapshot
+        if: steps.avd_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-x86_64-google_apis-pixel6-r4096-c4-v1
       - name: Set up Android SDK + emulator
         id: emu
         # v2.38.0 — prior pin 1dcd009…dd was a typo/orphan SHA (#535 F6).
@@ -692,6 +717,16 @@ jobs:
           path: tests/agent-e2e-mobile/runs/
           retention-days: 7
           if-no-files-found: ignore
+      # #905 — the ledger this runner appended, uploaded red or green; nothing
+      # else carries the observed durations off the runner.
+      - name: Upload the mobile run ledger
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mobile-run-ledger-nightly-android
+          path: tests/agent-e2e-mobile/ledger/durations.json
+          retention-days: 30
+          if-no-files-found: warn
 
   # Pairing journeys (issue #289 / matrix tunnel-pairing). Independent jobs so
   # one failure still leaves evidence from the others for the health report.

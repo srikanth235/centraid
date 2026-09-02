@@ -16,19 +16,22 @@
 //   node lib/harness.mjs setup         -> JSON with runId, platform, udid, runDir
 //   node lib/harness.mjs list-devices  -> JSON with first booted device
 
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import {
   defaultRunId,
   writeFlowVerdict,
 } from "../../agent-e2e-shared/harness.mjs";
+import { purgeDemo, seedDemo } from "./demo-corpus.mjs";
 import { classifyFailure, countMaestroAssertions } from "./failure-class.mjs";
 import {
   DISMISS_KEYBOARD_ONBOARDING,
   retryableTapCommands,
 } from "./first-run.mjs";
+import { digestLines } from "./hierarchy-digest.mjs";
 import {
   DEV_LAUNCHER_LINK,
   METRO_ORIGIN,
@@ -38,6 +41,8 @@ import {
 } from "./metro.mjs";
 import { appendRunRecord, ledgerPathFromEnv } from "./run-ledger.mjs";
 import { spawnLive, spawnQuiet } from "./spawn.mjs";
+
+const execFileAsync = promisify(execFile);
 
 const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
@@ -129,6 +134,39 @@ export function shQuote(value) {
 // stable, but it is a render signal, not a settled signal: it appears when
 // the band mounts, which may precede tile settlement.
 export const HOME_READY_MARKER = "All apps and places";
+// THE LAUNCHER — what "Home is ready" was always meant to mean (#905).
+//
+// The marker above renders in BOTH of Home's branches: the launcher grid and
+// the `DayOne` empty-vault fallback (apps/mobile/src/screens/Home.tsx picks
+// between them on `springboardState`). So it proves the band mounted and says
+// nothing about whether the vault's contents arrived — and a flow that waits
+// only for it walks into DayOne and then fails on its own selector. "could not
+// tap Open Notes" is what the log said; "the initial replica clone had not
+// landed yet" is what had happened.
+//
+// `home-grid` is published by `LauncherGrid` alone (kit/test-ids.ts
+// `TEST_IDS.home.grid`), so it is the first thing on screen that tells the two
+// branches apart. It is deliberately a HANDLE: every string on this screen is
+// copy that moves, and the branch is the contract.
+//
+// Waiting on it is also the repair, not merely the diagnosis. Home's tile reads
+// are LIVE — `useReplicaQuery` re-reads when a scope syncs — so a clone landing
+// a beat after the band flips the screen by itself. Nothing polls; this wait is
+// only what gives that beat somewhere to happen.
+export const HOME_LAUNCHER_HANDLE = "home-grid";
+// Budgeted like the pairing handshake rather than like a render: the initial
+// clone crosses iroh, and on a cold emulator that is the slow part.
+export const LAUNCHER_ARRIVAL_TIMEOUT_MS = 60_000;
+/**
+ * Wait for the launcher, for a flow whose next act is opening an app from Home.
+ * A flow that deliberately faces an empty vault (a purge, a cleared client)
+ * must NOT use this — DayOne is the correct screen there.
+ */
+export const AWAIT_LAUNCHER = `- extendedWaitUntil:
+    visible:
+      id: "${HOME_LAUNCHER_HANDLE}"
+    timeout: ${LAUNCHER_ARRIVAL_TIMEOUT_MS}
+`;
 // iOS Simulator's `openLink` (simctl openurl) raises a system
 // `Open in "Centraid"?` confirmation for custom-scheme links a moment AFTER the
 // openLink directive returns; Android fires the VIEW intent directly. That half
@@ -411,6 +449,141 @@ export async function setup({ runId } = {}) {
 // `--udid` pins Maestro to the chosen device — without it Maestro picks any
 // connected target, which silently runs flows on the wrong platform when
 // both an iOS sim and an Android emulator are booted.
+/** Long enough for a slow emulator to answer, short enough that a wedged
+ *  device cannot add a minute to a failure that already happened. */
+const HIERARCHY_TIMEOUT_MS = 20_000;
+
+/** A hierarchy from a scrollable screen is large; the default 1MB truncates it
+ *  into unparseable JSON, which reads as "no hierarchy" rather than as a cap. */
+const HIERARCHY_MAX_BYTES = 16 * 1024 * 1024;
+
+/**
+ * `maestro hierarchy` on the device, as a string, or `undefined`.
+ *
+ * `execFile` rather than a hand-rolled promise: it already owns the timeout, the
+ * kill and the single settlement, and every one of those is a place a bespoke
+ * version gets subtly wrong on the failure path.
+ */
+async function captureHierarchy(udid) {
+  try {
+    const { stdout } = await execFileAsync(
+      "maestro",
+      ["--udid", udid, "hierarchy"],
+      { maxBuffer: HIERARCHY_MAX_BYTES, timeout: HIERARCHY_TIMEOUT_MS }
+    );
+    return stdout;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Keep the tail bounded: a wedged app can fill logcat faster than anyone reads it. */
+const LOGCAT_TAIL_LINES = 4000;
+const LOGCAT_DIGEST_LINES = 40;
+
+/**
+ * What the app SAID while it was failing, reduced to the replica story.
+ *
+ * The screen digest answers "what was drawn"; nothing so far has answered "why
+ * was it drawn that way". A library that renders its empty state on a vault
+ * holding sixteen rows is either a clone that never arrived or a read that
+ * cannot see it, and those two look identical from the hierarchy. The app's own
+ * console reaches logcat under `ReactNativeJS` even in the release artifact, so
+ * this is available without changing one line of the bundle — which matters,
+ * because the apk cache key hashes the bundle and a JS-only diagnostic would
+ * cost a sixteen-minute rebuild to ask a question.
+ *
+ * Matched loosely on purpose. A regex tuned to today's phrasing goes quiet the
+ * first time a message is reworded, and a quiet diagnostic is worse than none.
+ */
+const REPLICA_LOG_PATTERN =
+  /replica|bootstrap|scope|vault|pull|sync|cursor|clone|undefined is not|Error|Exception/iu;
+
+/**
+ * The driver's own chatter, which defeated the filter above.
+ *
+ * Maestro walks the accessibility tree continuously and logs a line per skipped
+ * node. Each carries `packageName: dev.centraid.mobile` and `error: null`, so
+ * every one of them satisfies BOTH filters below — and at forty lines of tail
+ * they push out everything the app said. Run 33489359040's notes-library digest
+ * was one hundred percent this, which is why it named no cause.
+ */
+const DRIVER_NOISE_PATTERN = /\bMaestro\s*:/u;
+
+async function printReplicaDigest(udid) {
+  try {
+    const { stdout } = await execFileAsync(
+      "adb",
+      ["-s", udid, "logcat", "-d", "-t", String(LOGCAT_TAIL_LINES)],
+      { maxBuffer: HIERARCHY_MAX_BYTES, timeout: HIERARCHY_TIMEOUT_MS }
+    );
+    const kept = stdout
+      .split("\n")
+      .filter((line) => !DRIVER_NOISE_PATTERN.test(line))
+      .filter((line) => /ReactNativeJS|ReactNative:|centraid/iu.test(line))
+      .filter((line) => REPLICA_LOG_PATTERN.test(line));
+    // One failing request repeats until the retry ladder gives up, and forty
+    // copies of it push out the one line that says WHY (#905). Keyed on the
+    // message with the pid/timestamp prefix dropped, so repeats collapse and
+    // every distinct thing the app said survives the tail.
+    const seen = new Set();
+    const lines = kept
+      .filter((line) => {
+        const message = line.replace(/^.*?\b[VDIWEF]\s+/u, "");
+        if (seen.has(message)) return false;
+        seen.add(message);
+        return true;
+      })
+      .slice(-LOGCAT_DIGEST_LINES);
+    if (lines.length === 0) {
+      console.error("  the app logged nothing about the replica");
+      return;
+    }
+    console.error("  the app logged:");
+    for (const line of lines) console.error(`    ${line.trim()}`);
+  } catch {
+    // Same contract as the screen digest: never outlive the failure it explains.
+  }
+}
+
+/**
+ * Print the handles the failing screen is carrying.
+ *
+ * Read from the DEVICE, not from `--debug-output`: Maestro writes no hierarchy
+ * there under `--flatten-debug-output` — run 33465058064 reported the directory
+ * holding only `commands-(<chunk>.yaml).json`, `maestro.log` and a screenshot.
+ * Maestro has exited by the time this runs but the app is still foregrounded on
+ * the failing screen, so a live capture is both available and more truthful
+ * than a file: it is the screen the assertion actually missed on.
+ *
+ * Swallows everything. This runs while an error is already in flight, and a
+ * diagnostic that throws would replace the real failure with its own.
+ */
+async function printScreenDigest(udid, debugDir) {
+  try {
+    const lines = digestLines(await captureHierarchy(udid));
+    if (lines.length > 0) {
+      console.error("  the screen carried:");
+      for (const line of lines) console.error(`    ${line}`);
+      return lines;
+    }
+    // A SILENT NO-OP IS A FAILURE. If the capture came back empty the reason is
+    // the next thing anyone needs, so say what the run dir does hold rather
+    // than printing nothing and looking like a screen with no handles.
+    const names = await fs
+      .readdir(debugDir, { recursive: true })
+      .catch(() => []);
+    console.error(
+      `  no hierarchy from the device; ${path.basename(debugDir)} holds: ${
+        names.slice(0, 20).join(", ") || "nothing"
+      }`
+    );
+  } catch {
+    // Never let the diagnostic outlive the failure it was meant to explain.
+  }
+  return [];
+}
+
 async function runMaestroChunk(
   yaml,
   { state, label, maestroEnv = {}, sensitive = false }
@@ -441,9 +614,37 @@ async function runMaestroChunk(
       {
         cwd: state.screenshotsDir,
         env: { ...process.env, ...maestroEnv },
+        // The chunk's own capabilities, so a failure can print its step lines
+        // with every one of them replaced by exact match. `spawnLive` ignores
+        // this; only the sensitive path reads it.
+        secrets: Object.values(maestroEnv),
         timeoutMs: maestroChunkTimeoutMs(),
       }
     );
+  } catch (error) {
+    // THE SCREEN, on the failure path only. `Element not found` names the
+    // selector that missed and nothing about what was there instead, which is
+    // the difference between "Home rendered the other branch" and "the tile is
+    // broken" — see hierarchy-digest.mjs. Printed rather than left in the
+    // artifact because the artifact is not evidence to a reader who cannot
+    // download it.
+    //
+    // NEVER for a sensitive chunk: its hierarchy is discarded below precisely
+    // because it may hold a live enrollment capability, and reading it here to
+    // print a digest would defeat the control. The `configure-gateway` guard
+    // repeats the workflow's own pre-upload scrub as belt-and-braces, so a
+    // chunk that pairs stays silent even if it is ever run non-sensitive.
+    if (!sensitive && !label.includes("configure-gateway")) {
+      const screen = await printScreenDigest(state.udid, debugDir);
+      await printReplicaDigest(state.udid);
+      // CARRIED ON THE ERROR, because the digest is the only witness to a
+      // screen the assertion never reached — a system window over the app
+      // looks, from the exit text alone, exactly like a first-assertion
+      // regression (#905). `classifyFailure` reads it as `stdout`; a sensitive
+      // chunk has no digest to carry, which is the control above, not a gap.
+      if (error instanceof Error) error.screenDigest = screen.join("\n");
+    }
+    throw error;
   } finally {
     // A pairing ticket is a live enrollment capability. Sensitive flows use a
     // MAESTRO_* variable so the retained YAML contains only a placeholder, run
@@ -452,6 +653,56 @@ async function runMaestroChunk(
     // defense against abrupt harness termination.
     if (sensitive) await fs.rm(debugDir, { force: true, recursive: true });
   }
+}
+
+/**
+ * The commands a reuse-mode `configureGateway` contributes: a state-preserving
+ * launch and a wait for Home. Body lines only — the chunk they are folded into
+ * already carries the `appId:` header.
+ *
+ * @returns {string} YAML command lines.
+ */
+export function reusePairedCommands() {
+  return `- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible: "${HOME_READY_MARKER}"
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+`;
+}
+
+/**
+ * The commands `ctx.restart()` contributes: an OS process boundary that clears
+ * nothing, so only the vault's own bytes cross it.
+ *
+ * @returns {string} YAML command lines.
+ */
+export function restartCommands() {
+  return `- stopApp
+- launchApp:
+    clearState: false
+`;
+}
+
+/**
+ * Fold staged command lines into a chunk, immediately after its `---` document
+ * separator and before the chunk's own first command.
+ *
+ * @param {string} prefix Command lines to insert; empty leaves the chunk alone.
+ * @param {string} yaml A chunk, which always opens `appId: …` then `---`.
+ * @returns {string} The combined chunk.
+ */
+export function prependPrefix(prefix, yaml) {
+  if (!prefix) return yaml;
+  const separator = "\n---\n";
+  const at = yaml.indexOf(separator);
+  if (at === -1) {
+    throw new Error(
+      "cannot fold staged commands into a chunk with no `---` document separator"
+    );
+  }
+  const head = at + separator.length;
+  return `${yaml.slice(0, head)}${prefix}${yaml.slice(head)}`;
 }
 
 /**
@@ -476,7 +727,8 @@ async function runMaestroChunk(
  * ctx surface:
  *   ctx.state               read-only snapshot of {runId, runDir, udid, appId, ...}
  *   ctx.run(yaml, label?, options?) execute a YAML chunk; screenshots land under runs/.../screenshots/
- *   ctx.restart()           stopApp + launchApp without clearing state — mirrors desktop's ctx.restart()
+ *   ctx.restart()           stopApp + launchApp without clearing state, staged onto the next chunk
+ *   ctx.flush()             run any staged prefix now, so it lands outside a timed ctx.run()
  *   ctx.configureGateway()  pair from a clean state, or reuse the paired nightly profile when requested
  *   ctx.ensureDemo(appId)   seed a scenario before the initial replica clone, if absent
  *   ctx.purgeDemo(appId)    remove a scenario before an empty-vault journey
@@ -494,7 +746,7 @@ async function runMaestroChunk(
  *   runs/<slug-runId>/
  *     state.json
  *     flows/<NN-label>.yaml     ← every ctx.run() chunk, in order
- *     screenshots/<NN-name>.png ← whatever `takeScreenshot:` produced
+ *     screenshots/<name>.png    ← whatever `takeScreenshot:` produced
  *     verdict.md                ← PASS/FAIL + notes (written last)
  */
 export async function runFlow(slug, fn) {
@@ -518,11 +770,31 @@ export async function runFlow(slug, fn) {
   // its last of six assertions reports none of them — and undercounting is the
   // safe direction: it never inflates the evidence a failure claims to have.
   let assertionsRun = 0;
+  // Commands staged by `ctx.restart()` / reuse-mode `ctx.configureGateway()`
+  // rather than spawned: each `maestro test` costs ~9-15s of JVM start, and
+  // every caller of those two immediately follows with a `ctx.run()` the launch
+  // can ride along in. Nothing is dropped — a prefix still pending when the flow
+  // ends, or when `ctx.device()` needs the relaunch to have happened, runs as
+  // its own chunk under the label it would have had.
+  let pendingPrefix = "";
+  const pendingLabels = [];
   const run = async (yaml, hint, options = {}) => {
     const label = nextLabel(hint);
     console.log(`  run     : ${label}`);
-    await runMaestroChunk(yaml, { state, label, ...options });
-    assertionsRun += countMaestroAssertions(yaml);
+    const chunk = prependPrefix(pendingPrefix, yaml);
+    pendingPrefix = "";
+    pendingLabels.length = 0;
+    await runMaestroChunk(chunk, { state, label, ...options });
+    assertionsRun += countMaestroAssertions(chunk);
+  };
+  const stagePrefix = (commands, label) => {
+    pendingPrefix += commands;
+    pendingLabels.push(label);
+    console.log(`  prefix  : ${label} folded into the next chunk`);
+  };
+  const flushPrefix = async () => {
+    if (!pendingPrefix) return;
+    await run(`appId: ${state.appId}\n---\n`, pendingLabels.join("-"));
   };
   // THE DEVICE ESCAPE (#890 follow-up). Maestro drives ONE app's UI and nothing
   // around it, which is why six W5 journeys were recorded as blocked on "tooling
@@ -551,6 +823,7 @@ export async function runFlow(slug, fn) {
   // `adb shell` argv. Not needed for plain `adb` verbs (`emu`, `install`) or for
   // simctl, neither of which re-parses.
   const device = async (args, { label } = {}) => {
+    await flushPrefix();
     const hint = label ?? args[0] ?? "device";
     console.log(`  device  : ${hint}`);
     if (state.platform === "android")
@@ -571,6 +844,7 @@ export async function runFlow(slug, fn) {
     },
     run,
     device,
+    flush: flushPrefix,
   };
 
   // Mint the one-time pairing ticket the phone will redeem.
@@ -655,17 +929,7 @@ export async function runFlow(slug, fn) {
       );
     }
     if (process.env.MAESTRO_REUSE_PAIRED_STATE === "1") {
-      await ctx.run(
-        `appId: ${state.appId}
----
-- launchApp:
-    clearState: false
-- extendedWaitUntil:
-    visible: "${HOME_READY_MARKER}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-`,
-        "reuse-paired-gateway"
-      );
+      stagePrefix(reusePairedCommands(), "reuse-paired-gateway");
       ctx.note(`reused the paired nightly profile for ${gatewayUrl}`);
       return;
     }
@@ -677,6 +941,14 @@ export async function runFlow(slug, fn) {
     // carrying the placeholder label is asked for a profile. The gateway URL
     // is used only by the host-side harness to mint that ticket; the phone
     // reaches the gateway through the ticket's iroh endpoint.
+    //
+    // SPLIT AT THE CAPABILITY (#905 P). Everything up to the ticket field is
+    // ordinary onboarding: a cold launch and two taps, with nothing on screen
+    // and nothing in the environment that is worth protecting. It used to ride
+    // in the sensitive chunk anyway, which cost twice over — the ticket was
+    // handed to steps that never use it, and the chunk that fails most often on
+    // this lane was the one chunk that may not say what it saw. The failing
+    // assertion below is the FIRST in the journey, long before redemption.
     await ctx.run(
       `appId: ${state.appId}
 ---
@@ -690,6 +962,16 @@ ${DEV_LAUNCHER_HANDOFF}- extendedWaitUntil:
 - extendedWaitUntil:
     visible: "Paste the one-line ticket"
     timeout: 10000
+`,
+      "open-onboarding"
+    );
+
+    // From here the capability is real: the ticket is in the environment and,
+    // once typed, on the screen. Kept named `configure-gateway` so the
+    // workflow's pre-upload scrub keeps matching it.
+    await ctx.run(
+      `appId: ${state.appId}
+---
 - tapOn: "Paste the one-line ticket"
 # e2e-lint-allow: unasserted-input — throwaway input only provokes iOS keyboard
 # onboarding and is erased before the pairing ticket is entered.
@@ -767,42 +1049,22 @@ ${retryableTapCommands("Enter Centraid")}
    * flows never race a later refresh or depend on execution order. The GET
    * guard also lets all five Photos journeys share one gateway boot safely.
    */
+  // Both delegate to lib/demo-corpus.mjs, which the LANE also calls before any
+  // flow pairs (#905). Keeping the HTTP in one place is not tidiness here: the
+  // lane seeder and these two have to agree on the row-count guard, or the
+  // lane's corpus would be re-seeded per flow — or worse, disagree about
+  // whether one is present.
   ctx.ensureDemo = async (
     appId,
     gatewayUrl = process.env.MAESTRO_GATEWAY_URL,
     gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? ""
   ) => {
-    if (!gatewayUrl)
-      throw new Error("MAESTRO_GATEWAY_URL is required to seed demo data");
-    const base = gatewayUrl.replace(/\/+$/u, "");
-    const headers = gatewayToken
-      ? { authorization: `Bearer ${gatewayToken}` }
-      : {};
-    const statusResponse = await fetch(`${base}/centraid/_vault/demo`, {
-      headers,
-    });
-    const status = await statusResponse.json().catch(() => ({}));
-    if (!statusResponse.ok || !Array.isArray(status?.apps))
-      throw new Error(
-        `gateway refused demo status (${status?.error ?? statusResponse.status})`
-      );
-    const current = status.apps.find((app) => app?.appId === appId);
-    if (!current?.seedable)
-      throw new Error(`gateway does not ship the ${appId} demo scenario`);
-    if (Number(current.rows) > 0) {
-      ctx.note(`${appId} demo already present (${current.rows} rows)`);
-      return;
-    }
-    const seededResponse = await fetch(
-      `${base}/centraid/_vault/demo/${encodeURIComponent(appId)}`,
-      { headers, method: "POST" }
+    const result = await seedDemo(appId, gatewayUrl, gatewayToken);
+    ctx.note(
+      result.seeded
+        ? `${appId} demo seeded (${result.rows} rows)`
+        : `${appId} demo already present (${result.rows} rows)`
     );
-    const seeded = await seededResponse.json().catch(() => ({}));
-    if (!seededResponse.ok)
-      throw new Error(
-        `gateway refused ${appId} demo seed (${seeded?.error ?? seededResponse.status})`
-      );
-    ctx.note(`${appId} demo seeded (${seeded.rows ?? "unknown"} rows)`);
   };
 
   ctx.purgeDemo = async (
@@ -810,22 +1072,8 @@ ${retryableTapCommands("Enter Centraid")}
     gatewayUrl = process.env.MAESTRO_GATEWAY_URL,
     gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? ""
   ) => {
-    if (!gatewayUrl)
-      throw new Error("MAESTRO_GATEWAY_URL is required to purge demo data");
-    const base = gatewayUrl.replace(/\/+$/u, "");
-    const headers = gatewayToken
-      ? { authorization: `Bearer ${gatewayToken}` }
-      : {};
-    const response = await fetch(
-      `${base}/centraid/_vault/demo/${encodeURIComponent(appId)}`,
-      { headers, method: "DELETE" }
-    );
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok)
-      throw new Error(
-        `gateway refused ${appId} demo purge (${result?.error ?? response.status})`
-      );
-    ctx.note(`${appId} demo purged (${result.purged ?? "unknown"} rows)`);
+    const result = await purgeDemo(appId, gatewayUrl, gatewayToken);
+    ctx.note(`${appId} demo purged (${result.purged} rows)`);
   };
 
   // Mirror desktop's ctx.restart(): kill the app process so AsyncStorage
@@ -837,15 +1085,7 @@ ${retryableTapCommands("Enter Centraid")}
     await new Promise((resolve) => {
       setTimeout(resolve, 300);
     });
-    await ctx.run(
-      `appId: ${state.appId}
----
-- stopApp
-- launchApp:
-    clearState: false
-`,
-      "restart"
-    );
+    stagePrefix(restartCommands(), "restart");
   };
 
   let error;
@@ -856,6 +1096,11 @@ ${retryableTapCommands("Enter Centraid")}
     result = await fn(ctx);
   } catch (caughtError) {
     error = caughtError;
+  }
+  try {
+    await flushPrefix();
+  } catch (flushError) {
+    error ??= flushError;
   }
   const elapsedMs = Date.now() - t0;
   const pass = !error && result?.pass !== false;
@@ -886,7 +1131,13 @@ ${retryableTapCommands("Enter Centraid")}
   // could not be recorded still passed. Failing here would let a read-only
   // checkout or a full disk red a green nightly, so the failure is a warning
   // naming the path — the one fact needed to fix it (#890).
-  const failure = pass ? null : classifyFailure({ error, assertionsRun });
+  const failure = pass
+    ? null
+    : classifyFailure({
+        error,
+        assertionsRun,
+        stdout: error?.screenDigest ?? "",
+      });
   try {
     await appendRunRecord({
       flow: owner,

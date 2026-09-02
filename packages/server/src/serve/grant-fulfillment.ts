@@ -198,9 +198,6 @@ function passOne(input: {
       originVaultId: input.originVaultId,
       grantId: input.grantId,
       seatFor: (vaultId) => input.host.vaultFor(vaultId),
-      ...(input.subjectLabel === undefined
-        ? {}
-        : { subjectLabel: input.subjectLabel }),
       now: input.now,
       memory: memoryFor(input.host),
     });

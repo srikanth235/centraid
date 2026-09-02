@@ -66,6 +66,14 @@ import { NodeSqliteDriver } from "../../lib/replica/node-sqlite-driver";
 // `onPress` and drops every other handler, and a journey that TYPES needs
 // `onChangeText` to reach the draft. Overridden here rather than in the shared
 // stub, because a composer is the only surface that needs it.
+// The vault lockup every app frame draws. Stubbed for the same reason as in
+// `PhotosScreen.test.tsx`: this journey's claim is Tally's pending-write
+// behaviour, and mounting the real header pulls the active-vault read and its
+// native storage into a project with no setup file to seam them.
+vi.mock(import("../../screens/home/VaultBar"), () => ({
+  default: (): React.JSX.Element => React.createElement("view"),
+}));
+
 vi.mock(import("react-native"), async () => {
   const ReactModule = await import("react");
   const stub = await import("../../test/react-native-stub");
@@ -181,7 +189,11 @@ vi.mock(
 const posted = vi.hoisted(() => [] as string[]);
 vi.mock(
   import("../../kit/components/status-line"),
-  () => ({ postStatus: (message: string) => posted.push(message) }) as never
+  () =>
+    ({
+      postStatus: (message: string) => posted.push(message),
+      showUndoStatus: (message: string) => posted.push(message),
+    }) as never
 );
 
 const { WAITING_OWN_SCOPE } = await import("./tally-seat-copy");

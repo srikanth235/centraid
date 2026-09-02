@@ -26,4 +26,4 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 | origin Waiting — the doors this transport has, and the two verbs it does not | — | ✅ | — | `apps/mobile/src/apps/tally/WaitingView.test.tsx` |
 | origin pending writes survive a process restart — same intent ids, same overlay | — | — | ✅ | `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` |
 | origin share-a-group row — the phone's one commons producer, withheld offline | — | ✅ | — | `apps/mobile/src/apps/tally/TallyShareGroup.test.tsx` |
-| origin sharing journey — mint an invitation, redeem the claim on the mounted plane | — | — | ✅ | `tests/agent-e2e-mobile/flows/sharing-invite.mjs` |
+| origin sharing journey — compile a share, make a person reachable on the mounted plane | — | — | ✅ | `tests/agent-e2e-mobile/flows/sharing-reach.mjs` |

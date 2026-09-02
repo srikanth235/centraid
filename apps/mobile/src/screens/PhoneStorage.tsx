@@ -4,7 +4,10 @@ import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { formatBytes } from "@centraid/design";
 
-import { replicaStorageDirectory } from "../../modules/centraid-storage";
+import {
+  pathToFileUri,
+  replicaStorageDirectoryUri,
+} from "../../modules/centraid-storage";
 import Icon from "../kit/components/Icon";
 import { Text } from "../kit/components/NativeText";
 import TopSafeArea from "../kit/components/TopSafeArea";
@@ -449,14 +452,14 @@ function backgroundSyncNotice(
 }
 
 function fileBytes(path: string): number {
-  const file = new File(path);
+  const file = new File(pathToFileUri(path));
   return file.exists ? file.size : 0;
 }
 
 /** One shallow listing: a handful of database families plus the
  *  `thumbnail-pack` subdirectory, whose contents are sized natively. */
 function replicaDirectoryFiles(): { name: string; size: number }[] {
-  const root = replicaStorageDirectory();
+  const root = replicaStorageDirectoryUri();
   if (!root) return [];
   const directory = new Directory(root);
   if (!directory.exists) return [];

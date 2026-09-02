@@ -10,7 +10,9 @@ import type {
   ReplicaFetcher,
 } from "@centraid/client/replica/native";
 
+import { pathToFileUri } from "../../../modules/centraid-storage";
 import { authHeader, resolveGatewayBase } from "../../lib/gateway";
+import { fetchWithinReplyDeadline } from "../../lib/replica/gateway-deadline";
 import type { MountedReplicaScope } from "../../lib/replica/multi-vault-reader";
 import { nativeReplicaDigest } from "../../lib/replica/native-hash";
 import { MAX_MOUNTED_NATIVE_SCOPES } from "../../lib/replica/offline-budgets";
@@ -39,10 +41,26 @@ export function fetcher(vaultId?: string): ReplicaFetcher {
     for (const [key, value] of Object.entries(authHeader()))
       headers.set(key, value);
     if (vaultId) headers.set("x-centraid-vault", vaultId);
-    return fetch(new URL(pathname, `${baseUrl}/`), {
-      ...init,
-      headers,
-    } as RequestInit);
+    const method = init.method ?? "GET";
+    const url = new URL(pathname, `${baseUrl}/`);
+    try {
+      // Deadlined: the tunnel accepts after its peer is gone (#903).
+      const response = await fetchWithinReplyDeadline(
+        (signal) => fetch(url, { ...init, headers, signal } as RequestInit),
+        init.signal ?? undefined
+      );
+      if (!response.ok)
+        console.error(
+          `[centraid] replica: ${method} ${pathname} -> ${response.status}`
+        );
+      return response;
+    } catch (error) {
+      // Died on this device, so no gateway trace can show it (#905).
+      console.error(
+        `[centraid] replica: ${method} ${pathname} never left the phone — ${error instanceof Error ? error.message : String(error)}`
+      );
+      throw error;
+    }
   };
 }
 
@@ -201,7 +219,8 @@ function restoredCacheKeys(gatewayId: string, vaultId: string): string[] {
 /** An absent or zero-byte database is a container this replica never wrote. */
 function replicaFileHasData(databaseName: string): boolean {
   try {
-    const file = new File(databaseName);
+    // A path, not a URI — `File` throws on a scheme-less one (#905).
+    const file = new File(pathToFileUri(databaseName));
     return file.exists && (file.size ?? 0) > 0;
   } catch {
     // An unreadable path is not evidence of a restore; keep the cursor.
@@ -271,7 +290,7 @@ export function deleteReplicaDatabaseFamily(databaseName: string): void {
   if (!databaseName.includes("/")) return;
   for (const path of replicaDatabaseFamily(databaseName)) {
     try {
-      const file = new File(path);
+      const file = new File(pathToFileUri(path));
       if (file.exists) file.delete();
     } catch {
       // A sidecar the OS already removed is the outcome asked for.

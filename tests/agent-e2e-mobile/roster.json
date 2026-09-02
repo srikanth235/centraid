@@ -10,11 +10,14 @@
     "pr-gate-android": {
       "workflow": ".github/workflows/ci.yml",
       "job": "mobile-device-gate",
-      "scripts": ["apps/mobile/scripts/android-emulator-pr-gate.sh"],
+      "scripts": [
+        "apps/mobile/scripts/android-emulator-pr-gate.sh",
+        "apps/mobile/scripts/android-emulator-pr-gate-resilience.sh"
+      ],
       "blocking": true,
       "platform": "android",
       "budgetDoc": "tests/agent-e2e-mobile/flows/pr-gate-budget.md",
-      "why": "Device signal BEFORE merge, on the primary surface. Android per D1: Linux + /dev/kvm, and the stabler of the two Maestro drivers. The only blocking mobile device lane there is."
+      "why": "Device signal BEFORE merge, on the primary surface. Android per D1: Linux + /dev/kvm, and the stabler of the two Maestro drivers. The only blocking mobile device lane there is. One job, TWO matrix legs on two emulators — paired (pairing-canary, notes-library, photos-permissions) and resilience (pairing-canary, native-v0-resilience, cold-start) — because the five measured ~795s in sequence against a 720s deadline; each leg pairs itself and the twelve-minute budget is now per leg."
     },
     "canary-android": {
       "workflow": ".github/workflows/mobile-canary.yml",
@@ -52,7 +55,7 @@
     },
     "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs": {
       "status": "scheduled",
-      "claim": "Every native cover opens from Home, Settings loads, the app survives a process restart, and on Android an offline write reconnects and syncs. The one airplane-mode journey the device owns; the rest of the state grid is tests/integration-mobile/'s."
+      "claim": "Settings loads from the all-apps sheet, the app survives a process restart, and on Android an offline write reconnects and syncs. The one airplane-mode journey the device owns; the covers-open claim is Home.test.tsx's conformance sweep plus the per-cover canary journeys, and the rest of the state grid is tests/integration-mobile/'s."
     },
     "tests/agent-e2e-mobile/flows/cold-start.mjs": {
       "status": "scheduled",
@@ -118,9 +121,9 @@
       "status": "scheduled",
       "claim": "Home's launcher never read the one app it must not (a WITHHELD count, never 0), and no Locker session crossed a real process boundary. Only killing the process proves the second half."
     },
-    "tests/agent-e2e-mobile/flows/sharing-invite.mjs": {
+    "tests/agent-e2e-mobile/flows/sharing-reach.mjs": {
       "status": "scheduled",
-      "claim": "The phone mints an invitation from the one subject it may share, the sheet that mints it opens, the surface that redeems one loads, and on Android the verb is WITHHELD with its own sentence while the gateway is out of reach. Named three times in tests/matrix.json as an evidence owner while nothing ran it, until #890 W0 scheduled it on the roster lanes."
+      "claim": "The phone compiles a share from the one subject it may share, the sheet that compiles it opens, the surface that makes a person reachable loads, and on Android the verb is WITHHELD with its own sentence while the gateway is out of reach. Named three times in tests/matrix.json as an evidence owner while nothing ran it, until #890 W0 scheduled it on the roster lanes."
     },
     "tests/agent-e2e-mobile/flows/op-sqlite-probe.mjs": {
       "status": "promoting",

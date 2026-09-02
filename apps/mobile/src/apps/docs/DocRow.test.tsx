@@ -43,6 +43,7 @@ function doc(overrides: Partial<MobileDriveDoc> = {}): MobileDriveDoc {
     media_type: "application/pdf",
     byte_size: 120_000,
     poster_uri: null,
+    shared_from: null,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-08-01T00:00:00Z",
     folder_id: null,
@@ -119,12 +120,12 @@ describe(DocRow, () => {
     expect(texts(container)).not.toContain("on this device only");
   });
 
-  it("carries the matched passage as a second line on a search hit", () => {
+  it("carries the lead line — a matched passage — in place of the facts", () => {
     const container = render(
       <DocRow
         doc={doc()}
         offline={false}
-        snippet="…this tenancy shall end on the twelfth day…"
+        reason="…this tenancy shall end on the twelfth day…"
         onOpen={noop}
         onMenu={noop}
       />

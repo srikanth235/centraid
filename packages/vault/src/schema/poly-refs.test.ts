@@ -14,7 +14,11 @@ import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
-import { POLY_REF_EXCLUSIONS, POLY_REF_REGISTRY } from "./poly-refs.js";
+import {
+  PARTY_POINTER_REGISTRY,
+  POLY_REF_EXCLUSIONS,
+  POLY_REF_REGISTRY,
+} from "./poly-refs.js";
 
 interface DetectedPair {
   table: string;
@@ -141,6 +145,54 @@ describe("poly-refs", () => {
             `${entry.table}.${pair.idCol} missing`
           ).toBe(true);
         }
+      }
+    } finally {
+      close();
+    }
+  });
+
+  test("every registered party pointer exists and is still FK-less", () => {
+    // Two ways an entry goes stale, and both are silent: the column is dropped
+    // or renamed (the merge's UPDATE throws), or someone gives it a real
+    // foreign key (the merge's FK walk now re-points it too, and this entry
+    // becomes a second, redundant pass over the same rows).
+    const { vault, close } = openVaultDb();
+    try {
+      for (const pointer of PARTY_POINTER_REGISTRY) {
+        const cols = (
+          vault
+            .prepare(`PRAGMA table_info(${JSON.stringify(pointer.table)})`)
+            .all() as { name: string }[]
+        ).map((c) => c.name);
+        expect(
+          cols,
+          `party-pointer table ${pointer.table} does not carry ${pointer.column}`
+        ).toContain(pointer.column);
+        const partyFks = (
+          vault
+            .prepare(
+              `PRAGMA foreign_key_list(${JSON.stringify(pointer.table)})`
+            )
+            .all() as { table: string; from: string }[]
+        ).filter(
+          (fk) => fk.table === "core_party" && fk.from === pointer.column
+        );
+        expect(
+          partyFks,
+          `${pointer.table}.${pointer.column} now has a core_party foreign key — the FK walk re-points it, so drop this entry`
+        ).toStrictEqual([]);
+        // `revoke` dates the loser shut rather than deleting it, so the table
+        // has to have somewhere to write that date. Stated as an implication
+        // so it is ONE unconditional assertion: every other collision kind
+        // satisfies it vacuously.
+        expect(
+          pointer.collision !== "revoke" || cols.includes("revoked_at"),
+          `${pointer.table} has no revoked_at, so a 'revoke' collision would throw`
+        ).toBe(true);
+        expect(
+          pointer.note.length,
+          `${pointer.table}.${pointer.column} note is empty`
+        ).toBeGreaterThan(0);
       }
     } finally {
       close();

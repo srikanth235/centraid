@@ -18,6 +18,7 @@ import {
 import {
   readCustodyByContent,
   readLabelsByDocument,
+  readOriginsByDocument,
   readSharesByDocument,
 } from "./_shared.ts";
 import type { ConceptRow, SchemeRow, TagRow } from "./_shared.ts";
@@ -78,6 +79,7 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
         root_folder_id: rootFolderId,
         truncated: false,
         window,
+        shared_from_known: true,
       };
     }
     const tags = await ctx.vault.read({
@@ -94,13 +96,25 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
 
     const folderByDoc = new Map<string, string>();
     for (const t of tagRows) folderByDoc.set(t.target_id, t.concept_id);
-    if (folderByDoc.size === 0) {
+
+    // A DELIVERED copy carries no folders-scheme tag, so the window above
+    // cannot see it: its placement record is the second door in (#903).
+    const originByDoc = await readOriginsByDocument({
+      ctx,
+      purpose,
+      limit: window,
+    });
+    const windowedIds = [
+      ...new Set([...folderByDoc.keys(), ...(originByDoc?.keys() ?? [])]),
+    ];
+    if (windowedIds.length === 0) {
       return {
         folders,
         documents: [],
         root_folder_id: rootFolderId,
         truncated: false,
         window,
+        shared_from_known: originByDoc !== null,
       };
     }
 
@@ -114,7 +128,6 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
 
     // A share denial returns `null`, not an error: the drive still answers
     // while those scopes park for approval (#821).
-    const windowedIds = [...folderByDoc.keys()];
     const [documentsRes, starTags, tagsByDoc, sharesByDoc] = await Promise.all([
       ctx.vault.read({
         entity: "core.document",
@@ -202,7 +215,10 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
           poster_uri: posterOf(c),
           created_at: d.created_at,
           updated_at: d.updated_at,
-          folder_id: conceptId === rootFolderId ? null : conceptId,
+          folder_id:
+            conceptId === undefined || conceptId === rootFolderId
+              ? null
+              : conceptId,
           starred: starredIds.has(d.document_id),
           trashed: d.deleted_at != null,
           purge_at: d.purge_at ?? null,
@@ -213,6 +229,7 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
             sharesByDoc === null
               ? null
               : (sharesByDoc.get(d.document_id) ?? []),
+          shared_from: originByDoc?.get(d.document_id) ?? null,
         };
       })
       .toSorted((a, b) =>
@@ -227,6 +244,8 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
       root_folder_id: rootFolderId,
       truncated,
       window,
+      // ABSENT IS NOT EMPTY: a denied read is told, not drawn.
+      shared_from_known: originByDoc !== null,
     };
   } catch (error) {
     const e = error as { code?: string; message?: string };

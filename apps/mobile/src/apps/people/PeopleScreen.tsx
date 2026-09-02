@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBandOwner } from "../../kit/band/band-owner";
 import { useTheme } from "../../kit/theme";
 import type { PeopleShellNavigation } from "../../navigation";
+import VaultBar from "../../screens/home/VaultBar";
 import type { PeopleBandKey } from "./people-band";
 import PeopleBand from "./PeopleBand";
 
@@ -43,6 +44,9 @@ export default function PeopleScreen({
         { backgroundColor: colors.bg, paddingTop: insets.top },
       ]}
     >
+      {/* The vault lockup on every route (see `VaultBar`): which vault, which
+          gateway, and the product's two global verbs. */}
+      <VaultBar />
       <View style={styles.body}>{children}</View>
       {bandHidden === true ? null : (
         <PeopleBand

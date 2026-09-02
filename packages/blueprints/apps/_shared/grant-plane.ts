@@ -78,7 +78,7 @@ export interface GrantSubjectOffer {
 }
 
 export type GrantChannel =
-  | { state: "live" | "invited" | "severed"; vaultId?: string }
+  | { state: "live" | "severed"; vaultId?: string }
   | null
   | undefined;
 
@@ -223,8 +223,7 @@ export function parseChannel(value: unknown): GrantChannel {
   const row = record(value);
   if (!row) return undefined;
   const state = row.state;
-  if (state !== "live" && state !== "invited" && state !== "severed")
-    return undefined;
+  if (state !== "live" && state !== "severed") return undefined;
   const vaultId = text(row, "vaultId");
   return { state, ...(vaultId ? { vaultId } : {}) };
 }
@@ -246,16 +245,25 @@ export function subjectNoun(subjectType: string): string {
   );
 }
 
-export type GrantReach =
-  | "unknown"
-  | "never-reached"
-  | "invited"
-  | "live"
-  | "severed";
+export type GrantReach = "unknown" | "never-reached" | "live" | "severed";
 
 export function channelReach(channel: GrantChannel): GrantReach {
   if (channel === undefined) return "unknown";
   return channel === null ? "never-reached" : channel.state;
+}
+
+/**
+ * Whether this reach makes the share verb an act the surface cannot perform
+ * (#903): a person is reachable only through a live link, and the command pack
+ * refuses the rest, so offering the submit would name a promise nothing keeps.
+ *
+ * `unknown` deliberately does NOT block. "We could not look" is not "they are
+ * not linked", and a denied channel read must never disable a control the
+ * member is in fact entitled to use — the route stays the authority, and it
+ * answers in words if the guess here was generous.
+ */
+export function reachBlocksSharing(reach: GrantReach): boolean {
+  return reach === "never-reached" || reach === "severed";
 }
 
 export function liveGrants(

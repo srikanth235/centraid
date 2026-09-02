@@ -27,7 +27,7 @@ import type {
   TrashedPerson,
   UpcomingCard,
 } from "@centraid/blueprints/apps/people/types";
-import { IDENTITY_HUE_KEYS, partyHueKey } from "@centraid/design";
+import { IDENTITY_HUE_KEYS } from "@centraid/design";
 import type { ColorKey } from "@centraid/design";
 
 import { rowCanWrite, rowScopeLabels } from "../../kit/replica/row-provenance";
@@ -76,19 +76,6 @@ export function storedHueKey(
   return (IDENTITY_HUE_KEYS as readonly string[]).includes(key)
     ? (key as ColorKey)
     : null;
-}
-
-/** Stored hue → theme ring; stored hex → verbatim; nothing stored → a wheel
- *  place keyed by `party_id`, so a rename never moves them. The DECISION is
- *  `partyHueKey`'s (#883, ruling O-identity); only the LOWERING to a native
- *  theme ring is this file's. */
-export function avatarFill(
-  person: { party_id: string; avatar_color?: string | null },
-  ringFor: (key: ColorKey) => string
-): string {
-  const key = partyHueKey(person.party_id, person.avatar_color);
-  if (key) return ringFor(key);
-  return person.avatar_color ?? "";
 }
 
 // Mirrors `queries/people.ts` and `queries/trash.ts`.

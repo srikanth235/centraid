@@ -156,8 +156,10 @@ export async function pair(
       "Gateway did not return its EndpointId."
     );
   }
+  // Hostname first: this is a switcher row's SECOND line, and `vaultName` made
+  // both lines read the same word.
   const desktopName =
-    result.vaultName || result.gatewayName || parsed.vaultName || "Gateway";
+    result.gatewayName || result.vaultName || parsed.vaultName || "Gateway";
   const deviceId =
     result.enrollmentId || result.gatewayId || result.deviceId || "gateway";
   const returnedVaults = normalizePairedVaults(result);
@@ -271,9 +273,15 @@ export async function ensureTunnelStarted(): Promise<
   if (startInFlight) return startInFlight;
   startInFlight = (async () => {
     await hydratePhoneLink();
-    if (!isPaired() || !isTunnelAvailableImpl()) return undefined;
+    if (!isPaired() || !isTunnelAvailableImpl()) {
+      console.error(
+        `[centraid] replica: no tunnel — paired=${isPaired()} native=${isTunnelAvailableImpl()}`
+      );
+      return undefined;
+    }
     const status = await getTunnelStatusImpl();
     if (status.state === "running" && status.port) {
+      console.error(`[centraid] replica: tunnel reused on port ${status.port}`);
       return { baseUrl: `http://127.0.0.1:${status.port}` };
     }
     try {
@@ -281,6 +289,9 @@ export async function ensureTunnelStarted(): Promise<
         secretKeyB64: getSecure(LINK_SECRET_KEY, ""),
         ticket: getSecure(LINK_ENDPOINT_HINT_KEY, ""),
       });
+      console.error(
+        `[centraid] replica: tunnel started on port ${port} from ${status.state}`
+      );
       return { baseUrl: `http://127.0.0.1:${port}` };
     } catch (error) {
       throw new PhoneLinkError(

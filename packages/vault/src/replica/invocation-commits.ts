@@ -88,8 +88,14 @@ export class ReplicaInvocationRepairError extends Error {
   constructor(result: ReplicaInvocationRepairResult) {
     super(
       `replica invocation startup repair retained ${result.remaining} unfinished marker(s)` +
+        // NAME the failures: a vault that refuses to open is the loudest
+        // failure this codebase has, and a bare count sends whoever reads it
+        // to a debugger to learn what a `reason` we already hold would say.
         (result.failures.length > 0
-          ? `; ${result.failures.length} repair attempt(s) failed`
+          ? `; ${result.failures.length} repair attempt(s) failed: ` +
+            result.failures
+              .map((f) => `${f.invocationId} (${f.reason})`)
+              .join("; ")
           : "")
     );
     this.name = "ReplicaInvocationRepairError";
@@ -794,13 +800,20 @@ function ensureReceipt(
   commandId: string,
   audit: ReplicaInvocationAudit
 ): { receiptId: string; changed: boolean } {
+  // Scoped to the INVOCATION'S receipt, not every receipt on the invocation:
+  // `HandlerCtx.receipt` lets a handler write one of its own beside this one
+  // (#883), and `share.grant` does. Counting those as corruption made a shared
+  // document's marker unrepairable, so the vault refused to open after it.
   const rows = journal
     .prepare(
       `SELECT receipt_id, grant_id, action, object_type, object_id,
               purpose_concept_id, decision, detail_json
-         FROM consent_receipt WHERE invocation_id = ?`
+         FROM consent_receipt
+        WHERE invocation_id = ?
+          AND object_type = 'agent.command'
+          AND object_id = ?`
     )
-    .all(invocationId) as unknown as Array<{
+    .all(invocationId, commandId) as unknown as Array<{
     receipt_id: string;
     grant_id: string | null;
     action: string;

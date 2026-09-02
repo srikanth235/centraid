@@ -1,5 +1,7 @@
 # photos-permissions
 
+**Claim:** a REFUSED OS media grant degrades into an honest takeover with a working recovery path, and never removes the way back Home. If this passes when it should not, a release ships in which denying a permission strands the member on a dead screen with no way out of Photos.
+
 **Goal:** prove a refused device grant takes over an empty library with an honest recovery path and never removes the way Home.
 
 **Steps:** purge the Photos demo corpus, pair against the empty vault, relaunch with every device permission denied, enter Photos through its product deep link (an empty Home intentionally has no content tile), enter Library, assert the refusal takeover, recovery control, and disabled Select action, then take the Home capsule out of the takeover and require Home itself to arrive. The next suite journey seeds the corpus through the same paired profile.

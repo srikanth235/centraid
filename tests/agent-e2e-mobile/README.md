@@ -130,6 +130,11 @@ ctx surface:
 - `ctx.restart()` — `stopApp` + `launchApp { clearState: false }` with a 300ms pre-stop delay (analogous to the desktop harness's flushMs before SIGTERM, gives AsyncStorage time to flush).
 - `ctx.configureGateway(url?, token?)` — clear app state, mint a pairing ticket from the declared gateway (ownership: the ticket lands the phone in whichever owner host custody resolves — a fresh gateway founds a placeholder owner, a reused one lands on the owner an earlier flow already named), redeem it through the real ticket-only onboarding UI, and complete the test profile. Journeys that need a gateway call this themselves so their prerequisites do not depend on execution order. Live tickets and their Maestro diagnostics are never kept in uploaded run artifacts.
 - `ctx.ensureDemo(appId)` — idempotently load the named gateway demo scenario before pairing. Each seeded Photos journey calls it when run independently. In `run-photos-suite.mjs`, the permissions journey first proves the empty-vault denial state, the library journey then seeds and pairs Photos, and the remaining journeys reuse that paired app state so the suite shares one boot and seed.
+
+  **On a CI lane this is a no-op, and it has to be** (#905). `ensureDemo` writes to the GATEWAY; nothing pulls a post-clone write down to a phone that is already paired. A lane is many flows sharing one pairing — the PR gate pairs in `pairing-canary`, the roster pairs inside `run-probes-suite` and then runs three more suites against that profile — so only the first flow's seeding could ever precede a clone. The lane therefore seeds the whole corpus itself, in `seed-demo-corpus.mjs`, before `android-emulator-install.sh` hands off to Maestro; the per-flow calls stay because they document each journey's fixture and are what makes a flow runnable on its own.
+
+  Getting this wrong does not look like a seeding failure. An empty vault is a legitimate product state: `springboardState` calls it `first-run` and Home renders `DayOne` instead of `LauncherGrid`, so every `Open <App>` tile is absent and twelve journeys fail at their first tap with `Element not found` — while `HOME_READY_MARKER` ("All apps and places", a `HomeBand` label present in both states) still reports the screen ready. `lint:e2e-wiring`'s RULE `corpus` holds both halves down.
+
 - `ctx.note(msg)` — record an observation; surfaces under `## Notes` in `verdict.md`.
 
 Authoring rules of thumb (carried over from desktop):
@@ -157,27 +162,28 @@ The claims layer under all of it is unchanged: what belongs _here_ is the runtim
 
 | Lane | Trigger | Platform | Runs | Blocking |
 | --- | --- | --- | --- | --- |
-| `mobile-device-gate` (`ci.yml`) | every mobile-touching PR | Android | `run-pr-gate-suite.mjs` — the critical five, ≤12 min warm ([budget](flows/pr-gate-budget.md)) | **yes** |
+| `mobile-device-gate` (`ci.yml`) | every mobile-touching PR | Android | the critical five as two parallel matrix legs — `run-pr-gate-suite.mjs` (paired) and `run-pr-gate-resilience-suite.mjs` (resilience), ≤12 min warm **each** ([budget](flows/pr-gate-budget.md)) | **yes** |
 | `mobile-canary-android` (`mobile-canary.yml`) | every merge to `main` | Android | the full roster, and prebuilds the native shell the PR gate restores | no |
 | `mobile-e2e-android` (`e2e.yml`) | nightly | Android | the full roster | no |
 | `mobile-e2e-ios` (`e2e.yml`) | nightly | iOS | `run-ios-depth-suite.mjs` — the six claims that are facts about iOS, never a second copy ([budget](flows/ios-depth-budget.md)) | no |
-| `alarm` (`mobile-alarm-test.yml`) | quarterly | Android | the critical five against a build with Home blanked, and **requires them to FAIL** | no |
+| `alarm` (`mobile-alarm-test.yml`) | quarterly | Android | the gate's paired leg against a build with Home blanked, and **requires it to FAIL** | no |
 
 Android gates PRs per D1 in [docs/decisions.md](../../docs/decisions.md#mobile-testing-890): Linux runners expose `/dev/kvm`, and UIAutomator2 is the stabler of the two Maestro drivers.
 
-Every lane, and every flow it schedules, is declared in [`roster.json`](roster.json) and checked by `bun run lint:e2e-wiring`, which derives the real wiring from the shipped YAML and the shipped runners. A flow the roster calls `scheduled` that no lane runs is a hard failure — as is a `tests/matrix.json` owner nothing schedules, which is how `sharing-invite.mjs` spent its life being cited as evidence for a journey nobody ran.
+Every lane, and every flow it schedules, is declared in [`roster.json`](roster.json) and checked by `bun run lint:e2e-wiring`, which derives the real wiring from the shipped YAML and the shipped runners. A flow the roster calls `scheduled` that no lane runs is a hard failure — as is a `tests/matrix.json` owner nothing schedules, which is how `sharing-reach.mjs` spent its life being cited as evidence for a journey nobody ran.
 
 ## The committed roster
 
 | Suite / flow | What it owns |
 | --- | --- |
 | `flows/pairing-canary.mjs` | the shared prerequisite: a ticket is minted, redeemed, and pairing completes to Home — in under five minutes, before anything fans out. First and short-circuiting in every suite that has one. |
-| `run-pr-gate-suite.mjs` (5 flows) | the critical five that gate a PR — budget in [flows/pr-gate-budget.md](flows/pr-gate-budget.md) |
+| `run-pr-gate-suite.mjs` (3 flows) | the PAIRED leg of the critical five that gate a PR: `pairing-canary`, `notes-library`, `photos-permissions` — budget in [flows/pr-gate-budget.md](flows/pr-gate-budget.md) |
+| `run-pr-gate-resilience-suite.mjs` (3 flows) | the RESILIENCE leg of the same gate, on a second emulator in parallel: `pairing-canary`, `native-v0-resilience`, `cold-start` — same budget doc, and the canary is deliberately in both |
 | `run-ios-depth-suite.mjs` (6 flows) | the iOS-only claims — budget in [flows/ios-depth-budget.md](flows/ios-depth-budget.md) |
 | `run-photos-suite.mjs` (5 flows) | the Photos seat: refused permission, library, viewer, search, select-and-write — budget in [flows/photos-budget.md](flows/photos-budget.md) |
 | `run-home-apps-suite.mjs` (7 flows) | the Docs, Agenda, Notes, Tasks, People, Tally and Locker seats — budget in [flows/home-apps-budget.md](flows/home-apps-budget.md) |
 | `run-probes-suite.mjs` (6 flows) | the standalone journeys that grid G showed unbudgeted: `cold-start`, `home-loads`, `native-v0-resilience`, `places-seat`, `scroll-frames`, `volume-proof` — budget in [flows/probes-budget.md](flows/probes-budget.md) |
-| `flows/sharing-invite.mjs` | the phone's one commons producer and the surface that redeems an invitation |
+| `flows/sharing-reach.mjs` | the phone's one commons producer and the surface that makes a person reachable |
 
 Every suite runner declares only `FLOWS` and `BUDGET_MS`; the shared body — spawn, the classified retry, the aggregate budget — is [`lib/run-suite.mjs`](lib/run-suite.mjs). Those two literals stay in each runner because `lint:e2e-wiring` and `validate-report-registries.mjs` read them off disk to derive what a lane schedules and what it may cost.
 

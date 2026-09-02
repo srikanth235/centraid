@@ -137,6 +137,7 @@ export interface CreateNativeReplicaSessionOptions {
   appState?: AppStateLike;
   isConnected?: () => boolean;
   isNetworkWorkAllowed?: () => Promise<boolean>;
+  isRowSyncAllowed?: () => Promise<boolean>;
   retryDelayMs?: number;
   /**
    * Hermes has no WebCrypto; these default to `./native-hash` (expo-crypto),
@@ -160,6 +161,7 @@ export interface CreateNativeReplicaSessionOptions {
   }) => void;
   /** Fires once per storage-full pause, so the mount need not poll. */
   onStorageFull?: (error: unknown) => void;
+  onGatewayOutcome?: (reachable: boolean) => void;
   /**
    * Who a queued write into THIS vault may wait for. Set only where
    * `MountedReplicaScope.personal === false`; absent means the member's own
@@ -198,7 +200,9 @@ export class NativeReplicaSession implements MobileReplicaSession {
   readonly #appState: AppStateLike | undefined;
   readonly #isConnected: () => boolean;
   readonly #retryBackoff: BackoffSchedule;
+  readonly #bootstrapBackoff: BackoffSchedule;
   readonly #isNetworkWorkAllowed: () => Promise<boolean>;
+  readonly #isRowSyncAllowed: () => Promise<boolean>;
   readonly #bootstrapWindow: number | undefined;
   readonly #progressiveBootstrap: boolean;
   readonly #intentStore: SqliteIntentStore;
@@ -207,6 +211,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     | CreateNativeReplicaSessionOptions["onBootstrapProgress"]
     | undefined;
   readonly #stewardLabel: string | undefined;
+  readonly #onGatewayOutcome: ((reachable: boolean) => void) | undefined;
   #previewReady:
     | { resolve: () => void; reject: (error: unknown) => void }
     | undefined;
@@ -218,6 +223,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   #drainPromise: Promise<void> | undefined;
   #drainRequested = false;
   #retryTimer: ReturnType<typeof setTimeout> | undefined;
+  #bootstrapRetryTimer: ReturnType<typeof setTimeout> | undefined;
   #appStateSub: { remove: () => void } | undefined;
   #closed = false;
 
@@ -232,10 +238,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
       | "appState"
       | "isConnected"
       | "isNetworkWorkAllowed"
+      | "isRowSyncAllowed"
       | "retryDelayMs"
       | "bootstrapWindow"
       | "progressiveBootstrap"
       | "onBootstrapProgress"
+      | "onGatewayOutcome"
       | "steward"
     > & { idFactory: ReplicaIdFactory }
   ) {
@@ -248,8 +256,15 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#isConnected = options.isConnected ?? (() => true);
     this.#isNetworkWorkAllowed =
       options.isNetworkWorkAllowed ?? (() => Promise.resolve(true));
+    this.#isRowSyncAllowed =
+      options.isRowSyncAllowed ?? this.#isNetworkWorkAllowed;
     const baseMs = options.retryDelayMs ?? 2_000;
     this.#retryBackoff = backoffSchedule({
+      baseMs,
+      maxMs: Math.max(baseMs, MAX_INTENT_RETRY_DELAY_MS),
+      jitter: 0.2,
+    });
+    this.#bootstrapBackoff = backoffSchedule({
       baseMs,
       maxMs: Math.max(baseMs, MAX_INTENT_RETRY_DELAY_MS),
       jitter: 0.2,
@@ -258,6 +273,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#bootstrapWindow = options.bootstrapWindow;
     this.#progressiveBootstrap = options.progressiveBootstrap ?? false;
     this.#onBootstrapProgress = options.onBootstrapProgress;
+    this.#onGatewayOutcome = options.onGatewayOutcome;
     this.#stewardLabel = options.steward
       ? stewardDeviceLabel(options.steward.displayName)
       : undefined;
@@ -291,7 +307,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       (status.coverage === "partial" ||
         (status.cursor === null && status.coverage !== "complete")) &&
       this.#isConnected() &&
-      (await this.#isNetworkWorkAllowed())
+      (await this.#isRowSyncAllowed())
     ) {
       const preview = new Promise<void>((resolve, reject) => {
         this.#previewReady = { resolve, reject };
@@ -723,7 +739,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     if (this.#hasCursor) {
       void this.pullNow().catch(() => undefined);
     } else {
-      void this.bootstrapWhenReachable();
+      void this.bootstrapWhenReachable().catch(() => undefined);
     }
     void this.flushIntents();
   }
@@ -766,7 +782,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   /** Force a foreground delta pull immediately (e.g. on manual refresh). */
   async pullNow(): Promise<boolean> {
     if (this.#closed || !this.#isConnected() || !this.#hasCursor) return false;
-    if (!(await this.#isNetworkWorkAllowed())) return false;
+    if (!(await this.#isRowSyncAllowed())) return false;
     const status = await this.#coordinator.status();
     if (!status.cursor) return false;
     const abort = new AbortController();
@@ -798,7 +814,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
     if (detail !== undefined)
       noteResyncVerdict(detail, this.#gatewayAuth.vaultId);
     this.#hasCursor = false;
-    if (!this.#closed) void this.bootstrapWhenReachable();
+    if (!this.#closed)
+      void this.bootstrapWhenReachable().catch(() => undefined);
   }
 
   async close(): Promise<void> {
@@ -806,6 +823,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#closed = true;
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
     this.#retryTimer = undefined;
+    if (this.#bootstrapRetryTimer) clearTimeout(this.#bootstrapRetryTimer);
+    this.#bootstrapRetryTimer = undefined;
     this.#appStateSub?.remove();
     this.#appStateSub = undefined;
     this.#feed.setActive(false);
@@ -821,6 +840,8 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#closed = true;
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
     this.#retryTimer = undefined;
+    if (this.#bootstrapRetryTimer) clearTimeout(this.#bootstrapRetryTimer);
+    this.#bootstrapRetryTimer = undefined;
     this.#appStateSub?.remove();
     this.#appStateSub = undefined;
     this.#feed.setActive(false);
@@ -838,7 +859,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       if (this.#hasCursor) {
         void this.pullNow().catch(() => undefined);
       } else {
-        void this.bootstrapWhenReachable();
+        void this.bootstrapWhenReachable().catch(() => undefined);
       }
       void this.flushIntents();
     } else if (state === "background") {
@@ -849,11 +870,30 @@ export class NativeReplicaSession implements MobileReplicaSession {
   private async bootstrapWhenReachable(): Promise<void> {
     if (this.#bootstrapPromise || this.#closed || !this.#isConnected())
       return this.#bootstrapPromise;
-    if (!(await this.#isNetworkWorkAllowed())) return;
-    this.#bootstrapPromise = this.bootstrap().finally(() => {
-      this.#bootstrapPromise = undefined;
-    });
+    if (!(await this.#isRowSyncAllowed())) return;
+    this.#bootstrapPromise = this.bootstrap()
+      .then(() => {
+        this.#bootstrapBackoff.reset();
+      })
+      .catch((error: unknown) => {
+        this.scheduleBootstrapRetry();
+        throw error;
+      })
+      .finally(() => {
+        this.#bootstrapPromise = undefined;
+      });
     return this.#bootstrapPromise;
+  }
+
+  /** THE ONLY THING THAT ASKS AGAIN (#905): every other trigger fires once per
+   *  event, so one refusal left an empty library over a full vault. Its own
+   *  slot, never the outbox's — a parked drain must not swallow a rebootstrap. */
+  private scheduleBootstrapRetry(): void {
+    if (this.#bootstrapRetryTimer || this.#closed) return;
+    this.#bootstrapRetryTimer = setTimeout(() => {
+      this.#bootstrapRetryTimer = undefined;
+      void this.bootstrapWhenReachable().catch(() => undefined);
+    }, this.#bootstrapBackoff.next());
   }
 
   /**
@@ -961,6 +1001,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
         this.resolveWaiter(intent.intentId, outcome);
         // The gateway answered, so whatever the outage was is over.
         this.#retryBackoff.reset();
+        this.#onGatewayOutcome?.(true);
       } catch (error) {
         if (isAuthorizationError(error)) {
           this.rejectWaiter(intent.intentId, error);
@@ -980,6 +1021,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
           this.resolveWaiter(intent.intentId, outcome);
           return drainNextIntent();
         }
+        this.#onGatewayOutcome?.(false);
         await this.#coordinator
           .markIntentTransportFailed(intent.intentId, errorMessage(error))
           .catch(() => undefined);
@@ -1010,6 +1052,11 @@ export class NativeReplicaSession implements MobileReplicaSession {
   /** Something changed, so do not keep waiting out an outage-length delay. */
   private resetRetry(): void {
     this.#retryBackoff.reset();
+    this.#bootstrapBackoff.reset();
+    if (this.#bootstrapRetryTimer) {
+      clearTimeout(this.#bootstrapRetryTimer);
+      this.#bootstrapRetryTimer = undefined;
+    }
     if (!this.#retryTimer) return;
     clearTimeout(this.#retryTimer);
     this.#retryTimer = undefined;

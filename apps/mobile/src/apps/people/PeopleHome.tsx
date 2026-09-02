@@ -52,6 +52,7 @@ import type {
 
 import ChipsBlock from "../../kit/components/ChipsBlock";
 import EmptyBlock from "../../kit/components/EmptyBlock";
+import { NEWEST_FIRST_ANCHORING } from "../../kit/components/list-anchoring";
 import { TextInput } from "../../kit/components/NativeText";
 import PlaceHeader from "../../kit/components/PlaceHeader";
 import SkeletonRows from "../../kit/components/SkeletonRows";
@@ -271,6 +272,7 @@ function RosterBody({
         <EmptyLine text={EMPTY.noMatch} />
       ) : (
         <FlashList
+          maintainVisibleContentPosition={NEWEST_FIRST_ANCHORING}
           data={rows}
           keyExtractor={(person) => person.party_id}
           renderItem={({ item, index }) => (
@@ -538,6 +540,7 @@ function SearchBody({
         <EmptyLine text={EMPTY.noMatch} />
       ) : (
         <FlashList
+          maintainVisibleContentPosition={NEWEST_FIRST_ANCHORING}
           data={results}
           keyExtractor={(person) => person.party_id}
           renderItem={({ item }) => (

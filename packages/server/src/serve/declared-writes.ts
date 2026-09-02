@@ -3,7 +3,11 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
-import { JOURNAL_TABLES, POLY_REF_REGISTRY } from "@centraid/vault";
+import {
+  JOURNAL_TABLES,
+  PARTY_POINTER_REGISTRY,
+  POLY_REF_REGISTRY,
+} from "@centraid/vault";
 
 export function entityForPhysical(
   physical: string,
@@ -65,6 +69,13 @@ export function partyRepointEntities(
       .all() as { table: string }[];
     if (!references.some((fk) => fk.table === "core_party")) continue;
     const entity = entityForPhysical(name, all);
+    if (entity) cascade.add(entity);
+  }
+  // The merge walks one more set that no foreign key describes: the party
+  // pointers `core_party` has no FK for. Derived from the same registry the
+  // merge itself walks, so the two cannot drift.
+  for (const pointer of PARTY_POINTER_REGISTRY) {
+    const entity = entityForPhysical(pointer.table, all);
     if (entity) cascade.add(entity);
   }
   return cascade;

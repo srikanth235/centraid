@@ -186,7 +186,7 @@ export function groupAnswers(answers: readonly AccessAnswer[]): AccessGroup[] {
         (answer) =>
           isStanding(answer) && group.kinds.includes(answer.principalKind)
       )
-      .toSorted((left, right) => right.grantedAt.localeCompare(left.grantedAt)),
+      .sort((left, right) => right.grantedAt.localeCompare(left.grantedAt)),
   }));
 }
 

@@ -45,6 +45,26 @@ const onText = (id, pattern, reason, example) => ({
  * above it. Add a signal only with the line that motivated it.
  */
 export const INFRASTRUCTURE_SIGNALS = [
+  // FIRST, and matched on the screen digest rather than the exit text. An
+  // Android ANR/crash dialog is a system window with NO app content, so every
+  // `visible` under it misses whatever the app drew — the assertion did not
+  // look at the product and disagree, it never reached the product at all.
+  // That is the one shape where a `product` verdict would be a fabrication in
+  // the same sense the header describes, and `id:aerr_*` is unforgeable: those
+  // are AOSP `app_error.xml` handles, never app copy.
+  //
+  // This is a BACKSTOP for the suppression in
+  // apps/mobile/scripts/android-emulator-install.sh, not a substitute — the
+  // dialog is supposed to be hidden, and a retry that quietly papers over a
+  // launcher ANR every run is the failure-rate blindness this file exists to
+  // prevent. It fires so a run reports the environment honestly and can be
+  // retried; the digest line lands in the ledger reason either way.
+  onText(
+    "android-system-error-dialog",
+    /\bid:aerr_(?:close|wait|restart|report)\b/u,
+    "an Android ANR/crash dialog covered the app, so the assertion queried a system window with no app content",
+    'the screen carried: id:alertTitle "Pixel Launcher isn\'t responding" id:aerr_close "Close app" id:aerr_wait "Wait"'
+  ),
   onText(
     "maestro-driver-disconnect",
     /Failed to connect to \/127\.0\.0\.1:7001/u,

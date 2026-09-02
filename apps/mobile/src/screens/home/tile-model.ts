@@ -55,6 +55,31 @@ export interface TileData {
   body: TileBody;
 }
 
+export interface TileReadState {
+  loading: boolean;
+  connection: string;
+  error?: string;
+  lastSyncedAt?: string;
+}
+
+/** May this app be called EMPTY. Only a LANDED pull writes `lastSyncedAt`; an empty read lacking one is the CLONE missing, not the vault (#905 N). */
+export function combineTileStatus(
+  states: readonly TileReadState[],
+  hasContent: boolean
+): TileStatus {
+  if (hasContent) return "content";
+  if (states.some((state) => state.loading)) return "loading";
+  if (
+    states.some(
+      (state) => state.connection === "unavailable" || state.error !== undefined
+    )
+  )
+    return "unknown";
+  if (states.some((state) => state.lastSyncedAt === undefined))
+    return "unknown";
+  return "empty";
+}
+
 const text = (row: ReplicaRow, key: string): string =>
   row[key] == null ? "" : String(row[key]);
 

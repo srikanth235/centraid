@@ -4,7 +4,7 @@ import {
   recordQualityResult,
   rigDriftBudget,
 } from "../../agent-e2e-shared/harness.mjs";
-import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
+import { AWAIT_LAUNCHER, runFlow } from "../lib/harness.mjs";
 
 /**
  * PER-LAUNCH mobile cold start (issue #659 R3c).
@@ -48,6 +48,11 @@ await runFlow("mobile-cold-start", async (ctx) => {
   // every launch below measure a warm-install, cold-process start, which is
   // what a person does every morning.
   await ctx.configureGateway();
+  // A MEASURED LAUNCH CARRIES NOTHING BUT ITSELF. In reuse mode configureGateway
+  // stages its launch onto the next chunk, and the next chunk here is sample one
+  // — whose clock the drift budget reads. This flow is the one that pays the
+  // extra Maestro spawn on purpose, so the staged launch runs on its own first.
+  await ctx.flush();
 
   // Sequential by construction: each sample must be a cold process start on an
   // idle device, so these cannot be parallelised. Recursion rather than a loop
@@ -62,11 +67,12 @@ await runFlow("mobile-cold-start", async (ctx) => {
 ---
 - stopApp
 - launchApp
-- extendedWaitUntil:
-    visible:
-      text: "${HOME_READY_MARKER}"
-    timeout: 30000
-`,
+# THE LAUNCHER, NOT THE BAND'S LABEL — icon-to-usable, not icon-to-band. The
+# band's marker renders on the empty-vault DayOne screen too, so it used to stop
+# the clock on a Home that could not open a single app, and did (cold-start.md
+# has the run). Longer numbers, and no history invalidated: the drift budget
+# stays inactive until thirty samples exist.
+${AWAIT_LAUNCHER}`,
       `cold-start-${index + 1}`
     );
     launchMs.push(performance.now() - started);

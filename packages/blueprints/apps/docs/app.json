@@ -3,7 +3,7 @@
   "id": "docs",
   "name": "Docs",
   "description": "A drive for your important documents — leases, IDs, warranties, tax forms — as a projection of the vault. A document is a core.document wrapper around a sha256-deduped canonical content item (issue #352): identity is separate from bytes, so text documents edit in place and any document's content can be replaced, each change a walkable version in its history. Folders are SKOS concepts in the owner's folders scheme, and filing is a single tag per document. Starring is a flags-scheme tag on the same wrapper, so a photo favorited in Photos shows in Starred here. Trash sets a purge date about 30 days out and keeps the folder tag (and the star), so a restored document lands right back where it was. Uploading, renaming, moving, editing, replacing, restoring a version, starring, trashing and folder management all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "iconKey": "Folder",
   "colorKey": "teal",
   "vault": {
@@ -17,6 +17,8 @@
       { "schema": "share", "table": "circle_grant", "verbs": "read" },
       { "schema": "share", "table": "commons_member_state", "verbs": "read" },
       { "schema": "core", "table": "party", "verbs": "read" },
+      { "schema": "core", "table": "share_origin", "verbs": "read" },
+      { "schema": "share", "table": "party_vault_binding", "verbs": "read" },
       { "schema": "core", "table": "link", "verbs": "read" },
       { "schema": "core", "table": "tag", "verbs": "read" },
       { "schema": "core", "table": "concept", "verbs": "read" },

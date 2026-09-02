@@ -8,10 +8,9 @@
 //
 // This is the person screen's grant dashboard: every live grant reaching this
 // party, the channel that carries them, and the two acts the ruling gives
-// People — `Share` and `Revoke`. `awaiting_channel` reads as `Invitation
-// pending`, never as an error: a share to somebody this vault has never
-// reached is waiting, and the invitation is the grant's own first step, so no
-// link ceremony stands in front of the member's one gesture.
+// People — `Share` and `Revoke`. An unreached channel reads as an opportunity
+// rather than an error, and it names the act that opens it: linking the
+// person's account here is what makes them shareable (#903).
 //
 // FOUR STATES, FOUR SENTENCES: a read in flight draws the skeleton; a phone
 // with no gateway base says so; a refusal prints the route's own words; only a
@@ -152,8 +151,9 @@ export default function PersonGrants(
     const note = reachNote(state.reach);
     return (
       <View>
-        {/* The channel, in the kit's words. `Not reached yet · Sharing sends
-            an invitation first.` is an opportunity, not an error. */}
+        {/* The channel, in the kit's words. `Not reached yet · Link their
+            account in People to share with them.` is an opportunity, not an
+            error — and this screen is where that act lives. */}
         <Caption
           text={
             note

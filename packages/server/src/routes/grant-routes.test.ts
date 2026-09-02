@@ -326,9 +326,12 @@ describe("routes/grants", () => {
   });
 
   test("revoking says which of the three removals actually happened", async () => {
-    // (1) Never delivered: an audience with no channel parks at an invitation,
-    // so the sentence must not imply a peer was asked to delete anything.
-    const parked = world({ linked: false });
+    // (1) Never delivered: the audience is linked — since #903 nothing else
+    // can be granted — but their vault is not mounted here, so the grant is
+    // made and never carried. The sentence must not imply a peer was asked to
+    // delete anything.
+    const parked = world();
+    parked.mounted.delete(AUDIENCE);
     const never = await call(parked, {
       method: "POST",
       url: "/centraid/_vault/grants",

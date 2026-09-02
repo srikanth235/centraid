@@ -61,11 +61,6 @@ const shareKit = (await import(moduleUrl)) as {
     scopes: readonly Scope[]
   ) => Promise<ShareDestination[]>;
   isPendingPartyId: (partyId: string) => boolean;
-  quickAddedDestination: (partyId: string, label: string) => ShareDestination;
-  nearNameMatches: (
-    destinations: readonly ShareDestination[],
-    name: string
-  ) => ShareDestination[];
 };
 
 const OWN: Scope = {
@@ -225,52 +220,6 @@ describe("peopleDestinations — joined and invited identities", () => {
         }
       )
     ).toStrictEqual([{ partyId: "asha", capability: "read" }]);
-  });
-});
-
-describe("quick-add laws — minting a person from the sheet itself", () => {
-  it("synthesizes the id exactly as peopleDestinations does for a vault-less person", () => {
-    expect(shareKit.quickAddedDestination("asha", "Asha")).toStrictEqual({
-      id: "party:asha",
-      label: "Asha",
-      partyId: "asha",
-    });
-    expect(
-      shareKit.peopleDestinations([{ partyId: "asha", label: "Asha" }], [])[0]
-        ?.id
-    ).toBe(shareKit.quickAddedDestination("asha", "Asha").id);
-  });
-});
-
-describe("nearNameMatches — did you mean someone already listed?", () => {
-  const listed: ShareDestination[] = [
-    { id: "party:asha", label: "Asha Rao", partyId: "asha" },
-    { id: "party:ben", label: "Ben", partyId: "ben" },
-  ];
-
-  it("matches on case and surrounding whitespace alike", () => {
-    expect(shareKit.nearNameMatches(listed, "  ben ")).toStrictEqual([
-      listed[1],
-    ]);
-    expect(shareKit.nearNameMatches(listed, "BEN")).toStrictEqual([listed[1]]);
-  });
-
-  it("matches when either name contains the other", () => {
-    expect(shareKit.nearNameMatches(listed, "Asha")).toStrictEqual([listed[0]]);
-    expect(
-      shareKit.nearNameMatches(
-        [{ id: "party:ben", label: "Ben", partyId: "ben" }],
-        "Ben Rao"
-      )
-    ).toHaveLength(1);
-  });
-
-  it("asks nothing about an empty name", () => {
-    expect(shareKit.nearNameMatches(listed, "   ")).toStrictEqual([]);
-  });
-
-  it("finds nobody when no listed name is close", () => {
-    expect(shareKit.nearNameMatches(listed, "Cara")).toStrictEqual([]);
   });
 });
 

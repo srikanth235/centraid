@@ -68,6 +68,17 @@ export function originHealthSignal(
       destination: "phone",
     };
   }
+  if (facts.paired && !facts.online) {
+    return {
+      tone: "attention",
+      copy: "Can't reach your vault · nothing is waiting on this phone",
+      action: "What to do",
+      destination: "notifications",
+      notificationDetail: "phone",
+      notificationCause:
+        "Can't reach your vault · nothing is waiting to upload",
+    };
+  }
 
   const unsafeCopies = facts.custody
     ? facts.custody.buckets["local-only"].count +

@@ -1,8 +1,8 @@
 // SHARING, ON THE PHONE — the one commons producer this device has, and the
-// one place an invitation is redeemed (#825 G-edit; #872 rebuilt the seat).
+// one place a person becomes reachable (#825 G-edit; #872 rebuilt the seat).
 //
-// Between #831 and the v17 rebuild no mobile seat could mint an invitation at
-// all, and nothing on this layer noticed: the mobile journeys covered reading,
+// Between #831 and the v17 rebuild no mobile seat could share at all, and
+// nothing on this layer noticed: the mobile journeys covered reading,
 // recording and the gate, and sharing had no mobile-owned row. This flow is
 // that row.
 //
@@ -10,18 +10,17 @@
 //
 //   1. THE VERB EXISTS, ON THE SUBJECT THAT CAN BE SHARED. `tally.group` is
 //      v1's one edit-capable placeable subject (`_shared/placement-registry`),
-//      so the group's own life-acts section is where a `centraid://commons-
-//      invite` URI is minted — and the row says what an invitation IS before
-//      it is pressed, rather than after.
+//      so the group's own life-acts section is where a share is compiled — and
+//      the row says what a share DOES before it is pressed, rather than after.
 //   2. THE SHEET IS REAL. Pressing it opens the shell's share engine, which
 //      states the consequence of joining in its own words. What the sheet then
 //      OFFERS depends on who this vault is linked to; see "what CI can prove"
-//      in the .md — a single-vault fixture has nobody to hand an invitation to,
-//      and the flow asserts the sheet, not a roster it does not have.
-//   3. AN INVITATION IS REDEEMED SOMEWHERE, AND THAT SOMEWHERE LOADS. The
-//      producing seat and the redeeming seat are different screens on the same
-//      phone; Settings → Sharing is the second one, and its redemption field is
-//      the door a `centraid://commons-invite` URI goes through.
+//      in the .md — a single-vault fixture is linked to nobody, and the flow
+//      asserts the sheet, not a roster it does not have.
+//   3. A PERSON BECOMES REACHABLE SOMEWHERE, AND THAT SOMEWHERE LOADS. The
+//      producing seat and the linking seat are different screens on the same
+//      phone; Settings → Sharing is the second one, and its ticket field is
+//      the door a link ceremony goes through.
 //
 // Plus, on Android only, the fourth: OFFLINE DRAWS THE SENTENCE, NOT THE VERB.
 // Sharing is a commons compilation on the gateway and `MultiVaultReplicaSession
@@ -61,30 +60,29 @@ const GROUP_HERO_SUB =
 
 /** `apps/mobile/src/apps/tally/tally-seat-copy.ts` — the seat's own three. */
 const SHARE_VERB = "Share group";
-const SHARE_META = "one invitation each, redeemed in their own vault";
+const SHARE_META = "each member you are linked with gets it in their own vault";
 const SHARE_OFFLINE =
-  "Sharing needs a gateway connection . an invitation cannot be queued";
+  "Sharing needs a gateway connection . it cannot be queued";
 
-/** `apps/mobile/src/kit/share/ShareSheet.tsx` — the sheet's own consequence
- *  sentence, drawn whether or not this vault has anybody to share with. */
-const SHEET_NOTE = "Everyone who joins gets the full shared item.*";
+/** `apps/mobile/src/kit/share/ShareSheet.tsx` — the sheet's own general-access
+ *  sentence, drawn whether or not this vault is linked to anybody. */
+const SHEET_NOTE = "Everyone you add gets the full shared item.*";
 
-/** `apps/mobile/src/screens/Sharing.tsx` — the redemption section, whose title
- *  its local `Section` upper-cases, and the field's accessible name. */
-const REDEEM_SECTION = "REDEEM A SHARED-SPACE INVITE";
-const REDEEM_LEDE =
-  "Create your vault first, then paste the one-time invitation here.";
-const REDEEM_FIELD = "Shared-space invitation";
+/** `apps/mobile/src/screens/Sharing.tsx` — the two sections, whose titles its
+ *  local `Section` upper-cases, and the ceremony field's accessible name. */
+const LINK_SECTION = "LINK WITH SOMEONE";
+const PEOPLE_SECTION = "PEOPLE";
+const LINK_FIELD = "Pasted link ticket";
 
 /** `apps/mobile/src/screens/Settings.tsx` — the row's visible label. Its
  *  accessible name is the bare word "Sharing", which the section heading above
  *  it also carries; the row's own sentence is the unambiguous target. */
-const SHARING_ROW = "People, links and shared vaults";
+const SHARING_ROW = "People you are linked with";
 
 /** `packages/blueprints/apps/tally/seed.js` — the one group the demo creates. */
 const DEMO_GROUP = "Tahoe Trip";
 
-await runFlow("sharing-invite", async (ctx) => {
+await runFlow("sharing-reach", async (ctx) => {
   // A group is the subject being shared, so there has to be one. Seeded before
   // pairing so it arrives in the first replica clone; the GET guard makes a
   // second call a no-op.
@@ -147,7 +145,7 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
     `Tally group "${DEMO_GROUP}" offered Share group with its own meta, and the share sheet opened on it`
   );
 
-  // The redeeming seat.
+  // The linking seat.
   //
   // SETTINGS MOVED, AND THE PATH THIS FLOW USED IS GONE. Until #890 W2 this
   // chunk opened a vault drawer: `Open vault menu` → wait for `GO TO` → tap
@@ -213,33 +211,34 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
     id: "settings-sharing-row"
 - extendedWaitUntil:
     visible:
-      id: "sharing-redeem"
+      id: "sharing-screen"
     timeout: 20000
-# The door a centraid://commons-invite URI goes through, and the order it
-# states: your own vault first, then the one-time invitation.
-- assertVisible: "${REDEEM_SECTION}"
-- assertVisible: "${REDEEM_LEDE}"
+# The two halves of the ONE mechanism: the ceremony that makes a person
+# reachable, and the roster it writes. Nothing else is on this screen.
+- assertVisible: "${LINK_SECTION}"
+- assertVisible: "${LINK_FIELD}"
+- assertVisible: "${PEOPLE_SECTION}"
 - assertVisible:
-    id: "sharing-redeem-field"
-- assertVisible: "${REDEEM_FIELD}"
-- takeScreenshot: sharing-redeem-surface
+    id: "sharing-people"
+- takeScreenshot: sharing-link-surface
 `,
-    "redemption-surface"
+    "linking-surface"
   );
   ctx.note(
-    "Settings → Sharing drew the invite-redemption section, its ordering sentence and its field"
+    "Settings → Sharing drew the link ceremony and the roster it writes"
   );
 
   // UI-impact evidence for #880 (check:ui-receipt): the two member-visible
-  // surfaces this wave added on the sharing path — the Tally group's Share
-  // group sheet, and the rebuilt Settings → Sharing screen — published where
+  // surfaces on the sharing path — the Tally group's Share group sheet, and
+  // the Settings → Sharing screen — published where
   // the desktop and native journeys publish theirs. Copied out of the run dir
   // rather than re-captured, so what ships is the frame the assertions above
   // already passed against.
   const uiImpactDir = "artifacts/e2e/ui-impact";
   const screenshot = async (suffix, published) => {
     const frames = await readdir(ctx.state.screenshotsDir);
-    const frame = frames.find((name) => name.endsWith(`-${suffix}.png`));
+    // The frame is `<name>.png`, unprefixed — see `pairing-canary.mjs` (#905).
+    const frame = frames.find((name) => name === `${suffix}.png`);
     if (frame === undefined)
       throw new Error(`${suffix} frame was not captured`);
     await mkdir(uiImpactDir, { recursive: true });
@@ -253,7 +252,7 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
     "issue-880-mobile-share-group-sheet.png"
   );
   await screenshot(
-    "sharing-redeem-surface",
+    "sharing-link-surface",
     "issue-880-mobile-sharing-screen.png"
   );
 
@@ -329,6 +328,6 @@ ${retryableTapCommands(DEMO_GROUP, GROUPS_STATUS)}
   return {
     pass: true,
     notes:
-      "the phone minted an invitation from a Tally group, and the surface that redeems one loaded",
+      "the phone compiled a share from a Tally group, and the surface that makes a person reachable loaded",
   };
 });

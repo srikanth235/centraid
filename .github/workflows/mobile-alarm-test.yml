@@ -75,9 +75,16 @@ jobs:
       # restored cache would install the UNMUTATED app and the suite would pass,
       # which this job reads as "the alarm did not sound" and fails on. That
       # would be a correct verdict about the wrong artifact — the worst kind.
+      # Restore-then-save, for the reason already written above the apk and
+      # gradle caches and not applied to this one: `actions/cache` declares
+      # `post-if: success()`, so on a red lane the snapshot never saves and every
+      # run pays the ~2-minute create — the warm path stays unreachable until the
+      # greenness the cache exists to help deliver. `Post AVD cache` reported
+      # `skipped` on every red run while `Create AVD + snapshot` ran on every one,
+      # which is that same fact stated twice in the logs.
       - name: AVD cache
         id: avd_cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.android/avd/*
@@ -97,6 +104,14 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: false
           script: echo "Generated AVD snapshot for caching."
+      - name: Save the AVD snapshot
+        if: steps.avd_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-x86_64-google_apis-pixel6-r4096-c4-v1
       - name: Run the critical five against a build with Home blanked
         id: mutated
         continue-on-error: true

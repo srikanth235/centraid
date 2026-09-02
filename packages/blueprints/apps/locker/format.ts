@@ -168,7 +168,7 @@ export function rowsFor(
     // would be asking the same question twice and risking two answers.
     return true;
   });
-  return pool.toSorted(byTitle);
+  return [...pool].sort(byTitle);
 }
 
 /** How many rows each type holds, for the rail's six rows. A zero is drawn as
@@ -197,7 +197,7 @@ export function tagCounts(
   }
   return [...counts.entries()]
     .map(([tag, count]) => ({ tag, count }))
-    .toSorted((a, b) => a.tag.localeCompare(b.tag));
+    .sort((a, b) => a.tag.localeCompare(b.tag));
 }
 
 /**

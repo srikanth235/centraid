@@ -4,7 +4,8 @@
 // never again depends on whether a transport succeeded. The channel is not a
 // third table: `share_party_vault_binding` (#731) already answers "does this
 // person have a vault to deliver into", reframed by grant/channel.ts rather
-// than duplicated. Commons (`share_circle_grant` and its op log) is NOT
+// than duplicated — and since #903 that binding is the ONLY answer, since a
+// grant to a party without one is refused at the command pack. Commons (`share_circle_grant` and its op log) is NOT
 // superseded — it stays the fulfillment STRATEGY for edit capability, the way
 // closure reprojection is the strategy for view.
 //
@@ -34,6 +35,10 @@
 const SHARE_FULFILLMENT_COLUMNS = `
   grant_id      TEXT NOT NULL REFERENCES share_grant(grant_id) ON DELETE CASCADE,
   peer_vault_id TEXT NOT NULL,
+  -- awaiting_channel means the peer vault is known and the link to it has
+  -- ended (#903). It is deliberately NOT narrowed out of this CHECK: that
+  -- state is still reachable — link, share, then unlink — and only the
+  -- retired reading of it ("waiting on an invitation to be claimed") is gone.
   state         TEXT NOT NULL CHECK (state IN
     ('awaiting_channel','syncing','delivered','remove_sent','removed')),
   updated_at    TEXT NOT NULL,
@@ -188,11 +193,11 @@ FROM share_grant_mint;
 
 -- Delivery state per audience vault. A member with no binding row at all has
 -- no vault to name, and the primary key needs one, so no fulfillment row is
--- written: absence simply means "no channel yet" — the channel question is
--- answered separately (channelForParty, over bindings and pending
--- invitations), so nothing needs a placeholder row. A member whose only
--- binding is revoked keeps that vault id at 'awaiting_channel' — the peer is
--- known, the channel is not open.
+-- written: absence simply means "never linked" — the channel question is
+-- answered separately (channelForParty, over bindings alone), so nothing
+-- needs a placeholder row. A member whose only binding is revoked keeps that
+-- vault id at 'awaiting_channel' — the peer is known, the channel is not
+-- open.
 INSERT INTO share_fulfillment (grant_id, peer_vault_id, state, updated_at, detail)
 SELECT grant_id, peer_vault_id, state, updated_at, NULL
 FROM (

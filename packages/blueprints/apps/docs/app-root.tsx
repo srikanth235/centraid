@@ -85,6 +85,7 @@ import {
   RECENT,
   SCAN,
   SEARCH,
+  SHARED,
   STARRED,
   STORAGE,
   TRASH,
@@ -124,6 +125,7 @@ interface DriveResult {
   documents?: DriveDoc[];
   root_folder_id?: string | null;
   truncated?: boolean;
+  shared_from_known?: boolean;
   vaultDenied?: { message?: string } | null;
 }
 interface SearchResult {
@@ -167,6 +169,9 @@ function makeState(view: AppState["view"]): AppState {
     visibleRows: [],
     driveWindow: 200,
     driveTruncated: false,
+    // Optimistic until a payload says otherwise: "cannot say" needs a denial,
+    // never a pending read.
+    sharedFromKnown: true,
   };
 }
 
@@ -262,6 +267,8 @@ export function Root({
       data.documents = incoming.documents ?? [];
       data.root_folder_id = incoming.root_folder_id ?? data.root_folder_id;
       state.driveTruncated = Boolean(next?.truncated);
+      // A missing key means the read was never reached, not that it refused.
+      state.sharedFromKnown = next?.shared_from_known !== false;
       state.selected = new Set(
         [...state.selected].filter((id) =>
           data.documents.some((d) => d.document_id === id)
@@ -723,6 +730,12 @@ export function Root({
     [RECENT, Math.min(active.length, RECENT_WINDOW)],
     [FOLDERS, data.folders.length],
     [STARRED, active.filter((f) => f.starred).length],
+    // WITHHELD, not zero: "0" is the one claim this seat cannot make.
+    ...(state.sharedFromKnown
+      ? ([
+          [SHARED, active.filter((f) => f.shared_from !== null).length],
+        ] as const)
+      : []),
     [TRASH, trashCount],
   ]);
 
@@ -757,6 +770,7 @@ export function Root({
     ...(filtersActive(state.filters) ? { filtered: true } : {}),
     ...(openFolderName ? { folderName: openFolderName } : {}),
     ...(active.length === 0 ? { driveIsEmpty: true } : {}),
+    ...(state.sharedFromKnown ? {} : { sharedFromKnown: false }),
     // The new-folder editor stands in the shelf's place, so it is not "empty".
     ...(state.creatingFolder ? { suppressed: true } : {}),
   });

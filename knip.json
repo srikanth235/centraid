@@ -5,6 +5,7 @@
     "eas",
     "gitleaks",
     "hdiutil",
+    "maestro",
     "osv-scanner",
     "pmset",
     "sqlite3",

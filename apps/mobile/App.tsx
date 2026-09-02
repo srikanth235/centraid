@@ -1,6 +1,7 @@
 // Direct sub-paths: the barrel re-exports weights Metro cannot resolve.
 // Stay at Instrument Sans 400/600: an unnamed face diverges from the registry.
-import InstrumentSans_400Regular from "@expo-google-fonts/instrument-sans/400Regular/InstrumentSans_400Regular.ttf";
+// The 600 rung comes straight from upstream; the 400 rung's FILE is bundled
+// (see the `useFonts` call and kit/theme/native.ts).
 import InstrumentSans_600SemiBold from "@expo-google-fonts/instrument-sans/600SemiBold/InstrumentSans_600SemiBold.ttf";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -20,6 +21,8 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
+// The 400 rung, bundled rather than upstream — see the `useFonts` call.
+import InstrumentSans_470Book from "./assets/fonts/InstrumentSans_470Book.ttf";
 import {
   AssistantScreen,
   AssistantFullScreen,
@@ -86,6 +89,7 @@ import { useUploadReconciliation } from "./src/lib/upload/boot";
 import { rootNavigationRef } from "./src/navigation";
 import type { RootStackParamList } from "./src/navigation";
 import HomeScreen from "./src/screens/Home";
+import VaultChromeProvider from "./src/screens/home/VaultChrome";
 import OnboardingScreen from "./src/screens/Onboarding";
 
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -234,8 +238,14 @@ export default function App(): React.JSX.Element | null {
   const { colors } = resolveTheme(scheme);
   const [onboarded, setOnboarded] = React.useState<boolean | null>(null);
   // Tuple dropped: splash does not wait on fonts (see `onReady`).
+  //
+  // The 400 rung's FILE is a 470, which is a LOWERING and not a third weight:
+  // the ramp still names two weights and nothing may ask for a 470
+  // (kit/theme/native.ts carries why the phone needs it). The upstream 400
+  // static is deliberately absent — no role renders it on a touch surface, so
+  // loading it would ship a face nothing can reach.
   useFonts({
-    InstrumentSans_400Regular,
+    InstrumentSans_470Book,
     InstrumentSans_600SemiBold,
   });
 
@@ -297,133 +307,138 @@ export default function App(): React.JSX.Element | null {
                         <StatusBar
                           style={scheme === "dark" ? "light" : "dark"}
                         />
-                        {/* Bare fill, not a spinner — lazy eval is sub-frame. */}
-                        <React.Suspense
-                          fallback={
-                            <View
-                              style={{ backgroundColor: colors.bg, flex: 1 }}
-                            />
-                          }
-                        >
-                          <RootStack.Navigator
-                            screenOptions={{ headerShown: false }}
-                            // Haptic on cover open only — not dismissal.
-                            screenListeners={{
-                              transitionStart: (e) => {
-                                if (!e.data.closing)
-                                  void Haptics.selectionAsync();
-                              },
-                            }}
+                        {/* INSIDE the container: the provider routes New chat
+                            and a search hit, so it needs a navigation object.
+                            Outside it, `useNavigation` throws on first paint. */}
+                        <VaultChromeProvider>
+                          {/* Bare fill, not a spinner — lazy eval is sub-frame. */}
+                          <React.Suspense
+                            fallback={
+                              <View
+                                style={{ backgroundColor: colors.bg, flex: 1 }}
+                              />
+                            }
                           >
-                            <RootStack.Screen
-                              name="Home"
-                              component={HomeScreen}
-                            />
-                            <RootStack.Screen
-                              name="Capture"
-                              component={CaptureScreen}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="Scan"
-                              component={ScanScreen}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="Photos"
-                              component={PhotosNavigator}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="Docs"
-                              component={DocsNavigator}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="Agenda"
-                              component={AgendaNavigator}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="Locker"
-                              component={LockerNavigator}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="Tasks"
-                              component={TasksHome}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="People"
-                              component={PeopleNavigator}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="Notes"
-                              component={NotesHome}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="Tally"
-                              component={TallyNavigator}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="Assistant"
-                              component={AssistantScreen}
-                              options={{
-                                animation: "none",
-                                presentation: "transparentModal",
+                            <RootStack.Navigator
+                              screenOptions={{ headerShown: false }}
+                              // Haptic on cover open only — not dismissal.
+                              screenListeners={{
+                                transitionStart: (e) => {
+                                  if (!e.data.closing)
+                                    void Haptics.selectionAsync();
+                                },
                               }}
-                            />
-                            <RootStack.Screen
-                              name="AssistantFull"
-                              component={AssistantFullScreen}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="SystemOnPhone"
-                              component={SystemOnPhoneScreen}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="SignalNotification"
-                              component={SignalNotificationScreen}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="Automations"
-                              component={AutomationsScreen}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="Insights"
-                              component={InsightsScreen}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="Connectors"
-                              component={ConnectorsScreen}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="Data"
-                              component={DataScreen}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="Devices"
-                              component={DevicesScreen}
-                              options={COVER_OPTIONS}
-                            />
-                            <RootStack.Screen
-                              name="Settings"
-                              component={SettingsNavigator}
-                              options={COVER_OPTIONS}
-                            />
-                          </RootStack.Navigator>
-                        </React.Suspense>
+                            >
+                              <RootStack.Screen
+                                name="Home"
+                                component={HomeScreen}
+                              />
+                              <RootStack.Screen
+                                name="Capture"
+                                component={CaptureScreen}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="Scan"
+                                component={ScanScreen}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="Photos"
+                                component={PhotosNavigator}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="Docs"
+                                component={DocsNavigator}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="Agenda"
+                                component={AgendaNavigator}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="Locker"
+                                component={LockerNavigator}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="Tasks"
+                                component={TasksHome}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="People"
+                                component={PeopleNavigator}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="Notes"
+                                component={NotesHome}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="Tally"
+                                component={TallyNavigator}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="Assistant"
+                                component={AssistantScreen}
+                                options={{
+                                  animation: "none",
+                                  presentation: "transparentModal",
+                                }}
+                              />
+                              <RootStack.Screen
+                                name="AssistantFull"
+                                component={AssistantFullScreen}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="SystemOnPhone"
+                                component={SystemOnPhoneScreen}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="SignalNotification"
+                                component={SignalNotificationScreen}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="Automations"
+                                component={AutomationsScreen}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="Insights"
+                                component={InsightsScreen}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="Connectors"
+                                component={ConnectorsScreen}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="Data"
+                                component={DataScreen}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="Devices"
+                                component={DevicesScreen}
+                                options={COVER_OPTIONS}
+                              />
+                              <RootStack.Screen
+                                name="Settings"
+                                component={SettingsNavigator}
+                                options={COVER_OPTIONS}
+                              />
+                            </RootStack.Navigator>
+                          </React.Suspense>
+                        </VaultChromeProvider>
                       </NavigationContainer>
                     ) : (
                       <>

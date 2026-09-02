@@ -45,8 +45,6 @@ export function reachLabel(reach: GrantReach): string {
   switch (reach) {
     case "live":
       return "Reachable";
-    case "invited":
-      return "Invitation pending";
     case "severed":
       return "Link ended";
     case "never-reached":
@@ -58,12 +56,12 @@ export function reachLabel(reach: GrantReach): string {
 
 export function reachNote(reach: GrantReach): string | null {
   switch (reach) {
-    case "invited":
-      return "Sharing waits here until they join with a vault.";
     case "severed":
-      return "The link to their vault ended; nothing new can be delivered.";
+      return "The link to their vault ended; link again in People to share.";
+    // Not "an invitation goes out first" — since #903 nothing is sent, and a
+    // note promising an act the sheet will not perform is worse than silence.
     case "never-reached":
-      return "Sharing sends an invitation first.";
+      return "Link their account in People to share with them.";
     case "live":
     case "unknown":
       return null;
@@ -72,6 +70,13 @@ export function reachNote(reach: GrantReach): string | null {
 
 export function nothingSharedYet(audienceLabel: string): string {
   return `Nothing shared with ${audienceLabel} yet.`;
+}
+
+/** Subject-first lists one subject's grants across every audience, so its empty
+ *  line is about the subject; `nothingSharedYet` would read the document as the
+ *  person it went to. */
+export function notSharedWithAnyoneYet(subjectLabel: string): string {
+  return `${subjectLabel} is not shared with anyone yet.`;
 }
 
 export function audienceNotKnown(audienceLabel: string): string {

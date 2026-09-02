@@ -55,9 +55,11 @@ export function useDocsGrantAudiences(): readonly GrantAudienceOption[] | null {
     scopes: replica.scopes ?? [],
   });
   const circles = useNamedShareCircles(targets, ownerPartyId);
-  if (links === null) return null;
-  const audiences = grantAudiencesFrom(targets, circles);
-  // Unreadable + nobody named = "no answer": no Share verb off a broken read.
-  if (links === "unreadable" && audiences.length === 0) return null;
-  return audiences;
+  // Two ways to have no answer, and neither is an empty roster: the read is
+  // still in flight, or it fell over. The second used to be qualified with
+  // "…and nobody else answered", which stopped meaning anything once a link
+  // became the WHOLE address (`nativeShareTargets`): with the links read
+  // broken there is no target to name, so the qualifier could never be false.
+  if (links === null || links === "unreadable") return null;
+  return grantAudiencesFrom(targets, circles);
 }

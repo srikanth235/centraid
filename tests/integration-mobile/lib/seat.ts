@@ -68,6 +68,20 @@ export interface OpenSeatOptions {
   bootstrapWindow?: number;
   /** Distinct per seat so two seats on one gateway keep separate replicas. */
   label?: string;
+  /**
+   * The phone's own connectivity oracle, which is NOT the transport: the mount
+   * resolves the gateway base once and carries the answer as a boolean, so a
+   * probe that misses on a cold launch mounts a session that believes it is
+   * offline while the socket underneath it works. Only a suite that moves this
+   * can reach what `start()` does when it is false.
+   */
+  isConnected?: () => boolean;
+  /**
+   * Base delay for the session's retries. The default parks them beyond any
+   * suite's lifetime (see below); a suite asserting that something is retried
+   * at all has to shorten it.
+   */
+  retryDelayMs?: number;
 }
 
 /**
@@ -103,10 +117,11 @@ export async function openSeat(
     digest: nodeDigest,
     idFactory: () => `${label}-intent-${++counter}`,
     bootstrapWindow: options.bootstrapWindow ?? 200,
+    ...(options.isConnected ? { isConnected: options.isConnected } : {}),
     // The drain must not re-arm behind the test's back: every suite here
     // flushes explicitly, so a background retry would make "did it settle"
     // depend on a timer rather than on the arrangement.
-    retryDelayMs: 10 * 60_000,
+    retryDelayMs: options.retryDelayMs ?? 10 * 60_000,
   });
   return {
     session,

@@ -118,3 +118,73 @@ test("a missing report is 'not measured' locally and fatal under --require-repor
   assert.equal(strict.status, 1);
   assert.match(strict.stderr, /is missing, so no file could be scored/u);
 });
+
+// The wiring, not the scoring. `--require-report` is a promise that the report
+// EXISTS by the time the gate runs, and nothing checked that the lane asking for
+// it also writes one. `verify` asked for it while `test:suite` ran
+// `--reporter=default` alone: the suite went green, 1502 files and 18162 tests
+// passed, and the job's last step failed on an artifact no step in it produced.
+// A deterministic red on a job in `check`'s needs, so the required check could
+// not pass on any run that reached the step (#906). Derived from the shipped
+// YAML the way lint-e2e-wiring is, so a new lane inherits the check.
+const CI_YML = path.join(import.meta.dirname, "../../.github/workflows/ci.yml");
+const PACKAGE_JSON = path.join(import.meta.dirname, "../../package.json");
+const REPORT_PATH = "artifacts/test-results/vitest.json";
+
+/**
+ * Job name → its executable lines, read by indentation. Jobs sit at 2 spaces and
+ * a `- run:` (or a `run: |` block's body) is anything deeper.
+ *
+ * COMMENTS ARE STRIPPED, and that is the whole correctness of this check. The
+ * first draft kept them and passed against the very defect it was written for:
+ * `verify`'s header comment contains the words "`bun run coverage` alone at
+ * 20m15s", so a check looking for a producer invocation found one in prose. A
+ * wiring check that reads commentary is the same class of mistake as the wiring
+ * it is checking.
+ */
+function jobsWithRunLines(source) {
+  const jobs = new Map();
+  let current = null;
+  for (const line of source.split("\n")) {
+    const header = /^ {2}(?<name>[\w-]+):\s*$/u.exec(line);
+    if (header) {
+      current = header.groups.name;
+      jobs.set(current, []);
+      continue;
+    }
+    const trimmed = line.trim();
+    if (!current || trimmed === "" || trimmed.startsWith("#")) continue;
+    jobs.get(current).push(line);
+  }
+  return jobs;
+}
+
+test("every lane that demands --require-report also runs a script that writes the report", () => {
+  const scripts = JSON.parse(readFileSync(PACKAGE_JSON, "utf8")).scripts;
+  // The scripts that actually produce the artifact the gate reads.
+  const producers = Object.entries(scripts)
+    .filter(([, body]) => body.includes(`--outputFile=${REPORT_PATH}`))
+    .map(([name]) => name);
+  assert.ok(
+    producers.length > 0,
+    `no package script writes ${REPORT_PATH}; the gate would be unpayable everywhere`
+  );
+
+  const demanding = [...jobsWithRunLines(readFileSync(CI_YML, "utf8"))].filter(
+    ([, lines]) =>
+      lines.some(
+        (l) =>
+          l.includes("test:collection-tripwire") &&
+          l.includes("--require-report")
+      )
+  );
+  assert.ok(demanding.length > 0, "no ci.yml job demands --require-report");
+
+  for (const [job, lines] of demanding) {
+    const body = lines.join("\n");
+    assert.ok(
+      producers.some((name) => body.includes(`bun run ${name}`)),
+      `ci.yml job \`${job}\` runs the tripwire with --require-report but no step in it runs a script that writes ${REPORT_PATH} (one of: ${producers.join(", ")}). The gate cannot pass there.`
+    );
+  }
+});

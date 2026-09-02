@@ -4,8 +4,6 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { encodeCommonsInvite } from "@centraid/blueprints/apps/_shared/commons-invite";
-
 // The renderer guarantees the preload bridge before any script runs, and the
 // gateway client registers its gateway-change listener at module load. This
 // screen reaches that client through the sharing card, so the bridge has to
@@ -111,10 +109,6 @@ describe("HouseholdScreen suite", () => {
       onApproveLink: async () => {
         throw new Error("not used");
       },
-      loadEdges: async () => [],
-      loadCommonsInvitations: async () => [],
-      onClaimCommonsInvitation: async () => ({}),
-      onAnswerCommonsInvitation: async () => ({}),
     };
   }
 
@@ -451,154 +445,6 @@ describe("HouseholdScreen suite", () => {
       // offers no verb rather than a failing one.
       const without = await mount(roster());
       expect(without.textContent).not.toContain("Create a vault");
-    });
-
-    it("shows receiver Commons offers with size and explicit Accept/Refuse", async () => {
-      const onAnswerCommonsInvitation = vi.fn<
-        (
-          invitationId: string,
-          memberVaultId: string,
-          answer: "accept" | "refuse"
-        ) => Promise<unknown>
-      >(async () => ({}));
-      const el = await mount({
-        ...roster(),
-        sharing: {
-          ...sharing(),
-          loadCommonsInvitations: async () => [
-            {
-              invitationId: "invite-1",
-              grantId: "grant-1",
-              stewardVaultId: "other-vault",
-              memberVaultId: "v1",
-              currentSizeBytes: 4096,
-              status: "pending",
-              createdAt: "2026-08-10T00:00:00.000Z",
-            },
-          ],
-          onAnswerCommonsInvitation,
-        },
-      });
-      await act(async () => {
-        await Promise.resolve();
-      });
-      expect(el.textContent).toContain("Shared spaces offered to you");
-      expect(el.textContent).toContain("4.0 KB now");
-      await click(button(el, "Accept"));
-      expect(onAnswerCommonsInvitation).toHaveBeenCalledWith(
-        "invite-1",
-        "v1",
-        "accept"
-      );
-    });
-
-    it("puts a lost shared-space steward in front of the owner and runs the ceremony from here", async () => {
-      const onRecoverCommons = vi.fn<
-        NonNullable<SharingCardProps["onRecoverCommons"]>
-      >(async () => ({
-        state: "recovered",
-        grantId: "grant-2",
-        invitedPartyIds: ["party-b", "party-c"],
-        replayed: false,
-        invitations: [
-          { partyId: "party-b", memberVaultId: "vault-b", state: "delivered" },
-          { partyId: "party-c", state: "claim" },
-        ],
-      }));
-      const el = await mount({
-        ...roster(),
-        sharing: {
-          ...sharing(),
-          loadCommonsRecovery: async () => [
-            {
-              actorVaultId: "v1",
-              grantId: "grant-1",
-              containerType: "album",
-              steward: {
-                presence: "absent",
-                stewardVaultId: "vault-gone",
-                silentForMs: 9 * 24 * 60 * 60 * 1000,
-              },
-            },
-          ],
-          onRecoverCommons,
-        },
-      });
-      await act(async () => {
-        await Promise.resolve();
-      });
-      expect(el.textContent).toContain("Shared-space recovery");
-      expect(el.textContent).toContain("silent for 9 days");
-      await click(button(el, "Recover from my copy"));
-      expect(onRecoverCommons).toHaveBeenCalledWith("v1", "grant-1");
-      // The seat with no link to this device cannot be invited over the wire;
-      // saying so is the difference between a recovered circle and a smaller one.
-      await act(async () => {
-        await Promise.resolve();
-      });
-      expect(el.textContent).toContain("must be invited by hand");
-    });
-
-    it("never offers the ceremony for a seat parked on an unverified history", async () => {
-      const el = await mount({
-        ...roster(),
-        sharing: {
-          ...sharing(),
-          loadCommonsRecovery: async () => [
-            {
-              actorVaultId: "v1",
-              grantId: "grant-1",
-              containerType: "album",
-              steward: { presence: "parked", fault: "chain-divergence" },
-            },
-          ],
-          onRecoverCommons: async () => {
-            throw new Error("must not be reachable");
-          },
-        },
-      });
-      await act(async () => {
-        await Promise.resolve();
-      });
-      expect(el.textContent).toContain("could not be verified");
-      expect(button(el, "Recover from my copy")).toBeUndefined();
-    });
-
-    it("redeems a pasted one-time Commons invite into the selected vault", async () => {
-      const onClaimCommonsInvitation = vi.fn<
-        (
-          actorVaultId: string,
-          stewardVaultId: string,
-          claimToken: string
-        ) => Promise<unknown>
-      >(async () => ({}));
-      const el = await mount({
-        ...roster(),
-        sharing: { ...sharing(), onClaimCommonsInvitation },
-      });
-      const input = el.querySelector(
-        'input[aria-label="Shared-space invitation"]'
-      ) as HTMLInputElement;
-      const code = encodeCommonsInvite({
-        stewardVaultId: "vault-steward",
-        claimToken: "one-time-secret",
-      });
-      await act(async () => {
-        const setter = Object.getOwnPropertyDescriptor(
-          HTMLInputElement.prototype,
-          "value"
-        )?.set;
-        setter?.call(input, code);
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-      });
-      await click(button(el, "Redeem"));
-
-      expect(onClaimCommonsInvitation).toHaveBeenCalledWith(
-        "v1",
-        "vault-steward",
-        "one-time-secret"
-      );
-      expect(input.value).toBe("");
     });
   });
 });

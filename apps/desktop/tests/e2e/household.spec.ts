@@ -187,14 +187,16 @@ test("2.12 — Household renders the roster, the owner's scopes, and the sharing
       row(page, "Personal").getByText("You own this vault.")
     ).toBeVisible();
 
+    const sharingHead = page.getByRole("heading", { name: "People & circles" });
+    await expect(sharingHead).toBeVisible();
+    // The panel's two halves: the ceremony that makes a person reachable, and
+    // the roster it writes. Scoped, since "People" also names a block above.
+    const sharingPanel = sharingHead.locator("xpath=ancestor::section[1]");
     await expect(
-      page.getByRole("heading", { name: "People & circles" })
+      sharingPanel.getByRole("heading", { name: "Link with someone" })
     ).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Shared-space recovery" })
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Recover from my copy" })
+      sharingPanel.getByRole("heading", { name: "People", exact: true })
     ).toBeVisible();
 
     // Retired ask surface is not drawn; nothing on this page reaches the

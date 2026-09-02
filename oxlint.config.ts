@@ -119,16 +119,18 @@ const VITEST_TEST_FILES = [
 // can carry both this and the seam rules — an override replaces a rule's
 // configuration, so the two lists have to be spread together rather than
 // layered.
+// `toSorted` alone, because it is the only absence anything measured (#905):
+// the device threw on it, and #903's polyfill header reaches the same finding
+// from the engine side while recording that this Hermes build DOES ship
+// `toReversed`, `toSpliced`, `with` and `findLast`. Those four were briefly
+// banned here as a precaution; a gate that fails a build over a method the
+// engine implements is wrong rather than cautious, so they are gone.
+// `scripts/lint-hermes-array-surface.mjs` carries the full reasoning.
 const HERMES_ARRAY_PROPERTIES = [
   {
     property: "toSorted",
     message:
       "The reviewed Hermes runtime does not implement Array.prototype.toSorted; sort a fresh array with .sort instead.",
-  },
-  {
-    property: "findLast",
-    message:
-      "Keep the mobile/time-engine bundle on the reviewed Hermes Array surface; use an explicit forward scan instead.",
   },
 ] as const;
 
@@ -510,6 +512,15 @@ export default defineConfig({
       // redbox in the exact-HEAD journey, and time-engine is bundled into
       // native Agenda/Tally. Keep compatibility mechanical rather than relying
       // on Node-based unit tests, whose newer Array prototype masks the bug.
+      //
+      // THIS GLOB IS THE FAST SIGNAL, NOT THE GATE (#905). It covers the two
+      // trees an author is most likely to be editing, and it is a guess about
+      // reachability — the guess that failed, when eight crashing sites turned
+      // out to live in `packages/blueprints` and two more in `packages/client`.
+      // `bun run lint:hermes-surface` walks the import graph out of
+      // `apps/mobile/src` and checks what the bundle ACTUALLY reaches (793
+      // modules today), so widening this list is never the way to cover a new
+      // package: the walker already does, and derives it rather than guessing.
       files: ["apps/mobile/src/**", "packages/core/src/time/**"],
       rules: {
         "no-restricted-properties": ["error", ...HERMES_ARRAY_PROPERTIES],

@@ -1,0 +1,39 @@
+{
+  "_comment": "Device flows that do not yet state a **Claim:** in their companion .md. DOWN-ONLY: scripts/lint-e2e-claims.mjs fails if `flows` grows beyond `baseline`. A new device flow states what it catches; it does not join this list. Removing a pin means that flow's doc now answers 'what merges wrongly if this passes when it should not?'",
+  "baseline": [
+    "agenda-week",
+    "docs-drive",
+    "home-loads",
+    "locker-gate",
+    "op-sqlite-probe",
+    "people-roster",
+    "photos-library",
+    "photos-search",
+    "photos-select-write",
+    "photos-viewer",
+    "places-seat",
+    "scroll-frames",
+    "share-intent-in",
+    "tally-derived",
+    "tasks-board",
+    "volume-proof"
+  ],
+  "flows": [
+    "agenda-week",
+    "docs-drive",
+    "home-loads",
+    "locker-gate",
+    "op-sqlite-probe",
+    "people-roster",
+    "photos-library",
+    "photos-search",
+    "photos-select-write",
+    "photos-viewer",
+    "places-seat",
+    "scroll-frames",
+    "share-intent-in",
+    "tally-derived",
+    "tasks-board",
+    "volume-proof"
+  ]
+}

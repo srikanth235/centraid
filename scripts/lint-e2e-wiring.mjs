@@ -6,7 +6,7 @@
 // Why this exists. Three separate ways a mobile journey could be committed,
 // linted, registered as evidence, and never executed:
 //
-//   1. `flows/sharing-invite.mjs` was named three times in `tests/matrix.json`
+//   1. `flows/sharing-reach.mjs` was named three times in `tests/matrix.json`
 //      as an evidence owner — an appScenarios journey, a canonical `flows[]`
 //      record with `minimumTests: 15`, and a member of the `standalone` suite —
 //      while no workflow, no suite runner and no script invoked it. The matrix
@@ -32,7 +32,7 @@
 //
 //   RULE scheduled       A flow whose roster status is `scheduled` must be
 //     reachable from at least one declared lane. This is the rule
-//     `sharing-invite.mjs` fails today.
+//     `sharing-reach.mjs` fails today.
 //
 //   RULE exploratory     A flow whose roster status is `exploratory` must be
 //     reachable from NO lane. Exploratory means "a human drives this by hand";
@@ -47,6 +47,21 @@
 //     `tests/agent-e2e-mobile/` must resolve to a flow or runner that some lane
 //     schedules. A matrix owner nothing schedules is a HARD FAILURE — it is the
 //     precise shape of a green report over an unexecuted claim.
+//
+//   RULE corpus          A launcher tile exists only for an app that EARNED the
+//     grid, so `Open <App>` is not a route until that app has rows. Two halves,
+//     both learned from #905, where twelve journeys failed at their first tap
+//     on an app that was working:
+//       (a) every `Open <App>` a flow taps names an app that ships a
+//           `seed.js` scenario, or is one the springboard promotes on an empty
+//           vault (`locker`, whose body is a state rather than a query result);
+//       (b) the shared lane preamble seeds the corpus BEFORE it hands off to
+//           Maestro. A lane is many flows sharing one pairing, and a flow's own
+//           `ensureDemo` writes only to the gateway — so a seed after that first
+//           pairing never reaches the phone. Home then reads the vault as empty,
+//           renders `DayOne` instead of `LauncherGrid`, and every tile tap fails
+//           with `Element not found` while `HOME_READY_MARKER` still reports the
+//           screen ready.
 //
 // Reachability is TRANSITIVE and derived: a lane's job block is scanned for
 // `node tests/agent-e2e-mobile/<path>` invocations (comments stripped first, so
@@ -68,6 +83,21 @@ const MOBILE_DIR = "tests/agent-e2e-mobile";
 const FLOWS_DIR = `${MOBILE_DIR}/flows`;
 const ROSTER_PATH = `${MOBILE_DIR}/roster.json`;
 const MATRIX_PATH = "tests/matrix.json";
+const APPS_DIR = "packages/blueprints/apps";
+/** Sourced by both device lane scripts, so the seeding it carries is the one
+ *  place that covers the PR gate and the roster together. */
+const LANE_PREAMBLE = "apps/mobile/scripts/android-emulator-install.sh";
+const SEEDER = `${MOBILE_DIR}/seed-demo-corpus.mjs`;
+/** The handoff. Everything after this export is Maestro's, so the corpus has
+ *  to be in the gateway before it. */
+const LANE_HANDOFF = "export MAESTRO_PLATFORM";
+/** `locker`'s tile body is a STATE, not a query result, so `tileEarnsGrid`
+ *  promotes it on an empty vault and it ships no scenario. */
+const ALWAYS_EARNS_GRID = new Set(["locker"]);
+
+/** `Open Photos.*` / `Open Docs.*` — a launcher-tile tap. Filtered against the
+ *  real app ids below, so `Open Mom's chili` (a note's own name) is not one. */
+const COVER_RE = /Open (?<app>[A-Z][a-zA-Z]*)/gu;
 
 /** Strip `#` comments from a YAML or shell source so prose cannot count as
  * wiring. A `#` inside a quoted string is not a comment, but no invocation line
@@ -267,7 +297,7 @@ export function matrixMobileOwners(matrix) {
 }
 
 /** The rule engine. Pure over an injected tree so the self-test can drive it. */
-export function lintWiring({ roster, flows, runners, matrix, readFile }) {
+export function lintWiring({ roster, flows, runners, matrix, apps, readFile }) {
   const findings = [];
   const fail = (rule, message) => findings.push({ rule, message });
 
@@ -379,18 +409,110 @@ export function lintWiring({ roster, flows, runners, matrix, readFile }) {
     }
   }
 
+  // RULE corpus — the grid is content-dependent, so the corpus is wiring too.
+  for (const problem of corpusProblems({ apps, flows, readFile })) {
+    fail("corpus", problem);
+  }
+
   return { findings, laneCount: Object.keys(lanes).length, flowLanes };
+}
+
+/**
+ * The two halves of RULE corpus. Pure over an injected app table and `readFile`
+ * so the self-test can drive both a clean tree and each defect.
+ *
+ * `apps` is `[{ id, seedable }]` — read from `packages/blueprints/apps/` by the
+ * caller, never a hand-kept list, because a hand-kept list is exactly what
+ * drifts away from the blueprints that ship.
+ */
+export function corpusProblems({ apps, flows, readFile }) {
+  const problems = [];
+  const seedable = new Set(
+    apps.filter((app) => app.seedable).map((app) => app.id)
+  );
+  const known = new Set(apps.map((app) => app.id));
+
+  // (a) A tap on a cover whose app can never earn the grid.
+  for (const flow of flows) {
+    // A flow that cannot be read is RULE rostered's finding, not this one, and
+    // reporting it twice under two rules reads as two defects. In the real run
+    // `flows` comes from `discoverFlows()`, so every entry is on disk and this
+    // never skips; it is reachable only from a fixture that names a deleted file.
+    let source;
+    try {
+      source = stripComments(readFile(flow));
+    } catch {
+      continue;
+    }
+    const covers = new Set(
+      [...source.matchAll(COVER_RE)]
+        .map((match) => match.groups.app.toLowerCase())
+        .filter((id) => known.has(id))
+    );
+    for (const id of [...covers].sort()) {
+      if (seedable.has(id) || ALWAYS_EARNS_GRID.has(id)) continue;
+      problems.push(
+        `${flow} taps the \`Open ${id}\` launcher tile, but ${id} ships no ` +
+          `${APPS_DIR}/${id}/seed.js and is not one the springboard promotes on an ` +
+          `empty vault. \`tileEarnsGrid\` only promotes a tile with content, so that ` +
+          `tile does not exist in CI and the tap fails with \`Element not found\`. ` +
+          `Seed the app or reach its cover through the all-apps sheet, which lists ` +
+          `every app regardless of rows.`
+      );
+    }
+  }
+
+  // (b) The lane must seed before it hands off to Maestro.
+  const preamble = stripComments(readFile(LANE_PREAMBLE));
+  const seedAt = preamble.indexOf(SEEDER);
+  const handoffAt = preamble.indexOf(LANE_HANDOFF);
+  if (seedAt === -1) {
+    problems.push(
+      `${LANE_PREAMBLE} never runs ${SEEDER}. A lane is many flows sharing ONE ` +
+        `pairing, and a flow's own \`ensureDemo\` writes to the gateway only — so ` +
+        `every seed after the first pairing is invisible to the phone. Home reads the ` +
+        `vault as empty and renders DayOne instead of the launcher grid (#905).`
+    );
+  } else if (handoffAt !== -1 && seedAt > handoffAt) {
+    problems.push(
+      `${LANE_PREAMBLE} runs ${SEEDER} AFTER \`${LANE_HANDOFF}\`. Seeding has to ` +
+        `precede the first replica clone to be seen at all; ordering it after the ` +
+        `handoff restores the #905 defect while looking like the fix.`
+    );
+  }
+  return problems;
+}
+
+/** The bundled apps, and which ship a demo scenario. Directories only — the
+ *  tree also carries loose `.ts` files that are not apps. */
+export function discoverApps(root = ROOT) {
+  const dir = path.resolve(root, APPS_DIR);
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("_"))
+    .map((entry) => ({
+      id: entry.name,
+      seedable: existsSync(path.join(dir, entry.name, "seed.js")),
+    }));
 }
 
 // ---- self-test: the rules, exercised on fixtures, before judging the repo.
 function selfTest() {
   // Cases live in the sibling module; the assertion stays HERE so running the
   // linter directly still exercises them. See that file for why.
-  const { flows, runners, readFile, cases } = wiringSelfTestCases({
-    MOBILE_DIR,
+  const { files, flows, runners, apps, readFile, cases } = wiringSelfTestCases({
     FLOWS_DIR,
+    LANE_PREAMBLE,
+    MOBILE_DIR,
+    SEEDER,
   });
   for (const testCase of cases) {
+    // A case may shadow individual fixture files — the corpus cases vary the
+    // lane preamble, whose ORDERING is the thing under test and cannot be
+    // expressed as a roster or a flow list.
+    const caseRead = testCase.files
+      ? (rel) =>
+          rel in testCase.files ? testCase.files[rel] : readFile(rel, files)
+      : readFile;
     const got = [
       ...new Set(
         lintWiring({
@@ -398,7 +520,8 @@ function selfTest() {
           flows: testCase.flows ?? flows,
           runners,
           matrix: testCase.matrix,
-          readFile,
+          apps: testCase.apps ?? apps,
+          readFile: caseRead,
         }).findings.map((f) => f.rule)
       ),
     ].sort();
@@ -430,6 +553,7 @@ function main() {
   const flows = discoverFlows();
   const runners = discoverRunners();
   const matrix = JSON.parse(readFile(MATRIX_PATH));
+  const apps = discoverApps();
 
   // Silent-no-op guards. Each of these reads as "clean" if unchecked, and each
   // has a plausible cause: a moved directory, an emptied roster, a workflow
@@ -451,6 +575,7 @@ function main() {
     flows,
     runners,
     matrix,
+    apps,
     readFile,
   });
 

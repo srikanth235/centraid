@@ -58,7 +58,7 @@ describe("navigation theme lowering", () => {
 
   it("maps navigation weights onto the loaded sans family — no bold rung", () => {
     expect(navThemeFor("light").fonts.regular.fontFamily).toBe(
-      "InstrumentSans_400Regular"
+      "InstrumentSans_470Book"
     );
     expect(navThemeFor("dark").fonts.bold.fontFamily).toBe(
       "InstrumentSans_600SemiBold"

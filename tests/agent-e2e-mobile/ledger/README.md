@@ -33,6 +33,12 @@ const summary = summarize(
 
 `failureRate` and `infraFailureRate` are separate on purpose. A suite whose product failure rate is flat while its infrastructure rate climbs has a rig problem, not a regression; the split is only trustworthy because the classifier refuses to call an `assertVisible` timeout infrastructure.
 
+## Where CI runs land
+
+Each device lane writes this file on its own runner and uploads it as the `mobile-run-ledger-<lane>` artifact — `pr-gate-paired`, `pr-gate-resilience` (the PR gate runs as two parallel legs, and an artifact name must be unique per matrix leg), `canary-android`, `nightly-ios`, `nightly-android` — on **every** run, red or green. A red run's durations are the ones worth having, so the upload is unconditional ([#905](https://github.com/srikanth235/centraid/issues/905): before it, ten gate runs left the committed file at `records: []`).
+
+Folding those runs into the committed file is a **deliberate act**, never automatic: download the artifact, merge its records through [`boundedAppend`](../lib/run-ledger.mjs) semantics so the 500-per-key window and the key grouping hold, and commit naming the lane's run id. No workflow commits here — a file that rewrites itself under CI is not evidence anyone chose to keep. Budgets are derived from the committed file only; an artifact nobody folded in has not been observed yet.
+
 ## Deriving a budget from it
 
 Every suite budget in [`../flows/`](../flows/) is currently **derived arithmetic** — a rate nobody measured multiplied by a unit count — and each says it must be re-derived from an observed p95 once real runs exist. When you do that:

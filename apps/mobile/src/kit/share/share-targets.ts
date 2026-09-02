@@ -2,8 +2,8 @@
 // Native re-states only the parts whose INPUTS differ (two-sided links, vault
 // scopes); everything whose types line up delegates here rather than keeping a
 // second copy that can drift (#776).
+import { isAddressablePartyKind } from "@centraid/blueprints/apps/_shared/party-kind";
 import {
-  isPendingPartyId,
   selectedShareMembers,
   selectionsForCircle,
 } from "@centraid/blueprints/apps/_shared/share-kit";
@@ -32,12 +32,10 @@ export type NativeShareParty = Readonly<Record<string, unknown>>;
 export interface NativeShareTarget {
   id: string;
   label: string;
-  partyId?: string;
-  vaultId?: string;
-  /** This person exists only as a queued offline write: their party id is an
-   * overlay id no vault has settled. The row stays visible (the member did add
-   * them) but is never selectable, so no share can name that id. */
-  pending?: true;
+  partyId: string;
+  /** The peer's own vault, from an approved link. Every target has one — see
+   * `nativeShareTargets`. */
+  vaultId: string;
 }
 
 export interface NativeShareMember {
@@ -154,8 +152,16 @@ function otherSide(
   return undefined;
 }
 
-/** Merge the People directory with accepted links. A person remains selectable
- * before a link/vault exists; that target compiles to an invitation only. */
+/**
+ * Who this vault can reach, which is exactly who it is LINKED to.
+ *
+ * A share is delivered into the receiver's own vault, so an approved vault
+ * link is the whole mechanism: without one there is nowhere to deliver, and a
+ * row offering to reach someone unreachable is a promise the product cannot
+ * keep. The People directory supplies the NAME (and the ordering members
+ * recognise); the link supplies the address, and a party with no link is not
+ * a share target at all.
+ */
 export function nativeShareTargets(input: {
   sourceVaultId: string;
   ownerPartyId?: string;
@@ -177,36 +183,33 @@ export function nativeShareTargets(input: {
       });
   }
   const seen = new Set<string>();
+  // Parties the DIRECTORY ruled out, kept apart from `seen` so the linked-only
+  // pass below cannot resurrect them. A missing display name is not a ruling —
+  // that row still belongs in the sheet, unnamed — but the member's own party
+  // and a non-addressable kind are, and a recognition agent that happens to
+  // carry a link would otherwise walk back in as "Linked person", which is the
+  // exact row `isAddressablePartyKind` exists to keep out.
+  const refused = new Set<string>();
   const people = input.parties.flatMap((row) => {
     const partyId = typeof row.party_id === "string" ? row.party_id.trim() : "";
     const label =
       typeof row.display_name === "string" ? row.display_name.trim() : "";
-    if (
-      !partyId ||
-      !label ||
-      partyId === input.ownerPartyId ||
-      seen.has(partyId)
-    )
+    if (!partyId) return [];
+    if (partyId === input.ownerPartyId || !isAddressablePartyKind(row.kind)) {
+      refused.add(partyId);
       return [];
+    }
+    if (!label || seen.has(partyId)) return [];
     seen.add(partyId);
-    const vaultId = linkedByParty.get(partyId)?.vaultId;
-    if (vaultId && mounted.has(vaultId)) return [];
-    return [
-      {
-        id: vaultId ?? `party:${partyId}`,
-        partyId,
-        label,
-        ...(vaultId ? { vaultId } : {}),
-        // A person the member added while offline is projected by the outbox
-        // overlay, never settled by a vault. They are listed — hiding them
-        // would deny a write the member can see everywhere else — but marked
-        // so the sheet can refuse to select them.
-        ...(isPendingPartyId(partyId) ? { pending: true as const } : {}),
-      },
-    ];
+    const peer = linkedByParty.get(partyId);
+    // A vault this device has MOUNTED is one of the member's own, not another
+    // person: sharing into it is a copy between your vaults, not a reach.
+    if (!peer || mounted.has(peer.vaultId)) return [];
+    return [{ id: peer.vaultId, partyId, vaultId: peer.vaultId, label }];
   });
   const linkedOnly = [...linkedByParty].flatMap(([partyId, peer]) => {
-    if (seen.has(partyId) || mounted.has(peer.vaultId)) return [];
+    if (seen.has(partyId) || refused.has(partyId) || mounted.has(peer.vaultId))
+      return [];
     return [
       {
         id: peer.vaultId,
