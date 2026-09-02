@@ -306,8 +306,7 @@
         "core.tag",
         "locker.item",
         "locker.item_alias",
-        "locker.item_field",
-        "locker.item_history"
+        "locker.item_field"
       ]
     },
     {
@@ -409,8 +408,7 @@
         "core.concept_scheme",
         "core.tag",
         "locker.item",
-        "locker.item_alias",
-        "locker.item_history"
+        "locker.item_alias"
       ]
     },
     {
@@ -602,7 +600,7 @@
           }
         }
       },
-      "writes": ["locker.item", "locker.item_history"]
+      "writes": ["locker.item"]
     },
     {
       "name": "unarchive-item",
@@ -633,7 +631,7 @@
           }
         }
       },
-      "writes": ["locker.item", "locker.item_history"]
+      "writes": ["locker.item"]
     },
     {
       "name": "duplicate-item",
@@ -670,8 +668,7 @@
         "core.tag",
         "locker.item",
         "locker.item_address",
-        "locker.item_field",
-        "locker.item_history"
+        "locker.item_field"
       ]
     },
     {

@@ -245,15 +245,12 @@ export {
   audienceExists,
   createShareGrant,
   declineShare,
-  listStandingShareAuthority,
   maskedPartiesForSubject,
   readShareGrant,
   readLiveShareGrant,
   readLiveShareRefusal,
   resolveGrantAudienceParties,
-  revokeAuthorityForPrincipal,
   grantPlacementAuthority,
-  revokeAuthorityOverSubject,
   revokeShareGrant,
   revokeShareRefusal,
   listShareGrantsForAudience,
@@ -275,7 +272,6 @@ export {
   type ShareGrantRecord,
   type DeclineShareInput,
   type DeclineShareResult,
-  type RevokedAuthorityRow,
 } from "./grant/grant-store.js";
 // The closed declaration of what the plane may be asked (#883).
 export {
@@ -285,7 +281,6 @@ export {
   enforcementLocus,
   isRegisteredAuthority,
   registeredVerbs,
-  subjectRowExists,
   subjectWokenBy,
   wakeTypesForSubjectTypes,
   type AuthorityPrincipalKind,
