@@ -142,7 +142,6 @@ async function runInternal() {
                     display_name: label,
                     created_at: now,
                     updated_at: now,
-                    ontology_version: "1.3",
                   },
                 }
               : {
@@ -225,7 +224,6 @@ async function runInternal() {
                           display_name: `Gateway benchmark party ${index}`,
                           created_at: now,
                           updated_at: now,
-                          ontology_version: "1.3",
                         },
                       }
                     : {

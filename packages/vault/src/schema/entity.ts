@@ -25,7 +25,8 @@
 // it in a second place.
 //
 // ENTITY OR PROJECTION. `core_entity.entity_id` is a
-// PRIMARY KEY, so two entities can never share an id — which settles every
+// PRIMARY KEY and the membership trigger REFUSES an id another kind already
+// holds (#916, audit F1), so two entities can never share an id — which settles every
 // sidecar keyed by its parent's id by construction, not by taste:
 // `media.asset_phash`, `media.face_cluster` and `locker.item_passkey` are
 // PROJECTIONS of the row they are keyed by, and so are the composite-keyed
@@ -54,6 +55,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { ONTOLOGY_PACKS } from "./atlas.js";
+import { PRINCIPAL_ENTITY_KINDS } from "./authority.js";
 import { VAULT_ENTITIES } from "./tables.js";
 
 const CLOCK = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
@@ -168,15 +170,24 @@ BEGIN
      AND revoked_at IS NULL;
   -- The PRINCIPAL side of the same rule (#916, D1). \`principal_id\` is
   -- polymorphic on \`principal_kind\` and carries no foreign key, so a purged
-  -- person would leave live answers naming a row that is not there — a share
+  -- principal would leave live answers naming a row that is not there — a share
   -- the member granted that can no longer be resolved to a peer vault, failing
   -- silently. See schema/party-pointers.ts.
+  --
+  -- EVERY principal kind that is a ROW, not just 'person' (#916, audit F3):
+  -- the clause is generated from \`PRINCIPAL_ENTITY_KINDS\`, so a circle
+  -- deleted by \`tally.delete_group\` or by share/removal.ts ends the answers
+  -- its members hold through it, and a fifth kind cannot be added to the
+  -- table's CHECK without landing here too.
   UPDATE share_authority
      SET revoked_at = ${CLOCK}, revoked_reason = 'principal-purged'
-   WHERE OLD.entity_type = 'core.party'
-     AND principal_kind = 'person'
-     AND principal_id = OLD.entity_id
-     AND revoked_at IS NULL;
+   WHERE principal_id = OLD.entity_id
+     AND revoked_at IS NULL
+     AND principal_kind = CASE OLD.entity_type
+${[...PRINCIPAL_ENTITY_KINDS]
+  .map(([kind, entityType]) => `           WHEN '${entityType}' THEN '${kind}'`)
+  .join("\n")}
+         END;
 END;
 `;
 
@@ -191,6 +202,22 @@ END;
  * before the row that references it exists. `<t>_entity_delete` is AFTER
  * DELETE, so a hard delete of the entity row purges its pointers through the
  * cascade; the two directions converge, and deleting either row leaves neither.
+ *
+ * THE ID NAMESPACE IS ENFORCED, NOT ASSUMED (#916, audit F1). The membership
+ * INSERT is `OR IGNORE` because it is load-bearing: SQLite fires BEFORE INSERT
+ * triggers ahead of conflict resolution, so every upsert on an entity table
+ * (`ON CONFLICT (party_id) DO UPDATE`, and the dozens like it in
+ * `share/commons-bootstrap.ts`) re-derives a supertype row that is already
+ * there, as does a restore replaying the same row. But `OR IGNORE` on its own
+ * ALSO swallowed the case it must not: an id already held by a DIFFERENT kind
+ * minted no supertype row for the new entity, whose own
+ * `FOREIGN KEY (<pk>) REFERENCES core_entity(entity_id)` was then satisfied by
+ * the other kind's row — and purging that unrelated entity cascaded the
+ * intruder away. So the guard is separated from the write: the `RAISE(ABORT)`
+ * refuses a CROSS-KIND collision outright, and `OR IGNORE` keeps absorbing the
+ * same-kind re-derivation it exists for. `share/sql.ts:freeId` is the other
+ * half — it asks `core_entity`, not just the destination table, before reusing
+ * a peer-supplied id.
  */
 export function refreshEntityTriggers(db: DatabaseSync): void {
   const members = entitySupertypeMembers();
@@ -232,6 +259,10 @@ export function refreshEntityTriggers(db: DatabaseSync): void {
 CREATE TRIGGER IF NOT EXISTS ${physical}_entity_insert
 BEFORE INSERT ON ${physical}
 BEGIN
+  SELECT RAISE(ABORT, 'entity id is already held by another kind: ${physical} (#916)')
+   WHERE EXISTS (
+     SELECT 1 FROM core_entity
+      WHERE entity_id = NEW.${pk[0]} AND entity_type <> '${logical}');
   INSERT OR IGNORE INTO core_entity (entity_id, entity_type, created_at)
   VALUES (NEW.${pk[0]}, '${logical}', COALESCE(${created}, ${CLOCK}));
 END;

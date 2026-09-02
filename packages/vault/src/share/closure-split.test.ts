@@ -354,6 +354,54 @@ describe("closure split", () => {
     ).toStrictEqual([{ n: 0 }]);
   });
 
+  // #916, audit F1. Entity ids are ONE namespace, and the ids on the wire are
+  // PEER-CONTROLLED: an id the audience already holds as a place is not free
+  // for an incoming asset just because `media_asset` has no row under it. The
+  // membership trigger refuses the cross-kind collision outright, so `freeId`
+  // has to ask `core_entity` — asking only the destination table left the
+  // projection to abort mid-closure on a share that is perfectly legal.
+  test("an id the audience holds under ANOTHER kind is minted fresh, not reused", () => {
+    const { origin, originBoot, audience } = household();
+    const photo = seedPhoto(origin, originBoot, "collision");
+    // The audience's own, unrelated place — filed under the id the origin's
+    // asset happens to carry.
+    audience.vault
+      .prepare(
+        `INSERT INTO core_place (place_id, name, created_at) VALUES (?, 'Beach', ?)`
+      )
+      .run(photo.assetId, nowIso());
+
+    const shared = shareItemsToVault({
+      origin,
+      originVaultId: "vault-priya",
+      audience,
+      itemType: "media.asset",
+      itemIds: [photo.assetId],
+      sharedBy: "member-priya",
+      authority: placementAuthority(origin, "media.asset", [photo.assetId]),
+    });
+
+    const projectedId = shared.items[0]!.itemId;
+    expect(projectedId).not.toBe(photo.assetId);
+    // The place is untouched, and still the only holder of that entity id.
+    expect(
+      rowsOf(
+        audience,
+        `SELECT entity_type FROM core_entity WHERE entity_id = '${photo.assetId}'`
+      )
+    ).toStrictEqual([{ entity_type: "core.place" }]);
+    expect(
+      rowsOf(audience, "SELECT COUNT(*) AS n FROM core_place")
+    ).toStrictEqual([{ n: 1 }]);
+    // ...and the asset really landed, under its own id.
+    expect(
+      rowsOf(
+        audience,
+        `SELECT entity_type FROM core_entity WHERE entity_id = '${projectedId}'`
+      )
+    ).toStrictEqual([{ entity_type: "media.asset" }]);
+  });
+
   test("an empty item set is refused before anything is read", () => {
     const { origin } = household();
     expect(() =>

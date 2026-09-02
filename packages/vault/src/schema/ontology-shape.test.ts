@@ -17,6 +17,10 @@ import { describe, expect, it } from "vitest";
 
 import { ONTOLOGY_PACKS } from "./atlas.js";
 import {
+  NON_ENTITY_PRINCIPAL_KINDS,
+  PRINCIPAL_ENTITY_KINDS,
+} from "./authority.js";
+import {
   BASELINE_NOW as NOW,
   baselineVault,
   columnsOf,
@@ -241,6 +245,106 @@ describe("E2 — a purge revokes, it does not erase", () => {
     // An ISO stamp, not just non-empty: `revoked_at` is the live-grant filter.
     for (const row of rows)
       expect(row.at).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/u);
+  });
+
+  // #916, audit F3: the principal clause was written for `person` alone, so a
+  // circle deleted by `tally.delete_group` or share/removal.ts left the answers
+  // its members hold THROUGH it standing — a live answer whose audience is
+  // gone, which is the exact failure the clause exists to prevent.
+  it("stamps every live answer a purged CIRCLE principal holds", () => {
+    const db = baselineVault();
+    party(db, "owner");
+    db.prepare(
+      `INSERT INTO social_circle (circle_id, owner_party_id, name, kind, created_at, updated_at)
+       VALUES ('c1', 'owner', 'Family', 'family', ?, ?)`
+    ).run(NOW, NOW);
+    db.prepare(
+      `INSERT INTO share_authority (authority_id, principal_kind, principal_id, subject_type, subject_id, verb, duration, decision, granted_at, granted_by)
+       VALUES ('a1','circle','c1','core.party','owner','view','standing','granted', ?, 'owner')`
+    ).run(NOW);
+    db.prepare(`DELETE FROM social_circle WHERE circle_id = 'c1'`).run();
+    const answer = db
+      .prepare(
+        `SELECT revoked_reason AS why, revoked_at AS at FROM share_authority WHERE authority_id = 'a1'`
+      )
+      .get() as { why: string | null; at: string | null };
+    expect(answer.why).toBe("principal-purged");
+    expect(answer.at).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/u);
+  });
+
+  // The clause is generated from one map, so the vocabulary the table admits
+  // and the vocabulary the trigger answers for cannot drift apart.
+  it("accounts for every principal kind the table admits", () => {
+    const db = baselineVault();
+    const check =
+      /principal_kind IN\s*\((?<kinds>[^)]*)\)/u.exec(
+        tableSql(db, "share_authority")
+      )?.groups?.kinds ?? "";
+    const admitted = check
+      .split(",")
+      .map((kind) => kind.trim().replace(/'/gu, ""))
+      .sort();
+    expect(admitted).toStrictEqual(
+      [...PRINCIPAL_ENTITY_KINDS.keys(), ...NON_ENTITY_PRINCIPAL_KINDS].sort()
+    );
+    // The mapped kinds name REAL entity kinds, or the CASE would never match.
+    const kinds = (
+      db.prepare(`SELECT kind FROM core_entity_kind`).all() as {
+        kind: string;
+      }[]
+    ).map((row) => row.kind);
+    for (const entityType of PRINCIPAL_ENTITY_KINDS.values())
+      expect(kinds).toContain(entityType);
+  });
+});
+
+describe("audit F1 — the entity id namespace is ENFORCED, not assumed", () => {
+  it("refuses an id another entity kind already holds", () => {
+    const db = baselineVault();
+    party(db, "x1");
+    // Before this guard the membership trigger's `INSERT OR IGNORE` swallowed
+    // the collision: no supertype row was minted for the place, its own
+    // `FOREIGN KEY (place_id) REFERENCES core_entity(entity_id)` was satisfied
+    // by the PARTY's row, and purging the party cascaded the unrelated place
+    // away with it.
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO core_place (place_id, name, created_at) VALUES ('x1', 'Home', ?)`
+        )
+        .run(NOW)
+    ).toThrow(/already held by another kind/u);
+    const held = db
+      .prepare(
+        `SELECT entity_type AS t FROM core_entity WHERE entity_id = 'x1'`
+      )
+      .get() as { t: string };
+    expect(held.t).toBe("core.party");
+    const places = db.prepare(`SELECT count(*) AS n FROM core_place`).get() as {
+      n: number;
+    };
+    expect(places.n).toBe(0);
+  });
+
+  it("still absorbs the same kind re-deriving its own supertype row", () => {
+    const db = baselineVault();
+    party(db, "p1");
+    // SQLite fires BEFORE INSERT triggers AHEAD of conflict resolution, so
+    // every upsert on an entity table re-runs the membership write against a
+    // row that is already there. `OR IGNORE` is load-bearing for exactly this.
+    db.prepare(
+      `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
+       VALUES ('p1', 'person', 'renamed', ?, ?)
+       ON CONFLICT (party_id) DO UPDATE SET display_name = excluded.display_name`
+    ).run(NOW, NOW);
+    const renamed = db
+      .prepare(`SELECT display_name AS n FROM core_party WHERE party_id = 'p1'`)
+      .get() as { n: string };
+    expect(renamed.n).toBe("renamed");
+    const membership = db
+      .prepare(`SELECT count(*) AS n FROM core_entity WHERE entity_id = 'p1'`)
+      .get() as { n: number };
+    expect(membership.n).toBe(1);
   });
 });
 

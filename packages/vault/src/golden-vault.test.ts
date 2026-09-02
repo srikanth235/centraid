@@ -21,6 +21,7 @@ import { describe, expect, it } from "vitest";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { openVaultDb } from "./db.js";
+import type { VaultDb } from "./db.js";
 import { formatDoctorReport, vaultDoctor } from "./doctor.js";
 // Shared with the freezer script: two copies of the comparison rule is how a
 // gate comes to pass against a corpus it no longer describes.
@@ -28,6 +29,22 @@ import { compareSnapshot } from "./golden-snapshot.js";
 import type { VaultSnapshot } from "./golden-snapshot.js";
 
 const GOLDEN_ROOT = path.resolve(import.meta.dirname, "../tests/golden");
+
+/**
+ * Every schema object a vault holds, by name. `sqlite_stat*` is excluded: it is
+ * the query planner's own statistics table, written by ANALYZE over the corpus
+ * rows, so its presence says how much data a file has and nothing about shape.
+ */
+function schemaOf(db: VaultDb): Map<string, string> {
+  const rows = db.vault
+    .prepare(
+      `SELECT type, name, sql FROM sqlite_master
+        WHERE name NOT LIKE 'sqlite\\_stat%' ESCAPE '\\'
+        ORDER BY type, name`
+    )
+    .all() as { type: string; name: string; sql: string | null }[];
+  return new Map(rows.map((row) => [`${row.type} ${row.name}`, row.sql ?? ""]));
+}
 
 function goldenLabels(): string[] {
   if (!existsSync(GOLDEN_ROOT)) return [];
@@ -97,6 +114,51 @@ describe("golden vaults", () => {
       } finally {
         db.close();
         rmSync(work, { force: true, recursive: true });
+      }
+    });
+
+    // THE SHAPE, not just the rows (#916, audit F2). The row comparison above
+    // is blind to DDL: the corpus was frozen a few commits before the wave's
+    // last shape fixes and carried three foreign keys the shipping baseline had
+    // dropped, and every gate stayed green. A migration never rewrites a table
+    // it did not name, so a frozen file whose schema has drifted from the
+    // baseline is testing a vault this build cannot produce.
+    //
+    // It is a real assertion, not a stored snapshot: the expected side is a
+    // vault FOUNDED HERE by the same `openVaultDb`, so there is nothing to
+    // rewrite when it fails. The answer to a failure is `bun run
+    // golden-vault:freeze -- --label <this one>`, never a looser comparison.
+    it("carries the schema today's baseline builds", () => {
+      const { work, db } = openGolden();
+      const freshDir = tempDirSync(`centraid-golden-${label}-baseline-`);
+      const fresh = openVaultDb({ dir: freshDir });
+      try {
+        const frozenSchema = schemaOf(db);
+        const freshSchema = schemaOf(fresh);
+        const findings = [
+          ...[...frozenSchema.keys()]
+            .filter((name) => !freshSchema.has(name))
+            .map(
+              (name) => `${name}: in the frozen corpus, not in the baseline`
+            ),
+          ...[...freshSchema.keys()]
+            .filter((name) => !frozenSchema.has(name))
+            .map(
+              (name) => `${name}: in the baseline, not in the frozen corpus`
+            ),
+          ...[...frozenSchema.entries()]
+            .filter(
+              ([name, sql]) =>
+                freshSchema.has(name) && freshSchema.get(name) !== sql
+            )
+            .map(([name]) => `${name}: frozen DDL differs from the baseline's`),
+        ];
+        expect(findings.join("\n")).toBe("");
+      } finally {
+        db.close();
+        fresh.close();
+        rmSync(work, { force: true, recursive: true });
+        rmSync(freshDir, { force: true, recursive: true });
       }
     });
 
