@@ -787,7 +787,7 @@ origin/main -- packages/server` was empty) and which passed on the head before
 it. A single re-run came back green, confirming them as flakes rather than
 regressions; both are now fixed at the source rather than left to re-run.
 
-- `serve-scheduler-reconcile.test.ts` asserted `Date.now() - startedAt < 1000`
+- `packages/server/src/serve/serve-scheduler-reconcile.test.ts` asserted `Date.now() - startedAt < 1000`
   around a poll loop whose own budget was 900 ms, so every HTTP round trip the
   test made counted against the scheduler: it read 1638 ms on a shard
   contending with three others. The claim — the commit nudge fires the
@@ -796,7 +796,7 @@ regressions; both are now fixed at the source rather than left to re-run.
   returned, and the poll budget (5 s) says only how long the test watches.
   Nothing about the claim was loosened; the measurement stopped including the
   observer.
-- `web-session-store.test.ts` walked a 180-day absolute lifetime one hour at a
+- `packages/server/src/serve/web-session-store.test.ts` walked a 180-day absolute lifetime one hour at a
   time, and each hourly step clears the store's own disk-write throttle: about
   4,300 SQLite writes to prove that `touch` cannot slide expiry past the wall.
   It now steps by half the IDLE window — the thing that actually makes a touch
