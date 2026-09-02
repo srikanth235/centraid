@@ -27,7 +27,7 @@
 //     agree or the register is a second place for the truth to be wrong.
 //
 //   RULE dated-gap       A `gap` row carries `since` (an ISO date), a
-//     `trackingIssue` registered and OPEN in tests/matrix.json, and a `blocker`
+//     `trackingIssue` registered and OPEN in tests/claims.json, and a `blocker`
 //     that is a paragraph, not a shrug. An undated gap is indistinguishable from
 //     an oversight, and the audit ritual has nothing to read.
 //
@@ -46,7 +46,7 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 const APPS_DIR = "packages/blueprints/apps";
 const REGISTER_PATH = "tests/agent-e2e-mobile/origin-acts.json";
 const ROSTER_PATH = "tests/agent-e2e-mobile/roster.json";
-const MATRIX_PATH = "tests/matrix.json";
+const MATRIX_PATH = "tests/claims.json";
 
 // A year. Long enough that a genuinely blocked act is not busywork, short
 // enough that no gap outlives the person who understood it. Re-dating is a

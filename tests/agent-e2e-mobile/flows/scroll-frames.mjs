@@ -7,6 +7,7 @@ import {
 } from "../../agent-e2e-shared/harness.mjs";
 import { readFrameEvidence } from "../lib/frame-report.mjs";
 import {
+  AWAIT_LAUNCHER,
   CONFIRM_SYSTEM_OPEN,
   FIRST_LAUNCH_TIMEOUT_MS,
   runFlow,
@@ -169,6 +170,7 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
 # label / route name that scripts/lint-e2e-flows.mjs refuses to let a flow
 # ASSERT on, used here as a locator, where it is the same hazard: it matches
 # whatever draws that word.
+${AWAIT_LAUNCHER}
 - tapOn:
     id: "home-tile-photos"
     retryTapIfNoChange: true

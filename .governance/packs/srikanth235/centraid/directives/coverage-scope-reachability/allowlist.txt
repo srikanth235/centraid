@@ -19,7 +19,7 @@ packages/test-kit
 # source-level suites in the tree itself (pull-connectors, outbox-send,
 # release-notes-drafter beside handler-harness.ts), are instrumented via the
 # root coverageInclude `packages/blueprints/automations/**/handler.js`, and
-# the directive expects their floor scope in tests/coverage-floors.json. The
+# the directive expects their floor scope in tests/floors.json#coverage. The
 # five GENERATED recognition bundles (photo-ocr, embed-image, embed-text,
 # faces, transcript — the id list in
 # packages/model-runtime/build-automation-handlers.ts) need no row of their

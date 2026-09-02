@@ -20,7 +20,7 @@ import { AWAIT_LAUNCHER, runFlow } from "../lib/harness.mjs";
  * distribution yet, and a guessed ceiling would either fence nothing or red the
  * mobile lane on simulator jitter. The gate is the sustained-drift budget every
  * other rig now uses (30 samples, 1.5x the trailing median — the knobs live in
- * tests/quality-rig-budgets.json). An absolute ceiling lands in
+ * tests/budgets.json#qualityRigs). An absolute ceiling lands in
  * tests/experience-budgets/mobile.json once the distribution exists.
  *
  * Year-3 declared volume (docs/coding-standards.md D6): NOT MET. These launches

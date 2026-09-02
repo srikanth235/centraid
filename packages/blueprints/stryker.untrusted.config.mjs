@@ -17,7 +17,7 @@ export default {
   // This is the NODE-side property suite on purpose: the module's other suite
   // (src/untrusted-rendering.test.ts) runs under jsdom, and Stryker's vitest
   // runner dry-runs a jsdom project as "No tests were executed", so it defends
-  // no mutant. See tests/mutation-floors.json (#864) for the floor's provenance.
+  // no mutant. See tests/floors.json#mutation (#864) for the floor's provenance.
   mutate: ["apps/_shared/untrusted.ts"],
   reporters: ["clear-text", "json"],
   jsonReporter: {

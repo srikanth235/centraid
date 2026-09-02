@@ -56,6 +56,44 @@ directive_dirs_for_hook() {
         [[ -d "$GOVERNANCE_DIR/packs" ]] && find "$GOVERNANCE_DIR/packs" -type d -path '*/directives/*' | sort
     )
 }
+# ── centraid: deferred-directives (#915) ──────────────────────────────────
+# Rung 0's budget is 5 s. Two vendored `governance-kit` directives cost 86.3 s
+# of it on this tree — `repo-hygiene` (51.2 s, `git grep` + `git ls-files`
+# across every tracked file) and `receipt-per-issue` (35.1 s, re-reads the
+# receipt corpus) — because both are repo-wide BY CONSTRUCTION and cannot be
+# scoped to the staged set.
+#
+# Their `hook:` field cannot be changed in-tree: both folders carry digests in
+# `.governance/packs.lock`, so `managed-tree-integrity` fails on a hand edit.
+# The kit exposes no supported override either — `.governance/lib.sh` reads
+# `hook:` straight out of `directive.yaml`, and `conf_get`/`conf_list` only
+# serve keys a directive DECLARES in its own `config:` block, which `hook` is
+# not.
+#
+# So the deferral lives here, in a file the kit does not digest
+# (`.governance/install.yaml` covers only `governance.yml`, `lib.sh` and
+# `run.sh`): this hook skips the ids listed in the conf below and
+# `.githooks/pre-push` runs exactly those before `check:push`. Nothing is
+# dropped. `.governance/run.sh` still runs all 22 directives, so the CI
+# enforcing copy is untouched and only the LOCAL rung moved, 0 → 1.
+#
+# Cost of re-adding a directive here: read the conf's own rules first.
+DEFERRED_CONF="$GOVERNANCE_DIR/conf/srikanth235/centraid/pre-commit-deferred.conf"
+
+deferred_directive_ids() {
+    [[ -f "$DEFERRED_CONF" ]] || return 0
+    sed -e 's/#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$DEFERRED_CONF" \
+        | grep -v '^$' || true
+}
+
+directive_is_deferred() {
+    local id="$1" listed
+    while IFS= read -r listed; do
+        [[ "$listed" == "$id" ]] && return 0
+    done < <(deferred_directive_ids)
+    return 1
+}
+
 if [[ -x "$ROOT/scripts/test.sh" ]]; then
     bash "$ROOT/scripts/test.sh" || exit 1
 elif [[ -x "$ROOT/scripts/test-packs.sh" ]]; then
@@ -85,6 +123,11 @@ fi
 fail=0
 while IFS= read -r dir; do
     [[ -z "$dir" ]] && continue
+    id="$(basename "$dir")"
+    if directive_is_deferred "$id"; then
+        printf '⏭ %s deferred to pre-push (#915)\n' "$id" >&2
+        continue
+    fi
     bash "$dir/check.sh" || fail=1
 done < <(directive_dirs_for_hook pre-commit check)
 

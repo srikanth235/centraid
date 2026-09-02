@@ -19,13 +19,22 @@
  *    this for TESTS (declared, attributed, expiring); lanes had no equivalent,
  *    so a long-red lane simply stayed red. `--chronic-red-days N` fails, and
  *    files a deduplicated tracking issue, when a lane has been red on main for
- *    longer than N days without an unexpired entry in tests/lane-quarantine.json.
+ *    longer than N days without an unexpired entry in tests/quarantine.json#lanes.
  *
  * Nightly-only, deliberately: it reads api.github.com, and the PR lane must not
  * acquire a dependency on it (the same rule test:citations follows).
  *
+ * 3. THE RULES TABLE (#915). Pass rate, escapes, consecutive reds, expired
+ *    parks and p95-over-budget are now decided mechanically by
+ *    `scripts/ci/lane-rules.mjs` and written to the summary as `findings`, each
+ *    carrying the rolling issue title the workflow should open or update. The
+ *    report-level `verdict` (`HOLD` / `OK`) over the parks ledger is written
+ *    beside them, so the nightly page and this lane can never disagree about
+ *    how much debt the ladder is carrying.
+ *
  * Usage:
  *   node scripts/ci/lane-health.mjs --repo owner/name [--workflow ci.yml]
+ *        [--rung 2] [--escape-workflow ci.yml]
  *        [--runs 40] [--chronic-red-days 3] [--out artifacts/lane-health/summary.json]
  */
 import {
@@ -37,8 +46,21 @@ import {
 } from "node:fs";
 import path from "node:path";
 
+import {
+  RUNG_BUDGET_MS,
+  WORKFLOW_RUNG,
+  applyLaneRules,
+  countEscapes,
+  greenShas,
+  laneDurations,
+  overallVerdict,
+  percentile,
+} from "./lane-rules.mjs";
+
 const root = path.resolve(import.meta.dirname, "../..");
-const QUARANTINE_PATH = path.join(root, "tests/lane-quarantine.json");
+// Lane parks merged into the quarantine ledger beside the flaky-test entries
+// in #915 Wave 4; the shape (`lanes: {lane: {issue, expires, why}}`) is unchanged.
+const QUARANTINE_PATH = path.join(root, "tests/quarantine.json");
 
 /**
  * First-attempt pass rate per job name.
@@ -118,7 +140,7 @@ export function redStreaks(runsNewestFirst, now) {
  * Lanes that have been red longer than the rule allows and are not quarantined.
  *
  * @param {Map<string, {since: string, days: number, runs: number}>} streaks current red streaks, from `redStreaks`
- * @param {Record<string, {issue?: string, expires?: string, why?: string}>} quarantine the `lanes` map from tests/lane-quarantine.json
+ * @param {Record<string, {issue?: string, expires?: string, why?: string}>} quarantine the `lanes` map from tests/quarantine.json
  * @param {number} maxDays how many days a lane may stay red before the rule fires
  * @param {string} today ISO date, to judge whether a park has expired
  * @returns {{lane: string, days: number, runs: number, since: string, reason: string}[]} lanes past the rule, worst first
@@ -169,6 +191,36 @@ export function renderLaneHealth(rates, streaks, floor) {
   return lines.join("\n");
 }
 
+/**
+ * Markdown for the rules table's findings.
+ *
+ * @param {{lane: string, kind: string, title: string, detail: string}[]} findings From `applyLaneRules`.
+ * @param {{verdict: string, reasons: string[]}} verdict From `overallVerdict`.
+ * @param {number|null} rung Which rung was scored.
+ * @returns {string} Markdown.
+ */
+export function renderFindings(findings, verdict, rung) {
+  const lines = [
+    `### Lane rules (rung ${rung ?? "?"}) — verdict ${verdict.verdict}`,
+    "",
+  ];
+  if (verdict.reasons.length) {
+    for (const reason of verdict.reasons) lines.push(`- HOLD: ${reason}`);
+    lines.push("");
+  }
+  if (!findings.length) {
+    lines.push(
+      "No rule fired: every lane is inside its budget, its pass rate and its park."
+    );
+    return lines.join("\n");
+  }
+  lines.push("| Lane | Rule | What to do |", "| --- | --- | --- |");
+  for (const finding of findings) {
+    lines.push(`| \`${finding.lane}\` | ${finding.kind} | ${finding.detail} |`);
+  }
+  return lines.join("\n");
+}
+
 // --- fetching ---------------------------------------------------------------
 
 async function gh(url, token) {
@@ -200,11 +252,14 @@ async function fetchRuns(repo, workflow, limit, token) {
       );
       return {
         id: run.id,
+        headSha: run.head_sha ?? "",
         runAttempt: run.run_attempt ?? 1,
         startedAt: run.run_started_at ?? run.created_at,
         jobs: (jobs.jobs ?? []).map((job) => ({
           name: job.name,
           conclusion: job.conclusion,
+          startedAt: job.started_at,
+          completedAt: job.completed_at,
         })),
       };
     })
@@ -219,6 +274,8 @@ function parseArgs(argv) {
     chronicRedDays: null,
     floor: 0.95,
     out: null,
+    rung: null,
+    escapeWorkflow: null,
   };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--repo" && argv[i + 1]) out.repo = argv[++i];
@@ -229,7 +286,12 @@ function parseArgs(argv) {
     else if (argv[i] === "--floor" && argv[i + 1])
       out.floor = Number(argv[++i]);
     else if (argv[i] === "--out" && argv[i + 1]) out.out = argv[++i];
+    else if (argv[i] === "--rung" && argv[i + 1]) out.rung = Number(argv[++i]);
+    else if (argv[i] === "--escape-workflow" && argv[i + 1])
+      out.escapeWorkflow = argv[++i];
   }
+  // A workflow this repo knows about implies its rung; an unknown one must say.
+  if (out.rung == null) out.rung = WORKFLOW_RUNG[out.workflow] ?? null;
   return out;
 }
 
@@ -254,6 +316,53 @@ async function main() {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${report}\n`);
   }
 
+  const quarantine = existsSync(QUARANTINE_PATH)
+    ? (JSON.parse(readFileSync(QUARANTINE_PATH, "utf8")).lanes ?? {})
+    : {};
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Escapes need BOTH sides: what the deep rung caught, and which SHAs the
+  // merge gate had already called green. Skipped when the caller does not name
+  // a rung-2 workflow, because an escape count computed from one workflow is
+  // not an approximation of the rule — it is a different number wearing its
+  // name.
+  let escapes = new Map();
+  if (args.escapeWorkflow && args.escapeWorkflow !== args.workflow) {
+    try {
+      const gateRuns = await fetchRuns(
+        args.repo,
+        args.escapeWorkflow,
+        args.runs,
+        process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN
+      );
+      escapes = countEscapes(runs, greenShas(gateRuns));
+    } catch (error) {
+      console.error(
+        `::warning title=Escapes unmeasured::could not read ${args.escapeWorkflow} runs (${error.message}); the escape column is empty this run rather than zero`
+      );
+    }
+  }
+
+  const durations = laneDurations(runs);
+  const findings =
+    args.rung == null
+      ? []
+      : applyLaneRules({
+          rates,
+          streaks,
+          durations,
+          escapes,
+          quarantine,
+          rung: args.rung,
+          today,
+        });
+  const verdict = overallVerdict(quarantine, today);
+  const rulesReport = renderFindings(findings, verdict, args.rung);
+  console.log(rulesReport);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${rulesReport}\n`);
+  }
+
   if (args.out) {
     mkdirSync(path.dirname(path.resolve(root, args.out)), { recursive: true });
     writeFileSync(
@@ -262,9 +371,21 @@ async function main() {
         {
           generatedAt: new Date().toISOString(),
           workflow: args.workflow,
+          rung: args.rung,
+          rungBudgetMs: args.rung == null ? null : RUNG_BUDGET_MS[args.rung],
           floor: args.floor,
+          verdict: verdict.verdict,
+          reasons: verdict.reasons,
           lanes: Object.fromEntries(rates),
           redStreaks: Object.fromEntries(streaks),
+          escapes: Object.fromEntries(escapes),
+          p95Ms: Object.fromEntries(
+            [...durations].map(([lane, samples]) => [
+              lane,
+              percentile(samples, 0.95),
+            ])
+          ),
+          findings,
         },
         null,
         2
@@ -272,16 +393,23 @@ async function main() {
     );
   }
 
+  // A finding whose action is "open an issue" does not red this lane — the
+  // demote and promote rules are advice with a deadline attached, and reding
+  // the nightly for them would make the nightly mean less, which is the whole
+  // disease #915 is treating. The three that ARE red are the ones the ladder
+  // says are red: an expired park, a lane over its rung's budget, and a lane
+  // that owes a park it has not been given.
+  const redKinds = new Set(["park-expired", "over-budget", "park-required"]);
+  const red = findings.filter((finding) => redKinds.has(finding.kind));
+  for (const finding of red) {
+    console.error(
+      `::error title=${finding.title}::\`${finding.lane}\` — ${finding.detail}`
+    );
+  }
+  if (red.length > 0) process.exitCode = 1;
+
   if (args.chronicRedDays == null) return;
-  const quarantine = existsSync(QUARANTINE_PATH)
-    ? (JSON.parse(readFileSync(QUARANTINE_PATH, "utf8")).lanes ?? {})
-    : {};
-  const offenders = chronicRed(
-    streaks,
-    quarantine,
-    args.chronicRedDays,
-    new Date().toISOString().slice(0, 10)
-  );
+  const offenders = chronicRed(streaks, quarantine, args.chronicRedDays, today);
   if (offenders.length === 0) {
     console.log(
       `lane-health: no lane has been red on main for more than ${args.chronicRedDays} day(s)`
@@ -290,7 +418,7 @@ async function main() {
   }
   for (const offender of offenders) {
     console.error(
-      `::error title=Chronic red lane::\`${offender.lane}\` has been red on main for ${offender.days} day(s) across ${offender.runs} run(s) (${offender.reason}). Fix it, or quarantine it WITH AN EXPIRY in tests/lane-quarantine.json — a required lane that stays red teaches merging past red, which devalues every other lane.`
+      `::error title=Chronic red lane::\`${offender.lane}\` has been red on main for ${offender.days} day(s) across ${offender.runs} run(s) (${offender.reason}). Fix it, or quarantine it WITH AN EXPIRY in tests/quarantine.json#lanes — a required lane that stays red teaches merging past red, which devalues every other lane.`
     );
   }
   process.exitCode = 1;

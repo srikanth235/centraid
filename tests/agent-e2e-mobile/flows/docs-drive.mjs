@@ -32,6 +32,7 @@
 
 import { retryableTapCommands } from "../lib/first-run.mjs";
 import {
+  AWAIT_LAUNCHER,
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
   runFlow,
@@ -65,7 +66,7 @@ await runFlow("docs-drive", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-${retryableTapCommands("Open Docs.*")}
+${AWAIT_LAUNCHER}${retryableTapCommands("Open Docs.*")}
 - extendedWaitUntil:
     visible: "${ALL_STATUS}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
@@ -158,7 +159,7 @@ ${retryableTapCommands("Tahoe packing list", ALL_STATUS)}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${retryableTapCommands("Open Docs.*")}
+${AWAIT_LAUNCHER}${retryableTapCommands("Open Docs.*")}
 # The shelf still counts the drive — titles, folders, filing and stars are
 # replica reads and owe the gateway nothing…
 - extendedWaitUntil:

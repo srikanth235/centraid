@@ -149,8 +149,8 @@ describe("selectAffectedSeeds", () => {
   });
 
   test("global watch forces every seed", () => {
-    expect(MUTATION_GLOBAL_WATCH).toContain("tests/mutation-floors.json");
-    const hit = selectAffectedSeeds(["tests/mutation-floors.json"]);
+    expect(MUTATION_GLOBAL_WATCH).toContain("tests/floors.json#mutation");
+    const hit = selectAffectedSeeds(["tests/floors.json#mutation"]);
     expect(hit).toHaveLength(MUTATION_SEEDS.length);
   });
 

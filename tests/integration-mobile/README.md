@@ -4,7 +4,7 @@ The middle tier of the app × state grid ([#890](https://github.com/srikanth235/
 
 ## What this is
 
-Seven suites — one per app state in [`tests/matrix.json`](../matrix.json)`#appStates.states` — that boot a **real gateway process** (`serve()`, auto-founded Personal vault, the eight bundled system apps installed with their manifest scopes granted at install) and a **real native replica session** (`createNativeReplicaSession` over the repo's `node:sqlite` stand-in for op-sqlite), arrange each state as a boot condition, and assert **what the session reports**.
+Seven suites — one per app state in [`tests/claims.json`](../claims.json)`#appStates.states` — that boot a **real gateway process** (`serve()`, auto-founded Personal vault, the eight bundled system apps installed with their manifest scopes granted at install) and a **real native replica session** (`createNativeReplicaSession` over the repo's `node:sqlite` stand-in for op-sqlite), arrange each state as a boot condition, and assert **what the session reports**.
 
 ## Why it exists
 
@@ -43,7 +43,7 @@ Files run one at a time (`fileParallelism: false`): each boots its own gateway a
 
 ## The grid, as this tier covers it
 
-`✓` covered, `—` not reachable here (skipped with the reason in the test title).
+`✓` arranged and asserted here, `—` not **arrangeable** here — the cell is covered by a BLOCKER assertion instead (see below), so all 56 cells are accounted for and none is skipped.
 
 | App    | dayone | pending | offline | stale | conflict | parked | denied |
 | ------ | ------ | ------- | ------- | ----- | -------- | ------ | ------ |
@@ -65,7 +65,9 @@ Files run one at a time (`fileParallelism: false`): each boots its own gateway a
 - **photos** — `media.forget_person` is the only parking media command, and no bundled Photos action calls it.
 - **tasks** — schedule's parking commands are all event-shaped; none of `schedule.*_task` carries one.
 
-Those cells stay with the component tier, which is an honest owner for them: the apps genuinely design a parked state and genuinely render it, but _this_ tier cannot be the one that produces it. They are `it.skip`ped with that reason in the title rather than passed on an invented outcome. The fix is a product change (an action of those apps routing to a confirm-required command), not a test change — so do not "close" them here by faking a park.
+Those cells stay with the component tier for the RENDER — the apps genuinely design a parked state and genuinely draw it — but this tier still owns them, in the only honest way it can: `parked.integration.test.ts` asserts the **blocker**, computed from the shipped vault registry and the app's own handlers. That test passes only while the product really has no parking path there and turns red the day one is added, which is exactly when the cell becomes arrangeable here. An `it.skip` was the first shape considered and rejected: it would have needed a `tests/skips.json` entry with an open issue, and there is no open issue — the four cells are a product fact, not deferred work. The fix is a product change (an action of those apps routing to a confirm-required command), not a test change — so do not "close" them here by faking a park.
+
+[#915](https://github.com/srikanth235/centraid/issues/915) Wave 2 re-verified the grid against `packages/blueprints/apps/*/app.json#states` (all eight declare all seven designed, none excluded) and `CANONICAL_DESIGNED_STATES`: **56 cells, 52 arranged, 4 blocker-asserted, 0 skipped, 0 n/a**. It also made the doctrine mechanical at the other end — `scripts/lint-e2e-wiring.mjs` RULE `state-variety` refuses any `appStates` cell whose owner is under `tests/agent-e2e-mobile/`, so state variety cannot drift onto a device (a simulator minute costs roughly 600 Vitest seconds).
 
 ## How the enumeration stays honest
 

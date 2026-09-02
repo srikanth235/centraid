@@ -61,12 +61,53 @@ directive_dirs_for_hook() {
         [[ -d "$GOVERNANCE_DIR/packs" ]] && find "$GOVERNANCE_DIR/packs" -type d -path '*/directives/*' | sort
     )
 }
+# ── centraid: deferred-directives (#915) ──────────────────────────────────
+# The other half of the rung-0 deferral. `.githooks/pre-commit` skips the
+# directive ids listed in the conf below (repo-wide, digest-locked, 86.3 s
+# between them); this hook runs exactly those, before `check:push`, so a push
+# still carries the same 22 directives a commit used to. `.governance/run.sh`
+# — what CI invokes — was never changed, so the enforcing copy always ran all
+# of them regardless. See the block in `.githooks/pre-commit` for why the
+# directives' own `hook:` field could not be moved instead.
+DEFERRED_CONF="$GOVERNANCE_DIR/conf/srikanth235/centraid/pre-commit-deferred.conf"
+
+deferred_directive_ids() {
+    [[ -f "$DEFERRED_CONF" ]] || return 0
+    sed -e 's/#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$DEFERRED_CONF" \
+        | grep -v '^$' || true
+}
+
+# Print the directive folder for each deferred id, in conf order. An id that
+# names no installed directive is silently absent rather than fatal: the conf
+# is a deferral list, not an installation manifest, and a hook that refuses to
+# run because a vendored pack was dropped would block every push.
+deferred_directive_dirs() {
+    local id dir
+    while IFS= read -r id; do
+        [[ -n "$id" ]] || continue
+        while IFS= read -r dir; do
+            [[ -d "$dir" && -x "$dir/check.sh" ]] || continue
+            [[ "$(basename "$dir")" == "$id" ]] && printf '%s\n' "$dir"
+        done < <(
+            [[ -d "$GOVERNANCE_DIR/packs" ]] \
+                && find "$GOVERNANCE_DIR/packs" -type d -path '*/directives/*' | sort
+        )
+    done < <(deferred_directive_ids)
+}
+
 while IFS= read -r dir; do
     [[ -z "$dir" ]] && continue
     bash "$dir/hooks/pre-push.sh" "$REMOTE_NAME" "$REMOTE_URL" < "$REFS_FILE" || exit 1
 done < <(directive_dirs_for_hook pre-push helper)
 
 fail=0
+
+# Deferred first: they are cheap relative to `check:push` and their failures
+# are the ones a developer fixes without re-running the gate.
+while IFS= read -r dir; do
+    [[ -z "$dir" ]] && continue
+    bash "$dir/check.sh" || fail=1
+done < <(deferred_directive_dirs)
 while IFS= read -r dir; do
     [[ -z "$dir" ]] && continue
     bash "$dir/check.sh" "$REMOTE_NAME" "$REMOTE_URL" < "$REFS_FILE" || fail=1

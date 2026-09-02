@@ -6,7 +6,7 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 - **Seat class**: `byte-bearing` — real member files; custody triple, backup, pin/download, free-up-space.
 - **Graduation issue**: [#716](https://github.com/srikanth235/centraid/issues/716); remaining write-path holes tracked under [#864](https://github.com/srikanth235/centraid/issues/864).
 - **Journey ownership**: one north-star journey per platform. Origin: `tests/agent-e2e-mobile/flows/photos-library.mjs` (and the four sibling Photos Maestro flows). Custodian: `apps/desktop/tests/e2e/photos.spec.ts`. Viewer: `apps/web/tests/e2e/photos-grants.spec.ts`.
-- **Structural exclusions**: see `tests/matrix.json#appEngines`.
+- **Structural exclusions**: see `tests/claims.json#appEngines`.
 
 `U` is a pure/unit test, `C` a component test (RNTL on native, jsdom on web), `E` a named journey. A row owns one cheapest falsifying layer.
 

@@ -117,13 +117,22 @@ describe("web-session-store", () => {
       shellOrigin: "http://shell",
     });
 
-    // Continuous hourly use across the whole absolute lifetime. Without the
+    // Continuous use across the whole absolute lifetime. Without the
     // server-side cap this slides expiry to ~now + idle forever; with it,
     // the wall holds at creation + CONTROL_ABSOLUTE_TTL_MS even though every
     // touch happens well inside the idle window.
+    //
+    // The step is half the IDLE window because that is what makes a touch a
+    // slide — landing inside the window that would otherwise extend the
+    // session. Walking the 180-day lifetime an hour at a time instead spent
+    // ~4,300 SQLite writes (each hourly step clears the disk throttle) to
+    // prove the same invariant, and that I/O is what timed this test out at
+    // 30 s on a loaded CI shard (#915). The hourly throttle itself is proven
+    // by the test above, where it belongs.
     const absoluteWall = start + CONTROL_ABSOLUTE_TTL_MS;
-    while (now + 60 * 60 * 1000 < absoluteWall) {
-      now += 60 * 60 * 1000;
+    const step = CONTROL_IDLE_TTL_MS / 2;
+    while (now + step < absoluteWall) {
+      now += step;
       store.touch(hash);
     }
     expect(rows()[0]?.expiresAt).toBe(absoluteWall);

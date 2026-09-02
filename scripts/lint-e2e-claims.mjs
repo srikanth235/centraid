@@ -16,7 +16,7 @@
 // launcher tile, while three sibling flows failed on that same screen. A flow
 // whose claim nobody had to write down had quietly stopped making one.
 //
-// THE PIN LIST IS DOWN-ONLY, like `tests/comment-density-ratchet.json`. A gate
+// THE PIN LIST IS DOWN-ONLY, like `tests/inventory.json#commentDensity`. A gate
 // that lands with a backlog is not a weakened gate; a gate whose backlog is
 // allowed to grow is. Adding a flow to `claim-pins.json` fails this linter —
 // only removals are accepted — so the only way to add a device flow is to say
@@ -24,6 +24,8 @@
 
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
+
+import { flowPath, loadRoster } from "../tests/agent-e2e-mobile/lib/roster.mjs";
 
 const FLOWS_DIR = "tests/agent-e2e-mobile/flows";
 const PINS = "tests/agent-e2e-mobile/flows/claim-pins.json";
@@ -62,12 +64,28 @@ export function claimOf(source) {
  * Every violation, as printable strings. Pure: the caller does the reading, so
  * the rules are testable on inline fixtures before they touch the tree.
  */
-export function lintClaims({ flows, docs, pins }) {
+export function lintClaims({ flows, docs, pins, rostered = {} }) {
   const errors = [];
   const pinned = new Set(pins);
   for (const flow of flows) {
     const claim = claimOf(docs[flow]);
     const isPinned = pinned.has(flow);
+    // RULE agrees (#915 Wave 2) — `roster.json` is now the single source for
+    // what a journey claims, and the companion doc's bold line is a MIRROR of
+    // it. Two sentences that are allowed to drift are how a report comes to
+    // cite one claim while a reader is reading another; asserting they are the
+    // same string is what makes "the roster is the source" true rather than
+    // stated. A pinned flow has no line to mirror, which is the whole content
+    // of its pin.
+    const declared = rostered[flow];
+    if (declared === undefined)
+      errors.push(
+        `${flow}: no row in tests/agent-e2e-mobile/roster.json — a flow nobody rostered is a flow nobody schedules`
+      );
+    else if (claim !== undefined && claim !== declared)
+      errors.push(
+        `${flow}: the '**Claim:**' line in ${flow}.md does not match roster.json's \`claim\`. The roster is the source; copy its sentence, or change the roster and copy it here.`
+      );
     if (claim === undefined) {
       if (!isPinned)
         errors.push(
@@ -157,7 +175,18 @@ function selfTest() {
     },
   ];
   for (const testCase of cases) {
-    const errors = lintClaims(testCase.input);
+    const errors = lintClaims({
+      // Every legacy case predates RULE agrees and is about the doc line alone,
+      // so each flow is rostered with whatever claim its own doc states. The two
+      // cases below vary that deliberately.
+      rostered: Object.fromEntries(
+        (testCase.input.flows ?? []).map((flow) => [
+          flow,
+          claimOf(testCase.input.docs?.[flow]) ?? null,
+        ])
+      ),
+      ...testCase.input,
+    });
     if (errors.length !== testCase.errors)
       throw new Error(
         `self-test '${testCase.name}': expected ${testCase.errors} error(s), got ${errors.length} — ${errors.join("; ")}`
@@ -188,8 +217,14 @@ function main() {
     }
   }
   const pinned = JSON.parse(readFileSync(PINS, "utf8"));
+  const roster = loadRoster();
+  const rostered = Object.fromEntries(
+    flows
+      .map((flow) => [flow, roster.flows?.[flowPath(`${flow}.mjs`)]?.claim])
+      .filter(([, claim]) => claim !== undefined)
+  );
   const errors = [
-    ...lintClaims({ flows, docs, pins: pinned.flows }),
+    ...lintClaims({ flows, docs, pins: pinned.flows, rostered }),
     ...lintRatchet(pinned.flows, pinned.baseline),
   ];
   for (const error of errors)

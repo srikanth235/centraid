@@ -81,5 +81,38 @@ export function historyPoint(record) {
     appSeatCells: countRecord(record.appSeatCells),
     appStateCells: countRecord(record.appStateCells),
     adversaryCounts: countRecord(record.adversaryCounts),
+    // #915 Wave 3 — the ladder's own fields. The lane board's 30-run sparkline,
+    // the pass rate and the p95 all read `lanes`, and the trend charts read
+    // `laneSeries` above. Every night recorded before this wave carries none of
+    // them, so they read as an empty record and a null candidate: an unrecorded
+    // night renders as `no evidence` in the sparkline rather than as a pass.
+    candidate:
+      typeof record.candidate === "string" && record.candidate
+        ? record.candidate
+        : null,
+    lanes: laneRecord(record.lanes),
   };
+}
+
+/**
+ * The per-lane verdicts of one night, whitelisted the same way every other
+ * field here is: an unknown verdict word is dropped rather than trusted, and a
+ * duration that is not a finite number reads as null.
+ */
+function laneRecord(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const allowed = new Set([
+    "passed",
+    "failed",
+    "parked",
+    "no-evidence",
+    "degraded",
+  ]);
+  const out = {};
+  for (const [lane, entry] of Object.entries(value)) {
+    const verdict = entry?.verdict;
+    if (!allowed.has(verdict)) continue;
+    out[lane] = { verdict, durationMs: numeric(entry?.durationMs) };
+  }
+  return out;
 }

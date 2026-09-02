@@ -218,7 +218,7 @@
   variable, not trust the host; (2)
   `packages/server/src/serve/gateway-db-lock.integration.test.ts` shells out
   to the `sqlite3` CLI, absent here — a candidate for the new
-  `tests/env-red.json` inventory (guard on CLI presence) or a rewrite against
+  `tests/inventory.json#envRed` inventory (guard on CLI presence) or a rewrite against
   `node:sqlite`. Both still red in this container at #883's close, and both
   paths are restated here because the packages they used to name
   (`agent-runtime`, `gateway`) no longer exist.
@@ -328,7 +328,7 @@
   is red on the default branch cannot distinguish a regression from the standing
   state, so every branch inherits the failure and every author must decide
   whether to absorb it. #890 absorbed those eighteen into its pin raise, with the
-  reason stated at the number in `tests/comment-density-ratchet.json`, rather
+  reason stated at the number in `tests/inventory.json#commentDensity`, rather
   than leave its own branch red for something it did not cause. That absorption
   is a workaround, not the fix. Two things want settling on their own: how a pin
   file drifts out of agreement with the tree on `main` at all (a `--write` that

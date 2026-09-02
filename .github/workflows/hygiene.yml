@@ -1,0 +1,104 @@
+name: hygiene
+
+# Rung 5, the weekly hygiene lane (#915 Wave 4).
+#
+# Seven tighten-only ratchets over the TEST SUITE's own quality — comment
+# density, assertion-matcher families, fixed sleeps, skips, environment-red
+# sites, the type floor, the schema/export fingerprint. They protect the suite
+# from the agents; none of them proves the phone works, and charging every push
+# for them (10.2 s for comment density alone) bought latency nobody used.
+#
+# Every one is a STANDING check over the whole tree — a count, an inventory, a
+# fingerprint — never a diff-scoped one. That property is what makes a weekly
+# run against `main` see exactly what a per-push run would have seen: the move
+# costs detection latency (push → ≤ 7 days) and nothing else.
+#
+# ci.yml lines 295-313 (#782) rule that "enforced by the pre-push hook" is
+# enforcement in name only. This lane is not that regression, it is the third
+# tier the ruling implies: it runs in CI, against main, on a schedule, and
+# files ONE rolling issue when red. Nothing here depends on a developer's hook,
+# and `test:comment-density` had no CI job at all before this — weekly is
+# strictly more enforcement than it had. See docs/decisions.md, "Gate and
+# ledger diet".
+#
+# `schedule:` + `workflow_dispatch:` only: ci.yml is the one workflow allowed
+# to listen on `pull_request` (#557, enforced by lint:workflow-pins rule 5).
+
+on:
+  schedule:
+    # Saturday 05:00 UTC — after the 03:40 soak has claimed its runners and
+    # before the 06:00 nightly, so a red ratchet never competes with either for
+    # attention on a Saturday morning.
+    - cron: "0 5 * * 6"
+  workflow_dispatch:
+
+concurrency:
+  group: hygiene-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # The lane's whole output on red is one rolling issue, replaced in place.
+  issues: write
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          # `audit` for the same reason soak-weekly.yml uses it: the allowlist
+          # for this lane has not been learned yet, and a job that dies on an
+          # unlisted endpoint on a Saturday costs a week to notice.
+          egress-policy: audit
+      - id: start
+        run: echo "at=$(date -u +%FT%TZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # test:comment-density, test:env-red and lint:schema-export walk the
+          # tracked corpus and resolve refs; a shallow clone has neither.
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      # Runs all seven, reports every failure in one pass, and writes
+      # artifacts/hygiene/summary.json. `continue-on-error` so the rolling
+      # issue and the lane evidence below are written on a red run — the step's
+      # outcome is what the final gate re-reads.
+      - id: ratchets
+        continue-on-error: true
+        run: bun run hygiene:lane
+      - name: Job summary
+        if: always()
+        run: cat artifacts/hygiene/summary.md >> "$GITHUB_STEP_SUMMARY"
+      # ONE rolling issue, updated in place, never re-created (#915 Wave 0's
+      # rule). `--update` replaces the body, so the issue always states the
+      # lane's current condition instead of growing a thread nobody reads.
+      - name: File the rolling issue
+        if: steps.ratchets.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HYGIENE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          node scripts/ci/file-tracking-issue.mjs \
+            --title '[hygiene] weekly ratchets red' \
+            --search '[hygiene] weekly ratchets red' \
+            --body-file artifacts/hygiene/issue-body.md \
+            --update \
+            --run-url "$HYGIENE_RUN_URL"
+      - name: Write lane evidence
+        if: always()
+        env:
+          LANE_STARTED_AT: ${{ steps.start.outputs.at }}
+        run: node scripts/test-report/write-evidence.mjs --lane hygiene --rung 5 --platform any --verdict auto --job-status ${{ steps.ratchets.outcome == 'success' && 'success' || 'failure' }} --started-at "$LANE_STARTED_AT" --budget-ms 1800000
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: hygiene-weekly-evidence
+          path: artifacts/
+      # The lane's verdict. Every step above runs on red so the evidence and the
+      # issue exist; this is where the run itself goes red.
+      - name: Fail on a red ratchet
+        if: steps.ratchets.outcome == 'failure'
+        run: |
+          echo "::error::weekly hygiene ratchets are red — see the rolling issue"
+          exit 1

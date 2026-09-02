@@ -6,7 +6,7 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 - **Seat class**: `byte-bearing` — real member files; custody triple, staged blob upload, download-on-demand.
 - **Graduation issue**: none yet — Docs rides the blended `_shared` + non-graduated coverage floor; [#781](https://github.com/srikanth235/centraid/issues/781) tracks the admission-contract gaps this table closes and names.
 - **Journey ownership**: byte-bearing, so one north-star journey per platform. Desktop: `apps/desktop/tests/e2e/docs-drive.spec.ts`. Web: `apps/web/tests/e2e/docs-drive.spec.ts`. Mobile: the native Docs surface has **no journey yet** — a gap under #781, not a skip.
-- **Structural exclusions** (`tests/matrix.json#appEngines`, citing [engine contracts](../blueprint-seats.md#engine-contracts)): triage (no shipped correction-proposal queue) and search scaffold (Docs does not consume it; its FTS search is its own query). All other engine cells pass through the canonical conformance gates.
+- **Structural exclusions** (`tests/claims.json#appEngines`, citing [engine contracts](../blueprint-seats.md#engine-contracts)): triage (no shipped correction-proposal queue) and search scaffold (Docs does not consume it; its FTS search is its own query). All other engine cells pass through the canonical conformance gates.
 
 `U` is a pure/unit test, `C` a component test, `E` a named Playwright journey. A row owns one cheapest falsifying layer; `U + E` is intentional only where the claims differ.
 

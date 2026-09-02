@@ -22,13 +22,14 @@ const requiredFlowScripts = [
   "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs",
   "tests/agent-e2e-pairing/flows/cross-network-relay.mjs",
   "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs",
-  // #890 W4 — iOS is the depth platform and owns its own runner. The Android
-  // roster's runners are invoked from the committed emulator script rather
-  // than from this YAML (the action executes `script:`), so they are checked
-  // by scripts/lint-e2e-wiring.mjs against the shipped roster instead; that
+  // #890 W4 / #915 Wave 2 — the iOS lane's roster-runner invocation is in
+  // this YAML (`run-roster.mjs --rung 4 --platform ios`). The Android lanes
+  // invoke the same runner from the committed emulator script rather than
+  // from this YAML (the action executes `script:`), so they are checked by
+  // scripts/lint-e2e-wiring.mjs against the shipped roster instead; that
   // linter reads the script the lane hands off to and is the general form of
   // the rule this list encodes for the pairing lanes.
-  "tests/agent-e2e-mobile/run-ios-depth-suite.mjs",
+  "tests/agent-e2e-mobile/run-roster.mjs",
 ];
 
 const requiredJobs = [
@@ -454,7 +455,7 @@ try {
 }
 
 // --- Rig budget registry completeness (#656 Layer 1F) ----------------------
-// `tests/quality-rig-budgets.json` documented 9 of the 24 committed rigs and
+// `tests/budgets.json#qualityRigs` documented 9 of the 24 committed rigs and
 // nothing read it, so it drifted silently for two milestones. Making it
 // exhaustive is only durable if something fails when it stops being
 // exhaustive — that is this block. A new rig must declare its lane and volume;
@@ -465,8 +466,8 @@ const LANES = [
 ];
 
 const budgets = JSON.parse(
-  await readFile(path.join(root, "tests/quality-rig-budgets.json"), "utf8")
-);
+  await readFile(path.join(root, "tests/budgets.json"), "utf8")
+).qualityRigs;
 const registered = new Set(Object.keys(budgets.rigs ?? {}));
 
 // Read every lane directory and every rig source up front: the checks below are
@@ -504,25 +505,25 @@ for (const { lane, key, source } of rigs) {
     registered.delete(key);
     if (entry.lane !== lane)
       errors.push(
-        `tests/quality-rig-budgets.json entry ${key} declares lane "${entry.lane}" but lives in tests/${lane}`
+        `tests/budgets.json#qualityRigs entry ${key} declares lane "${entry.lane}" but lives in tests/${lane}`
       );
     if (typeof entry.volume !== "string" || entry.volume.trim() === "")
       errors.push(
-        `tests/quality-rig-budgets.json entry ${key} needs a non-empty volume descriptor`
+        `tests/budgets.json#qualityRigs entry ${key} needs a non-empty volume descriptor`
       );
     if ("budgetMs" in entry && !(entry.budgetMs > 0))
       errors.push(
-        `tests/quality-rig-budgets.json entry ${key} has a non-positive budgetMs`
+        `tests/budgets.json#qualityRigs entry ${key} has a non-positive budgetMs`
       );
   } else {
     errors.push(
-      `tests/quality-rig-budgets.json has no entry for rig ${key} (declare its lane and volume)`
+      `tests/budgets.json#qualityRigs has no entry for rig ${key} (declare its lane and volume)`
     );
   }
   // A rig that inlines its own absolute ceiling is invisible to test:ratchet.
   if (/^const BUDGET_MS\s*=\s*[\d_]+/mu.test(source))
     errors.push(
-      `${key} inlines a numeric BUDGET_MS — declare budgetMs in tests/quality-rig-budgets.json and read it with rigBudgetMs(OWNER) so the ratchet sees it`
+      `${key} inlines a numeric BUDGET_MS — declare budgetMs in tests/budgets.json#qualityRigs and read it with rigBudgetMs(OWNER) so the ratchet sees it`
     );
   // #659 R4 — every rig must consume its own history. An absolute ceiling set
   // at ~3x a baseline only fires on a collapse: before this rule, a rig could
@@ -540,12 +541,69 @@ for (const { lane, key, source } of rigs) {
     );
 }
 
+// ---------------------------------------------------------------------------
+// #915 Wave 3 — every rung 2–5 lane writes evidence.
+//
+// The report is a pure function of `artifacts/evidence/`, so a lane job with no
+// `Write lane evidence` step is a lane the page cannot see: it renders as
+// `no evidence` forever and nobody can tell that from a lane that genuinely did
+// not run. The registry in `tests/claims.json#lanes` is the list of lanes the
+// page has a row for; this rule holds every one of them that names a job in a
+// workflow to actually carrying the step. The converse direction — a step
+// naming an UNREGISTERED lane — is `bun run lint:evidence-mapping`, which runs
+// on rung 2 so an unmapped file fails a PR rather than becoming a banner.
+const claimsLanes = JSON.parse(
+  await readFile(path.join(root, "tests/claims.json"), "utf8")
+).lanes;
+const EVIDENCE_STEP = /- name: Write lane evidence/u;
+/** Where each registered lane's job is defined, and whether it writes evidence. */
+const laneWiring = new Map(
+  claimsLanes.map((lane) => [lane.id, { lane, jobs: [], wired: false }])
+);
+for (const { file, source } of allWorkflows) {
+  const code = source
+    .split("\n")
+    .map((line) => line.replace(/(?<lead>^|\s)#.*$/u, ""))
+    .join("\n");
+  for (const entry of laneWiring.values()) {
+    const header = new RegExp(
+      `^  ${entry.lane.id.replaceAll(".", "\\.")}:\\s*$`,
+      "mu"
+    );
+    const at = header.exec(code);
+    if (!at) continue;
+    const after = at.index + at[0].length;
+    const next = code.slice(after).search(/\n {2}\S[^\n]*:/u);
+    const block = code.slice(at.index, next === -1 ? undefined : after + next);
+    entry.jobs.push(file);
+    // A caller job (`uses:` a reusable workflow) has no `steps:` of its own; its
+    // evidence is written by the calling workflow's aggregate step instead.
+    if (/^\s+uses:/mu.test(block) && !/^\s+steps:/mu.test(block))
+      entry.wired = true;
+    if (EVIDENCE_STEP.test(block)) entry.wired = true;
+  }
+  // A lane whose evidence is written from a loop over reusable-workflow results
+  // counts as wired wherever that loop names it.
+  for (const match of code.matchAll(
+    /"(?<lane>[a-z0-9][a-z0-9._-]*):\$\{\{ needs\./gu
+  )) {
+    const entry = laneWiring.get(match.groups.lane);
+    if (entry) entry.wired = true;
+  }
+}
+for (const { lane, jobs, wired } of laneWiring.values()) {
+  if (jobs.length === 0 || wired) continue;
+  errors.push(
+    `${jobs.join(", ")}: job \`${lane.id}\` is a registered rung-${lane.rung} lane with no \`Write lane evidence\` step — the report would render it as no evidence every night`
+  );
+}
+
 // Non-vitest rigs (the mobile on-device flow) may stay registered as long as
 // the file they name still exists.
 for (const { rig, present } of orphanChecks) {
   if (!present && registered.has(rig))
     errors.push(
-      `tests/quality-rig-budgets.json registers ${rig}, which no longer exists`
+      `tests/budgets.json#qualityRigs registers ${rig}, which no longer exists`
     );
 }
 

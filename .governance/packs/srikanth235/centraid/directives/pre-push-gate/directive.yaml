@@ -2,8 +2,9 @@
 category: Repo hygiene
 recommended: true
 summary: |
-  Every push that creates or updates a ref runs `bun run check:pr`, the
-  local superset of the CI `static` job. Deletes and no-op pushes are
+  Every push that creates or updates a ref runs `bun run check:push` (17 gate
+  names since #915 Wave 4), plus the two repo-wide governance directives
+  `.githooks/pre-commit` defers to this rung. Deletes and no-op pushes are
   exempt.
 
   AGENTS.md has said "before every `git push` to a PR, agents must run
@@ -13,10 +14,11 @@ summary: |
   written and already fast; this directive is only the wiring that makes
   running them the default instead of the diligent thing.
 
-  Budget is roughly 90s of static gates plus whatever `test:affected` has
-  not already cached, measured against a 12.3-minute CI round trip. If that
-  trade is wrong for a particular push — a WIP branch, a docs typo, a
-  throwaway spike — `SKIP_CHECK_PR=1 git push` opts out of this directive
-  alone, and CI still enforces.
+  Budget is whatever `test:affected` has not already cached — every other
+  gate finishes inside that window — plus the ~86s of deferred repo-wide
+  directives, measured against a 12.3-minute CI round trip. If that trade is
+  wrong for a particular push — a WIP branch, a docs typo, a throwaway spike —
+  `SKIP_CHECK_PR=1 git push` opts out of this directive alone (the deferred
+  directives still run), and CI still enforces.
 surface: repo-state
 hook: pre-push

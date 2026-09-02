@@ -12,12 +12,12 @@
  * must carry an ENV GUARD (`skipIf(predicate)` or a runtime `t.skip`), which
  * makes it honest at runtime everywhere — red becomes a visible, reported skip
  * — and the guard site must be inventoried HERE, which makes the class
- * visible: `tests/env-red.json` records the environment predicate, the guard
+ * visible: `tests/inventory.json#envRed` records the environment predicate, the guard
  * mechanism, an open issue, and an expiry or revisit trigger, under a
  * down-only budget.
  *
  * The guard site itself is also a skip site, so it independently lands in
- * `tests/skips.json` — that budget counts holes; this one records WHY the hole
+ * `tests/inventory.json#skips` — that budget counts holes; this one records WHY the hole
  * is environment-shaped and when to look again. What no static scan can find
  * is the UNguarded instance (G4's chmod named no platform or uid), so the
  * contract is: the moment such a red is diagnosed, the fix is either an
@@ -28,9 +28,14 @@
  * for skips.
  */
 
-import { glob, readFile, writeFile } from "node:fs/promises";
+import { glob, readFile } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  INVENTORY_PATH,
+  readLedgerSection,
+  writeLedgerSection,
+} from "../check-ledgers.mjs";
 import { parseDay } from "./quarantine.mjs";
 import { SCAN_EXCLUDE, SCAN_INCLUDE } from "./skip-inventory.mjs";
 
@@ -254,7 +259,7 @@ export function validateEnvRedInventory(
 
   const budget = inventory?._budget;
   if (!Number.isInteger(budget)) {
-    errors.push("tests/env-red.json has no integer _budget");
+    errors.push("tests/inventory.json#envRed has no integer _budget");
   } else if (sites.length > budget) {
     errors.push(
       `env-red budget exceeded: ${sites.length} guard sites against a budget of ${budget}. The budget is down-only — make a test environment-independent instead of raising it.`
@@ -299,24 +304,21 @@ export function reconcileInventory(inventory, sites) {
 
 async function main() {
   const write = process.argv.includes("--write");
-  const inventoryPath = path.join(root, "tests/env-red.json");
   const { sites, sources } = await discoverEnvGuardSites({ root });
-  let inventory;
-  try {
-    inventory = JSON.parse(await readFile(inventoryPath, "utf8"));
-  } catch {
-    inventory = { _budget: sites.length, sites: {} };
-  }
+  const inventory = readLedgerSection(INVENTORY_PATH, "envRed", root) ?? {
+    _budget: sites.length,
+    sites: {},
+  };
   if (write) {
     const next = reconcileInventory(inventory, sites);
-    await writeFile(inventoryPath, `${JSON.stringify(next, null, 2)}\n`);
+    writeLedgerSection(INVENTORY_PATH, "envRed", next, root);
     console.log(
-      `env-red: wrote ${sites.length} sites (budget ${next._budget}) to tests/env-red.json`
+      `env-red: wrote ${sites.length} sites (budget ${next._budget}) to ${INVENTORY_PATH}#envRed`
     );
     return;
   }
   const matrix = JSON.parse(
-    await readFile(path.join(root, "tests/matrix.json"), "utf8")
+    await readFile(path.join(root, "tests/claims.json"), "utf8")
   );
   const { errors, warnings, count } = validateEnvRedInventory(
     inventory,

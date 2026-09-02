@@ -4,9 +4,9 @@
 
 **Goal:** prove that the phone can compile a share from the one subject it is allowed to share, that the sheet which compiles it opens, and that the surface where a person becomes reachable loads — with the offline half asserting that the verb is withheld and says why, rather than offered and refused.
 
-Sharing had no mobile-owned journey. Between [#831](https://github.com/srikanth235/centraid/issues/831) and the v17 rebuild ([#872](https://github.com/srikanth235/centraid/issues/872)) no mobile seat could share at all, and nothing on this layer would have noticed: the mobile journeys covered reading, recording and the Locker gate, and the sharing rows in `tests/matrix.json` were owned by desktop (`household.spec.ts`) and the gateway (`owners-routes.test.ts`). This flow is the mobile row.
+Sharing had no mobile-owned journey. Between [#831](https://github.com/srikanth235/centraid/issues/831) and the v17 rebuild ([#872](https://github.com/srikanth235/centraid/issues/872)) no mobile seat could share at all, and nothing on this layer would have noticed: the mobile journeys covered reading, recording and the Locker gate, and the sharing rows in `tests/claims.json` were owned by desktop (`household.spec.ts`) and the gateway (`owners-routes.test.ts`). This flow is the mobile row.
 
-**Setup:** install a development build, start Metro, and expose a reachable gateway through `MAESTRO_GATEWAY_URL`. The flow seeds the Tally demo scenario (`ctx.ensureDemo("tally")`) because a group is the subject being shared, then pairs with `ctx.configureGateway()`. It runs standalone rather than inside `run-home-apps-suite.mjs`: it restarts the app twice and, on Android, takes the device offline, neither of which belongs in a suite whose later members reuse one paired profile and one continuous session.
+**Setup:** install a development build, start Metro, and expose a reachable gateway through `MAESTRO_GATEWAY_URL`. The flow seeds the Tally demo scenario (`ctx.ensureDemo("tally")`) because a group is the subject being shared, then pairs with `ctx.configureGateway()`. It runs in its own `sharing` suite rather than inside `home-apps`: it restarts the app twice and, on Android, takes the device offline, neither of which belongs in a suite whose later members reuse one paired profile and one continuous session.
 
 **Automated steps:**
 

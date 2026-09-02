@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "candidate": "f5ca34fb6deadbeef0000000000000000000000",
+  "startedAt": "2026-09-02T06:00:00Z",
+  "finishedAt": "2026-09-02T06:40:00Z",
+  "budgetMs": 900000,
+  "durationMs": 228000,
+  "cases": [
+    {
+      "id": "connect",
+      "verdict": "passed",
+      "durationMs": 22000,
+      "attempts": 1
+    }
+  ],
+  "parked": null,
+  "tags": {
+    "qualities": ["journey", "accessibility"],
+    "surfaces": ["web-pwa"]
+  },
+  "lane": "web-e2e",
+  "rung": 4,
+  "platform": "web",
+  "verdict": "failed"
+}

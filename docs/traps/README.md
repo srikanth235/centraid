@@ -15,3 +15,5 @@ Read the matching trap before working near its area; each one was paid for once.
 | [emulator-snapshot-settings.md](emulator-snapshot-settings.md) | `settings put global` on a lane that restores a cached AVD RAM snapshot |
 | [list-anchoring.md](list-anchoring.md) | Virtualized lists that hide rows arriving from another device |
 | [unreachable-vault.md](unreachable-vault.md) | A gateway that stops answering while the phone stays online |
+| [lane-evidence.md](lane-evidence.md) | Why a green lane can vanish from the nightly report: upload path, `if: always()`, and the lane registry |
+| [ios-shell-injection.md](ios-shell-injection.md) | Re-using a cached iOS `.app` across commits: `expo export:embed` emits SOURCE, and a Hermes app runs it |

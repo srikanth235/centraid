@@ -6,7 +6,7 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 - **Seat class**: `byte-bearing` via attachments; notes themselves are records with optional blobs.
 - **Graduation issue**: none yet — rides the blended floor; write-path holes tracked under [#864](https://github.com/srikanth235/centraid/issues/864).
 - **Journey ownership**: origin `tests/agent-e2e-mobile/flows/notes-library.mjs`; custodian `apps/desktop/tests/e2e/notes.spec.ts`; viewer `apps/web/tests/e2e/notes.spec.ts`.
-- **Structural exclusions**: see `tests/matrix.json#appEngines`.
+- **Structural exclusions**: see `tests/claims.json#appEngines`.
 
 | Notes scenario | U | C | E | Owner / evidence |
 | --- | --- | --- | --- | --- |

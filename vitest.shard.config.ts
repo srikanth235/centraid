@@ -15,7 +15,7 @@ import {
 //
 // THE ONE DIFFERENCE FROM THE ROOT CONFIG IS THE ABSENCE OF `thresholds`, AND IT
 // IS LOAD-BEARING. A shard sees only its slice of the test universe, so every
-// floor in tests/coverage-floors.json would fail against it — `packages/cli/**`
+// floor in tests/floors.json#coverage would fail against it — `packages/cli/**`
 // measures 0% on the shard that happens to hold no CLI tests. Evaluating floors
 // per shard would therefore either red every run or force the floors down to
 // meaninglessness. They are evaluated exactly once, on the merged report, which

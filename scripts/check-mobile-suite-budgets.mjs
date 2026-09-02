@@ -23,18 +23,30 @@
 //
 // It is a NO-OP until the ledger has data, deliberately: seeding a ratchet from
 // zero samples would pin the derived guesses as if they were measurements, which
-// is the failure `tests/mutation-floors.json` records as its own worst case.
+// is the failure `tests/floors.json#mutation` records as its own worst case.
+//
+// WHERE THE NUMBERS LIVE NOW (#915 Wave 2). They used to be a `const BUDGET_MS`
+// literal in each of seven `run-*-suite.mjs` files, which this script read back
+// off disk by regex. They are `roster.json`'s `suites[*].budgetMs` — the same
+// numbers, one document, beside the members they price and the rung they run on.
+// The ratchet is unchanged and so is its asymmetry; what changed is that the
+// merge-base read has to cross that move, and a suite RENAME. Both are handled
+// by `baseBudgetMs`: it looks for the suite in the merge base's roster, then for
+// the suite it `supersedes`, then for the `run-<id>-suite.mjs` literal the suite
+// used to be. A ceiling cannot be laundered by moving it or by renaming it.
 
 import { execFileSync } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
+
+import { loadRoster } from "../tests/agent-e2e-mobile/lib/roster.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const MOBILE_DIR = "tests/agent-e2e-mobile";
 const LEDGER_PATH = `${MOBILE_DIR}/ledger/durations.json`;
 
 // Three real runs, matching what every #890 budget doc promises and what
-// tests/coverage-floors.json's `sustainedRuns` already uses for the same
+// tests/floors.json#coverage's `sustainedRuns` already uses for the same
 // question: how many observations before a number stops being an anecdote.
 const MIN_SAMPLES = 3;
 // A budget may sit at most 1.5x above the observed p95. Wide enough that a
@@ -43,30 +55,20 @@ const MIN_SAMPLES = 3;
 // (`rigDriftBudgetMs`), because it answers the same question.
 const SLACK = 1.5;
 
-/** `{ name, budgetMs, flows }` for every committed suite runner. */
-export function readRunners(root = ROOT) {
-  const dir = path.resolve(root, MOBILE_DIR);
-  return readdirSync(dir)
-    .filter((name) => /^run-[\w.-]+\.mjs$/u.test(name))
-    .sort()
-    .map((name) => {
-      const source = readFileSync(path.join(dir, name), "utf8");
-      const budget = /^const BUDGET_MS = (?<minutes>[\d_]+) \* 60_000/mu.exec(
-        source
-      );
-      const flows = /^const FLOWS\s*=\s*\[(?<body>[\s\S]*?)\]/mu.exec(source);
-      return {
-        file: `${MOBILE_DIR}/${name}`,
-        budgetMs: budget
-          ? Number(budget.groups.minutes.replaceAll("_", "")) * 60_000
-          : null,
-        flows: flows
-          ? [
-              ...flows.groups.body.matchAll(/["'](?<flow>[\w.-]+\.mjs)["']/gu),
-            ].map((m) => m.groups.flow)
-          : [],
-      };
-    });
+/** `{ file, budgetMs, flows }` for every suite the roster declares.
+ *
+ * `file` is the roster path rather than a runner path: it is what a failure
+ * message tells the reader to edit, and there is no longer a per-suite file to
+ * name. The shape is otherwise unchanged, so `checkBudgets` and its self-test
+ * did not have to move with the data. */
+export function readSuites(roster = loadRoster()) {
+  return Object.entries(roster.suites ?? {}).map(([id, spec]) => ({
+    id,
+    file: `${MOBILE_DIR}/roster.json#suites.${id}`,
+    budgetMs: typeof spec.budgetMs === "number" ? spec.budgetMs : null,
+    flows: spec.flows ?? [],
+    supersedes: spec.supersedes,
+  }));
 }
 
 /** Nearest-rank p95 — the same definition `lib/run-ledger.mjs` uses. */
@@ -105,25 +107,58 @@ export function groupByFlow(ledger) {
   return byFlow;
 }
 
-/** The previous BUDGET_MS for a runner on the merge base, or null when the file
- * is new or no base ref resolves (a fresh clone, a detached CI checkout). */
-function baseBudgetMs(file) {
+/** Read one file at a ref, or `undefined` when it is not there. */
+function showAt(ref, file) {
+  try {
+    return execFileSync("git", ["show", `${ref}:${file}`], {
+      cwd: ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    // A missing file on the base is a new suite, not an error.
+    return undefined;
+  }
+}
+
+/**
+ * The previous ceiling for a suite on the merge base, or `null` when the suite
+ * is new (or no base ref resolves — a fresh clone, a detached CI checkout).
+ *
+ * THREE places, in order, because the number moved and one suite was renamed
+ * (#915 Wave 2). Reading only the first would let a rename reset a ratchet to
+ * "new suite, no base", which is the one move that always works and always
+ * costs the gate its meaning — the same thing RULE tighten-only exists to
+ * refuse.
+ */
+export function baseBudgetMs(suite, supersedes, show = showAt) {
   for (const ref of ["origin/main", "main"]) {
-    try {
-      const source = execFileSync("git", ["show", `${ref}:${file}`], {
-        cwd: ROOT,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      });
-      const match = /^const BUDGET_MS = (?<minutes>[\d_]+) \* 60_000/mu.exec(
-        source
-      );
-      return match
-        ? Number(match.groups.minutes.replaceAll("_", "")) * 60_000
-        : null;
-    } catch {
-      // Try the next ref; a missing file on the base is a new suite, not an error.
+    const roster = show(ref, `${MOBILE_DIR}/roster.json`);
+    if (roster) {
+      const parsed = JSON.parse(roster);
+      const base = parsed.suites?.[suite]?.budgetMs;
+      if (typeof base === "number") return base;
+      const inherited = supersedes && parsed.suites?.[supersedes]?.budgetMs;
+      if (typeof inherited === "number") return inherited;
     }
+    // Two spellings, because the suite id and the retired file name only
+    // sometimes agree: `pr-gate` lived in `run-pr-gate-suite.mjs` while
+    // `probes-suite` lived in `run-probes-suite.mjs`.
+    const candidates = [suite, supersedes]
+      .filter(Boolean)
+      .flatMap((id) => [`run-${id}-suite.mjs`, `run-${id}.mjs`]);
+    for (const candidate of candidates) {
+      const source = show(ref, `${MOBILE_DIR}/${candidate}`);
+      const match =
+        source &&
+        /^const BUDGET_MS = (?<minutes>[\d_]+) \* 60_000/mu.exec(source);
+      if (match)
+        return Number(match.groups.minutes.replaceAll("_", "")) * 60_000;
+    }
+    // Deliberately NO early return when this ref merely resolved: a shallow or
+    // stale `origin/main` that happens to predate the suite would otherwise
+    // report "new suite, no base" and hand back the ratchet. Only running out
+    // of refs means there is no base.
   }
   return null;
 }
@@ -133,15 +168,15 @@ export function checkBudgets({ runners, byFlow, baseOf }) {
   for (const runner of runners) {
     if (runner.budgetMs == null) {
       findings.push(
-        `${runner.file} declares no BUDGET_MS. Every suite owes an aggregate ceiling — ` +
+        `${runner.file} declares no budgetMs. Every suite owes an aggregate ceiling — ` +
           `a roster nothing prices is a roster that can grow without anyone deciding to spend it.`
       );
       continue;
     }
-    const base = baseOf(runner.file);
+    const base = baseOf(runner.id ?? runner.file, runner.supersedes);
     if (base != null && runner.budgetMs > base) {
       findings.push(
-        `${runner.file} raises BUDGET_MS from ${base / 60_000} to ${runner.budgetMs / 60_000} ` +
+        `${runner.file} raises budgetMs from ${base / 60_000} to ${runner.budgetMs / 60_000} ` +
           `minutes. These ceilings are TIGHTEN-ONLY: a slow lane is fixed by moving a claim ` +
           `down a tier or batching its chunks, never by widening the number that was supposed ` +
           `to notice.`
@@ -224,10 +259,10 @@ function selfTest() {
 
 function main() {
   selfTest();
-  const runners = readRunners();
+  const runners = readSuites();
   if (runners.length === 0) {
     console.error(
-      `\nFAIL — found zero suite runners under ${MOBILE_DIR}. The roster moved or was deleted.\n`
+      `\nFAIL — ${MOBILE_DIR}/roster.json declares zero suites. The roster moved or was deleted.\n`
     );
     process.exit(1);
   }
@@ -249,7 +284,7 @@ function main() {
     (r) => observedSuiteMs(r, byFlow) != null
   ).length;
   console.log(
-    `ok   mobile-suite-budgets — ${runners.length} suite(s), tighten-only; ` +
+    `ok   mobile-suite-budgets — ${runners.length} suite(s) from roster.json, tighten-only; ` +
       `${measured} measured against ledger p95, ${runners.length - measured} still on the ` +
       `derived ceiling their budget doc admits to`
   );
