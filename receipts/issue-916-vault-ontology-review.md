@@ -127,6 +127,19 @@ Receipt, independent audit, and the repo-wide gates (W4) — the audit returned 
 - **F3 — revoke-on-purge covers every principal that is a row.** The principal clause of `core_entity_revoke_on_purge` was gated on `principal_kind = 'person'`, so deleting a circle — which `commands/tally.ts`'s `tally.delete_group` and `share/removal.ts` both do outright — left the answers its members hold through it LIVE, naming an audience that no longer exists. The clause is generated from `PRINCIPAL_ENTITY_KINDS` (`schema/authority.ts`) now, which maps `person → core.party` and `circle → social.circle`; `harness` and `device` are the two kinds that are not rows (an engine class, and an access-plane row that is machinery rather than an ontology pack, so no `core_entity` row exists to purge), and they are declared as such in `NON_ENTITY_PRINCIPAL_KINDS`. `ontology-shape.test.ts` holds the table's own `principal_kind` CHECK to being exactly the union of those two sets, so a fifth kind cannot be added without answering this question, and pins the circle purge end to end.
 - **F4 — the `verify` CI job's perf lane never ran.** `packages/server/scripts/bench-low-end.mjs` sent `ontology_version: "1.3"` in both of its `core.party` insert bodies. ONT-04 dropped `core_party.ontology_version` (the ontology version is a property of a command — `agent_command.ontology_version` — never of a row), so the gateway answered `400 table core_party has no column named ontology_version` and the harness threw `warmup write failed` before measuring anything. Both lines are deleted; nothing replaces them, because the column is gone rather than renamed.
 
+## User impact
+
+Almost all of this wave is under the floor: a member sees the same screens, and the point of the schema work is that they keep working. Three things do reach the surface, and one of them is visible.
+
+**The star.** `media_asset.favorite` was a mirrored column; the star is a flags-scheme tag on the asset now (ONT-star), the same scheme Docs, Locker and People already read, each anchored on its own subject. A member stars a photograph exactly as before — the action still speaks its `0`/`1` integer — but the heart in the grid is derived from a `core.tag` row rather than read off the asset. The risk this carries is precisely that the read stops answering while the write keeps succeeding, so `apps/desktop/tests/e2e/photos.spec.ts` stars a photo, reloads the app, and asserts the star comes back **through the real library projection** rather than by inspecting the tag row: a unit test on the row would pass even if nothing reached the grid.
+
+![Photos grid with a starred photograph, drawn from the flags-scheme tag](artifacts/e2e/ui-impact/issue-916-photos-star.png)
+
+**First-run:** nothing to do, and nothing to see. A vault founded on this baseline mints the flags scheme and its `starred` concept the first time something is starred, so a brand-new vault shows an empty grid with no stars and no scheme rows — the absence is an honest "nothing is starred", never an error. There is no migration and no first-run prompt: v0 has no vaults in the field, and a pre-#916 vault directory is refused by `openVaultDb` as an old-format install (see **Out of scope**) rather than upgraded.
+
+**Locker's password history is not reachable.** `locker.item_history` is dropped and its rotation record lives in a `core_entity_revision` snapshot, but the Locker blueprint's readers were not ported with it. Until they are, that pane queries a table that no longer exists. This is the wave's one user-visible regression and it is open, not fixed — tracked in `## Still red / not run` rather than claimed here.
+
+
 ## Out of scope
 
 - **`social.thread` / `social.message`.** They stay: the O-domains test asks for a writer, and messaging has one. Nothing was built on top of them here.

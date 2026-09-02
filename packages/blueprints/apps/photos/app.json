@@ -120,7 +120,7 @@
     },
     {
       "name": "update-asset",
-      "description": "Recaption a photo, fix its capture time, or toggle its favorite heart or its archived flag through media.update_asset (the title lives on the content item; favorite and archived live on the asset — archiving hides a photo from the timeline without trashing it).",
+      "description": "Recaption a photo, fix its capture time, or toggle its favorite heart or its archived flag through media.update_asset (the title lives on the content item, the star is a flags-scheme tag on the asset rather than a column of its own, and archived lives on the asset — archiving hides a photo from the timeline without trashing it).",
       "confirmation": "none",
       "input": {
         "type": "object",
