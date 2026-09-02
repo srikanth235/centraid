@@ -806,6 +806,17 @@ regressions; both are now fixed at the source rather than left to re-run.
 Both files burn in 3/3 in isolation, and `bun run typecheck` is green across
 all 25 packages.
 
+**The `check` aggregator was red for a third reason, and it was the ladder's
+own.** `check` has no `actions/checkout`, and the rung-2 wall-clock step added
+here runs `node scripts/ci/pr-gate-wall-clock.mjs` — so every `check` since the
+first push died on `MODULE_NOT_FOUND`, immediately after its aggregate step had
+counted nineteen green lanes. The job read red while everything it aggregates
+was green, and the budget the step exists to enforce was never measured once:
+precisely the "a gate that never looked" failure this issue is about, shipped
+inside the fix for it. `.github/workflows/ci.yml` now checks out between the
+two steps. A sweep of every workflow job for the same shape — a `run:` that
+invokes a repo script from a job with no checkout — finds no second instance.
+
 ## Audit
 
 **Verdict: PASS**

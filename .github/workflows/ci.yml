@@ -1849,6 +1849,14 @@ jobs:
       # at ~26 min against a docs claim of 12.3 and nothing could have noticed.
       # `if: always()` so a red gate is still weighed — a slow red gate is worse
       # than a slow green one, not exempt from the budget.
+      # The script lives in the repo and this aggregator had no checkout, so
+      # every `check` since the ladder landed died on MODULE_NOT_FOUND right
+      # after the aggregate step passed: the job read red while every lane it
+      # aggregates was green, and the budget it exists to enforce was never
+      # measured once. Checked out here rather than at the top of the job so
+      # the aggregate step above still runs against a bare runner.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: always()
       - name: PR gate wall clock
         if: always()
         env:
