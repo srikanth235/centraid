@@ -289,3 +289,133 @@ What was verified and holds (recorded so the re-do does not re-litigate it):
 - One-hop bound: stated in the module header and in the test's `oneHopImports` doc. Enumerated depth-2+ reachable files myself — only `apps/_shared/format-kit.ts`, `apps/notes/filing.ts`, `apps/notes/types.ts`; none contains an `entity:` or `command:` reference, so nothing an app uses today falls outside the bound.
 
 Gates run: `bun run format` (5354 files, `git diff --stat` empty after); root `bun run lint` clean; `bun run --cwd packages/blueprints test` → 207 files, 6597 passed | 2 expected fail; `bun run --cwd packages/blueprints typecheck` clean; `bun run test:claims` → 45 claims, 48 lanes, 193 derived flows; `bun run lint:law-registry` → 49 laws, 83 tag sites; `bun run --cwd packages/server test -- manifest-scope-denial` → 4 files, 99 passed | 3 expected fail; `bash .governance/run.sh` → 20 passed, `repo-hygiene` (`locker/queries.test.ts` 638 lines) and `receipt-per-issue` (this section) the only reds, the first pre-existing on `origin/main`; `bun run lint:ledgers` / `bun run test:ratchet` red only on the pre-existing "unknown predecessor schema-migration-corpus" — neither names the new floor.
+
+## w1c — the automation principal kind in the schema
+
+Execution-plan wave 1(c). The one authority plane **accepts** an automation answer; nothing writes one. Wave 3 is its writer, and the point of accepting it a wave early is that wave 3 lands without touching the schema, the registry, the CHECK vocabulary or either dashboard. **Nothing is ticked above** — accepting a value in a CHECK is not, on its own, any of #928's acceptance criteria.
+
+### What changed
+
+- **`packages/vault/src/schema/authority.ts`** — `automation` added to the `principal_kind` CHECK, with the comment naming its writer (`#928 wave 3 writes it`) so a value with no producer is not mistaken for a dormant mechanism, and naming why `app` is absent (first-party apps are not principals, #928 A1; a third-party door would be a new answer, not a new value). `automation` joins `NON_ENTITY_PRINCIPAL_KINDS`, not `PRINCIPAL_ENTITY_KINDS`: **an automation is not a vault entity**. Its canonical id is the manifest ref `<app_id>/<automation_id>` minted by `packages/server/src/automation/manifest/ref.ts`; the only thing keyed by it in the vault is `automation_state` / `automation_trigger_cursor` in the ledger band, keyed by that text with no foreign key, and there is no `agent`-plane or `gateway.db` row for an automation at all. So it carries the same reasoning `harness` and `device` carry — no `core_entity` row to purge — and the generated `core_entity_revoke_on_purge` clause in `schema/entity.ts` is deliberately unchanged, because there is no purge event to answer for.
+- The `granted_by` CHECK (`granted_by IS NOT NULL OR principal_kind IN ('harness','device')`) is **not** widened: the owner approves an automation's manifest, so a party always answered, and a row minted without one would be an automation that granted itself. The reason is written beside the CHECK.
+- **`packages/vault/src/grant/authority-registry.ts`** — `AuthorityPrincipalKind` gains `automation` (and `app` is documented as a type-level absence, never a triple that refuses); `AuthorityStrategy` gains `execution-clamp`; `enforcementLocus("automation")` is `local`, on the same argument as `harness` — an automation runs inside this vault's own engine, so the only thing that ever called it is the thing that stops calling it. Two triples are added, both `read`+`act`, both fulfilled by `execution-clamp`, both cited `#928 A3 over #883 V-registry`:
+  - `automation × agent.pack` — a whole command pack, `subject_id` being the pack/schema name, which is what a manifest scope with a `schema` and no `table` asks for;
+  - `automation × core.entity` — one entity type, `subject_id` being the dotted entity type, which is what a manifest scope with `schema` + `table` asks for.
+
+  An automation is answered about a **class** of rows, never one row, which is why the subject id is a type name rather than an entity id. `reveal` is absent by type: a sealed reveal is Locker's permit, not a standing grant (#873, and #750 for the same reason `locker.item` has no share triple). **No `app` triple is added.**
+- **`packages/vault/src/schema/ontology-shape.test.ts`** — the CHECK-vocabulary test (`accounts for every principal kind the table admits`) needed no edit: it derives the expected set from `PRINCIPAL_ENTITY_KINDS` + `NON_ENTITY_PRINCIPAL_KINDS`, so adding the kind to the map is what keeps the trigger's vocabulary and the table's from drifting. A new case inserts an `automation` answer (principal id `photos/dedupe`, subject `agent.pack media`, granted by the owner) and proves an `app` row and a `granted_by`-less automation row are both still refused by CHECK.
+- **`packages/vault/src/grant/authority-registry.test.ts`** — the automation triples enumerated verb by verb; `reveal` and `view` refused; `media.asset` carries no automation triple; `app` carries no triple at all for any subject type; `enforcementLocus("automation") === "local"`.
+- **`packages/vault/tests/golden/issue-916/manifest.json`** and **`packages/vault/tests/golden/issue-916/vault.db.gz`** — the golden corpus re-frozen under the same label, per the ONT-ladder ruling below, with the old corpus proven sound first.
+- **`docs/vault-ontology.md`** — R6's standing now states the plane's principal kinds, marks `automation` "accepted in #928 wave 1, written in wave 3", says what its id and subjects are, and says `app` is not among them and is not reserved as a value. The commitments table gains the **ONT-ladder** row: pre-1.0 with no release since the freeze, a baseline DDL change re-freezes the corpus in the same slice with the old corpus proven to open; the first change after a release adds a rung instead.
+
+**No new member copy was written.** `grant/phrases.ts` holds no principal-noun table to extend, and the per-locus revoke sentence an automation needs already exists and already reads correctly for it: `revokePromiseCopy("local")` is *"nothing here will call it again — this vault is the only thing that ever did"*. Adding an unused automation phrase would have been a promise with no producer, which is what #916 ONT-06 deleted four of.
+
+### Out of scope
+
+Wave 1c writes **no** automation row and deletes nothing. The **Access dashboard** is out of scope for this wave by decision (below), so `packages/client/src/access-lens.ts` and `packages/client/src/access-lens.test.ts` are unchanged. Also explicitly untouched: every prospective writer (`serve/vault-plane.ts`, `lifecycle/headless-automation-compile.ts` — wave 3), the migration script, `evaluateAccess` and everything under `access_*`, the assistant's standing grant, `grant_profile_json`, `outbox_grant`, and any `app`-kind triple. `docs/glossary.md` is w1a's and is untouched here. `packages/core/src/protocol/**` and `docs/protocol.md` are untouched because `principal_kind` is not on the wire as a typed union — the Access dashboard reads the authority rows out of the device replica, and the server's own SQL narrows to `principal_kind IN ('person','circle')` at every site (`serve/grant-fulfillment.ts`, `routes/edges-reconcile.ts`), so nothing there widens or breaks. `scripts/docs-site/src/content/ontology-body.html` is untouched because `ontology-doc.test.ts` compares column tuples (name, type, flags, references) and a widened CHECK adds no column and changes no flag.
+
+### Nothing deleted
+
+This slice is additive by design: a value with no writer, two registry triples, two tests, one doc row. No store, engine, rig or ruling is superseded by it, so there is nothing to delete beside a replacement.
+
+### The golden corpus: the OLD corpus proven sound, then re-frozen
+
+The widened CHECK made the frozen `share_authority` DDL text differ from a freshly founded vault's — no rung rewrites a table it did not name, and #916 ruled one baseline rung. **Before re-freezing, the evidence that matters was captured on the OLD, unmodified corpus:**
+
+```
+$ bun run --cwd packages/vault test -- --run src/golden-vault.test.ts --reporter=verbose
+ ✓ golden vaults > has at least one frozen corpus to open
+ ✓ golden vaults > issue-916 > opens under today's code and migrates forward
+ ✓ golden vaults > issue-916 > preserves every row the release froze
+ × golden vaults > issue-916 > carries the schema today's baseline builds
+   → table share_authority: frozen DDL differs from the baseline's
+ ✓ golden vaults > issue-916 > holds together structurally after migrating
+ Tests  1 failed | 4 passed (5)
+```
+
+So the pre-1.0 file **opens**, **migrates forward**, **preserves every frozen row** and is **doctor-clean**; only the DDL-equality case is red, which is the case the re-freeze exists for. After `bun run golden-vault:freeze -- --label issue-916` the same command is `5 passed (5)`, and the full package suite is green.
+
+The corpus diff against `origin/main` is `manifest.json` (115 insertions, 115 deletions) and `vault.db.gz` (125128 → 125125 bytes). **It is not only the DDL text, and that is a finding about the freeze script, not about this change** — see the decisions below. Structurally the corpus is unchanged, compared field by field against main's manifest: the same 67 tables, the same 288 rows, identical per-table row counts, identical primary keys, and 53 of the 67 tables digest-identical. The 14 that differ are the ones whose ids are minted by `uuidv7()` through the vault's own commands rather than by the script's seeded generator, so their ids — and every digest taken over them — move with the wall clock.
+
+### Decisions
+
+- **`automation` is a non-entity principal kind.** Established by reading, not assumed: there is no automation table in the vault's `agent` plane, none in `gateway.db`, and the only automation-keyed rows (`automation_state`, `automation_trigger_cursor`) key on the manifest ref as free text. So the revoke-on-purge trigger is deliberately left alone.
+- **Two subject types, `agent.pack` and `core.entity`.** #928's Decision A3 says an automation's answers are minted "per (pack or entity × read|act)"; a manifest scope is `{schema, table?, verbs}`, so a scope with no table is a pack and a scope with one is an entity type. Spelled in the registry's existing dotted style (`core.vault`, `enrich.scope`), with the *type name* as `subject_id` because the answer is about a class of rows. **Accepted by the umbrella owner, with the note that wave 3 may rename either subject type before the first row is written** — nothing writes them yet, so the rename costs one edit; after wave 3's first row it costs a migration.
+- **ONT-ladder — how a baseline DDL change is reconciled with the frozen corpus.** **Pre-1.0, with no release since the freeze**: change the baseline in place and **re-freeze the corpus in the same slice**, after proving the OLD corpus opens, migrates forward, keeps every row and is doctor-clean. **The first change after a release adds a rung instead**, because a corpus a release shipped is the only evidence a rung works, and regenerating it would erase the thing under test. The `issue-916` corpus is one day old and from the same pre-release tree, and `golden-vault.test.ts`'s own header already re-freezes for a retired column — a widened CHECK is the same class of DDL-text change. Ruled by the umbrella owner; recorded in `docs/vault-ontology.md`'s commitments table so the next slice does not re-litigate it.
+- **The Access dashboard's automation group waits for the wave that writes the first row.** The lens change was written and then reverted, on two grounds that agree. (i) **Gate**: `check:ui-receipt` treats any `packages/client/**` edit as user-facing and requires `## User impact`, a `First-run:` note and a screenshot emitted by a *changed* e2e harness under `artifacts/e2e/ui-impact/`. No automation row can exist before wave 3, so no such screenshot can be taken; naming a path for a screenshot nobody produced would be fabricated evidence, and the alternative — loosening the gate — is forbidden. (ii) **Product**: with no writer, the only visible effect on either seat is an "Automations" card reading "No standing answers here." — a section advertising something that cannot yet exist. Nothing is at risk in the meantime: `parseAnswer` drops a kind it does not know *by design* ("a drifted row is DROPPED, never half-drawn"), and there is nothing to drop. **Wave 3 must carry it**, and it is cheap and self-evident there: `AccessPrincipalKind` + `PRINCIPAL_KINDS` + one `GROUPS` entry (`automations` / "Automations" / locus `local` — its own group, not folded in with harnesses: an automation is a thing the owner approved by name, a harness is an engine class). Both renderers already draw a group generically, so neither needs a code change. Deferral **accepted by the umbrella owner**.
+- **No new phrase.** See "What changed" — the local revoke sentence already covers the kind, and `phrases.ts` has no principal-noun table to hold one.
+- **A value with no writer is admitted only because #928 wave 3 is its writer.** #916's rule is that every CHECK admits only what is written; this is a one-wave exception taken deliberately, named in the CHECK's own comment and in the doc, so that the wave which widens the model does not also have to widen the schema. If wave 3 does not land, the value is a finding.
+- **Finding: `scripts/golden-vault/build.mjs` is not deterministic, and its header says determinism "is the whole job".** Two consecutive freezes of the same label produce different corpora — verified directly by freezing twice in a row and diffing the manifests, which differ — because ids minted by `uuidv7()` inside the vault's own commands are clock-derived while only the script's own `seededIds` generator is seeded. The consequence is that a re-freeze cannot be reviewed as "only the DDL text moved"; the reviewer has to compare table sets, row counts and primary keys instead, as this section does above. Not fixed here — `scripts/` is outside this slice's contract, and the fix (thread the seeded generator through the command calls, or freeze a fixed clock) is a change to the freeze mechanism that deserves its own review. Filed for the umbrella owner.
+
+### Verification
+
+Host: 4 cores / 15 GB, this slice's own worktree. This section is **stacked on w1b**: the slice was verified first on `origin/main` at `e2f277da3` (which carries w1a, #930, #922's rulings and #927 w1-core), then rebased onto w1b's branch at `bf5a56b0f` to cut a CI round trip. Package suites are run **one at a time** — an earlier attempt ran the client and server suites concurrently and both were OOM-killed (`SIGKILL`), which is a host limit, not a result.
+
+Re-run on the w1b-based tree, since w1b touches `packages/blueprints/src/app-entity-tripwire*`, `tests/claims.json`, `tests/floors.json` and `tests/quality/classification-ratchet.json` — none of which this slice touches, and the two slices' only shared file is this receipt:
+
+```
+bun run format                              # oxfmt, 5355 files, clean
+bun run lint                                # oxlint --deny-warnings, clean
+bun run --cwd packages/vault typecheck      # clean
+bun run --cwd packages/vault build          # clean
+bun run --cwd packages/vault test           # 200 files, 1572 passed, 2 skipped, 0 failed
+bun run --cwd packages/blueprints typecheck # clean (w1b's tripwire reads the schema this slice widens)
+bash .governance/run.sh                     # 22 directives, all green
+```
+
+Run once on the `e2f277da3` tree and unaffected by w1b's four files:
+
+```
+bun run --cwd packages/server test -- --run \
+  src/serve/authz-deny-matrix.test.ts src/serve/authz-matrix.smoke.test.ts   # 2 files, 88 passed
+bun run lint:product                        # 39/39 product gates
+bun run --cwd packages/client typecheck     # clean
+bun run --cwd apps/mobile typecheck         # clean
+```
+
+The evidence the golden-corpus ruling rests on, captured before the re-freeze on the original tree:
+
+```
+bun run --cwd packages/vault test -- --run src/golden-vault.test.ts --reporter=verbose
+                                        # BEFORE the re-freeze: 4 passed, 1 failed (the proof, below)
+bun run golden-vault:freeze -- --label issue-916
+                                        # froze issue-916 — 67 table(s), 288 row(s), schema v1 (ontology 1.0)
+bun run --cwd packages/vault test -- --run src/golden-vault.test.ts --reporter=verbose
+                                        # AFTER the re-freeze: 5 passed, 0 failed
+```
+
+The named invariant suites are green: the authz deny matrix and `authz-matrix.smoke`, plus `gateway/access-properties.test.ts`, `schema/ontology-rules.test.ts`, `schema/ontology-doc.test.ts`, `schema/lifecycle.test.ts` and `schema/entity-refs.test.ts` inside the green vault package suite.
+
+Known reds NOT caused by this slice, each reproduced on an unmodified tree: `acp/backends/acp/launch.test.ts` fails twice because this container exports `IS_SANDBOX=yes` and the test asserts the value the launcher would set (`"1"` / `undefined`); `serve/gateway-db-lock.integration.test.ts` fails because the `sqlite3` CLI it shells out to is absent (a spawn failure, `status === null`); `test:qualities`'s `kill-mid-write.integration.test.ts` times out because the child gateway dies at `git commit … : unable to create temporary file`; `design:gallery` needs a Playwright chromium that is not installed here. No server file is touched by this slice.
+
+### Audit
+
+(verbatim from the fresh-context verifier, commit `a298263c`)
+
+Fresh-context verifier, wave 1c (`e9787c7d`, 8 files, +344/−122). Merge base `cf616a09a`; `origin/main` has since advanced to `5823f098d`.
+
+Verdict: PASS
+
+- **Diff ↔ receipt.** All 8 files in `git diff origin/main...HEAD` are named and described in `## What changed`; nothing described is absent. No scope creep: nothing outside the slice contract — `grant/phrases.ts`, `packages/core/src/protocol/**`, `docs/protocol.md`, `ontology-body.html`, `packages/client/**` and `apps/mobile/**` are untouched by the diff, as claimed.
+- **Checklist ↔ issue.** The 12 boxes are byte-identical to #928's acceptance criteria (diffed mechanically against the issue body); `grep -c '\- \[x\]'` is 0 — nothing ticked, correct for a slice that only accepts a value.
+- **CHECK behaviour, verified independently** of the worker's tests, against `dist/schema/authority.js` in a throwaway in-memory DB: `automation` + `granted_by='owner'` ACCEPTED; `automation` + `granted_by NULL` REFUSED (`granted_by IS NOT NULL OR principal_kind IN ('harness','device')`) — the exemption is not widened; `app` REFUSED by the `principal_kind` CHECK; `device` + `granted_by NULL` still ACCEPTED — the harness/device exemption is intact.
+- **`core_entity_revoke_on_purge` (schema/entity.ts:187).** The principal clause is generated from `PRINCIPAL_ENTITY_KINDS`, which is unchanged, so every entity-kind principal is still covered and `automation` is correctly skipped: `principal_kind = CASE OLD.entity_type … END` can only ever equal a mapped kind, and yields NULL (no match) for an unmapped type. Consistent with `automation` having no `core_entity` row.
+- **No exhaustive-switch hazard.** `AuthorityPrincipalKind` / `AuthorityStrategy` have no consumer outside `authority-registry.ts` and the barrel; `enforcementLocus` is the only kind-dispatch and handles `automation`. `lociWire` (`server/src/routes/grant-routes.ts:132`) keys by locus, so the `local` revoke sentence an automation needs is already on the wire — the "no new phrase" claim holds.
+- **Golden corpus, structural comparison against `origin/main`'s manifest** (ids are non-deterministic, #935): same 67 tables, same table set, 288 rows both sides, identical per-table `rows`, `columns` and `primaryKey` for all 67; only `digests` differ, in exactly 14 tables — the receipt's figures reproduce. The re-frozen `vault.db.gz` carries the widened CHECK (`'person','circle','harness','device','automation'`); main's carries the four-value one. `share_authority` gains no column. `golden-vault.test.ts` 5/5 inside the green package suite.
+- **Doc.** R6 states `automation` as "accepted in #928 wave 1, written in wave 3"; the new ONT-ladder commitment row claims no written row. No sentence in `docs/vault-ontology.md` asserts an automation row exists today.
+- **Doctrine.** Each "deliberate"/"by design" seam names a live property (no `core_entity` row to purge; first-party apps are not principals; a row minted without a granter would be self-granted authority). No budget, floor, allowlist or ratchet was widened; no test skipped, quarantined or deleted.
+
+Gates run (this worktree, 4 cores):
+
+- `bun run format` → clean, `git status --porcelain` empty after
+- `bun run lint` → clean
+- `bun run --cwd packages/vault build` → clean; `… typecheck` → clean
+- `bun run --cwd packages/vault test` → 200 files, 1572 passed, 2 skipped, 0 failed (948 s) — includes `golden-vault`, `access-properties`, `ontology-rules`, `ontology-doc`, `lifecycle`, `entity-refs`, `ontology-shape`, `authority-registry`
+- `bun run --cwd packages/server test -- --run src/serve/authz-deny-matrix.test.ts src/serve/authz-matrix.smoke.test.ts` → 2 files, 88 passed
+- `bun run --cwd packages/client typecheck` → clean; `bun run --cwd apps/mobile typecheck` → clean
+- `bash .governance/run.sh` → 20 passed, 2 failed: the attestation this section satisfies, and `repo-hygiene` on `packages/blueprints/apps/locker/queries.test.ts` (638 lines) — untouched by this diff and already split on `origin/main` by `0d7975254` (#930); it clears on rebase
+
+Observation for the umbrella owner, not a defect of this slice:
+
+- `packages/vault/src/grant/authority-registry.ts` reports as **binary** in `git diff --numstat` (`-\t-`), so its hunk is invisible to a normal textual review. Cause: two raw NUL bytes at offsets 7092 and 7288, used as the `BY_KEY` composite-key delimiter — **pre-existing, byte-identical on `origin/main`**, not introduced here. This slice's edit was reviewed against a NUL-stripped copy of both revisions and matches `## What changed` exactly. Fix (own slice): write the delimiter as the two-character escape `\\0` in source, or use a nested `Map`, rather than embedding a literal NUL byte.
+

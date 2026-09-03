@@ -69,8 +69,49 @@ describe("grant/authority-registry", () => {
     );
   });
 
+  // #928 A3, accepted a wave before its writer: wave 3 mints these rows from
+  // the compiled manifest, and the registry is what closes the vocabulary it
+  // may mint. An automation is answered about a PACK or an ENTITY TYPE.
+  test("an automation is answered about a pack or an entity, read or act", () => {
+    for (const subjectType of ["agent.pack", "core.entity"] as const) {
+      for (const verb of ["read", "act"] as const)
+        expect(
+          authorityStrategyFor("automation", subjectType, verb),
+          `automation x ${subjectType} x ${verb}`
+        ).toBe("execution-clamp");
+      expect(registeredVerbs("automation", subjectType)).toStrictEqual([
+        "read",
+        "act",
+      ]);
+      // A sealed reveal is Locker's permit, never a standing grant (#873).
+      expect(isRegisteredAuthority("automation", subjectType, "reveal")).toBe(
+        false
+      );
+      expect(isRegisteredAuthority("automation", subjectType, "view")).toBe(
+        false
+      );
+    }
+    // The subject is a class of rows, not a shareable item.
+    expect(authorityTriple("automation", "media.asset")).toBeUndefined();
+  });
+
+  // #928 A1: first-party apps are the owner's own screens, so `app` is not a
+  // principal kind — and the reserved third-party door stays a type-level
+  // absence, never a triple that refuses.
+  test("the reserved `app` kind carries no triple at all", () => {
+    for (const subjectType of ["agent.pack", "core.entity", "core.vault"])
+      expect(authorityTriple("app", subjectType)).toBeUndefined();
+    expect(
+      AUTHORITY_REGISTRY.some(
+        (triple) => (triple.principalKind as string) === "app"
+      )
+    ).toBe(false);
+  });
+
   test("enforcement locus is derived from the principal, never stored", () => {
     expect(enforcementLocus("harness")).toBe("local");
+    // An automation runs in this vault's own engine, like a harness (V-locus).
+    expect(enforcementLocus("automation")).toBe("local");
     expect(enforcementLocus("device")).toBe("boundary");
     expect(enforcementLocus("person")).toBe("remote");
     expect(enforcementLocus("circle")).toBe("remote");

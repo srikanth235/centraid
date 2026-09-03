@@ -20,12 +20,16 @@ import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
  * a live answer whose audience no longer exists, which is exactly what the
  * trigger says must not happen.
  *
- * The two kinds NOT here are not rows: a `harness` principal is an engine
- * class (its ids are a closed vocabulary, see the CHECK below), and a `device`
+ * The three kinds NOT here are not rows: a `harness` principal is an engine
+ * class (its ids are a closed vocabulary, see the CHECK below), a `device`
  * lives in the access plane, which is machinery rather than an ontology pack
- * and so has no `core_entity` row to purge. `authority-principals.test.ts`
- * holds the CHECK's vocabulary to being exactly this map plus those two, so a
- * fifth principal kind cannot be added without answering the question.
+ * and so has no `core_entity` row to purge, and an `automation` is named by
+ * its MANIFEST REF (`<app_id>/<automation_id>`, `automation/manifest/ref.ts`)
+ * — a compiled manifest, not a row of any table in this file; the closest
+ * thing it has to storage is `automation_state`, keyed by that same ref with
+ * no foreign key. `ontology-shape.test.ts` holds the CHECK's vocabulary to
+ * being exactly this map plus that set, so a further principal kind cannot be
+ * added without answering the question.
  */
 export const PRINCIPAL_ENTITY_KINDS: ReadonlyMap<string, string> = new Map([
   ["person", "core.party"],
@@ -36,13 +40,20 @@ export const PRINCIPAL_ENTITY_KINDS: ReadonlyMap<string, string> = new Map([
 export const NON_ENTITY_PRINCIPAL_KINDS: ReadonlySet<string> = new Set([
   "harness",
   "device",
+  "automation",
 ]);
 
 export const SHARE_AUTHORITY_DDL = `
 CREATE TABLE share_authority (
   authority_id   TEXT PRIMARY KEY,
+  -- 'automation' is ACCEPTED here with no writer yet: #928 wave 3 writes it,
+  -- when an automation's compiled manifest mints one row per (pack or entity
+  -- x read|act) and the owner's refusals become 'declined' rows. Accepting it
+  -- a wave early is what lets that wave land without a schema change. The
+  -- 'app' kind is deliberately NOT here — first-party apps are not principals
+  -- (#928 A1), and a third-party door would be a new answer, not a new value.
   principal_kind TEXT NOT NULL CHECK (principal_kind IN
-    ('person','circle','harness','device')),
+    ('person','circle','harness','device','automation')),
   principal_id   TEXT NOT NULL,
   subject_type   TEXT NOT NULL,
   -- '' where the subject is the whole of something the principal is already
@@ -79,6 +90,9 @@ CREATE TABLE share_authority (
   -- never a second copy of it.
   receipt_id     TEXT,
   CHECK ((duration = 'until-date') = (expires_at IS NOT NULL)),
+  -- 'automation' is deliberately NOT exempted: the owner APPROVES an
+  -- automation's manifest, so there is always a party who answered, and a row
+  -- minted without one would be an automation that granted itself (#928 A3).
   CHECK (granted_by IS NOT NULL OR principal_kind IN ('harness','device')),
   -- The one principal whose id is a closed vocabulary rather than a row id:
   -- a harness principal is an ENGINE CLASS, and an egress class outside the
