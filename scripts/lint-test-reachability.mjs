@@ -399,8 +399,7 @@ export function assertEveryConfigModelled(configs, projects) {
 }
 
 /**
- * Run the gate.
- * @param {{cwd?: string}} [options] Repo root to scan (the self-test points this at a fixture).
+ * Run the gate over this repository.
  * @returns {Promise<{orphans: string[], failures: string[], scanned: number}>} The verdict.
  */
 export async function run() {

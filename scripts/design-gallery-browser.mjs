@@ -28,7 +28,18 @@ import { existsSync } from "node:fs";
 export const CHROMIUM_PATH =
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ?? "";
 
-export const IS_CI = process.env.CI === "true" || process.env.CI === "1";
+/**
+ * Are we on a CI runner?
+ *
+ * Any non-empty `CI` counts except the two spellings that mean "no". GitHub
+ * Actions sets `CI=true`, but other runners set `CI=1`, `CI=yes` or just `CI=`
+ * with a bare word, and this gate must be FATAL wherever it is real — a
+ * mis-parsed `CI` would silently downgrade it to the local skip, which is the
+ * one outcome that would make this change a hole rather than a fix.
+ */
+export const IS_CI = !["", "0", "false"].includes(
+  (process.env.CI ?? "").toLowerCase()
+);
 
 /**
  * Is the browser this gate needs actually on the machine?

@@ -20,23 +20,48 @@ const TEST_FILE_RE = /(?:\.test|\.test-fixtures)\.[^./]+$/u;
 
 /*
  * A DATA CLIENT is not a surface either (#931), the same refinement #930 made
- * one commit earlier for a blueprint app's suite. `packages/client` is the
- * shell package, and only part of it draws: `src/react/**` is the screens and
- * blocks a member looks at, and `src/styles.css` is what they are painted
- * with. `src/replica/**`, the gateway clients and the transport modules beside
- * them render nothing. Watching the whole package meant that escaping a raw NUL
- * in an attachment-URL cache key — two characters, in a module with no DOM —
- * demanded a screenshot of a screen that had not moved, emitted by an e2e
- * harness the change had no reason to touch, in an environment that may have no
- * browser at all. The screenshot requirement itself is untouched: this narrows
- * WHICH files are surfaces, not what a surface change owes.
+ * one commit earlier for a blueprint app's suite. Watching the whole of
+ * `packages/client` meant that escaping a raw NUL in an attachment-URL cache
+ * key — two characters, in a module with no DOM — demanded a screenshot of a
+ * screen that had not moved, emitted by an e2e harness the change had no reason
+ * to touch, in an environment that may have no browser at all.
+ *
+ * IT IS AN EXCLUSION LIST, NOT AN ALLOWLIST, and that is the whole design. The
+ * drawing surface of this package is not `src/react/**`: `home-copy.ts` is the
+ * single spelling of every Home string, `icons.ts` is innerHTML'd SVG,
+ * `theme-vars.ts` is the token CSS applied before first paint, `index.html` is
+ * the shell document, and the eight other `*-copy.ts` modules are the words a
+ * member reads. An allowlist would have dropped every one of them silently,
+ * which is how a gate stops enforcing. So the default stays what it was —
+ * everything under `packages/client` is a surface — and only subtrees READ and
+ * confirmed to render nothing are named below. Adding a path here is a claim
+ * about a specific file; the surrounding cases in validate-ui-receipt.test.mjs
+ * pin what must stay outside it.
+ *
+ * The screenshot requirement itself is untouched: this narrows WHICH files are
+ * surfaces, not what a surface change owes.
  */
-const CLIENT_SURFACE_RE = /^packages\/client\/(?:src\/react\/|.*\.css$)/u;
+const CLIENT_NOT_A_SURFACE = [
+  // The replica store and its transport: no DOM, no copy, no markup.
+  /^packages\/client\/src\/replica\//u,
+  // The renderer-side HTTP client hub and its per-surface modules, plus the
+  // credential handover, the SSE/turn streams, the change feeds, the protocol
+  // handshake and the device compute/blob sources beside them. Each was read
+  // for DOM calls, markup and user-visible strings before being named here.
+  /^packages\/client\/src\/gateway-client[\w.-]*\.ts$/u,
+  /^packages\/client\/src\/(?:gateway-auth|turn-stream|vault-change-feed|vault-change-sse|version-handshake|device-blob-source|device-enrichment-worker|device-roster)\.ts$/u,
+];
+
+/** Does this path draw something a member can see? */
+function isClientSurface(file) {
+  if (!file.startsWith("packages/client/")) return false;
+  return !CLIENT_NOT_A_SURFACE.some((pattern) => pattern.test(file));
+}
 
 export function validateUiReceipt({ changed, readText }) {
   const touchesUi = changed.some(
     (file) =>
-      CLIENT_SURFACE_RE.test(file) ||
+      isClientSurface(file) ||
       /^apps\/[^/]+\/.*\.(?:tsx|css)$/u.test(file) ||
       (file.startsWith("packages/blueprints/apps/") && !TEST_FILE_RE.test(file))
   );

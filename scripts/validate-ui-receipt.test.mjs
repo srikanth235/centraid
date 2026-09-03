@@ -68,14 +68,25 @@ test("UI receipt evidence: a test-only change under a blueprint app needs no scr
 });
 
 // A data client is not a surface (#931), the #930 refinement applied to the
-// other over-broad half of the predicate. The React tree and the shell's
-// stylesheet still draw; the gateway clients and the transport beside them do
-// not.
-test("UI receipt evidence: a packages/client React change still demands a screenshot", () => {
+// other over-broad half of the predicate. It is an EXCLUSION of the subtrees
+// that render nothing, not an allowlist of the ones that do: most of what a
+// member reads in this package lives outside `src/react/**`, so an allowlist
+// would have stopped watching it without anyone noticing. These cases pin the
+// files that must stay surfaces.
+test("UI receipt evidence: a packages/client drawing change still demands a screenshot", () => {
   for (const file of [
     "packages/client/src/react/Shell.tsx",
     "packages/client/src/react/screens/Home.tsx",
     "packages/client/src/styles.css",
+    // None of these is under src/react/, and every one of them draws:
+    // the single spelling of every Home string, innerHTML'd SVG, the token
+    // CSS applied before first paint, and the shell document itself.
+    "packages/client/src/home-copy.ts",
+    "packages/client/src/icons.ts",
+    "packages/client/src/theme-vars.ts",
+    "packages/client/src/index.html",
+    // Copy, not transport: it carries an "Undo" action label.
+    "packages/client/src/status-channel.ts",
   ]) {
     assert.deepEqual(
       validateUiReceipt({
@@ -93,7 +104,10 @@ test("UI receipt evidence: a packages/client data-client change needs no screens
     validateUiReceipt({
       changed: [
         "packages/client/src/gateway-client-conversation-history.ts",
+        "packages/client/src/gateway-client.ts",
         "packages/client/src/replica/apply.ts",
+        "packages/client/src/turn-stream.ts",
+        "packages/client/src/version-handshake.ts",
         receipt,
       ],
       readText: () => "",

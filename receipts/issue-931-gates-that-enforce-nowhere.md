@@ -13,8 +13,9 @@ comments.
 - [x] `candidate.yml` runs the rung-1 bundle and the commit-message check on the merged tip
 - [x] the JS bundle fingerprint ignores test, spec, fixture and markdown modules
 - [x] the rung-2 wall clock excludes runner queue wait without widening the ceiling
-- [x] a data client is not a surface: `check:ui-receipt` watches the client's React tree and stylesheets, not its transport
-- [ ] `test:fuzz:replay` green — the `wal-keys` target is filed as a finding, not fixed
+- [ ] item 7, load-sensitive timeouts — not this slice's; see `## Out of scope`
+- [x] granted addition A: a data client is not a surface, expressed as an exclusion of the subtrees that draw nothing
+- [ ] granted addition B: `test:fuzz:replay` green — the `wal-keys` target is filed as a finding, not fixed
 
 ## What changed
 
@@ -50,7 +51,7 @@ something that matches too much), the include/exclude interplay that the mobile
 stub/RNTL split depends on, the Playwright `testDir` forms, and a live run of the
 gate on this tree.
 
-**The orphan it found, and the fix.** Run over 1,705 test files, the gate
+**The orphan it found, and the fix.** Run over 1,710 test files, the gate
 reported exactly **one** orphan: `scripts/gateway-npm/publish.test.mjs` — four
 `node:test` cases pinning `publish.mjs`'s refusal contract (it aborts before the
 first `npm publish` spawn), sitting in no vitest project and named by no script.
@@ -186,30 +187,55 @@ changed, and that the ceiling did not move.
 `.test.mjs` files to the `scripts:test` `node --test` list, and adds
 `publish.test.mjs` to `gateway:npm:helpers:test`.
 `tests/quality/classification-ratchet.json` re-pins the `tests/claims.json`
-whole-file fingerprint (`a3d830db…` → `be04aaf5…`) with the reason in
+whole-file fingerprint (`76aac1a07f17…` → `56f64c948746…`) with the reason in
 `approvedDeviation`.
 
-**7. `check:ui-receipt` — a data client is not a surface.** Granted into this
+**Granted addition A — `check:ui-receipt`: a data client is not a surface.**
+(Not one of the issue's numbered items; the issue's item 7 is load-sensitive
+timeouts, which is out of scope below.) Granted into this
 slice by the program root after the collision below was reported, and made the
 way [#930](https://github.com/srikanth235/centraid/issues/930) made its
 neighbour one commit earlier: by narrowing WHICH files are surfaces, never by
 touching what a surface change owes. `scripts/validate-ui-receipt.mjs`'s
 predicate treated every path under `packages/client/` as user-facing, so a
 two-character NUL escape in an attachment-URL cache key demanded a screenshot of
-a screen that had not moved. `packages/client` is the shell package and only
-part of it draws: `CLIENT_SURFACE_RE` now matches `packages/client/src/react/**`
-(the screens and blocks) and any `.css` in the package (`src/styles.css` is what
-they are painted with). `src/replica/**`, the gateway clients and the transport
-modules beside them render nothing and are no longer watched. The screenshot
-requirement, the emitter rule, the `apps/*` rule and the blueprints
-test/fixture exclusion are all untouched.
-`scripts/validate-ui-receipt.test.mjs` — the `node:test` file #930 wired into
-`scripts:test` — gains the two cases the root asked for: a
-`packages/client/src/react/**` edit (and `src/styles.css`) still demands the
-screenshot, and a `packages/client/src/gateway-client-*.ts` / `src/replica/**`
-edit does not.
+a screen that had not moved.
 
-**8. `test:fuzz:replay` — the `wal-keys` target, filed rather than patched.**
+**It is written as an EXCLUSION, not an allowlist, and the first attempt was
+wrong.** That attempt kept `packages/client/src/react/**` plus the package's
+stylesheets and dropped everything else — which would have stopped watching
+`src/home-copy.ts` (the single spelling of every Home string), `src/icons.ts`
+(innerHTML'd, member-visible SVG), `src/theme-vars.ts` (the token CSS applied
+before first paint), `src/index.html` (the shell document) and eight further
+`*-copy.ts` modules. The verifier caught it. The default therefore stays exactly
+what it was — every path under `packages/client` is a surface — and
+`CLIENT_NOT_A_SURFACE` names only the subtrees READ and confirmed to render
+nothing: `src/replica/**`; the `src/gateway-client*.ts` family (the renderer's
+HTTP client hub and its per-surface modules); and, beside them,
+`gateway-auth.ts`, `turn-stream.ts`, `vault-change-feed.ts`,
+`vault-change-sse.ts`, `version-handshake.ts`, `device-blob-source.ts`,
+`device-enrichment-worker.ts` and `device-roster.ts`. Each was checked for DOM
+calls, markup and user-visible strings before being named; `status-channel.ts`
+was checked and LEFT OUT of the list, because it carries an `"Undo"` action
+label, and `device-enrichment-compute.ts` was left out as borderline — keeping a
+file as a surface is never a hole. On that formulation, nothing exits this gate
+that could not exit it before: the exclusion removes files from the watched set,
+it never adds an exit from the screenshot requirement. The screenshot rule, the
+changed-emitter rule, the `apps/*` rule and the blueprints test/fixture
+exclusion are all byte-identical.
+
+`scripts/validate-ui-receipt.test.mjs` — the `node:test` file #930 wired into
+`scripts:test` — gains the two cases the root asked for, widened after the
+audit: the drawing case now asserts that `src/react/Shell.tsx`,
+`src/react/screens/Home.tsx`, `src/styles.css`, `src/home-copy.ts`,
+`src/icons.ts`, `src/theme-vars.ts`, `src/index.html` and `src/status-channel.ts`
+each still demand the screenshot, and the transport case that
+`gateway-client-conversation-history.ts`, `gateway-client.ts`,
+`replica/apply.ts`, `turn-stream.ts` and `version-handshake.ts` together demand
+none.
+
+**Granted addition B — `test:fuzz:replay`: the `wal-keys` target, filed rather
+than patched.**
 `scripts/fuzz/targets-storage.mjs` imports `parseWalPairMarkerKey` and
 `walPairMarkerKey` from `packages/backup/dist/wal-format.js`. `git log -S
 parseWalPairMarkerKey` names the commit: `cf616a09a`, #916's ontology close,
@@ -246,6 +272,16 @@ exemption above cannot generalise into a folder.
 
 ## Out of scope
 
+- **The issue's item 7, load-sensitive timeouts.** Filed on #931 as
+  [comment 5525336103](https://github.com/srikanth235/centraid/issues/931#issuecomment-5525336103):
+  on PR #948 head `61973cef5`, `coverage-shard (4)` failed with two 30 s
+  timeouts in `packages/server/src/serve/vault-registry.test.ts:200` and `:318`
+  on a shard whose wall time was 912 s against 2,783 s cumulative test time,
+  and the same shard passed minutes earlier on the same base. It arrived after
+  this slice's contract was set and its candidate fixes (a per-file timeout
+  that scales with observed shard load, or moving the two restart/listener
+  scenarios off a four-way coverage shard) are lane-shape decisions; it belongs
+  to the wave-2 contract, not here.
 - **The `wal-keys` fuzz target's invariants.** `scripts/fuzz/targets-storage.mjs`
   is left exactly as it is: the tick-marker contract that replaced the pair
   marker is #916's, and choosing what to fuzz it for is a decision for that
@@ -277,17 +313,21 @@ exemption above cannot generalise into a folder.
   fix that governance forbids. The entry names one path rather than the folder, so
   a NUL in an unmerged receipt is still caught while its author can still fix it.
 - **`check:ui-receipt`: a data client is not a surface (predicate refinement, not
-  a waiver).** Reported to the root as a collision and granted back into this
-  slice, since `scripts/validate-ui-receipt.mjs` is a gate script and #931 is the
-  gates issue. The precedent is #930's, one commit earlier and the same sentence
-  shape: "a suite is not a surface" narrowed `packages/blueprints/apps/**` after
-  every repair of an over-long test file had to photograph a screen that had not
-  moved. Here the over-broad half is `packages/client/`, a package whose React
-  tree draws and whose gateway clients and replica transport do not. The gate is
-  not weakened: nothing exits it that could not exit it before, the screenshot
-  and changed-emitter rules are byte-identical, and two new `node:test` cases pin
-  both directions. What changed is the answer to "is this file something a member
-  can see", which is what the predicate was always for.
+  a waiver), and it is an exclusion list on purpose.** Reported to the root as a
+  collision and granted back into this slice, since
+  `scripts/validate-ui-receipt.mjs` is a gate script and #931 is the gates issue.
+  The precedent is #930's, one commit earlier and the same sentence shape: "a
+  suite is not a surface" narrowed `packages/blueprints/apps/**` after every
+  repair of an over-long test file had to photograph a screen that had not moved.
+  The first attempt here inverted that — an allowlist of `src/react/**` plus
+  stylesheets — and the verifier refuted it: most of what a member reads in this
+  package (`home-copy.ts`, `icons.ts`, `theme-vars.ts`, `index.html`, the eight
+  other `*-copy.ts` modules) lives outside `src/react/**`, so the allowlist
+  stopped watching files that draw. The shipped form keeps the old default and
+  subtracts only subtrees read and confirmed to render nothing, which is what
+  makes "nothing exits this gate that could not exit it before" true: subtracting
+  from the watched set cannot create an exit from the screenshot requirement, and
+  a file left in the set is at worst a false demand, never a silent hole.
 - **`test:fuzz:replay` stays red, deliberately.** The alternative — re-pointing
   the import at `parseWalTickMarkerKey` — would leave the target asserting
   `marker.vaultGeneration` and `db === "journal"`, fields #916 deleted, so the
@@ -311,38 +351,44 @@ Each box above, and the command that shows it:
 - `candidate.yml` runs the rung-1 bundle and the commit-message check on the merged tip — `bun run test:claims`, `bun run lint:evidence-mapping`, `bun run lint:workflow-pins`, `bun run lint:path-filters`.
 - the JS bundle fingerprint ignores test, spec, fixture and markdown modules — `bun run --cwd apps/mobile test -- js-bundle-fingerprint` (15 cases).
 - the rung-2 wall clock excludes runner queue wait without widening the ceiling — `node --test scripts/ci/pr-gate-wall-clock.test.mjs` (8 cases), `tests/budgets.json` unchanged.
-- a data client is not a surface: `check:ui-receipt` watches the client's React tree and stylesheets, not its transport — `node --test scripts/validate-ui-receipt.test.mjs` (7 cases) and `bun run check:ui-receipt`.
+- granted addition A: a data client is not a surface, expressed as an exclusion of the subtrees that draw nothing — `node --test scripts/validate-ui-receipt.test.mjs` (7 cases) and `bun run check:ui-receipt`.
 
 ```
 $ bun scripts/lint-test-reachability.mjs
-test-reachability: scripts/gateway-npm/publish.test.mjs is matched by no vitest project's include, …
+test-reachability: scripts/gateway-npm/publish.test.mjs is matched by no vitest project's include, is named by no package.json script, and is owned by no Playwright config — its cases never run
    → the one orphan on this tree; wired into gateway:npm:helpers:test, then:
-test-reachability: 1705 test files, every one reached by a runner
+test-reachability: 1710 test files, every one reached by a runner
 
 $ node scripts/lint-no-nul-bytes.mjs
-   → 12 source files reported, escaped to \0, then:
-no-nul-bytes: 6047 tracked text files, none carrying a raw NUL
+   → 12 source files reported, escaped to \0, then (after the rebase onto
+     dccf9e609, which re-landed authority-registry.ts with its two raw NULs
+     and needed the same escape re-applied):
+no-nul-bytes: 6049 tracked text files, none carrying a raw NUL
 
-$ node --test scripts/lint-test-reachability.test.mjs      # 11 pass, 0 fail
-$ node --test scripts/lint-no-nul-bytes.test.mjs           #  5 pass, 0 fail
-$ node --test scripts/ci/pr-gate-wall-clock.test.mjs       #  8 pass, 0 fail
-$ node --test scripts/ci/gate-classes.test.mjs             #  6 pass, 0 fail
+$ node --test scripts/lint-test-reachability.test.mjs      # pass 11, fail 0
+$ node --test scripts/lint-no-nul-bytes.test.mjs           # pass  5, fail 0
+$ node --test scripts/validate-ui-receipt.test.mjs         # pass  7, fail 0
+$ node --test scripts/design-gallery-browser.test.mjs      # pass  4, fail 0
+$ node --test scripts/ci/pr-gate-wall-clock.test.mjs       # pass  8, fail 0
+$ node --test scripts/ci/gate-classes.test.mjs             # pass  6, fail 0
 
 $ bun run design:gallery
-design:gallery: SKIPPED — the pinned Playwright Chromium is not installed (…). Install it with …
-$ CI=true bun run design:gallery
-::error title=design:gallery unrunnable::…   (exit 1)
+design:gallery: SKIPPED — the pinned Playwright Chromium is not installed (/opt/pw-browsers/chromium-1234/chrome-linux64/chrome). Install it with `bunx playwright install chromium`, or point PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH at a Chromium you already have. CI runs this lane for real, where the baselines are enforced.
+$ CI=1 bun run design:gallery                              # exit 1
+::error title=design:gallery unrunnable::the pinned Playwright Chromium is not installed (/opt/pw-browsers/chromium-1234/chrome-linux64/chrome). Under CI a missing browser means the workflow is misconfigured, not that the gate is optional.
 
 $ bun run test:claims
-claims: 45 claims, 49 lanes, 192 derived flows, 56 deliberate n/a cells
-nightly-wiring: 4 mobile device lane(s) discovered, …
-release-wiring: one tag entry point, …
+claims: 45 claims, 49 lanes, 193 derived flows, 56 deliberate n/a cells
+nightly-wiring: 4 mobile device lane(s) discovered, all pinned to one Maestro version and none starting Metro
+release-wiring: one tag entry point, every lane reachable and reusable-only, release-check aggregates every lane, mobile stays opt-in, secrets stay per-lane
 $ bun run lint:evidence-mapping
 evidence-mapping: 49 registered lanes, every evidence step mapped
 $ bun run lint:workflow-pins
-workflow-pins: 23 workflow(s) clean …
+workflow-pins: 23 workflow(s) clean (SHA pins, bun pin, timeouts, no hand-rolled install, single PR + release entry point)
 $ bun run lint:path-filters
-path-filters: 10 filter(s) cover every workspace and top-level path …
+path-filters: 10 filter(s) cover every workspace and top-level path (3 ledgered as always-on), and every read of one carries the `all` fallback
+$ bun run lint:product
+✓ 41/41 product gates passed
 ```
 
 ## Audit

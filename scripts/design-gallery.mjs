@@ -64,6 +64,7 @@ const WEB_DIR = path.join(ROOT, "apps/web");
 const WEB_DIST = path.join(WEB_DIR, "dist");
 const MATRIX = JSON.parse(readFileSync(MATRIX_FILE, "utf8"));
 const UPDATE = process.argv.includes("--update");
+
 /** The one bundled face. Every lane must resolve it or fail. */
 const SANS = fonts.sans;
 
