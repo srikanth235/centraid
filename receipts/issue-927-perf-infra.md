@@ -1020,6 +1020,11 @@ Slices (iii) photos-timeline rig fix, (iv) fixture warm + build/mount split, (v)
 | Path | Change |
 | --- | --- |
 | `tests/scale/photos-timeline.scale.test.ts` | The degenerate corpus's `INSERT` stops naming `media_asset.favorite`, deleted by #916 (ONT-03). One statement; profile, volumes, budgets and all four assertions untouched. |
+| `packages/test-kit/src/year3-fixture-cache.ts` (new) | The content-addressed cache, split out of `year3-vault.ts`: version, root, key, the WARM set, and `materializeYear3Fixture` — now a BUILD that never copies and never opens. Re-exported in full by `./year3-vault`, so no import moved. |
+| `packages/test-kit/src/year3-vault.ts` | Loses the cache half (461 → 358 lines), gains the re-export. `YEAR3_FIXTURE_VERSION` 2 → 3: the golden replica carries `meta.json` now, so a version-2 directory is a different artifact. The unused `profile` default is dropped. |
+| `packages/test-kit/src/year3-vault.test.ts` | Version assertion follows the bump; new test — three CONCURRENT materializations of one key run `generate` once and share one directory. |
+| `tests/helpers/factories.ts` | `buildGoldenYear3Vault()` (the artifact exists in the cache; no copy) and `mountGoldenYear3Vault()` (a private writable copy) are separate; `goldenYear3Vault()` is their composition. `goldenYear3Replica()` computes its content address from the profile alone and reads `rows`/`cursor` from the artifact's `meta.json`, so a warm run neither mounts the vault nor walks a row. |
+| `tests/scale/large-vault.scale.test.ts` | Publishes `golden vault mount` — the copy alone. The file lands in this lane's #922 gauge commit, which adds the audit-band gauges to the same `recordQualityResult` call. |
 
 Also in this lane, under #922 and detailed there: `tests/scale/replica-sse-fanout.scale.test.ts`, `apps/web/tests/e2e/perf-waterfall.spec.ts`, `scripts/test-report/render/adversaries.mjs`, `scripts/test-report/render.test.mjs`.
 
@@ -1027,15 +1032,48 @@ Also in this lane, under #922 and detailed there: `tests/scale/replica-sse-fanou
 
 Host: this session's container, Linux 4 cores / 15 GB, node 22, cache root `/tmp/centraid-year3-fixture-cache`. Volume: `goldenYear3Profile()`, 106,274,816 B on disk. Command: `bun run test:scale -- tests/scale/<rig> --reporter=verbose`.
 
-`photos-timeline`, warm, is 2,580.9 ms, of which 2,271.2 ms is its own degenerate corpus.
+| Measurement | Before | After |
+| --- | --- | --- |
+| Golden replica cases, WARM (N = 1 / 10 / 40) | 1,159 / 2,700 / 2,646 ms | 9 / 6 / 6 ms |
+| Golden replica cases, warm, total | 6,505 ms | 21 ms |
+| `goldenYear3Replica().buildMs`, warm, N = 40 | 585.1 ms | 1.0 ms |
+| Golden replica cases, COLD under version 3 | — | 8,680 / 8,675 / 8,418 ms |
+| Golden vault MOUNT alone, warm | not separable | 198.4 ms |
+| `large-vault` materialize + mount + open, warm | 574.9 ms | 441.3 ms |
+
+Before, a replica cache HIT still mounted 126 MB of golden vault and walked 50,000 rows through `readReplicaRows` to rebuild a snapshot it discarded: `rows` and `cursor` were knowable only from the walk. `photos-timeline`, warm, is 2,580.9 ms, of which 2,271.2 ms is its own degenerate corpus.
+
+### Deleted, with its replacement
+
+- `goldenYear3Vault({ copy: false })` — the branch handing a caller the cache directory itself. No caller passed it, and opening the artifact writes a WAL and an identity key into the bytes every other rig measures against. Replaced by `buildGoldenYear3Vault()` for callers that need only its existence.
+- `copyMs` → `mountMs`; `materializeYear3Fixture`'s `profile` default.
+
+### Decisions
+
+1. **The version bump IS the invalidation.** `meta.json` changes the artifact's shape, so a version-2 directory cannot answer a version-3 question; tolerating its absence would leave a rebuild-on-missing-file shim forever. Cost: one ~25 s golden-vault rebuild per cache root.
+2. **The warm set lives in the kit.** "Materialize once" is the cache's job; a memo in `tests/helpers` would leave `photos-timeline` and `restore-10gib`, which call the cache directly, out of it.
+3. **`photos-timeline` keeps its own 50,000-photo profile** — finding 1.
 
 ### Verification
 
 ```sh
 # in /home/user/centraid-wt/claude/927-w1c-golden-vault
+bash $S/self-audit.sh 927 origin/claude/927-ledger   # tree <TREE_927>
+bun run --cwd packages/test-kit typecheck && bun run --cwd packages/test-kit test
+bun run typecheck
 bun run test:scale -- tests/scale/photos-timeline.scale.test.ts    # 1 passed (red at the base)
+bun run test:scale -- tests/scale/large-vault.scale.test.ts        # 1 passed
+bun run test:scale -- tests/scale/replica-bootstrap.scale.test.ts  # 5 passed
+bash .governance/run.sh
 ```
 
 ### Findings
 
 1. **Whether `photos-timeline` should mount the golden vault is open.** A: mount and re-declare it at 10,000 + 10,000 — needs `tests/budgets.json#qualityRigs` and `tests/claims.json#photos.scale-50k` to move with the volume (3b's files). B: mount and top up to 50,000 — the top-up is not cacheable, so warm seed cost goes from ~0.3 s to seconds and the rig's own 1.5x drift gate walks. Recommendation: A, in 3b's ledger pass. Not taken here.
+2. **`.github/workflows/e2e.yml` still names `artifacts/year3-cache`** four times (w1c finding 1). The env var is still read, so CI is correct; the literal is the trace lane's.
+3. **A build still leaves an orphan identity key** in the cache root (w1c finding 6) — now once per version bump too. Unowned.
+
+### Doc debt
+
+- `tests/experience-budgets/README.md` — the year-3 table names the golden artifact per row but not `meta.json` (#927 wave 2's ledger pass).
+- `docs/harnesses.md` — describes the year-3 fixture as materialize-and-copy; build vs mount is a distinction a rig author now has to know.
