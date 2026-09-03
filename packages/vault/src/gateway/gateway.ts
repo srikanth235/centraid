@@ -161,6 +161,7 @@ import {
   GATEWAY_MAX_READ_ROWS,
   GatewayError,
 } from "./types.js";
+import { instrumentVaultStatements } from "./work-counters.js";
 
 /** Non-owner provenance reads (#352) must scope to one (entity_type, entity_id) and hold read on that entity's table. */
 function provenanceScopeFailure(
@@ -2342,5 +2343,10 @@ export class Gateway {
 }
 
 export function createGateway(db: VaultDb, deps: GatewayDeps = {}): Gateway {
+  // #927 P2: the always-on work counters are counted at the statement layer,
+  // not here. Attaching once at construction means every gateway op — and the
+  // replica protocol and schema code that share the same handle (#916) — is
+  // counted by the same integers, with no call site to keep in sync.
+  instrumentVaultStatements(db.vault);
   return new Gateway(db, deps);
 }

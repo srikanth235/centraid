@@ -7,6 +7,12 @@ import { startRuntimeHttpServer } from "@centraid/server/engine";
 import { OAUTH_CALLBACK_PATH } from "../routes/connections-routes.js";
 import { buildGateway } from "./build-gateway.js";
 import type { BuildGatewayOptions, BuiltGateway } from "./build-gateway.js";
+import {
+  GatewayTracer,
+  traceRequests,
+  traceSamplingFromEnvironment,
+} from "./gateway-trace.js";
+import { lazyVaultTraceSink } from "./trace-store.js";
 import { startWebUiServer } from "./web-ui-server.js";
 
 export interface ServeOptions extends BuildGatewayOptions {
@@ -37,10 +43,30 @@ export async function serve(
 ): Promise<GatewayServeHandle> {
   const gateway = await buildGateway(options);
 
+  // #927 P1: one span per request, around the whole composed chain, so a
+  // waterfall shows where a tap's gateway milliseconds went. OFF by default —
+  // `traceSamplingFromEnvironment` returns TRACE_SAMPLING_OFF unless the
+  // developer set CENTRAID_TRACE=1 — and the records land inside the current
+  // vault directory, which is what makes them purge with the vault.
+  const tracer = new GatewayTracer({
+    policy: traceSamplingFromEnvironment(),
+    sink: lazyVaultTraceSink(() => {
+      try {
+        return gateway.vaults.current().dir;
+      } catch {
+        // No vault mounted yet: nothing sovereign to write into.
+        return undefined;
+      }
+    }),
+  });
+
   // Composed handler owns the post-auth chain: the vault scope (#289) wraps all.
   const serverOptions: Parameters<typeof startRuntimeHttpServer>[0] = {
     runtime: gateway.runtime,
-    extraHandlers: [gateway.webhookHandler, gateway.composedHandler],
+    extraHandlers: [
+      gateway.webhookHandler,
+      traceRequests(gateway.composedHandler, tracer),
+    ],
     exposeUserStoreRoute: false,
     exposeConversationRoute: false,
     // Bearer-free by exception only: `state` (#304), webhook secret (#96). Never

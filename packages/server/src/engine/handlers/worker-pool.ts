@@ -8,6 +8,7 @@
 import { Worker } from "node:worker_threads";
 
 import { unrefTimer } from "../../lib/unref-timer.js";
+import { bumpEngineWorkCounter } from "./work-counters.js";
 import { isConstrainedWorkerHost } from "./worker-admission.js";
 import type { WorkerHostCapacity } from "./worker-admission.js";
 
@@ -141,6 +142,9 @@ export class WorkerPool {
   }
 
   private spawn(): Worker {
+    // #927 P2: the ONE place a handler thread is created — `acquire()` and the
+    // refill both come through here, so one bump counts every spawn.
+    bumpEngineWorkCounter("workerSpawns");
     const worker = new Worker(this.workerFile, {
       workerData: { pooled: true },
       resourceLimits: this.resourceLimits,
