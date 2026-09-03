@@ -813,6 +813,59 @@ Residual after both passes: **110 of 2,524 added lines (4.4 %)** repo-wide, and 
 The consecutive `acceptTruncation: true,` runs the first pass counted do not register under this measure: a window of eight identical single-property lines is under the 120-character floor, which is the more Sonar-like reading — an eight-line block that carries almost no tokens is not a copied block. Nothing was extracted for them, and E2 deletes those lines outright when each read declares its own window.
 
 
+### Audit — re-verification, 2026-09-03
+
+Verdict: PASS
+
+Scope: the three commits that landed on the wave branch after the audit above — `abdb176ab` (search + gateway-fallback signal), `fd3948e6b` (taxonomy and Photos read declarations), `4b3d64c64` (owner-vault test fixture, host-stub preamble). Same fresh-context verifier, same adversarial default. `git diff --numstat` shows no binary rows in any of the three; every changed path is named in this receipt; the file is still a byte-exact 31,677-byte prefix extension of `origin/main`'s copy.
+
+**Follow-up 1 — search.** `store-core.search` fetches `limit + 1 + relevant.length (+1 opaque)` and answers `overlaid.length > limit`. Verified the verdict cannot over-report: the extra `relevant.length` term only ever surfaces hits that genuinely exist, so a true set of exactly `limit` fills the window without claiming more. The mounted federated search applies the same rule over its ranked union (`ranked.length > limit` after dedupe). Rendered once per seat — `inlineQueryCtx.vault.search`, `MultiVaultReplicaSession.search`.
+
+**Follow-up 2 — gateway fallback.** `gatewayRead` posts the notice only when the answer itself carries `truncated` + a numeric `appliedLimit`. The receipt is honest that the app-query envelope does not yet aggregate its handler's reads into that signal: read the server side and confirmed there is no aggregation, so today the branch is reachable only for a handler that forwards the fields. Filed, not faked — as claimed.
+
+**Follow-up 3 — mounted reader.** Three cases against real SQLite, including the short-page case that makes an unconditional verdict fail.
+
+**Taxonomy extraction.** Read all eight call sites. Six spread `...conceptTaxonomyReads(ctx.vault, purpose)` into the exact positions the two inline reads occupied, in the helper's own order (`core.concept`, then `core.concept_scheme`). The two `history.ts` handlers held the pair in the opposite order and had their destructuring flipped to `[concepts, schemes]`; the positional mapping is correct in both, and downstream `findSchemeConcept(schemes, concepts, …)` still receives each entity in its own argument. Same entities, same `purpose`, same `acceptTruncation`, promises still created eagerly and still awaited inside the caller's own `Promise.all`.
+
+**Photos constants.** `PHOTO_ENTITY_READS` is referenced 34 times across 14 screens, every one of them as a bare argument — no spread, no mutation, and no code path anywhere mutates a read request (`readMounted` copies it into `planRequest`). A module constant is stable across mounts as well as across renders, so `useReplicaQuery`'s effect and `useCallback` keys re-run no more often than the per-component `useMemo` did, and never less correctly; `coalesceWork` is created per hook instance and keys on its closure, not on the request, so sharing one object across screens cannot collide. `check:ui-receipt` passes for a structural reason, not a semantic one — the gate is satisfied by the receipt's `## User impact` + `First-run:` note + a screenshot whose emitter (`apps/web/tests/e2e/tasks.spec.ts`) is in the changed set — so it is the reading above, not that gate, that establishes the 14-file Photos touch leaves the frame unchanged.
+
+**Test-fixture extractions (`4b3d64c64`).** `openOwnerVault()` preserves the original `ownerName = "Priya"` default and no assertion moved; the mobile host stubs now reach one lazy `hosts()` import from inside each hoisted `vi.mock` factory, which the suite proves resolves in order.
+
+**Numbers re-derived.** Ran the receipt's own first-pass scan (`git diff --unified=0 e2f277da3..`, whitespace-normalised, identical ≥ 8-line blocks, `.ts`/`.tsx`): **157 → 27** duplicated lines and **1.1 %** after, matching exactly; the sole residual block is eight consecutive added `acceptTruncation: true,` lines occurring in `notes/library.ts`, `people/person.ts` and `tasks/board.ts` — precisely the three handlers named, and nothing extractable. A repo-wide second-pass reproduction attributes every residual duplicated line to the Metro adapter (`inline-query-ctx.native.ts` + its test) and scores both of 0a's own files at **0**, as claimed. Added-line denominators differ from the receipt's (2,388/2,375 against 2,499/2,489; 6.6 % against 6.3 % before), so the *shares* are estimator-dependent while the duplicated-line counts and the attribution are not.
+
+**Gates run at `4b3d64c64`** (package suites under the shared host lock):
+
+```sh
+bun run format:check                       # clean, 5364 files
+bun run lint                               # clean
+bun run --cwd packages/client build
+bun run --cwd packages/client test         # 266 files, 2436 passed (+4 search cases)
+bun run --cwd packages/client typecheck
+bun run --cwd packages/vault test          # 201 files, 1574 passed | 2 skipped
+bun run --cwd packages/vault typecheck
+bun run --cwd packages/blueprints test     # 207 files, 6594 passed | 2 expected fail
+bun run --cwd packages/blueprints typecheck
+bun run --cwd apps/mobile test -- useReplicaQuery multi-vault photos home-tile-reads   # 61 files, 662 passed
+bun run --cwd apps/mobile typecheck
+bash .governance/run.sh                    # 22/22 directives
+```
+
+`lint:product` is 36/39: `test:ratchet`, `lint:ledgers` and `lint:quality-knobs` are red. Verified as base lag rather than accepted as such — all three compare against `origin/main` (`dccf9e609`), the flow they name (`blueprint-app-entity-tripwire-law`) is present in main's `tests/floors.json` and absent from the branch's merge-base `e2f277da3`, and the branch edits none of `tests/floors.json`, `tests/claims.json` or `tests/quality/classification-ratchet.json`. They clear on the wave's rebase.
+
+**Falsification attempts.**
+1. *The search verdict is not actually discriminating.* Forced it to `true` unconditionally in a throwaway edit: `a page under the cap is not truncated` and `a set of exactly the cap fills the window without hiding a hit` both failed (`expected true to be undefined`); restored, 11/11 green. The over-report case is genuinely guarded.
+2. *The mounted-reader dedupe case is really just the statement probe.* Reduced the verdict to `page.truncated` alone: the badge-composition case failed while the statement case and the short-page case stayed green. Confirmed by the plan — `core.content_item` carries `sha256`, so with two vaults `badgeRisk` is true and the plan runs at `REPLICA_MAX_LOCAL_ROWS`; the probe cannot fire on three rows, and only `rows.length > requested` can produce the verdict. Restored, 13/13 green.
+3. *The two flipped `history.ts` destructurings are swapped.* No handler-level test executes either file, so the suite could not answer this. Drove both handlers directly with a stub vault whose `revises` relation resolves only when `schemes` and `concepts` arrive in their own arguments: both returned a 2-version chain. Seeding the swap into `notes/queries/history.ts` dropped it to 1 while `docs` stayed at 2, so the probe is sharp and both handlers are correct as landed. Throwaway deleted; tree clean.
+
+**Findings for the root (none blocking).**
+- `packages/blueprints/apps/_shared/taxonomy-reads.ts:4` and the `### Sonar duplication` section above ("six query handlers", "each of the six call sites") say **six**; the helper is adopted at **eight** — `docs/queries/{drive,history,search}.ts`, `notes/queries/history.ts`, `people/queries/{dashboard,people,person,search}.ts`. Fix: say eight in both the docstring and the section.
+- `abdb176ab`'s waiver reason states "nothing above the new sub-heading is rewritten, the audit text included", but the `## Decisions` bullet — which is above it — was rewritten in that same commit (three files → four). The append-only property against `origin/main` still holds because the whole 0a section sits below main's copy; it is the reason line that does not describe its diff.
+- That rewritten bullet now over-reports in the other direction: `packages/client/src/replica/worker-client.ts`, `packages/client/src/replica/search.ts` (both under `packages/client/src/replica/**`) and `apps/mobile/src/lib/replica/multi-vault-session.ts` (under `apps/mobile/src/lib/replica/**`) are all inside the slice contract's globs. Genuinely outside it are only `packages/blueprints/types/centraid.d.ts` and `tests/quality/user-facing-qualities.test.ts`.
+- No handler-level test exercises `docs/queries/history.ts` or `notes/queries/history.ts`, so the refactor's one real risk is carried by review rather than by the suite. A single case per handler asserting a two-version chain would pin it.
+- `ReplicaSearchRequest.acceptTruncation` is declared and typed but read nowhere: search is never refused, by design. Either wire a refusal or drop the field, so the type does not promise a boundary that does not exist.
+- `apps/mobile/src/lib/replica/multi-vault-reader.ts:450` clamps `limit + 1 + displacing` to `MAX_SEARCH_FETCH_ROWS` (10,000). With `limit` capped at 1,000, a `displacing` of 8,999 or more swallows the probe and under-reports truncation. Unreachable in practice today; worth a comment or a floor.
+
+
 ## User impact
 
 **One new line, and one refusal a member will never see.** Nothing a shipped screen shows changes in this slice except this: when a list is cut short by its window, the seat now says so on its one status line — `Showing the newest 1,000; more not loaded` — instead of drawing a shorter list that looks complete. That is the whole visible surface. A member with fewer than a thousand contacts, notes or photographs in any one entity sees nothing new at all, because nothing was ever hidden from them.
