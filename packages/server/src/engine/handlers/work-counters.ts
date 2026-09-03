@@ -1,7 +1,7 @@
 /*
  * The engine's slice of the #927 work counters.
  *
- * A SECOND registry, deliberately. `@centraid/vault` counts the work it does
+ * A SECOND registry. `@centraid/vault` counts the work it does
  * (statements, rows, durability barriers, payload bytes) and this counts the
  * work the app-handler engine does (worker spawns). The engine must not import
  * `@centraid/vault` — the import-boundary checker aside, `handler-runner.ts`

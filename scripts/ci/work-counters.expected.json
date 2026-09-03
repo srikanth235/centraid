@@ -1,0 +1,26 @@
+{
+  "$comment": "Per-PR perf gate expectations (#927 P2). Integers the product counts about itself on the golden year-3 vault, measured by tests/perf/work-counters.perf.test.ts and compared by scripts/ci/work-counter-gate.mjs. TIGHTEN-ONLY: lowering a number is a normal commit; raising one is the thing a reviewer must see, and needs the receipt to say what got more expensive and why. `max` is a budget — anything above it fails. `exact` is for a value where BOTH directions are a regression: a durability barrier that disappears is a durability bug, not a speed-up.",
+  "fixture": "@centraid/test-kit/year3-vault via goldenYear3Vault()",
+  "scenarios": {
+    "gateway.read core.party limit=20": {
+      "$comment": "An owner read of 20 rows. The one barrier is the audit receipt: every gateway read is also a durable write (packages/vault/src/gateway/evidence.ts).",
+      "counters": {
+        "statements": { "mode": "max", "value": 6 },
+        "rowsScanned": { "mode": "max", "value": 24 },
+        "fsyncs": { "mode": "exact", "value": 1 },
+        "bytesRead": { "mode": "max", "value": 2100 },
+        "bytesWritten": { "mode": "max", "value": 198 }
+      }
+    },
+    "gateway.invoke atlas.insert_row core.place": {
+      "$comment": "One user write through the real command path. FIVE durability barriers for one row — five separate autocommit writes rather than one transaction. Recorded as measured, not as approved; see the #927 w1-gate receipt's findings.",
+      "counters": {
+        "statements": { "mode": "max", "value": 25 },
+        "rowsScanned": { "mode": "max", "value": 31 },
+        "fsyncs": { "mode": "exact", "value": 5 },
+        "bytesRead": { "mode": "max", "value": 1448 },
+        "bytesWritten": { "mode": "max", "value": 948 }
+      }
+    }
+  }
+}

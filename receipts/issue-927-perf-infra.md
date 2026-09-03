@@ -904,7 +904,7 @@ node node_modules/vitest/vitest.mjs run --config vitest.perf.config.ts   # ad-ho
 | `packages/client/src/replica/live-query-registry.ts` | `invalidations` bumped once per invalidation FIRED, before fan-out. |
 | `packages/client/src/replica/live-query.ts` | `reReads` bumped where a read actually happens — after the dirty check and `matches()`. **This is #922's D4 reads-per-action counter; no second counter was added.** |
 | `packages/client/src/replica/shell-transport.ts` | `countedRoundTrip` wraps the one transport seam, so all six request paths — and any injected fetcher — count identically. |
-| `packages/client/src/replica/{index,native}.ts` | Export `trace.js` and `work-counters.js` on both barrels; the native barrel's DOM-free rule holds (neither module imports a DOM global or `node:`). |
+| `packages/client/src/replica/index.ts` and `packages/client/src/replica/native.ts` | Export `trace.js` and `work-counters.js` on both barrels; the native barrel's DOM-free rule holds (neither module imports a DOM global or `node:`). |
 | `apps/mobile/src/lib/replica/native-trace.ts` (new) | The phone's tracer over `nativeReplicaIdFactory`, the `EXPO_PUBLIC_CENTRAID_TRACE` policy, and `flushNativeTraces` writing `<replicaStorage>/diagnostics/traces.jsonl`. `expo-file-system` is imported **lazily inside the flush**: a static import would pull Expo's native module graph into every unit test that reaches `background-sync.ts` (it did — `background-sync.test.ts` went red on `__DEV__ is not defined` until the import moved). |
 | `apps/mobile/src/lib/replica/native-trace.test.ts` (new) | 7 tests: default-off, drain-once, native minting, swallowed write failure. |
 | `apps/mobile/src/lib/replica/background-sync.ts` | One `flushNativeTraces()` in `runBackgroundReplicaSync`'s `finally`. |
@@ -937,3 +937,77 @@ bun run --cwd apps/mobile test -- src/lib/replica/native-trace.test.ts    # 7 pa
 bun run --cwd packages/client test                                        # 267 files, 2447 passed (engine lane)
 bun run --cwd apps/mobile test -- src/lib/replica/                        # 30 files, 214 passed (engine lane)
 ```
+
+## w1-gate — the merge rung stops timing and starts counting
+
+**Files**
+
+| Path | What |
+| --- | --- |
+| `.github/workflows/ci.yml` | The per-PR perf gate is now `bun run test:perf:counters`. The `apt-get install strace` step and the **retry-once wrapper are DELETED**. |
+| `scripts/ci/work-counter-gate.mjs` (new) | The comparison: `compareScenario` / `compareAll` / `renderRows` / `explainFailures` / `verdict`, plus a CLI over a captured measurements file. Two modes — `max` (a budget) and `exact` (a value where both directions are a regression). |
+| `scripts/ci/work-counters.expected.json` (new) | The committed, tighten-only expectations. |
+| `scripts/ci/work-counter-gate.test.mjs` (new) | 10 `node --test` cases, incl. drift in both directions between the rig and the file. |
+| `tests/perf/work-counters.perf.test.ts` (new) | The rig: golden year-3 vault, real `Gateway.read` and `Gateway.invoke`, counters diffed and compared. Second test asserts two identical runs cost identically — the property that makes the retry unnecessary. |
+| `packages/server/src/cli/trace-admin.ts` (new) | `centraid-gateway trace last [--data-dir] [--vault-dir] [--json] [--clear]` — the waterfall, rendered through the contract's own `waterfall()`. |
+| `packages/server/src/cli/trace-admin.test.ts` (new) | 9 tests: rendering, vault ordering by recency, `--json`, `--clear`, and the "spans are off, here is how to turn them on" refusal. |
+| `packages/server/src/cli/cli.ts` | `trace` subcommand + usage line. |
+| `packages/vault/src/gateway/work-counters.ts` | `fsyncs` also counts an AUTOCOMMIT write (a mutating statement outside a transaction opens and commits its own, so SQLite syncs with no `COMMIT` to see). Found by this rig: without it the gate read 0 barriers for a write. |
+| `packages/vault/src/gateway/work-counters.test.ts` | +2 tests: autocommit is a barrier, a no-op statement is not, and two writes in one transaction are ONE barrier. |
+| `package.json` | `test:perf:counters`; `work-counter-gate.test.mjs` added to `scripts:test`. |
+| `docs/logs.md` | `trace last`'s flags, and the merge-rung paragraph. |
+
+**Numbers** — host: this container, Linux 6.18 x64, 4 cores / 15 GB, Node 22. Volume: the golden year-3 vault. Command: `bun run test:perf:counters`. These are the committed expectations, measured, not estimated:
+
+| Scenario | statements | rowsScanned | fsyncs | bytesRead | bytesWritten |
+| --- | --- | --- | --- | --- | --- |
+| `gateway.read core.party limit=20` | 6 | 24 | **1** | 2100 | 198 |
+| `gateway.invoke atlas.insert_row core.place` | 25 | 31 | **5** | 1448 | 948 |
+
+**Seeded-regression proof.** Both seeds were applied to `Gateway.read`, the gate run once, and the seed reverted.
+
+| Seed | First-run verdict |
+| --- | --- |
+| One extra statement (`SELECT 1`) | `statements max 6 → 7 FAIL` — *"statements must be at most 6, measured 7 (+1). Something on this path now does more work. Find it — do not raise the number."* |
+| One extra durability barrier (an autocommit `INSERT`) | `fsyncs exact 1 → 2 FAIL` — *"fsyncs is 1, measured 2 (+1)."* |
+
+Both failed on the **first** run, with no retry and no history, and both named the counter and the direction.
+
+**Deleted / replaced**
+
+- The **retry-once step** (#532, annotated by #557) is gone. Re-judged on its merits: it existed only because the wall-clock rig it wrapped read shared-runner event-loop noise as a regression. Deterministic integers have no noise to absorb, and a retry over them would hide a real regression half the time. There is no product or security property that depends on it — it is deleted, not moved.
+- The `apt-get install strace` step is gone with it. `strace` gave an exact `fsync(2)` count at the cost of a Linux runner and an external tracer; a durability barrier is the product's own behaviour and is the same integer on every host.
+- The wall-clock rig itself (`test:perf:pr` → `packages/server/scripts/bench-low-end.mjs`) is **NOT** deleted: it answers a different question — latency, RSS and idle cost under a constrained hardware profile — and no counter replaces that. Per the lane's escape hatch, **the counters gate replaces it on the merge rung and the wall-clock rig moves to rung 3 (`candidate.yml`) in wave 2**; `candidate.yml` is outside this lane's contract so it was not edited. `check:full` still runs it locally, so it is not orphaned in the meantime.
+
+**Decisions**
+
+- `fsyncs` uses `mode: "exact"`, the other counters `mode: "max"`. A durability barrier that disappears is a durability bug, not a speed-up, so both directions must fail; the rest are budgets and must not fail an improvement.
+- The rig warms each path before measuring. The first call through any path compiles statements and fills SQLite's page cache; fencing that would fence the fixture's coldness, which no product change moves.
+- The comparison lives in `scripts/ci/` and the measurement in `tests/perf/`, so the comparison is unit-tested without booting a vault and a developer's `--explain` and CI's failure use one renderer.
+- A scenario in the file but not in the run, or measured but not expected, is an **error**. A gate that silently stops fencing a path is worse than no gate.
+
+**Findings** (not this lane's to fix; filed for the root)
+
+1. **One `atlas.insert_row` costs five durability barriers.** Five separate autocommit writes for one user write, where a transaction would make it one. Recorded in the expectations as measured, with the comment saying so — not approved.
+2. **Every gateway READ performs a durable write** (the audit receipt), so a read costs an fsync. The property that depends on it is real — an access receipt that is not durable before the caller sees the rows is not evidence — but it means "read" is not a read-only cost, and any read-heavy budget written as if it were is wrong.
+3. **`tests/quality/first-paint-query-counts.test.ts` has its own statement counter** (`countReadStatements`) and its own query-count budget file. That is the "query-count file" #927's ledger criterion says the ledger replaces; it should read these counters instead of counting statements a second way.
+
+**Verification**
+
+```
+bun run test:perf:counters                                              # 2 passed; the table above, all rows ok
+node --test scripts/ci/work-counter-gate.test.mjs                       # 10 pass, 0 fail
+bun run --cwd packages/server test -- src/cli/trace-admin.test.ts       # 9 passed
+bun run --cwd packages/vault test -- src/gateway/work-counters.test.ts  # 11 passed
+bun run lint:workflow-pins                                              # 23 workflows clean
+bun run lint:path-filters                                               # 10 filters cover every path
+bun run scripts:test                                                    # 599 pass, 0 fail
+bash .governance/run.sh                                                 # 22/22 directives passed
+bun run --cwd packages/vault test                                       # 202 files, 1588 passed (engine lane)
+bun run --cwd packages/server test                                      # 391/395 files; 3 reds are BASE STATE, see below
+bun run format:check && bun run lint && bun run typecheck               # clean
+```
+
+Lane tree hash after the final gates: quoted in the lane report to the root. A tree hash cannot be written inside the tree it names — recording it here would change it — so the report is the authority and `git rev-parse HEAD^{tree}` on the landed head is the check. Base: `origin/claude/927-w1b@f782cfb6d`.
+
+The three `packages/server` reds are BASE STATE, not this lane: `gateway-db-lock.integration.test.ts` shells out to the `sqlite3` CLI, which is not installed in this container, and `acp/backends/acp/launch.test.ts` asserts `IS_SANDBOX` is unset while the container exports `IS_SANDBOX=yes`. `git diff --name-only origin/main...HEAD` touches neither tree.
