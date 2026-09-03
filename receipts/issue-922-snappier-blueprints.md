@@ -710,7 +710,55 @@ Files changed in this slice:
 
 ### Audit
 
-REFUTED — no fresh-context verifier has adjudicated this slice yet. The root runs the verifier against the worktree separately and replaces this verdict; the slice does not self-certify, and the directive's default when uncertain is REFUTED.
+Verdict: PASS
+
+Adjudicated by a fresh-context verifier sub-agent against the worktree at `f77acd1f5`, handed only the diff, the receipt and the issue.
+
+**Diff ↔ receipt.** `git diff origin/main...HEAD --stat` is 81 files; every non-receipt path appears verbatim in the appended section's file list (checked mechanically, path-by-path). Nothing in the diff is undescribed and nothing described is absent. `git diff --numstat origin/main...HEAD` shows no binary (`- -`) rows. `origin/main`'s copy of this receipt is a byte-exact prefix of the branch's copy (31,677 bytes, `cmp`), so the append rewrote nothing above it.
+
+**Acceptance criterion, clause by clause (issue #922 Part 0 box 1).**
+- *Replica read plan reports `truncated` when the default cap fills* — `read-plan.ts` binds `limit + 1`; `trimReplicaPage` is the only place the probe is dropped; both consumers (`store-core.ts`, `multi-vault-reader.ts`) route through it. `read-plan-truncation.test.ts` drives a real `ReplicaSqliteStore` over real SQLite for all three cases, including the exactly-at-cap case that a naive `rows.length === limit` would over-report.
+- *Gateway read reports `truncated`* — `gateway.ts` `read()` selects `LIMIT ${limit + 1}`, slices the probe, and the access receipt's `rowCount` counts the delivered rows only.
+- *Undeclared unbounded reads are refused* — verified at RUNTIME, not only by test (see falsification 2 below).
+- *Truncation is visible on the surface* — re-ran the e2e case here and re-generated `artifacts/e2e/ui-impact/issue-922-web-truncation-status.png`; the frame's status line reads `Showing the newest 20; more not loaded` under the real board query.
+
+**Numbers re-derived independently.** A balanced-paren walk of every `ctx.vault.read(` argument across `packages/blueprints/apps/*/queries/*.ts` gives 208 call sites, 138 carrying `acceptTruncation: true`, and **0** carrying both `acceptTruncation` and a top-level `limit` — so the flag was added only where a read was unbounded. The same walk over `apps/mobile/src` non-test files gives 121 `useReplicaQuery` calls, 85 flagged, and 13 unflagged-and-unwindowed, all of which are Home's tile reads whose constants in `home-tile-reads.ts` each declare a `limit` (checked). No shipped call site can reach the refusal.
+
+**Policy.** No budget, ratchet, allowlist or floor widened; `tests/quality/unbounded-query-waivers.json` is untouched. The one gate edit (`REPLICA_REQUEST_KEYS` gains `acceptTruncation`) can only turn `keys.every(...)` from false to true, i.e. it makes the P3 walk scan strictly more objects; `bun run test:qualities -- user-facing-qualities` is green (15 tests). The `CENTRAID_E2E_CHROMIUM` override is a spread guarded on the env var: unset — the CI case — the config is byte-identical to before. Both new "deliberate" seams (`UNBOUNDED_READ` excluded from `FALLBACK_CODES`; refusal as state on the phone, rejection on the web) name the concrete property they protect.
+
+**Gates run here** (each package suite under the shared host lock):
+
+```sh
+bun run format:check                       # all 5357 files formatted
+bun run lint                               # clean
+bun run lint:product                       # 39/39 in 5.7s
+bun run --cwd packages/{core,vault,client,blueprints} build
+bun run --cwd packages/client typecheck    # clean
+bun run --cwd packages/vault typecheck     # clean
+bun run --cwd packages/blueprints typecheck
+bun run --cwd packages/core typecheck
+bun run --cwd apps/mobile typecheck        # clean
+bun run --cwd apps/web typecheck           # clean
+bun run --cwd packages/client test         # 266 files, 2432 passed
+bun run --cwd packages/vault test          # 201 files, 1574 passed | 2 skipped
+bun run --cwd packages/blueprints test     # 207 files, 6586 passed | 2 expected fail
+bun run --cwd apps/mobile test             # 272 files, 2359 passed
+bun run test:qualities -- user-facing-qualities   # 15 passed
+bash .governance/run.sh                    # 22/22 directives
+CENTRAID_E2E_CHROMIUM=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell \
+  bun run --cwd apps/web e2e -- tasks.spec.ts     # 2 passed (24.7s)
+```
+
+**Falsification attempts.**
+1. *A read path that still caps by default without reporting it.* Grepped every default limit under `packages/client/src`, `packages/vault/src/gateway`, `apps/mobile/src/lib/replica` and the mobile hooks. Two survivors: `query.ts`'s `request.limit ?? 1000` is `evaluateReplicaRead`, which has no production caller (it is the parity oracle only); `store-core.ts`'s FTS `search` still defaults to 100 and clamps to 1,000 with no `truncated` on `ReplicaSearchWireResult` — a distinct RPC from the two the criterion names, recorded as an observation below rather than a defect in this slice. Every read path named by the criterion reports.
+2. *The refusal is only a test fixture.* Built the real inline ctx (`buildInlineCtx`) over a counting session stub and issued `ctx.vault.read({ entity: "schedule.task", purpose })`. It rejected with `UnboundedReplicaReadError` / `code: "UNBOUNDED_READ"` / `entity: "schedule.task"`, naming both fixes, with **`session.read` call count 0** — the refusal precedes the read. The same ctx answered `acceptTruncation: true` and `limit: 5` normally. Enforced at runtime.
+
+**Observations for the root (none blocking).**
+- The replica FTS `search` path (`packages/client/src/replica/store-core.ts`) truncates at its own default without a `truncated` field. Outside this criterion's two named layers, but it is a read on a seat, so it should be routed to a later slice or explicitly ruled out rather than left unnamed.
+- `multi-vault-reader.ts`'s truncation verdict (`page.truncated || rows.length > requested`, covering the dedupe-collapse case) is new logic with no direct test; the phone-hook suite stubs the session. The logic reads correct on both the badge-risk and dedupe-rerun branches.
+- The web's online-fallback path (`gatewayRead` in `centraid-inline.ts`) does not surface a gateway `truncated` onto the status line; the signal exists at the API but has no consumer there yet.
+- The demonstrated-red run for the e2e case is recorded with its seed and outcome; it was not re-executed here (it needs a source edit plus a client/web/server rebuild). The case's green run and its screenshot were reproduced.
+- Bookkeeping: the Decisions bullet says "three files were touched outside the slice contract's list", but `store-core.ts` and `multi-vault-reader.ts` are both inside it, and a fourth outside file (`tests/quality/user-facing-qualities.test.ts`) is disclosed in its own bullet instead. Every outside-list edit is disclosed somewhere; only the count is off.
 
 ## User impact
 
