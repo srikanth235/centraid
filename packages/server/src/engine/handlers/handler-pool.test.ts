@@ -1,8 +1,9 @@
 import { writeFile } from "node:fs/promises";
-// Warm-spare worker pool (#404). These cover the four properties the
-// pool must hold beyond "dispatch still works": it keeps warm spares between
-// runs, it preserves per-run module isolation (a worker is never reused across
-// handlers), a hung handler is still terminable, and a worker crash doesn't
+// Warm worker pool (#404, #922 B3). These cover the properties the pool must
+// hold beyond "dispatch still works": it keeps warm threads between runs, a
+// thread IS reused across clean runs but every run gets a fresh handler graph
+// and no global a handler left behind, a lane is never reused across a sandbox
+// boundary, a hung handler is still terminable, and a worker crash doesn't
 // poison the pool for subsequent runs.
 import path from "node:path";
 
@@ -109,15 +110,21 @@ describe("handler-pool", () => {
     expect(outcome.value).toBe("cold");
   });
 
-  test("module-level state from run A is not visible to run B (no worker reuse)", async () => {
-    pool = new WorkerPool(HANDLER_WORKER_FILE, 2);
+  test("a reused thread still gives every run a fresh handler graph and a clean global", async () => {
+    pool = new WorkerPool(HANDLER_WORKER_FILE, 1);
     pool.prewarm();
-    // A handler whose module-scope counter would climb across runs IF the worker
-    // (and thus its module registry) were reused. Single-use workers guarantee a
-    // fresh module each run, so both runs must observe the initial value.
+    await tick();
+    // `seen` and `stashed` would both climb if the graph were reused; the
+    // thread counter climbs BECAUSE the thread is.
     const handlerFile = await writeHandler(
       "stateful.js",
-      `let seen = 0;\nexport default async () => { seen += 1; return { seen }; };`
+      `let seen = 0;\n` +
+        `export default async () => {\n` +
+        `  seen += 1;\n` +
+        `  globalThis.__leak = (globalThis.__leak ?? 0) + 1;\n` +
+        `  globalThis.__thread = (globalThis.__thread ?? 0) + 1;\n` +
+        `  return { seen, leak: globalThis.__leak, thread: globalThis.__thread };\n` +
+        `};`
     );
     const run = () =>
       dispatch({
@@ -127,11 +134,102 @@ describe("handler-pool", () => {
         timeoutMs: 5_000,
       });
     const first = await run();
+    await tick();
     const second = await run();
-    expect(first.value).toStrictEqual({ seen: 1 });
-    // If the worker were reused, this would be { seen: 2 }.
-    expect(second.value).toStrictEqual({ seen: 1 });
-  });
+    await tick();
+    const third = await run();
+    expect(first.value).toStrictEqual({ seen: 1, leak: 1, thread: 1 });
+    // Module scope and the global object both start clean on every run...
+    expect(second.value).toStrictEqual({ seen: 1, leak: 1, thread: 1 });
+    expect(third.value).toStrictEqual({ seen: 1, leak: 1, thread: 1 });
+  }, 30_000);
+
+  /** Records the FIRST run's ordinal in a global no scrub can remove, so a
+   *  later run reports which thread it landed on. */
+  const THREAD_MARKER =
+    `export default async ({ n }) => {\n` +
+    `  const g = globalThis;\n` +
+    `  if (!("__firstRun" in g)) {\n` +
+    `    Object.defineProperty(g, "__firstRun", {\n` +
+    `      value: n, configurable: false, writable: false,\n` +
+    `    });\n` +
+    `  }\n` +
+    `  return { first: g.__firstRun, now: n };\n` +
+    `};`;
+
+  test("a thread serves later runs instead of being discarded after one", async () => {
+    pool = new WorkerPool(HANDLER_WORKER_FILE, 1);
+    pool.prewarm();
+    await tick();
+    const handlerFile = await writeHandler("thread-id.js", THREAD_MARKER);
+    const run = (n: number) =>
+      dispatch({
+        handlerFile,
+        handlerKind: "query",
+        args: { n },
+        timeoutMs: 5_000,
+      });
+    expect((await run(1)).value).toStrictEqual({ first: 1, now: 1 });
+    await tick();
+    // Same thread: the marker still carries run 1's ordinal.
+    expect((await run(2)).value).toStrictEqual({ first: 1, now: 2 });
+  }, 30_000);
+
+  test("a timed-out thread is destroyed, never handed to the next run", async () => {
+    pool = new WorkerPool(HANDLER_WORKER_FILE, 1);
+    pool.prewarm();
+    await tick();
+    const marker = await writeHandler("marker.js", THREAD_MARKER);
+    const hung = await writeHandler(
+      "hang2.js",
+      `export default async () => { await new Promise(() => {}); };`
+    );
+    const run = (n: number) =>
+      dispatch({
+        handlerFile: marker,
+        handlerKind: "query",
+        args: { n },
+        timeoutMs: 5_000,
+      });
+    expect((await run(1)).value).toStrictEqual({ first: 1, now: 1 });
+    await tick();
+    const timedOut = await dispatch({
+      handlerFile: hung,
+      handlerKind: "query",
+      args: { n: 2 },
+      timeoutMs: 100,
+    });
+    expect(timedOut.ok).toBe(false);
+    await tick(200);
+    // A fresh thread: the marker is unset, so run 3 stamps its own ordinal.
+    expect((await run(3)).value).toStrictEqual({ first: 3, now: 3 });
+  }, 60_000);
+
+  test("a seed's thread is never handed an ordinary handler run", async () => {
+    // `seed.js` installs the app-seed lane, which grants fs reads under the app
+    // dir. That grant is thread-wide and one-way, so the pool must not park the
+    // thread where an app-handler run can pick it up.
+    pool = new WorkerPool(HANDLER_WORKER_FILE, 2);
+    pool.prewarm();
+    await tick();
+    const seedFile = await writeHandler("seed.js", THREAD_MARKER);
+    const plain = await writeHandler("plain.js", THREAD_MARKER);
+    const seeded = await dispatch({
+      handlerFile: seedFile,
+      handlerKind: "action",
+      args: { n: 1 },
+      timeoutMs: 10_000,
+    });
+    expect(seeded.value).toStrictEqual({ first: 1, now: 1 });
+    await tick();
+    const ordinary = await dispatch({
+      handlerFile: plain,
+      handlerKind: "query",
+      args: { n: 2 },
+      timeoutMs: 10_000,
+    });
+    expect(ordinary.value).toStrictEqual({ first: 2, now: 2 });
+  }, 30_000);
 
   test("runs a TypeScript handler graph (typed source + relative .ts sibling import)", async () => {
     // TS-authored apps ship `.ts` handlers; the worker installs the esbuild

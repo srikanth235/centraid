@@ -285,7 +285,16 @@ type WorkerToParentMessage =
     }
   | { type: "vault"; id: number; op: VaultOp; payload: Record<string, unknown> }
   | { type: "log"; level: "info" | "warn" | "error"; msg: string }
-  | { type: "result"; ok: boolean; value?: unknown; error?: string };
+  | {
+      type: "result";
+      ok: boolean;
+      value?: unknown;
+      error?: string;
+      /** The thread has served its run budget: terminate rather than park. */
+      retire?: boolean;
+      /** The sandbox the thread actually installed. */
+      sandboxKey?: string;
+    };
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -641,7 +650,20 @@ export async function runHandler(
     /* swallow */
   }
 
-  const worker = automationWorkerPool().acquire();
+  // The lane the parent is about to ask for, as a POOLING HINT; the worker
+  // reports the lane it actually installed and the pool parks under that.
+  const pool = automationWorkerPool();
+  const sandboxKeyHint = JSON.stringify([
+    opts.sandboxLane ?? "automation-handler",
+    opts.sandboxReadRoots ? [...opts.sandboxReadRoots] : [],
+    opts.sandboxRuntimeDir ?? null,
+  ]);
+  let installedKey = sandboxKeyHint;
+  // Only a run that completed the protocol leaves a thread fit to serve the
+  // next one; a timeout, a worker error or a non-zero exit kills it.
+  let reusable = false;
+  let timedOut = false;
+  const worker = pool.acquire(sandboxKeyHint);
   const workerRequest = {
     handlerFile: opts.handlerFile,
     args: { automation: { id: opts.automationId } },
@@ -659,6 +681,9 @@ export async function runHandler(
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   if (timeoutMs > 0) {
     timeoutHandle = setTimeout(() => {
+      // A timed-out thread never goes back in the pool, whatever it posts
+      // next: the grace period below ends in `terminate()`.
+      timedOut = true;
       abortController.abort("timeout");
       // oxlint-disable-next-line unicorn/require-post-message-target-origin -- grandfathered pre-existing suppression (#247)
       worker.postMessage({ type: "abort", reason: "timeout" });
@@ -891,8 +916,8 @@ export async function runHandler(
       }
       applyRetention(audit.store, audit.automationId, opts.history);
       abortController.abort();
-      worker.removeAllListeners();
-      worker.terminate().catch(() => {});
+      if (reusable && !timedOut) pool.release(worker, installedKey);
+      else pool.retire(worker);
       if (persistedEntries.length > 0)
         void appendLogs(opts.automationDir, persistedEntries);
       // oxlint-disable-next-line promise/no-multiple-resolved -- grandfathered pre-existing suppression (#247)
@@ -1031,6 +1056,8 @@ export async function runHandler(
         return;
       }
       if (msg.type === "result") {
+        reusable = msg.retire !== true;
+        if (msg.sandboxKey) installedKey = msg.sandboxKey;
         void (async () => {
           try {
             let rawValue = msg.value;

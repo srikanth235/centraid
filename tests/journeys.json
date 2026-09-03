@@ -508,6 +508,17 @@
             "observedBrowseP95SoloMs": [4.9, 19.9, 21.5],
             "note": "MEASURED after #883 C2 correlated the blob egress reference CTE (packages/vault/src/blob/read.ts): the revision-chain predicate used to seed its recursive walk from `SELECT current_content_id FROM core_document` — the whole library — on every byte request, and now walks from the requested page toward the document head through rung 7's core_link endpoint indexes. This entry is the ref-search half of that composition asked for by #883 C2 item 4; the read lane is fenced here rather than only through the worst-lane ceiling.",
             "headroom": "~3x the worst of three observations on a contended shared container, the convention the neighbouring entries use. Tighten-only."
+          },
+          "_remeasured": {
+            "at": "2026-09-03",
+            "by": "#922 B2/B3 — blueprint handlers precompiled and handler workers reused across clean runs",
+            "host": "linux x64, 4 vCPU, 15.7 GiB RAM, shared dev container; node v22.22.2; in-process serve() gateway, empty vault, eight bundled apps",
+            "command": "node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/composite-load.scale.test.ts",
+            "runs": 3,
+            "observedBrowseP95CompositeMs": [291.6, 293.0, 300.1],
+            "observedBrowseP95SoloMs": [5.3, 5.4, 6.3],
+            "observedWorstLaneP95Ms": [646.7, 721.3, 754.3],
+            "note": "The ceiling is UNCHANGED at 1000 ms. Ref-search under composition did not move (291.6-300.1 ms against the 2026-08-28 band of 228.4-333.4 ms) — this lane is starved by the CPU the other lanes take, and B2/B3 make each app-engine worker cheaper without making the write lane stop competing for the core. What DID move is the lane doing the taking: the worst lane (Notes create-note) fell from an observed 828.1-1147.5 ms to 646.7-754.3 ms on the same rig. `compositeLoadFactor.ceilingWorstLaneP95Ms` (3500) is therefore loose against the new distribution and is a candidate tightening, left to the umbrella's budget pass rather than moved here."
           }
         }
       }

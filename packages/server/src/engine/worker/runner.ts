@@ -1,10 +1,16 @@
 /**
- * Worker entry that executes one user handler. The app-handler sandbox is
+ * Worker entry that executes app handlers. The app-handler sandbox is
  * installed before the handler graph is imported (#842), so network reach
  * survives only as `ctx.fetch` and the only data door is `ctx.vault`. It is
  * still NOT an OS sandbox — read `../sandbox/install.ts`'s limits before
- * describing this boundary in a threat model. A worker runs EXACTLY ONE
- * handler and is discarded (#404), so no thread ever imports two.
+ * describing this boundary in a threat model.
+ *
+ * A THREAD SERVES MANY RUNS (#922 B3) and every run gets a fresh handler
+ * graph: the handler is imported under a per-run URL, so nothing a handler
+ * kept at module scope — a memo, a cursor, a captured `ctx` — is visible to
+ * the next run. The sandbox itself is installed ONCE and is one-way, so the
+ * pool only ever hands this thread runs in the lane it is already committed
+ * to (see `../handlers/worker-pool.ts`).
  */
 
 import { existsSync } from "node:fs";
@@ -24,6 +30,43 @@ async function loadSandboxBoot(): Promise<typeof import("../sandbox/boot.js")> {
 
 /** Captured BEFORE the sandbox revokes the global. */
 const hostFetch = globalThis.fetch;
+
+/**
+ * Own global keys as of the first run, captured AFTER the sandbox installs so
+ * the sandbox's own marks are part of the baseline. A reused thread shares one
+ * global object, so anything a handler parks there would otherwise be readable
+ * by the NEXT handler — possibly another app's. Scrubbing before each graph
+ * loads closes that channel; it is not a realm, and a non-configurable global
+ * still cannot be removed.
+ */
+let baselineGlobals: Set<string | symbol> | undefined;
+
+function scrubHandlerGlobals(): void {
+  const scope = globalThis as unknown as Record<PropertyKey, unknown>;
+  if (!baselineGlobals) {
+    baselineGlobals = new Set(Reflect.ownKeys(scope));
+    return;
+  }
+  for (const key of Reflect.ownKeys(scope)) {
+    if (baselineGlobals.has(key)) continue;
+    try {
+      delete scope[key];
+    } catch {
+      /* non-configurable: never ours to remove */
+    }
+  }
+}
+
+/**
+ * Retire the thread after this many runs. Each run imports the handler under a
+ * fresh URL, and Node's module registry never drops one, so the cost of a
+ * fresh graph is a registry that grows with the thread's age. This is the
+ * resource-limit guard for that growth — reached before `resourceLimits`
+ * would kill a worker MID-RUN and fail a member's request.
+ */
+const MAX_RUNS_PER_WORKER = 64;
+
+let runsServed = 0;
 
 let tsLoaderRegistered = false;
 function ensureTsLoader(): void {
@@ -88,6 +131,14 @@ interface ResultMessage {
   ok: boolean;
   value?: unknown;
   error?: string;
+  /** The thread has served its run budget: park nothing, terminate it. */
+  retire?: boolean;
+  /**
+   * The sandbox this THREAD is now committed to, as installed — not as the
+   * parent guessed. The pool parks under this, so a mis-hinted run can only
+   * cost a thread, never leak a lane's grant into the next run.
+   */
+  sandboxKey?: string;
 }
 
 if (!parentPort) {
@@ -179,15 +230,23 @@ const log = {
     port.postMessage({ type: "log", level: "error", msg } satisfies LogMessage),
 };
 
-const abortController = new AbortController();
-const baseCtx = {
-  fetch: (input: string, init?: RequestInit) =>
-    hostFetch(input, { ...init, signal: abortController.signal }),
-  abortSignal: abortController.signal,
-  vault,
-};
+/** One per run: the previous run's controller is aborted in its `finally`, so
+ *  a shared one would hand run N+1 a dead signal. */
+let abortController = new AbortController();
+function baseCtx() {
+  const signal = abortController.signal;
+  return {
+    fetch: (input: string, init?: RequestInit) =>
+      hostFetch(input, { ...init, signal }),
+    abortSignal: signal,
+    vault,
+  };
+}
 
 function execute(req: WorkerRequest): void {
+  runsServed += 1;
+  abortController = new AbortController();
+  let sandboxKey: string | undefined;
   void (async () => {
     try {
       const unavailableTime = (): never => {
@@ -228,8 +287,19 @@ function execute(req: WorkerRequest): void {
           : sandboxApi.appHandlerPolicy(),
         { redactLaunchArgs: true }
       );
+      // A seed's grant is scoped to ITS app dir, so the dir is part of the
+      // identity two runs must share to run on one thread.
+      sandboxKey = isSeed
+        ? `app-seed:${path.dirname(req.handlerFile)}`
+        : sandbox.policy.lane;
+      scrubHandlerGlobals();
       sandbox.taint(pathToFileURL(req.handlerFile).href);
-      const mod = (await import(pathToFileURL(req.handlerFile).href)) as {
+      // A per-run URL, not the bare one: the registry key differs, so the
+      // handler graph is evaluated again and carries no state from the last
+      // run. The taint set and the resolve hook both strip the query.
+      const mod = (await import(
+        `${pathToFileURL(req.handlerFile).href}?centraid-run=${runsServed}`
+      )) as {
         default?: (args: unknown) => Promise<unknown>;
       };
       if (typeof mod.default !== "function") {
@@ -238,13 +308,15 @@ function execute(req: WorkerRequest): void {
       const fullArgs = {
         ...(req.args as object),
         log,
-        ctx: { ...baseCtx, time },
+        ctx: { ...baseCtx(), time },
       };
       const value = await mod.default(fullArgs);
       port.postMessage({
         type: "result",
         ok: true,
         value,
+        ...(sandboxKey ? { sandboxKey } : {}),
+        ...(runsServed >= MAX_RUNS_PER_WORKER ? { retire: true } : {}),
       } satisfies ResultMessage);
     } catch (error) {
       port.postMessage({
@@ -254,9 +326,16 @@ function execute(req: WorkerRequest): void {
           error instanceof Error
             ? (error.stack ?? error.message)
             : String(error),
+        ...(sandboxKey ? { sandboxKey } : {}),
+        ...(runsServed >= MAX_RUNS_PER_WORKER ? { retire: true } : {}),
       } satisfies ResultMessage);
     } finally {
       abortController.abort();
+      // A late reply for a run that already ended must never resolve into the
+      // next one. Dropped, not rejected: a call the handler abandoned has no
+      // `catch`, and an unhandled rejection would kill a thread that is about
+      // to serve someone else.
+      pendingVaultCalls.clear();
     }
   })();
 }

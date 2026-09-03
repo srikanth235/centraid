@@ -28,6 +28,18 @@ const WORKER_FILE = resolveWorkerFile();
 
 export const HANDLER_WORKER_FILE = WORKER_FILE;
 
+/**
+ * The sandbox lane a thread is committed to once it has run this file. A seed
+ * carries its app dir because `appSeedPolicy` grants fs reads UNDER THAT DIR:
+ * two apps' seeds are two keys, and neither is an ordinary handler's.
+ * Mirrors the lane choice in `../worker/runner.ts`.
+ */
+function appSandboxKey(handlerFile: string): string {
+  return /(?:^|[\\/])seed\.(?:m?js|tsx?)$/u.test(handlerFile)
+    ? `app-seed:${path.dirname(handlerFile)}`
+    : "app-handler";
+}
+
 /** Lazy: import must not spawn threads (#404). */
 let sharedWorkerPoolInstance: WorkerPool | undefined;
 function sharedWorkerPool(): WorkerPool {
@@ -93,7 +105,8 @@ export async function runHandler(
   const logs: HandlerOutcome["logs"] = [];
 
   const pool = opts.pool ?? sharedWorkerPool();
-  const worker = pool.acquire();
+  const sandboxKey = appSandboxKey(opts.handlerFile);
+  const worker = pool.acquire(sandboxKey);
   const runMessage = {
     type: "run",
     request: {
@@ -113,6 +126,12 @@ export async function runHandler(
 
   return await new Promise<HandlerOutcome>((resolve) => {
     let resolved = false;
+    // Only a run that completed the protocol leaves a thread fit to serve the
+    // next one; a timeout, a worker error or a non-zero exit kills it.
+    let reusable = false;
+    // The worker's own answer wins over the acquire hint: it is the lane
+    // actually installed on that thread.
+    let installedKey = sandboxKey;
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     const finish = (outcome: HandlerOutcome) => {
       if (resolved) return;
@@ -127,8 +146,8 @@ export async function runHandler(
           /* must not change the outcome */
         }
       }
-      worker.removeAllListeners();
-      worker.terminate().catch(() => {});
+      if (reusable) pool.release(worker, installedKey);
+      else pool.retire(worker);
       if (persistedEntries.length > 0) {
         void appendLogs(opts.app.dir, persistedEntries);
       }
@@ -193,7 +212,11 @@ export async function runHandler(
           ok: boolean;
           value?: unknown;
           error?: string;
+          retire?: boolean;
+          sandboxKey?: string;
         };
+        reusable = r.retire !== true;
+        if (r.sandboxKey) installedKey = r.sandboxKey;
         if (!r.ok && r.error) {
           persistedEntries.push({
             ts: Date.now(),

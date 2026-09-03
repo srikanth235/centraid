@@ -22,6 +22,7 @@ import { Worker } from "node:worker_threads";
 
 import { describe, expect, test } from "vitest";
 
+import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 const APP_RUNNER = fileURLToPath(
@@ -662,4 +663,95 @@ describe("an automation worker given no lane gets the strict floor", () => {
       envOverride: null,
     });
   });
+});
+
+/**
+ * A THREAD SERVES MANY RUNS (#922 B3), so every case above has to hold on run
+ * N, not only on a virgin thread. These drive ONE pooled worker through a
+ * sequence of handlers through the same run protocol dispatch uses.
+ */
+async function runAppHandlerSequence(
+  files: readonly string[]
+): Promise<ResultMessage[]> {
+  const worker = new Worker(APP_RUNNER, {
+    workerData: { pooled: true },
+    execArgv: [],
+    env: { [CANARY_ENV]: CANARY_VALUE },
+  });
+  const out: ResultMessage[] = [];
+  try {
+    await forEachSequentially(files, async (file) => {
+      const settled = awaitResult(worker);
+      const run = {
+        type: "run",
+        request: {
+          handlerFile: file,
+          handlerKind: "query",
+          args: { body: {} },
+        },
+      };
+      // oxlint-disable-next-line unicorn/require-post-message-target-origin -- node:worker_threads postMessage has no targetOrigin (#252)
+      worker.postMessage(run);
+      out.push(await settled);
+      worker.removeAllListeners("message");
+      worker.removeAllListeners("error");
+    });
+  } finally {
+    await worker.terminate();
+  }
+  return out;
+}
+
+describe("app-handler lane: a thread reused across runs", () => {
+  test("the refusal still holds on the second run of the same thread", async () => {
+    const benign = await handler(
+      "reuse-benign.mjs",
+      `export default async () => ({ ok: true });`
+    );
+    const hostile = await handler(
+      "reuse-fs.mjs",
+      `import { readFileSync } from "node:fs";
+       export default async () => ({ leaked: readFileSync("/etc/hostname", "utf8") });`
+    );
+    const [first, second] = await runAppHandlerSequence([benign, hostile]);
+    expect(first?.ok).toBe(true);
+    expect(second?.ok).toBe(false);
+    expect(refusal(second as ResultMessage)).toContain("node:fs");
+  }, 40_000);
+
+  test("no module state and no planted global survive into the next run", async () => {
+    const stateful = await handler(
+      "reuse-state.mjs",
+      `let seen = 0;
+       export default async () => {
+         seen += 1;
+         globalThis.__stash = (globalThis.__stash ?? 0) + 1;
+         return { seen, stash: globalThis.__stash };
+       };`
+    );
+    const [first, second] = await runAppHandlerSequence([stateful, stateful]);
+    expect(first?.value).toStrictEqual({ seen: 1, stash: 1 });
+    // A second app's handler on this thread must not read the first's stash.
+    expect(second?.value).toStrictEqual({ seen: 1, stash: 1 });
+  }, 40_000);
+
+  test("the environment is still empty and the abort signal still live on run two", async () => {
+    const probe = await handler(
+      "reuse-ctx.mjs",
+      `export default async ({ ctx }) => ({
+         envIsEmpty: Object.keys(process.env).length === 0,
+         canary: process.env.${CANARY_ENV} ?? null,
+         aborted: ctx.abortSignal.aborted,
+       });`
+    );
+    const [, second] = await runAppHandlerSequence([probe, probe]);
+    expect(second?.ok).toBe(true);
+    expect(second?.value).toStrictEqual({
+      envIsEmpty: true,
+      canary: null,
+      // The previous run's controller was aborted in its `finally`; a shared
+      // one would hand this run a dead signal and break every `ctx.fetch`.
+      aborted: false,
+    });
+  }, 40_000);
 });
