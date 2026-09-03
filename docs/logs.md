@@ -61,6 +61,23 @@ Steward-absence detection and local Commons sync instrumentation — no network 
 
 Each grant's entry carries: `steward` (the escalating presence + silence duration), `reachableRatio` (contacts / attempts), `absence` (episode count, total/longest/open duration), `pullOutcomes` (noop/tail/snapshot/tombstone/parked/unreachable counts), `opLog` (row count, last/checkpoint sequence, rows beyond checkpoint — the first go/no-go number in the [Commons decision](decisions.md#commons)), `memberLag` (member count, max/p50 ops behind, count beyond the K=256 window — the second go/no-go number), and `intentDwellMs` (parked-intent submitted→settled latency).
 
+## Traces and work counters (#927)
+
+The product measures itself: every hop of a user action — seat → tunnel → gateway → handler → SQLite → commit → SSE → apply → render — emits a span, and the journey budgets are queries over those spans, so a regression says _where_ and not only _whether_. The shared contract is `packages/core/src/protocol/trace.ts` (`TraceSpan`, `TraceRecord`, `WorkCounters`, `validateTraceRecord`, `waterfall`), imported by every emitter and every consumer so there is exactly one format.
+
+**Sovereign and local-only.** A trace never leaves the machine that produced it. There is no telemetry endpoint, no sampling service, no opt-in upload — the store is part of the owner's own diagnostics under their vault directory, so it is backed up, moved and **purged with the vault** like any other vault content. Nothing in the trace path writes to a network socket; a span that reached one would be a security bug, not a configuration mistake.
+
+| Property | How it holds |
+| --- | --- |
+| Never egressed | The record type is not part of any wire schema; no route serves it and no client posts it. |
+| Purged with the vault | The store lives under the vault's diagnostics, so deleting the vault deletes the traces. |
+| Bounded cost | Spans are **off by default** and sampled (`TraceSamplingPolicy`, `shouldSample`); only the integer work counters are always on. |
+| Deterministic unit | `WorkCounters` — statements, rows scanned, fsyncs, bytes read/written, worker spawns, HTTP round trips, invalidations, re-reads — integers, so the merge rung compares them with no flake, no retry and no history. |
+
+A trace id is not a new identifier: for a write it **is** the replica intent id (`traceIdOfIntent`), so the outbox row and the waterfall join without a lookup table; a read has no intent and mints one at the seat (`mintTraceId`).
+
+**Reading the last tap's waterfall.** `centraid-gateway trace last` prints the most recent trace on this machine as a nested waterfall (each row: hop, name, offset from the root, duration, depth), rendered from the pure `waterfall()` helper the rigs also use. It is a developer tool on the owner's own machine, not product surface. _Lands in #927 w1-gateway_ — the contract in `packages/core` is here now, the command and the store that backs it arrive with the gateway emitter slice.
+
 ## What is not a log
 
 | Path | Role |

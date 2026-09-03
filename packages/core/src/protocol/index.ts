@@ -51,6 +51,37 @@ export {
 } from "./handshake.js";
 
 export {
+  TRACE_FORMAT_VERSION,
+  TRACE_HOPS,
+  TRACE_SEATS,
+  TRACE_JOURNEYS,
+  TRACE_SAMPLING_OFF,
+  WORK_COUNTER_KEYS,
+  addCounters,
+  diffCounters,
+  mintTraceId,
+  shouldSample,
+  traceIdOfIntent,
+  validateTraceRecord,
+  waterfall,
+  webCryptoTraceIdFactory,
+  zeroCounters,
+  type JourneyId,
+  type TraceAttrValue,
+  type TraceAttrs,
+  type TraceHop,
+  type TraceId,
+  type TraceIdFactory,
+  type TraceRecord,
+  type TraceSamplingPolicy,
+  type TraceSeat,
+  type TraceSpan,
+  type WaterfallRow,
+  type WorkCounterKey,
+  type WorkCounters,
+} from "./trace.js";
+
+export {
   judgePeerHandshake,
   peerHello,
   peerProtocolsCompatible,
