@@ -1,9 +1,34 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import type { SQLInputValue } from "node:sqlite";
 
-export const YEAR3_FIXTURE_VERSION = 1;
+import { seedYear3Distributions } from "./year3-distributions.js";
+import {
+  YEAR3_CONTACT_NEEDLE,
+  YEAR3_CONTACT_NEEDLE_INDEX,
+  YEAR3_DISTRIBUTIONS,
+} from "./year3-shape.js";
+import type {
+  Year3SeedCounts,
+  Year3VaultProfile,
+  Year3VaultTarget,
+} from "./year3-shape.js";
+
+// One public subpath: `./year3-vault` stays the whole vocabulary's front door,
+// so splitting the module changed no import anywhere else in the tree.
+export * from "./year3-shape.js";
+
+/**
+ * 2 — the golden artifact (#927 P4). Version 1 declared row COUNTS only; the
+ * golden year-3 vault declares DISTRIBUTIONS as well (long note bodies over
+ * the replica's 64 KiB value ceiling, grantees with live bindings and standing
+ * authority, a year of receipts in the audit band, the five-vault footprint),
+ * so a fixture cached under version 1 is a different artifact and is not
+ * reusable. `year3FixtureCacheKey` carries the version, so the bump alone
+ * invalidates every cached directory.
+ */
+export const YEAR3_FIXTURE_VERSION = 2;
 
 /**
  * Stand-in for a caller that names no schema. Distinct from any real ladder
@@ -12,46 +37,6 @@ export const YEAR3_FIXTURE_VERSION = 1;
  */
 const UNVERSIONED_SCHEMA = -1;
 export const YEAR3_DEFAULT_SEED = 679_003;
-
-export interface Year3VaultProfile {
-  readonly seed: number;
-  readonly generatedAt: string;
-  readonly parties: number;
-  readonly photos: number;
-  readonly conversations: number;
-  readonly turnsPerConversation: number;
-  readonly multiYearStart: string;
-  readonly sealedSentinels: Readonly<Record<string, string>>;
-  readonly parkedActions: readonly string[];
-}
-
-interface Statement {
-  get: (...values: SQLInputValue[]) => unknown;
-  run: (...values: SQLInputValue[]) => unknown;
-}
-
-export interface Year3Sqlite {
-  exec: (sql: string) => void;
-  prepare: (sql: string) => Statement;
-}
-
-export interface Year3VaultTarget {
-  /** The ONE file (#916): ontology, audit and ledger bands share this handle. */
-  readonly vault: Year3Sqlite;
-  readonly sealCell: (
-    entity: string,
-    column: string,
-    rowId: string,
-    plaintext: string
-  ) => string;
-}
-
-export interface Year3SeedCounts {
-  readonly parties: number;
-  readonly photos: number;
-  readonly conversations: number;
-  readonly turnsPerConversation: number;
-}
 
 /**
  * One deterministic generator for the year-3 row, chronology, custody, and
@@ -105,7 +90,13 @@ export function seedYear3Vault(
     const timestamp = at(index % 1_096);
     party.run(
       id("year3-party", index),
-      `Year 3 person ${index}`,
+      // The golden vault plants its own search needle rather than leaving each
+      // rig to UPDATE a row after copying the fixture: a rig that rewrites the
+      // artifact is no longer measuring the artifact.
+      counts.distributions &&
+        index === YEAR3_CONTACT_NEEDLE_INDEX % Math.max(1, counts.parties)
+        ? YEAR3_CONTACT_NEEDLE
+        : `Year 3 person ${index}`,
       timestamp,
       timestamp
     );
@@ -297,6 +288,16 @@ export function seedYear3Vault(
     }
   }
   target.vault.exec("COMMIT");
+  if (counts.distributions) {
+    seedYear3Distributions(target, counts.distributions, profile, {
+      at,
+      id,
+      digest,
+      ownerPartyId: owner.self_party_id,
+      parties: counts.parties,
+      photos: counts.photos,
+    });
+  }
   target.vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 }
 
@@ -351,6 +352,43 @@ export function year3VaultProfile(
     },
     parkedActions: ["outbox.stage", "schedule.propose_event"],
   };
+}
+
+/**
+ * THE golden year-3 vault (#927 P4): one named, versioned, content-addressed
+ * artifact every rig mounts, so "shape ids unchanged on the golden vault" and
+ * every before/after number stand on the same fixture.
+ *
+ * `photos` is the DAILY-USE path count (10,000), not the library total
+ * (90,000): the golden vault is what a journey rig opens, and a journey reads
+ * the daily path. The 90,000-asset library stays `year3VaultProfile()`'s
+ * number, seeded by the two rigs that measure the library itself
+ * (`phash-clustering`, `restore-10gib`).
+ */
+export function goldenYear3Profile(
+  seed = YEAR3_DEFAULT_SEED
+): Year3VaultProfile {
+  return {
+    ...year3VaultProfile(seed),
+    photos: YEAR3_DISTRIBUTIONS.dailyPathPhotos,
+    distributions: YEAR3_DISTRIBUTIONS,
+  };
+}
+
+/**
+ * Where materialized fixtures live. `CENTRAID_YEAR3_CACHE_DIR` is the CI
+ * override (a cached workflow path); otherwise the host's scratch dir, which
+ * survives between local runs and so gives a warm build on the second run.
+ *
+ * ONE way to name the cache: every rig calls this rather than repeating the
+ * env-var-or-temp-dir dance, which is how `artifacts/year3-cache` ended up
+ * spelled out in rig bodies in the first place.
+ */
+export function year3FixtureCacheRoot(): string {
+  return (
+    process.env.CENTRAID_YEAR3_CACHE_DIR ??
+    path.join(tmpdir(), "centraid-year3-fixture-cache")
+  );
 }
 
 /**

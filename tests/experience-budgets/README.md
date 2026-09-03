@@ -43,20 +43,26 @@ An `unmeasured` entry deliberately has no `ceilingMs`. Landing a plausible numbe
 
 Every ceiling in this directory is stated **at a volume**. A ceiling with no volume is not a budget. These are the repo's declared year-3 numbers for a single personal vault, and they are the same ones the nightly scale rigs seed to — see the `volume` string on each entry in [`tests/budgets.json`](../budgets.json)'s `qualityRigs` section.
 
-| Dimension | Year-3 volume | Rig that seeds it |
-| --- | --- | --- |
-| Photo assets | 90,000 (3,000 near-duplicate families) | `tests/scale/phash-clustering.scale.test.ts` |
-| Photos in the daily-use path | 10,000 | `tests/scale/large-vault.scale.test.ts` |
-| Contacts / people | 5,000 | `tests/scale/large-vault.scale.test.ts` |
-| Notes | 1,000 | `tests/scale/large-vault.scale.test.ts` |
-| Conversation turns | 7,300/yr → ~22,000 | `tests/scale/conversation-ledger.scale.test.ts` |
-| Ontology entities | 10,000 | `tests/scale/ontology.scale.test.ts` |
-| CAS objects | 100,000 | `tests/scale/blob-gc.scale.test.ts` |
-| Automations | 200 | `tests/scale/automations-fire.scale.test.ts` |
-| Replica rows on a phone | 50,000 | `tests/scale/replica-bootstrap.scale.test.ts` (first sync) · `tests/scale/replica-reconnect.scale.test.ts` (resume after a disconnect) |
-| Vault on disk | 10 GiB | `tests/scale/restore-10gib.scale.test.ts` |
-| Paired devices | 200 | `tests/scale/tunnel-pairs.scale.test.ts` |
-| Mounted vaults on one gateway | 5 | `tests/scale/multi-vault-footprint.scale.test.ts` |
+The **golden artifact** column names the field of `YEAR3_DISTRIBUTIONS` (or of the profile) that carries the dimension in the one versioned fixture every rig mounts — `packages/test-kit/src/year3-vault.ts`, materialized through `tests/helpers/factories.ts#goldenYear3Vault` and, for the phone half, `#goldenYear3Replica` (#927 P4). A dash means the dimension is not in the golden artifact yet and its rig still seeds its own corpus.
+
+| Dimension | Year-3 volume | Golden artifact | Rig that seeds it |
+| --- | --- | --- | --- |
+| Photo assets | 90,000 (3,000 near-duplicate families) | `year3VaultProfile().photos` (library profile, not the golden vault) | `tests/scale/phash-clustering.scale.test.ts` |
+| Photos in the daily-use path | 10,000 | `dailyPathPhotos` | `tests/scale/large-vault.scale.test.ts` |
+| Contacts / people | 5,000 | `year3VaultProfile().parties` | `tests/scale/large-vault.scale.test.ts` |
+| Notes | 1,000 | `notes` (with `longNoteShare` over 64 KiB) | `tests/scale/large-vault.scale.test.ts` |
+| Calendar events | 1,096 (three years, one a day) | `eventDays` | `tests/scale/large-vault.scale.test.ts` |
+| Conversation turns | 7,300/yr → ~22,000 | `year3VaultProfile().conversations × turnsPerConversation` | `tests/scale/conversation-ledger.scale.test.ts` |
+| Ontology entities | 10,000 | — | `tests/scale/ontology.scale.test.ts` |
+| CAS objects | 100,000 | — | `tests/scale/blob-gc.scale.test.ts` |
+| Automations | 200 | `automations` | `tests/scale/automations-fire.scale.test.ts` |
+| Grantees (live binding + standing authority) | 12, one of them a circle | `grantees` / `granteeCircles` | `tests/scale/large-vault.scale.test.ts` (mounts them) |
+| Audit receipts | 365 days | `receiptDays` | `tests/scale/large-vault.scale.test.ts` (mounts them) |
+| Replica rows on a phone | 50,000 | `replicaRows` — **one shape (`schedule.task`), a declared filler rather than a realistic year-3 mix**: the daily-path corpus alone reaches only ~27,000 mirrorable rows, and padding it with undeclared photos would invent a number. Revisited by [#927](https://github.com/srikanth235/centraid/issues/927) w3, which owns the journey rigs that would consume a realistic mix | `tests/scale/replica-bootstrap.scale.test.ts` (first sync, and the golden replica artifact) · `tests/scale/replica-reconnect.scale.test.ts` (resume after a disconnect) |
+| Pending intents on reconnect | 1 · 10 · 40 | `YEAR3_PENDING_INTENT_VOLUMES` | `tests/scale/replica-bootstrap.scale.test.ts` |
+| Vault on disk | 10 GiB | — (library profile plus blobs) | `tests/scale/restore-10gib.scale.test.ts` |
+| Paired devices | 200 | — | `tests/scale/tunnel-pairs.scale.test.ts` |
+| Mounted vaults on one gateway | 5 | `mountedVaults` | `tests/scale/multi-vault-footprint.scale.test.ts` |
 
 **A budget measured on an empty vault is labelled `"volume": "empty"`** — it is a bundle/transport ratchet only and cannot catch an O(vault-size) regression. Several entries here are honestly in that state today; each says so.
 
