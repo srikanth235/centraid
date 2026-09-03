@@ -398,3 +398,87 @@ $ bash .governance/run.sh                           # all 22 directives passed
 | date | harness | session |
 | --- | --- | --- |
 | 2026-09-03 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+
+### Audit
+
+Verdict: PASS
+
+Fresh-context verifier (handed only the worktree, the branch, the receipt and issue
+#922). Checked against `origin/main` = `e2f277da3`.
+
+**Verified**
+
+- Diff is exactly three files, all named in the appended section:
+  `apps/mobile/src/lib/replica/inline-query-ctx.native.ts` (+238),
+  `apps/mobile/src/lib/replica/inline-query-ctx.native.test.ts` (+568), this receipt
+  (+234). No file outside the slice contract; `apps/mobile/metro.config.js`,
+  `packages/blueprints/apps/inline-types.ts` and `packages/blueprints/package.json` are
+  untouched, as the section states. No binary hunks (`git diff --numstat`), no NUL bytes
+  (`grep -lP '\x00'` over the three files: no match).
+- Receipt is an append: `origin/main`'s 31,677 bytes are an exact byte-prefix of the
+  branch's 46,855 (`head -c 31677 … | cmp`). No `## Checklist` line is ticked — the file
+  contains zero `- [x]` items, so rule 3's crosswalk has nothing to satisfy and nothing
+  above the appended section is rewritten.
+- Both preconditions the root attached to ADOPT are the appended section's first
+  paragraph: (a) one ctx builder behind a DOM-free `@centraid/client` subpath consumed
+  from `src`, with `inline-query-ctx.native.ts` deleted in the same E3/E7 slice; (b) no
+  `__centraid*` provenance on rows handed to a handler, stripped at the adapter. Both are
+  named as "E7's first line".
+- Blocker 1's premise checked independently: `packages/client/package.json` publishes 21
+  subpaths and none reaches `src/react/blueprints/inlineQueryCtx.ts`.
+- No widened budget, allowlist or ratchet; no test skipped, quarantined or deleted; no
+  lint/config change. `tests/experience-budgets/mobile.json` untouched.
+
+**Falsification attempts**
+
+1. *"The parity test runs the same `queries/dashboard.ts` the web seat imports."* Holds.
+   `packages/blueprints/apps/tally/app-inline.tsx:12` imports `./queries/dashboard.ts`;
+   the test imports `../../../../../packages/blueprints/apps/tally/queries/dashboard.ts`,
+   which resolves to that same file — not a copy. The provenance difference is asserted
+   positively (`native.recurring[0].__centraidScopeId === "personal"`), not normalised
+   away. Non-vacuous: mutating the adapter's `vault.read` to drop one row
+   (`result.rows.slice(1)`) turns both tests red; reverted, tree clean.
+2. *"+31 KB, exit 0."* Reproduced here, not just re-read. `expo export --platform android
+   --clear` on this branch: baseline 2,682 modules / 8,024,743 B `.hbc`, exit 0; with a
+   throwaway `spike-probe-verify.ts` importing `@centraid/blueprints/apps/tally/queries/
+   dashboard` + `runNativeInlineQuery` from `index.ts`, 2,686 modules / 8,056,801 B, exit
+   0 — **+4 modules, +32,058 B (+0.399 %)** with `metro.config.js` unmodified. Absolute
+   byte totals differ from the receipt's (its baseline was a different tree; main has
+   advanced), the delta matches. Probe removed; tree clean.
+3. Bonus: the uncommitted "8 errors" claim was reproduced exactly. A throwaway module
+   importing `inlineQueryCtx.ts` by source path makes `bun run --cwd apps/mobile
+   typecheck` emit 8 errors, the first being
+   `packages/client/src/gateway-client-core.ts(65,40): error TS2551` — the line the
+   receipt quotes.
+
+**Gates run** (this worktree, 4 cores, Node 22 vs pinned 24)
+
+```
+bun run format:check                      # clean, 5357 files
+bun run lint                              # green
+bun run --cwd apps/mobile typecheck       # green
+bun run --cwd apps/mobile test            # 272 files, 2357 passed
+bun run --cwd packages/blueprints typecheck  # green
+bun run --cwd packages/blueprints test    # 207 files, 6588 passed | 2 expected fail
+bun run lint:product                      # 39/39
+bash .governance/run.sh                   # 22/22 directives
+```
+
+**Noted, not blocking**
+
+- "a local read that runs in single-digit milliseconds at today's ledger size" overstates
+  this receipt's own number: the recorded N=40 median is 11.1 ms. The recommendation does
+  not turn on it (the path it replaces is a tunnel RTT plus a cold worker spawn), but the
+  prose should read "low tens of milliseconds".
+- The N=40 / N=2000 timings carry host and volume but their harness is an uncommitted
+  variant, so they are unreproducible here. The receipt says so and does not assert them;
+  recorded as the limit of that evidence.
+- The first full `packages/blueprints test` run exited 1 with two unhandled errors from a
+  `setInterval` in `src/photos-selection-bar.test.ts` firing after teardown. A second run
+  was clean (exit 0) and the file passes standalone on `origin/main` and here; the diff
+  touches no blueprints source. Flake, unrelated to this slice.
+- `packages/blueprints` gains 4 dynamic tests (6584 → 6588) because
+  `app-manifest-reads.test.ts` and `no-inference-client.test.ts` enumerate
+  `apps/mobile/src`; all four pass. Not scope creep — no blueprints file changed.
+- `docs/decisions.md` still records `SB-loader` as **Open**. Correct for this slice (the
+  edit is out of scope and the root's); flagged so it is not forgotten.
