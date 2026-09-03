@@ -164,3 +164,237 @@ Falsification attempts:
 | date | harness | session |
 | --- | --- | --- |
 | 2026-09-03 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
+
+## w1 Metro-loader spike — ADOPT
+
+Wave-1 ruling (i): **can the phone run the SAME blueprint query handler web runs
+(`packages/blueprints/apps/<app>/queries/*.ts`, executed on web by `runInlineQuery` over
+the replica session) over the native replica session, loaded by Metro?**
+
+**It can, and no bundler change is needed.** The root ruled **ADOPT**, with two
+preconditions this slice's evidence produced: (a) ONE ctx builder, shared through a
+DOM-free `@centraid/client` export subpath that the React Native seat consumes from
+`src`, with `apps/mobile/src/lib/replica/inline-query-ctx.native.ts` **deleted in that
+same E3/E7 slice** — never two builders side by side; (b) rows handed to a handler carry
+no `__centraid*` provenance keys, stripped at the adapter, because provenance is a
+mounted-read-plane concern and not part of the handler contract. Both are E7's first
+line. `SB-loader` is recorded by the root in `docs/decisions.md`, not here.
+
+This slice is a **spike**: nothing in product code imports the adapter, and no projection
+fork is deleted. It exists to make the ruling answerable with numbers.
+
+#### w1(i) — the Metro-loadable `queries/*.ts` spike
+
+A **spike**, not product wiring: it answers one question with evidence so the root can
+record ruling (i). Nothing in the product imports the new adapter; E7 owns the wiring.
+
+- `packages/blueprints/apps/inline-types.ts` — **not changed**, after being changed and
+  reverted. The spike added an `InlineQueryEntry` type there (the query half of an inline
+  app with no React DOM `Root`, which `InlineAppModule` satisfies structurally); every
+  path under `packages/blueprints/apps/` that is not a test file counts as user-facing to
+  `check:ui-receipt`, whose only exit is a screenshot emitted by a changed e2e harness. A
+  types-only addition that no code imports has no screen to photograph, so the choice was
+  a fabricated UI receipt, a weakened gate, or dropping the edit. Dropped — the contract
+  it states is stated in prose below and E7 declares it beside the real entry file it
+  actually exports, where a UI receipt is honest. The spike loses no evidence: the export,
+  the parity test and the recommendation stand without it.
+- `apps/mobile/src/lib/replica/inline-query-ctx.native.ts` — **new**. The `ctx` the phone
+  supplies to a blueprint query handler: `vault.read`/`vault.search` over the mounted
+  replica session, the shared `@centraid/core/time` engine, an `ONLINE_ONLY` guard for
+  oversized/undisclosed fields, and every write or gateway-only verb rejecting. The
+  `handler-contract` read-only rule is kept by construction, not by trusting the handler.
+- `apps/mobile/src/lib/replica/inline-query-ctx.native.test.ts` — **new**. The
+  balance-parity oracle: Tally's `packages/blueprints/apps/tally/queries/dashboard.ts` —
+  the same module file the web seat imports — runs unmodified against a seeded
+  node-sqlite replica through `MultiVaultReplicaReader`, and its output is compared to
+  the same handler over the same rows through a plain row-array ctx.
+- `apps/mobile/metro.config.js` — **unchanged, deliberately**. See the finding below: no
+  resolver change is needed. `packages/blueprints/package.json` exports are **unchanged**
+  too — `"./apps/tally/*": "./apps/tally/*.ts"` already resolves
+  `@centraid/blueprints/apps/tally/queries/dashboard`.
+- `receipts/issue-922-snappier-blueprints.md` — this file.
+
+#### The finding that changes the question
+
+**The issue's premise — "the only real blocker is that Metro cannot load `queries/*.ts`"
+— is stale.** Metro loads them today, with no configuration change:
+
+- `apps/mobile` already imports blueprint TypeScript sources
+  (`@centraid/blueprints/apps/_shared/*`, 20+ sites under `src/kit/share`), so
+  `watchFolders`, `nodeModulesPaths` and the package-exports resolver already reach
+  `packages/blueprints`.
+- `apps/mobile/tsconfig.json` already sets `allowImportingTsExtensions` **and** already
+  includes `packages/blueprints/types/centraid.d.ts`, so the ambient `HandlerCtx` /
+  `HandlerArgs` globals a handler references by bare name are in the mobile program.
+- No `queries/*.ts` module in any of the eight apps imports a node builtin. Across all of
+  them the only non-relative runtime imports are `@centraid/design`, `tldts` (one Locker
+  module) and `@centraid/core/time` — and mobile already bundles the first and third.
+- What is *actually* unloadable is `app-inline.tsx`, which pairs the queries with a React
+  DOM `Root`. That is the entry problem `InlineQueryEntry` names, and it is a file, not a
+  bundler limitation.
+
+Measured, not argued: a Metro export with `queries/dashboard.ts` in the app graph
+**succeeds** (below).
+
+### Recommendation — **ADOPT**
+
+The phone can run the same handler web runs, over the native replica session, loaded by
+Metro. Adopt the loader; E7 then deletes each app's projection fork instead of maintaining
+it. The blockers are real but small, and none of them is Metro.
+
+**Blockers, and the fix for each:**
+
+1. **One ctx builder, not two.** `packages/client/src/react/blueprints/inlineQueryCtx.ts`
+   is already seat-neutral at runtime (its only runtime imports are `@centraid/core/time`
+   and blueprints' `pending-overlay`; the replica imports are type-only), but
+   `@centraid/client` publishes **no export subpath that reaches it**, so no seat outside
+   that package can import it. Importing it by source path pulls the package's DOM
+   sources into the mobile TypeScript program and fails `bun run --cwd apps/mobile
+   typecheck` (measured — see Verification). *Fix:* publish it as a client subpath (or
+   move it to a seat-neutral module) and **delete `inline-query-ctx.native.ts` in the same
+   slice** — never keep two builders. Until then this spike's adapter is the only way the
+   phone can run a handler, and it is a duplicate, which is why it must not be wired into
+   product code as-is.
+2. **Mounted provenance leaks into handler output.** The phone's mounted read plane
+   decorates every row with `__centraidScopeId` / `__centraidScopeLabel` /
+   `__centraidCanWrite` (and the plural forms); the web replica session does not. A
+   handler that spreads a whole row — Tally's `recurring` does — therefore emits those
+   keys on the phone. Everything derived is identical (asserted). *Fix:* E7 decides once,
+   for all eight apps — the native ctx strips provenance before the handler sees it, or
+   the seats expect it and the web ctx grows the same fields. The parity test pins the
+   difference so the decision cannot be made by accident.
+3. **`ctx.time` must be the same engine.** It already is: the adapter passes the same five
+   `@centraid/core/time` functions the web builder passes, and `@centraid/core` already
+   ships a `react-native` condition pointing at source. No work; named so it is not
+   re-litigated.
+4. **The pending-overlay carry is not in the adapter.** The web builder carries pending
+   row identity across product-field projections (`carryPendingRows`). The spike adapter
+   does not, because copying that logic is exactly the duplication blocker 1 forbids. It
+   comes free once blocker 1 is fixed. No app can be cut over before then.
+5. **Per-app ctx surface: nothing missing.** Across all eight apps the queries use
+   `ctx.vault.read` (208), `search` (9), `authenticate` (5), `invoke` (4), `reveal` (3),
+   `resolve` (2) and `ctx.time` (5). `resolve` (notes/`library.ts`, tasks/`board.ts`)
+   already returns `{ cards: [] }` on the web inline path and does the same here.
+   `authenticate` / `invoke` / `reveal` appear **only** in Locker's six sealed-half
+   modules, which stay online-only by design — E7 moves Locker's list half only. So there
+   is no handler that needs a `ctx` feature the native session cannot supply.
+6. **Hermes.** `toSorted` is used by queries in agenda, docs, locker, notes, people and
+   tasks. `apps/mobile/polyfills/array-to-sorted.js` already installs it before app code
+   via `getPolyfills`, and `bun run lint:hermes-surface` — which walks the real mobile
+   import graph — is green with the handler reachable. Nothing to do; recorded because
+   the gate is what makes it safe to pull six more apps' queries into the bundle.
+7. **Bundle weight is not a blocker but is not free.** +31,494 B (+0.39 %) of Hermes
+   bytecode for one app's dashboard chain. Eight apps' full query sets will cost more;
+   E8's lazy navigators and `perf:app-weight`'s tighten-only ceiling are the control.
+   `tests/experience-budgets/mobile.json` must be re-measured, never widened, as apps
+   cut over.
+8. **No new workspace package (#801) and no `packages/blueprints` boundary change.** The
+   export map already resolves `queries/*`; nothing was added.
+
+**What ADOPT buys, in the issue's own terms:** the ~2.5k-line per-app projection fork
+(`people-model.ts`, `docs-projection*.ts`, `notes-model.ts`, `timeline-model.ts`,
+`useTasks`) becomes deletable app by app, the 1,000-row drift it carries goes with it,
+and Tally's seven gateway RPCs and 10-minute stale clock are replaced by a local read
+that runs in single-digit milliseconds at today's ledger size.
+
+**If the root refuses instead**, the alternative is the parity oracle this slice already
+committed: keep the fork and hold it honest with
+`apps/mobile/src/lib/replica/inline-query-ctx.native.test.ts`'s comparison against the
+blueprint handler on the same rows. That is strictly worse — it pays for two derivations
+forever — but it is now available either way.
+
+### Out of scope
+
+- No projection fork deleted; `tally-store.ts` / `tally-gateway.ts` and every product
+  screen untouched (E7 owns them).
+- No `docs/decisions.md` edit — the root records SB-loader from this recommendation.
+- No `docs/mobile-offline.md` / `docs/blueprint-seats.md` change; no workflow changes.
+- `apps/mobile/metro.config.js` and `packages/blueprints/package.json` deliberately
+  unchanged: the spike established that neither needs an edit.
+
+### Verification
+
+Host: 4 cores / 15 GB, Node 22 (repo pins 24.4.1 — local warning only).
+Volume where stated: one mounted scope, node-sqlite replica driver.
+
+```
+# Metro export — BASELINE (clean tree)
+$ cd apps/mobile && bunx expo export --platform android --output-dir /tmp/mx-baseline --clear
+Android Bundled 106826ms apps/mobile/index.ts (2681 modules)   exit 0
+_expo/static/js/android/index-*.hbc = 8,012,753 B
+
+# Metro export — WITH `queries/dashboard.ts` + the native adapter in the app graph
+# (a temporary `spike-probe.ts` imported from index.ts, reverted after measuring;
+#  metro.config.js NOT modified)
+$ cd apps/mobile && bunx expo export --platform android --output-dir /tmp/mx-spike --clear
+Android Bundled 143361ms apps/mobile/index.ts (2685 modules)   exit 0
+_expo/static/js/android/index-*.hbc = 8,044,247 B
+=> +4 modules, +31,494 B (+0.39%) of Hermes bytecode
+
+# Handler execution over the node-sqlite driver, median of 7 runs
+#   40 expenses / 160 splits / 40 payers   : 11.1 ms  (9.6,9.8,10.1,11.1,14.5,15.4,16.1)
+#   2000 expenses / 8000 splits / 8000 pyrs: 188.2 ms (154.0,164.4,172.4,188.2,267.6,304.5,531.6)
+# (the 2000 case is the query's own declared window; timing measured with a
+#  throwaway variant of the committed test, not committed — timings are not
+#  assertions. The gateway path it would replace is a tunnel RTT plus a cold
+#  worker spawn per tap, which this host cannot measure: structural, per #922.)
+
+# The stronger oracle, run once and NOT committed: the same fixture compared
+# against the WEB builder itself, imported by source path.
+$ bun run --cwd apps/mobile test -- src/lib/replica/inline-query-ctx.native.test.ts
+  Test Files  1 passed (1)   Tests  2 passed (2)
+  # `expect(native).toStrictEqual(web)` green with
+  # `runInlineQuery` from packages/client/src/react/blueprints/inlineQueryCtx.ts.
+$ bun run --cwd apps/mobile typecheck
+  ../../packages/client/src/gateway-client-core.ts(65,40): error TS2551 ... (8 errors)
+  # => the source-path import is not committable; blocker 1 above.
+
+# Committed gates
+$ bun run format                                    # 5353 files, clean
+$ bun run lint                                      # green
+$ bun run --cwd apps/mobile test                    # 272 files, 2357 tests passed
+$ bun run --cwd apps/mobile typecheck               # green
+$ bun run --cwd packages/blueprints test            # 207 files, 6588 passed | 2 expected fail
+$ bun run --cwd packages/blueprints typecheck       # green
+$ bun run lint:engine-conformance                   # ok
+$ bun run check:reachability                        # ok (356 capabilities, 21 module globs)
+$ bun run --cwd packages/blueprints test -- src/one-computation.test.ts   # 7 passed
+$ bun run lint:hermes-surface
+  ok — 807 modules reachable from the mobile bundle, none calling an Array method Hermes lacks
+$ bun run lint:product                              # 39/39 (rebased onto origin/main
+                                                    # after #930 and PR #936 merged;
+                                                    # baseline is also 39/39)
+$ bash .governance/run.sh                           # all 22 directives passed
+                                                    # (doc-integrity green on the append)
+```
+
+### Decisions
+
+- **`apps/mobile/metro.config.js` was not edited.** The contract expected a resolver or
+  `watchFolders` change; the export proves none is needed. Editing it to satisfy the
+  contract's shape would have added configuration with no property depending on it.
+- **`packages/blueprints/package.json` was not edited.** `"./apps/tally/*"` already
+  resolves the `queries/` subpath; adding an explicit entry would be redundant surface.
+- **The parity oracle's reference side is a row-array ctx, not the web builder.** The web
+  builder was used first and the assertion passed (recorded above verbatim), but
+  committing that import breaks `apps/mobile typecheck`. The committed test states the
+  substitution in its header rather than quietly weakening the claim.
+- **Provenance is compared with `__centraid*` stripped**, and the difference is asserted
+  explicitly rather than normalised away, so the E7 decision in blocker 2 is forced into
+  the open.
+- **The `InlineQueryEntry` type was dropped rather than shipped past `check:ui-receipt`.**
+  See `#### w1(i)` above. The contract it would have stated, recorded here so E7 does not
+  rediscover it: *an entry exporting `{ appId, queries: Record<string, InlineQueryModule> }`
+  and nothing else — the query half of an inline app without its `Root`.* `app-inline.tsx`
+  cannot be that entry, because it pairs the queries with a React DOM `Root` and a
+  React Native bundle must not reach it. This is the whole "Metro cannot load" problem,
+  and it is an entry-file problem, not a bundler one.
+- **`apps/mobile/metro.config.js` was in the slice contract's file list and was not
+  touched.** Reported to the root rather than edited: the export is the evidence that no
+  resolver, `watchFolders` or exports-map change is required.
+
+### Identifiers
+
+| date | harness | session |
+| --- | --- | --- |
+| 2026-09-03 | claude-code | 60f9e86b-149f-5fc9-84c0-f2160b6b6f3c |
