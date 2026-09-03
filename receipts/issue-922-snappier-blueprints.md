@@ -95,7 +95,28 @@ The verifier's `## Audit` below is REFUTED on two findings; both are fixed in th
 
 ## Audit
 
-Verdict: REFUTED
+Verdict: PASS
+
+Re-verified at head `8e9156571` (second pass). Both first-pass findings are fixed at the four sites each touched; the register is untouched; all gates re-run. One risk raised below for the root, not a finding.
+
+Second pass — what was re-checked:
+
+- **"both seats already import" is gone from every live site.** `grep -rn "both seats already import\|both seats import" docs/ receipts/ ARCHITECTURE.md README.md` returns only this receipt's own audit and fix narrative quoting the old phrase, plus an unrelated 2026 receipt (`receipts/issue-903-…:788`). `docs/decisions.md:670` (`SB-tally`), `docs/decisions.md:71` (pointer), `docs/mobile-offline.md:116` and this receipt's `## What changed` all now read "the pure module pair the web query handlers already import, which the phone imports directly from wave 4 (E7); until then the phone reaches the fold only through the gateway RPC this ruling supersedes."
+- **`SB-replica-sync`'s mechanism matches the code it cites.** Mobile shared connection confirmed: `apps/mobile/src/lib/replica/native-session.ts:1130` — "Store and intent outbox share ONE driver handle" — with `NativeReplicaStore.create(options.driver, …)` and `SqliteIntentStore.create(options.driver)` at lines 1138-1142, and `sqlite-intent-store.ts:68-70` placing the outbox tables inside the shared replica database. Pragmas set on that one handle: `packages/client/src/replica/store-core.ts:296-298` (`foreign_keys=ON`, `journal_mode=DELETE`, `synchronous=FULL`). Web/desktop outbox is IndexedDB: `packages/client/src/replica/intent-store.ts:31,37` (`IDBDatabase`, `IDBFactory = indexedDB`). The `NORMAL` default with `PRAGMA synchronous=FULL` bracketing each outbox transaction before `BEGIN` and back to `NORMAL` after `COMMIT` is legal on a shared connection (the pragma is per-connection and takes effect between transactions), and `sqlite-intent-store.ts:350-360`'s synchronous `BEGIN IMMEDIATE` guard gives it a single place to sit.
+- **The re-judged register is still verbatim.** All 18 rows re-diffed cell-for-cell against #922's body: the same three benign deviations as the first pass (two dropped `file:line` suffixes, one self-reference rendered as an in-doc anchor) and nothing else. No row was edited to absorb the correction; the clarification sits as a labelled paragraph immediately under the table, naming the ruling as the design and the register row as the reproduction.
+
+Raised for the root — not blocking, and not a misstatement of current code:
+
+- `docs/decisions.md:672` (`SB-replica-sync`) rules `synchronous=NORMAL` on a replica that is also `journal_mode=DELETE` (`store-core.ts:297`), i.e. a rollback journal rather than WAL. The rationale given — "lost commits are re-pulled from the cursor" — is the WAL guarantee; under a rollback journal, `NORMAL` admits a small chance of **database corruption**, not merely lost commits, on power loss. Because the mobile outbox shares that one file, a corrupting replica commit would take the durable outbox with it, which the per-transaction `FULL` bracket does not prevent. Today's code is `FULL`, so nothing is broken now. Question for the owner before wave 3 (C2) implements it: keep `DELETE` and accept the window, move the replica to WAL where `NORMAL` means only lost commits (the second op-sqlite reader handle is what `DELETE` protects — `store-core.ts:1006` — so this is a real trade), or give the outbox its own file. Recommendation: name the answer in `SB-replica-sync` and add a power-loss case to C2's convergence suite, since B4's "fsyncs per offline intent" measurement does not probe it.
+
+Gates re-run at `8e9156571`:
+
+- `bun run format` → clean; `git status --porcelain` shows only this receipt.
+- root `bun run lint` (oxlint, `--deny-warnings`) → pass.
+- `bash .governance/run.sh` → 21 pass, 1 fail: `repo-hygiene` (`packages/blueprints/apps/locker/queries.test.ts` 638 > 625 lines — known pre-existing, #930). `internal-doc-links`, `doc-integrity` and `receipt-per-issue` all green.
+- Still docs-only: the diff touches no `packages/**` or `apps/**` file, so no package suite or typecheck lane applies.
+
+### First pass (REFUTED — both findings fixed at `8e9156571`)
 
 Findings:
 
