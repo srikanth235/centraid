@@ -108,9 +108,14 @@ describe("photos-timeline.scale", () => {
          (content_id, media_type, content_uri, sha256, byte_size, title, created_at)
        VALUES (?, 'image/jpeg', ?, ?, 4096, ?, ?)`
     );
+    // No `favorite` column: the star is a flags-scheme `core_tag` on the asset
+    // since #916 (ruling ONT-03), and naming the dropped column made this rig
+    // red at every volume rather than at a large one. The degenerate corpus
+    // stars nothing — these reads are ordered and bucketed by `captured_at`,
+    // and a tag join is `large-vault`'s axis, not this one.
     const insertAsset = db.vault.prepare(
-      `INSERT INTO media_asset (asset_id, content_id, kind, captured_at, favorite)
-       VALUES (?, ?, 'photo', ?, 0)`
+      `INSERT INTO media_asset (asset_id, content_id, kind, captured_at)
+       VALUES (?, ?, 'photo', ?)`
     );
 
     // The degenerate one-day corpus. Seeded and timed separately from the

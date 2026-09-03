@@ -1011,3 +1011,31 @@ bun run format:check && bun run lint && bun run typecheck               # clean
 Lane tree hash after the final gates: quoted in the lane report to the root. A tree hash cannot be written inside the tree it names — recording it here would change it — so the report is the authority and `git rev-parse HEAD^{tree}` on the landed head is the check. Base: `origin/claude/927-w1b@f782cfb6d`.
 
 The three `packages/server` reds are BASE STATE, not this lane: `gateway-db-lock.integration.test.ts` shells out to the `sqlite3` CLI, which is not installed in this container, and `acp/backends/acp/launch.test.ts` asserts `IS_SANDBOX` is unset while the container exports `IS_SANDBOX=yes`. `git diff --name-only origin/main...HEAD` touches neither tree.
+## lane 3a — golden-vault follow-ups
+
+Slices (iii) photos-timeline rig fix, (iv) fixture warm + build/mount split, (v) `artifacts/year3-cache` retired — `## w1c`'s finding 4 and its fixture-cost notes.
+
+### Files
+
+| Path | Change |
+| --- | --- |
+| `tests/scale/photos-timeline.scale.test.ts` | The degenerate corpus's `INSERT` stops naming `media_asset.favorite`, deleted by #916 (ONT-03). One statement; profile, volumes, budgets and all four assertions untouched. |
+
+Also in this lane, under #922 and detailed there: `tests/scale/replica-sse-fanout.scale.test.ts`, `apps/web/tests/e2e/perf-waterfall.spec.ts`, `scripts/test-report/render/adversaries.mjs`, `scripts/test-report/render.test.mjs`.
+
+### Numbers
+
+Host: this session's container, Linux 4 cores / 15 GB, node 22, cache root `/tmp/centraid-year3-fixture-cache`. Volume: `goldenYear3Profile()`, 106,274,816 B on disk. Command: `bun run test:scale -- tests/scale/<rig> --reporter=verbose`.
+
+`photos-timeline`, warm, is 2,580.9 ms, of which 2,271.2 ms is its own degenerate corpus.
+
+### Verification
+
+```sh
+# in /home/user/centraid-wt/claude/927-w1c-golden-vault
+bun run test:scale -- tests/scale/photos-timeline.scale.test.ts    # 1 passed (red at the base)
+```
+
+### Findings
+
+1. **Whether `photos-timeline` should mount the golden vault is open.** A: mount and re-declare it at 10,000 + 10,000 — needs `tests/budgets.json#qualityRigs` and `tests/claims.json#photos.scale-50k` to move with the volume (3b's files). B: mount and top up to 50,000 — the top-up is not cacheable, so warm seed cost goes from ~0.3 s to seconds and the rig's own 1.5x drift gate walks. Recommendation: A, in 3b's ledger pass. Not taken here.
