@@ -78,6 +78,8 @@ Registration is observable rather than assumed. Whether the background task and 
 
 The focused write target is ordered before the other cached scopes before the four-scope cap is applied. Upload rows persist that target vault, and headless reconciliation keeps the corresponding mounted sessions alive through canonical follow-up replay; transferred bytes therefore cannot settle without their app mutation merely because the app was backgrounded.
 
+The pass is also where diagnostics traces land. Spans (#927) buffer in a bounded in-memory ring while the app runs — a phone doing disk I/O on a scroll is exactly the cost the traces exist to find — and are written to `<replicaStorage>/diagnostics/traces.jsonl` in the pass's `finally`, so a pass that timed out still lands what it recorded. The write swallows its own failures and the ring is dropped if the OS kills the app first: a diagnostics buffer, not evidence. Tracing is OFF unless `EXPO_PUBLIC_CENTRAID_TRACE=1`; the work counters underneath are always on and are integers. See [logs.md](logs.md).
+
 The gateway push relay is wake-only. Its payload contains no vault id, item id, title, content, cursor, or owner data. Push delivery can make a background pull happen earlier, but loss or throttling cannot lose data. iOS background push is therefore treated as an optimization, in line with Expo's delivery guidance.
 
 ## Thumbnail packs and budgets
