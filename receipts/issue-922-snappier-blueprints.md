@@ -86,6 +86,40 @@ Docs-only slice: no package suite or typecheck lane is in scope (no `packages/**
 - **The Tally carve-out text stays.** Deleting it now would make `docs/mobile-offline.md` describe a seat that does not exist yet; the forward-stated supersession note keeps the doc current in both directions until wave 4.
 - **`SB-loader` is a row, not an omission.** Leaving the Metro-loader question out of the table would have let a later wave inherit it as an undecided default. It is recorded as open with the spike that closes it and the consequence of each answer.
 
+## Audit
+
+Verdict: REFUTED
+
+Findings:
+
+1. `docs/decisions.md:670` (`SB-tally`), `docs/decisions.md:71` (superseded pointer) and `docs/mobile-offline.md:116` → each states as current fact that the balance engine is "the pure module pair `tally-balance.ts` / `tally-simplify.ts` that both seats **already import**". The phone imports neither: `grep -rn "tally-balance\|tally-simplify\|tallyGroupNet\|simplifyDebts" apps/mobile/src` returns nothing, and the only importers are the web query handlers (`packages/blueprints/apps/tally/queries/{dashboard,friend}.ts` → `tally-balance.ts`, `queries/group.ts` → `tally-simplify.ts`). The phone reaches the fold only by a gateway RPC — which is exactly the carve-out this ruling supersedes, so the sentence asserts the post-wave-4 state as though it had landed and undercuts the ruling's own premise. Fix: state what is true now and name the wave — e.g. "the pure module pair the web query handlers already import, which the phone imports directly from wave 4 (E7)". The same wording is repeated in this receipt's `## What changed` (line 55) and needs the same correction.
+
+2. `docs/decisions.md:672` (`SB-replica-sync`) → "The client replica store runs `synchronous=NORMAL` on every seat. The intent outbox stays `FULL`." is ruled over a premise that does not hold on either seat. On mobile the outbox tables live in the **same** database file and on the same connection as the replica store (`apps/mobile/src/lib/replica/sqlite-intent-store.ts:68-70`, "Its tables are its own inside the shared replica database"; `packages/client/src/replica/store-core.ts:297-298` sets `journal_mode=DELETE` and `synchronous=FULL` for that one handle), and `synchronous` is a per-connection pragma — so the two halves of the ruling cannot both hold as written without a per-transaction pragma switch or a file split. On web the outbox is IndexedDB (`packages/client/src/replica/intent-store.ts`), where "stays `FULL`" names nothing. The register row copied from the issue ("the outbox that must survive a crash is a separate store") carries the same false premise, but as a verbatim reproduction it is not the defect — the new ruling is. Fix: `SB-replica-sync` should say how the outbox keeps its durability under a `NORMAL` replica handle (per-transaction pragma, or a separate outbox file) on mobile, and that the web outbox is IndexedDB and outside this pragma entirely, so wave 3 (C2) does not inherit an unimplementable sentence.
+
+Verified clean (no finding):
+
+- Diff ↔ receipt: the diff is exactly `docs/decisions.md` (+47/-1), `docs/mobile-offline.md` (+2), the new receipt; `## What changed` names all three and every one of the three `docs/decisions.md` edits (new section, six superseded-pointer rows, one appended sentence in `## Performance and Rust byte plane`). No file outside the slice contract's path list is touched; no code file is touched.
+- `## Checklist` mirrors the issue's acceptance criteria **verbatim** — 36 non-blank lines diffed line-by-line against #922's `### Acceptance criteria` after HTML-entity unescaping, zero differences, Part 0/A/B/C/D/E/F all present in order. `grep -c '\- \[x\]'` = 0, so nothing is ticked.
+- Re-judged register: all 18 rows of the issue's "Re-judged 2026-09-03" table are reproduced in order; every Seam, Ruling-cited, Property and Verdict cell compared cell-for-cell. Only three differences, none of them a lost property or an altered verdict: `worker-pool.ts:64-65` → `worker-pool.ts`, `build-gateway.ts:731` → `build-gateway.ts`, `store-core.ts:1006` dropped (stale-prone line numbers), and the self-reference `docs/decisions.md § Performance` rendered as the in-doc anchor.
+- The three answers are recorded as decisions, not proposals: `SB-payload` "**The SSE `change` frame carries the projected batch and the client applies it**" (OQ5), `SB-text` "**Deferred text is a per-entity declared ceiling, and text rides in full**" (OQ7), `SB-reuse` "**A handler worker is a reused thread that gets a fresh realm per run**" (OQ2). No "proposed" / "to be decided" survives in any of the eight decided rows. `SB-instrument` records F1 absorbed into #927's trace and F2/F4 closed. `SB-loader` is "**Open.**" with verdict "Undecided." and names the spike — no row decides it.
+- Every ruling names its landing wave, and the section preamble states that the code has not moved. Wave assignments check out against #922's execution plan: 0b → wave 1, B3 → wave 2, A1/C2 → wave 3, C6/E7 → wave 4.
+- Code facts asserted by the new rulings verified against the tree: `CONSTRAINED_WORKER_POOL_SIZE = 1` (`packages/server/src/engine/handlers/worker-pool.ts:65`), `workerPoolSize: 0` on the `conserve` preset (`packages/server/src/serve/hardware-profile.ts:84`), the boot override (`packages/server/src/serve/build-gateway.ts:732`), `journal_mode=DELETE` + the second op-sqlite reader handle (`packages/client/src/replica/store-core.ts:297,1006`, `apps/mobile/src/lib/replica/op-sqlite-driver.ts:20`).
+- Superseded pointers: six rows, each naming #922 and its `SB-*` replacement. Three name an origin issue (#873/#883, #599, #528, #404); the doorbell feed and the replica's `synchronous=FULL` have no origin ruling to name — confirmed, the replica pragma is code-only with no decision entry. Only the Tally row links the `#snappier-blueprint-apps-922` anchor, which matches the table's existing mixed convention and `internal-doc-links` passes.
+- Placement: the new section sits immediately before `## Related docs`; `## One authority plane (#928)` is absent from `origin/main`, as the receipt's `## Decisions` states.
+
+Gates run:
+
+- `bun run format` → clean; `git status --porcelain` and `git diff --stat` empty afterwards.
+- root `bun run lint` (oxlint, `--deny-warnings`) → pass.
+- `bash .governance/run.sh` → 20 pass, 2 fail: `receipt-per-issue` (this `## Audit` missing, fixed by this commit) and `repo-hygiene` (`packages/blueprints/apps/locker/queries.test.ts` 638 > 625 lines — known pre-existing, #930). `internal-doc-links`, `doc-integrity`, `required-docs`, `format-check`, `lint-check` all pass, so every new anchor and link resolves.
+- `bun run lint:product` → 37/39; the two reds are `test:ratchet` and `lint:ledgers`, both "unknown predecessor schema-migration-corpus" — known pre-existing (#930), and this diff touches no ledger.
+- No package suite or typecheck lane run: the diff contains no `packages/**` or `apps/**` file.
+
+Falsification attempts:
+
+- "The register is reproduced in full with no altered verdict." Attacked by machine diff of all 18 rows × 4 cells against the issue body pulled fresh from GitHub. It held.
+- "Nothing claims code has landed." Attacked by checking each ruling's asserted present-tense code state against the tree. It broke on `SB-tally`'s "both seats already import" (finding 1) and on `SB-replica-sync`'s separate-outbox premise (finding 2).
+
 ## Session
 
 ### Identifiers
