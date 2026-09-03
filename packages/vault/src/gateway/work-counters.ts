@@ -112,6 +112,7 @@ function countExecuted(sql: string): void {
  */
 class CountedStatement {
   constructor(
+    private readonly db: DatabaseSync,
     private readonly statement: StatementSync,
     private readonly sql: string
   ) {}
@@ -137,7 +138,15 @@ class CountedStatement {
   run(...params: Parameters<StatementSync["run"]>): unknown {
     countExecuted(this.sql);
     totals.bytesWritten += paramBytes(params);
-    return this.statement.run(...params);
+    const result = this.statement.run(...params);
+    // AUTOCOMMIT IS A BARRIER. A mutating statement outside an explicit
+    // transaction opens and commits its own, so SQLite syncs even though no
+    // `COMMIT` was ever executed — the case a keyword screen alone misses, and
+    // the one that showed a gateway READ performing a durable audit write.
+    // `changes > 0` rather than "is a write": a statement that changed nothing
+    // dirtied no page, and the counter must stay a fact about work done.
+    if (!this.db.isTransaction && result.changes > 0) totals.fsyncs += 1;
+    return result;
   }
 
   iterate(...params: Parameters<StatementSync["iterate"]>): unknown {
@@ -179,7 +188,7 @@ export function instrumentVaultStatements(db: DatabaseSync): void {
   const prepare = db.prepare.bind(db);
   const exec = db.exec.bind(db);
   db.prepare = (sql: string) =>
-    new CountedStatement(prepare(sql), sql) as unknown as StatementSync;
+    new CountedStatement(db, prepare(sql), sql) as unknown as StatementSync;
   db.exec = (sql: string) => {
     countExecuted(sql);
     return exec(sql);

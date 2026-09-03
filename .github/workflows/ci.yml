@@ -484,36 +484,28 @@ jobs:
       # shrinking. It is NOT path-filtered — a change anywhere in the gateway,
       # the vault or the replica can move what these states report.
       - run: bun run test:integration:mobile
-      # Issue #456's real-gateway budget gate. Linux strace supplies an exact
-      # fsync/write count; losing that signal is itself a benchmark failure.
-      - run: sudo apt-get update && sudo apt-get install --yes strace
-      # #532 — per-PR perf gate: gateway low-end budgets (fsync-count on Linux).
-      # Budget *numbers* also ratchet tighten-only via test:ratchet on static.
-      # One automatic retry absorbs shared-runner event-loop noise (main is green
-      # on the same budgets; a single noisy sample should not fail the PR).
-      # #557 — the retry stays (shared-runner event-loop noise is real), but a
-      # pass-on-retry must not read as a clean pass. Budgets here ratchet
-      # tighten-only, so a regression that fails ~50% of the time would look
-      # permanently healthy under a bare `cmd || cmd`. The second attempt now
-      # annotates the run and the Job Summary, so flake frequency is visible
-      # instead of being absorbed.
-      - name: Per-PR perf gate (gateway low-end budgets)
-        env:
-          CENTRAID_BENCH_REQUIRE_FSYNC: "1"
-          CENTRAID_HARDWARE_PROFILE: constrained
-        run: |
-          set -uo pipefail
-          if bun run test:perf:pr; then
-            exit 0
-          fi
-          echo "::warning title=Perf gate flaked::First attempt failed; retrying once. If this annotation is frequent, the budget is too tight or the regression is real — do not ignore it."
-          {
-            echo "### ⚠️ Perf gate needed a retry"
-            echo
-            echo "\`test:perf:pr\` failed on its first attempt and was retried."
-            echo "A green job here is a **second-attempt** pass, not a clean one."
-          } >> "$GITHUB_STEP_SUMMARY"
-          bun run test:perf:pr
+      # #927 P2 — THE PER-PR PERF GATE IS A WORK-COUNTER COMPARISON. It runs a
+      # fixed workload against the golden year-3 vault and compares the integers
+      # the product counts about itself (statements, rows, durability barriers,
+      # payload bytes) to `scripts/ci/work-counters.expected.json`. Two runs of
+      # the same code give the same integers on any host, so:
+      #   * NO RETRY STEP. #532/#557's automatic second attempt existed because
+      #     the wall-clock rig it wrapped read shared-runner event-loop noise as
+      #     a regression. Deterministic integers have no noise to absorb, and a
+      #     retry over them would only hide a real regression half the time.
+      #     That is the whole reason the retry is deleted here rather than moved.
+      #   * NO HISTORY. The expectations are checked in, tighten-only: lowering
+      #     one is a normal commit, raising one is a diff a reviewer sees.
+      #   * NO strace, and no `apt-get install strace` step. Counting fsync(2)
+      #     needed a Linux runner and an external tracer; a durability barrier is
+      #     the product's own behaviour and the same integer everywhere.
+      # The wall-clock rig (`test:perf:pr`, packages/server/scripts/bench-low-end.mjs)
+      # is NOT deleted — it answers a different question, latency under a
+      # constrained profile — but it is off the merge rung, where it cost the
+      # retry above. Re-homing it to rung 3 (candidate.yml) is #927 wave 2;
+      # `check:full` still runs it locally in the meantime.
+      - name: Per-PR perf gate (work counters)
+        run: bun run test:perf:counters
       # #842 W0.5 — send → first token, the product's most-felt latency, which
       # had no rig at all until now. Times a real `runAcpTurn` against the
       # scripted fake ACP harness, so the provider is held constant and the

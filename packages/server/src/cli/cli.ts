@@ -44,6 +44,7 @@ import { commandRecover } from "./recover-admin.js";
 import { resolveDaemonConfig } from "./resolve-config.js";
 import { commandService } from "./service-admin.js";
 import { commandStatus } from "./status-admin.js";
+import { commandTrace } from "./trace-admin.js";
 import { commandVault } from "./vault-admin.js";
 
 const PKG_VERSION = "0.1.0";
@@ -101,6 +102,7 @@ function usage(): never {
       "  centraid-gateway status [--data-dir <path> | --config <path>] [--label <id>] [--json]",
       "  centraid-gateway lock-status [--data-dir <path> | --config <path>] [--json]",
       "  centraid-gateway doctor [--data-dir <path>] [--vault <id>] [--full] [--json]",
+      "  centraid-gateway trace last [--data-dir <path>] [--vault-dir <path>] [--json] [--clear]",
       "  centraid-gateway --version",
       "  centraid-gateway --help",
       "",
@@ -369,6 +371,9 @@ async function main(): Promise<void> {
       return;
     case "doctor":
       await commandDoctor(rest, fail);
+      return;
+    case "trace":
+      await commandTrace(rest, fail);
       return;
     default:
       fail(`unknown subcommand "${sub}"`, 2);

@@ -82,6 +82,32 @@ describe("gateway work counters", () => {
     db.close();
   });
 
+  it("counts an autocommit write as a barrier — SQLite syncs with no COMMIT", () => {
+    const db = counted();
+    db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+    const before = gatewayWorkCounters();
+    db.prepare("INSERT INTO t (id) VALUES (?)").run(1);
+    expect(diffCounters(before, gatewayWorkCounters()).fsyncs).toBe(1);
+    // A statement that changed nothing dirtied no page and is not a barrier.
+    const beforeNoop = gatewayWorkCounters();
+    db.prepare("DELETE FROM t WHERE id = ?").run(999);
+    expect(diffCounters(beforeNoop, gatewayWorkCounters()).fsyncs).toBe(0);
+    db.close();
+  });
+
+  it("does not double-count a write inside an explicit transaction", () => {
+    const db = counted();
+    db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+    const before = gatewayWorkCounters();
+    db.exec("BEGIN IMMEDIATE");
+    db.prepare("INSERT INTO t (id) VALUES (?)").run(1);
+    db.prepare("INSERT INTO t (id) VALUES (?)").run(2);
+    db.exec("COMMIT");
+    // Two rows, ONE barrier: that is the whole reason to batch writes.
+    expect(diffCounters(before, gatewayWorkCounters()).fsyncs).toBe(1);
+    db.close();
+  });
+
   it("a seeded extra statement on a hot path moves an integer", () => {
     const db = counted();
     db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY)");
