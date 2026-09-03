@@ -1,21 +1,3 @@
-// The composing surfaces' building blocks: the field row, the chip set, the
-// two things a member types, the allocation table and the foot.
-//
-// ONE EDITOR SHAPE for Add expense, Settle up and Export (design reference's
-// `eCfg`): a head, a lede, the typed fields, chips for everything else, and a
-// foot that says WHERE THE WRITE WILL LAND before the commit rather than after
-// it. Three separately-drawn editors would be three chances for the key column
-// to start on a different edge.
-//
-// A CHIP IS A BUTTON WITH `aria-pressed`, which is what makes a chip set a set
-// rather than a row of unrelated controls — the shared `kit-chip` recipe reads
-// that attribute for its selected state, so nothing here restyles it.
-//
-// THE COMMIT CARRIES ITS OWN REFUSAL. Where a surface cannot write — a
-// division the vault does not back, an expense with no group, an export that
-// is an engineering ask — the button is disabled and the REASON is on the page
-// beside it, not discovered by pressing. A disabled commit never takes the
-// fill: `primary` is for a control that will actually do the thing.
 import type { ReactNode } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";
@@ -34,16 +16,11 @@ export function ChipSet({
   onPick,
 }: {
   options: readonly ChipOption[];
-  /** Which one is chosen, or `null` where none is. */
   value: string | null;
-  /** The set's own accessible name — a group of chips is one control. */
   label: string;
   onPick: (id: string) => void;
 }): ReactNode {
   return (
-    // A chip set is ONE control, so it is a real `fieldset` with a name —
-    // not a div wearing `role="group"`, which is the same claim made in a way
-    // the platform cannot check.
     <fieldset className={styles.chips} aria-label={label}>
       {options.map((option) => (
         <button
@@ -60,9 +37,6 @@ export function ChipSet({
   );
 }
 
-/** One field row (§5): a key column, a value or a chip set, and the note that
- *  carries the rule. A note may be SEVERAL lines, because some rules are
- *  genuinely two claims and each of them is its own sentence. */
 export function FieldRow({
   label,
   note,
@@ -88,7 +62,6 @@ export function FieldRow({
   );
 }
 
-/** A field row whose value is a fact rather than a control. */
 export function ValueRow({
   label,
   value,
@@ -98,7 +71,6 @@ export function ValueRow({
   label: string;
   value: string;
   note?: string | readonly string[];
-  /** Is the value a number? Then it is tabular and bidi-isolated. */
   num?: boolean;
 }): ReactNode {
   return (
@@ -110,8 +82,6 @@ export function ValueRow({
   );
 }
 
-/** One of the two things a member types. The label is a real `<label>`: a key
- *  column that only looked like one would leave the input unnamed. */
 export function TypedRow({
   id,
   label,
@@ -147,7 +117,6 @@ export function TypedRow({
   );
 }
 
-/** A short typed value INSIDE a field row — a currency code, a rate, a date. */
 export function InlineInput({
   id,
   label,
@@ -157,8 +126,6 @@ export function InlineInput({
   onChange,
 }: {
   id: string;
-  /** Visually hidden: the field row's key column is the visible name, and this
-   *  is what a screen reader reads when there are three of them in one row. */
   label: string;
   value: string;
   placeholder?: string;
@@ -181,15 +148,11 @@ export function InlineInput({
 export interface AllocRow {
   partyId: string;
   name: string;
-  /** The resolved share, always — even under a division the vault will not
-   *  take, because the table is the review surface. */
   figure: string;
-  /** What the member types beside them, where this division has them type. */
   typed?: { value: string; label: string; onChange: (value: string) => void };
   note?: string;
 }
 
-/** The allocation table, and the reconcile line under it. */
 export function AllocTable({
   head,
   rows,
@@ -232,13 +195,10 @@ export function AllocTable({
 
 export interface CommitState {
   label: string;
-  /** Why it cannot fire, when it cannot. Present means disabled, and the
-   *  reason travels with the control rather than being found by pressing it. */
   refusal?: string;
   run: () => void;
 }
 
-/** The editor's foot: where the write lands, then Cancel and the one commit. */
 export function EditorFoot({
   copy,
   net,
@@ -247,7 +207,6 @@ export function EditorFoot({
   commit,
 }: {
   copy: string;
-  /** Does this foot read in the `--net` register — bytes leaving the device? */
   net?: boolean;
   cancelLabel: string;
   onCancel: () => void;
@@ -279,7 +238,6 @@ export function EditorFoot({
   );
 }
 
-/** The head and lede every composing surface opens with. */
 export function EditorHead({
   head,
   lede,
@@ -295,7 +253,6 @@ export function EditorHead({
   );
 }
 
-/** The editor's own frame. */
 export function Editor({ children }: { children: ReactNode }): ReactNode {
   return <div className={styles.editor}>{children}</div>;
 }

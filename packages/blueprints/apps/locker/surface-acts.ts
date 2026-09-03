@@ -1,13 +1,3 @@
-// THE THREE SURFACES THAT TALK TO SOMETHING OTHER THAN A QUERY OR AN ACTION,
-// held together so their three rules are stated once each:
-//
-//   * ACCESS is online-only by construction — receipts live in the journal,
-//     which the replica does not carry.
-//   * IMPORT is FEATURE-DETECTED, C1, no fallback. A host without the staged
-//     import plane gets no control and a sentence naming the seat that has it.
-//   * EXPORT never lands in the bag: the bytes are handed to the member on the
-//     same tick, and nothing keeps a reference.
-
 import { useCallback, useMemo } from "react";
 import type { RefObject } from "react";
 
@@ -26,9 +16,6 @@ import {
 import type { LockerAccessEntry } from "./types.ts";
 import { exportWrite } from "./writes.ts";
 
-/** The optional doors, as this app feature-detects them. A door is present
- *  only when it is a FUNCTION — an older host parses the client shape
- *  unchanged and simply has none of them. */
 export function importDoorPresent(): boolean {
   const client = window.centraid as unknown as Record<string, unknown>;
   return (
@@ -99,9 +86,6 @@ export function useSurfaceActs(input: SurfaceActsInput): SurfaceActs {
             ...(itemId ? { item_id: itemId } : {}),
           },
         });
-        // A denial or an authentication refusal is NOT an empty history: an
-        // audit surface that drew "nothing" over a read that never ran would
-        // be the one lie it exists to prevent.
         if (payload?.authRequired || payload?.vaultDenied) {
           bagRef.current.accessEntries = null;
           bagRef.current.accessWindow = null;
@@ -252,12 +236,6 @@ export function useSurfaceActs(input: SurfaceActsInput): SurfaceActs {
     bump();
   }, [bagRef, bump]);
 
-  /**
-   * A PARK is narrated as a park: a mass reveal asked for off-owner has not
-   * happened, and saying "written" would claim an act that did not run.
-   *
-   * The payload is never stored — bytes are handed over inside this callback.
-   */
   const handleRunExport = useCallback((): void => {
     bagRef.current.exportConfirm = false;
     bump();

@@ -1,6 +1,3 @@
-// Albums shelf (v4 handoff §5): paper, not elevation; coverless ground is
-// `--skel` at exact cover geometry; the New tile keeps the strong outline and
-// stays the only dashed element.
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { displayText, safeBackgroundImage } from "../../_shared/untrusted.ts";
 import { PlusIcon } from "../icons.tsx";

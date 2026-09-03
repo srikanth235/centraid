@@ -1,4 +1,3 @@
-// BALANCES ARE ABSENT BY CONSTRUCTION: nothing here folds a figure.
 import type { ExportData } from "./types.ts";
 
 function cell(value: unknown): string {
@@ -18,7 +17,6 @@ function rowsToCsv(rows: readonly Record<string, unknown>[]): string {
   return [head, ...body].join("\n");
 }
 
-/** Three tables: one row type would invent columns. */
 export function exportFile(
   data: ExportData,
   format: string
@@ -46,5 +44,4 @@ export function exportFile(
   return { name: `${slug || "ledger"}.csv`, type: "text/csv", text };
 }
 
-// Handing the file over is the format kit's (#883) — one path for every seat.
 export { saveExportFile } from "../_shared/format-kit.ts";

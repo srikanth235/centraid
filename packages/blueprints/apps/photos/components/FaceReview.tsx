@@ -1,13 +1,3 @@
-// FACE REVIEW (#711, v4 §8) — self-contained: it reads `face-queue` and fires
-// its own writes, so app-root only MOUNTS it.
-//
-// TWO RULES THIS FILE KEEPS: confidence is a MATCH COUNT, never a percentage;
-// and ONE face at a time, so `current` is one entry and nothing loops.
-//
-// Every control is a real write (#712) except Skip, which writes nothing —
-// that is what makes "it stays in the queue" true. "Someone else" picks an
-// EXISTING person: no create-party action exists. The cursor/counts machine
-// is `../triage-session.ts`.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { faceCropStyle } from "../../_shared/face-crop.ts";
@@ -51,7 +41,6 @@ interface FaceQueueData {
   queue?: QueueEntry[];
   unmatchedTotal?: number;
   confirmedTotal?: number;
-  /** A rejection is a state, not a deletion (#712). */
   rejectedTotal?: number;
   dismissedTotal?: number;
   people?: Array<{ party_id: string; name: string | null }>;
@@ -127,16 +116,12 @@ export function FaceReview({
   focusRegionId,
 }: {
   narrow?: boolean;
-  /** Applied ONCE, on the first loaded queue, so the member's own cursor
-   *  movement is never fought (#711). */
   focusRegionId?: string;
 }) {
   const [data, setData] = useState<FaceQueueData | null>(null);
-  // Cursor, frozen denominator and counts in ONE immutable value.
   const [session, setSession] = useState<TriageSession<QueueEntry> | null>(
     null
   );
-  // A ref, not state: flipping it must not trigger a render.
   const focusApplied = useRef(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
@@ -149,7 +134,6 @@ export function FaceReview({
       });
       setData(result ?? {});
       const queue = result?.queue ?? [];
-      // First load only: a reload must never re-jump under the member.
       let at = 0;
       if (!focusApplied.current && focusRegionId) {
         focusApplied.current = true;
@@ -158,7 +142,6 @@ export function FaceReview({
           0
         );
       }
-      // The first load freezes the denominator at the whole backlog.
       setSession((previous) =>
         previous
           ? triageRefill(previous, queue, { at })
@@ -178,14 +161,10 @@ export function FaceReview({
 
   const people = useMemo(() => data?.people ?? [], [data]);
 
-  /** The ONE write behind every answer (#712): the answer is the
-   *  discriminant, so a new answer is a union member, not a new endpoint. */
   async function answer(
     kind: FaceAnswer,
     copy: {
-      /** `confirm` only: the vault refuses a party on the other two. */
       partyId?: string;
-      /** Blank where the queue moving on says it better. */
       done?: string;
       failed: string;
     }
@@ -210,7 +189,6 @@ export function FaceReview({
       outcome?.status === "in-flight" ||
       outcome?.status === "parked"
     ) {
-      // The row stays in the queue; a toast never substitutes for it.
       setNote("");
       await load();
     } else {
@@ -230,7 +208,6 @@ export function FaceReview({
     await answer("reject", { failed: "Could not reject that face." });
   }
 
-  /** Reviewed, kept, deliberately unnamed — unlike Skip, it stays gone. */
   async function dismiss(): Promise<void> {
     await answer("dismiss", {
       done: "Kept, and left unnamed.",
@@ -416,8 +393,6 @@ export function FaceReview({
   );
 }
 
-/** The middle clause reads `reviewed` and counts rejections AND dismissals
- *  together; it is dropped entirely at 0 — omit rather than pad (§14). */
 function statusNote(data: FaceQueueData, toGo: number): string {
   const parts = [`confirmed ${data.confirmedTotal ?? 0}`];
   const answeredAway = (data.rejectedTotal ?? 0) + (data.dismissedTotal ?? 0);

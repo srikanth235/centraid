@@ -1,7 +1,5 @@
 import { debounce } from "@centraid/design/elements";
 
-// Debounce and fetch only; app.tsx owns the merge. Hits must carry `scope_id`
-// — content ids collide across scopes (#599).
 import { mountedScopes, ownScopeId } from "../_shared/scope-kit.ts";
 import { mergeScopePages } from "../_shared/scope-merge.ts";
 import { perScopeReach, scopeReachFacts } from "../_shared/search-scaffold.ts";
@@ -13,8 +11,6 @@ import {
 import type { MergeableAsset } from "./scope-declaration.ts";
 import type { Asset } from "./types.ts";
 
-// `unreachable` = NO scope answered, never "no matches" (§9). Re-exported,
-// never redeclared: the scaffold owns this union (#883).
 export type { SearchStatus } from "../_shared/search-scaffold.ts";
 
 export function createSearch({
@@ -52,8 +48,6 @@ export function createSearch({
           query: "search",
           input: { term },
         });
-        // A short scope is neither zero hits nor grounds to blank the rest
-        // (#726); `reachFacts` names it.
         const reach = perScopeReach(results);
         reached = reach.some((entry) => entry.state === "reached");
         reachFacts = scopeReachFacts(reach);

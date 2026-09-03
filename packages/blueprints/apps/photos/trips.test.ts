@@ -1,11 +1,3 @@
-// What a trip is CALLED, and the line drawn across it (#816).
-//
-// The vault owns whether a run of days is a trip at all
-// (`packages/vault/src/enrich/memories.test.ts`); nothing here re-tests that.
-// What these cases own is the display layer's two claims: a title a person
-// would say out loud, and a route a card can sketch offline — plus the two
-// things a title must NEVER be, which is the reason this module exists at all:
-// a coordinate, or a phrase relative to where the member lives.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -41,7 +33,6 @@ const HOME: TripPlace = {
   lng: -122.143,
 };
 
-/** One frame at `place`, captured at noon UTC on `day`. */
 const frame = (
   day: string,
   place: TripPlace | null = null,
@@ -51,7 +42,6 @@ const frame = (
   place,
 });
 
-/** Consecutive days from `start`, one frame each, all at `place`. */
 function run(start: string, days: number, place: TripPlace): TripMember[] {
   const base = Date.parse(`${start}T12:00:00Z`);
   return Array.from({ length: days }, (_, index) => ({
@@ -62,7 +52,6 @@ function run(start: string, days: number, place: TripPlace): TripMember[] {
 
 describe("a trip's title", () => {
   it("calls a two-day span over a weekend a weekend", () => {
-    // 2026-08-15 is a Saturday, 2026-08-16 a Sunday.
     const facts = tripFacts({
       members: run("2026-08-15", 2, TAHOE),
       homePlaceKey: HOME.key,
@@ -76,7 +65,6 @@ describe("a trip's title", () => {
   });
 
   it("calls a three-day span that reaches a Sunday a weekend", () => {
-    // Saturday, Sunday, Monday — the long weekend the ceiling exists for.
     const facts = tripFacts({
       members: run("2026-08-15", 3, TRUCKEE),
       homePlaceKey: HOME.key,
@@ -86,7 +74,6 @@ describe("a trip's title", () => {
   });
 
   it("counts a midweek pair in days, not weekends", () => {
-    // Tuesday and Wednesday: the same length, no weekend in it.
     const facts = tripFacts({
       members: run("2026-08-18", 2, TRUCKEE),
       homePlaceKey: HOME.key,
@@ -117,8 +104,6 @@ describe("a trip's title", () => {
   });
 
   it("keeps the detector's bare hint when no rung can name the place", () => {
-    // A place minted from GPS and never renamed, with no gazetteer installed:
-    // the ONE case where the title has nothing to say but the day count.
     const unnamed: TripPlace = {
       key: "place-x",
       name: "39.09680, -120.03240",
@@ -167,8 +152,6 @@ describe("a trip's title", () => {
   });
 
   it("honours the detector's own modal place when it hands one over", () => {
-    // Same frames, but the vault says Truckee — the projection and the card
-    // must agree about which place the trip was "in".
     const facts = tripFacts({
       members: [
         frame("2026-08-15", TRUCKEE, 9),
@@ -198,7 +181,6 @@ describe("a trip's title", () => {
   });
 
   it("never names home, even when the trip came back through it", () => {
-    // The vault's rule makes a same-day return's home frames trip members.
     const facts = tripFacts({
       members: [
         ...run("2026-08-15", 2, TAHOE),
@@ -252,8 +234,6 @@ describe("a trip's day span", () => {
   });
 
   it("leaves an unplaced day out of the away count without dropping it", () => {
-    // A day inside the trip with no located frame is a day the vault bridged;
-    // its count lives in the hint, and the hint outranks the derived number.
     const facts = tripFacts({
       members: [
         ...run("2026-08-15", 2, TAHOE),
@@ -268,8 +248,6 @@ describe("a trip's day span", () => {
   });
 
   it("reads the trip's own day key in the camera's zone, not the reader's", () => {
-    // 01:30 UTC on the Monday is still Sunday evening in California, so the
-    // trip that ended then covered a weekend.
     const members = [
       { capturedAt: "2026-08-15T20:00:00Z", tzOffsetMin: -420, place: TAHOE },
       { capturedAt: "2026-08-17T01:30:00Z", tzOffsetMin: -420, place: TAHOE },

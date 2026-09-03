@@ -1,10 +1,3 @@
-/**
- * A BOUNDED recent window (#262): documents arrive newest-filed-first via their
- * folders-scheme tags, never a whole-table pull. Identity is the core.document
- * wrapper (#352), not the content item it points at, and every decoration is
- * `in`-bounded by the same window.
- */
-
 import {
   FLAGS_SCHEME_URI,
   FOLDER_SCHEME_URI,
@@ -45,7 +38,6 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
-    // Owner-curated and small, so unbounded; they bound the rest.
     const [concepts, schemes] = await Promise.all([
       ctx.vault.read({ entity: "core.concept", purpose }),
       ctx.vault.read({ entity: "core.concept_scheme", purpose }),
@@ -70,7 +62,6 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
       }))
       .toSorted((a, b) => String(a.name).localeCompare(String(b.name)));
 
-    // An `in` filter with an empty array throws; no scheme, empty drive.
     const folderConceptIds = schemeConcepts.map((c) => c.concept_id);
     if (folderConceptIds.length === 0) {
       return {
@@ -97,8 +88,6 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
     const folderByDoc = new Map<string, string>();
     for (const t of tagRows) folderByDoc.set(t.target_id, t.concept_id);
 
-    // A DELIVERED copy carries no folders-scheme tag, so the window above
-    // cannot see it: its placement record is the second door in (#903).
     const originByDoc = await readOriginsByDocument({
       ctx,
       purpose,
@@ -118,7 +107,6 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
       };
     }
 
-    // Starred is a flags-scheme tag (#274): no concept, never starred.
     const starredConcept = findSchemeConcept(
       schemeRows,
       conceptRows,
@@ -126,8 +114,6 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
       STARRED_NOTATION
     );
 
-    // A share denial returns `null`, not an error: the drive still answers
-    // while those scopes park for approval (#821).
     const [documentsRes, starTags, tagsByDoc, sharesByDoc] = await Promise.all([
       ctx.vault.read({
         entity: "core.document",
@@ -168,7 +154,6 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
       ((starTags.rows ?? []) as unknown as TagRow[]).map((t) => t.target_id)
     );
 
-    // Bounded by the wrappers' current_content_id set (#352).
     const documentRows = (documentsRes.rows ?? []) as unknown as DocumentRow[];
     const contentIds = [
       ...new Set(documentRows.map((d) => d.current_content_id)),
@@ -190,8 +175,6 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
       ])
     );
 
-    // Blob bytes (#296) serve as same-origin URLs so Range and caching work;
-    // data: URIs pass through.
     const srcOf = (c: ContentRow | undefined) =>
       typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
         ? `/centraid/_vault/blobs/${c.content_id}`
@@ -224,7 +207,6 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
           purge_at: d.purge_at ?? null,
           tags: tagsByDoc.get(d.document_id) ?? [],
           custody_state: custodyByContent.get(d.current_content_id) ?? null,
-          // `null` is "reads denied"; `[]` is "shared with nobody".
           shared_with:
             sharesByDoc === null
               ? null
@@ -236,7 +218,6 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
         String(b.created_at).localeCompare(String(a.created_at))
       );
 
-    // A full window means older documents may lie beyond.
     const truncated = tagRows.length >= window;
     return {
       folders,
@@ -244,7 +225,6 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
       root_folder_id: rootFolderId,
       truncated,
       window,
-      // ABSENT IS NOT EMPTY: a denied read is told, not drawn.
       shared_from_known: originByDoc !== null,
     };
   } catch (error) {

@@ -1,14 +1,3 @@
-/**
- * One person's full profile, gathered from the vault: the party, its
- * people_profile, the party's contact identifiers and every child record.
- * Nothing is stored by the app; it is all a read of the owner's vault.
- *
- * The sharing questions (./_shared.ts) deny independently of the profile —
- * People's `share.*` scopes are newer than the app, so on an existing vault
- * they wait for the owner — and a denial leaves those three fields null
- * instead of blanking the person.
- */
-
 import {
   FLAGS_SCHEME_URI,
   LIST_SCHEME_URI,
@@ -158,10 +147,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       vault,
       shareLinks,
     ] = await Promise.all([
-      // `core.party_identifier` is NOT read here any more (#883, ruling
-      // O-contact): reachability has one store, and the read-time fold of
-      // legacy `tel`/`email` identifier rows back into this list went with the
-      // rung that moved them onto channels.
       ctx.vault.read({
         entity: "social.contact_channel",
         purpose,
@@ -229,7 +214,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       ctx.vault.read({ entity: "core.concept", purpose }),
       ctx.vault.read({ entity: "core.concept_scheme", purpose }),
       ctx.vault.read({ entity: "core.vault", purpose }),
-      // Null when the sharing plane is unreadable — never a thrown denial.
       readPersonShareLinks(ctx.vault, partyId),
     ]);
 
@@ -445,7 +429,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         };
       });
     const person = {
-      // Stamps ride along: the detail draws the roster's chip (#864).
       ...Object.fromEntries(
         Object.values(PENDING_OVERLAY_FIELDS).flatMap((field) =>
           field in profile

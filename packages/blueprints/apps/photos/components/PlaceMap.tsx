@@ -1,15 +1,9 @@
 import { projectPlaces, readableName, tierNoun } from "../place-map.ts";
 import type { MapPin, PlacePoint } from "../place-map.ts";
-// The Places map. Every pixel is `place-map.ts` arithmetic over vault
-// coordinates: no basemap, no tile request, and the blueprint CSP denies
-// remote hosts anyway (docs/traps/blueprint-csp.md). THE PIN IS THE PICTURE:
-// no degrees in the margins, a name only where `readableName` accepts it
-// (docs/photos-places.md), and pins stay HTML buttons for focus.
 import { photosPinLabel } from "../shared-copy.ts";
 
 import styles from "./PlaceMap.module.css";
 
-/** Area, not width, tracks the count; below 40px a photograph stops reading. */
 const PIN_MIN = 40;
 const PIN_MAX = 76;
 
@@ -55,7 +49,6 @@ export function placePoints(
   );
 }
 
-/** One scale on both axes: a wider box fits by height and huddles the pins. */
 const MAX_DRAW_WIDTH = 640;
 
 export function PlaceMap({
@@ -71,17 +64,14 @@ export function PlaceMap({
   activeKey?: string | null;
   onOpen: (key: string) => void;
 }) {
-  // No pins, no map: the shelf owns the empty state.
   if (points.length === 0 || width <= 0) return null;
 
   const drawWidth = Math.min(width, MAX_DRAW_WIDTH);
   const drawHeight = height ?? Math.round(drawWidth * 0.66);
-  // Padding must clear half the largest pin or the top picture hangs off.
   const { pins, meridians, parallels, scale, tier } = projectPlaces(points, {
     width: drawWidth,
     height: drawHeight,
     padding: PIN_MAX / 2 + 6,
-    // Centres closer than the WIDEST pin cannot both be seen.
     mergeDistance: PIN_MAX,
   });
   const largest = pins.reduce((max, pin) => Math.max(max, pin.count), 1);
@@ -177,7 +167,6 @@ export function PlaceMap({
             >
               <span className={styles.frame} style={{ blockSize: `${size}px` }}>
                 {pin.thumb ? (
-                  // Decorative: the button's aria-label already names it.
                   <img className={styles.shot} src={pin.thumb} alt="" />
                 ) : null}
                 {/* A numeral: mono. */}

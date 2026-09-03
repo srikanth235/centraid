@@ -1,5 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit — this file holds the app's
-// whole orchestration as one React tree by design (#505).
 import {
   useCallback,
   useEffect,
@@ -108,7 +107,6 @@ import {
 
 import styles from "./Chrome.module.css";
 
-// Re-derived when a change names one of these, or names none.
 export const CHANGE_TABLES = [
   "core.document",
   "core.content_item",
@@ -146,7 +144,6 @@ function makeState(view: AppState["view"]): AppState {
     view,
     shelf: null,
     filters: NO_FILTERS,
-    // The order the status line names.
     sortKey: "changed",
     sortDir: -1,
     selecting: false,
@@ -169,13 +166,10 @@ function makeState(view: AppState["view"]): AppState {
     visibleRows: [],
     driveWindow: 200,
     driveTruncated: false,
-    // Optimistic until a payload says otherwise: "cannot say" needs a denial,
-    // never a pending read.
     sharedFromKnown: true,
   };
 }
 
-// One ref: nav needs logic.clearSelection and logic needs nav.openQuick.
 interface Core {
   logic: ReturnType<typeof createLogic>;
   nav: ReturnType<typeof createNav>;
@@ -193,13 +187,11 @@ export function Root({
   const [ready, setReady] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  // State, not the ref below: banner and caption render from it.
   const [readFailedState, setReadFailedState] = useState(false);
   const [consent, setConsent] = useState<{ message: string } | null>(null);
   const [dropVisible, setDropVisible] = useState(false);
   const [dropTarget, setDropTarget] = useState("");
   const [shareFolder, setShareFolder] = useState<Folder | null>(null);
-  // `null` = unread/unreadable, not empty — share needs an answer; empty is one.
   const [audiences, setAudiences] = useState<
     readonly GrantAudienceOption[] | null
   >(null);
@@ -214,8 +206,6 @@ export function Root({
   const uploadRef = useRef<HTMLInputElement | null>(null);
   const skeletonRef = useRef<HTMLDivElement | null>(null);
   const readFailedRef = useRef(false);
-  // Set during the render that performs the move — a render-phase write no
-  // `setState` may do (view-state.ts rule 2).
   const goneFolderRef = useRef(false);
 
   const dataRef = useRef<AppData>({
@@ -261,13 +251,11 @@ export function Root({
         bump();
         return;
       }
-      // Mutate in place, never reassign: logic.ts closed over this object.
       const incoming = next ?? data;
       data.folders = incoming.folders ?? [];
       data.documents = incoming.documents ?? [];
       data.root_folder_id = incoming.root_folder_id ?? data.root_folder_id;
       state.driveTruncated = Boolean(next?.truncated);
-      // A missing key means the read was never reached, not that it refused.
       state.sharedFromKnown = next?.shared_from_known !== false;
       state.selected = new Set(
         [...state.selected].filter((id) =>
@@ -284,13 +272,11 @@ export function Root({
         !data.documents.some((d) => d.document_id === state.quickId)
       )
         state.quickId = null;
-      // A background refresh must never close the editor over a typing user.
       bump();
     };
     core = { refresh } as Core;
 
     core.applySearch = debounce(async () => {
-      // Debounce can outlive the shelf — a missing field means a stale query.
       const field = document.querySelector<HTMLInputElement>("#searchInput");
       if (!field) return;
       const q = field.value.trim();
@@ -315,8 +301,6 @@ export function Root({
         });
         rows = res?.documents ?? [];
       } catch {
-        // A throw is not an empty result set; falling through would claim
-        // "nothing matches" unverified.
         reached = false;
       }
       if (seq !== state.searchSeq) return;
@@ -385,7 +369,6 @@ export function Root({
     startCreateFolder: handleStartCreateFolder,
     triggerUpload: handleTriggerUpload,
   } = nav;
-  // Opening a row opens the stage, never a text-only fork (§1.8, §7).
   const handleOpenQuick = useCallback(
     (id: string) => core.nav.openQuick(id),
     [core]
@@ -408,10 +391,8 @@ export function Root({
     [rootRef]
   );
 
-  // Every navigation clears what was open over it (§1.1).
   const selectShelf = useCallback(
     (shelf: ShelfId) => {
-      // A query left behind shows search rows under the wrong breadcrumb.
       if (shelf !== SEARCH && state.search) {
         if (searchInputRef.current) searchInputRef.current.value = "";
         state.searchSeq += 1;
@@ -421,8 +402,6 @@ export function Root({
       }
       nav.selectShelf(shelf);
       goneFolderRef.current = false;
-      // Mode must go with the ticks nav.selectShelf dropped, or the next
-      // shelf opens with stray checkboxes.
       state.selecting = false;
       setMoreOpen(false);
       setSideOpen(false);
@@ -430,7 +409,6 @@ export function Root({
     [nav, state]
   );
 
-  /** Focus the field next frame — it does not exist until this nav renders. */
   const openSearch = useCallback(() => {
     selectShelf(SEARCH);
     requestAnimationFrame(() => searchInputRef.current?.focus());
@@ -453,7 +431,6 @@ export function Root({
     [state]
   );
 
-  // Same column reverses; a new one takes its own natural direction.
   const onSortBy = useCallback(
     (key: SortKey) => {
       if (state.sortKey === key) state.sortDir = state.sortDir === 1 ? -1 : 1;
@@ -466,7 +443,6 @@ export function Root({
     [state]
   );
 
-  // Shared popover: one menu open, one Escape closes it.
   const onOpenSortMenu = useCallback(
     (anchor: HTMLElement) => {
       openPopover(anchor, (box) => {

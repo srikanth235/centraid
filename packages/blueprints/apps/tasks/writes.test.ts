@@ -1,5 +1,3 @@
-// The Tasks write door: a HOUSE-scope act stays in HOUSE, and Delete removes
-// the row instead of cancelling it (#864). Pure so both seats share one answer.
 import { describe, expect, it } from "vitest";
 
 import {

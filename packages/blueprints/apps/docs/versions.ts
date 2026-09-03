@@ -1,8 +1,3 @@
-// Document content lifecycle (#352): in-place text edits, whole-file
-// replacement, and version-history reads/restores. Split out of logic.ts
-// purely to keep both files under the file-size cap — same factory pattern,
-// closing over app.tsx's own `data`/`refresh` plus logic.ts's own
-// `act`/`narrate`/`notice` (passed in, never re-implemented).
 import {
   isPendingOffsite,
   stageFileBytes,
@@ -35,9 +30,6 @@ export function createVersions({
   narrate,
   notice,
 }: VersionsDeps) {
-  // "Replace file…" — any media type, through the same staged-bytes door
-  // uploadFiles() uses (#296): no base64 through command JSON, so a
-  // 200 MB scan replaces just as well as a 20 KB one.
   async function replaceDocument(doc: DriveDoc, file: File) {
     if (file.size > MAX_UPLOAD_BYTES) {
       notice(
@@ -66,11 +58,6 @@ export function createVersions({
     }
   }
 
-  // Restore is itself a new version (rule R3: history only ever grows
-  // forward) — a full refresh both updates this doc's current content AND
-  // gives the details drawer's history panel a fresh doc.content_id to key
-  // its own remount+refetch off of (the same trick QuickLook's stage
-  // element uses for the identical reason).
   async function restoreVersion(doc: DriveDoc, contentId: string) {
     const outcome = await act("restore-version", {
       document_id: doc.document_id,
@@ -82,9 +69,6 @@ export function createVersions({
     }
   }
 
-  // A plain read, never a command (core.link is already the durable
-  // history) — a denial or a network hiccup both just render as "no history
-  // available" rather than throwing through the caller.
   async function loadHistory(documentId: string): Promise<HistoryResult> {
     try {
       return await window.centraid.read<HistoryResult>({

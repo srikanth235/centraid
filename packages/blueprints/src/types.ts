@@ -5,8 +5,6 @@ export interface AppKnobOption {
   label: string;
 }
 export interface AppKnob {
-  /** The runtime routes by key name: a `Color`/`Accent` suffix becomes an
-   *  `--app-<kebab>` CSS var, anything else a `data-app-<kebab>` attribute. */
   key: string;
   label: string;
   type: "segmented" | "swatch";
@@ -18,7 +16,6 @@ export interface AppKnobsManifest {
   knobs: AppKnob[];
 }
 
-/** Duplicated, never imported: blueprints must not depend on app-engine. */
 export interface AppSeats {
   byteBearing: boolean;
   originActs: string[];
@@ -26,7 +23,6 @@ export interface AppSeats {
   northStar: string;
 }
 
-/** The segment directory is DERIVED from `kind`, never stored. */
 export interface TemplateMeta {
   id: string;
   name: string;

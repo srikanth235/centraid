@@ -1,8 +1,3 @@
-/**
- * Matrix cell blueprints.contracts (#535 coverable-today).
- * App id + clone file-map contract is the public surface every app-owning
- * gateway route depends on.
- */
 import { describe, expect, it } from "vitest";
 
 import { validateAppId } from "./app-meta.js";

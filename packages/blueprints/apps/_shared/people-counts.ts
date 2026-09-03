@@ -1,4 +1,3 @@
-/** Shared face grouping and photograph-count law for every Photos seat. */
 export interface CountableFaceRegion {
   region_id: string;
   asset_id?: string | null;
@@ -63,11 +62,6 @@ function groupRows(
   });
 }
 
-/**
- * A person exists only after a confirmed answer. Counts are distinct
- * photographs, while proposed candidates and unnamed clusters remain
- * questions in separate collections.
- */
 export function groupPeopleFaces(
   faces: readonly CountableFaceRegion[],
   clusters: readonly CountableFaceCluster[]

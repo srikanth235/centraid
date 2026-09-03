@@ -1,19 +1,3 @@
-/**
- * Note search as a vault projection: the FTS5 index inside the vault does
- * the matching (title + canonical body), so the app never pulls the whole
- * knowledge.note table to grep it — vault data has no upper bound. Only the
- * matched rows are joined with their decoded bodies and notebook names,
- * mirroring the library projection's shape row-for-row so the UI renders
- * either list with the same code.
- *
- * People-journal entries are EXCLUDED from the hits (#834 R-journal): the
- * Journal place is their one home in Notes. The exclusion runs over the ranked
- * hits, so an all-journal search answers an empty list, not a filtered one.
- *
- * A consent denial is a first-class outcome, not an error: the UI renders
- * it as the "ask the owner for access" state, receipt id included.
- */
-
 import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
 import { decodeNoteBody } from "../note-body.ts";
 
@@ -55,13 +39,11 @@ interface CollectionRow {
   name?: string;
 }
 
-/** The shared attachment projection — see library.ts for the shape's home. */
 function attachmentsBySubject(
   subjectType: string,
   attachments: AttachmentRow[],
   contentById: Map<string, ContentRow>
 ) {
-  // Blob-backed bytes serve as same-origin URLs (#296).
   const srcOf = (c: ContentRow | undefined) =>
     typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`

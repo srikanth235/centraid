@@ -1,22 +1,6 @@
-// THE WORDS THE EIGHT SURFACES BEYOND THE LIST SAY (README-Locker §5, §6, §9;
-// GAPS.md §3.3).
-//
-// This file and `view-copy.ts` are ONE table split only by the 500-line file
-// rule: a sentence lives in whichever of them its route reads. The notes below
-// state what each row DOES, never what it is waiting for; what remains out of
-// reach is stated as a LIMIT, never as a promise deferred.
-//
-// THE REGISTER IS §7's: item, reveal, conceal, permit, receipt, passphrase,
-// alias, review, verdict, window. Never "master password", never "secure",
-// never a reassurance adjective.
-
 import type { SearchStateCopy } from "../_shared/search-scaffold.ts";
 import type { UnrunnableRow } from "./review-model.ts";
 import { COMPROMISED_WHY } from "./view-copy.ts";
-
-// ---------------------------------------------------------------------------
-// Add / edit
-// ---------------------------------------------------------------------------
 
 export const EDIT_HEAD_NEW = "New item";
 export const EDIT_HEAD_EDIT = "Edit";
@@ -24,11 +8,8 @@ export const EDIT_SAVE = "Save";
 export const EDIT_CANCEL = "Cancel";
 export const EDIT_FOOT =
   "Saved to the vault directly · nothing about it is queued";
-/** Offline the commit is WITHHELD, and this stands where it was — the rule
- *  again, at the moment it applies (STATES.md, Locker / Add-edit / offline). */
 export const EDIT_FOOT_OFFLINE =
   "The gateway is out of reach · a secret write waits for it rather than queueing";
-/** The lede's second sentence — what the rule does NOT cost. */
 export const EDIT_LEDE_TAIL =
   "Everything else here — the star, the tags, the trash — works offline.";
 
@@ -36,21 +17,11 @@ export const TYPE_ROW = "Type";
 export const TITLE_ROW = "Title";
 export const TITLE_PLACEHOLDER = "What this is";
 
-/**
- * THE TYPE NOTE. Fifteen types exist; SIX of them own columns on `locker_item`
- * and the other nine are sets of fields the vault mints from a template — which
- * is the same mechanism that lets a type this build does not know still open.
- *
- * The rail stays SIX ROWS with counts (README-Locker §1). The other nine are
- * reachable from this chip row and from the filters, because a rail listing
- * fifteen would be a taxonomy where a glanceable list belongs.
- */
 export const TYPE_NOTE =
   "Fifteen exist · one the vault does not have yet degrades to a note with custom fields rather than to nothing.";
 
 export const TITLE_NOTE = "Metadata · searchable.";
 
-/** Per-field notes, by the action key the field writes to. */
 export const FIELD_NOTE: Readonly<Record<string, string>> = {
   username: "Metadata · searchable, and it never needed a permit.",
   password: "Type it, paste it, or generate it here without leaving the form.",
@@ -66,7 +37,6 @@ export const FIELD_NOTE: Readonly<Record<string, string>> = {
   network: "Metadata · the network name is not a secret.",
 };
 
-/** What a sealed field says when it is standing in for one nobody revealed. */
 export const SEALED_UNCHANGED =
   "Left as it is · type here only to replace the stored secret";
 
@@ -140,10 +110,6 @@ export const EDIT_SAVED = "Saved · straight to the vault, nothing queued";
 export const EDIT_CREATED = "Item created · straight to the vault";
 export const EDIT_TITLE_MISSING = "A title first — the list is titles.";
 
-// ---------------------------------------------------------------------------
-// Generator
-// ---------------------------------------------------------------------------
-
 export const GEN_HEAD = "Generator";
 export const GEN_KIND_ROW = "Kind";
 export const GEN_LENGTH_ROW = "Length";
@@ -168,14 +134,9 @@ export const GEN_REGENERATED = "Regenerated · nothing was saved";
 export const GEN_SEEDED =
   "On the form · nothing is written until the item is saved";
 
-/** The strength sentence over a generated string, by the score's own word. */
 export function genStrengthCopy(label: string, length: number): string {
   return `${label} · ${length} characters, and nothing in it is a word, a date or a look-alike`;
 }
-
-// ---------------------------------------------------------------------------
-// Review
-// ---------------------------------------------------------------------------
 
 export const REVIEW_ATTENTION = "Needs attention";
 export const REVIEW_UNRUNNABLE = "Checked, and cannot be checked";
@@ -189,7 +150,6 @@ export const REVIEW_NOTHING_BODY =
   "A verdict needs an item to be about, and there are none here.";
 export const ALL_CLEAR = "All clear";
 export const ALL_CLEAR_ACT = "What was checked";
-/** The dash a check with no answer wears, instead of a zero it did not earn. */
 export const NO_ANSWER = "—";
 
 export const CHECK_LABEL: Readonly<Record<string, string>> = {
@@ -211,14 +171,6 @@ export const CHECK_WHY: Readonly<Record<string, string>> = {
   age: "The current password has stood over a year, counted from the day it was set.",
 };
 
-/**
- * A check with a producer, a source, and no read that carries it to this
- * screen. Named as its own fact — a zero here would be a claim nobody made.
- *
- * All three are SERVED today (`servedFields` reads the rows, not a flag), so
- * these sentences stand only if a read stops carrying a field. They are kept
- * for exactly that: a check that quietly went silent must still say so.
- */
 export const UNSERVED_WHY: Readonly<Record<string, string>> = {
   http: "The address is in the vault; this read did not carry it, so nothing was checked.",
   expiring:
@@ -226,7 +178,6 @@ export const UNSERVED_WHY: Readonly<Record<string, string>> = {
   age: "The date the password was set is in the vault; this read did not carry it, so nothing was checked.",
 };
 
-/** The three checks with no source at all (GAPS §3.3 #6c, #6d, #6e). */
 export const UNRUNNABLE_CHECKS: readonly UnrunnableRow[] = [
   {
     key: "2fa",
@@ -240,7 +191,6 @@ export const UNRUNNABLE_CHECKS: readonly UnrunnableRow[] = [
   },
 ];
 
-/** The all-clear screen's account of itself: what ran, over how many, when. */
 export function allClearBody(items: number, checks: number): string {
   return `${items} items read, ${checks} checks run · the checks this product cannot honestly run are listed below rather than left out`;
 }
@@ -252,10 +202,6 @@ export function checkedAt(clock: string): string {
 export function verdictMeta(verdicts: number, checks: number): string {
   return `${verdicts} verdicts across ${checks} checks`;
 }
-
-// ---------------------------------------------------------------------------
-// Search
-// ---------------------------------------------------------------------------
 
 export const SEARCH_PLACEHOLDER = "Search titles, usernames and addresses";
 export const SEARCH_SCOPE = "titles, usernames and addresses";
@@ -287,10 +233,6 @@ export const SEARCH_COPY: SearchStateCopy = {
   },
 };
 
-// ---------------------------------------------------------------------------
-// Import
-// ---------------------------------------------------------------------------
-
 export const IMPORT_HEAD = "Import";
 export const IMPORT_LEDE =
   "Draft, review, publish · nothing reaches the vault until the draft is published, and the vault wins every collision";
@@ -312,26 +254,15 @@ export const IMPORT_DRAFTS_META = "staged, and not in the vault";
 export const IMPORT_NO_DRAFTS = "No draft is waiting.";
 export const IMPORT_ROWS = "The rows";
 export const IMPORT_ROWS_META = "each with the verdict the vault gave it";
-/** A staged draft that holds nothing. DIFFERENT from "no draft is waiting":
- *  the draft exists and the border recognised nothing in the file, which is a
- *  refusal to state rather than an empty list to draw. */
 export const IMPORT_NO_ROWS =
   "Nothing in that file was recognised · the draft holds no rows, and discarding it writes nothing.";
 export const IMPORT_REVIEW_OPEN = "Review";
 export const IMPORT_OTHER_ENTITY =
   "not a Locker item · it lands in the app that owns it";
-/** Custodian-only, and it says which seat rather than which device (SURFACES.md
- *  — Import is a custodian surface). */
 export const IMPORT_NO_DOOR =
   "Import runs on the custodian — the desktop beside the gateway — and the draft is reviewed and published there.";
-/** The doors refuse offline BY CONSTRUCTION: an import payload is the raw file,
- *  secrets included, and a durable offline queue is where it must not sit. */
 export const IMPORT_OFFLINE =
   "The gateway is out of reach · an import carries the file itself, secrets and all, so it waits for a connection rather than queueing";
-
-// ---------------------------------------------------------------------------
-// Access history
-// ---------------------------------------------------------------------------
 
 export const ACCESS_HEAD = "Access history";
 export const ACCESS_LEDE =
@@ -358,10 +289,6 @@ export const ACCESS_NO_VALUES =
 export const ACCESS_WHERE =
   "Approvals shows the same receipts, across every app.";
 
-// ---------------------------------------------------------------------------
-// Trash
-// ---------------------------------------------------------------------------
-
 export const TRASH_HEAD = "Trash";
 export const TRASH_META = "star and tags kept, so a restore is lossless";
 export const TRASH_EMPTY = "Nothing in the trash.";
@@ -372,10 +299,6 @@ export const PURGE_CONFIRM_LABEL = "Purge";
 export const PURGED = "Purged · gone for good";
 export const PURGE_PARKED = "Parked · it waits for the owner’s confirmation";
 export const RESTORED_WHOLE = "Restored · whole, with its star and its tags";
-
-// ---------------------------------------------------------------------------
-// Export
-// ---------------------------------------------------------------------------
 
 export const EXPORT_HEAD = "Export everything";
 export const EXPORT_LEDE_TAIL = "There is no encrypted export today.";
@@ -410,10 +333,6 @@ export function exportWhat(items: number): string {
   return `${items} items · every field, in the clear`;
 }
 
-// ---------------------------------------------------------------------------
-// Companion
-// ---------------------------------------------------------------------------
-
 export const FILL_HEAD = "Companion";
 export const FILL_LEDE =
   "Origin-matched candidates for the page in front of you · https only, and secret-free until the fill";
@@ -429,12 +348,6 @@ export const FILL_OFFERS =
 export const FILL_NOT_OFFERED = "Not offered";
 export const FILL_NOT_OFFERED_META = "why a credential you have did not appear";
 
-// ---------------------------------------------------------------------------
-// The More sheet
-// ---------------------------------------------------------------------------
-
-/** The five surfaces behind the band's sixth slot, each with the one line
- *  that says what it is for. */
 export const SURFACE_TITLE: Readonly<Record<string, string>> = {
   "built-in:import": "Import",
   "built-in:access": "Access history",

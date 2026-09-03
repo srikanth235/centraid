@@ -1,5 +1,3 @@
-// People's chrome (#505): owns frame geometry; contents arrive as slots.
-// Nav is band/strip, never sidebar/topbar.
 import type { ReactNode } from "react";
 
 import { ConsentBanner, NoticeBanner } from "../_shared/AppChrome.tsx";
@@ -19,7 +17,6 @@ export interface ChromeSlots {
 export interface ChromeProps {
   shelf: ShelfId;
   narrow: boolean;
-  /** Strip would duplicate the band's destinations. */
   bandOwned: boolean;
   consent: { message: string } | null;
   onSelectShelf: (id: ShelfId) => void;
@@ -28,7 +25,6 @@ export interface ChromeProps {
 }
 
 export function Chrome(props: ChromeProps): ReactNode {
-  // A callback ref off `props` taints React-compiler reads (#573).
   const { rootRef } = props;
   const current = originShelf(props.shelf);
   const shellClass = chromeClass(

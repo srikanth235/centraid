@@ -1,5 +1,3 @@
-// Photos' rail rows as a table (v16 §4); `_shared/NavRail.tsx` draws it. No
-// Sharing row: a share's place is the recipient's vault (#726).
 import type { NavRailItem } from "../_shared/NavRail.tsx";
 import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from "./constants.ts";
 import { PEOPLE, PLACES, SEARCH, countKey, personIdFrom } from "./shelves.ts";
@@ -19,22 +17,17 @@ const LABELS: ReadonlyMap<ShelfId, string> = new Map<ShelfId, string>([
   [TRASH, "Trash"],
 ]);
 
-// A sub-state lights the shelf it came from; an unlisted one lights nothing.
 export function railShelf(id: ShelfId): ShelfId | undefined {
   if (personIdFrom(id)) return PEOPLE;
   if (LABELS.has(id)) return id;
-  // Any other non-built-in string id is an album.
   if (typeof id === "string" && !id.startsWith("built-in:")) return ALBUMS;
   return undefined;
 }
 
-// Exactly the routes that drew a strip: Search is its own page; Storage
-// deliberately keeps a rail with nothing current.
 export function railDrawnOn(id: ShelfId): boolean {
   return id !== SEARCH;
 }
 
-// One counts map, shared with the More sheet; a missing count draws nothing.
 export function photosNavRail({
   shelf,
   counts,

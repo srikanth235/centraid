@@ -1,8 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** Additive and idempotent over the one shared "Tags" concept scheme
- *  (packages/vault/src/commands/tags.ts): the same label twice dedupes onto
- *  one tag row. */
 export default async function tagAsset({ body, ctx }: HandlerArgs) {
   const input = actionInput(body);
   return runVaultAction(ctx, {

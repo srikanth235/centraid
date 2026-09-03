@@ -1,12 +1,8 @@
 import { runSelectionBatch } from "../_shared/selection-engine.ts";
-// Narration goes through outcomes.ts, not the element layer's `statusLine` —
-// a batch banner would be a second status line (§14/§18).
 import { assetKey, parseAssetKey, scopeOfKey } from "./asset-key.ts";
 import { act, narrate, notice } from "./outcomes.ts";
 import type { Album, Asset } from "./types.ts";
 
-// Composite keys (#599): a bare `asset_id` collides across vaults, so a lookup
-// could delete the wrong row. Album add is the exception — own-scope.
 interface BatchCallbacks {
   refresh: () => Promise<void>;
   setBarBusy: (on: boolean) => void;
@@ -118,8 +114,6 @@ export async function runBatchAddToAlbum(
   const results = await runSelectionBatch(keys, async (key, i) => {
     if (progressRef.current)
       progressRef.current.textContent = `Adding ${i + 1} of ${keys.length}…`;
-    // Own-scope album: only the asset half travels; the key's scope is where
-    // the row is shown from, not where the album lives.
     return act(
       "add-to-album",
       { album_id: album.album_id, asset_id: parseAssetKey(key).assetId },
@@ -149,8 +143,6 @@ export async function runBatchAddToAlbum(
   notice(parts.join(" · ") || "Nothing to add");
 }
 
-// Sets favorite ON, never toggles — a mixed selection has no single current
-// state. Does not exit selection: tiles stay, a second action is common.
 export async function runBatchFavorite(
   keys: string[],
   progressRef: { readonly current: HTMLElement | null },
@@ -192,8 +184,6 @@ export async function runBatchFavorite(
   if (lastBad) narrate(lastBad);
 }
 
-// Client-side save, never a vault write — no `act()`, no Undo. Skip assets
-// with nothing paintable here; "Load the original" is the fetch path.
 export async function runBatchDownload(
   keys: string[],
   visible: readonly Asset[],
@@ -231,6 +221,3 @@ export async function runBatchDownload(
   if (skipped > 0) parts.push(`${skipped} not on this device`);
   notice(parts.join(" · ") || "Nothing to download");
 }
-
-// No batch share or copy-into-scope, and none may be added (#726 P6, #825):
-// Share opens the grant kit over ONE subject, not a copy loop.

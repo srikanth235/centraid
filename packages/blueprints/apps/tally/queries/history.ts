@@ -9,7 +9,6 @@ interface RevisionRow {
   undone_at?: string | null;
 }
 
-/** Expense edit/trash history, constrained to tally.expense by grant. */
 export default async function expenseHistory({ input, ctx }: HandlerArgs) {
   const expenseId = String(input?.expense_id ?? "");
   if (!expenseId) return { revisions: [] };

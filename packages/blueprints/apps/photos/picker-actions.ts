@@ -1,12 +1,7 @@
-// Picker Add commit (v4 handoff §3, §14): progress NEVER lands on the
-// control — determinate counts ride the frame's one status line, and Undo
-// removes exactly the ids that landed.
 import { act, notice, writeTarget } from "./outcomes.ts";
 import type { Album } from "./types.ts";
 
-/** What one pass over the picked ids did. */
 interface AddTally {
-  /** What Undo takes back. */
   added: string[];
   parked: number;
   queued: number;
@@ -70,7 +65,6 @@ export async function submitPicker(
     closePicker,
   }: { refresh: () => Promise<void>; closePicker: () => void }
 ): Promise<void> {
-  // Albums live in the member's own scope (#599); a disabled target says why.
   const target = writeTarget("own");
   if (target.disabled) {
     notice(target.reason);

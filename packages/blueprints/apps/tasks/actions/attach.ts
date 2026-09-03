@@ -1,8 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** Bytes arrive either STAGED (#296: streamed to /_vault/blobs, sha claimed
- *  here) or as a small inline data: URI; the vault dedupes them into one
- *  canonical content item. */
 export default async function attachHandler({
   body,
   ctx,

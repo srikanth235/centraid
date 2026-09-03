@@ -1,9 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/**
- * The edge goes; the deduped content item stays, since it may back other
- * attachments.
- */
 export default async function detachHandler({ body, ctx }: HandlerArgs) {
   const input = actionInput(body);
   return runVaultAction(ctx, {

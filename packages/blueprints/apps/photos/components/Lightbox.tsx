@@ -1,8 +1,3 @@
-// The viewer (v4 §7.1) covers the whole frame. THE STAGE IS NOT A THEMED
-// SURFACE: `--stage` is one literal in both themes, so the focus ring takes
-// `--focus-ring-color` and its gap from `--stage`, never `currentColor`.
-// Pure rules are in viewer.ts, the stage in ViewerStage.tsx, the actions in
-// ViewerActions.tsx. Every outcome lands on the FRAME's one status line.
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { GrantSheet } from "../../_shared/GrantSheet.tsx";
@@ -50,7 +45,6 @@ interface Dims {
   height: number;
 }
 
-/** Below this the five actions move to a bottom bar (§7.1). */
 const COMPACT = 720;
 
 function withProbedDims(asset: Asset, probed: Dims | null): Asset {
@@ -106,8 +100,6 @@ export function LightboxShell({
   const [probed, setProbed] = useState<Dims | null>(null);
   const [rootRef, rootWidth] = useWidth();
   const [barRef, barWidth] = useWidth();
-  // Adjusted during render, never in an effect: an effect would paint the old
-  // dims against the new photograph for a frame (#573).
   const [probedFor, setProbedFor] = useState(asset.asset_id);
   if (probedFor !== asset.asset_id) {
     setProbedFor(asset.asset_id);
@@ -115,8 +107,6 @@ export function LightboxShell({
     setMoreOpen(false);
   }
   const displayAsset = withProbedDims(asset, probed);
-  // Read-only audiences view; writing actions are DISABLED with the reason
-  // rather than firing and apologising (#599).
   const canWrite = canWriteScope(asset.scope_id);
   const readOnly = canWrite ? undefined : "This library is read-only for you.";
   const compact = rootWidth > 0 && rootWidth < COMPACT;
@@ -124,7 +114,6 @@ export function LightboxShell({
   const downloadHref = safeMediaUrl(asset.content_uri);
   const editable =
     isRenderableUri(asset.content_uri) && !isVideoAsset(asset) && canWrite;
-  // A STANDING GRANT over this photograph (#825); the sheet owns the rest.
   const share = usePhotoShare(notice);
   const scopes = mountedScopes();
   const actorVaultId = asset.scope_id ?? scopes[0]?.id ?? "";
@@ -193,7 +182,6 @@ export function LightboxShell({
     await refresh();
   }
 
-  // Described ONCE, laid out twice (§D: same five names, same marks).
   const specs: Record<string, ViewerActionSpec> = {
     favorite: {
       id: "favorite",
@@ -208,8 +196,6 @@ export function LightboxShell({
       id: "edit",
       icon: EditIcon,
       disabled: !editable,
-      // Name THIS control's blocker: edit is also off for a video or a
-      // missing original, where "read-only" would misstate it (§6).
       reason: canWrite
         ? isVideoAsset(asset)
           ? "Only photographs can be cropped and rotated."
@@ -227,7 +213,6 @@ export function LightboxShell({
       id: "copy",
       icon: ShareIcon,
       label: commonsResident ? "Save to my vault" : "Share",
-      // Never disabled on a guess: `share.request` answers on the status line.
       disabled: false,
       onRun: () => (commonsResident ? void saveToMyVault() : share.request()),
     },
@@ -269,16 +254,12 @@ export function LightboxShell({
     <div
       className={styles.lightbox}
       ref={rootRef}
-      // The sheet's state is the whole viewer's — the filmstrip and stage
-      // foot are the body's SIBLINGS.
       data-info={!editing && infoOpen ? "open" : undefined}
     >
       <GrantSheet
         open={share.open}
         onClose={() => share.close()}
         audiences={share.audiences}
-        // OBJECT-FIRST: opened over THIS photograph; the capability picker is
-        // the registry's answer for `media.asset`.
         subject={{
           subjectType: "media.asset",
           subjectId: asset.asset_id,
@@ -292,8 +273,6 @@ export function LightboxShell({
         <button
           type="button"
           className={styles.close}
-          // No `title` beside an identical `aria-label` — the native tooltip
-          // paints over the 34px control it claims to label.
           aria-label="Close"
           onClick={onClose}
         >
@@ -399,8 +378,6 @@ export function LightboxShell({
   );
 }
 
-/** Kept on the phone. A frame is a step-to control, not a grid tile, so it
- *  does not reach for Tile.tsx; it shares only the CHEAP source rule. */
 function Filmstrip({
   list,
   current,

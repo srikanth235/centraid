@@ -1,9 +1,3 @@
-// TYPED LINES — the sixth division's arithmetic, and the payload two commands
-// take.
-//
-// PINNED HERE because the same fold serves *By line* on Add expense and the
-// allocation editor on Receipt: if these two disagreed, one receipt would read
-// two ways on two seats. The tie-break on a LINE is position, not the payer.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -18,8 +12,6 @@ import type { LineDraft } from "./line-model.ts";
 
 const THREE = ["me", "ana", "tom"];
 
-/** How this app renders one amount, stubbed to the pence so the sentence under
- *  test is the sentence and not the formatter. */
 const money = (minor: number): string => (minor / 100).toFixed(2);
 
 function line(over: Partial<LineDraft> = {}): LineDraft {
@@ -42,8 +34,6 @@ describe("one line, split between the people on it", () => {
   });
 
   it("hands the remainder to the EARLIER party, not to a payer", () => {
-    // A line has nobody out of pocket, so position is the only honest
-    // tie-break — and it is the one the phone's capture flow already uses.
     expect(allocateLine(1000, THREE)).toStrictEqual([
       { party_id: "me", share_minor: 334 },
       { party_id: "ana", share_minor: 333 },

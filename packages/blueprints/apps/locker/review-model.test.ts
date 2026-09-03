@@ -1,10 +1,3 @@
-// REVIEW'S TWO REGISTERS, AND THE THIRD FACT BETWEEN THEM.
-//
-// The state this file exists for is the last block: a check whose source the
-// read does not carry must NOT report a zero. "Checked, and found none" is a
-// reassurance; "not asked" is a gap. A review surface that says the first when
-// the second is true is the single failure this whole screen exists to avoid.
-
 import { describe, expect, it } from "vitest";
 
 import { daysUntilExpiry, isExpiringSoon, matchesCheck } from "./format.ts";
@@ -18,8 +11,6 @@ function row(over: Partial<LockerRow> & { item_id: string }): LockerRow {
   return { type: "login", title: over.item_id, ...over };
 }
 
-/** A window whose rows carry the three metadata fields the checks read — what
- *  the items query hands back since #872 decorated them. */
 const SERVED: LockerRow[] = [
   row({
     item_id: "a",
@@ -55,8 +46,6 @@ const SERVED: LockerRow[] = [
   }),
 ];
 
-/** A read that stopped carrying them. The register must then say "not asked"
- *  rather than reporting a zero — which is the state this file exists for. */
 const UNSERVED: LockerRow[] = SERVED.map(
   ({ url: _url, expiry: _expiry, password_set_at: _setAt, ...rest }) => rest
 );
@@ -138,8 +127,6 @@ describe("Checked, and cannot be checked", () => {
     const register = reviewRegister(SERVED, NOW);
     const keys = register.unrunnable.map((check) => check.key);
     expect(keys).toStrictEqual(UNRUNNABLE_CHECKS.map((check) => check.key));
-    // Password age LEFT this register when the read started carrying its
-    // source; the two that remain are rulings, not deferrals.
     expect(keys).toStrictEqual(["2fa", "breach"]);
   });
 
@@ -149,7 +136,6 @@ describe("Checked, and cannot be checked", () => {
     expect(keys).toContain("http");
     expect(keys).toContain("expiring");
     expect(keys).toContain("age");
-    // …and neither appears as a verdict with a count of nothing.
     expect(register.attention.map((verdict) => verdict.key)).toStrictEqual([
       "compromised",
       "weak",
@@ -169,7 +155,6 @@ describe("ALL CLEAR is a state, not an absence", () => {
     );
     expect(register.allClear).toBe(true);
     expect(register.attention).toHaveLength(0);
-    // It still knows what it checked, which is what the screen says.
     expect(register.ran).toStrictEqual([
       "compromised",
       "weak",
@@ -201,7 +186,6 @@ describe("the two pure reads", () => {
     const card = row({ item_id: "c", type: "card", expiry: "02 / 26" });
     expect(isExpiringSoon(card, NOW)).toBe(true);
     expect(isExpiringSoon({ ...card, expiry: "02 / 29" }, NOW)).toBe(false);
-    // A login is not a card, whatever it holds in that column.
     expect(isExpiringSoon({ ...card, type: "login" }, NOW)).toBe(false);
   });
 
@@ -212,7 +196,6 @@ describe("the two pure reads", () => {
     expect(
       matchesCheck(row({ item_id: "2", url: "https://a" }), "http", NOW)
     ).toBe(false);
-    // A bare host has no scheme to be insecure with.
     expect(
       matchesCheck(row({ item_id: "3", url: "a.example" }), "http", NOW)
     ).toBe(false);

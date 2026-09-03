@@ -1,13 +1,3 @@
-// The detail panel — a column BESIDE the canvas, never over it, so the next
-// row can be reached without dismissing the description first.
-//
-// PARKED CANCEL IS A STATE, NOT AN ERROR. Cancelling is medium-risk, so the
-// vault HOLDS the ask for the owner instead of executing it. The event stays
-// on the agenda, this panel says exactly what is held, and the way on is
-// Approvals — the owner's own surface. There is deliberately no unpark control
-// here: the vault's release door (`confirmVaultParked`) is the owner's, an app
-// cannot reach it, and a button that could not act would be worse than the
-// sentence that says who decides.
 import type { ReactNode } from "react";
 
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
@@ -50,7 +40,6 @@ export interface EventDetailProps {
   event: AgEvent;
   calendarName: string | undefined;
   hue: string | null;
-  /** The row's held write, read from the shared overlay by the caller. */
   pending: { status: string; action: string } | undefined;
   onClose: () => void;
   onEdit: () => void;
@@ -79,9 +68,6 @@ function GuestRow({ guest }: { guest: Attendee }): ReactNode {
 export function EventDetail(props: EventDetailProps): ReactNode {
   const ev = props.event;
   const mine = myAttendance(ev);
-  // The owner's own door. It is absent on a host that mounts no approvals
-  // surface, and then the panel says where the decision lives instead of
-  // drawing a control that goes nowhere.
   const handleReviewInApprovals = window.centraid.openApprovals;
   const heldCancel =
     props.pending?.action === "cancel-event" &&

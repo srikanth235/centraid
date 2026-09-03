@@ -1,11 +1,5 @@
 import { fmtBytes } from "@centraid/design/elements";
 
-// Storage (v4 handoff §12). EVERY NUMBER HERE IS READ, NEVER INVENTED, from
-// two sources the screen names apart: the whole-library ROLLUP (#711,
-// `blob.custody_rollup`, silent until the sweep has run) and the LOADED
-// WINDOW, which alone can speak about the trash. No backup-policy block and no
-// "Back up now" — neither is readable or writable through this seat's grant.
-// No filled control either: the app bar owns the view's one filled ink (§18).
 import { assetBytes } from "../format.ts";
 import { custodyHealth, freeUpIsOfferable } from "../storage-model.ts";
 import type { CustodyFacts, Totals } from "../storage-model.ts";
@@ -18,7 +12,6 @@ export interface StorageFacts {
   shown: number;
   truncated: boolean;
   bytes: number;
-  /** Rows with no recorded size — the reason `bytes` is a floor, not a total. */
   unsized: number;
   trashCount: number;
   trashBytes: number;
@@ -92,7 +85,6 @@ function Row({
   );
 }
 
-/** Severity order, worst last: a reader scanning down ends on what needs them. */
 const CUSTODY_ORDER = [
   "replicated",
   "remote-only",
@@ -101,7 +93,6 @@ const CUSTODY_ORDER = [
   "missing",
 ] as const;
 
-/** `unknown` and `held` take no number and are handled before this is called. */
 function healthCount(
   custody: CustodyFacts,
   health: "missing" | "only-here" | "waiting"
@@ -111,8 +102,6 @@ function healthCount(
   return custody.waiting.count;
 }
 
-/** `null` is a THIRD state, not a zero: the read has not landed, and a member
- *  would read a count of nothing as a finding. */
 function Health({ custody }: { custody: CustodyFacts | null }) {
   if (!custody) {
     return (
@@ -160,7 +149,6 @@ function Health({ custody }: { custody: CustodyFacts | null }) {
   );
 }
 
-/** The whole library, not the loaded window. */
 function WhereTheOriginalsAre({ custody }: { custody: CustodyFacts }) {
   const totalsOf: Record<(typeof CUSTODY_ORDER)[number], Totals> = {
     replicated: custody.backedUp,
@@ -194,7 +182,6 @@ function WhereTheOriginalsAre({ custody }: { custody: CustodyFacts }) {
   );
 }
 
-/** A statement, not a control: the unproven remainder prints beside the offer. */
 function FreeUp({ custody }: { custody: CustodyFacts }) {
   return (
     <>

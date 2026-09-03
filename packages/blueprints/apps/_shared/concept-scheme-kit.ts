@@ -1,14 +1,9 @@
-// The one place a blueprint names a concept scheme: a URI copied elsewhere in
-// this tree fails `lint-engine-conformance.mjs` (ENGINE V). The helpers walk
-// rows the caller already read; the read stays with the query that owns it.
-
 export const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
 
 export const FOLDER_SCHEME_URI = "https://centraid.dev/schemes/folders";
 
 export const LIST_SCHEME_URI = "https://centraid.dev/schemes/lists";
 
-/** Apart from the shared vocabulary: labels are as private as the item. */
 export const LOCKER_TAGS_SCHEME_URI =
   "https://centraid.dev/schemes/locker-tags";
 
@@ -20,7 +15,6 @@ export const RELATIONS_SCHEME_URI = "urn:duaility:relations";
 
 export const STARRED_NOTATION = "starred";
 
-/** Not a folder a member can rename. */
 export const ROOT_FOLDER_NOTATION = "root";
 
 export const JOURNAL_ENTRY_NOTATION = "entry";

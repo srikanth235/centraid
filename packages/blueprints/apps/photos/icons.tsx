@@ -1,5 +1,3 @@
-// Same registry as the other blueprint apps; the adapter preserves the
-// existing exports and lets CSS provide currentColor — no second SVG dict.
 import type { FC, ReactElement, SVGProps } from "react";
 
 import { iconSvg } from "@centraid/design";
@@ -23,7 +21,6 @@ function RegisteredIcon({
     <i
       aria-hidden="true"
       className={className}
-      // INLINE-FLEX, NOT INLINE: an inline wrapper's line box is the glyph plus the font's descent (22px around an 18px mark), so flex parents centre the wrong box and the glyph rides 2px high. `inline-flex` is exactly the glyph's box and still sits beside text, unlike `display: block`.
       style={{ display: "inline-flex", ...style, color }}
       // oxlint-disable-next-line react/no-danger -- registry output is the reviewed shared icon lowering.
       dangerouslySetInnerHTML={{ __html: markup }}
@@ -66,17 +63,11 @@ export const ShieldIcon = make("CheckCircle");
 export const PinIcon = make("Pin");
 export const RenameIcon = make("Pencil");
 
-// Selection bar's five actions (v4 handoff §6, CHANGELOG B2) — the lowercase
-// registry keys, NOT reuses of the capitalised exports above: B2 requires
-// sharing exact artwork without a second competing glyph.
 export const SelectFavoriteIcon = make("heart");
 export const SelectAlbumIcon = make("album");
 export const SelectShareIcon = make("share");
 export const SelectDownloadIcon = make("download");
 export const SelectTrashIcon = make("trash");
 export const SelectRestoreIcon = make("restore");
-// Viewer marks with no honest stand-in (CHANGELOG §B2): `more` is a different
-// action from `Menu` (bar overflow vs navigation) and `info` states what is
-// known — an alert glyph would say something went wrong.
 export const MoreIcon = make("more");
 export const InfoMarkIcon = make("info");

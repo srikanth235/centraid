@@ -1,6 +1,5 @@
 import { defineConfig } from "vitest/config";
 
-/** Standalone Stryker test root for the pure app-meta/rename builders. */
 export default defineConfig({
   test: {
     name: "@centraid/blueprints-mutation",

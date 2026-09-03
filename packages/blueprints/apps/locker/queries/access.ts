@@ -1,14 +1,3 @@
-/**
- * Access history (README-Locker §1). ONLINE-ONLY: `access.receipt` lives in
- * the vault's audit band, not the replica, so `ctx.vault.authenticate` marks the run
- * ONLINE_ONLY and the gateway serves it. Never catch that — a flattened
- * ONLINE_ONLY draws an empty history as none.
- *
- * THE ROW FILTER IS THE BOUNDARY: `provenanceScopeFailure` guards
- * `access.provenance` only, so app.json's rowFilter on `object_type` is all
- * that holds this grant to Locker's own receipts.
- */
-
 const LOCKER_ITEM_TYPE = "locker.item";
 const LOCKER_AUTH_TYPE = "locker.auth";
 const DEFAULT_WINDOW = 200;

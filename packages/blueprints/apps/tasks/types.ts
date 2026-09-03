@@ -1,5 +1,3 @@
-// Page-side shapes for Tasks (#834). `Task`'s recurrence fields are derived
-// behind `ctx.time` and are the only recurrence facts a surface may render.
 import type { Attachment } from "@centraid/design/elements";
 
 import type { ScopeSearchReach } from "../_shared/search-scaffold.ts";
@@ -41,7 +39,6 @@ export interface TaskTag {
 
 export interface Task {
   task_id: string;
-  /** From the cross-scope merge; absent on single-scope surfaces (#726). */
   scope_id?: string | null;
   status: TaskStatus;
   title: string;
@@ -75,7 +72,6 @@ export interface BoardCounts {
   closed?: number;
 }
 
-/** Never reassigned — mutated in place so the orchestrator's closures hold. */
 export interface BoardData {
   open: Task[];
   logbook: Task[];
@@ -110,7 +106,6 @@ export type Overlay =
   | { kind: "release"; taskId: string }
   | { kind: "delete"; taskId: string };
 
-/** Client-side only — never persisted, never sent to the vault. */
 export interface AppState {
   search: string;
   searchResults: Task[] | null;

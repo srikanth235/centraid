@@ -1,6 +1,3 @@
-// THE ONE COMPONENT IN THIS APP THAT READS FOR ITSELF: the grant plane is
-// the gateway's door (`GrantDoor`), not a People query. Routing it through
-// `logic.ts` would put a second transport beside `window.centraid.read`.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -44,7 +41,6 @@ export interface PersonGrantsProps {
   onToggle: () => void;
   onStatus: (message: string) => void;
   door?: GrantDoor;
-  /** Defaults to the bridge's own feature detection — tests and e2e only. */
   available?: boolean;
 }
 
@@ -57,8 +53,6 @@ export function PersonGrants(props: PersonGrantsProps): ReactNode {
   const [busy, setBusy] = useState(false);
 
   const partyId = props.partyId;
-  // Keyed to the person asked about: a late read is dropped, not drawn under
-  // the wrong name.
   const asked = useRef(partyId);
   const read = useCallback(
     async (showPending: boolean): Promise<void> => {
@@ -74,8 +68,6 @@ export function PersonGrants(props: PersonGrantsProps): ReactNode {
     [available, door, partyId]
   );
 
-  // Deferred off the effect body: a synchronous setState here would cascade a
-  // second render before the first has painted.
   useEffect(() => {
     let active = true;
     void Promise.resolve().then(async () => {
@@ -98,7 +90,6 @@ export function PersonGrants(props: PersonGrantsProps): ReactNode {
     const outcome = await door.revoke(grant.grantId);
     setBusy(false);
     setConfirming(null);
-    // Printed verbatim — softening would flatten three honest answers into one.
     props.onStatus(outcome.message);
     await read(false);
   };

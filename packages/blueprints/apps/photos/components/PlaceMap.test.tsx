@@ -1,6 +1,3 @@
-// @vitest-environment jsdom
-// Places map markup. Silent-regression traps: every pin is a focusable
-// button with an accessible name, and there is no request to anywhere.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -48,7 +45,6 @@ const POINTS: Point[] = [
     lat: 39.0021,
     lng: -120.1131,
     count: 2,
-    // Must never reach the drawing.
     name: "39.0021, -120.1131",
     thumb: "data:image/png;base64,iVBOR",
   },
@@ -144,3 +140,4 @@ describe("the Places map", () => {
     expect(render({ points: [] })).toBe("");
   });
 });
+// @vitest-environment jsdom

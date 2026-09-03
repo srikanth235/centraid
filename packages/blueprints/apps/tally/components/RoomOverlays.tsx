@@ -1,13 +1,3 @@
-// The overlay layer, wired.
-//
-// THE SHEETS EDIT THE OVERLAY VALUE ITSELF rather than a fourth bag beside it,
-// so "one overlay at a time" stays true of the thing being typed into as well
-// as of the thing on screen: there is exactly one place a half-named group can
-// be, and closing the sheet is what discards it.
-//
-// Each editor below is TOTAL — an overlay of another kind comes back unchanged
-// — which is what lets one `onName` serve the friend sheet, the group sheet and
-// the rename sheet without any of them knowing about the others.
 import type { ReactNode } from "react";
 
 import type { ComposeState, Overlay } from "../compose-state.ts";
@@ -48,7 +38,6 @@ export interface RoomOverlaysProps {
   overlay: Overlay;
   compose: ComposeState;
   friends: readonly Person[];
-  /** Everyone not already in the open group — the member sheet's chips. */
   candidates: readonly Person[];
   onNavigate: (shelf: ShelfId) => void;
   onRemove: (partyId: string) => void;

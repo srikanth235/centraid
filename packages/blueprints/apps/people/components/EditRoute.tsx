@@ -1,7 +1,3 @@
-// Edit / New person (v12 § 8): `new`/`edit` draw the SAME form; mode only names
-// the screen. Vaults section withheld (people-copy.ts) — People reads sharing,
-// writes none. `Never` chip writes zero (floored everywhere); swatches store
-// `var(--c-<hue>)`, never hex: legacy hexes match no swatch.
 import type { ReactNode } from "react";
 
 import { IDENTITY_HUE_KEYS } from "@centraid/design";
@@ -28,7 +24,6 @@ function hueValue(key: ColorKey): string {
   return `var(--c-${key})`;
 }
 
-/** Labels from format.ts: cadence reads the same word as the person screen. */
 const CADENCE_OPTIONS = CADENCE_CHIPS.map((days) => ({
   id: String(days),
   label: days === 0 ? CADENCE_NEVER : agoLabel(days),
@@ -36,7 +31,6 @@ const CADENCE_OPTIONS = CADENCE_CHIPS.map((days) => ({
 
 export function EditRoute(props: EditRouteProps): ReactNode {
   const draft = props.draft;
-  // Unbuilt draft == read in flight: skeleton, never a saveable empty form.
   if (props.loading || !draft) {
     return (
       <SkeletonBlock>

@@ -1,5 +1,3 @@
-// Everything the viewer/slideshow/editor stage knows WITHOUT a DOM. Copy here
-// is FINAL, and no user-visible string names a storage noun for a scope.
 import { clock, isAudioAsset, isVideoAsset } from "./format.ts";
 import {
   PHOTOS_VIDEO_STATUS,
@@ -8,7 +6,6 @@ import {
 import { isLiveAsset } from "./tile-state.ts";
 import type { Asset } from "./types.ts";
 
-// Pixels OF BAR, never a viewport breakpoint: the info rail narrows it.
 export const LABEL_BREAKPOINT = 840;
 
 export function labelsVisible(barWidth: number): boolean {
@@ -17,7 +14,6 @@ export function labelsVisible(barWidth: number): boolean {
 
 export const FIT = 1;
 
-// Discrete rungs, not a pinch factor: every step is pointer-reachable.
 export const ZOOM_STEPS: readonly number[] = [FIT, 1.5, 2, 2.4, 3, 4];
 
 export function isZoomed(scale: number): boolean {
@@ -34,7 +30,6 @@ export function zoomOut(scale: number): number {
   return below;
 }
 
-// Rounds HERE so the string and the transform cannot disagree.
 export function zoomReadout(scale: number): string {
   return `${Math.round(scale * 100)}% · drag to pan`;
 }
@@ -43,7 +38,6 @@ export const FIT_CHIP = "fit";
 
 export const FIT_ACTION = "Fit";
 
-// From the RECORD, and square when absent: nothing reflows.
 export function assetRatio(asset: Asset): number {
   const w = Number(asset.width);
   const h = Number(asset.height);
@@ -79,7 +73,6 @@ export function videoResolutionLabel(asset: Asset): string | null {
   return `${Math.round(height)}p`;
 }
 
-// A field the record lacks is OMITTED, never invented as `?p` or `0:00`.
 export function videoKindLabel(asset: Asset): string {
   const parts = ["video"];
   const resolution = videoResolutionLabel(asset);
@@ -125,8 +118,6 @@ function takenDate(asset: Asset): string | null {
   });
 }
 
-// Lineage is read, never assumed (#711): an edited copy's `captured_at` is its
-// SAVE date, not a capture date.
 export function editorSourceLine(asset: Asset, source?: Asset | null): string {
   if (asset.source_asset_id) {
     const resolved =
@@ -147,12 +138,10 @@ export interface OriginStatus {
   action?: string;
 }
 
-// Never fetches: loading a full-quality original is ALWAYS an explicit choice.
 export function originStatus(
   asset: Asset,
   gatewayName: string
 ): OriginStatus | null {
-  // Video beats the custody line (§7.1): the transport streams the display copy.
   if (isVideoAsset(asset)) {
     return { text: PHOTOS_VIDEO_STATUS };
   }
@@ -177,8 +166,6 @@ export function originStatus(
 
 export const DEFAULT_GATEWAY_NAME = "the gateway";
 
-// `blob.custody_state` is the only per-photograph custody fact an app may read:
-// `blob_replica` is not a registered entity, so a destination would be invented.
 const ORIGIN_PARAGRAPHS: Record<string, (gatewayName: string) => string> = {
   replicated: (gateway) => `The original is on this device and on ${gateway}.`,
   "remote-only": (gateway) =>
@@ -193,7 +180,6 @@ const ORIGIN_PARAGRAPHS: Record<string, (gatewayName: string) => string> = {
 
 export function originParagraph(asset: Asset, gatewayName: string): string {
   const line = ORIGIN_PARAGRAPHS[String(asset.custody_state ?? "")];
-  // No row, no claim: the blob sweep may not have run.
   if (!line)
     return `Where the original is kept has not been checked yet — ${gatewayName} works that out on its own schedule.`;
   return line(gatewayName);
@@ -218,7 +204,6 @@ export const PHONE_ACTIONS = [
 ] as const;
 export type PhoneActionId = (typeof PHONE_ACTIONS)[number];
 
-// `copy` names a DESTINATION, never `Share`; `copyActionLabel` overrides it.
 export const ACTION_LABELS: Readonly<
   Record<ViewerActionId | PhoneActionId, string>
 > = {
@@ -239,7 +224,6 @@ export {
   PHOTOS_SAVE_AS_NEW_EXPLANATION as SAVE_AS_NEW_EXPLANATION,
 } from "./shared-copy.ts";
 
-// An edit this app cannot express non-destructively is not offered.
 export const EDITOR_RATIOS = ["Original", "Square", "3:2"] as const;
 export type EditorRatio = (typeof EDITOR_RATIOS)[number];
 
@@ -249,7 +233,6 @@ export function ratioValue(ratio: EditorRatio): number | null {
   return null;
 }
 
-/** In FRACTIONS of the frame. */
 export function centredCrop(
   frameRatio: number,
   ratio: number
@@ -262,7 +245,6 @@ export function centredCrop(
   return { x: (1 - w) / 2, y: 0, w, h: 1 };
 }
 
-// Two consequences, not three: a place is the member's own or it is not.
 export const PERSONAL_MEANING =
   "reachable by nothing. Copy it somewhere shared to let someone see it.";
 export const SHARED_MEANING =

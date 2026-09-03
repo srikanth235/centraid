@@ -14,11 +14,6 @@ import {
 } from "./clone.js";
 import type { ScaffoldFile } from "./scaffold-types.js";
 
-/**
- * Lay down a minimal published app on disk: the id is the folder name and the
- * display name lives in `app.json#name` — the only two facts the identity
- * probes below read.
- */
 async function publishApp(
   appsDir: string,
   id: string,
@@ -63,10 +58,6 @@ describe(suggestCloneIdentity, () => {
   });
 
   it("skips past existing display-name collisions even when the id slot is free", async () => {
-    // Bare "Hydrate" is taken by an unrelated app. The dir id `hydrate`
-    // is also taken by that same app. Then `hydrate-2` is free as a
-    // dir but the user renamed yet another app to "Hydrate 2" — bump
-    // both to N=3.
     await publishApp(dir, "hydrate", "Hydrate");
     await publishApp(dir, "something", "Hydrate 2");
     const picked = await suggestCloneIdentity(dir, "hydrate", "Hydrate");
@@ -75,8 +66,6 @@ describe(suggestCloneIdentity, () => {
   });
 
   it("keeps id and name advancing together when both classes of collision interleave", async () => {
-    // N=1: id+name taken (bare). N=2: id taken. N=3: id free but name
-    // taken. N=4: both free.
     await publishApp(dir, "hydrate", "Hydrate");
     await publishApp(dir, "hydrate-2", "Hydrate 2");
     await publishApp(dir, "whatever", "Hydrate 3");
@@ -88,7 +77,6 @@ describe(suggestCloneIdentity, () => {
   it("does case-insensitive display-name comparison", async () => {
     await publishApp(dir, "x", "HYDRATE");
     const picked = await suggestCloneIdentity(dir, "hydrate", "Hydrate");
-    // Bare name "Hydrate" collides with "HYDRATE" case-insensitively → bump.
     expect(picked.id).toBe("hydrate-2");
     expect(picked.name).toBe("Hydrate 2");
   });
@@ -131,7 +119,6 @@ describe("suggestCloneIdentityFrom (git-store backend — no filesystem)", () =>
   });
 
   it("falls back to the id for apps with no display name", () => {
-    // An app published with no `name` still blocks its own id.
     const picked = suggestCloneIdentityFrom(
       [{ id: "hydrate" }],
       "hydrate",
@@ -243,7 +230,6 @@ describe(cloneTemplate, () => {
   });
 
   it("rewrites automation.json#name + stamps generated for automation templates", async () => {
-    // Lay down an automation-template-shaped source: app.json + automations/<id>/...
     const templateDirLocal = await tempDir("centraid-auto-tmpl-");
     await fs.writeFile(
       path.join(templateDirLocal, "app.json"),
@@ -299,7 +285,6 @@ describe(cloneTemplate, () => {
     expect(mf.name).toBe("Briefing 2");
     expect(mf.generated.by).toBe("centraid-builder");
     expect(mf.generated.at).toMatch(/^\d{4}-\d{2}-\d{2}T/u);
-    // Other fields carry through unchanged.
     expect(mf.prompt).toBe("do the thing");
     expect(mf.triggers).toStrictEqual([{ kind: "cron", expr: "0 18 * * 1-5" }]);
 
@@ -379,7 +364,6 @@ describe(cloneTemplateFiles, () => {
     expect(mf.name).toBe("Hydrate 2");
     expect(mf.generated.by).toBe("centraid-builder");
     expect(mf.generated.at).not.toBe("2020-01-01T00:00:00.000Z");
-    // No automations brief is seeded when a real manifest ships.
     expect(out.has("automations/README.md")).toBe(false);
   });
 

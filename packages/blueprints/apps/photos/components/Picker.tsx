@@ -1,7 +1,3 @@
-// The album picker, drawn as a panel. IT OFFERS THE SAME `<Tile>` THE TIMELINE
-// DOES over the shared `justify()` packer — never a second square tile whose
-// shape comes from CSS instead of the record. Permanently in `selectMode`:
-// picking is all it does, and there is nothing here to open.
 import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 
@@ -11,14 +7,11 @@ import { Tile } from "./Tile.tsx";
 
 import styles from "./Picker.module.css";
 
-/** Rung S — never the member's timeline rung. */
 const PICKER_RUNG = 1;
 const PICKER_ROW_HEIGHT = RUNGS[PICKER_RUNG]!.desktop;
 
 const FALLBACK_WIDTH = 720;
 
-/** It filters what is OFFERED — a loaded window, with no path to the gateway's
- *  index — so the copy may never claim to search the library. */
 const NARROW_PLACEHOLDER = "Narrow the photographs offered here";
 
 function matchesQuery(asset: Asset, query: string): boolean {
@@ -109,7 +102,6 @@ export function PickerView({
                   rung={PICKER_RUNG}
                   selected={picked.has(t.asset.asset_id)}
                   selectMode
-                  // Album membership is own-scope only (#599): nothing is marked.
                   vaultMark={null}
                   onOpen={() => onToggle(t.asset.asset_id)}
                   onToggleSelect={() => onToggle(t.asset.asset_id)}

@@ -1,14 +1,3 @@
-// "Scan a document" — where documents are born on a phone (Docs spec §4.4).
-//
-// THE SHELF EXISTS BECAUSE THE MORE SHEET NAMES IT, and what it draws is the
-// truth about this surface: there is no camera path here. A web seat cannot
-// find page edges, straighten what it sees and lay three captures down as one
-// PDF; what it can do is take the file the OS hands it, which is the share
-// sheet, which is a different door and is named as such.
-//
-// The screen is NOT a dead end. Every row below goes somewhere or explains
-// itself, because a member who taps "Scan a document" and meets a blank page
-// has been told their phone cannot do something their phone can do.
 import type { ReactNode } from "react";
 
 import { Note, Panel, Rows, Screen, Section } from "./Blocks.tsx";
@@ -18,8 +7,6 @@ export function ScanRoute({
   narrow,
   onUpload,
 }: {
-  /** The compact form factor. The capture path is a phone's, so the screen
-   *  says something different at a desk. */
   narrow: boolean;
   onUpload: () => void;
 }): ReactNode {

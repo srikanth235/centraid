@@ -1,7 +1,3 @@
-// @vitest-environment jsdom
-// THE PEOPLE SHELF'S CONSENT GATE (#712): while the roster is empty and the
-// question open, `gate` replaces the grid/note; app-root.tsx decides WHEN.
-// Pure-view test via renderToStaticMarkup.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -80,7 +76,6 @@ describe("the People shelf's consent gate", () => {
   it("renders the gate in place of the grid/note when `gate` is present", () => {
     const html = markup({ gate: GATE_PROPS });
     expect(html).toContain(ON_DEVICE_PANEL.action);
-    // Not the plain pending-note copy — the gate is the whole empty state.
     expect(html).not.toContain("not matched to anyone");
   });
 
@@ -93,8 +88,6 @@ describe("the People shelf's consent gate", () => {
   });
 
   it("prefers a non-empty roster's cards over the gate even if `gate` were passed", () => {
-    // Belt and braces: the component never shows grid AND gate together —
-    // withholding `gate` is the CALLER's job.
     const html = markup({
       people: [{ party_id: "p1", name: "Ana", count: 2, asset_ids: [] }],
       gate: GATE_PROPS,
@@ -104,9 +97,6 @@ describe("the People shelf's consent gate", () => {
   });
 });
 
-// A FACE GROUP MAY SPAN TWO PEOPLE'S CONFIRMATIONS (#712): subject and
-// answerer are separate schema columns; merging the two members is
-// precisely what must not happen.
 describe("a person's confirmers", () => {
   const ANA = (confirmedBy: Person["confirmed_by"]): Person => ({
     party_id: "p1",
@@ -132,7 +122,6 @@ describe("a person's confirmers", () => {
       ],
     });
     expect(html).toContain("Confirmed by Sam and Kit");
-    // The subject of the group is still one person, not two.
     expect(html).toContain("Ana");
     expect(html).not.toContain("Sam and Kit and Ana");
   });
@@ -156,3 +145,4 @@ describe("a person's confirmers", () => {
     expect(html).not.toContain("Confirmed by");
   });
 });
+// @vitest-environment jsdom

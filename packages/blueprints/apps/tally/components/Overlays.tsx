@@ -1,12 +1,3 @@
-// What stands OVER the room: the band's More sheet, the confirms, and the
-// sheets that mint a friend, a group or a member.
-//
-// ONE OVERLAY AT A TIME, and it is a value — `Overlay` in `compose-state.ts`.
-// Two confirms at once would be two questions with one answer between them,
-// and a sheet over a confirm puts the way out behind what opened it.
-//
-// The composing sheets — those with FIELDS — live in their own file; the union
-// that names them keeps "one at a time" true by construction, not by care.
 import type { ReactNode } from "react";
 
 import { MoreSheet } from "../../_shared/MoreSheet.tsx";
@@ -60,10 +51,6 @@ export function Overlays(props: OverlaysProps): ReactNode {
 
   if (open.kind === "more") {
     return (
-      // THE DOCKED SHEET, not a top-layer modal (#883, ruling O-sheet). An
-      // overflow OF the band stands inside the app pane above where the band
-      // renders; a modal would take the platform's top layer over the very
-      // chrome it overflows.
       <MoreSheet
         label={MORE_TITLE}
         title={MORE_TITLE}
@@ -81,8 +68,6 @@ export function Overlays(props: OverlaysProps): ReactNode {
   }
 
   if (open.kind === "leave") {
-    // The §6 sentence in two parts — one paragraph, one trailing line — so
-    // each literal stays a single claim.
     return (
       <Confirm
         title={LEAVE_TITLE}
@@ -112,8 +97,6 @@ export function Overlays(props: OverlaysProps): ReactNode {
   }
 
   if (open.kind === "nudge") {
-    // IT ALWAYS PARKS, and the confirm says so BEFORE the press. A reminder
-    // this app could send would be a delivery path this product does not have.
     return (
       <Confirm
         title={nudgeTitle(open.name)}

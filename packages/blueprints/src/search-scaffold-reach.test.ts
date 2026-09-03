@@ -1,12 +1,3 @@
-// SearchScaffold's per-scope reach panel (#726 D10/D11 finding 3),
-// loaded by file URL like `photos-shelves-v4.test.ts` does for the rest of
-// Photos' `.tsx` rendering — `apps/**/*.test.ts` is this package's own test
-// include glob (`vitest.config.ts`), which does not pick up `.tsx` files as
-// entry points, so a runnable assertion on `SearchScaffold.tsx` (co-located
-// as `apps/_shared/SearchScaffold.test.tsx`) needs a `.test.ts` host the
-// glob actually collects. `SearchScaffold.test.tsx` itself still carries the
-// same cases for a reader who opens the component's own directory; this file
-// is what actually EXECUTES under `bun run test`.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -15,11 +6,6 @@ import type { ComponentType } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-// Local restatements of `search-scaffold.ts`'s types, not an `import type`
-// from `apps/` — this package's `tsconfig.test.json` roots at `src/`, so a
-// static reference (even type-only) into `apps/` fails `rootDir`. The file
-// URL dynamic import below is the one sanctioned way this suite reaches into
-// `apps/`.
 type SearchStatus = "resting" | "searching" | "ready" | "unreachable";
 interface SearchGroupRow {
   kind: string;

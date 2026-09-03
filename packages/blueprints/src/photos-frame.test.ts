@@ -1,20 +1,3 @@
-// Photos as a route inside the frame (v4 handoff §3, §5, §H).
-//
-// Three behaviours, each either a contribution to the frame or a control that
-// knows when NOT to render:
-//
-//   1. the shelf strip carries the current shelf on the TAB, not as a fill;
-//   2. the app bar is CONTRIBUTED — title, count, Select, Import — and the one
-//      filled ink element is never a disabled commit;
-//   3. the toolbar row renders only when it carries something.
-//
-// Rendered to static markup rather than driven in jsdom: all three are pure
-// views over their props, so the markup IS the behaviour, and a server render
-// keeps the assertions free of act() scheduling noise.
-//
-// The app sources are loaded by file URL, like every other blueprint-app
-// fixture here: `src/` is its own tsconfig rootDir, so the types the
-// assertions need are declared locally rather than imported across it.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -33,8 +16,6 @@ interface Scope {
   id: string;
   label: string;
   canWrite: boolean;
-  /** The founding marker. `false` is "somewhere other than my own"; absent is
-   *  "the host did not say", which reads as the member's own (§H). */
   personal?: boolean;
 }
 interface Shelf {
@@ -88,7 +69,6 @@ const { appBar, barCount } = (await import(app("frame.tsx"))) as {
   barCount: (state: AppBarState) => ReactNode;
 };
 
-// The strip is the ONE shared component now (#883 B9), not a Photos file.
 const { ShelfStrip } = (await import(shared("ShelfStrip.tsx"))) as {
   ShelfStrip: ComponentType<StripProps>;
 };
@@ -148,7 +128,6 @@ function toolbar(overrides: Partial<ToolbarProps> = {}): string {
   );
 }
 
-/** Photos' own shelf table into the shared strip; no sub-state to fold. */
 const strip = (props: Omit<StripProps, "shelves">): string =>
   renderToStaticMarkup(
     createElement(ShelfStrip, { ...props, shelves: SHELVES })
@@ -213,8 +192,6 @@ describe("the app bar contribution", () => {
   it("contributes content, never styling", () => {
     const bar = appBar(base);
     expect(bar.title).toBe("Photos");
-    // The count is a value the FRAME renders in its numeric register; the app
-    // passes no class, colour or metric with it.
     expect(bar.count).toBe("214 photographs");
   });
 
@@ -231,7 +208,6 @@ describe("the app bar contribution", () => {
     const html = actions(base);
     expect(html.indexOf("Select")).toBeLessThan(html.indexOf("Import"));
     expect([...html.matchAll(/kit-btn primary/gu)]).toHaveLength(1);
-    // upload.ts drives this id.
     expect(html).toContain('id="uploadBtn"');
   });
 
@@ -239,7 +215,6 @@ describe("the app bar contribution", () => {
     const html = actions({ ...base, importDisabledReason: "Read-only here" });
     expect(html).not.toContain("kit-btn primary");
     expect(html).toContain("disabled");
-    // The reason rides the control rather than living only in a tooltip.
     expect(html).toContain("Read-only here");
   });
 
@@ -252,14 +227,11 @@ describe("the app bar contribution", () => {
 
 describe("the toolbar row", () => {
   it("renders nothing when it carries nothing", () => {
-    // One vault to filter and no tiles to size: an empty band is chrome.
     expect(toolbar()).toBe("");
   });
 
   it("renders once it carries the tile-size control", () => {
     const html = toolbar({ tileSize: 2, onStepTileSize: () => {} });
-    // Four segments, named by their own visible text, in one group whose name
-    // states the property and the member's position in it.
     expect(html).toContain('aria-label="Tile size 3 of 4"');
     for (const rung of [">XS<", ">S<", ">M<", ">L<"])
       expect(html).toContain(rung);
@@ -272,7 +244,6 @@ describe("the toolbar row", () => {
   });
 
   it("holds exactly one rung, and says which one it is", () => {
-    // The range has ends rather than wrapping.
     const first = toolbar({ tileSize: 0, onStepTileSize: () => {} });
     expect(first).toContain('aria-label="Tile size 1 of 4"');
     expect([...first.matchAll(/aria-pressed="true"/gu)]).toHaveLength(1);
@@ -305,7 +276,6 @@ describe("the shelf route", () => {
       "search",
     ]);
     expect(BAND_DESTINATIONS.length).toBeLessThanOrEqual(5);
-    // Every tab is labelled — a glyph alone is not a name.
     expect(BAND_DESTINATIONS.every((d) => d.label.length > 0)).toBe(true);
     expect(BAND_DESTINATIONS.map((d) => d.icon)).toStrictEqual([
       "Image",
@@ -324,12 +294,9 @@ describe("the shelf route", () => {
 
 describe("the vault filter reads the record, never a name", () => {
   it("marks any scope but the member's own as shared", () => {
-    // Renaming changes nothing in EITHER direction.
     expect(isSharedScope(scope("s", "Beach pics", false))).toBe(true);
     expect(isSharedScope(scope("h", "Sharing", false))).toBe(true);
     expect(isSharedScope(scope("o", "Sharing", true))).toBe(false);
-    // A host that did not answer leaves the tile unmarked rather than
-    // marking every tile.
     expect(isSharedScope(scope("u", "Library"))).toBe(false);
     expect(isSharedScope(undefined)).toBe(false);
   });

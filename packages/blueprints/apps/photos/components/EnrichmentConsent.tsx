@@ -1,6 +1,4 @@
 import { ConsentGate } from "../../_shared/ConsentGate.tsx";
-// THIN WRAPPER (#712): panels/facts live in the shared ConsentGate; this
-// supplies Photos' copy + props only, and holds no state.
 import {
   CLOUD_PANEL,
   ENRICHMENT_NOTE,

@@ -1,7 +1,3 @@
-// A location as a phrase, never a coordinate. In `"shared"` context the
-// relative rung is skipped: it hands a stranger a bearing to the member's home.
-// Import-free — Expo bundles this out of blueprints, so helpers are duplicated.
-
 export interface NamedPlace {
   key: string;
   name: string;
@@ -28,7 +24,6 @@ export interface PlacePhraseInput {
   context?: PlacePhraseContext;
 }
 
-// Must stay byte-identical to `shared-copy.ts`'s `PLACE_UNNAMED`.
 export const PLACE_NO_NAME = "A place with no name yet";
 
 function isCoordinateLabel(text: string): boolean {
@@ -45,7 +40,6 @@ const EARTH_RADIUS_KM = 6371.0088;
 
 const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
 
-// Haversine, not the flat shortcut: phrases span hundreds of km. NaN, never 0.
 export function distanceKm(
   aLat: number,
   aLng: number,
@@ -106,7 +100,6 @@ export function compassPoint(bearing: number): CompassPoint | null {
 
 export type HomeBand = "at home" | "around town" | "away";
 
-// "At home", not "same place": looser than `findOrCreatePlaceTx`'s radii.
 const AT_HOME_KM = 0.5;
 
 const AROUND_TOWN_KM = 25;
@@ -120,24 +113,20 @@ export function homeBand(km: number): HomeBand | null {
 
 const AT_ANCHOR_KM = 0.1;
 
-// Home outranks a nearer anchor inside a town's span; beyond it nearest wins.
 const HOME_ANCHOR_KM = 25;
 
-// Past this a bearing is trivia, not a location.
 const RELATIVE_MAX_KM = 250;
 
 export function formatDistance(km: number): string | null {
   if (!Number.isFinite(km) || km < 0) return null;
   if (km < 1) {
     const metres = Math.round((km * 1000) / 50) * 50;
-    // 990m rounds to 1000, and nobody says that.
     if (metres < 1000) return `${metres} m`;
   }
   if (km < 10) return `${km.toFixed(1)} km`;
   return `${Math.round(km)} km`;
 }
 
-// The `"shared"` suppression lives in `placePhrase`, not here.
 export function relativePhrase(
   lat: number,
   lng: number,
@@ -168,7 +157,6 @@ export function relativePhrase(
   return `${distance} ${point} of ${name}`;
 }
 
-// The text is never coordinate-shaped, for any input.
 export function placePhrase({
   placeName,
   gazetteerName,
@@ -193,9 +181,6 @@ export function placePhrase({
   return { text: PLACE_NO_NAME, source: "none" };
 }
 
-// `core_place.address_json` → `{ gazetteer: { name } }`; `{ none: true }` is a
-// result, not a name. Malformed shapes fall through, never throw. Key must
-// agree with `gazetteerOf`.
 export function gazetteerNameFrom(
   addressJson: string | null | undefined
 ): string | null {
@@ -215,7 +200,6 @@ export function gazetteerNameFrom(
   return trimmed === "" ? null : trimmed;
 }
 
-// The one place digits are printed, behind an explicit member action.
 export function exactLocation(
   lat: number | null | undefined,
   lng: number | null | undefined

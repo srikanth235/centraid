@@ -1,15 +1,3 @@
-// THE ACTS — every write this app can take, wired to the one door.
-//
-// Separated from `compose-state.ts`: the bag is what a member has typed; this
-// is what happens when they press. The orchestrator can hand composing routes
-// the group id they need before the ledger read that answers it.
-//
-// UNDO ONLY WHERE A TRUE REVERSE WRITE EXISTS. Three pairs: trash ↔ restore,
-// an edit ↔ `undo-expense`, pause ↔ resume. Adding, settling, minting a
-// friend, skipping and materialising state their outcome and offer no reverse.
-//
-// A SURFACE STAYS STANDING WHEN ITS WRITE DOES NOT LAND. `ledger.write`
-// answers `false` on a refusal; navigating away would lose the typed draft.
 import { useCallback, useMemo } from "react";
 
 import { COMPOSE_OUTCOMES } from "./compose-copy.ts";
@@ -56,12 +44,9 @@ import {
 } from "./writes.ts";
 
 export interface ComposeActs {
-  /** Open Add expense PRE-FILLED from an expense that already exists. The same
-   *  surface, because editing an expense is the same six decisions. */
   openEditFrom: (entry: LedgerEntry) => void;
   commitExpense: () => void;
   commitSettle: () => void;
-  /** Whichever sheet is open — friend, group, rename, member, delete, trash. */
   commitSheet: () => void;
   restore: (expenseId: string) => void;
   undo: (expenseId: string, revisionId: string) => void;
@@ -70,11 +55,8 @@ export interface ComposeActs {
   materialise: (due: DueOccurrence) => void;
   contribVerb: (verb: ContribVerb, row: ContribRow) => void;
   removeMember: (partyId: string) => void;
-  /** Commit the receipt's allocation as it currently stands. */
   reallocate: (entry: LedgerEntry, selection: LineSelection) => void;
-  /** Turn simplification on or off for the open group. */
   setSimplify: (groupId: string, simplify: boolean) => void;
-  /** Prepare a reminder. It ALWAYS parks, and the deep link is to Waiting. */
   nudge: (input: {
     partyId: string;
     name: string;
@@ -86,7 +68,6 @@ export interface ComposeActs {
 export function useComposeActs(args: {
   compose: ComposeState;
   ledger: LedgerReads;
-  /** The chosen group's members, in the order the allocation table draws. */
   members: readonly GroupMember[];
   currency: string;
   go: (shelf: ShelfId) => void;
@@ -141,8 +122,6 @@ export function useComposeActs(args: {
     if (open.kind === "leave") {
       const groupId = open.groupId;
       void (async () => {
-        // NO UNDO: the reverse of leaving is being re-added with a role this
-        // write never carried, so the outcome states what happened instead.
         const landed = await act(leaveGroupWrite(groupId), {
           outcome: COMPOSE_OUTCOMES.left,
         });
@@ -157,7 +136,6 @@ export function useComposeActs(args: {
         outcome: archived
           ? COMPOSE_OUTCOMES.unarchived
           : COMPOSE_OUTCOMES.archived,
-        // The same write with the other boolean IS the reverse write.
         undo: () => void act(archiveGroupWrite(groupId, archived)),
       });
       done();
@@ -166,8 +144,6 @@ export function useComposeActs(args: {
     if (open.kind === "nudge") {
       const ask = open;
       void (async () => {
-        // ALWAYS PARKS. `ledger.write` narrates a parked outcome itself, and
-        // this act adds the deep link rather than a second sentence.
         await act(
           nudgeWrite({
             partyId: ask.partyId,
@@ -230,7 +206,6 @@ export function useComposeActs(args: {
       void (async () => {
         const landed = await act(trashExpenseWrite(expenseId), {
           outcome: COMPOSE_OUTCOMES.trashed,
-          // The true reverse write, and the pair this app's Undo rests on.
           undo: () => void act(restoreExpenseWrite(expenseId)),
         });
         compose.close();
@@ -251,9 +226,6 @@ export function useComposeActs(args: {
     [act]
   );
 
-  /** The vault's own durable snapshot, applied once. It IS the reverse write,
-   *  which is why this act offers no Undo of its own: a second one-shot undo
-   *  of an undo would be two windows over one snapshot. */
   const undo = useCallback(
     (expenseId: string, revisionId: string) => {
       void act(undoExpenseWrite(expenseId, revisionId), {
@@ -271,8 +243,6 @@ export function useComposeActs(args: {
       const next = paused ? "active" : "paused";
       void act(saveRecurringWrite({ ...base, status: next }), {
         outcome: paused ? COMPOSE_OUTCOMES.resumed : COMPOSE_OUTCOMES.paused,
-        // Pause and resume are the same write with the other word, so each is
-        // the other's true reverse.
         undo: () =>
           void act(
             saveRecurringWrite({
@@ -311,9 +281,6 @@ export function useComposeActs(args: {
     [act]
   );
 
-  /** The outbox's own verbs, through the outbox's own doors. Nothing here goes
-   *  near `window.centraid.write`: a queued intent is not re-sent by writing
-   *  it again, it is retried, discarded or cancelled where it lives. */
   const contribVerb = useCallback(
     (verb: ContribVerb, row: ContribRow) => {
       const client = window.centraid;
@@ -321,9 +288,6 @@ export function useComposeActs(args: {
         client.openApprovals?.();
         return;
       }
-      // THE STEWARD'S ANSWER goes through its own door and reports its own
-      // outcome — including the one where the request had already settled
-      // before the answer arrived, which is a fact and not an error.
       if (verb === "approve" || verb === "decline") {
         void (async () => {
           let decided: { decided: boolean } | undefined;
@@ -333,8 +297,7 @@ export function useComposeActs(args: {
               decision: verb,
             });
           } catch {
-            // The door's own failure is not this app's to paraphrase; the
-            // next read shows the intent exactly as it still stands.
+            // Intentionally empty.
           }
           ledger.say(
             decided && !decided.decided
@@ -357,8 +320,7 @@ export function useComposeActs(args: {
         try {
           await door();
         } catch {
-          // The door's own failure is not this app's to paraphrase; the next
-          // read shows the intent exactly as it still stands.
+          // Intentionally empty.
         }
         ledger.say(
           verb === "cancel"
@@ -373,15 +335,6 @@ export function useComposeActs(args: {
     [ledger]
   );
 
-  /**
-   * The receipt's allocation, committed.
-   *
-   * The lines and the shares go in ONE write because they are one fact: an
-   * `edit-expense` that rewrote the splits would leave the stored line
-   * allocations disagreeing with them inside the vault. The command
-   * re-validates that the lines still sum to the expense, and the amount never
-   * changes.
-   */
   const reallocate = useCallback(
     (entry: LedgerEntry, selection: LineSelection) => {
       const lines = entry.receipt?.lines ?? entry.line_items ?? [];
@@ -411,8 +364,6 @@ export function useComposeActs(args: {
     [act, participants]
   );
 
-  /** The opt-in flag, and nothing else: the proposal is derived at read time
-   *  and written nowhere. Each direction is the other's true reverse. */
   const setSimplify = useCallback(
     (groupId: string, simplify: boolean) => {
       void act(setSimplificationWrite(groupId, simplify), {
@@ -444,9 +395,6 @@ export function useComposeActs(args: {
     [compose]
   );
 
-  /** The removal itself, once the guard has let the question be put. No Undo:
-   *  re-adding a member needs their role back, which the removal does not
-   *  carry, and a half-working Undo is worse than none. */
   const removeMember = useCallback(
     (partyId: string) => {
       compose.close();

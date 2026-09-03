@@ -1,13 +1,5 @@
 import { armConfirm, fmtBytes } from "@centraid/design/elements";
 
-// Resolves one duplicate cluster.
-//
-// SELECTED MEANS MARKED FOR TRASH, as on the shelf (Duplicates.tsx). Exactly
-// one copy survives, so a tile is not a free checkbox: clicking a copy makes it
-// the keeper, and the kept copy is inert — "keep none" is not on offer.
-//
-// Show only what queries/duplicates.ts carries; it has no provenance column,
-// so no provenance clause. Do not guess one.
 import { parseAssetKey } from "../asset-key.ts";
 import { decideCluster } from "../duplicate-decision.ts";
 import { assetBytes } from "../format.ts";
@@ -19,7 +11,6 @@ import { Tile } from "./Tile.tsx";
 
 import styles from "./DuplicateReview.module.css";
 
-// A width no cluster can fill: one never-stretched row per cluster.
 const UNBOUNDED_WIDTH = 100_000;
 
 function copyFacts(asset: Asset): string | null {
@@ -78,18 +69,14 @@ export function DuplicateReviewView({
   cluster: DuplicateCluster;
   index: number;
   total: number;
-  /** 0-3 = XS/S/M/L (§4.2). */
   rung: Rung;
   keptId: string | null;
-  /** Trash batch in flight. Progress rides the frame's one status line (§14);
-   *  no spinner here. */
   busy?: boolean;
   onKeep: (assetId: string) => void;
   onTrashRest: (assetIds: string[]) => void;
   onKeepAll: () => void;
 }) {
   const decision = decideCluster(cluster.assets, keptId);
-  // No copies left is a caller bug worth seeing, not a blank panel.
   if (!decision) {
     throw new Error("DuplicateReviewView: cluster has no copies to review");
   }
@@ -126,7 +113,6 @@ export function DuplicateReviewView({
               rung={rung}
               selected={!isKept}
               selectMode
-              // Own-scope only (§599).
               vaultMark={null}
               note={isKept ? keptNote : "trash"}
               onOpen={(key) => onKeep(parseAssetKey(key).assetId)}

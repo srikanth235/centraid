@@ -1,9 +1,6 @@
 import { DAY_MS } from "../_shared/format-kit.ts";
 import { GROUPS, landsInFoot } from "./view-copy.ts";
 import type { QUICK_ADD_WHEN } from "./view-copy.ts";
-// Quick add, projected (spec §3). THE FIELD NEVER PARSES A SENTENCE: the
-// chips carry When/Where/Priority and `QUICK_ADD.assistant` is the door for
-// words. `add_task` takes no project, so filing is a SECOND write.
 import { dayKey } from "./when.ts";
 
 export type QuickAddWhenKey = (typeof QUICK_ADD_WHEN)[number]["key"];
@@ -11,7 +8,6 @@ export type QuickAddWhenKey = (typeof QUICK_ADD_WHEN)[number]["key"];
 export interface QuickAddDraft {
   title: string;
   when: QuickAddWhenKey;
-  /** `null` is the Inbox — the absence of a project, not one named for it. */
   projectId: string | null;
   priority: number;
   scopeId: string | null;
@@ -36,7 +32,6 @@ function weekday(day: string): number {
   return Number.isNaN(parsed.getTime()) ? 0 : parsed.getUTCDay();
 }
 
-/** A weekend that has arrived is today, never next week's. */
 export function quickAddDue(when: QuickAddWhenKey, now: string): string | null {
   const today = dayKey(now);
   if (when === "none") return null;

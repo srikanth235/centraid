@@ -1,13 +1,3 @@
-/*
- * A read scope is what the gateway turns into a consent grant and a replica
- * shape (#883). UNDECLARED fails late as a refused read; UNUSED never fails at
- * all — the member granted reach no surface needed.
- *
- * THE POOL IS BOTH SEATS: a blueprint app, its native half in
- * `apps/mobile/src/apps/<id>`, and any shell surface reading through the app's
- * scope all share one manifest scope.
- */
-
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import path from "node:path";
 
@@ -23,11 +13,6 @@ interface Scope {
   verbs: string;
 }
 
-/**
- * Every TABLE-level read scope each app declares, so adding one to a manifest
- * is a decision made twice. SCHEMA-level scopes (`{schema: "media"}`) are an
- * app's own band, not a table it borrows, and are not listed.
- */
 const READS: Readonly<Record<string, readonly string[]>> = {
   agenda: [
     "core.vault",
@@ -53,7 +38,6 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     "core.concept_scheme",
     "access.provenance",
     "blob.custody_state",
-    // The Shared shelf: where a document came from, and whose vault that was.
     "core.share_origin",
     "share.party_vault_binding",
   ],
@@ -66,8 +50,6 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     "locker.item_field",
     "locker.item_address",
     "locker.item_passkey",
-    // The item pane's history section reads the shared revision ledger; the
-    // per-app `locker.item_history` table is gone (#916).
     "core.entity_revision",
     "core.attachment",
     "core.content_item",
@@ -106,7 +88,6 @@ const READS: Readonly<Record<string, readonly string[]>> = {
     "tally.obligation",
     "social.contact_channel",
     "share.party_vault_binding",
-    // V-dashboard: Settings → Access reads the authority plane through People.
     "share.authority",
     "share.commons_invitation",
     "core.entity_revision",
@@ -215,11 +196,6 @@ function join(files: readonly string[]): string {
   return files.map((file) => readFileSync(file, "utf8")).join("\n");
 }
 
-/**
- * A seat NAMES the scope at the call site, so the read is attributed to that
- * scope and never to the directory it sits in: Photos legitimately reads
- * `core.vault` through PEOPLE's scope.
- */
 function scopedSeatReads(): Map<string, Set<string>> {
   const byScope = new Map<string, Set<string>>();
   const seats = [

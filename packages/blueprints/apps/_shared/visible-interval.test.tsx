@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { act, useState } from "react";
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -19,7 +18,6 @@ describe("a second hand that stops when nobody is looking", () => {
     return <span data-testid="count">{count}</span>;
   }
 
-  /** `useFakeClock` registers per-test teardown, so each test installs it. */
   function mount(active = true): void {
     hidden = false;
     Object.defineProperty(document, "visibilityState", {
@@ -77,7 +75,6 @@ describe("a second hand that stops when nobody is looking", () => {
     const beforeReturn = shown();
 
     setVisibility("visible");
-    // One catch-up, not sixty.
     expect(shown()).toBe(beforeReturn + 1);
 
     act(() => clock.advanceSync(2_000));
@@ -101,8 +98,8 @@ describe("a second hand that stops when nobody is looking", () => {
 
     unmount();
     expect(clock.pending()).toBe(0);
-    // A `visibilitychange` after teardown must not resurrect anything.
     setVisibility("visible");
     expect(clock.pending()).toBe(0);
   });
 });
+// @vitest-environment jsdom

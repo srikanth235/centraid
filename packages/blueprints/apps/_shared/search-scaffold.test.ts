@@ -1,8 +1,3 @@
-// The pure half of the search scaffold (#712): grouping caps,
-// status derivation, and the copy builders every app's search surface
-// shares. Pure-function assertions, same convention `write-target.test.ts`
-// and `placement-registry.test.ts` use for other `_shared` modules — no
-// rendering here, `SearchScaffold.test.tsx` covers the component.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -48,7 +43,6 @@ const ENTITIES: readonly SearchEntity<Source, SearchGroupRow>[] = [
 ];
 
 describe(groupSearchHits, () => {
-  // [law:search-scaffold-grouping] Configured entities own grouping and caps.
   it("is empty for an empty or whitespace-only query — resting has no hits to group", () => {
     const source: Source = { people: ["Ana"], places: ["Lyme"] };
     expect(groupSearchHits("", source, ENTITIES)).toStrictEqual([]);
@@ -143,9 +137,6 @@ describe(searchOpenLabel, () => {
 });
 
 describe(perScopeReach, () => {
-  // [law:per-scope-reach] #726 P4 item 7 (D11): reach is named per scope,
-  // never collapsed into one boolean before a caller can render which scope
-  // is short.
   it("names each scope's own state instead of one shared boolean", () => {
     expect(
       perScopeReach([
@@ -168,9 +159,6 @@ describe(perScopeReach, () => {
     ).toStrictEqual([{ scope: "photos-commons", state: "unreached" }]);
   });
 
-  // [law:mask-refuses-not-no-matches] #726 P4 D10: a scope whose field mask
-  // excludes an indexed column REFUSES — it never pretends a narrower index
-  // was the whole one, and refused beats unreached when a caller knows both.
   it("marks a scope REFUSED when it is named in refusedScopes, even if it also answered ok", () => {
     const reach = perScopeReach(
       [{ scope: "photos-commons", ok: true }],

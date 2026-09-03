@@ -1,15 +1,4 @@
 #!/usr/bin/env node
-/**
- * Generates `manifest.json` from `index.json` plus a directory walk of each
- * template's files.
- *
- * The runtime reads this manifest (both the bundled copy at the package root
- * and any cached copy in user-data). The bundled file is checked into git so
- * the same path on GitHub raw can serve as the remote manifest — no separate
- * publish step.
- *
- * Run via `bun run build:manifest` (or as part of `bun run build`).
- */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -47,9 +36,6 @@ const enriched = {
 
 const templates = await Promise.all(
   src.templates.map(async (tmpl) => {
-    // Kind-segment directory: automation apps live under `automations/`, every
-    // other app under `apps/`. Derived from `kind` so the manifest, the disk
-    // resolver, and the remote fetcher all agree on the prefix.
     const kindDir = tmpl.kind === "automation" ? "automations" : "apps";
     const dir = path.join(PACKAGE_ROOT, kindDir, tmpl.id);
     let files = [];
@@ -61,19 +47,8 @@ const templates = await Promise.all(
       );
       return undefined;
     }
-    // Per-app knobs (font, width, radius…) are declared as `app.json#knobs`
-    // — folded in from the old `app-knobs.json` sidecar so there's a single
-    // app manifest. Embed the parsed list in the gallery manifest so the
-    // desktop doesn't need a second fetch — `resolveTemplates()` already
-    // reads manifest.json, so this rides along for free.
     let appKnobs;
-    // The seats block (docs/blueprint-seats.md) rides along the same way —
-    // InlineAppRoute.tsx (packages/client) also can't import app.json
-    // directly, and this manifest is already the one thing it fetches.
     let seats;
-    // The designed-state partition (issue #839 G7) rides along for the same
-    // reason: the shell and the test report want "which of the seven states
-    // does this app owe a member" without a second fetch per app.
     let states;
     try {
       const rawLocal = await fs.readFile(path.join(dir, "app.json"), "utf8");
@@ -84,11 +59,8 @@ const templates = await Promise.all(
       if (parsed?.states && typeof parsed.states === "object")
         states = parsed.states;
     } catch {
-      /* template has no parseable app.json or no knobs/seats/states — fine,
-       the popover just shows manage actions and the app mounts unrestricted */
+      // Intentionally empty.
     }
-    // `kind` is declared explicitly in index.json (`'automation'` for an
-    // automation app); a normal UI app omits it and defaults to `'app'`.
     const kind = tmpl.kind ?? "app";
     return {
       ...tmpl,

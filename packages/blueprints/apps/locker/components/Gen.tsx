@@ -1,15 +1,3 @@
-// THE GENERATOR (README-Locker §5; FLOWS.md "Generator").
-//
-// A ROUTE OF ITS OWN, because someone who wants a string should not have to
-// invent an item to get one. The output sits at the display rung in a bordered
-// container — a value to be read off a screen and typed on a keypad, which is
-// also why look-alikes are excluded in every mode and the note says so.
-//
-// NOTHING HERE IS WRITTEN. The three verbs end at *Put it on an item*, which
-// carries the value onto the add / edit form and leaves the writing to the one
-// place that writes. The output itself is a secret nobody has saved, so it
-// lives in the orchestrator's `generated` — wiped by the same lock that wipes
-// a reveal, and never serialised anywhere.
 import type { ReactNode } from "react";
 
 import { Meter } from "../../_shared/Meter.tsx";
@@ -36,8 +24,6 @@ import { strength } from "../totp.ts";
 import styles from "./Rows.module.css";
 
 export interface GenScreenProps {
-  /** The current output. Empty before the first draw, which is a state, not
-   *  an error — the screen simply has not been asked for a string yet. */
   value: string;
   options: GenOptions;
   onOptions: (options: GenOptions) => void;

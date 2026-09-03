@@ -1,10 +1,5 @@
-// Photos copy web and native both print. Deliberately IMPORT-FREE: native
-// bundles this leaf and cannot read the web app's `.ts` graph. `view-copy.ts`
-// re-exports it and holds the rest.
-
 export const PLACE_UNNAMED = "A place with no name yet";
 
-/** Distinct from `PLACE_UNNAMED`: nobody placed this one at all. */
 export const PLACE_NO_LOCATION = "No location yet";
 
 export const PLACE_NO_LOCATION_TERMS: readonly string[] = [
@@ -67,7 +62,6 @@ export function photosPurgeNote(days: number): string {
     : `purges in ${days} ${days === 1 ? "day" : "days"}`;
 }
 
-/** The archived-shelf verb. Same word as the shelf, on every seat. */
 export const PHOTOS_ARCHIVE = "Archive";
 export const PHOTOS_UNARCHIVE = "Unarchive";
 export const PHOTOS_ARCHIVE_EMPTY = "Archive is empty.";

@@ -1,18 +1,3 @@
-// Client ThumbHash (#419): a ~5-25 byte DCT placeholder painted instantly
-// while the real thumb streams. A faithful port of Evan Wallace's public-domain
-// reference (github.com/evanw/thumbhash) so the bytes decode on any conforming
-// decoder — produced here off the same canvas decode the thumb/dHash pay for;
-// the gateway backstop only fills what a client couldn't. Kept dependency-free
-// (no kit imports) so it is unit-testable outside the browser, mirroring the
-// gateway's own thumbhash.ts. TS ergonomics only (matching that file): `?? 0`
-// on typed-array/sparse reads (noUncheckedIndexedAccess); no numeric constant,
-// quantization step, or byte-layout decision changes.
-
-/**
- * Encode a ≤100×100 RGBA raster (row-major, 4 bytes/pixel) to its ThumbHash as
- * unpadded standard base64. Returns null when either edge exceeds 100 (callers
- * downscale first) — a missing placeholder is a blank tile, never a failure.
- */
 export function thumbHashFromRgba(
   w: number,
   h: number,
@@ -125,10 +110,6 @@ export function thumbHashFromRgba(
   return btoa(binary).replace(/=+$/u, "");
 }
 
-/**
- * Decode one bitmap to ≤100 px RGBA on a canvas and hash it (#419) — the
- * same canvas raster codec the thumb/dHash use, so no extra image fetch.
- */
 export function thumbHashFromImage(
   img: HTMLImageElement | ImageBitmap
 ): string | null {

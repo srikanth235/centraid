@@ -1,8 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** The owner's override of the place linked from EXIF GPS at upload (#352).
- *  No app-plane command MINTS a place: point at an existing `core.place` row,
- *  or omit `place_id` to clear back to unknown. */
 export default async function setPlace({ body, ctx }: HandlerArgs) {
   const input = actionInput(body);
   return runVaultAction(ctx, {

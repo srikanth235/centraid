@@ -1,14 +1,10 @@
 import { RELATIONS_SCHEME_URI } from "../_shared/concept-scheme-kit.ts";
 import type { VaultRow } from "./filing.ts";
-// THE CHAIN IS APPEND-ONLY: a restore appends a new head pointing at the body
-// it brings back and nothing between is rewritten, which is why `current` is a
-// position (index 0) and never a stored flag.
 import { decodeTextContent } from "./format.ts";
 import type { NoteVersion } from "./types.ts";
 
 const REVISES_NOTATION = "revises";
 const CONTENT_TYPE = "core.content_item";
-/** A cycle is possible (a restore points back at an older body). */
 const MAX_CHAIN_STEPS = 500;
 
 function text(row: VaultRow, key: string): string {
@@ -24,9 +20,7 @@ export interface ChainRows {
 }
 
 export interface NoteVersionChain {
-  /** Head first, then each older body. */
   contentIds: readonly string[];
-  /** When the edge OUT of a content id was asserted — that version's date. */
   assertedAt: ReadonlyMap<string, string>;
 }
 
@@ -47,7 +41,6 @@ export function revisesConceptId(rows: {
   return concept ? text(concept, "concept_id") || null : null;
 }
 
-/** The ids alone, so a caller can bound its content read to the chain. */
 export function noteVersionChain(rows: ChainRows): NoteVersionChain {
   const head = rows.headContentId;
   const assertedAt = new Map<string, string>();
@@ -92,11 +85,9 @@ export function noteVersionChain(rows: ChainRows): NoteVersionChain {
 export interface VersionRows {
   chain: NoteVersionChain;
   contents: readonly VaultRow[];
-  /** The note's own `created_at`, for the oldest body's date. */
   createdAt?: string;
 }
 
-/** An unreadable body is "", never invented text. */
 export function projectNoteVersions(rows: VersionRows): NoteVersion[] {
   const byId = new Map(
     rows.contents.flatMap((content): Array<[string, VaultRow]> => {

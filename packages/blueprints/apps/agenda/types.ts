@@ -1,6 +1,3 @@
-// Type-only Agenda shapes — no runtime members, every importer uses `import type`.
-
-/** View is STATE on the one `agenda` route, never a route. */
 export type ViewKind = "month" | "week" | "day" | "schedule" | "waiting";
 
 export interface Calendar {
@@ -29,7 +26,6 @@ export interface AgAttachment {
   [k: string]: unknown;
 }
 
-/** core.event projection; recurrence instances share `event_id`, carry `instance_key`. */
 export interface AgEvent {
   event_id: string;
   calendar_id?: string | null;
@@ -102,7 +98,6 @@ export interface CreatePayload {
   rrule?: string;
   conferencing_uri?: string;
   reminders?: { minutes_before: number }[];
-  // Index signature lets this flow to the vault write path without a cast.
   [k: string]: unknown;
 }
 
@@ -118,9 +113,7 @@ export interface DaySegment {
   segEnd: number;
   startsHere: boolean;
   endsHere: boolean;
-  /** Drawn in the all-day rail, not the grid. */
   spansAll: boolean;
-  /** The event runs past this day's bounds; each occupied day still gets a row. */
   clamped: boolean;
 }
 

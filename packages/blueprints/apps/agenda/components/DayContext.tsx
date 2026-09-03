@@ -1,5 +1,3 @@
-// Day-context layers — none of this is a calendar or an event; a layer gets
-// no hue dot.
 import type { ReactNode } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";
@@ -25,7 +23,6 @@ export interface LayerTogglesProps {
   onToggle: (id: LayerId) => void;
 }
 
-/** Three toggles could read as three calendars; one sentence says what they are. */
 export function LayerToggles(props: LayerTogglesProps): ReactNode {
   return (
     <>
@@ -53,7 +50,6 @@ export interface DayRibbonProps {
   facts: readonly RibbonFact[];
 }
 
-/** A day's costless facts on one line; several collapse into a count. */
 export function DayRibbon(props: DayRibbonProps): ReactNode {
   if (props.facts.length === 0) return null;
   const label = ribbonLabel(props.facts);
@@ -78,12 +74,9 @@ export interface DayShelfProps {
   tasks: readonly DueTask[];
   open: boolean;
   onToggle: (dayKey: string) => void;
-  /** Hand this task to Tasks; absent where the host offers no way out. */
   onOpenTask?: (taskId: string) => void;
 }
 
-/** Due-task shelf: `3 due`, collapsed, toggleable. NEVER GRID CHIPS (no time
- *  cost → no grid shape); tap-through leaves for Tasks. */
 export function DayShelf(props: DayShelfProps): ReactNode {
   if (props.count === 0) return null;
   return (

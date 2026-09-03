@@ -1,9 +1,5 @@
-// @vitest-environment jsdom
 // oxlint-disable-next-line typescript-eslint/ban-ts-comment -- browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (#406)
 // @ts-nocheck
-//
-// The unit fence under `apps/web/tests/e2e/renderer-leak.spec.ts` (#883 C4): a
-// listener left on `window` retains a whole closed Photos.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- the typed `import()` form pulls `apps/` into this program's `rootDir: ./src` and fails typecheck (TS6059); apps are typechecked by tsconfig.apps.json.
@@ -140,3 +136,4 @@ describe("Photos leaves nothing running when it closes", () => {
     expect(created[0]?.rootMargin).toBe("0px");
   });
 });
+// @vitest-environment jsdom

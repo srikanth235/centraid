@@ -1,10 +1,3 @@
-/**
- * The locker as a bounded recent window, decorated with
- * favorite/tag/subtitle/Watchtower. Secrets are SEALED columns (#293):
- * weak/reused + last4 come from `locker.watchtower`, derived INSIDE the
- * sealed boundary; secrets NEVER ride this payload.
- */
-
 import {
   FLAGS_SCHEME_URI,
   LOCKER_TAGS_SCHEME_URI,
@@ -83,29 +76,17 @@ interface DecoratedItem {
   reused: boolean;
   compromised: boolean;
   severity: string;
-  /**
-   * Plain TEXT columns, NOT sealed (see SEALED_INPUT/SEALED_COLUMNS in
-   * packages/vault/src/commands/locker.ts: password, otp_seed, card_number,
-   * cvv, content). The Review surface reads them off the list row to
-   * self-heal, so carrying them here keeps the list payload secret-free.
-   */
   url: string | null;
   expiry: string | null;
   updated_at?: string;
   purge_at: string | null;
-  /** The connector alias (#298 item 4), read back from the registered
-   *  `locker_item_alias` table (#872), so the form can pre-fill and show what a
-   *  typed value would overwrite. */
   alias: string | null;
-  /** Archived items are kept forever and hidden from the default window. */
   archived: boolean;
-  /** When the CURRENT password was set — Review's password-age source. */
   password_set_at: string | null;
 }
 
 const ITEM_TYPE = "locker.item";
 
-/** A safe, secret-free subtitle for a list row. */
 function subtitleOf(it: RawItem, watch: WatchEntry | undefined): string {
   switch (it.type) {
     case "login":
@@ -123,10 +104,6 @@ function subtitleOf(it: RawItem, watch: WatchEntry | undefined): string {
   }
 }
 
-/**
- * Watchtower derivatives per item id: {weak, reused, last4?} (#293) —
- * passwords never leave the sealed boundary. Fail-soft: no grant → empty map.
- */
 export async function readWatchtower(
   ctx: HandlerCtx,
   purpose: string
@@ -142,12 +119,11 @@ export async function readWatchtower(
     const entries = (out.output?.items ?? []) as WatchEntry[];
     for (const entry of entries) map.set(entry.item_id, entry);
   } catch {
-    /* fail soft */
+    // Intentionally empty.
   }
   return map;
 }
 
-/** Build the secret-free decorated rows for a set of raw item rows. */
 export function decorate(
   rows: RawItem[],
   tagsByItem: Map<string, string[]>,
@@ -183,10 +159,6 @@ export function decorate(
   });
 }
 
-/**
- * item_id → connector alias. Fail-soft: an app installed before the alias
- * scope existed keeps rendering its list with no alias rather than going dark.
- */
 export async function readAliases(
   ctx: HandlerCtx,
   ids: string[],
@@ -203,18 +175,11 @@ export async function readAliases(
     for (const row of (result.rows ?? []) as unknown as AliasRow[])
       map.set(row.item_id, row.alias);
   } catch {
-    /* fail soft — an alias is a decoration, never the list itself */
+    // Intentionally empty.
   }
   return map;
 }
 
-/**
- * The vault's own COUNT, for "300 of 312 · the window is 300 by default and
- * 2,000 at most". Counted inside the vault rather than by reading the ceiling
- * back and calling `.length` on it — the foot line's whole job is to say how
- * much is beyond the window, so deriving it from the window would be circular.
- * Fail-soft: no counts means the foot line says nothing, never a wrong number.
- */
 export async function readCounts(
   ctx: HandlerCtx,
   purpose: string
@@ -232,7 +197,6 @@ export async function readCounts(
   }
 }
 
-/** Read the two SKOS vocabulary tables once, shared by readTags + readStarred (#404). */
 export async function readConceptTables(
   ctx: HandlerCtx,
   purpose: string
@@ -247,7 +211,6 @@ export async function readConceptTables(
   };
 }
 
-/** Read tags into item_id → string[] (locker-tags scheme); pass `tables` to share the read. */
 export async function readTags(
   ctx: HandlerCtx,
   ids: string[],
@@ -282,7 +245,6 @@ export async function readTags(
   return map;
 }
 
-/** Read starred flag ids (flags-scheme star); pass `tables` to share the read. */
 export async function readStarred(
   ctx: HandlerCtx,
   ids: string[],
@@ -334,9 +296,6 @@ export default async function itemsHandler({
         configured: authentication.configured ?? false,
       };
     }
-    // Archived is "keep forever, hide from lists" (GAPS §3.3 #9): it leaves
-    // the default window without being deleted and without a purge date, so
-    // the shelf is asked for explicitly rather than filtered client-side.
     const archived = input?.archived === true;
     const res = await ctx.vault.read({
       entity: "locker.item",
@@ -352,8 +311,6 @@ export default async function itemsHandler({
     });
     const rows = (res.rows ?? []) as unknown as RawItem[];
     const ids = rows.map((r) => r.item_id);
-    // One shared vocabulary read + ONE watchtower unseal (#404) — not a
-    // second full read and second receipted unseal.
     const vocab = await readConceptTables(ctx, purpose);
     const [tagsByItem, starredIds, watchByItem, aliasByItem, counts] =
       await Promise.all([

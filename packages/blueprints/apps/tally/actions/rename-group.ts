@@ -1,6 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** tally.rename_group — contract in app.json. */
 const KEYS = ["group_id", "name"];
 export default async function renameGroup({ body, ctx }: HandlerArgs) {
   const input = actionInput(body);

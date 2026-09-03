@@ -1,6 +1,3 @@
-// Stage properties panel (§7 vInfo/vMeaning/vFacts): BESIDE the document, never
-// a sheet over it — asked while looking. Meaning rows first, flat facts second.
-// Stands ON the stage (only the title editable): no paper background, one seam.
 import type { ReactNode } from "react";
 
 import { STAGE_PROPS } from "../document-copy.ts";
@@ -37,15 +34,12 @@ export function QuickLookInfo({
 }: {
   doc: DriveDoc;
   folderName: (id: string | null | undefined) => string;
-  /** Closes the panel, not the stage — the document stays open behind it. */
   onClose: () => void;
-  /** Absent where the shelf cannot write (trash): plain title, no edit promise. */
   onRename?: () => void;
 }) {
   const m = typeMeta(doc.media_type, doc.title);
   const custody = custodyMeta(doc.custody_state);
 
-  // Withholds Versions/Contents rows: guessing them invents provenance.
   const facts: [string, string][] = [
     ["Kind", m.name],
     ["Size", fmtBytes(doc.byte_size)],
@@ -71,7 +65,6 @@ export function QuickLookInfo({
         <dl className={styles.meanings}>
           <Meaning label={STAGE_PROPS.title}>
             {onRename ? (
-              // Dashed rule = editable in place (§7.2); fires the row-menu rename.
               <button
                 type="button"
                 className={styles.editable}

@@ -1,20 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-// Agenda's vault IO: the writes and what each outcome is narrated as
-// (#839 W2-1). The debounced search read is the sibling `logic-search.test.ts`;
-// the seat both drive is `logic.test-fixtures.ts`, which says why the frame and
-// the gateway here are recording fakes rather than mocks.
-//
-// THREE OUTCOMES, THREE DIFFERENT SENTENCES, none of them an error — that is
-// the rule this file exists to hold. `executed` earns the receipt on the
-// frame's one status line, `parked` earns the owner-confirmation sentence (a
-// cancel PARKS by design, so this is the ordinary path and not the exception),
-// and a write still sitting on this device earns the queued sentence. Only a
-// genuine refusal reaches the in-pane notice banner.
-//
-// The RSVP projection is the one place the app paints before the vault has
-// spoken, so it is asserted for what the member sees at the moment the command
-// leaves rather than for what is true once it settles.
 import type { Harness } from "./logic.test-fixtures.ts";
 import { event, harness } from "./logic.test-fixtures.ts";
 import type { Attendee } from "./types.ts";
@@ -146,9 +131,6 @@ describe("proposing an event", () => {
     expect(app.status()).toStrictEqual({ text: OUTCOME_PARKED, action: null });
   });
 
-  // Spelled out rather than looped: each case installs its own
-  // `window.centraid`, so the three writes have to be driven one after the
-  // other against the global they each just claimed.
   it("says the write is on this device when it is still held here", async () => {
     const queued = harness({ write: async () => ({ status: "queued" }) });
     await queued.logic.proposeEvent({ summary: "Dentist" } as never);
@@ -236,9 +218,6 @@ describe("RSVP paints before the vault answers", () => {
     }
   });
 
-  // A member who presses Going and watches the row stay "No answer yet" for a
-  // round trip has been told the press did nothing — so the projection has to
-  // be on screen BEFORE the command leaves, not after it settles.
   it("has already painted the answer by the time the write goes out", async () => {
     let paintedAtWrite: string | undefined;
     const app: Harness = loaded({

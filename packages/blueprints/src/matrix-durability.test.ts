@@ -1,7 +1,3 @@
-/**
- * Matrix cell blueprints.durability (#535 coverable-today).
- * Meta updates must preserve identity fields across rewrites.
- */
 import { describe, expect, it } from "vitest";
 
 import { updateAppMetaFiles } from "./app-meta.js";
@@ -58,7 +54,6 @@ describe("blueprint app-meta durability", () => {
     expect((JSON.parse(manifest!.content) as { name: string }).name).toBe(
       "Renamed"
     );
-    // Original file map still has the old name (pure function, no mutation).
     const originalApp = JSON.parse(
       original.find((f) => f.path === "app.json")!.content
     ) as {

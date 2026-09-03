@@ -1,9 +1,3 @@
-/**
- * Scenario generator (issue #290 phase 1): three friends, one trip group and
- * a lived-in expense ledger — uneven payers, exact splits, one settlement.
- * Balances stay derived (never stored), so the seeded ledger exercises the
- * whole projection. Demo register: `seed.demo` provenance, one-click purge.
- */
 const PURPOSE = "dpv:ServiceProvision";
 
 export default async function seedHandler({ input, log, ctx }) {
@@ -21,7 +15,6 @@ export default async function seedHandler({ input, log, ctx }) {
     return out.output;
   };
 
-  // The owner is auto-included in every group; expenses need their party id.
   const vaultRow = await ctx.vault.read({
     entity: "core.vault",
     purpose: PURPOSE,
@@ -35,8 +28,6 @@ export default async function seedHandler({ input, log, ctx }) {
   const chris = await invoke("tally.add_friend", { name: "Chris" });
   const friends = [maya.party_id, jake.party_id, chris.party_id];
 
-  // Icon is rendered verbatim — it must come from format.ts's GROUP_ICONS
-  // emoji set, not a lucide name.
   const group = await invoke("tally.create_group", {
     name: "Tahoe Trip",
     icon: "🏔️",
@@ -44,7 +35,6 @@ export default async function seedHandler({ input, log, ctx }) {
     member_ids: friends,
   });
 
-  /** Split `amount` across `parties` exactly — remainder lands on the payer. */
   const even = (amount, parties, payer) => {
     const base = Math.floor(amount / parties.length);
     const splits = parties.map((party_id) => ({ party_id, share_minor: base }));

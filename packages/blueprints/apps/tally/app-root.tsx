@@ -1,30 +1,3 @@
-// Tally — the settling room, query-free React tree (issue #872, rebuilt after
-// the #831 removal). Holds `Root` plus the constants it needs that do NOT
-// depend on the node-side `./queries/*` handler modules; `app-inline.tsx`
-// pairs it with those and with the pending projection.
-//
-// THE STATE IDIOM IS TASKS'. A mutable bag in a ref plus a bump reducer,
-// because the room is one tree with fifteen routes over six reads: putting a
-// dozen independent `useState`s over the same ledger would make "the ledger
-// changed" a dozen renders instead of one, and would put the ordering of those
-// renders beyond anyone's reach. What genuinely belongs to React — which route
-// is open, which group, has a read landed, is the vault denied, how wide is
-// the pane — stays `useState`, because each of those changes WHAT IS READ.
-//
-// THREE BAGS, NOT ONE. The ledger's own reads (`ledger-reads.ts`), the search
-// shelf (`ledger-search.ts`) and what a member is composing
-// (`compose-state.ts`) each hold their own, because they change on three
-// different clocks: a change event, a keystroke, and a press.
-//
-// EVERY FRAME CONTRIBUTION COMES FROM AN EFFECT. The bar, the band and the one
-// status line render ABOVE this app, so contributing during render would be
-// updating a component that is already painting.
-//
-// NO STORED FIGURE IS DERIVED HERE. Every net, share and total arrives folded
-// by `queries/dashboard.ts`'s one balance engine. The arithmetic this room
-// does own is the other direction — resolving the splits a member is about to
-// SEND, which `app.json` asks for by name — and it lives in tested pure
-// modules (`split-model.ts`, `draft-model.ts`, `receipt-model.ts`).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactElement } from "react";
 
@@ -72,16 +45,8 @@ import {
 import type { ShelfId } from "./shelves.ts";
 import type { LedgerEntry, Person } from "./types.ts";
 
-/**
- * The vault entities this app's queries read — the shell's change-subscription
- * filter, and the one export beside `Root` the inline descriptor pairs with
- * this module.
- */
 export { CHANGE_TABLES } from "./ledger-reads.ts";
 
-/** The owner, as a person the chip sets can name. `queries/dashboard.ts`
- *  spells the owner "You" on every row it decorates; this is the same word in
- *  the one place the dashboard does not hand a row over. */
 const ME_NAME = "You";
 
 export function Root({
@@ -98,15 +63,9 @@ export function Root({
   const rootElRef = useRef<HTMLDivElement | null>(null);
   const nowRef = useRef<string>(new Date().toISOString());
 
-  // What the member is composing. Built BEFORE the reads, because the group it
-  // names is one of the things the reads have to fetch.
   const compose = useComposeState({ today: nowRef.current.slice(0, 10) });
-  // The bag, dereferenced ONCE for this render — the same place every other
-  // room in this product reads its own.
   const bag = compose.bagRef.current;
 
-  // A composing route stands over the group its draft names; a ledger route
-  // over the group the member opened. One id, so one read answers both.
   const openGroupId =
     shelf === GROUP || shelf === null ? routeGroupId : compose.groupId;
 
@@ -120,8 +79,6 @@ export function Root({
   const refresh = ledger.refresh;
   const search = useLedgerSearch();
 
-  // THE ROOM'S ONE SUBSCRIPTION: the first read, then every change to a table
-  // this app reads, then a window that came back into focus.
   useEffect(() => {
     void refresh();
     const stopChanges = onDataChange(CHANGE_TABLES, () => void refresh());
@@ -146,8 +103,6 @@ export function Root({
     [rootRef]
   );
 
-  // ---- navigation ----------------------------------------------------------
-
   const go = useCallback(
     (next: ShelfId) => {
       setShelf(next);
@@ -158,8 +113,6 @@ export function Root({
 
   const openGroup = useCallback(
     (groupId: string) => {
-      // The previous group's ledger is DROPPED, not left standing under the
-      // new group's name until its own read lands.
       ledger.forget("group");
       setRouteGroupId(groupId);
       setShelf(GROUP);
@@ -206,8 +159,6 @@ export function Root({
     setShelf(SETTLE);
   }, [compose, dashboard.me, ledger.now, openFriendId, openGroupId]);
 
-  // ---- what the composing routes stand on ----------------------------------
-
   const group = ledger.group;
   const members = useMemo(
     () => (group?.group?.group_id === compose.groupId ? group.members : []),
@@ -217,8 +168,6 @@ export function Root({
     (group?.ledger ?? []).find((row) => row.expense_id === compose.expenseId) ??
     null;
 
-  // The receipt chips start from what the vault already holds — once per
-  // receipt, so a re-read never stamps on a member's own moves.
   const seedSelection = compose.seedSelection;
   useEffect(() => {
     if (entry) seedSelection(entry);
@@ -253,9 +202,6 @@ export function Root({
 
   const sheets = useRoomSheets({ compose, group, openGroupId });
 
-  // The Export route's own read, beside the spine. It answers for ONE group,
-  // so it is asked when a group is chosen and not before — and until it lands
-  // the surface states no counts rather than zero ones.
   const exports = useExportRead({
     shelf,
     groupId: bag.exportDraft.groupId,
@@ -263,8 +209,6 @@ export function Root({
     format: bag.exportDraft.format,
     say: ledger.say,
   });
-
-  // ---- what the room knows about itself ------------------------------------
 
   const reach = libraryReachability({
     hostStatus: rootElRef.current?.dataset.gatewayStatus ?? null,
@@ -280,8 +224,6 @@ export function Root({
   const friendName = openFriendId
     ? dashboard.friends.find((row) => row.party_id === openFriendId)?.name
     : undefined;
-
-  // ---- the route's body, and what stands over it ---------------------------
 
   const back = backShelf(shelf);
   const goBack = useCallback(() => {
@@ -355,8 +297,6 @@ export function Root({
     />
   );
 
-  // ---- what Tally contributes to the FRAME ---------------------------------
-
   const handedOff = compact || narrow;
 
   useEffect(() => {
@@ -393,9 +333,6 @@ export function Root({
     entry,
   ]);
 
-  /** The ambient sentence this route stands under, until a write speaks over
-   *  it. A later outcome replaces it in place; landing on another route puts
-   *  the route's own sentence back. */
   useEffect(() => {
     frame.setStatus(routeStatus(shelf, groupIsShared));
   }, [frame, shelf, groupIsShared]);

@@ -1,6 +1,3 @@
-// Propose a keeper. Say `largest` only when one copy is strictly bigger;
-// omit the word on a tie or missing size. Order must be deterministic —
-// arrival order would move which photograph a `Trash` press destroys.
 import { assetBytes } from "./format.ts";
 import type { Asset } from "./types.ts";
 
@@ -12,7 +9,6 @@ export interface ClusterDecision {
   trashIds: string[];
 }
 
-/** Partial area is unknown, not smaller. */
 function pixelArea(asset: Asset): number | null {
   const { width, height } = asset;
   if (typeof width !== "number" || typeof height !== "number") return null;
@@ -26,7 +22,6 @@ function takenAt(asset: Asset): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
-/** Bytes, then area, then earliest capture, then id — total, query-order free. */
 function biggerFirst(a: Asset, b: Asset): number {
   const bytes = (assetBytes(b) ?? -1) - (assetBytes(a) ?? -1);
   if (bytes !== 0) return bytes;
@@ -51,7 +46,6 @@ function isStrictlyLargest(assets: readonly Asset[], keptId: string): boolean {
   });
 }
 
-/** Stale `override` (id gone from the cluster) falls back to the proposal. */
 export function decideCluster(
   assets: readonly Asset[],
   override?: string | null

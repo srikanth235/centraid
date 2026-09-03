@@ -1,18 +1,9 @@
-/**
- * Document version chain (#352): core.link is the durable history — follow the live `revises`
- * edge OUT (NEW -> OLD per recordRevision) until an item has no such edge (the original upload)
- * or an already-visited id: restores add NEW edges (R3) and cycle, so the seen-guard terminates
- * like documents.test.ts's helper and target_in_chain. Dates are edge assertion times
- * (valid_from), never created_at.
- */
-
 import {
   RELATIONS_SCHEME_URI,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
 
 const REVISES_RELATION = "revises";
-// Caps runaway growth.
 const MAX_CHAIN_STEPS = 500;
 
 interface DocumentRow {
@@ -129,7 +120,6 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
         content_uri: srcOf(c),
         poster_uri: posterOf(c),
         current: i === 0,
-        // Oldest entry dates from its own mint; others from edge assertion.
         asserted_at: assertedAtOf.get(id) ?? c?.created_at ?? doc.created_at,
       };
     });

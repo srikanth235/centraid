@@ -1,6 +1,3 @@
-// The info panel's location block (#816). A PHRASE, NEVER A NUMBER — digits
-// live only behind `Copy exact location`. Display state only: `write` and its
-// refusal region stay with the panel, whose stylesheet this shares (§7.2).
 import { useEffect, useState } from "react";
 
 import { CloseIcon } from "../icons.tsx";
@@ -37,8 +34,6 @@ function assetCoords(asset: Asset): { lat: number; lng: number } | null {
   return null;
 }
 
-/** A place labelled with its own coordinate is not an anchor — measuring from
- *  it just prints the coordinate again. */
 function namedAnchors(places: readonly Place[]): NamedPlace[] {
   return places.flatMap((place) => {
     const name = readableName(place.name);
@@ -55,7 +50,6 @@ function namedAnchors(places: readonly Place[]): NamedPlace[] {
   });
 }
 
-/** Fixed, not panel-relative: a growing figure competes with the photograph. */
 const MINI_MAP_WIDTH = 280;
 
 export function LightboxLocation({
@@ -67,7 +61,6 @@ export function LightboxLocation({
   asset: Asset;
   places: Place[];
   refresh: () => Promise<void>;
-  /** The panel's write trampoline; it owns the refusal region. */
   write: (
     tried: string,
     action: string,
@@ -83,8 +76,6 @@ export function LightboxLocation({
     return () => clearTimeout(timer);
   }, [copied]);
 
-  // Private context, so the relative rung is allowed here; an export must
-  // never carry it (place-phrase.ts).
   const coords = assetCoords(asset);
   const phrase = placePhrase({
     placeName: asset.place?.name,
@@ -104,7 +95,6 @@ export function LightboxLocation({
           lat: coords.lat,
           lng: coords.lng,
           count: 1,
-          // No pin label: the phrase above the map already said this in words.
           name: null,
           thumb: asset.thumb_uri ?? asset.preview_uri ?? asset.content_uri,
         },
@@ -211,7 +201,6 @@ export function LightboxLocation({
             points={mapPoints}
             width={MINI_MAP_WIDTH}
             height={Math.round(MINI_MAP_WIDTH * 0.66)}
-            // Nowhere to open: the pin IS the photograph on the stage.
             onOpen={() => {}}
           />
           {/* No digits in the label — a button that prints its subject leaks it. */}

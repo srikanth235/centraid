@@ -1,11 +1,3 @@
-// @vitest-environment jsdom
-// The Tile, its four overlay slots, and every state a tile can be in
-// (v4 handoff §2.4, §4.3, §4.4, §14). Rendered to static markup rather than
-// driven in jsdom (like photos-frame): the tile is a pure view over its props,
-// so the markup IS the behaviour. Assertions key on `data-tile-state`, inline
-// geometry, aria labels and visible copy — NEVER on a hashed CSS-module class
-// name. jsdom, not node: the shared kit's custom-element base is evaluated at
-// module load through `format.ts`; the render itself stays `renderToStaticMarkup`.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -35,7 +27,6 @@ interface Scope {
   id: string;
   label: string;
   canWrite: boolean;
-  /** `false` is "somewhere other than my own" (§H). */
   personal?: boolean;
   color?: string;
 }
@@ -98,7 +89,6 @@ const { dayMeta, groupByMonth, monthCount, monthTicks } = (await import(
   ) => { key: string; short: string }[];
 };
 
-/** A row with real bytes inline, so `gridSrc` has something to paint. */
 const photo = (over: Partial<Asset> = {}): Asset => ({
   asset_id: "a1",
   title: "Cove",
@@ -110,7 +100,6 @@ const photo = (over: Partial<Asset> = {}): Asset => ({
   ...over,
 });
 
-/** A row whose bytes are NOT on this device — nothing paintable at all. */
 const offloaded = (over: Partial<Asset> = {}): Asset =>
   photo({ content_uri: "https://elsewhere.example/original.jpg", ...over });
 
@@ -145,8 +134,6 @@ function tile(over: Partial<TileProps> = {}): string {
   );
 }
 
-/** The tile's direct children as tag+attribute heads — counts overlay slots
- *  without a hashed class name. */
 function slotCount(markup: string): number {
   const inner = markup.replace(/^<div[^>]*>/u, "").replace(/<\/div>$/u, "");
   return [...inner.matchAll(/<(?:button|span|div)\b/gu)].length;
@@ -154,7 +141,6 @@ function slotCount(markup: string): number {
 
 describe("the Tile's four overlay slots (§4.4)", () => {
   it("carries NOTHING but the media and the selection slot on a plain tile", () => {
-    // Content-led: the media plus the one control, no chrome.
     expect(slotCount(tile())).toBe(2);
   });
 
@@ -170,7 +156,6 @@ describe("the Tile's four overlay slots (§4.4)", () => {
   it("draws the kind slot from rung S up, and never on a still", () => {
     const clip = photo({ media_type: "video/mp4", duration_s: 8 });
     expect(tile({ asset: clip, rung: 1 })).toContain("0:08");
-    // XS is below the gate: not every tile carries the slot.
     expect(tile({ asset: clip, rung: 0 })).not.toContain("0:08");
     expect(showsKindSlot(0)).toBe(false);
     expect(showsKindSlot(1)).toBe(true);
@@ -187,7 +172,6 @@ describe("the Tile's four overlay slots (§4.4)", () => {
 
   it("lets the state slot carry Trash's purge countdown, media first", () => {
     expect(tile({ note: "purges in 12 days" })).toContain("purges in 12 days");
-    // "could not decode" matters more than a deadline.
     const both = tile({ state: "failed", note: "purges in 12 days" });
     expect(both).toContain("could not decode");
     expect(both).not.toContain("purges in 12 days");
@@ -207,14 +191,11 @@ describe("the vault slot fires on the record, never on a name (§4.4, §H)", () 
 
   it("leaves the member's own vault the UNMARKED default", () => {
     expect(vaultMarker(scope("own", "Home", true))).toBeNull();
-    // A solo mount and any scope the host did not answer for stay unmarked —
-    // a badge on every tile would be noise.
     expect(vaultMarker(scope("", "Library"))).toBeNull();
     expect(vaultMarker(undefined)).toBeNull();
   });
 
   it("is derived from `personal`, so renaming a vault cannot change it", () => {
-    // Neither rename touches the marker; it derives from `personal`.
     expect(vaultMarker(scope("shr", "My own things", false))).not.toBeNull();
     expect(vaultMarker(scope("own", "Sharing", true))).toBeNull();
   });
@@ -240,7 +221,6 @@ describe("a tile holds its geometry from record to bytes to failure (§14)", () 
   const box = 'style="width:264px;height:176px"';
 
   it("paints the skeleton at the EXACT geometry, before any bytes", () => {
-    // The skeleton already occupies the box the photograph will — no reflow.
     expect(initialMediaState(photo())).toBe("pending");
     const pending = tile();
     expect(pending).toContain(box);
@@ -250,7 +230,6 @@ describe("a tile holds its geometry from record to bytes to failure (§14)", () 
   });
 
   it("says `on the gateway` from the FIRST frame when nothing is local", () => {
-    // From the FIRST frame — never a grey square with no words.
     expect(initialMediaState(offloaded())).toBe("gateway");
     const away = tile({ asset: offloaded() });
     expect(away).toContain(box);
@@ -312,7 +291,6 @@ describe("the timeline the tiles sit in (§4.3, §4.5, §4.6)", () => {
   it("carries a scrub rail labelled by month, reachable by pointer", () => {
     const markup = timeline();
     expect(markup).toContain('aria-label="Scrub by month"');
-    // Every tick is a real button with a real name — never drag-only.
     expect(markup).toMatch(/aria-label="\w+ 2026"/u);
   });
 
@@ -328,8 +306,6 @@ describe("grouping and labels (§4.3)", () => {
   let seq = 0;
   const aug = (day: string, over: Partial<Asset> = {}): Asset =>
     photo({
-      // Counter id: unique inside one case; unseeded randomness would make
-      // a failure unreproducible.
       asset_id: `${day}-${(seq += 1)}`,
       taken_at: `2026-08-${day}T12:00:00`,
       ...over,
@@ -340,7 +316,6 @@ describe("grouping and labels (§4.3)", () => {
     expect(
       monthCount([aug("14"), aug("14", { media_type: "video/mp4" })])
     ).toBe("1 photograph · 1 video");
-    // A `· 0 videos` clause is noise about an absence.
     expect(monthCount([aug("14")])).toBe("1 photograph");
   });
 
@@ -349,7 +324,6 @@ describe("grouping and labels (§4.3)", () => {
     expect(
       dayMeta([aug("14", { place: lyme }), aug("14", { place: lyme })])
     ).toBe("2 · Lyme Regis");
-    // Two places is no place: guessing one would be a lie.
     expect(
       dayMeta([
         aug("14", { place: lyme }),
@@ -382,3 +356,4 @@ describe("grouping and labels (§4.3)", () => {
     expect(ticks[0]!.short).toMatch(/2026/u);
   });
 });
+// @vitest-environment jsdom

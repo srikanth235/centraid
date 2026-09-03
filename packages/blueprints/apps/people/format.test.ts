@@ -1,4 +1,3 @@
-// Overdue vs cadence, and leap-day month-days, as the handoff states them.
 import { describe, expect, it } from "vitest";
 
 import { daysUntilMonthDay, isOverdue } from "./format.ts";

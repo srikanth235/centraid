@@ -1,10 +1,3 @@
-// The selection bar (v4 §6): TWO ARRANGEMENTS OF ONE TABLE.
-// `_shared/selection-engine.ts` owns the fixed order and the Trash shelf's
-// swap, so views and tests cannot drift. *Share* (#825) opens the shared grant
-// kit: no destination list or share call of its own.
-//
-// `buildPhotoSelectionActions` is an ADAPTER over that engine (#883): icon KEY
-// → this app's icon component, plus the Trash arm's confirm label.
 import { useRef } from "react";
 import type { FC } from "react";
 
@@ -35,7 +28,6 @@ import type { Album, Asset } from "../types.ts";
 
 import styles from "./SelectionBar.module.css";
 
-/** Pixels OF BAR, never a viewport breakpoint (§6, §15). */
 export const LABEL_BREAKPOINT = 840;
 
 export function labelsVisible(barWidth: number): boolean {
@@ -50,9 +42,7 @@ export interface SelectionActionSpec {
   icon: FC<{ size?: number }>;
   onRun: () => void;
   disabled: boolean;
-  /** Stated ON the control, never only a tooltip (§6, §18). */
   reason?: string;
-  /** Outlined `--net`, never filled (§18). Trash only. */
   destructive?: boolean;
   confirmLabel?: string;
 }
@@ -60,11 +50,8 @@ export interface SelectionActionSpec {
 export interface BuildSelectionActionsInput {
   count: number;
   shelfKind: SelectionShelfKind;
-  /** The sheet asks who, so the control never names a destination (#825). */
   copyLabel: string;
-  /** Read-only (§6). *Share* and Download stay live: neither writes. */
   readOnlyReason: string | null;
-  /** ONE subject per grant (#825): DISABLE, never tappable-and-inert. */
   copyBlockedReason: string | null;
   onFavorite: () => void;
   onAddToAlbum: () => void;
@@ -73,7 +60,6 @@ export interface BuildSelectionActionsInput {
   onTrash: () => void;
 }
 
-/** Pure, so order, swap and disabled state are testable unrendered (§6). */
 export function buildPhotoSelectionActions({
   count,
   shelfKind,
@@ -136,7 +122,6 @@ function ActionButton({
       className={`${styles.action} ${spec.destructive ? styles.destructive : ""}`}
       disabled={spec.disabled}
       aria-label={spec.label}
-      // Icon-only, `title` is the name; labelled, only the reason (§18).
       title={spec.reason ?? (labelled ? undefined : spec.label)}
       onClick={(e) => {
         if (
@@ -194,12 +179,10 @@ export function SelectionBarView({
   const share = usePhotoShare(notice);
   const [only] = [...selectedIds];
 
-  // countRef is dereferenced only at event time, never during render.
   // oxlint-disable-next-line react/react-compiler
   const actions = buildPhotoSelectionActions({
     count,
     shelfKind,
-    // WHO is the sheet's question (#726); HOW MANY refuses here.
     copyLabel: "Share",
     readOnlyReason,
     copyBlockedReason: count === 1 ? null : ONE_AT_A_TIME,
@@ -234,7 +217,6 @@ export function SelectionBarView({
           open={share.open}
           onClose={() => share.close()}
           audiences={share.audiences}
-          // Composite keys are PARSED, never posted: not a vault id.
           subject={{
             subjectType: "media.asset",
             subjectId: parseAssetKey(only).assetId,
@@ -272,8 +254,6 @@ export function SelectionBarView({
                         role="menuitem"
                         onClick={() => {
                           onCloseMenu();
-                          // Own-scope whatever the chip says; resolved here
-                          // to keep selection-actions.ts import-free.
                           const target = writeTarget("own");
                           void runBatchAddToAlbum(
                             [...selectedIds],
@@ -317,7 +297,6 @@ export interface SelectionBottomBarProps {
   refresh: () => Promise<void>;
   setBarBusy: (on: boolean) => void;
   onExit: () => void;
-  /** No room for an inline popover: the caller supplies the picker. */
   onAddToAlbum: () => void;
 }
 
@@ -432,7 +411,6 @@ export interface PhoneAlbumSheetProps {
   onCancel: () => void;
 }
 
-/** Dismissed by an explicit Cancel: there is no pointer to miss with. */
 export function PhoneAlbumSheet({
   albums,
   onPick,

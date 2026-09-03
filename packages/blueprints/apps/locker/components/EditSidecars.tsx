@@ -1,19 +1,3 @@
-// THE EDIT FORM'S SIDECAR EDITORS (#872; GAPS §3.3 #2, #3, #4).
-//
-// Custom fields, further addresses and the passkey slot are their own rows,
-// not columns of an item, so they are edited only on an item that ALREADY
-// EXISTS — a create has no id for a field to hang off.
-//
-// ONE FIELD PER ACT. `locker.set_field` takes exactly one field per call so a
-// sealed value is always a top-level input the journal's redaction can reach.
-// The editor honours that literally: one draft, one save, and a member adding
-// three fields makes three calls — which is slower to type and impossible to
-// get wrong.
-//
-// THE ADDRESS LIST IS REPLACE-ALL, and the row says so. `locker.set_addresses`
-// replaces the whole set, so a row removed here is removed in the vault, and a
-// member who did not know that would lose an address to a save they thought
-// was additive.
 import type { ReactNode } from "react";
 
 import { SEALED } from "../draft.ts";
@@ -72,7 +56,6 @@ export interface SidecarActs {
 }
 
 export interface EditSidecarsProps extends SidecarActs {
-  /** Absent on a create — exactly when these editors are withheld. */
   detail: LockerDetail | null;
   draft: SidecarDraft;
 }
@@ -99,8 +82,6 @@ function textRow(
   );
 }
 
-/** A field being rewritten starts at the vault's placeholder, so an untouched
- *  save leaves the stored secret alone. */
 function FieldDraft({
   draft,
   onFieldDraft,
@@ -175,8 +156,6 @@ function FieldDraft({
 
 export function EditSidecars(props: EditSidecarsProps): ReactNode {
   const { detail, draft } = props;
-  // A CREATE HAS NOTHING TO HANG A FIELD OFF. The rows are withheld with the
-  // reason rather than drawn dead: save the item, then its own sections open.
   if (!detail) {
     return (
       <FieldRow
@@ -299,9 +278,6 @@ export function EditSidecars(props: EditSidecarsProps): ReactNode {
           </FieldRow>
           {addresses.map((address, index) => (
             <FieldRow
-              // The list is ORDERED and rows are edited in place, so the index
-              // is the row's identity here — an address has no id until the
-              // vault mints one, and two blank rows are two rows.
               key={`address-${index}`}
               label=""
               acts={[

@@ -1,19 +1,3 @@
-// @vitest-environment jsdom
-// The album picker, on the Binding Layer (v4 handoff §C, §D, §E, §14, §18).
-//
-// Behaviour, not implementation: every assertion keys on packed geometry,
-// aria state, the global kit control classes and visible copy — never on a
-// CSS-module class name, which is hashed at build time and would make this a
-// test of the bundler.
-//
-// The panel is rendered to static markup rather than driven in jsdom, like
-// photos-tile: `PickerView` is a pure view over its props (its one piece of
-// internal state is the measured grid width, which falls back cleanly where
-// there is no layout), so the markup IS the behaviour.
-//
-// The commit (`submitPicker`) IS driven, because what it does is a sequence of
-// writes and a sequence of status-line sentences — the determinate progress
-// §14 asks for, and the Undo §3 asks for.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -94,7 +78,6 @@ function picker(over: Partial<PickerProps> = {}): string {
   );
 }
 
-/** Every tile's packed box, in source order. */
 function boxes(markup: string): { width: number; height: number }[] {
   return [
     ...markup.matchAll(
@@ -122,16 +105,12 @@ describe("the album picker panel", () => {
     });
     const packed = boxes(markup);
     expect(packed).toHaveLength(2);
-    // One row height, two different widths — the landscape is wider than the
-    // portrait, which is exactly what a square grid could not express.
     expect(packed[0]!.height).toBe(packed[1]!.height);
     expect(packed[0]!.width).toBeGreaterThan(packed[1]!.width);
     for (const box of packed) expect(box.width).not.toBe(box.height);
   });
 
   it("gives every tile its geometry before any bytes land", () => {
-    // A row with nothing paintable on this device still occupies a packed box
-    // and says so on its own state slot — it never collapses (§14).
     const markup = picker({
       candidates: [
         photo({
@@ -168,7 +147,6 @@ describe("the album picker panel", () => {
 
   it("goes inert while the add runs, keeping the panel's geometry", () => {
     const markup = picker({ picked: new Set(["a1"]), busy: true });
-    // Both controls refuse, neither becomes a progress bar or a spinner.
     expect([...markup.matchAll(/disabled/gu)].length).toBeGreaterThanOrEqual(2);
     expect(markup).not.toContain("kit-btn primary");
     expect(boxes(markup)).toHaveLength(1);
@@ -271,3 +249,4 @@ describe("the album picker commit", () => {
     expect(closed).toBe(0);
   });
 });
+// @vitest-environment jsdom

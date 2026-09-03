@@ -1,21 +1,3 @@
-// ADD / EDIT (README-Locker §1, §5; FLOWS.md "Add / edit each type").
-//
-// THE TYPE CHIP IS THE FIRST CONTROL AND IT DECIDES THE FIELDS. The set is
-// `draft.ts`'s table rather than a chain of conditionals here, so a card is
-// never asked for a username and a type the vault gains later is one row of
-// data.
-//
-// THE ONLINE-ONLY RULE IS IN THE LEDE, NOT AT THE COMMIT. A member finds out
-// that creating or editing a secret needs the gateway before they type, which
-// is the difference between a designed refusal and a discovered one — and
-// offline the commit is WITHHELD rather than disabled, with the reason in its
-// place (no disabled button anywhere in this app).
-//
-// NOTHING ON THIS FORM IS HELD IN `useState`. Every keystroke lands in the
-// orchestrator's `editSeed`, which is one of the enumerated secret-bearing
-// fields a lock erases (session.ts `SECRET_BEARING_KEYS`) — a half-typed
-// password in component state would be a value React may retain across a
-// suspended render, and the whole boundary would have a hole in it.
 import type { ReactNode } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";
@@ -71,17 +53,10 @@ import styles from "./Rows.module.css";
 
 export interface EditScreenProps extends SidecarActs {
   seed: ItemDraftSeed;
-  /** The item as the vault last answered with it, on an EDIT. The sidecar
-   *  editors hang off it; a create has none and they say so. */
   detail: LockerDetail | null;
-  /** What the sidecar editors are holding between keystrokes. */
   sidecarDraft: SidecarDraft;
-  /** The gateway is out of reach, so a secret write has nowhere to land. */
   offline: boolean;
-  /** A save is in flight — the commit says so by being absent, not by a
-   *  spinner and not by a disabled control. */
   busy: boolean;
-  /** What the form itself refused, in its own words. */
   error: string;
   onChange: (seed: ItemDraftSeed) => void;
   onRetype: (type: LockerItemType) => void;
@@ -101,9 +76,6 @@ export function EditScreen(props: EditScreenProps): ReactNode {
     props.onChange({ ...seed, fields: { ...seed.fields, [key]: value } });
   };
 
-  /** One typed row. A sealed field whose stored value the member has not
-   *  replaced draws the run and says it is unchanged — it never shows the
-   *  vault's placeholder as if it were a value. */
   const row = (field: DraftField): ReactNode => {
     const value = seed.fields[field.key] ?? "";
     const sealed = isSealedField(field);

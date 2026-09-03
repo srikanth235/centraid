@@ -1,5 +1,3 @@
-// Storage rollup (#711), lazy; MULTI-SCOPE (#599): every mounted scope is
-// asked — an unanswerable one is NAMED (`unread`), never empty.
 import { mountedScopes } from "../_shared/scope-kit.ts";
 import type { StorageRollup } from "./queries/storage.ts";
 import { custodyFacts } from "./storage-model.ts";
@@ -11,7 +9,6 @@ interface StorageData {
 
 export interface CustodyStore {
   ensureLoaded: () => Promise<void>;
-  /** Null = nothing read yet; distinct from zero. */
   facts: () => CustodyFacts | null;
   invalidate: () => void;
 }
@@ -57,7 +54,6 @@ export function createCustody({
   async function ensureLoaded(): Promise<void> {
     if (facts != null || loading) return;
     loading = true;
-    // Fan-out failure still yields facts: failed scopes read UNREAD, not empty.
     let scopes: ScopeRollup[];
     try {
       scopes = await readScopes();

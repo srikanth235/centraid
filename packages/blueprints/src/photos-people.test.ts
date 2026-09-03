@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 // oxlint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
 // @ts-nocheck
 import fs from "node:fs";
@@ -15,7 +14,6 @@ const PEOPLE_MODULE_CSS = path.resolve(
   "../apps/photos/components/People.module.css"
 );
 
-// `relativePath` PARAMETER, not an inlined literal — TS6059 if tsc can resolve the specifier at compile time.
 const PEOPLE_PATH = "../apps/photos/components/People.tsx";
 const importPeople = (relativePath: string) => import(relativePath);
 
@@ -70,7 +68,6 @@ describe("People is six columns desktop, three phone (proto :4432)", () => {
   const css = fs.readFileSync(PEOPLE_MODULE_CSS, "utf8");
 
   it("fixes the desktop grid at six columns, not auto-fill's floor", () => {
-    // `auto-fill` with a 104px floor lands near nine columns — absence from the RULE (first `.grid { … }`; phone override is the `@media` block below).
     const gridRule = css.match(/\.grid\s*\{(?<body>[^}]*)\}/u);
     expect(gridRule?.groups?.body).toMatch(/repeat\(6,\s*1fr\)/u);
     expect(gridRule?.groups?.body).not.toMatch(/auto-fill/u);
@@ -101,7 +98,6 @@ describe("the pending note carries the live unmatched count (proto :4433)", () =
   });
 
   it("omits the number rather than claiming a zero before the count is known", async () => {
-    // No `unmatchedCount` is unread, never a zero the caller never checked.
     const { PeopleShelf } = await importPeople(PEOPLE_PATH);
     const html = renderToStaticMarkup(
       createElement(PeopleShelf, { people: [], assets: [], onOpen: () => {} })
@@ -113,7 +109,6 @@ describe("the pending note carries the live unmatched count (proto :4433)", () =
 
 describe("a confirmed person with no display name is never invented", () => {
   it("prints nothing rather than a placeholder string for a name-less row", async () => {
-    // `people.create` requires `display_name` minLength 1 — do not invent fallback prose for a name-less row the query never produces.
     const { container } = await mount({
       people: [{ party_id: "p1", name: null, count: 3, asset_ids: [] }],
       unmatchedCount: 0,
@@ -175,7 +170,6 @@ describe("unconfirmed proposals render distinct from confirmed people (issue #71
   });
 
   it("renders no proposal cards when the caller has not wired onNameProposal", async () => {
-    // No `onNameProposal` → omit proposal cards rather than dead buttons.
     const { container } = await mount({
       people: [],
       proposals: [proposal()],
@@ -184,3 +178,4 @@ describe("unconfirmed proposals render distinct from confirmed people (issue #71
     expect(container.textContent).not.toContain("Not yet named");
   });
 });
+// @vitest-environment jsdom

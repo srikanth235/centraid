@@ -1,6 +1,3 @@
-// Per-app files own the shelf TABLES; this file owns the ROUND TRIP. A shelf is
-// a value, not a component, so every surface reads one record.
-
 export type ShelfId = string | null;
 
 export interface Shelf {
@@ -15,7 +12,6 @@ export interface BandDestination {
   icon?: string;
 }
 
-/** Party and folder tokens carry no colon — never introduce one that does. */
 export function tokenFromShelf(prefix: string, id: ShelfId): string | null {
   return typeof id === "string" && id.startsWith(prefix)
     ? id.slice(prefix.length)
@@ -54,7 +50,6 @@ export function createShelfRoutes(config: ShelfRouteConfig) {
   };
 
   return {
-    /** Root's `null` borrows the band's name; never a per-surface key (v16 §3). */
     countKey: (id: ShelfId): string => id ?? rootBandId,
     shelfFromSegment,
     shelfSegment,

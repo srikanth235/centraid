@@ -1,13 +1,3 @@
-// THE ONE ROW SHAPE, AND THE ONE SECTION HEAD (README-Locker §5).
-//
-// Every list in Locker — Items, Review, Search, Trash, the Companion's
-// candidates — is this row under a different filter. That is why it lives in
-// one file: a title that rendered one way in the list and another in the
-// review is exactly the drift the shared row grammar exists to prevent.
-//
-// The row is: type chip · title · meta sentence · star · verdict · ONE quiet
-// verb. One, not two: a row with a menu of acts is a row asking the member to
-// choose before they have opened the thing.
 import type { ReactNode } from "react";
 
 import {
@@ -30,19 +20,10 @@ export interface RowVerb {
 
 export interface ItemRowProps {
   row: LockerRow;
-  /** Opening an item is a per-item gesture — it opens the permit gate, not
-   *  the item's secrets. Absent where a row is a fact rather than a door. */
   onOpen?: (itemId: string) => void;
-  /** The row's ONE quiet verb, or none. */
   verb?: RowVerb;
-  /** Extra words for this list's own reason for showing the row — a purge
-   *  date in Trash, "matched the title" in Search. */
   meta?: string;
-  /** A verdict this list asserts over the row's own (Review names the check
-   *  it grouped by). */
   status?: { label: string; tone: "net" | "seam" } | null;
-  /** Position in a WINDOWED set (`Windowed.tsx`). Present only where the list
-   *  windows, and then the row IS the list item, never a wrapper around it. */
   position?: RowPosition;
 }
 
@@ -86,8 +67,6 @@ export function ItemRow(props: ItemRowProps): ReactNode {
           <span className={styles.open}>{body}</span>
         )}
         {row.favorite ? (
-          // The one product-wide star, as a mark. Its accessible name is the
-          // word, because a glyph alone is not a name.
           <>
             <span className={styles.star} aria-hidden="true">
               ★
@@ -121,15 +100,10 @@ export function ItemRow(props: ItemRowProps): ReactNode {
 
 export interface SectionProps {
   label: string;
-  /** The count and what it counts, in this section's own words. */
   meta?: string;
-  /** The section's own text verb, at the end of the head. */
   verb?: RowVerb;
-  /** What stands here when the section has nothing — on ITS OWN terms, never
-   *  on the list's. Absent means the section is simply not drawn. */
   empty?: ReactNode;
   children?: ReactNode;
-  /** Has a read landed? Nothing is empty until one has. */
   loaded?: boolean;
   count: number;
 }

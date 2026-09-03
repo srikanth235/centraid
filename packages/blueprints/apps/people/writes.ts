@@ -1,6 +1,3 @@
-// One door (`window.centraid.write` + `publishOutcome` on the frame status
-// line). An outcome is not a throw — check `executed`. Undo only where a true
-// reverse write exists; a compensating write would lie about the vault.
 import { publishOutcome } from "../_shared/app-frame.tsx";
 import type { InlineFrame } from "../inline-types.ts";
 import { OUTCOMES, REFUSALS } from "./people-copy.ts";
@@ -16,12 +13,10 @@ import type {
 interface WriteDeps {
   frame: InlineFrame;
   refresh: () => Promise<void>;
-  /** The ambient sentence must not overwrite an outcome on the status line. */
   hold: () => void;
   notice: (text?: string) => void;
 }
 
-/** Each non-executed status has its own sentence. */
 function refusal(outcome: VaultOutcome | undefined): string {
   if (outcome?.status === "parked") return REFUSALS.parked;
   if (outcome?.status === "queued" || outcome?.status === "in-flight")
@@ -31,7 +26,6 @@ function refusal(outcome: VaultOutcome | undefined): string {
 }
 
 export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
-  /** Intent id minted here so `pending-projection.ts` can recognise it. */
   async function act(
     action: string,
     input: Record<string, unknown>
@@ -48,9 +42,6 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     }
   }
 
-  /** QUEUED IS NOT A REFUSAL: durable in the outbox and already projected, so
-   *  the row's pending chip carries it — and no Undo, because a reverse write
-   *  against a row the vault never saw is not a reversal. */
   async function settle(
     outcome: VaultOutcome | undefined,
     text: string,
@@ -119,8 +110,6 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     await settle(outcome, OUTCOMES.restored(person.name));
   }
 
-  // Edit is two commands: cadence is `set-cadence`. Pass `previous` — after
-  // the write those values are gone.
   async function savePerson(
     draft: PersonDraft,
     previous: PersonDetail | null
@@ -192,7 +181,6 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     });
   }
 
-  /** No Undo: the contract has no un-log. */
   async function logTouch(draft: LogDraft, name: string): Promise<void> {
     const outcome = await act("log-interaction", {
       party_id: draft.party_id,
@@ -226,7 +214,6 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     await settle(outcome, OUTCOMES.dated(name));
   }
 
-  /** No Undo: a second toggle is a new decision, not a reversal. */
   async function toggleReminder(
     dateId: string,
     label: string,
@@ -270,7 +257,6 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     await settle(outcome, OUTCOMES.channelRemoved(channel.kind));
   }
 
-  /** No reverse: modal confirm, not Undo. */
   async function mergePeople(
     source: PersonRow,
     target: { party_id: string; name: string }

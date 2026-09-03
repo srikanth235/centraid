@@ -16,7 +16,6 @@ export function createSlideshow({ slideshowRoot }: { slideshowRoot: Root }) {
     slideshowRoot.render(null);
   }
 
-  // list = caller's visibleAssets() snapshot; onStopped = asset to reopen on.
   function openSlideshow(
     list: Asset[],
     startAssetId: string | null,
@@ -36,7 +35,6 @@ export function createSlideshow({ slideshowRoot }: { slideshowRoot: Root }) {
     );
   }
 
-  // Raw listener precedes React dispatch — gate on target === currentTarget.
   $("slideshow").addEventListener("click", (e) => {
     if (e.target === e.currentTarget) closeSlideshow();
   });

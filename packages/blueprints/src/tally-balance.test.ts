@@ -1,9 +1,3 @@
-// The invariants the whole app rests on: Tally derives every figure at read
-// time from one fold. If a group's nets stop summing to zero, or the pairwise
-// view stops agreeing with the per-member view, some member is being told a
-// number nobody owes. Multi-payer expenses are exercised throughout — that is
-// where per-payer attribution drifts silently.
-
 import { describe, expect, test } from "vitest";
 
 import type { TallyBalanceData } from "./tally-balance.js";
@@ -37,8 +31,6 @@ function sum(values: Iterable<number>): number {
 
 describe("expensePayers — payer rows are ground facts, never inferred", () => {
   test("no payer rows attributes nothing — the compat fallback is gone", () => {
-    // Every expense carries payer rows (#883, ruling O-payers): an empty set
-    // is an unfinished write, and showing it is more honest than guessing.
     expect(
       expensePayers({
         group_id: GROUP,
@@ -142,8 +134,6 @@ describe("a group's per-member positions", () => {
 
   test("a member who paid nothing and owes nothing is level, not absent", () => {
     const net = tallyGroupNet(data([]), GROUP);
-    // Sorted by party id explicitly: the fold's iteration order is not part of
-    // its contract, and a default `sort()` would compare stringified pairs.
     const entries = [...net.entries()].sort(([a], [b]) => (a < b ? -1 : 1));
     expect(entries).toStrictEqual([
       ["a", 0],
@@ -232,8 +222,6 @@ describe("who owes whom inside a group", () => {
       const pair = tallyGroupPairNets(d, GROUP);
       const net = tallyGroupNet(d, GROUP);
       for (const [party, row] of pair) {
-        // `pair` is "what I owe", `net` is "what I get back": opposite signs.
-        // `+ 0` normalises the negation of zero, which is a distinct value.
         expect(sum(row.values())).toBe(-(net.get(party) ?? 0) + 0);
       }
     }

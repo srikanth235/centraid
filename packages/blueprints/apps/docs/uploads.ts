@@ -1,6 +1,3 @@
-// The upload RUN: size refusals, the drawn queue, serial stage-then-commit,
-// and the account of what did not land (per-file staging lives in upload.ts).
-
 import { isPendingOffsite, statusLine } from "@centraid/design/elements";
 
 import { fmtBytes } from "./format.ts";
@@ -8,7 +5,6 @@ import { folderIdFrom } from "./shelves.ts";
 import type { AppState, UploadItem } from "./types.ts";
 import { stageDocumentFile } from "./upload.ts";
 
-/** Files above this never reach the vault; the queue says so. */
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
 
 interface UploadsDeps {
@@ -19,7 +15,6 @@ interface UploadsDeps {
     action: string,
     input: Record<string, unknown>
   ) => Promise<VaultOutcome | undefined>;
-  /** logic.ts's phrasing — never a second copy. */
   friendlyOutcome: (outcome: VaultOutcome | undefined) => string | null;
   notice: (text?: string) => void;
 }
@@ -32,8 +27,6 @@ export function createUploads({
   friendlyOutcome,
   notice,
 }: UploadsDeps) {
-  // stageFileBytes (#296) stages into the vault CAS; claiming the sha is
-  // the receipt.
   async function uploadFiles(fileList: FileList | File[]) {
     if (state.uploading) return;
     const files = [...fileList];
@@ -50,8 +43,6 @@ export function createUploads({
       failures.push(`Skipped ${skipped.length} files over 512 MB.`);
 
     state.uploading = true;
-    // THE QUEUE IS DRAWN, not narrated: a notice bar cannot say WHICH files
-    // failed.
     state.uploadQueue = [
       ...accepted.map(
         (f): UploadItem => ({ name: f.name, state: "waiting" as const })
@@ -110,8 +101,6 @@ export function createUploads({
     };
     await uploadNext(0);
     state.uploading = false;
-    // A CLEAN RUN CLEARS ITSELF; a refused run stays — the panel is the only
-    // place naming what did not land.
     if (!state.uploadQueue.some((q) => q.state === "failed"))
       state.uploadQueue = [];
     render();

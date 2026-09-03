@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-// The album picker ("Add photos" inside an album).
 import { PickerView } from "./components/Picker.tsx";
 import { $ } from "./dom.ts";
 import { submitPicker as runSubmitPicker } from "./picker-actions.ts";
@@ -23,7 +22,6 @@ export function createPicker({
 }) {
   let pickerAlbum: Album | null = null;
   const pickerPicked = new Set<string>();
-  // BUSY panel, not a progress bar (§14); a second click starts nothing.
   let pickerBusy = false;
 
   function closePicker() {
@@ -53,7 +51,6 @@ export function createPicker({
   function renderPicker() {
     if (!pickerAlbum) return;
     const album = pickerAlbum;
-    // Own-scope photos only (#599).
     const candidates = getAssets().filter(
       (a) => !(a.album_ids ?? []).includes(album.album_id)
     );
@@ -85,8 +82,6 @@ export function createPicker({
     $("picker").hidden = false;
   }
 
-  // Raw `#picker` listener (also the React root): React's delegated listener
-  // registers there first, so descendant stopPropagation() cannot shield it.
   $("picker").addEventListener("click", (e) => {
     if (e.target === e.currentTarget) closePicker();
   });

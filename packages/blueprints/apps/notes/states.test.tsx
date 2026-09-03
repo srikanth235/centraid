@@ -1,20 +1,3 @@
-// @vitest-environment jsdom
-// NOTES' HONEST STATES (matrix `appStates`, umbrella #864).
-//
-// Three cells — conflict, parked, offline — each proven where the member meets
-// it rather than on a copy table:
-//
-//   conflict  the panel two devices earn, drawn from `components/States.tsx`,
-//             plus the gate in `app-root.tsx` that decides it is on screen.
-//   parked    the shared held-write chip, on BOTH library shapes — the card and
-//             the row — because a note that is waiting for the owner must say
-//             so in whichever view the member happens to be in.
-//   offline   NOTES HAS NO SECOND BANNER ON PURPOSE. The reachability verdict
-//             surfaces as the STALE notice: a replica that answered but lags is
-//             what a member can act on, and inventing a second sentence beside
-//             it would be two ways of saying one thing. This file owns the cell
-//             by driving the production `Root` to that notice through the
-//             host's own `data-gateway-status` knob.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -42,8 +25,6 @@ const SOURCE = readFileSync(
   "utf8"
 );
 
-// ---------------------------------------------------------------- conflict
-
 describe("conflict: both bodies kept, and nothing to choose", () => {
   test("the panel reports the fact and offers only the history", () => {
     const markup = renderToStaticMarkup(
@@ -61,8 +42,6 @@ describe("conflict: both bodies kept, and nothing to choose", () => {
     expect(buttons.map((button) => button.textContent)).toStrictEqual([
       "Version history",
     ]);
-    // NO FILLED CONTROL. Nothing was lost and nothing needs choosing, so there
-    // is no "the thing you are supposed to press" here.
     expect(host.querySelector(".kit-btn.primary")).toBeNull();
   });
 
@@ -76,11 +55,7 @@ describe("conflict: both bodies kept, and nothing to choose", () => {
   });
 });
 
-// ------------------------------------------------------------------ parked
-
 describe("parked: the owner's approval, said in both library shapes", () => {
-  /** A note whose edit the vault is holding for the owner, decorated by the one
-   *  shared overlay engine every seat consumes. */
   const PARKED = decoratePendingMutation(
     {
       op: "upsert" as const,
@@ -113,8 +88,6 @@ describe("parked: the owner's approval, said in both library shapes", () => {
   ] as const)(
     "the %s carries the chip, the sentence and the way in",
     async (_label, Shape) => {
-      // The Approvals door records what reached it, so the assertion below is
-      // the OUTCOME the press produced rather than the fact that a mock ran.
       const opened: string[] = [];
       (window as unknown as { centraid: unknown }).centraid = {
         openApprovals: () => opened.push("approvals"),
@@ -166,8 +139,6 @@ describe("parked: the owner's approval, said in both library shapes", () => {
   });
 });
 
-// ----------------------------------------------------------------- offline
-
 describe("offline is READ from the host, and it speaks as the stale notice", () => {
   const NOTES: readonly Note[] = [
     {
@@ -189,8 +160,6 @@ describe("offline is READ from the host, and it speaks as the stale notice", () 
   let hostEl: HTMLElement | null = null;
 
   beforeAll(() => {
-    // jsdom implements neither of the dialog's modal methods; the element is
-    // otherwise real, so they are defined rather than stubbed over.
     for (const method of ["showModal", "close"] as const)
       Object.defineProperty(HTMLDialogElement.prototype, method, {
         configurable: true,
@@ -236,8 +205,6 @@ describe("offline is READ from the host, and it speaks as the stale notice", () 
     return container;
   }
 
-  /** The notice as this app words it: the copy function's own sentence over
-   *  whatever clock time the render stamped. */
   function staleSentence(container: HTMLElement): string | undefined {
     const clock = /(?<at>\d{2}:\d{2})/u;
     return [...container.querySelectorAll("span")]
@@ -250,11 +217,9 @@ describe("offline is READ from the host, and it speaks as the stale notice", () 
 
   test("a host that says the gateway is down raises the stale notice", async () => {
     const container = await mount();
-    // Nothing to declare while the vault answers.
     expect(staleSentence(container)).toBeUndefined();
 
     hostEl!.dataset.gatewayStatus = "down";
-    // Window focus is this app's own sanctioned re-read (`onFocusRefresh`).
     await act(async () => {
       window.dispatchEvent(new Event("focus"));
     });
@@ -280,11 +245,8 @@ describe("offline is READ from the host, and it speaks as the stale notice", () 
     expect(SOURCE).toContain("libraryReachability({");
     expect(SOURCE).toContain("rootElRef.current?.dataset.gatewayStatus");
     expect(SOURCE).toMatch(/readFailed: readFailedState/u);
-    // The forbidden signal (`_shared/view-state-kit.ts`): a desktop with no
-    // network still reaches its local gateway.
     expect(SOURCE).not.toContain("navigator.onLine");
-    // And the one place the verdict surfaces: the stale notice, gated on a
-    // read having landed.
     expect(SOURCE).toMatch(/\{offline && loaded \? \(\s*<Stale/u);
   });
 });
+// @vitest-environment jsdom

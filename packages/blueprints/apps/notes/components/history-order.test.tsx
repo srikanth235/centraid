@@ -1,7 +1,3 @@
-// The version chain is the standing answer to the lost paragraph, so what it
-// promises has to be true on screen: newest first, the live body marked as
-// current and offering no restore of itself, and every earlier body one
-// control away.
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 

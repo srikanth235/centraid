@@ -1,7 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** Optional fields are forwarded only when present, so the command contract
- *  (additionalProperties: false) sees exactly what the user set. */
 export default async function add({
   body,
   ctx,

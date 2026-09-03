@@ -5,11 +5,6 @@ import {
   stablePendingRowId,
 } from "../_shared/pending-overlay.js";
 
-// Only columns that live on `media.asset`. Caption `title` is on
-// `core.content_item`; `archived` is the action input that the vault
-// turns into `archived_at`. Projecting either onto the asset shape
-// throws `Unknown column` in `prepareReplicaWrite` and aborts the
-// durable write before the vault ever sees it.
 const ASSET_FIELDS = ["captured_at", "favorite"] as const;
 const asset = (input: Readonly<Record<string, unknown>>) =>
   pendingPatch("media.asset", input.asset_id, input, ASSET_FIELDS);
@@ -49,14 +44,10 @@ export const photosPendingProjection = definePendingProjection({
     "set-album-cover": ({ input }) => album(input),
     "delete-album": ({ input }) => album(input),
     "restore-album": ({ input }) => album(input),
-    // Membership is a relation, but its visible anchor is the photograph.
-    // Keep that anchor on-screen until canonical collection_entry settlement.
     "add-to-album": ({ input }) =>
       pendingPatch("media.asset", input.asset_id, input),
     "remove-from-album": ({ input }) =>
       pendingPatch("media.asset", input.asset_id, input),
-    // Changing review_state optimistically would filter the only visible row
-    // out of the queue. Project status onto it without guessing settlement.
     "answer-face": ({ input }) =>
       pendingPatch("media.face_region", input.region_id, input),
     "set-place": ({ input }) => asset(input),

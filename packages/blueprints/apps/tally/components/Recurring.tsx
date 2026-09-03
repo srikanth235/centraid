@@ -1,22 +1,3 @@
-// RECURRING — templates, what they are due to do, and the one write in this
-// app that needs the gateway (Tally spec §3, §4, STATES.md).
-//
-// A SCHEDULE IS A SENTENCE. `queries/dashboard.ts` asks the shared time core
-// for it; where the core cannot phrase a rule the row carries the §6 line and
-// NO PREVIEW AT ALL. Printing `FREQ=WEEKLY;BYDAY=TU,TH` in its place would be
-// a leak of the storage format dressed as information.
-//
-// A ROW'S VERBS ARE WITHHELD WHERE THE WRITE WOULD BE REFUSED.
-// `save-recurring-expense` upserts the WHOLE template — its splits, its rule,
-// its anchor, its zone — so pausing one means sending all of it back. A row
-// whose stored splits cannot be read carries no Pause, and says why, rather
-// than a button that would fail at the far end of a press.
-//
-// DUE NEXT NAMES THE ONE EXCEPTION. Materialising an occurrence is excluded
-// from the pending projection by construction — the occurrence's id is minted
-// by the canonical recurrence engine — so it is the single act in Tally with
-// no optimistic copy, and the section says so where the member is standing
-// rather than only in the offline notice.
 import type { ReactNode } from "react";
 
 import {
@@ -48,8 +29,6 @@ export interface RecurringScreenProps {
   groups: readonly GroupSummary[];
   now: string;
   narrow: boolean;
-  /** The gateway is not answering. Everything else in Tally still records;
-   *  this section is the one place that changes. */
   offline: boolean;
   onPause: (template: RecurringTemplate) => void;
   onSkip: (template: RecurringTemplate) => void;

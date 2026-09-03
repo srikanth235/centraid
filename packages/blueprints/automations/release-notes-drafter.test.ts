@@ -1,10 +1,3 @@
-/*
- * Source-level contract of the hand-authored release-notes-drafter webhook
- * handler (#781): only a genuine merge buys a delegate turn, the prompt is
- * bounded before it is billed, and the draft rides back as run output
- * rather than a vault write.
- */
-
 import { describe, expect, it } from "vitest";
 
 import { createHarness, loadEnricher } from "./handler-harness.js";
@@ -49,7 +42,6 @@ describe("release-notes-drafter", () => {
       },
       delegate: (call) => {
         expect(call.prompt).toContain("acme/widgets #41");
-        // Title and body are truncated before they are billed.
         expect(call.prompt).toContain(`Title: T${"t".repeat(299)}\n`);
         expect(call.prompt).not.toContain("t".repeat(300));
         expect(call.prompt).not.toContain("b".repeat(4000));
@@ -67,7 +59,6 @@ describe("release-notes-drafter", () => {
       headline: "  Faster widget search  ",
       body: "Details.",
     });
-    // Not a connector: nothing is written to the vault.
     expect(harness.invokes).toHaveLength(0);
   });
 

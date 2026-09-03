@@ -1,15 +1,3 @@
-// The Photos multi-scope data layer (#599, apps/photos/library-store.ts).
-// Two behaviours carry the whole feature and are pinned here:
-//
-//  * a change-feed burst tagged with ONE scope refetches THAT scope only —
-//    otherwise a busy audience turns every burst into an N× read storm;
-//  * "Show more" re-queries only the scopes at the merged horizon, each from
-//    its own keyset cursor, and appends — otherwise paging is quadratic and
-//    the settled scopes get re-read for nothing.
-//
-// The store takes every effect as a dependency, so the "fake" here is a
-// recording reader rather than a mocked app: the assertions are about the real
-// module's real calls. Loaded by file URL like the other blueprint-app fixtures.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -78,7 +66,6 @@ const asset = (id: string, takenAt: string | null): Asset => ({
   taken_at: takenAt,
 });
 
-/** One recorded fan-out: which scopes were asked, and with what input. */
 interface Call {
   scopes: string[];
   input: Record<string, unknown>;
@@ -91,7 +78,6 @@ let calls: Call[];
 let answers: Map<string, LibraryData>;
 let paints: number;
 
-/** A store over three scopes whose reader answers from `answers`. */
 function makeStore(overrides: { pageSize?: number } = {}): Store {
   return createLibraryStore({
     async readScopes(scopeIds, input) {
@@ -109,8 +95,6 @@ function makeStore(overrides: { pageSize?: number } = {}): Store {
     scopeIds: () => [...SCOPES],
     ownScopeId: () => "own",
     readTables: TABLES,
-    // Immediate: the debounce is the app's, and this suite is about WHICH
-    // scope gets read, not about when.
     schedule: (_key, run) => run(),
     onData: () => {
       paints += 1;
@@ -209,7 +193,6 @@ describe("photos-library-store suite", () => {
       await store.refreshAll();
       calls = [];
 
-      // A `scope-added` announcement carries no tables — the gate must not eat it.
       store.handleChange({ source: "scope-added", scope: "club" });
       await Promise.resolve();
       await Promise.resolve();
@@ -256,8 +239,6 @@ describe("photos-library-store suite", () => {
 
   describe("Photos library store — show more (#599)", () => {
     beforeEach(() => {
-      // Own reaches back to July 5 and is exhausted; Family stops at July 9 with
-      // more behind it, so Family alone sits at the merged horizon.
       answers = new Map([
         [
           "own",
@@ -318,8 +299,6 @@ describe("photos-library-store suite", () => {
         ["f1", "f2"]
       );
       expect(store.scope("family").tail).toBe("2026-07-02");
-      // With nothing truncated any more, the horizon lifts and the previously
-      // withheld older assets join the timeline in date order.
       expect(store.merged().rows.map((a) => a.asset_id)).toStrictEqual([
         "o1",
         "f1",
@@ -356,8 +335,6 @@ describe("photos-library-store suite", () => {
       await Promise.resolve();
       await Promise.resolve();
 
-      // Family holds two assets at a page size of one, so its refetch asks for
-      // two — a burst must not shrink a scope back to its first page.
       expect(calls[0]).toStrictEqual({
         scopes: ["family"],
         input: { limit: 2 },

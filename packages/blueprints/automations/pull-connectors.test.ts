@@ -1,16 +1,3 @@
-/*
- * Source-level contract of the hand-authored PULL CONNECTORS in this tree
- * (issues #304/#781): cursor discipline (provider tokens, high-water
- * watermarks, honest expiry/reset), external-payload → staging-row shaping
- * (identity normalization, truncation, stable external ids), bounded pages
- * per fire, and the shared auth-refusal path.
- *
- * `packages/blueprints/src/pull-handlers.test.ts` already owns: the Gmail
- * history-page drain, GitLab's independent watermarks, Slack channel-id
- * keying, the Todoist/Notion principal identity pins, and the Microsoft
- * Calendar stale-horizon delta restart. Nothing here restates those flows.
- */
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -102,7 +89,6 @@ describe("github-pull", () => {
     expect(fetches).toHaveLength(2);
     expect(fetches[0]!.url).toContain("since=2026-01-01T00%3A00%3A00Z");
     expect(fetches[0]!.url).toContain("direction=asc");
-    // The watermark is the max updated_at actually seen, not the clock.
     expect(harness.updates.get("github.since")).toBe("2026-02-01T00:00:00Z");
     expect(result.rows[0]).toStrictEqual({
       entity_type: "social.message",
@@ -117,7 +103,6 @@ describe("github-pull", () => {
         threadKey: "github:acme/widgets#1",
       },
     });
-    // A PR names itself as one, and the repo parses out of repository_url.
     expect(result.rows[100]).toMatchObject({
       external_id: "github:acme/widgets/7",
       payload: { body: "PR acme/widgets#7 is closed" },
@@ -150,7 +135,6 @@ describe("dropbox-pull", () => {
       "/2/files/list_folder/continue",
       "/2/files/list_folder",
     ]);
-    // Folders never stage; the fresh cursor replaces the reset one.
     expect(result.rows).toStrictEqual([
       {
         entity_type: "core.content_item",
@@ -200,7 +184,6 @@ describe("google-calendar-pull", () => {
           etag: '"v1"',
           updated: "2026-04-30T00:00:00Z",
         },
-        // A bare tombstone of an event this vault never saw: dropped.
         { id: "gone", status: "cancelled" },
         {
           id: "e2",
@@ -228,7 +211,6 @@ describe("google-calendar-pull", () => {
     expect(paramsOf(0).has("syncToken")).toBe(false);
     expect(paramsOf(0).has("pageToken")).toBe(false);
     expect(paramsOf(1).get("pageToken")).toBe("p2");
-    // Sending syncToken alongside pageToken is a Calendar API 400.
     expect(paramsOf(1).has("syncToken")).toBe(false);
     expect(result.rows).toHaveLength(2);
     expect(result.rows[0]).toStrictEqual({
@@ -255,8 +237,6 @@ describe("google-calendar-pull", () => {
         ],
       },
     });
-    // All-day events carry the date form; a finished listing stores the
-    // sync token and clears the page token.
     expect(result.rows[1]).toMatchObject({
       external_id: "gcal:e2",
       payload: { dtstart: "2026-05-02", dtend: "2026-05-03" },
@@ -320,8 +300,6 @@ describe("google-contacts-pull", () => {
       payload: {
         fn: "Asha Rao",
         sortName: "Rao, Asha",
-        // A birthday without a year still records month/day, in vCard's
-        // yearless form — two leading dashes, never three.
         bday: "--09-05",
         identifiers: [
           { scheme: "email", value: "asha@example.com", label: "home" },
@@ -337,7 +315,6 @@ describe("google-contacts-pull", () => {
         ],
       },
     });
-    // Nameless but reachable: the identifier stands in as the display name.
     expect(result.rows[1]).toMatchObject({
       external_id: "gcontacts:people/c2",
       payload: { fn: "only@example.com", sortName: null },
@@ -412,8 +389,6 @@ describe("google-drive-pull", () => {
         body: "household budget",
       },
     });
-    // createdTime backstops a file that never reports modifiedTime, and the
-    // watermark follows the max seen.
     expect(result.rows[1]!.payload).toMatchObject({
       modifiedAt: "2026-03-05T00:00:00.000Z",
     });

@@ -27,9 +27,6 @@ const LYME: PlaceSection = {
   lat: 50.7256,
   lng: -2.9366,
 };
-// The seeded roll's own geography (`seed.js`): a declared home in Palo Alto, an
-// errand a few kilometres from it, and a Tahoe trip ~250 km away. Realistic
-// coordinates matter here — the bands these tests assert are distances.
 const HOME: PlaceSection = {
   key: "place-home",
   name: "Home",
@@ -45,7 +42,6 @@ const AROUND_TOWN: PlaceSection = {
   lat: 37.47,
   lng: -122.16,
 };
-/** The member named this one "the shore"; the gazetteer says which shore. */
 const SHORE: PlaceSection = {
   key: "place-shore",
   name: "the shore",
@@ -54,7 +50,6 @@ const SHORE: PlaceSection = {
   lat: 38.9542,
   lng: -120.1094,
 };
-/** Unnamed, and 250 km from home: the gazetteer is all it has. */
 const RIVER_BEND: PlaceSection = {
   key: "place-river",
   name: "39.16820, -120.14290",
@@ -182,7 +177,6 @@ describe(searchGroups, () => {
   });
 });
 
-// THE NO-LOCATION BUCKET (#816): the one set Places could not show.
 const NO_LOCATION_SECTION: PlaceSection = {
   key: NO_LOCATION_KEY,
   name: "No location yet",
@@ -191,11 +185,6 @@ const NO_LOCATION_SECTION: PlaceSection = {
   lng: null,
 };
 
-// A PLACE IS A SEARCH TERM (#816). A place that answered to exactly one
-// string — the `name` column — left the Tahoe trip unfindable by the word
-// "Tahoe" whenever the member had called the sections something else or the
-// vault had called them a coordinate, and matched nothing at all for
-// "near home".
 describe("the vocabulary a place answers to", () => {
   function placesFor(query: string, sections: readonly PlaceSection[]) {
     return searchGroups({
@@ -212,21 +201,15 @@ describe("the vocabulary a place answers to", () => {
 
   it("finds a place by the gazetteer's settlement name, and still titles it with the member's own name", () => {
     const [hit] = placesFor("tahoe", ROLL);
-    // "the shore" is what the member called it; the gazetteer is how it was
-    // FOUND. A name a person entered outranks a derived one in display, always.
     expect(hit?.title).toBe("the shore");
     expect(hit?.meta).toBe("place · 2 photographs");
     expect(hit?.targetShelf).toBe(PLACES);
   });
 
   it("does not pull in a section whose gazetteer says somewhere else", () => {
-    // Truckee is thirty kilometres from the lake shore and is not called Tahoe.
-    // A search that returned it for "tahoe" would be guessing at geography.
     expect(placesFor("tahoe", ROLL).map((hit) => hit.key)).toStrictEqual([
       "place-shore",
     ]);
-    // …and Truckee IS findable, by its own name, titled through the ladder's
-    // gazetteer rung because the place itself is unnamed.
     expect(placesFor("truckee", ROLL)[0]).toMatchObject({
       key: "place-river",
       title: "near Truckee, CA",
@@ -243,9 +226,6 @@ describe("the vocabulary a place answers to", () => {
   });
 
   it("has no home vocabulary at all until a member declares which place is home", () => {
-    // No `kind: 'home'` anywhere — search does NOT fall back to the busiest
-    // place or the modal coordinate, because "near home" is a claim about a
-    // place a person named.
     const unanchored = [{ ...HOME, kind: null }, AROUND_TOWN];
     expect(placesFor("near home", unanchored)).toStrictEqual([]);
   });
@@ -268,8 +248,6 @@ describe("the vocabulary a place answers to", () => {
         expect(hit.title).not.toMatch(/^-?\d{1,3}\.\d+,\s*-?\d{1,3}\.\d+$/u);
       }
     }
-    // And a coordinate is not a search term either: the digits stored on an
-    // unnamed place are a placeholder, not a name a member would type.
     expect(placesFor("39.16", ROLL)).toStrictEqual([]);
   });
 });
@@ -288,7 +266,6 @@ describe("the no-location bucket", () => {
     const bucket = sections.at(-1)!;
     expect(bucket.name).toBe("No location yet");
     expect(bucket.assets.map((a) => a.asset_id)).toStrictEqual(["b", "c"]);
-    // No coordinates, so `PlaceMap.placePoints` draws no pin for it.
     expect(bucket.lat).toBeNull();
     expect(bucket.lng).toBeNull();
   });

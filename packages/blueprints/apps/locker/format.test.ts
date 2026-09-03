@@ -1,10 +1,3 @@
-// THE ROW RECIPE, AS LAWS (README-Locker §5).
-//
-// Every list in Locker composes its rows out of these three functions, so the
-// list, the review, the search results and the trash cannot disagree about
-// what a row says. Asserting them here rather than through four renderers is
-// what makes "one row shape per app" a property of the code.
-
 import { describe, expect, it } from "vitest";
 
 import {

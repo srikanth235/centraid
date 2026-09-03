@@ -5,7 +5,6 @@ import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from "./constants.ts";
 
 export type { Shelf, ShelfId } from "../_shared/shelves.ts";
 
-// `built-in:` cannot collide with a collection id — no colons there.
 export const PLACES = "built-in:places";
 export const PEOPLE = "built-in:people";
 export const SEARCH = "built-in:search";
@@ -21,7 +20,6 @@ export function personIdFrom(id: ShelfId): string | null {
   return tokenFromShelf(PERSON_PREFIX, id);
 }
 
-/** The strip, in order (§5). Search is a shelf, not a ninth tab. */
 export const SHELVES: readonly Shelf[] = [
   { id: null, label: "Library", segment: "" },
   { id: FAVORITES, label: "Favorites", segment: "favorites" },
@@ -38,7 +36,6 @@ const ROUTED: readonly Shelf[] = [
   { id: STORAGE, label: "Storage", segment: "storage" },
 ];
 
-/** Four here; the frame adds the home capsule to make §3.1's five. */
 export const BAND_DESTINATIONS: readonly BandDestination[] = [
   { id: "library", label: "Library", icon: "Image" },
   { id: "albums", label: "Albums", icon: "album" },
@@ -46,7 +43,6 @@ export const BAND_DESTINATIONS: readonly BandDestination[] = [
   { id: "search", label: "Search", icon: "Search" },
 ];
 
-/** Import is NOT here: the app bar owns that verb (§15). */
 export const MORE_DESTINATIONS: readonly Shelf[] = [
   ...SHELVES.filter(
     (shelf) =>
@@ -78,12 +74,10 @@ const NON_TIMELINE: ReadonlySet<string> = new Set([
   STORAGE,
 ]);
 
-/** Album detail and a person sub-state are timelines too (§5). */
 export function showsTimeline(id: ShelfId): boolean {
   return id === null || !NON_TIMELINE.has(id);
 }
 
-/** Places packs tiles but is not a timeline. */
 export function packsTiles(id: ShelfId): boolean {
   return showsTimeline(id) || id === PLACES;
 }

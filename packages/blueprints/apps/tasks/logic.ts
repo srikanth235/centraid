@@ -1,21 +1,15 @@
-// What each route SHOWS, derived from one board read (spec §1, §4). Pure,
-// DOM-free; boardState is the one answer to "what is this screen saying".
 import { showsEmptyState } from "../_shared/view-state-kit.ts";
 import { daysBetween, isOverdue } from "./format.ts";
 import type { BoardData, ReentryBucket, Task, TaskGroup } from "./types.ts";
 import { DONE, GROUPS, WONT_DO, inboxMeta, overdueMeta } from "./view-copy.ts";
 import { isOpenStatus, landsToday } from "./when.ts";
 
-// `landsToday` and family nesting live in `when.ts` (#834) and are
-// re-exported so every caller of `logic.ts` still has one definition.
 export { landsToday, nestTaskFamilies } from "./when.ts";
 
 export function isOpen(task: Task): boolean {
   return isOpenStatus(task.status);
 }
 
-/** One Catch-up bulk verb → the writes it actually fires. Sitting is Release
- *  all: cancel, never stamp Today onto an undated someday row. */
 export function catchUpWrites(
   key: ReentryBucket["key"],
   rows: readonly Pick<Task, "task_id">[],
@@ -39,9 +33,6 @@ export function catchUpWrites(
   }));
 }
 
-/** Date-only first, then moment — a date-only task has no moment and must not
- *  string-sort after a 17:00 meeting. Undated sorts LAST (ruling 4). Same-day
- *  rows stay TIED here, for callers that break the tie their own way. */
 export function byDueDay(a: Task, b: Task): number {
   const left = a.next_due ?? a.due_at ?? "";
   const right = b.next_due ?? b.due_at ?? "";
@@ -54,7 +45,6 @@ export function byDue(a: Task, b: Task): number {
   return byDueDay(a, b) || a.title.localeCompare(b.title);
 }
 
-/** Today: overdue first with its own header and its own verbs, then today. */
 export function todayGroups(rows: readonly Task[], now: string): TaskGroup[] {
   const open = rows.filter(isOpen);
   const overdue = open.filter((task) => isOverdue(task, now)).sort(byDue);
@@ -77,7 +67,6 @@ export function todayGroups(rows: readonly Task[], now: string): TaskGroup[] {
   return groups;
 }
 
-/** Upcoming: one group per civil day, nearest first; Today keeps its own rows. */
 export function upcomingGroups(
   rows: readonly Task[],
   now: string,
@@ -101,7 +90,6 @@ export function upcomingGroups(
     }));
 }
 
-/** Anytime: the undated, grouped by where they belong. */
 export function anytimeGroups(
   rows: readonly Task[],
   projectName: (id: string | null | undefined) => string
@@ -122,7 +110,6 @@ export function anytimeGroups(
     }));
 }
 
-/** All: dated and undated, two groups and no third (the spec's split). */
 export function allGroups(rows: readonly Task[]): TaskGroup[] {
   const open = rows.filter(isOpen);
   const dated = open.filter((task) => task.due_at ?? task.next_due);
@@ -153,7 +140,6 @@ export function byClosed(a: Task, b: Task): number {
   return left < right ? 1 : -1;
 }
 
-/** The Logbook: two OUTCOMES, never one undifferentiated pile. */
 export function logbookGroups(rows: readonly Task[]): TaskGroup[] {
   const closed = rows.filter((task) => !isOpen(task));
   const groups: TaskGroup[] = [];
@@ -169,7 +155,6 @@ export function logbookGroups(rows: readonly Task[]): TaskGroup[] {
   return groups;
 }
 
-/** A lead time on an undated row reminds about nothing. */
 export function remindingTasks(rows: readonly Task[]): Task[] {
   return rows
     .filter(
@@ -181,7 +166,6 @@ export function remindingTasks(rows: readonly Task[]): Task[] {
     .sort(byDue);
 }
 
-/** The Inbox: unfiled rows, an age signal on each, and no badge anywhere. */
 export function inboxGroup(rows: readonly Task[]): TaskGroup {
   const unfiled = rows
     .filter((task) => isOpen(task) && !task.project_id)
@@ -194,7 +178,6 @@ export function inboxGroup(rows: readonly Task[]): TaskGroup {
   };
 }
 
-/** Away-days measured from the oldest thing that came due; zero = not away. */
 export function awayDays(rows: readonly Task[], now: string): number {
   const overdue = rows.filter((task) => isOpen(task) && isOverdue(task, now));
   if (overdue.length === 0) return 0;
@@ -205,8 +188,6 @@ export function awayDays(rows: readonly Task[], now: string): number {
   return oldest ? Math.max(0, daysBetween(oldest, now)) : 0;
 }
 
-/** The absence to name, or null; a week is the threshold (a two-day pile is a
- *  Tuesday). */
 export function absence(
   rows: readonly Task[],
   now: string
@@ -219,8 +200,6 @@ export function absence(
   return due > 0 ? { days, due } : null;
 }
 
-/** Catch up's three piles (§3); a row belongs to exactly one, so no bulk verb
- *  acts on the same task twice. */
 export function reentryBuckets(
   rows: readonly Task[],
   now: string,
@@ -254,8 +233,6 @@ export function reentryBuckets(
   ].filter((entry) => entry.rows.length > 0);
 }
 
-/** The one answer to "what is this screen saying right now" (§4), ordered by
- *  what OVERRIDES what: denial > loading > empties > live. */
 export type BoardStateName =
   | "loading"
   | "denied"
@@ -284,7 +261,6 @@ export function boardState(input: {
   }
   const dueToday = open.filter((task) => landsToday(task, input.now));
   if (dueToday.length > 0) return "live";
-  // The two quiets are different facts: did anything come due today at all?
   const closedToday = input.logbook.filter(
     (task) =>
       task.completed_at && daysBetween(task.completed_at, input.now) === 0
@@ -292,8 +268,6 @@ export function boardState(input: {
   return closedToday.length > 0 ? "all-done" : "nothing-scheduled";
 }
 
-/** Is the board showing a window? The query answered; this pairs it with the
- *  two numbers the notice says. */
 export function windowEnd(
   data: Pick<BoardData, "counts" | "open">,
   truncated: boolean

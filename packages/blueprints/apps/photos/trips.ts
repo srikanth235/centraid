@@ -1,7 +1,3 @@
-// Display layer over the vault's trip detection (#816); what a trip IS belongs
-// to `enrich/memories.ts`. Titles use phrase rungs 1-2 only, unhedged — rung 3
-// is relative to home. Import-free, so small helpers are duplicated here.
-
 export interface TripPlace {
   key: string;
   name?: string | null;
@@ -13,11 +9,9 @@ export interface TripPlace {
 export interface TripMember {
   capturedAt?: string | null;
   tzOffsetMin?: number | null;
-  /** Nullable: an unplaced frame still counts, and is never "at home". */
   place?: TripPlace | null;
 }
 
-// Must stay assignable to `place-map.ts`'s `PlacePoint`.
 export interface TripRoutePoint {
   key: string;
   lat: number;
@@ -36,15 +30,11 @@ export interface TripFacts {
 
 export interface TripFactsInput {
   members: readonly TripMember[];
-  /** Only COUNTS days; never decides what a trip is. Null = no home known. */
   homePlaceKey?: string | null;
-  /** `title_hint`: authoritative day count, and the fallback title. */
   titleHint?: string | null;
-  /** `place_id`: card and projection must name the same place. */
   placeKey?: string | null;
 }
 
-// DISPLAY grammar, tunable; not what a trip IS.
 const WEEKEND_MIN_DAYS = 2;
 const WEEKEND_MAX_DAYS = 3;
 
@@ -68,7 +58,6 @@ export function tripPlaceName(
   return printableName(place.name) ?? printableName(place.gazetteer);
 }
 
-// Must stay the vault's `captureLocalDay` rule; the spans are compared.
 function captureLocalDay(
   capturedAt: string,
   tzOffsetMin: number | null | undefined
@@ -84,7 +73,6 @@ function captureLocalDay(
   return new Date(shifted).toISOString().slice(0, 10);
 }
 
-// Lowest key breaks a draw, matching the vault's `modalKey`.
 function modalKey(counts: ReadonlyMap<string, number>): string | null {
   let best: string | null = null;
   let bestCount = -1;
@@ -98,7 +86,6 @@ function modalKey(counts: ReadonlyMap<string, number>): string | null {
   return best;
 }
 
-// UTC on purpose: the key is already a local day, so a zone would shift twice.
 function isWeekendDay(dayKey: string): boolean {
   const day = new Date(`${dayKey}T00:00:00Z`).getUTCDay();
   return day === 0 || day === 6;
@@ -128,7 +115,6 @@ function modalPlaceByDay(
   return modal;
 }
 
-// A day with no placed frame is NOT away — the vault bridged it.
 export function awayDaysOf(
   members: readonly TripMember[],
   homePlaceKey?: string | null
@@ -151,7 +137,6 @@ export function hintDayCount(
   return Number.isInteger(days) && days > 0 ? days : null;
 }
 
-// Pass the WHOLE library: a trip's modal place is where they travelled to.
 export function resolveHomeKey(
   members: readonly TripMember[],
   homeTaggedKeys: readonly string[] = []
@@ -167,7 +152,6 @@ export function resolveHomeKey(
   return modalKey(counts);
 }
 
-// Capture order, not size order: a line ordered by popularity is not a route.
 export function tripRoute(members: readonly TripMember[]): TripRoutePoint[] {
   const order: string[] = [];
   const byKey = new Map<string, TripRoutePoint>();
@@ -207,7 +191,6 @@ function plainDays(days: number): string {
   return `${days} day${days === 1 ? "" : "s"}`;
 }
 
-// The title is never coordinate-shaped and never relative to home, ever.
 export function tripFacts({
   members,
   homePlaceKey = null,

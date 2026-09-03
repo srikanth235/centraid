@@ -49,7 +49,6 @@ describe(ribbonsFor, () => {
     expect(facts).toStrictEqual([
       { kind: "birthday", id: "p1", text: "Dana Okafor", inner: true },
     ]);
-    // The same birthday, a year later — the fact carries no year.
     expect(ribbonsFor("2027-03-12", DATA, ALL_LAYERS_ON)).toHaveLength(1);
   });
 
@@ -68,7 +67,6 @@ describe(ribbonsFor, () => {
     expect(ribbonsFor("2026-03-12", DATA, OFF({ bdays: false }))).toStrictEqual(
       []
     );
-    // The holiday layer is untouched by the birthday switch.
     expect(ribbonsFor("2026-03-06", DATA, OFF({ bdays: false }))).toHaveLength(
       1
     );
@@ -126,12 +124,6 @@ describe("the due shelf", () => {
     expect(ribbonsFor("2026-03-19", DATA, layers)).toHaveLength(3);
   });
 
-  /**
-   * AN UNDATED TASK NEVER APPEARS ON THE CALENDAR IN ANY CODE PATH. The
-   * projection can only key a task to a day by its `due_at`, so an undated one
-   * has no day to be keyed to — asserted here as the property the shelf
-   * depends on rather than left implicit in the query.
-   */
   it("has no day for a task with no due date", () => {
     const undated: DayContextData = { ...DATA, due: [] };
     for (const day of ["2026-03-10", "2026-03-19", "2026-03-31"])

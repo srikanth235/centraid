@@ -1,13 +1,3 @@
-// The 232px rail (spec §5), on a wide pointer surface only.
-//
-// TWO NAMED HEADS, because the rail holds two different kinds of thing and the
-// difference is the whole navigational idea of the app: *Views · when it is
-// due* is time, *Projects · where it belongs* is place. A rail that listed both
-// under one silent head would be asking the member to infer why Upcoming and
-// Kitchen are neighbours.
-//
-// Counts are facts, not badges: they are tabular annotations beside a label,
-// never a coloured pip, and a zero is drawn as a zero rather than hidden.
 import type { ReactNode } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";
@@ -26,15 +16,12 @@ import { GROUPS, RAIL_HEADS, shelfCopy } from "../view-copy.ts";
 
 import styles from "./Board.module.css";
 
-/** The five view rows, in the order the rail lists them. */
 const VIEWS: readonly ShelfId[] = [null, UPCOMING, ANYTIME, ALL, INBOX];
 
 export interface RailProps {
   current: ShelfId;
   counts: Readonly<Record<string, number>>;
   projects: readonly Project[];
-  /** The palette slot for one project's dot — a content marker, never a
-   *  control colour. */
   projectHue: (project: Project) => string | null;
   onSelect: (shelf: ShelfId) => void;
 }
@@ -76,9 +63,6 @@ function Row({
 }
 
 export function Rail(props: RailProps): ReactNode {
-  // Areas are the member's own words, so the rail groups by them rather than
-  // by a fixed taxonomy — and a project with no area sits under no head at all
-  // rather than under an invented one.
   const areas = new Map<string, Project[]>();
   for (const project of props.projects) {
     const key = project.area ?? "";

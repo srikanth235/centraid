@@ -1,13 +1,3 @@
-// @vitest-environment jsdom
-// THE SESSION AND CLIPBOARD LAWS (README-Locker §2).
-//
-// The boundary is built and proven before any screen exists, because a screen
-// that draws a secret is only as honest as the rules underneath it. Four laws
-// are asserted here, and each one was a bug class in the interface this
-// replaces: it boots locked; the window slides rather than extends; hiding
-// ends it at once; and a lock takes EVERY secret-bearing field with it —
-// enumerated, so a field added later cannot quietly escape the wipe.
-
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
@@ -73,7 +63,6 @@ describe("the session boots locked", () => {
     expect(resumed.phase).toBe("open");
     expect(resumed.token).toBe("s1");
 
-    // Authenticated with no token is not a session — it is a claim.
     const claimed = afterStatus(
       bootSession(T0),
       { ok: true, configured: true, authenticated: true },
@@ -91,7 +80,6 @@ describe("the session boots locked", () => {
     );
     expect(created.phase).toBe("open");
     expect(created.configured).toBe(true);
-    // …and locking that session lands on Lock, never back on First run.
     expect(lock(created, T0).phase).toBe("locked");
   });
 });
@@ -154,9 +142,6 @@ describe("a refusal keeps its own words", () => {
 });
 
 describe("a lock takes every secret-bearing field with it", () => {
-  /** A bag with EVERY declared secret-bearing field holding something. The
-   *  first assertion below proves that claim against the key list itself, so a
-   *  field added without a value here fails rather than going untested. */
   function loaded(): SecretBag {
     return {
       sessionToken: "session-token",
@@ -188,8 +173,6 @@ describe("a lock takes every secret-bearing field with it", () => {
       searchTerm: "git",
       searchResults: [{ item_id: "l1", type: "login", title: "GitHub" }],
       trashRows: [{ item_id: "z1", type: "login", title: "Old agent" }],
-      // The sidecar editors' typed values — a half-typed sealed field and a
-      // half-pasted passkey key are both plaintext a lock has to reach.
       sidecarDraft: {
         field: {
           section: "Recovery",
@@ -263,9 +246,6 @@ describe("the clipboard clears itself", () => {
   let clock: FakeClock;
 
   beforeEach(() => {
-    // The shared fake clock, not `vi.useFakeTimers`: it restores real timers
-    // even when a test throws, so a thirty-second wipe cannot leak into a
-    // later test as a hang (docs/coding-standards.md, test seams).
     clock = useFakeClock(T0);
     written = [];
     held = "";
@@ -335,3 +315,4 @@ describe("the clipboard clears itself", () => {
     });
   });
 });
+// @vitest-environment jsdom

@@ -1,23 +1,3 @@
-// @vitest-environment jsdom
-// THE NAMING CONVERSATION (#816), on the web.
-//
-// `place-phrase.test.ts` proves the ladder; this proves the app ASKS. Four
-// claims, and each of them is a way the surface could regress into printing a
-// coordinate or into asking a question nobody can answer:
-//
-//   1. THE ASK STANDS WHERE THE FALLBACK STANDS. A section whose place has no
-//      readable name gets the prompt; a named one gets nothing to answer, and
-//      neither ever renders the digits as a heading.
-//   2. A COORDINATE LABEL IS NOT A NAME. `findOrCreatePlaceTx` names a fresh
-//      place after its own coordinate, so "37.4419, -122.1430" must read as
-//      unnamed here and draw the prompt like any other.
-//   3. TYPING A NAME WRITES ONE — through `name-place`, with the place id the
-//      heading was drawn from, and nothing else in the input.
-//   4. "This is home" IS ONE TAP and carries `kind: 'home'`, which is the
-//      declaration every relative phrase anchors on.
-//
-// A real render (createRoot + act) rather than static markup, because the
-// prompt holds state and the point of the file is what a press writes.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -68,8 +48,6 @@ interface Write {
 let writes: Write[] = [];
 let refreshes = 0;
 
-// The shell's client seam, as much of it as this surface reaches for. `write`
-// answers "executed" so the component takes the success path.
 (window as unknown as { centraid: unknown }).centraid = {
   write: (request: Write) => {
     writes.push(request);
@@ -132,7 +110,6 @@ function click(button: HTMLButtonElement | undefined): void {
   act(() => button!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 }
 
-/** Type into the open input and press Enter, the way `InlineInput` submits. */
 function type(text: string): void {
   const input = container!.querySelector("input");
   expect(input).toBeDefined();
@@ -184,8 +161,6 @@ describe("naming a place from the Places shelf", () => {
     render([section("p-coord", "37.4419, -122.1430")]);
     click(pressing("Name this place?"));
     type("  Grandma's house  ");
-    // The write and the re-read are one chain of promises; let it settle before
-    // asking whether the surface was told to re-phrase.
     await act(async () => undefined);
     expect(writes).toStrictEqual([
       {
@@ -220,3 +195,4 @@ describe("naming a place from the Places shelf", () => {
     expect(pressing("Name this place?")).toBeDefined();
   });
 });
+// @vitest-environment jsdom

@@ -18,13 +18,10 @@ export interface CloneTemplateOptions {
   templateDir: string;
   newName?: string;
   newDesc?: string;
-  /** Backfilled (#263); a template declaring them wins. */
   iconKey?: string;
   colorKey?: string;
 }
 
-/** Rewrites what must be unique: name, a fresh `0.1.0`, and `package.json#name`
- *  — the last only when it followed the `centraid-app-*` convention. */
 export async function cloneTemplate(
   opts: CloneTemplateOptions
 ): Promise<AppInfo> {
@@ -48,7 +45,6 @@ export async function cloneTemplate(
   await fs.mkdir(opts.appsDir, { recursive: true });
   await copyDir(opts.templateDir, destDir);
 
-  // Adds missing directories only; never overwrites copied content (#70).
   await ensureCanonicalSubdirs(destDir);
 
   await rewriteAppJson(destDir, opts.newName, opts.newDesc, opts.newAppId);
@@ -59,7 +55,6 @@ export async function cloneTemplate(
     });
   }
   await rewritePackageJson(destDir, opts.newAppId);
-  // `automation.json#name` is a row title, so it tracks `app.json#name`.
   if (opts.newName) {
     await rewriteAutomationManifestNames(destDir, opts.newName, {
       stampGenerated: true,
@@ -81,7 +76,6 @@ export async function cloneTemplate(
   };
 }
 
-/** Case-insensitive and whitespace-trimmed. */
 export async function isDisplayNameTaken(
   appsDir: string,
   name: string,
@@ -107,7 +101,6 @@ export async function isDisplayNameTaken(
   return findMatchingName(0);
 }
 
-/** `alwaysSuffix` keeps a clone off the template's own id. */
 export async function suggestAppId(
   appsDir: string,
   preferred: string,
@@ -131,8 +124,6 @@ export async function suggestAppId(
   return findAvailableId(start);
 }
 
-/** Id and name advance in lockstep, so two clones never both read "Hydrate".
- *  The bare pair is tried first: the template lives in a different tree. */
 export async function suggestCloneIdentity(
   appsDir: string,
   preferredId: string,
@@ -159,7 +150,6 @@ export async function suggestCloneIdentity(
   return findAvailableIdentity(1);
 }
 
-/** Filesystem-free `suggestCloneIdentity` for the git-store backend (#137). */
 export function suggestCloneIdentityFrom(
   existing: ReadonlyArray<{ id: string; name?: string }>,
   preferredId: string,
@@ -190,12 +180,10 @@ export interface CloneTemplateFilesOptions {
   templateFiles: ScaffoldFile[];
   newName?: string;
   newDesc?: string;
-  /** Backfilled (#263); a template declaring them wins. */
   iconKey?: string;
   colorKey?: string;
 }
 
-/** Filesystem-free `cloneTemplate` (#141); must match the disk path's rewrites. */
 export function cloneTemplateFiles(
   opts: CloneTemplateFilesOptions
 ): ScaffoldFile[] {
@@ -249,7 +237,6 @@ export function cloneTemplateFiles(
     }) ?? JSON.stringify(nextAppJson, null, 2) + "\n";
   set("app.json", withVisual);
 
-  // Only the convention-following name is rewritten.
   const pkgIdx = byPath.get("package.json");
   if (pkgIdx !== undefined) {
     try {
@@ -264,7 +251,7 @@ export function cloneTemplateFiles(
         set("package.json", JSON.stringify(pkg, null, 2) + "\n");
       }
     } catch {
-      /* unparseable — leave alone */
+      // Intentionally empty.
     }
   }
 
@@ -300,7 +287,6 @@ async function copyDir(src: string, dest: string): Promise<void> {
     } else if (entry.isFile()) {
       await fs.copyFile(srcPath, destPath);
     }
-    // Symlinks and other types: skipped. Templates ship plain files only.
     return copyNextEntry(index + 1);
   };
   return copyNextEntry(0);
@@ -322,7 +308,7 @@ async function rewriteAppJson(
     const raw = await fs.readFile(appJsonPath, "utf8");
     parsed = JSON.parse(raw);
   } catch {
-    // No app.json in the template (or unparseable). Write a fresh one.
+    // Intentionally empty.
   }
   const next: Record<string, unknown> = {
     ...parsed,
@@ -330,10 +316,7 @@ async function rewriteAppJson(
       newName ?? (typeof parsed.name === "string" ? parsed.name : "Untitled"),
     version: "0.1.0",
   };
-  // The manifest `id` must track the new folder name, or the dispatcher's
-  // manifest-id check mismatches the registry id.
   if (newAppId) next.id = newAppId;
-  // `newDesc` wins; an empty string clears the field.
   const descSource =
     newDesc ??
     (typeof parsed.description === "string" ? parsed.description : "");
@@ -361,7 +344,6 @@ async function rewritePackageJson(
     return; // unparseable; leave alone.
   }
   const currentName = typeof parsed.name === "string" ? parsed.name : "";
-  // Unrelated names are left alone rather than clobbering author intent.
   if (!currentName.startsWith("centraid-app-")) return;
   parsed.name = `centraid-app-${newAppId}`;
   await fs.writeFile(pkgPath, JSON.stringify(parsed, null, 2) + "\n");
@@ -405,7 +387,6 @@ async function ensureCanonicalSubdirs(appDir: string): Promise<void> {
       fs.mkdir(path.join(appDir, sub), { recursive: true })
     )
   );
-  // Seeded only when the template shipped no README of its own.
   const readmePath = path.join(appDir, "automations", "README.md");
   try {
     await fs.access(readmePath);

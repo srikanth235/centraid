@@ -1,14 +1,3 @@
-/**
- * Scenario generator (issue #708): a small drive that already looks used —
- * two folders, three filed documents, a star, a tag, and one document with a
- * SECOND version so the history walk has something to walk. Demo register:
- * `seed.demo` provenance, invisible to automations, one-click purge.
- * Deterministic: the packing list's dates derive from input.now.
- *
- * The bytes ride the inline data: door (issue #296) as text/markdown — small,
- * text, so they stay in the row and the FTS triggers index them, and
- * core.edit_document (text-only) can revise them in place.
- */
 const PURPOSE = "dpv:ServiceProvision";
 
 export default async function seedHandler({ input, log, ctx }) {
@@ -40,7 +29,6 @@ export default async function seedHandler({ input, log, ctx }) {
         "- Rain shell\n- Hiking boots\n- Headlamp\n- Swimsuit (the cabin has a hot tub)\n- Board games\n"
     ),
   });
-  // One edit, so version history has two versions to show: the walk is
   // `revises` links between CONTENT items, minted by this call (issue #352).
   await invoke("core.edit_document", {
     document_id: packing.document_id,
@@ -56,8 +44,6 @@ export default async function seedHandler({ input, log, ctx }) {
     label: "tahoe",
   });
 
-  // "(sample)" in the title: a rental agreement and an insurance policy are
-  // exactly the records a member must never mistake for the real thing.
   await invoke("core.add_document", {
     title: "Cabin rental agreement (sample)",
     folder_id: travel.folder_id,

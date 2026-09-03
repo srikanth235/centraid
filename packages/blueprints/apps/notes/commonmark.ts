@@ -1,8 +1,3 @@
-/**
- * The portable Notes source contract. Bodies stay plain CommonMark text; the
- * editor never serializes a private rich-text AST. Wikilinks are an extension
- * over that source and compile to canonical core.link rows separately.
- */
 export interface WikiLinkToken {
   raw: string;
   label: string;
@@ -23,7 +18,6 @@ export function parseWikiLinks(source: unknown): WikiLinkToken[] {
   });
 }
 
-/** Replace CRLF only; every other byte remains user-authored CommonMark. */
 export function normalizeCommonMark(source: unknown): string {
   return String(source ?? "").replace(/\r\n?/gu, "\n");
 }

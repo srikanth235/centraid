@@ -1,9 +1,3 @@
-// Desktop/PWA's own way to Search (§9): a bounded control in the bar, since
-// the compact band is the only other way to the Search shelf. This colocates
-// with frame.tsx (which owns the control) rather than
-// stretching src/photos-frame.test.ts's dynamic-import harness, which
-// declares its own local `AppBarState` and would need to grow the same
-// `compact`/`onSearch` fields to exercise this at all.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -34,13 +28,10 @@ describe("the bar's own way to Search (§9)", () => {
   it("renders an outlined Search control on desktop/PWA when reachable", () => {
     const html = render(state({ onSearch: () => {} }));
     expect(html).toContain('aria-label="Search"');
-    // Outlined, never filled (§18) — Import stays the one filled element.
     expect(html).not.toContain('aria-label="Search" class="kit-btn primary"');
   });
 
   it("is unreachable — the desktop entry regresses to nothing — once the callback is dropped", () => {
-    // Sabotage-shaped assertion: if app-root.tsx ever stops wiring
-    // `onSearch`, this is exactly what goes red.
     const html = render(state({ onSearch: undefined }));
     expect(html).not.toContain('aria-label="Search"');
   });

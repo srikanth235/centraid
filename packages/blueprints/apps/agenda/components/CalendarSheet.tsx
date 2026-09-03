@@ -1,5 +1,3 @@
-// The band's sixth slot where there is no rail: calendar FILTERS, not
-// destinations — the destination overflow is `_shared/MoreSheet.tsx`.
 import type { ReactNode } from "react";
 
 import type { Calendar } from "../types.ts";

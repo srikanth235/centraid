@@ -1,9 +1,4 @@
 import type { SearchGroupRow } from "../../_shared/search-scaffold.ts";
-// Search is a SHELF (v4 handoff §9). Every state renders through
-// `_shared/SearchScaffold.tsx` (#712) from `SEARCH_COPY`.
-//
-// SEARCH WILL NOT PRETEND TO HAVE LOOKED (§9): an `unreachable` reach takes the
-// `--net` panel and a Retry, never "no matches". Copy stays DETERMINATE (§14).
 import { SearchScaffold } from "../../_shared/SearchScaffold.tsx";
 import type { SearchGroupHit } from "../search-groups.ts";
 import type { SearchStatus } from "../search.ts";
@@ -14,7 +9,6 @@ import styles from "./SearchShelf.module.css";
 
 const EMPTY_GROUPS: readonly SearchGroupHit[] = [];
 
-/** An adapter at this render boundary; widen neither type. */
 function toGroupRow(hit: SearchGroupHit): SearchGroupRow {
   return {
     kind: hit.kind,
@@ -22,7 +16,6 @@ function toGroupRow(hit: SearchGroupHit): SearchGroupRow {
     title: hit.title,
     meta: hit.meta,
     here: hit.here,
-    // For the type only: `search-groups.ts` never produces `null`.
     openTarget: hit.targetShelf ?? "",
   };
 }
@@ -42,18 +35,13 @@ export function SearchShelf({
 }: {
   query: string;
   status: SearchStatus;
-  /** Exact; it is what keeps the working line determinate. */
   count: number;
-  /** Real data only: a group with nothing behind it is absent, never faked. */
   groups?: readonly SearchGroupHit[];
   onQuery: (value: string) => void;
   onClear: () => void;
   onRetry?: () => void;
   onOpenGroup?: (shelf: ShelfId) => void;
-  /** A scope that did not answer, named BESIDE the hits still on screen
-   *  (#726 D10/D11). */
   reachFacts?: readonly { label: string; value: string }[];
-  /** Hands the field back so `Clear` can empty it; see the note on the input. */
   inputRef?: (el: HTMLInputElement | null) => void;
   children?: React.ReactNode;
 }) {
@@ -83,7 +71,6 @@ export function SearchShelf({
           onInput={(e) => onQuery(e.currentTarget.value)}
         />
         {query ? (
-          // Mono, underlined TEXT (§9) — never an icon button.
           <button type="button" className={styles.clearBtn} onClick={onClear}>
             Clear
           </button>

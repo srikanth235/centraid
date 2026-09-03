@@ -1,17 +1,3 @@
-/**
- * PHOTOS SHARES THROUGH THE ONE KIT (#825).
- *
- * Two halves, and the second is the one that keeps the first honest:
- *
- *  - The MAPPING law: who Photos may name in a grant. A grant is addressed to
- *    a party, so a destination that only names a vault, or one whose party id
- *    is an unsettled offline overlay, is not an audience.
- *  - The SOURCE law: no app-private share plumbing survives anywhere under
- *    `apps/photos`. This is a source scan on purpose — a rendering test proves
- *    what one component does, while the defect being prevented is a SECOND
- *    door reappearing somewhere else in the app.
- */
-
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -28,11 +14,6 @@ function sourceFiles(dir: string): string[] {
       : [];
   });
 }
-
-// WHO PHOTOS MAY NAME IN A GRANT is not asserted here any more (#825): the
-// roster mapping is one law for every app and both seats, proved in
-// `apps/_shared/grant-audiences.test.ts`. What stays below is the part that
-// is genuinely about THIS app — that nothing app-private survives under it.
 
 describe("no app-private share plumbing remains under apps/photos", () => {
   const sources = sourceFiles(HERE).map(

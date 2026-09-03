@@ -1,10 +1,3 @@
-// THE FIXTURES AND THE MOUNT both `compose-states.test.tsx` files compose
-// their routes out of.
-//
-// EVERY PATH A CALLER TAKES IS ONE A MEMBER CAN TAKE: `press` finds a control
-// by the label the previous screen drew and clicks it, so a route reachable
-// only from a test is a route nobody has. Nothing here sets app state from
-// outside.
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect } from "vitest";
@@ -159,8 +152,6 @@ export interface ComposeHarness {
   press: (container: HTMLElement, label: string) => Promise<void>;
 }
 
-/** Call from a `describe` body: it registers its own teardown, so a suite that
- *  throws mid-route still leaves the document and the host bridge clean. */
 export function composeHarness(): ComposeHarness {
   let reactRoot: ReturnType<typeof createRoot> | undefined;
 
@@ -175,9 +166,6 @@ export function composeHarness(): ComposeHarness {
     dashboard: DashboardData,
     over: { group?: GroupData; centraid?: Record<string, unknown> } = {}
   ): Promise<HTMLDivElement> {
-    // jsdom implements `<dialog>` without the modal half; the confirms open
-    // with `showModal()` on purpose, so the kit supplies the two methods
-    // rather than the app avoiding the door.
     const proto = window.HTMLDialogElement.prototype as unknown as {
       showModal?: () => void;
       close?: () => void;
@@ -189,11 +177,6 @@ export function composeHarness(): ComposeHarness {
       this.removeAttribute("open");
       this.dispatchEvent(new Event("close"));
     };
-    // A POINTER SURFACE, explicitly. `observeWidth` measures `clientWidth`,
-    // which jsdom reports as 0 — every app would render at its narrow rung and
-    // the rail, the second section verb and the desktop switcher would all be
-    // withheld. The pane is given a width so the wide layout is the one under
-    // test; the narrow rung is Wave 1's own concern and has its own cases.
     Object.defineProperty(window.HTMLElement.prototype, "clientWidth", {
       configurable: true,
       value: 1200,

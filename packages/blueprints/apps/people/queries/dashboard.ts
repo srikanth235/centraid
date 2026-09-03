@@ -1,23 +1,3 @@
-/**
- * The keep-in-touch summary, derived from the vault: who is overdue to
- * reconnect with (last contact strictly past their cadence), which reminders are
- * coming up next (birthdays and dates with their reminder on), the most recent
- * touches you have logged, and the headline counts. A person never contacted
- * counts from when they were added, so a fresh contact reads as on-track.
- *
- * The app's own views compute Reconnect / Upcoming / Favorites client-side
- * from the `people` window; this query is the same judgment server-side.
- *
- * A cadence of 0 days means "no cadence set", not "overdue every day": those
- * people are excluded from Reconnect entirely rather than pinned to the top of
- * it forever.
- *
- * The counts also carry `linked` / `to_link` — how many of these people have a
- * vault of their own. That read denies independently (People's `share.*`
- * scopes are newer than the app), and a denial leaves the pair null while the
- * four original counts stand.
- */
-
 import {
   FLAGS_SCHEME_URI,
   STARRED_NOTATION,
@@ -165,7 +145,6 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         ],
         purpose,
       }),
-      // Null means the sharing plane is unreadable, not that nobody is linked.
       readLiveBindings(ctx.vault, partyIds),
     ]);
 

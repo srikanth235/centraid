@@ -1,6 +1,3 @@
-// Agenda copy table. No literal past 120 characters or a second sentence;
-// none says "please", "successfully", "simply", "in order to" or "you can".
-
 import type { ViewKind } from "./types.ts";
 
 export const VIEW_LABELS: Readonly<Record<ViewKind, string>> = {
@@ -26,14 +23,11 @@ export const TODAY = "Today";
 export const PREVIOUS = "Previous";
 export const NEXT = "Next";
 
-/** Empty Day context when the read was refused — no switches over missing facts. */
 export const RAIL_CALENDARS = "Calendars";
 export const RAIL_DAY_CONTEXT = "Day context";
 export const RAIL_DAY_CONTEXT_EMPTY = "Nothing decorating these days yet.";
 export const RAIL_MINI_MONTH = "Month at a glance";
 
-/** Day-context words live in `day-context-copy.ts`, import-free so the phone
- *  can share them (#834). */
 export {
   BIRTHDAY_LEAD_DEFAULT_DAYS,
   BIRTHDAY_LEADS,
@@ -46,11 +40,9 @@ export {
   shelfDue,
 } from "./day-context-copy.ts";
 
-/** A date with no time cost is never a row here. */
 export const GRID_RULE = "The grid holds what takes time.";
 
 export const ALL_DAY = "All day";
-/** A run that leaves this day — one row on the start day, not a bar across columns. */
 export const CONTINUES = "Continues";
 export const CONTINUED = "Continued";
 export const NOW = "Now";
@@ -67,7 +59,6 @@ export function partlyDeniedLine(names: readonly string[]): string {
   return `Hidden while denied: ${names.join(", ")}.`;
 }
 
-/** No unpark write in the app — the owner releases it in Approvals. */
 export const PARKED_CANCEL_TITLE = "Cancellation held for the owner";
 export const PARKED_CANCEL_BODY =
   "The event stays on the agenda until the owner approves the cancellation.";
@@ -106,7 +97,6 @@ export const REMINDER_LEADS: readonly { minutes: number; label: string }[] = [
 ];
 export const REMINDER_NONE = "No reminder";
 
-/** Picker words; the summary a row shows always comes back from the vault. */
 export const REPEAT_CHOICES: readonly { rrule: string; label: string }[] = [
   { rrule: "FREQ=DAILY", label: "Every day" },
   { rrule: "FREQ=WEEKLY", label: "Every week" },
@@ -115,7 +105,6 @@ export const REPEAT_CHOICES: readonly { rrule: string; label: string }[] = [
   { rrule: "FREQ=YEARLY", label: "Every year" },
 ];
 
-/** No filled button — all three scope answers are equal. */
 export const SCOPE_TITLE = "This event repeats";
 export const SCOPE_QUESTION = "Which occurrences does this change?";
 export const SCOPE_OCCURRENCE = "This occurrence";

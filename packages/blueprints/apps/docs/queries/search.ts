@@ -1,11 +1,3 @@
-/**
- * Document search as a vault projection: FTS5 matches `core.document`
- * (#352), hits join folder tags/custody exactly like drive.ts (factored into
- * ./_shared.ts, `shared_with` #821 included), trashed rows never match, and
- * a match must carry a folders-scheme tag. Consent denial renders as the
- * ask-the-owner state.
- */
-
 import {
   FLAGS_SCHEME_URI,
   FOLDER_SCHEME_URI,
@@ -71,8 +63,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const tagRows = (tags.rows ?? []) as unknown as TagRow[];
     const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
     const schemeRows = (schemes.rows ?? []) as unknown as SchemeRow[];
-    // Free-form labels (#352) reuse ./_shared.ts's helper; a small bounded
-    // read over the same matched ids.
     const tagsByDoc = await readLabelsByDocument({
       ctx,
       purpose,
@@ -87,7 +77,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       findConcept(schemeConcepts, scheme, ROOT_FOLDER_NOTATION)?.concept_id ??
       null;
 
-    // A document is a wrapper tagged with a folders-scheme concept.
     const folderConceptIds = new Set(schemeConcepts.map((c) => c.concept_id));
     const folderByDoc = new Map<string, string>();
     for (const t of tagRows) {
@@ -95,7 +84,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         folderByDoc.set(t.target_id, t.concept_id);
     }
 
-    // Starred rides the tag read already in hand (#274).
     const starredConceptId =
       findSchemeConcept(
         schemeRows,
@@ -111,7 +99,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         .map((t) => t.target_id)
     );
 
-    // Bounded by the matched wrappers' current_content_id set, custody too.
     const contentIds = [...new Set(hits.map((d) => d.current_content_id))];
     const [contents, custodyByContent, sharesByDoc] = await Promise.all([
       contentIds.length > 0
@@ -122,7 +109,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           })
         : { rows: [] as Record<string, unknown>[] },
       readCustodyByContent({ ctx, purpose, contentIds }),
-      // Shares (#821) bounded by matched documents; same join drive.ts makes.
       readSharesByDocument({
         ctx,
         purpose,
@@ -138,7 +124,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       ])
     );
 
-    // Blob-backed bytes serve as same-origin URLs (#296).
     const srcOf = (c: ContentRow | undefined) =>
       typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
         ? `/centraid/_vault/blobs/${c.content_id}`
@@ -148,7 +133,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         ? `/centraid/_vault/blobs/${c.content_id}?variant=poster`
         : null;
 
-    // Vault order is rank order (best match first) — keep it.
     const documents = hits
       .filter((d) => folderByDoc.has(d.document_id))
       .map((d) => {

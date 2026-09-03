@@ -1,11 +1,3 @@
-// Every string the Tasks room says (spec §6, verbatim). ONE FILE: a sentence
-// written at its render site cannot be reviewed against the table.
-//
-// A TWO-SENTENCE ROW IS TWO CONSTANTS — the copy ratchet holds every literal
-// to one thought, and the pair renders as two nodes in the table's order.
-//
-// Interpolate counts and dates through the functions below; never store a
-// string with a number baked into it.
 import type { ShelfId } from "./shelves.ts";
 import {
   ALL,
@@ -40,7 +32,6 @@ const SHELF_COPY: Readonly<Record<string, ShelfCopy>> = {
   [NOTIFY]: { title: "Reminder", unit: "reminders" },
 };
 
-/** Today is the room's own root, so it answers with the app's own name. */
 export function shelfCopy(shelf: ShelfId, projectName?: string): ShelfCopy {
   if (projectName) return { title: projectName, unit: "tasks" };
   if (typeof shelf === "string" && SHELF_COPY[shelf]) {
@@ -67,7 +58,6 @@ export const GROUPS = {
   file: "File",
 } as const;
 
-/** Two earned-quiet states, never one ambiguous "all clear" (§9). */
 export const TODAY_DONE = "Everything due today is done.";
 export const TODAY_EMPTY = "Nothing is scheduled for today.";
 export const TODAY_EMPTY_SUB =
@@ -79,12 +69,10 @@ export function nothingElseUntil(day: string): string {
   return `Nothing else is due until ${day}.`;
 }
 
-/** A count and a reassurance, never a scold. */
 export function overdueMeta(count: number): string {
   return `${count} · nothing was deleted`;
 }
 
-// Re-entry (spec §3, ruling 2)
 export function reentryNotice(days: number, due: number): string {
   return `You were away ${days} days · ${due} tasks came due. Nothing was deleted.`;
 }
@@ -101,19 +89,16 @@ export const REENTRY_FOOT_A =
 export const REENTRY_FOOT_B = "It is an outcome, not a failure.";
 export const REENTRY_NONE = "Nothing came due while you were away.";
 
-/** One bulk verb each (§3). */
 export const REENTRY_BUCKETS = {
   dated: { label: "Dated while you were away", verb: "Move all to today" },
   repeating: { label: "Repeating", verb: "Skip to the next one" },
   sitting: { label: "Sitting since March", verb: "Release all" },
 } as const;
 
-// The row's own words
 export const MISSED_NOTE_A = "One live occurrence.";
 export const MISSED_NOTE_B =
   "Four missed periods collapse into it — never four copies.";
 
-/** From the collapse the query already did, never a recount. */
 export function missedLabel(missed: number, nextDay: string): string {
   return `missed ${missed} · next is ${nextDay}`;
 }
@@ -122,12 +107,10 @@ export function familyProgress(done: number, total: number): string {
   return `${done} of ${total}`;
 }
 
-/** The age signal (§5) — a fact, never a reprimand. */
 export function sittingSince(month: string): string {
   return `sitting since ${month}`;
 }
 
-/** Marks a shared-vault row; personal rows stay silent. */
 export const VAULT_MARKER = "HOUSE";
 
 export const DONE = "Done";
@@ -139,7 +122,6 @@ export function doneNext(day: string): string {
   return `Done · the next one is ${day}`;
 }
 
-// The editor
 export const FIELDS = {
   when: "When",
   time: "Time",
@@ -214,8 +196,6 @@ export function homeVault(vault: string, who: string): string {
 export const HOME_VAULT_NOTE_A = "A task keeps the vault it was born in.";
 export const HOME_VAULT_NOTE_B = "Completion is receipted there.";
 
-// Release is OUTLINED SECONDARY — it destroys nothing; only Delete takes the
-// outlined `net` control (§3).
 export const RELEASE_CONFIRM = {
   title: "Release this task?",
   bodyA: "It goes to the Logbook as won't do, with its history.",
@@ -232,7 +212,6 @@ export const DELETE_CONFIRM = {
 
 export const CANCEL = "Cancel";
 
-// The honest states
 export const PENDING_CHIP = "Saved on this device · queued for the vault";
 export const PENDING_ROW = "not in the vault yet";
 
@@ -263,7 +242,6 @@ export function inboxMeta(count: number): string {
   return `${count} · nothing is counting at you`;
 }
 
-// Capture, search, reminder
 export const QUICK_ADD = {
   pointerPlaceholder: "Name it so it still makes sense on Friday",
   touchPlaceholder: "What is it? Name it for Friday",
@@ -276,7 +254,6 @@ export function landsInFoot(place: string, vault: string): string {
   return `${place} · ${vault}`;
 }
 
-/** `none` is a CHOICE, so it rides the row rather than sitting outside it. */
 export const QUICK_ADD_WHEN = [
   { key: "today", label: "Today" },
   { key: "tomorrow", label: "Tomorrow" },
@@ -291,7 +268,6 @@ export const LENSES = [
   { key: "house", label: "House" },
 ] as const;
 
-/** The toggle names the order it WILL take, never the one it is in. */
 export const SORT_LABELS = {
   priority: "Priority within date",
   manual: "Manual order",
@@ -302,7 +278,6 @@ export function boardCount(shown: number, unit: string): string {
   return `${shown} ${shown === 1 ? singular : unit}`;
 }
 
-/** A project may also belong to neither. */
 export const AREAS = ["Home", "Work"] as const;
 
 export const NEW_PROJECT = {
@@ -332,8 +307,6 @@ export const NOTIFY_COPY = {
   snoozes: ["10 min", "1 hour", "This evening", "Tomorrow 09:00"],
 } as const;
 
-// Denial is DATA (§3, §5): name the receipt, the scope and the time, and offer
-// a way to the grant rather than a dead end.
 export const DENIED = {
   title: "Tasks cannot read this vault",
   bodyA: "Ask the owner of this vault for access.",
@@ -344,7 +317,6 @@ export const DENIED = {
   holds: "What Tasks holds",
 } as const;
 
-/** In the sheet's own order; `meta` is a rule, never a count. */
 export const MORE_ROWS: readonly {
   shelf: ShelfId;
   label: string;
@@ -358,7 +330,6 @@ export const MORE_ROWS: readonly {
   { shelf: NOTIFY, label: "Reminder", meta: "delivered on your phone" },
 ];
 
-/** The keyboard sheet, in the order the spec lists it (§7). */
 export const SHORTCUTS: readonly { keys: string; act: string }[] = [
   { keys: "q", act: "Quick add" },
   { keys: "c", act: "Quick add" },

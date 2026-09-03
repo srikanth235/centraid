@@ -1,13 +1,3 @@
-// What a member is composing, and what it turns into.
-//
-// WHAT IS PINNED HERE. *No group* is a real choice now — `tally.add_expense`
-// has `group_id` optional and checks a group-less expense's participants
-// against the friend roster — so the input OMITS the field rather than nulling
-// it. Several payers must put down exactly the expense. A write carries ONLY
-// the fields its schema declares, so a currency provenance that is
-// half-supplied travels as nothing at all rather than as a rate the vault
-// would reject. And an edit re-opens the DIVISION that was recorded, with the
-// numbers that produced the shares, rather than collapsing to exact amounts.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -109,8 +99,6 @@ describe("what the expense comes to", () => {
   });
 
   it("is derived from the rate the MEMBER supplied, and nothing looks one up", () => {
-    // €249.00 at 1.1636 — the design file's own hire car — is £213.99, and
-    // the rate the member supplied is the only thing that decides it.
     expect(
       settlementMinor(
         draft({

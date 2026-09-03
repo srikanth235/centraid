@@ -1,5 +1,3 @@
-// THE CHAIN IS APPEND-ONLY. These cases are the guard on that claim: a
-// restore adds a head and every earlier body is still in the walk afterwards.
 import { describe, expect, test } from "vitest";
 
 import { RELATIONS_SCHEME_URI } from "../_shared/concept-scheme-kit.ts";
@@ -96,8 +94,6 @@ describe("the version chain", () => {
   });
 
   test("a restore APPENDS: nothing the chain held is lost", () => {
-    // `restore-note-version` mints a new head whose revises edge points at the
-    // body it brings back. The pre-restore chain must survive inside the new.
     const before = noteVersionChain({
       headContentId: "v3",
       links: LINKS,

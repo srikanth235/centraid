@@ -1,30 +1,3 @@
-// ADD EXPENSE — the most rule-dense surface in the app (Tally spec §3).
-//
-// Two typed fields, and everything else a chip, because everything else is a
-// choice from a set. The allocation table and the reconcile line under it
-// change WITH the division: the odd penny for equal, a penny of tolerance for
-// exact amounts, "it will not commit at 99" for percentages, weights for
-// shares, an equal base with an adjustment, typed lines.
-//
-// ALL SIX COMMIT, and each has its own table: five put a cell beside every
-// person, *By line* puts a row per line with a chip per member. The reconcile
-// line under whichever table is showing reads the shares back, and the commit
-// is refused only when the ARITHMETIC refuses — percentages at 99, exact
-// amounts a pound out, lines that do not sum.
-//
-// *NO GROUP* IS A REAL CHOICE. `tally.add_expense` has `group_id` optional and
-// checks a group-less expense's participants against the friend roster
-// instead of a circle, so the chip writes rather than explains (GAPS.md §4).
-//
-// SEVERAL PAYERS IS NOT A MODE. The payer chip set still names one person; the
-// table beside it takes an amount from anyone who put money down, and clearing
-// an amount takes them back out.
-//
-// THIS SCREEN COMPUTES, AND THAT IS NOT A CONTRADICTION. Every figure Tally
-// READS arrives folded by the one balance engine; the shares below are an
-// INPUT being validated before it is sent, which `app.json` asks for by name.
-// The arithmetic lives in `split-model.ts` and `draft-model.ts`, tested, and
-// none of it is written to the vault as a balance.
 import type { ReactNode } from "react";
 
 import { DAY_MS } from "../../_shared/format-kit.ts";
@@ -70,8 +43,6 @@ import type { AllocRow, ChipOption } from "./Fields.tsx";
 
 import styles from "./Compose.module.css";
 
-/** The day before a day key, in UTC on the key itself — the same arithmetic
- *  `activity-model.ts` does, for the same reason. */
 function yesterdayOf(today: string): string {
   const stamp = Date.parse(`${today.slice(0, 10)}T00:00:00.000Z`);
   if (Number.isNaN(stamp)) return today;
@@ -80,19 +51,12 @@ function yesterdayOf(today: string): string {
 
 export interface AddExpenseProps {
   draft: ExpenseDraft;
-  /** Editing an expense that already exists rather than adding one. */
   editing: boolean;
-  /** The chosen group's members, in the order the table draws them. Empty
-   *  while the group's own read has not landed — and then the table is ABSENT
-   *  rather than drawn empty. */
   members: readonly GroupMember[];
   groups: readonly GroupSummary[];
-  /** What the group settles in. */
   currency: string;
   today: string;
   verdict: DraftVerdict;
-  /** Rates this vault has already been told, per currency pair — offered as a
-   *  prefill and never as a lookup: there is no rate provider in this path. */
   rateSuggestions: readonly RateSuggestion[];
   onPatch: (patch: Partial<ExpenseDraft>) => void;
   onEntry: (partyId: string, text: string) => void;
@@ -115,8 +79,6 @@ function whenChip(draft: ExpenseDraft, today: string): string {
   return draft.spentOn === yesterdayOf(today) ? "yesterday" : "pick";
 }
 
-/** The unit's own label for one typed cell, so three inputs in a row are three
- *  named controls rather than three boxes. */
 function cellLabel(division: Division, name: string): string {
   const unit = divisionSpec(division).unit;
   if (unit === "percent") return `Percentage for ${name}`;
@@ -126,8 +88,6 @@ function cellLabel(division: Division, name: string): string {
     : `Amount for ${name}`;
 }
 
-/** The suggestion for the pair this draft names, or nothing. The most recent
- *  one the vault holds, which is what `rate_suggestions` already returns. */
 function suggestionFor(props: AddExpenseProps): RateSuggestion | undefined {
   const from = props.draft.currency.trim().toUpperCase();
   if (from === "" || from === props.currency.toUpperCase()) return undefined;
@@ -154,8 +114,6 @@ function allocRows(props: AddExpenseProps): AllocRow[] {
     partyId: member.party_id,
     name: member.name,
     figure: money(byParty.get(member.party_id) ?? 0, props.currency),
-    // `derived` and `lines` are the two divisions with nothing to type beside
-    // a person: equal shares are computed, and typed lines are typed above.
     ...(unit === "derived" || unit === "lines"
       ? {}
       : {

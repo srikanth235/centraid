@@ -1,8 +1,3 @@
-// How a row says WHEN, and what stands in its meta line (spec §5, §9).
-//
-// The clock is injected in every case here for the reason the module takes it
-// as an argument: the midnight problem is a boundary problem, and a helper that
-// read the wall clock for itself could be asserted on only one side of it.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -74,7 +69,6 @@ describe("overdue", () => {
   it("is a fact about the clock, and reads from the live occurrence", () => {
     expect(isOverdue(task({ due_at: "2026-08-19" }), NOW)).toBe(true);
     expect(isOverdue(task({ due_at: "2026-08-21" }), NOW)).toBe(false);
-    // A repeating task's live occurrence wins over the series' first due.
     expect(
       isOverdue(
         task({
@@ -125,9 +119,6 @@ describe("the meta line", () => {
   });
 
   it("marks every number as numeric, so nothing reorders under RTL", () => {
-    // Each numeric part is drawn with the tabular + `unicode-bidi: isolate`
-    // class; the flag is what carries that to the row, so a part carrying a
-    // count or a clock and NOT flagged is the defect this asserts against.
     const parts = metaParts({
       task: task({
         due_at: "2026-08-21T17:00:00Z",
@@ -162,7 +153,6 @@ describe("the age signal", () => {
       "sitting since March"
     );
     expect(ageLabel(task({ created_at: "2026-08-01" }), NOW)).toBeNull();
-    // A dated task is not sitting — it is scheduled.
     expect(
       ageLabel(task({ created_at: "2026-03-02", due_at: "2026-08-21" }), NOW)
     ).toBeNull();
@@ -191,8 +181,6 @@ describe("the small conversions", () => {
   });
 
   it("maps the north-star scale onto the four chips, 0 meaning unset", () => {
-    // Todoist stores 1 as the lowest set priority and 4 as the highest.
-    // The editor's chips write the same numbers (Soon=1, Next=2, Now=3).
     expect(priorityLevel(undefined)).toBe(0);
     expect(priorityLevel(0)).toBe(0);
     expect(priorityLevel(1)).toBe(1);
@@ -211,9 +199,6 @@ describe("the small conversions", () => {
 
 describe("Today is the member's day, not UTC", () => {
   it("keys a timed due on the local calendar day even when UTC has already rolled", () => {
-    // Named zone, not `process.env.TZ`: Node does not apply TZ after boot, so
-    // a post-start mutation is a no-op on UTC CI and the member's day collapses
-    // to the UTC prefix.
     const zone = "Pacific/Kiritimati";
     expect("2026-08-21T23:00:00Z".slice(0, 10)).toBe("2026-08-21");
     expect(dayKey("2026-08-21T23:00:00Z", zone)).toBe("2026-08-22");

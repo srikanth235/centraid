@@ -1,6 +1,3 @@
-// The toolbar's rules (§4). What is asserted here is the pair of traps the
-// toolbar exists to avoid: two chips that each read as additive taking the
-// board to nothing, and a sort that quietly re-derives the member's own order.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -30,7 +27,6 @@ describe("the three lenses", () => {
   it("counts only an effort that is set AND under the half hour", () => {
     expect(lensHolds("effort", QUICK)).toBe(true);
     expect(lensHolds("effort", LONG)).toBe(false);
-    // Unset is not "small" — it is unanswered, and the lens asks a question.
     expect(lensHolds("effort", UNSET)).toBe(false);
   });
 

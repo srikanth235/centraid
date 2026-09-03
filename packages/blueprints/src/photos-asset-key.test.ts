@@ -1,21 +1,3 @@
-// Cross-scope asset identity in Photos (#599, apps/photos/asset-key.ts).
-//
-// `asset_id` is minted per vault, so two mounted scopes can legitimately carry
-// the SAME id for two unrelated photos. Everything in the UI that means "this
-// exact row" — the selection set, the lightbox lookup, a batch command's
-// target — therefore keys on the pair `(scope_id, asset_id)`. These tests use a
-// deliberately colliding id and prove that a command aimed at one scope touches
-// ONLY that scope.
-//
-// LAYOUT NOTE. These modules are unit-testable without a booted app, so the
-// real sources are copied into a temp dir beside two stubs and imported from
-// there, byte-identical apart from ONE rewritten specifier: this still tests
-// the real code, with two effect boundaries replaced.
-//
-// The design element layer is stubbed rather than loaded: importing it defines
-// custom elements, needing a DOM this node-side suite has no reason to boot. It
-// cannot be `vi.mock`ed — the copies load by native `import()` from outside the
-// project root, which never reaches vitest's module registry.
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -39,9 +21,6 @@ interface PhotosAsset {
   [key: string]: unknown;
 }
 
-// The loaded modules' surfaces, declared locally: a `typeof import(...)` of an
-// app file would pull `apps/` into this package's `src`-rooted program (the
-// same reason photos-library-store.test.ts declares its own `Store`).
 interface AssetKeyModule {
   assetKey: (asset: { asset_id: string; scope_id?: string | null }) => string;
   assetRefKey: (scopeId: string | null | undefined, assetId: string) => string;
@@ -107,9 +86,6 @@ copyFileSync(
   path.resolve(PHOTOS, "../_shared/selection-engine.ts"),
   path.join(root, "_shared/selection-engine.ts")
 );
-// The format kit is copied too (`format.ts` re-exports its custody table,
-// #883); its one package import is rewritten onto the same element stub,
-// because the temp root has no `node_modules` to walk.
 writeFileSync(
   path.join(root, "_shared/format-kit.ts"),
   readFileSync(
@@ -118,8 +94,6 @@ writeFileSync(
   ).replaceAll('"@centraid/design"', '"../photos/elements-stub.ts"')
 );
 
-// The element surface these two modules actually touch. `format.ts` wants two
-// formatting helpers; `selection-actions.ts` wants `statusLine`.
 writeFileSync(
   path.join(dir, "elements-stub.ts"),
   `export const fmtBytes = (n: number): string => String(n);
@@ -129,8 +103,6 @@ export const statusLine = (): void => undefined;
 `
 );
 
-// The command boundary, recording instead of dispatching. Every assertion below
-// is about WHAT the real batch code asked for and IN WHICH SCOPE.
 writeFileSync(
   path.join(dir, "outcomes.ts"),
   `const sink = globalThis as unknown as { __photosActs: unknown[] };
@@ -158,7 +130,6 @@ const { runBatchDelete, runBatchRestore } = await load<SelectionActionsModule>(
 const acts = (globalThis as unknown as { __photosActs: ActCall[] })
   .__photosActs;
 describe("photos-asset-key suite", () => {
-  /** THE collision: one id, two scopes, two entirely different photos. */
   const COLLIDING = "asset-1";
   const ownRow: PhotosAsset = {
     asset_id: COLLIDING,

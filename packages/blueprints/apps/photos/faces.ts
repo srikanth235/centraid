@@ -1,9 +1,3 @@
-// Faces (#299, #711): the propose-and-confirm loop over media.face_region for
-// the ONE open photograph; the vault-wide surface is components/FaceReview.tsx.
-// TWO RULES: confidence is a MATCH COUNT, never a percentage; and ONE face at
-// a time, its index on the host (`data-face-index`) so it survives the
-// re-render this function calls on itself. Not ../triage-session.ts: no
-// frozen denominator here. Imperative builder — React reconciles nothing.
 import { act, narrate } from "./outcomes.ts";
 
 interface FaceRegion {
@@ -62,7 +56,6 @@ export async function renderFaces(
     return; // face queries never break the lightbox
   }
   const regions = data?.regions ?? [];
-  // Cleared before the empty bail-out, so the LAST region leaves nothing.
   host.replaceChildren();
   if (regions.length === 0 || data?.denied) return;
   const confirmedCount = regions.filter((r) => r.confirmed).length;
@@ -84,7 +77,6 @@ export async function renderFaces(
     host.appendChild(row);
   }
   if (unconfirmed.length === 0) return;
-  // A NEW photograph starts at the head, never inheriting Skip's index.
   if (host.dataset.faceAsset !== assetId) {
     host.dataset.faceIndex = "0";
     host.dataset.faceAsset = assetId;
@@ -118,8 +110,6 @@ export async function renderFaces(
     if (region.party_id === person.party_id) option.selected = true;
     picker.appendChild(option);
   }
-  // ONE VERB, THREE ANSWERS (#712): a face answered here is answered
-  // everywhere.
   const answerHere = async (
     answer: "confirm" | "reject" | "dismiss",
     partyId?: string

@@ -1,7 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** Delete is removal, not a cancelled status — the confirm already promised
- *  the Logbook keeps nothing. */
 export default async function deleteTask({
   body,
   ctx,

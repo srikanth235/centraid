@@ -1,14 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit — the app's whole orchestration is one React tree by design (#505/#834).
-// Notes — the query-free React tree (#505, rebuilt for #834).
-//
-// This file decides WHICH screen; each screen decides what it looks like
-// (`components/*`). It holds the mutable state bag, the library read, the
-// route switch and the three frame contributions — the app bar, the compact
-// band and the one status line — and it draws nothing itself.
-//
-// The shell's `InlineAppModule` descriptor (`app-inline.tsx`) imports `Root`
-// and `CHANGE_TABLES` from here and adds the query wiring; there is
-// deliberately no parallel served entry point.
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 
@@ -95,9 +85,6 @@ import {
 
 import styles from "./Chrome.module.css";
 
-/** The vault entities this app's queries read — the shell's change filter.
- *  The concept scheme joins the list with the Journal place: its marker is a
- *  concept in a scheme, so a change there changes what Journal holds. */
 export const CHANGE_TABLES = [
   "knowledge.note",
   "core.content_item",
@@ -126,8 +113,6 @@ interface JournalResult {
   vaultDenied?: { message?: string } | null;
 }
 
-/** The default arrangement comes from the app's own knob; `masonry` is the
- *  knob's word for the card wall. */
 function initialView(rootEl: HTMLElement | null): AppState["view"] {
   return rootEl?.dataset.appDefaultView === "list" ? "list" : "cards";
 }
@@ -165,8 +150,6 @@ interface Core {
   refreshJournal: () => Promise<void>;
 }
 
-/** What a confirm is standing over. Both confirms are the same component
- *  and the same dialog; only the subject differs. */
 type ConfirmTarget =
   | { kind: "note"; note: Note }
   | { kind: "notebook"; book: Notebook; notes: number }
@@ -183,9 +166,6 @@ export function Root({
   const [consent, setConsent] = useState<{ message: string } | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [confirming, setConfirming] = useState<ConfirmTarget>(null);
-  // A read that actually came back FAILED — the only evidence this app has
-  // for "the gateway is out of reach". A replica that answered but lagged is
-  // the STALE state, which is a different sentence.
   const [readFailedState, setReadFailedState] = useState(false);
 
   const rootElRef = useRef<HTMLDivElement | null>(null);
@@ -235,9 +215,6 @@ export function Root({
         bump();
         return;
       }
-      // Mutated in place — logic.ts closed over this exact object at boot.
-      // The library window has no body; keep the one the editor already holds
-      // so Pin / tag / attach cannot refresh it into an empty overwrite.
       data.notes = carryLoadedBodies(data.notes, next?.notes ?? []);
       data.trash = carryLoadedBodies(data.trash, next?.trash ?? []);
       data.notebooks = next?.notebooks ?? [];
@@ -253,8 +230,6 @@ export function Root({
           query: "journal",
           input: { limit: state.libraryWindow },
         });
-        // The Journal place answers for itself: a denial here darkens Journal
-        // and nothing else, because no other route reads this query.
         data.journal = answer?.vaultDenied
           ? []
           : carryLoadedBodies(data.journal, answer?.entries ?? []);
@@ -300,19 +275,10 @@ export function Root({
     [rootRef]
   );
 
-  /** Every navigation inside Notes clears what was open over it, and leaves
-   *  the query behind on the route it belonged to. */
   const go = useCallback(
     (shelf: ShelfId) => {
-      // Leaving the editor must flush the keyed debounce — Library is still
-      // the same app-root, so the unmount flush never runs, and a vault read
-      // of `library` would see "Untitled note" while the card already shows
-      // the typed title from in-memory state (#865 desktop e2e).
       if (state.shelf === NOTE && shelf !== NOTE) void logic.flushSave();
       if (shelf !== SEARCH && state.search) logic.clearSearch();
-      // Reaching Search FROM a notebook is what gives the scope pair its
-      // second option; reaching it from anywhere else leaves Everywhere as
-      // the only honest answer.
       if (shelf === SEARCH) {
         state.scopeNotebookId = notebookIdFrom(state.shelf);
         if (!state.scopeNotebookId) state.searchScope = "everywhere";
@@ -338,7 +304,6 @@ export function Root({
     void logic.createNote();
   }, [logic]);
 
-  // ──── mount wiring: the doorbell, focus, width and the keyboard map ────
   useEffect(() => {
     const stopDoorbell = onDataChange(CHANGE_TABLES, () => void core.refresh());
     const stopFocus = onFocusRefresh(() => void core.refresh());
@@ -370,7 +335,6 @@ export function Root({
         setConfirming(null);
         return;
       }
-      // `/` reaches Search, but never out of a field the member is typing in.
       const target = event.target as HTMLElement | null;
       const typing =
         target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
@@ -398,8 +362,6 @@ export function Root({
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
   }, []);
 
-  // ──── derive the render ────
-
   const shelf = state.shelf;
   const openNotebookId = notebookIdFrom(shelf);
   const openNotebookName = openNotebookId
@@ -423,8 +385,6 @@ export function Root({
     [logic]
   );
 
-  /** The powerbox, from the `[[` sigil and from the bar's filled Link — one
-   *  sheet, two doors, and the same anchor in both. */
   const openPowerbox = useCallback(
     (
       anchor: {
@@ -469,8 +429,6 @@ export function Root({
     [logic, state]
   );
 
-  // A body edit is debounced INSIDE logic; the draft is the row itself, so
-  // the editor paints from the same object the library does.
   const onEdit = useCallback(
     (patch: { title?: string; body_text?: string }) => {
       const noteId = state.noteId;
@@ -497,8 +455,6 @@ export function Root({
     state.libraryWindow = Math.min(2000, state.libraryWindow * 2);
     void core.refresh();
   }, [core, state]);
-
-  // ──── the route switch ────
 
   let routeBody: ReactNode;
   if (!loaded) {
@@ -564,8 +520,6 @@ export function Root({
       />
     );
   } else if (shelf === CAPTURE) {
-    // The origin acts belong to the phone. This seat states that rather than
-    // drawing a camera button that cannot open one.
     routeBody = <CaptureRoute />;
   } else if (shelf === VOICE) {
     routeBody = <VoiceRoute />;
@@ -625,9 +579,6 @@ export function Root({
     );
   }
 
-  // The Search route is the row set under a field, with the shared four-state
-  // scaffold above it — the same module Docs and Photos render, so two apps
-  // do not grow two grammars for "nothing matches".
   const scroll = (
     <>
       {/* OFFLINE IS READ, NEVER INVENTED: the host stamps its own answer on
@@ -732,9 +683,6 @@ export function Root({
     ) : null;
 
   const toolbar = showsViewToggle(shelf) ? (
-    // The pair sits inside the chrome's own `role="toolbar"`, which is where
-    // the row is named; a second group label here would announce the same
-    // furniture twice.
     <div>
       <button
         type="button"
@@ -810,8 +758,6 @@ export function Root({
     </>
   );
 
-  // ──── what Notes contributes to the FRAME ────
-
   const barCountValue =
     shelf === NOTE || shelf === CAPTURE || shelf === VOICE ? null : rows.length;
   const onPrimary = useCallback(() => {
@@ -841,8 +787,6 @@ export function Root({
     onPrimary,
   ]);
 
-  // The status line, per route. Three sentences and no fourth: what the
-  // editor promises, what the chain promises, and what is still queued.
   useEffect(() => {
     if (state.queued > 0) {
       publishOutcome(frame, { text: pendingStatus(state.queued) });
@@ -881,8 +825,6 @@ export function Root({
   }, [frame]);
 
   return (
-    // Fill the app pane so the chrome gets real width — otherwise it collapses
-    // to content width and the width observer wrongly reads a phone.
     <div
       ref={setRoot}
       style={{
@@ -901,9 +843,6 @@ export function Root({
           rail,
           scroll,
           overlays,
-          // The band's sixth slot, drawn by the ONE shared sheet (#883 B9).
-          // Only a PLACE is in the band; Capture, Voice, Tags, Trash and
-          // Version history are acts, so they live here.
           moreSheet: moreOpen ? (
             <MoreSheet
               label="More in Notes"

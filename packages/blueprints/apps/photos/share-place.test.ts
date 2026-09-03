@@ -1,17 +1,3 @@
-// The share-time place choice (#816).
-//
-// Two claims live here. The first is ordinary: the option list is what a sheet
-// should show, and the default is the safe rung. The second is the one this
-// wave exists for — NOTHING this module can emit, for any input, at any
-// precision, is a phrase relative to a place the member named. The relative
-// rung is what turns "3.5 km NE of Home" into a bearing and a distance to
-// where somebody lives, and a copy of a photograph is read by somebody else.
-//
-// The suppression is proved twice over: once by asserting the private ladder
-// WOULD have said it for the same input (so the test would fail if the ladder
-// stopped producing relative phrases and the assertion became vacuous), and
-// once as a property over every option and message the module can produce.
-
 import { describe, expect, it } from "vitest";
 
 import { PLACE_NO_NAME, placePhrase, relativePhrase } from "./place-phrase.ts";
@@ -35,7 +21,6 @@ const HOME: NamedPlace = {
   isHome: true,
 };
 
-/** A coordinate a few kilometres from Home, with nothing named at it. */
 const UP_THE_VALLEY: SharePlaceInput = {
   lat: 37.4635,
   lng: -122.1145,
@@ -44,22 +29,18 @@ const UP_THE_VALLEY: SharePlaceInput = {
 
 const PRECISIONS: readonly SharePlacePrecision[] = ["none", "name", "exact"];
 
-/** Every shape of input a share can be asked about. */
 const INPUTS: readonly SharePlaceInput[] = [
   {},
   UP_THE_VALLEY,
   { ...UP_THE_VALLEY, placeName: "Emerald Bay" },
   { ...UP_THE_VALLEY, gazetteerName: "Truckee, CA" },
-  // A place still labelled with the digits it was minted from.
   { ...UP_THE_VALLEY, placeName: "37.46350, -122.11450" },
   { lat: 37.4419, lng: -122.143, namedPlaces: [HOME] },
   { lat: Number.NaN, lng: Number.NaN, namedPlaces: [HOME] },
 ];
 
-/** "3.5 km NE of Home", in the shape rather than the wording. */
 const RELATIVE_SHAPE = /\d\s?(?:m|km)\s(?:N|NE|E|SE|S|SW|W|NW)\sof\s/u;
 
-/** Every string this module would put in front of, or send with, a member. */
 function everySentence(input: SharePlaceInput): string[] {
   return [
     ...sharePlaceOptions(input).flatMap((option) => [
@@ -85,8 +66,6 @@ describe("the choice a member is offered", () => {
         (option) => option.precision
       )
     ).toStrictEqual(["none", "name", "exact"]);
-    // Nothing named, no gazetteer: the ladder's only answer is the fallback
-    // sentence, which is not worth sending anybody.
     expect(
       sharePlaceOptions(UP_THE_VALLEY).map((option) => option.precision)
     ).toStrictEqual(["none", "exact"]);
@@ -122,10 +101,6 @@ describe("the choice a member is offered", () => {
 
 describe("the Home-relative rung never leaves the device", () => {
   it("is exactly what the member's own screen would have said", () => {
-    // The assertion below is only meaningful while the private ladder still
-    // produces this phrase for this input. Stated here so a change that
-    // retires the rung fails loudly rather than quietly making the
-    // suppression test pass for the wrong reason.
     expect(relativePhrase(UP_THE_VALLEY.lat!, UP_THE_VALLEY.lng!, [HOME])).toBe(
       "3.5 km NE of Home"
     );

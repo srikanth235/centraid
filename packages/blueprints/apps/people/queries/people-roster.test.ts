@@ -1,4 +1,3 @@
-// The roster window must not drop people with no notice.
 import { describe, expect, it, vi } from "vitest";
 
 import { STATUS } from "../people-copy.ts";

@@ -1,8 +1,3 @@
-// The Storage screen's custody arithmetic (#711) — DOM-free, exactly as
-// the model is. Two things are being pinned here: that the totals are sums of
-// the buckets the gateway wrote and nothing else, and that a free-up offer is
-// gated on PROVEN custody, never on a plausible-looking number.
-
 import { describe, expect, it } from "vitest";
 
 import type { StorageBucket, StorageRollup } from "./queries/storage.ts";
@@ -47,8 +42,6 @@ describe("folding every scope's rollup into one set of facts", () => {
   });
 
   it("keeps the local-tier buckets OUT of the library total", () => {
-    // freeable/local-unproven describe the same originals from the disk's side.
-    // Folding them in would count every photograph twice.
     const facts = custodyFacts([
       {
         label: "Library",
@@ -161,8 +154,6 @@ describe("free-up safety: only PROVEN bytes may be offered", () => {
   const at = "2026-08-04T09:00:00.000Z";
 
   it("offers nothing when no byte has a proven copy elsewhere", () => {
-    // The disk is full of originals; not one of them is provably held
-    // elsewhere, so there is no offer at any size.
     const facts = custodyFacts([
       {
         label: "L",
@@ -193,7 +184,6 @@ describe("free-up safety: only PROVEN bytes may be offered", () => {
       count: 1412,
       bytes: 96_400_000_000,
     });
-    // The 41 unproven originals are reported, but they are NOT in the offer.
     expect(facts.unproven.count).toBe(41);
   });
 

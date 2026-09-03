@@ -1,5 +1,3 @@
-// Multi-scope write target (#599). "All" is a reading lens, never a writing
-// one. Reason strings must not contain "vault".
 import type { InlineScope } from "../inline-types.ts";
 
 export type WriteTarget =

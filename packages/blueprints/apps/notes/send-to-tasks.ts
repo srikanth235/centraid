@@ -1,5 +1,3 @@
-// Send to Tasks (#834): parsing only; the write is the action handler.
-
 import { MONTHS as MONTHS_PRINTED } from "../_shared/format-kit.ts";
 import { sentToTasks } from "./view-copy.ts";
 
@@ -14,8 +12,6 @@ const WEEKDAYS = [
   "friday",
   "saturday",
 ];
-// Alternation DERIVED from the printed list (#883 B4): a second hand-kept copy
-// is a second chance to misspell a month.
 const MONTHS = MONTHS_PRINTED.map((month) => month.toLowerCase());
 const WEEKDAY_RE = new RegExp(`\\b(?<day>${WEEKDAYS.join("|")})\\b`, "iu");
 const MONTH_DAY_RE = new RegExp(
@@ -37,8 +33,6 @@ function shift(from: Date, days: number): Date {
   return new Date(from.getFullYear(), from.getMonth(), from.getDate() + days);
 }
 
-/** Date-only: an invented moment lands a reminder at midnight. Weekdays
- *  resolve FORWARD — "Friday" on a Friday means today. */
 export function dateFromLine(text: string, now: Date): string | null {
   const iso = ISO.exec(text)?.groups?.["iso"];
   if (iso) return iso;
@@ -61,7 +55,6 @@ export function dateFromLine(text: string, now: Date): string | null {
     const day = Number(monthDay["day"] ?? monthDay["day2"]);
     if (month >= 0 && day >= 1 && day <= 31) {
       const thisYear = new Date(now.getFullYear(), month, day);
-      // A month already behind means next year.
       const year =
         dayKey(thisYear) < dayKey(now)
           ? now.getFullYear() + 1
@@ -72,7 +65,6 @@ export function dateFromLine(text: string, now: Date): string | null {
   return null;
 }
 
-/** Two cases earn the control: a line naming a day, or one on `[[…]]`. */
 export function wantsDate(line: { text: string; checked: boolean }): boolean {
   if (line.checked) return false;
   const text = line.text.trim();
@@ -82,7 +74,6 @@ export function wantsDate(line: { text: string; checked: boolean }): boolean {
 
 export interface SendToTasksPayload {
   title: string;
-  /** Absent unless the line carried one; undated never touches Today. */
   due_at?: string;
   note_id: string;
   line: number;

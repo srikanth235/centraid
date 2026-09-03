@@ -1,16 +1,3 @@
-// @vitest-environment jsdom
-// THE PLACES SHELF'S TRAILING "NO LOCATION" SECTION (#816).
-//
-// The photographs nobody told where they were taken were in the library and on
-// no shelf: every section on Places stands for a place, so the set was reachable
-// only by scrolling the whole timeline. It is a section now — and the three
-// things worth pinning are that it renders with a name of its OWN (not the
-// located-but-unnamed fallback, which is a different fact), that it carries the
-// dom id a search hit scrolls to, and that the map above the sections draws no
-// pin for it, because it has no coordinate to draw one at.
-//
-// A pure-view test in the technique `People.test.tsx` uses: the shelf holds no
-// state this exercises, so `renderToStaticMarkup` over its props is enough.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -59,8 +46,6 @@ describe("the no-location section", () => {
   });
 
   it("carries the dom id a search hit scrolls to", () => {
-    // `search-groups.ts` hands back `key: "no-location"` with `targetShelf`
-    // PLACES; `sectionDomId` is the other half of that handshake.
     expect(markup(ROLL)).toContain(`id="place-${NO_LOCATION_KEY}"`);
   });
 
@@ -75,3 +60,4 @@ describe("the no-location section", () => {
     expect(markup([ROLL[0]!])).not.toContain("No location yet");
   });
 });
+// @vitest-environment jsdom

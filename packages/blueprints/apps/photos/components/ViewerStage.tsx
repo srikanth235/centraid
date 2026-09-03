@@ -1,7 +1,3 @@
-// The stage (v4 §7.1). FIT: aspect-ratio from the RECORD, preferred width
-// `targetHeight × ratio`, `max-width/max-height: 100%`. Zoomed, maxima come
-// off and the wrap clips. Prev/next use `inset-inline-*` so RTL needs no
-// second rule.
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
@@ -36,8 +32,6 @@ function useStageHeight(): [(el: HTMLDivElement | null) => void, number] {
   const ref = useCallback((el: HTMLDivElement | null) => {
     observer.current?.disconnect();
     if (!el) return;
-    // jsdom has no ResizeObserver: never measure; the two maxima are the
-    // correct fit there rather than a thrown error.
     if (typeof ResizeObserver !== "function") return;
     observer.current = new ResizeObserver((entries) => {
       setHeight(entries[0]?.contentRect.height ?? 0);
@@ -56,10 +50,6 @@ interface Zoom {
 }
 const FIT_ZOOM: Zoom = { scale: FIT, x: 0, y: 0 };
 
-/**
- * Every branch stamps the scope its bytes live in (#599): the viewer steps
- * a merged list, and content ids are per-scope.
- */
 function Media({
   asset,
   zoom,
@@ -72,14 +62,11 @@ function Media({
   onDims: (w: number, h: number) => void;
 }) {
   const scope = scopeAttr(asset.scope_id);
-  // Remounted per asset (`key={asset.asset_id}` in Lightbox) — no stale-true.
   const [painted, setPainted] = useState(false);
   const contentSrc = safeMediaUrl(asset.content_uri);
   const posterSrc = safeMediaUrl(asset.poster_uri);
   const ratio = assetRatio(asset);
   const zoomed = isZoomed(zoom.scale);
-  // Preference only after the wrap is measured. Before that the two maxima
-  // are a correct fit — nothing reflows when the measurement lands.
   const box = {
     aspectRatio: String(ratio),
     ...(stageHeight > 0 && !zoomed
@@ -170,7 +157,6 @@ function Media({
       </>
     );
   }
-  // No paintable source. The box is still the right box (§14).
   return (
     <div className={styles.absent} style={box}>
       <span className={styles.absentLine}>on the gateway</span>
@@ -234,7 +220,6 @@ function VideoKindLabel({ asset }: { asset: Asset }) {
   return <span className={styles.transportKind}>{videoKindLabel(asset)}</span>;
 }
 
-/** Live photo / audio only. Do not overlay a hand-rolled transport on `<video controls>`. */
 export function Transport({ asset }: { asset: Asset }) {
   const kind = transportKind(asset);
   if (!kind || kind === "video") return null;
@@ -260,7 +245,6 @@ export function Transport({ asset }: { asset: Asset }) {
   );
 }
 
-/** Verb is an inline text action — never a button that starts a metered download on its own. */
 export function StageStatus({
   status,
   onAction,
@@ -305,8 +289,6 @@ export function ViewerStage({
   const [wrapRef, stageHeight] = useStageHeight();
   const [zoom, setZoom] = useState<Zoom>(FIT_ZOOM);
   const drag = useRef<{ x: number; y: number } | null>(null);
-  // Reset during the render that first sees a new asset_id, not an effect —
-  // the incoming photograph must not paint a frame at the outgoing zoom.
   const [zoomFor, setZoomFor] = useState(asset.asset_id);
   if (zoomFor !== asset.asset_id) {
     setZoomFor(asset.asset_id);

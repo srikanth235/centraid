@@ -1,8 +1,5 @@
-// Justified-row timeline layout: pure, DOM-free.
 import type { Asset } from "./types.ts";
 
-/** The 2px seam, both axes. Packer and stylesheet must spend the same number
- *  (`--sp-gutter`) or the scrollbar drifts from the rows. */
 export const TIMELINE_GUTTER = 2;
 
 export const RUNG_LABELS = ["XS", "S", "M", "L"] as const;
@@ -22,7 +19,6 @@ export const RUNGS: readonly RungTargets[] = [
 
 export const DEFAULT_RUNG: Rung = 2;
 
-// Subtract before packing or rows slide under the rail; CSS reserves it too.
 export const RAIL_WIDTH = 14;
 
 export function rungHeight(
@@ -33,10 +29,8 @@ export function rungHeight(
 }
 
 export const ZOOM_LEVELS: readonly number[] = RUNGS.map((r) => r.desktop);
-// `number`, not `Rung`: callers walk it by ±1.
 export const DEFAULT_ZOOM: number = 2;
 
-// Deliberately not the repo's 720px default.
 export const BREAKPOINT = 860;
 const SIDEBAR_WIDTH = 250;
 const PANE_PADDING = 44;

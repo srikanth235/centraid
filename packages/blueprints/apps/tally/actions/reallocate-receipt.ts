@@ -1,6 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** tally.reallocate_receipt — contract in app.json. */
 const KEYS = ["expense_id", "line_items", "splits"];
 export default async function reallocateReceipt({ body, ctx }: HandlerArgs) {
   const input = actionInput(body);

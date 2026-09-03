@@ -1,6 +1,3 @@
-// Quick add's projection (§3). The When chips are the only place a date is
-// derived from a word, so this suite pins each one against a known Friday —
-// and pins that the field itself never contributes one.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -13,7 +10,6 @@ import {
 } from "./quick-add.ts";
 import { GROUPS } from "./view-copy.ts";
 
-// A Friday, so "this weekend" is still ahead and "next week" clears it.
 const FRIDAY = "2026-08-28T09:00:00Z";
 const SATURDAY = "2026-08-29T09:00:00Z";
 const SUNDAY = "2026-08-30T09:00:00Z";

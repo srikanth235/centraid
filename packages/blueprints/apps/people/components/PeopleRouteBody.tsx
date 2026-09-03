@@ -1,5 +1,3 @@
-// Which People shelf draws which screen. `app-root.tsx` owns the bags and
-// the handlers; this file is the shelf → route map only.
 import type { ReactNode } from "react";
 
 import { EDIT, LOG, MERGE, PERSON, SEARCH, TOUCH, TRASH } from "../shelves.ts";

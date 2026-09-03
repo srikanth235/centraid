@@ -1,6 +1,3 @@
-// Over the registry and the door, so the claims hold for every surface, not
-// just the one `GrantSheet.test.tsx` draws (#883, V-registry).
-
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -23,7 +20,6 @@ const { GRANT_FAILED } = (await import(
   moduleUrl("grant-copy.ts")
 )) as typeof import("../apps/_shared/grant-copy.ts");
 
-/** The vault's words (`unregisteredVerbCopy`), not this file's. */
 const ROUTE_REFUSAL =
   "core.document can be shared for view, not for edit; nothing here could keep that promise true";
 
@@ -40,7 +36,6 @@ function refusingDoor(message: string) {
 
 describe("the registry's refusal", () => {
   it("offers nothing for a subject the wire did not name", () => {
-    // The registry answer is the ONLY source of verbs: a Locker secret has none.
     const offers = [
       { subjectType: "core.document", capabilities: ["view"] as const },
     ];
@@ -50,7 +45,6 @@ describe("the registry's refusal", () => {
   });
 
   it("names no first-party subject the placement registry cannot share", () => {
-    // V-registry: an exclusion is a type-level absence, never a row saying no.
     for (const entity of PLACEMENT_REGISTRY) {
       expect(entity.itemType).not.toBe("locker.item");
     }
@@ -69,7 +63,6 @@ describe("the registry's refusal", () => {
       message: ROUTE_REFUSAL,
       reach: "refused",
     });
-    // The seat's own sentence is the LAST resort: only where no words came.
     const wordless = await refusingDoor("").create({
       audienceKind: "party",
       audienceId: "p1",

@@ -1,19 +1,3 @@
-// @vitest-environment jsdom
-// The Duplicates shelf's member-facing copy and cluster header (#711
-// review, v4 handoff proto :4437-:4439):
-//
-//   1. NO ISSUE ID EVER REACHES A MEMBER. A lede printing "(#352)" is
-//      an implementation detail, not something a member reads.
-//      Sabotage-verified below: re-adding any
-//      `#<digits>` to the shelf's rendered copy fails this file.
-//   2. EACH CLUSTER IS LABELLED, not one undifferentiated paragraph per row:
-//      an ordinal, a count, and an honestly-derived "why we think so" meta —
-//      the time window and the per-copy size — omitted rather than invented
-//      when the rows do not carry the fact.
-//
-// Rendered to static markup, like every other pure-view fixture in this
-// package (photos-shelves-v4.test.ts): these are pure views over props, so
-// the markup IS the behaviour.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -153,3 +137,4 @@ describe("each cluster is its own labelled header", () => {
     expect(html).not.toContain("each");
   });
 });
+// @vitest-environment jsdom

@@ -7,7 +7,6 @@ export function OfflineBanner({ onRetry }: { onRetry: () => void }) {
     <section
       className={styles.banner}
       aria-label={OFFLINE_COPY.label}
-      // polite, not assertive: an unreachable gateway is not an interruption.
       aria-live="polite"
     >
       <p className={styles.body}>{OFFLINE_COPY.banner}</p>

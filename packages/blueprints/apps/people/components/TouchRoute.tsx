@@ -1,5 +1,3 @@
-// Touch (v12 handoff § Screens 2): tiles + three lists off one `dashboard`
-// query. NOTHING HERE TOGGLES A REMINDER — that lives on the person screen.
 import type { ReactNode } from "react";
 
 import { LoadingSkeleton } from "../../_shared/LoadingSkeleton.tsx";
@@ -25,8 +23,6 @@ import { CountTiles, Row, Section, SkeletonBlock, Verb } from "./Shared.tsx";
 
 export function TouchRoute(props: TouchRouteProps): ReactNode {
   const dashboard = props.dashboard;
-  // Null dashboard is a pending read, not an empty member (`view-state-kit`);
-  // same gate as `loading`.
   if (props.loading || !dashboard) {
     return (
       <SkeletonBlock>
@@ -35,9 +31,6 @@ export function TouchRoute(props: TouchRouteProps): ReactNode {
     );
   }
 
-  // Handoff tiles while the sharing plane answers (Starred has a roster chip);
-  // roster-answerable tiles once linked/to_link land — a denied read must not
-  // render as a 0 count.
   const counts = dashboard.counts;
   const linked = counts.linked;
   const toLink = counts.to_link;

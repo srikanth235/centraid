@@ -1,10 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/**
- * Pin a file to an event through core.attach. Bytes arrive either staged
- * (#296: streamed to /_vault/blobs, claimed here by sha) or as a small inline
- * data: URI; the vault dedupes them into one canonical content item.
- */
 export default async function attachHandler({
   body,
   ctx,

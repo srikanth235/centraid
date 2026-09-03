@@ -1,5 +1,3 @@
-// The ceremony-free Commons destination model (#731): a roster of people,
-// never another vault.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 

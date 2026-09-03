@@ -1,8 +1,3 @@
-// The slideshow (v4 handoff §7.3) — a mode DISTINCT FROM THE VIEWER: no
-// filmstrip, info panel or action bar; one transport, determinate position,
-// and a status line saying stopping keeps your place. Same STAGE tokens.
-// Videos are skipped (no reliable end signal; autoplay needs a mute
-// decision this app does not make) — open them to play them.
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { scopeAttr } from "../../_shared/scope-kit.ts";
@@ -30,7 +25,6 @@ export function SlideshowView({
 }: {
   list: Asset[];
   startAssetId: string | null;
-  /** Carries the photograph the run stopped on, so the viewer reopens there (§7.3). */
   onClose: (stoppedOn: Asset | null) => void;
 }) {
   const photos = list.filter(
@@ -54,14 +48,11 @@ export function SlideshowView({
     [photos.length]
   );
 
-  // Escape and Exit close through here, reading the CURRENT index off the
-  // closing render.
   const leave = useCallback(
     () => onClose(photos[idx] ?? null),
     [onClose, photos, idx]
   );
 
-  // Re-arms the 4s clock on every idx/paused change.
   useEffect(() => {
     if (paused || photos.length <= 1) return undefined;
     timerRef.current = setTimeout(() => step(1), ADVANCE_MS);
@@ -112,7 +103,6 @@ export function SlideshowView({
           style={{ aspectRatio: String(assetRatio(asset)) }}
           src={src ?? undefined}
           alt={displayText(asset.title ?? "Photograph")}
-          /* Consecutive slides can come from different scopes (#599). */
           data-scope={scopeAttr(asset.scope_id)}
         />
       </div>

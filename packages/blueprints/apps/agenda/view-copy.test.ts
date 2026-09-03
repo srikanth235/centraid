@@ -1,12 +1,3 @@
-// Copy integrity: the house rules this app's strings live under, asserted on
-// the table itself rather than on a rendered screen.
-//
-// The repo-wide ratchet (`tests/quality/user-facing-qualities.test.ts`) walks
-// every literal in the product; this suite is the app's own copy of the same
-// rules pointed at the one module that is meant to hold all of Agenda's
-// strings — so a violation fails beside the table rather than in a repo-wide
-// sweep somebody else is running.
-
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -18,13 +9,11 @@ import * as copy from "./view-copy.ts";
 const BANNED =
   /\b(?:please|successfully|simply|in order to|you can|we're sorry)\b/iu;
 
-/** Two or more sentences: an internal boundary plus a terminated tail. */
 function sentenceCount(text: string): number {
   const inner = text.match(/[.!?…](?=\s+["'(]?\p{Lu})/gu)?.length ?? 0;
   return inner + (/[.!?…]["')]?\s*$/u.test(text) ? 1 : 0);
 }
 
-/** Every plain string this module exports, flattened out of its tables. */
 function strings(): string[] {
   const out: string[] = [];
   const walk = (value: unknown): void => {
@@ -55,9 +44,6 @@ describe("Agenda's copy", () => {
 
   it("names all five views and counts each of them in its own noun", () => {
     const views: ViewKind[] = ["month", "week", "day", "schedule", "waiting"];
-    // Asserting the values, not their truthiness: a label is the word the
-    // switcher segment shows and a unit is the noun the app-bar count is
-    // spoken in, so an empty string is as wrong as a missing key.
     expect(Object.keys(copy.VIEW_LABELS).toSorted()).toStrictEqual(
       views.toSorted()
     );
@@ -92,10 +78,6 @@ describe("Agenda's copy", () => {
 });
 
 describe("no raw recurrence rule reaches a surface", () => {
-  // The repeat picker carries RRULE fragments as VALUES on their way to the
-  // vault. What must never happen is one of them being rendered — so the check
-  // is that every choice's LABEL is words, and that no component prints a
-  // rule.
   it("names every repeat choice in words", () => {
     for (const choice of copy.REPEAT_CHOICES) {
       expect(choice.label, choice.rrule).not.toContain("FREQ=");

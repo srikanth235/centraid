@@ -11,8 +11,6 @@ export interface ExportRead {
   save: () => void;
 }
 
-/** LOCAL calendar parts, never an ISO slice: a slice names yesterday's month
- *  off UTC. */
 export function rangeSince(
   range: string,
   now: Date = new Date()
@@ -21,7 +19,6 @@ export function rangeSince(
   if (range === "year") return `${year}-01-01`;
   if (range === "month")
     return `${year}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-  // An unrecognised chip must not narrow the ledger.
   return null;
 }
 
@@ -33,7 +30,6 @@ export function useExportRead(args: {
   say: (text: string) => void;
 }): ExportRead {
   const { shelf, groupId, range, format, say } = args;
-  // Payload and ask as ONE value: two states mismatch rows and name.
   const [held, setHeld] = useState<{
     forGroup: string;
     forRange: string;
@@ -51,7 +47,6 @@ export function useExportRead(args: {
       try {
         data = await window.centraid.read<ExportData>({
           query: "export",
-          // Omitted, not null — an absent bound is not a bound of nothing.
           input: { group_id: wanted, ...(since === null ? {} : { since }) },
         });
       } catch {

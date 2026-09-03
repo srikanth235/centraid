@@ -1,11 +1,8 @@
-// Docs' shelf TABLES; structure lives in `_shared/shelves.ts`. THE ROUTE ID
-// IS `docs`, never `dx` — `docs` is the installed app and manifest id.
 import { createShelfRoutes, tokenFromShelf } from "../_shared/shelves.ts";
 import type { BandDestination, Shelf, ShelfId } from "../_shared/shelves.ts";
 
 export type { Shelf, ShelfId } from "../_shared/shelves.ts";
 
-// `built-in:` cannot collide with a folder id, which never carries a colon.
 export const FOLDERS = "built-in:folders";
 export const RECENT = "built-in:recent";
 export const STARRED = "built-in:starred";
@@ -30,7 +27,6 @@ export function folderIdFrom(id: ShelfId): string | null {
   return tokenFromShelf(FOLDER_PREFIX, id);
 }
 
-/** Search, Storage, Add and Scan are deliberately absent: not tabs. */
 export const DSHELVES: readonly Shelf[] = [
   { id: null, label: "All", segment: "" },
   { id: FOLDERS, label: "Folders", segment: "folders" },
@@ -54,7 +50,6 @@ const ROUTED: readonly Shelf[] = [
 
 const ALL_ID = "list";
 
-/** A CAP but no floor: never invent a tab. `grid` is a view of All. */
 export const BAND_DESTINATIONS: readonly BandDestination[] = [
   { id: ALL_ID, label: "All" },
   { id: "folders", label: "Folders" },
@@ -103,7 +98,6 @@ export function showsDrive(id: ShelfId): boolean {
   return id === null || !NON_DRIVE.has(id);
 }
 
-/** NOT `showsDrive`: Folders paints a set too. */
 export function showsViewToggle(id: ShelfId): boolean {
   return showsDrive(id) || id === FOLDERS;
 }

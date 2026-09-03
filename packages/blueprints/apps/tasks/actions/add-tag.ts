@@ -1,7 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** One Tags concept scheme is shared with every app tagging through
- *  core.tag_item. Idempotent: a label already on the task returns its edge. */
 export default async function addTag({
   body,
   ctx,

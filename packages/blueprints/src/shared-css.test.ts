@@ -5,9 +5,6 @@ import { describe, expect, it } from "vitest";
 
 const packageDir = path.resolve(import.meta.dirname, "..");
 const appDir = path.join(packageDir, "apps");
-// The system apps that currently DRAW something. Agenda, Notes and Tasks
-// returned here with their rebuilt chromes (#834); Tally returned with its
-// v17 rebuild (#872), a chrome that composes the shell like the rest.
 const systemApps = [
   "agenda",
   "docs",
@@ -19,10 +16,6 @@ const systemApps = [
   "tasks",
 ];
 
-/** Every bundled app on disk, drawing or not. The bans below are about what an
- *  app must NEVER carry, so they are asked of the directory listing rather
- *  than the curated list — an app with no chrome yet can still be caught
- *  reintroducing a served entrypoint. */
 const allApps = readdirSync(appDir, { withFileTypes: true })
   .filter((entry) => entry.isDirectory() && !entry.name.startsWith("_"))
   .map((entry) => entry.name);
@@ -56,11 +49,6 @@ describe("shared blueprint CSS", () => {
   });
 
   it("does not reintroduce retired global chrome selectors", () => {
-    // Scanned across each app's WHOLE source tree rather than one chrome file:
-    // these three chromes are free to put styling wherever the design asks, so
-    // a rule keyed to one file could quietly assert nothing. Reading the tree
-    // keeps the ban on these global selectors live wherever the styling ends
-    // up living.
     const retiredSelectors = {
       agenda: [".ag-shell", ".ag-side", ".ag-topbar"],
       notes: [".nt-side", ".nt-topbar", ".nt-hamburger"],
@@ -83,8 +71,6 @@ describe("shared blueprint CSS", () => {
         existsSync(path.join(appDir, app, "app.tsx")),
         `${app}/app.tsx`
       ).toBe(false);
-      // The main client compiles these apps; no bundled app carries a
-      // document the gateway could serve (#799).
       expect(
         existsSync(path.join(appDir, app, "index.html")),
         `${app}/index.html`
@@ -109,7 +95,6 @@ describe("shared blueprint CSS", () => {
 });
 
 describe("shared blueprint chrome", () => {
-  // #883 pins the shared frame chrome across all eight bundled apps.
   it.each(systemApps)("apps/%s draws its chrome from the shared kit", (app) => {
     const source = readFileSync(path.join(appDir, app, "Chrome.tsx"), "utf8");
     expect(source).toContain('from "../_shared/AppChrome.tsx"');
@@ -117,7 +102,6 @@ describe("shared blueprint chrome", () => {
   });
 });
 
-/** Every CSS and component source under one app, concatenated. */
 function appSource(root: string): string {
   return readdirSync(root, { withFileTypes: true })
     .flatMap((entry) => {

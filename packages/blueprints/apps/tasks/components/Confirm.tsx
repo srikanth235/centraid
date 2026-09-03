@@ -1,12 +1,3 @@
-// The two confirms (spec §3, §6) — one component, two tones.
-//
-// RELEASE IS NOT DESTRUCTION. "Won't do" moves a task to the Logbook with its
-// history intact, so its confirm takes the plain OUTLINED SECONDARY control.
-// Only Delete takes the outlined `net` control, and `net` is outlined and never
-// filled anywhere in this system.
-//
-// `_shared/KitModal.tsx` owns Escape, the focus trap, the inert background,
-// and returning focus to the control that opened it.
 import type { ReactNode } from "react";
 
 import { KitModal } from "../../_shared/KitModal.tsx";

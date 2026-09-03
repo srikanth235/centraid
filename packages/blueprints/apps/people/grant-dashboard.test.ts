@@ -1,8 +1,3 @@
-// The seat-agnostic half of the person screen's grant dashboard (#825, #880).
-//
-// One claim, four ways: a read that did not come back is never flattened into
-// "nothing is shared". The 404 is an answer, a refusal keeps the route's own
-// words, and a gateway nothing reached degrades to ABSENT (L-read).
 import { describe, expect, test } from "vitest";
 
 import {
@@ -26,7 +21,6 @@ function grant(overrides: Partial<GrantRecord> = {}): GrantRecord {
     grantedBy: "party-owner",
     maxSizeBytes: null,
     fulfillment: [],
-    // The vault's own words for where it stands (ruling V-phrases).
     phrase: "on its way",
     reason: "no vault has been addressed for it yet",
     ...overrides,
@@ -109,8 +103,6 @@ describe("reading one person's standing grants", () => {
   });
 
   test("a gateway nothing reached is absent, not refused and not empty", async () => {
-    // `unavailable` draws no count and no rows, so a phone off the network
-    // cannot read as "nothing is shared" or as a vault that said no.
     const state = await readPartyGrants(
       stubDoor({
         forParty: () =>

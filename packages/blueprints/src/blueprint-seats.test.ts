@@ -1,10 +1,3 @@
-/*
- * Checks docs/blueprint-seats.md S1/S2/S5. S1/S2: record-only apps never name
- * custody vocabulary nor import `kit/transfer` — a tripwire grep, not a proof.
- * S5: Locker alone is disabledOn ["viewer"]. Tally's byte-bearing EDGE (receipt
- * photos) lives here; app.json takes no comments.
- */
-
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -48,12 +41,10 @@ function sourceFiles(dir: string): string[] {
   return out;
 }
 
-// Record-only apps must never name these.
 const CUSTODY_TERMS = ["local-only", "remote-only", "backupState"] as const;
 const TRANSFER_IMPORT_RE = /kit\/transfer/u;
 
 describe("blueprint seats (docs/blueprint-seats.md S1/S2/S5)", () => {
-  // [law:custody-seat-exclusion] Record-only apps cannot import byte custody.
   const ids = appIds();
 
   it.each(ids.map((id) => [id] as const))(
@@ -70,7 +61,6 @@ describe("blueprint seats (docs/blueprint-seats.md S1/S2/S5)", () => {
 
   it("classes every app exactly as docs/blueprint-seats.md's north-star table", () => {
     const byId = Object.fromEntries(ids.map((id) => [id, readSeats(id)]));
-    // Doc table, id-for-id; fix whichever drifted, same PR.
     const expectedByteBearing: Record<string, boolean> = {
       photos: true,
       docs: true,
@@ -79,7 +69,6 @@ describe("blueprint seats (docs/blueprint-seats.md S1/S2/S5)", () => {
       tasks: false,
       people: false,
       locker: true,
-      // Byte-bearing at one edge only (`originActs: ["camera"]`).
       tally: false,
     };
     for (const [id, expected] of Object.entries(expectedByteBearing)) {

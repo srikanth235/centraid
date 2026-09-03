@@ -1,9 +1,3 @@
-/**
- * The action kit is the ONE implementation of the refusal taxonomy every
- * bundled write settles into, so these cases pin the WIRE bytes rather than
- * the object: `reason`/`code` are set unconditionally, and JSON drops an
- * undefined value, which is what a client actually receives.
- */
 import { describe, expect, it } from "vitest";
 
 import {

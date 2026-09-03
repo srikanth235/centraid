@@ -1,10 +1,3 @@
-// The receipt's reconciliation, stated as arithmetic.
-//
-// The FLOWS.md example is the fixture: six lines totalling £132.50 against an
-// expense of £132.50, with the owner's own part coming to £41.17. It is pinned
-// because the whole design of the surface rests on that sentence being true —
-// a mis-allocation has to be visible before saving, and a foot that computed
-// the wrong total would hide exactly the thing it exists to show.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -39,7 +32,6 @@ function line(
   };
 }
 
-/** FLOWS.md's own receipt: the dinner at the Ship. */
 const LINES: ReceiptLine[] = [
   line("l1", "Two mains", 3800, ["me", "tom"]),
   line("l2", "Fish, whole", 2900, ["ana"]),
@@ -51,9 +43,6 @@ const LINES: ReceiptLine[] = [
 
 describe("one line, split between the people on it", () => {
   it("splits evenly and, where it cannot, to the EARLIER party", () => {
-    // A line has no payer — four claims on a bottle are four equal claims —
-    // so position is the tie-break, exactly as the phone's capture flow
-    // resolves it. This is the one place Tally does NOT prefer the payer.
     expect(allocateLine(1000, PEOPLE)).toStrictEqual([
       { party_id: "me", share_minor: 334 },
       { party_id: "ana", share_minor: 333 },
@@ -99,7 +88,6 @@ describe("the foot states the arithmetic", () => {
   });
 
   it("folds the owner's own part out of the line allocations", () => {
-    // 1900 (mains) + 867 (wine) + 484 (sides) + 434 (service) = 3685.
     expect(folded.yoursMinor).toBe(3685);
   });
 
@@ -128,7 +116,6 @@ describe("the foot states the arithmetic", () => {
       participants: PEOPLE,
     });
     expect(stripped.unallocated).toBe(1);
-    // The LINES still total the expense; it is the shares that fall short.
     expect(stripped.lineTotalMinor).toBe(13_250);
     expect(
       stripped.shares.reduce((sum, share) => sum + share.share_minor, 0)

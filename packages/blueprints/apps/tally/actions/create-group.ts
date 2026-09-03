@@ -1,6 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** tally.create_group — contract in app.json. */
 const KEYS = ["name", "icon", "color", "member_ids"];
 export default async function createGroup({ body, ctx }: HandlerArgs) {
   const input = actionInput(body);

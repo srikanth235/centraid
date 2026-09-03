@@ -1,10 +1,3 @@
-// The web half of the DOWN-direction fetch gate (apps/_shared/download-on-demand.ts):
-// explicit act → fetch → object URL lifecycle, plus the "no fabricated
-// determinism" rule that keeps the no-spinner grammar honest.
-//
-// Loaded by file URL, same trick write-target.test.ts and docs-media.test.ts
-// use: the blueprint apps are browser ES modules outside this package's TS
-// program.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -73,7 +66,6 @@ describe("shouldStartFetch (the explicit-act guard)", () => {
   });
 });
 
-/** A response whose body streams `chunks`, with an optional Content-Length. */
 function fakeResponse(
   chunks: Uint8Array[],
   { ok = true, totalBytes }: { ok?: boolean; totalBytes?: number } = {}
@@ -295,7 +287,6 @@ describe("DownloadOnDemand", () => {
     dl.start(); // a fresh fetch, its own generation
     await vi.waitFor(() => expect(dl.state().phase).toBe("ready"));
 
-    // The slow response finally lands — it must not overwrite the fresh ready state.
     resolveSlow?.(fakeResponse([new Uint8Array(9)], { totalBytes: 9 }));
     await new Promise<void>((resolve) => {
       setTimeout(resolve, 10);

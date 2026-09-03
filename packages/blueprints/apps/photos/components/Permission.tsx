@@ -1,4 +1,3 @@
-// A SCREEN, NOT AN ERROR. Keep `id="consentBanner"`: onFocusRefresh (refresh.ts) keys on it.
 import { VaultAccessButton } from "../../_shared/VaultAccessButton.tsx";
 import { PERMISSION_COPY } from "../view-copy.ts";
 

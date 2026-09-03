@@ -1,9 +1,5 @@
-// @vitest-environment jsdom
 // oxlint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
 // @ts-nocheck
-// Face review (#711): never a `%`; one panel at a time; unmatched still has
-// a forward action; Keep unnamed writes `dismiss` (#712). Mock `outcomes.ts`
-// by string specifier (TS6059/TS2307 if imported typed).
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -62,7 +58,6 @@ function stubCentraid(queue: typeof QUEUE): void {
   });
 }
 
-// Parameter, not a literal: tsc typechecks a literal `import()` (TS6059).
 const FACE_REVIEW_PATH = "../apps/photos/components/FaceReview.tsx";
 const importFaceReview = (relativePath: string) => import(relativePath);
 
@@ -170,3 +165,4 @@ describe("Face review surface", () => {
     expect(container.textContent).toMatch(/No proposed match/u);
   });
 });
+// @vitest-environment jsdom

@@ -1,5 +1,3 @@
-// Page-side shapes for photos. Type-only: a value import 404s at serve time.
-// `Asset`'s index signature keeps unnamed vault columns `unknown`, not `any`.
 import type { TripRoutePoint } from "./trips.ts";
 
 export interface AssetTag {
@@ -18,8 +16,6 @@ export interface Place {
 
 export interface Asset {
   asset_id: string;
-  /** The scope this row is shown FROM (#599): ids collide, so an unscoped
-   *  blob reference paints the WRONG image. */
   scope_id?: string | null;
   content_id?: string | null;
   favorite?: number | boolean | null;
@@ -35,7 +31,6 @@ export interface Asset {
   kind?: string | null;
   taken_at?: string | null;
   captured_at?: string | null;
-  /** An absent offset is not an offset of zero. */
   tz_offset_min?: number | null;
   source_asset_id?: string | null;
   created_at?: string | null;
@@ -99,7 +94,6 @@ export interface MemoryMemberRow {
 export interface ExifRow {
   label: string;
   value: string;
-  // No `href`: a row is a fact, not a departure.
 }
 
 export interface ActivityItem {

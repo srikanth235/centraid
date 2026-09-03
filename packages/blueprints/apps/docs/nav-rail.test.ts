@@ -1,12 +1,3 @@
-// Docs' rail, as a table (v16 §5) — and the folder tree the app's own §14 cut.
-//
-//  * the DRIVE group, the FOLDERS group with the tree indented under it, the
-//    rule, and Trash;
-//  * opening a folder marks THAT folder's row current and leaves *Folders*
-//    reachable as its own shelf — the thing that makes the tree a filter over
-//    one set rather than a second place to be;
-//  * Unfiled is in the tree, carries the real number, and is not a route;
-//  * a folder's count is the same number the Folders shelf draws.
 import { describe, expect, it } from "vitest";
 
 import type { NavRailItem } from "../_shared/NavRail.tsx";
@@ -31,8 +22,6 @@ const activeDocs: DriveDoc[] = [
   doc("d4", null),
   doc("d5", null),
   doc("d6", null),
-  // A label naming a folder this drive does not have: counted nowhere, and it
-  // is NOT unfiled — the document does carry a label.
   doc("d7", "f-gone"),
 ];
 
@@ -69,8 +58,6 @@ describe("Docs' navigation rail", () => {
       "All",
       "Recently changed",
       "Starred",
-      // Inside Drive: a delivered copy IS this vault's document, so the shelf
-      // is a lens on the drive, not a second one.
       "Shared with you",
       "# Folders",
       "Folders",
@@ -87,8 +74,6 @@ describe("Docs' navigation rail", () => {
     const current = items.filter((item) => item.kind === "row" && item.current);
     expect(current).toHaveLength(1);
     expect(current[0]?.kind === "row" && current[0].label).toBe("Property");
-    // *Folders* is still a row, still routes, and is NOT lit: the shelf that
-    // lists the folders is a different destination from any one of them.
     const foldersRow = items.find(
       (item) => item.kind === "row" && item.label === "Folders"
     );
@@ -115,9 +100,6 @@ describe("Docs' navigation rail", () => {
     );
     expect(unfiled?.kind === "row" && unfiled.count).toBe(3);
     expect(unfiled?.kind === "row" && unfiled.indent).toBe(true);
-    // Not a destination: the drive has no route that shows only the set with
-    // no label, and a row that led somewhere else while wearing this number
-    // would be lying about where it led.
     expect(unfiled?.kind === "row" && unfiled.onSelect).toBeUndefined();
   });
 
@@ -134,7 +116,6 @@ describe("Docs' navigation rail", () => {
     });
     expect(perFolder.get("f-prop")).toBe(2);
     expect(perFolder.get("f-money")).toBe(1);
-    // The orphaned label is in no folder's count and is not unfiled either.
     expect(unfiledCount(activeDocs)).toBe(3);
   });
 });

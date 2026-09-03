@@ -1,10 +1,3 @@
-// Waiting's three sections, and the verbs each state actually permits.
-//
-// The grammar is the outbox's (`_shared/pending-overlay.ts`), and what is
-// pinned here is that this app does not widen it: a queued write cannot be
-// retried and an expired one cannot be re-sent. Approve and Decline exist now
-// — the steward's own answer, through `decideCommonsIntent` — and they are
-// drawn ONLY where that door is, with no substitute offered where it is not.
 import { describe, expect, it } from "vitest";
 
 import { commandLabel, contribSections, intentTitle } from "./contrib-model.ts";
@@ -124,8 +117,6 @@ describe("the verbs each state permits", () => {
   });
 
   it("draws NEITHER Approve nor Decline where the decide door is absent", () => {
-    // Protocol C1: no fallback behaviour stands in for a door that is not
-    // there. The inbox is a different verb, not a substitute for these two.
     const out = sections([intent({ status: "parked" })], {
       cancel: true,
       retry: true,

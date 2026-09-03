@@ -1,14 +1,5 @@
-/*! Browser-JS fixtures intentionally lack TypeScript declarations. (#408) */
 // oxlint-disable-next-line typescript/ban-ts-comment -- (#408) these browser-JS fixture imports have no TypeScript declarations
 // @ts-nocheck -- the imported browser fixtures intentionally lack declarations
-// Directly exercises a few blueprint query handlers (browser ES modules under
-// apps/*/queries) with a mocked `ctx.vault`, the way the runtime invokes them
-// (`mod.default({ input, query, ctx })` — dispatcher.ts passes the typed input
-// as both `input` and `query`). The app-boot harness only proves the apps
-// boot with an empty vault; these cover the mobile fast-path projection
-// changes (#404) that only manifest with content: notes shipping a
-// preview + checklist tally instead of full bodies, the on-open body pull, and
-// agenda bounding recurring expansion to the visible range.
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -32,7 +23,6 @@ type VaultInvokeTestSeam = (input: {
   input?: unknown;
 }) => Promise<{ status: string; output: unknown }>;
 
-/** A mock ctx.vault that returns fixture rows keyed by entity name. */
 function ctxOf(rowsByEntity: Record<string, unknown[]>) {
   return {
     time: {
@@ -49,8 +39,6 @@ function ctxOf(rowsByEntity: Record<string, unknown[]>) {
       resolve: async () => ({ cards: [] }),
       invoke: async () => ({ status: "executed", output: { items: [] } }),
       search: async () => ({ rows: rowsByEntity.__search__ ?? [] }),
-      // Companion/query tests default to an unlocked Locker; lock gates are
-      // covered by vault unit tests of LockerAuthentication.
       authenticate: async () => ({
         ok: true,
         configured: false,
@@ -64,9 +52,6 @@ function ctxOf(rowsByEntity: Record<string, unknown[]>) {
 const dataUri = (text: string) =>
   `data:text/markdown,${encodeURIComponent(text)}`;
 
-// Keep browser-JS fixtures out of the TypeScript program while still loading
-// the real module at runtime. oxlint's type-aware host otherwise tries to emit
-// imported JavaScript beside the source despite this test config using noEmit.
 const importQuery = (relativePath: string) => import(relativePath);
 
 describe("Locker Companion queries (#462)", () => {
@@ -232,7 +217,6 @@ describe("Locker Companion queries (#462)", () => {
         invoke: vi.fn<VaultInvokeTestSeam>(),
       },
     };
-    // pageOrigin requires origin === raw; evil hostname fails match even if stored is loopback.
     const result = await fill({
       input: { item_id: "login-1", page_origin: "https://example.com" },
       ctx,
@@ -271,11 +255,8 @@ describe("notes library query (issue #404)", () => {
     const res = await library({ input: { limit: 50 }, query: {}, ctx });
     expect(res.notes).toHaveLength(1);
     const row = res.notes[0];
-    // No full body on the wire anymore.
     expect(row.body).toBeUndefined();
-    // Checklist tally computed server-side (2 boxes, 1 done).
     expect(row.check).toStrictEqual({ total: 2, done: 1 });
-    // Preview is short and glyphs the checklist, dropping the heading.
     expect(row.preview).toBeTypeOf("string");
     expect(row.preview.length).toBeLessThanOrEqual(200);
     expect(row.preview).toContain("☐ buy milk");
@@ -327,11 +308,8 @@ describe("agenda upcoming query — range-bounded recurrence (issue #404)", () =
       from: "2026-06-01T00:00:00.000Z",
       to: "2026-06-08T00:00:00.000Z",
     });
-    // A one-week window (plus the ~31d span buffer back of `from`) — a couple
-    // dozen instances, NOT a year's worth.
     expect(res.events.length).toBeGreaterThan(30);
     expect(res.events.length).toBeLessThan(45);
-    // Every instance sits inside [fromLower, to).
     for (const e of res.events) {
       expect(e.dtstart >= "2026-05-01T00:00:00.000Z").toBe(true);
       expect(e.dtstart < "2026-06-08T00:00:00.000Z").toBe(true);
@@ -340,9 +318,6 @@ describe("agenda upcoming query — range-bounded recurrence (issue #404)", () =
 
   it("caps open-ended (no `to`) expansion to a bounded forward window, not a year", async () => {
     const bounded = await run({ from: "2026-06-01T00:00:00.000Z" });
-    // The 120-day default window would yield ~150 daily instances; the old
-    // 366-day ceiling would hit expandRrule's 200 backstop. Assert we're well
-    // under that ceiling AND larger than the one-week window above.
     expect(bounded.events.length).toBeLessThan(190);
     expect(bounded.events.length).toBeGreaterThan(120);
   });
@@ -442,8 +417,6 @@ describe("replica-local search projections (issue #406)", () => {
       dtend: "2026-07-20T10:00:00.000Z",
       _snippet: "Quarterly ⟦budget⟧ review",
     };
-    // No fetch/online capability is present on this context. Every join the
-    // real handler performs is satisfiable by eager replica rows.
     const ctx = ctxOf({ __search__: [event] });
     const result = await search({ input: { term: "budg" }, query: {}, ctx });
 
@@ -478,8 +451,6 @@ describe("replica-local search projections (issue #406)", () => {
       deleted_at: null,
       place_id: null,
     };
-    // `__search__` represents the complete replica FTS result, while the
-    // normal recency window is intentionally absent from the fixture.
     const ctx = ctxOf({
       __search__: [content],
       "core.content_item": [content],

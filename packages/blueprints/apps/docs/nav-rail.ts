@@ -1,5 +1,3 @@
-// Docs' navigation rail as a pure table (v16 §5). Every row is a shelf in
-// `shelves.ts`, except Unfiled: no route shows that set, so it draws inert.
 import type { NavRailItem } from "../_shared/NavRail.tsx";
 import { displayText } from "../_shared/untrusted.ts";
 import { folderCounts, unfiledCount } from "./folder-counts.ts";
@@ -23,7 +21,6 @@ const DRIVE_GROUP: readonly { id: ShelfId; label: string }[] = [
   { id: SHARED, label: "Shared with you" },
 ];
 
-/** One counts map, shared with the strip and the More sheet. */
 export function docsNavRail({
   shelf,
   counts,
@@ -45,7 +42,6 @@ export function docsNavRail({
       id: countKey(id),
       label,
       ...(count === undefined ? {} : { count }),
-      // With a folder open no drive shelf is current — never light both.
       ...(!openFolder && id === shelf ? { current: true } : {}),
       onSelect: () => onSelect(id),
     };

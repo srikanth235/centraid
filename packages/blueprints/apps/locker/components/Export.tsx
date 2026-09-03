@@ -1,7 +1,3 @@
-// EXPORT (README-Locker §6; GAPS §3.3 #7). The confirm names the consequence;
-// the two options that make the file worse are off unless asked for. The
-// action unseals inside the vault under a declared list and receipts it, and
-// the plaintext never enters this app's bag.
 import type { ReactNode } from "react";
 
 import {
@@ -31,7 +27,6 @@ import styles from "./Rows.module.css";
 
 export interface ExportScreenProps {
   items: number;
-  /** A mass reveal is never answered from a device's durable store. */
   offline: boolean;
   busy: boolean;
   includeTrashed: boolean;

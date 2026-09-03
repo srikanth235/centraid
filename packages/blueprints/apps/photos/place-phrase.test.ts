@@ -14,7 +14,6 @@ import {
   relativePhrase,
 } from "./place-phrase.ts";
 
-/** The seeded Photos roll (seed.js), which is what both surfaces render. */
 const HOME_BACKYARD = { lat: 37.4419, lng: -122.143 };
 const WEST_SHORE_RIDGE = { lat: 39.0021, lng: -120.1131 };
 const EMERALD_BAY = { lat: 38.9542, lng: -120.1094 };
@@ -31,7 +30,6 @@ const RIDGE: NamedPlace = {
   ...WEST_SHORE_RIDGE,
 };
 
-/** The shape every place row wears until a member renames it. */
 const COORDINATE_LABEL = /^-?\d{1,3}\.\d+,\s*-?\d{1,3}\.\d+$/u;
 
 describe("the phrase ladder", () => {
@@ -52,7 +50,6 @@ describe("the phrase ladder", () => {
       ...EMERALD_BAY,
       namedPlaces: [HOME],
     });
-    // "near", because a settlement name is a neighbourhood-scale claim.
     expect(phrase).toStrictEqual({
       text: "near Truckee, CA",
       source: "gazetteer",
@@ -148,7 +145,6 @@ describe("shared contexts never leak the way home", () => {
       text: PLACE_NO_NAME,
       source: "none",
     });
-    // Even standing in the back garden — the rung is gone, not softened.
     expect(
       placePhrase({
         ...HOME_BACKYARD,
@@ -177,7 +173,6 @@ describe("distance and bearing over the seeded roll", () => {
       EMERALD_BAY.lng
     );
     expect(km).toBeCloseTo(5.336, 2);
-    // Emerald Bay is almost due south of the ridge; the ridge due north of it.
     expect(
       compassPoint(
         bearingDegrees(
@@ -223,8 +218,6 @@ describe("distance and bearing over the seeded roll", () => {
   });
 
   it("prefers home as the anchor within a town, the nearest one beyond it", () => {
-    // A named place 300m from the back garden. Home still wins: "300 m NE of
-    // Home" situates a reader, "100 m S of Shed" does not.
     const shed: NamedPlace = {
       key: "shed",
       name: "Shed",
@@ -235,15 +228,12 @@ describe("distance and bearing over the seeded roll", () => {
       placePhrase({ lat: 37.4449, lng: -122.143, namedPlaces: [HOME, shed] })
         .text
     ).toBe("350 m N of Home");
-    // At the lake, home is 248km away, so the ridge takes over as the anchor.
     expect(
       placePhrase({ ...EMERALD_BAY, namedPlaces: [HOME, RIDGE] }).text
     ).toBe("5.3 km S of The ridge");
   });
 
   it("refuses to phrase against an anchor that is not a place any more", () => {
-    // Sydney, anchored on a Californian home: over the ceiling, so the phrase
-    // gives up rather than printing a bearing nobody can use.
     expect(
       placePhrase({ lat: -33.8688, lng: 151.2093, namedPlaces: [HOME] })
     ).toStrictEqual({ text: PLACE_NO_NAME, source: "none" });
@@ -274,7 +264,6 @@ describe("the compass", () => {
 describe("distances in the register a person would use", () => {
   it("uses metres below a kilometre, to the nearest fifty", () => {
     expect(formatDistance(0.34)).toBe("350 m");
-    // 990m rounds up to a kilometre rather than printing "1000 m".
     expect(formatDistance(0.999)).toBe("1.0 km");
     expect(formatDistance(0)).toBe("0 m");
   });
@@ -336,8 +325,6 @@ describe("the gazetteer record, read out of address_json", () => {
   });
 
   it("reads a checked-and-found-nothing marker as no name", () => {
-    // A miss is a recorded result, not a name. The ladder must fall through to
-    // the relative rung rather than print anything about it.
     expect(
       gazetteerNameFrom(
         JSON.stringify({

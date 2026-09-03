@@ -1,6 +1,3 @@
-// Naming a GPS-minted place (#816). "This is home" sits beside the prompt,
-// not inside the open input: `InlineInput` cancels on blur, so a neighbour
-// control would unmount before the press lands.
 import { useState } from "react";
 
 import { act, narrate } from "../outcomes.ts";
@@ -8,7 +5,6 @@ import { InlineInput } from "./InlineInput.tsx";
 
 import styles from "./PlaceNaming.module.css";
 
-/** Kind "This is home" declares. The kind is what the phrase ladder reads. */
 const HOME_NAME = "Home";
 
 export function PlaceNaming({
@@ -29,7 +25,6 @@ export function PlaceNaming({
       { place_id: placeId, name, ...(kind ? { kind } : {}) },
       scope
     );
-    // Refusal → frame status line; success is silent — the new name is the receipt.
     if (narrate(outcome)) await refresh();
   }
 

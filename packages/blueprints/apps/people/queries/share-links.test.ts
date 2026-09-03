@@ -1,13 +1,3 @@
-// The sharing plane People projects per person (#821): linked/unlinked
-// on the roster, the vaults / pending invitations / shared containers on the
-// profile, and the linked / to_link headline counts.
-//
-// The load-bearing case is the SECOND one in each pair. People's `share.*`
-// scopes are newer than the app, and on an existing vault newly declared
-// scopes wait for the owner rather than being auto-granted — so a denial of
-// those reads must leave the link fields absent (null) while the roster, the
-// profile and the four original counts answer in full. A regression here does
-// not read as a bug; it reads as "nobody is linked", which is worse.
 import { describe, expect, it, vi } from "vitest";
 
 import dashboardHandler from "./dashboard.ts";
@@ -93,7 +83,6 @@ const ROWS: Record<string, Array<Record<string, unknown>>> = {
   ],
 };
 
-/** A ctx whose share/social reads either answer from ROWS or throw a denial. */
 function ctxOf(shareDenied: boolean) {
   const read = vi.fn<
     (request: { entity: string }) => Promise<{
@@ -158,7 +147,6 @@ describe("People profile sharing standing (#821)", () => {
         linked_at: "2026-02-01T00:00:00Z",
       },
     ]);
-    // Only the unanswered invitation — the accepted one is already a share.
     expect(person.pending_invites).toStrictEqual([
       {
         invitation_id: "invite-recipes",
@@ -167,8 +155,6 @@ describe("People profile sharing standing (#821)", () => {
         created_at: "2026-04-01T00:00:00Z",
       },
     ]);
-    // WHAT IS SHARED WITH THEM IS NOT THIS QUERY'S ANSWER (#825): standing
-    // grants come from the grant plane, read live by the person screen.
     expect(person).not.toHaveProperty("shared_with_them");
   });
 

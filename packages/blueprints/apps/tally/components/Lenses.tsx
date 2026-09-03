@@ -1,19 +1,3 @@
-// The three lenses: Spending, Trash and Search.
-//
-// SPENDING IS RESTRAINT (gap register §6). Six category rows and the
-// paid-versus-share pair, and nothing else: no trend, no chart beyond a
-// proportion bar comparing rows inside this one list. The difference between
-// what you paid and what is yours is CARRIED IN BALANCES — it is not a saving,
-// and the row that states it says so.
-//
-// TRASH LISTS THE PURGE DATE RATHER THAN AN EMPTY BUTTON. Thirty days, and the
-// date each row stops being restorable is on the row. Purge happens on the
-// date and never on a button, so there is no purge control here at all.
-//
-// SEARCH IS THE SHARED FOUR-STATE SCAFFOLD (`_shared/SearchScaffold.tsx`), so
-// "nothing matches" reads the same here as in Photos — and, crucially, an
-// index that could not be reached says NOTHING WAS CHECKED rather than
-// collapsing into "no results".
 import type { ReactNode } from "react";
 
 import type { SearchStatus } from "../../_shared/search-scaffold.ts";
@@ -173,11 +157,6 @@ export function Trash(props: TrashProps): ReactNode {
   );
 }
 
-/**
- * The search field itself, which the scaffold deliberately does not own: where
- * a field stands is chrome each app already owns, and Tally's stands in the
- * tool row above the results.
- */
 export function SearchField({
   query,
   onQuery,

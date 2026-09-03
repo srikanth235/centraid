@@ -28,8 +28,6 @@ describe("web memories", () => {
     expect(cards).toHaveLength(1);
     expect(cards[0]).toMatchObject({
       key: "trip-1",
-      // No member of this trip carries a place, so the ladder has nothing to
-      // name and the vault's own hint still titles the card (#816).
       title: "Three days in Mysuru",
       coverUri: "member.jpg",
     });
@@ -38,14 +36,6 @@ describe("web memories", () => {
     expect(onOpen).toHaveBeenCalledExactlyOnceWith("memory:trip-1");
   });
 });
-
-// ── A trip card, titled and sketched (issue #816) ──────────────────────────
-//
-// `trips.test.ts` owns the title grammar and the route arithmetic. What these
-// cases own is the wiring: that a trip card asks the ladder at all, that it
-// resolves HOME from the whole library rather than from the trip (the mistake
-// that makes every away day read as a day at home), and that no other kind of
-// memory changed shape.
 
 const HOME: Place = {
   place_id: "place-home",
@@ -57,8 +47,6 @@ const HOME: Place = {
 
 const TAHOE: Place = {
   place_id: "place-tahoe",
-  // What `findOrCreatePlaceTx` mints, still unrenamed — the case the title
-  // must never print.
   name: "39.09680, -120.03240",
   gazetteer: "South Lake Tahoe, CA",
   lat: 39.0968,
@@ -84,8 +72,6 @@ const frame = (
   thumb_uri: `${asset_id}.jpg`,
 });
 
-/** Six days at home, then a Saturday and a Sunday at the lake with a stop in
- *  Truckee on the way — the seeded roll's shape. */
 const LIBRARY: Asset[] = [
   ...Array.from({ length: 6 }, (_, index) =>
     frame(`home-${index}`, `2026-08-0${index + 1}T12:00:00Z`, HOME)
@@ -126,8 +112,6 @@ describe("a trip card", () => {
   });
 
   it("carries the trip's stops in capture order, ready to project", () => {
-    // Truckee first because it was photographed first — the sketch draws a
-    // route, and a route ordered by tally is not one.
     expect(tripCard().route).toStrictEqual([
       {
         key: TRUCKEE.place_id,
@@ -181,7 +165,6 @@ describe("a trip card", () => {
       onOpen: () => undefined,
     });
     expect(cards[0]!.title).toBe("2-day trip");
-    // Still sketchable: the stop has coordinates even with no name.
     expect(cards[0]!.route).toHaveLength(1);
   });
 
@@ -217,13 +200,6 @@ describe("a trip card", () => {
 
 describe("the memories strip's silence", () => {
   it("draws a trip's route from arithmetic, so a card fetches nothing to show it", () => {
-    // Asserted against the SOURCE because that is where the regression would
-    // land: a rendered card proves only that this test's fixture had no remote
-    // cover, while a basemap tile URL or a static-map `<image>` added to the
-    // sketch is the whole defect — the strip would look richer and emit the
-    // coordinates of a member's holiday to whoever served the picture. The
-    // blueprint CSP denies remote hosts anyway (docs/traps/blueprint-csp.md);
-    // this keeps the card honest before it gets that far.
     const source = readFileSync(
       path.join(
         path.dirname(expect.getState().testPath!),

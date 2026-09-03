@@ -1,13 +1,5 @@
 import { decodeNoteBody } from "../note-body.ts";
 
-/**
- * A single note's canonical body, decoded — the editor's on-open pull. The
- * library and search projections carry only a preview and the checklist tally
- * (#404), so full text is fetched lazily here.
- *
- * A consent denial is a first-class outcome, not an error: the UI renders the
- * "ask the owner for access" state, receipt id included.
- */
 export default async function noteHandler({ input, ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
   const noteId = String(input?.note_id ?? "").trim();

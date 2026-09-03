@@ -1,6 +1,3 @@
-// Projects and one project's screen (§2, §5). The two rules worth pinning:
-// a project with no area is not filed under an invented one, and an empty
-// section keeps its head so the writing surface still has somewhere to add.
 import { describe, expect, it } from "vitest";
 
 import { IDENTITY_HUE_KEYS } from "@centraid/design";

@@ -1,5 +1,3 @@
-// Real RFC-6238 TOTP and strength scoring — the app's only crypto surface;
-// seed and code are never logged.
 import { useEffect, useState } from "react";
 
 import { useVisibleInterval } from "../_shared/visible-interval.ts";
@@ -78,14 +76,10 @@ export function useTotp(seed: string | null | undefined): {
   code: string | null;
   offset: number;
 } {
-  // Derived during render, not synced by an effect (#573); `computed` holds the
-  // previous code until the fresh step resolves.
   const [, setTick] = useState(0);
   const [step, setStep] = useState(() => Math.floor(Date.now() / 30000));
   const [computed, setComputed] = useState<string | null>(null);
 
-  // A second hand, only while somebody is looking (#883 C4); `useVisibleInterval`
-  // fires once on return.
   useVisibleInterval(
     () => {
       setTick((t) => t + 1);
@@ -96,7 +90,6 @@ export function useTotp(seed: string | null | undefined): {
   );
 
   const key = seed ? cacheKey(seed, step) : null;
-  // Cached null wins too; only a miss falls back to the last resolved code.
   const code = key
     ? OTP_CACHE.has(key)
       ? (OTP_CACHE.get(key) ?? null)
@@ -129,7 +122,6 @@ export interface Strength {
   color: string;
 }
 
-// Mirrors the server's `strengthScore`.
 export function strength(pw: string | null | undefined): Strength {
   if (!pw) return { ratio: 0, tone: "", label: "", color: "var(--text-faint)" };
   let s = 0;

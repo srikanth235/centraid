@@ -1,18 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-// Notes' vault IO: narration, the raw write path, and the lazy reads
-// (#839 W2-1). The commands that ride on top are `logic-commands.test.ts`; the
-// panes they feed are `logic-panes.test.ts`; the seat all three drive is
-// `logic.test-fixtures.ts`, which says why the gateway and the frame here are
-// recording fakes rather than mocks.
-//
-// EVERY WRITE HERE IS OPTIMISTIC, so the thing worth pinning is not "a command
-// was sent" but which of the three outcomes the member is shown: `executed`
-// clears the banner, `parked` ALSO clears it (a park is a designed state the
-// row's own chip carries, never an error), and only a real refusal reaches the
-// status line. The friendly-predicate table is the one place this app
-// translates the vault's own words, so each mapped predicate is asserted by
-// the sentence it produces rather than by "some message appeared".
 import { hasConcurrentVersions } from "./format.ts";
 import { harness, note } from "./logic.test-fixtures.ts";
 import { NOTE, notebookShelf } from "./shelves.ts";

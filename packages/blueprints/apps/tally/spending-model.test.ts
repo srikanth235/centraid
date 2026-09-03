@@ -1,11 +1,3 @@
-// Spending's folds, as arithmetic (spec §5, gap register §6).
-//
-// The point of these is the CLAIM they let the screen make: a category row is
-// the whole expense, the paid/share pair keeps two different questions apart,
-// and neither is a balance. Each of the three has a failure mode that reads
-// perfectly on screen — counting settlements as spending, counting the owner's
-// share as what they paid, letting last month leak into this one — so each has
-// a case here.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -63,8 +55,6 @@ describe("what the month went on", () => {
   });
 
   it("never counts a settlement as spending", () => {
-    // A settlement moves a debt that already exists. Folding one in would
-    // report the same money twice and put it under a category nobody chose.
     const rows: ActivityRow[] = [
       expense({ category: "travel", amount_minor: 9600 }),
       { kind: "settlement", date: "2026-07-05", amount_minor: 6400 },
@@ -96,15 +86,12 @@ describe("what the month went on", () => {
       expense({ category: key, amount_minor: (9 - index) * 100 })
     );
     expect(categoryTotals(rows, NOW)).toHaveLength(CATEGORY_ROWS);
-    // The total still counts everything the six leave out.
     expect(monthTotal(rows, NOW)).toBe(4500);
   });
 });
 
 describe("paid, and owed", () => {
   it("counts the whole expense as paid and only the split as yours", () => {
-    // £100 fronted by the owner, split three ways: £33.34 is theirs, the
-    // £66.66 the others owe is what the row's stance carries.
     const rows = [
       expense({
         amount_minor: 10_000,

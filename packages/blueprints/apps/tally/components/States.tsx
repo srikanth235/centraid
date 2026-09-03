@@ -1,21 +1,3 @@
-// Tally's honest states, as blocks (spec §4, STATES.md).
-//
-// EACH IS A FACT WITH A WAY FORWARD. A notice that reports a lag with no way
-// to close it, or a screen that says "nothing here" without saying on whose
-// terms, is the class of half-truth this file exists to close.
-//
-// WHY OFFLINE AND STALE ARE TWO NOTICES HERE AND ONE IN TASKS. Tasks has one
-// sentence because its two facts collapse: a task board that cannot reach the
-// gateway is simply lagging. Tally's do not. "The gateway is not answering" and
-// "what you are reading was matched at 08:02" answer different questions, and
-// Tally has a third thing to say that Tasks does not — that it RECORDS FULLY
-// OFFLINE, with exactly one exception, which a member has to know before they
-// decide whether to keep working. Folding that into a staleness line would
-// bury the one sentence that changes what they do next.
-//
-// DAY ONE AND DENIED LOOK NOTHING ALIKE. Day one offers a first move; denied
-// shows absence with a receipt, the scope to re-grant, and the fact that the
-// other members still hold their own copies of the facts.
 import { Fragment } from "react";
 import type { ReactNode } from "react";
 
@@ -45,17 +27,10 @@ import {
 import styles from "./Ledger.module.css";
 
 export interface NoticesProps {
-  /** How many of this member's writes are still on this device. */
   pendingWriteCount?: number;
-  /** The gateway did not answer. Tally records anyway, and says which single
-   *  act it cannot do. */
   offline?: boolean;
-  /** The wall time the replica last matched the vault, or null when it is
-   *  current. */
   staleAt?: string | null;
-  /** A steward-only act is waiting on this member. */
   parked?: boolean;
-  /** Two edits to one expense reached the replica. */
   conflict?: boolean;
   onWaiting: () => void;
   onRefresh: () => void;
@@ -133,8 +108,6 @@ export function Notices(props: NoticesProps): ReactNode {
   );
 }
 
-/** Day one: nothing is split yet, and the first real move is one expense with
- *  one person. Never shown until a read has landed. */
 export function DayOne({ onAdd }: { onAdd: () => void }): ReactNode {
   return (
     <div className="kit-empty" data-variant="day-one">
@@ -151,18 +124,12 @@ export function DayOne({ onAdd }: { onAdd: () => void }): ReactNode {
   );
 }
 
-/** Every balance level. STATED, not celebrated: no tick, no colour, no
- *  congratulation — and the ledger that got the member here is still there. */
 export function AllSettled(): ReactNode {
   return <p className={styles.note}>{ALL_SETTLED}</p>;
 }
 
 export interface DeniedGateProps {
-  /** The receipt the denial came back with, as the query reported it. */
   receipt: string;
-  /** WHEN the grant went, where the gateway recorded it. `null` when the
-   *  denial carried no time — and then the gate says the time is gone with
-   *  the grant rather than inventing one. */
   revokedAt?: string | null;
 }
 

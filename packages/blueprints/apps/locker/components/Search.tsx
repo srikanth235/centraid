@@ -1,15 +1,3 @@
-// SEARCH — TITLE, USERNAME AND ADDRESS, AND IT SAYS SO (README-Locker §6).
-//
-// The four states are the product's (`_shared/SearchScaffold.tsx`), so an
-// index that could not be reached says NOTHING WAS CHECKED here exactly as it
-// does in Photos and Tally, rather than collapsing into "no results".
-//
-// WHAT IS STRUCTURALLY ABSENT FROM THIS PATH: a secret value and a note. The
-// query matches over title, username and url INSIDE the vault and hands back
-// the same secret-free row the list draws (`queries/search.ts`), so there is
-// no code path here that could show a secret even if this file asked for one.
-// The note under the field states that as a DESIGN — a note routinely holds
-// recovery codes — rather than leaving it to read as an omission.
 import type { ReactNode } from "react";
 
 import type { SearchStatus } from "../../_shared/search-scaffold.ts";
@@ -31,7 +19,6 @@ import styles from "./Rows.module.css";
 export interface SearchScreenProps {
   query: string;
   status: SearchStatus;
-  /** `null` until a search has run — an absent answer, never an empty set. */
   results: LockerRow[] | null;
   onQuery: (value: string) => void;
   onClear: () => void;

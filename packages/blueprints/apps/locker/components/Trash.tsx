@@ -1,19 +1,3 @@
-// TRASH (README-Locker §6, "Trash"; FLOWS.md "Trash and purge").
-//
-// THIRTY DAYS, WITH THE STAR AND THE TAGS — which is what makes a restore
-// LOSSLESS, and why this screen lists a purge DATE rather than offering an
-// Empty button. A member emptying a trash is a member making one decision
-// about many items; a countdown per row is the same information without the
-// decision.
-//
-// A PURGE IS IRREVERSIBLE, so it is confirmed, and the confirm names the
-// consequence rather than asking "are you sure". Asked for on a device that is
-// not the owner's it PARKS — and the app says so rather than appearing to have
-// done it, which is the whole of the parked state in this app.
-//
-// Offline this screen works: trash, restore and purge are metadata, and
-// metadata queues (writes.ts). Nothing here is a secret and nothing here needs
-// a permit.
 import type { ReactNode } from "react";
 
 import { virtualItemAria } from "../../_shared/virtual-window.ts";
@@ -32,13 +16,10 @@ import { WindowedRows } from "./Windowed.tsx";
 
 import styles from "./Rows.module.css";
 
-/** A trash row is the item row PLUS the purge act under it; the first-paint
- *  guess says so, and the first measurement replaces it either way. */
 const TRASH_ROW_RUNG = 88;
 
 export interface TrashScreenProps {
   rows: readonly LockerRow[];
-  /** Has the trash read landed? Nothing is empty until one has. */
   loaded: boolean;
   onRestore: (itemId: string) => void;
   onPurge: (itemId: string) => void;

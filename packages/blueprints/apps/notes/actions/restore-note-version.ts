@@ -1,6 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** Restores by appending a revision. */
 export default async function restoreNoteVersion({ body, ctx }: HandlerArgs) {
   const input = actionInput(body);
   return runVaultAction(ctx, {

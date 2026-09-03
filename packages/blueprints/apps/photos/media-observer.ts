@@ -1,27 +1,15 @@
-// One-screen lookahead: swap staged `data-prefetch-src` into `src` a viewport
-// before view (src/photos-media.test.ts).
-//
-// Observer budget (#883): one IntersectionObserver per scroll root plus ONE
-// MutationObserver, for both "auth landed" and "tile detached". Per-image
-// observers and `getComputedStyle` root walks cost a style recalc per photo.
 import { VAULT_BLOB_PATH } from "../_shared/untrusted.ts";
 
-/** Mirrors the shell's authorizer stamp; blueprints cannot import the client. */
 export const BLOB_PENDING_ATTR = "data-blob-pending";
 
-/** `rootMargin` expands only the observer's OWN root, so the lookahead reaches
- *  a screen ahead only when rooted in the pane that actually scrolls. */
 export const MEDIA_ROOT_ATTR = "data-media-root";
 
 const MEDIA_ROOT_SELECTOR = `[${MEDIA_ROOT_ATTR}]`;
 
-/** Save-Data narrows the lookahead to the visible rect; skipping staging
- *  instead would load the whole library on that connection. */
 const LOOKAHEAD_MARGIN = "100% 0px";
 const SAVE_DATA_MARGIN = "0px";
 
 let viewportObserver: IntersectionObserver | undefined;
-/** Keyed by margin too: Save-Data changes it. */
 const rootObservers = new Map<Element, Map<string, IntersectionObserver>>();
 const observerByImage = new WeakMap<HTMLElement, IntersectionObserver>();
 const staged = new Set<HTMLImageElement>();
@@ -45,8 +33,6 @@ function applyPending(img: HTMLImageElement, pending: string): void {
   img.src = pending;
 }
 
-/** Off the gateway origin a raw vault path falls through to SPA `index.html`,
- *  so `src` set before `blob:` lands paints a permanent placeholder. */
 function promote(img: HTMLImageElement): void {
   const pending = img.dataset.prefetchSrc;
   if (!pending) {
@@ -85,7 +71,6 @@ function createObserver(
       for (const entry of entries) {
         if (!entry.isIntersecting) continue;
         const target = entry.target as HTMLImageElement;
-        // Leave `data-prefetch-src`: `promote` may still wait on auth.
         releaseIntersection(target);
         promote(target);
       }
@@ -147,7 +132,6 @@ export function stopNextScreenObservation(img: HTMLImageElement): void {
   stopObserving(img);
 }
 
-/** The observers are module singletons; the app root calls this on unmount. */
 export function stopMediaObservation(): void {
   for (const img of staged) releaseIntersection(img);
   staged.clear();

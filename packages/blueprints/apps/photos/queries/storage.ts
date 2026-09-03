@@ -1,7 +1,3 @@
-/**
- * @type {import('@centraid/server/engine').QueryHandler}
- */
-
 const KNOWN_BUCKETS = [
   "pending-offsite",
   "local-only",

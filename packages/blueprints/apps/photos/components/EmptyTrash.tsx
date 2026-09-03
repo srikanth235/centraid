@@ -1,6 +1,3 @@
-// Empty trash (v4 handoff §4.5). The control is NOT the deletion: confirm
-// names count + irreversibility first; outlined --net never filled (§18);
-// no undo (trash-actions.ts).
 import { useState } from "react";
 
 import { fmtBytes } from "@centraid/design/elements";
@@ -18,7 +15,6 @@ export interface EmptyTrashProps {
   refresh: () => Promise<void>;
 }
 
-/** First scope in this trash the member may not delete from, if any. */
 function blockedLabel(trash: readonly Asset[]): string | null {
   const blocked = trash.find((asset) => !canWriteScope(asset.scope_id));
   if (!blocked) return null;
@@ -28,12 +24,10 @@ function blockedLabel(trash: readonly Asset[]): string | null {
   return scope ? scope.label : "that library";
 }
 
-/** Shelf head: note then action; note alone when empty. */
 export function EmptyTrash({ trash, refresh }: EmptyTrashProps) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const count = trash.length;
-  // Refused server-side anyway; surfaced on the control up front.
   const blocked = blockedLabel(trash);
   let bytes = 0;
   for (const asset of trash) bytes += assetBytes(asset) ?? 0;

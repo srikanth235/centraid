@@ -1,6 +1,3 @@
-// The powerbox's kinds, as a value. Locker's absence and the journal
-// exclusion are the two rules this table exists to keep identical on every
-// seat, so they are asserted here rather than in each surface.
 import { describe, expect, test } from "vitest";
 
 import { apps } from "@centraid/design";
@@ -34,8 +31,6 @@ describe("what `[[` may point at", () => {
   });
 
   test("every kind names an app the catalog knows — no invented labels", () => {
-    // The names are the product catalog's (#883, ruling O-label): an app id
-    // this table gets wrong falls through to the id, which this would catch.
     for (const kind of LINK_TARGET_KINDS) {
       expect(
         apps.some((app) => app.id === kind.appId),

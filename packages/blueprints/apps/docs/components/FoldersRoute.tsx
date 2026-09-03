@@ -1,8 +1,3 @@
-// The FOLDERS shelf (spec §4.3), drawn in THE DRIVE'S OWN IDIOM: it reuses the
-// drive's ACTUAL classes, never a lookalike, and no folder tree goes in a rail
-// (§14). The trailing crumb's place menu is the only desk-side door to the
-// off-strip destinations. "A folder is a label on the document, not a place it
-// sits" (§2 row 3): the last row is UNFILED, not a folder, and is never hidden.
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -36,7 +31,6 @@ interface CountedFolder {
   count: number;
 }
 
-/** The drive's card rules; a folder must not borrow a kind colour. */
 function FolderCard({
   name,
   count,

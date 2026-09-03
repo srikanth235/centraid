@@ -1,4 +1,3 @@
-/** Package-local Stryker options (types from root @stryker-mutator/core). */
 export default {
   packageManager: "npm",
   testRunner: "vitest",
@@ -8,15 +7,6 @@ export default {
     "src/app-meta-properties.test.ts",
     "src/app-rewrites.test.ts",
   ],
-  // The filesystem-free file-map builders (issue #141) plus the rename
-  // rewriters they call. `app-meta.ts` is pure in/out — id validation,
-  // metadata patching, changed-file selection — and `app-rewrites.ts` is the
-  // same string layer plus thin readFile / writeFile wrappers whose only
-  // behaviour is "missing → no-op, changed → write", pinned by temp-dir
-  // tests.
-  //
-  // Deliberately OUT: `clone.ts` / `index.ts` (directory walks, manifest
-  // resolution).
   mutate: ["src/app-meta.ts", "src/app-rewrites.ts"],
   reporters: ["clear-text", "json"],
   jsonReporter: {

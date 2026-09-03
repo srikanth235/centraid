@@ -1,9 +1,3 @@
-// THE EXPORT WINDOW, AND THE RANGE THAT BOUNDS IT.
-//
-// The Range chip used to be decoration: the surface named a month and the file
-// carried the whole ledger anyway. These cases pin the honest version — what
-// `since` excludes, what it keeps, and that the counts the foot reads describe
-// the range rather than the group.
 import { describe, expect, it, vi } from "vitest";
 
 import exportHandler from "./export.ts";

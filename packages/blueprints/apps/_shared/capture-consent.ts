@@ -1,5 +1,3 @@
-// Capture-time OCR consent (#712). Scan.tsx must not extract text UNCONDITIONALLY: device first, then gateway `POST …/capture/ocr`. Copy lives in `_shared/` because Scan is a FRAME surface, not Docs'. Gateway backstop is disclosed, not offered — the on-device answer covers both lanes (#630).
-
 import type { ConsentPanelCopy } from "./consent-gate.ts";
 
 export const OCR_ON_DEVICE_PANEL: ConsentPanelCopy = {
@@ -21,7 +19,6 @@ export const OCR_ON_DEVICE_PANEL: ConsentPanelCopy = {
   filled: true,
 };
 
-/** Disclosure only — `net.available` is always false here (`scan-consent.ts`); not an action. */
 export const OCR_GATEWAY_PANEL: ConsentPanelCopy = {
   eyebrow: "The backstop",
   net: true,
@@ -46,7 +43,6 @@ export const OCR_GATEWAY_PANEL: ConsentPanelCopy = {
   action: "Not a separate choice",
 };
 
-/** Disclosure, not a control (mirrors `ENRICHMENT_UNAVAILABLE.cloudUnavailable`). */
 export const OCR_GATEWAY_NOT_A_CHOICE =
   "Not a separate choice: the gateway backstop runs automatically, only when on-device extraction can't. Answering the on-device question above covers both.";
 

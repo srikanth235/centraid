@@ -1,5 +1,3 @@
-/** Clone + rename share these so row title cannot drift from `app.json#name`. */
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -8,10 +6,6 @@ export interface AppVisualIdentity {
   colorKey?: string;
 }
 
-/**
- * Backfill `iconKey` / `colorKey` from the catalog (#263). Keys already
- * present win. Unparseable → `null`.
- */
 export function applyAppVisualIdentity(
   raw: string,
   visual: AppVisualIdentity
@@ -45,7 +39,6 @@ export async function stampAppVisualIdentity(
 }
 
 export interface AutomationManifestRewriteOptions {
-  /** Clone path restamps `generated`; rename leaves it. */
   stampGenerated?: boolean;
 }
 
@@ -84,7 +77,6 @@ export async function rewriteAutomationManifestNames(
       .filter((name) => !name.startsWith(".") && !name.startsWith("_"))
       .map(async (name) => {
         const manifestPath = path.join(autoRoot, name, "automation.json");
-        // readFile fails for non-directories / missing manifests — no Dirent check.
         let raw: string;
         try {
           raw = await fs.readFile(manifestPath, "utf8");

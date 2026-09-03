@@ -1,10 +1,3 @@
-// The Photos chrome as JSX — a ROUTE INSIDE THE FRAME (v4 §3). NONE of these
-// may come back: hamburger or drawer, in-pane search, zoom pair, slideshow
-// button, the app's own title/count/Select/Import, `#noticeBanner`, a consent
-// strip — the frame owns each, and permission is a SCREEN (§13), so no
-// `ConsentBanner`/`NoticeBanner` stands here. Overlays re-scope absolute
-// against `.shell` (#505 trap 7); selection has NO overlay of its own (§6).
-// The imperative nodes keep their ids and a literal `hidden`.
 import type { ReactNode } from "react";
 
 import { DropOverlay, ScrollHost } from "../_shared/AppChrome.tsx";
@@ -26,7 +19,6 @@ export interface ChromeSlots {
   picker: ReactNode;
   permission: ReactNode;
   moreSheet: ReactNode;
-  /** Pushes nothing aside: everything below it still renders (§14). */
   banner: ReactNode;
 }
 

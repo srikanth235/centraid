@@ -1,10 +1,3 @@
-/**
- * Grant sheet, web seat (#825). Audience-first (G-audience): person → what
- * → capability. Object-first is an ENTRY via `subject`, not a second sheet.
- * `edit` only where the subject registry answers it. Feedback is `onStatus`,
- * never a toast.
- */
-
 import { useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 
@@ -84,16 +77,12 @@ function subjectTitle(subject: GrantSubject): string {
 }
 
 export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
-  // Once per mount: a fresh door every render would re-read on every keystroke.
   const door = useMemo(() => props.door ?? webGrantDoor(), [props.door]);
-  // `null` = unread. Empty registry is "cannot be shared" — do not paint that early.
   const [registry, setRegistry] = useState<SubjectRegistry | null>(null);
   const [audienceId, setAudienceId] = useState(props.audienceId ?? "");
   const [subjectId, setSubjectId] = useState("");
-  // `null` = unchosen.
   const [picked, setPicked] = useState<GrantCapability | null>(null);
   const [standing, setStanding] = useState<GrantRecord[] | null>(null);
-  // `undefined` until a read answers. `null` would paint "Not reached yet" for one frame.
   const [channel, setChannel] = useState<GrantChannel>(undefined);
   const [audienceKnown, setAudienceKnown] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -108,13 +97,11 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
   const subject =
     offered.find((candidate) => subjectKey(candidate) === subjectId) ??
     offered[0];
-  // Effect keys, not objects — a rebuilt roster array must not re-read every render.
   const audienceKey = audience?.id ?? "";
   const audienceKind = audience?.kind ?? "party";
   const pinnedType = props.subject?.subjectType ?? "";
   const pinnedId = props.subject?.subjectId ?? "";
 
-  // Reset + registry read deferred off the effect body — sync setState would cascade.
   useEffect(() => {
     if (!props.open) return;
     let active = true;
@@ -136,7 +123,6 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
     };
   }, [props.open, props.audienceId, door]);
 
-  // Reach is about the person: object-first still owes a reach read.
   useEffect(() => {
     if (!props.open) return;
     if (!pinnedType && !audienceKey) return;
@@ -146,7 +132,6 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
       setStanding(null);
       setChannel(undefined);
       setAudienceKnown(true);
-      // Failed reach leaves channel unknown; do not blank the standing list.
       const readReach = async (): Promise<void> => {
         try {
           const reach = await door.forParty(audienceKey);
@@ -154,7 +139,7 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
           if (reach.known) setChannel(reach.channel);
           else setAudienceKnown(false);
         } catch {
-          /* unknown draws the checking line, never a claim */
+          // Intentionally empty.
         }
       };
       try {
@@ -193,8 +178,6 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
     };
   }, [props.open, pinnedType, pinnedId, audienceKind, audienceKey, door]);
 
-  // Open on the standing capability — do not propose a downgrade or a widen.
-  // An effect writing it back would be a second source of truth.
   const alreadyStanding =
     subject && standing
       ? grantOverSubject(
@@ -209,13 +192,11 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
   const capabilities = subject
     ? capabilitiesFor(registry?.offers ?? [], subject.subjectType)
     : [];
-  // Clamp to drawable: a standing `edit` the registry narrowed must not be posted.
   const capability = drawableCapability(
     capabilities,
     picked ?? defaultCapability(alreadyStanding)
   );
   const noun = subject ? subjectNoun(subject.subjectType) : "shared item";
-  // Unread, empty-for-subject, refused, unreachable. Only the second refuses.
   const registryPending = registry === null;
   const registryProblem =
     registry !== null && !registry.readable
@@ -233,8 +214,6 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
     ? groupContributionNote(subject.subjectType, capability)
     : null;
   const rows = standing ? liveGrants(standing) : [];
-  // Unknown audience gets its own sentence — "nothing shared" is a lie.
-  // Subject-first lists this subject's grants; audience-first, the audience's.
   const standingEmptyLine = audienceKnown
     ? props.subject
       ? notSharedWithAnyoneYet(subjectTitle(props.subject))
@@ -242,8 +221,6 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
     : audienceNotKnown(audience?.label ?? "this audience");
   const showStanding = audienceKnown && rows.length > 0;
   const reach = channelReach(channel);
-  // The standing answer this submit would replace. Same verb is not a change:
-  // the route reads that back.
   const changing =
     alreadyStanding && alreadyStanding.capability !== capability
       ? alreadyStanding
@@ -254,16 +231,11 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
     registryPending ||
     registryUnreadable ||
     notOfferable ||
-    // A person is reachable only through a live link (#903), and the command
-    // pack refuses the rest — so the sheet does not grow a control naming an
-    // act it cannot perform. The reach line above already says why.
     reachBlocksSharing(reach) ||
     busy;
 
   const submit = async (): Promise<void> => {
     if (!audience || !subject || cannotShare) return;
-    // No in-place change of verb (ruling V-table): posting it would be refused.
-    // Ask first — the change costs the audience their copy while it runs.
     if (changing) {
       setChangeConfirm(true);
       return;
@@ -278,8 +250,6 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
       setRefusal(outcome.message);
       return;
     }
-    // A held share (#883) reads "on its way", never as the granted outcome: no
-    // vault has been asked about it yet.
     props.onStatus(
       outcome.outcome === "awaiting_confirmation" ||
         outcome.outcome === "queued"
@@ -319,7 +289,6 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
     const outcome = await door.revoke(grant.grantId);
     setBusy(false);
     setConfirming(null);
-    // Route sentence, verbatim — nothing here may soften it.
     props.onStatus(outcome.message);
     if (outcome.ok)
       setStanding((current) =>
@@ -450,7 +419,6 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
                     aria-label="What to share"
                     value={subject ? subjectKey(subject) : ""}
                     onChange={(event) => {
-                      // Different subject, different verbs — pick does not carry.
                       setPicked(null);
                       setSubjectId(event.target.value);
                     }}
@@ -563,7 +531,6 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
   );
 }
 
-/** Roster label, or kind — an id is not a name. */
 function audienceLabelFor(
   grant: GrantRecord,
   audiences: readonly GrantAudienceOption[]

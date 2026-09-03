@@ -9,7 +9,6 @@ interface Party {
   display_name: string;
 }
 
-/** Secret-free People trash shelf; canonical parties remain intact. */
 export default async function trashPeople({ ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
   try {

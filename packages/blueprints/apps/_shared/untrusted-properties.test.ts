@@ -1,25 +1,5 @@
 /* oxlint-disable no-script-url -- the adversarial URL generators must name the
    executable schemes they prove the shared allowlist rejects. */
-// NO `@vitest-environment` docblock on purpose. This suite must stay on the
-// node environment: it is the node-side property complement to the jsdom
-// render suite (src/untrusted-rendering.test.ts), and it is what lets Stryker's
-// vitest runner measure apps/_shared/untrusted.ts at all — a jsdom project
-// dry-runs as "No tests were executed" and defends no mutant (#864).
-//
-// The jsdom suite proves the app rows render the XSS vectors inert. This suite
-// proves the four render-boundary laws the module itself must satisfy, against
-// arbitrary unicode, `fc.webUrl()`, and a hand-built adversarial scheme/
-// encoding alphabet — total display text, a closed URL allowlist, media ⊆
-// document, and an unescapable CSS `background-image` sink. Boundaries the
-// current implementation does NOT hold are pinned with `it.fails`, so the day
-// one is closed the pin turns red and asks to become a passing law.
-//
-// Every non-printable character below is written as a `\u` escape on purpose:
-// the code points under test are exactly the invisible controls and bidi marks
-// this module exists to scrub, and a literal one in the source would be
-// unreviewable. Each guarded law is checked with an UNCONDITIONAL boolean (the
-// implication folded in), never a conditional `expect`, so the assertion count
-// is stable and the property reads as one law.
 import { describe, expect, it } from "vitest";
 
 import { fc } from "@centraid/test-kit/fast-check";
@@ -35,14 +15,6 @@ import {
 
 const REPLACEMENT = "�";
 
-// ---------------------------------------------------------------------------
-// The render-boundary's forbidden output set, written as the security contract
-// it is rather than as a copy of `displayText`'s predicate: these are the
-// categories that must never survive to a text node or attribute — the C0
-// controls minus the three whitespace ones the contract keeps (TAB, LF, CR),
-// DEL, the Unicode bidi OVERRIDES, and the bidi ISOLATES. The tests scan the
-// OUTPUT against this table; they never re-run the module's own logic over the
-// input and compare.
 const BANNED_RANGES: ReadonlyArray<readonly [number, number]> = [
   [0x00, 0x08],
   [0x0b, 0x0c],
@@ -56,9 +28,6 @@ function isBanned(code: number): boolean {
   return BANNED_RANGES.some(([lo, hi]) => code >= lo && code <= hi);
 }
 
-// A code UNIT (not code point) at or below space, or DEL — the exact thing the
-// URL sinks promise never to carry. Scanned as UTF-16 units so a smuggled
-// C0/DEL cannot hide inside a surrogate pair.
 function hasControlUnit(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
     const unit = value.charCodeAt(index);
@@ -79,9 +48,6 @@ function isHttpS(value: string): boolean {
   }
 }
 
-// True when a sink's answer is null or lands in that sink's own allowlist and
-// carries no active-content scheme. Returns a plain boolean so the property can
-// assert it unconditionally.
 function isClosed(name: string, result: string | null): boolean {
   if (result === null) return true;
   if (ACTIVE_CONTENT.test(result)) return false;
@@ -95,10 +61,6 @@ function isClosed(name: string, result: string | null): boolean {
   );
 }
 
-// True when a background-image answer is undefined or a single, unbreakable
-// `url("…")` token whose inner string re-derives exactly the URL the media
-// sink admitted (proving the escaper added and dropped nothing but its two
-// escapes, and that no `"` can terminate the CSS string early).
 function isSealedUrlToken(
   out: `url("${string}")` | undefined,
   admitted: string | null
@@ -112,8 +74,6 @@ function isSealedUrlToken(
       backslashes += 1;
       continue;
     }
-    // A double quote is safe only behind an odd run of backslashes; an even
-    // (incl. zero) run would close the CSS string and free the `)`.
     if (character === '"' && backslashes % 2 === 0) return false;
     backslashes = 0;
   }
@@ -121,16 +81,11 @@ function isSealedUrlToken(
   return recovered === admitted;
 }
 
-// Arbitrary unicode over full UTF-16 (incl. lone surrogates and every control),
-// plus grapheme strings that reach astral code points.
 const anyText = fc.oneof(
   fc.string({ unit: "binary" }),
   fc.string({ unit: "grapheme" })
 );
 
-// URL-shaped inputs: real web URLs, a hand-built adversarial scheme/encoding
-// alphabet, vault-blob and data: prefixed strings that exercise the trusted
-// branches, and free-form unicode noise.
 const adversarialScheme = fc.constantFrom(
   "javascript:",
   "JavaScript:",
@@ -182,8 +137,6 @@ const URL_SINKS: ReadonlyArray<
   ["safeDocumentUrl", safeDocumentUrl],
 ];
 
-// ---------------------------------------------------------------------------
-
 describe("[law:untrusted-display-total] displayText is total, length-preserving, idempotent and sanitizing", () => {
   it("never throws, for any input including non-strings", () => {
     fc.assert(
@@ -193,7 +146,6 @@ describe("[law:untrusted-display-total] displayText is total, length-preserving,
       }),
       { numRuns: 400, seed: 8_640_001 }
     );
-    // The non-string coercions the JSX layer can hand it, spelled out.
     for (const value of [
       null,
       undefined,
@@ -215,10 +167,7 @@ describe("[law:untrusted-display-total] displayText is total, length-preserving,
     fc.assert(
       fc.property(anyText, (value) => {
         const once = displayText(value);
-        // One output code point per input code point — every banned point is
-        // replaced by exactly one U+FFFD, never dropped or expanded.
         expect([...once]).toHaveLength([...value].length);
-        // Re-running changes nothing: U+FFFD and every kept character are safe.
         expect(displayText(once)).toBe(once);
       }),
       { numRuns: 400, seed: 8_640_002 }
@@ -234,9 +183,6 @@ describe("[law:untrusted-display-total] displayText is total, length-preserving,
       }),
       { numRuns: 400, seed: 8_640_003 }
     );
-    // The spoofing vectors the jsdom suite renders, at the display contract:
-    // an RLO override is scrubbed, and an ESC-sequence prefix maps its two
-    // controls to U+FFFD while the visible tail survives.
     expect(displayText("\u202Etxt.exe\u202C")).not.toContain("\u202E");
     expect(displayText("\u0000\u001B[31m")).toBe(
       `${REPLACEMENT}${REPLACEMENT}[31m`
@@ -244,8 +190,6 @@ describe("[law:untrusted-display-total] displayText is total, length-preserving,
   });
 
   it("keeps every non-banned character and maps every banned one to U+FFFD", () => {
-    // Boundary-adjacent SAFE code points on both sides of every banned range,
-    // plus ordinary and astral text: none may be touched.
     const safeUnit = fc.constantFrom(
       "\t", // 0x09 kept
       "\n", // 0x0A kept
@@ -273,7 +217,6 @@ describe("[law:untrusted-display-total] displayText is total, length-preserving,
       ),
       { numRuns: 300, seed: 8_640_004 }
     );
-    // Every banned code point collapses to a single U+FFFD.
     const bannedUnit = fc.constantFrom(
       "\u0000",
       "\u0008",
@@ -313,7 +256,6 @@ describe("[law:untrusted-url-allowlist-closed] the dynamic URL sinks return null
       }),
       { numRuns: 600, seed: 8_640_010 }
     );
-    // The concrete rejections the jsdom suite spot-checks.
     expect(safeExternalUrl("javascript:alert(1)")).toBeNull();
     expect(safeExternalUrl("java\tscript:alert(1)")).toBeNull();
     expect(safeMediaUrl("data:image/svg+xml;base64,PHN2Zz4=")).toBeNull();
@@ -321,9 +263,6 @@ describe("[law:untrusted-url-allowlist-closed] the dynamic URL sinks return null
   });
 
   it("admits every allowlisted scheme verbatim and rejects at each guard boundary", () => {
-    // The POSITIVE side the "null OR allowlisted" property cannot pin: a sink
-    // that always answered null would satisfy that law, so every admitted
-    // scheme is checked to round-trip its exact input here.
     expect(safeExternalUrl("http://a.example/")).toBe("http://a.example/");
     expect(safeExternalUrl("https://a.example/p?q=1#f")).toBe(
       "https://a.example/p?q=1#f"
@@ -346,7 +285,6 @@ describe("[law:untrusted-url-allowlist-closed] the dynamic URL sinks return null
     expect(safeDocumentUrl("data:application/pdf;base64,AAAA")).toBe(
       "data:application/pdf;base64,AAAA"
     );
-    // Non-strings are rejected by every sink's typeof guard, never coerced.
     for (const value of [
       123,
       123n,
@@ -362,21 +300,13 @@ describe("[law:untrusted-url-allowlist-closed] the dynamic URL sinks return null
       expect(safeMediaUrl(value)).toBeNull();
       expect(safeDocumentUrl(value)).toBeNull();
     }
-    // Empty and whitespace-only collapse to null; the leading/trailing trim is
-    // load-bearing — without it those spaces would themselves trip the control
-    // guard and the URL below would never be admitted.
     expect(safeExternalUrl("")).toBeNull();
     expect(safeExternalUrl("   ")).toBeNull();
     expect(safeExternalUrl("  https://a.example/  ")).toBe(
       "https://a.example/"
     );
-    // A DEL (U+007F) or an embedded space is a control code unit that rejects
-    // the whole external link — the DEL exercises the `=== 127` arm the space
-    // (<= 32) does not reach.
     expect(safeExternalUrl("https://a.example/\u007F")).toBeNull();
     expect(safeExternalUrl("https://a.example/ x")).toBeNull();
-    // The 8 KiB external-link cap is exact: 8192 code units is admitted, 8193
-    // is not.
     const base = "https://a.example/";
     const at8192 = base + "a".repeat(8_192 - base.length);
     expect(at8192).toHaveLength(8_192);
@@ -388,14 +318,10 @@ describe("[law:untrusted-url-allowlist-closed] the dynamic URL sinks return null
     fc.assert(
       fc.property(urlInput, (value) => {
         const result = safeExternalUrl(value);
-        // Implication folded in: null is vacuously control-free.
         expect(result === null || !hasControlUnit(result)).toBe(true);
       }),
       { numRuns: 600, seed: 8_640_011 }
     );
-    // The same holds for media/document when they answer via the HTTP(S) arm —
-    // the only arm that runs the control scan (the trusted-prefix arms do not,
-    // which the boundary pin below records).
     fc.assert(
       fc.property(fc.webUrl(), (value) => {
         for (const sink of [safeMediaUrl, safeDocumentUrl]) {
@@ -410,9 +336,6 @@ describe("[law:untrusted-url-allowlist-closed] the dynamic URL sinks return null
   });
 
   it.fails("BOUNDARY: media/document pass control units straight through the trusted vault-blob and data: prefixes", () => {
-    // The vault-blob and data: arms return the value verbatim with no control
-    // scan, so the control-free promise is NOT global to these two sinks.
-    // This pin documents that trusted-prefix gap; close it and this turns red.
     const smuggled = `${VAULT_BLOB_PATH}a\u0001b`;
     const result = safeMediaUrl(smuggled);
     expect(result).not.toBeNull();
@@ -425,7 +348,6 @@ describe("[law:untrusted-media-subsumed-by-document] every media source is a doc
     fc.assert(
       fc.property(urlInput, (value) => {
         const media = safeMediaUrl(value);
-        // Implication folded in: a rejected media value is vacuously subsumed.
         expect(media === null || safeDocumentUrl(value) === media).toBe(true);
       }),
       { numRuns: 600, seed: 8_640_020 }
@@ -444,7 +366,6 @@ describe("[law:untrusted-media-subsumed-by-document] every media source is a doc
       }),
       { numRuns: 600, seed: 8_640_021 }
     );
-    // Both directions of the converse, concretely.
     expect(safeMediaUrl("data:application/pdf;base64,AA")).toBeNull();
     expect(safeDocumentUrl("data:application/pdf;base64,AA")).toBe(
       "data:application/pdf;base64,AA"
@@ -466,23 +387,15 @@ describe("[law:untrusted-background-image-unescapable] safeBackgroundImage canno
       }),
       { numRuns: 600, seed: 8_640_030 }
     );
-    // The existing adversarial class is rejected upstream — it never reaches
-    // the escaper, so there is nothing to break out of.
     expect(
       safeBackgroundImage('https://x.invalid/a") ; color:red;/*')
     ).toBeUndefined();
-    // A clean URL bearing quote and backslash is neutralized, not dropped.
     expect(safeBackgroundImage('https://x/a"b\\c')).toBe(
       'url("https://x/a\\"b\\\\c")'
     );
   });
 
   it.fails("BOUNDARY: a data-URL newline yields CSS that is not a single valid url() token", () => {
-    // safeMediaUrl admits a data: body verbatim, and the escaper only handles
-    // quote and backslash — so a raw newline survives into the CSS string,
-    // which is a parse error rather than a single url() token. The value
-    // cannot inject (it fails to set), but the token-integrity clause of the
-    // law does not hold here. Strip the control and this turns red.
     const out = safeBackgroundImage("data:image/png;base64,AA\nBB");
     expect(out).toBeTypeOf("string");
     expect(/[\n\r\f]/u.test(out ?? "")).toBe(false);

@@ -1,12 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/**
- * One field per call, not a list: only a TOP-LEVEL command input is hashed out
- * of the append-only journal by the vault's `sealedInput` redaction, so a list
- * would carry sealed values into the journal in the clear. Online-only: the
- * payload can carry a secret, and a secret never enters the offline queue.
- */
-
 export default async function setField({ body, ctx }: HandlerArgs) {
   const input = actionInput(body);
   const cmdInput: Record<string, unknown> = {

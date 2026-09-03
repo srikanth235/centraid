@@ -1,13 +1,3 @@
-// IMPORT (README-Locker §1 `locker/import`, §6 "Import verdicts").
-//
-// DRAFT → REVIEW → PUBLISH: nothing reaches the vault until a draft is
-// published, and a discarded draft writes nothing.
-//
-// THE VAULT WINS: `held` is the verdict on a row whose secret the vault
-// already has — an import can never overwrite one.
-//
-// The staged-import doors are feature-detected with NO fallback (protocol C1),
-// owner-tier and online-only. Without them a seat draws no control at all.
 import type { ReactNode } from "react";
 
 import { LOCKER_ENTITY, batchMeta, verdictOf } from "../import-model.ts";
@@ -40,9 +30,7 @@ import { Section } from "./Rows.tsx";
 import styles from "./Rows.module.css";
 
 export interface ImportScreenProps {
-  /** Feature-detected: absent means no control at all, never a disabled one. */
   hasDoor: boolean;
-  /** The doors refuse offline, and the screen says so before a file is picked. */
   offline: boolean;
   batches: readonly StagedBatch[] | null;
   rows: readonly StagedRow[] | null;
@@ -54,8 +42,6 @@ export interface ImportScreenProps {
   onDiscard: (batchId: string) => void;
 }
 
-/** Drawn always — a reviewer needs the vocabulary whether or not this draft
- *  uses all three (§6). */
 function Verdicts(): ReactNode {
   return (
     <FieldRow label={IMPORT_VERDICTS_ROW}>

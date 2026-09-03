@@ -1,6 +1,3 @@
-// First-line promotion is the default case, so it is the first thing tested:
-// over half the corpus has no title of its own, and every card, row, result
-// and chip reads this one function.
 import { describe, expect, test } from "vitest";
 
 import {
@@ -39,9 +36,6 @@ describe("first-line promotion", () => {
   });
 
   test("a title derived from the first line still reads as untitled", () => {
-    // What `create-note` had to send, because the vault will not take a
-    // nameless note — the member never typed it, so the card must not
-    // print the same line twice.
     const body = "call the plumber\nbefore Friday";
     const shown = promote({ title: deriveTitle("", body), body });
     expect(shown.untitled).toBe(true);
@@ -108,7 +102,6 @@ describe("checklists", () => {
     const [head, box, tail] = segments;
     expect(head).toMatchObject({ text: "intro", from: 0 });
     expect(box).toMatchObject({ line: 1, checked: false, text: "one" });
-    // The run's offsets address the same string the anchor and the edit do.
     expect(tail).toMatchObject({ text: "after" });
     expect("from" in tail! ? tail.from : -1).toBe("intro\n- [ ] one\n".length);
   });

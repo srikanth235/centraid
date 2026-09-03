@@ -1,17 +1,9 @@
-/*
- * A4/A7 tripwires for `apps/_shared/placement-registry.ts` (#712). A4:
- * `PlaceableItemType` stays vault's `ShareableItemType` minus `"locker.item"`;
- * blueprints cannot import `@centraid/vault`, so this source-scans
- * `closure.ts`. A7: Locker is structurally excluded from sharing.
- */
-
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-// Browser ES modules outside this TS program, so the shape is local.
 interface PlacementEntity {
   itemType: string;
   appId: string;
@@ -33,7 +25,6 @@ const CLOSURE_PATH = path.resolve(
 );
 const APPS_DIR = path.join(PACKAGE_ROOT, "apps");
 
-/** A source scan, not an import — see the header. */
 function vaultShareableItemTypes(): string[] {
   const source = readFileSync(CLOSURE_PATH, "utf8");
   const match = source.match(
@@ -63,11 +54,9 @@ function sourceFiles(dir: string): string[] {
 }
 
 describe("placement registry (A4) mirrors vault's ShareableItemType minus locker.item", () => {
-  // [law:placement-registry-parity] Every placeable entity is enumerated once.
   const vaultTypes = vaultShareableItemTypes();
 
   it("vault's own list still contains locker.item — else this tripwire is stale", () => {
-    // If vault drops locker.item, A7 is moot: revisit, never pass silently.
     expect(vaultTypes).toContain("locker.item");
   });
 
@@ -103,11 +92,6 @@ describe("locker is structurally excluded from placement (A7)", () => {
   });
 });
 
-/*
- * A6. Tally is "born shared", so it tests whether engine A is an ENGINE or
- * Photos' sharing code with a wider type: any edit Tally needs is an ENGINE
- * DEFECT, not a Tally patch.
- */
 describe("Tally consumes the placement engine with zero engine edits (A6)", () => {
   const ENGINE_FILES = [
     path.join(APPS_DIR, "_shared", "placement-registry.ts"),
@@ -127,7 +111,6 @@ describe("Tally consumes the placement engine with zero engine edits (A6)", () =
   });
 
   it("no engine module branches on an app id or an item type", () => {
-    // Only RENDERERS are held to this; a registry names apps by definition.
     for (const file of ENGINE_FILES.slice(1)) {
       const source = readFileSync(file, "utf8");
       expect(source.toLowerCase(), file).not.toContain("tally");
@@ -137,7 +120,6 @@ describe("Tally consumes the placement engine with zero engine edits (A6)", () =
   });
 
   it("record-only Tally reaches placement without touching custody", () => {
-    // Being "born shared" says nothing about carrying bytes.
     const dir = path.join(APPS_DIR, "tally");
     for (const file of sourceFiles(dir)) {
       const text = readFileSync(file, "utf8");
@@ -148,8 +130,6 @@ describe("Tally consumes the placement engine with zero engine edits (A6)", () =
 });
 
 describe("Docs shares its actual folder container", () => {
-  // A shared folder is ONE standing grant over `docs.folder`, never a batch
-  // of placed item ids (#825). Restore the native half with its screen.
   it("web shares the selected folder as one docs.folder grant", () => {
     const web = readFileSync(
       path.join(APPS_DIR, "docs", "app-root.tsx"),
@@ -157,7 +137,6 @@ describe("Docs shares its actual folder container", () => {
     );
     expect(web).toContain('subjectType: "docs.folder"');
     expect(web).toContain("shareFolder.folder_id");
-    // No app-private share plumbing survives anywhere in Docs.
     for (const file of sourceFiles(path.join(APPS_DIR, "docs"))) {
       const text = readFileSync(file, "utf8");
       expect(text, file).not.toContain("ShareSheet");
@@ -178,8 +157,6 @@ describe("Docs shares its actual folder container", () => {
   });
 });
 
-// A share is a standing grant over ONE declared subject (#825); retaining is
-// not sharing and stays on the Commons plane.
 describe("native Photos selection reaches the grant plane by subject", () => {
   it("shares the selected photograph as one media.asset grant", () => {
     const source = readFileSync(
@@ -219,11 +196,6 @@ describe("native Photos selection reaches the grant plane by subject", () => {
   });
 });
 
-// This block used to pin the OPPOSITE: a claim-code handoff that let a share
-// reach somebody the member had never linked — sender copies a code, receiver
-// pastes and redeems it. #903 retired that mechanism, so the same surfaces are
-// held to its absence. Inverted rather than deleted, because a source scan
-// that stops running is how a retired transport creeps back.
 describe("there is no claim-code path to someone this vault has not linked", () => {
   it("the share sheet mints no claim and offers nothing to copy or send", () => {
     const native = readFileSync(
@@ -236,7 +208,6 @@ describe("there is no claim-code path to someone this vault has not linked", () 
     expect(native).not.toContain("result.claims");
     expect(native).not.toContain("Clipboard.setStringAsync");
     expect(native).not.toContain("Share.share");
-    // What it says instead names the ONE act that makes a person shareable.
     expect(native).toContain("You have not linked with anyone yet");
   });
 
@@ -269,7 +240,6 @@ describe("named-circle reuse stays exact", () => {
     );
     expect(native).toContain("manualShareSelection");
     expect(native).toContain("setSelectedCircleId(next.circleId)");
-    // The group is named by its own chip now, not by a prefixed option label.
     expect(native).toContain("accessibilityLabel={`Select the group ");
   });
 });
@@ -288,8 +258,6 @@ describe("Save to my vault is gated by exact Commons residency", () => {
         PACKAGE_ROOT,
         "../../apps/mobile/src/apps/photos/AlbumDetail.tsx"
       ),
-      // The rebuilt Docs surfaces must rejoin this list: the exact-residency
-      // gate is what keeps "Save to my vault" off a non-Commons item.
     ];
     for (const file of files) {
       const source = readFileSync(file, "utf8");

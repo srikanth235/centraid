@@ -1,6 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** tally.settle_up — contract in app.json. */
 const KEYS = ["from_party", "to_party", "amount_minor", "group_id", "paid_on"];
 export default async function settleUp({ body, ctx }: HandlerArgs) {
   const input = actionInput(body);

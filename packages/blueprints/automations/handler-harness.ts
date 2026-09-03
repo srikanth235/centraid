@@ -1,8 +1,3 @@
-/*
- * Connector/enricher suites extend the repository-owned automation handler
- * harness with published-module loading and cursor rails specific to pulls.
- */
-
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -46,9 +41,6 @@ export function createHarness(
   });
 }
 
-// Same observable semantics as `cursorManager` in
-// packages/server/src/automation/worker/runner.ts: provider cursors are live opaque
-// tokens; high-water cursors only move upward and refuse type changes.
 export interface CursorHarness {
   cursor: {
     provider: (key: string) => {

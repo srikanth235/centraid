@@ -1,19 +1,3 @@
-// EXPORT — the custodian's surface (GAPS.md Tally §8).
-//
-// LOCAL-FIRST MAKES LEAVING POSSIBLE, and that is the point of it: a sovereign
-// vault must not be a roach motel. The `export` query answers with one group's
-// rows; the FILE is assembled here and saved from here, which is why the foot
-// reads in `--net` — the bytes leave the vault the moment the member saves it,
-// and nothing before that moment has left anything.
-//
-// SPLITS AND REVISIONS TRAVEL; BALANCES DO NOT. A balance is arithmetic over
-// the rows, and the rows are what the file holds — so the export cannot ship a
-// figure this app refuses to store. The payload says `balances_excluded` out
-// loud rather than leaving a reader to notice the absence.
-//
-// THE WINDOW IS STATED. `truncated` and `window` come back with the rows, so a
-// partial export is never mistaken for a whole one: the foot names the counts
-// before the press, and a file that carries the window says so.
 import type { ReactNode } from "react";
 
 import {
@@ -48,9 +32,6 @@ export interface ExportDraft {
 export interface ExportScreenProps {
   draft: ExportDraft;
   groups: readonly GroupSummary[];
-  /** The rows the chosen group's `export` query answered with, or `null` while
-   *  that read is in flight — and then the counts are absent rather than zero,
-   *  because "nothing to export" is a claim nobody has checked. */
   data: ExportData | null;
   onPatch: (patch: Partial<ExportDraft>) => void;
   onCancel: () => void;

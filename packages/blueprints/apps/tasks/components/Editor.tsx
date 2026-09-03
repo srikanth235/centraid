@@ -1,18 +1,3 @@
-// The task editor (`tasks/task`) — a 720px measure, one field row per fact
-// (spec §1, §5).
-//
-// THE ANCHOR CONTROL IS THE POINT OF THIS SCREEN. Two cards, each a sentence:
-// *Every Monday, whether or not I did it. Rent.* against *3 days after I last
-// finished it. Watering.* That single choice is the difference between a bill
-// and a houseplant, and it is the place every recurring-task product in the
-// category has failed by never asking. It writes through `organize-task`, the
-// ONLY door for `recurrence_anchor`/`recurrence_tz`, which also requires the
-// row's `sort_order` — preserved, never reset, or a member's manual order would
-// quietly collapse every time they changed an anchor.
-//
-// The bar's second verb is Release. It is outlined secondary, because a task
-// that will not be done is an outcome; Delete is the one outlined `net` control
-// in this room.
 import type { ReactNode } from "react";
 
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
@@ -75,8 +60,6 @@ export interface EditorProps {
   task: Task;
   now: string;
   projects: readonly Project[];
-  /** The vault this task was born in and who else can see it, or null when it
-   *  is the member's own — personal is silence. */
   home?: { vault: string; who: string } | null;
   onTitle: (title: string) => void;
   onPriority: (priority: number) => void;

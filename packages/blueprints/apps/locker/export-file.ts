@@ -1,6 +1,3 @@
-// The plaintext export file (README-Locker §6): the `export` action unseals in
-// the vault and receipts it. The plaintext never enters the app's bag.
-
 export interface ExportItem {
   item_id?: string;
   type?: string | null;
@@ -25,11 +22,6 @@ export interface ExportItem {
     value?: string | null;
   }[];
   passkey?: Record<string, unknown> | null;
-  /** THE ONE PLACE A PREVIOUS PASSWORD IS READABLE (#916, D2). `locker.export`
-   *  unseals each item's `core_entity_revision` snapshots under the export's
-   *  own confirmation and receipt; the item pane cannot, because no reveal
-   *  permit reaches a revision. So this stays — it is not a read of the dead
-   *  `locker_item_history` table, it is the command's own unseal. */
   history?: Record<string, unknown>[];
   [column: string]: unknown;
 }
@@ -40,8 +32,6 @@ export interface ExportPayload {
   items?: ExportItem[];
 }
 
-/** 1Password dialect column order. Anything without a column rides `Notes`,
- *  appended rather than dropped. */
 const COLUMNS: readonly string[] = [
   "Title",
   "Url",
@@ -61,7 +51,6 @@ function cell(value: unknown): string {
   return /["\n,]/u.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
-/** Named lines, not JSON — readable without a parser. */
 function extras(item: ExportItem): string[] {
   const lines: string[] = [];
   if (item.notes) lines.push(String(item.notes));
@@ -111,6 +100,4 @@ export function exportFileName(payload: ExportPayload): string {
   return stamp ? `locker-${stamp}.csv` : "locker.csv";
 }
 
-// Handing the file over is the format kit's (#883 B4): `{ name, type, text }`
-// carries the media type beside the name, where a file's type belongs.
 export { saveExportFile } from "../_shared/format-kit.ts";

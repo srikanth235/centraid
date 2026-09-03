@@ -1,13 +1,9 @@
-// @vitest-environment jsdom
 // oxlint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
 // @ts-nocheck
-// Editor is a decision surface — nothing is written until Save (v4 §7.4).
-// Arrow keys must not step while editing: stray ←/→ remounts (`key={asset.asset_id}`) and drops crop/rotation.
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-// React 19 wants this global before `act()` drives a client root.
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const PNG =
@@ -18,7 +14,6 @@ const ASSETS = [
   { asset_id: "a2", scope_id: "", title: "Second", content_uri: PNG },
 ];
 
-// Specifier is a PARAMETER: a literal `import()` is typechecked and would pull `apps/` in (TS6059).
 const load = (relativePath: string) => import(relativePath);
 
 function mountHost(): HTMLElement {
@@ -31,7 +26,6 @@ async function openViewer() {
   const { createLightbox, viewerKeyAction } = await load(
     "../apps/photos/lightbox.tsx"
   );
-  // Composite key — a bare `asset_id` is not a key on a merged timeline.
   const { assetKey } = await load("../apps/photos/asset-key.ts");
   const root = createRoot(host);
   const lightbox = createLightbox({
@@ -140,7 +134,6 @@ describe("an in-progress edit survives the viewer's own keys", () => {
     expect(lightbox.isOpen()).toBe(false);
   });
 
-  // COUNTER-PROOF (sabotage): stepping is destructive. Remove the `editing` branch from `viewerKeyAction` and the test above becomes this one.
   it("stepping WOULD destroy the edit — which is why the guard exists", async () => {
     const { host, lightbox } = await openViewer();
     await startEditing(host);
@@ -196,3 +189,4 @@ describe("the editor's tool row and commit row (§7.4)", () => {
     expect(order.indexOf("Crop")).toBeLessThan(order.indexOf("Cancel"));
   });
 });
+// @vitest-environment jsdom

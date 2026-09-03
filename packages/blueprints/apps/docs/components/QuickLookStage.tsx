@@ -15,7 +15,6 @@ import { Icon } from "./Shared.tsx";
 
 import styles from "./QuickLook.module.css";
 
-// Keyed by `content_id`: re-setting `src` reloads and rescrolls the frame.
 function StageMedia({ doc }: { doc: DriveDoc }) {
   const m = typeMeta(doc.media_type, doc.title);
 
@@ -71,8 +70,6 @@ function StageMedia({ doc }: { doc: DriveDoc }) {
         className={styles.frame}
         src={doc.content_uri}
         title={doc.title ?? "PDF"}
-        // NO `sandbox`: an opaque-origin frame loads neither a plugin document
-        // nor a `blob:` URL. The content type bounds it, not the attribute.
       />
     );
 

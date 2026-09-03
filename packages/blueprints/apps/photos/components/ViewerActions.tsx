@@ -1,5 +1,3 @@
-// Viewer actions (v4 §7.1, §D). Labels follow bar width (`labelled` prop).
-// `reason` on the control, not a tooltip (§6). Trash is outlined `--net` (§18).
 import type { FC, ReactElement } from "react";
 
 import type { PhoneActionId, ViewerActionId } from "../viewer.ts";
@@ -46,7 +44,6 @@ export function ViewerBarActions({
         const label = labelled ? (
           <span className={styles.actionLabel}>{name}</span>
         ) : null;
-        // Icon-only: `aria-label` + `title`. Labelled, `title` is only the disable reason.
         const title = spec.reason ?? (labelled ? undefined : name);
         const handleRun = spec.onRun;
         if (spec.href !== undefined) {
@@ -85,7 +82,6 @@ export function ViewerBarActions({
   );
 }
 
-/** Never labelled — name lives on the element. */
 export function ViewerBottomBar({
   specs,
 }: {

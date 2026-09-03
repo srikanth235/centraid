@@ -1,26 +1,3 @@
-// @vitest-environment jsdom
-// The drive family, the reading/editor pair and the details rail (Docs spec
-// §4.1, §4.2, §4.6, §6, §8) — tested where the rules actually live: in pure
-// modules.
-//
-// Every assertion here is on a rule the app would otherwise express as an
-// inline condition in a render function:
-//
-//   * a filter axis is only offered where this drive can ANSWER it, and the
-//     axes compose (filters.ts);
-//   * a breadcrumb chain goes through the place the member reached the shelf
-//     from, and the trailing crumb is not a link (drive-copy.ts `crumbsFor`);
-//   * a write has seven visible outcomes and only three of them may be pressed
-//     (document-copy.ts `DSAVE`);
-//   * whether Docs can SHOW a kind is a separate fact from what the kind is
-//     (format.ts `canRender`).
-//
-// The app sources are loaded by file URL, like every other blueprint-app
-// fixture here: `src/` is its own tsconfig rootDir, so the types the
-// assertions need are declared locally rather than imported across it. The
-// jsdom environment is required only because `format.ts` reaches the shared
-// component kit, whose custom-element base class needs `HTMLElement` at import
-// time — nothing asserted below touches a DOM.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -52,7 +29,6 @@ interface Row {
   custody_state: string | null;
   created_at: string;
   updated_at: string;
-  /** `[]` is shared with nobody; `null` is "the share reads were denied". */
   shared_with: SharedWith[] | null;
 }
 interface SaveOutcome {
@@ -140,9 +116,6 @@ describe("the filter row (§4.2)", () => {
       "modified",
       "source",
     ]);
-    // People is in the table and off the screen while nothing is shared: its
-    // options ARE the audiences the rows name (#821), so a drive with
-    // no shares has no answerable option and draws no pill.
     expect(filters.liveAxes().map((axis) => axis.id)).toStrictEqual([
       "type",
       "modified",
@@ -159,18 +132,14 @@ describe("the filter row (§4.2)", () => {
     const people = copy.DFILTERS.find((axis) => axis.id === "people")!;
     const rows = [
       row({ document_id: "a", shared_with: [share("Family")] }),
-      // The same audience twice is one pill; a folder-borne share is still a
-      // share, so it earns its audience an option.
       row({ document_id: "b", shared_with: [share("Family", "folder")] }),
       row({ document_id: "c", shared_with: [share("Ana and Tom")] }),
-      // Denied share reads are UNKNOWN, not an audience.
       row({ document_id: "d", shared_with: null }),
     ];
     expect(filters.liveOptions(people, rows)).toStrictEqual([
       "Shared with Ana and Tom",
       "Shared with Family",
     ]);
-    // Nothing is invented from the spec's fixtures: no owner, no names axis.
     expect(people.options).toStrictEqual([]);
   });
 
@@ -195,7 +164,6 @@ describe("the filter row (§4.2)", () => {
     const source = copy.DFILTERS.find((axis) => axis.id === "source")!;
     const live = filters.liveOptions(source);
     expect(live).toContain("On this device");
-    // How a document ARRIVED is not in the drive projection.
     expect(live).not.toContain("Scanned here");
     expect(live).not.toContain("From the share sheet");
   });
@@ -275,11 +243,6 @@ describe("the breadcrumb (§1.6)", () => {
   });
 });
 
-// §6.3's seven write outcomes are the EDITOR's save states, and Docs has no
-// editor (docs/design-divergences.md): it holds, versions and files a
-// document; it does not open one to type into. There is no `DSAVE` export to
-// police here.
-
 describe("what Docs can show (§10.1) and what it asks for (§4.3)", () => {
   it("loads an inline-shell document through the authenticated blob primitive", async () => {
     const host = globalThis as unknown as {
@@ -341,9 +304,6 @@ describe("what Docs can show (§10.1) and what it asks for (§4.3)", () => {
   });
 
   it("draws trash's ask without a destroy verb", () => {
-    // A label and one sentence: the eyebrow says it is not a control that
-    // failed, and the fallback says why destruction is scheduled. The design
-    // rationale is a comment in drive-copy.ts, never printed at a member.
     expect(copy.TRASH_ASK.eyebrow).toBe("Not available yet");
     expect(copy.TRASH_ASK.title).toBe("Delete forever and Empty trash");
     expect(copy.TRASH_FALLBACK).toContain("cannot be emptied");
@@ -364,3 +324,4 @@ describe("the details rail (§8)", () => {
     ]);
   });
 });
+// @vitest-environment jsdom

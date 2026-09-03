@@ -10,7 +10,6 @@ export interface AppInfo {
   modifiedAt: string;
   name?: string;
   description?: string;
-  /** Legacy `auto.` id prefix superseded ('automation' = UI-less). */
   kind?: "app" | "automation";
 }
 

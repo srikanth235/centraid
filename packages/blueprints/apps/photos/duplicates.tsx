@@ -6,9 +6,6 @@ import {
   triageCurrent,
 } from "../_shared/triage-session.ts";
 import type { TriageSession } from "../_shared/triage-session.ts";
-// The duplicates orchestrator (#352), rendered into the SAME `gridRoot` the
-// library uses. Loaded LAZILY: the query walks up to 4000 assets. TWO
-// SURFACES, ONE STATE — the review is a mode, never a second copy.
 import { DuplicateReviewView } from "./components/DuplicateReview.tsx";
 import { DuplicatesView } from "./components/Duplicates.tsx";
 import { trashDuplicateAssets } from "./duplicates-actions.ts";
@@ -17,7 +14,6 @@ import type { DuplicateCluster } from "./types.ts";
 
 type Root = { render: (node: ReactNode) => void };
 
-// Own-scope (#599). `rung` is a getter: tile size can change (§4.2).
 export function createDuplicates({
   gridRoot,
   refresh,
@@ -33,8 +29,6 @@ export function createDuplicates({
   let loading = false;
   const selected = new Set<string>();
 
-  // A SNAPSHOT, never the live `clusters` list: a denominator that shrank
-  // under the member would report a shorter queue than they agreed to walk.
   let session: TriageSession<DuplicateCluster> | null = null;
   let busy = false;
   const keptByCluster = new Map<string, string>();
@@ -85,7 +79,6 @@ export function createDuplicates({
     );
   }
 
-  /** Drops clusters left under two copies: a cluster of one is no question. */
   function dropTrashed(ids: readonly string[]): void {
     const trashedIds = new Set(ids);
     clusters = (clusters ?? [])
@@ -103,7 +96,6 @@ export function createDuplicates({
     renderDuplicates();
   }
 
-  /** Inert while the batch runs, so no second press starts a second pass. */
   async function resolveCluster(
     cluster: DuplicateCluster,
     assetIds: string[]

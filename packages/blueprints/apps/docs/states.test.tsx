@@ -1,24 +1,3 @@
-// @vitest-environment jsdom
-
-// Docs' honest-state cells `docs.parked` and `docs.conflict`, asserted on the
-// PRODUCTION rows rather than on the shared overlay component.
-//
-// `_shared/PendingWriteActions.test.tsx` already proves the overlay draws the
-// right chip, sentence and buttons when it is handed a decorated row. What it
-// cannot prove is that a Docs row ever REACHES it: the drive draws a document
-// two ways (`ListRow`, `GridCard`), and a member who parks a rename in the grid
-// and finds no explanation there is in the same position as one whose row never
-// carried the mark at all. So both layouts are driven here, through the same
-// decorated `DriveDoc` the outbox produces — `decoratePendingMutation` is the
-// one law that stamps the overlay fields, and `enrichPendingRows` is the one
-// that later names the steward, so nothing below hand-writes an overlay field
-// the shell would not have written.
-//
-// The third Docs cell, `docs.pending`, is NOT here on purpose: it is owned by
-// `apps/desktop/tests/e2e/pending-overlay.spec.ts`, where a real offline rename
-// queues in the durable replica outbox and its chip survives an Electron
-// reload. A jsdom re-enactment of that would assert strictly less.
-
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, test } from "vitest";
@@ -61,8 +40,6 @@ const BASE: DriveDoc = {
   shared_from: null,
 };
 
-/** The row exactly as the outbox hands it to the drive: a projected upsert of
- *  the document, decorated with the intent's presentation fields. */
 function pendingDoc(intent: PendingIntentPresentationInput): DriveDoc {
   return decoratePendingMutation(
     pendingUpsert(
@@ -80,7 +57,6 @@ const PARKED = pendingDoc({
   action: "rename",
 });
 
-/** The same parked row after the shell learned WHO is holding it. */
 const PARKED_WITH_STEWARD = enrichPendingRows(
   [PARKED as unknown as Record<string, unknown>],
   [{ intentId: INTENT, status: "parked", stewardLabel: "Ravi" }]
@@ -93,7 +69,6 @@ const CONFLICTED = pendingDoc({
   conflict: { expectedVersion: 4, actualVersion: 5 },
 });
 
-/** The two production layouts of one document, rendered from the same row. */
 const VIEWS = [
   [
     "list",
@@ -145,8 +120,6 @@ describe("a Docs row whose write has not landed", () => {
     (window as unknown as { centraid?: unknown }).centraid = undefined;
   });
 
-  /** Render one layout and return the row's pending region, which the overlay
-   *  labels for a screen reader — the drive's other buttons stay outside it. */
   async function paint(
     view: (typeof VIEWS)[number][1],
     doc: DriveDoc,
@@ -170,8 +143,6 @@ describe("a Docs row whose write has not landed", () => {
   test.each(VIEWS)(
     "%s: a parked rename says who is waiting and offers the Approvals inbox",
     async (_name, view) => {
-      // Recorders rather than spies: what is asserted is the shell call the
-      // press PRODUCED, arguments and all, not that some mock ran.
       const opened: string[] = [];
       (window as unknown as { centraid: unknown }).centraid = {
         openApprovals: () => opened.push("approvals"),
@@ -182,8 +153,6 @@ describe("a Docs row whose write has not landed", () => {
       expect(region.querySelector(".kit-pending-chip")?.textContent).toBe(
         "parked"
       );
-      // The sentence, not only the word: "parked" alone tells a member nothing
-      // about what will unpark it.
       expect(region.textContent).toContain(
         "Waiting for the owner to approve this change."
       );
@@ -204,8 +173,6 @@ describe("a Docs row whose write has not landed", () => {
       const region = await paint(view, PARKED_WITH_STEWARD);
 
       expect(region.textContent).toContain("Waiting for Ravi.");
-      // …and does not ALSO say it the vague way, which would be the same fact
-      // told twice at two levels of precision.
       expect(region.textContent).not.toContain(
         "Waiting for the owner to approve this change."
       );
@@ -215,9 +182,6 @@ describe("a Docs row whose write has not landed", () => {
   test.each(VIEWS)(
     "%s: with no Approvals door, the row still names where the change went",
     async (_name, view) => {
-      // A shell build without the inbox (`openApprovals` absent) must not draw
-      // a button that would do nothing when pressed — but the member is still
-      // owed the destination, so the affordance degrades to the sentence.
       (window as unknown as { centraid: unknown }).centraid = {};
 
       const region = await paint(view, PARKED);
@@ -251,9 +215,6 @@ describe("a Docs row whose write has not landed", () => {
       expect(region.querySelector(".kit-pending-chip")?.textContent).toBe(
         "conflict"
       );
-      // The two numbers are the whole reason this is a conflict rather than a
-      // failure: they are what tells the member their edit was made against a
-      // row somebody else has since moved on from.
       expect(region.textContent).toContain(
         "This row changed somewhere else. Expected version 4; found 5."
       );
@@ -269,11 +230,7 @@ describe("a Docs row whose write has not landed", () => {
         buttons[1]?.click();
         buttons[2]?.click();
       });
-      // Edit reopens THIS document's own details rail — a conflict that sent a
-      // member to some other row would be worse than no way back at all.
       expect(detailed).toStrictEqual([BASE.document_id]);
-      // Both acts name the intent the row is carrying, and no scope id: on a
-      // personal drive row the shell settles it in the caller's own vault.
       expect(settled).toStrictEqual([
         ["retry", INTENT, undefined],
         ["discard", INTENT, undefined],
@@ -281,3 +238,4 @@ describe("a Docs row whose write has not landed", () => {
     }
   );
 });
+// @vitest-environment jsdom

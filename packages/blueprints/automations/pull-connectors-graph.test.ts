@@ -1,22 +1,3 @@
-/*
- * Second half of the pull-connector source contract (issues #304/#781):
- * the Microsoft Graph delta family, Linear, Notion, Todoist, and Gmail.
- * The first half (shared auth refusal, GitHub, Dropbox, Google Calendar/
- * Contacts) lives in pull-connectors.test.ts beside this file; the split is
- * the repo's 625-line file ceiling, not a conceptual boundary.
- *
- * The scope of the hand-authored PULL CONNECTORS in this tree
- * (issues #304/#781): cursor discipline (provider tokens, high-water
- * watermarks, honest expiry/reset), external-payload → staging-row shaping
- * (identity normalization, truncation, stable external ids), bounded pages
- * per fire, and the shared auth-refusal path.
- *
- * `packages/blueprints/src/pull-handlers.test.ts` already owns: the Gmail
- * history-page drain, GitLab's independent watermarks, Slack channel-id
- * keying, the Todoist/Notion principal identity pins, and the Microsoft
- * Calendar stale-horizon delta restart. Nothing here restates those flows.
- */
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -212,10 +193,6 @@ describe("microsoft graph delta connectors", () => {
 });
 
 describe("microsoft-calendar-pull", () => {
-  // pull-handlers.test.ts owns the stale-horizon roll (a delta link whose
-  // encoded window fell behind is abandoned). These cover the other side of
-  // that contract: a fresh-horizon link is REUSED, and a 410 inside a fresh
-  // window re-bootstraps the calendarView once.
   it("reuses a fresh-horizon delta link and shapes calendarView rows", async () => {
     const spec = await loadPull("microsoft-calendar-pull");
     const { ctx, log, fetches } = pullCtx(({ url }) => {
@@ -240,9 +217,6 @@ describe("microsoft-calendar-pull", () => {
       });
     });
     const harness = cursorHarness({
-      // ctx.now is 2099-01-01, so the freshly computed horizon ends
-      // 2101-01-01 — one day past this stored end, well under the roll
-      // threshold, so the link must be kept.
       "outlookcal.deltaLink": "https://graph.microsoft.com/delta-cur",
       "outlookcal.windowEnd": "2100-12-31T00:00:00.000Z",
     });
@@ -269,7 +243,6 @@ describe("microsoft-calendar-pull", () => {
     expect(harness.updates.get("outlookcal.deltaLink")).toBe(
       "https://graph.microsoft.com/delta-new"
     );
-    // A kept link means the window did not move.
     expect(harness.updates.has("outlookcal.windowEnd")).toBe(false);
   });
 
@@ -290,8 +263,6 @@ describe("microsoft-calendar-pull", () => {
 
     const result = await spec.pull({ ctx, cursor: harness.cursor, log });
 
-    // The rebuilt view spans now−1y .. now+2y around the deterministic
-    // ctx.now, and the rolled window end is persisted.
     expect(fetches[1]!.url).toBe(
       "https://graph.microsoft.com/v1.0/me/calendarView/delta?startDateTime=2098-01-01T00%3A00%3A00.000Z&endDateTime=2101-01-01T00%3A00%3A00.000Z"
     );
@@ -368,7 +339,6 @@ describe("microsoft-contacts-pull", () => {
         ],
       },
     });
-    // No display name: the first identifier stands in.
     expect(result.rows[1]!.payload).toMatchObject({
       fn: "noname@example.com",
     });
@@ -480,7 +450,6 @@ describe("notion-pull", () => {
       (JSON.parse(fetches[1]!.body ?? "{}") as Record<string, unknown>)
         .start_cursor
     ).toBeUndefined();
-    // Only pages stage; the title is joined from the title property runs.
     expect(result.rows).toStrictEqual([
       {
         entity_type: "core.content_item",
@@ -593,7 +562,6 @@ describe("google-gmail-pull", () => {
       payload: {
         messageId: "gmail:m9",
         subject: "Yo",
-        // RFC 2822 From parsing: display name kept, address lowercased.
         fromName: "Jane Doe",
         fromEmail: "jane@example.com",
         sentAt: "2023-11-14T22:13:20.000Z",
@@ -601,7 +569,6 @@ describe("google-gmail-pull", () => {
         threadKey: "gmail-thread:t9",
       },
     });
-    // The watermark is the profile's historyId captured BEFORE listing.
     expect(harness.updates.get("gmail.historyId")).toBe("900");
   });
 

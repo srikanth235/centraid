@@ -1,11 +1,3 @@
-// @vitest-environment jsdom
-//
-// The per-row custody altitude (#712 B4, docs/blueprint-seats.md "Byte
-// custody vocabulary"): List/Grid rows mark the EXCEPTION only, never the
-// norm. `custodyMeta` still tells the full four-state story for Details.tsx's
-// per-item chip — this file pins `custodyRowMark`, the row-scale narrowing of
-// it, against drifting back to a dot on every row.
-
 import { describe, expect, test } from "vitest";
 
 import { custodyMeta, custodyRowMark } from "./format.ts";
@@ -42,8 +34,6 @@ describe("docs custodyRowMark", () => {
   });
 
   test("the per-item full story still carries all four states", () => {
-    // Details.tsx's on-demand chip reads custodyMeta directly, unnarrowed —
-    // this is the guard against narrowing THAT function by mistake instead.
     expect(custodyMeta("replicated")).toStrictEqual({
       label: "Backed up",
       tone: "ok",
@@ -54,3 +44,4 @@ describe("docs custodyRowMark", () => {
     });
   });
 });
+// @vitest-environment jsdom

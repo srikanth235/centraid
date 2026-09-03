@@ -1,8 +1,3 @@
-// Tasks chrome — a route inside the frame (spec §1). Geometry only:
-// 232px rail + scroll host. No token, rung, colour, or control recipe.
-// No global tk-prefixed shell/side/topbar trio (trap #5, shared-css.test.ts);
-// banned selectors are not even spelled in comments. Variable UI arrives as
-// slots, same shape as docs/photos Chrome.
 import type { ReactNode } from "react";
 
 import {

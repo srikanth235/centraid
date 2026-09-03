@@ -1,6 +1,3 @@
-// The Tasks write door (#864): every act names its HOUSE scope when it has
-// one, and Delete is a delete — never a cancelled status wearing the verb.
-
 export function taskWrite(args: {
   action: string;
   input: Record<string, unknown>;
@@ -17,10 +14,6 @@ export function taskWrite(args: {
   };
 }
 
-/** A write names a HOUSE scope only when that id is actually mounted.
- *  An unrecognised `scope_id` (a vault-row leftover, a pending stamp)
- *  must not ride through to `bindingFor`, which throws UNKNOWN_SCOPE
- *  and leaves the row unchanged. */
 export function mountedWriteScope(
   scopeId: string | null | undefined,
   mountedIds: readonly string[]
@@ -29,8 +22,6 @@ export function mountedWriteScope(
   return mountedIds.includes(scopeId) ? scopeId : null;
 }
 
-/** Optimistic add projects `pending:<intent>:task`. Completing that
- *  synthetic id is a vault miss; wait for the landed row instead. */
 export function isPendingTaskId(taskId: string): boolean {
   return taskId.startsWith("pending:");
 }
@@ -47,13 +38,11 @@ export function landedTask<T extends { task_id: string; title: string }>(
   );
 }
 
-/** The id `add` minted, or `null` while the write is still queued. */
 export function landedTaskId(outcome: unknown): string | null {
   const output = (outcome as { output?: { task_id?: unknown } } | null)?.output;
   return typeof output?.task_id === "string" ? output.task_id : null;
 }
 
-/** The delete-confirm's own write: remove the row, do not cancel it. */
 export function removeTaskWrite(taskId: string): {
   action: "delete";
   input: { task_id: string };

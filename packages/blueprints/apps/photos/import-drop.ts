@@ -1,8 +1,3 @@
-// Drop capture for web/desktop import (issue #864). `dataTransfer.files` is
-// not always the complete selection — some hosts put files only on `items`,
-// including nested directory entries. Capture is synchronous; walking
-// entries may await.
-
 interface DropReader {
   readEntries: (
     ok: (entries: DropEntry[]) => void,

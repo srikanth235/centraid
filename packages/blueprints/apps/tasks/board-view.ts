@@ -1,6 +1,3 @@
-// The board's toolbar (spec §4). MINE AND HOUSE ARE ONE AXIS: a row is
-// personal or it carries a scope, never both, so holding both lenses would
-// filter the board to nothing — `toggleLens` retires the sibling instead.
 import { priorityLevel } from "./format.ts";
 import { byDueDay } from "./logic.ts";
 import { tasksScopeDeclaration } from "./scope-declaration.ts";
@@ -23,7 +20,6 @@ export function lensHolds(key: TasksLensKey, task: Task): boolean {
   return key === "house" ? Boolean(task.scope_id) : !task.scope_id;
 }
 
-/** The set is an AND, so the count only falls. */
 export function lensedRows(
   rows: readonly Task[],
   lenses: readonly TasksLensKey[]
@@ -51,7 +47,6 @@ export function byPriorityWithinDate(a: Task, b: Task): number {
   return a.title.localeCompare(b.title);
 }
 
-/** The member's own `sort_order`, never re-derived from the dates. */
 export function byManualOrder(a: Task, b: Task): number {
   const left = a.sort_order ?? 0;
   const right = b.sort_order ?? 0;
@@ -82,8 +77,6 @@ export interface DeniedFact {
 
 export const TASKS_SCOPE = tasksScopeDeclaration.mintedIdFamilies.join(" · ");
 
-/** No row for a fact the seat lacks: an em dash beside "Receipt" is a
- *  placeholder wearing a fact's clothes. */
 export function deniedFacts(input: {
   receipt?: string | null;
   scope?: string | null;

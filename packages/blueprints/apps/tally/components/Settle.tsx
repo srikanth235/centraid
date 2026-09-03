@@ -1,27 +1,3 @@
-// SETTLE UP — a payment that HAPPENED, recorded (Tally spec §3, FLOWS.md).
-//
-// FROM AND TO ARE BOTH OPEN, so two friends can settle with the owner as
-// neither party; when they do, the foot says the §6 line out loud — the
-// settlement changes a balance and writes no ledger entry of the owner's.
-//
-// THE GROUP SCOPE INCLUDES *NO GROUP*, and here that is a real choice rather
-// than a stated gap: `settle-up` declares `group_id` optional and the vault
-// command agrees. It is the same chip Add expense has to refuse, which is
-// exactly why GAPS.md §4 phrases the open question the way it does —
-// settlements already work group-less.
-//
-// A PARTIAL PAYMENT IS A SMALLER AMOUNT. There is no partial mode, no
-// percentage of a balance and no "settle everything" button: the member types
-// what they paid.
-//
-// THE SIMPLIFICATION PROPOSAL IS A PROPOSAL. The ruling is opt-in per group,
-// off by default, because it rewires who owes whom and a member who agreed to
-// pay Ana should not silently owe Tom. Turning it on writes ONE FLAG; the
-// transfers themselves are derived at read time by `queries/group.ts` and
-// stored nowhere, and the panel states what it changed — five debts, three
-// payments — because a rewiring that did not say what it rewired is exactly
-// what the ruling forbids. A group whose read has not landed shows no
-// proposal at all rather than an invented one.
 import type { ReactNode } from "react";
 
 import {
@@ -70,7 +46,6 @@ import styles from "./Compose.module.css";
 
 export interface SettleScreenProps {
   draft: SettleDraft;
-  /** Everyone this vault can name: the owner and their friends. */
   friends: readonly FriendSummary[];
   me: string | null;
   meName: string;
@@ -78,10 +53,7 @@ export interface SettleScreenProps {
   currency: string;
   today: string;
   verdict: SettleVerdict;
-  /** The open group's proposal, or `null` while its read has not landed — and
-   *  then nothing is drawn, because absent is not "no transfers". */
   simplification: Simplification | null;
-  /** Who each transfer runs between, by party id. */
   names: ReadonlyMap<string, string>;
   onPatch: (patch: Partial<SettleDraft>) => void;
   onSimplify: (simplify: boolean) => void;
@@ -89,7 +61,6 @@ export interface SettleScreenProps {
   onCommit: () => void;
 }
 
-/** The proposal panel: the §6 sentence, what it changed, and the transfers. */
 function Proposal({
   simplification,
   names,

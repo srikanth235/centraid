@@ -1,21 +1,3 @@
-/**
- * Mechanical guard for docs/blueprint-seats.md's one-computation rule (#883).
- *
- * TWO LANES, TWO BASELINES, so fixing one moves only its own list. NAMES — the
- * same exported identifier in both trees of a pair. BODIES — the same
- * normalized body whatever the two are called, the only lane that sees a
- * rename.
- *
- * `packages/client/src` pairs twice: the kit lane takes mobile's `kit` + `lib`,
- * the screens lane the rest of `apps/mobile/src/apps`. Each dir pairs once.
- *
- * TIGHTEN-ONLY IN BOTH DIRECTIONS. `toStrictEqual` against a seeded baseline,
- * so a NEW collision fails and a REMOVED one fails too until the baseline is
- * shrunk in the same PR.
- *
- * A TRIPWIRE, NOT A PROOF: a text scanner, so `export default`, destructured
- * exports and re-exported classes are outside its reach.
- */
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -37,7 +19,6 @@ const PAIRED_APPS = [
 
 const MOBILE_APPS = path.join("apps", "mobile", "src", "apps");
 
-/** DERIVED, so a new mobile app seat is scanned the day it lands. */
 function unpairedMobileApps(): string[] {
   return readdirSync(path.join(ROOT, MOBILE_APPS), { withFileTypes: true })
     .filter(
@@ -49,7 +30,6 @@ function unpairedMobileApps(): string[] {
     .sort();
 }
 
-/** `[lane, web-side roots, native-side roots]`, all repo-relative. */
 const PAIRED_TREES: readonly (readonly [
   string,
   readonly string[],
@@ -74,7 +54,6 @@ const PAIRED_TREES: readonly (readonly [
   ["screens", [path.join("packages", "client", "src")], unpairedMobileApps()],
 ];
 
-/** Below this, bodies collide by chance. Ceiling: `assetRatio` is 84. */
 const MIN_BODY_CHARS = 40;
 
 const RUNTIME_EXPORT =
@@ -106,11 +85,6 @@ function endOfQuote(source: string, start: number): number {
   return source.length;
 }
 
-/**
- * The `{ … }` block of `function NAME<params>: Ret { … }`. Params and return
- * annotations may themselves contain braces (`{ a }: Props`), so the body
- * opener is the first `{` at paren/bracket depth zero.
- */
 function functionBody(source: string, from: number): string {
   let depth = 0;
   for (let i = from; i < source.length; i++) {
@@ -140,11 +114,6 @@ function balancedBlock(source: string, open: number): string {
   return source.slice(open);
 }
 
-/**
- * The initializer of `const NAME<: Type> = …`, to the first `;` or line break
- * outside every bracket. The `=` search skips `==` and `=>` so an arrow-typed
- * annotation does not end it early.
- */
 function constBody(source: string, from: number): string {
   let assign = -1;
   for (let i = from; i < source.length && assign === -1; i++) {
@@ -172,11 +141,6 @@ function constBody(source: string, from: number): string {
   return source.slice(assign + 1);
 }
 
-/**
- * Comments and whitespace removed, so a reformat cannot hide a copy. `://` is
- * spared so a URL in a string survives; a `//` inside any other string literal
- * is over-stripped, harmless because both sides normalize the same way.
- */
 function normalizeBody(body: string): string {
   return body
     .replace(/\/\*[\s\S]*?\*\//gu, " ")
@@ -231,7 +195,6 @@ function nameCollisions(left: TreeScan, right: TreeScan): string[] {
   return [...left.names.keys()].filter((name) => right.names.has(name)).sort();
 }
 
-/** `web ↔ native`: an entry names what to collapse, not a hash. */
 function bodyCollisions(left: TreeScan, right: TreeScan): string[] {
   return [...left.bodies.entries()]
     .flatMap(([hash, webNames]) => {
@@ -259,10 +222,6 @@ function scanAllLanes(): {
   return { names, bodies };
 }
 
-// Every lane key stays present when empty, so a lane that stops being scanned
-// fails loudly instead of passing by absence.
-
-/** Same exported identifier in both seats. Shrinks only. */
 const NAME_COLLISIONS = {
   agenda: ["DayRibbon", "ribbonLabel", "shelfLabel"],
   docs: [],
@@ -319,11 +278,9 @@ const NAME_COLLISIONS = {
     "updateVault",
     "useAppearance",
   ],
-  // Empty: screen names are seat-specific.
   screens: [],
 } as const;
 
-/** Identical bodies in both seats, name notwithstanding. Shrinks only. */
 const BODY_COLLISIONS = {
   agenda: [],
   docs: [],
@@ -357,7 +314,6 @@ describe("[law:one-computation] paired seats compute a rule once", () => {
   });
 
   it("every paired lane is really scanned — no lane passes by being empty", () => {
-    // A typo'd root scans nothing and reports zero collisions.
     for (const [lane, web, native] of PAIRED_TREES) {
       for (const roots of [web, native]) {
         const scan = scanTree(roots);

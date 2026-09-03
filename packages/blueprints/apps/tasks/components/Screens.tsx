@@ -1,6 +1,3 @@
-// The routes that are not a board (spec §1): Projects, one project, Catch up,
-// the Logbook, Search and the reminder surface — each a SCREEN answering a
-// question the board cannot.
 import type { ReactNode } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";
@@ -22,8 +19,6 @@ import { Board } from "./Board.tsx";
 import type { RowContext } from "./Board.tsx";
 
 import styles from "./Board.module.css";
-
-// ─── Projects, and one project ──────────────────────────────────────────────
 
 export function ProjectsRoute({
   projects,
@@ -88,8 +83,6 @@ export function ProjectsRoute({
   );
 }
 
-/** Sections in the member's own manual order — nothing here re-sorts a
- *  section behind the member. */
 export function ProjectRoute({
   sections,
   rows,
@@ -144,8 +137,6 @@ export function ProjectRoute({
   );
 }
 
-// ─── Catch up (§3, ruling 2) ────────────────────────────────────────────────
-
 export function ReentryRoute({
   days,
   due,
@@ -189,8 +180,6 @@ export function ReentryRoute({
   );
 }
 
-// ─── The Logbook: done AND won't do, each with history and a way back ───────
-
 export function LogbookRoute({
   groups,
   ctx,
@@ -200,8 +189,6 @@ export function LogbookRoute({
   groups: readonly { key: string; label: string; rows: Task[] }[];
   ctx: RowContext;
   narrow: boolean;
-  /** The vault's own total, as words — a four-digit count is written the
-   *  way the member would say it. */
   total: string;
 }): ReactNode {
   const shown = groups.reduce((sum, group) => sum + group.rows.length, 0);
@@ -214,8 +201,6 @@ export function LogbookRoute({
     </>
   );
 }
-
-// ─── Search: field, scope, ranked rows with the hit in the meta slot ────────
 
 export function SearchRoute({
   status,
@@ -282,9 +267,6 @@ export function SearchRoute({
   );
 }
 
-// ─── Reminder surface: drawn on every seat so the design can be read; its ───
-// ─── own copy says pointer seats never fire one (ruling 4, §1). ─────────────
-
 export function NotifyRoute({
   title,
   when,
@@ -293,7 +275,6 @@ export function NotifyRoute({
 }: {
   title: string;
   when: string;
-  /** This seat can actually deliver a notification; only the phone can. */
   supported: boolean;
   note: ReactNode;
 }): ReactNode {
@@ -327,9 +308,6 @@ export function NotifyRoute({
     </div>
   );
 }
-
-// ─── Consent gate: denial is DATA — receipt, scope and time are rows, not ───
-// ─── prose. ─────────────────────────────────────────────────────────────────
 
 export function ConsentGate({
   receipt,

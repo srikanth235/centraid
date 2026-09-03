@@ -1,14 +1,3 @@
-// The version-history panel inside the details drawer (#352): lists a
-// document's `revises` chain (queries/history.ts already did the walk and
-// the honest-ordering math — this only renders it), newest-first, each
-// entry previewable inline and — unless read-only (a trashed document) or
-// already current — restorable through core.restore_document_version.
-//
-// Mounted keyed by the doc's own content_id at the call site (Details.tsx),
-// mirroring QuickLook.tsx's identical trick: a restore mints a new current
-// content id, which remounts this component and re-triggers its fetch, so
-// the panel always reflects the freshly-recorded chain without any extra
-// wiring back to app.tsx's refresh().
 import { useEffect, useState } from "react";
 
 import { fmtBytes, fmtFull, loadable, typeMeta } from "../format.ts";
@@ -148,7 +137,6 @@ export function History({
     return () => {
       cancelled = true;
     };
-    // (#360) loadVersions/documentId read once at mount; Details.tsx keys this component by content_id, so a real version change already remounts it fresh instead of re-running this effect
   }, [documentId, loadVersions]);
 
   if (versions === null)

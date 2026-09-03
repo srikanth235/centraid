@@ -1,7 +1,3 @@
-// Every string Notes puts on a screen (spec §6, verbatim). Copy is specified,
-// never paraphrased inline. The two destructive confirms and the consent gate
-// are the only reassurance this app may offer. Multi-sentence copy is stored as
-// parts and joined by the view, keeping each literal one sentence (#805).
 import { countLabel } from "../_shared/app-frame.tsx";
 import {
   BOOKS,
@@ -41,7 +37,6 @@ export function deleteNotebookBody(notes: number): string {
 export const DELETE_NOTEBOOK_KEPT = "Nothing is deleted with it.";
 export const DELETE_NOTEBOOK_VERB = "Delete";
 
-/** Surfaces the vault's own refusal; never a second rule in front of it. */
 export const RENAME_REFUSAL = "A notebook cannot share a name with its sibling";
 
 export function notebookDeleted(unfiled: number): string {
@@ -98,15 +93,12 @@ export function searchNoMatch(term: string): string {
 
 export const SEARCH_SCOPE = "the live library";
 
-/** Literal queries: typing any of these back must answer. */
 export const SEARCH_EXAMPLES: readonly string[] = [
   "roadmap",
   "checklist",
   "anything I wrote in March",
 ];
 
-/** A SEARCH THAT COULD NOT RUN NEVER SAYS "NOTHING MATCHES": a closed door and
- *  an empty shelf are two different sentences. */
 export const SEARCH_COPY = {
   resting: {
     eyebrow: "Nothing typed",
@@ -184,8 +176,6 @@ export function shelfCopy(shelf: ShelfId, notebookName?: string): ShelfCopy {
       return { title: "Capture", unit: "notes" };
     case VOICE:
       return { title: "Voice", unit: "notes" };
-    // Named, not swept into `default:` — switch-exhaustiveness-check counts
-    // union members, and `default:` does not discharge a named one.
     case null:
       return { title: "Notes", unit: "notes" };
     default:

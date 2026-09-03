@@ -1,7 +1,3 @@
-/** Read-only cross-app decorations for the calendar grid (#834). Entities read
- *  here must stay in Agenda's `CHANGE_TABLES`. THIS vault only; a denial
- *  returns the same shape with `vaultDenied`. */
-
 import {
   FLAGS_SCHEME_URI,
   STARRED_NOTATION,
@@ -14,7 +10,6 @@ interface RawParty {
   party_id: string;
   kind?: string;
   display_name?: string;
-  /** `YYYY-MM-DD` or the year-less `--MM-DD` the vault writes. */
   birth_date?: string | null;
 }
 
@@ -59,7 +54,6 @@ interface DueTask {
 interface DueFact {
   day: string;
   count: number;
-  /** In due order. A shelf lists; it never pages. */
   tasks: DueTask[];
 }
 
@@ -75,11 +69,8 @@ interface DayContextResult {
   vaultDenied?: { code?: string; message?: string };
 }
 
-// No `relationship_tier` column exists: `inner` means starred.
-
 const MAX_RANGE_DAYS = 400;
 const DEFAULT_RANGE_DAYS = 45;
-/** A vault has no upper bound; reads are row-capped. */
 const PARTY_CAP = 2000;
 const TASK_CAP = 2000;
 const TAG_CAP = 5000;
@@ -99,7 +90,6 @@ function addDays(day: string, days: number): string {
     .slice(0, 10);
 }
 
-/** An unusable range is not an error; the default window stands. */
 function rangeOf(input: Record<string, unknown> | undefined): {
   from: string;
   to: string;
@@ -113,7 +103,6 @@ function rangeOf(input: Record<string, unknown> | undefined): {
   return { from, to: to > ceiling ? ceiling : to };
 }
 
-/** Both stored forms end in the recurring `MM-DD`. */
 function monthDayOf(birthDate: unknown): { month: number; day: number } | null {
   if (typeof birthDate !== "string" || birthDate.length < 5) return null;
   const tail = birthDate.slice(-5);
@@ -124,7 +113,6 @@ function monthDayOf(birthDate: unknown): { month: number; day: number } | null {
   return { month, day };
 }
 
-/** Day-by-day so Feb 29 stays absent in a non-leap year. */
 function recursInRange(
   month: number,
   day: number,
@@ -145,7 +133,6 @@ export default async function dayContext({
   const purpose = "dpv:ServiceProvision";
   const { from, to } = rangeOf(input);
   try {
-    // Half-open, so date-only and timed `due_at` both land.
     const dueUpper = addDays(to, 1);
     const [parties, tasks, schemes] = await Promise.all([
       ctx.vault.read({
@@ -164,7 +151,6 @@ export default async function dayContext({
           { column: "due_at", op: "gte", value: from },
           { column: "due_at", op: "lt", value: dueUpper },
         ],
-        // Due order: a shelf lists the day's earliest rows.
         orderBy: { column: "due_at", dir: "asc" },
         limit: TASK_CAP,
         purpose,
@@ -176,7 +162,6 @@ export default async function dayContext({
       }),
     ]);
 
-    // No marker means nobody is starred: an honest `outer`.
     const flagsScheme = findScheme(
       (schemes.rows ?? []) as unknown as RawScheme[],
       FLAGS_SCHEME_URI
@@ -233,7 +218,6 @@ export default async function dayContext({
         left.name.localeCompare(right.name)
     );
 
-    // Days with no due task are absent, not zero-filled.
     const counts = new Map<string, number>();
     const listed = new Map<string, DueTask[]>();
     for (const task of (tasks.rows ?? []) as unknown as RawTask[]) {
@@ -251,7 +235,6 @@ export default async function dayContext({
       .map(([day, count]) => ({ day, count, tasks: listed.get(day) ?? [] }))
       .toSorted((left, right) => left.day.localeCompare(right.day));
 
-    // No holiday source exists in the vault; the field holds the shape open.
     const holidays: HolidayFact[] = [];
 
     return { birthdays, due, holidays };

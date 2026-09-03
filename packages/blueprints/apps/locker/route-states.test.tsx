@@ -1,17 +1,3 @@
-// @vitest-environment jsdom
-// THE STATES OF THE EIGHT ROUTES BEYOND THE LIST (STATES.md's Locker matrix,
-// umbrella #872).
-//
-// `states.test.tsx` next door proves the states that are a claim about the
-// WHOLE ROOM — locked, first run, denied, day one — by driving the production
-// `Root`. This file proves the ones that belong to one route: the form's
-// designed offline refusal, Review's two registers, Search's four states,
-// Trash's countdown, and the four surfaces that describe what they cannot
-// yet do.
-//
-// THE RULE EVERY BLOCK BELOW SHARES: a screen with no door says so and offers
-// no control. A disabled button teaches a member the app is broken; a stated
-// reason teaches them what it is waiting for.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
@@ -74,8 +60,6 @@ const ROW: LockerRow = {
 
 const NOOP = (): void => undefined;
 
-// --------------------------------------------- ADD / EDIT: the online-only rule
-
 describe("ADD / EDIT states the online-only rule in the lede", () => {
   const form = (props: Partial<Parameters<typeof EditScreen>[0]>) =>
     renderToStaticMarkup(
@@ -112,7 +96,6 @@ describe("ADD / EDIT states the online-only rule in the lede", () => {
   test("OFFLINE: the commit is WITHHELD and the reason stands in its place", () => {
     const markup = form({ offline: true });
     expect(markup).toContain(EDIT_FOOT_OFFLINE);
-    // Withheld, never disabled — no dead control anywhere in this app.
     expect(markup).not.toContain(`>${EDIT_SAVE}<`);
     expect(markup).not.toContain("disabled");
   });
@@ -133,7 +116,6 @@ describe("ADD / EDIT states the online-only rule in the lede", () => {
       },
     });
     expect(markup).toContain(SEALED_UNCHANGED);
-    // The vault's placeholder is never drawn as if it were a value.
     expect(markup).not.toContain(SEALED);
   });
 
@@ -179,7 +161,6 @@ describe("ADD / EDIT states the online-only rule in the lede", () => {
     });
     expect(markup).toContain(ALIAS_ROW);
     expect(markup).toContain('value="deploy-key"');
-    // Not the old read-only row: there is a field to empty.
     expect(markup).toContain(`aria-label="${ALIAS_ROW}"`);
   });
 
@@ -219,12 +200,9 @@ describe("ADD / EDIT states the online-only rule in the lede", () => {
     expect(markup).toContain("Recovery code");
     expect(markup).toContain("Add a field");
     expect(markup).toContain("https://alt.example.test");
-    // The replace-all semantics are stated where the save is, not after it.
     expect(markup).toContain("replaces the whole list");
   });
 });
-
-// ------------------------------------------------------ REVIEW: two registers
 
 describe("REVIEW says what it checked and what it cannot check", () => {
   const review = (rows: LockerRow[], props?: { loaded?: boolean }) =>
@@ -264,7 +242,6 @@ describe("REVIEW says what it checked and what it cannot check", () => {
     const markup = review([{ item_id: "ok", type: "login", title: "Fine" }]);
     expect(markup).toContain(ALL_CLEAR);
     expect(markup).toContain("09:12");
-    // …and it still lists what could not be checked.
     expect(markup).toContain(REVIEW_UNRUNNABLE);
   });
 
@@ -272,8 +249,6 @@ describe("REVIEW says what it checked and what it cannot check", () => {
     expect(review([FLAGGED], { loaded: false })).toBe("");
   });
 });
-
-// --------------------------------------------------------------- SEARCH
 
 describe("SEARCH says what it does not search", () => {
   const search = (props: Partial<Parameters<typeof SearchScreen>[0]>) =>
@@ -315,8 +290,6 @@ describe("SEARCH says what it does not search", () => {
   });
 });
 
-// ---------------------------------------------------------------- TRASH
-
 describe("TRASH counts down, restores whole, and purges once", () => {
   const trash = (rows: LockerRow[], loaded = true) =>
     renderToStaticMarkup(
@@ -352,8 +325,6 @@ describe("TRASH counts down, restores whole, and purges once", () => {
     expect(PURGE_PARKED_BODY).toContain("parks until the owner confirms it");
   });
 });
-
-// ----------------------------------- the four surfaces drawn against the ask
 
 describe("IMPORT is live where the door is, and states the fact where it is not", () => {
   const DRAFT = {
@@ -445,8 +416,6 @@ describe("IMPORT is live where the door is, and states the fact where it is not"
   });
 });
 
-// ------------------------------------------------- ACCESS HISTORY, now served
-
 describe("ACCESS HISTORY draws the receipts and never a value", () => {
   const ENTRIES: LockerAccessEntry[] = [
     {
@@ -532,8 +501,6 @@ describe("ACCESS HISTORY draws the receipts and never a value", () => {
   });
 });
 
-// -------------------------------------------------------- EXPORT, now committed
-
 describe("EXPORT carries §6's lede and a commit that names the consequence", () => {
   const exporter = (props: Partial<Parameters<typeof ExportScreen>[0]>) =>
     renderToStaticMarkup(
@@ -567,13 +534,10 @@ describe("EXPORT carries §6's lede and a commit that names the consequence", ()
   test("OFFLINE: the commit is WITHHELD, with the reason in its place", () => {
     const markup = exporter({ offline: true });
     expect(markup).toContain(EXPORT_OFFLINE);
-    // Withheld, never disabled: the row stays, the BUTTON does not.
     expect(markup).not.toContain(`<button type="button" class="kit-btn">`);
     expect(markup).not.toContain("disabled");
   });
 });
-
-// ------------------------------------------- COMPANION: still where it happens
 
 describe("COMPANION explains where the act happens and dispatches nothing", () => {
   test("the three not-offered reasons are §6's, and there is no control", () => {
@@ -585,3 +549,4 @@ describe("COMPANION explains where the act happens and dispatches nothing", () =
     expect(markup).not.toContain("<button");
   });
 });
+// @vitest-environment jsdom

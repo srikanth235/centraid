@@ -1,14 +1,4 @@
 import { DAY_MS } from "../../_shared/format-kit.ts";
-/**
- * The library projection as bounded windows: newest live assets by captured_at
- * plus the newest 200 trashed. Never read core.content_item whole — bytes ride
- * inline as data: URIs (#264). Keyset cursor (#599): `input.before` admits only
- * strictly older captured_at, `tail` is the next `before`, and NULL
- * captured_at fails that comparison, so undated assets ride the first window
- * only. A consent denial is an outcome, not an error.
- *
- * @type {import('@centraid/server/engine').QueryHandler}
- */
 import { readAssetJoins, readPlaces, srcOf } from "./_shared.ts";
 
 interface RawAsset {
@@ -63,13 +53,11 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       await Promise.all([
         ctx.vault.read({
           entity: "media.asset",
-          // Archived assets are in neither shelf (#419).
           where: liveWhere,
           orderBy: { column: "captured_at", dir: "desc" },
           limit: window,
           purpose,
         }),
-        // A ~30-day shelf the sweep keeps short: 200 needs no knob.
         ctx.vault.read({
           entity: "media.asset",
           where: [{ column: "deleted_at", op: "not-null" }],
@@ -84,7 +72,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           : ctx.vault.read({ entity: "media.memory", limit: 200, purpose }),
       ]);
 
-    // Joins stay `in`-bounded: only the windowed photos' bytes travel.
     const liveRows = (liveAssets.rows ?? []) as unknown as RawAsset[];
     const trashRows = (trashedAssets.rows ?? []) as unknown as RawAsset[];
     const windowed = [...liveRows, ...trashRows];
@@ -188,7 +175,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     };
 
     const live = liveRows
-      // Live means the bytes are live too: released content is never library.
       .filter((asset) => contentById.get(asset.content_id)?.deleted_at == null)
       .map(join);
     live.sort((a, b) =>
@@ -196,7 +182,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     );
 
     const trash = trashRows.map((asset) => {
-      // The asset owns the grace window (#274); content is the fallback.
       const purgeAt =
         asset.purge_at ?? contentById.get(asset.content_id)?.purge_at ?? null;
       const ms = purgeAt == null ? NaN : Date.parse(purgeAt) - Date.now();
@@ -236,7 +221,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       memoryMembers: [],
       tail: null,
     };
-    // Only a consent deny is "ask the owner"; every other failure is ours.
     const e = error as { code?: string; message?: string };
     if (e.code === "VAULT_ACCESS") {
       return { ...empty, vaultDenied: { code: e.code, message: e.message } };

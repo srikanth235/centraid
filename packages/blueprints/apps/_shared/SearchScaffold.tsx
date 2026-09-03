@@ -1,4 +1,3 @@
-// Search body states (#712), never the search field — each app owns chrome.
 import type { ReactNode } from "react";
 
 import type {
@@ -11,20 +10,17 @@ import { searchOpenLabel } from "./search-scaffold.ts";
 import styles from "./SearchScaffold.module.css";
 
 export interface SearchScaffoldProps {
-  /** Empty query is `resting` regardless of `status`. */
   query: string;
   status: SearchStatus;
   count: number;
   scope: string;
   copy: SearchStateCopy;
   examples: readonly string[];
-  /** Real grouped hits only; never pad empty groups. */
   groups?: readonly SearchGroupRow[];
   onQuery: (value: string) => void;
   onClear: () => void;
   onRetry?: () => void;
   onOpenGroup?: (openTarget: string, row: SearchGroupRow) => void;
-  /** Unreachable scopes named beside remaining results, never instead (#726 D10/D11). */
   reachFacts?: readonly { label: string; value: string }[];
   children?: ReactNode;
 }
@@ -51,11 +47,9 @@ export function SearchScaffold({
   const asked = Boolean(query);
   const searching = asked && status === "searching";
   const unreachable = asked && status === "unreachable";
-  // Groups match independently of `count` — a named entity with no list hit still shows.
   const hasGroups = groups.length > 0;
   const none = asked && status === "ready" && count === 0 && !hasGroups;
   const showResults = asked && status === "ready" && (count > 0 || hasGroups);
-  // Partial reach is still `ready`; name the short scope beside what answered (#726).
   const showPartialReach = asked && status === "ready" && reachFacts.length > 0;
 
   return (

@@ -1,15 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#630) — the bounded dashboard
-// projection and balance derivation intentionally stay together so every
-// monetary view uses the same fixed-point source rows and allocation rules.
-/**
- * The dashboard, and the shared balance engine every Tally query reads through.
- * Balances are DERIVED here, never stored: loadTally() pulls the ground facts
- * in a handful of bounded reads, and pairwise()/groupNet() fold them into net
- * positions. The owner is the vault's self_party_id — the implicit `me`;
- * everyone else is a canonical core.party carried by a tally_friend row. All
- * money is INTEGER minor units. A consent denial is a first-class outcome the
- * UI renders as the access state.
- */
 
 import {
   BRAND,
@@ -30,7 +19,6 @@ import {
   readPendingOverlay,
 } from "../../_shared/pending-overlay.ts";
 
-/** A resolved person (owner or friend) the ledgers decorate rows with. */
 export interface ServerPerson {
   party_id: string;
   name: string;
@@ -55,7 +43,6 @@ interface GroupRow {
 type DecoratedGroup = GroupRow & { name: string };
 interface ExpenseRowRaw {
   expense_id: string;
-  /** Null on a group-less 1:1 expense (GAPS #4). */
   group_id: string | null;
   paid_by: string;
   amount_minor: number;
@@ -91,9 +78,7 @@ interface RecurringRow {
 }
 type ExpenseFact = ExpenseRowRaw & {
   splits: Record<string, number>;
-  /** Who put money down. Empty reads as the single `paid_by` payer. */
   payers: Record<string, number>;
-  /** Typed lines, receipt-backed or not; empty when the expense has none. */
   lines: ReceiptLineFact[];
 };
 interface ReceiptLineFact {
@@ -137,7 +122,6 @@ interface ObligationRow {
   [k: string]: unknown;
 }
 
-/** The folded ground facts every Tally query computes against. */
 export interface TallyData {
   me: string | null;
   currency: string;
@@ -148,17 +132,13 @@ export interface TallyData {
   expenses: ExpenseWithReceipt[];
   settlements: SettlementRow[];
   obligations: ObligationRow[];
-  /** Reminders the owner PREPARED. Nothing here was ever sent. */
   nudges: NudgeRow[];
 }
 
-/** Pull every ground fact Tally needs and shape it for the compute helpers. */
 export async function loadTally(
   ctx: HandlerCtx,
   purpose: string
 ): Promise<TallyData> {
-  // A group decorates a social.circle (#310): the circle carries
-  // the name and the membership, tally.group the icon + colour.
   const [
     vaultRes,
     friendsRes,
@@ -182,8 +162,6 @@ export async function loadTally(
     ctx.vault.read({ entity: "social.circle_member", purpose }),
     ctx.vault.read({
       entity: "tally.expense",
-      // Trashed expenses (#441) drop out of every balance and ledger —
-      // their splits are read below but never consumed once the expense is gone.
       where: [{ column: "deleted_at", op: "is-null" }],
       orderBy: { column: "spent_on", dir: "desc" },
       limit: 2000,
@@ -206,8 +184,6 @@ export async function loadTally(
       limit: 2000,
       purpose,
     }),
-    // A receipt IS the `role='receipt'` attachment on the expense (#883,
-    // ruling O-attach).
     ctx.vault.read({
       entity: "core.attachment",
       where: [
@@ -241,9 +217,6 @@ export async function loadTally(
 
   const friends = (friendsRes.rows ?? []) as unknown as FriendRow[];
   const friendPartyIds = friends.map((f) => f.party_id);
-  // Circle membership is current state, the ledger durable history: a member
-  // who left must stay nameable wherever an expense or settlement still refers
-  // to them, so query every ledger party rather than today's roster.
   const activeExpenseIds = new Set(
     ((expensesRes.rows ?? []) as unknown as ExpenseRowRaw[]).map(
       (expense) => expense.expense_id
@@ -256,7 +229,6 @@ export async function loadTally(
     ...((expensesRes.rows ?? []) as unknown as ExpenseRowRaw[]).map(
       (expense) => expense.paid_by
     ),
-    // A co-payer who is no longer a member still has to be nameable.
     ...(
       (payersRes.rows ?? []) as unknown as Array<{
         expense_id: string;
@@ -293,9 +265,6 @@ export async function loadTally(
     display_name?: string;
   }>;
   const nameById = new Map(partyRows.map((p) => [p.party_id, p.display_name]));
-  // THE PARTY HUE, not `identityColor` (#883, ruling O-identity): the person
-  // wheel has eight places, and the vault wheel's ninth is the ink brand —
-  // keying off it draws a person as a black disc.
   const colorByParty = new Map(
     friends.map((f) => [f.party_id, partyHueValue(partyHueKey(f.party_id)!)])
   );
@@ -409,8 +378,6 @@ export async function loadTally(
     allocationsByLine.get(allocation.line_item_id)![allocation.party_id] =
       allocation.share_minor;
   }
-  // Lines hang off the EXPENSE, the receipt an optional decoration, so the
-  // "By line" division has typed lines and no photo.
   const linesByExpense = new Map<string, ReceiptLineFact[]>();
   for (const line of (receiptLinesRes.rows ?? []) as unknown as Array<{
     line_item_id: string;
@@ -487,12 +454,6 @@ export async function loadTally(
   };
 }
 
-/**
- * The denial the UI renders as its access state. `revoked_at` is present only
- * when the refusal really was a revocation — the gateway attaches the time,
- * because a revoked app cannot read the consent tables. Null otherwise: the
- * app never invents a timestamp.
- */
 export function deniedPayload(error: unknown): {
   code?: string;
   message?: string;
@@ -518,15 +479,11 @@ export function personOf(data: TallyData, pid: string): ServerPerson {
   );
 }
 
-/** Net per friend vs the owner, in minor units. Positive = they owe me. */
 export function pairwise(data: TallyData): Map<string, number> {
   const me = data.me;
   const b = new Map<string, number>();
   for (const f of data.friends) b.set(f.party_id, 0);
   for (const e of data.expenses) {
-    // With several payers a share is owed to each of them for the part they
-    // actually put down, so the owner's position is their own slice of it —
-    // never the whole share to whoever happened to be named `paid_by`.
     for (const { from, to, amount_minor } of attributeExpense(e)) {
       if (from === to) continue;
       if (to === me && from !== me)
@@ -557,10 +514,8 @@ export function pairwise(data: TallyData): Map<string, number> {
   return b;
 }
 
-/** Net per member within a group, in minor units. Positive = gets money back. */
 export const groupNet = tallyGroupNet;
 
-/** A ledger row: the expense decorated with the owner's lent/borrowed stance. */
 export function ledgerRow(data: TallyData, e: ExpenseWithReceipt) {
   const pending = readPendingOverlay(e);
   const me = data.me;
@@ -598,8 +553,6 @@ export function ledgerRow(data: TallyData, e: ExpenseWithReceipt) {
     spent_on: e.spent_on,
     paid_by: e.paid_by,
     paid_by_name: personOf(data, e.paid_by).name,
-    // How the shares were arrived at, so an edit re-opens the way it was
-    // entered rather than collapsing every division to exact amounts.
     split_method: e.split_method ?? "exact",
     split_params:
       typeof e.split_params_json === "string"
@@ -673,7 +626,6 @@ export function ledgerRow(data: TallyData, e: ExpenseWithReceipt) {
   };
 }
 
-/** One remembered rate for a currency pair, with where it came from. */
 export interface RateSuggestion {
   from_currency: string;
   to_currency: string;
@@ -685,12 +637,6 @@ export interface RateSuggestion {
   expense_id: string;
 }
 
-/**
- * The most recent rate this vault has already been told, per currency pair.
- * ADDITIVE ONLY: the manual-rate flow stands alone and stays the primary path.
- * There is no rate provider here and no network call — the suggestion is the
- * vault quoting itself, which is why it always carries its source and date.
- */
 export function rateSuggestions(data: TallyData): RateSuggestion[] {
   const latest = new Map<string, RateSuggestion>();
   for (const expense of data.expenses) {
@@ -724,7 +670,6 @@ export function rateSuggestions(data: TallyData): RateSuggestion[] {
   );
 }
 
-/** A group row for the lists, archived or not. */
 function groupCard(data: TallyData, g: TallyData["groups"][number]) {
   const net = groupNet(data, g.group_id);
   return {
@@ -787,8 +732,6 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
       if (v > 0) owed += v;
       else if (v < 0) owe += -v;
     }
-    // Archived groups leave the default lists and keep everything, so they
-    // travel in their own array rather than being filtered into silence.
     const groups = data.groups
       .filter((g) => !g.archived_at)
       .map((g) => groupCard(data, g));
@@ -842,9 +785,6 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
       const next = ctx.time.applyRecurrenceExceptions(instances, exceptions)[0];
       return {
         ...template,
-        // A rule the summariser cannot phrase drops its preview entirely.
-        // Falling back to `template.rrule` would put RRULE syntax on a
-        // member-facing surface, which the house rule bans outright.
         preview: ctx.time.describeRecurrence(template.rrule),
         next_start: next?.originalStart ?? null,
       };
@@ -859,9 +799,6 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
       recurring,
       owe_total_minor: owe,
       owed_total_minor: owed,
-      // The two counts the Balances hero states its arithmetic from
-      // ("derived from 194 expenses and 22 settlements"), over the same
-      // bounded window every figure on this screen came from.
       expense_count: data.expenses.length,
       settlement_count: data.settlements.length,
       rate_suggestions: rateSuggestions(data),
@@ -871,7 +808,6 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
         group_id: nudge.group_id ?? null,
         prepared_at: nudge.prepared_at,
         note: nudge.note ?? null,
-        // Stated, and always false: Tally has no delivery path.
         sent: false,
       })),
     };

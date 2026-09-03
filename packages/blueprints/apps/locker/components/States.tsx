@@ -1,14 +1,3 @@
-// THE HONEST STATES, AS BLOCKS (README-Locker §4, STATES.md's Locker matrix).
-//
-// EACH IS A FACT WITH A WAY FORWARD, and in this app each also says what still
-// works. "Offline" in Locker is not a smaller Locker: stars, tags, trash and
-// restore all work, and only a SECRET write needs the gateway — so the notice
-// names the boundary rather than apologising for it.
-//
-// DENIED IS NOT DAY ONE, AND NEITHER IS REFUSED. A revoked grant is a receipt,
-// a scope and the fact that nothing was deleted; day one is an offer. They are
-// two blocks here because conflating them was how an app that had been
-// switched off came to look like an app with nothing in it.
 import type { ReactNode } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";
@@ -32,24 +21,15 @@ import {
 import styles from "./Rows.module.css";
 
 export interface NoticesProps {
-  /** How many METADATA writes are still on this device. A secret write is
-   *  never among them — that is the sentence, not a caveat. */
   onDeviceWrites: number;
-  /** The gateway is out of reach. Read from the host's own verdict
-   *  (`_shared/view-state-kit.ts`), never from `navigator.onLine`. */
   offline: boolean;
   onWhyOffline: () => void;
-  /** The replica last matched the vault at this wall time. */
   staleAt: string | null;
   onRefresh: () => void;
-  /** This item was edited in two places. The values are compared unshown. */
   conflict: boolean;
   onCompare: () => void;
-  /** A purge asked for on a device that is not the owner's. */
   parked: boolean;
   onReviewParked: () => void;
-  /** The permit ran out with nothing revealed — stated, so a member who looks
-   *  back at a concealed field knows why it concealed. */
   reauth: boolean;
 }
 
@@ -114,20 +94,11 @@ export function Notices(props: NoticesProps): ReactNode {
 }
 
 export interface DeniedGateProps {
-  /** The vault's own message. Rendered as it arrived, never re-worded. */
   message: string;
-  /** When the grant was revoked, if the vault said. */
   revokedAt?: string;
-  /** The receipt this refusal wrote, if the vault named it. */
   receipt?: string;
 }
 
-/**
- * THE DENIED GATE. A receipt, a scope, and the one fact a member actually
- * wants: nothing was deleted. The recovery act is the shared
- * `VaultAccessButton` — a denied read always offers a direct way to the grant,
- * never a dead end.
- */
 export function DeniedGate(props: DeniedGateProps): ReactNode {
   const facts: Array<[string, string]> = [
     ["Scope", DENIED_SCOPE],

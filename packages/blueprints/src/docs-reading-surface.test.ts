@@ -1,8 +1,3 @@
-// @vitest-environment jsdom
-// The Docs reading sheet (QuickLookText) is the surface Preview opens for a
-// text document. The web/desktop docs-drive journeys name it as an article
-// whose accessible name is the file title, with the title as a heading and
-// both body paragraphs painted. This drives the shipped module, not a copy.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -94,3 +89,4 @@ describe("Docs reading sheet", () => {
     expect(paragraphs).toContain(DOC_BODY.split("\n\n")[1]);
   });
 });
+// @vitest-environment jsdom

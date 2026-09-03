@@ -1,5 +1,3 @@
-// Photos' rail as a table (v16 §4): groups + rule in order; every row routes;
-// a sub-state lights its shelf; counts from the ONE map.
 import { describe, expect, it } from "vitest";
 
 import type { NavRailItem } from "../_shared/NavRail.tsx";
@@ -52,7 +50,6 @@ describe("Photos' navigation rail", () => {
   });
 
   it("lists no destination the app cannot route to", () => {
-    // Every row routes; rail-only would read as Library.
     const rowIds: ShelfId[] = [
       null,
       FAVORITES,
@@ -75,10 +72,8 @@ describe("Photos' navigation rail", () => {
         .map((item) => (item.kind === "row" ? item.label : ""));
     expect(current(null)).toStrictEqual(["Library"]);
     expect(current(TRASH)).toStrictEqual(["Trash"]);
-    // Inside an album, **Albums** is current — definition of done.
     expect(current("collection-7")).toStrictEqual(["Albums"]);
     expect(current(personShelf("p1"))).toStrictEqual(["People"]);
-    // An unlisted shelf lights NOTHING, not nearest row.
     expect(current(STORAGE)).toStrictEqual([]);
   });
 
@@ -91,7 +86,6 @@ describe("Photos' navigation rail", () => {
       Favorites: 128,
       Albums: 14,
       Places: 42,
-      // People/Duplicates answer `null` until lazy reads land.
       People: undefined,
       Duplicates: undefined,
       Trash: 24,
@@ -102,7 +96,6 @@ describe("Photos' navigation rail", () => {
     expect(railDrawnOn(null)).toBe(true);
     expect(railDrawnOn(ALBUMS)).toBe(true);
     expect(railDrawnOn("collection-7")).toBe(true);
-    // Storage keeps a rail though §4 lists it: withdrawing strands the seat.
     expect(railDrawnOn(STORAGE)).toBe(true);
     expect(railDrawnOn(SEARCH)).toBe(false);
   });

@@ -1,18 +1,6 @@
-// Pinch-to-rung on the compact surface (v4 handoff §4.2, §15, CHANGELOG D).
-//
-// Tile size is ONE member preference with four rungs, and on the phone pinch
-// does the same thing the stepper does — all four rungs, because dropping
-// rungs on one surface would make a member preference surface-specific.
-//
-// THE RULE THIS EXISTS UNDER: every gesture has a pointer equivalent, so
-// nothing is reachable by gesture alone. This module adds no capability; the
-// stepper in the toolbar row is the pointer path and remains the only way in
-// on a surface with a mouse.
 import { useCallback, useRef } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
-/** How far apart two fingers must travel before the rung steps. Deliberately
- *  coarse: four rungs over the whole pinch range, not a continuous zoom. */
 const IN = 1.35;
 const OUT = 0.74;
 
@@ -23,12 +11,6 @@ export interface PinchHandlers {
   onPointerCancel: (e: ReactPointerEvent<HTMLElement>) => void;
 }
 
-/**
- * Pointer handlers that step the tile-size rung on a two-finger pinch.
- * Returns `null` when the caller passes no `onStep` — a surface with no pinch
- * then spreads nothing rather than binding four dead listeners to every scroll
- * of the grid.
- */
 export function usePinchRung(
   onStep: ((delta: number) => void) | undefined
 ): PinchHandlers | null {

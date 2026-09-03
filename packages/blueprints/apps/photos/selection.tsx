@@ -1,9 +1,3 @@
-// Selection, as one owner (§6). `#toolbarMount` is shared with the toolbar
-// row: `renderBar` writes there only while a selection is active, and
-// `renderToolbarRow` only while one is not. On the phone the row carries
-// nothing — head and `SelectionBottomBar` take over (§6, §15). Keys are
-// COMPOSITE (asset-key.ts): two scopes can share an `asset_id`, so a bare-id
-// set batches to the wrong one (#599).
 import type { ReactNode } from "react";
 
 import { observeWidth } from "@centraid/design/elements";
@@ -61,7 +55,6 @@ export function createSelection({
   getAlbums: () => Album[];
   refresh: () => Promise<void>;
   repaint: () => void;
-  /** Which shelf swap applies (§6: Trash → Restore); off means "normal". */
   getShelfKind?: () => SelectionShelfKind;
   isNarrow?: () => boolean;
 }): Selection {
@@ -81,7 +74,6 @@ export function createSelection({
   }
 
   function onAway(e: globalThis.MouseEvent): void {
-    // Only the desktop popover carries this class; the sheet has a Cancel.
     const wrap = document.querySelector(".bar-menu-wrap");
     if (wrap && !wrap.contains(e.target as Node)) {
       closeMenu();
@@ -106,7 +98,6 @@ export function createSelection({
 
   function pickAlbum(album: Album): void {
     closeMenu();
-    // Albums are own-scope whatever the chip says (albums-actions.ts).
     const target = writeTarget("own");
     void runBatchAddToAlbum(
       [...keys],
@@ -124,8 +115,6 @@ export function createSelection({
     }
   }
 
-  /** Non-null once a selected row sits in an unwritable scope (§6). Copy and
-   *  Download never disable on it — neither writes to that scope. */
   function readOnlyReason(): string | null {
     const scopes = mountedScopes();
     for (const key of keys) {
@@ -201,7 +190,6 @@ export function createSelection({
     document.body.classList.add("has-selection");
     repaint();
     renderBar();
-    // Measure the bar, never a surface flag; the phone has no labels.
     stopWidthObserver?.();
     if (!narrow()) {
       stopWidthObserver = observeWidth(
@@ -224,7 +212,6 @@ export function createSelection({
     stopWidthObserver?.();
     stopWidthObserver = null;
     bottomBarRoot?.render(null);
-    // `renderBar` is inert once inactive; `repaint()` hands the mount back.
     repaint();
   }
 

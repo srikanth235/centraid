@@ -27,24 +27,10 @@ import {
   projectPendingWrite,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
 
-// Boots a blueprint app the way the v0 client does. THREE constraints; break
-// one and the gate passes while the app is broken:
-//
-//  1. Errors trap on `process`, not `window`: boot's un-awaited `refresh()`
-//     throws a NODE rejection, which vitest prints WITHOUT failing.
-//  2. ONE app and ONE module import per process — timers outlive tests and
-//     `customElements.define()` runs at module scope. Hence one
-//     `<app>.test.ts` each; the forks pool isolates per FILE.
-//  3. Consent paths re-read, never re-import: flip the mock, dispatch 'focus'.
-
-// From this module's own path, not process.cwd().
 const PKG = path.resolve(import.meta.dirname, "..");
 
-// The CLI, not esbuild's JS API: the API refuses to load under jsdom.
 const ESBUILD_BIN = path.resolve(PKG, "../..", "node_modules/.bin/esbuild");
 
-// BY PATH, not by specifier: `@centraid/client` already depends on this
-// package, so the reverse edge would make Turbo's `^build` graph cyclic.
 const { replicaIntentInvalidations } = await import(
   pathToFileURL(
     path.resolve(PKG, "../client/src/replica/intent-invalidations.ts")

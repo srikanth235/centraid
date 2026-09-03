@@ -1,14 +1,3 @@
-// THE ITEMS ROUTE (README-Locker §1, §5) — the browsable half of the app.
-//
-// What is on this screen is METADATA: titles, usernames, addresses and tags.
-// The status line says so in the frame above, and the window's foot says how
-// much of the vault this is. Nothing here is a secret, which is why every row
-// can be drawn without a permit and why opening one costs one.
-//
-// DAY ONE IS AN OFFER, NOT AN ABSENCE. `Nothing is kept here yet` carries two
-// ways in — the import and one login by hand — because the first item is the
-// one that proves the reveal is worth its cost. A filter that matches nothing
-// is a DIFFERENT state and says so on its own terms.
 import type { ReactNode } from "react";
 
 import { showsEmptyState } from "../../_shared/view-state-kit.ts";
@@ -28,28 +17,18 @@ import { WindowedRows } from "./Windowed.tsx";
 import styles from "./Rows.module.css";
 
 export interface LockerListProps {
-  /** The rows this filter shows, already sorted by `format.rowsFor`. */
   rows: readonly LockerRow[];
-  /** How many rows the whole window holds, whatever this filter shows. Day one
-   *  is a fact about the WINDOW; "nothing matches" is a fact about the lens. */
   windowCount: number;
-  /** How many live items EXIST, as the vault counted them — the other half of
-   *  "300 of 312". `null` when the count could not be read. */
   total: number | null;
-  /** Has a read landed? Nothing is empty until one has. */
   loaded: boolean;
-  /** Older items exist beyond the window. */
   truncated: boolean;
   onOpen: (itemId: string) => void;
-  /** The row's one quiet verb: copy the username, which is metadata and needs
-   *  no permit. Omitted for a row with nothing to copy. */
   onCopyUsername: (row: LockerRow) => void;
   onShowMore: () => void;
   onImport: () => void;
   onAdd: () => void;
 }
 
-/** The day-one block: one sentence, one more that says why, and two ways in. */
 function DayOne({
   onImport,
   onAdd,
@@ -75,8 +54,6 @@ function DayOne({
   );
 }
 
-/** A lens with nothing under it. Its own sentence, and no act: the way out of
- *  an empty filter is the filter, which is already on screen. */
 function NoMatch(): ReactNode {
   return (
     <div className="kit-empty" data-variant="no-match">
@@ -92,8 +69,6 @@ export function LockerList(props: LockerListProps): ReactNode {
     loaded: props.loaded,
     count: props.rows.length,
   });
-  // Two different facts, and they look nothing alike: an empty VAULT offers a
-  // first move; an empty LENS says only that this lens is empty.
   if (empty && props.windowCount === 0) {
     return <DayOne onImport={props.onImport} onAdd={props.onAdd} />;
   }

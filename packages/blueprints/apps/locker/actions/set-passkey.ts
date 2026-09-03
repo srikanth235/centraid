@@ -1,8 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-// ONLINE-ONLY: private_key is key material, never queued offline. Resending
-// «sealed» keeps it.
-
 const METADATA = [
   "user_handle",
   "display_name",

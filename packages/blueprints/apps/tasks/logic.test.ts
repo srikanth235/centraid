@@ -1,9 +1,3 @@
-// What each route shows, and the twelve states it may claim (spec §4).
-//
-// The three rules that carry the product get their own cases here, because each
-// is a rule a board breaks by accident: an undated task must never touch Today,
-// a repeating task must be one row that says how many periods it swallowed, and
-// a cut list must never read as everything.
 import { describe, expect, it } from "vitest";
 
 import { weekdayName } from "./format.ts";

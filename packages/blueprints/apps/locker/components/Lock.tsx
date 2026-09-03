@@ -1,18 +1,3 @@
-// THE TWO GATES (README-Locker §1, §6; FLOWS.md "First run", "Unlock").
-//
-// ONE FIELD, ONE VERB, AND A SENTENCE ABOUT WHAT A SESSION IS. Both screens
-// are the same shape because they are the same question asked at two moments,
-// and both state the boundary in words rather than implying it with a lock
-// icon (§7: never a lock icon standing in for a sentence).
-//
-// FIRST RUN says the twelve-character rule and the fact that this passphrase
-// cannot be revoked — before the field, not after a refusal. LOCK says what
-// ends a session, and carries the facts table underneath, because "why did it
-// close on me" is a question a member asks once and should never have to ask
-// twice.
-//
-// NOTHING IS BROWSABLE BEHIND EITHER. `shelves.suppressesNavigation` withdraws
-// the rail, the band and every list; this screen is what stands in their place.
 import { useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 
@@ -31,12 +16,8 @@ import {
 import styles from "./Rows.module.css";
 
 export interface LockProps {
-  /** First run, or a lock over a passphrase that already exists. */
   mode: "setup" | "lock";
-  /** An authentication request is in flight — the commit says so by being
-   *  unavailable, never by a spinner. */
   busy: boolean;
-  /** The host's refusal, in its own words. Includes the backoff sentence. */
   error: string;
   onSubmit: (secret: string) => void;
 }
@@ -44,9 +25,6 @@ export interface LockProps {
 export function Lock(props: LockProps): ReactNode {
   const setup = props.mode === "setup";
   const [secret, setSecret] = useState("");
-  // The twelve-character rule is enforced HERE, in front of the member, rather
-  // than by a round trip that comes back refused: the rule is stated above the
-  // field, so the field may as well hold to it.
   const tooShort =
     setup && secret.length > 0 && secret.length < PASSPHRASE_MINIMUM;
   const ready =

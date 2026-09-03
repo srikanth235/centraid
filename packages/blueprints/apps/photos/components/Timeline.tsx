@@ -1,6 +1,3 @@
-// The justified timeline (v4 handoff §4): `justify()` packs rows from real
-// aspect ratios, grouped by month; no chrome inside the grid (§4.3). `.row`
-// must stay a DIRECT child of the month/day fragments for the sticky head.
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 
@@ -40,7 +37,6 @@ interface TileCommon {
   selectMode: boolean;
   rung: number;
   onEnterSelectMode: () => void;
-  /** Both take the COMPOSITE key (asset-key.ts), never a bare `asset_id`. */
   onToggleSelect: (key: string, shiftKey?: boolean) => void;
   onOpen: (key: string) => void;
   vaultOf: (scopeId: string | null | undefined) => InlineScope | undefined;
@@ -66,7 +62,6 @@ const Row = memo(
       <div className={styles.row}>
         {tiles.map((t) => (
           <Tile
-            // Ids are per-scope (#599); a bare id reuses another scope's tile.
             key={`${t.asset.scope_id ?? ""}:${t.asset.asset_id}`}
             asset={t.asset}
             width={t.width}
@@ -117,8 +112,6 @@ function TileExtras({
   reason?: string;
   refresh: () => Promise<void>;
 }) {
-  // A read-only album must offer no write (§6, §14): `disabled` stops pointer
-  // and keyboard, the inert handler the rest.
   const remove = async (): Promise<void> => {
     const outcome = await act(
       "remove-from-album",
@@ -148,16 +141,6 @@ function TileExtras({
   );
 }
 
-// The windowed stream (#883). Windowing is arithmetic, not estimate: blocks
-// carry exact heights from `justify()` and the measured chrome rungs.
-// `content-visibility` is not enough on its own — an off-screen tile is still a
-// node, retained and re-measured on every resize.
-//
-// Month heads are never windowed out: the head is `position: sticky` and the
-// scrub rail's tick observes `[data-month]`, so dropping one stops the month
-// naming itself and the rail following. One head per month bounds that by the
-// calendar.
-
 const BLOCK_KIND_ATTR = "data-vkind";
 
 const MONTH_HEAD_FALLBACK = 45;
@@ -173,8 +156,6 @@ type TimelineBlock =
     }
   | { kind: "row"; key: string; tiles: JustifiedTile[]; height: number };
 
-/** Months → days → packed rows, one flat sequence with a height each. Heights
- *  come from `layout.ts`, so scrollbar and packer can never disagree. */
 function flattenTimeline(
   months: readonly MonthGroup[],
   containerWidth: number,
@@ -206,7 +187,6 @@ function flattenTimeline(
   return blocks;
 }
 
-/** One spacer per omitted RUN: per block, the saving goes on the stand-ins. */
 function renderBlocks(
   blocks: readonly TimelineBlock[],
   slice: { start: number; end: number },
@@ -314,15 +294,12 @@ export function TimelineBody({
   const [activeMonth, setActiveMonth] = useState<string | null>(null);
   const pinch = usePinchRung(phone ? onPinchRung : undefined);
 
-  // Callers sort differently (trash by deleted_at); bucketing needs taken_at.
   const ordered = [...assets].sort((a, b) =>
     String(b.taken_at ?? "").localeCompare(String(a.taken_at ?? ""))
   );
   const months: MonthGroup[] = groupByMonth(ordered);
   const ticks = monthTicks(months);
 
-  // Measured, never re-derived: both rungs move with the density tier and a
-  // text-scale setting.
   const monthHead = useMeasuredBlockHeight(blocksRef, MONTH_HEAD_FALLBACK, {
     selector: `[${BLOCK_KIND_ATTR}="month"]`,
   });

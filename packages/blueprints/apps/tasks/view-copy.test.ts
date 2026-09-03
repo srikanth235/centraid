@@ -1,10 +1,3 @@
-// The copy table, held to what it says (spec §6).
-//
-// STRINGS IN THIS PRODUCT ARE SPECIFIED, NOT PARAPHRASED, so this file asserts
-// the table's own rows rather than "some sentence appears". It also holds the
-// two rules that outlive any one row: nothing apologises or fills, and no
-// literal carries two thoughts — the table's two-sentence rows live as the pair
-// they read as, which is why each half is checked as its own constant.
 import { describe, expect, it } from "vitest";
 
 import { ALL, INBOX, LOGBOOK, SEARCH, UPCOMING } from "./shelves.ts";
@@ -13,8 +6,6 @@ import * as copy from "./view-copy.ts";
 const BANNED =
   /\b(?:please|successfully|simply|in order to|you can|we're sorry)\b/iu;
 
-/** Every literal the table ships, flattened — including the halves of the rows
- *  that are a statement plus its reassurance. */
 const EVERY_STRING: string[] = [
   copy.TODAY_DONE,
   copy.TODAY_EMPTY,
@@ -77,8 +68,6 @@ describe("the copy table", () => {
 
   it.each(EVERY_STRING)("%s stays one thought under the ceiling", (line) => {
     expect(line.length).toBeLessThanOrEqual(120);
-    // Two sentences in one literal is the thing the pairs above exist to
-    // prevent; a row that reads as two IS two constants.
     const inner = line.match(/[.!?…](?=\s+["'(]?\p{Lu})/gu)?.length ?? 0;
     const tail = /[.!?…]["')]?\s*$/u.test(line) ? 1 : 0;
     expect(inner + tail).toBeLessThanOrEqual(1);
@@ -170,7 +159,6 @@ describe("the copy table", () => {
     expect(copy.shelfCopy(ALL).unit).toBe("tasks");
     expect(copy.shelfCopy(SEARCH).unit).toBe("hits");
     expect(copy.shelfCopy(LOGBOOK).title).toBe("Logbook");
-    // A project carries its OWN name in the bar, not the app's.
     expect(copy.shelfCopy(null, "Kitchen").title).toBe("Kitchen");
   });
 

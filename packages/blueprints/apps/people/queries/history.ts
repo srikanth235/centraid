@@ -7,7 +7,6 @@ interface RevisionRow {
   undone_at?: string | null;
 }
 
-/** Version/undo history for one person, row-filtered by the app grant. */
 export default async function peopleHistory({ input, ctx }: HandlerArgs) {
   const partyId = String(input?.party_id ?? "");
   if (!partyId) return { revisions: [] };

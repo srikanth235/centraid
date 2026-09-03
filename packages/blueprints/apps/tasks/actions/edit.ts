@@ -1,7 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** Only changed fields are forwarded; clearing a due date or a note is the
- *  explicit clear_due / clear_description intent, never an empty string. */
 export default async function edit({
   body,
   ctx,

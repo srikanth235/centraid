@@ -1,9 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/**
- * Bytes arrive staged (#296) or as a small inline data: URI. Re-uploading
- * identical bytes restores the deduped document from trash and renames it.
- */
 export default async function upload({ body, ctx }: HandlerArgs) {
   const input = actionInput(body);
   return runVaultAction(ctx, {

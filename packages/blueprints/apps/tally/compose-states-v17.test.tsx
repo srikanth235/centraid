@@ -1,9 +1,3 @@
-// @vitest-environment jsdom
-// THE COMPOSING ROUTES THAT ARRIVED WITH THE TABLES AND THE DOORS (STATES.md's
-// Tally matrix, #872) — sibling of `compose-states.test.tsx`, same kit.
-//
-// EVERY PATH HERE IS ONE A MEMBER CAN ACTUALLY TAKE — reached by pressing what
-// the previous screen offers, never by setting state from outside.
 import { describe, expect, test } from "vitest";
 
 import { EXPORT_FOOT, SIMPLIFICATION } from "./compose-copy.ts";
@@ -24,13 +18,10 @@ describe("Tally’s composing routes — the tables and the doors", () => {
       await press(container, "14 Sitwell Road");
       await press(container, "Add expense");
       await press(container, "By line");
-      // One empty line opens with it, because a table with no rows is a
-      // control with nothing to press.
       expect(buttonNamed(container, "Add a line")).toBeDefined();
       expect(container.textContent).toContain(
         "Type the lines, then press whoever was on each of them."
       );
-      // And the reconcile line states the arithmetic, not a verdict word.
       expect(container.textContent).toContain("the expense is");
     });
 
@@ -51,8 +42,6 @@ describe("Tally’s composing routes — the tables and the doors", () => {
       await press(container, "Settle up");
       await press(container, "14 Sitwell Road");
       expect(container.textContent).toContain(SIMPLIFICATION);
-      // OFF BY DEFAULT, and the control offers to turn it on rather than
-      // refusing: the write exists, and it stores one flag.
       expect(container.textContent).toContain(
         "Off for this group · debts read as they were incurred"
       );
@@ -84,8 +73,6 @@ describe("Tally’s composing routes — the tables and the doors", () => {
     });
 
     test("a host without the decide door draws neither, and no substitute", async () => {
-      // Protocol C1: an absent door is offered as nothing at all — never as a
-      // control that cannot fire, and never as a fallback pretending to be it.
       const container = await mount(DASHBOARD, {
         centraid: {
           commonsIntents: () => Promise.resolve([PARKED_BY_ANA]),
@@ -126,13 +113,10 @@ describe("Tally’s composing routes — the tables and the doors", () => {
       await press(container, "14 Sitwell Road");
       await press(container, "Export");
       expect(container.textContent).toContain(EXPORT_FOOT);
-      // A LEDGER IS A GROUP'S, so nothing is exportable until one is named —
-      // and the refusal says which field is missing.
       expect(buttonNamed(container, "Export")?.disabled).toBe(true);
       expect(container.textContent).toContain(
         "A group · a ledger is a group's"
       );
-      // Named, the read lands and the window is the query's own count.
       await press(container, "14 Sitwell Road");
       expect(container.textContent).toContain(
         "194 expenses and 22 settlements"
@@ -149,8 +133,6 @@ describe("Tally’s composing routes — the tables and the doors", () => {
       expect(container.textContent).toContain(
         "Your rows stay on the ledger, marked departed, and your balance with the group stays visible."
       );
-      // §6's "Settle first if you can." minus the filler the repo's copy rule
-      // bans; the advice it carries is unchanged.
       expect(container.textContent).toContain("Settle first.");
       expect(buttonNamed(container, "Leave")?.disabled).toBe(false);
     });
@@ -181,7 +163,6 @@ describe("Tally’s composing routes — the tables and the doors", () => {
           },
         ],
       });
-      // Groups is reached the way a member reaches it: out of a group ledger.
       await press(container, "14 Sitwell Road");
       await press(container, "Groups");
       expect(container.textContent).toContain("Archived");
@@ -199,7 +180,6 @@ describe("Tally’s composing routes — the tables and the doors", () => {
 
   describe("a reminder is prepared, never sent", () => {
     test("the confirm says it parks, before the press", async () => {
-      // A reminder is for a row that owes YOU: positive is owed to you.
       const container = await mount({
         ...DASHBOARD,
         friends: [
@@ -221,3 +201,4 @@ describe("Tally’s composing routes — the tables and the doors", () => {
     });
   });
 });
+// @vitest-environment jsdom

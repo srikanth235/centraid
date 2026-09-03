@@ -1,10 +1,3 @@
-// THE PERMIT LAWS (README-Locker §2, "Per item" and "Failures").
-//
-// One shot, one field, about thirty seconds, and a refusal that says which
-// kind of refusal it was. The last of those is the one the old interface got
-// wrong: a rate limit and a wrong passphrase read identically, so a member
-// backing off had no way to know they were.
-
 import { describe, expect, it } from "vitest";
 
 import {

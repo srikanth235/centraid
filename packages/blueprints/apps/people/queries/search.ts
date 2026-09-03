@@ -1,13 +1,3 @@
-/**
- * People search as a vault projection: three FTS5 indexes do the matching —
- * the party's name (core.party), the role line (people.profile) and the
- * owner's notes (knowledge.annotation on the party) — so the app never pulls a
- * whole table to grep it. The union of matched parties is filtered to the CRM
- * people (those with a people_profile), then decorated into the same row shape
- * the `people` window uses, plus the vault's hit snippet. Name matches rank
- * first, then role, then notes.
- */
-
 import {
   FLAGS_SCHEME_URI,
   LIST_SCHEME_URI,

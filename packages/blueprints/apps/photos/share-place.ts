@@ -1,6 +1,3 @@
-// A share's place precision, decided once before bytes leave (#816). `none` is
-// the default; `sharePlaceStripsLocation` says when a caller owes a strip.
-
 import { placePhrase } from "./place-phrase.ts";
 import type { NamedPlace, PlacePhrase } from "./place-phrase.ts";
 
@@ -27,7 +24,6 @@ export interface SharePlaceOption {
   detail: string;
 }
 
-// The only phrase allowed off-device: hard-wires `context: "shared"`.
 export function sharedPlacePhrase(input: SharePlaceInput): PlacePhrase {
   return placePhrase({ ...input, context: "shared" });
 }
@@ -46,7 +42,6 @@ function located(input: SharePlaceInput): boolean {
   );
 }
 
-// `exact` is offered with no known coordinate — the camera wrote one.
 export function sharePlaceOptions(
   input: SharePlaceInput
 ): readonly SharePlaceOption[] {
@@ -84,14 +79,12 @@ export function sharePlaceMessage(
   return sharePlaceName(input) ?? undefined;
 }
 
-// `name` strips too: words are no licence for the fix underneath.
 export function sharePlaceStripsLocation(
   precision: SharePlacePrecision
 ): boolean {
   return precision !== "exact";
 }
 
-// Stated every time, `none` included; silence reads as safety.
 export function sharePlaceReceipt(
   precision: SharePlacePrecision,
   input: SharePlaceInput

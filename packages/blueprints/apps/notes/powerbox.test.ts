@@ -1,5 +1,3 @@
-// The `[[` powerbox: what it groups, what opens it, and what an anchored
-// passage carries.
 import { describe, expect, test } from "vitest";
 
 import {

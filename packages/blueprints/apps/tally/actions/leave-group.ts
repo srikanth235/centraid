@@ -1,9 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/**
- * tally.leave_group — contract in app.json.
- * The rows stay on the ledger, marked departed.
- */
 const KEYS = ["group_id", "party_id"];
 export default async function leaveGroup({ body, ctx }: HandlerArgs) {
   const input = actionInput(body);

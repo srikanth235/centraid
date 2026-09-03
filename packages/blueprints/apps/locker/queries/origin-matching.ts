@@ -1,10 +1,3 @@
-/**
- * Server-side origin matching for Companion fill (defense-in-depth).
- * Mirrors apps/extension/src/origin-matching.ts so reveal refuses wrong-site
- * fills even if a modified client forges page_origin. Keep vectors aligned
- * with apps/extension/spec/origin-matching-v1.json.
- */
-
 import { getDomain } from "tldts";
 
 export type OriginMatchPolicy = "registrable-domain" | "exact-host";
@@ -14,7 +7,6 @@ export interface OriginCandidate {
   readonly url_match_policy?: OriginMatchPolicy;
 }
 
-/** True only for real IPv4 loopback (`127.0.0.0/8`) and exact localhost / ::1. */
 export function isLoopback(hostname: string): boolean {
   if (hostname === "localhost" || hostname === "::1" || hostname === "[::1]")
     return true;
@@ -60,7 +52,6 @@ export function matchesOrigin(
   );
 }
 
-/** Normalize a page origin string for fill receipts (scheme://host[:port]). */
 export function pageOrigin(raw: unknown): string | undefined {
   try {
     const url = new URL(String(raw ?? ""));

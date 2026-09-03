@@ -1,7 +1,3 @@
-// The detail place's projection, held to the rules the layout depends on: a
-// field is absent when the row has no answer for it, the anchor exists only
-// where a task repeats, and the two `organize-task` writes never drop the
-// row's manual order.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -58,7 +54,6 @@ describe("the field projection", () => {
       task: task({ due_at: "2026-08-28" }),
       now: NOW,
     }).find((field) => field.key === "time");
-    // No clock to show, so the row carries the rule instead of a fake moment.
     expect(dateOnly?.value).toBeNull();
     expect(dateOnly?.notes).toHaveLength(1);
   });

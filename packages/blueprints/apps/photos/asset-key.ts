@@ -1,7 +1,3 @@
-// Multi-scope identity (#599): `asset_id` is minted per vault, so the UI
-// token is `(scope_id, asset_id)` joined by NUL (injective; empty scope is
-// solo). Bare `asset_id` parses as ambient so single-scope hosts stay honest.
-
 const SEP = "\u0000";
 
 export interface AssetRef {

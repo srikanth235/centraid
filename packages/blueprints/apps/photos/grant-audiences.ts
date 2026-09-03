@@ -1,5 +1,3 @@
-/** Photos' grant-sheet entry (#825); roster mapping lives in _shared/. */
-
 import { useState } from "react";
 
 import {
@@ -13,21 +11,17 @@ import {
 } from "../_shared/grant-gateway.ts";
 import type { GrantAudienceOption } from "../_shared/grant-plane.ts";
 
-/** One subject per grant — twelve photos = twelve revocations; share the album. */
 export const ONE_AT_A_TIME =
   "Sharing stands over one photograph or one album — select a single photograph, or share the album.";
 
 export interface PhotoShareEntry {
-  /** Empty until the first request resolves the roster. */
   audiences: GrantAudienceOption[];
   open: boolean;
-  /** Failed read ≠ "you know nobody". */
   request: () => void;
   close: () => void;
 }
 
 export function usePhotoShare(
-  /** Every refusal lands here. */
   refuse: (message: string) => void
 ): PhotoShareEntry {
   const [audiences, setAudiences] = useState<GrantAudienceOption[]>([]);
@@ -41,7 +35,6 @@ export function usePhotoShare(
         return;
       }
       void readGrantAudiences().then((read) => {
-        // An unreadable roster is NOT an empty one.
         if (!read.ok) {
           refuse(ROSTER_UNREADABLE);
           return;

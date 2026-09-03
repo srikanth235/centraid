@@ -1,6 +1,3 @@
-// Tasks inline descriptor (#505); ./queries imports live ONLY here — node
-// handlers must never reach the browser bundle.
-
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, CHANGE_TABLES } from "./app-root.tsx";
 import { tasksPendingProjection as pendingProjection } from "./pending-projection.ts";

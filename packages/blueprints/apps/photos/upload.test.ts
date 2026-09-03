@@ -1,11 +1,3 @@
-// @vitest-environment jsdom
-// Web/desktop import completeness (issue #864 import-runupload).
-//
-// A large drop is the only way many photographs enter this app on web/desktop.
-// Two ways it used to lose files: the drop handler read `dataTransfer.files`
-// and ignored `items` (some hosts put the files only there), and a middle
-// staging failure aborted the rest of the run. This suite is the cheapest
-// falsifier for both — not field forwarding (actions/upload.test.ts).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const stage = vi.hoisted(() => ({
@@ -183,3 +175,4 @@ describe("runUpload batch completeness", () => {
     ]);
   });
 });
+// @vitest-environment jsdom

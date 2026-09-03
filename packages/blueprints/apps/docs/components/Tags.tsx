@@ -1,9 +1,3 @@
-// The Details drawer's tag editor (#352): add/remove chips
-// over core.tag_item/untag_item (the shared "Tags" concept scheme,
-// packages/vault/src/commands/tags.ts) — additive and idempotent, so
-// retyping an existing label just no-ops rather than erroring. Mirrors the
-// photos app's Lightbox tag editor almost verbatim, adapted to docs' own
-// class names.
 import { useState } from "react";
 
 import { I } from "../icons.ts";

@@ -12,24 +12,18 @@ export function isRenderableUri(uri: unknown): boolean {
   return safeMediaUrl(uri) !== null;
 }
 
-// Grid never fetches a full original: server thumb (#296) or inline `data:`; else placeholder.
-// THUMB_EDGE is the SERVE ceiling and must stay 360 (client tiny edge is 256, #405):
-// v0 never migrates old thumbs, so probing `?variant=thumb` 404s to a placeholder.
 export const THUMB_EDGE = 360;
 
 export function gridSrc(asset: Asset): string | null | undefined {
   if (isVideoAsset(asset)) return safeMediaUrl(asset.poster_uri);
   if (isAudioAsset(asset)) return null;
   if (typeof asset.thumb_uri === "string") {
-    // Known-small blobs never get a thumb staged — `?variant=thumb` 404s. Missing dimensions use the thumb.
     const knownSmall =
       asset.width != null &&
       asset.height != null &&
       Math.max(asset.width, asset.height) <= THUMB_EDGE;
     return safeMediaUrl(knownSmall ? asset.content_uri : asset.thumb_uri);
   }
-  // No thumb yet (#708): paint inline `data:` or a vault blob path (as Home mosaic).
-  // Bare remote URL stays a placeholder — returning null means no `<img>` is built, so the retry cannot cover it.
   const inline = typeof asset.content_uri === "string" ? asset.content_uri : "";
   if (inline.startsWith("data:") || inline.startsWith(VAULT_BLOB_PATH)) {
     return safeMediaUrl(asset.content_uri);
@@ -41,7 +35,6 @@ export function durationLabel(
   seconds: number | null | undefined
 ): string | null {
   const value = Number(seconds);
-  // `duration_s` of 0 is a still — "0:00" reads as a broken video.
   if (!Number.isFinite(value) || value <= 0) return null;
   return clock(value);
 }
@@ -51,7 +44,6 @@ function renderPlaceholder(tile: HTMLElement, asset: Asset): void {
   const shimmer = document.createElement("span");
   shimmer.className = "ph-tile-ph";
   shimmer.setAttribute("aria-hidden", "true");
-  // `--skel`, never `--bg-elev`/`--bg-sunken` (those read as a card; v4 §2.2). Inline so non-React callers match.
   shimmer.style.background = "var(--skel, var(--bg-sunken))";
   tile.appendChild(shimmer);
   if (isVideoAsset(asset)) {
@@ -72,7 +64,6 @@ function renderPlaceholder(tile: HTMLElement, asset: Asset): void {
 }
 
 function renderDuration(tile: HTMLElement, asset: Asset): void {
-  // Stray `duration_s` on a still is not a clip (#708).
   if (!isVideoAsset(asset) && !isAudioAsset(asset)) return;
   const label = durationLabel(asset.duration_s);
   if (!label) return;
@@ -82,7 +73,6 @@ function renderDuration(tile: HTMLElement, asset: Asset): void {
   tile.appendChild(badge);
 }
 
-/** Callback after the retry ladder; typed loosely so tile-state.ts owns the vocabulary (v4 §14). */
 export type MediaReport = (state: "bytes" | "gateway" | "failed") => void;
 
 export function fillTileMedia(
@@ -90,12 +80,10 @@ export function fillTileMedia(
   asset: Asset,
   report?: MediaReport
 ): void {
-  // Stamp scope on the tile before any child (#599): content ids collide across scopes — unstamped = wrong photo, not 404.
   const scope = scopeAttr(asset.scope_id);
   if (scope) tile.dataset.scope = scope;
   const src = gridSrc(asset);
   if (src == null) {
-    // Offline/offloaded (§14), not a failure: keep geometry.
     renderPlaceholder(tile, asset);
     renderDuration(tile, asset);
     report?.("gateway");
@@ -110,10 +98,8 @@ export function fillTileMedia(
     img.width = asset.width;
     img.height = asset.height;
   }
-  // One retry against the original (#708): missing derivative, or `blob:` revoked mid-decode.
   const original = safeMediaUrl(asset.content_uri);
   img.addEventListener("error", () => {
-    // Authorizer mid-flight: off-origin this path is the SPA `index.html`. Wait; do not tear the tile down.
     if (
       img.getAttribute(BLOB_PENDING_ATTR) === "1" &&
       (img.getAttribute("src") ?? "").startsWith(VAULT_BLOB_PATH)
@@ -152,13 +138,11 @@ export function fillTileMedia(
   observeNextScreen(img, src);
 }
 
-// Once-per-mount guard for `fillTileMedia`. Pair with `key={asset.asset_id}` to keep the `<img>` across refreshes.
 export function mountMedia(
   el: HTMLElement | null,
   asset: Asset,
   report?: MediaReport
 ): void {
-  // Scope + asset id (#599): id-only treats a Family photo as already painted and leaves the previous scope's bytes.
   const key = `${asset.scope_id ?? ""}:${asset.asset_id}`;
   if (!el || el.dataset.mediaFor === key) return;
   el.dataset.mediaFor = key;

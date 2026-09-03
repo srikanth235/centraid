@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-/** Direct recovery path for a denied blueprint read (#630). */
 export function VaultAccessButton(): ReactNode {
   return (
     <button

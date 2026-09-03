@@ -1,15 +1,3 @@
-// THE FIELD ROW WITH VERBS (README-Locker §5).
-//
-// Key column · value · a note carrying the rule · a trailing act group. The
-// row is the product's existing field row; the two things Locker added are a
-// SEALED value (a letter-spaced dot run in the soft ink rung) and per-field
-// verbs at the row's end. Both are variants of what already existed, which is
-// why neither introduces a size, a weight or a colour.
-//
-// EVERY ROW CARRIES ITS OWN RULE. A metadata row says it never needed a
-// permit; a sealed row says what revealing costs; a revealed row says how long
-// it has left AND that the receipt is already written — past tense, because it
-// is. That last sentence is the one that keeps a reveal from feeling free.
 import type { ReactNode } from "react";
 
 import { Meter } from "../../_shared/Meter.tsx";
@@ -35,13 +23,9 @@ export interface FieldAct {
 
 export interface FieldRowProps {
   label: string;
-  /** A metadata value, shown plainly. */
   value?: string | null;
   note?: string;
-  /** Read in the numeric register — an expiry, a code, a count. */
   numeric?: boolean;
-  /** The row's verbs, at its end. The first is the plain control, the rest
-   *  quiet: a row with two equally weighted acts asks a question. */
   acts?: readonly FieldAct[];
   children?: ReactNode;
 }
@@ -89,27 +73,16 @@ export function FieldRow(props: FieldRowProps): ReactNode {
 
 export interface SealedFieldProps {
   label: string;
-  /** The permit's identity — a permit is minted for exactly this field. */
   field: string;
-  /** The plaintext, present ONLY while a reveal is live. */
   revealed: string | null;
-  /** When the reveal landed, for the countdown. */
   revealedAt: number | null;
-  /** The clock this screen reads — one value per tick, so the note and the
-   *  field it sits under cannot disagree by a second. */
   now: number;
-  /** The rule this field carries while sealed. Defaults to §6's sentence. */
   note?: string;
   onReveal: (field: string) => void;
   onCopy: (field: string) => void;
   onConceal: (field: string) => void;
 }
 
-/**
- * A SEALED FIELD. Sealed it offers `Reveal` and `Copy`, and BOTH open the
- * permit gate — copying a secret without seeing it is still taking it, and
- * costs the same permit and the same receipt.
- */
 export function SealedField(props: SealedFieldProps): ReactNode {
   const open = props.revealed !== null && props.revealedAt !== null;
   const note = open
@@ -178,16 +151,6 @@ export function SealedField(props: SealedFieldProps): ReactNode {
   );
 }
 
-/**
- * THE STRENGTH ROW. Scored by the same rule Review scores against
- * (`totp.ts` `strength`, which mirrors the vault's own `strengthScore`), so
- * the item view and the verdict list can never disagree — which is the whole
- * reason the meter is worth drawing at all.
- *
- * It reads the REVEALED password, so it appears only while one is on screen:
- * a meter over a sealed value would be a claim derived from something this
- * seat has not been given.
- */
 export function StrengthField({
   password,
   onGenerate,
@@ -216,12 +179,6 @@ export function StrengthField({
   );
 }
 
-/**
- * THE ONE-TIME CODE. The SEED is a secret; the six digits are a reveal of
- * their own, and copying takes the CODE, never the seed. The code is computed
- * on this device from the seed the permit bought — real RFC-6238, never a
- * round trip that would put the seed on a wire.
- */
 export function TotpField({
   seed,
   now,
@@ -230,7 +187,6 @@ export function TotpField({
   onCopy,
   onConceal,
 }: {
-  /** Present only while the seed's reveal is live. */
   seed: string | null;
   now: number;
   revealedAt: number | null;

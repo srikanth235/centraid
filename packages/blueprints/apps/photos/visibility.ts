@@ -5,7 +5,6 @@ import type { Asset } from "./types.ts";
 
 export interface Visibility {
   visibleAssets: () => Asset[];
-  /** Composite key, never a bare `asset_id`. */
   findAsset: (key: string) => Asset | undefined;
 }
 
@@ -45,15 +44,12 @@ export function createVisibility({
       .every((token) => hay.includes(token));
   }
 
-  // Trash is client-only (soft-deleted rows leave FTS). Live: merge server
-  // hits (#352); All = whole library; album/Favorites = already-loaded only.
   function visibleAssets(): Asset[] {
     const query = getSearchQuery();
     const selectedAlbum = getSelectedAlbum();
     if (!query) return getAlbumAssets();
     if (selectedAlbum === TRASH) return getTrash().filter(matchesSearchLocal);
     const scoped = getAlbumAssets();
-    // Composite key (#599): a bare `asset_id` would collapse two scopes.
     const scopedKeys = selectedAlbum ? new Set(scoped.map(assetKey)) : null;
     const merged = new Map<string, Asset>();
     for (const a of scoped.filter(matchesSearchLocal))

@@ -1,18 +1,3 @@
-// Who a document is shared with (#821), as the drive and search
-// projections ship it.
-//
-// Three rules are load-bearing here, and each one is a sentence a member would
-// otherwise read wrongly:
-//
-//   * a grant on a FOLDER reaches the documents inside it, at any depth, and
-//     the row says the share came `via: "folder"` — a rail that claimed the
-//     document itself was shared would send a member looking for a share they
-//     never made;
-//   * a DENIAL of the (new, therefore parked-for-approval) share scopes leaves
-//     `shared_with: null` on every row and the drive otherwise whole — a
-//     regression here does not read as a bug, it reads as "shared with nobody";
-//   * an IMPLICIT circle is labelled by who is in it, because its stored name
-//     is a machine string nobody chose.
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -30,8 +15,6 @@ const SHARE_ENTITIES = new Set([
   "core.party",
 ]);
 
-// One folders scheme: root › Property › Leases. `doc-lease` sits two levels
-// down, `doc-loose` sits at the top level.
 const ROWS: Record<string, Array<Record<string, unknown>>> = {
   "core.concept_scheme": [{ scheme_id: "s-folders", uri: FOLDER_SCHEME_URI }],
   "core.concept": [
@@ -108,7 +91,6 @@ const ROWS: Record<string, Array<Record<string, unknown>>> = {
     { party_id: "party-ravi", display_name: "Ravi" },
   ],
   "share.circle_grant": [
-    // The grant is on the GRANDPARENT folder, not on the document.
     {
       grant_id: "grant-property",
       circle_id: "circle-family",
@@ -117,7 +99,6 @@ const ROWS: Record<string, Array<Record<string, unknown>>> = {
       plane: "commons",
       implicit_circle: 0,
     },
-    // A one-off recipient: the circle exists only to carry this share.
     {
       grant_id: "grant-note",
       circle_id: "circle-adhoc",
@@ -148,7 +129,6 @@ interface Row {
   shared_with: SharedWith[] | null;
 }
 
-/** A ctx whose share/social reads either answer from ROWS or throw a denial. */
 function ctxOf(shareDenied: boolean) {
   const read = vi.fn<
     (request: { entity: string }) => Promise<{
@@ -183,8 +163,6 @@ describe("the drive's shared_with (#821)", () => {
       grant_id: "grant-property",
       label: "Family",
       via: "folder",
-      // The folder the member would have to change — the grandparent, not
-      // the folder the document is filed in.
       container_id: "c-property",
       member_count: 2,
       pending_count: 1,

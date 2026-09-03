@@ -1,13 +1,3 @@
-// The overlays that are not a confirm: quick add and the shortcut sheet
-// (spec §3, §7). The band's More sheet is the ONE shared
-// `_shared/MoreSheet.tsx` (#883 B9), wired from `app-root.tsx`.
-//
-// QUICK ADD IS ONE CONTROL AND ONE FILLED BUTTON. Title first, optional chip
-// rows under it, and the foot states where it will land. The defaults answer
-// what they can, so four words and Add files a task correctly.
-//
-// A DENIED WRITE SCOPE DISABLES ADD WITH THE REASON, never a dead button; the
-// control stops being filled the moment it stops being pressable.
 import type { ReactNode } from "react";
 
 import { KitModal } from "../../_shared/KitModal.tsx";
@@ -38,7 +28,6 @@ export interface QuickAddProps {
   onLandsIn: (scopeId: string) => void;
   priority: number;
   onPriority: (level: number) => void;
-  /** The one reason capture cannot fire, or undefined when it can. */
   disabledReason?: string;
   inputRef: (el: HTMLInputElement | null) => void;
   onCancel: () => void;
@@ -46,8 +35,6 @@ export interface QuickAddProps {
 }
 
 export function QuickAdd(props: QuickAddProps): ReactNode {
-  // The callback ref comes off `props` FIRST: a ref read from the props object
-  // taints every later `props.*` read for the React compiler (#573).
   const { inputRef } = props;
   const chosen =
     props.scopes.find((scope) => scope.id === (props.landsIn ?? "")) ??
@@ -153,7 +140,6 @@ export function Shortcuts({ onClose }: { onClose: () => void }): ReactNode {
   );
 }
 
-/** The shelf a More row lands on, named for the bar while it is open. */
 export function moreRowTitle(shelf: ShelfId): string {
   return shelfCopy(shelf).title;
 }

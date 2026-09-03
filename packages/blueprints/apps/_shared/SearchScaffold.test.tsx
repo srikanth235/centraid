@@ -1,9 +1,3 @@
-// The shared search scaffold's rendering half (#712) — a generic
-// smoke test with invented copy, independent of any one app's strings. The
-// exact-copy assertions for a real consumer live with that consumer
-// (`src/photos-shelves-v4.test.ts` for Photos; this file only proves the
-// four states/config-driven groups render at all, for an app that is
-// neither Photos nor Tally.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -85,8 +79,6 @@ describe("SearchScaffold's four states", () => {
 
   it("echoes the query and the caller's honest miss body on a real miss", () => {
     const html = render({ query: "zzz", status: "ready", count: 0 });
-    // renderToStaticMarkup HTML-escapes quotes in text nodes too, not just
-    // attributes — assert against what actually lands in the markup.
     expect(html).toContain("Nothing matches &quot;zzz&quot;");
     expect(html).toContain("Nothing matched.");
     expect(html).not.toContain("the caller's own results");
@@ -103,7 +95,6 @@ describe("SearchScaffold's four states", () => {
     const html = render({ query: "x", status: "ready", count: 3 });
     expect(html).toContain(">3<");
     expect(html).toContain("results · searched the live library");
-    // Same escaping note as above — the apostrophe lands as `&#x27;`.
     expect(html).toContain("the caller&#x27;s own results");
   });
 
@@ -133,8 +124,6 @@ describe("SearchScaffold's four states", () => {
     expect(html).toContain("Not every scope answered");
     expect(html).toContain("commons");
     expect(html).toContain("peer offline");
-    // The results are STILL there — a partial reach never collapses `ready`
-    // into the miss/unreachable panels.
     expect(html).toContain("own results"); // the caller's own children
     expect(html).toContain("results · searched the live library");
   });

@@ -5,7 +5,6 @@ import {
   findScheme,
 } from "./concept-scheme-kit.ts";
 
-// Re-exported: the kit owns every scheme URI a blueprint names.
 export {
   JOURNAL_ENTRY_NOTATION,
   JOURNAL_SCHEME_URI,
@@ -27,8 +26,6 @@ interface TagRow {
   concept_id: string;
 }
 
-// Bounded `op: "eq"` reads only. A denied read THROWS — answering "empty"
-// would leak journal notes into excluded surfaces.
 export async function readJournalNoteIds(
   vault: VaultApi,
   purpose: string

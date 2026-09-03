@@ -1,5 +1,3 @@
-// The reading room (Notes spec §5): every surface reads `promote()`, so none
-// can disagree what a note is called.
 import { useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 
@@ -31,7 +29,6 @@ interface NoteProps {
   search?: string;
 }
 
-/** Sized by `--target-min`, never a media query. */
 function Pin({ note, onTogglePin }: Pick<NoteProps, "note" | "onTogglePin">) {
   const pinned = note.pinned === 1;
   return (
@@ -50,7 +47,6 @@ function Pin({ note, onTogglePin }: Pick<NoteProps, "note" | "onTogglePin">) {
   );
 }
 
-/** Content type is stated per kind, not one blank card for all three. */
 function Placeholder({ kind }: { kind: "screenshot" | "link-only" | "audio" }) {
   return (
     <div className={styles.placeholder} data-kind={kind}>
@@ -84,11 +80,7 @@ export function NoteCard({ note, onOpen, onTogglePin, search }: NoteProps) {
         className={`kit-plain-btn ${styles.open}`}
         onClick={() => onOpen(note.note_id)}
       >
-        <span
-          className={styles.title}
-          data-untitled={String(shown.untitled)}
-          // Member text — sanitised at the render boundary.
-        >
+        <span className={styles.title} data-untitled={String(shown.untitled)}>
           {displayText(shown.heading)}
         </span>
         {placeholder ? (
@@ -113,7 +105,6 @@ export function NoteRow({
   search,
   position,
 }: NoteProps & {
-  /** The row IS the list item, never a wrapper around it. */
   position?: { index: number; setSize: number };
 }) {
   const shown = promote(note);
@@ -154,12 +145,10 @@ export interface NoteSetProps {
   onOpen: (noteId: string) => void;
   onTogglePin: (note: Note) => void;
   search?: string;
-  /** Shown once the read has landed, never while loading. */
   empty?: ReactNode;
   foot?: ReactNode;
 }
 
-/** Width changes columns and measure, never type size. */
 export function NoteSet({
   notes,
   view,
@@ -201,18 +190,8 @@ export function NoteSet({
   );
 }
 
-/** Replaced by the first measurement. */
 const ROW_RUNG_FALLBACK = 44;
 
-/**
- * The row arrangement, windowed (#883 C4).
- *
- * THE CARD ARRANGEMENT IS NOT WINDOWED — a stated gap. `.cards` packs with
- * `auto-fill`/`minmax`, so the browser owns the column count a per-block
- * height would need. Deriving it in JS copies the CSS packing rule and drifts
- * when the minmax changes; reading it back from the DOM (children grouped by
- * `offsetTop`) is the shape a follow-up takes.
- */
 function WindowedRows({
   notes,
   onOpen,

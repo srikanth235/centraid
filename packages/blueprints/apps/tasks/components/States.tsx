@@ -1,15 +1,3 @@
-// The honest states, as blocks (spec §4, §6).
-//
-// EACH IS A FACT WITH A WAY FORWARD. A view that says "nothing here" without
-// saying on whose terms, or a notice that reports a lag with no way to close
-// it, is the class of half-truth this file exists to close: every block below
-// carries the sentence AND the act that answers it.
-//
-// The empty blocks use the shared `kit-empty` vocabulary with a `kit-btn` act,
-// because Tasks' three variants differ in their sentence rather than in their
-// shape — unlike Docs, which needed five distinguishable blocks and drew its
-// own. A centred notice card with one line and one or two acts is exactly what
-// Today's quiet, the day-one screen and an empty lens each need.
 import type { ReactNode } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";
@@ -40,12 +28,7 @@ export type EmptyVariant =
 
 export interface EmptyStateProps {
   variant: EmptyVariant;
-  /** The day the next thing is due, for the all-done sentence. Absent when
-   *  nothing else is due at all, and then the sub-line is simply withheld
-   *  rather than invented. */
   nextDay?: string | null;
-  /** This lens' own sentence, for the `lens` variant — a shelf is empty on its
-   *  own terms, never on Today's. */
   lensLine?: string;
   onQuickAdd?: () => void;
   onNewProject?: () => void;
@@ -104,18 +87,12 @@ export function EmptyState(props: EmptyStateProps): ReactNode {
 }
 
 export interface NoticesProps {
-  /** The absence the board can see, or null when there was none. */
   absence: { days: number; due: number } | null;
   onCatchUp: () => void;
-  /** The replica last matched the vault at this wall time — the WEB seat's
-   *  lag, stated rather than hidden. */
   staleAt?: string | null;
   onRefresh?: () => void;
-  /** A vault that did not answer: the notice names the slice that is missing,
-   *  and the board below it is honestly partial rather than pretending whole. */
   partial?: { vault: string; own: number } | null;
   onRetry?: () => void;
-  /** How many writes are still on this device. */
   pendingWriteCount?: number;
 }
 

@@ -1,6 +1,3 @@
-// What `[[` may point at. LOCKER IS NOT A KIND: the absence is structural, so
-// a secret cannot become a link target by adding a probe. A kind names its app
-// by id only — the product catalog owns the name (#883, ruling O-label).
 import { apps } from "@centraid/design";
 
 import type { VaultRow } from "./filing.ts";
@@ -10,7 +7,6 @@ export interface LinkTargetKind {
   appId: string;
   entity: string;
   id: string;
-  /** First non-empty wins; a row with none is not a target. */
   labels: readonly string[];
   subtitles: readonly string[];
 }
@@ -81,7 +77,6 @@ function first(row: VaultRow, fields: readonly string[]): string {
   return "";
 }
 
-/** `excluded` drops ids of that kind (Notes passes its journal set). */
 export function linkTargetsFrom(
   kind: LinkTargetKind,
   rows: readonly VaultRow[],

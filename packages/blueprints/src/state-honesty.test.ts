@@ -9,8 +9,6 @@ const read = (relative: string): string =>
   readFileSync(path.resolve(appsRoot, relative), "utf8");
 
 describe("blueprint state honesty", () => {
-  // Requirements on an interface, never exemptions for an app: an app with no
-  // interface asserts nothing.
   test.each(["locker", "tasks"])(
     "%s paints a skeleton until its first read settles",
     (app) => {
@@ -19,8 +17,6 @@ describe("blueprint state honesty", () => {
     }
   );
 
-  // Per ROUTE: a route added without a skeleton, or wired to a gate of its
-  // own invention, fails here.
   test("people gates every route on its own skeleton", () => {
     const routes: Array<[string, string]> = [
       ["EditRoute", "props.loading"],
@@ -46,7 +42,6 @@ describe("blueprint state honesty", () => {
     expect(body.match(/loading=\{loading\}/gu)).toHaveLength(routes.length);
   });
 
-  // A skeleton in these chromes outlives the read it stands in for.
   test.each([
     ["agenda", "LoadingSkeleton"],
     ["notes", "<Skeletons"],
@@ -57,8 +52,6 @@ describe("blueprint state honesty", () => {
     expect(read(`${app}/Chrome.tsx`)).not.toContain("LoadingSkeleton");
   });
 
-  // A denied read always offers a way to the grant, never a dead end: the
-  // chrome must draw `ConsentBanner` and the banner must carry the button.
   test.each([
     ["locker", "locker/Chrome.tsx"],
     ["docs", "docs/Chrome.tsx"],
@@ -74,7 +67,6 @@ describe("blueprint state honesty", () => {
     expect(read("_shared/AppChrome.tsx")).toContain("<VaultAccessButton />");
   });
 
-  // Photos' denial is a SCREEN, not a banner (v4 §13).
   test("photos' permission screen offers the grant directly", () => {
     expect(read("photos/components/Permission.tsx")).toContain(
       "VaultAccessButton"
@@ -98,7 +90,6 @@ describe("blueprint state honesty", () => {
     expect(source).toContain("kit-btn");
   });
 
-  // Docs draws its own block (§4.6), naming its reason.
   test("docs draws the five empty states, only one with a display serif", () => {
     const block = read("docs/components/EmptyState.tsx");
     expect(block).toContain("kit-btn");
@@ -107,7 +98,6 @@ describe("blueprint state honesty", () => {
     const css = read("docs/components/EmptyState.module.css");
     expect(css).toContain("var(--t-display)");
     expect(css).toContain("var(--t-reading)");
-    // The gate is the SHARED kit's, so no app answers "empty" its own way.
     const viewState = read("docs/view-state.ts");
     expect(viewState).toContain("emptyStateView");
     expect(viewState).toContain("showsEmptyState");

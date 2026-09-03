@@ -1,10 +1,3 @@
-/*
- * @centraid/blueprints. A bundled automation is CLONED into user-owned code; a
- * bundled UI app under `apps/<id>/` is enrolled IN PLACE, never copied. Kind,
- * not source shape, picks the segment directory, and a user-data cache may hold
- * a newer copy per template. Depends only on `@centraid/design`.
- */
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -43,7 +36,6 @@ export async function listTemplates(): Promise<TemplateMeta[]> {
   return (await readManifest(appTemplatesDir)).templates;
 }
 
-/** These ids are RESERVED: a code-store app must never shadow one (#434). */
 export async function listBundledAppTemplates(): Promise<TemplateMeta[]> {
   return (await listTemplates()).filter(
     (t) => (t.kind ?? "app") !== "automation"
@@ -54,7 +46,6 @@ export function bundledAppDir(id: string): string {
   return templateSourceDir(id, { kind: "app" });
 }
 
-/** Higher semver wins; a cache failure degrades to the bundle. */
 export async function resolveTemplates(
   opts: { cacheDir?: string } = {}
 ): Promise<ResolvedTemplate[]> {
@@ -93,7 +84,6 @@ export function templateSourceDir(
   return path.join(base, templateKindDir(opts.kind), templateId);
 }
 
-/** A manifest-listed file missing on disk surfaces as a read rejection. */
 export async function readTemplateFiles(
   template: Pick<TemplateMeta, "id" | "files" | "kind"> & {
     source?: TemplateSource;
@@ -139,7 +129,6 @@ function compareSemver(a: string, b: string): number {
   return 0;
 }
 
-// Gateway lifecycle routes use the `*Files` variants.
 export { updateAppMetaFiles, validateAppId } from "./app-meta.js";
 export {
   cloneTemplate,

@@ -1,12 +1,3 @@
-// THE GENERATOR'S PROMISES (README-Locker §5; GAPS §3.3 #12).
-//
-// Three of them are testable as properties rather than as examples, which is
-// the only way to test a generator at all: LOOK-ALIKES ARE NEVER PRESENT, the
-// length is the one that was asked for, and a mode change actually changes the
-// output's shape. Everything below runs the real `crypto.getRandomValues` —
-// there is no seeded-random mode in this app, because a generator with one is
-// a generator somebody will ship with it on.
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -18,7 +9,6 @@ import {
   readsInclude,
 } from "./gen-model.ts";
 
-/** The characters this product refuses to put in a secret, in every mode. */
 const LOOK_ALIKES = /[IOl01]/u;
 
 const DRAWS = 40;

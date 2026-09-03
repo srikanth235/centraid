@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 
-/** `tick` is read through a ref: a fresh closure must not reset the phase. */
 export function useVisibleInterval(
   tick: () => void,
   ms: number,
@@ -31,7 +30,6 @@ export function useVisibleInterval(
         stop();
         return;
       }
-      // Catch up once: a clock that merely paused comes back a step behind.
       latest.current();
       start();
     };

@@ -1,4 +1,3 @@
-// Grid view row (#grid root's mapped children).
 import type { MouseEvent } from "react";
 
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
@@ -34,23 +33,17 @@ export function GridCard({
 }: {
   doc: DriveDoc;
   index: number;
-  /** The gateway is out of reach — rung 4 of the row state ladder (§4.1). */
   offline: boolean;
-  /** This card is in Trash, where the slot carries the purge date. */
   trashed: boolean;
   selectedIds: Set<string>;
-  /** Selection is a MODE, entered by the app bar's Select (§4.1). */
   selecting: boolean;
   onOpenDetails: (id: string) => void;
   onOpenQuick: (id: string) => void;
   onToggleSelect: (id: string, index: number, shift: boolean) => void;
-  /** A card is the same row in another layout (`ListRow`). */
   showSender?: boolean;
 }) {
   const m = typeMeta(doc.media_type, doc.title);
   const selected = selectedIds.has(doc.document_id);
-  // The document's real first words, when its bytes rode along inline. A
-  // decorative mock of a page is only honest when there is nothing to show.
   const rowState = rowStateFor(doc, { trashed, offline });
   const body = inlineText(doc);
   const excerpt = body ? textExcerpt(body) : "";
@@ -71,11 +64,6 @@ export function GridCard({
         aria-label={`Select ${doc.title ?? "Untitled"}`}
         aria-pressed={selected}
         onClick={(e) => onToggleSelect(doc.document_id, index, e.shiftKey)}
-        // A DOUBLE CLICK OPENS THE DOCUMENT ON THE STAGE, not the reading
-        // route. One click picks the row, two open it — the gesture pair every
-        // file browser a member has already used trains them on, and the thing
-        // that opens is the document itself, full-bleed, with its properties
-        // beside it.
         onDoubleClick={() => onOpenQuick(doc.document_id)}
       />
       <button

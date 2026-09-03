@@ -1,10 +1,3 @@
-// Activity's folds and the two guards that ride with them.
-//
-// The day bucket and the window both have a silent failure mode: a row filed
-// under the wrong heading reads perfectly, and a truncated feed that draws no
-// end row reads as the whole ledger. The removal guard has a third — a member
-// who appears on a ledger must never be removable, and "appears" has to mean
-// paid it OR holds a share of it, not just the first of those.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -112,8 +105,6 @@ describe("the removal guard", () => {
   });
 
   it("catches someone who only holds a share", () => {
-    // The bug this closes: guarding on `paid_by` alone lets a member who
-    // never fronted anything be removed out from under their own shares.
     expect(appearsOnLedger([entry], "me")).toBe(true);
   });
 

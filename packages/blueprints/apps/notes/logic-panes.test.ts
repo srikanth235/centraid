@@ -1,20 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-// What Notes puts in front of the member: the search sequence, the `[[`
-// powerbox probe, and the rows a route paints (#839 W2-1) — split out of
-// `logic.test.ts`, which holds narration and the lazy reads; the seat the
-// first two drive is `logic.test-fixtures.ts`.
-//
-// SEARCH NEVER CLAIMS AN EMPTY RESULT IT DID NOT VERIFY. A denial and a throw
-// are both "unreachable", never "nothing matches", because the second is a
-// claim about the vault that nobody checked. Both debounced paths run on the
-// fake clock: coalescing is their whole point, and a suite that awaited them
-// directly would prove nothing about the delay they exist to hold.
-//
-// `rowsFor` and the three counters are pure over the loaded window, so they
-// are driven directly rather than through the seat — a route that paints the
-// library while a query is live, or a tag treated as a place rather than a
-// lens, is a defect no rendering test would see.
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import { data, harness, note, state } from "./logic.test-fixtures.ts";
@@ -80,8 +65,6 @@ describe("search never claims an empty result it did not verify", () => {
   it("drops an answer to a query the member has already moved past", async () => {
     const clock = useFakeClock();
     const app: Harness = harness({
-      // The member types on while the vault is answering: the sequence moves
-      // under the in-flight read, exactly as a second `runSearch` would move it.
       read: async () => {
         app.state.searchSeq += 5;
         return { notes: [note({ note_id: "stale" })] };

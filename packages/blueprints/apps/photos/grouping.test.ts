@@ -1,13 +1,3 @@
-// The timeline's day sub-label, on the one point no cheaper layer holds: a
-// coordinate is not a place name (#816).
-//
-// `photos-tile.test.ts` already owns the sub-label's grammar over named places
-// (one place names the day, two places name nothing) and the month bucketing.
-// What this file owns is the label's refusal: every place minted from GPS
-// carries the digits `findOrCreatePlaceTx` wrote as its name until somebody
-// renames it, and the timeline must not print them — `12 · 39.09680,
-// -120.03240` beside a day at the lake, in the app's own voice, as if a person
-// had typed it.
 import { describe, expect, it } from "vitest";
 
 import { dayMeta } from "./grouping.ts";
@@ -32,8 +22,6 @@ describe("the day sub-label", () => {
   });
 
   it("names nothing when one frame's place is a coordinate and another's is not", () => {
-    // The named place is not "the day's place" — the day also holds a frame
-    // this label has nothing to say about, and one of two is not all of them.
     expect(
       dayMeta([
         frame({ place_id: "p-cabin", name: "The cabin" }),

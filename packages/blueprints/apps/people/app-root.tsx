@@ -1,4 +1,3 @@
-// People orchestrator: wires state/data, logic, writes, and the frame. Draws none of it.
 import {
   useCallback,
   useEffect,
@@ -114,7 +113,6 @@ export function Root({
   const state = stateRef.current;
   const data = dataRef.current;
 
-  // Compact layout before first paint: observeWidth fires post-paint.
   useLayoutEffect(() => {
     const element = rootElRef.current;
     if (!element) return;

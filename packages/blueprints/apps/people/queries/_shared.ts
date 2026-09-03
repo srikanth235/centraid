@@ -1,8 +1,3 @@
-/*
- * Not a query (dispatcher maps a name to `queries/<name>.ts`). WHAT IS SHARED WITH A PERSON IS NOT READ HERE (#825) — grants go through `GET /centraid/_vault/grants?partyId=`.
- * GRACEFUL DENIAL: catch → `null` ("facts absent"), never a consent wall over the roster.
- */
-
 const PURPOSE = "dpv:ServiceProvision";
 
 export interface BindingRow {

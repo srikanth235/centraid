@@ -6,12 +6,9 @@ import styles from "./ShelfStrip.module.css";
 
 export interface ShelfStripProps {
   shelves: readonly Shelf[];
-  /** Already folded to a strip shelf by the caller (Docs: `stripShelf`). */
   current: ShelfId;
   onSelect: (id: ShelfId) => void;
-  /** Omit an empty count rather than inventing a zero. */
   counts?: ReadonlyMap<string, number>;
-  /** The pane's own width, never the viewport (#505 trap 1). */
   narrow?: boolean;
   label?: string;
 }

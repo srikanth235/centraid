@@ -1,9 +1,3 @@
-// TRIAGE SESSION (#712) — queue+cursor machine shared by Face Review (durable
-// answers, queue re-read per write), Duplicate Review (ephemeral snapshot) and
-// Docs OCR. Shared surface only: one current item, a FROZEN denominator,
-// skip-vs-answer, per-outcome counts. Pure values, so native twins import it.
-
-/** Immutable; `cursor === queue.length` means finished. */
 export interface TriageSession<Item> {
   readonly queue: readonly Item[];
   readonly cursor: number;
@@ -19,7 +13,6 @@ export interface TriageProgress {
   readonly done: boolean;
 }
 
-/** Pass `total` when the queue is one page of a larger backlog. */
 export function openTriage<Item>(
   queue: readonly Item[],
   options?: { total?: number; at?: number }
@@ -38,7 +31,6 @@ export function triageCurrent<Item>(
   return session.queue[session.cursor];
 }
 
-/** Records nothing and WRAPS: a skip leaves the item in the queue. */
 export function triageSkip<Item>(
   session: TriageSession<Item>
 ): TriageSession<Item> {
@@ -46,7 +38,6 @@ export function triageSkip<Item>(
   return { ...session, cursor: (session.cursor + 1) % session.queue.length };
 }
 
-/** Advances; running off the end ends the session. */
 export function triageAnswer<Item>(
   session: TriageSession<Item>,
   outcome: string
@@ -61,7 +52,6 @@ export function triageAnswer<Item>(
   };
 }
 
-/** Keeps total and counts; indexes shifted, so the cursor returns to head. */
 export function triageRefill<Item>(
   session: TriageSession<Item>,
   queue: readonly Item[],

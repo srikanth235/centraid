@@ -1,10 +1,3 @@
-// ACCESS HISTORY (README-Locker §1 `locker/access`, §2 "Receipts").
-//
-// An audit surface never invents a row: every line comes out of
-// `access.receipt`. No VALUE is shown — a reveal names the columns it opened
-// and stops. No REFUSAL is hidden — a denial lists like an allowance. Receipts
-// live in the journal, which the browser replica does not carry, so this read
-// is online-only and the screen names the fact it is missing.
 import type { ReactNode } from "react";
 
 import { virtualItemAria } from "../../_shared/virtual-window.ts";
@@ -36,7 +29,6 @@ import { WindowedRows } from "./Windowed.tsx";
 import styles from "./Rows.module.css";
 
 export interface AccessScreenProps {
-  /** `null` before a read has landed — nothing is empty until one has. */
   entries: readonly LockerAccessEntry[] | null;
   window: { window: number; truncated: boolean } | null;
   itemId: string | null;

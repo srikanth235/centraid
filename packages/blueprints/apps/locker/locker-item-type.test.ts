@@ -1,15 +1,3 @@
-/*
- * Tripwire for `types.ts`'s `LockerItemType` (#712).
- *
- * `types.ts` is deliberately type-only (no runtime members — see its own
- * header), so the union cannot be exported as a value and compared directly
- * against the schema. Instead this scans both files' SOURCE TEXT for their
- * literal lists, the same technique `placement-registry.test.ts` uses for
- * vault's `SHAREABLE_ITEM_TYPES`, and fails loudly the moment the
- * spellings drift instead of failing silently at a browser runtime that
- * never typechecks against the real CHECK constraint.
- */
-
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -21,7 +9,6 @@ const SCHEMA_PATH = path.resolve(
   "../../../vault/src/schema/domains-locker.ts"
 );
 
-/** Pull the quoted members out of `export type LockerItemType = ...`. */
 function declaredLockerItemTypes(): string[] {
   const source = readFileSync(TYPES_PATH, "utf8");
   const match = source.match(
@@ -36,7 +23,6 @@ function declaredLockerItemTypes(): string[] {
   return [...match[1]!.matchAll(/"(?<name>[^"]+)"/gu)].map((m) => m[1]!);
 }
 
-/** Pull the CHECK constraint's members out of `locker_item.type`. */
 function schemaLockerItemTypes(): string[] {
   const source = readFileSync(SCHEMA_PATH, "utf8");
   const match = source.match(
@@ -54,7 +40,6 @@ function schemaLockerItemTypes(): string[] {
 
 describe("LockerItemType mirrors the schema's CHECK constraint (issue #712 C4)", () => {
   it("the schema's own list still names fifteen types — else this tripwire is stale", () => {
-    // Six column-backed types plus the nine template-backed ones #872 added.
     expect(schemaLockerItemTypes()).toHaveLength(15);
   });
 

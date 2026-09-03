@@ -1,11 +1,3 @@
-// The multi-scope write rule (#599, apps/_shared/write-target.ts): where
-// a new item lands when an app is mounted over several scopes at once. Every
-// branch of the rule is pinned here, including the two degenerate inputs that
-// keep the function total.
-//
-// The module is loaded by file URL (the blueprint apps are browser ES modules
-// outside this package's TS program — the same trick docs-media.test.ts uses),
-// so the shapes it returns are declared locally.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -100,7 +92,6 @@ describe("resolveWriteTarget (#599)", () => {
       disabled: true,
       reason: "Library is read-only for now.",
     });
-    // "All" resolves through the same branch, so it is blocked identically.
     expect(resolve(null, frozen)).toStrictEqual(resolve("own", frozen));
   });
 

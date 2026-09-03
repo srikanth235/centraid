@@ -1,14 +1,3 @@
-// Trash's ask panel (Docs spec §4.3 `trash`, §14).
-//
-// AN ASK, NOT A VERB. §4.3 draws this panel with two actions — a dangerous
-// "Empty trash" and "Read the fallback wording" — and the first of those is
-// the very thing being asked FOR: nothing behind it exists. So the panel is a
-// label and one sentence, and the ask's own rationale lives beside the copy
-// in `drive-copy.ts`.
-//
-// The eyebrow says which kind of thing this is so it is never mistaken for a
-// control that failed, and nothing here is in the `net` role: nothing has gone
-// wrong, and a net border would say otherwise.
 import type { ReactNode } from "react";
 
 import { TRASH_ASK, TRASH_FALLBACK } from "../drive-copy.ts";

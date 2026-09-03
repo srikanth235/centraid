@@ -1,5 +1,3 @@
-// The view derivations, asserted directly rather than through a rendered tree.
-
 import type { ReactElement, ReactNode } from "react";
 import { isValidElement } from "react";
 import { describe, expect, it } from "vitest";
@@ -32,8 +30,6 @@ import {
   weekDays,
 } from "./views.ts";
 
-/** A local-time instant, so these assertions do not depend on the runner's
- *  zone the way a hardcoded `Z` string would. */
 function at(
   year: number,
   month: number,
@@ -83,7 +79,6 @@ describe("which views a surface offers", () => {
   });
 
   it("resolves a POINTER preference the touch seat cannot draw", () => {
-    // Not a destination falling back: nothing the band offers lands here.
     expect(resolveView("month", true)).toBe("day");
     expect(resolveView("week", true)).toBe("day");
     expect(resolveView("waiting", true)).toBe("waiting");
@@ -140,7 +135,6 @@ describe("the compact band is the only band", () => {
   });
 
   it("carries Search, which is what lets the bar withdraw its own on compact", () => {
-    // `_shared/app-frame.tsx` withdraws it on the band's promise to carry it.
     expect(barOffersSearch(false)).toBe(true);
     expect(barOffersSearch(true)).toBe(false);
     expect(

@@ -1,4 +1,3 @@
-// Hide and Archive are one act: the same words on every seat.
 import { describe, expect, it } from "vitest";
 
 import {

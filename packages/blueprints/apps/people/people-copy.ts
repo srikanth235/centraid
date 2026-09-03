@@ -1,8 +1,3 @@
-// EVERY STRING PEOPLE PUTS ON SCREEN, so a component cannot mint copy; the
-// budgets are DESIGN.md § Copy. `Share` and `Revoke` take their words from the
-// shared kit (#825) and are never restated. `Link vault` has no copy: linking
-// is not an act a member performs.
-
 export const APP_TITLE = "People";
 export const TOUCH_TITLE = "Touch";
 export const SEARCH_TITLE = "Search";
@@ -36,7 +31,6 @@ export const FILTER_CHIPS = [
 
 const LINK_CHIP_IDS: readonly string[] = ["linked", "unlinked"];
 
-/** Unreadable link facts DROP the chips: empty reads as "nobody". */
 export function filterChips(
   linksAvailable: boolean
 ): readonly { id: string; label: string }[] {
@@ -51,7 +45,6 @@ export const TOUCH_TILES = [
   { id: "starred", label: "Starred", net: false },
 ] as const;
 
-/** `Vaults` counts LINKED PEOPLE: at most one live binding per party. */
 export const LINK_TOUCH_TILES = [
   { id: "linked", label: "Vaults", net: false },
   { id: "to_link", label: "To link", net: true },
@@ -71,7 +64,6 @@ export const SECTIONS = {
   result: "Result",
 } as const;
 
-/** Rows say `Linked vault`, never a vault id: an id is not a name. */
 export const LINK = {
   linked: "Linked",
   vaultRow: "Linked vault",
@@ -82,12 +74,8 @@ export const LINK = {
     `${capability} · since ${when.toLowerCase()}`,
 } as const;
 
-// A grant's subject is named by `grantNoun` (#825), never worded here.
-
-/** The vault stores the word. */
 export const LOG_KINDS = ["Message", "Call", "Met up", "Note"] as const;
 
-/** `Never` IS THE ZERO: zero is never overdue (`format.ts` isOverdue). */
 export const CADENCE_CHIPS = [0, 7, 14, 30, 90] as const;
 
 export const CADENCE_NEVER = "Never";
@@ -143,13 +131,11 @@ export const FIRST_RUN = {
 
 export const SENTENCES = {
   mergeWarning: "Merging cannot be undone.",
-  /** People keeps people: there is no subject of its own to share. */
   shareStartsWhereItLives: "A share starts in the app that holds the thing.",
   merged: "Merged.",
   trashPurge: "Erased after 30 days.",
 } as const;
 
-/** Revoke is the KIT'S confirm, word for word — never restated here. */
 export const CONFIRMS = {
   trash: {
     title: (name: string) => `Move ${name} to trash?`,
@@ -163,7 +149,6 @@ export const CONFIRMS = {
   },
 } as const;
 
-/** Never a zero standing in for a number nobody could see. */
 export const STATUS = {
   roster: (people: number, due: number, starred: number, truncated = false) =>
     truncated
@@ -180,7 +165,6 @@ export const STATUS = {
     truncated
       ? `${linked} vaults across ${people} people shown · ${toLink} to link · ${due} to reconnect · ${starred} starred`
       : `${linked} vaults across ${people} people · ${toLink} to link · ${due} to reconnect · ${starred} starred`,
-  /** Roster app-bar meta on a pointer surface. */
   barLinked: (linked: number, people: number) =>
     `${linked} of ${people} linked`,
   touch: (people: number, due: number) => `${people} people · ${due} overdue`,
@@ -213,7 +197,6 @@ export const OUTCOMES = {
   merged: (dupe: string, keep: string) => `${dupe} merged into ${keep}`,
 } as const;
 
-/** A denial, a park and a queue are three facts; each keeps its sentence. */
 export const REFUSALS = {
   denied: "The vault refused that write.",
   parked: "Waiting for approval.",

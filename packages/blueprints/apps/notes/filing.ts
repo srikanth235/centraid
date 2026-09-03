@@ -1,8 +1,3 @@
-// Notebooks and tags projected from raw vault rows — no IO, no JSX.
-//
-// NOTEBOOKS ARE WHERE A NOTE LIVES; TAGS ARE HOW IT IS SEEN. Deleting a
-// notebook unfiles its notes and destroys none; removing a tag drops ONE edge
-// and never the shared concept, which other subjects still carry.
 import type { NoteTag, Notebook } from "./types.ts";
 
 export type VaultRow = Record<string, unknown>;
@@ -26,8 +21,6 @@ export interface NotebookShelf extends Notebook {
 export interface NotebookRows {
   collections: readonly VaultRow[];
   entries: readonly VaultRow[];
-  /** Membership is counted over these ids only, so a count can never promise a
-   *  note the place cannot open (R-journal). */
   visible?: ReadonlySet<string>;
 }
 
@@ -85,21 +78,15 @@ export function notebookIdsOfNote(
 export interface TagShelf {
   concept_id: string;
   label: string;
-  /** Removing one edge removes THIS note's edge only. */
   edges: ReadonlyArray<{ tag_id: string; note_id: string }>;
 }
 
 export interface TagRows {
   tags: readonly VaultRow[];
-  /** `core.concept` rows, for the shared label. */
   concepts: readonly VaultRow[];
   visible?: ReadonlySet<string>;
 }
 
-/**
- * A concept whose every edge fell outside `visible` is DROPPED, never shown
- * with a zero, so a journal-only tag cannot leak back in.
- */
 export function projectTagShelves(rows: TagRows): TagShelf[] {
   const labels = new Map<string, string>();
   for (const concept of rows.concepts) {

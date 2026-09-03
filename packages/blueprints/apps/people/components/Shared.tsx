@@ -1,7 +1,3 @@
-// ONE ROW AND ONE SECTION FOR THE WHOLE APP: a screen picks recipes, geometry
-// lives once in `shared.module.css`. Member strings pass through
-// `displayText`, which strips the invisible control characters that let one
-// label impersonate another.
 import type { CSSProperties, ReactNode } from "react";
 
 import { partyHueKey, partyHueValue } from "@centraid/design";
@@ -26,8 +22,6 @@ export interface AvatarSubject {
 
 export type LinkState = "linked" | "unlinked" | "unknown";
 
-/** Size comes from `--pe-avatar-size` on the ROW; the ring is an OUTLINE,
- *  since a border grows the box. `unknown` draws nothing. */
 export function PersonAvatar({
   person,
   link = "unknown",
@@ -35,8 +29,6 @@ export function PersonAvatar({
   person: AvatarSubject;
   link?: LinkState;
 }): ReactNode {
-  // ONE party-hue resolver (#883, ruling O-identity); the wheel place is keyed
-  // by the stable party id, so a rename never moves someone.
   const hueKey = partyHueKey(person.party_id, person.avatar_color);
   const fill = hueKey ? partyHueValue(hueKey) : (person.avatar_color ?? "");
   return (
@@ -50,7 +42,6 @@ export function PersonAvatar({
   );
 }
 
-/** Stops propagation, so it never opens the person. */
 export function StarButton({
   name,
   starred,
@@ -94,18 +85,14 @@ export interface RowProps {
   avatar?: AvatarSubject;
   avatarLink?: LinkState;
   name: string;
-  /** Strong rung at the SAME size, so nothing reflows. */
   strong?: boolean;
   sub?: string;
   subNumeric?: boolean;
   meta?: string;
-  /** The meta fact is a consequence (overdue, duplicate). */
   metaNet?: boolean;
-  /** A row with no handler is not a button. */
   onOpen?: () => void;
   trailing?: ReactNode;
   star?: ReactNode;
-  /** True index and total of a windowed set, never the mounted count. */
   position?: { index: number; setSize: number };
 }
 
@@ -130,8 +117,6 @@ export function Row(props: RowProps): ReactNode {
     </>
   );
   const position = props.position;
-  // A windowed row is a real `li`, and the row element ITSELF rather than a
-  // wrapper, so `.row:last-child` still means the last row.
   const Box = position ? "li" : "div";
   return (
     <Box
@@ -175,7 +160,6 @@ export function Row(props: RowProps): ReactNode {
   );
 }
 
-/** `quiet`: a removal that must not compete with the row's name. */
 export function Verb({
   label,
   quiet = false,
@@ -186,7 +170,6 @@ export function Verb({
   label: string;
   quiet?: boolean;
   disabled?: boolean;
-  /** Required where the visible word does not name its object ("✕"). */
   ariaLabel?: string;
   onClick: () => void;
 }): ReactNode {
@@ -208,7 +191,6 @@ export function Verb({
 
 export interface SectionProps {
   title: string;
-  /** Omit rather than show an invented zero. */
   count?: number;
   collapsible?: boolean;
   open?: boolean;
@@ -278,7 +260,6 @@ export function ChipRow({
   label: string;
 }): ReactNode {
   return (
-    // `<fieldset>`, never a div with `role="group"` — native grouping.
     <fieldset className={styles.chipRow} aria-label={label}>
       {options.map((option) => (
         <button
@@ -302,7 +283,6 @@ export interface CountTile {
   net?: boolean;
 }
 
-/** A number-only tile is a badge, and this product has none. */
 export function CountTiles({
   tiles,
   narrow,
@@ -367,7 +347,6 @@ export function Field({
   );
 }
 
-/** Only for acts no reverse write can undo. */
 export function ConfirmPanel({
   title,
   body,

@@ -17,8 +17,6 @@ const FIELDS = [
   "phone",
   "address",
   "network",
-  // Connector alias (#298). Forwarded even as the empty string, which the
-  // command reads as "clear the alias", freeing it for another live item.
   "alias",
 ] as const;
 

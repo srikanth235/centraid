@@ -1,18 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit — this file holds the room's whole orchestration as one React tree by design (#834); splitting it belongs to the app's own code evolution, not this rebuild.
-// Tasks — the commitments room, query-free React tree (#505). Holds `Root`
-// plus every helper that does NOT depend on the node-side `./queries/*`
-// modules; `app-inline.tsx` pairs it with those and the pending projection.
-//
-// THE STATE IDIOM IS DOCS'. A mutable bag in a ref plus a bump reducer, because
-// the room is one tree with a dozen routes over one read: putting twenty
-// independent `useState`s over the same board would make "the board changed"
-// twenty renders instead of one, and would put the ordering of those renders
-// beyond anyone's reach. What genuinely belongs to React — has a read landed,
-// is the vault denied, how wide is the pane — stays `useState`.
-//
-// EVERY FRAME CONTRIBUTION COMES FROM AN EFFECT. The bar and the band render
-// ABOVE this app, so contributing during render would be updating a component
-// that is already painting.
 import {
   useCallback,
   useEffect,
@@ -114,8 +100,6 @@ import {
   taskWrite,
 } from "./writes.ts";
 
-/** The vault entities this app's queries read — the shell's change-subscription
- *  filter. */
 export const CHANGE_TABLES = [
   "schedule.task",
   "schedule.project",
@@ -133,8 +117,6 @@ interface BoardResult extends Partial<BoardData> {
   reach?: ScopeSearchReach[];
 }
 
-/** The palette slots a project dot may take — a CONTENT marker, assigned by
- *  position so two projects are never the same colour by accident. */
 const PROJECT_HUES = [
   "ochre",
   "teal",
@@ -176,9 +158,6 @@ export function Root({
   const [loaded, setLoaded] = useState(false);
   const [readFailedState, setReadFailedState] = useState(false);
   const [consent, setConsent] = useState<{ message: string } | null>(null);
-  // The clock the whole room reads. One value per read rather than a fresh
-  // `Date.now()` per render, so a group header and the rows under it cannot
-  // straddle midnight and disagree about what "today" is.
   const [now, setNow] = useState(() => new Date().toISOString());
 
   const rootElRef = useRef<HTMLDivElement | null>(null);
@@ -221,7 +200,6 @@ export function Root({
       bump();
       return;
     }
-    // Mutated in place, never reassigned: the closures below hold this object.
     const board = dataRef.current;
     board.open = next.open ?? [];
     board.logbook = next.logbook ?? [];
@@ -235,8 +213,6 @@ export function Root({
     bump();
   }, []);
 
-  /** Every write goes through one door, so every outcome lands on the ONE
-   *  status line and every failure is narrated rather than swallowed. */
   const act = useCallback(
     async (
       action: string,
@@ -266,8 +242,6 @@ export function Root({
     [frame, refresh]
   );
 
-  // ──── first read, live changes, focus recovery, width ──────────────────────
-
   useEffect(() => {
     void refresh();
     const stopChanges = onDataChange(CHANGE_TABLES, () => void refresh());
@@ -294,8 +268,6 @@ export function Root({
     },
     [rootRef]
   );
-
-  // ──── what the room knows about itself ────────────────────────────────────
 
   const reach = libraryReachability({
     hostStatus: rootElRef.current?.dataset.gatewayStatus ?? null,
@@ -326,8 +298,6 @@ export function Root({
     readPendingOverlay(task as unknown as Record<string, unknown>)
   ).length;
 
-  // A scope that could not be asked is a NAMED slice of the board that is
-  // missing, never rows that quietly are not there (#726).
   const unreachedScope = state.boardReach.find(
     (entry) => entry.state !== "reached"
   );
@@ -339,8 +309,6 @@ export function Root({
   ).length;
 
   const away = absence(data.open, now);
-
-  // ──── navigation ───────────────────────────────────────────────────────────
 
   const go = useCallback((next: ShelfId) => {
     setShelf(next);
@@ -371,13 +339,8 @@ export function Root({
     bump();
   }, []);
 
-  // ──── the acts ─────────────────────────────────────────────────────────────
-
   const complete = useCallback(
     (task: Task) => {
-      // A repeating task's check-off says where the next one landed: the
-      // outcome carries `next_due`, which the query already collapsed. It is
-      // never re-derived here — one summariser, one answer.
       const text =
         task.rrule && task.next_due
           ? doneNext(weekdayName(task.next_due))
@@ -420,8 +383,6 @@ export function Root({
           );
           publishOutcome(frame, {
             text,
-            // Undo IS reopening — the status goes back to needs-action rather
-            // than a second, parallel notion of "undone".
             undo: () => {
               void act(
                 "set-status",
@@ -486,9 +447,6 @@ export function Root({
     [act]
   );
 
-  /** Recurrence anchor and filing both travel through `organize-task`, the ONE
-   *  door for them — and it needs `sort_order`, so the row's own is preserved
-   *  rather than reset to zero behind the member's manual order. */
   const organize = useCallback(
     (task: Task, patch: Record<string, unknown>) => {
       void act(
@@ -531,8 +489,6 @@ export function Root({
           });
           rows = result?.tasks ?? [];
         } catch {
-          // A THROW IS NOT AN EMPTY RESULT SET: the index lives on the gateway,
-          // and "nothing matches" would be a claim nobody verified.
           reached = false;
         }
         if (seq !== bag.searchSeq) return;
@@ -542,8 +498,6 @@ export function Root({
       }, 150),
     []
   );
-
-  // ──── the keyboard map (§7) ────────────────────────────────────────────────
 
   useEffect(() => {
     const rows = (): Task[] => dataRef.current.open.filter(isOpen);
@@ -610,8 +564,6 @@ export function Root({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [act, closeOverlay, complete, moveToToday, openQuickAdd, openSearch]);
-
-  // ──── the rows this route paints ──────────────────────────────────────────
 
   const rowCtx: RowContext = {
     now,
@@ -910,8 +862,6 @@ export function Root({
     return boardBody;
   })();
 
-  // ──── the overlays ─────────────────────────────────────────────────────────
-
   const overlay: Overlay | null = state.overlay;
   const writeTarget = state.landsIn ?? own;
   const overlays = ((): ReactNode => {
@@ -950,7 +900,6 @@ export function Root({
               "add",
               {
                 title,
-                // add_task does not take project_id; membership is organize-task.
                 ...(shelf === null ? { due_at: dayKey(now) } : {}),
               },
               { scope: stateRef.current.landsIn }
@@ -986,8 +935,6 @@ export function Root({
     return null;
   })();
 
-  // ──── what Tasks contributes to the FRAME ─────────────────────────────────
-
   const handedOff = compact || narrow;
   const barCountValue = showsBoard(shelf)
     ? groups.reduce((sum, group) => sum + group.rows.length, 0)
@@ -1004,9 +951,6 @@ export function Root({
         count: barCountValue,
         compact: handedOff,
         onSearch: openSearch,
-        // Withheld while the capture panel is open: the panel's own Add is the
-        // one filled control then, and two filled buttons is two answers to
-        // one question.
         ...(overlay === null ? { onQuickAdd: openQuickAdd } : {}),
       })
     );
@@ -1104,7 +1048,6 @@ export function Root({
           overlays,
           moreSheet:
             overlay?.kind === "more" ? (
-              // The band's sixth slot, drawn by the ONE shared sheet (#883 B9).
               <MoreSheet
                 label="More"
                 rows={MORE_ROWS.map((row) => ({

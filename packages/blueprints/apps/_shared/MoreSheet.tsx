@@ -1,5 +1,3 @@
-// The sheet holding what the compact band could not seat — five destinations
-// plus More (DESIGN.md invariant 1).
 import type { ReactNode } from "react";
 
 import { KitModal } from "./KitModal.tsx";
@@ -9,9 +7,7 @@ import styles from "./MoreSheet.module.css";
 export interface MoreSheetRow {
   key: string;
   label: string;
-  /** Trailing numeric column; omit rather than invent a zero. */
   meta?: string;
-  /** Prose line under the label — `meta`'s tabular `--t-mono` is wrong here. */
   note?: string;
   current?: boolean;
   select: () => void;

@@ -1,9 +1,5 @@
 import { DAY_MS, MONTHS, decodeDataUri } from "../_shared/format-kit.ts";
 
-// Pure projections over a note — no app state, no vault IO, no JSX. THE
-// UNTITLED NOTE IS THE DEFAULT CASE (Notes spec §1): `promote` is the single
-// answer, and no surface may derive its own.
-
 export type Block =
   | { kind: "check"; checked: boolean; text: string; line: number }
   | { kind: "h"; level: number; text: string; line: number }
@@ -52,7 +48,6 @@ export function parseBlocks(body: unknown): Block[] {
   return out;
 }
 
-/** Emphasis is STRIPPED, never styled: a note renders only text nodes. */
 export function stripInline(text: unknown): string {
   return String(text ?? "")
     .replace(/\*\*(?<bold>.+?)\*\*/gu, "$<bold>")
@@ -85,8 +80,6 @@ export interface Promoted {
 
 export const UNTITLED_NOTE = "Untitled note";
 
-/** UNTITLED covers a missing title, the sentinel, AND a title equal to the
- *  first line — the shape `create_note` leaves behind. */
 export function promote(note: {
   title?: unknown;
   preview?: unknown;
@@ -113,8 +106,6 @@ export function promote(note: {
   };
 }
 
-/** The ruled decoder (#883 B4), but empty where a list says "(external
- *  content)": a writing surface opens empty, never on a parenthetical. */
 export function decodeTextContent(uri: unknown): string {
   return decodeDataUri(typeof uri === "string" ? uri : null) ?? "";
 }
@@ -123,8 +114,6 @@ export type Segment =
   | { kind: "text"; from: number; to: number; text: string }
   | { kind: "check"; line: number; checked: boolean; text: string };
 
-/** A CHECKLIST LINE IS A CONTROL, never a second rendered copy. `from`/`to`
- *  are character offsets into the body. */
 export function bodySegments(body: string): Segment[] {
   const lines = body.split("\n");
   const out: Segment[] = [];
@@ -166,7 +155,6 @@ export function deriveTitle(title: unknown, body: unknown): string {
   return firstLine ? firstLine.trim().slice(0, 80) : "";
 }
 
-/** A FACT, NOT A REPRIMAND: an old note says only when it last changed. */
 export function ageLabel(when: unknown, now: number = Date.now()): string {
   const stamp = Date.parse(String(when ?? ""));
   if (Number.isNaN(stamp)) return "";
@@ -180,7 +168,6 @@ export function ageLabel(when: unknown, now: number = Date.now()): string {
   return `not changed since ${month}`;
 }
 
-/** Null where no purge date — never count down from an invented one. */
 export function daysLeft(
   purgeAt: unknown,
   now: number = Date.now()
@@ -190,8 +177,6 @@ export function daysLeft(
   return Math.max(0, Math.ceil((stamp - now) / DAY_MS));
 }
 
-/** The ONE observable form of "two devices changed this passage": identical
- *  `asserted_at` stamps. The conflict panel reads this, never a guess. */
 export function hasConcurrentVersions(
   versions: ReadonlyArray<{ asserted_at: string }>
 ): boolean {

@@ -1,7 +1,5 @@
-// Once per mount.
 import type { AppData, AppState } from "./types.ts";
 
-/** Zero is a value (`Never`). */
 export const DEFAULT_CADENCE = 30;
 
 export function makeState(): AppState {
@@ -24,7 +22,6 @@ export function makeState(): AppState {
   };
 }
 
-/** Gate empties on `loaded`, not counts. */
 export function makeData(): AppData {
   return {
     people: [],

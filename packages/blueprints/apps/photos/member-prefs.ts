@@ -1,6 +1,3 @@
-// Seam, not storage (§16). Do not use localStorage — a member-record pref
-// must not fork per device. A remount reset is visibly incomplete; a silent
-// fork is not.
 import { DEFAULT_RUNG } from "./layout.ts";
 import type { Rung } from "./layout.ts";
 

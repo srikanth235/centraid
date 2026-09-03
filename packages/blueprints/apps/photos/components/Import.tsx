@@ -1,6 +1,3 @@
-// Progress belongs to the frame's one status line (§14) — never add a second
-// progress surface. No panel action beyond dismiss: an arbitrary set of asset
-// ids has no shelf here (every shelf is the timeline under a filter).
 import styles from "./Import.module.css";
 
 export interface ImportResult {
@@ -9,9 +6,6 @@ export interface ImportResult {
   restored: number;
 }
 
-/** `media.add_asset` answers `deduped: 1` for both cases, so `wasTrashed` must
- *  be asked against a snapshot taken BEFORE the run. An unvouched id counts as
- *  a plain dedupe: under-reporting restores is the only allowed error. */
 export function tallyDedupes(
   dedupedAssetIds: readonly string[],
   wasTrashed: (assetId: string) => boolean
@@ -25,7 +19,6 @@ export function tallyDedupes(
   return { deduped, restored };
 }
 
-/** No line prints the storage noun for a place (#599). */
 const IMPORT_COPY = {
   dedupedEyebrow: "Deduped",
   dedupedTitle: (n: number) =>

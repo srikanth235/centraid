@@ -1,7 +1,3 @@
-// Placement registry (#712): the one `itemType` union every placement control
-// reads. A hand-maintained mirror of the vault's `ShareableItemType` minus
-// `locker.item` — a secret cannot be placed — because `@centraid/vault` is
-// Node-only and must never be imported here.
 export type PlaceableItemType =
   | "core.collection"
   | "core.content_item"

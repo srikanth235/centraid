@@ -1,13 +1,5 @@
-// @vitest-environment jsdom
 // oxlint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
 // @ts-nocheck
-// Lightbox face mini-list (apps/photos/faces.ts, #711); two rules pinned:
-//   1. CONFIDENCE IS NEVER A PERCENTAGE (README.md:285) — count, not `%`.
-//   2. ONE FACE AT A TIME (v4 3967) — one interactive row, never N.
-//
-// String-specifier mock + global centraid stub: typed vi.mock(import(…))
-// pulls apps/ into this package's TS program (TS6059/TS2307 — see
-// photos-media.test.ts); faces.ts reads window.centraid as a global.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- see header
@@ -19,8 +11,6 @@ vi.mock("../apps/photos/outcomes.ts", () => ({
   narrate: () => true,
 }));
 
-// Parameter, not literal: a literal inside import() gets typechecked, pulling
-// apps/ into this package (TS6059; see photos-media.test.ts).
 const FACES_PATH = "../apps/photos/faces.ts";
 const importFaces = (relativePath: string) => import(relativePath);
 
@@ -64,7 +54,6 @@ describe("photos faces mini-list", () => {
         person_name: "Ana",
         confidence: 0.92, // a similarity score — must never surface as 92%
       },
-      // A second proposal for the SAME person is what the match count counts.
       {
         region_id: "r2",
         party_id: "party-ana",
@@ -113,3 +102,4 @@ describe("photos faces mini-list", () => {
     expect(host.dataset.faceIndex).toBe("1");
   });
 });
+// @vitest-environment jsdom

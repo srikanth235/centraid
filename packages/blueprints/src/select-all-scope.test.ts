@@ -1,9 +1,3 @@
-// @vitest-environment jsdom
-// SELECT-ALL MEANS THE FILTERED SET (#883, the consolidation default): it takes
-// the rows the member can SEE, never the whole table, and a selection survives
-// a filter change through `pruneSelection` rather than by riding along. A key
-// with no row is a target nothing on screen points at, and the batch that
-// spends it is one the member never composed.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -80,7 +74,6 @@ function drive() {
     render: () => {},
     state,
   });
-  /** What `app-root.tsx` does once per render pass, in order. */
   const paint = (): Doc[] => {
     state.visibleRows = logic.currentRows();
     logic.pruneVisibleSelection();
@@ -111,7 +104,6 @@ describe("[law:select-all-filtered] docs — the drive's select-all is the filte
     logic.toggleAllVisible(paint(), false);
     expect(state.selected.size).toBe(2);
 
-    // Off the screen after the shelf change, so no longer selected.
     state.shelf = "built-in:trash";
     expect(paint()).toStrictEqual([]);
 
@@ -135,7 +127,6 @@ describe("[law:select-all-filtered] docs — the drive's select-all is the filte
   it("never reports a selected row the member cannot see", () => {
     const { logic, paint, state } = drive();
     paint();
-    // The shape a stale selection takes.
     state.selected.add("ghost");
     paint();
     expect(logic.selectedDocs().map((row) => row.document_id)).not.toContain(
@@ -161,3 +152,4 @@ describe("[law:select-all-filtered] the engine photos calls answers the same two
     expect([...pruneSelection(new Set(visible), ["v2"])]).toStrictEqual(["v2"]);
   });
 });
+// @vitest-environment jsdom

@@ -28,7 +28,6 @@ import path from "node:path";
 
 const PURPOSE = "dpv:ServiceProvision";
 const SAMPLE_DIR = path.join(import.meta.dirname, "sample");
-/** Pacific daylight time — the whole roll is one American trip. */
 const TZ_OFFSET_MIN = -420;
 
 /**
@@ -81,18 +80,11 @@ const PLACE_BY_FILE = {
   "ana-and-marco-table.png": HOME_BACKYARD,
 };
 
-/** The coordinate fields `media.add_asset` takes, or nothing when the frame
- *  carries no location. Spread into the call so a place-less frame sends no
- *  half-pair — the command refuses one coordinate without the other. */
 function placeInput(file) {
   const spot = PLACE_BY_FILE[file];
   return spot ? { latitude: spot.lat, longitude: spot.lng } : {};
 }
 
-/**
- * The roll, newest last. `day`/`hour` place each frame relative to input.now;
- * `thumbhash`/`phash` are the precomputed derivatives described above.
- */
 const ROLL = [
   {
     file: "downtown-blue-hour.png",
@@ -347,11 +339,8 @@ const PORTRAITS = [
   },
 ];
 
-/** Named so a confirmed proposal has someone to be. Face review never invents
- *  a person — the member picks one, so the roster has to exist first. */
 const FACE_PEOPLE = ["Ana Ribeiro", "Marco Salas"];
 
-/** The four frames that made the "where are we staying" shortlist. */
 const ALBUM_TITLE = "Tahoe scouting";
 const ALBUM_FILES = [
   "emerald-bay-overlook.png",
@@ -361,10 +350,6 @@ const ALBUM_FILES = [
 ];
 const ALBUM_COVER = "emerald-bay-overlook.png";
 
-/** A tiny deterministic video payload. The journey corpus needs media-kind
- * diversity, not playback fidelity; the viewer's capability rows and video
- * badge read the vault's honest kind/duration metadata while the fixture stays
- * small enough for the inline scenario door. */
 const VIDEO = {
   file: "tahoe-pan.mp4",
   title: "Tahoe shoreline pan",
@@ -398,10 +383,6 @@ export default async function seedHandler({ input, log, ctx }) {
     return out.output;
   };
 
-  // Uploads run STRICTLY in order (recursion, not Promise.all): asset ids are
-  // minted per invoke, so a parallel roll would shuffle the timeline's tie
-  // breaks and the album's member positions run to run — and determinism is
-  // the whole contract of a scenario generator.
   const assetIdByFile = new Map();
   const addFrame = async (index) => {
     const frame = ROLL[index];
@@ -420,8 +401,6 @@ export default async function seedHandler({ input, log, ctx }) {
       ...placeInput(frame.file),
     });
     assetIdByFile.set(frame.file, added.asset_id);
-    // The general editor rather than set_favorite: one command, and it is the
-    // path the app's own detail pane takes.
     if (frame.favorite)
       await invoke("media.update_asset", {
         asset_id: added.asset_id,
@@ -431,8 +410,6 @@ export default async function seedHandler({ input, log, ctx }) {
   };
   await addFrame(0);
 
-  // ── Portraits, then their face proposals ────────────────────────────────
-  // Same ordered recursion as the landscape roll, and for the same reason.
   const facesByAsset = [];
   const addPortrait = async (index) => {
     const frame = PORTRAITS[index];
@@ -471,14 +448,9 @@ export default async function seedHandler({ input, log, ctx }) {
   });
   assetIdByFile.set(VIDEO.file, video.asset_id);
 
-  // The roster a confirm can name. `people.add_person` is the same command the
-  // People app uses, so these are ordinary parties, not seed-only rows.
   const addPerson = async (index) => {
     const name = FACE_PEOPLE[index];
     if (!name) return;
-    // `cadence_days` is required by the command — a person the People app
-    // would never nag about still needs the field, so pick its own default
-    // rather than inventing a reminder cadence Photos has no opinion on.
     await invoke("people.add_person", {
       display_name: name,
       cadence_days: 90,
@@ -487,13 +459,6 @@ export default async function seedHandler({ input, log, ctx }) {
   };
   await addPerson(0);
 
-  // Face regions have NO create command of their own: they are enrichment
-  // output, and enrichment output reaches the vault through the staging
-  // publisher (`ingest/enrich-publishers.ts` faceRegionPublisher). So the seed
-  // takes the same road a real enricher takes — stage a batch, publish it —
-  // rather than reaching past the command surface into SQL. External ids keep
-  // the enricher's `<asset>:face:<n>` convention so a later real pass diffs
-  // against these rows instead of duplicating them.
   if (facesByAsset.length) {
     const rows = facesByAsset.flatMap(({ assetId, faces }) =>
       faces.map((face, n) => ({
@@ -511,8 +476,6 @@ export default async function seedHandler({ input, log, ctx }) {
       label: "Face proposals (scenario)",
       rows,
     });
-    // Auto-publish trust may have applied the batch already; publishing a
-    // non-draft batch fails its own precondition, so only push a draft.
     if (batch.published === undefined || batch.staged !== undefined)
       await invoke("sync.publish_batch", { batch_id: batch.batch_id }).catch(
         () => undefined

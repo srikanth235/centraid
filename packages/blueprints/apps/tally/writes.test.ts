@@ -1,10 +1,3 @@
-// The write door: the manifest action each act invokes, and the input its
-// schema requires.
-//
-// These are pinned because a write is the one thing a render cannot be trusted
-// to assemble: `app.json` declares `restore-expense` with `expense_id`
-// required and nothing else permitted, and a field spread in from a view model
-// is refused by the vault at the far end of a member's press.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -39,8 +32,6 @@ describe("the acts this wave can take", () => {
   });
 
   it("trashes with the write that is a restore's true reverse", () => {
-    // The Undo beside a restore issues exactly this, which is why the pair is
-    // the only one in this wave that offers Undo at all.
     expect(trashExpenseWrite("x1")).toStrictEqual({
       action: "delete-expense",
       input: { expense_id: "x1" },
@@ -55,8 +46,6 @@ describe("the acts this wave can take", () => {
   });
 
   it("applies the vault's own pre-edit snapshot, keyed by both ids", () => {
-    // The undo window is the vault's, not a timer this app keeps: the write
-    // names the revision, and the command applies it exactly once.
     expect(undoExpenseWrite("x1", "rev_9")).toStrictEqual({
       action: "undo-expense",
       input: { expense_id: "x1", revision_id: "rev_9" },
@@ -64,9 +53,6 @@ describe("the acts this wave can take", () => {
   });
 
   it("passes an already-resolved expense input through untouched", () => {
-    // The splits arrive resolved and validated by `draft-model.ts`; the
-    // builder names the action and adds NOTHING, so a view model cannot leak
-    // a field into a schema that forbids it.
     const input = { group_id: "flat", description: "Shop" };
     expect(addExpenseWrite(input)).toStrictEqual({
       action: "add-expense",
@@ -160,8 +146,6 @@ describe("the acts this wave can take", () => {
   });
 
   it("re-cuts a receipt's lines and its shares in ONE write", () => {
-    // The lines and the shares are one fact; two writes would let the vault
-    // hold a cut whose lines and shares disagree.
     expect(
       reallocateReceiptWrite({
         expenseId: "x1",

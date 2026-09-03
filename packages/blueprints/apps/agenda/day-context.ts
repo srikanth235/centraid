@@ -1,5 +1,3 @@
-// THE GRID IS FOR THINGS WITH A TIME COST (#834): costless date-shaped facts
-// project onto a day as a ribbon or shelf; no event row is ever minted for one.
 import {
   ribbonCollapsed,
   ribbonCollapsedBirthdays,
@@ -15,7 +13,6 @@ export const ALL_LAYERS_ON: LayerState = { bdays: true, due: true, hols: true };
 export interface BirthdayFact {
   party_id: string;
   name: string;
-  /** 1–12; no year — birthdays recur annually. */
   month: number;
   day: number;
   tier: "inner" | "outer";
@@ -27,9 +24,7 @@ export interface DueTask {
 }
 
 export interface DueFact {
-  /** `YYYY-MM-DD`. */
   day: string;
-  /** May exceed `tasks.length`, which the query bounds. */
   count: number;
   tasks?: readonly DueTask[];
 }
@@ -67,7 +62,6 @@ function padded(month: number, day: number): string {
   return `${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-/** A layer off removes its facts and nothing else — filtered here, once. */
 export function ribbonsFor(
   dayKey: string,
   data: DayContextData,
@@ -105,7 +99,6 @@ export function ribbonLabel(facts: readonly RibbonFact[]): string {
     : ribbonCollapsed(facts.length);
 }
 
-/** The member's OWN tasks only — never across vaults (#834). */
 export function dueCountFor(
   dayKey: string,
   data: DayContextData,

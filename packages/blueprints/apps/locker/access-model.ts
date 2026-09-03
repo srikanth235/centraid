@@ -1,8 +1,3 @@
-// Access history, as a projection. NAMES ACTS, NEVER CONTENTS: a reveal
-// names columns, a fill its page origin, no row a value. A denial is a row
-// like any allowance, never filtered out. Unrecorded parts drop from a row
-// rather than draw an em dash; times stay absolute.
-
 import type { LockerAccessEntry, LockerRow } from "./types.ts";
 
 export function accessVerb(entry: LockerAccessEntry): string {

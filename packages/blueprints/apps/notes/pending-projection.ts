@@ -72,9 +72,6 @@ export const notesPendingProjection = definePendingProjection({
       excluded: true,
       reason: "The tag id does not identify its note row.",
     },
-    // The row this action mints belongs to Tasks and its id is minted at the
-    // vault, so there is no Notes row to hang a pending chip on. Excluded, not
-    // missing.
     "send-to-tasks": {
       excluded: true,
       reason: "Tasks owns the task this mints; Notes keeps no copy to project.",

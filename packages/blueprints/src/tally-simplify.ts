@@ -1,6 +1,3 @@
-/** Pure and read-time: no proposal table, no stored balance. Simplification
- *  is OFF unless a group opts in. */
-
 import type { TallyBalanceData } from "./tally-balance.js";
 import {
   tallyGroupNet,
@@ -21,8 +18,6 @@ export interface TallySimplification {
   payments_after: number;
 }
 
-/** Min-cash-flow: each transfer zeroes a party, so at most `n - 1` payments;
- *  integer minor units, so it terminates. */
 export function minimalTransfers(
   net: ReadonlyMap<string, number>
 ): TallyTransfer[] {
@@ -32,7 +27,6 @@ export function minimalTransfers(
     if (amount < 0) debtors.push([partyId, -amount]);
     else if (amount > 0) creditors.push([partyId, amount]);
   }
-  // Deterministic order: a proposal must not reshuffle between reads.
   const bySize = (a: [string, number], b: [string, number]): number =>
     b[1] - a[1] || a[0].localeCompare(b[0]);
   debtors.sort(bySize);

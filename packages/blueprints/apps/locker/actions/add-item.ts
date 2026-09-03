@@ -17,8 +17,6 @@ const FIELDS = [
   "phone",
   "address",
   "network",
-  // Connector alias (#298): a non-empty value binds `locker:@<alias>:<column>`
-  // to this item; blank is dropped, matching the command.
   "alias",
 ] as const;
 

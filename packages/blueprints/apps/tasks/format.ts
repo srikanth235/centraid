@@ -1,6 +1,3 @@
-// Task-row WHEN formatting and meta-line composition (spec §5). Pure,
-// clock-injected, DOM-free. NOTHING HERE DERIVES A RECURRENCE — this module
-// only lays out what the summariser produced.
 import type { Task } from "./types.ts";
 import { familyProgress, missedLabel, sittingSince } from "./view-copy.ts";
 import {
@@ -11,7 +8,6 @@ import {
   weekdayName,
 } from "./when.ts";
 
-// WHEN rules live once in when.ts (#834).
 export {
   dayKey,
   daysBetween,
@@ -27,15 +23,12 @@ export function isOverdue(task: Task, now: string): boolean {
   return isOverdueWhen(task, now);
 }
 
-/** A meta part; numbers are tabular and bidi-isolated. */
 export interface MetaPart {
   text: string;
   numeric?: boolean;
-  /** Overdue is the ONE part drawn in the attention tone. */
   attention?: boolean;
 }
 
-/** Meta line, spec order: project · due · repeats · missed · reminder · effort · tag. */
 export function metaParts(input: {
   task: Task;
   now: string;
@@ -82,18 +75,12 @@ export function metaParts(input: {
   return parts;
 }
 
-/** Age signal: only once an undated row has sat 90+ days. */
 export function ageLabel(task: Task, now: string): string | null {
   const born = task.created_at;
   if (!born || task.due_at) return null;
   return daysBetween(born, now) >= 90 ? sittingSince(monthName(born)) : null;
 }
 
-/**
- * The four member-facing priority levels. Todoist (the north star) stores 1
- * as the lowest set priority and 4 as the highest; 0 is unset. The editor's
- * chips write the same scale (Soon=1, Next=2, Now=3).
- */
 export function priorityLevel(priority: number | undefined): 0 | 1 | 2 | 3 {
   const value = Number(priority ?? 0);
   if (value <= 0) return 0;
@@ -101,7 +88,6 @@ export function priorityLevel(priority: number | undefined): 0 | 1 | 2 | 3 {
   return value as 1 | 2;
 }
 
-/** Todoist digits 1–4: 1 is Now (highest), 4 is unset. */
 export function priorityFromDigit(digit: number): number {
   if (digit < 1 || digit > 4) return 0;
   return 4 - digit;

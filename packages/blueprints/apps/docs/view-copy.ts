@@ -1,14 +1,4 @@
 import { fmtDate } from "./format.ts";
-// Every string a Docs view says about ITSELF: bar title, what the count counts,
-// the caption closing a row set, how each shelf is empty on its own terms, the
-// one mark a row may carry (§1.5, §2, §4.1, §4.3, §4.6). Here rather than in the
-// orchestrator because it changes on its own schedule and "empty on its own
-// terms" is a TABLE, not a chain of ternaries in a renderer.
-//
-// The spec's copy VERBATIM, with two departures and no others:
-//   1. NUMBERS ARE REAL — the tables carry the NOUN, the caller the number.
-//   2. THE STORAGE NOUN IS NEVER PRINTED FOR A SCOPE (#599): a member reads
-//      `scope.label`, which the owner may rename.
 import {
   CAPABILITIES,
   FILING,
@@ -27,17 +17,13 @@ import {
 } from "./shelves.ts";
 import type { ShelfId } from "./shelves.ts";
 
-/** A verb's shape, from the app's one table. */
 type ActionIcon = keyof typeof import("./icons.ts").ACTION_ICONS;
 
-/** `unit` is plural; frame.tsx singularises it for a count of one. */
 export interface ShelfCopy {
   title: string;
   unit: string;
 }
 
-/** §2's Title column and units. `Docs` where the spec leaves the app's own
- *  name — the meta line says which shelf. */
 const SHELF_COPY: Readonly<Record<string, ShelfCopy>> = {
   [FOLDERS]: { title: "Docs", unit: "folders" },
   [RECENT]: { title: "Docs", unit: "documents" },
@@ -55,8 +41,6 @@ const SHELF_COPY: Readonly<Record<string, ShelfCopy>> = {
 
 const ALL_COPY: ShelfCopy = { title: "Docs", unit: "documents" };
 
-/** A folder's id is in no table: it carries the folder's name, which the
- *  caller supplies (§2 row 4). */
 export function shelfCopy(id: ShelfId, folderName?: string): ShelfCopy {
   if (folderIdFrom(id)) {
     return { title: folderName ?? "Folder", unit: "documents" };
@@ -65,7 +49,6 @@ export function shelfCopy(id: ShelfId, folderName?: string): ShelfCopy {
   return SHELF_COPY[id] ?? ALL_COPY;
 }
 
-/** Read by the breadcrumb and the More sheet, so neither restates a label. */
 export const SHELF_LABELS: Readonly<Record<string, string>> = {
   [FOLDERS]: "Folders",
   [RECENT]: "Recently changed",
@@ -76,10 +59,6 @@ export const SHELF_LABELS: Readonly<Record<string, string>> = {
   [STORAGE]: "Storage",
 };
 
-// ─── Captions: the closing sentence under a row set (§4.1, §4.3) ─────
-
-/** Never a sentence on a row: the caption carries the prose, once (§4.1) —
- *  which is why `rowStateMark` may return at most one mark. */
 const CAPTION_ALL =
   "Everything here is on this gateway and on this device; a mark means this device only.";
 const CAPTION_OFFLINE =
@@ -90,11 +69,8 @@ const CAPTION_TRASH =
   "Each document is purged 30 days after deletion, on the date shown.";
 const CAPTION_SHARED = "Sorted by when it reached you, newest first.";
 
-/** The sender, unnamed where no live binding says whose vault it was. */
 export const SHARED_SENDER_UNKNOWN = "Another vault";
 
-/** The Shared row's lead line, in the slot a matched passage takes on Search;
- *  a row carries one or the other, never both. */
 export function sharedFromLine(from: {
   name: string | null;
   at: number;
@@ -106,14 +82,6 @@ export function sharedFromLine(from: {
 const CAPTION_SEARCH =
   "318 documents could not be looked inside; they were matched on title and filing only.";
 
-/**
- * `offline` wins over the shelf: a caption still promising "on this gateway"
- * while it is unreachable would be the one untrue sentence on screen.
- *
- * SEARCH'S CAPTION IS WITHHELD until the "what could not be searched" read
- * exists — the spec's sentence carries a count this app cannot yet ask for, and
- * naming it wrongly is worse than saying nothing.
- */
 export function captionFor(
   id: ShelfId,
   {
@@ -135,41 +103,25 @@ export function captionFor(
       ? null
       : `${searchUnreadable} documents could not be looked inside; they were matched on title and filing only.`;
   }
-  // A caller that does not know the name says "This folder" rather than
-  // printing one it had to invent.
   if (folderIdFrom(id)) return folderCaption(folderName ?? "This folder");
   return CAPTION_ALL;
 }
 
-/** §4.3's folder caption, with the folder's real name. */
 export function folderCaption(name: string): string {
   return `${name} is a label; taking it off does not delete anything.`;
 }
 
-/** For the day the unreadable count is real. */
 export const SEARCH_CAPTION_SAMPLE = CAPTION_SEARCH;
 
-// ─── The five empty states (§4.6) ─────
-
-/**
- * Exactly FIVE distinguishable empty states — a new drive, an empty folder, an
- * empty shelf, a filter with no matches, a search with no matches — and only the
- * first is a whole-screen state with the display rung (§4.6).
- */
 export type EmptyVariant = "drive" | "folder" | "shelf" | "filter" | "search";
 
 export interface EmptyCopy {
   variant: EmptyVariant;
-  /** Display serif ONLY for `drive`; every other variant takes the title rung. */
   display: boolean;
   title: string;
   body: string;
-  /** Filled only on `drive`; elsewhere the app bar already holds the one
-   *  filled control (§3.1). */
   action?: string;
   action2?: string;
-  /** Word and mark kept together, never a component matching the display
-   *  string — a copy edit would silently drop the mark. */
   actionIcon?: ActionIcon;
   action2Icon?: ActionIcon;
 }
@@ -185,8 +137,6 @@ const DRIVE_EMPTY: EmptyCopy = {
   action2Icon: "open",
 };
 
-/** Empty because nothing was starred says something different from empty
- *  because the drive is new (§2's Note column). */
 const SHELF_EMPTY: Readonly<Record<string, EmptyCopy>> = {
   [RECENT]: {
     variant: "shelf",
@@ -206,8 +156,6 @@ const SHELF_EMPTY: Readonly<Record<string, EmptyCopy>> = {
     title: "Trash is empty",
     body: "Each document carries its own purge date.",
   },
-  // Ruling G-revoke: withdrawal hard-deletes the audience's copy. The shelf may
-  // not promise it survives one.
   [SHARED]: {
     variant: "shelf",
     display: false,
@@ -222,7 +170,6 @@ const SHELF_EMPTY: Readonly<Record<string, EmptyCopy>> = {
   },
 };
 
-/** A different thing to say from an empty drive — hence its own variant. */
 export function folderEmpty(name: string): EmptyCopy {
   return {
     variant: "folder",
@@ -236,8 +183,6 @@ export function folderEmpty(name: string): EmptyCopy {
   };
 }
 
-/** The prototype's near-miss second sentence is NOT printed: this app cannot
- *  compute it. */
 export function searchEmpty(query: string): EmptyCopy {
   return {
     variant: "search",
@@ -249,8 +194,6 @@ export function searchEmpty(query: string): EmptyCopy {
   };
 }
 
-/** Distinct from a search miss because the way out differs: drop a pill, not
- *  the query. */
 export const FILTER_EMPTY: EmptyCopy = {
   variant: "filter",
   display: false,
@@ -260,8 +203,6 @@ export const FILTER_EMPTY: EmptyCopy = {
   actionIcon: "dismiss",
 };
 
-/** Not an empty shelf: a shelf that does not know. The two must never look
- *  alike, so this REPLACES the set rather than captioning it. */
 const SHARED_UNKNOWN: EmptyCopy = {
   variant: "shelf",
   display: false,
@@ -269,8 +210,6 @@ const SHARED_UNKNOWN: EmptyCopy = {
   body: "Where each document came from is a separate read, and it did not answer.",
 };
 
-/** `query` and `filtered` are about what the member JUST DID, so they win — in
- *  that order, since a query is typed over a filter. */
 export function emptyCopy(
   id: ShelfId,
   {
@@ -283,14 +222,10 @@ export function emptyCopy(
     query?: string;
     filtered?: boolean;
     folderName?: string;
-    /** The one first-run state. */
     driveIsEmpty?: boolean;
-    /** Whether the placement reads ANSWERED (#903). */
     sharedFromKnown?: boolean;
   } = {}
 ): EmptyCopy {
-  // Ahead of query and filter: neither is why this shelf is blank when the
-  // read behind it never answered.
   if (id === SHARED && !sharedFromKnown) return SHARED_UNKNOWN;
   if (query) return searchEmpty(query);
   if (filtered) return FILTER_EMPTY;
@@ -300,54 +235,32 @@ export function emptyCopy(
   return shelf ?? DRIVE_EMPTY;
 }
 
-// ─── The row state slot (§4.1) ─────
-
-/**
- * The state slot shows AT MOST ONE thing, in this order (§4.1). A LADDER, not
- * independent conditions, and pure for exactly that reason: inline in a row
- * renderer three could be true at once and a row would carry three marks. The
- * last rung is a GLYPH, never a sentence.
- */
 export interface RowStateInput {
-  /** Beyond the fetched window; content has not arrived. */
   loadingBeyondWindow?: boolean;
-  /** Came back FAILED, not still in flight — only then may a row claim it. */
   fetchFailed?: boolean;
-  /** Docs cannot render this kind (§1.3). */
   cannotRender?: boolean;
-  /** In Trash the slot carries the purge date instead. */
   inTrash?: boolean;
-  /** Omitted keeps the slot blank rather than printing an uncomputed number. */
   purgeInDays?: number | null;
-  /** The gateway is unreachable. */
   offline?: boolean;
-  /** Under `offline` a row whose bytes are elsewhere opens to nothing, and
-   *  says so. */
   bytesOnDevice?: boolean;
-  /** The one custody state a member can lose something to. */
   deviceOnly?: boolean;
 }
 
 export interface RowStateMark {
-  /** `glyph` renders the device mark with `text` as its accessible name. */
   kind: "text" | "glyph";
   text: string;
-  /** The `net` role: a refusal, not a status. */
   net: boolean;
 }
 
 export function rowStateMark(input: RowStateInput): RowStateMark | null {
-  // 1. Blank while still coming: only the failure is worth a word.
   if (input.loadingBeyondWindow) {
     return input.fetchFailed
       ? { kind: "text", text: "could not be fetched", net: true }
       : null;
   }
-  // 2. No viewer to open, so the row says so before the member taps (§1.3).
   if (input.cannotRender && !input.inTrash) {
     return { kind: "text", text: "cannot be shown", net: false };
   }
-  // 3. In trash the slot belongs to the purge date.
   if (input.inTrash) {
     return typeof input.purgeInDays === "number"
       ? {
@@ -357,38 +270,25 @@ export function rowStateMark(input: RowStateInput): RowStateMark | null {
         }
       : null;
   }
-  // 4. Offline with the bytes elsewhere: opening does nothing, so say so.
   if (input.offline && !input.bytesOnDevice) {
     return { kind: "text", text: "will not open", net: true };
   }
-  // 5. A glyph, not a sentence — see the caption rule above.
   if (input.deviceOnly) {
     return { kind: "glyph", text: "on this device only", net: false };
   }
   return null;
 }
 
-// ─── The "More in Docs" sheet (§1.5) ─────
-
-/** Its title and the sentence that closes it (§1.5). */
 export const MORE_TITLE = "More in Docs";
 export const MORE_FOOTER =
   "Everything Docs can show — the vault mark goes back to the rest of Centraid.";
 
-/** `meta` is prose only where the prose is a RULE; where the spec printed a
- *  sample number the row carries none and the caller supplies the count. */
 export interface MoreRow {
-  /** `null` for a row that fires a verb. */
   shelf: ShelfId;
   label: string;
   meta?: string;
 }
 
-/**
- * `live` is what this app can honour today: an unrendered row is a dead end
- * avoided, the one thing a navigation surface may never be. The table stays
- * whole so landing a route flips one flag rather than re-deriving the copy.
- */
 export const MORE_ROWS: readonly (MoreRow & { live: boolean })[] = [
   { shelf: RECENT, label: "Recently changed", live: true },
   { shelf: STARRED, label: "Starred", meta: "shared", live: true },
@@ -414,8 +314,6 @@ export const MORE_ROWS: readonly (MoreRow & { live: boolean })[] = [
     meta: "where the line is",
     live: true,
   },
-  // KIND AND SORT stays withheld, alone: it would restate the column heads and
-  // filter pills the compact form factor already reaches — §1.5's "two menus".
   {
     shelf: null,
     label: "Kind and sort",
@@ -430,19 +328,13 @@ export const MORE_ROWS: readonly (MoreRow & { live: boolean })[] = [
   },
 ];
 
-// ─── Banners and status (§11) ─────
-
-/** One sentence, one consequence, one action (DESIGN.md → Copy). The spec's
- *  queued-writes promise belongs where the write is made, not on every screen. */
 export const OFFLINE_BANNER =
   "Gateway unreachable — filing works from this device, opening and search do not.";
 export const OFFLINE_BANNER_ACTION = "Retry";
 
-/** Recent is recently CHANGED, never recently opened (§14). */
 export const RECENT_RULE =
   "Ordered by last change · nothing records when a document was opened";
 
-/** "<label> · <n> document(s)", with Undo (§11). */
 export function actionStatus(label: string, count: number): string {
   return `${label} · ${count} ${count === 1 ? "document" : "documents"}`;
 }

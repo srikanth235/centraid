@@ -56,8 +56,6 @@ const expenseProjection = ({
       ...pendingInputValues(input, EXPENSE_FIELDS),
     }),
   ];
-  // The payer rows are projected too, so an offline expense folds through the
-  // same multi-payer path the canonical one does instead of reading as unpaid.
   if (Array.isArray(input.payers)) {
     input.payers.forEach((raw, index) => {
       if (!raw || typeof raw !== "object") return;
@@ -187,9 +185,6 @@ export const tallyPendingProjection = definePendingProjection({
         }),
       ];
     },
-    // Re-allocation rewrites lines and shares wholesale; the optimistic copy
-    // patches the expense row it belongs to so the surface stops claiming the
-    // old cut while the write is in flight.
     "reallocate-receipt": ({ input }) =>
       pendingPatch("tally.expense", input.expense_id, input),
     "set-group-simplification": ({ input }) =>
@@ -204,7 +199,6 @@ export const tallyPendingProjection = definePendingProjection({
       }),
     nudge: {
       excluded: true,
-      // An optimistic copy would claim a reminder nobody has agreed to.
       reason:
         "A nudge always parks for the owner's confirmation, so there is no outcome to show optimistically.",
     },

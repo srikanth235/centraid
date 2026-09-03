@@ -1,6 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** The shared concept and its scheme survive — other subjects may carry it. */
 export default async function removeTag({
   body,
   ctx,

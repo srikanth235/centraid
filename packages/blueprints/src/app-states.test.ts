@@ -1,10 +1,3 @@
-/*
- * The designed-state partition per blueprint (#839): every canonical state is
- * claimed by one side, so silence is impossible. `excluded` means structurally
- * unrepresentable and costs a reason plus a citation; "not built yet" is a GAP,
- * and writing one into `excluded` launders it into a non-goal.
- */
-
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -53,7 +46,6 @@ describe("app.json#states", () => {
   it.each(BLUEPRINT_APPS.map((id) => [id] as const))(
     "apps/%s declares a states block the real validator preserves",
     (id) => {
-      // The validator whitelists: an unknown block parses and is dropped.
       const manifest = readManifest(id);
       expect(manifest.states).toBeDefined();
       expect(manifest.states?.designed).toStrictEqual([
@@ -82,8 +74,6 @@ describe("app.json#states", () => {
         ...entry,
       }))
     );
-    // The first real exclusion must REPLACE this pin with a check that every
-    // entry carries a citation and a reason.
     expect(table).toStrictEqual([]);
   });
 

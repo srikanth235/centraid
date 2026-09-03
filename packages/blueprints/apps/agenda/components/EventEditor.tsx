@@ -1,18 +1,3 @@
-// The editor — one modal for both the new event and the edit, because they
-// are the same seven fields and a second composer is a second product.
-//
-// The all-day switch is the event's recurrence SEMANTICS, not a display
-// toggle.
-//
-// REPEAT SHOWS THE SUMMARY, NEVER THE RULE. The event's current repetition is
-// read from `recurrence_summary`, the one sentence the shared summariser
-// produced in the query. The picker's own options are named in words too; the
-// rule each one carries is a value on its way to `edit-event` and is never
-// painted.
-//
-// A REPEATING EVENT OPENS THE SCOPE PANEL ON SAVE. Three answers, none of them
-// filled: which occurrences this change is about is the member's decision and
-// the panel does not have a recommendation.
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, ReactNode } from "react";
 
@@ -118,9 +103,6 @@ export function EventEditor(props: EventEditorProps): ReactNode {
   );
   const [scopeOpen, setScopeOpen] = useState(false);
 
-  // The editor opens on its first field. `KitModal` is a CHILD, so its own
-  // effect has already put the dialog on the top layer by the time this runs
-  // — and it is what hands focus back to the opener on close.
   useEffect(() => {
     titleRef.current?.focus();
   }, []);
@@ -148,8 +130,6 @@ export function EventEditor(props: EventEditorProps): ReactNode {
       attendee_party_ids: [...invited],
       reminders,
       ...(rrule ? { rrule } : {}),
-      // An unsafe scheme never leaves this form: the same allowlist that
-      // refuses to paint it refuses to store it.
       ...(conferencingUri ? { conferencing_uri: conferencingUri } : {}),
     });
   };
@@ -194,7 +174,6 @@ export function EventEditor(props: EventEditorProps): ReactNode {
       commitNew();
       return;
     }
-    // The scope question is asked ONLY where it has an answer that matters.
     if (needsScopePanel(ev)) {
       setScopeOpen(true);
       return;
@@ -205,8 +184,6 @@ export function EventEditor(props: EventEditorProps): ReactNode {
   const onSkip = (scope: EditScope): void => {
     if (!ev) return;
     const payload = occurrenceEdit({ event: ev, scope, intent: "skip" });
-    // `null` means the product does not offer that pairing, so nothing is
-    // sent and no control was drawn for it above.
     if (payload) props.onEditOccurrence(payload);
   };
 

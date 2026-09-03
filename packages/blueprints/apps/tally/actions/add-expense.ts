@@ -1,6 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** tally.add_expense — contract in app.json. */
 const KEYS = [
   "group_id",
   "description",

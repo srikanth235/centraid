@@ -1,6 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** tally.delete_expense — contract in app.json. */
 const KEYS = ["expense_id"];
 export default async function deleteExpense({ body, ctx }: HandlerArgs) {
   const input = actionInput(body);

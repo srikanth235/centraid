@@ -1,25 +1,3 @@
-// WAITING — the multi-writer surface (Tally spec §1, FLOWS.md).
-//
-// NOT A QUEUE WIDGET, and not a badge with a number on it. Every row is an
-// intent from somebody's own vault, and it says whose it is, where it is, and
-// what it is waiting on. That is why this surface holds a band slot at all:
-// it is the only place in Tally where a write can be somebody else's and
-// stuck, and there is nowhere else to look for it.
-//
-// EMPTY IS THE HEALTHY STATE. Three empty sections are the ordinary Tuesday,
-// so each one says so in its own words rather than the screen collapsing into
-// a single generic nothing.
-//
-// APPROVE AND DECLINE ARE THE STEWARD'S ANSWER, given here, through
-// `decideCommonsIntent`. Every verb on every row is drawn only where its own
-// door exists: a host without the decide door draws neither button and offers
-// no substitute for them, because a control that cannot fire teaches a member
-// something false and a fallback that faked it would be worse (protocol C1).
-//
-// REMINDERS PREPARED IS A FOURTH SECTION, and it is not an intent list. A
-// nudge always parks — Tally has no delivery path — so what the dashboard
-// returns is a record of intentions, and the section says "prepared" in every
-// row and "sent" in none of them.
 import type { ReactNode } from "react";
 
 import {
@@ -47,13 +25,9 @@ import type { RowAct } from "./LedgerRow.tsx";
 
 export interface WaitingScreenProps {
   sections: ContribSections;
-  /** Does this host hold an approval inbox at all? */
   hasApprovals: boolean;
-  /** Does it hold the per-intent Approve/Decline door? */
   canDecide: boolean;
-  /** Reminders the owner prepared. Nothing here was ever sent. */
   nudges: readonly Nudge[];
-  /** Who each reminder is about, by party id. */
   people: readonly Person[];
   narrow: boolean;
   onVerb: (verb: ContribVerb, row: ContribRow) => void;

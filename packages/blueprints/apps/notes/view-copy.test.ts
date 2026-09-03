@@ -1,6 +1,3 @@
-// Copy integrity. The spec's table is the contract: these strings are
-// SPECIFIED, not paraphrased, so a well-meaning rewrite has to fail here
-// before it reaches a member's screen.
 import { describe, expect, test } from "vitest";
 
 import { BOOKS, JOURNAL, TRASH } from "./shelves.ts";

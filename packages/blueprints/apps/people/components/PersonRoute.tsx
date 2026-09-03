@@ -1,11 +1,3 @@
-// Person screen (v12 handoff § Screens 4): hero, two commits, three record
-// sections, the acts that end a person. Rows/chips/metrics come from
-// Shared.tsx so screen and roster cannot disagree.
-// Vault-link section is ABSENT when the sharing plane could not be read
-// (null vaults+pending_invites together) — never an empty answer over a denied
-// read. Share/Revoke are live (#825); no `Link vault` commit — linking is not
-// a member act. Adding is a composer field where the row will be, never a new
-// screen; composer state lives in app-root.
 import type { ReactNode } from "react";
 
 import { LoadingSkeleton } from "../../_shared/LoadingSkeleton.tsx";
@@ -48,14 +40,12 @@ import {
 
 import shared from "./shared.module.css";
 
-/** Channel kinds the vault stores; chip word IS stored word (LOG_KINDS). */
 const CHANNEL_KINDS: readonly ContactChannel["kind"][] = [
   "phone",
   "email",
   "handle",
 ];
 
-/** `phone · work · preferred`; absent labels leave no empty separator. */
 function channelSub(channel: ContactChannel): string {
   const parts: string[] = [channel.kind];
   if (channel.label) parts.push(channel.label);
@@ -72,7 +62,6 @@ export function PersonRoute(props: PersonRouteProps): ReactNode {
     );
   }
 
-  // Past the gate an absent person is a fact, not a pending read.
   const person = props.person;
   if (!person) return <EmptyState title={EMPTY.noMatch} />;
 
@@ -86,7 +75,6 @@ export function PersonRoute(props: PersonRouteProps): ReactNode {
     </>
   );
 
-  // Add draws only while its composer is closed — an open composer IS the add.
   const addVerb = (key: ComposerKey): ReactNode =>
     composing(key) ? null : (
       <Verb label={VERBS.add} onClick={() => props.onOpenComposer(key)} />
@@ -95,7 +83,6 @@ export function PersonRoute(props: PersonRouteProps): ReactNode {
   const composer = props.composer;
   const overdue = isOverdue(person);
 
-  // The sharing plane answers all three or none; one flag gates sections + ring.
   const vaults = person.vaults;
   const invites = person.pending_invites;
   const linksAvailable = vaults !== null;
@@ -229,7 +216,6 @@ export function PersonRoute(props: PersonRouteProps): ReactNode {
               name={channel.value}
               strong
               sub={channelSub(channel)}
-              // Meta = the NAMES the value collides with, consequence tone.
               {...(channel.duplicate_names?.length
                 ? {
                     meta: channel.duplicate_names.join(" · "),
@@ -317,8 +303,6 @@ export function PersonRoute(props: PersonRouteProps): ReactNode {
           <EmptyState title={EMPTY.notes} />
         ) : (
           person.notes.map((note) => (
-            // Composed directly: Row ellipsises names; notes wrap via the
-            // shared .wrapText recipe — no second row definition.
             <div className={shared.row} key={note.annotation_id}>
               <div className={shared.rowMain}>
                 <span className={shared.wrapText}>

@@ -1,6 +1,3 @@
-// One task row for every list in this room (spec §5); one component because
-// it appears in eight places. NOTHING COUNTS AT THE MEMBER: no badge/dot/red.
-// EVERY STRING FROM THE VAULT GOES THROUGH `displayText` (untrusted.ts).
 import type { ReactNode } from "react";
 
 import { readPendingOverlay } from "../../_shared/pending-overlay.ts";
@@ -15,13 +12,9 @@ import styles from "./Board.module.css";
 export interface TaskRowProps {
   task: Task;
   now: string;
-  /** Pre-resolved project name — one lookup answers a whole list. */
   projectName?: string | null;
-  /** Hue slot for the project dot: CONTENT, never a control. */
   projectHue?: string | null;
-  /** Non-member vault: carries the read-only marker. */
   shared?: boolean;
-  /** A subtask: pill box + indent. */
   child?: boolean;
   log?: boolean;
   focused?: boolean;
@@ -30,11 +23,9 @@ export interface TaskRowProps {
   onOpen: () => void;
   onComplete: () => void;
   onReopen?: () => void;
-  /** Retry/discard chip for an unsettled write. */
   onEditPending?: () => void;
 }
 
-/** In-process is `–`, not a half-tick: worked-on is not half-done. */
 function boxGlyph(task: Task, log: boolean): string {
   if (log) return task.status === "cancelled" ? "–" : "✓";
   if (task.status === "completed") return "✓";

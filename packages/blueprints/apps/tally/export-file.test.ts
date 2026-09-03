@@ -1,8 +1,3 @@
-// THE FILE A MEMBER SAVES — its bytes, and what is deliberately not in them.
-//
-// BALANCES ARE ABSENT BY CONSTRUCTION. Nothing in `export-file.ts` folds a
-// figure, so a balance cannot reach the file by accident; `balances_excluded`
-// travels in the JSON so a reader knows the absence was a decision rather than
 import { describe, expect, it } from "vitest";
 
 import { exportFile } from "./export-file.ts";
@@ -70,9 +65,6 @@ describe("the file, assembled on the device", () => {
   });
 });
 
-// THE RANGE CHIP IS NOT DECORATION: what it names is what the query is asked
-// for. The boundary is a LOCAL calendar fact, so these cases pin the local
-// parts rather than anything sliced off a UTC string.
 describe("the Range chip, as the query's floor", () => {
   const NOW = new Date(2026, 7, 26, 12, 0, 0); // 26 August 2026, local
 

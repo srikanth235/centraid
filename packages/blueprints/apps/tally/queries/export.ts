@@ -1,25 +1,13 @@
-/**
- * BALANCES ARE EXCLUDED BY DESIGN: a balance is arithmetic over ground facts,
- * and shipping one would be the first stored balance in the app.
- *
- * The window is bounded and STATED: `truncated` and `window` travel, so a
- * partial export is never read as a whole one.
- */
-
 import { deniedPayload, loadTally } from "./dashboard.ts";
 
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 2000;
 
-/** Anything not a `YYYY-MM-DD` date is no floor — a malformed bound must not
- *  narrow a ledger. */
 function floorDate(value: unknown): string | null {
   const text = String(value ?? "");
   return /^\d{4}-\d{2}-\d{2}$/u.test(text) ? text : null;
 }
 
-/** A row with NO date cannot fall inside a bounded range, so a bound excludes
- *  it. `YYYY-MM-DD` storage makes lexicographic order chronological. */
 function onOrAfter(date: unknown, since: string | null): boolean {
   if (since === null) return true;
   const text = String(date ?? "").slice(0, 10);
@@ -57,8 +45,6 @@ export default async function exportHandler({ input, ctx }: HandlerArgs) {
         window: emptyWindow,
       };
 
-    // An expense ranges by the day it was SPENT, a settlement by the day it
-    // was PAID; revisions follow the expenses they edited.
     const scoped = data.expenses.filter(
       (e) => e.group_id === groupId && onOrAfter(e.spent_on, since)
     );
@@ -148,7 +134,6 @@ export default async function exportHandler({ input, ctx }: HandlerArgs) {
         paid_on: s.paid_on,
       })),
       revisions,
-      // Stated, not implied: a reader must not go looking for a total.
       balances_excluded: true,
       truncated: scoped.length > limit || settlements.length > limit,
       window: {

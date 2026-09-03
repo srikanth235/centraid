@@ -1,10 +1,6 @@
-// `[[` powerbox (Notes spec §3, §5). LOCKER IS NOT A LINK KIND — the kinds
-// table omits it and the sheet's foot states the absence.
 import { LINK_TARGET_KINDS, linkTargetAppLabel } from "./link-targets-table.ts";
 import type { LinkTarget } from "./types.ts";
 
-// Group order DERIVED from the kinds table (#883, ruling O-label), never a
-// second list that can disagree about order or naming.
 export const KIND_ORDER: readonly string[] = LINK_TARGET_KINDS.map((kind) =>
   linkTargetAppLabel(kind.appId)
 );
@@ -25,7 +21,6 @@ export function groupTargets(targets: readonly LinkTarget[]): TargetGroup[] {
     app,
     targets: byApp.get(app)!,
   }));
-  // The query, not this order, is the authority on what is linkable.
   const extra = [...byApp.keys()]
     .filter((app) => !KIND_ORDER.includes(app))
     .sort((a, b) => a.localeCompare(b))
@@ -43,8 +38,6 @@ export function probeAt(body: string, caret: number): WikiProbe | null {
   const open = head.lastIndexOf("[[");
   if (open === -1) return null;
   const term = head.slice(open + 2);
-  // A closing pair or line break ends the probe: `[[` from a paragraph ago is
-  // not the current type-in.
   if (term.includes("]]") || term.includes("\n")) return null;
   return { start: open, term };
 }
@@ -56,10 +49,8 @@ export interface PassageAnchor {
   start: number;
 }
 
-/** Enough to re-find after a nearby edit, not a second copy of the note. */
 const CONTEXT = 32;
 
-/** Empty selection → null: link the note whole, never a standoff over nothing. */
 export function anchorFrom(
   body: string,
   selectionStart: number,
@@ -77,7 +68,6 @@ export function anchorFrom(
   };
 }
 
-/** Where the passage sits NOW, or null — never a pretended position. */
 export function resolveAnchor(
   body: string,
   anchor: { exact?: string; prefix?: string; start?: number } | null | undefined
@@ -85,8 +75,6 @@ export function resolveAnchor(
   const exact = anchor?.exact;
   if (typeof exact !== "string" || exact === "") return null;
   const hinted = typeof anchor?.start === "number" ? anchor.start : 0;
-  // Remembered offset, then prefix, then bare text: first hit wins, each
-  // fallback weaker.
   if (body.slice(hinted, hinted + exact.length) === exact)
     return { start: hinted, end: hinted + exact.length };
   const prefix = anchor?.prefix;

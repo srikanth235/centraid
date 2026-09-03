@@ -1,8 +1,3 @@
-// "Storage" — what the drive weighs (Docs spec §4.5). COUNTED, NOT ESTIMATED:
-// countable here: only the total across read rows (caveated when truncated)
-// and the on-this-device figure (`custody_state`); backup/gateway-only/
-// releasable need the blob rollup this projection never reads — a sentence,
-// never a zero.
 import type { ReactNode } from "react";
 
 import { fmtBytes } from "../format.ts";
@@ -16,9 +11,7 @@ export function StorageRoute({
   docs,
   truncated,
 }: {
-  /** Every row read — trashed included; they occupy disk until purge. */
   docs: readonly DriveDoc[];
-  /** Totals cover the fetch window, not the whole library. */
   truncated: boolean;
 }): ReactNode {
   const bytes = docs.reduce((sum, d) => sum + (d.byte_size ?? 0), 0);

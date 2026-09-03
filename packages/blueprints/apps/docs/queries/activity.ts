@@ -1,6 +1,3 @@
-// Activity trail (#352). Non-owner reads obey provenanceScopeFailure
-// (activity-read.test.ts): exactly one eq pair + read consent on the entity's own table.
-
 const DOCUMENT_TARGET_TYPE = "core.document";
 
 interface ProvenanceRow {
@@ -22,7 +19,6 @@ export default async function activityHandler({ input, ctx }: HandlerArgs) {
       ],
       purpose,
     });
-    // No ordering guarantee; sort here.
     const events = ((result.rows ?? []) as unknown as ProvenanceRow[])
       .map((r) => ({
         activity: r.prov_activity,

@@ -18,10 +18,6 @@ import {
 
 const appDir = path.join(path.resolve(import.meta.dirname, ".."), "apps");
 
-/**
- * Custom-property namespaces owned by `packages/design`. An app declaring
- * one shadows the design system's token and stops tracking theme changes.
- */
 const RESERVED_PREFIXES = [
   "--c-",
   "--t-",
@@ -33,7 +29,6 @@ const RESERVED_PREFIXES = [
 
 const CONTRACT_PROPS = new Set<string>(BLUEPRINT_TOKEN_CONTRACT);
 
-// `#rgb`/`#rgba`/`#rrggbb`/`#rrggbbaa`; longest alternative first.
 const HEX = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b/gu;
 const FUNCTIONAL = /\b(?:rgba?|hsla?)\(/gu;
 const FONT_FAMILY = /(?:^|[;{])\s*font-family\s*:(?<value>[^;}]*)/gmu;
@@ -50,16 +45,10 @@ function listModuleCss(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/**
- * Count the violations in one stylesheet. Comments are stripped first so a
- * documented "was #fff" note doesn't read as a live literal.
- */
 function scan(source: string): TokenPurityBudget {
   const css = source.replace(/\/\*[\s\S]*?\*\//gu, "");
 
   const fontFamily = [...css.matchAll(FONT_FAMILY)].filter((match) => {
-    // A value purely out of `var()` (+ CSS-wide keywords, whitespace, commas)
-    // is exactly the compliant form.
     const residue = (match.groups?.value ?? "")
       .replace(VAR_REFERENCE, "")
       .replace(FONT_KEYWORDS, "")
@@ -102,7 +91,6 @@ describe("blueprint app CSS token purity", () => {
   }
 
   it("finds the blueprint stylesheets it claims to police", () => {
-    // Guards against the walker silently matching nothing.
     expect(files.length).toBeGreaterThan(50);
   });
 
@@ -132,10 +120,6 @@ describe("blueprint app CSS token purity", () => {
   });
 
   it("resolves every fallback-less var() an app references", () => {
-    // A fallback-less `var(--x)` naming nothing declared drops its
-    // declaration silently — how a stale rename survives review. Names may
-    // resolve from the contract, kit.css, or the app's own stylesheets; the
-    // reader is shared with the shell's twin gate (#686).
     const kitDeclared = declaredCustomProps(
       readFileSync(
         path.join(appDir, "..", "..", "design", "src", "elements", "kit.css"),

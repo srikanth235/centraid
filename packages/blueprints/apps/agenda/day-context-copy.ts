@@ -1,13 +1,9 @@
-// IMPORT-FREE leaf: mobile TS can't read ts-extensions/CSS modules; no imports.
-
 export const LAYERS: readonly { id: string; name: string; from: string }[] = [
   { id: "bdays", name: "Birthdays", from: "from People" },
   { id: "due", name: "Due tasks", from: "from Tasks" },
   { id: "hols", name: "Holidays", from: "subscribed" },
 ];
 
-/** Said once under the switches, because a member may reasonably read three
- *  toggles as three more calendars. */
 export const LAYERS_READ_ONLY =
   "Layers decorate a day; none of them is writable.";
 

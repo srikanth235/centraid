@@ -1,5 +1,3 @@
-// Notes chrome — geometry only. No app bar, status line, or navigation stem;
-// those are the frame's. A null slot renders nothing, not an empty container.
 import type { ReactNode } from "react";
 
 import {

@@ -1,12 +1,3 @@
-// A TYPE IS A SET OF FIELDS, AND A SEALED VALUE ROUND-TRIPS UNCHANGED.
-//
-// Two claims, and the second is the one with teeth: an edit that touches a
-// title must not overwrite a password the member never revealed. The vault
-// reads `«sealed»` as "leave it alone" (packages/vault commands/locker.ts
-// `isPlaceholder`), so the form seeds exactly that — and this file pins the
-// placeholder to the vault's own constant by value, because a drifted string
-// here would silently write the literal into a secret column.
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -91,8 +82,6 @@ describe("an edit pre-fills metadata plainly and secrets as the placeholder", ()
     expect(SEALED).toBe("«sealed»");
     expect(seed.fields["password"]).toBe(SEALED);
     expect(seed.fields["otp_seed"]).toBe(SEALED);
-    // The write built from it sends the placeholder, which the vault reads as
-    // "unchanged" — the round trip this whole seeding exists for.
     expect(draftFrom(seed).fields["password"]).toBe(SEALED);
   });
 
@@ -114,7 +103,6 @@ describe("switching type keeps what the two share and drops the rest", () => {
     expect(seed.title).toBe("GitHub");
     expect(seed.fields["notes"]).toBe("Rotated after the notice.");
     expect(seed.fields["username"]).toBeUndefined();
-    // A password is a field BOTH types own, so it survives the switch.
     expect(seed.fields["password"]).toBe(SEALED);
   });
 });

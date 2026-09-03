@@ -1,11 +1,3 @@
-/**
- * Secret-free login metadata for Centraid Companion. This query intentionally
- * returns every live login; the worker applies the versioned PSL origin policy
- * before a page sees suggestions. Sealed values are reduced to an OTP-presence
- * bit and Watchtower derivatives; neither a password nor an OTP seed crosses
- * this handler.
- */
-
 interface LoginRow {
   item_id: string;
   title: string;
@@ -25,10 +17,6 @@ export default async function autofillCandidates({
 }) {
   const purpose = "dpv:ServiceProvision";
   try {
-    // When Locker auth is configured, candidate enumeration requires the
-    // vault to be unlocked (any live session on this gateway) — same lock that
-    // gates fill/reveal. Without it a paired device could map every login's
-    // item_id + url while locked.
     const authentication = (await ctx.vault.authenticate({
       operation: "status",
       ...(typeof input?.auth_session === "string" && input.auth_session

@@ -1,6 +1,3 @@
-// Notebooks are WHERE a note lives; tags are HOW it is seen. Both projections
-// answer from raw rows, and both must refuse to promise a note the surface
-// cannot open.
 import { describe, expect, test } from "vitest";
 
 import {
@@ -20,7 +17,6 @@ const ENTRIES = [
   { collection_id: "work", target_type: "knowledge.note", target_id: "n1" },
   { collection_id: "work", target_type: "knowledge.note", target_id: "n2" },
   { collection_id: "home", target_type: "knowledge.note", target_id: "n2" },
-  // A collection may also hold photos and documents; this surface files notes.
   { collection_id: "work", target_type: "core.document", target_id: "d1" },
 ];
 
@@ -76,8 +72,6 @@ describe("notebook membership", () => {
       entries: ENTRIES,
     });
     const work = shelves.find((shelf) => shelf.notebook_id === "work");
-    // The confirm's sentence is built from this count, so it must be the
-    // notes that lose their only filing, never the notebook's whole roster.
     expect(work?.noteIds).toHaveLength(2);
   });
 });
@@ -158,7 +152,6 @@ describe("tag edges", () => {
   });
 
   test("removing this note's edge leaves the concept and its other notes", () => {
-    // What `remove-tag` does, as a value: drop ONE edge row and re-project.
     const remaining = TAGS.filter((tag) => tag.tag_id !== "t1");
     const shelves = projectTagShelves({
       tags: remaining,

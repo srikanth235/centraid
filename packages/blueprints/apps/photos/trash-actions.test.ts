@@ -1,9 +1,3 @@
-// @vitest-environment jsdom
-// The one thing about emptying the trash that is a pure function, and the one
-// thing a member would feel if it were wrong: purge ORDER. The vault refuses
-// to destroy a photograph while an edited copy still names it as its source
-// (#711), so a trash holding both must send the copy first or the
-// control silently leaves the original behind.
 import { describe, expect, it } from "vitest";
 
 import { emptyTrashOrder, emptyTrashSummary } from "./trash-actions.ts";
@@ -25,7 +19,6 @@ describe("purge order", () => {
   });
 
   it("puts an edited copy before the source it names", () => {
-    // The shelf lists the source first (it was trashed most recently).
     const trash = [asset("original"), asset("crop", "original")];
     expect(ids(emptyTrashOrder(trash))).toStrictEqual(["crop", "original"]);
   });
@@ -44,8 +37,6 @@ describe("purge order", () => {
   });
 
   it("ignores a source that is not itself in the trash", () => {
-    // The original is still live; only the copy is being destroyed, and the
-    // vault has no objection to that.
     const trash = [asset("crop", "still-in-the-library")];
     expect(ids(emptyTrashOrder(trash))).toStrictEqual(["crop"]);
   });
@@ -75,3 +66,4 @@ describe("the summary sentence", () => {
     );
   });
 });
+// @vitest-environment jsdom

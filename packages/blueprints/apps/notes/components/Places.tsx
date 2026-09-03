@@ -1,10 +1,3 @@
-// The spine and the lens: the rail, the Notebooks route, the Tags route, the
-// Trash and the version chain (Notes spec §5, §6).
-//
-// THE RAIL STATES THE DIVISION IN WORDS — *Notebooks · where a note lives*
-// over *Tags · how a note is seen* — because the paralysis two filing systems
-// create is a copy problem before it is a structure problem. A note lives in
-// one notebook or in none; a tag never decides where anything lives.
 import { useState } from "react";
 import type { ReactNode } from "react";
 
@@ -41,8 +34,6 @@ function Count({ n }: { n: number }): ReactNode {
   return <span className={styles.count}>{n}</span>;
 }
 
-/** One tree row. 34 under a pointer, 44 on touch — the surface's own
- *  `--target-min`, never a breakpoint. */
 function TreeRow({
   label,
   note,
@@ -147,8 +138,6 @@ export interface NotebooksRouteProps {
   onDelete: (book: Notebook) => void;
 }
 
-/** An inline name editor — the create and the rename are the same control,
- *  because they are the same act at two moments. */
 function NameField({
   initial,
   label,
@@ -258,8 +247,6 @@ export interface TagsRouteProps {
   onSelectTag: (conceptId: string | null) => void;
 }
 
-/** Tags are a LENS, so this route's rows narrow the library rather than
- *  standing as a place a note could be moved into. */
 export function TagsRoute(props: TagsRouteProps): ReactNode {
   return (
     <div className={styles.list}>
@@ -289,9 +276,6 @@ export interface TrashRouteProps {
   onRestore: (noteId: string) => void;
 }
 
-/** The trash row: the note's own heading, its notebook, its days left in
- *  tabular numerals, and Restore — which puts it back in place with its
- *  links, its tags and its files. */
 export function TrashRoute(props: TrashRouteProps): ReactNode {
   return (
     <div className={styles.list}>
@@ -326,11 +310,6 @@ export interface HistoryRouteProps {
   onRestore: (contentId: string) => void;
 }
 
-/**
- * The version chain, newest first. RESTORING APPENDS: the row's control puts
- * an earlier body back at the head of the chain and nothing between is lost,
- * which is why the status line under this route says so in as many words.
- */
 export function HistoryRoute(props: HistoryRouteProps): ReactNode {
   return (
     <div className={styles.list}>

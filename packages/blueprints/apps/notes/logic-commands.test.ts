@@ -1,20 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-// The commands Notes sends, and the sentence each one earns (#839 W2-1) —
-// split out of `logic.test.ts`, which holds narration and the lazy reads; the
-// seat they all drive is `logic.test-fixtures.ts`, which says why the gateway
-// and the frame here are recording fakes rather than mocks.
-//
-// EVERY WRITE HERE IS OPTIMISTIC, so what is pinned is the shape of the typed
-// command that reached the gateway and what the member is left looking at —
-// the row patched in place, the undo beside "Moved to trash", the composer
-// still open on a refused name. A park never reaches the status line: the
-// row's own chip carries it.
-//
-// The editor's save runs on the fake clock because coalescing is its whole
-// point: a suite that awaited it directly would prove nothing about the delay
-// it exists to hold, and a re-read per keystroke would repaint the reading
-// room under a member who is typing into it.
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import { harness, note } from "./logic.test-fixtures.ts";

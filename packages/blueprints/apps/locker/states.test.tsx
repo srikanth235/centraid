@@ -1,15 +1,3 @@
-// @vitest-environment jsdom
-// LOCKER'S HONEST STATES (STATES.md's Locker matrix, umbrella #872).
-//
-// Locker owes the seven canonical states plus five of its own — Locked,
-// Re-auth, Revealed, Window end and the viewer refusal. This file proves them
-// where a member meets them, and it drives the PRODUCTION `Root` for the ones
-// that are a claim about the whole room (locked, denied, day one), because
-// those are exactly the ones an app can get right in a component and wrong in
-// the tree above it.
-//
-// THE STATE THIS FILE EXISTS FOR is the first block: a Locker that boots
-// browsable is not a Locker. Everything else here is downstream of that.
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -64,8 +52,6 @@ const ROW: LockerRow = {
 
 const NOOP = (): void => undefined;
 
-// ------------------------------------------------- locked, first run, denied
-
 describe("the room is shut until it is opened", () => {
   let reactRoot: ReturnType<typeof createRoot> | undefined;
 
@@ -102,7 +88,6 @@ describe("the room is shut until it is opened", () => {
       authenticated: false,
     });
     expect(container.textContent).toContain(LOCK_BODY);
-    // The band, the rail and every list are WITHDRAWN, not dimmed.
     expect(container.querySelector("nav")).toBeNull();
     expect(container.querySelector("[data-item-id]")).toBeNull();
     expect(container.textContent).not.toContain(ROW.title);
@@ -112,7 +97,6 @@ describe("the room is shut until it is opened", () => {
     const container = await mount({ ok: true, configured: false });
     expect(container.textContent).toContain(SETUP_BODY);
     expect(container.querySelector("[data-item-id]")).toBeNull();
-    // Twelve characters is enforced in front of the member, not by a refusal.
     const commit = container.querySelector("button[type='submit']");
     expect((commit as HTMLButtonElement | null)?.disabled).toBe(true);
   });
@@ -149,13 +133,10 @@ describe("the room is shut until it is opened", () => {
     expect(container.querySelector("#consentBanner")).not.toBeNull();
     expect(container.textContent).toContain("nothing was deleted");
     expect(container.textContent).toContain("The grant was revoked.");
-    // Denied is not day one: it offers the grant back, not a first move.
     expect(container.textContent).not.toContain(DAY_ONE_TITLE);
     expect(container.textContent).toContain("Review vault access");
   });
 });
-
-// --------------------------------------------------------- day one and lens
 
 describe("day one and an empty lens are different facts", () => {
   const list = (props: Partial<Parameters<typeof LockerList>[0]>) =>
@@ -195,8 +176,6 @@ describe("day one and an empty lens are different facts", () => {
   });
 });
 
-// ------------------------------------------------------------- window's end
-
 describe("WINDOW END: a bounded window says so", () => {
   test("names what is shown, that more exist, and offers the way on", () => {
     const markup = renderToStaticMarkup(
@@ -215,12 +194,8 @@ describe("WINDOW END: a bounded window says so", () => {
     );
     expect(markup).toContain(WINDOW_RULE);
     expect(markup).toContain(SHOW_MORE);
-    // §6, VERBATIM, whenever the vault counted: "300 of 312 · the window is
-    // 300 by default and 2,000 at most."
     expect(markup).toContain("300 of 312");
     expect(windowEndCopy(300, true, 312)).toBe(`300 of 312 · ${WINDOW_RULE}`);
-    // AND THE HONEST FALLBACK. A total the read did not carry is a
-    // denominator this seat does not have, and it says what it knows instead.
     expect(windowEndCopy(300, true)).toContain("older items beyond them");
     expect(windowEndCopy(300, true)).not.toContain("of 312");
   });
@@ -244,8 +219,6 @@ describe("WINDOW END: a bounded window says so", () => {
     expect(markup).not.toContain(SHOW_MORE);
   });
 });
-
-// ------------------------------------------ pending, offline, stale, parked
 
 describe("the notices name the boundary rather than apologise for it", () => {
   const notices = (props: Partial<Parameters<typeof Notices>[0]>) =>
@@ -298,8 +271,6 @@ describe("the notices name the boundary rather than apologise for it", () => {
   });
 });
 
-// -------------------------------------------------------- sealed / revealed
-
 describe("SEALED and REVEALED are two states of one row", () => {
   const field = (props: Partial<Parameters<typeof SealedField>[0]>) =>
     renderToStaticMarkup(
@@ -322,7 +293,6 @@ describe("SEALED and REVEALED are two states of one row", () => {
     expect(markup).toContain("Reveal");
     expect(markup).toContain("Copy");
     expect(markup).not.toContain("Conceal");
-    // The run's length never tracks the secret's.
     expect(markup).toContain("••••••••••••••");
   });
 
@@ -337,8 +307,6 @@ describe("SEALED and REVEALED are two states of one row", () => {
     expect(markup).toContain("the receipt is already written");
     expect(markup).toContain("k7Q-vn2-Rme");
     expect(markup).toContain("Conceal");
-    // …and the Reveal VERB is gone — matched as a control, because the note
-    // above it legitimately contains the word "Revealed".
     expect(markup).not.toContain(">Reveal<");
   });
 
@@ -352,8 +320,6 @@ describe("SEALED and REVEALED are two states of one row", () => {
     expect(markup).toContain(revealedNote(39, 0));
   });
 });
-
-// ------------------------------------------------------ the gate's question
 
 describe("the permit gate names what it is buying", () => {
   test("a sealed field, by its own word", () => {
@@ -372,16 +338,12 @@ describe("the permit gate names what it is buying", () => {
   });
 });
 
-// -------------------------------------------------------------- the refusal
-
 describe("VIEWER REFUSED is a ruling, and it is stated", () => {
   test("Locker owns the sentence, whoever draws the wall", () => {
     expect(VIEWER_REFUSED).toContain("user-presence boundary");
     expect(VIEWER_REFUSED).toContain("refuses the seat outright");
   });
 });
-
-// ---------------------------------------------------- the archive shelf
 
 describe("ARCHIVE IS NOT TRASH, and the rail keeps its six type rows", () => {
   const rail = (props: Partial<Parameters<typeof Rail>[0]>) =>
@@ -402,15 +364,11 @@ describe("ARCHIVE IS NOT TRASH, and the rail keeps its six type rows", () => {
   test("the archived shelf is a row of the vault, with the VAULT's count", () => {
     const markup = rail({});
     expect(markup).toContain(RAIL_ARCHIVED);
-    // 7 archived items, none of them in the window that was read — which is
-    // exactly why the count cannot come from `rows`.
     expect(markup).toContain("7");
   });
 
   test("THE RULING: the rail stays SIX type rows (README-Locker §1)", () => {
     expect(TYPE_ORDER).toHaveLength(6);
-    // …while the vocabulary itself is fifteen, reachable from the add form
-    // and the filters rather than from a column of fifteen rows.
     expect(ALL_TYPES).toHaveLength(15);
     for (const type of TYPE_ORDER) expect(ALL_TYPES).toContain(type);
     const markup = rail({});
@@ -419,11 +377,9 @@ describe("ARCHIVE IS NOT TRASH, and the rail keeps its six type rows", () => {
   });
 
   test("an archived shelf is a different READ, never a slice of the window", () => {
-    // `rowsFor` hands back what it was given: the archived rows were fetched
-    // by a second read, so filtering them again would be asking twice.
     const archived: LockerRow = { ...ROW, item_id: "a1", archived: true };
     expect(rowsFor([archived], { kind: "archived" })).toHaveLength(1);
-    // And nothing archived carries a purge date — that is the trash's clock.
     expect(archived.purge_at).toBeUndefined();
   });
 });
+// @vitest-environment jsdom

@@ -1,9 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit #864 keyed save flush and lazy history belong with the other writes
-// Every vault read and write Notes performs, and nothing that draws.
-// `createLogic()` closes over the orchestrator's `state`/`data` (mutated in
-// place, never reassigned) plus `render`/`refresh`/`status`. EVERY WRITE IS
-// OPTIMISTIC: the pending projection paints at intent, a park is a designed
-// state on the row's chip, a refusal lands on the one status line — no toasts.
 import { debounce, outcomeMessage } from "@centraid/design/elements";
 
 import { coalesceByKey } from "./draft-writes.ts";
@@ -20,10 +15,8 @@ import type {
 } from "./types.ts";
 import { RENAME_REFUSAL, notebookDeleted } from "./view-copy.ts";
 
-/** Keyed by the text before the first ": ". */
 type Friendly = Record<string, string>;
 
-/** The refusal is the VAULT'S; never pre-empt it with a local rule. */
 const NOTEBOOK_NAME_FRIENDLY: Friendly = {
   name_unused_by_owner: RENAME_REFUSAL,
   name_unused: RENAME_REFUSAL,
@@ -55,7 +48,6 @@ export function createLogic({
   status,
   go,
 }: LogicDeps) {
-  // Imperative — no JSX children, so reconciliation cannot clobber it.
   function notice(text: string): void {
     const el = document.querySelector<HTMLElement>("#noticeBanner");
     if (!el) return;
@@ -63,7 +55,6 @@ export function createLogic({
     el.hidden = !text;
   }
 
-  /** True when the write landed. A PARK IS NOT A FAILURE. */
   function narrate(
     outcome: VaultOutcome | undefined,
     friendly?: Friendly
@@ -91,7 +82,6 @@ export function createLogic({
     return false;
   }
 
-  /** A throw is the gateway out of reach, not a fact about the note. */
   async function act(
     action: string,
     input: Record<string, unknown>
@@ -104,7 +94,6 @@ export function createLogic({
     }
   }
 
-  /** Continuous save: patch the row in place; keyed so a note-switch flushes. */
   const persistSave = async (
     noteId: string,
     patch: { title?: string; body_text?: string }
@@ -138,8 +127,6 @@ export function createLogic({
     persistSave,
     (noteId) => noteId,
     600,
-    // Title and body arrive as separate patches; replacing the pending
-    // args would drop the title and the vault would keep "Untitled note".
     (previous, next) => {
       const merged: [string, { title?: string; body_text?: string }] = [
         previous[0],
@@ -149,7 +136,6 @@ export function createLogic({
     }
   );
 
-  /** Write, narrate, and re-read whatever changed shape. */
   async function write(
     action: string,
     input: Record<string, unknown>,
@@ -163,8 +149,6 @@ export function createLogic({
     else render();
     return outcome;
   }
-
-  // ─── reading one note ───
 
   function findNote(noteId: string): Note | null {
     return (
@@ -180,8 +164,6 @@ export function createLogic({
     );
   }
 
-  /** The library ships a preview, never a body (#404); a denial leaves the
-   *  editor usable with it. */
   async function openNote(noteId: string): Promise<void> {
     state.noteId = noteId;
     state.versions = null;
@@ -233,10 +215,6 @@ export function createLogic({
     render();
   }
 
-  // ─── writing a note ───
-
-  /** Untitled and unfiled, writing immediately. The vault refuses a nameless
-   *  note, so the first line stands in (`deriveTitle`). */
   async function createNote(seed = ""): Promise<string | null> {
     const input: Record<string, unknown> = {
       title: deriveTitle("", seed) || UNTITLED_NOTE,
@@ -259,7 +237,6 @@ export function createLogic({
     await write("edit-note", { note_id: note.note_id, pinned });
   }
 
-  /** `move-note` with no notebook is the vault's way of saying unfiled. */
   async function moveNote(
     noteId: string,
     notebookId: string | null
@@ -281,7 +258,6 @@ export function createLogic({
     if (outcome?.status === "executed") status("Restored in place");
   }
 
-  /** RESTORING APPENDS: nothing in between is lost. */
   async function restoreVersion(
     noteId: string,
     contentId: string
@@ -296,8 +272,6 @@ export function createLogic({
     await loadHistory(noteId);
     await openNote(noteId);
   }
-
-  // ─── notebooks ───
 
   async function createNotebook(name: string): Promise<void> {
     const trimmed = name.trim();
@@ -324,7 +298,6 @@ export function createLogic({
     render();
   }
 
-  /** Deleting a notebook UNFILES its notes. */
   async function deleteNotebook(notebookId: string): Promise<void> {
     const outcome = await write(
       "delete-notebook",
@@ -336,8 +309,6 @@ export function createLogic({
     if (notebookIdFrom(state.shelf) === notebookId) go(null);
   }
 
-  // ─── tags, links, files ───
-
   async function addTag(noteId: string, label: string): Promise<void> {
     const trimmed = label.trim();
     if (!trimmed) return;
@@ -348,8 +319,6 @@ export function createLogic({
     await write("remove-tag", { tag_id: tagId });
   }
 
-  /** The anchor travels with the link, so the far end points at the
-   *  sentence. */
   async function linkNote(
     noteId: string,
     target: LinkTarget,
@@ -374,7 +343,6 @@ export function createLogic({
     await write("link", input);
   }
 
-  /** Bytes ride as a data URI, which is what `attach` accepts at this size. */
   async function attachFile(noteId: string, file: File): Promise<void> {
     const dataUri = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -400,9 +368,6 @@ export function createLogic({
     await write("detach", { attachment_id: attachmentId });
   }
 
-  // ─── checklists ───
-
-  /** The body is the fact — a box is a character in it. */
   async function toggleCheck(noteId: string, line: number): Promise<void> {
     const note = findNote(noteId);
     if (!note || typeof note.body !== "string") return;
@@ -423,8 +388,6 @@ export function createLogic({
     saveNote(noteId, { body_text: body });
   }
 
-  // ─── search, and the powerbox ───
-
   const runSearch = debounce(async (term: string) => {
     const trimmed = term.trim();
     state.search = trimmed;
@@ -444,8 +407,6 @@ export function createLogic({
         notes?: Note[];
         vaultDenied?: unknown;
       }>({ query: "search", input: { term: trimmed } });
-      // A DENIAL IS NOT AN EMPTY RESULT SET, nor is a throw — neither may
-      // print "nothing matches".
       if (answer?.vaultDenied) reached = false;
       else rows = answer?.notes ?? [];
     } catch {
@@ -533,8 +494,6 @@ export function rowsFor(
     rows = rows.filter((note) =>
       (note.notebook_ids ?? []).includes(notebookId)
     );
-  // THE SCOPE IS THE MEMBER'S: Everywhere by default, This notebook only
-  // where Search was reached from one.
   if (
     state.search.trim() &&
     state.searchScope === "notebook" &&
@@ -551,7 +510,6 @@ export function rowsFor(
       (note.tags ?? []).some((tag) => tag.concept_id === conceptId)
     );
   }
-  // PINNED FIRST, THEN NEWEST EDITED; nothing else reorders.
   return rows.toSorted(
     (a, b) =>
       (b.pinned ?? 0) - (a.pinned ?? 0) ||
@@ -559,7 +517,6 @@ export function rowsFor(
   );
 }
 
-/** Within the WINDOW the library read — bounded honesty. */
 export function notebookCounts(data: AppData): Map<string, number> {
   const counts = new Map<string, number>();
   for (const note of data.notes) {

@@ -1,24 +1,3 @@
-// ONE ROW, drawn once, used by every list in this app (spec §5's ledger row).
-//
-// Balances draws it twice — once per person, once per group. Activity draws it
-// for an expense and for a settlement. A group's ledger, a friend's shared
-// expenses, Spending's categories, Trash and Search all draw the same one.
-// Eight lists, one component, because a row re-drawn per screen is eight
-// chances for a figure to end up left-aligned, or for "you owe" to read as
-// "you are owed" on the one screen nobody checked.
-//
-// THE FIGURE IS THE ROW'S POINT, and it is the only thing on it that carries a
-// colour: `--net` where the amount means YOU OWE, plain ink where it means you
-// are owed, the recessive rung where the balance is level. Never a green.
-//
-// NOTHING COUNTS AT THE MEMBER. There is no badge, no dot and no red: a debt
-// that has stood for a month is a phrase in the meta sentence, and a held
-// write is a 2px ink rule on the leading edge plus the words for it.
-//
-// EVERY STRING FROM THE VAULT GOES THROUGH `displayText`. A description, a
-// group name and a person's name can all arrive from an import, a share or
-// another member, and React escaping alone leaves invisible control characters
-// able to spoof a label (apps/_shared/untrusted.ts).
 import type { CSSProperties, ReactNode } from "react";
 
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
@@ -28,33 +7,22 @@ import type { FigureTone } from "../format.ts";
 
 import styles from "./Ledger.module.css";
 
-/** One quiet trailing verb. Two on a pointer, one where a finger lands. */
 export interface RowAct {
   label: string;
   run: () => void;
 }
 
-/** The status chip's tone. `seam` is "not yet, and not wrong"; `net` is ended
- *  — expired or refused — and is an OUTLINE, never a fill. */
 export type StatusTone = "none" | "seam" | "net";
 
 export interface LedgerRowProps {
-  /** The person this row is about, if it is about one. The chip takes their
-   *  point on the shared identity wheel, keyed by the stable party id. */
   chip?: { partyId: string; initials: string } | null;
   title: string;
-  /** ONE sentence, clamped to one line: when, who paid, where, how divided. */
   meta?: string;
-  /** A share of the largest row in this list, 0–100. Spending's only chart. */
   proportion?: number | null;
   status?: { label: string; tone?: StatusTone } | null;
-  /** The right-aligned figure and the sub-label under it. */
   figure?: { text: string; tone: FigureTone; sub?: string } | null;
   acts?: readonly RowAct[];
-  /** One act on touch, two on a pointer (§5). */
   narrow?: boolean;
-  /** The row as the query handed it over, so the shared overlay engine can
-   *  read the pending fields off it. A settled row passes nothing. */
   pendingRow?: Readonly<Record<string, unknown>> | null;
   onOpen?: () => void;
 }
@@ -98,8 +66,6 @@ export function LedgerRow(props: LedgerRowProps): ReactNode {
             {body}
           </button>
         ) : (
-          // A row with nowhere to go is TEXT. A button that did nothing would
-          // still take a tab stop and still announce itself as pressable.
           <span className={styles.bodyStatic}>{body}</span>
         )}
 

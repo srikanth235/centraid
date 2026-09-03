@@ -1,23 +1,3 @@
-// The three screens the app lives on: Balances, Activity and Groups.
-//
-// BALANCES IS ONE FIGURE, THEN THE PEOPLE, THEN THE GROUPS, and every one of
-// those figures arrives derived from `queries/dashboard.ts`. This file adds up
-// nothing: it chooses a word for a sign, an absolute value for an amount, and
-// a tone for a leaf.
-//
-// ACTIVITY INTERLEAVES two kinds of fact under three day headings, and states
-// where its window ends. A settlement where neither party is the owner changes
-// a balance and nothing else, which its own row says out loud.
-//
-// GROUPS DRAWS TWO REAL ACTS. Leave and Archive both write; the confirms they
-// open state the consequence in the handoff's own words and then commit.
-// ARCHIVED GROUPS ARE THEIR OWN SECTION — they leave the lists and keep
-// everything, so filtering them into silence would be the one thing archiving
-// is not — and each carries the verb that brings it back.
-//
-// REMIND IS ON A BALANCE ROW THAT HAS GONE QUIET. It always parks: this app
-// has no delivery path, so the row offers to PREPARE a reminder and the
-// confirm says so before the press.
 import type { ReactNode } from "react";
 
 import { identityInitials } from "@centraid/design";
@@ -65,7 +45,6 @@ export interface BalancesProps {
   onNewGroup: () => void;
   onSettle: () => void;
   onSpending: () => void;
-  /** Prepare a reminder about one friend's balance. Always parks. */
   onRemind: (friend: {
     party_id: string;
     name: string;
@@ -75,10 +54,6 @@ export interface BalancesProps {
 
 export function Balances(props: BalancesProps): ReactNode {
   const { data } = props;
-  // The hero's figure is the two totals the dashboard derived, differenced —
-  // not a third sum over the rows below it. `owed - owe` is the same
-  // subtraction the sub-line states in words, and it is the only arithmetic on
-  // this screen.
   const net = data.owed_total_minor - data.owe_total_minor;
   const level =
     allSettled(data.friends.map((friend) => friend.net_minor)) &&
@@ -138,9 +113,6 @@ export function Balances(props: BalancesProps): ReactNode {
                 sub: personSubLabel(friend.net_minor),
               }}
               acts={
-                // ONLY WHERE THERE IS SOMETHING TO REMIND ABOUT. A level
-                // balance has nothing owed, and a row that owes YOU money is
-                // the one a reminder is for.
                 friend.net_minor > 0
                   ? [
                       {
@@ -270,8 +242,6 @@ export interface GroupsProps {
   onOpenGroup: (groupId: string) => void;
   onNewGroup: () => void;
   onLeave: (groupId: string) => void;
-  /** `archived` is what the group IS now, so the confirm can ask the right
-   *  question and the write can send the other boolean. */
   onArchive: (groupId: string, archived: boolean) => void;
 }
 

@@ -1,9 +1,4 @@
-// Photo places as geometry, shared by both Places surfaces; no React or
-// tokens. Never add a basemap or tiles — blueprint CSP denies remote hosts
-// (docs/traps/blueprint-csp.md).
-
 export interface PlacePoint {
-  /** `core_place` id; `""` = the unnamed group. */
   key: string;
   lat: number;
   lng: number;
@@ -13,14 +8,12 @@ export interface PlacePoint {
 }
 
 export interface MapPin {
-  /** The place this pin OPENS — largest of the group. */
   key: string;
   x: number;
   y: number;
   count: number;
   name: string | null;
   places: number;
-  /** Drawn AS the pin; a merge keeps the largest place's. */
   thumb?: string | null;
 }
 
@@ -58,13 +51,11 @@ export interface ProjectOptions {
   height: number;
   padding?: number;
   mergeDistance?: number;
-  /** Draw through this rather than fitting — a basemap owns its viewport. */
   camera?: MapCamera;
 }
 
 const KM_PER_DEG_LAT = 111.32;
 
-// Zero-degree box floor: no divide by zero, no house at continental scale.
 const MIN_SPAN_DEG = 0.01;
 
 const MIN_KM_PER_PX = 1e-6;
@@ -72,10 +63,8 @@ const MIN_KM_PER_PX = 1e-6;
 const clamp = (value: number, low: number, high: number): number =>
   Math.min(high, Math.max(low, value));
 
-// Km per pixel, not a zoom integer: the SDKs disagree on "zoom 12".
 const TIER_CEILING_KM_PER_PX = { countries: 0.5, cities: 0.02 };
 
-// Ground gap to stay two pins; place identity rounds to ~11m, so 50m is floor.
 const TIER_FLOOR_KM: Record<MapTier, number> = {
   countries: 25,
   cities: 1,
@@ -107,7 +96,6 @@ export function tierMergeDistance(
   );
 }
 
-// cos(lat): dropping it stretches a 39°N trip 29% too wide.
 function lngScaleAt(centreLat: number): number {
   return Math.max(0.05, Math.cos((centreLat * Math.PI) / 180));
 }
@@ -134,7 +122,6 @@ export function kmPerPxForSpan(
   return (Math.abs(latitudeDegrees) * KM_PER_DEG_LAT) / Math.max(1, heightPx);
 }
 
-/** Opening viewport only; pins never go through it. */
 export function tileZoomFor(camera: MapCamera): number {
   const metresPerPx = Math.max(camera.kmPerPx, MIN_KM_PER_PX) * 1000;
   const equatorial = 156_543.033_92 * lngScaleAt(camera.lat);
@@ -151,7 +138,6 @@ export function projectAt(
   const lngScale = lngScaleAt(camera.lat);
   return {
     x: box.width / 2 + ((lng - camera.lng) * lngScale) / unitsPerPx,
-    // Latitude grows north, y grows down — the sign that silently flips a map.
     y: box.height / 2 - (lat - camera.lat) / unitsPerPx,
   };
 }
@@ -170,8 +156,6 @@ export function coordAt(
   };
 }
 
-// `expo-maps` fires marker-press only on iOS 18; the target is 17.5, so taps
-// cannot be delegated to the SDK. Nearest-wins.
 export function pinAtPoint(
   pins: readonly MapPin[],
   x: number,
@@ -211,7 +195,6 @@ export function fitCamera(
     MIN_SPAN_DEG * lngScale
   );
 
-  // ONE scale for both axes: per-axis fitting lies about a trip's shape.
   const unitsPerPx = Math.max(latSpan / boxHeight, lngSpan / boxWidth);
   return {
     lat: centreLat,
@@ -220,7 +203,6 @@ export function fitCamera(
   };
 }
 
-/** Non-finite coordinates are dropped. */
 export function projectPlaces(
   points: readonly PlacePoint[],
   options: ProjectOptions
@@ -252,7 +234,6 @@ export function projectPlaces(
   const project = (lat: number, lng: number): { x: number; y: number } =>
     projectAt(camera, { width, height }, lat, lng);
 
-  // Merge in PIXELS, floored by the tier's ground gap; largest pin first.
   const merge = tierMergeDistance(tier, camera.kmPerPx, mergeDistance);
   const ordered = [...usable].sort(
     (a, b) => b.count - a.count || a.key.localeCompare(b.key)
@@ -277,7 +258,6 @@ export function projectPlaces(
     }
   }
 
-  // Spans the whole BOX, not the points' bounds.
   const halfLatSpan = (height / 2) * unitsPerPx;
   const halfLngSpan = ((width / 2) * unitsPerPx) / lngScale;
   const latStep = graticuleStep(halfLatSpan * 2);
@@ -317,8 +297,6 @@ export function projectPlaces(
   };
 }
 
-// null when the name is still a coordinate — it reads as an answer. Twin of
-// the vault's `isCoordinateLabel`; a blueprint cannot link the vault.
 export function readableName(name: string | null | undefined): string | null {
   const text = (name ?? "").trim();
   if (text === "") return null;

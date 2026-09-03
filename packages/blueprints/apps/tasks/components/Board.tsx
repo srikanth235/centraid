@@ -1,15 +1,3 @@
-// The list every board route paints: groups, their headers, the families kept
-// whole inside them, and the honest end of the window (spec §5, §4).
-//
-// A GROUP HEADER CARRIES UP TO TWO QUIET VERBS, one on touch. Overdue is the
-// only group that has two — *Move all to today* beside *Catch up* — and neither
-// is filled: the one filled control in any view is capture, and a bulk gesture
-// offered as the loudest thing on screen would read as the thing to do.
-//
-// FAMILIES ARE NEVER SPLIT BY A FILTER. A parent renders with its children
-// underneath it or with a twist collapsing them, and the children come from the
-// row itself rather than a second pass over the board — which is what keeps a
-// windowed parent from appearing to have lost its work.
 import type { ReactNode } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";
@@ -32,8 +20,6 @@ export interface RowContext {
   onReopen?: (task: Task) => void;
 }
 
-/** One task and, unless the member folded them away, its one level of
- *  children. One level only — a subtask cannot have a subtask (§3). */
 export function TaskFamily({
   task,
   ctx,
@@ -84,13 +70,10 @@ export function TaskFamily({
   );
 }
 
-/** A stable empty list, so a header with no verbs does not hand a fresh array
- *  identity down on every render. */
 const NO_VERBS: readonly { label: string; run: () => void }[] = [];
 
 export interface GroupHeaderProps {
   group: TaskGroup;
-  /** At most two, and the second is withheld on touch (§5). */
   verbs?: readonly { label: string; run: () => void }[];
   narrow: boolean;
 }
@@ -132,14 +115,9 @@ export interface BoardProps {
   groups: readonly TaskGroup[];
   ctx: RowContext;
   narrow: boolean;
-  /** The overdue group's two verbs, supplied by the route that has them. */
   overdueVerbs?: readonly { label: string; run: () => void }[];
-  /** `60 of 214 · this is a window, not everything open`, or null when the
-   *  vault answered with everything it holds. */
   windowEnd?: { shown: number; total: number } | null;
   onShowMore?: () => void;
-  /** What stands here when there is nothing to stand — supplied by the route,
-   *  because every screen is empty ON ITS OWN TERMS. */
   empty?: ReactNode;
   log?: boolean;
 }

@@ -1,11 +1,3 @@
-/**
- * The People shelf's roster (§5). Confirmed people and unconfirmed proposals
- * stay in SEPARATE arrays (#711): a proposal is evidence, not an identity, and
- * has no `name` field. Nothing writes `party_id` and there is no
- * face-similarity signal, so a proposal of one region is honest (#712).
- *
- * @type {import('@centraid/server/engine').QueryHandler}
- */
 import { groupPeopleFaces } from "../../_shared/people-counts.ts";
 import { srcOf } from "./_shared.ts";
 
@@ -15,7 +7,6 @@ interface RawRegion {
   bbox_json?: unknown;
   party_id?: string | null;
   confirmed_by_party_id?: string | null;
-  /** proposed | confirmed | rejected | dismissed (#712). */
   review_state?: string | null;
 }
 
@@ -42,10 +33,8 @@ interface RawContent {
   content_uri?: unknown;
 }
 
-/** Must match `queries/face-queue.ts` or they disagree on the backlog. */
 const REGION_LIMIT = 4000;
 
-/** Bounded to keep the grid's asset+content join cheap. */
 const PROPOSAL_LIMIT = 60;
 
 interface ProposalGroup {
@@ -88,7 +77,6 @@ export default async function people({ ctx }: HandlerArgs) {
       regions.map((region) => [region.region_id, region] as const)
     );
 
-    // Still-open only: an answered region is nobody's backlog.
     const proposalGroups = new Map<string, ProposalGroup>();
     for (const group of grouped.pendingByParty) {
       const coverRegion = group.coverRegionId
@@ -185,14 +173,12 @@ export default async function people({ ctx }: HandlerArgs) {
           name: nameOf.get(entry.id) ?? null,
           count: entry.assetIds.length,
           asset_ids: entry.assetIds,
-          // `null` for a non-person confirmer: the view says "someone else".
           confirmed_by: entry.confirmerIds.map((confirmerId) => ({
             party_id: confirmerId,
             name: nameOf.get(confirmerId) ?? null,
           })),
         })),
       proposals,
-      // The pending count, not the groups above.
       unmatchedTotal: grouped.pendingTotal,
     };
   } catch (error) {

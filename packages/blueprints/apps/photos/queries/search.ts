@@ -1,12 +1,3 @@
-/**
- * Photo search as a vault projection (#352): the in-vault FTS5 index matches
- * titles/captions on core.content_item. Only matched content ids' live assets
- * are read, never a table scan; trashed items fall out of the index.
- *
- * Row shape mirrors queries/library.js's `join()` output row-for-row so hits
- * render straight into the existing grid; album-name matching stays
- * client-side. Consent denial is a first-class outcome.
- */
 import { readAssetJoins, readPlaces, srcOf } from "./_shared.ts";
 
 interface RawHit {
@@ -59,8 +50,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     ];
     if (contentIds.length === 0) return { assets: [] };
 
-    // Only matched content ids' LIVE assets — a trashed asset stays out
-    // (re-upload is the restore path).
     const liveAssets = await ctx.vault.read({
       entity: "media.asset",
       where: [
@@ -124,7 +113,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
             name: place.name,
             lat: place.lat,
             lng: place.lng,
-            // Library projection shape: identical phrasing as the grid.
             kind: place.kind,
             gazetteer: place.gazetteer,
           }
@@ -157,7 +145,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           custody_state: custodyByContent.get(asset.content_id) ?? null,
         };
       });
-    // Vault rank order (best match first).
     assets.sort(
       (a, b) =>
         contentIds.indexOf(a.content_id) - contentIds.indexOf(b.content_id)

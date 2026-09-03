@@ -1,6 +1,3 @@
-// EVERY vault string passes through `displayText` before the DOM — it strips
-// invisible control/bidi characters. Links take `safeExternalUrl`: escaping
-// never makes `javascript:` safe.
 import type { ChangeEvent, ReactNode } from "react";
 
 import { displayText, safeExternalUrl } from "../../_shared/untrusted.ts";
@@ -9,7 +6,6 @@ import { CLOSE, PENDING_MARK, SEARCH_LABEL } from "../view-copy.ts";
 
 import styles from "./Shared.module.css";
 
-/** Where the band's Search tab and the bar's Search icon both land. */
 export function SearchField({
   value,
   onSearch,
@@ -79,7 +75,6 @@ export function Safe({ value }: { value: unknown }): ReactNode {
   return <>{displayText(value)}</>;
 }
 
-/** An unsafe scheme draws NO control rather than a dead one. */
 export function JoinLink({
   uri,
   label,

@@ -1,9 +1,3 @@
-/**
- * The People journal projects canonical rows (#450): owner entries are
- * knowledge.note rows tagged in the People-journal scheme; automatic ones
- * are core.activity rows linked `about` a party, with annotations.
- */
-
 import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
 
 interface RawConcept {

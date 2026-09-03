@@ -1,17 +1,5 @@
-/**
- * Task board as a bounded window, never a whole-table pull (#262): newest
- * open tasks by task_id (UUIDv7 creation order, caller-sized window, default
- * 500) plus the 50 most recently closed — exactly what the logbook shows;
- * beyond the window use FTS or grow it (`truncated` offers that). Open tasks
- * sort due-first, then priority (higher more urgent, 0 unset), then title,
- * subtasks nested; unfinished children of a completed or released parent
- * are promoted onto the open board (`nestTaskFamilies`). Closed top-level
- * tasks form the logbook. Everything comes from the vault — no rows of its
- * own; consent denial is first-class, receipt included.
- */
 import { nestTaskFamilies } from "../when.ts";
 
-/** Raw schedule.task row as the vault projects it (unread columns ride the index signature). */
 interface RawTask {
   task_id: string;
   parent_task_id?: string | null;
@@ -76,17 +64,11 @@ interface DecoratedAttachment {
   byte_size: number;
 }
 
-/**
- * Group one subject type's attachments by target_id, each value joined to
- * its content item — shared attachment-projection shape every app copies
- * (core.attachment edges + core.content_item bytes).
- */
 function attachmentsBySubject(
   subjectType: string,
   attachments: RawAttachment[],
   contentById: Map<string, RawContent>
 ): Map<string, DecoratedAttachment[]> {
-  // Blob-backed bytes serve as same-origin URLs (#296).
   const srcOf = (c: RawContent | undefined): string | undefined =>
     typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`
@@ -156,8 +138,6 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       byId.set(t.task_id, t);
     }
 
-    // Families stay whole across the window edge: fetch any referenced
-    // parents the windows missed (`in` needs a non-empty array).
     const missingParentIds = [
       ...new Set(
         [...byId.values()]
@@ -175,9 +155,6 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
         byId.set(t.task_id, t);
     }
 
-    // …then the reverse edge: every subtask of a fetched top-level task —
-    // open so a windowed parent's to-do work isn't silently gone, closed
-    // so `done_children` counts true (children of windowed parents only).
     const topLevelIds = [...byId.values()]
       .filter((t) => !t.parent_task_id)
       .map((t) => t.task_id);
@@ -193,7 +170,6 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
     const rows = [...byId.values()];
     const taskIds = rows.map((t) => t.task_id);
 
-    // Joins are `in`-bounded by the fetched set.
     const attachments =
       taskIds.length > 0
         ? await ctx.vault.read({
@@ -226,8 +202,6 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       contentById
     );
 
-    // Cross-references (#272, #282): @-mentioned entities resolve via live
-    // links + anchors; cards resolvable-if-linked.
     const links =
       taskIds.length > 0
         ? await ctx.vault.read({
@@ -326,7 +300,7 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       try {
         selectorByLink.set(a.link_id, JSON.parse(a.selector_json));
       } catch {
-        // an unreadable selector is just an unanchored reference
+        // Intentionally empty.
       }
     }
     const refsByTask = new Map<string, Array<Record<string, unknown>>>();

@@ -1,5 +1,3 @@
-// Shapes the Notes routes read. Every field ships from this app's own queries;
-// a view may not invent a fact the projection does not carry.
 import type { ShelfId } from "./shelves.ts";
 
 export interface NoteTag {
@@ -49,9 +47,6 @@ export interface Note extends Record<string, unknown> {
   updated_at?: string;
   deleted_at?: string | null;
   purge_at?: string | null;
-  /** Flattened teaser (`library`/`search`/`journal`) — never a body. The
-   *  canonical body arrives only via `note`; `check` is the projection's
-   *  tally; `snippet` is the FTS hit on a search row. */
   preview?: string;
   check?: { total: number; done: number };
   body?: string;
@@ -103,20 +98,14 @@ export interface AppState {
   shelf: ShelfId;
   view: LibraryView;
   noteId: string | null;
-  /** Tag lens over the library — never a place, only a filter. */
   conceptId: string | null;
-  /** Unfiled is a PLACE in the spine as a library filter — never its own
-   *  route; an unfiled note still opens from where it is. */
   unfiledOnly: boolean;
   search: string;
   searchScope: SearchScope;
-  /** Notebook Search was scoped FROM; a scope control with no notebook behind
-   *  it would be two controls meaning one thing. */
   scopeNotebookId: string | null;
   searchResults: Note[] | null;
   searchStatus: "resting" | "searching" | "ready" | "unreachable";
   searchSeq: number;
-  /** The `[[` powerbox: the query, its answers, and where the text landed. */
   powerbox: {
     open: boolean;
     term: string;

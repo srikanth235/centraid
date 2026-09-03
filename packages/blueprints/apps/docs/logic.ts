@@ -1,6 +1,3 @@
-// Non-visual business logic; never a second copy of mutable state.
-// `createLogic()` closes over app.tsx's `state`/`data` BY REFERENCE: app.tsx
-// mutates their properties and never reassigns the bindings.
 import {
   outcomeMessage,
   runBulk as runBulkBase,
@@ -26,12 +23,8 @@ import { createVersions } from "./versions.ts";
 
 const $ = (id: string) => document.querySelector<HTMLElement>(`#${id}`)!;
 
-/** A WINDOW, not a filter: the nav rail's count must be the number this shelf
- *  draws (v16 §3). */
 export const RECENT_WINDOW = 8;
 
-// The gateway stringifies a failed precondition as `"name: column op value"`,
-// so the lookup keys off the substring before ": ".
 const FRIENDLY_PREDICATES: Record<string, string> = {
   not_rented_elsewhere:
     "This file is in use elsewhere in your vault (an attachment, a note, an avatar…) — remove it there first.",
@@ -78,7 +71,6 @@ export function createLogic({
     );
   }
 
-  // True when the write executed; otherwise narrates parked/failed/denied.
   function narrate(outcome: VaultOutcome | undefined): boolean {
     if (outcome?.status === "executed") {
       notice("");
@@ -109,8 +101,6 @@ export function createLogic({
     }
   }
 
-  // ─── data helpers ─────
-
   function folderById(id: string | null | undefined): Folder | undefined {
     return data.folders.find((f) => f.folder_id === id);
   }
@@ -136,11 +126,8 @@ export function createLogic({
           sensitivity: "base",
         }
       );
-    // A no-op while this drive projects ONE vault, but dropping it leaves
-    // Owner the one unpressable head.
     else if (state.sortKey === "owner") r = 0;
     else if (state.sortKey === "kind")
-      // The word in the column: two media types printing it land together.
       r = typeMeta(a.media_type, a.title).name.localeCompare(
         typeMeta(b.media_type, b.title).name,
         undefined,
@@ -162,8 +149,6 @@ export function createLogic({
     } else {
       list = activeFiles();
       if (shelf === STARRED) list = list.filter((f) => f.starred);
-      // A seat that could not READ placements draws its own state, so empty
-      // here always means nothing arrived.
       if (shelf === SHARED)
         list = state.sharedFromKnown
           ? list.filter((f) => f.shared_from !== null)
@@ -171,13 +156,10 @@ export function createLogic({
       if (folderId)
         list = list.filter((f) => (f.folder_id ?? null) === folderId);
     }
-    // §4.2: a chain of predicates, deliberately not a score (filters.ts).
     list = applyFilters(list, state.filters);
-    // Free-form labels (#352) sit ALONGSIDE the type chips, never replace.
     if (tag && tag !== "all")
       list = list.filter((f) => (f.tags ?? []).some((t) => t.label === tag));
     if (search.trim()) return list; // keep the vault's rank order for search
-    // Newest ARRIVAL first, not `updated_at`; the sort control overrides it.
     if (shelf === SHARED && state.sortKey === "changed" && state.sortDir === -1)
       return [...list].sort(
         (a, b) => (b.shared_from?.at ?? 0) - (a.shared_from?.at ?? 0)
@@ -192,21 +174,14 @@ export function createLogic({
     return [...list].sort(compareDocs);
   }
 
-  // ─── selection ─────
-
   function clearSelection() {
     state.selected.clear();
     state.anchorIndex = null;
   }
-  /** The selection AS THE MEMBER CAN SEE IT (#883): the FILTERED set, never the
-   *  whole table, so a shelf change cannot carry off-screen rows into a batch
-   *  write. Pruned in step, so this and the bar's count agree. */
   function selectedDocs(): DriveDoc[] {
     return state.visibleRows.filter((d) => state.selected.has(d.document_id));
   }
 
-  /** Drop keys the current filter no longer shows: a filter change is the only
-   *  thing that can strand a key, and the only thing that recomputes this. */
   function pruneVisibleSelection(): void {
     if (state.selected.size === 0) return;
     const kept = pruneSelection(
@@ -246,8 +221,6 @@ export function createLogic({
     render();
   }
 
-  // ─── document writes ─────
-
   async function trashDoc(doc: DriveDoc) {
     const outcome = await act("trash", { document_id: doc.document_id });
     if (!narrate(outcome)) return;
@@ -270,7 +243,6 @@ export function createLogic({
     }
   }
 
-  // One star across the vault: a Photos favorite is this same judgment.
   async function toggleStar(doc: DriveDoc) {
     const outcome = await act(doc.starred ? "unstar" : "star", {
       document_id: doc.document_id,
@@ -360,7 +332,6 @@ export function createLogic({
   function moveSelected(anchor: HTMLElement) {
     openMovePopover(anchor, selectedDocs());
   }
-  /** ONE VERB FOR THE SET, decided before any write; mixed becomes starred. */
   function starSelected() {
     const docs = selectedDocs();
     const unstar = docs.length > 0 && docs.every((d) => d.starred);
@@ -381,8 +352,6 @@ export function createLogic({
     clearSelection();
     render();
   }
-
-  // ─── folder writes ─────
 
   async function createFolder(name: string) {
     const outcome = await act("create-folder", { name });
@@ -407,7 +376,6 @@ export function createLogic({
   async function deleteFolder(folder: Folder) {
     const outcome = await act("delete-folder", { folder_id: folder.folder_id });
     if (narrate(outcome)) {
-      // Fall back to FOLDERS, not All (view-state.ts, rule 2).
       if (folderIdFrom(state.shelf) === folder.folder_id) state.shelf = FOLDERS;
       statusLine("Folder deleted · receipted.");
       await refresh();
@@ -426,8 +394,6 @@ export function createLogic({
     render();
   }
 
-  // ─── upload ─────
-  // Closes over this factory's state/act/notice, so refusals keep one voice.
   const { uploadFiles } = createUploads({
     state,
     render,
@@ -437,7 +403,6 @@ export function createLogic({
     notice,
   });
 
-  // ─── content lifecycle ─────
   const { replaceDocument, restoreVersion, loadHistory } = createVersions({
     refresh,
     act,
@@ -445,14 +410,12 @@ export function createLogic({
     notice,
   });
 
-  // ─── metadata ─────
   const { addTag, removeTag, loadActivity } = createMetadata({
     refresh,
     act,
     narrate,
   });
 
-  // ─── popovers ─────
   const { openMovePopover, openDocMenu } = createPopovers({
     data,
     openQuick,

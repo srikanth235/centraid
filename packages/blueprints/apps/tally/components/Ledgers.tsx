@@ -1,25 +1,3 @@
-// The two screens that cut a net: a GROUP's ledger and a FRIEND's.
-//
-// GROUP LEDGER. Members with the nets the group engine derived, departed
-// members kept on the ledger with the balance they left, and the group's
-// expenses newest-first. The removal guard lives on the member row: a member
-// who appears anywhere on this ledger cannot be removed, because removing them
-// would make the arithmetic unreadable — they are marked departed instead.
-//
-// FRIEND. Every part of one net, openable, each with the figure that part
-// contributes: the GROUPS the two of you share, what is outside every group,
-// and the standing obligation People holds — which Tally reads and never
-// writes.
-//
-// THE PART FIGURES ARE THE QUERY'S. `queries/friend.ts` folds them with the
-// same `pairwise` engine that produced the net, scoped per group, and returns
-// `parts[]` — so the parts sum to the net by construction rather than by a
-// second balance engine in the interface computing from whichever expenses
-// this route happened to load.
-//
-// THE GROUP'S OWN ACTS ARE ON ITS LEDGER: leave, archive, export, and the
-// simplification opt-in. Each is a real write; the two that change what a
-// member owes ask first, in the confirm's own words.
 import type { ReactNode } from "react";
 
 import { appearsOnLedger } from "../activity-model.ts";
@@ -75,7 +53,6 @@ import { LedgerRow } from "./LedgerRow.tsx";
 
 import styles from "./Ledger.module.css";
 
-/** Whoever a transfer runs between, named off the members the query derived. */
 function nameOfMember(data: GroupData, partyId: string): string {
   return (
     data.members.find((member) => member.party_id === partyId)?.name ?? partyId
@@ -92,20 +69,15 @@ export interface GroupLedgerProps {
   onOpenExpense: (entry: LedgerEntry) => void;
   onSettle: () => void;
   onRename: () => void;
-  /** The vault refuses a group that still holds expenses; the confirm puts the
-   *  refusal in front of the question where this ledger already knows it. */
   onDelete: () => void;
   onLeave: () => void;
   onArchive: () => void;
-  /** Turn simplification on or off. Off by default, always. */
   onSimplify: (simplify: boolean) => void;
 }
 
 export function GroupLedger(props: GroupLedgerProps): ReactNode {
   const { data } = props;
   if (!data.group) return null;
-  // The owner's own net in this group, read off the members list the query
-  // derived — not a second fold over the ledger below it.
   const mine = data.members.find((member) => member.is_me)?.net_minor ?? 0;
   const tone = figureTone(mine);
 
@@ -133,8 +105,6 @@ export function GroupLedger(props: GroupLedgerProps): ReactNode {
             label: data.group.archived_at ? VERBS.unarchive : VERBS.archive,
             run: props.onArchive,
           },
-          // DESTRUCTIVE IS OUTLINED, never filled, and it sits beside the
-          // group's own figure because that is where the group IS.
           {
             label: VERBS.deleteGroup,
             run: props.onDelete,
@@ -263,7 +233,6 @@ export function GroupLedger(props: GroupLedgerProps): ReactNode {
 
 export interface FriendScreenProps {
   data: FriendData;
-  /** Every group this vault knows, so a shared one can be named and opened. */
   groups: readonly GroupSummary[];
   narrow: boolean;
   onOpenGroup: (groupId: string) => void;
@@ -280,9 +249,6 @@ export function FriendScreen(props: FriendScreenProps): ReactNode {
     props.groups.map((group) => [group.group_id, group.name])
   );
 
-  // EVERY PART IS THE QUERY'S OWN FOLD. `friend.parts` names each group, the
-  // group-less rows, and the figure each contributes — derived by the same
-  // engine that produced the net above, so the rows add up to it.
   const parts = data.friend.parts ?? [];
 
   return (

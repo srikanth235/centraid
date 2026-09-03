@@ -1,11 +1,3 @@
-/**
- * One explicit-gesture fill. Only password is revealed; TOTP is requested as
- * a derivative from locker.totp_code, so the OTP seed never leaves the sealed
- * command boundary. The page origin is normalized, matched against the item's
- * stored URL + policy (same rules as Companion origin-matching), and attached
- * to the reveal receipt for the Approvals/audit surface.
- */
-
 import { matchesOrigin, pageOrigin } from "./origin-matching.ts";
 
 interface LoginRow {

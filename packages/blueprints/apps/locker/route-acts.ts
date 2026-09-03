@@ -1,21 +1,3 @@
-// WHAT THE ROUTES BEYOND THE LIST DO, as one hook.
-//
-// The orchestrator owns the boundary — the session, the permit, the wipe — and
-// it owns the ONE write door and the ONE read. This module owns the handlers
-// the eight other routes hang off, so `app-root.tsx` stays the file about the
-// boundary rather than growing a second job.
-//
-// EVERY WRITE STILL GOES THROUGH THE ONE DOOR. Nothing here calls
-// `window.centraid.write`; it calls the `act` it was handed, which publishes
-// every outcome — executed, queued, parked or failed — on the one status line.
-// The one read here is Search's, which returns the SAME secret-free row shape
-// the list draws.
-//
-// AND EVERY SECRET IT TOUCHES IS ALREADY IN THE BAG'S ENUMERATED HALF. The
-// form's typed values are `editSeed`, the generator's output is `generated`,
-// the search term and its results are `searchTerm` / `searchResults` — four of
-// the fields `wipeSecretState` empties. This hook holds no state of its own.
-
 import { useCallback, useMemo, useRef } from "react";
 import type { RefObject } from "react";
 
@@ -73,13 +55,8 @@ import {
 } from "./writes.ts";
 import type { LockerWrite } from "./writes.ts";
 
-/** How long a typed term settles before the vault is asked. Short enough that
- *  a member never waits on a keystroke, long enough that a word is one read. */
 const SEARCH_SETTLE_MS = 150;
 
-/** How the orchestrator's write door is called from here. `text` may be a
- *  function of the settled status, because a purge that PARKED and a purge
- *  that ran are two different sentences and the member is owed the true one. */
 export interface ActOutcome {
   text: string | ((status: string) => string);
   undo?: () => void;
@@ -90,11 +67,7 @@ export interface RouteActsInput {
   act: (write: LockerWrite, outcome: ActOutcome) => Promise<void>;
   bump: () => void;
   go: (shelf: ShelfId) => void;
-  /** Copy a secret, with the sentence that says the clipboard clears itself. */
   copySecret: (value: string, label: string) => void;
-  /** The ONE status line. A generator draw is not a write, and it still
-   *  resolves out loud — because "nothing was saved" is the fact a member has
-   *  to be able to rely on here. */
   publish: (text: string) => void;
 }
 
@@ -102,13 +75,8 @@ export interface RouteActs {
   handleEditChange: (seed: ItemDraftSeed) => void;
   handleRetype: (type: LockerItemType) => void;
   handleSave: () => void;
-  /** Open the editor over an item that is already on screen. The seed is
-   *  built BEFORE the route changes, because leaving the item screen drops
-   *  the detail — which is the point of dropping it. */
   handleEditDetail: (detail: LockerDetail | null) => void;
   handleNewItem: () => void;
-  /** Generate a password INTO the form, without leaving it. The route of its
-   *  own still exists for a member who wants a string with no item in mind. */
   handleGenerateInto: (key: string) => void;
   handleGenOptions: (options: GenOptions) => void;
   handleRegenerate: () => void;
@@ -121,13 +89,8 @@ export interface RouteActs {
   handleAskPurge: (itemId: string) => void;
   handlePurge: (itemId: string) => void;
   handleShowVerdict: (key: CheckKey) => void;
-  /** Archive / unarchive one item — the opposite end of the trash's countdown,
-   *  and idempotent in the vault, so a double press is not a second act. */
   handleArchive: (itemId: string, archived: boolean) => void;
   handleDuplicate: (itemId: string) => void;
-  /** The sidecar editors. ONE FIELD PER ACT: `locker.set_field` takes one
-   *  field per call so a sealed value is always a top-level input, and the
-   *  editor queues sequential calls rather than batching them. */
   handleFieldDraft: (draft: SidecarDraft["field"]) => void;
   handleFieldSave: () => void;
   handleFieldRemove: (fieldId: string) => void;
@@ -140,9 +103,6 @@ export interface RouteActs {
 
 export function useRouteActs(input: RouteActsInput): RouteActs {
   const { bagRef, act, bump, go, copySecret, publish } = input;
-  // The keystroke timer. It is TOUCHED ONLY FROM THE EVENT HANDLER below,
-  // never during render — a ref read while a component is painting is a value
-  // React may already have thrown away.
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const draw = useCallback(
@@ -155,8 +115,6 @@ export function useRouteActs(input: RouteActsInput): RouteActs {
     [bagRef, bump, publish]
   );
 
-  /** The one read this module makes. It answers the SAME secret-free row shape
-   *  the list draws — there is no code path from here to a secret value. */
   const runSearch = useCallback(
     (term: string): void => {
       const bag = bagRef.current;
@@ -173,10 +131,7 @@ export function useRouteActs(input: RouteActsInput): RouteActs {
           input: { term },
         })
         .then((payload) => {
-          // A late answer never overwrites a newer term.
           if (seq !== bagRef.current.searchSeq) return;
-          // A denial is not a miss: an index that refused was not read, and
-          // "nothing matches" would be a claim nobody verified.
           const denied = Boolean(payload?.vaultDenied);
           bagRef.current.searchResults = denied ? null : (payload?.items ?? []);
           bagRef.current.searchStatus = denied ? "unreachable" : "ready";
@@ -219,9 +174,6 @@ export function useRouteActs(input: RouteActsInput): RouteActs {
       seed.mode === "edit" && seed.itemId
         ? editItemWrite({ ...draft, itemId: seed.itemId })
         : addItemWrite(draft);
-    // The typed secret leaves the bag the moment the payload is built: it is
-    // in flight, and a form nobody is looking at should not still be holding
-    // a password.
     bagRef.current.editSeed = null;
     bagRef.current.generated = "";
     go(null);
@@ -291,8 +243,6 @@ export function useRouteActs(input: RouteActsInput): RouteActs {
   const handlePutOnItem = useCallback((): void => {
     const value = bagRef.current.generated;
     const seed = bagRef.current.editSeed ?? emptySeed();
-    // Seeded BEFORE the route changes, so the value travels in the one field a
-    // lock already erases rather than through the route.
     bagRef.current.editSeed = {
       ...seed,
       fields: { ...seed.fields, password: value },
@@ -331,8 +281,6 @@ export function useRouteActs(input: RouteActsInput): RouteActs {
     (itemId: string): void => {
       bagRef.current.confirm = null;
       bump();
-      // No Undo: there is no reverse write for a purge, and offering one would
-      // be the single worst promise this app could make.
       void act(purgeWrite(itemId), {
         text: (status) => (status === "parked" ? PURGE_PARKED : PURGED),
       });
@@ -340,9 +288,6 @@ export function useRouteActs(input: RouteActsInput): RouteActs {
     [act, bagRef, bump]
   );
 
-  /** The rows behind ONE verdict — the same derivation the count came from
-   *  (`format.matchesCheck`), so the list can never answer a different set
-   *  from the number that was pressed. */
   const handleShowVerdict = useCallback(
     (check: CheckKey): void => {
       bagRef.current.filter = { kind: "verdict", check };
@@ -378,9 +323,6 @@ export function useRouteActs(input: RouteActsInput): RouteActs {
     [bagRef, bump]
   );
 
-  /** The open field, saved. The typed value leaves the bag the moment the
-   *  payload is built — it is in flight, and an editor nobody is looking at
-   *  should not still be holding a secret. */
   const handleFieldSave = useCallback((): void => {
     const draft = bagRef.current.sidecarDraft.field;
     const itemId = bagRef.current.detail?.item_id;
@@ -425,8 +367,6 @@ export function useRouteActs(input: RouteActsInput): RouteActs {
     [bagRef, bump]
   );
 
-  /** REPLACE-ALL, which the row above it says. A blank row is dropped rather
-   *  than sent: an address with no url is a row a member started and left. */
   const handleAddressSave = useCallback((): void => {
     const itemId = bagRef.current.detail?.item_id;
     const draft = bagRef.current.sidecarDraft.addresses;
@@ -487,10 +427,6 @@ export function useRouteActs(input: RouteActsInput): RouteActs {
     void act(clearPasskeyWrite(itemId), { text: PASSKEY_CLEARED });
   }, [act, bagRef]);
 
-  // ONE STABLE OBJECT. The orchestrator hands these to the frame from an
-  // effect, so a bag rebuilt on every render would re-contribute the app bar
-  // on every render — the shape of a loop, in the one place this app can least
-  // afford one.
   return useMemo(
     () => ({
       handleEditChange,

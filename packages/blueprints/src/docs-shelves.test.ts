@@ -1,21 +1,3 @@
-// Docs as a route inside the frame — the shelf model, the copy tables, and the
-// view-state rules (Docs spec §1, §2, §4).
-//
-// These are the four pure modules the restructure introduced (`shelves.ts`,
-// `view-copy.ts`, `view-state.ts`, `capabilities.ts`) plus the frame
-// contribution (`frame.tsx`). Every assertion here is on a RULE the app used
-// to express as an inline condition in a render function, where it could not
-// be read and could not be tested:
-//
-//   * a shelf is one value the strip, the band, the app bar and the row set
-//     all read, so they cannot disagree about what "Trash" is;
-//   * the row state slot shows AT MOST ONE thing, in one order;
-//   * nothing is empty until a read has landed, and a shelf is never silently
-//     swapped for another one.
-//
-// The app sources are loaded by file URL, like every other blueprint-app
-// fixture here: `src/` is its own tsconfig rootDir, so the types the
-// assertions need are declared locally rather than imported across it.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -166,7 +148,6 @@ describe("docs shelves", () => {
       "Shared with you",
       "Trash",
     ]);
-    // All is the app's own root, with no segment: `docs` IS All.
     expect(shelves.DSHELVES[0]?.id).toBeNull();
     expect(shelves.DSHELVES[0]?.segment).toBe("");
   });
@@ -205,11 +186,6 @@ describe("docs shelves", () => {
   });
 
   it("claims its band destinations plus More", () => {
-    // FOUR, and the fourth is earned rather than promoted to fill Coming due's
-    // hole: Shared is a destination a member arrives at from outside the app,
-    // which is the claim a band tab makes. This seat keeps Search where the
-    // phone traded it for Shared — the phone has no rail, and the two bands are
-    // deliberately not one list.
     expect(shelves.BAND_DESTINATIONS.map((d) => d.label)).toStrictEqual([
       "All",
       "Folders",
@@ -221,18 +197,13 @@ describe("docs shelves", () => {
   it("lights no band tab for a shelf that has none", () => {
     expect(shelves.bandActiveId(null)).toBe("list");
     expect(shelves.bandActiveId(shelves.FOLDERS)).toBe("folders");
-    // Trash is a strip tab and a More row — never a band tab, so the band
-    // lights nothing rather than the wrong thing.
     expect(shelves.bandActiveId(shelves.TRASH)).toBeUndefined();
-    // A folder is the Folders shelf's own sub-state.
     expect(shelves.bandActiveId(shelves.folderShelf("f7"))).toBe("folders");
   });
 
   it("lights the strip tab the member reached the screen from", () => {
     expect(shelves.stripShelf(shelves.folderShelf("f7"))).toBe(shelves.FOLDERS);
     expect(shelves.stripShelf(shelves.TRASH)).toBe(shelves.TRASH);
-    // A sheet destination is not a strip tab; it lights All, not nothing —
-    // the member is still inside the drive.
     expect(shelves.stripShelf(shelves.STORAGE)).toBeNull();
   });
 
@@ -242,12 +213,8 @@ describe("docs shelves", () => {
     expect(shelves.showsDrive(shelves.folderShelf("f7"))).toBe(true);
     expect(shelves.showsDrive(shelves.FOLDERS)).toBe(false);
     expect(shelves.showsDrive(shelves.STORAGE)).toBe(false);
-    // The toggle is WIDER than the drive: Folders draws a set too, and both
-    // arrangements say something true about it.
     expect(shelves.showsViewToggle(shelves.FOLDERS)).toBe(true);
     expect(shelves.showsViewToggle(shelves.STORAGE)).toBe(false);
-    // Trash keeps selection: the bar's trash swap (Restore) is what makes it
-    // work, exactly as it does in Photos.
     expect(shelves.allowsSelection(shelves.TRASH)).toBe(true);
     expect(shelves.isTrash(shelves.TRASH)).toBe(true);
     expect(shelves.isTrash(null)).toBe(false);
@@ -275,8 +242,6 @@ describe("docs view copy", () => {
   });
 
   it("puts the offline caption above the shelf's own", () => {
-    // A caption that still promised "on this gateway and on this device" while
-    // the gateway was unreachable would be the one untrue line on screen.
     expect(copy.captionFor(shelves.TRASH, { offline: true })).toContain(
       "read from this device"
     );
@@ -322,7 +287,6 @@ describe("docs view copy", () => {
   });
 
   it("lets what the member just did win over the shelf", () => {
-    // A query is typed over a filter, so it wins; both win over the shelf.
     expect(
       copy.emptyCopy(shelves.TRASH, { query: "lease", filtered: true })
     ).toStrictEqual(copy.searchEmpty("lease"));
@@ -360,9 +324,6 @@ describe("docs view copy", () => {
     });
 
     it("shows AT MOST ONE thing, in the spec's order", () => {
-      // Every rung below is true at once. The ladder must pick exactly one,
-      // and it must pick the highest — three marks on one row is exactly the
-      // failure this case guards.
       const all = {
         cannotRender: true,
         offline: true,
@@ -394,8 +355,6 @@ describe("docs view copy", () => {
       expect(copy.rowStateMark({ inTrash: true, purgeInDays: 1 })?.text).toBe(
         "purged in 1 day"
       );
-      // No computed date: the slot stays blank rather than printing a number
-      // nobody worked out.
       expect(copy.rowStateMark({ inTrash: true })).toBeNull();
     });
 
@@ -409,9 +368,6 @@ describe("docs view copy", () => {
     expect(copy.MORE_FOOTER).toBe(
       "Everything Docs can show — the vault mark goes back to the rest of Centraid."
     );
-    // The order is the sheet's own reading order: the three shelves the strip
-    // dropped, then the two ways a document arrives, then the four consent
-    // destinations, then the one withholding, then Storage.
     expect(copy.MORE_ROWS.map((r) => r.label)).toStrictEqual([
       "Recently changed",
       "Starred",
@@ -425,8 +381,6 @@ describe("docs view copy", () => {
       "Kind and sort",
       "Storage",
     ]);
-    // A row is only drawn once its destination exists. Everything live must
-    // name a real shelf.
     for (const row of copy.MORE_ROWS.filter((r) => r.live)) {
       expect(shelves.shelfSegment(row.shelf)).not.toBe("");
     }
@@ -458,7 +412,6 @@ describe("docs view state", () => {
     expect(
       viewState.emptyStateView({ loaded: true, count: 3, shelf: null }).visible
     ).toBe(false);
-    // Something else already answers the view.
     expect(
       viewState.emptyStateView({
         loaded: true,
@@ -481,8 +434,6 @@ describe("docs view state", () => {
   });
 
   it("falls a gone folder back to Folders, and says so", () => {
-    // NOT All: the folder was reached from Folders, and the move is announced
-    // rather than silently performed.
     expect(
       viewState.shelfAfterRead(shelves.folderShelf("f7"), ["f1", "f2"])
     ).toStrictEqual({ shelf: shelves.FOLDERS, goneFolder: true });
@@ -499,7 +450,6 @@ describe("docs view state", () => {
     expect(viewState.libraryReachability({ readFailed: true })).toBe(
       "unreachable"
     );
-    // The host's own word wins over the app's inference in both directions.
     expect(
       viewState.libraryReachability({ hostStatus: "up", readFailed: true })
     ).toBe("reachable");
@@ -517,7 +467,6 @@ describe("docs capabilities", () => {
       "names",
       "due",
     ]);
-    // Nothing leaves the device, and none of them changes a document.
     for (const cap of caps.DCAPS) {
       expect(cap.leaves).toBe("nothing");
       expect(cap.where).toBe("on this device");
@@ -540,8 +489,6 @@ describe("docs frame contribution", () => {
     expect(frame.primaryLabel(null)).toBe("New");
     expect(frame.primaryLabel(shelves.FOLDERS)).toBe("New folder");
     expect(frame.primaryLabel(shelves.folderShelf("f7"))).toBe("New");
-    // The platform has no destroy verb, so Trash's bar is empty rather than
-    // carrying an "Empty trash" that would refuse.
     expect(frame.primaryLabel(shelves.TRASH)).toBeNull();
     expect(frame.primaryLabel(shelves.SEARCH)).toBeNull();
     expect(frame.primaryLabel(shelves.CAPABILITIES)).toBeNull();

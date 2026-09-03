@@ -1,6 +1,3 @@
-// What the task detail place SAYS and WRITES (spec §5). THE FIELD LIST IS A
-// PROJECTION, NOT A LAYOUT: a field is absent when the row has no answer for
-// it, so nothing draws a repeat control on a task that does not repeat.
 import { dueLabel, isDateOnly, priorityLevel, timeOfDay } from "./format.ts";
 import type { Project, Task, TaskStatus } from "./types.ts";
 import {
@@ -34,10 +31,8 @@ import {
 } from "./view-copy.ts";
 import { weekdayName } from "./when.ts";
 
-/** The cap is a discipline, not an apology (§3). */
 export const PROMOTION_AT = 5;
 
-/** Minutes behind `EFFORT_CHIPS`, index for index; 0 is unset. */
 export const EFFORT_MINUTES: readonly number[] = [0, 5, 15, 25, 60];
 
 export interface EffortChoice {
@@ -45,8 +40,6 @@ export interface EffortChoice {
   minutes: number;
 }
 
-/** `edit_task` takes `effort_min >= 1` (app.json), so `EFFORT_CHIPS[0]` is the
- *  unset value, never a control. */
 export const EFFORT_CHOICES: readonly EffortChoice[] = EFFORT_CHIPS.slice(
   1
 ).map((label, index) => ({ label, minutes: EFFORT_MINUTES[index + 1] ?? 0 }));
@@ -68,7 +61,6 @@ export type TaskFieldKey =
 export interface TaskField {
   key: TaskFieldKey;
   label: string;
-  /** `null` where the row's own control IS the answer. */
   value: string | null;
   notes: readonly string[];
 }
@@ -77,7 +69,6 @@ export interface TaskFieldsInput {
   task: Task;
   now: string;
   projectName?: string | null;
-  /** A personal task passes nothing — personal is silence. */
   home?: { vault: string; who?: string } | null;
 }
 
@@ -89,7 +80,6 @@ export function anchorOf(task: Task): "scheduled" | "completion" {
   return task.recurrence_anchor ?? "scheduled";
 }
 
-/** The member's own words, never the stored token. */
 export function anchorHead(task: Task): string {
   const chosen = anchorOf(task);
   return ANCHOR_CARDS.find((card) => card.value === chosen)?.head ?? chosen;
@@ -211,7 +201,6 @@ export function taskFields(input: TaskFieldsInput): TaskField[] {
   return fields;
 }
 
-/** A completed or released row has no run to begin or halt. */
 export function lifecycleAct(
   task: Task
 ): { verb: string; status: TaskStatus } | null {
@@ -222,10 +211,6 @@ export function lifecycleAct(
   return null;
 }
 
-/**
- * `organize-task` is the ONE door for the anchor and requires `sort_order`:
- * preserved, never reset, or the member's manual order collapses.
- */
 export function anchorWrite(
   task: Task,
   anchor: "scheduled" | "completion",
@@ -239,7 +224,6 @@ export function anchorWrite(
   };
 }
 
-/** Same door, same reason. */
 export function projectWrite(
   task: Task,
   projectId: string | null

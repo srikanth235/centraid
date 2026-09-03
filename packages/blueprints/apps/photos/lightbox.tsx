@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-// Orchestrator only; the pure view is components/Lightbox.tsx.
 import { assetKey } from "./asset-key.ts";
 import { LightboxShell } from "./components/Lightbox.tsx";
 import { $ } from "./dom.ts";
@@ -15,8 +14,6 @@ export type ViewerKeyAction =
   | "step-next"
   | null;
 
-/** The editor is per-asset and writes nothing until Save, so a mid-edit step
- *  discards the crop: arrows mean nothing, Escape cancels the EDIT (§7.4). */
 export function viewerKeyAction(
   key: string,
   editing: boolean
@@ -51,7 +48,6 @@ export function createLightbox({
     ) => void;
   };
 }) {
-  // COMPOSITE (asset-key.ts): a bare `asset_id` is ambiguous per scope (#599).
   let openKey: string | null = null;
   let renderSeq = 0;
   let priorFocus: HTMLElement | null = null;
@@ -85,7 +81,6 @@ export function createLightbox({
     renderLightbox();
   }
 
-  // The CURRENT scoped list; the viewer reopens where it stopped (§7.3).
   function startSlideshow(id: string | null) {
     const list = visibleAssets();
     const wasOpen = openKey != null;
@@ -130,8 +125,6 @@ export function createLightbox({
     });
   }
 
-  // React's delegated listener sits on this SAME node and registers AFTER it,
-  // so nested `stopPropagation` cannot help — only this gate can.
   $("lightbox").addEventListener("click", (e) => {
     if (e.target === e.currentTarget) closeLightbox();
   });
@@ -158,7 +151,6 @@ export function createLightbox({
     }
   });
 
-  // Ask the DOM (`data-editor="open"`), never a mirrored `editing` flag.
   const editorEl = (): HTMLElement | null =>
     $("lightbox").querySelector<HTMLElement>('[data-editor="open"]');
 
@@ -168,13 +160,10 @@ export function createLightbox({
     step,
     startSlideshow,
     isEditing: () => editorEl() !== null,
-    /** Through the editor's OWN Cancel button, so key and click cannot
-     *  diverge. Answers whether it acted. */
     cancelEdit: (): boolean => {
       const button = editorEl()?.querySelector<HTMLButtonElement>(
         "[data-editor-cancel]"
       );
-      // A Save in flight disables Cancel.
       if (!button || button.disabled) return false;
       button.click();
       return true;

@@ -1,10 +1,3 @@
-// The app's ONE sign convention, and the words that carry it (spec §2).
-//
-// Positive is owed to you, negative is owed by you — expressed once, in
-// `figureTone`, so a figure never needs a legend. Everything below is a case
-// where getting it wrong would still LOOK right on screen: a settled balance
-// painted as a debt, a debt painted in ink, a minus sign doing the work a word
-// is supposed to do, or a green anywhere at all.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -30,8 +23,6 @@ describe("the sign convention", () => {
   });
 
   it("treats a balance that rounds to nothing as level", () => {
-    // A row reading "you owe £0.00" in the danger tone is a warning about
-    // nothing, which is worse than no row at all.
     expect(figureTone(0)).toBe("settled");
     expect(netFigure(0, "GBP")).toBe("settled");
   });
@@ -45,7 +36,6 @@ describe("the sign convention", () => {
   });
 
   it("phrases a group's position as the owner's, not the group's", () => {
-    // A group does not owe; the members do.
     expect(groupSubLabel(-100)).toBe("you owe");
     expect(groupSubLabel(100)).toBe("owed to you");
   });
@@ -90,7 +80,6 @@ describe("the proportion bar", () => {
   });
 
   it("cannot exceed its own track, or go under it", () => {
-    // A bar wider than its track is a rendering bug wearing a data costume.
     expect(proportion(200, 100)).toBe(100);
     expect(proportion(-5, 100)).toBe(0);
     expect(proportion(10, 0)).toBe(0);

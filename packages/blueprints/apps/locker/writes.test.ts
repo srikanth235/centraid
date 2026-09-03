@@ -1,10 +1,3 @@
-// THE ONLINE-ONLY PARTITION (README-Locker §2, row "Writes").
-//
-// A secret write refuses to queue; a metadata write queues like any other.
-// Asserted over the payload VALUES rather than over a mocked vault, because
-// the rule is a property of the payload — which is exactly why the payloads
-// are values in the first place.
-
 import { describe, expect, it } from "vitest";
 
 import { lockerPendingProjection } from "./pending-projection.ts";
@@ -73,8 +66,6 @@ describe("a secret write refuses the offline queue", () => {
   });
 
   it("names every secret-bearing action, and only those", () => {
-    // #872 adds a custom field and a passkey slot (sealed values in the
-    // payload) and the plaintext export (every secret in the RESULT).
     expect([...ONLINE_ONLY_ACTIONS].toSorted()).toStrictEqual([
       "add-item",
       "edit-item",

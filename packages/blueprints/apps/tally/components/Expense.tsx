@@ -1,21 +1,3 @@
-// ONE EXPENSE — what it cost, who paid, how it divided, what that makes yours,
-// and the revision list that is the reason an edit is safe (Tally spec §1, §4).
-//
-// EVERY PAYER IS NAMED. Several people can front one expense, and each of them
-// is owed back the part they actually put down — so *Paid by* lists them with
-// their amounts rather than naming one person and rounding the rest away.
-//
-// THE METHOD IS NOT INFERRED — IT IS READ. `tally.add_expense` records
-// `split_method` beside the shares, so *Divided* states the method that was
-// actually used. An expense written before the method was recorded has none,
-// and then the row says how many shares there are and points at the table:
-// "Equally" guessed from three equal numbers would be exactly the claim a
-// member opened this screen to check.
-//
-// UNDO IS THE VAULT'S OWN REVERSE WRITE. `queries/history.ts` reports each
-// revision's `undo_until`, and `undo-expense` applies that durable pre-edit
-// snapshot exactly once. So Undo appears on the revision it would undo, inside
-// the window, and nowhere else — never as a decoration on a status line.
 import type { ReactNode } from "react";
 
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
@@ -46,8 +28,6 @@ import { ValueRow } from "./Fields.tsx";
 
 import styles from "./Compose.module.css";
 
-/** Is this revision's one-shot undo window still open? A window that has
- *  closed, or a snapshot already applied, offers nothing. */
 export function undoIsLive(revision: Revision, nowIso: string): boolean {
   if (revision.undone_at) return false;
   const until = Date.parse(revision.undo_until);
@@ -60,8 +40,6 @@ export interface ExpenseScreenProps {
   groupName?: string;
   currency: string;
   me: string | null;
-  /** `null` while the history read has not landed — and then the section is
-   *  absent, not empty: "no revisions" is a claim nobody has checked. */
   revisions: readonly Revision[] | null;
   now: string;
   narrow: boolean;
@@ -72,8 +50,6 @@ export interface ExpenseScreenProps {
   onUndo: (revisionId: string) => void;
 }
 
-/** The payers, as one value: who put down what. One payer reads as one name
- *  and one amount, which is what a one-payer expense is. */
 function paidValue(entry: LedgerEntry, currency: string): string {
   const payers = entry.payers ?? [];
   if (payers.length === 0)
@@ -83,8 +59,6 @@ function paidValue(entry: LedgerEntry, currency: string): string {
     .join("  ·  ");
 }
 
-/** The recorded method, in the interface's own word for it — or the share
- *  count where the vault holds no method for this expense. */
 function dividedText(entry: LedgerEntry): string {
   const spec = DIVISIONS.find((row) => row.method === entry.split_method);
   return spec ? spec.label : dividedValue(entry.splits.length);
@@ -101,8 +75,6 @@ function currencyValue(entry: LedgerEntry): string {
 
 export function ExpenseScreen(props: ExpenseScreenProps): ReactNode {
   const { entry } = props;
-  // "You paid" is true where the owner put ANY of it down, which is the point
-  // of several payers: `paid_by` names one of them, never all.
   const isMine =
     props.me !== null &&
     (entry.paid_by === props.me ||

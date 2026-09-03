@@ -1,8 +1,3 @@
-// @vitest-environment jsdom
-// Pin / add-tag / attach in the editor must not empty a body the note query
-// already answered (matrix `pin-empty-overwrite`, #864). The parent forgets
-// the loaded body on every library re-read; the editor is the last place that
-// still has the words, so a forgotten body must not become an empty write.
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, test } from "vitest";
@@ -146,3 +141,4 @@ describe("in-editor writes keep the loaded body", () => {
     ).toBe(BODY);
   });
 });
+// @vitest-environment jsdom

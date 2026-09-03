@@ -1,6 +1,3 @@
-// Pure derivations, so `views.test.ts` asserts product rules directly. The
-// grid is only for things with a time cost: day context decorates, never rows.
-
 import type { BandDestination } from "../_shared/shelves.ts";
 import {
   civilMidnight,
@@ -24,7 +21,6 @@ export const VIEWS: readonly ViewKind[] = [
 
 export const POINTER_VIEWS: readonly ViewKind[] = VIEWS.slice();
 
-/** Month and Week absent BY TYPE: 7 columns at 390px are unreadable. */
 export type TouchView = "day" | "schedule" | "waiting";
 
 export const TOUCH_VIEWS: readonly TouchView[] = ["day", "schedule", "waiting"];
@@ -34,8 +30,6 @@ export function resolveView(view: ViewKind, touch: boolean): ViewKind {
   return view;
 }
 
-/** Not a view: `appBar` withdraws the bar's Search on compact because the band
- *  carries this. */
 export const BAND_SEARCH_ID = "search";
 
 const BAND_ICONS: Readonly<Record<TouchView, string>> = {
@@ -44,7 +38,6 @@ const BAND_ICONS: Readonly<Record<TouchView, string>> = {
   waiting: "Users",
 };
 
-/** ONE table, both seats; four plus More is the cap. */
 export const BAND_DESTINATIONS: readonly BandDestination[] = [
   ...TOUCH_VIEWS.map((view) => ({
     id: view,
@@ -63,16 +56,13 @@ export function defaultView(touch: boolean, knob?: string): ViewKind {
   return VIEWS.includes(knob as ViewKind) ? (knob as ViewKind) : "month";
 }
 
-/** Minutes from day start: NOW today, working morning otherwise, never 0. */
 export const GRID_OPEN_HOUR = 8;
 export function nowAnchor(anchorDay: Date, now: Date = new Date()): number {
   const sameDay = localDayKey(anchorDay) === localDayKey(now);
   if (!sameDay) return GRID_OPEN_HOUR * 60;
-  // An hour of context above the line; hour zero keeps its rail.
   return Math.max(0, now.getHours() * 60 + now.getMinutes() - 60);
 }
 
-/** Null off this day: the now line draws on one column only. */
 export function nowLineMinutes(
   dayKey: string,
   now: Date = new Date()
@@ -107,7 +97,6 @@ export function dayRange(d: Date): { from: string; to: string } {
   return { from: start.toISOString(), to: end.toISOString() };
 }
 
-/** Bounded windows only; forward lists name `from`, query owns the cap. */
 export function rangeForView(
   view: ViewKind,
   anchor: Date
@@ -138,13 +127,10 @@ export function weekDays(anchor: Date): string[] {
   );
 }
 
-/** The vault decides; a day-long timed event is still timed. */
 export function isAllDay(ev: AgEvent): boolean {
   return ev.recurrence_semantics === "all-day";
 }
 
-/** All-day civil `dtend` is inclusive; timed `dtend` is the end instant.
- *  `clamped` means the run continues past midnight. */
 export function bucketByDay(
   list: readonly AgEvent[]
 ): Map<string, DaySegment[]> {
@@ -195,7 +181,6 @@ export function bucketByDay(
   return map;
 }
 
-/** The rail sits above the grid: a whole-day fact has no position. */
 export function splitDay(segments: readonly DaySegment[]): {
   allDay: DaySegment[];
   timed: DaySegment[];
@@ -239,7 +224,6 @@ export function segmentBox(segment: DaySegment): {
   const dayStart = startOfDay(new Date(segment.segStart)).getTime();
   const top = ((segment.segStart - dayStart) / DAY_MS) * 100;
   const raw = ((segment.segEnd - segment.segStart) / DAY_MS) * 100;
-  // A zero-length event needs a 20-minute floor.
   return { top, height: Math.max(raw, (20 / (24 * 60)) * 100) };
 }
 
@@ -252,7 +236,6 @@ export function visibleEvents(
   );
 }
 
-/** Owner's PARTSTAT still `needs-action`. */
 export function waitingOn(list: readonly AgEvent[]): AgEvent[] {
   return list.filter((ev) =>
     (ev.attendees ?? []).some(
@@ -274,7 +257,6 @@ export function myAttendance(
   return mine ? { party_id: mine.party_id, partstat: mine.partstat } : null;
 }
 
-/** Occurrences stay addressable despite one `event_id`. */
 export function rowKey(ev: AgEvent): string {
   return ev.instance_key ?? ev.event_id;
 }

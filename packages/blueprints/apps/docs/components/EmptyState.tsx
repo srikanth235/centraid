@@ -1,5 +1,3 @@
-// The five empty states (§4.6): only first-run takes the display serif; actions render ONLY where
-// performable (`runFor`). NOT `.kit-empty` (state-honesty.test.ts).
 import type { ReactNode } from "react";
 
 import type { ACTION_ICONS } from "../icons.ts";
@@ -13,7 +11,6 @@ export function EmptyState({
   runFor,
 }: {
   view: EmptyStateView;
-  /** The handler for one of this variant's action labels, or nothing. */
   runFor: (label: string) => (() => void) | undefined;
 }): ReactNode {
   if (!view.visible) return null;

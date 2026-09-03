@@ -1,8 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/**
- * Retitle an album through media.rename_album. Risk low.
- */
 export default async function renameAlbum({ body, ctx }: HandlerArgs) {
   const input = actionInput(body);
   return runVaultAction(ctx, {

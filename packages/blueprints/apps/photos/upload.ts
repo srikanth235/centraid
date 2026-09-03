@@ -1,5 +1,3 @@
-// Upload pipeline: hash + client thumb staging, then the typed `upload`
-// command per file.
 import {
   isPendingOffsite,
   stageDerivative,
@@ -21,7 +19,6 @@ import { thumbHashFromImage } from "./thumbhash.ts";
 const CLIENT_TINY_EDGE = VIDEO_THUMB_EDGE;
 const CLIENT_MEDIUM_EDGE = VIDEO_POSTER_EDGE;
 
-// Matches the blob staging route's own cap; bytes stream there (#296).
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
 
 interface MediaMeta {
@@ -32,7 +29,6 @@ interface MediaMeta {
   thumbhash?: string;
 }
 
-// 64-bit dHash (#299 Tier 0): 9×8 grayscale.
 export function dHashFromImage(
   img: HTMLImageElement | ImageBitmap
 ): string | null {
@@ -68,7 +64,6 @@ export function dHashFromImage(
   }
 }
 
-// Never upscales; q0.82 matches the gateway codec's ~0.8 band (#405 §2).
 async function stageRung(
   bitmap: ImageBitmap,
   parentSha: string,
@@ -89,14 +84,6 @@ async function stageRung(
   await stageDerivative(parentSha, variant, blob, "image/jpeg");
 }
 
-// Both preview-ladder rungs (#405) off one decode; the backstop fills the rest.
-//
-// SCOPE NOTE (#599): `stageDerivative` is not scope-addressed, so these rungs
-// land in the mount's primary scope even for an audience upload — a missing
-// variant, never a leaked image.
-//
-// Decode via `createImageBitmap(file)`, NEVER `img.src = createObjectURL()`:
-// apps run under `img-src 'self' data:`, so a blob-URL <img> is CSP-refused.
 async function stageClientPreviews(
   file: File,
   parentSha: string
@@ -146,7 +133,6 @@ async function stageClientPreviews(
   }
 }
 
-// Hardware-decode one frame on this device: there is no gateway video decoder.
 export async function stageVideoPoster(
   file: File,
   parentSha: string
@@ -237,12 +223,9 @@ export async function runUpload(
   }: {
     refresh: () => Promise<void>;
     setUploading: (v: boolean) => void;
-    /** Must answer from before the run began — see `tallyDedupes`. */
     wasTrashed: (assetId: string) => boolean;
   }
 ): Promise<ImportResult> {
-  // WHERE the new photos land (#599). Re-checked even though the entry points
-  // are disabled: a drop or paste can race the shell revoking write access.
   const target = writeTarget("new");
   if (target.disabled) {
     notice(target.reason);
@@ -261,12 +244,9 @@ export async function runUpload(
   }
 
   setUploading(true);
-  // Inert, never a progress bar (v4 §14): progress lives on the status line.
   setImportEnabled(false);
 
   let added = 0;
-  // Ids, not a count: "already here" and "restored" share one output and only
-  // the id separates them.
   const dedupedIds: string[] = [];
   let parked = 0;
   let pendingOffsite = 0;
@@ -281,7 +261,6 @@ export async function runUpload(
     notice(`Importing ${i + 1} of ${accepted.length}…`);
     let staged;
     try {
-      // Bytes go into the SAME scope as the command that claims them.
       staged = await stageFileBytes(file, "", {
         hash: true,
         ...(scope ? { scope } : {}),
@@ -325,8 +304,6 @@ export async function runUpload(
       scope
     );
     if (outcome?.status === "executed") {
-      // A DEDUPE IS NOT AN ADDITION. These branches stay exclusive, or a run of
-      // four already-present files reports four added AND four deduped.
       if (outcome.output?.deduped) {
         dedupedIds.push(String(outcome.output.asset_id ?? ""));
       } else if (isPendingOffsite(staged)) pendingOffsite += 1;
@@ -347,7 +324,6 @@ export async function runUpload(
   await uploadNext(0);
 
   setUploading(false);
-  // Through the target: the selection may have moved to a read-only audience.
   applyUploadTarget();
 
   const { deduped, restored } = tallyDedupes(dedupedIds, wasTrashed);
@@ -377,7 +353,6 @@ function dragHasFiles(e: DragEvent): boolean {
   return [...(e.dataTransfer?.types ?? [])].includes("Files");
 }
 
-// Either can be absent on a render, unlike the static ids `$` asserts non-null.
 const IMPORT_CONTROL_IDS = ["uploadBtn", "emptyUpload"] as const;
 
 function importControls(): HTMLButtonElement[] {
@@ -393,7 +368,6 @@ function setImportEnabled(enabled: boolean): void {
   for (const btn of importControls()) btn.disabled = !enabled;
 }
 
-// Called on every toolbar render (#599): a read-only audience refuses up front.
 export function applyUploadTarget(): void {
   const target = writeTarget("new");
   const reason = target.disabled ? target.reason : "";
@@ -403,12 +377,6 @@ export function applyUploadTarget(): void {
   }
 }
 
-/**
- * Wires the import doors and RETURNS ITS OWN TEARDOWN (#883): the `window`
- * listeners below close over the app root's store, its assets and its React
- * roots, so one left registered keeps a closed app's whole detached subtree
- * reachable. The contract is a disposer, not a void.
- */
 export function wireUpload({
   uploadFiles,
   isAlbumSelected,
@@ -419,7 +387,6 @@ export function wireUpload({
   openPicker: () => void;
 }): () => void {
   const onImportClick = (): void => {
-    // Inside a real album the natural "add" is from the library, not disk.
     if (isAlbumSelected()) openPicker();
     else $("fileInput").click();
   };

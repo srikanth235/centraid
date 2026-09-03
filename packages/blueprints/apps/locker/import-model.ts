@@ -1,8 +1,3 @@
-// Import review as a pure projection: a plane disposition becomes one of §6's
-// three verdicts here and nowhere else. THE VAULT WINS — `held` is the promise
-// that an import never overwrites a stored secret, and `merge-candidate` wears
-// it deliberately: an unresolved match may not touch one.
-
 export type ImportVerdictKey = "new" | "gapfill" | "held";
 
 export const LOCKER_ENTITY = "locker.item";

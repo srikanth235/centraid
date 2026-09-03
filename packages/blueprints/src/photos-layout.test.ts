@@ -1,6 +1,3 @@
-// v4 justified-row packing math (design_handoff_photos §4.1-4.2,
-// apps/photos/layout.ts). Pure and DOM-free: straight coverage of `justify()`
-// and the tile-size rung table, no app boot harness.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -47,14 +44,12 @@ const {
   rungHeight: (rung: number, surface?: "desktop" | "phone") => number;
 };
 
-/** An asset carrying only what the packer reads: pixel `width`/`height`. */
 const photo = (id: string, width: number, height: number): Asset => ({
   asset_id: id,
   width,
   height,
 });
 
-/** Sum of a row's tile widths plus the gaps between them. */
 const rowSpan = (row: JustifiedTile[], gap: number): number =>
   row.reduce((s, t) => s + t.width, 0) + gap * (row.length - 1);
 
@@ -87,8 +82,6 @@ describe("Photos justified packing (v4 §4.1)", () => {
   });
 
   it("does not stretch a trailing row that is a hair short of full", () => {
-    // Four 4:3 photos sum just under a full 1000px row: last-row branch,
-    // natural stretch height near (and below) the 1.25x cap.
     const assets = [
       photo("a", 400, 300),
       photo("b", 400, 300),
@@ -133,8 +126,6 @@ describe("Photos justified packing (v4 §4.1)", () => {
 
   describe("gap arithmetic", () => {
     it("fills the row exactly with a single closing tile (no interior gap to subtract)", () => {
-      // One wide tile crossing the close-row threshold: a genuine one-tile
-      // FULL row; no interior gap, so the span must land on 800 exactly.
       const rows = justify([photo("wide", 4000, 400)], 800, 176, 2);
       expect(rows).toHaveLength(1);
       expect(rows[0]).toHaveLength(1);
@@ -142,7 +133,6 @@ describe("Photos justified packing (v4 §4.1)", () => {
     });
 
     it("packs a two-tile row exactly, gap subtracted once", () => {
-      // Two squares: the row closes exactly after the second tile at 300.
       const assets = [photo("a", 300, 300), photo("b", 300, 300)];
       const rows = justify(assets, 300, 176, 2);
       expect(rows).toHaveLength(1);
@@ -151,8 +141,6 @@ describe("Photos justified packing (v4 §4.1)", () => {
     });
 
     it("packs many full rows exactly with gaps subtracted (n-1) times each", () => {
-      // 17 squares at 1200: uniform aspect closes every 8th tile; full rows
-      // plus a genuine one-tile trailing remainder.
       const assets = Array.from({ length: 17 }, (_, i) =>
         photo(`m${i}`, 300, 300)
       );
@@ -185,7 +173,6 @@ describe("Photos justified packing (v4 §4.1)", () => {
     const first = justify(assets, 1100, 176);
     const second = justify(assets, 1100, 176);
     expect(second).toStrictEqual(first);
-    // Fresh structurally identical clones: no hidden state keyed on identity.
     const clones = assets.map((a) => ({ ...a }));
     const third = justify(clones, 1100, 176);
     expect(third.map((r) => r.map((t) => [t.width, t.height]))).toStrictEqual(
@@ -232,8 +219,6 @@ describe("Photos tile-size rungs (v4 §4.2)", () => {
       expect(rungHeight(rung, "desktop")).toBe(RUNGS[rung]!.desktop);
       expect(rungHeight(rung, "phone")).toBe(RUNGS[rung]!.phone);
     }
-    // Same index, different pixel heights per surface: the index, not a
-    // pixel value, is what persists.
     expect(rungHeight(DEFAULT_RUNG, "desktop")).not.toBe(
       rungHeight(DEFAULT_RUNG, "phone")
     );

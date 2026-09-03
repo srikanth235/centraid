@@ -1,6 +1,3 @@
-// One bounded probe per `LINK_TARGET_KINDS` entry, each isolated so a denied
-// scope leaves its column absent rather than emptying the sheet — which is why
-// the journal read rides inside the Notes probe (#834).
 import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
 import {
   LINK_TARGET_KINDS,

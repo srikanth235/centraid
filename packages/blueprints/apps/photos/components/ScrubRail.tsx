@@ -1,6 +1,3 @@
-// SCRUB RAIL (v4 handoff §2.3, §4.5): answers "where am I in tens of
-// thousands?" in months, snapping to one. Desktop: tick column; phone:
-// absolute overlay. Every tick is a real labelled button — never drag-only.
 import { useCallback, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
@@ -10,9 +7,7 @@ import type { MonthTick } from "../grouping.ts";
 import styles from "./ScrubRail.module.css";
 
 export interface ScrubRailProps {
-  /** Newest month first. */
   ticks: readonly MonthTick[];
-  /** Null before first scroll. */
   activeKey: string | null;
   phone: boolean;
   onSeek: (monthKey: string) => void;
@@ -20,7 +15,6 @@ export interface ScrubRailProps {
 
 export function ScrubRail({ ticks, activeKey, phone, onSeek }: ScrubRailProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
-  // Month under the thumb WHILE DRAGGING; null at rest.
   const [dragging, setDragging] = useState<string | null>(null);
 
   const monthAt = useCallback(
@@ -54,7 +48,6 @@ export function ScrubRail({ ticks, activeKey, phone, onSeek }: ScrubRailProps) {
   return (
     <nav
       className={cls(styles.rail, phone ? styles.phone : styles.column)}
-      // Named <nav>: announced as one landmark.
       aria-label="Scrub by month"
     >
       <div
@@ -81,7 +74,6 @@ export function ScrubRail({ ticks, activeKey, phone, onSeek }: ScrubRailProps) {
               styles.tick,
               tick.key === activeKey && styles.tickCurrent
             )}
-            // Text-free at rest, so it states its own name.
             aria-label={tick.short}
             aria-current={tick.key === activeKey ? "true" : undefined}
             onClick={() => onSeek(tick.key)}

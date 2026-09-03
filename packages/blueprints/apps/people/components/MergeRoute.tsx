@@ -1,6 +1,3 @@
-// Merge (v12 handoff § 10): one person kept, one folded in.
-// The commit does NOT merge — it opens the ConfirmPanel modal app-root.tsx owns
-// (acts no reverse write can undo); the picked candidate row takes `strong`.
 import type { ReactNode } from "react";
 
 import { LoadingSkeleton } from "../../_shared/LoadingSkeleton.tsx";
@@ -18,7 +15,6 @@ import type { MergeRouteProps, PersonRow } from "../types.ts";
 import { EmptyState } from "./EmptyState.tsx";
 import { Caption, Commits, Row, Section, SkeletonBlock } from "./Shared.tsx";
 
-/** One `Result` row: the surviving value and what it replaced. */
 function resultRow(
   field: string,
   kept: string,
@@ -42,8 +38,6 @@ export function MergeRoute(props: MergeRouteProps): ReactNode {
   }
 
   const source: PersonRow | null = props.source;
-  // A field neither person filled in is not a result.
-  // Blank keep fields take the duplicate's value, matching core.merge_party.
   const cadenceDays =
     keep.cadence_days > 0
       ? keep.cadence_days

@@ -1,6 +1,3 @@
-// Body history is the append-only `revises` content-item chain, walked for the
-// selected note only. No command fabricates history.
-
 import {
   RELATIONS_SCHEME_URI,
   findSchemeConcept,

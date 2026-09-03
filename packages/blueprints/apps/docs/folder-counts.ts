@@ -1,6 +1,5 @@
 import type { DriveDoc, Folder } from "./types.ts";
 
-// Active docs only — Trash counts its own.
 export function folderCounts(
   folders: readonly Folder[],
   activeDocs: readonly DriveDoc[]
@@ -12,7 +11,6 @@ export function folderCounts(
     const id = doc.folder_id ?? null;
     if (id === null) continue;
     const seen = counts.get(id);
-    // Unknown labels drop, never conjure.
     if (seen !== undefined) counts.set(id, seen + 1);
   }
   return counts;

@@ -1,11 +1,3 @@
-/**
- * Event search as a vault projection: the vault's FTS5 index matches, so
- * core.event is never pulled wholesale (vault data is unbounded). Matched
- * rows join calendar edge + attachments in the upcoming projection's shape;
- * cancelled events drop after the hit — the index knows text, not status.
- * Consent denial is first-class: rendered as "ask the owner for access",
- * receipt id included.
- */
 interface RawSearchHit {
   event_id: string;
   status?: string;
@@ -54,13 +46,11 @@ interface DecoratedAttendee {
   is_you: boolean;
 }
 
-/** The shared attachment projection — see upcoming.ts for the shape's home. */
 function attachmentsBySubject(
   subjectType: string,
   attachments: RawAttachment[],
   contentById: Map<string, RawContent>
 ): Map<string, DecoratedAttachment[]> {
-  // Blob-backed bytes serve as same-origin URLs (#296).
   const srcOf = (c: RawContent | undefined): string | undefined =>
     typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`

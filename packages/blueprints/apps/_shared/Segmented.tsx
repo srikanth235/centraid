@@ -1,5 +1,3 @@
-// Markup for the `.kit-seg` recipe (kit.css). `pressed` is passed, not derived:
-// callers mark by different keys.
 import type { ReactNode } from "react";
 
 export interface SegmentedOption {

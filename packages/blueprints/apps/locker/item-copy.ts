@@ -1,12 +1,5 @@
-// The sidecar half of the §6 copy table (`view-copy.ts` and `route-copy.ts`
-// hold the rest). THE REGISTER IS §7's: never "master password", never
-// "secure", never "protected", never a reassurance adjective, no lock icon.
-
 export const FIELDS_HEAD = "Fields";
 export const FIELDS_META = "the item's own sections, as the vault sorted them";
-
-/** Revealed through the OWNING ITEM's permit (#873) — same cost, same words
- *  as the item's own sealed columns. */
 
 export const PLAIN_FIELD_NOTE = "Metadata · it never needed a permit.";
 
@@ -28,8 +21,6 @@ export const PASSKEY_KEY_NONE =
 export const PASSKEY_SINCE = "Added";
 export const PASSKEY_KEY_ROW = "Key material";
 
-/** THE HONEST BOUNDARY: sealing is a column class and a file is not a column,
- *  so "sealed" here would be a lie a member could not check. */
 export const ATTACHMENTS_HEAD = "Attachments";
 export const ATTACHMENTS_META = "what the file is, and how big";
 export const ATTACHMENTS_NOTE =
@@ -38,11 +29,6 @@ export const ATTACHMENTS_NOTE =
 export const HISTORY_HEAD = "History";
 export const HISTORY_META = "what changed, and when";
 export const HISTORY_EMPTY = "Nothing has been rewritten yet.";
-/** WHERE A ROTATED PASSWORD WENT (#916, D2). The pane used to offer it behind
- *  a permit; a revision is a snapshot now, its sealed cells stay sealed, and
- *  the only thing that opens them is the export — which is confirmed,
- *  receipted, and says out loud that it is a mass reveal. Saying so on the row
- *  is the honest answer to "so where is my old password". */
 export const HISTORY_PASSWORD_PRESENT =
   "Previous password kept · sealed in this revision, and readable only through a confirmed export.";
 export const PASSWORD_AGE_ROW = "Password age";

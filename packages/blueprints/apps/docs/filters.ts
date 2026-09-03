@@ -1,9 +1,6 @@
 import { DAY_MS } from "../_shared/format-kit.ts";
 import { DFILTERS, sharedWithOption } from "./drive-copy.ts";
 import type { FilterAxis } from "./drive-copy.ts";
-// The filter row's MEANING (Docs spec §4.2), pure and DOM-free. An option with
-// no computable predicate is NOT rendered — a pill that silently matches
-// nothing reads as a fact about the drive. `shared_with: null` matches none.
 import { typeMeta } from "./format.ts";
 import type { DriveDoc } from "./types.ts";
 
@@ -34,7 +31,6 @@ const TYPE_PREDICATE: Readonly<Record<string, (doc: DriveDoc) => boolean>> = {
   Text: (doc) => String(doc.media_type ?? "") === "text/plain",
   Audio: (doc) => String(doc.media_type ?? "").startsWith("audio/"),
   Video: (doc) => String(doc.media_type ?? "").startsWith("video/"),
-  // `Folder` is absent: a folder is a label, not a row in this set (§2).
 };
 
 const MODIFIED_WINDOW: Readonly<Record<string, number>> = {
@@ -54,7 +50,6 @@ function modifiedThisYear(doc: DriveDoc, now: number): boolean {
   return new Date(stamp).getFullYear() === new Date(now).getFullYear();
 }
 
-// `custody_state` is the only provenance fact this projection carries.
 const SOURCE_PREDICATE: Readonly<Record<string, (doc: DriveDoc) => boolean>> = {
   "On this device": (doc) =>
     doc.custody_state === "local-only" || doc.custody_state === "replicated",
@@ -70,8 +65,6 @@ function sharedWithLabels(rows: readonly DriveDoc[]): string[] {
   return [...labels].sort((a, b) => a.localeCompare(b));
 }
 
-/** `rows` is the drive's own set, not the filtered one — else choosing an
- *  audience deletes its own pill. */
 export function liveOptions(
   axis: FilterAxis,
   rows: readonly DriveDoc[] = []
@@ -100,7 +93,6 @@ export function liveAxes(
   return DFILTERS.filter((axis) => liveOptions(axis, rows).length > 0);
 }
 
-/** Filters compose (§4.6): a chain, never a score. */
 export function applyFilters(
   rows: readonly DriveDoc[],
   filters: DriveFilters,

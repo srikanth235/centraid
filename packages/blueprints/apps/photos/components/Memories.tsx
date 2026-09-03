@@ -12,8 +12,6 @@ import shared from "./shared.module.css";
 const SKETCH_WIDTH = 72;
 const SKETCH_HEIGHT = 48;
 
-// Offline route sketch (#816): geometry, not a map picture. One stop = one
-// dot and no line — a polyline through one point would invent travel.
 function RouteSketch({ route }: { route: readonly TripRoutePoint[] }) {
   const { pins } = projectPlaces(route, {
     width: SKETCH_WIDTH,
@@ -22,7 +20,6 @@ function RouteSketch({ route }: { route: readonly TripRoutePoint[] }) {
     mergeDistance: 0,
   });
   if (pins.length === 0) return null;
-  // Re-order to the trip: `projectPlaces` sorts by count.
   const stops = route.flatMap((point) => {
     const pin = pins.find((candidate) => candidate.key === point.key);
     return pin ? [pin] : [];
@@ -82,9 +79,7 @@ export function MemoriesStrip({ memories }: { memories: MemoryCard[] }) {
               key={m.key}
               type="button"
               className={styles.memoryCard}
-              /* Cover may be a shared photo — fetch in that scope (#599). */
               data-scope={scopeAttr(m.coverScopeId)}
-              /* Composite control: custom accessible NAME, not visible-text duplicate. */
               aria-label={`Open ${title}`}
               onClick={handleOpen}
             >

@@ -1,5 +1,3 @@
-// The four shapes every non-drive screen composes from (Docs spec §4.3). Keep
-// each prop-driven: no state, no data access, no knowledge of its screen.
 import type { ReactNode } from "react";
 
 import type { ACTION_ICONS } from "../icons.ts";
@@ -10,25 +8,18 @@ import styles from "./Blocks.module.css";
 export interface Fact {
   k: string;
   v: string;
-  /** Egress, a limit passed, a refusal. At most a line or two per panel. */
   net?: boolean;
 }
 
 export interface Act {
   label: string;
-  /** Optional: consent verbs have no shape in a file-action table. */
   icon?: keyof typeof ACTION_ICONS;
   onClick?: () => void;
-  /** At most one per panel. */
   filled?: boolean;
-  /** Irreversible, or it reaches outside the device. */
   net?: boolean;
-  /** Set this rather than dropping the verb, which teaches nothing. */
   disabledReason?: string;
 }
 
-/** Use this, not `Row`, once an actor, an artifact and a consequence must be
- *  stated together. */
 export function Panel({
   eyebrow,
   title,
@@ -80,11 +71,9 @@ export function Panel({
 
 function ActButton({ act }: { act: Act }): ReactNode {
   const off = act.disabledReason !== undefined;
-  // The fill promises that pressing does something; never fill a dead one.
   const tone = `${act.filled === true && !off ? "primary" : ""}${
     act.net === true ? " danger" : ""
   }`.trim();
-  // The handler naming rule wants a `handle*` identifier at the call site.
   const handleClick = (): void => void act.onClick?.();
   if (act.icon)
     return (
@@ -109,7 +98,6 @@ function ActButton({ act }: { act: Act }): ReactNode {
   );
 }
 
-/** At most one verb; more belongs in a `Panel`. */
 export interface Row {
   id: string;
   label: string;
@@ -127,7 +115,6 @@ export function Rows({
   ariaLabel: string;
 }): ReactNode {
   return (
-    /* A real <ul>, never a div wearing role="list". */
     <ul className={styles.rows} aria-label={ariaLabel}>
       {rows.map((row) => (
         <li
@@ -147,7 +134,6 @@ export function Rows({
   );
 }
 
-/** A head ABOVE the box it names, never a caption inside it. */
 export function Section({
   label,
   meta,
@@ -163,7 +149,6 @@ export function Section({
   );
 }
 
-/** The closing sentence: a non-goal, or the rule behind what is there. */
 export function Note({ children }: { children: ReactNode }): ReactNode {
   return <p className={styles.note}>{children}</p>;
 }

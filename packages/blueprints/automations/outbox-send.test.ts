@@ -1,19 +1,3 @@
-/*
- * Source-level contract of the two hand-authored OUTBOX WRITERS —
- * google-gmail-send and google-calendar-invite-send (issues #304/#306).
- * These are the only handlers in this tree that stage vault-mediated
- * external writes, so they lead the #781 floor: the exact `outbox.stage`
- * artifact/request shape (the owner approves the thing itself, so a wrong
- * artifact is a consent bug), recipient identity resolution, RFC 2822 /
- * RFC 5545 rendering, the per-fire staging bound, skip-vs-heal
- * discipline, and the refusal path.
- *
- * `packages/server/src/automation/manifest/enricher-templates.test.ts` owns the
- * enricher spine (doc-*, obligation-extractor, renewal-reminders) and
- * `packages/blueprints/src/pull-handlers.test.ts` owns its six named pull
- * flows; nothing here restates either.
- */
-
 import { describe, expect, it } from "vitest";
 
 import { createHarness, loadEnricher } from "./handler-harness.js";
@@ -102,8 +86,6 @@ describe("google-gmail-send outbox staging", () => {
     expect(request.url).toBe(
       "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
     );
-    // The credential is a placeholder the transport substitutes — the
-    // handler must never see or invent a real token.
     expect(request.headers.authorization).toBe(
       "Bearer {{connection:access_token}}"
     );
@@ -117,15 +99,12 @@ describe("google-gmail-send outbox staging", () => {
         "See you at nine.",
       ].join("\r\n")
     );
-    // The staged item is remembered so the next fire cannot double-send.
     expect(harness.state.get("staged:m1")).toBe("item-1");
   });
 
   it("resolves recipients by handle first, then primary party email, never the sender", async () => {
     const handler = await loadEnricher("google-gmail-send");
     const entities = gmailEntities();
-    // A second participant whose handle duplicates p2's resolved address —
-    // the To list must dedupe.
     entities["social.thread_participant"].push({
       thread_id: "t1",
       party_id: "p4",
@@ -183,7 +162,6 @@ describe("google-gmail-send outbox staging", () => {
 
     expect(result.output).toStrictEqual({ staged: 0, skipped: 1 });
     expect(harness.invokes).toHaveLength(0);
-    // No staged: key — the message stays eligible for the next fire.
     expect(harness.state.size).toBe(0);
   });
 
@@ -191,7 +169,6 @@ describe("google-gmail-send outbox staging", () => {
     const handler = await loadEnricher("google-gmail-send");
     const entities = gmailEntities();
     entities["social.message"] = [
-      // Rows arrive message_id-desc, so mZ stages first and mA refuses.
       {
         message_id: "mA",
         thread_id: "t1",
@@ -239,8 +216,6 @@ describe("google-gmail-send outbox staging", () => {
     const entities = gmailEntities();
     const harness = createHarness({
       entities,
-      // The condition trigger hands the rows directly; the handler must not
-      // re-read social.message when trigger rows are present.
       input: { rows },
     });
 
@@ -306,7 +281,6 @@ describe("google-calendar-invite-send outbox staging", () => {
       output: { staged: number; skipped: number };
     };
 
-    // The owner's own attendee row would need no email; only the guest stages.
     expect(result.output).toStrictEqual({ staged: 1, skipped: 0 });
     const staged = harness.invokes[0]!;
     expect(staged.command).toBe("outbox.stage");
@@ -324,7 +298,6 @@ describe("google-calendar-invite-send outbox staging", () => {
     const raw = decodeRaw((staged.input.request as { body: string }).body);
     expect(raw).toContain('Content-Type: text/calendar; charset="UTF-8"');
     const ics = raw.split("\r\n").filter((line) => /^[A-Z]+[;:]/u.test(line));
-    // Dates render in RFC 5545 basic UTC form; text escapes , ; and newlines.
     expect(ics).toContain("DTSTART:20990201T183000Z");
     expect(ics).toContain("DTEND:20990201T200000Z");
     expect(ics).toContain("SUMMARY:Dinner\\; bring wine\\, please");
@@ -363,7 +336,6 @@ describe("google-calendar-invite-send outbox staging", () => {
       output: { staged: number; skipped: number };
     };
 
-    // att-1 cancelled, att-2 already staged, att-3's event is gone.
     expect(result.output).toStrictEqual({ staged: 0, skipped: 3 });
     expect(harness.invokes).toHaveLength(0);
   });

@@ -1,14 +1,3 @@
-/*
- * THE OFFLINE GRANT QUEUE (#883), at the transport where it lives.
- *
- * Three claims, and they are the whole of the ruled design: a grant taken off
- * the network is HELD rather than lost, the held intents execute against the
- * grant ROUTES in order once the gateway answers, and a refusal on execution
- * leaves the queue carrying the route's OWN WORDS rather than being retried
- * forever. The seat-shaped halves — IndexedDB on the browser, AsyncStorage on
- * the phone — are tested where they live; this is the law both share.
- */
-
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -31,7 +20,6 @@ const { GRANT_QUEUED, REVOKE_QUEUED } = (await import(
 
 type Intent = import("../apps/_shared/grant-transport.ts").QueuedGrantIntent;
 
-/** A store with the ONE property the ruling asks of a seat's: it survives. */
 function memoryQueue(kept: Intent[] = []) {
   return {
     kept,
@@ -131,7 +119,6 @@ describe("the offline grant queue", () => {
       queued: true,
       message: REVOKE_QUEUED,
     });
-    // No promise rides with a withdrawal the vault has not been asked for yet.
     expect("promise" in revoked).toBe(false);
   });
 
@@ -147,9 +134,6 @@ describe("the offline grant queue", () => {
     await queued.revoke("g1");
     expect(store.kept.map((intent) => intent.op)).toStrictEqual(["revoke"]);
 
-    // Reachable again. The held withdrawal is sent FIRST — a grant that landed
-    // before the withdrawal it replaces would be the answer edited in place
-    // that ruling V-table refuses — and only then does the new grant go.
     offline = false;
     await queued.create(REQUEST);
     expect(sent).toStrictEqual(["revoke", "revoke", "create"]);
@@ -166,8 +150,6 @@ describe("the offline grant queue", () => {
 
     await queued.revoke("g1");
     await queued.create(REQUEST);
-    // The drain pass tried the withdrawal again and could not send it, so the
-    // grant waits behind it rather than being attempted out of order.
     expect(sent).toStrictEqual(["revoke", "revoke"]);
     expect(store.kept.map((intent) => intent.op)).toStrictEqual([
       "revoke",
@@ -184,7 +166,6 @@ describe("the offline grant queue", () => {
     ).create(REQUEST);
     expect(durable).toHaveLength(1);
 
-    // A new process, a new transport, the same store.
     const { wire: calls, calls: sent } = wire({});
     const drain = await queuedGrantWireCalls(
       calls,
@@ -223,7 +204,6 @@ describe("the offline grant queue", () => {
     expect(drain.refused[0]!.message).toBe(
       "this is already shared for edit; withdraw that first — an answer changed in place could not be audited"
     );
-    // Answered is answered: it is not asked again on the next pass.
     expect(durable).toStrictEqual([]);
     expect((await refused.drain()).refused).toStrictEqual([]);
   });

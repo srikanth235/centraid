@@ -1,7 +1,3 @@
-// The capture-time OCR consent copy (#712) — pinned the same way
-// Photos' enrichment-consent.test.ts pins its copy, so a future edit that
-// drops the caps, the egress flag, or the "not a separate choice" answer
-// fails here rather than being noticed only in a screenshot review.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -41,10 +37,6 @@ describe("the gateway backstop panel", () => {
   });
 
   it("is disclosed, not offered — it is never a second choice", () => {
-    // Unlike Photos' cloud helper (a genuine second consent), the backstop is
-    // the SAME on-device answer widened automatically — there is nothing to
-    // click here, and the copy says so plainly rather than rendering a live
-    // control that would fire nothing.
     expect(OCR_GATEWAY_PANEL.action).toBe("Not a separate choice");
     expect(OCR_GATEWAY_NOT_A_CHOICE).toContain("automatically");
   });

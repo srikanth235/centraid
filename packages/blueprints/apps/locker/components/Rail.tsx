@@ -1,18 +1,3 @@
-// THE 232px RAIL (README-Locker §1), on a wide pointer surface only.
-//
-// THREE GROUPS, because the rail holds three different kinds of thing and the
-// difference is the navigational idea of the app: *The vault* is the set and
-// its two lenses, *Types* is what an item IS, and *Acts* are surfaces rather
-// than places. A rail that listed all twelve under one silent head would be
-// asking a member to work out why Wi-Fi and Trash are neighbours.
-//
-// The rail is `_shared/NavRail.tsx` — the same component Photos and Docs draw,
-// so the roving tab stop, the count register and the current row are the
-// product's rather than this app's. This file is only the ROWS.
-//
-// Counts are facts, not badges: bare integers in the numeric register beside a
-// label, never a coloured pip, and a zero is drawn as a zero rather than
-// hidden — a type with nothing in it is a fact about the vault.
 import type { ReactNode } from "react";
 
 import { NavRail } from "../../_shared/NavRail.tsx";
@@ -32,16 +17,11 @@ import {
 } from "../view-copy.ts";
 
 export interface RailProps {
-  /** The route the member is standing on. */
   shelf: ShelfId;
-  /** Which slice of the window Items is showing. */
   filter: ItemFilter;
-  /** The whole window, for the three counts at the top and the six below. */
   rows: readonly LockerRow[];
   typeCounts: Readonly<Record<LockerItemType, number>>;
   trashCount: number;
-  /** How many items are archived, counted inside the vault. Archived items are
-   *  out of the default window, so this is never `rows.filter(...)`. */
   archivedCount: number;
   onFilter: (filter: ItemFilter) => void;
   onGo: (shelf: ShelfId) => void;
@@ -91,9 +71,6 @@ export function Rail(props: RailProps): ReactNode {
       props.rows.filter((row) => row.favorite).length,
       { kind: "starred" }
     ),
-    // Review is a ROUTE, not a lens: it draws two registers of its own — the
-    // verdicts, and the checks that cannot honestly run — so it goes to
-    // `locker/watch` rather than filtering the list in place.
     {
       kind: "row",
       id: String(WATCH),
@@ -102,9 +79,6 @@ export function Rail(props: RailProps): ReactNode {
       current: props.shelf === WATCH,
       onSelect: () => props.onGo(WATCH),
     },
-    // ARCHIVED IS A SHELF OF THE VAULT, NOT AN ACT and NOT THE TRASH: it is
-    // "keep forever, hide from the lists", and nothing in it has a purge date.
-    // Its count is the vault's, because its rows are out of the window.
     filterRow("archived", RAIL_ARCHIVED, props.archivedCount, {
       kind: "archived",
     }),

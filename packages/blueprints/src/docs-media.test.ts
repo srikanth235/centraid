@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 // oxlint-disable-next-line typescript-eslint/ban-ts-comment -- browser fixture intentionally uses DOM-shaped PDF.js objects; governance: allow-no-unjustified-suppressions JS fixture boundary (#414)
 // @ts-nocheck -- imported blueprint app code has no declarations; governance: allow-no-unjustified-suppressions JS fixture boundary (#414)
 import path from "node:path";
@@ -98,9 +97,6 @@ describe("Docs device-side PDF text", () => {
   });
 
   test("loads the client-bundled production runtime and extracts a real PDF offline", async () => {
-    // PDF.js' browser display module creates one identity DOMMatrix at import
-    // time. jsdom lacks that browser API; extraction never renders, so this
-    // narrow identity stand-in is sufficient for the production module path.
     if (!globalThis.DOMMatrix) {
       vi.stubGlobal(
         "DOMMatrix",
@@ -114,16 +110,11 @@ describe("Docs device-side PDF text", () => {
         }
       );
     }
-    // Node 24 already implements Promise.try; CI's Node 20 does not. Remove it
-    // here so this test proves the source-level compatibility bridge rather than
-    // accidentally relying on the host runtime.
     const nativePromiseTry = Object.getOwnPropertyDescriptor(Promise, "try");
     Reflect.deleteProperty(Promise, "try");
     try {
       const pdfjs = await loadPdfJs();
       expect(Reflect.get(Promise, "try")).toBeTypeOf("function");
-      // Pinned on purpose: proves the real client-bundled runtime loaded rather
-      // than a stub. Bump in lockstep with the `pdfjs-dist` dependency.
       expect(pdfjs.version).toBe("6.1.200");
       expect(pdfjs.GlobalWorkerOptions.workerSrc).toContain("pdf.worker.min");
 
@@ -148,3 +139,4 @@ describe("Docs device-side PDF text", () => {
     }
   });
 });
+// @vitest-environment jsdom

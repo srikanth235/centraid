@@ -1,9 +1,3 @@
-// The room's twelve routes, as a round trip (spec §1, §2).
-//
-// A ROUTE IS A VALUE, so the whole navigation model is testable without a
-// renderer: `tasks` and `tasks/<sub>` are one destination, and a member's URL,
-// the rail's current row and the band's lit tab all read the SAME record. What
-// this file guards is that they cannot disagree.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -71,8 +65,6 @@ describe("the twelve routes", () => {
     expect(shelfFromRoute("tasks/project/p7")).toBe(shelf);
     expect(projectIdFrom(shelf)).toBe("p7");
     expect(railShelf(shelf)).toBe(PROJECTS);
-    // A segment with no token lands on the index rather than a project that
-    // does not exist.
     expect(shelfFromSegment("project/")).toBe(PROJECTS);
   });
 });

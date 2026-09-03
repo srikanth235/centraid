@@ -1,18 +1,3 @@
-// Where a document ends and a credential begins (Docs spec §14's `locker`),
-// and the two capability-gated shelves that hang off the same rule — the filing
-// Docs would propose, and the people a document names.
-//
-// THREE SCREENS IN ONE FILE because they are three answers to one question:
-// what does Docs hold, and what does it deliberately not hold. The Locker
-// boundary is the rule; proposed filing and named people are the two places a
-// machine would write something BESIDE a document, which is the same boundary
-// drawn one step in.
-//
-// None of the three can show live content: two are gated on capabilities that
-// are off, and the Locker boundary is a statement about what Docs will never
-// do, which has no live state by definition. What they can do is be exact
-// about the line, which is the whole value — a member who does not know where
-// the line is will put a passport number in a document title.
 import type { ReactNode } from "react";
 
 import { DCAPS } from "../capabilities.ts";
@@ -22,7 +7,6 @@ import type { Row } from "./Blocks.tsx";
 const FILING_CAP = DCAPS.find((cap) => cap.id === "filing");
 const NAMES_CAP = DCAPS.find((cap) => cap.id === "names");
 
-/** §14 — the boundary itself. */
 export function LockerBoundaryRoute(): ReactNode {
   const rows: Row[] = [
     {
@@ -76,7 +60,6 @@ export function LockerBoundaryRoute(): ReactNode {
   );
 }
 
-/** §10.7's `filing` capability, as a shelf. */
 export function FilingRoute(): ReactNode {
   return (
     <Screen label="Proposed filing">
@@ -111,7 +94,6 @@ export function FilingRoute(): ReactNode {
   );
 }
 
-/** §10.7's `names` capability, as a shelf. */
 export function NamesRoute(): ReactNode {
   return (
     <Screen label="Who your documents name">

@@ -1,11 +1,3 @@
-// @vitest-environment jsdom
-//
-// Docs kind colours vs the design contract (#686): TEXT reads the solved
-// --c-<hue>-text rung, FILL the raw --c-<hue> (icon fills are not text
-// surfaces). Hand-picked hexes fell below AA (--kind-pdf 2.24:1); contrast
-// itself is measured in packages/design contrast.test.ts — this pins binding
-// + distinct hues.
-
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -13,13 +5,11 @@ import { describe, expect, test } from "vitest";
 
 import { fillVar, tintBg, typeMeta } from "./format.js";
 
-// jsdom makes import.meta.url an http: origin fileURLToPath rejects.
 const chrome = readFileSync(
   path.join(import.meta.dirname, "Chrome.module.css"),
   "utf8"
 );
 
-/** The `--name: value;` pairs declared on `.shell`. */
 function shellDeclarations(): Record<string, string> {
   const start = chrome.indexOf(".shell {");
   expect(start, "Chrome.module.css declares a .shell block").toBeGreaterThan(
@@ -75,14 +65,10 @@ describe("docs file-kind colours", () => {
           ?.hue ?? ""
     );
     expect(new Set(hues).size, hues.join(",")).toBe(KINDS.length);
-    // `ochre` is amber at lower chroma, converging at the same contrast
-    // floor — never carry both.
     expect(hues).not.toContain("ochre");
   });
 
   test("no dark override re-declares the kind rungs", () => {
-    // The design package emits both halves of `--c-*-text`; an app-local dark
-    // block would be an unmeasured second source of truth.
     const dark = chrome.slice(chrome.indexOf('data-theme="dark"'));
     for (const kind of KINDS) {
       expect(dark, `--kind-${kind} redeclared in a dark block`).not.toContain(
@@ -99,3 +85,4 @@ describe("docs file-kind colours", () => {
     expect(tintBg(meta.cv, 12)).not.toContain("var(--kind-pdf)");
   });
 });
+// @vitest-environment jsdom

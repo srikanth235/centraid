@@ -1,21 +1,3 @@
-// The five small surfaces that MINT something: a friend, a group, a member, a
-// rename, and the two questions that take something away.
-//
-// THEY ARE SHEETS, NOT ROUTES, and that is the spec's own shape: §1 names
-// fifteen routes and none of them is "new group". Each of these is one field
-// and one consequence, opened from the row that owns it — the People section's
-// verb, the Groups section's verb, the group ledger's own head — so a member
-// never leaves the ledger to name a thing.
-//
-// A FRIEND IS A PERSON IN PEOPLE. `add-friend` mints a canonical party; Tally
-// keeps no directory of its own, and the sheet says so, because the same
-// person then answers to the same name and the same hue in every app.
-//
-// DELETING A GROUP IS REFUSED WHILE IT HOLDS EXPENSES, by the vault. Where the
-// group's own ledger has landed this app already knows the answer and puts the
-// refusal in front of the question; where it has not, the question is put and
-// the VAULT'S OWN REASON lands on the status line. Neither path invents a
-// verdict.
 import type { ReactNode } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";
@@ -49,7 +31,6 @@ import { Confirm, FormSheet } from "./Panels.tsx";
 
 import styles from "./Compose.module.css";
 
-/** What a composing sheet is holding while it is open. */
 export type ComposeOverlay =
   | { kind: "friend"; name: string }
   | {
@@ -66,9 +47,7 @@ export type ComposeOverlay =
 
 export interface ComposeSheetsProps {
   overlay: ComposeOverlay;
-  /** Everyone this vault can name — the group sheet's member chips. */
   friends: readonly Person[];
-  /** Everyone not already in the open group — the member sheet's chips. */
   candidates: readonly Person[];
   onName: (value: string) => void;
   onIcon: (id: string) => void;

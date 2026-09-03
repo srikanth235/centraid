@@ -1,6 +1,3 @@
-// Memories strip cards. Pure: data in, cards out.
-// Album membership is OWN-SCOPE only (#599); trips are TITLED via
-// trips.ts's ladder, not measured (#816).
 import { resolveHomeKey, tripFacts } from "./trips.ts";
 import type { TripMember } from "./trips.ts";
 import type {
@@ -13,7 +10,6 @@ import type {
 
 const LIMIT = 6;
 
-/** Trip member as `trips.ts` wants it; a place-less asset still counts. */
 function tripMemberOf(asset: Asset): TripMember {
   const offset = asset.tz_offset_min;
   return {
@@ -31,7 +27,6 @@ function tripMemberOf(asset: Asset): TripMember {
   };
 }
 
-/** Resolve home over the WHOLE library, not one trip's members; tagged 'home' wins. */
 function homeKeyOf(ownAssets: readonly Asset[]): string | null {
   const tagged = ownAssets.flatMap((asset) =>
     asset.place?.kind === "home" ? [asset.place.place_id] : []
@@ -39,7 +34,6 @@ function homeKeyOf(ownAssets: readonly Asset[]): string | null {
   return resolveHomeKey(ownAssets.map(tripMemberOf), tagged);
 }
 
-/** Single count/cover source — grid and strip must never disagree. */
 export function enrichAlbums(
   albums: readonly Album[],
   ownAssets: readonly Asset[]
@@ -68,7 +62,6 @@ export function buildMemories({
   memoryMembers,
   onOpen,
 }: {
-  /** Member's own photographs; only used to resolve projected members. */
   ownAssets: readonly Asset[];
   memories: readonly MemoryRow[];
   memoryMembers: readonly MemoryMemberRow[];
@@ -81,7 +74,6 @@ export function buildMemories({
     if (list) list.push(member);
     else membersByMemory.set(member.memory_id, [member]);
   }
-  // Once for the whole strip, not once per trip.
   const homeKey = memories.some((memory) => memory.kind === "trip")
     ? homeKeyOf(ownAssets)
     : null;
@@ -95,7 +87,6 @@ export function buildMemories({
         });
       const cover = members[0];
       if (!cover) return null;
-      // Trips title through the ladder; others keep their contract.
       const trip =
         memory.kind === "trip"
           ? tripFacts({

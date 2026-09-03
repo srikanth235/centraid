@@ -1,5 +1,3 @@
-// The ten routes round-trip, and the band lights the destination the member
-// is actually standing in.
 import { describe, expect, test } from "vitest";
 
 import {
@@ -79,7 +77,6 @@ describe("the phone's band", () => {
   test("a notebook lights Library, which is the set it narrows", () => {
     expect(bandActiveId(notebookShelf("nb-7"))).toBe("library");
     expect(bandActiveId(JOURNAL)).toBe("journal");
-    // An act has no tab of its own, so nothing in the band is lit for it.
     expect(bandActiveId(TRASH)).toBeUndefined();
   });
 });

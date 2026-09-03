@@ -1,14 +1,3 @@
-// THE ROOM'S DATA PLANE: the five reads, the one write door, and the three
-// facts a screen is allowed to state about how fresh it is.
-//
-// THE DASHBOARD IS THE SPINE and every route reads it; a route that needs a
-// second payload — a group's ledger, a friend's, the feed — asks for exactly
-// that one. A refresh does both together, so a change event can never land the
-// spine and the route's own rows a render apart.
-//
-// NOTHING HERE FOLDS A FIGURE. Every net, share and total arrives derived from
-// `queries/dashboard.ts`'s one balance engine; this module moves payloads and
-// records when they landed.
 import { useCallback, useMemo, useState } from "react";
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
@@ -34,12 +23,9 @@ import type {
 import { PARKED_OUTCOME, REFUSED } from "./view-copy.ts";
 import type { TallyWrite } from "./writes.ts";
 
-/** The vault entities this app's queries read — the shell's
- *  change-subscription filter, unchanged by the interface's removal. */
 export const CHANGE_TABLES = [
   "tally.expense",
   "tally.expense_split",
-  // A receipt is a `core.attachment` with `role='receipt'` (#883, O-attach).
   "core.attachment",
   "tally.expense_line_item",
   "tally.expense_line_allocation",
@@ -56,16 +42,6 @@ export const CHANGE_TABLES = [
   "tally",
 ];
 
-/**
- * Which routes need ONE GROUP'S OWN READ standing behind them.
- *
- * The group ledger obviously does. So do the four composing routes, and for a
- * reason worth stating: the dashboard carries a group's name and its member
- * COUNT, never its member ids — and Add expense cannot draw a payer chip set,
- * an allocation table or a re-validated splits map out of a count. The same
- * read answers all five, so choosing a group on the editor asks for exactly
- * one more payload and no other.
- */
 const GROUP_BACKED: ReadonlySet<string> = new Set([
   String(GROUP),
   String(ADD),
@@ -95,50 +71,22 @@ export interface LedgerReads {
   group: GroupData | null;
   friend: FriendData | null;
   activity: ActivityData | null;
-  /** A read has LANDED. False covers both "still in flight" and "every read so
-   *  far failed": in neither case may a view claim a set is empty. */
   loaded: boolean;
-  /** A denied read, as the query reported it. Denial is DATA — including the
-   *  moment the grant went, where the gateway recorded one. */
   consent: { message: string; revokedAt: string | null } | null;
-  /** A read that actually came back failed — evidence, not a guess. */
   readFailed: boolean;
-  /** The clock the whole room reads, so a day heading and the rows under it
-   *  cannot straddle midnight and disagree about what "today" is. */
   now: string;
-  /** When the last read that ACTUALLY LANDED did. */
   matchedAt: string | null;
-  /** How many of this member's own writes have not settled, and whether one is
-   *  parked on a steward. Read from the durable intent overlay the host holds
-   *  — never counted off rows, which would miss the writes whose rows this
-   *  route did not load. */
   queued: number;
   parked: boolean;
   refresh: () => Promise<void>;
-  /** Resolves `true` when the write actually landed, so a caller can close the
-   *  surface it was composed on — and leave it standing, with the vault's own
-   *  reason on the status line, when it did not. */
   write: (
     write: TallyWrite,
     extra?: { outcome?: string; undo?: () => void }
   ) => Promise<boolean>;
-  /** Put a sentence on the frame's ONE status line, for the acts that do not
-   *  go through `write` — the outbox's own doors, and a verb that only tells
-   *  the member something. */
   say: (text: string) => void;
-  /** Drop a cached payload the member is navigating away from, so the next
-   *  group's ledger never paints under the previous group's name. */
   forget: (which: "group" | "friend") => void;
 }
 
-/** Everything one landed read leaves behind, as ONE value.
- *
- * A single state object rather than the ref bag the rest of the room uses: the
- * whole point of the bag is that a dozen independent mutations must not cost a
- * dozen renders, and a read is not a dozen mutations — it is one moment, and
- * every field below is decided in that one moment. Setting it once per read
- * means the dashboard and the route's own payload can never be a render apart.
- */
 interface Snapshot {
   dashboard: DashboardData;
   group: GroupData | null;
@@ -167,9 +115,6 @@ const EMPTY_SNAPSHOT: Snapshot = {
   parked: false,
 };
 
-/** How many of this member's writes are in flight, and whether one is parked
- *  on a steward. Absent on a host that holds no intent overlay, and then the
- *  notices simply have nothing to declare. */
 async function readIntents(): Promise<{ queued: number; parked: boolean }> {
   try {
     const intents = (await window.centraid.commonsIntents?.()) ?? [];
@@ -194,8 +139,6 @@ export function useLedgerReads(args: {
     now: new Date().toISOString(),
   }));
 
-  /** The route's own payload, beside the dashboard spine. A route that needs
-   *  no second read asks for none, and gets `null` for the two it did not. */
   const readRoute = useCallback(async (): Promise<
     Pick<Snapshot, "group" | "friend" | "activity">
   > => {
@@ -244,8 +187,6 @@ export function useLedgerReads(args: {
     const denied = next.vaultDenied;
     const stamp = new Date().toISOString();
     if (denied) {
-      // A DENIED READ RENDERS NOTHING, never an empty set: the previous
-      // payload is dropped so no figure outlives the grant that produced it.
       setSnapshot({
         ...EMPTY_SNAPSHOT,
         loaded: true,
@@ -271,16 +212,6 @@ export function useLedgerReads(args: {
     });
   }, [readRoute]);
 
-  /**
-   * Every write goes through ONE door, so every outcome lands on the ONE
-   * status line and nothing is swallowed.
-   *
-   * A REFUSAL IS AN OUTCOME, NOT AN EXCEPTION. `actions/*.ts` catch the vault's
-   * own error and answer `{status:'denied', reason}` with a 200, so a door that
-   * only watched for a throw would report a refused delete as done. Every
-   * non-landing status is narrated in the VAULT'S OWN WORDS — the group that
-   * still holds expenses says so itself, and this app does not paraphrase it.
-   */
   const write = useCallback(
     async (
       command: TallyWrite,
@@ -328,13 +259,6 @@ export function useLedgerReads(args: {
   const forget = useCallback((which: "group" | "friend") => {
     setSnapshot((prior) => ({ ...prior, [which]: null }));
   }, []);
-
-  // NO MOUNT EFFECT HERE. The first read, the change subscription and the
-  // focus recovery are driven by the COMPONENT (`app-root.tsx`), where they
-  // are one effect over `refresh` and `CHANGE_TABLES` — the same shape every
-  // other room in this product uses. Owning them here would bury the room's
-  // one subscription inside a data module, where nobody looking for "when does
-  // this app re-read" would think to look.
 
   return useMemo(
     () => ({ ...snapshot, refresh, write, say, forget }),

@@ -1,42 +1,8 @@
-// Every member-facing string on the routes that COMPOSE — Add expense, the
-// expense, the receipt, Settle up, Recurring, Waiting and Export — plus the
-// five small surfaces that mint a friend, a group or a member.
-//
-// A SECOND COPY FILE, not a bigger one. `view-copy.ts` is the ledger's
-// vocabulary and it is already the longest file in this app; the composing
-// surfaces have a vocabulary of their own (a field key, a reconcile line, a
-// foot that says where a write lands) and they arrive WITH the surfaces that
-// render them. A string nothing can show is a string nobody can check.
-//
-// THE SIX §6 STRINGS THIS WAVE OWNS ARE VERBATIM: the currency note, the
-// unsummarisable schedule, the due occurrence, the simplification proposal,
-// the trash confirm and the export foot. Wave 1 deliberately left them out
-// because their surfaces did not exist yet; they are back, unaltered, beside
-// the surfaces that carry them.
-//
-// NO GAP TAG SURVIVES HERE. Every capability these surfaces name is now
-// backed by a command or a query the app actually calls, so the field notes
-// carry the RULE rather than the register: what the vault checks, what a
-// method means, where a write lands. A tag left standing over a wired control
-// would be the same lie in the other direction.
-
-// ------------------------------------------------------- the §6 verbatim six
-
-/**
- * Add expense → Currency. There is no rate provider anywhere in this path.
- *
- * HELD AS TWO LITERALS, rendered one after the other: the §6 note is two
- * claims — where the rate came from, and that nothing supplies one — and the
- * copy rule this repo enforces is that a string carries a single thought. What
- * a member reads is the handoff's sentence pair, unaltered.
- */
 export const CURRENCY_NOTE =
   "The rate is supplied at entry, with its source and date.";
 export const CURRENCY_NOTE_2 =
   "There is no rate provider, and the vault works with none.";
 
-/** Add expense → Currency, beside a pair this vault has already been told a
- *  rate for. ADDITIVE: the manual flow is the primary path and stands alone. */
 export const RATE_SUGGESTION_NOTE =
   "A rate this vault was already given for the same pair · press to fill it in";
 export function rateSuggestionChip(
@@ -47,28 +13,19 @@ export function rateSuggestionChip(
   return `${rate} · ${source} · ${date}`;
 }
 
-/** Recurring → a rule the summariser cannot phrase. No preview at all, and it
- *  says why — raw rule syntax on a member-facing surface is banned outright. */
 export const UNSUMMARISABLE =
   "This one’s schedule cannot be put in a sentence, so there is no preview.";
 
-/** Recurring → Due next. The one write in Tally with no optimistic copy. */
 export const DUE_OCCURRENCE =
   "materialises on the gateway · the one write with no optimistic copy";
 
-/** Settle up → the proposal below the fields. Opt-in per group, off by
- *  default, and it always states what it changed. */
 export const SIMPLIFICATION =
   "Five debts become three payments. Simplification rewires who owes whom, so it is off unless a group turns it on, and it says what it changed.";
 
-/** The expense's life row → Trash. */
 export const TRASH_BODY =
   "Trashed for 30 days, restorable whole with its splits, revisions and receipt — and every member sees it leave.";
 
-/** Export → the foot, in the `--net` register: it leaves the device. */
 export const EXPORT_FOOT = "The file leaves the vault the moment you save it";
-
-// --------------------------------------------------------------- Add expense
 
 export const ADD_HEAD = "Add an expense";
 export const EDIT_HEAD = "Edit this expense";
@@ -146,7 +103,6 @@ export const WHEN_CHIPS = {
 
 export const NO_GROUP_LABEL = "No group";
 
-/** The typed-lines table's own verbs and marks. */
 export const LINE_VERBS = {
   add: "Add a line",
   remove: "Remove",
@@ -154,7 +110,6 @@ export const LINE_VERBS = {
   whoWasOn: "Who was on",
 } as const;
 
-/** Where the write lands, said BEFORE the commit rather than after it. */
 export function addFoot(groupName: string | null): string {
   const where = groupName ?? NO_GROUP_LABEL;
   return `Lands in ${where} · queued on this device until the gateway answers`;
@@ -163,8 +118,6 @@ export function addFoot(groupName: string | null): string {
 export const ADD_COMMIT = "Add expense";
 export const EDIT_COMMIT = "Save edit";
 export const CANCEL = "Cancel";
-
-// ------------------------------------------------------------- the expense
 
 export const EXPENSE_NOTES = {
   paidBy:
@@ -190,14 +143,10 @@ export const EXPENSE_ROWS = {
   noRevisions: "No revisions yet.",
 } as const;
 
-/** How an expense divided, said WITHOUT claiming a method. The vault stores
- *  the shares, not the rule that produced them, so the row states the shares
- *  and points at the table rather than inventing "equally". */
 export function dividedValue(count: number): string {
   return `${count} ${count === 1 ? "share" : "shares"} · listed below`;
 }
 
-/** The pending strip's sentence on the expense that carries the held write. */
 export const PENDING_STRIP =
   "On this device · queued for the vault, and for the other members";
 export const PENDING_VIEW = "View";
@@ -214,8 +163,6 @@ export function revisionLine(operation: string, at: string): string {
   return `${operation} · ${at}`;
 }
 
-/** Two edits to one expense reached the replica: BOTH sides are shown, and
- *  neither is picked for the member. */
 export const CONFLICT_BOTH =
   "Two revisions of this expense · keep one, or keep both as separate expenses";
 
@@ -228,12 +175,9 @@ export const LIFE_ACTS = {
   trash: "Trash",
 } as const;
 
-/** The mark on a split row belonging to somebody who fronted part of it. */
 export const PAID_IT = "paid it";
 
 export const TRASH_TITLE = "Trash this expense?";
-
-// -------------------------------------------------------------- the receipt
 
 export const RECEIPT_HEAD = "The lines, allocated";
 export const RECEIPT_LEDE_ORIGIN =
@@ -249,13 +193,9 @@ export function unallocatedLines(count: number): string {
   return `${count} ${count === 1 ? "line has" : "lines have"} nobody on them`;
 }
 
-// -------------------------------------------------------------- settle up
-
 export const SETTLE_HEAD = "Settle up";
 export const SETTLE_LEDE =
   "A settlement records a payment that happened. Nothing moves money; there is no payment rail in this product.";
-/** The bank-line row's value: the act it WOULD offer, named so the row is not
- *  a note with nothing above it. */
 export const BANK_LINE_VALUE = "Bind to an imported transaction";
 export const SETTLE_NOTES = {
   from: "Anyone to anyone, including two friends with you as neither party.",
@@ -274,9 +214,6 @@ export const SIMPLIFY_OFF =
   "Off for this group · debts read as they were incurred";
 export const SIMPLIFY_ON = "On for this group · the proposal is below";
 export const SIMPLIFY_STOP = "Turn it off";
-/** What it CHANGED, in the group's own figures. The §6 sentence states the
- *  shape; this states the instance, because a proposal that did not say what
- *  it rewired would be exactly the silent re-wiring the ruling forbids. */
 export function simplifyChanged(before: number, after: number): string {
   const debts = `${before} ${before === 1 ? "debt becomes" : "debts become"}`;
   const payments = `${after} ${after === 1 ? "payment" : "payments"}`;
@@ -286,8 +223,6 @@ export const SIMPLIFY_NONE = "Nothing to rewire · this group is already level";
 export function transferLine(from: string, to: string, amount: string): string {
   return `${from} pays ${to} ${amount}`;
 }
-
-// --------------------------------------------------------------- recurring
 
 export const RECURRING_SECTIONS = {
   templates: "Templates",
@@ -320,8 +255,6 @@ export function weightLine(parts: readonly string[]): string {
   return `${parts.join(" : ")} · weights, not amounts`;
 }
 
-// ----------------------------------------------------------------- waiting
-
 export const CONTRIB_SECTIONS = {
   waiting: "Waiting on you",
   inFlight: "On a device",
@@ -347,8 +280,6 @@ export const CONTRIB_VERBS = {
 } as const;
 export const CONTRIB_NO_DOOR =
   "This host holds no approval inbox, so the act waits where it is";
-/** Reminders the owner PREPARED. Nothing here was ever sent — Tally has no
- *  delivery path, and the record is the intention. */
 export function nudgeTitle(name: string): string {
   return `Remind ${name}?`;
 }
@@ -361,8 +292,6 @@ export const NUDGE_EMPTY = "No reminders prepared.";
 export function nudgePrepared(name: string, at: string): string {
   return `${name} · prepared ${at}`;
 }
-
-// ------------------------------------------------------------------ export
 
 export const EXPORT_HEAD = "Export a ledger";
 export const EXPORT_LEDE =
@@ -390,8 +319,6 @@ export const EXPORT_FORMATS: readonly (readonly [string, string])[] = [
   ["csv", "CSV"],
   ["json", "JSON"],
 ];
-
-// ------------------------------------------------- friends, groups, members
 
 export const FRIEND_HEAD = "Add a friend";
 export const FRIEND_BODY =
@@ -427,9 +354,6 @@ export const GROUP_COLOURS: readonly (readonly [string, string])[] = [
   ["rose", "Rose"],
 ];
 
-// ---------------------------------------------------------------- outcomes
-
-/** What the one status line says after each of this wave's writes. */
 export const COMPOSE_OUTCOMES = {
   added:
     "Queued on this device · it reaches the others when the gateway answers",

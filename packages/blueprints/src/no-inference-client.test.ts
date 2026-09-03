@@ -1,12 +1,3 @@
-/*
- * Tripwire for docs/blueprint-seats.md "Enrichment doctrine" (#712): greps
- * import specifiers for known provider SDKs. Not a proof — aliases, dynamic
- * `import(computed)`, and bare fetch dodge it. Specifiers only, so a model
- * pin in `automation.json` and prose naming a package do not trip (pinned
- * below). Recognition uses ctx.vault content/invoke; billed calls use
- * `ctx.delegate`. No third road.
- */
-
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -14,13 +5,8 @@ import { describe, expect, it } from "vitest";
 
 const PACKAGE_ROOT = path.resolve(import.meta.dirname, "..");
 
-// Authored source. `src` is in because a provider import in package tooling
-// is still a third road.
 const SOURCE_DIRS = ["apps", "automations", "scripts", "src", "types"] as const;
 
-// Native tree too (#712 E1, engine C): the work-lease lane is where a
-// provider SDK is tempting. One check for one rule — this file already
-// crosses into `packages/vault` the same way.
 const EXTRA_ROOTS = [
   path.resolve(PACKAGE_ROOT, "../../apps/mobile/src"),
   path.resolve(PACKAGE_ROOT, "../server/src/automation"),
@@ -100,12 +86,10 @@ const allFiles = [
 
 describe("no blueprint imports a provider SDK directly (docs/blueprint-seats.md Enrichment doctrine)", () => {
   it("sanity: the source scan actually found blueprint files", () => {
-    // Count guards a layout drift that would scan nothing.
     expect(allFiles.length).toBeGreaterThan(50);
   });
 
   it("sanity: the widened scan actually reaches the native tree", () => {
-    // EXTRA_ROOTS must actually resolve; otherwise engine C is ungated.
     expect(
       allFiles.filter((f) =>
         f.includes(`${path.sep}apps${path.sep}mobile${path.sep}`)
@@ -137,7 +121,6 @@ describe("no blueprint imports a provider SDK directly (docs/blueprint-seats.md 
     expect(
       importedProviderPackages("// never reach for openai or @anthropic-ai/sdk")
     ).toStrictEqual([]);
-    // Interpolated so this file does not trip its own scan.
     const provider = "openai";
     expect(
       importedProviderPackages(`import OpenAI from "${provider}";`)

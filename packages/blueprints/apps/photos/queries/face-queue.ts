@@ -1,18 +1,3 @@
-/**
- * Face review queue (#711): vault-wide, one entry at a time.
- * `queries/faces.ts` stays the per-asset lightbox read.
- *
- * Confidence is a match count, never a percentage: other regions proposing
- * the same `party_id`, deduped by photograph.
- *
- * Filters on `review_state`, not `confirmed_by_party_id` (#712). Confirmed /
- * rejected / dismissed leave this list; the enricher may not put them back.
- *
- * `first seen` is earliest `media_asset.captured_at` among matches —
- * `media_face_region` has no `created_at`. Do not invent proposal time.
- *
- * @type {import('@centraid/server/engine').QueryHandler}
- */
 import { srcOf } from "./_shared.ts";
 
 const QUEUE_LIMIT = 60;
@@ -62,7 +47,6 @@ export default async function faceQueue({ ctx }: HandlerArgs) {
     const nameOf = new Map(
       persons.map((p) => [p.party_id, p.display_name] as const)
     );
-    // Unanswered, not merely unconfirmed (#712).
     const pending = regions.filter((r) => r.review_state === "proposed");
     const confirmedTotal = regions.filter(
       (r) => r.review_state === "confirmed"

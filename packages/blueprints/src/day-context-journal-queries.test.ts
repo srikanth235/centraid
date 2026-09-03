@@ -1,11 +1,5 @@
-/*! Browser-JS fixtures intentionally lack TypeScript declarations. (#408) */
 // oxlint-disable-next-line typescript/ban-ts-comment -- (#408) these browser-JS fixture imports have no TypeScript declarations
 // @ts-nocheck -- the imported browser fixtures intentionally lack declarations
-// Stage-0 handler coverage for #834: Agenda's new read-only
-// `day-context` projection (R-daycontext / R-shelf-scope) and the
-// People-journal exclusion the three Notes list queries now apply
-// (R-journal). Same shape as query-handlers.test.ts — a mocked `ctx.vault`
-// keyed by entity, the handler invoked the way the dispatcher invokes it.
 import { describe, expect, it } from "vitest";
 
 interface ReadCall {
@@ -14,13 +8,6 @@ interface ReadCall {
   limit?: number;
 }
 
-/**
- * A mock ctx.vault returning fixture rows keyed by entity, recording every
- * read so the boundedness contract can be asserted rather than assumed. The
- * fixtures deliberately do NOT apply `where` — each handler re-narrows in
- * memory, which is what keeps it correct against a mock and a real vault
- * alike.
- */
 function ctxOf(
   rowsByEntity: Record<string, unknown[]>,
   calls: ReadCall[] = []
@@ -46,9 +33,6 @@ const importQuery = (relativePath: string) => import(relativePath);
 const FLAGS_SCHEME = "https://centraid.dev/schemes/flags";
 const JOURNAL_SCHEME = "https://centraid.dev/schemes/people-journal";
 
-// ── Agenda: day-context ────────────────────────────────────────────────────
-
-/** A vault holding two people, one starred, and four tasks. */
 function dayContextRows() {
   return {
     "core.party": [
@@ -64,7 +48,6 @@ function dayContextRows() {
         display_name: "Dana",
         birth_date: "1988-03-20",
       },
-      // Outside the window entirely.
       {
         party_id: "party-sam",
         kind: "person",
@@ -88,14 +71,12 @@ function dayContextRows() {
       },
     ],
     "schedule.task": [
-      // Date-only due.
       {
         task_id: "t1",
         status: "needs-action",
         title: "File the return",
         due_at: "2026-03-14",
       },
-      // Timed due, same day.
       {
         task_id: "t2",
         status: "in-process",
@@ -108,9 +89,7 @@ function dayContextRows() {
         title: "Renew the passport",
         due_at: "2026-03-20",
       },
-      // Closed tasks never count.
       { task_id: "t4", status: "completed", due_at: "2026-03-14" },
-      // Outside the window.
       { task_id: "t5", status: "needs-action", due_at: "2026-05-01" },
     ],
   };
@@ -142,7 +121,6 @@ describe("Agenda day-context (#834 R-daycontext)", () => {
         tier: "outer",
       },
     ]);
-    // A birthday outside the asked window is absent, not tiered-and-dropped.
     expect(JSON.stringify(result.birthdays)).not.toContain("Sam");
   });
 
@@ -155,9 +133,6 @@ describe("Agenda day-context (#834 R-daycontext)", () => {
       input: { from: "2026-03-01", to: "2026-03-31" },
       ctx,
     });
-    // A day carries its COUNT and the first few rows behind it: the shelf
-    // lists what is due without becoming a second task board, so identity and
-    // title are all a row projects and the tap-through belongs to Tasks.
     expect(result.due).toStrictEqual([
       {
         day: "2026-03-14",
@@ -173,7 +148,6 @@ describe("Agenda day-context (#834 R-daycontext)", () => {
         tasks: [{ task_id: "t3", title: "Renew the passport" }],
       },
     ]);
-    // No holiday source exists in the vault, so the field is honestly empty.
     expect(result.holidays).toStrictEqual([]);
   });
 
@@ -205,7 +179,6 @@ describe("Agenda day-context (#834 R-daycontext)", () => {
       ?.where?.find(
         (clause) => clause.column === "due_at" && clause.op === "lt"
       )?.value;
-    // 400 days past 2026-01-01, plus the exclusive day after it.
     expect(upper).toBe("2027-02-06");
   });
 
@@ -230,16 +203,9 @@ describe("Agenda day-context (#834 R-daycontext)", () => {
   });
 });
 
-// ── Notes: journal exclusion ───────────────────────────────────────────────
-
 const dataUri = (text: string) =>
   `data:text/markdown,${encodeURIComponent(text)}`;
 
-/**
- * One journal note and one ordinary note, each tagged with its own concept,
- * so an exclusion that leaked would be visible twice over: as a row, and as
- * the filter chip its concept becomes.
- */
 function notesRows() {
   return {
     "knowledge.note": [
@@ -311,7 +277,6 @@ describe("Notes journal exclusion (#834 R-journal)", () => {
       result.notes.map((note: { note_id: string }) => note.note_id)
     ).toStrictEqual(["note-plain"]);
     expect(result.trash).toStrictEqual([]);
-    // The journal-only concept must not survive as a filter chip.
     expect(
       result.tags.map((tag: { concept_id: string }) => tag.concept_id)
     ).toStrictEqual(["concept-errands"]);

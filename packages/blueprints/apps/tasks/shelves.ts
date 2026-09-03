@@ -1,11 +1,8 @@
-// Tasks shelves (spec §1, §2): a place or a lens, never a mode. Structure is
-// `_shared/shelves.ts`. `tasks/task` is a routed screen, not an overlay.
 import { createShelfRoutes, tokenFromShelf } from "../_shared/shelves.ts";
 import type { BandDestination, Shelf, ShelfId } from "../_shared/shelves.ts";
 
 export type { Shelf, ShelfId } from "../_shared/shelves.ts";
 
-// `built-in:` cannot collide with a project id (opaque, no colon).
 export const UPCOMING = "built-in:upcoming";
 export const ANYTIME = "built-in:anytime";
 export const ALL = "built-in:all";
@@ -28,7 +25,6 @@ export function projectIdFrom(id: ShelfId): string | null {
   return tokenFromShelf(PROJECT_PREFIX, id);
 }
 
-/** `null` is Today: empty segment, not `today`. */
 export const TASK_SHELVES: readonly Shelf[] = [
   { id: null, label: "Today", segment: "" },
   { id: UPCOMING, label: "Upcoming", segment: "upcoming" },
@@ -46,7 +42,6 @@ export const TASK_SHELVES: readonly Shelf[] = [
 
 const TODAY_ID = "today";
 
-/** Four places plus More. Lenses sit behind More. */
 export const BAND_DESTINATIONS: readonly BandDestination[] = [
   { id: TODAY_ID, label: "Today", icon: "Check" },
   { id: "upcoming", label: "Upcoming", icon: "Clock" },
@@ -100,7 +95,6 @@ export function allowsQuickAdd(id: ShelfId): boolean {
   return showsBoard(id) || id === PROJECTS;
 }
 
-/** One project lights Projects; the editor lights nothing. */
 export function railShelf(id: ShelfId): ShelfId {
   if (projectIdFrom(id)) return PROJECTS;
   return id === PROJECT ? PROJECTS : id;

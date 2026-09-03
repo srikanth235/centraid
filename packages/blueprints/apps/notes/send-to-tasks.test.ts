@@ -6,7 +6,6 @@ import {
   wantsDate,
 } from "./send-to-tasks.ts";
 
-/** A Wednesday, so every weekday case has both directions around it. */
 const NOW = new Date(2026, 2, 11);
 
 describe(dateFromLine, () => {
@@ -88,12 +87,6 @@ describe(sendToTasksPayload, () => {
     });
   });
 
-  /**
-   * UNDATED UNLESS THE LINE CARRIED A DATE. An undated task never touches
-   * Today and never reaches the calendar grid, so the absence of `due_at` here
-   * is the property the whole projection rests on — not a default that happens
-   * to be missing.
-   */
   it("sends no due date when the line named none", () => {
     const payload = sendToTasksPayload({
       noteId: "note-1",
@@ -102,10 +95,7 @@ describe(sendToTasksPayload, () => {
       now: NOW,
     });
     expect(payload).not.toHaveProperty("due_at");
-    // The sigils are markup, not words: a task title is a sentence to read.
     expect(payload.title).toBe("Ask Tom Pemberton about the survey");
-    // The anchor keeps the line VERBATIM, so the link points at the passage
-    // as the member actually wrote it.
     expect(payload.exact).toBe("Ask [[Tom Pemberton]] about the survey");
   });
 });

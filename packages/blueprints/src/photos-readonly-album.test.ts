@@ -1,9 +1,5 @@
-// @vitest-environment jsdom
 // oxlint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
 // @ts-nocheck
-// READ-ONLY ALBUM (v4 §14, README.md:233): writing controls are the disabled
-// outline WITH THE REASON and never fire — bar reason INLINE, tile `Remove`
-// gated AND inert, primary becomes `Download` (proto 4800-4801).
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -120,13 +116,11 @@ describe("the album bar says WHY it refuses (§14, README:233)", () => {
 
   it("never hides the reason in a tooltip alone", async () => {
     const html = await renderBar({ canWrite: false, reason: REASON });
-    // As TEXT, not only a `title` attribute.
     expect(html).toContain(`>${REASON}</p>`);
   });
 });
 
 describe("a read-only album offers no write on the tile either", () => {
-  // NO `vi.resetModules()`: re-evaluating the kit re-registers custom elements.
   beforeEach(() => {
     writes = [];
   });
@@ -156,7 +150,6 @@ describe("a read-only album offers no write on the tile either", () => {
     expect(writes).toStrictEqual([]);
   });
 
-  // Counter-proof: a WRITABLE album's click reaches the vault.
   it("still removes from a writable album", async () => {
     const { remove } = await mountTimeline({ canWriteAlbum: true });
     expect(remove.disabled).toBe(false);
@@ -181,3 +174,4 @@ describe("the read-only surface keeps a primary (proto 4800-4801)", () => {
     );
   });
 });
+// @vitest-environment jsdom

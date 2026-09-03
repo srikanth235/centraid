@@ -1,16 +1,7 @@
-// A shared "type a name, Enter to submit, Escape/blur to cancel" input used
-// by both the new-album chip and the album rename control (Sidebar.tsx).
-// Uncontrolled (`defaultValue`, not `value`) — it never re-renders on
-// keystroke; only Enter/Escape/blur touch app state. The ref-based
-// focus/select guard mirrors `mountMedia`'s once-only pattern. Renders only
-// kit vocabulary (`kit-input`, `bare`), so it owns no CSS module.
 export function InlineInput({
   value = "",
   placeholder,
   label,
-  // kit-input is the text-input primitive (app.css no longer styles a bare
-  // `input` element) — every caller gets it unless it composes its own
-  // (the new-album chip rides `kit-input bare`).
   className = "kit-input",
   autoSelect = false,
   onSubmit,

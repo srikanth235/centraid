@@ -1,28 +1,6 @@
-// Every member-facing string in Tally, in one file.
-//
-// THE SPEC'S §6 TABLE IS VERBATIM. Where a sentence in the handoff carries a
-// value the prototype had and this app derives — the friend's name in the
-// removal guard, the query in the search miss, the counts behind the Balances
-// sub-line, the wall clock on the denied gate — the string is a function of
-// that value rather than a copy of the prototype's example.
-//
-// TWO OF THEM ARE HELD AS A PAIR OF SENTENCES rather than one string (the
-// leave and archive confirms). They render one after the other, so what a
-// member reads is the §6 line unaltered; splitting the SOURCE is what keeps
-// each literal a single claim, which is the copy ratchet's whole subject.
-//
-// THE REGISTER (§7). Nine categories, closed. The words are *expense,
-// settlement, group, member, departed, steward, contribution, ledger, share,
-// memo* — never *transaction*, never *friend request*, never *simplify debts*
-// as a noun. A number lives in a sentence, a figure is a fact and never a
-// verdict, and nothing in here celebrates a settled balance.
-
-/** The one sentence Balances stands under: what a figure on this screen IS. */
 export const BALANCES_STATUS =
   "Every figure is derived at read time · no balance is stored and none is transmitted";
 
-/** Every balance level. Stated, never celebrated — no tick, no colour, no
- *  congratulation, because the ledger is the point and not the score. */
 export const ALL_SETTLED =
   "Everyone is level · the ledger keeps every expense that got you here";
 
@@ -31,13 +9,6 @@ export const DAY_ONE_SUB =
   "The first real move is one expense with one person; a group can wait for three of you.";
 export const DAY_ONE_ACT = "Add an expense";
 
-/**
- * The invariant under the hero, with the two totals the dashboard derived AND
- * the counts they were derived from — the §6 line, whole.
- *
- * The counts are the point: a figure that says where it came from is
- * inspectable, and this one names the exact rows a member could go and count.
- */
 export function balancesHeroSub(
   owedTo: string,
   owe: string,
@@ -53,8 +24,6 @@ export const HERO_LEVEL = "nothing outstanding, with anyone";
 export const HERO_SETTLED_SUB =
   "Every group and every friend is level, and the ledger keeps all of it.";
 
-/** The group hero's label and the sentence that says where its figure came
- *  from — every member computes it themselves, from the same facts. */
 export const GROUP_HERO_OWE = "you owe in this group";
 export const GROUP_HERO_OWED = "owed to you in this group";
 export const GROUP_HERO_LEVEL = "this group is level";
@@ -70,8 +39,6 @@ export function friendHeroOwed(name: string): string {
 export const FRIEND_HERO_LEVEL = "level, with nothing outstanding";
 export const FRIEND_HERO_SUB =
   "Every part of it is a fact, and each one opens.";
-
-// ---------------------------------------------------------------- sections
 
 export const SECTIONS = {
   people: "People",
@@ -131,8 +98,6 @@ export const VERBS = {
   close: "Close",
 } as const;
 
-// ------------------------------------------------------------ empty lines
-
 export const EMPTY = {
   people: "No friends yet.",
   groups: "No groups yet.",
@@ -143,13 +108,6 @@ export const EMPTY = {
   archived: "No groups are archived.",
 } as const;
 
-// ------------------------------------------------------------- the guards
-
-/**
- * The removal guard, refusing. The prototype's sentence named one member by
- * pronoun; the real one names the member, because the guard is about THIS
- * person's rows and a pronoun would be a guess about them.
- */
 export function removeRefused(name: string): string {
   return `${name} appears on this ledger, so removing them would make its arithmetic unreadable. Members who leave are marked departed instead.`;
 }
@@ -165,10 +123,6 @@ export const REMOVE_BODY =
 export const LEAVE_TITLE = "Leave this group?";
 export const LEAVE_BODY =
   "Your rows stay on the ledger, marked departed, and your balance with the group stays visible.";
-/** DIVERGENCE, deliberate and small: §6 reads "Settle first if you can." The
- *  repo's copy rule bans "you can" outright as filler, and the clause it
- *  qualifies is advice rather than a fact about the write — so the advice
- *  stands and the filler goes. Nothing a member needs is lost. */
 export const LEAVE_BODY_2 = "Settle first.";
 
 export const ARCHIVE_TITLE = "Archive this group?";
@@ -180,15 +134,11 @@ export const UNARCHIVE_TITLE = "Bring this group back?";
 export const UNARCHIVE_BODY =
   "It returns to the lists with everything it kept.";
 
-// ------------------------------------------------------------- the notices
-
 export function pendingNotice(count: number): string {
   const writes = count === 1 ? "write is" : "writes are";
   return `${count} ${writes} on this device · they settle when the gateway answers.`;
 }
 
-/** Tally records fully offline. The ONE exception is named, rather than left
- *  for a member to discover at a commit. */
 export const OFFLINE_NOTICE =
   "Offline · everything here still records. Only a recurring occurrence needs the gateway.";
 
@@ -204,20 +154,13 @@ export const CONFLICT_NOTICE =
 
 export const PENDING_ROW = "on this device, not in the vault yet";
 
-// -------------------------------------------------------------- the window
-
 export function windowEnd(shown: number, total: number): string {
   return `${shown} of ${total} · this is a window on the ledger, not all of it`;
 }
 
-// --------------------------------------------------------------- the gate
-
 export const DENIED_TITLE = "Tally cannot read this vault";
 export const DENIED_BODY =
   "Your expenses, groups and receipts are untouched, and nothing was deleted.";
-/** WHEN the grant went, where the gateway recorded it. The clock is a fact the
- *  denial carried, so it is stated; a denial that carried none says nothing
- *  rather than inventing a time (§6, and the room's rule about figures). */
 export function revokedAt(at: string): string {
   return `The grant was revoked at ${at}.`;
 }
@@ -234,19 +177,9 @@ export const DENIED_FACT_LABELS = {
   members: "Members",
 } as const;
 
-// -------------------------------------------------------------- the lenses
-
-/* The spec's §6 table also carries the currency note, the unsummarisable
-   schedule, the due occurrence, the simplification proposal, the trash confirm
-   and the export foot. They belong to the routes Wave 2 draws — Add expense,
-   Recurring, Settle up, Expense and Export — and they arrive WITH those
-   surfaces rather than sitting here unrendered: a string nothing can show is a
-   string nobody can check. */
-
 export const SETTLEMENT_NOT_YOURS =
   "neither party is you · no ledger entry, balances only";
 
-/** One part of a friend's net, with the figure the query derived for it. */
 export function partSubLabel(netMinor: number): string {
   if (Math.abs(netMinor) < 1) return "";
   return netMinor < 0 ? "you owe" : "owes you";
@@ -264,8 +197,6 @@ export function purgesOn(day: string): string {
 export function trashedOn(day: string): string {
   return `trashed ${day}`;
 }
-
-// -------------------------------------------------------------- the search
 
 export const SEARCH_PLACEHOLDER = "Search expense descriptions";
 export const SEARCH_SCOPE = "expense descriptions in this vault";
@@ -296,10 +227,6 @@ export const SEARCH_COPY = {
 
 export const MATCHED_DESCRIPTION = "matched the description";
 
-// ----------------------------------------------------------- the outcomes
-
-/** What the one status line says after a write. Every act resolves out loud;
- *  Undo appears only beside a write whose reverse is a real write. */
 export const OUTCOMES = {
   restored: "Restored · back on the ledger with its history",
   trashed: "Trashed · restorable for 30 days",
@@ -309,17 +236,11 @@ export const OUTCOMES = {
   refreshed: "Refreshed · the vault answered",
 } as const;
 
-/** A refusal the vault gave no words for. It never paraphrases the vault's own
- *  reason — this is only what stands in when there is none. */
 export const REFUSED = "Refused · the vault would not take it";
 
-/** A write that stopped at the steward. Not applied, and not lost. */
 export const PARKED_OUTCOME =
   "Parked · nothing is applied until the steward answers";
 
-// ------------------------------------------------------- the status lines
-
-/** The ambient sentence each route stands under, before any write speaks. */
 export const ROUTE_STATUS = {
   balances: BALANCES_STATUS,
   activity: "One line per fact, from your point of view",
@@ -347,7 +268,6 @@ export const ROUTE_STATUS = {
   denied: "Tally has no grant on this vault",
 } as const;
 
-/** The More sheet's own foot: what sits behind it, and what does not. */
 export const MORE_FOOT = "Lenses and acts · the four places are in the band";
 export const MORE_TITLE = "Tally";
 export const MORE_META = {
@@ -382,13 +302,10 @@ export const DEPARTED_META =
 export const ON_THE_LEDGER = "on the ledger · cannot be removed";
 export const CO_CONTRIBUTES = "co-contributes from their own vault";
 
-/** A row that has gone quiet, in days — the stale balance a nudge is for. */
 export function owedFor(days: number): string {
   return `owed ${days} ${days === 1 ? "day" : "days"}`;
 }
 
-/** A reminder ALWAYS parks: this app has no delivery path, and the record is
- *  the intention. The sentence never says "sent", in any tense. */
 export const NUDGE_PARKED =
   "Prepared, awaiting your confirmation · nothing is sent from here";
 
@@ -402,9 +319,6 @@ export function sharedExpenseCount(count: number): string {
   return `${count} shared ${count === 1 ? "expense" : "expenses"}`;
 }
 
-/** Every part carries its own figure now, derived by the same fold that
- *  produced the net — so the claim the section makes is checkable by adding
- *  the rows up. */
 export const FRIEND_PARTS_NOTE =
   "The net above is these parts added up · each one is derived from the same facts";
 

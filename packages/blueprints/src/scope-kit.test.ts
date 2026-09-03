@@ -1,12 +1,3 @@
-// What an app asks about its mounted scopes (#599, moved to
-// apps/_shared/scope-kit.ts for #726 D11). The rule itself is proved
-// in write-target.test.ts; what matters here is that the app applies it to
-// the right question — in particular that looking at a read-only audience
-// yields a DISABLED target with a reason, so the control is greyed out
-// rather than firing a write the shell would refuse.
-//
-// The module reads `window.centraid` live (audiences hydrate after first
-// paint), so each case installs its own window stub before importing.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -40,7 +31,6 @@ const own: Scope = { id: "own", label: "Library", canWrite: true };
 const family: Scope = { id: "family", label: "Family", canWrite: true };
 const club: Scope = { id: "club", label: "Book Club", canWrite: false };
 
-/** Install a `window.centraid` with the given scopes (and a multi-scope door). */
 function mount(
   scopes: Scope[] | undefined,
   { readAll = true }: { readAll?: boolean } = {}
@@ -63,7 +53,6 @@ describe("scope-kit suite", () => {
       const scopes = scopesModule.mountedScopes();
       expect(scopes).toHaveLength(1);
       expect(scopesModule.ownScopeId(scopes)).toBe("");
-      // An empty id is never stamped, so a solo member's markup is unchanged.
       expect(
         scopesModule.scopeAttr(scopesModule.ownScopeId(scopes))
       ).toBeUndefined();
@@ -76,7 +65,6 @@ describe("scope-kit suite", () => {
       expect((target as { reason: string }).reason).toBe(
         "Book Club is read-only here."
       );
-      // Same answer through the per-scope question the tile controls ask.
       expect(scopesModule.canWriteScope("club")).toBe(false);
       expect(scopesModule.canWriteScope("family")).toBe(true);
     });
@@ -88,7 +76,6 @@ describe("scope-kit suite", () => {
         scopeId: "family",
         label: "Family",
       });
-      // "All" is a reading lens, never a writing one.
       expect(scopesModule.photoWriteTarget("new", null)).toStrictEqual({
         disabled: false,
         scopeId: "own",
@@ -98,8 +85,6 @@ describe("scope-kit suite", () => {
 
     it("keeps own-scope surfaces on the own scope whatever the chip says", () => {
       mount([own, family, club]);
-      // Albums, tags and places resolve as `own`, so selecting a read-only
-      // audience never disables making an album in the member's own space.
       for (const selected of [null, "family", "club"]) {
         expect(scopesModule.photoWriteTarget("own", selected)).toStrictEqual({
           disabled: false,

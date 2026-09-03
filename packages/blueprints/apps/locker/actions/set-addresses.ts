@@ -1,8 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-// Whole-list replace — no address is a secret. The primary locker_item.url
-// and its Companion bindings are untouched.
-
 interface AddressInput {
   url?: unknown;
   match_policy?: unknown;

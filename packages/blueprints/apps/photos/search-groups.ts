@@ -1,6 +1,3 @@
-// Grouped hits above the Search grid (§9), pure over data app-root holds. A
-// group with no backing data is left out, never faked — captions have no
-// aggregate and no destination of their own.
 import { NO_LOCATION_KEY } from "./components/Places.tsx";
 import type { PlaceSection } from "./components/Places.tsx";
 import type { Person } from "./people.ts";
@@ -49,8 +46,6 @@ function personGroup(
     }));
 }
 
-// Every phrase honestly true of a place, not just its `name` column (#816).
-// Never a coordinate: digits must neither match a section nor title a hit.
 function placeVocabulary(
   section: PlaceSection,
   home: NamedPlace | null
@@ -66,7 +61,6 @@ function placeVocabulary(
     home !== null && section.lat !== null && section.lng !== null
       ? homeBand(distanceKm(section.lat, section.lng, home.lat, home.lng))
       : null;
-  // "away" is deliberately not vocabulary: a holiday is not near home.
   if (band === "at home" || band === "around town") {
     words.push(...PLACE_HOME_TERMS, band);
   }
@@ -90,7 +84,6 @@ function anchorsOf(sections: readonly PlaceSection[]): NamedPlace[] {
   });
 }
 
-/** The declared home only: "near home" names a place a person declared. */
 function homeAnchor(anchors: readonly NamedPlace[]): NamedPlace | null {
   return anchors.find((anchor) => anchor.isHome === true) ?? null;
 }
@@ -109,18 +102,15 @@ function placeGroup(
     .map((section) => ({
       kind: "place" as const,
       key: section.key || "unnamed",
-      // Always the ladder, never the column: a title must be sayable.
       title: placePhrase({
         placeName: section.name,
         gazetteerName: section.gazetteer,
         lat: section.lat,
         lng: section.lng,
         namedPlaces: anchors,
-        // Own screen: anything leaving it is phrased by `share-place.ts`.
         context: "private",
       }).text,
       meta: `place · ${section.assets.length} ${section.assets.length === 1 ? "photograph" : "photographs"}`,
-      // No per-place route: Open lands on the shelf and scrolls to it.
       targetShelf: PLACES,
     }));
 }
@@ -169,7 +159,6 @@ export function searchGroups({
   people: readonly Person[];
   placeSections: readonly PlaceSection[];
   albums: readonly Album[];
-  /** Own-scope only: a tag minted elsewhere means nothing here. */
   ownAssets: readonly Asset[];
   hits: readonly Asset[];
 }): SearchGroupHit[] {

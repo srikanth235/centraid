@@ -1,6 +1,3 @@
-// People's view models and the FROZEN prop contract for its screens. A field
-// the vault does not have is ABSENT here, or a screen draws a fact nobody
-// stored. Screens own no state and no reads of their own.
 import type { SearchStatus } from "../_shared/search-scaffold.ts";
 import type { ShelfId } from "./shelves.ts";
 
@@ -23,7 +20,6 @@ export interface PersonRow {
   list_id: string | null;
   starred: boolean;
   reminders: ReminderRef[];
-  /** TRI-STATE: `null` unreadable, ABSENT unasked; both draw as unknown. */
   linked?: boolean | null;
   vault_count?: number;
   snippet?: string;
@@ -44,7 +40,6 @@ export interface PendingInvite {
   created_at: string;
 }
 
-/** Every reach row is a `social.contact_channel` (#883, ruling O-contact). */
 export interface ContactChannel {
   channel_id?: string;
   kind: "phone" | "email" | "address" | "handle";
@@ -91,13 +86,10 @@ export interface PersonDetail {
   dates: ImportantDate[];
   notes: PersonNote[];
   interactions: Interaction[];
-  /** NULL IS NOT AN EMPTY LIST: denied reads draw no vault section, never an
-   *  empty one. Standing grants live in the grant plane (#825). */
   vaults: VaultBinding[] | null;
   pending_invites: PendingInvite[] | null;
 }
 
-/** Joined in from the roster read, so optional. */
 export interface PersonCard {
   party_id: string;
   name: string;
@@ -144,7 +136,6 @@ export interface TrashedPerson {
   purge_at: string | null;
 }
 
-/** `linked`/`unlinked` are DRAWN only while the sharing plane reads. */
 export type RosterFilter = "all" | "linked" | "unlinked" | "starred" | "due";
 
 export type TouchTile =
@@ -155,7 +146,6 @@ export type TouchTile =
   | "linked"
   | "to_link";
 
-/** Adding is a field where the row will be, never a new screen. */
 export type ComposerKey = "channels" | "dates" | "notes";
 
 export interface ComposerState {
@@ -166,7 +156,6 @@ export interface ComposerState {
   monthDay: string;
 }
 
-/** `avatar_color` is a stored hex, or null to derive. */
 export interface PersonDraft {
   party_id: string | null;
   name: string;
@@ -187,7 +176,6 @@ export interface ConfirmState {
   source_party_id?: string;
 }
 
-/** MUTATED IN PLACE, never reassigned, as Docs' `AppState` is. */
 export interface AppState {
   shelf: ShelfId;
   personId: string | null;
@@ -209,7 +197,6 @@ export interface AppState {
 export interface AppData {
   people: PersonRow[];
   truncated: boolean;
-  /** False draws the link-free app, ring and chips included. */
   linksAvailable: boolean;
   person: PersonDetail | null;
   dashboard: DashboardData | null;
@@ -217,7 +204,6 @@ export interface AppData {
 }
 
 export interface RouteBase {
-  /** Draw the skeleton, never "nothing here". */
   loading: boolean;
   offline: boolean;
   narrow: boolean;
@@ -256,7 +242,6 @@ export interface SearchRouteProps extends RouteBase {
 export interface PersonRouteProps extends RouteBase {
   person: PersonDetail | null;
   roster: readonly PersonRow[];
-  /** Not a People write, but it lands on the same line. */
   onStatus: (message: string) => void;
   collapsed: Readonly<Record<string, boolean>>;
   composer: ComposerState | null;

@@ -1,10 +1,3 @@
-// THE ROUTE SWITCH for everything that is not the item list or one item.
-//
-// One place where a `ShelfId` becomes a screen, so the orchestrator keeps its
-// one job — the boundary — and the routes keep theirs. Every screen below
-// takes the state it needs as props and holds NONE of its own: the add / edit
-// form's typed values and the generator's output live in the orchestrator's
-// bag, where the lock's enumerated wipe can reach them.
 import type { ReactNode } from "react";
 
 import { titlesOf } from "../access-model.ts";
@@ -36,8 +29,6 @@ import { SearchScreen } from "./Search.tsx";
 import { FillScreen } from "./Surfaces.tsx";
 import { TrashScreen } from "./Trash.tsx";
 
-/** The routes this switch draws. Everything else — the list, one item, the
- *  two gates — belongs to the orchestrator, which owns their state. */
 const ROUTED: ReadonlySet<string> = new Set([
   String(EDIT),
   String(GEN),
@@ -57,24 +48,14 @@ export function isRoutedScreen(shelf: ShelfId): boolean {
 export interface ScreensProps {
   shelf: ShelfId;
   bag: Bag;
-  /** Has the items read landed? Nothing is empty until one has. */
   loaded: boolean;
-  /** The gateway is out of reach — the add / edit commit is withheld. */
   offline: boolean;
-  /** A write is in flight. */
   busy: boolean;
-  /** One clock for the whole room, so an expiry read here and a countdown
-   *  read next door cannot disagree by a second. */
   now: number;
   acts: RouteActs;
-  /** The three surfaces that talk to a door rather than the write path. */
   surfaces: SurfaceActs;
-  /** Does THIS seat carry the staged-import plane? Feature-detected once by
-   *  the orchestrator, so every consumer reads the same answer. */
   hasImportDoor: boolean;
-  /** Opening an item is a per-item gesture: it opens the permit gate. */
   onOpenItem: (itemId: string) => void;
-  /** Leave the form without writing. The typed values go with it. */
   onCancelEdit: () => void;
 }
 
@@ -82,9 +63,6 @@ export function Screens(props: ScreensProps): ReactNode {
   const { acts, bag, shelf } = props;
 
   if (shelf === EDIT) {
-    // A member who arrives at this route by URL rather than by the bar's verb
-    // gets the same empty form the verb would have built. The first keystroke
-    // puts a seed in the bag, which is where a typed secret has to live.
     return (
       <EditScreen
         seed={bag.editSeed ?? emptySeed()}

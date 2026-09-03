@@ -1,11 +1,3 @@
-// Document metadata (#352): free-form labels through
-// core.tag_item/untag_item (the shared "Tags" concept scheme,
-// packages/vault/src/commands/tags.ts — additive and idempotent, mirroring
-// the photos app's tag-asset/untag-asset actions) and the activity read over
-// access.provenance. Split out of logic.ts purely for file-size
-// hygiene — versions.ts/popovers.ts's exact factory pattern: closes over
-// app.tsx's own `data`/`refresh` plus logic.ts's own `act`/`narrate`
-// (passed in, never re-implemented).
 import { statusLine } from "@centraid/design/elements";
 
 import type { ActivityEvent, DriveDoc } from "./types.ts";
@@ -46,9 +38,6 @@ export function createMetadata({ refresh, act, narrate }: MetadataDeps) {
     }
   }
 
-  // A plain read (no command fabricates history) — a denial or a network
-  // hiccup both render as an honest "no activity" empty state rather than
-  // throwing through the caller, exactly like versions.ts's loadHistory.
   async function loadActivity(documentId: string): Promise<ActivityResult> {
     try {
       return await window.centraid.read<ActivityResult>({

@@ -1,5 +1,3 @@
-// Photos empty-copy after a real read (§14). Until `loaded`, paint `--skel`.
-// Empty trash is a state. A deleted album has no view and no sentence.
 import { showsEmptyState } from "../_shared/view-state-kit.ts";
 import type { EmptyStateGate } from "../_shared/view-state-kit.ts";
 import type { ShelfId } from "./shelves.ts";
@@ -11,7 +9,6 @@ import {
   searchMissTitle,
 } from "./view-copy.ts";
 
-/** Empty trash stays. Drop only an album id the read no longer carries. */
 export function shelfAfterRead(
   shelf: ShelfId,
   albumIds: readonly string[]
@@ -31,9 +28,7 @@ export interface EmptyStateInput extends EmptyStateGate {
   shelf: ShelfId;
   query?: string;
   inAlbum?: boolean;
-  /** Confirmed person's name, not an id. */
   personName?: string | null;
-  /** Phone only — camera is a real way in (§15). */
   phone?: boolean;
 }
 
@@ -45,7 +40,6 @@ export interface EmptyStateView {
   offersCamera: boolean;
 }
 
-/** Hide the block — Search/Duplicates/Storage take it down through this door. */
 export const NO_EMPTY_STATE: EmptyStateView = {
   visible: false,
   title: "",
@@ -69,10 +63,8 @@ export function emptyStateView(input: EmptyStateInput): EmptyStateView {
             ...(input.inAlbum ? { inAlbum: true } : {}),
           }),
     offersImport,
-    // Camera rides with Import: Trash/search-miss is not a landing place.
     offersCamera: offersImport && Boolean(input.phone),
   };
 }
 
-/** Offline as the shared kit reads it — never invented here. */
 export { libraryReachability } from "../_shared/view-state-kit.ts";

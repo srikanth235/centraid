@@ -1,5 +1,3 @@
-// Search (v12 handoff): same chips/rows as the roster. Gate on `status`,
-// NOT `loading`; `unreachable` draws nothing.
 import type { ReactNode } from "react";
 
 import { LoadingSkeleton } from "../../_shared/LoadingSkeleton.tsx";
@@ -12,7 +10,6 @@ import { ChipRow, Row, SkeletonBlock, StarButton, Verb } from "./Shared.tsx";
 
 import styles from "./shared.module.css";
 
-// queries/search.ts has no link facts — a carried link filter reads as `All`.
 const SEARCH_CHIPS = filterChips(false);
 
 export function SearchRoute(props: SearchRouteProps): ReactNode {
@@ -38,7 +35,6 @@ export function SearchRoute(props: SearchRouteProps): ReactNode {
       ) : (
         rows.map((person) => {
           const overdue = isOverdue(person);
-          // Snippet over role: the matched passage explains the row.
           const sub = person.snippet ?? person.role;
           return (
             <Row
@@ -73,7 +69,6 @@ export function SearchRoute(props: SearchRouteProps): ReactNode {
           value={props.term}
           aria-label={FIELDS.searchPlaceholder}
           placeholder={FIELDS.searchPlaceholder}
-          // Callback ref: direct `ref={props.inputRef}` trips react-compiler `Refs`.
           ref={(el) => {
             props.inputRef(el);
           }}

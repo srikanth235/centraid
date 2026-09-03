@@ -1,13 +1,3 @@
-// @vitest-environment jsdom
-// Stage rules for viewer + slideshow + editor (v4 handoff §7.1-§7.4), asserted
-// as rules, not pixel snapshots: --stage is one value in BOTH themes; actions
-// go icon-only below 840px OF BAR; `Save as a new photograph` is the ONE
-// filled element and a disabled commit is not filled.
-//
-// jsdom because app modules reach the browser kit (fmtBytes, staging) at
-// import time. App sources load by file URL (`src/` is its own tsconfig
-// rootDir, so types are declared locally); components render to STATIC markup
-// — pure views over props, so markup is the behaviour.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -135,7 +125,6 @@ const { EditorView } = (await import(app("components/Editor.tsx"))) as {
 const Mark: FC<{ size?: number; filled?: boolean }> = () =>
   createElement("i", { "aria-hidden": "true" });
 
-/** One declaration block, by class name, comments stripped. */
 function rule(source: string, selector: string): string {
   const stripped = source.replace(/\/\*[\s\S]*?\*\//gu, "");
   const at = stripped.indexOf(`${selector} {`);
@@ -143,8 +132,6 @@ function rule(source: string, selector: string): string {
   return stripped.slice(at, stripped.indexOf("}", at));
 }
 
-/** `:root` / dark-block declarations of one custom property in the emitted
- *  blueprint CSS — the two values the app actually resolves at runtime. */
 function emitted(token: string): { light: string; dark: string } {
   const sheet = toBlueprintCss();
   const darkAt = sheet.indexOf("data-theme='dark'");
@@ -215,8 +202,6 @@ describe("the top bar's flexible title", () => {
 });
 
 describe("labels are a function of bar width, not of surface", () => {
-  // #726: the copy action's caption is per-destination — the caller resolves
-  // the sole other writable scope and hands `Copy to ⟨label⟩` in.
   const specs: ActionSpec[] = [
     { id: "favorite", icon: Mark },
     { id: "copy", icon: Mark, label: "Copy to Family" },
@@ -337,8 +322,6 @@ describe("the editor's commit", () => {
     expect(SAVE_AS_NEW).toBe("Save as a new photograph");
     expect(html).toContain(SAVE_AS_NEW);
     expect(html).toContain(SAVE_AS_NEW_EXPLANATION);
-    // BESIDE the control, in the SAME bar as the tools (proto 4617-4630);
-    // Cancel stands before Save (proto 2891-2906).
     expect(html.indexOf(SAVE_AS_NEW_EXPLANATION)).toBeLessThan(
       html.indexOf(SAVE_AS_NEW)
     );
@@ -368,7 +351,6 @@ describe("the editor's commit", () => {
     expect(rule(EDITOR_CSS, ".commit")).toContain(
       "background: var(--on-stage)"
     );
-    // A DISABLED COMMIT IS NOT FILLED (§18).
     expect(rule(EDITOR_CSS, ".commit:disabled")).toContain(
       "background: transparent"
     );
@@ -381,8 +363,6 @@ describe("the editor's commit", () => {
       "Straighten −1°",
       "Original",
       "Square",
-      // Spaced and mono-faced exactly as the handoff writes it (proto 4621,
-      // 4624).
       "3 : 2",
       "Reset",
     ]) {
@@ -445,7 +425,6 @@ describe("the transport, one slot and three variants", () => {
   it("keeps the track determinate and inside its own bounds", () => {
     expect(clock(8)).toBe("0:08");
     expect(clock(24)).toBe("0:24");
-    // Past an hour the clock grows a field.
     expect(clock(3_904)).toBe("1:05:04");
     expect(trackFraction(0, 0)).toBe(0);
     expect(trackFraction(12, 24)).toBe(0.5);
@@ -545,3 +524,4 @@ describe("video playback is honest, not double-transported", () => {
     expect(html).toContain("<progress");
   });
 });
+// @vitest-environment jsdom

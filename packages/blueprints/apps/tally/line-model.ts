@@ -1,9 +1,3 @@
-// TYPED LINES — the sixth division, shared by *By line* on Add expense and
-// Receipt's allocation editor, so two seats cannot disagree about one receipt
-// (Tally spec §3).
-//
-// THE LINE'S REMAINDER GOES TO THE EARLIER PARTY, not to the payer — a line
-// has no payer, so the tie-break is position, as `receipt-capture.ts` does it.
 import { parseMoneyText } from "./money-text.ts";
 import { allocateWeighted } from "./split-model.ts";
 import type { Allocation, Share } from "./split-model.ts";
@@ -49,8 +43,6 @@ export function allocateLine(
   );
 }
 
-/** A line nobody is on carries NO allocations rather than being dropped —
- *  hiding it would reconcile while the expense stayed mis-allocated. */
 export function lineItems(lines: readonly LineDraft[]): LineItemInput[] {
   return lines
     .filter((line) => line.description.trim() !== "")

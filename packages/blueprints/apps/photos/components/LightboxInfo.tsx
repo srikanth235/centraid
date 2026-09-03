@@ -1,9 +1,3 @@
-// Info panel (§7.2). OWNER RULING (#711) — do not "fix" these back:
-// paper not stage; Albums + Activity stay; NO destructive control here
-// (Trash lives on the viewer bar). Every row is a write that can fail —
-// refusal region, not a generic error; typed text stays on device (§13).
-// Place is a phrase, never a coordinate (`LightboxLocation.tsx`). Vault
-// meaning is `scope.personal`, never the storage noun or `scope.label`.
 import { useEffect, useRef, useState } from "react";
 
 import { fmtBytes } from "@centraid/design/elements";
@@ -12,7 +6,6 @@ import { mountedScopes } from "../../_shared/scope-kit.ts";
 import { buildActivity } from "../activity.ts";
 import { renderFaces } from "../faces.ts";
 import { assetBytes, custodyMeta, toLocalInputValue } from "../format.ts";
-// Commands address the OPEN asset's scope (#599), not the chip selection.
 import { act, narrate } from "../outcomes.ts";
 import type { Album, Asset, Place } from "../types.ts";
 import {
@@ -29,7 +22,6 @@ interface Refusal {
   reason: string;
 }
 
-/** Capture time is read in this zone — else a photo taken abroad is silently reinterpreted. */
 function localZone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "this device";
@@ -47,7 +39,6 @@ function captureSource(asset: Asset): string {
   return stamped ? "from the camera" : "from the file";
 }
 
-/** Absent facts are omitted, never an em dash. */
 function factRows(asset: Asset): Array<[string, string]> {
   const rows: Array<[string, string]> = [];
   if (asset.width && asset.height) {
@@ -94,13 +85,8 @@ export function LightboxInfo({
       asset.asset_id,
       facesNoteRef.current!
     );
-    // Remounts per asset/refresh (keyed by renderSeq) (#360).
   }, [asset.asset_id]);
 
-  /**
-   * Success is silent (frame status line). Refusal via detached `narrate`
-   * element — no second banner.
-   */
   async function write(
     tried: string,
     action: string,

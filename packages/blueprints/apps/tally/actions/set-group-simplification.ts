@@ -1,9 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/**
- * tally.set_group_simplification — contract in app.json.
- * Writes the OPT-IN FLAG only; the proposal itself is derived at read time.
- */
 const KEYS = ["group_id", "simplify"];
 export default async function setGroupSimplification({
   body,

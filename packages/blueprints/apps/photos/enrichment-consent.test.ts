@@ -1,14 +1,3 @@
-// @vitest-environment jsdom
-// THE ENRICHMENT CONSENT MOMENT (v4 handoff §8) — a privacy regression net.
-//   1. NO ENRICHMENT WRITE WITHOUT AN EXPLICIT ANSWER: mounting, opening,
-//      reading the policy, declining, closing all write nothing. No
-//      device-side faces producer exists here; that answer cannot reach
-//      `window.centraid.write`.
-//   2. THE EGRESS DISCLOSURE STAYS ON SCREEN: the cloud panel is the only
-//      place Photos says photographs would leave the device; it renders even
-//      though no cloud helper can be chosen.
-// Copy asserted via the shared consent module (the native client renders the
-// same one). Views via renderToStaticMarkup; gate driven directly.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -77,7 +66,6 @@ const { createEnrichmentGate } = (await import(app("enrichment-gate.ts"))) as {
   createEnrichmentGate: (opts: { onData: () => void }) => EnrichmentGate;
 };
 
-/** Every fact the two panels must state — the handoff's nine, verbatim. */
 const NINE_FACTS: readonly [string, string][] = [
   ["where it would run", "on this device"],
   ["what leaves the device", "nothing"],
@@ -106,7 +94,6 @@ function markup(props: Partial<ConsentProps> = {}): string {
 describe("the enrichment consent surface", () => {
   it("asks the question over the live count, before anything runs", () => {
     expect(markup()).toContain("Run face detection over 6,214 photographs?");
-    // A library of one is still a sentence, not `1 photographs`.
     expect(copy.onDeviceTitle(1)).toBe("Run face detection over 1 photograph?");
   });
 
@@ -120,11 +107,8 @@ describe("the enrichment consent surface", () => {
 
   it("carries the egress disclosure in the cloud panel, flagged", () => {
     const html = markup();
-    // THE line. Its absence is the defect this file exists to catch.
     expect(html).toContain(copy.CLOUD_EGRESS_DISCLOSURE);
     expect(html).toContain("a downscaled copy of every photograph");
-    // Flagged as egress: `data-net` is what the stylesheet turns into the
-    // 2px `--net` rule, so this pins the mark, not a class name.
     expect(html).toMatch(
       /data-net="true"[^]*?a downscaled copy of every photograph/u
     );
@@ -132,8 +116,6 @@ describe("the enrichment consent surface", () => {
   });
 
   it("renders the cloud panel even though no cloud helper can be chosen", () => {
-    // Present and unavailable, with the reason stated — never omitted;
-    // omitting it removes the disclosure above with it.
     const html = markup();
     expect(html).toContain(copy.CLOUD_PANEL.action);
     expect(html).toContain(copy.ENRICHMENT_UNAVAILABLE.cloudUnavailable);
@@ -152,8 +134,6 @@ describe("the enrichment consent surface", () => {
     const html = markup();
     expect(html).toContain("Run on this device");
     expect(html).toContain("Not now");
-    // The ONE filled element is the run answer (§18); the cloud answer is
-    // outlined destructive, never a fill.
     expect(html).toMatch(/class="kit-btn primary"[^]*?Run on this device/u);
     expect(html).toMatch(
       /class="kit-btn destructive"[^]*?Choose the cloud helper/u
@@ -161,7 +141,6 @@ describe("the enrichment consent surface", () => {
   });
 
   it("withholds the device answer when the library points at the gateway tier", () => {
-    // "what leaves the device: nothing" is FALSE there, so no answer; name it.
     expect(copy.deviceAnswerFor("gateway").available).toBe(false);
     expect(copy.deviceAnswerFor("gateway").reason).toBe(
       copy.ENRICHMENT_UNAVAILABLE.modelTier
@@ -176,8 +155,6 @@ describe("the enrichment consent surface", () => {
   });
 
   it("[C5] also accepts the pre-rename 'local'/'model' spellings, the same way", () => {
-    // A raw `enrich.policy` row can bypass vault's normalizing read — see
-    // this file's C5 COMPAT comment.
     expect(copy.deviceAnswerFor("local")).toStrictEqual({
       available: false,
       reason: copy.ENRICHMENT_UNAVAILABLE.deviceUnavailable,
@@ -190,9 +167,6 @@ describe("the enrichment consent surface", () => {
 });
 
 describe("the enrichment gate (issue #712 C2, re-homed into People's empty state)", () => {
-  // `enrichment-gate.ts` drives `PeopleShelf`'s `gate` prop — a plain closure
-  // over `window.centraid`, driven directly. LOAD-BEARING: no enrichment write
-  // without an explicit answer.
   const write = vi.fn<(intent: unknown) => Promise<{ status: string }>>(
     async () => ({ status: "executed" })
   );
@@ -228,8 +202,6 @@ describe("the enrichment gate (issue #712 C2, re-homed into People's empty state
     await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
     gate.props(6214)?.onDecline();
     expect(write).not.toHaveBeenCalled();
-    // Declining answers the question — the caller falls back to its own copy
-    // rather than leaving a half-answered gate up.
     expect(gate.props(6214)).toBeNull();
   });
 
@@ -263,3 +235,4 @@ describe("the enrichment gate (issue #712 C2, re-homed into People's empty state
     expect(write).not.toHaveBeenCalled();
   });
 });
+// @vitest-environment jsdom

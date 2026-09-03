@@ -1,7 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** The command's postcondition owns the completed_at invariant (stamped iff
- *  completed); this handler stays a pass-through. */
 export default async function setStatus({
   body,
   ctx,

@@ -2,7 +2,6 @@ import { armConfirm } from "@centraid/design/elements";
 
 import { GrantSheet } from "../../_shared/GrantSheet.tsx";
 import { usePhotoShare } from "../grant-audiences.ts";
-// Destructive is outlined `--net`, never a fill (§18), and arms first.
 import { ChevronLeftIcon } from "../icons.tsx";
 import { notice } from "../outcomes.ts";
 import { InlineInput } from "./InlineInput.tsx";
@@ -25,7 +24,6 @@ export function AlbumBar({
   title: string;
   renaming: boolean;
   canWrite: boolean;
-  /** Inline `--net` reason when writes are refused — never a tooltip (§6, §14). */
   reason?: string;
   onBack: () => void;
   onStartRename: () => void;
@@ -33,10 +31,8 @@ export function AlbumBar({
   onRenameCancel: () => void;
   onDelete: () => void;
 }) {
-  // Disabled control's handler is inert too (synthetic activation).
   const startRename = canWrite ? onStartRename : () => {};
   const deleteAlbum = canWrite ? onDelete : () => {};
-  // Sharing is not a write to the album — the grant door refuses, not this bar.
   const share = usePhotoShare(notice);
   return (
     <div className={styles.bar}>

@@ -1,7 +1,3 @@
-/**
- * Matrix cell blueprints.concurrency (#535 coverable-today).
- * Clone builders are pure — concurrent builds must not share arrays/maps.
- */
 import { describe, expect, it } from "vitest";
 
 import { cloneTemplateFiles } from "./clone.js";
@@ -39,7 +35,6 @@ describe("blueprint clone concurrency", () => {
       expect(appJson.id).toBe(`app-${i}`);
       expect(appJson.name).toBe(`App ${i}`);
     }
-    // Mutate one map only; siblings and the shared template stay intact.
     maps[0]![0]!.content = "MUTATED";
     for (let i = 1; i < maps.length; i += 1) {
       expect(maps[i]![0]!.content).not.toBe("MUTATED");

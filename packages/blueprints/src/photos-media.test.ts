@@ -1,9 +1,7 @@
-// @vitest-environment jsdom
 // oxlint-disable-next-line typescript-eslint/ban-ts-comment -- browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (#406)
 // @ts-nocheck
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-// `clock` comes through REAL: stubbing it would copy the rule under test.
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- the typed `import()` form pulls `apps/` into this program's `rootDir: ./src` and fails typecheck (TS6059); apps are typechecked by tsconfig.apps.json.
 vi.mock("../apps/photos/format.js", async (importOriginal) => ({
   clock: ((await importOriginal()) as { clock: (s: number) => string }).clock,
@@ -28,8 +26,6 @@ const observers: FakeObserver[] = [];
 const mutationCallbacks: MutationCallback[] = [];
 let mutationCallback: MutationCallback | undefined;
 
-/** Fires the one delegated MutationObserver with the record a real attribute
- *  change on `target` would deliver (#883). */
 function flushMutations(target?: Element): void {
   const records = target
     ? ([{ type: "attributes", target }] as unknown as MutationRecord[])
@@ -113,9 +109,6 @@ describe("Photos next-screen media loading", () => {
     expect(observers[0]?.unobserve).toHaveBeenCalledWith(image);
   });
 
-  // A relative `/centraid/_vault/blobs/…` path is the gateway only on the
-  // served path; in the shell it is the SPA's index.html. The staged value
-  // must never reach `src` while the authorizer claims it (#708).
   test("holds the staged promotion while the shell authorizes a vault path", async () => {
     const { observeNextScreen } = await importFixture(
       "../apps/photos/media-observer.js"
@@ -184,9 +177,6 @@ describe("Photos next-screen media loading", () => {
     expect(observers[0]?.unobserve).toHaveBeenCalledWith(image);
   });
 
-  // saveData / no IntersectionObserver puts the raw path straight into `src`, so
-  // it can fail before the authorizer settles. That error is the un-authorized
-  // load, not the asset — tearing the tile down there empties the grid.
   test("does not placeholder a tile whose error arrives mid-authorization", async () => {
     const { fillTileMedia } = await importFixture("../apps/photos/media.js");
 
@@ -294,8 +284,6 @@ describe("Photos next-screen media loading", () => {
   test("paints the original when a photo has no thumb derivative yet", async () => {
     const { gridSrc } = await importFixture("../apps/photos/media.js");
 
-    // `thumb_uri` lands only once the preview backstop writes the derivative
-    // row; null builds no `<img>` at all.
     expect(
       gridSrc({
         content_uri: "/centraid/_vault/blobs/original-photo",
@@ -339,7 +327,6 @@ describe("Photos next-screen media loading", () => {
     );
   });
 
-  // A "0:00" chip on a still reads as a video (#708).
   test("never stamps a duration on a still photo", async () => {
     const { durationLabel, fillTileMedia } = await importFixture(
       "../apps/photos/media.js"
@@ -365,8 +352,6 @@ describe("Photos next-screen media loading", () => {
     expect(oddStill.querySelector(".ph-tile-duration")).toBeNull();
   });
 
-  // A missing derivative and a `blob:` URL revoked mid-decode both surface as one
-  // `error`; the tile retries the original once before giving up (#708).
   test("retries the original once before falling back to a placeholder", async () => {
     const { fillTileMedia } = await importFixture("../apps/photos/media.js");
 
@@ -392,10 +377,6 @@ describe("Photos next-screen media loading", () => {
     expect(tile.classList.contains("is-placeholder")).toBe(true);
   });
 
-  // The authorizer resolves a blob reference in the scope of the nearest
-  // `data-scope`. Content ids collide across scopes, so an unstamped audience
-  // tile renders a different photo, not a 404 — the stamp must land before the
-  // media element exists (#599).
   test("stamps the owning scope on every tile it paints for an audience", async () => {
     const { fillTileMedia } = await importFixture("../apps/photos/media.js");
 
@@ -420,7 +401,6 @@ describe("Photos next-screen media loading", () => {
     });
     expect(placeholder.dataset.scope).toBe("family");
 
-    // An empty stamp would address a scope called "" instead of the ambient one.
     const solo = document.createElement("div");
     fillTileMedia(solo, {
       asset_id: "a3",
@@ -429,8 +409,6 @@ describe("Photos next-screen media loading", () => {
     expect(Object.hasOwn(solo.dataset, "scope")).toBe(false);
   });
 
-  // Asset ids are per-scope: the once-per-mount guard must not read the same id
-  // from another scope as "already painted".
   test("repaints a tile when the same asset id arrives from another scope", async () => {
     const { mountMedia } = await importFixture("../apps/photos/media.js");
     const tile = document.createElement("div");
@@ -458,3 +436,4 @@ describe("Photos next-screen media loading", () => {
     expect(tile.querySelectorAll("img")).toHaveLength(painted);
   });
 });
+// @vitest-environment jsdom

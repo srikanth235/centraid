@@ -1,7 +1,3 @@
-// THE TILE (v4 §2.3, §2.4, §4.4): content-led, no chrome, its own aspect
-// ratio, and exactly FOUR overlay slots — selection, vault, kind, state.
-// STATE IS WHAT THE TILE IS (§14): skeleton, photograph and failure all
-// occupy the one `justify()` box, so nothing reflows when bytes land.
 import { useState } from "react";
 import type { ReactNode } from "react";
 
@@ -55,8 +51,6 @@ export function Tile({
   onEnterSelectMode,
   extras,
 }: TileProps) {
-  // Seeded from the RECORD so the first frame is truthful; the media only
-  // ever escalates it.
   const [seen, setSeen] = useState<TileMediaState>(() =>
     initialMediaState(asset)
   );
@@ -78,7 +72,6 @@ export function Tile({
       style={{ width: `${width}px`, height: `${height}px` }}
       data-asset-id={asset.asset_id}
       data-tile-state={media}
-      /* Content ids collide across scopes by design (#599). */
       data-scope={scopeAttr(asset.scope_id)}
     >
       <button

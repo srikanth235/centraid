@@ -24,16 +24,12 @@ describe("grant audiences — one roster mapping for every app", () => {
   });
 
   test("a destination with no party names a vault, not a person, and is dropped", () => {
-    // A grant is addressed to a PARTY; a row the roster could not settle to
-    // one has nobody for the grant plane to name.
     expect(grantAudiencesFrom([{ label: "Linked vault" }], [])).toStrictEqual(
       []
     );
   });
 
   test("a person queued offline is never offered", () => {
-    // `pending:` is an overlay id no vault has settled — offering it would
-    // record a grant against an identity that does not exist yet.
     expect(
       grantAudiencesFrom(
         [{ label: "Offline friend", partyId: "pending:intent-1:0" }],
@@ -47,9 +43,6 @@ describe("grant audiences — one roster mapping for every app", () => {
   });
 
   test("the native seat's own pending flag is honoured beside the id form", () => {
-    // The native roster settles the pending question itself and carries a real
-    // party id beside the flag; the web roster carries it in the id. One law
-    // reads both rather than each seat restating it.
     expect(
       grantAudiencesFrom(
         [
@@ -106,8 +99,6 @@ describe("reading the roster — unreadable is not empty", () => {
   });
 
   test("a circles read that failed takes the whole roster with it", async () => {
-    // Half a roster is not a roster: a member choosing from the people half
-    // alone could not tell that their named groups were silently missing.
     stub({
       shareTargets: () =>
         Promise.resolve([{ partyId: "party-asha", label: "Asha" }]),

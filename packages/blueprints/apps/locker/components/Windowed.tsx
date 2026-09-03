@@ -9,7 +9,6 @@ import {
   VirtualSpacer,
 } from "../../_shared/VirtualWindow.tsx";
 
-/** First-paint guess; the first measurement replaces it. */
 const ROW_RUNG_FALLBACK = 44;
 
 export interface RowPosition {
@@ -24,8 +23,6 @@ export interface WindowedRowsProps<T> {
   children: (row: T, position: RowPosition) => ReactNode;
 }
 
-/** The window every long Locker list shares (#883 C4). The caller draws the
- *  `<li>`: the row IS the list item, never a wrapper around one. */
 export function WindowedRows<T>(props: WindowedRowsProps<T>): ReactNode {
   const listRef = useRef<HTMLUListElement | null>(null);
   const scrollRef = useScrollHost(listRef);

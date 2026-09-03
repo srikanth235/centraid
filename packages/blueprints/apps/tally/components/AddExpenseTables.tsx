@@ -1,9 +1,3 @@
-// The PAYER SET and the TYPED LINES tables of Add expense.
-//
-// NEITHER IS A MODE. Several payers is the ordinary payer chip set with
-// amounts typed beside it, and clearing an amount takes that person back out;
-// the lines table appears only under *By line*, the one division whose numbers
-// are not per-person.
 import type { ReactNode } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";
@@ -22,7 +16,6 @@ import styles from "./Compose.module.css";
 
 export interface PayerTableProps {
   members: readonly GroupMember[];
-  /** What each payer has typed. A person absent from the map is not a payer. */
   payers: Readonly<Record<string, string>>;
   payerId: string;
   onPayer: (partyId: string, text: string) => void;
@@ -62,9 +55,6 @@ export interface LineTableProps {
   onAdd: () => void;
 }
 
-/** The same object the Receipt surface allocates, without the photograph;
- *  `line-model.ts` folds them into the shares, so a typed split and a
- *  photographed one are the same arithmetic. */
 export function LineTable(props: LineTableProps): ReactNode {
   const replace = (index: number, next: LineDraft): void =>
     props.onLines(props.lines.map((line, at) => (at === index ? next : line)));

@@ -1,12 +1,3 @@
-/**
- * The notes projection as a BOUNDED recent window (#262): newest by
- * updated_at plus every pinned note, never the whole table; `truncated` tells
- * the UI to offer a wider one. People-journal entries are EXCLUDED (#834
- * R-journal) — they must never reach the library, the trash shelf, or the tag
- * chips derived from it, though opening one by id still works. A consent
- * denial is a first-class outcome, not an error.
- */
-
 import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
 import { decodeNoteBody } from "../note-body.ts";
 
@@ -79,8 +70,6 @@ interface CardRow extends Record<string, unknown> {
   id: string;
 }
 
-// A short preview + checklist tally, never the whole body (#404). Mirrors
-// format.ts's previewText/checkStats — inlined, as handlers are standalone.
 const CHECK_RE = /^\s*[-*] \[(?<mark> |x|X)\]\s?(?<text>.*)$/u;
 
 function previewOf(body: unknown): string {
@@ -125,13 +114,11 @@ function checkOf(body: unknown): { total: number; done: number } {
   return { total, done };
 }
 
-/** The shared attachment-projection shape, keyed by target_id. */
 function attachmentsBySubject(
   subjectType: string,
   attachments: AttachmentRow[],
   contentById: Map<string, ContentRow>
 ) {
-  // Blob-backed bytes serve as same-origin URLs (#296).
   const srcOf = (c: ContentRow | undefined) =>
     typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`
@@ -164,7 +151,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
-    // Pinned notes ride beside the window: a pin survives the note aging out.
     const [recent, pinnedNotes, trashedNotes, notebooks, journalNoteIds] =
       await Promise.all([
         ctx.vault.read({
@@ -360,7 +346,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       try {
         selectorByLink.set(a.link_id, JSON.parse(a.selector_json));
       } catch {
-        // an unreadable selector is just an unanchored reference
+        // Intentionally empty.
       }
     }
     const referencesByNote = new Map<string, Array<Record<string, unknown>>>();

@@ -1,10 +1,6 @@
 import { armConfirm, fmtBytes } from "@centraid/design/elements";
 
 import { Skeleton } from "../../_shared/LoadingSkeleton.tsx";
-// Duplicates shelf (#352): one row per cluster, shared `Tile` + `justify()`
-// like a Timeline day-row. Own-scope-only write (§599): unmarked tiles,
-// nothing to open — a cluster is a decision, so `onOpen`/`onEnterSelectMode`
-// are no-ops and selection is always on. Orchestrator owns load/selection.
 import { parseAssetKey } from "../asset-key.ts";
 import { DUPLICATES } from "../constants.ts";
 import { assetBytes } from "../format.ts";
@@ -16,15 +12,11 @@ import { Tile } from "./Tile.tsx";
 
 import styles from "./Duplicates.module.css";
 
-function noop(): void {
-  // Tile requires onOpen / onEnterSelectMode; a cluster never fires them.
-}
+function noop(): void {}
 
-// Member's rung, not a shelf size. Unbounded width: never-stretched row.
 const CLUSTER_RUNG = 1; // S — shows the kind slot (duration / live)
 const UNBOUNDED_WIDTH = 100_000;
 
-/** Cluster span (v4 :4439). Every copy needs a timestamp or `null` (§14). Shared with DuplicateReview. */
 export function fmtClusterWindow(assets: readonly Asset[]): string | null {
   const times = assets
     .map((a) => a.taken_at ?? a.captured_at ?? a.created_at ?? null)

@@ -1,5 +1,3 @@
-// Tasks' frame contribution (spec §1–2). No board → no primary at all; a
-// denied WRITE scope keeps the button and states the reason.
 import type { ReactNode } from "react";
 
 import {
@@ -18,10 +16,8 @@ import { QUICK_ADD, shelfCopy } from "./view-copy.ts";
 
 export interface AppBarState extends AppBarBase {
   shelf: ShelfId;
-  /** Project names itself in the bar. */
   projectName?: string;
   onQuickAdd?: () => void;
-  /** Why capture cannot fire (e.g. denied write scope). */
   quickAddDisabledReason?: string;
 }
 
@@ -51,7 +47,6 @@ export function appBar(state: AppBarState): InlineAppBarContribution {
         <SearchBarButton label="Search tasks" onSearch={handleSearch} />
       ) : null}
       {offersQuickAdd(state.shelf) && handleQuickAdd ? (
-        // A disabled commit takes the outline, never the fill (rule 4).
         <button
           type="button"
           className={disabled ? "kit-btn" : "kit-btn primary"}

@@ -1,10 +1,6 @@
-// Emptying trash (§4.5 / proto:4800-4803) — the one irreversible batch.
-// NO UNDO GRAMMAR: never pass `notice`'s second argument. Confirmation happens BEFORE this module (`EmptyTrash.tsx`).
-// ORDER MATTERS: `source_asset_id` is a real FK (#711) — purge derived copies FIRST or the vault refuses the original.
 import { act, narrate, notice } from "./outcomes.ts";
 import type { Asset } from "./types.ts";
 
-/** Derived copy before the source it names. `visiting` so a two-row cycle degrades to some order rather than hanging. */
 export function emptyTrashOrder(trash: readonly Asset[]): Asset[] {
   const byId = new Map(trash.map((asset) => [asset.asset_id, asset]));
   const done = new Set<string>();
@@ -26,7 +22,6 @@ export function emptyTrashOrder(trash: readonly Asset[]): Asset[] {
 
 export interface EmptyTrashResult {
   purged: number;
-  /** Vault refused — a lineage still points at them, most often. */
   kept: number;
   queued: number;
 }
@@ -36,7 +31,6 @@ export interface EmptyTrashCallbacks {
   setBusy?: (on: boolean) => void;
 }
 
-/** Serial `purge-asset` — lineage refusal depends on the previous one having landed. */
 export async function runEmptyTrash(
   trash: readonly Asset[],
   { refresh, setBusy }: EmptyTrashCallbacks
@@ -70,7 +64,6 @@ export async function runEmptyTrash(
   setBusy?.(false);
   await refresh();
   notice(emptyTrashSummary(result));
-  // Last refusal's own words after the summary — the vault's reason, not just the count.
   if (lastBad) narrate(lastBad);
   return result;
 }

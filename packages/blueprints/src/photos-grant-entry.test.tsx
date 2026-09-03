@@ -1,14 +1,3 @@
-// @vitest-environment jsdom
-// Photos' way into the grant sheet, web seat (#825): what the member is TOLD
-// when the sheet does not open. Three refusals, three different facts — no
-// grant plane on this host, a roster that answered nobody, and a roster that
-// could not be read at all. The third must never be spoken as the second: that
-// accuses a member with a full People directory of knowing nobody.
-//
-// Driven as the real hook inside a probe component against a stubbed
-// `window.centraid`, the same harness shape share-sheet-quick-add.test.tsx
-// uses; the hook is behind a file-URL dynamic import for the TS6059 reason
-// the other app-render suites document.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -45,12 +34,6 @@ describe("Photos' grant entry, web seat", () => {
     delete (window as { centraid?: unknown }).centraid;
   });
 
-  /**
-   * Press *Share* and record the SENTENCES that reached the status line, plus
-   * whether the sheet opened. Those two are the whole observable outcome of a
-   * refusal: what the member reads, and whether they were made to stare at an
-   * empty picker instead.
-   */
   const press = async (
     centraid: Record<string, unknown>
   ): Promise<{ said: string[]; opened: boolean }> => {
@@ -135,3 +118,4 @@ describe("Photos' grant entry, web seat", () => {
     expect(opened).toBe(false);
   });
 });
+// @vitest-environment jsdom

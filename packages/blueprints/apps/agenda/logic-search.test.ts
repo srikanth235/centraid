@@ -1,16 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-// Agenda's search read (#839 W2-1) — split out of `logic.test.ts`, which holds
-// the write side; the seat both drive is `logic.test-fixtures.ts`.
-//
-// SEARCH ASKS THE VAULT, never the loaded window, and it is the second place
-// this app paints before the vault has spoken. So the cases below are driven on
-// the fake clock (coalescing is the whole point of the debounce, and a suite
-// that awaited the read directly would prove nothing about the delay) and each
-// pins what the pane holds when the answer never comes, comes late, or comes
-// for a term the member has already typed past. A THROW IS NOT AN EMPTY RESULT
-// SET: "nothing matches" is a claim about the vault, and the app may only make
-// it when the vault said so.
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import type { Harness } from "./logic.test-fixtures.ts";
@@ -81,7 +70,6 @@ describe("search asks the vault, never the loaded window", () => {
     const clock = useFakeClock();
     const app: Harness = harness({
       read: async () => {
-        // A second keystroke lands while this read is in flight.
         app.logic.clearSearch();
         return { events: [event({ event_id: "stale" })] };
       },

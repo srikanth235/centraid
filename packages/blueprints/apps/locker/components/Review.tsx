@@ -1,15 +1,3 @@
-// REVIEW — TWO REGISTERS AND THE ITEMS BEHIND THEM (README-Locker §5;
-// FLOWS.md "Review triage").
-//
-// A VERDICT LIST, NOT A SCORE. The first register is what this product checks
-// and what it found; the second is every check that could not run, with the
-// reason — a check whose source does not exist, and a check whose source
-// exists but whose data no read carries here, are both "nothing was checked"
-// to a member, and both say so rather than reporting a zero they did not earn.
-//
-// ALL CLEAR IS A DESIGNED STATE. It says WHAT was checked and WHEN, because
-// "nothing here" and "nothing was checked" are different facts and only one of
-// them is reassuring.
 import type { ReactNode } from "react";
 
 import type { ReviewRegister } from "../review-model.ts";
@@ -38,20 +26,13 @@ import styles from "./Rows.module.css";
 
 export interface ReviewScreenProps {
   register: ReviewRegister;
-  /** How many items were read at all — the all-clear's own denominator. */
   windowCount: number;
-  /** Wall clock of the read the verdicts were scored against. Absent until
-   *  one has landed: a check time nobody measured is not a fact. */
   checkedAtClock: string | null;
-  /** Has a read landed? Nothing is empty until one has. */
   loaded: boolean;
-  /** Show the items behind one verdict, in the list. */
   onShowThem: (key: CheckKey) => void;
-  /** Open the item that would fix it — the change, not the diagnosis. */
   onChange: (row: LockerRow) => void;
 }
 
-/** One check, as a row: its label, its reason, and the count as the status. */
 function CheckRow({
   label,
   why,

@@ -1,8 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** The title is the caption on the content item; captured_at, favorite and
- *  archived live on the asset. Every optional field app.json declares must be
- *  forwarded — one dropped here returns 200 and changes nothing. */
 export default async function updateAsset({ body, ctx }: HandlerArgs) {
   const input = actionInput(body);
   return runVaultAction(ctx, {

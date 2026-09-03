@@ -1,20 +1,3 @@
-/**
- * Near-duplicate clusters over the live library (#352 phase 3/4 —
- * closing #299's deferred "duplicates shelf").
- *
- * THE SIMILARITY SIGNAL IS THE SERVER'S, never an exact-sha group plus a
- * "same dimensions + same byte size" fingerprint, which is coincidence-prone:
- *   - `media.asset_phash` is a registered logical entity (schema/tables.ts)
- *     an app with `{schema:'media', verbs:'read'}` can read directly.
- *   - `cluster_id` is a column the standing sweep recomputes wholesale
- *     every run (enrich/clusters.ts's `recomputeDuplicateClusters` —
- *     union-find over phash hamming distance ≤ 6, deterministic id = the
- *     group's lowest asset_id), so reading `WHERE cluster_id IS NOT NULL`
- *     and grouping client-side is a real visual-similarity signal.
- *
- * This query does the read + group + join to content, nothing more — the
- * clustering itself already happened server-side.
- */
 import { srcOf } from "./_shared.ts";
 
 interface RawPhash {
@@ -61,9 +44,6 @@ export default async function duplicatesHandler({ ctx }: HandlerArgs) {
     }
     const allAssetIds = [...new Set(rows.map((r) => r.asset_id))];
 
-    // Only LIVE assets ride into a cluster card — a trashed member of an
-    // old cluster is not something to offer trashing again. Clusters left
-    // with fewer than 2 live members are dropped entirely below.
     const assetsResult = await ctx.vault.read({
       entity: "media.asset",
       where: [

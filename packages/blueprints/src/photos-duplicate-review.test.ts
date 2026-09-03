@@ -1,19 +1,3 @@
-// @vitest-environment jsdom
-// THE DUPLICATE REVIEW's real decision logic (v4 handoff proto :4291-:4303).
-//
-// Two things here are load-bearing and neither is cosmetic:
-//
-//   1. WHICH COPY IS KEPT. A `Trash` press destroys every copy this module did
-//      not choose, so the choice has to be deterministic (the same cluster
-//      proposes the same keeper every time, in any row order) and it may only
-//      claim `largest` when the rows actually support that word.
-//   2. WHAT THE COUNTS ARE. "2 copies to trash" and "The other 2 go to trash"
-//      are promises about how many photographs a press removes; they are
-//      derived from the same decision the press acts on, never counted twice.
-//
-// The view is rendered to static markup, like every other pure-view fixture in
-// this package (photos-picker.test.ts): `DuplicateReviewView` is a pure view
-// over its props, so the markup IS the behaviour.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -102,9 +86,6 @@ describe("which copy the review proposes to keep", () => {
   });
 
   it("does not say `largest` when the biggest size is a tie", () => {
-    // The prototype's own cluster: two copies at 4.1 MB and one at 820 KB.
-    // Something still has to be kept, but nothing measured makes one of the
-    // two tied copies the larger, so the word is withheld rather than guessed.
     const decision = decideCluster([
       copy("a", { byte_size: 4_100_000 }),
       copy("b", { byte_size: 4_100_000 }),
@@ -131,8 +112,6 @@ describe("which copy the review proposes to keep", () => {
     const forward = decideCluster(rows)!;
     const reversed = decideCluster(rows.toReversed())!;
     expect(forward.keptId).toBe(reversed.keptId);
-    // Same bytes, same pixels — the EARLIEST capture wins, because of two
-    // identical copies the first one taken is the original.
     expect(forward.keptId).toBe("b");
   });
 
@@ -144,7 +123,6 @@ describe("which copy the review proposes to keep", () => {
     const overridden = decideCluster(assets, "small")!;
     expect(overridden.keptId).toBe("small");
     expect(overridden.trashIds).toStrictEqual(["big"]);
-    // The member kept the smaller copy, so `largest` is no longer true of it.
     expect(overridden.reason).toBeNull();
   });
 
@@ -196,14 +174,12 @@ describe("what the review promises before it trashes anything", () => {
   it("marks exactly one copy `keep` and every other one `trash`", () => {
     const html = review(cluster);
     expect([...html.matchAll(/>keep · largest</gu)]).toHaveLength(1);
-    // Once on the tile's state slot and once in the readout row, per copy.
     expect([...html.matchAll(/>trash</gu)]).toHaveLength(4);
   });
 
   it("moves the keep when the member overrides it", () => {
     const html = review(cluster, { keptId: "small" });
     expect(html).toContain("2 copies to trash");
-    // The smaller copy is not the largest, so the reason word is gone with it.
     expect(html).not.toContain("keep · largest");
     expect([...html.matchAll(/>keep</gu)]).toHaveLength(2);
   });
@@ -242,8 +218,6 @@ describe("what the review promises before it trashes anything", () => {
     const html = review(cluster);
     expect(html).toContain("4032 × 3024");
     expect(html).toContain("1600 × 1200");
-    // No provenance column exists on a cluster row, so the prototype's
-    // `· from this phone` clause is omitted rather than guessed.
     expect(html).not.toContain("from this phone");
   });
 
@@ -269,3 +243,4 @@ describe("what the review promises before it trashes anything", () => {
     expect(review(cluster)).not.toContain("kit-btn primary");
   });
 });
+// @vitest-environment jsdom

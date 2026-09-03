@@ -1,10 +1,3 @@
-/**
- * The Journal PLACE (#834 R-journal): the only query door including the
- * journal scheme (`library`/`search` exclude it). Read-only; every read is
- * bounded, and a DENIAL IS A VALUE: translated into the empty shape plus
- * `vaultDenied`, not a throw.
- */
-
 import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
 import { decodeNoteBody } from "../note-body.ts";
 
@@ -23,8 +16,6 @@ interface ContentRow {
   content_uri?: string;
 }
 
-// Preview + checklist tally, never a whole body — the derivations `library`
-// ships, inlined (a query handler is a standalone module).
 const CHECK_RE = /^\s*[-*] \[(?<mark> |x|X)\]\s?(?<text>.*)$/u;
 
 function previewOf(body: string): string {
@@ -87,8 +78,6 @@ export default async function journalHandler({ input, ctx }: HandlerArgs) {
       limit: window,
       purpose,
     });
-    // INCLUDE-ONLY is this query's whole contract: re-narrow in memory so an
-    // over-wide read cannot put a non-journal note in the Journal place.
     const rows = ((notes.rows ?? []) as unknown as NoteRow[]).filter(
       (note) => journalNoteIds.has(note.note_id) && note.deleted_at == null
     );
@@ -127,7 +116,6 @@ export default async function journalHandler({ input, ctx }: HandlerArgs) {
           check: checkOf(body),
         };
       }),
-      // A full slice means there is more behind it.
       truncated: ((notes.rows ?? []) as unknown[]).length >= window,
       window,
     };

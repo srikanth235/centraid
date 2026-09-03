@@ -1,5 +1,3 @@
-// PEOPLE STAY OWN-SCOPE: a party id minted in another scope means nothing, or
-// means someone else. Loaded lazily — the roster walks every face region.
 import type { Asset } from "./types.ts";
 
 export interface Person {
@@ -7,11 +5,9 @@ export interface Person {
   name: string | null;
   count: number;
   asset_ids: string[];
-  /** Distinct confirmers (#712 P6b) — never merged. */
   confirmed_by?: Array<{ party_id: string; name: string | null }>;
 }
 
-/** NO `name` field, by design: a proposal is never resolved to a name (#711). */
 export interface FaceProposal {
   cluster_id: string;
   party_id: string | null;
@@ -65,7 +61,6 @@ export function createPeople({ onData }: { onData: () => void }): PeopleStore {
     }
     people = [...(data?.people ?? [])].sort((a, b) => b.count - a.count);
     proposals = [...(data?.proposals ?? [])];
-    // Unread stays `null`, never a false zero.
     unmatched = data?.unmatchedTotal ?? null;
     loading = false;
     onData();

@@ -1,6 +1,3 @@
-// Agenda vault IO. `parked` is a designed hold (no unpark door in an app),
-// not an error; `queued`/`in-flight` stay on this device until the gateway answers.
-
 import { debounce, outcomeMessage } from "@centraid/design/elements";
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
@@ -44,7 +41,6 @@ export function createLogic({
   render,
   refresh,
 }: LogicDeps) {
-  /** The in-pane notice, driven imperatively so React never clobbers it. */
   function notice(text: string): void {
     const el = document.querySelector<HTMLElement>("#noticeBanner");
     if (!el) return;
@@ -135,7 +131,6 @@ export function createLogic({
     return outcome;
   }
 
-  /** Project RSVP into the loaded window before the vault answers. */
   async function respondRsvp(
     eventId: string,
     partyId: string,
@@ -168,12 +163,10 @@ export function createLogic({
     return outcome;
   }
 
-  /** Cancelling parks — `parked` is the ordinary outcome. */
   async function cancelEvent(
     eventId: string
   ): Promise<VaultOutcome | undefined> {
     const outcome = await act("cancel-event", { event_id: eventId });
-    // A held ask is not a failure — answer it before `narrate` writes a reason.
     if (narrateHeld(outcome)) {
       render();
       return outcome;
@@ -200,7 +193,6 @@ export function createLogic({
     return outcome;
   }
 
-  // Search asks the vault FTS5 index, not the loaded window.
   let searchSeq = 0;
   const applySearchInput = debounce(async (raw: string) => {
     state.search = raw;
@@ -218,7 +210,6 @@ export function createLogic({
       });
       rows = result?.events ?? [];
     } catch {
-      // A throw is not an empty result set — "nothing matches" would be unverified.
       rows = null;
     }
     if (seq !== searchSeq) return;

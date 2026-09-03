@@ -1,4 +1,3 @@
-// Breadcrumb (Docs spec §1.6). Trailing crumb owns the place; crumbs before it are links. Chain is `crumbsFor`.
 import type { ReactNode } from "react";
 
 import {
@@ -56,7 +55,6 @@ export function Breadcrumb({
                 </span>
               ) : null}
               {last && menu && menu.length > 0 ? (
-                // Trailing crumb owns the place — `aria-current`; opens the menu, does not navigate.
                 <button
                   type="button"
                   className={`kit-plain-btn ${styles.here} ${styles.hereBtn}`}
@@ -72,7 +70,6 @@ export function Breadcrumb({
                   </span>
                 </button>
               ) : last || crumb.shelf === undefined ? (
-                // `aria-current="page"` rather than a disabled link: here, not unavailable.
                 <span className={styles.here} aria-current="page">
                   {label}
                 </span>

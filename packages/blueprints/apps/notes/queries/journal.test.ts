@@ -1,8 +1,3 @@
-// The Journal place is INCLUDE-ONLY over the People-journal scheme — the
-// mirror image of the exclusion its three sibling projections apply. Same
-// mocked-vault shape as `src/day-context-journal-queries.test.ts`: fixtures
-// keyed by entity, no `where` applied, so a handler that trusted the read
-// instead of re-narrowing in memory fails here.
 import { describe, expect, test } from "vitest";
 
 import { FLAGS_SCHEME_URI } from "../../_shared/concept-scheme-kit.ts";
@@ -39,8 +34,6 @@ function ctxOf(
 const body = (text: string): string =>
   `data:text/markdown,${encodeURIComponent(text)}`;
 
-/** A vault with two journal entries, one ordinary note, and one journal
- *  entry already in the trash. */
 function vaultRows() {
   return {
     "core.concept_scheme": [
@@ -135,8 +128,6 @@ describe("the Journal place", () => {
     const untitled = answer.entries[1] as Record<string, unknown>;
     expect(untitled["preview"]).toContain("first line");
     expect(untitled["check"]).toStrictEqual({ total: 2, done: 1 });
-    // The place ships a preview and a tally, never a body: the editor pulls
-    // the canonical text on open, exactly as the library does.
     expect(untitled["body"]).toBeUndefined();
   });
 

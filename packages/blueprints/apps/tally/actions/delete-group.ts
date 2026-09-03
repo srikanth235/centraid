@@ -1,6 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/** tally.delete_group — contract in app.json. */
 const KEYS = ["group_id"];
 export default async function deleteGroup({ body, ctx }: HandlerArgs) {
   const input = actionInput(body);

@@ -1,13 +1,9 @@
-// LOADING IS A SHAPE, NOT AN ABSENCE (§14): the same packer, rung height and
-// gutter as the timeline, so arrival is a repaint, not a relayout.
-
 import { cls } from "../format.ts";
 import { justify } from "../layout.ts";
 import type { Asset } from "../types.ts";
 
 import styles from "./LoadingGrid.module.css";
 
-/** Fixed order, never random: a shuffled skeleton reads as movement. */
 const SHAPES: readonly (readonly [number, number])[] = [
   [4, 3],
   [3, 4],

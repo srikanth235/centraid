@@ -1,15 +1,3 @@
-/**
- * Whether face enrichment is enabled for this vault (#352
- * phase 3/4): a straight read of `enrich.policy` for the photos domain — an
- * app-readable MIRROR of the owner's settings
- * (packages/vault/src/schema/enrich.ts), never the settings bag itself
- * (that stays owner-only, GET/PATCH /centraid/_vault/enrich). `tier` is
- * one of 'off' | 'device' | 'gateway' (#712 C5, renamed from
- * 'off' | 'local' | 'model'); the toolbar's "Detect faces now" only
- * fires when it isn't 'off' — when it is, the UI says so plainly rather
- * than showing a button that would silently no-op.
- */
-
 interface RawPolicy {
   tier?: string;
 }

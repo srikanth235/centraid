@@ -1,6 +1,3 @@
-// Agenda chrome — a route inside the frame. Geometry only. No topbar/sidebar:
-// the ag-prefixed shell/side/topbar trio is banned (shared-css.test.ts).
-// Everything variable arrives as a slot; `dayContext` is the day-context seam.
 import type { ReactNode } from "react";
 
 import {
@@ -13,14 +10,11 @@ import { RAIL_CALENDARS, RAIL_DAY_CONTEXT } from "./view-copy.ts";
 
 import styles from "./Chrome.module.css";
 
-/** What the chrome DRAWS but does not decide. `null` renders nothing, not an empty container. */
 export interface ChromeSlots {
   miniMonth: ReactNode;
   calendars: ReactNode;
-  /** Layers are NOT calendars — nothing in them can be written to. */
   dayContext: ReactNode;
   searchField: ReactNode;
-  /** Null where the app has nothing to declare — an empty row is chrome. */
   stateRow: ReactNode;
   canvas: ReactNode;
   detail: ReactNode;

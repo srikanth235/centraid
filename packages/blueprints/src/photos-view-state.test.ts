@@ -1,7 +1,3 @@
-// @vitest-environment jsdom
-// Photos must not: render unread as empty; invent copy over a failed read;
-// redirect empty Trash to Library; omit where bytes go (v4 §14). jsdom: kit
-// custom-elements evaluate `HTMLElement` at module load.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -63,7 +59,6 @@ describe("an un-loaded library is never an empty one (§14)", () => {
   it("says NOTHING while the first read is in flight", () => {
     const view = emptyStateView(unread);
     expect(view.visible).toBe(false);
-    // Empty copy must be blank, not CSS-hidden.
     expect(view.title).toBe("");
     expect(view.body).toBe("");
     expect(view).toStrictEqual(NO_EMPTY_STATE);
@@ -138,7 +133,6 @@ describe("offline is explained, never left as a grey mosaic (§14)", () => {
     );
     expect(html).toContain(OFFLINE_COPY.banner);
     expect(html).toContain(OFFLINE_COPY.retry);
-    // Banner is outlined; the one fill belongs to the view (§18).
     expect(html).not.toContain("kit-btn primary");
   });
 
@@ -268,3 +262,4 @@ describe("Storage names both halves of what it opens", () => {
     expect(shelfCopy(STORAGE).title).toBe("Storage and backup");
   });
 });
+// @vitest-environment jsdom

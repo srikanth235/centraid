@@ -1,16 +1,3 @@
-/**
- * App id + metadata-patch laws (#656 Layer 3 mutation seed).
- *
- * `app-meta.ts` guards the two things every app-owning route depends on: the
- * id shape that keeps a write inside the app's own directory, and the
- * changed-files-only patch the git store commits. The ordinary tests assert
- * that a rename "changes the name" — true of a great many wrong
- * implementations. Deleting the `_` guard from `validateAppId`, loosening the
- * `automations/<id>/automation.json` path regex, returning unchanged files, or
- * dropping the case-insensitive duplicate-name check all survived.
- *
- * Each test below names the law the mutant breaks.
- */
 import { describe, expect, it } from "vitest";
 
 import { fc } from "@centraid/test-kit/fast-check";
@@ -44,7 +31,6 @@ describe(validateAppId, () => {
       }),
       { numRuns: 120, seed: 65660 }
     );
-    // Boundaries: 1 char and 63 chars are in; 64 is out.
     expect(() => validateAppId("a")).not.toThrow();
     expect(() => validateAppId(`a${"b".repeat(62)}`)).not.toThrow();
     expect(() => validateAppId(`a${"b".repeat(63)}`)).toThrow(
@@ -70,7 +56,6 @@ describe(validateAppId, () => {
     ];
     for (const id of rejected) {
       expect(() => validateAppId(id), id).toThrow(/Invalid app id/u);
-      // …and a rejected id never patches a file map either.
       expect(() => updateAppMetaFiles([], id, { name: "X" }), id).toThrow(
         /Invalid app id/u
       );
@@ -109,8 +94,6 @@ describe(updateAppMetaFiles, () => {
   ];
 
   it("returns ONLY the files whose content actually changed", () => {
-    // Returning an unchanged file would rewrite it in the git store and put a
-    // no-op commit in the app's history.
     expect(
       updateAppMetaFiles(base(), "todos", {}).map((f) => f.path)
     ).toStrictEqual(["app.json"]);
@@ -125,8 +108,6 @@ describe(updateAppMetaFiles, () => {
         .map((f) => f.path)
         .sort()
     ).toStrictEqual(["app.json", "automations/wake/automation.json"]);
-    // Renaming to the SAME name leaves the manifest byte-identical, so it
-    // must not be returned.
     expect(
       updateAppMetaFiles(withAutomation, "todos", { name: "Todos" }).map(
         (f) => f.path
@@ -176,11 +157,9 @@ describe(updateAppMetaFiles, () => {
         ])
       ).code
     ).toBe("already_exists");
-    // A sibling with no name at all is not a collision.
     expect(() =>
       updateAppMetaFiles(base(), "todos", { name: "Other" }, [{ id: "s" }])
     ).not.toThrow();
-    // The app's own row never collides with itself.
     expect(() =>
       updateAppMetaFiles(base(), "todos", { name: "Todos" }, [
         { id: "todos", name: "Todos" },
@@ -204,13 +183,11 @@ describe(updateAppMetaFiles, () => {
     ) as { description: string };
     expect(kept.description).toBe("next");
 
-    // An absent `description` key leaves the existing value alone.
     const untouched = JSON.parse(
       byPath(updateAppMetaFiles(start, "todos", {})).get("app.json") as string
     ) as { description: string; name: string };
     expect(untouched.description).toBe("keep me");
 
-    // Description-only must not invent a name (kills `if (renameTo)` → true).
     expect(untouched.name).toBe("Todos");
     expect(
       (
@@ -250,10 +227,6 @@ describe(updateAppMetaFiles, () => {
   });
 
   it("rebuilds app.json from scratch when the current one is not a JSON object", () => {
-    // NOTE: a top-level JSON *array* is deliberately not in this list —
-    // `typeof [] === "object"`, so today it is adopted and the rename is lost
-    // when it is re-serialised. Pinning that here would freeze the gap; it is
-    // reported as a #656 Layer 3 finding instead.
     for (const content of ["{not json", "null", '"a string"', "7"]) {
       const files: ScaffoldFile[] = [{ path: "app.json", content }];
       const out = JSON.parse(
@@ -261,7 +234,6 @@ describe(updateAppMetaFiles, () => {
           "app.json"
         ) as string
       ) as Record<string, unknown>;
-      // A salvaged array/scalar would produce `{"0":1,"1":2,"name":…}`.
       expect(out, content).toStrictEqual({ name: "Tasks" });
     }
   });
@@ -272,7 +244,6 @@ describe(updateAppMetaFiles, () => {
     const files: ScaffoldFile[] = [
       ...base(),
       { path: "automations/wake/automation.json", content: manifest("Todos") },
-      // Near misses that must NOT be rewritten.
       { path: "automations/automation.json", content: manifest("Todos") },
       {
         path: "automations/wake/nested/automation.json",

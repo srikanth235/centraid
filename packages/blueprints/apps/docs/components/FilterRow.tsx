@@ -1,19 +1,3 @@
-// The filter row (Docs spec §4.2, `filterBlock`) — clearable dropdown pills,
-// each independently toggleable, plus a "Clear filters" link that only appears
-// once at least one filter is set.
-//
-// A pill is a `<details>`/`<summary>` disclosure rather than a hand-rolled
-// popover: it opens on click and on Enter, closes on Escape, is reachable by
-// keyboard with no JavaScript at all, and never needs a document-level click
-// listener that another overlay could swallow. What it opens is a radio group,
-// because an axis holds ONE value — "Modified: Today" and "Modified: This
-// year" cannot both be true of the same set.
-//
-// WHICH PILLS EXIST IS A DATA QUESTION, not a layout one (`liveAxes`): §4.2
-// names four properties, and this drive can answer three of them outright and
-// the People axis only where the rows carry real shares. See filters.ts for why
-// an unanswerable pill is worse than a missing one — and why `rows` has to be
-// the drive's whole set rather than the filtered one.
 import type { ReactNode } from "react";
 
 import { CLEAR_FILTERS } from "../drive-copy.ts";
@@ -32,8 +16,6 @@ export function FilterRow({
   onClear,
 }: {
   filters: DriveFilters;
-  /** The drive's own rows BEFORE the filters narrow them — the People axis'
-   *  options are derived from what they are shared with. */
   rows: readonly DriveDoc[];
   onSelect: (axis: keyof DriveFilters, option: string | null) => void;
   onClear: () => void;

@@ -1,8 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit cohesive agenda projection query; the event/calendar/proposal SELECTs and their row shaping are one read path against the vault
-// Agenda projection: non-cancelled canonical events plus candidate calendars.
-// `{ from, to }` optional (default: today forward); events fetched from
-// BEFORE `from` so multi-day spans arrive — the filter below re-applies the
-// true lower bound.
+// governance: allow-repo-hygiene file-size-limit cohesive agenda projection query; the event/calendar/proposal SELECTs and their row shaping are one read path against the vaul
 
 interface RawEvent {
   event_id: string;
@@ -87,7 +83,6 @@ interface EventRow extends RawEvent {
   attendees?: DecoratedAttendee[];
   is_recurrence_instance?: boolean;
   instance_key?: string;
-  /** The ONE member-facing recurrence sentence; never the rule (#834). */
   recurrence_summary?: string | null;
 }
 function attachmentsBySubject(
@@ -95,7 +90,6 @@ function attachmentsBySubject(
   attachments: RawAttachment[],
   contentById: Map<string, RawContent>
 ): Map<string, DecoratedAttachment[]> {
-  // Blob-backed bytes serve as same-origin URLs (#296).
   const srcOf = (c: RawContent | undefined): string | undefined =>
     typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`
@@ -242,7 +236,7 @@ function expandRecurringEvents(
       });
       continue;
     }
-    // Unsupported FREQ keeps the anchor: a free-text RRULE mistake must not
+    // Unsupported FREQ keeps the anchor: a free-text RRULE mistake must no
     // erase the event from the agenda.
     const durationMs = eventDurationMs(ev);
     const eventExceptions = exceptions.filter(

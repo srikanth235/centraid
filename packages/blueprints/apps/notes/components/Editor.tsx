@@ -1,13 +1,3 @@
-// The editor (Notes spec §5). The whole posture of this app is the REOPEN,
-// not the save: there is no Save button anywhere on this surface, the status
-// line says every change is saved as you write, and the version chain behind
-// it is what makes that promise keepable.
-//
-// THE BODY IS ONE SURFACE, NOT TWO. A checklist line is a control, so it is
-// drawn as a row with a real box; everything between the boxes is the prose
-// the member types into (`format.ts` `bodySegments`). The alternative — a
-// rendered copy beside a writing copy — puts the same sentence on screen
-// twice and makes one of them wrong on every keystroke.
 import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -29,16 +19,10 @@ import styles from "./Editor.module.css";
 
 export interface EditorProps {
   note: Note;
-  /** The body as the editor holds it — undefined until the `note` query has
-   *  answered, which is what the skeleton stands in for. */
   body: string | undefined;
-  /** Every keystroke, optimistically. */
   onEdit: (patch: { title?: string; body_text?: string }) => void;
   onToggleCheck: (line: number) => void;
-  /** Hand this checklist line to Tasks (#834). The row decides WHETHER the
-   *  control is drawn; the orchestrator owns the write. */
   onSendToTasks: (line: number, text: string) => void;
-  /** Open the powerbox for the passage currently selected. */
   onLink: (
     anchor: {
       exact: string;
@@ -47,7 +31,6 @@ export interface EditorProps {
       start: number;
     } | null
   ) => void;
-  /** The caret moved inside a `[[` — the sigil opens the same sheet. */
   onProbe: (body: string, caret: number) => void;
   onAddTag: (label: string) => void;
   onRemoveTag: (tagId: string) => void;
@@ -58,9 +41,6 @@ export interface EditorProps {
   onTogglePin: () => void;
 }
 
-/** The eleven controls of the tool row. `[[` is OUTLINED — it is the act
- *  this editor is built around — and the other ten are quiet. The row
- *  scrolls on a narrow pane rather than wrapping into a second bar. */
 const TOOLS: ReadonlyArray<{ key: string; glyph: string; label: string }> = [
   { key: "bold", glyph: "B", label: "Bold" },
   { key: "italic", glyph: "I", label: "Italic" },
@@ -74,8 +54,6 @@ const TOOLS: ReadonlyArray<{ key: string; glyph: string; label: string }> = [
   { key: "code", glyph: "‹›", label: "Code" },
 ];
 
-/** What each tool wraps or prefixes. Plain text in, plain text out — a note
- *  body is markdown-lite, never parsed markup. */
 const WRAP: Record<string, [string, string]> = {
   bold: ["**", "**"],
   italic: ["*", "*"],
@@ -106,16 +84,6 @@ function applyTool(
   return `${body.slice(0, lineStart)}${prefix}${body.slice(lineStart)}`;
 }
 
-/**
- * One checklist row: a 20/26 box at the sub radius, ink-filled when done and
- * the text struck through in annotation ink.
- *
- * SEND TO TASKS sits beside the box, and ONLY on a line that wants a date
- * (`send-to-tasks.ts` `wantsDate`). It is a quiet control that really writes:
- * one `schedule.add_task` row on the same spine Tasks reads, linked back to
- * this note. Nothing is stored here about the line afterwards — the point of
- * the gesture is that the commitment LEAVES.
- */
 function ChecklistRow({
   text,
   checked,
@@ -154,8 +122,6 @@ function ChecklistRow({
   );
 }
 
-/** The reference block: what this note points at, and — read the other way —
- *  what points at it. */
 function References({
   references,
   body,
@@ -177,9 +143,6 @@ function References({
               {displayText(reference.card.title ?? reference.card.id)}
             </span>
             {exact ? (
-              // AN ANCHORED PASSAGE TAKES A 2px RULE and says where the link
-              // came from. A DEGRADED ANCHOR STATES ITSELF rather than
-              // pointing at a passage that is no longer there.
               <p className={styles.passage} data-degraded={String(!found)}>
                 <span className={styles.passageText}>{displayText(exact)}</span>
                 <span className={styles.annot}>
@@ -240,13 +203,7 @@ export function Editor(props: EditorProps): ReactNode {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const areaRef = useRef<HTMLTextAreaElement | null>(null);
   const [title, setTitle] = useState(shown.untitled ? "" : shown.heading);
-  // THE FIELD FOLLOWS THE NOTE THE MEMBER OPENED, not the last one they typed
-  // into. Adjusting the draft during render on an id change is React's own
-  // answer for state derived from a prop — an effect would paint one frame of
-  // the previous note's name into this note's field first.
   const [shownNoteId, setShownNoteId] = useState(note.note_id);
-  // A library re-read ships no body. Forgetting the loaded text here would
-  // paint an empty field and the next keystroke would overwrite the note.
   const [heldBody, setHeldBody] = useState<string | undefined>(props.body);
   if (shownNoteId !== note.note_id) {
     setShownNoteId(note.note_id);

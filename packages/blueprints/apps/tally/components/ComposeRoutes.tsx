@@ -1,14 +1,3 @@
-// The seven routes this wave draws, resolved to a body.
-//
-// SPLIT OUT OF `Route.tsx` so the route table stays readable AS a route table.
-// The composing routes need a different bundle of state from the ledger lists
-// — a draft, a verdict, an allocation, a selection — and threading all of it
-// through the one switch would bury the fifteen-route map in editor plumbing.
-//
-// EVERY ONE OF THEM RENDERS NOTHING RATHER THAN A GUESS. An expense whose
-// group ledger has not landed, a receipt whose expense is not loaded, a
-// template list before the dashboard answers: each is ABSENT, because a
-// half-drawn expense is a claim about an expense nobody has read.
 import type { ReactNode } from "react";
 
 import type { ComposeActs } from "../compose-acts.ts";
@@ -40,29 +29,18 @@ import { RecurringScreen } from "./Recurring.tsx";
 import { SettleScreen } from "./Settle.tsx";
 import { WaitingScreen } from "./Waiting.tsx";
 
-/** Everything the composing routes stand on, assembled once by the
- *  orchestrator so no leaf has to ask a second question of the room. */
 export interface ComposeView {
   state: ComposeState;
   acts: ComposeActs;
-  /** The composing bag, dereferenced ONCE by the orchestrator. */
   bag: ComposeBag;
-  /** The open expense, re-found in the ledger the room re-read. `null` while
-   *  that read is in flight — and then the route draws nothing. */
   entry: LedgerEntry | null;
   verdict: DraftVerdict;
   settleVerdict: SettleVerdict;
   contrib: ContribSections;
-  /** Does this host hold an approval inbox at all? */
   hasApprovals: boolean;
-  /** An authed `blob:` URL for the open receipt's photograph, or `null`. */
   shotUrl: string | null;
-  /** The chosen group's members, empty until that group's read lands. */
   members: readonly GroupMember[];
-  /** Does this host hold the per-intent Approve/Decline door? */
   canDecide: boolean;
-  /** The chosen group's export payload, or `null` while that read is in
-   *  flight — and then the counts are absent rather than zero. */
   exportData: ExportData | null;
 }
 
@@ -79,8 +57,6 @@ export interface ComposeRoutesProps {
   go: (shelf: ShelfId) => void;
   onBack: () => void;
   onWaiting: () => void;
-  /** Assemble the file and hand it to the member. Nothing has left the vault
-   *  until this runs, which is what the foot says. */
   onSaveExport: () => void;
 }
 
@@ -105,8 +81,6 @@ export function ComposeRoutes(props: ComposeRoutesProps): ReactNode {
         onLines={(lines) => compose.state.setLines(lines)}
         onAddLine={() => compose.state.addLine()}
         onPatch={(patch) => {
-          // Choosing a DIVISION rewrites the typed cells, because their unit
-          // changed; every other field is an ordinary patch.
           if (patch.division === undefined) {
             compose.state.patchDraft(patch);
             return;

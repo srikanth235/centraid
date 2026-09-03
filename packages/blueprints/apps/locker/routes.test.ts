@@ -1,11 +1,3 @@
-// LOCKER'S THIRTEEN ROUTES, AS A ROUND TRIP (README-Locker §1).
-//
-// A route is a VALUE, so the navigation model is testable without a renderer:
-// `locker` and `locker/<sub>` are one destination, and the member's URL, the
-// rail's current row and the band's lit tab all read the SAME record. What
-// this file guards is that they cannot disagree — and that the four gates
-// withdraw the spine rather than dimming it.
-
 import { describe, expect, it } from "vitest";
 
 import { isRoutedScreen } from "./components/Screens.tsx";
@@ -203,7 +195,6 @@ describe("a gate withdraws the spine rather than dimming it", () => {
   it("forces the gate's own route, whatever was last asked for", () => {
     expect(gatedShelf({ ...OPEN, setup: true }, TRASH)).toBe(SETUP);
     expect(gatedShelf({ ...OPEN, locked: true }, TRASH)).toBe(LOCK);
-    // First run outranks Lock: there is no session to lock without a passphrase.
     expect(gatedShelf({ ...OPEN, setup: true, locked: true }, null)).toBe(
       SETUP
     );

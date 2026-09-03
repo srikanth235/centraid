@@ -18,8 +18,6 @@ import { Row, SkeletonBlock, StarButton, ChipRow } from "./Shared.tsx";
 
 import styles from "./shared.module.css";
 
-// A filter is a pure view predicate, never a second read; unknown link state
-// matches neither link chip.
 export function applyRosterFilter(
   people: readonly PersonRow[],
   filter: RosterFilter,
@@ -82,16 +80,8 @@ export function RosterRoute(props: RosterRouteProps): ReactNode {
   );
 }
 
-/** First-paint guess only; `useMeasuredBlockHeight` swaps in the real height. */
 const ROW_RUNG_FALLBACK = 44;
 
-/**
- * Windowed (#883 C4): the screen costs a viewport, not the roster.
- * `useVirtualWindow` pins the block focus is inside, so scrolling with the
- * caret cannot unmount it and drop focus to `<body>`. Selection is party ids
- * pruned against ROWS, never the DOM. Each row carries `aria-setsize` /
- * `aria-posinset` because the DOM no longer states the size of the set.
- */
 function RosterRows({
   rows,
   onOpenPerson,

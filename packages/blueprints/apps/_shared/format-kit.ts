@@ -1,4 +1,3 @@
-// No relative import: the client program has no `allowImportingTsExtensions`.
 import { localDayKey } from "@centraid/design";
 
 export const DAY_MS = 86_400_000;
@@ -29,7 +28,6 @@ export interface FmtDayOptions {
   now?: Date;
 }
 
-/** Compared on the LOCAL wall clock: an evening photograph is not tomorrow's. */
 export function fmtDay(key: string, options: FmtDayOptions = {}): string {
   if (!key) return options.undated ?? "";
   const now = options.now ?? new Date();
@@ -45,7 +43,6 @@ export function fmtDay(key: string, options: FmtDayOptions = {}): string {
   }
 }
 
-/** An unreadable date must never read "purges today". */
 export function purgeCountdown(iso: string | null | undefined): string {
   if (!iso) return "";
   const days = Math.ceil((new Date(iso).getTime() - Date.now()) / DAY_MS);
@@ -55,7 +52,6 @@ export function purgeCountdown(iso: string | null | undefined): string {
   return `purges in ${days} days`;
 }
 
-/** Rounds, never truncates: truncation loses the last second. */
 export function mediaClock(seconds: number): string {
   const total = Math.max(0, Math.round(seconds));
   const hours = Math.floor(total / 3600);
@@ -76,7 +72,6 @@ export interface CustodyMeta {
 const CUSTODY_META: Readonly<Record<string, CustodyMeta>> = {
   "local-only": { label: "On this device only", tone: "warn" },
   missing: { label: "Missing — needs attention", tone: "danger" },
-  // "warn", not "ok": a queued copy is not a copy.
   "pending-offsite": { label: "Copy queued, not finished", tone: "warn" },
   replicated: { label: "Backed up", tone: "ok" },
   "remote-only": { label: "Only in the cloud", tone: "warn" },
@@ -88,7 +83,6 @@ export function custodyMeta(
   return CUSTODY_META[state ?? ""] ?? null;
 }
 
-/** The CSP blocks `fetch()` of a `data:` URI (#296); `null` means not inline. */
 export function decodeDataUri(uri: string | null | undefined): string | null {
   const text = String(uri ?? "");
   if (!text.startsWith("data:")) return null;
@@ -98,7 +92,6 @@ export function decodeDataUri(uri: string | null | undefined): string | null {
   const payload = text.slice(comma + 1);
   try {
     if (!meta.includes(";base64")) return decodeURIComponent(payload);
-    // `atob` yields BYTES; reading them as characters mangles multi-byte text.
     const binary = globalThis.atob(payload);
     const bytes = Uint8Array.from(binary, (char) => char.codePointAt(0) ?? 0);
     return new TextDecoder("utf-8").decode(bytes);
@@ -107,7 +100,6 @@ export function decodeDataUri(uri: string | null | undefined): string | null {
   }
 }
 
-/** The object URL is revoked at once: a Locker export points at plaintext. */
 export function saveExportFile(file: {
   name: string;
   type: string;

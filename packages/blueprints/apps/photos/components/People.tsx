@@ -1,7 +1,3 @@
-// The People shelf (v4 §5). Face PROPOSALS render beside confirmed people
-// (#711), never named — confirming is Face Review's (§8). NOTHING REFLOWS: a
-// card keeps its square with no cover (§14). While the roster is empty and the
-// consent question open, `gate` renders IN PLACE of the grid (#712).
 import { faceCropStyle } from "../../_shared/face-crop.ts";
 import { mountMedia } from "../media.ts";
 import type { FaceProposal, Person } from "../people.ts";
@@ -20,7 +16,6 @@ export function coverFor(
   return assets.find((asset) => wanted.has(asset.asset_id));
 }
 
-/** 100 turns `faceCropStyle`'s pixels into PERCENTAGES. */
 const CROP_BOX_UNIT = 100;
 
 function ProposalCard({
@@ -57,7 +52,6 @@ function ProposalCard({
               }}
             />
           ) : (
-            // No bbox: the plain source, never a guess.
             <img className={styles.cropImg} src={src} alt="" />
           )
         ) : null}
@@ -81,7 +75,6 @@ export function PeopleShelf({
 }: {
   people: readonly Person[];
   proposals?: readonly FaceProposal[];
-  /** Null while unread: the note omits it, never claims a zero. */
   unmatchedCount?: number | null;
   assets: readonly Asset[];
   onOpen: (partyId: string) => void;
@@ -136,7 +129,6 @@ export function PeopleShelf({
           : null}
       </div>
       {onReview ? (
-        // The note IS the control.
         <button type="button" className={styles.noteButton} onClick={onReview}>
           {note}
         </button>

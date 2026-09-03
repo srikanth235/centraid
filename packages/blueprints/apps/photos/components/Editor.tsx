@@ -1,7 +1,3 @@
-// Editor (§7.4) — non-destructive. Crop and rotate only; commit is a new
-// photograph beside the original. No "also trash the original" — that would
-// falsify the copy. Consequence sits BESIDE the one filled commit (§18).
-// Canvas raster; crop is fractions of the CURRENT frame.
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 
@@ -30,14 +26,11 @@ interface Crop {
   h: number;
 }
 
-/** Horizon levelling, not rotation — that's Rotate 90°. */
 const STRAIGHTEN_STEP = 1;
 const STRAIGHTEN_LIMIT = 15;
 
-/** Keyboard-reachable Crop (proto 4621): centred inset, not drag-only. */
 const DEFAULT_CROP: Crop = { x: 0.1, y: 0.1, w: 0.8, h: 0.8 };
 
-/** Display label: `3 : 2` spaced; ids stay unspaced for comparison. */
 function ratioLabel(ratio: EditorRatio): string {
   return ratio === "3:2" ? "3 : 2" : ratio;
 }
@@ -62,7 +55,6 @@ function cropCanvas(source: HTMLCanvasElement, crop: Crop): HTMLCanvasElement {
   return out;
 }
 
-/** Bounding box after `deg`. Straighten is not 90°, so the box grows. */
 function rotatedBox(
   w: number,
   h: number,
@@ -104,7 +96,6 @@ export function EditorView({
     const img = imgRef.current;
     const canvas = canvasRef.current;
     if (!img || !canvas) return;
-    // Mounted before it has pixels — wait for `naturalWidth` or the canvas is 0×0.
     if (!img.complete || img.naturalWidth === 0) return;
     const box = rotatedBox(img.naturalWidth, img.naturalHeight, angle);
     canvas.width = box.width;
@@ -159,7 +150,6 @@ export function EditorView({
   }
   function onPointerUp() {
     dragRef.current = null;
-    // Accidental tap: discard a sliver crop.
     setCrop((c) => (c && c.w > 0.02 && c.h > 0.02 ? c : null));
   }
 
@@ -193,7 +183,6 @@ export function EditorView({
       const file = new File([blob], `${baseName}-edited.jpg`, {
         type: "image/jpeg",
       });
-      // New photo lands in the ORIGINAL's scope (#599), never the chip selection.
       const scope = asset.scope_id ?? undefined;
       const staged = await stageFileBytes(file, "", scope ? { scope } : {});
       const outcome = await act(
@@ -201,7 +190,6 @@ export function EditorView({
         {
           staged_sha: staged.sha256,
           kind: "photo",
-          // Dated today + `source_asset_id` (#711) — else meta reads save as capture.
           captured_at: new Date().toISOString(),
           source_asset_id: asset.asset_id,
           title: asset.title || "Edited photograph",
@@ -230,7 +218,6 @@ export function EditorView({
   const straightenLabel = `Straighten ${straighten > 0 ? `+${straighten}` : straighten}°`;
 
   return (
-    // `data-editor="open"` is lightbox `isEditing` — stops ←/→ under an unsaved crop.
     <div className={styles.editor} data-editor="open">
       {/* Paint through the DOM, not `new Image()`. Blob paths have no credential;
           the shell authorizer (`inline-blob-images.ts`) swaps mounted subtree
@@ -268,7 +255,6 @@ export function EditorView({
           <canvas ref={canvasRef} className={styles.canvas} />
         )}
         {crop ? (
-          // 1px rectangle; outside dimmed; mask is the stage token at 55% (§7.4).
           <div
             className={styles.cropBox}
             style={{
@@ -303,7 +289,6 @@ export function EditorView({
             disabled={busy}
             onClick={() => {
               setQuarters((q) => (q + 1) % 4);
-              // Old-orientation crop no longer lines up. Clear here, not in redraw.
               setCrop(null);
               setRatio("Original");
             }}
@@ -364,7 +349,6 @@ export function EditorView({
           <button
             type="button"
             className={styles.tool}
-            // lightbox `cancelEdit` clicks this — Escape and click stay one act.
             data-editor-cancel=""
             disabled={busy}
             onClick={onCancel}
@@ -373,7 +357,6 @@ export function EditorView({
           </button>
           <button
             type="button"
-            // One filled ink; disabled is never filled (§18) — stylesheet, same class.
             className={styles.commit}
             disabled={busy || loadError}
             onClick={() => void handleSave()}

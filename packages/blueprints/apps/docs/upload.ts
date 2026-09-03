@@ -1,9 +1,3 @@
-// Docs upload-side processing (#414 D9/D10): client SHA preflight and
-// a real PDF.js text-layer contribution before the document claim. The
-// lockfile-pinned display+worker builds are emitted by the main client bundle
-// and cached offline; a load or parse failure still degrades to the gateway's
-// cheap extractor, never a failed upload.
-
 import { stageDerivative, stageFileBytes } from "@centraid/design/elements";
 import type { StagedBlob } from "@centraid/design/elements";
 
@@ -30,7 +24,7 @@ export async function stageDocumentFile(file: File): Promise<StagedBlob> {
           "text/plain"
         );
       } catch {
-        // The gateway backstop still owns eventual extraction.
+        // Intentionally empty.
       }
     }
   }

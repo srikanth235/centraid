@@ -1,14 +1,3 @@
-// @vitest-environment jsdom
-// TALLY'S HONEST STATES ON BALANCES (STATES.md's Tally matrix, umbrella #872).
-//
-// Balances is where every one of the designed states is reachable, so it is
-// where they are proven: day one, all settled, pending, offline, stale, parked
-// and denied, plus the sign convention the whole app rests on.
-//
-// THE TWO PAIRS THAT MUST NOT LOOK ALIKE. Day one offers a first move; denied
-// shows absence with a receipt and the scope to re-grant. A net you owe takes
-// `--net`; one you are owed stays ink. Each pair is asserted against the OTHER
-// member of the pair, because "it rendered something" is not the claim.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -102,11 +91,6 @@ const BARE: DashboardData = {
 let reactRoot: ReturnType<typeof createRoot> | undefined;
 let hostEl: HTMLElement | null = null;
 
-/**
- * ONE OUTER BLOCK, because the teardown below belongs to every case in this
- * file: a mount left standing would carry its `window.centraid` stub into the
- * next test and make a passing assertion mean nothing.
- */
 describe("Tally’s honest states", () => {
   afterEach(() => {
     if (reactRoot) act(() => reactRoot?.unmount());
@@ -143,8 +127,6 @@ describe("Tally’s honest states", () => {
     return container;
   }
 
-  /** The sentence a notice is carrying, matched whole rather than by substring:
-   *  a banner that says half of what it should still contains the half. */
   function sentences(container: HTMLElement): string[] {
     return [...container.querySelectorAll("span")].map(
       (span) => span.textContent ?? ""
@@ -160,15 +142,6 @@ describe("Tally’s honest states", () => {
     );
   }
 
-  /**
-   * Fire something and let the whole read chain land INSIDE the act scope.
-   *
-   * A refresh here is four awaits deep — the dashboard read, the route read, the
-   * intent overlay, then the render — and `act`'s own drain exits after the first
-   * turn. Yielding to a macrotask inside the scope drains the rest, so the state
-   * updates it produces are act-covered rather than warned about and asserted
-   * against by luck.
-   */
   test("contributing the bar does not re-enter the room", async () => {
     (window as unknown as { centraid: unknown }).centraid = {
       read: ({ query }: { query: string }) =>
@@ -214,15 +187,12 @@ describe("Tally’s honest states", () => {
     });
   }
 
-  // ------------------------------------------------------- the sign convention
-
   describe("one sign convention, and no legend", () => {
     test("a net you owe takes --net and one you are owed stays ink", async () => {
       const container = await mount(DASHBOARD);
       const figures = [
         ...container.querySelectorAll<HTMLElement>("[data-tone]"),
       ].map((node) => [node.textContent ?? "", node.dataset.tone] as const);
-      // Ana is negative — you owe her — and Tom is positive.
       const ana = figures.find(([text]) => text.includes("45.60"));
       const tom = figures.find(([text]) => text.includes("81.00"));
       expect(ana?.[1]).toBe("net");
@@ -243,20 +213,15 @@ describe("Tally’s honest states", () => {
       const container = await mount(DASHBOARD);
       const sub = container.textContent ?? "";
       expect(sub).toContain("Owed to you");
-      // THE COUNTS ARE THE POINT: a figure that names the rows it was derived
-      // from is one a member can go and check.
       expect(sub).toContain("Derived from 194 expenses and 22 settlements");
       expect(sub).toContain("no balance is stored, and none is ever sent.");
     });
   });
 
-  // ------------------------------------------------------------- all settled
-
   describe("every balance level", () => {
     test("states it, and does not celebrate it", async () => {
       const container = await mount(LEVEL);
       expect(container.textContent).toContain(ALL_SETTLED);
-      // Nothing congratulatory, and no second chrome to carry it.
       expect(container.querySelector(".kit-empty")).toBeNull();
     });
 
@@ -266,15 +231,12 @@ describe("Tally’s honest states", () => {
     });
   });
 
-  // -------------------------------------------------------- day one vs denied
-
   describe("day one and denied look nothing alike", () => {
     test("day one offers the first real move", async () => {
       const container = await mount(BARE);
       expect(container.textContent).toContain(DAY_ONE);
       expect(container.textContent).toContain(DAY_ONE_SUB);
       expect(buttonNamed(container, "Add an expense")).toBeDefined();
-      // Day one is not a denial: no receipt, no scope to re-grant.
       expect(container.textContent).not.toContain(DENIED_TITLE);
     });
 
@@ -288,7 +250,6 @@ describe("Tally’s honest states", () => {
       expect(container.textContent).toContain(DENIED_REGRANT);
       expect(container.textContent).toContain(DENIED_SCOPE);
       expect(container.textContent).toContain("rcp_9114");
-      // A denied read renders NOTHING, never an empty set — and never day one.
       expect(container.textContent).not.toContain(DAY_ONE);
       expect(container.querySelector("nav")).toBeNull();
     });
@@ -323,8 +284,6 @@ describe("Tally’s honest states", () => {
     });
   });
 
-  // ------------------------------------------------------------ pending, parked
-
   describe("a write that has not settled speaks", () => {
     test("the count of queued writes, with the way to them", async () => {
       const container = await mount(DASHBOARD, [
@@ -347,22 +306,15 @@ describe("Tally’s honest states", () => {
     });
   });
 
-  // ------------------------------------------------------------ offline, stale
-
   describe("offline is a state the app reads, never one it invents", () => {
     test("a host that says the gateway is down names the one exception, and the lag", async () => {
       const container = await mount(DASHBOARD);
       expect(container.textContent).not.toContain(OFFLINE_NOTICE);
 
       hostEl!.dataset.gatewayStatus = "down";
-      // Window focus is this app's own sanctioned re-read (`onFocusRefresh`).
       await settle(() => window.dispatchEvent(new Event("focus")));
 
-      // Tally records fully offline, and says which single act it cannot do.
       expect(container.textContent).toContain(OFFLINE_NOTICE);
-      // And how old what is on screen is — a different question from why. The
-      // sentence is matched WHOLE over whatever clock the render stamped, so a
-      // banner carrying half of it would not pass.
       const clock = /(?<at>\d{2}:\d{2})/u;
       const stale = sentences(container).find((text) => {
         const at = clock.exec(text)?.groups?.at;
@@ -370,8 +322,6 @@ describe("Tally’s honest states", () => {
       });
       expect(stale).toBeTypeOf("string");
       expect(buttonNamed(container, VERBS.refresh)).toBeDefined();
-      // The room re-publishes the verdict on its own root, so anything reading
-      // this app's element sees the same answer it acted on.
       expect(hostEl?.dataset.gatewayStatus).toBe("down");
     });
 
@@ -386,13 +336,9 @@ describe("Tally’s honest states", () => {
       expect(SOURCE).toContain("libraryReachability({");
       expect(SOURCE).toContain("rootElRef.current?.dataset.gatewayStatus");
       expect(SOURCE).toMatch(/readFailed: ledger\.readFailed/u);
-      // The forbidden signal (`_shared/view-state-kit.ts`): a desktop with no
-      // network still reaches its local gateway.
       expect(SOURCE).not.toContain("navigator.onLine");
     });
   });
-
-  // ------------------------------------------------------------ the status line
 
   describe("the room stands under one sentence", () => {
     test("Balances declares what a figure on it IS", async () => {
@@ -419,3 +365,4 @@ describe("Tally’s honest states", () => {
     });
   });
 });
+// @vitest-environment jsdom

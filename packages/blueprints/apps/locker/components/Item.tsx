@@ -1,16 +1,3 @@
-// ONE ITEM (README-Locker §1, §5; FLOWS.md "Unlock, re-auth, reveal, copy").
-//
-// METADATA READS PLAINLY; A SECRET IS A ROW WITH A VERB, and the row states
-// the cost of using it — about thirty seconds, and a receipt. Which rows exist
-// is decided by the item's TYPE, because a type in this app is a set of
-// sections and fields (§3) rather than a label on one shape: a type the vault
-// does not have yet degrades to a note with custom fields rather than to
-// nothing.
-//
-// NOTHING ON THIS SCREEN IS REVEALED UNTIL THE MEMBER ASKS. `revealed` is
-// empty on arrival and is emptied again by every conceal, every permit
-// expiry, every lock and every hide — it lives in the orchestrator's ref bag
-// (session.ts `SECRET_BEARING_KEYS`) and is never serialised anywhere.
 import type { ReactNode } from "react";
 
 import { displayText, safeExternalUrl } from "../../_shared/untrusted.ts";
@@ -41,20 +28,12 @@ import styles from "./Rows.module.css";
 
 export interface ItemScreenProps {
   detail: LockerDetail;
-  /** The list row for this item, for the verdict chip — the SAME verdict the
-   *  list drew, read from the same derivation. */
   row?: LockerRow;
-  /** Plaintext values, present only while a reveal is live. */
   revealed: Readonly<Record<string, string>>;
-  /** When each reveal landed, for the countdowns. */
   revealedAt: Readonly<Record<string, number>>;
-  /** One clock for the whole screen, ticking once a second. */
   now: number;
   onReveal: (field: string) => void;
-  /** Keep it forever and take it out of the lists — the opposite end of the
-   *  trash's countdown, never the same act. */
   onArchive: () => void;
-  /** Clone-and-edit for a sibling account. */
   onDuplicate: () => void;
   onCopySecret: (field: string) => void;
   onCopyCode: (code: string) => void;
@@ -68,10 +47,6 @@ export interface ItemScreenProps {
 
 export function ItemScreen(props: ItemScreenProps): ReactNode {
   const { detail } = props;
-  // ONE SET OF VERBS FOR EVERY SEALED ROW ON THIS SCREEN (#873). The item's own
-  // columns and the sealed sidecars read the same reveal state and call the
-  // same three handlers — which is what makes "a secret is a row with a verb"
-  // true of a custom field and a retained password, not only of a password.
   const reveal: SidecarRevealProps = {
     revealed: props.revealed,
     revealedAt: props.revealedAt,

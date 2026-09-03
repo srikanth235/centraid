@@ -1,10 +1,3 @@
-// @vitest-environment jsdom
-//
-// THE PERSON SCREEN AS THE GRANT DASHBOARD (#825). The claims are the test
-// names below; two constraints they encode and a reader must not relax: the
-// listing comes from the ONE read the ruling names (`?partyId=`), and every
-// standing is the VAULT'S phrase (#883, ruling V-phrases), never one derived
-// here.
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -37,7 +30,6 @@ function grant(overrides: Partial<GrantRecord> = {}): GrantRecord {
         detail: null,
       },
     ],
-    // The vault's own words for where it stands (ruling V-phrases).
     phrase: "shared",
     reason: "the vault it addresses is holding it",
     ...overrides,
@@ -172,10 +164,8 @@ describe("the person screen's grant dashboard", () => {
       }),
     });
     const text = container.textContent ?? "";
-    // The reach line names the opportunity; the grant row names the wait.
     expect(text).toContain("Not reached yet");
     expect(text).toContain("Link their account in People to share with them.");
-    // The row's standing is the WIRE's phrase, never one derived here.
     expect(text).toContain("On its way");
   });
 
@@ -201,8 +191,6 @@ describe("the person screen's grant dashboard", () => {
     expect(asking).toContain("their vault is asked to remove its copy");
     expect(asking).toContain("Keep sharing");
 
-    // The confirm's own Revoke is the second one on screen — the row's control
-    // is still there behind the panel.
     const confirmButton = buttons(container).filter(
       (button) => button.textContent?.trim() === "Revoke"
     );
@@ -255,8 +243,6 @@ describe("the person screen's grant dashboard", () => {
     });
     const text = container.textContent ?? "";
     expect(text).toContain("Nothing shared with Priya yet.");
-    // With nothing to name, there is no Share control to press, and the screen
-    // says where a share begins instead.
     expect(text).toContain("A share starts in the app that holds the thing.");
     expect(
       buttons(container).some(
@@ -281,8 +267,6 @@ describe("the person screen's grant dashboard", () => {
         },
       }),
     });
-    // ONE gesture opens the sheet, ONE press sends the grant. The link is the
-    // prerequisite (#903), not a step inside this flow.
     await act(async () => {
       pressing(container, "Share").click();
     });
@@ -325,7 +309,7 @@ describe("the person screen's grant dashboard", () => {
     await act(async () => {
       sheetButtons[sheetButtons.length - 1]?.click();
     });
-    // The command pack would refuse it (#903); the sheet declines to ask.
     expect(sent).toStrictEqual([]);
   });
 });
+// @vitest-environment jsdom

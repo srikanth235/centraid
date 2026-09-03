@@ -1,11 +1,3 @@
-// @vitest-environment jsdom
-// The two import outcomes worth explaining (v4 handoff §11, proto 4386-4400).
-//
-// The load-bearing rule under test: `media.add_asset` answers `deduped: 1` for
-// BOTH "these bytes were already a live photograph" and "these bytes brought a
-// deleted one back", so the split is made from what the caller knew before the
-// run — the trash this device had loaded. A restore is only ever claimed on
-// evidence, which means the split may under-report and may never invent.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -64,8 +56,6 @@ describe("tallyDedupes", () => {
   });
 
   it("never claims a restore for an id the command did not name", () => {
-    // An executed dedupe whose output carried no asset_id lands here as "".
-    // The honest answer is an ordinary dedupe: under-report, never invent.
     expect(tallyDedupes(["", ""], () => true)).toStrictEqual({
       deduped: 2,
       restored: 0,
@@ -101,3 +91,4 @@ describe("ImportPanels", () => {
     expect(html).toContain(">Dismiss</button>");
   });
 });
+// @vitest-environment jsdom

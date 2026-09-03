@@ -1,8 +1,5 @@
 import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
 
-/**
- * Ingest one file through media.add_asset (STAGED #296 or inline URI).
- */
 export default async function upload({ body, ctx }: HandlerArgs) {
   const input = actionInput(body);
   return runVaultAction(ctx, {
@@ -15,14 +12,12 @@ export default async function upload({ body, ctx }: HandlerArgs) {
       ...(input.captured_at == null
         ? {}
         : { captured_at: String(input.captured_at) }),
-      // #724 audit: forward validated fields (#419, #721/#724 A2).
       ...(input.tz_offset_min == null
         ? {}
         : { tz_offset_min: Number(input.tz_offset_min) }),
       ...(input.capture_group_id == null
         ? {}
         : { capture_group_id: String(input.capture_group_id) }),
-      // #711: an empty string is not a lineage.
       ...(input.source_asset_id == null
         ? {}
         : { source_asset_id: String(input.source_asset_id) }),

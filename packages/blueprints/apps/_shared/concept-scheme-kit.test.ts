@@ -33,8 +33,6 @@ const CONCEPTS = [
 
 describe("the scheme vocabulary", () => {
   it("matches the URIs the vault commands mint", () => {
-    // Mirrors of vault's own constants: the blueprint tree may not import
-    // vault to check itself, and a drift here is a silently empty shelf.
     expect([
       FLAGS_SCHEME_URI,
       FOLDER_SCHEME_URI,

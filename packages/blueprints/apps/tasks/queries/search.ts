@@ -1,14 +1,3 @@
-/**
- * Task search as a vault projection: the FTS5 index inside the vault does
- * the matching (title + description), so the app never pulls the whole
- * schedule.task table to grep it — vault data has no upper bound. Only the
- * matched rows come back, joined with their attachments to mirror the board
- * projection's per-task shape row-for-row, plus a hit snippet.
- *
- * A consent denial is a first-class outcome, not an error: the UI renders
- * it as the "ask the owner for access" state, receipt id included.
- */
-
 interface RawSearchTask {
   task_id: string;
   _rank?: unknown;
@@ -56,8 +45,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const hits = (matches.rows ?? []) as unknown as RawSearchTask[];
     if (hits.length === 0) return { tasks: [] };
     const taskIds = hits.map((t) => t.task_id);
-    // Attachments only for the matched tasks — the join stays as narrow as
-    // the match set, never a whole-table pull.
     const attachments = await ctx.vault.read({
       entity: "core.attachment",
       where: [
@@ -79,7 +66,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         : { rows: [] };
     const contentRows = (contents.rows ?? []) as unknown as RawContent[];
     const contentById = new Map(contentRows.map((c) => [c.content_id, c]));
-    // Blob-backed bytes serve as same-origin URLs (#296).
     const srcOf = (c: RawContent | undefined): string | undefined =>
       typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
         ? `/centraid/_vault/blobs/${c.content_id}`
@@ -102,10 +88,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     for (const list of attByTask.values()) {
       list.sort((x, y) => (y.is_primary ?? 0) - (x.is_primary ?? 0));
     }
-    // A hit row is the BOARD's row shape, which since #834 includes the one
-    // summariser's words and the missed-occurrence collapse — a search result
-    // that rendered a raw rule where the board renders a sentence would be the
-    // second summariser this contract exists to forbid.
     const nowIso = new Date().toISOString();
     const recurrenceOf = (task: Record<string, unknown>) => {
       const rrule = typeof task["rrule"] === "string" ? task["rrule"] : null;
@@ -132,7 +114,6 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         next_due: collapsed.nextDue,
       };
     };
-    // Vault order is rank order (best match first) — keep it.
     const tasks = hits.map(({ _rank, _snippet, ...task }) => ({
       ...task,
       attachments: attByTask.get(task.task_id) ?? [],

@@ -1,5 +1,3 @@
-// TEXT ON PAPER ON THE STAGE (Docs spec §1.8/§6.1): the sheet is PAPER, the
-// near-black around it the theater. NOT A ROUTE. NOT A MARKDOWN RENDERER.
 import { useEffect, useMemo, useState } from "react";
 
 import { loadBlobText } from "../blob-text.ts";
@@ -31,8 +29,6 @@ function blocksOf(body: string): Block[] {
 }
 
 export function QuickLookText({ doc }: { doc: DriveDoc }) {
-  // The inline `data:` branch decodes synchronously during first render;
-  // the effect below owns only the async blob-door read.
   const inline = useMemo<{ state: LoadState; text: string } | null>(() => {
     const uri = doc.content_uri;
     if (typeof uri !== "string" || !uri.startsWith("data:")) return null;
@@ -74,7 +70,6 @@ export function QuickLookText({ doc }: { doc: DriveDoc }) {
         {loadState === "loading" ? (
           <p className={styles.readStatus}>Loading…</p>
         ) : loadState === "error" ? (
-          // A refusal, not a blank page: the member is owed that sentence.
           <p className={styles.readFailed}>
             This document&rsquo;s text could not be fetched.
           </p>

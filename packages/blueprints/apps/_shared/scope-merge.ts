@@ -1,24 +1,3 @@
-/**
- * K-way merge of per-scope pages (#599, #726 D11). Pure. Only `sortKey` /
- * `direction` / `dedupeIdentity` vary; no app gets a copy of the rest.
- *
- * ORDERING. Ties break by `dedupeIdentity` (byte-stable). Null `sortKey`
- * sorts AFTER every keyed row in both directions — SQLite's within-scope
- * placement — one stable null-keyed tail.
- *
- * DEDUPE. Own copy wins (the one the member can edit/trash/un-share). Two
- * audience copies: earlier input page wins.
- *
- * SAFE HORIZON. A truncated scope is COMPLETE at/before `tail`, UNKNOWN
- * beyond. Merging different depths would later INSERT a shallower-scope row
- * above rows already on screen, so the list extends only to the SHALLOWEST
- * truncated tail. Non-truncated scopes constrain nothing.
- *
- * A truncated scope with null `tail` ran out inside the null bucket: it
- * still knows every keyed row, so it must NOT drag the keyed horizon. It
- * does cap the null bucket — withhold null rows while ANY scope is truncated.
- */
-
 export type MergeDirection = "asc" | "desc";
 
 export interface ScopePage<Row> {
@@ -87,7 +66,6 @@ function horizonOf<Row>(
     if (horizon == null || shallower(page.tail!, horizon, direction))
       horizon = page.tail!;
   }
-  // Null-tailed truncated scopes cap the null bucket; paging them lifts that cap.
   const atHorizon = truncated.filter(
     (page) => page.tail === horizon || page.tail == null
   );

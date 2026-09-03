@@ -328,6 +328,8 @@ node scripts/check-comment-density-ratchet.mjs       # after final --write: shar
 - The density ratchet still reports nine existing fixture/ledger pin rises;
   those fixture files were not changed per scope and require a separate
   approved baseline update.
+- Final changes are committed in package, blueprint, server, application,
+  and tooling/test batches for independent review.
 
 ## Audit
 

@@ -1,10 +1,3 @@
-/**
- * One group: its meta, members with derived net balances, and its expense
- * ledger newest-first — each row decorated with the owner's lent/borrowed
- * stance and its per-person splits (so the detail popover needs no second
- * read). All balances come from the shared engine in dashboard.ts.
- */
-
 import { tallySimplification } from "../../../src/tally-simplify.ts";
 import {
   deniedPayload,
@@ -69,9 +62,6 @@ export default async function groupHandler({ input, ctx }: HandlerArgs) {
       },
       members,
       ledger,
-      // Derived, never stored: the minimal payment set this group's ledger
-      // implies, plus the counts that say what it rewired. Empty rows until
-      // the group opts in, because simplification changes who owes whom.
       simplification: tallySimplification(
         data,
         groupId,

@@ -1,5 +1,3 @@
-// The row's ONE state slot (Docs spec §4.1): at most one thing, ladder order.
-// Rules live in `rowStateMark`; this renders its verdict.
 import type { ReactNode } from "react";
 
 import { DAY_MS } from "../../_shared/format-kit.ts";
@@ -10,7 +8,6 @@ import type { RowStateInput } from "../view-copy.ts";
 
 import styles from "./RowStateSlot.module.css";
 
-// Fields only from the projection or held state — never a guess.
 export function rowStateFor(
   doc: DriveDoc,
   { trashed, offline }: { trashed: boolean; offline: boolean }
@@ -35,7 +32,6 @@ export function RowStateSlot({
   fallback = null,
 }: {
   input: RowStateInput;
-  /** Renders only when the ladder says nothing. */
   fallback?: ReactNode;
 }): ReactNode {
   const mark = rowStateMark(input);

@@ -1,16 +1,3 @@
-// The three blocks every Tally screen is built out of, beside the row (§5).
-//
-//   Section  a label, a count or a meta phrase, one underlined text verb, one
-//            quiet verb on a pointer, the rows, and — when there are none — an
-//            empty line IN THE SECTION'S OWN WORDS. A shelf is never empty on
-//            another shelf's terms.
-//   Hero     the display-rung figure, its label, and a sentence that says
-//            WHERE THE FIGURE CAME FROM. Balances, a group and a friend each
-//            take one; nothing else does, because a hero is an answer to the
-//            screen's question and most screens are lists.
-//   WindowEnd  a bounded window, saying how bounded. Drawn whether or not
-//            there is more behind it: a window that happens to hold everything
-//            still states how much that is.
 import type { ReactNode } from "react";
 
 import { iconForConcept, iconSvg } from "@centraid/design";
@@ -21,14 +8,6 @@ import { windowEnd } from "../view-copy.ts";
 
 import styles from "./Ledger.module.css";
 
-/**
- * The back row, labelled with WHERE IT GOES.
- *
- * "Groups", not "Back": a member who descended into a group ledger should be
- * able to read the way out rather than remember it, and a bare chevron is a
- * control with no name. The glyph beside it is the shared registry's `back`
- * concept and is decorative — the word is the accessible name.
- */
 export function BackRow({
   label,
   onBack,
@@ -65,19 +44,12 @@ export interface SectionVerb {
 
 export interface SectionProps {
   label: string;
-  /** The count and what it counts, or the phrase that stands in for one. */
   meta?: string;
-  /** The section's own verb — underlined, in the annotation rung. */
   verb?: SectionVerb | null;
-  /** A second verb, on a pointer only: a phone's row is already carrying one. */
   verb2?: SectionVerb | null;
   narrow?: boolean;
-  /** This section's own sentence for having nothing in it. */
   empty?: string;
   children?: ReactNode;
-  /** How many rows are actually under it — the empty line's one gate, passed
-   *  in rather than counted off `children`, because a caller that has read
-   *  nothing yet must not be told the shelf is empty. */
   count: number;
 }
 
@@ -126,8 +98,6 @@ export function Section(props: SectionProps): ReactNode {
 export interface HeroAct {
   label: string;
   run: () => void;
-  /** Destructive acts are OUTLINED in `--net`, never filled — the
-   *  `kit-btn destructive` recipe is exactly that. */
   destructive?: boolean;
 }
 
@@ -135,8 +105,6 @@ export interface HeroProps {
   figure: string;
   tone: FigureTone;
   label: string;
-  /** Where the figure came from — the sentence that makes it inspectable
-   *  rather than an oracle. */
   sub: string;
   acts?: readonly HeroAct[];
 }
@@ -200,13 +168,10 @@ export function WindowEnd({
   );
 }
 
-/** A note under a section: the rule it follows, and where relevant the gap tag
- *  a reviewer reads off the surface itself. */
 export function Note({ children }: { children: ReactNode }): ReactNode {
   return <p className={styles.note}>{children}</p>;
 }
 
-/** The rows of one section, as a plain list host. */
 export function Rows({ children }: { children: ReactNode }): ReactNode {
   return <div>{children}</div>;
 }

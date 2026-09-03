@@ -1,9 +1,3 @@
-/**
- * Match expenses by description, newest first, in the same decorated ledger
- * row shape (with the group name folded in for context). Matching runs
- * server-side over the bounded expense window.
- */
-
 import { deniedPayload, ledgerRow, loadTally } from "./dashboard.ts";
 
 export default async function search({ input, ctx }: HandlerArgs) {

@@ -7,10 +7,6 @@ import {
   starWrite,
 } from "../apps/locker/writes.ts";
 
-/* A secret-bearing payload must never enter the durable offline queue: the
- * queue outlives the session, and the session boundary is what keeps a secret
- * memory-only. The write builders carry that rule; pending-projection.ts's
- * excluded set is pinned to the same list in apps/locker/writes.test.ts. */
 describe("locker-online-only", () => {
   it("marks add and edit online-only while leaving metadata actions queueable", () => {
     const draft = {

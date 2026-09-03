@@ -1,10 +1,3 @@
-// Which sentence each route stands under, and what a route Wave 2 has still to
-// draw says for itself.
-//
-// KEPT OUT OF THE ORCHESTRATOR because they are lookups over the route table
-// and nothing else — pure, total, and readable without a renderer. A `switch`
-// buried in a render is where a route quietly acquires another route's status
-// line and nobody notices, because both of them are sentences.
 import {
   ACTIVITY,
   ADD,
@@ -23,14 +16,6 @@ import {
 import type { ShelfId } from "./shelves.ts";
 import { MORE_META, ROUTE_STATUS } from "./view-copy.ts";
 
-/**
- * The ambient sentence a route stands under, before any write speaks over it.
- *
- * A group's ledger is the one route whose sentence depends on a fact rather
- * than on the route: a group shared for co-contribution says which acts stay
- * with the steward, and one the member keeps alone says what sharing it would
- * cost. `shared` is that fact, read off the members the query returned.
- */
 export function routeStatus(shelf: ShelfId, shared: boolean): string {
   if (shelf === null) return ROUTE_STATUS.balances;
   if (shelf === ACTIVITY) return ROUTE_STATUS.activity;
@@ -51,7 +36,6 @@ export function routeStatus(shelf: ShelfId, shared: boolean): string {
   return ROUTE_STATUS.export;
 }
 
-/** The More sheet's one-line meta per lens. */
 export function moreMeta(shelf: ShelfId): string {
   if (shelf === RECURRING) return MORE_META.recurring;
   if (shelf === SPENDING) return MORE_META.insight;

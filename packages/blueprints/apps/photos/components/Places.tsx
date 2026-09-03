@@ -1,5 +1,3 @@
-// The Places shelf (v4 §5) — SECTIONS, NOT CARTOGRAPHY. Never a placeholder
-// map: it would put pins where nothing was measured. Unnamed is not Unknown.
 import { useCallback, useState } from "react";
 
 import type { InlineScope } from "../../inline-types.ts";
@@ -26,10 +24,8 @@ export interface PlaceSection {
   gazetteer?: string | null;
 }
 
-/** Both surfaces spell it the same way; never confusable with a uuid. */
 export const NO_LOCATION_KEY = "no-location";
 
-/** Only assets carrying a place: inventing one is a geography claim. */
 export function placeSections(assets: readonly Asset[]): PlaceSection[] {
   const byPlace = new Map<string, PlaceSection>();
   for (const asset of assets) {
@@ -54,7 +50,6 @@ export function placeSections(assets: readonly Asset[]): PlaceSection[] {
   return [...byPlace.values()];
 }
 
-/** Null when empty; distinct from "a place with no name" (#816). */
 export function noLocationSection(
   assets: readonly Asset[]
 ): PlaceSection | null {
@@ -69,7 +64,6 @@ export function noLocationSection(
   };
 }
 
-/** A SIBLING of `placeSections`: the bucket is a section, not a place. */
 export function placeSectionsWithNoLocation(
   assets: readonly Asset[]
 ): PlaceSection[] {
@@ -77,7 +71,6 @@ export function placeSectionsWithNoLocation(
   return bucket ? [...placeSections(assets), bucket] : placeSections(assets);
 }
 
-/** Prefixed because a uuid-leading id is not a valid CSS selector. */
 function sectionDomId(key: string): string {
   return `place-${key || "unnamed"}`;
 }
@@ -107,7 +100,6 @@ export function PlacesShelf({
   onToggleSelect: (key: string) => void;
   onEnterSelectMode: () => void;
 }) {
-  // A place is a section, not a screen; a pin tap scrolls to it.
   const [reading, setReading] = useState<string | null>(null);
   const openPlace = useCallback((key: string) => {
     setReading(key);
@@ -151,11 +143,7 @@ export function PlacesShelf({
           </h2>
           {justify(section.assets, containerWidth, targetHeight).map(
             (tiles, index) => (
-              <div
-                // Stable: the packer is pure, so re-packing emits one order.
-                key={`${section.key}-${index}`}
-                className={styles.row}
-              >
+              <div key={`${section.key}-${index}`} className={styles.row}>
                 {tiles.map((tile) => (
                   <Tile
                     key={`${tile.asset.scope_id ?? ""}:${tile.asset.asset_id}`}

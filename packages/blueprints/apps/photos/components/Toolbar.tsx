@@ -1,6 +1,3 @@
-// The Photos toolbar row (§3). IT RENDERS ONLY WHEN IT CARRIES SOMETHING — an
-// empty band is chrome. The vault filter reads the RECORD, never a name.
-
 import type { InlineScope } from "../../inline-types.ts";
 import type { KindFilter } from "../filters.ts";
 import { KIND_LABELS, KINDS, orderedScopes, scopeIsOn } from "../filters.ts";
@@ -74,9 +71,6 @@ export function ToolbarView(props: ToolbarProps) {
   );
 }
 
-/** ONE property with four rungs (§4.2), not four views: the group carries the
- *  name, segments are `aria-pressed`. No `aria-label` on a segment — the
- *  visible text is its name (`scripts/lint-aria-labels.mjs`). */
 function TileSizeControl({
   tileSize,
   onStep,

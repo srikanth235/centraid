@@ -1,9 +1,3 @@
-// The room's fifteen routes, as a round trip (Tally spec §1).
-//
-// A ROUTE IS A VALUE, so the whole navigation model is testable without a
-// renderer: `tally` and `tally/<sub>` are one destination, and a member's URL,
-// the rail's current row, the band's lit tab and the back row's label all read
-// the SAME record. What this file guards is that they cannot disagree.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -70,8 +64,6 @@ describe("the fifteen routes", () => {
   });
 
   it("keeps a group and a friend singular routes, not shelf families", () => {
-    // Which group is open is app state BESIDE the route; the spec's table
-    // names fifteen routes and this is what keeps it fifteen.
     expect(shelfRoute(GROUP)).toBe("tally/group");
     expect(shelfRoute(FRIEND)).toBe("tally/friend");
   });
@@ -94,7 +86,6 @@ describe("the phone's band", () => {
     [ACTIVITY, "activity"],
     [GROUPS, "groups"],
     [WAITING, "contrib"],
-    // A descent lights the place it was reached from.
     [GROUP, "groups"],
     [FRIEND, "balances"],
     [EXPENSE, "activity"],

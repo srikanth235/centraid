@@ -1,10 +1,3 @@
-// Photos, inline descriptor (#505). The `InlineAppModule` the shell's
-// client loader (packages/client inlineApps.ts) imports: it pairs the
-// query-free `Root` (app-root.tsx) with this app's `./queries/*` handler
-// modules for the shell's client-side query path, alongside changeTables +
-// kitAsk. The `./queries/*` imports live ONLY here so they never reach the
-// served/browser bundle (the gateway refuses to serve node-side handlers).
-
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, PHOTOS_READ_TABLES_LIST } from "./app-root.tsx";
 import { photosPendingProjection as pendingProjection } from "./pending-projection.ts";
@@ -20,13 +13,7 @@ const photosInlineApp: InlineAppModule = {
   appId: "photos",
   pendingProjection,
   changeTables: PHOTOS_READ_TABLES_LIST,
-  // Mount over every scope this member can see (#599): the timeline is
-  // the merge of their own library and each audience they belong to. app-root
-  // paints one grid over N pages; albums, places and trash stay own-scope.
   multiScope: true,
-  // Query defaults are typed against the ambient `HandlerArgs`; the inline
-  // contract types `ctx` as `unknown`, so bridge the two here (the shell builds
-  // a compatible ctx at run time — inlineQueryCtx.ts).
   queries: {
     library: { default: libraryQuery },
     search: { default: searchQueryModule },
@@ -34,7 +21,6 @@ const photosInlineApp: InlineAppModule = {
     "enrichment-status": { default: enrichmentStatusQuery },
     faces: { default: facesQuery },
     people: { default: peopleQuery },
-    // The whole-library custody rollup the Storage screen reads (#711).
     storage: { default: storageQuery },
   } as unknown as InlineAppModule["queries"],
   kitAsk: {

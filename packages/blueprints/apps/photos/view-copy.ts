@@ -1,7 +1,4 @@
-// Copy here is FINAL, held to DESIGN.md's `## Copy` budgets (#805), and never
-// names a storage noun for a scope — `photos-vocabulary.test.ts` enforces it.
 import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from "./constants.ts";
-// Strings native renders too live in the import-free leaf `shared-copy.ts`.
 import {
   PHOTOS_EMPTY_DUPLICATES,
   PHOTOS_EMPTY_FAVORITES,
@@ -23,7 +20,6 @@ export {
   photosArchiveVerb,
 } from "./shared-copy.ts";
 
-/** `unit` is plural; frame.tsx singularises it for a count of one. */
 export interface ShelfCopy {
   title: string;
   unit: string;
@@ -65,11 +61,9 @@ const EMPTY_COPY: Readonly<Record<string, string>> = {
     "Search reaches titles, captions, people, places, things and album names across your whole library.",
 };
 
-// §14: it owes the member where the bytes go, never the mechanism.
 const LIBRARY_EMPTY_BODY =
   "Photographs you bring in are held in your library; the originals stay on your gateway.";
 
-// One line for every shelf: `emptyCopy`'s paragraph is what differs.
 export const EMPTY_TITLE = "Nothing here yet";
 
 export function searchMissTitle(query: string): string {
@@ -92,7 +86,6 @@ export function emptyCopy(
 export const TRASH_NOTE =
   "Deleted photographs are purged after 30 days; restoring returns them to the day they were taken.";
 
-// The confirm itself says how many, what else goes, and that it is final.
 export const EMPTY_TRASH_COPY = {
   control: "Empty trash",
   question: (count: number) =>
@@ -113,7 +106,6 @@ export function emptyOffersImport(
   return id === null || id === ALBUMS;
 }
 
-// `null` omits the number rather than claiming a zero it has not read (§14).
 export function peoplePendingNote(unmatchedCount: number | null): string {
   if (unmatchedCount === null) {
     return "Faces are not matched to anyone yet — face review proposes them one at a time.";
@@ -122,7 +114,6 @@ export function peoplePendingNote(unmatchedCount: number | null): string {
   return `${unmatchedCount} ${verb} not matched to anyone — face review proposes them one at a time.`;
 }
 
-// Said only when it is news (#712); an unnameable confirmer is never invented.
 export function peopleConfirmedByNote(
   confirmedBy: ReadonlyArray<{ party_id: string; name: string | null }>
 ): string | null {
@@ -133,7 +124,6 @@ export function peopleConfirmedByNote(
   return `Confirmed by ${head} and ${last} — separately, and they stay separate.`;
 }
 
-// A read-and-download grant KEEPS a primary rather than losing one.
 export const DOWNLOAD_PRIMARY = "Download";
 export function downloadPrimaryTitle(scopeLabel: string): string {
   return `You may download from ${scopeLabel}`;
@@ -143,8 +133,6 @@ export function personEmptyCopy(name: string): string {
   return `No photographs confirmed as ${name} yet.`;
 }
 
-// Offline is a designed STATE, not an apology. The banner takes a `--net`
-// BORDER — never a fill, an icon, or a dimmed container (§14).
 export const OFFLINE_COPY = {
   status:
     "Offline · meaning renders from the local replica; bytes stay on the gateway",
@@ -159,8 +147,6 @@ export const EMPTY_ACTIONS = {
   camera: "Take a photograph",
 } as const;
 
-// TWO FACTS, NOT THREE — a sanctioned deviation (#765): the v9 screen's third
-// row needs a library count a denial carries no rows to source.
 export const PERMISSION_COPY = {
   headline: "Photos has no access yet",
   lede: "Photos reads your library to show it back to you — nothing has been read yet.",
@@ -179,7 +165,6 @@ export const PERMISSION_COPY = {
 
 export const STORAGE_COPY = {
   lede: "What your photographs cost, and where their bytes currently are.",
-  // Numbers ride the head's meta, never a figure display.
   spaceHead: "Space",
   spaceMeta: (shown: number, bytes: string) =>
     `${shown} ${shown === 1 ? "photograph" : "photographs"} · ${bytes}`,
@@ -188,9 +173,7 @@ export const STORAGE_COPY = {
   wholeNote: "These numbers cover your whole library.",
   sizeAbsent:
     "No size was recorded for these, so the total below counts only the ones that carry one.",
-  // No failing verdict rather than a guess: the rollup carries no error.
   healthHead: "Backup",
-  /** NOT the same sentence as "the gateway has never counted". */
   healthPending: "Reading what the gateway last counted…",
   healthMeta: {
     unknown: "not counted yet",
@@ -216,7 +199,6 @@ export const STORAGE_COPY = {
   uncountedScopes: (labels: readonly string[]) =>
     `${labels.join(" and ")} ${labels.length === 1 ? "has" : "have"} not been counted yet and ${labels.length === 1 ? "is" : "are"} not in the numbers below.`,
 
-  // The one split the custody projection can prove; cause is not available.
   custodyHead: "Where the originals are",
   custodyRow: {
     replicated: "In your library and copied elsewhere",
@@ -228,7 +210,6 @@ export const STORAGE_COPY = {
   libraryMeta: (count: number, bytes: string) =>
     `${count} ${count === 1 ? "original" : "originals"} · ${bytes}`,
 
-  // Only originals PROVED held elsewhere, and no control: nothing here frees.
   freeUpHead: "Free up space",
   freeUpTitle: (bytes: string) => `${bytes} could be released`,
   freeUpBody: (count: number) =>
@@ -245,7 +226,6 @@ export const STORAGE_COPY = {
   trashEmpty: "Nothing is in the trash, so there is nothing to free.",
 } as const;
 
-/** Real queries: a member can type any of these back. */
 export const SEARCH_EXAMPLES: readonly string[] = [
   "ana at the coast",
   "videos from June",
@@ -267,9 +247,7 @@ export const SEARCH_COPY = {
   },
   miss: {
     eyebrow: "No results",
-    // NOT `searchMissTitle` — its exact wording is asserted elsewhere.
     title: (query: string) => `Nothing matches “${query}”`,
-    // Mobile's words (#711) plus "things": only this client matches tags.
     body: "Nothing in captions, people, places, things or album names.",
     clear: "Clear the query",
   },

@@ -1,5 +1,3 @@
-// `inline` is for a panel the frame must keep showing around — a band's
-// overflow sheet must not hide the app bar; every other dialog is `top`.
 import { useEffect, useRef } from "react";
 import type { CSSProperties, ReactNode, RefObject } from "react";
 
@@ -39,7 +37,6 @@ export function KitModal({
   children,
 }: KitModalProps): ReactNode {
   const ref = useRef<HTMLDialogElement | null>(null);
-  // Read through a ref: an inline arrow would reopen the dialog each render.
   const dismissRef = useRef(onDismiss);
   useEffect(() => {
     dismissRef.current = onDismiss;
@@ -62,7 +59,6 @@ export function KitModal({
         ref.current = node;
         if (dialogRef) dialogRef.current = node;
       }}
-      // `top` is opened by `showModal()`; the attribute would keep it in flow.
       {...(layer === "inline" ? { open: true } : {})}
       {...(id === undefined ? {} : { id })}
       {...(className === undefined ? {} : { className })}

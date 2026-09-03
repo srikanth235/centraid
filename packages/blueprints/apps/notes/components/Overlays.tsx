@@ -1,11 +1,3 @@
-// The two things that stand OVER a Notes route: the `[[` powerbox and the
-// confirms (Notes spec §5, §7). The band's overflow sheet is the ONE shared
-// `_shared/MoreSheet.tsx` (#883 B9).
-//
-// Both are the kit modal's TOP layer, which is `showModal()`: the platform
-// owns the focus trap, Escape and the inert background, and the kit hands
-// focus back. A hand-rolled overlay gets one of those right and the member
-// finds out about the others with a keyboard.
 import type { ReactNode } from "react";
 
 import { KitModal } from "../../_shared/KitModal.tsx";
@@ -20,18 +12,12 @@ export interface PowerboxProps {
   open: boolean;
   term: string;
   targets: readonly LinkTarget[];
-  /** The passage the link will carry, when the member had one selected. */
   anchored: boolean;
   onTerm: (term: string) => void;
   onPick: (target: LinkTarget) => void;
   onClose: () => void;
 }
 
-/**
- * One ranked list across seven kinds, the kind its own column. Panel under a
- * pointer, bottom sheet on touch — the stylesheet's decision, not a second
- * component.
- */
 export function Powerbox(props: PowerboxProps): ReactNode {
   const groups = groupTargets(props.targets);
   return (
@@ -87,11 +73,8 @@ export function Powerbox(props: PowerboxProps): ReactNode {
 export interface ConfirmProps {
   open: boolean;
   title: string;
-  /** One line per sentence: the confirms are the only place this app is
-   *  allowed to reassure, and each half is its own literal. */
   lines: readonly string[];
   verb: string;
-  /** Destructive verbs are OUTLINED in `--net`, never filled. */
   destructive?: boolean;
   onConfirm: () => void;
   onClose: () => void;

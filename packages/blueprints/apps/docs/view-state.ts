@@ -1,6 +1,3 @@
-// What Docs may say about itself once a read has landed (spec §2 rows 25–31, §4.6, §11; rules live in `_shared/view-state-kit.ts`):
-//  1. Until `loaded`, paint skeleton rows — the drive projection is `[]` before the first read, not "This drive is empty".
-//  2. A vanished open folder falls back to FOLDERS (not All) and is ANNOUNCED (`goneFolder`) — §4.3 applied to navigation.
 import { showsEmptyState } from "../_shared/view-state-kit.ts";
 import type { EmptyStateGate } from "../_shared/view-state-kit.ts";
 import { FOLDERS, folderIdFrom } from "./shelves.ts";
@@ -32,9 +29,7 @@ export interface EmptyStateInput extends EmptyStateGate {
   query?: string;
   filtered?: boolean;
   folderName?: string;
-  /** Drive holds nothing — the only first-run state that gets the display serif. */
   driveIsEmpty?: boolean;
-  /** `false` REPLACES the Shared empty state, never captions it. */
   sharedFromKnown?: boolean;
 }
 
@@ -42,7 +37,6 @@ export interface EmptyStateView extends EmptyCopy {
   visible: boolean;
 }
 
-/** Nothing to draw and nothing to SAY — Due/Storage take the block down through this same door. */
 export const NO_EMPTY_STATE: EmptyStateView = {
   visible: false,
   variant: "shelf",

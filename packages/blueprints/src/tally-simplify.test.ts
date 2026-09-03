@@ -1,8 +1,3 @@
-// The minimal-transfer engine is opt-in because it rewires who owes whom, so
-// the two things it must never get wrong are the money (a proposal that does
-// not clear every position is worse than no proposal) and the claim it makes
-// about itself (the before/after counts are the whole consent argument).
-
 import { describe, expect, test } from "vitest";
 
 import type { TallyBalanceData } from "./tally-balance.js";
@@ -19,7 +14,6 @@ function data(
   return { membersByGroup: new Map([[GROUP, members]]), expenses, settlements };
 }
 
-/** Apply the proposal to the positions and check everyone lands level. */
 function settleAll(net: Map<string, number>): Map<string, number> {
   const after = new Map(net);
   for (const transfer of minimalTransfers(net)) {
@@ -76,8 +70,6 @@ describe("the minimal payment set", () => {
 });
 
 describe("the group proposal", () => {
-  // Ana paid for dinner, Ben paid for the taxi; three ways each. Ana and Ben
-  // partly cancel out, so three directed debts stand: ben→ana, cy→ana, cy→ben.
   const ledger = data([
     {
       group_id: GROUP,
@@ -99,8 +91,6 @@ describe("the group proposal", () => {
     const result = tallySimplification(ledger, GROUP, false);
     expect(result.opted_in).toBe(false);
     expect(result.transfers).toStrictEqual([]);
-    // With no proposal, "after" is what stands today — never a smaller number
-    // the group did not agree to.
     expect(result.payments_after).toBe(result.debts_before);
   });
 
@@ -110,7 +100,6 @@ describe("the group proposal", () => {
     expect(result.debts_before).toBe(3);
     expect(result.payments_after).toBe(result.transfers.length);
     expect(result.payments_after).toBeLessThan(result.debts_before);
-    // And the proposal still clears the group.
     const after = new Map(tallyGroupNet(ledger, GROUP));
     for (const transfer of result.transfers) {
       after.set(

@@ -1,16 +1,8 @@
-// The three album commands that hit the vault (create/rename/delete). Kept
-// beside outcomes.ts rather than inline in app.tsx purely for line budget —
-// each still needs a couple of app.tsx-owned setters/orchestrators, passed in
-// per call exactly like every other action module here.
 import { statusLine } from "@centraid/design/elements";
 
 import { act, narrate, writeTarget } from "./outcomes.ts";
 import type { Album } from "./types.ts";
 
-// Albums are a per-scope collection this app only ever authors in the member's
-// OWN space (#599): a collection id means nothing outside the scope that
-// minted it, and there is no cross-scope album. So all three commands resolve
-// through the `own` write target rather than following the chip selection.
 const ownScope = (): string | null => {
   const target = writeTarget("own");
   return target.disabled ? null : target.scopeId;

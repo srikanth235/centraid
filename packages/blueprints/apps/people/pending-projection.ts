@@ -6,9 +6,6 @@ import {
   stablePendingRowId,
 } from "../_shared/pending-overlay.js";
 
-// Existing People commands address the person spine by party_id. The profile's
-// separate profile_id is deliberately not guessed: the party row is the stable
-// visible anchor for the pending state until canonical settlement arrives.
 const profile = (input: Readonly<Record<string, unknown>>) =>
   pendingPatch("core.party", input.party_id, input);
 const person = (input: Readonly<Record<string, unknown>>) =>

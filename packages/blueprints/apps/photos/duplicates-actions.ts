@@ -1,5 +1,3 @@
-// Duplicates' one write: the same media.delete_asset/runBatchDelete path as grid+lightbox+selection.
-// Narration ONLY via outcomes.ts — frame's one status line, with Undo.
 import { assetRefKey } from "./asset-key.ts";
 import { act, narrate, notice } from "./outcomes.ts";
 import { runBatchRestore } from "./selection-actions.ts";
@@ -12,13 +10,11 @@ export async function trashDuplicateAssets(
   let queued = 0;
   let failed = 0;
   let lastBad: VaultOutcome | undefined = undefined;
-  // Undo's manifest, keyed like the restore batch.
   const trashedKeys: string[] = [];
   const total = ids.length;
   const trashNext = async (index: number): Promise<void> => {
     const id = ids[index];
     if (id === undefined) return;
-    // Never a spinner (v4 §14).
     notice("Trashing duplicates", undefined, { done: index, total });
     const outcome = await act("delete-asset", { asset_id: id }, scope);
     if (outcome?.status === "executed")

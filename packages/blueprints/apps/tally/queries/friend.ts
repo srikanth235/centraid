@@ -1,8 +1,3 @@
-/**
- * One friend: the net balance with them (positive = they owe you) and the
- * expenses you both took part in, newest first, decorated like a group ledger.
- */
-
 import { attributeExpense } from "../../../src/tally-balance.ts";
 import {
   deniedPayload,
@@ -12,12 +7,6 @@ import {
   personOf,
 } from "./dashboard.ts";
 
-/**
- * The friend's net, broken down by where it came from: one part per group plus
- * "outside any group" for the group-less 1:1 rows. Same fold as `pairwise`,
- * scoped — the parts sum to the whole net, which is the only claim the hero
- * makes about them.
- */
 function netParts(
   data: Awaited<ReturnType<typeof loadTally>>,
   friendId: string
@@ -43,7 +32,6 @@ function netParts(
       add(groupId, -settlement.amount_minor);
   }
   for (const obligation of data.obligations) {
-    // A standing IOU is never group-scoped, so it lands outside any group.
     if (obligation.from_party === me && obligation.to_party === friendId)
       add(null, -obligation.amount_minor);
     else if (obligation.to_party === me && obligation.from_party === friendId)

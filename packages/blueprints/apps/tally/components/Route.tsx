@@ -1,18 +1,3 @@
-// WHICH SCREEN THE CURRENT ROUTE PAINTS — the one place the fifteen routes are
-// resolved to a body.
-//
-// It is a component rather than a branch inside the orchestrator so that the
-// switch stays readable as the route table it is. Everything it needs arrives
-// as a prop: it reads nothing, writes nothing, and holds no state of its own.
-//
-// ABSENT IS NOT EMPTY. A route whose own read has not landed — a group ledger
-// before the group query answers, a feed before the activity query does —
-// renders NOTHING. An empty list in its place would be a claim that the group
-// has no expenses, which nobody has checked.
-//
-// THE SEVEN COMPOSING ROUTES ARE DELEGATED to `ComposeRoutes.tsx`: they stand
-// on a bundle of draft state this file has no other use for, and threading it
-// through here would bury the route map in editor plumbing.
 import type { ReactNode } from "react";
 
 import type { SearchStatus } from "../../_shared/search-scaffold.ts";
@@ -44,8 +29,6 @@ import { DayOne, DeniedGate } from "./States.tsx";
 
 export interface RouteProps {
   shelf: ShelfId;
-  /** A denied read, as the query reported it. Denial is DATA, and it replaces
-   *  every route's body with the gate rather than emptying it. */
   consent: { message: string; revokedAt: string | null } | null;
   dashboard: DashboardData;
   group: GroupData | null;
@@ -66,9 +49,7 @@ export interface RouteProps {
   onShowMore: () => void;
   onAskLeave: (groupId: string) => void;
   onAskArchive: (groupId: string, archived: boolean) => void;
-  /** Turn simplification on or off for the open group. */
   onSimplify: (groupId: string, simplify: boolean) => void;
-  /** Prepare a reminder about one balance. Always parks. */
   onRemind: (input: {
     partyId: string;
     name: string;
@@ -86,7 +67,6 @@ export interface RouteProps {
   onRestore: (expenseId: string) => void;
   onBack: () => void;
   onWaiting: () => void;
-  /** Assemble the export file and hand it to the member. */
   onSaveExport: () => void;
   onQuery: (value: string) => void;
   onRetry: () => void;
@@ -103,8 +83,6 @@ export function Route(props: RouteProps): ReactNode {
     );
 
   if (shelf === null) {
-    // DAY ONE IS A FACT ABOUT A READ THAT LANDED, and it looks nothing like a
-    // denial: it offers the first real move rather than a receipt.
     const dayOne =
       dashboard.friends.length === 0 && dashboard.groups.length === 0;
     return dayOne ? (

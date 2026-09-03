@@ -1,26 +1,3 @@
-/**
- * The people window as a bounded recent view: the CRM people are the rows of
- * people.profile (each a 1:1 enrichment of a canonical core.party), newest
- * first, caller-sized (default the read max). Each row is decorated with its party's
- * display name, its list (one lists-scheme tag, the same mechanism Docs
- * folders use), its canonical favorite star (the flags-scheme tag on the
- * party, #274), and its active reminder dates so the sidebar can derive
- * Reconnect / Upcoming / Favorites client-side.
- * `truncated` means older people exist beyond the window and is named on the
- * status line — never a silent drop.
- *
- * Each row also carries the sharing plane's answer to "is this person linked
- * to a vault of their own?" (`linked` / `vault_count`, via ./_shared.ts). Those
- * reads can be denied independently of the roster — People's `share.*` scopes
- * are newer than the app — so a denial leaves `linked` null and flips
- * `links_available` to false rather than darkening the window; the UI draws
- * Linked/Unlinked chips only while that flag is true.
- *
- * Everything comes from the vault; this app holds no rows of its own. A
- * consent denial is a first-class outcome (vaultDenied), rendered as the
- * "ask the owner for access" state.
- */
-
 import {
   FLAGS_SCHEME_URI,
   LIST_SCHEME_URI,
@@ -32,7 +9,6 @@ import {
 import { PENDING_OVERLAY_FIELDS } from "../../_shared/pending-overlay.ts";
 import { readLiveBindings } from "./_shared.ts";
 
-/** Forwarded verbatim, so the roster can draw the pending chip (#864). */
 function pendingStamps(
   row: Readonly<Record<string, unknown>>
 ): Record<string, unknown> {
@@ -88,7 +64,6 @@ interface Reminder {
   month_day: string;
 }
 
-/** Gateway read max is 10_000; look-ahead needs one spare row. */
 const ROSTER_MAX = 9_999;
 
 export default async function peopleHandler({ input, ctx }: HandlerArgs) {
@@ -113,7 +88,6 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
     const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
     const schemeRows = (schemes.rows ?? []) as unknown as RawScheme[];
 
-    // Lists are owner-curated SKOS concepts — small and unbounded.
     const listConcepts = conceptsInScheme(
       conceptRows,
       findScheme(schemeRows, LIST_SCHEME_URI)
@@ -167,7 +141,6 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
         ],
         purpose,
       }),
-      // One bounded read for the whole window; null means "denied", not "none".
       readLiveBindings(ctx.vault, partyIds),
     ]);
 

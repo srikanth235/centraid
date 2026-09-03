@@ -4,7 +4,6 @@ import type { BandDestination, Shelf, ShelfId } from "../_shared/shelves.ts";
 export type { Shelf, ShelfId } from "../_shared/shelves.ts";
 
 export const BOOKS = "built-in:books";
-/** Journal is a filter over the People-journal scheme, never interleaved into the library. */
 export const JOURNAL = "built-in:journal";
 export const SEARCH = "built-in:search";
 export const NOTE = "built-in:note";
@@ -37,10 +36,8 @@ const ROUTED: readonly Shelf[] = [
   { id: VOICE, label: "Voice", segment: "voice" },
 ];
 
-/** Empty library segment still needs a non-empty band/`aria-current` id. */
 const LIBRARY_ID = "library";
 
-/** Places only — Capture, Voice, Tags, Trash, History are acts behind More. */
 export const BAND_DESTINATIONS: readonly BandDestination[] = [
   { id: LIBRARY_ID, label: "Library" },
   { id: "books", label: "Notebooks" },
@@ -71,7 +68,6 @@ export const {
     idPrefix: NOTEBOOK_PREFIX,
     segmentPrefix: "notebook/",
     fallback: BOOKS,
-    // A notebook is the library under a filter, not a second band place.
     bandKey: LIBRARY_ID,
   },
 });

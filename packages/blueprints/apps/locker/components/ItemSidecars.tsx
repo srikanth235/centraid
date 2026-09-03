@@ -1,12 +1,3 @@
-// THE SIDECAR SECTIONS OF ONE ITEM (#872; GAPS §3.3 #2–#5, #8–#10).
-//
-// THE SEALED HALF IS A ROW WITH VERBS (#873): a sealed custom value and a
-// passkey's key material read back as PRESENT, never as a value, and each
-// offers `Reveal` and `Copy` through the SAME per-item permit gate the item's
-// own sealed columns run on. A REVISION IS NOT ONE OF THEM (#916, D2) — see
-// `HistorySection`.
-//
-// So these rows say nothing special: `SealedField`, and §6's own sentence.
 import type { ReactNode } from "react";
 
 import { displayText, safeExternalUrl } from "../../_shared/untrusted.ts";
@@ -55,11 +46,6 @@ import { Section } from "./Rows.tsx";
 
 import styles from "./Rows.module.css";
 
-/**
- * Passed as a unit because every section below must wire the SAME machinery: a
- * section taking its own subset could drift into holding a revealed value the
- * wipe does not know about.
- */
 export interface SidecarRevealProps {
   revealed: Readonly<Record<string, string>>;
   revealedAt: Readonly<Record<string, number>>;
@@ -69,8 +55,6 @@ export interface SidecarRevealProps {
   onConceal: (field: string) => void;
 }
 
-/** The permit key is namespaced by the row's own id (`field-model`), so a
- *  permit cannot walk to the next row. */
 function SidecarSecret({
   label,
   field,
@@ -152,8 +136,6 @@ export function FieldsHead({ detail }: { detail: LockerDetail }): ReactNode {
   );
 }
 
-/** The PRIMARY is the item's own `url` and stays first; the rest are the
- *  `set-addresses` list, in vault order. */
 export function AddressSection({
   detail,
   onOpen,
@@ -270,15 +252,6 @@ export function AttachmentSection({
   );
 }
 
-/**
- * ONE ROW PER REVISION, AND NO VERBS ON IT (#916, D2). This pane used to draw a
- * second row beneath each rotation — `Previous password`, with `Reveal` and
- * `Copy` behind the item's permit — because `locker_item_history` kept that
- * value in a sealed cell of its own. That table is gone. A revision is a
- * `core_entity_revision` snapshot whose sealed cells nothing here unseals, so
- * the row names the rotation and its time and says where the old value lives:
- * in a confirmed export, and nowhere a reveal reaches.
- */
 export function HistorySection({
   detail,
 }: {
@@ -312,10 +285,6 @@ export function HistorySection({
   );
 }
 
-/**
- * Archive and duplicate, which are NOT the trash: archive has no purge date
- * and never gets one, and the row says so.
- */
 export function LifeRows({
   detail,
   onArchive,

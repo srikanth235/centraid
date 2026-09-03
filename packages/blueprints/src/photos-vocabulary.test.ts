@@ -1,11 +1,3 @@
-// Vocabulary guard for the Photos app (#599): the storage noun "vault" must
-// never reach user-visible copy except reviewed #731 phrases.
-//
-// HOW THE SCAN TELLS COPY FROM CODE: (1) comments stripped by a quote-aware
-// state machine so `//` inside strings survives; (2) the offence regex is
-// edge-bounded — prose matches, `x.vault.read`/`vaultDenied`/`VAULT_ACCESS`
-// never do. Only .ts/.tsx/.html scanned; app.json excluded on purpose (it is
-// the machine-readable contract, not copy).
 import fs from "node:fs";
 import path from "node:path";
 
@@ -14,7 +6,6 @@ import { describe, expect, it } from "vitest";
 const PHOTOS_DIR = path.resolve(import.meta.dirname, "../apps/photos");
 const SCANNED = new Set([".ts", ".tsx", ".html"]);
 
-/** Every scannable source file under the Photos app, repo-relative. */
 function sourceFiles(dir: string, acc: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
@@ -24,7 +15,6 @@ function sourceFiles(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
-/** Drop `<!-- -->`, `/* *\/` and `//` comments; keep string contents intact. */
 function stripComments(source: string): string {
   const withoutHtml = source.replace(/<!--[\s\S]*?-->/gu, " ");
   let out = "";
@@ -69,7 +59,6 @@ function stripComments(source: string): string {
   return out;
 }
 
-/** The word as a user would read it: whitespace/edge bounded, not `x.vault`. */
 const OFFENCE = /(?:^|[\s>({[])vault(?=[\s.,!;:?'’"”)\]}<-]|$)/gimu;
 const APPROVED_VAULT_COPY = [
   /\bSave to my vault\b/giu,
@@ -111,7 +100,6 @@ describe("Photos app vocabulary (#599)", () => {
   });
 
   it("distinguishes code and comments from prose", () => {
-    // Code: dotted member expression, never prose.
     expect(
       offences("await ctx.vault.read({ entity: 'media.asset' })")
     ).toStrictEqual([]);
@@ -119,15 +107,12 @@ describe("Photos app vocabulary (#599)", () => {
     expect(offences("if (e.code === 'VAULT_ACCESS') return;")).toStrictEqual(
       []
     );
-    // Comments: stripped before the scan, both forms.
     expect(offences("// the vault owns the meaning here")).toStrictEqual([]);
     expect(offences("/* a projection of your vault */")).toStrictEqual([]);
     expect(offences("<!-- your vault, rendered -->")).toStrictEqual([]);
-    // A `//` inside a string is not a comment; the prose after it is scanned.
     expect(
       offences("const help = 'https://x/y — see your vault';")
     ).toHaveLength(1);
-    // Prose: string literal and JSX text alike.
     expect(offences("const tag = 'a projection of your vault';")).toHaveLength(
       1
     );

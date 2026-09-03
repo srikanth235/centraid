@@ -1,11 +1,5 @@
 import { runVaultAction } from "../../_shared/action-kit.ts";
 
-/**
- * The ontology primitive `core.merge_party` (#290) owns this, never a
- * People-local soft merge: every FK re-points, the merged party is deleted,
- * non-owner callers are confirm-gated. Body source/target map onto the
- * command's merged/survivor.
- */
 export default async function mergePeople({
   body,
   ctx,

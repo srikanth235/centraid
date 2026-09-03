@@ -1,6 +1,3 @@
-// @vitest-environment jsdom
-// EVERY LONG LOCKER LIST IS WINDOWED (#883 C4). The accessibility contract
-// pins that each list REACHES `WindowedRows`; this pins what it then does.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
@@ -13,7 +10,6 @@ import { TrashScreen } from "./components/Trash.tsx";
 import { reviewRegister } from "./review-model.ts";
 import type { LockerAccessEntry, LockerRow } from "./types.ts";
 
-/** Over `VIRTUALIZE_FROM`; the query's ceiling is 2,000. */
 const MANY = 400;
 
 const NOOP = (): void => undefined;
@@ -23,7 +19,6 @@ const rows: LockerRow[] = Array.from({ length: MANY }, (_, index) => ({
   type: "login",
   title: `Account ${String(index)}`,
   subtitle: "ana@example.test",
-  // Review groups by verdict; compromised lands in the items register.
   compromised: true,
 }));
 
@@ -40,19 +35,14 @@ const receipts: LockerAccessEntry[] = Array.from(
 );
 
 interface WindowReport {
-  /** Mounted, and nowhere near the whole set. */
   slice: boolean;
-  /** One entry, or the mounted rows disagree on the set. */
   setSizes: string[];
-  /** The first row's place: the SET's first, not the slice's. */
   firstPos: string | undefined;
-  /** The omitted rows' height. */
   spacer: boolean;
 }
 
 function windowOf(markup: string, total: number): WindowReport {
   const items = [...markup.matchAll(/<li\b[^>]*>/gu)].map((match) => match[0]);
-  // A spacer carries no position; a real row does.
   const drawn = items.filter((tag) => tag.includes("aria-posinset"));
   return {
     slice: drawn.length > 0 && drawn.length < total / 2,
@@ -135,7 +125,6 @@ describe("the routes beyond the list", () => {
       })
     );
     expect(windowOf(markup, MANY)).toStrictEqual(WINDOWED);
-    // The list item is the row AND its act, never one without the other.
     expect([...markup.matchAll(/>Purge</gu)]).toHaveLength(
       [...markup.matchAll(/aria-posinset/gu)].length
     );
@@ -155,3 +144,4 @@ describe("the routes beyond the list", () => {
     expect(windowOf(markup, MANY)).toStrictEqual(WINDOWED);
   });
 });
+// @vitest-environment jsdom

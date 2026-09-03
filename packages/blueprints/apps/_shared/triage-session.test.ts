@@ -1,8 +1,3 @@
-// The shared triage state machine (#712). Pinned here rather than
-// through either surface, because the two behaviours that actually bit — a
-// denominator that slides under the member, and a "skip" that is
-// indistinguishable from an answer — are arithmetic, and arithmetic is
-// cheapest to hold still in a unit test.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -17,8 +12,6 @@ import {
 const QUEUE = ["a", "b", "c"];
 
 describe("triage session", () => {
-  // [law:triage-session-progress] A frozen denominator and distinct skip
-  // semantics are the cross-seat contract for every proposal queue.
   it("walks one item at a time", () => {
     const session = openTriage(QUEUE);
     expect(triageCurrent(session)).toBe("a");
@@ -52,9 +45,6 @@ describe("triage session", () => {
   });
 
   it("the denominator is frozen at open, so the numerator counts UP as the queue shrinks", () => {
-    // The bug this exists to stop: re-reading a shorter queue after each
-    // answer and printing its length would count the member DOWN from a total
-    // that moved, so "3 of 5" could be followed by "1 of 4".
     let session = openTriage(QUEUE);
     session = triageAnswer(session, "confirm");
     session = triageRefill(session, ["b", "c"]);

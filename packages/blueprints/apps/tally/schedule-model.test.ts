@@ -1,11 +1,3 @@
-// A schedule is a sentence — and where it cannot be, there is no preview.
-//
-// The fallback is the point of this file. `queries/dashboard.ts` asks the
-// shared time core to phrase each rule and hands the answer over as `preview`;
-// what is pinned here is that an ABSENT answer produces no preview at all
-// rather than raw rule syntax on a member-facing surface, and that a template
-// missing any field the save command requires withholds its acts instead of
-// sending a write the vault would refuse.
 import { describe, expect, it } from "vitest";
 
 import {

@@ -1,12 +1,3 @@
-/**
- * Behavioural contract for every manifested blueprint handler (#630).
- *
- * Every action and query is invoked with schema-derived input against a
- * seeded, scope-enforcing vault seam — importing a handler and swallowing its
- * query errors proves nothing. A handler fails the suite when it throws,
- * returns the wrong shape, skips its vault operation, or reaches outside the
- * scopes declared in app.json.
- */
 // oxlint-disable-next-line typescript-eslint/ban-ts-comment -- browser-JS fixtures intentionally lack TS declarations (#408)
 // @ts-nocheck
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -190,20 +181,14 @@ function permits(
       scope.verbs.split("+").includes(verb) ||
       (verb === "read" && scope.verbs === "read+act");
     if (!verbs) return false;
-    // A table-less act scope must not match any command in the schema
-    // (schedule.foo_bar with only `{schema: schedule, verbs: act}`): require
-    // the command's second segment so a renamed engine command fails smoke.
     if (scope.table == null) {
       if (verb !== "act") return true;
-      // Accept schema-level act only when the target has a real command name
-      // (schema.command), not a bare schema or free-form string.
       return parsed.table.length > 0 && /^[a-z][a-z0-9_]*$/u.test(parsed.table);
     }
     return scope.table === parsed.table;
   });
 }
 
-/** Extract vault command names the action source actually dispatches. */
 function declaredCommands(source: string): string[] {
   const found = new Set<string>();
   for (const match of source.matchAll(
@@ -259,8 +244,6 @@ function scopedSeededCtx(manifest: AppJson) {
         read: async (input: { entity: string; purpose?: string }) => {
           checkPurpose(input);
           check("read", input.entity, "read");
-          // core.vault is the one universal seeded record. Other projections
-          // intentionally exercise their honest empty-state branch.
           return {
             rows:
               input.entity === "core.vault"
@@ -366,9 +349,6 @@ describe("blueprint handler behavioural contract", () => {
       expect(schemaMismatch(result.body, handler.output)).toBeNull();
       const invokes = seam.calls.filter((call) => call.method === "invoke");
       expect(invokes).toHaveLength(1);
-      // A renamed engine command must fail: the action source's `command:`
-      // literal has to match the string actually invoked. Actions that build
-      // the command dynamically leave expectedCommands empty and skip this.
       expect(
         expectedCommands.length === 0 ||
           expectedCommands.includes(invokes[0]!.target)

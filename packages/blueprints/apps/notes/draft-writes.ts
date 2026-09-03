@@ -1,9 +1,5 @@
-// Draft writes the editor must not lose: a library re-read never carries a
-// body, and one trailing debounce must not eat another note's pending save.
 import type { Note } from "./types.ts";
 
-/** Keep bodies the editor already loaded (or typed) across a library window
- *  that only ships previews. A row that arrived with its own body wins. */
 export function carryLoadedBodies(
   previous: readonly Note[],
   next: readonly Note[]
@@ -20,11 +16,6 @@ export function carryLoadedBodies(
   });
 }
 
-/**
- * Trailing debounce keyed by identity. A burst on one key still coalesces;
- * a different key flushes the previous burst immediately so a fast switch
- * cannot drop it. `flush` is the unmount / leave-the-surface path.
- */
 export function coalesceByKey<Args extends unknown[]>(
   fn: (...args: Args) => void | Promise<void>,
   keyOf: (...args: Args) => unknown,

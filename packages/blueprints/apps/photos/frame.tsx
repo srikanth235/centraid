@@ -1,4 +1,3 @@
-// Photos' frame contribution (v4 §3, §18): Select outlined, Import the one fill.
 import type { ReactNode } from "react";
 
 import {
@@ -22,9 +21,7 @@ export interface AppBarState extends AppBarBase {
   onToggleSelect: () => void;
   showImport: boolean;
   onImport: () => void;
-  /** Disabled Import is outlined, never filled (§18). */
   importDisabledReason?: string;
-  /** Phone select: Select all stays in the head; count is selected, not shelf total (§6, §15). */
   onToggleAll?: () => void;
   selectedCount?: number;
 }
@@ -64,7 +61,6 @@ export function appBar(state: AppBarState): InlineAppBarContribution {
         </button>
       ) : null}
       {state.showImport ? (
-        // id upload.ts drives; disabled is outline, never fill (§18).
         <button
           type="button"
           id="uploadBtn"

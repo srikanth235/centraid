@@ -1,16 +1,5 @@
-// `.js` specifier: the client program typechecks this module and does not
-// enable `allowImportingTsExtensions`. A package import of format-kit also
-// failed Rolldown in the gateway image, which copies sources and not dist.
 import { DAY_MS, MONTHS } from "../_shared/format-kit.js";
 
-/** WHEN a task is (#834). Import-free so Home and the phone can read it;
- *  `format.ts`/`logic.ts` re-export — one definition of `landsToday`. */
-
-/**
- * Local YYYY-MM-DD in `timeZone` (IANA), or the host zone. Intl, not
- * `Date#getFullYear` with a post-boot `process.env.TZ` write: Node ignores TZ
- * after boot, so that goes green on a Mac and red on UTC CI.
- */
 function civilDay(instant: Date, timeZone?: string): string | null {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,
@@ -25,8 +14,6 @@ function civilDay(instant: Date, timeZone?: string): string | null {
   return `${year}-${month}-${day}`;
 }
 
-/** A civil day key (`2026-08-21`). Instants use the member's local calendar
- *  day — never the UTC prefix. */
 export function dayKey(value: string, timeZone?: string): string {
   if (isDateOnly(value)) return value.slice(0, 10);
   const parsed = new Date(value);
@@ -38,7 +25,6 @@ export function isDateOnly(due: string | null | undefined): boolean {
   return typeof due === "string" && !due.includes("T");
 }
 
-/** Whole civil days from `from` to `to`, negative when `to` is earlier. */
 export function daysBetween(
   from: string,
   to: string,
@@ -106,7 +92,6 @@ export function isOverdueWhen(task: TaskWhen, now: string): boolean {
   return daysBetween(now, due) < 0;
 }
 
-/** VTODO open set — the statuses the live board may act on. */
 export function isOpenStatus(status: string): boolean {
   return status === "needs-action" || status === "in-process";
 }
@@ -117,8 +102,6 @@ export interface FamilyRow {
   status: string;
 }
 
-/** An unfinished child of a completed or released parent is a root of its own
- *  — completing the parent must not hide remaining work. */
 export function isOpenBoardRoot(
   task: FamilyRow,
   parent: FamilyRow | undefined
@@ -128,8 +111,6 @@ export function isOpenBoardRoot(
   return !parent || !isOpenStatus(parent.status);
 }
 
-/** Unfinished children of a closed parent are promoted onto the open board;
- *  the logbook parent keeps only closed children, so no row is drawn twice. */
 export function nestTaskFamilies<T extends FamilyRow>(
   rows: readonly T[],
   decorate: (task: T, children: T[]) => T

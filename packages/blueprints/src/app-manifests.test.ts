@@ -1,11 +1,3 @@
-/*
- * Every bundled blueprint must be deployable as-is: its app.json parses
- * under the runtime's real manifest validator (including the vault block),
- * every declared action/query has a handler file on disk, and the gallery
- * index and the template dirs agree. This is the gate that keeps a
- * template from cloning into an app the dispatcher immediately rejects.
- */
-
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -19,10 +11,6 @@ const PACKAGE_ROOT = path.resolve(import.meta.dirname, "..");
 const quotedSource = (value: string) =>
   `["']${value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}["']`;
 
-// A directory under `apps/` is a template UNLESS its name starts with `_`:
-// underscore-prefixed dirs are shared modules several apps import (#599's
-// `apps/_shared`), the same convention `queries/_shared.ts` already uses. They
-// carry no app.json and never ship as a gallery entry.
 const isTemplateDir = (name: string) => !name.startsWith("_");
 
 function templateDirs(kind: "apps" | "automations"): string[] {
@@ -194,8 +182,6 @@ describe("bundled blueprint manifests", () => {
   it.each(apps.map((id) => [id] as const))(
     "apps/%s declares only handlers that exist on disk",
     (id) => {
-      // Handlers may be authored as `.ts` or `.js` — the dispatcher probes
-      // `.ts` first, then `.js`. Accept whichever is present.
       const handlerExists = (
         kind: "actions" | "queries",
         name: string
@@ -223,7 +209,6 @@ describe("bundled blueprint manifests", () => {
       const manifest = readManifest("apps", id);
       return manifest.vault !== undefined;
     });
-    // The §01 projection band, as blueprints.
     expect(projections).toStrictEqual(
       [
         "agenda",
@@ -262,20 +247,10 @@ describe("bundled blueprint manifests", () => {
     }
   );
 
-  // The identity hue is one contract with two readers: the shell/mobile
-  // launcher reads `apps` from @centraid/design, every other surface (the
-  // blueprint app's own chrome, the product-grammar gallery) reads the
-  // manifest. When #707 reassigned the wheel by content character, the
-  // registry moved and the manifests did not — so the same app wore two
-  // different hues depending on which surface you were looking at. Nothing
-  // caught it, because neither side is wrong on its own.
   it("every manifest's identity hue matches the design registry", () => {
     const registry = Object.fromEntries(
       designApps.map((app) => [app.id, app.colorKey])
     );
-    // Read the raw JSON, not `readManifest`: the runtime validator narrows to
-    // the fields the dispatcher needs and drops presentation ones like
-    // `colorKey`, which is exactly the field under test here.
     const onDisk = Object.fromEntries(
       templateDirs("apps").map((id) => [
         id,

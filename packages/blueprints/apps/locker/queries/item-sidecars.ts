@@ -1,12 +1,3 @@
-/**
- * Sidecar reads for the item pane (#872) — a helper, not a query.
- *
- * ONE RULE RUNS THROUGH ALL OF IT: a sealed cell never rides these payloads.
- * `value_sealed` and `private_key` come back as the vault's placeholder, and a
- * revision's `snapshot_json` is opened here and never forwarded — so these
- * return the SHAPE of a secret, never the secret.
- */
-
 const SEALED_PLACEHOLDER = "«sealed»";
 
 interface FieldRow {
@@ -74,8 +65,6 @@ async function rowsOf<T>(
     });
     return (result.rows ?? []) as unknown as T[];
   } catch {
-    // A sidecar the grant does not cover leaves its section empty; it never
-    // takes the pane down with it.
     return [];
   }
 }
@@ -126,9 +115,6 @@ export async function readFields(
       section: row.section,
       label: row.label,
       kind: row.kind,
-      // A sealed custom value reads back as the placeholder, like
-      // `locker_item.password`; `null` with `sealed: true` is the honest
-      // shape.
       value: row.kind === "sealed" ? null : row.value_text,
       sealed:
         row.kind === "sealed" &&
@@ -176,25 +162,10 @@ export async function readPasskey(
     credential_id: row.credential_id,
     algorithm: row.algorithm,
     created_at: row.created_at,
-    // Key material is sealed; its PRESENCE is what the slot draws.
     has_private_key: row.private_key != null,
   };
 }
 
-/**
- * THE PLAIN COLUMNS A REVISION MAY NAME, and the word it names each by.
- *
- * IT IS AN ALLOW-LIST, AND THE SEALED COLUMNS ARE NOT ON IT. A snapshot keeps
- * `password`, `otp_seed`, `card_number`, `cvv` and `content` exactly as the row
- * held them — ciphertext under the item's own additional data — so comparing
- * two snapshots would answer "was this cell rewritten", never "did the value
- * change", and the ciphertext is not something a payload may carry either way.
- *
- * A ROTATION IS READ OFF ITS PLAIN WITNESS: the vault re-stamps
- * `password_set_at` exactly when a password is set and leaves it alone when an
- * edit round-trips the sealed placeholder, so the timestamp says a rotation
- * happened without anything having to look at the secret.
- */
 const REVISION_COLUMNS: Readonly<Record<string, string>> = {
   type: "type",
   title: "title",
@@ -216,8 +187,6 @@ const REVISION_COLUMNS: Readonly<Record<string, string>> = {
   password_set_at: "password",
 };
 
-/** What the state that SUPERSEDED this snapshot says differently — column
- *  names, never values. */
 function changedBetween(
   before: Record<string, unknown>,
   after: Record<string, unknown>
@@ -231,23 +200,6 @@ function changedBetween(
   return changed;
 }
 
-/**
- * ONE ITEM'S REVISIONS (#916, owner decision D2). `locker_item_history` was a
- * SECOND revision mechanism for the same question, and it is gone: an item's
- * pre-mutation state is a `core_entity_revision` row, and `locker.item`
- * declares `revisions: { retain: 'forever' }` so a password rotated last March
- * is still here.
- *
- * The snapshot is opened HERE and never forwarded. What comes back is what
- * changed and when — a rotation is nameable, the password it rotated away from
- * is not. That value survives sealed in the snapshot and leaves the vault only
- * through `locker.export`, which is confirmed and receipted as the mass unseal
- * it is.
- *
- * `current` is the item as it stands now: newest-first, each revision is
- * superseded by the one before it in the list, and the newest by the item
- * itself.
- */
 export async function readHistory(
   ctx: HandlerCtx,
   itemId: string,
@@ -269,8 +221,6 @@ export async function readHistory(
     });
     rows = (result.rows ?? []) as unknown as RevisionRow[];
   } catch {
-    // A read the grant does not cover leaves the section empty; it never takes
-    // the pane down with it.
     return [];
   }
   let after = current;
@@ -279,9 +229,6 @@ export async function readHistory(
     try {
       snapshot = JSON.parse(row.snapshot_json) as Record<string, unknown>;
     } catch {
-      // A snapshot that will not parse names NOTHING. An empty object diffed
-      // against the live item would report every column as changed, which is a
-      // louder claim than "unreadable" and a false one.
       snapshot = null;
     }
     const changed = snapshot ? changedBetween(snapshot, after) : {};
@@ -295,8 +242,6 @@ export async function readHistory(
   });
 }
 
-/** Attachment METADATA. The bytes are NOT sealed — the sealed class is a
- *  column class — so this returns what the file IS (GAPS §3.3 #8). */
 export async function readAttachments(
   ctx: HandlerCtx,
   itemId: string,

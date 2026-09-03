@@ -1,14 +1,3 @@
-// The cross-scope merge (#599, generalised for #726 D11 to
-// apps/_shared/scope-merge.ts): k-way ordering, cross-scope dedupe, the
-// shared safe horizon, and the null-keyed tail bucket. Loaded by file URL
-// like the other blueprint-app fixtures.
-//
-// Two suites: "Photos-shaped merge" pins the exact behaviour `merge.ts` had
-// before the extraction (taken_at desc, sha-else-content-id), proving the
-// generalisation changed nothing for the app it was lifted from. "A
-// record-only app" proves the OTHER end of the two parameters — ascending
-// order by the row's own id, identity same as sort key — the shape a
-// second, record-only app (apps/tasks) declares.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -50,7 +39,6 @@ const { mergeScopePages } = (await import(moduleUrl)) as {
   ) => Result<TRow>;
 };
 
-/** An asset whose id doubles as its content id unless a sha is given. */
 const asset = (id: string, takenAt: string | null, sha?: string): Asset => ({
   asset_id: id,
   content_id: `c-${id}`,
@@ -58,7 +46,6 @@ const asset = (id: string, takenAt: string | null, sha?: string): Asset => ({
   taken_at: takenAt,
 });
 
-/** A complete (untruncated) page: `tail` is its oldest row, nothing beyond. */
 const page = (
   scopeId: string,
   rows: Asset[],
@@ -70,8 +57,6 @@ const page = (
   truncated,
 });
 
-/** Photos' own two hardcodes (taken_at desc, sha-else-content-id), restated
- *  as the parameters `mergeScopePages` now takes. */
 const photoDedupeIdentity = (a: Asset): string =>
   a.sha256 != null && a.sha256 !== ""
     ? `sha:${a.sha256}`
@@ -119,7 +104,6 @@ describe("Photos-shaped merge (#599, #726)", () => {
 
   it("dedupes a shared photo on sha256 and keeps the own-scope copy", () => {
     const shared = (id: string) => asset(id, "2026-05-01", "sha-shared");
-    // Audience page first: the own copy must still win the tile.
     const result = merge([
       page("family", [shared("family-copy")]),
       page("own", [shared("own-copy")]),
@@ -166,7 +150,6 @@ describe("Photos-shaped merge (#599, #726)", () => {
     const result = merge([
       page("own", [asset("a", "2026-05-01"), asset("b", "2026-04-01")], true),
     ]);
-    // Its own tail is the horizon, and the tail row itself is still safe.
     expect(result.horizon).toBe("2026-04-01");
     expect(ids(result)).toStrictEqual(["a", "b"]);
     expect(result.horizonScopeIds).toStrictEqual(["own"]);
@@ -174,9 +157,7 @@ describe("Photos-shaped merge (#599, #726)", () => {
 
   it("caps two scopes at the NEWEST tail among the truncated ones", () => {
     const result = merge([
-      // Shallow: truncated at July.
       page("own", [asset("a", "2026-07-10"), asset("b", "2026-07-01")], true),
-      // Deep: reaches March, so its May row is not safe to show yet.
       page(
         "family",
         [asset("c", "2026-06-01"), asset("d", "2026-05-01")],
@@ -193,7 +174,6 @@ describe("Photos-shaped merge (#599, #726)", () => {
   it("ignores complete scopes when computing the horizon", () => {
     const result = merge([
       page("own", [asset("a", "2026-07-10"), asset("b", "2026-07-01")], true),
-      // Complete: its older rows stay visible because nothing can precede them.
       page("family", [asset("c", "2026-06-01")], false),
     ]);
     expect(result.horizon).toBe("2026-07-01");
@@ -205,9 +185,7 @@ describe("Photos-shaped merge (#599, #726)", () => {
   it("names only the scopes sitting at the horizon across three scopes", () => {
     const result = merge([
       page("own", [asset("a", "2026-07-01")], true),
-      // Same tail as own — both must be re-queried to page deeper.
       page("family", [asset("b", "2026-07-01")], true),
-      // Deeper, so paging it alone would not lower the horizon.
       page("club", [asset("c", "2026-06-01")], true),
     ]);
     expect(result.horizon).toBe("2026-07-01");
@@ -245,7 +223,6 @@ describe("Photos-shaped merge (#599, #726)", () => {
 
   it("does not let a null-tailed truncated scope raise the dated horizon", () => {
     const result = merge([
-      // Ran out inside its undated bucket: dated rows are all known.
       {
         scopeId: "own",
         rows: [asset("a", "2026-05-01"), asset("n1", null)],
@@ -256,7 +233,6 @@ describe("Photos-shaped merge (#599, #726)", () => {
     ]);
     expect(result.horizon).toBe("2026-04-01");
     expect(ids(result)).toStrictEqual(["a", "b"]);
-    // Both must page: family sets the dated horizon, own caps the undated tail.
     expect(result.horizonScopeIds).toStrictEqual(["own", "family"]);
     expect(result.withheld).toBe(1);
   });
@@ -272,10 +248,6 @@ describe("Photos-shaped merge (#599, #726)", () => {
   });
 });
 
-// A record-only app (apps/tasks' declared shape, #726 D11 task 3): no
-// separate content identity, so `sortKey` and `dedupeIdentity` both read the
-// row's own id, ascending (oldest/lowest first — the mirror image of
-// Photos' newest-first).
 interface Row {
   row_id: string;
 }
@@ -319,9 +291,7 @@ describe("A record-only app's merge (ascending by row id, #726 D11)", () => {
 
   it("caps the horizon at the shallowest truncated tail, ascending", () => {
     const result = mergeRecords([
-      // Shallow: truncated after a2.
       recordPage("own", [record("a1"), record("a2")], true),
-      // Deep: reaches a5, so a3/a4 are not yet safe to show.
       recordPage("shared", [record("a3"), record("a4")], true),
     ]);
     expect(result.horizon).toBe("a2");

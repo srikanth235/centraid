@@ -1,10 +1,3 @@
-// The six divisions and the three laws that decide whether one commits.
-//
-// These are the rules a member reads off the reconcile line, so they are
-// pinned as arithmetic rather than as rendering: the odd penny goes to the
-// PAYER (not to the first row, which is what the phone's receipt allocator
-// does and what a copy of it would have done here), exact amounts get ONE
-// penny of tolerance and not two, and percentages will not commit at 99.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -29,8 +22,6 @@ describe("equal shares, and where the odd penny lands", () => {
   });
 
   it("gives the odd penny to the payer, wherever the payer sits", () => {
-    // £100.00 three ways is 33.34 / 33.33 / 33.33, and the extra penny is the
-    // payer's — Tom's here, even though he is the LAST row.
     expect(allocateEqually(10_000, THREE, "tom")).toStrictEqual([
       { party_id: "me", share_minor: 3333 },
       { party_id: "ana", share_minor: 3333 },
@@ -73,8 +64,6 @@ describe("equal shares, and where the odd penny lands", () => {
   });
 
   it("gives the payer the penny even when they are not on the expense", () => {
-    // A payer outside the participants simply takes no remainder; the pennies
-    // fall to the table order instead of vanishing.
     const shares = allocateWeighted(
       10_000,
       THREE.map((party_id) => ({ party_id, value: 1 })),
@@ -107,7 +96,6 @@ describe("what each division commits, and what it says", () => {
       division: "exact",
       entries: { me: 3333, ana: 3333, tom: 3333 },
     });
-    // 99.99 against 100.00 — one penny out, which is the tolerance.
     expect(out.ok).toBe(true);
     expect(out.line).toContain("a penny of tolerance either way");
   });

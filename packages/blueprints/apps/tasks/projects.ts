@@ -1,7 +1,3 @@
-// The Projects place and one project's screen (spec §2, §5). AREAS ARE THE
-// MEMBER'S: `area` is free text, so a project with none keeps its own head
-// rather than an invented "Other". A SECTION SURVIVES BEING EMPTY — each one
-// carries its own add, so hiding it would hide the way to fill it.
 import { IDENTITY_HUE_KEYS, identityHueKey } from "@centraid/design";
 import type { ColorKey } from "@centraid/design";
 
@@ -92,8 +88,6 @@ export function projectSectionGroups(input: {
 
 const HUES = new Set<string>(IDENTITY_HUE_KEYS);
 
-/** A stored hue wins; anything else takes a stable one off the project's id,
- *  so a dot is never absent and never moves between reads. */
 export function projectHue(project: Project): ColorKey {
   const stored = (project.color ?? "").replace(/^var\(--c-|\)$/gu, "");
   return HUES.has(stored)

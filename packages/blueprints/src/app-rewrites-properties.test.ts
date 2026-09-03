@@ -7,14 +7,6 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { rewriteAutomationManifestNames } from "./app-rewrites.js";
 
-/**
- * The thin readFile/writeFile wrappers over the pure rewrites next door.
- * Split from the app-meta property file (#656 Layer 3) — their whole
- * behaviour is "missing → no-op, changed → write", which is a different law
- * from the string transforms they wrap, and the combined file exceeded the
- * size cap.
- */
-
 describe("filesystem rewrite wrappers", () => {
   let dir: string;
 
@@ -60,14 +52,12 @@ describe("filesystem rewrite wrappers", () => {
     await expect(nameOf("automations/sleep/automation.json")).resolves.toBe(
       "New"
     );
-    // Conventionally-hidden folders are not automations.
     await expect(nameOf("automations/.hidden/automation.json")).resolves.toBe(
       "Old"
     );
     await expect(nameOf("automations/_scratch/automation.json")).resolves.toBe(
       "Old"
     );
-    // A broken sibling does not abort the others, and is left as-is.
     await expect(
       fs.readFile(path.join(dir, "automations/broken/automation.json"), "utf8")
     ).resolves.toBe("{oops");

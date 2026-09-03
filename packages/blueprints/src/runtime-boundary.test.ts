@@ -59,8 +59,6 @@ describe("v0 blueprint runtime boundary", () => {
   });
 
   it("ships no generated token stylesheets of its own", () => {
-    // Tokens reach an app through `@centraid/design`, never through a
-    // blueprint-local copy the design package could not ratchet.
     expect(existsSync(path.join(packageDir, "kit", "tokens.css"))).toBe(false);
     expect(existsSync(path.join(packageDir, "kit", "wall.css"))).toBe(false);
   });

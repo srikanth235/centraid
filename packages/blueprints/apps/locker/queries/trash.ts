@@ -1,9 +1,3 @@
-/**
- * Trashed items with their purge dates, in the secret-free row shape. A
- * trashed item keeps its star and tags so a restore is lossless; it rides the
- * same decorate() path as the live window.
- */
-
 import { decorate, readTags, readStarred } from "./items.ts";
 import type { RawItem } from "./items.ts";
 

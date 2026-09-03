@@ -5,9 +5,6 @@ import {
   ENRICHMENT_DECLINED_NOTE,
   ENRICHMENT_REQUESTED_NOTE,
 } from "./enrichment-consent.ts";
-// Face-detection consent gate (#712): lives in the People shelf's empty
-// state, not behind a toolbar dialog; closure factory as in people.ts.
-// LOAD-BEARING: no enrichment write without an explicit latched answer.
 import { act, narrate, notice } from "./outcomes.ts";
 
 interface EnrichmentStatus {
@@ -47,7 +44,6 @@ export function createEnrichmentGate({
       });
   }
 
-  // THE ONE WRITE — reachable from onRunOnDevice alone.
   async function runOnDevice(): Promise<void> {
     if (busy || answered) return;
     if (!deviceAnswerFor(status?.tier, !!status?.vaultDenied).available) return;

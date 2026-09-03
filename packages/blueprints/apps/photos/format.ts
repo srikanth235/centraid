@@ -1,4 +1,3 @@
-// Pure formatting over an asset row — no DOM, IO or state.
 import { fmtBytes, localDayKey } from "@centraid/design/elements";
 
 import {
@@ -8,11 +7,9 @@ import {
 import type { Asset, ExifRow } from "./types.ts";
 
 export function dayKey(iso: string | number | Date | null | undefined): string {
-  // Local wall clock, never the UTC slice: an evening photo is not tomorrow's.
   return iso ? localDayKey(iso) : "";
 }
 
-/** Kit words for Today/Yesterday; the short weekday is Photos' own. */
 export function fmtDay(key: string): string {
   return sharedFmtDay(key, {
     absolute: { day: "numeric", month: "short", weekday: "short" },
@@ -40,8 +37,6 @@ export function toLocalInputValue(iso: string | null | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// One clock, the kit's, so two surfaces cannot report two lengths for one
-// recording (#883).
 export { mediaClock as clock } from "../_shared/format-kit.ts";
 
 export function assetBytes(asset: Asset): number | null {
@@ -112,8 +107,6 @@ export function exifRows(asset: Asset): ExifRow[] {
       if (FOLDED.has(key)) continue;
       if (exif[key] != null) rows.push({ label, value: String(exif[key]) });
     }
-    // NO location row, ever: a place is a phrase; coordinates never go to a
-    // map host.
   }
   if (asset.width && asset.height) {
     rows.push({
@@ -130,7 +123,6 @@ export function exifRows(asset: Asset): ExifRow[] {
   if (captured) {
     const d = new Date(captured);
     if (!Number.isNaN(d.getTime())) {
-      // `dateStyle`/`timeStyle` cannot be mixed with `weekday` — Intl throws.
       rows.push({
         label: "Captured",
         value: d.toLocaleString(undefined, {
@@ -144,8 +136,6 @@ export function exifRows(asset: Asset): ExifRow[] {
   return rows;
 }
 
-// Custody words plus a tone the CSS keys off; null when the row has none. The
-// table is the format kit's (#883) — one answer for photograph and document.
 export { custodyMeta } from "../_shared/format-kit.ts";
 
 export function isVideoAsset(asset: Asset): boolean {

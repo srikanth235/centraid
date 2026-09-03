@@ -1,5 +1,3 @@
-// Storage's custody arithmetic (#711) over the gateway's rollup: the whole
-// library, not the loaded window. Absence is reported, never zeroed.
 import type { StorageBucket, StorageRollup } from "./queries/storage.ts";
 
 export interface ScopeRollup {
@@ -12,7 +10,6 @@ export interface Totals {
   bytes: number;
 }
 
-/** `known` false means NO scope has a rollup: never render zeroes for it. */
 export interface CustodyFacts {
   known: boolean;
   unread: string[];
@@ -28,7 +25,6 @@ export interface CustodyFacts {
   unproven: Totals;
 }
 
-/** Deliberately no `failing`: the rollup carries no error data. */
 export type CustodyHealth =
   | "unknown"
   | "missing"
@@ -82,7 +78,6 @@ export function custodyFacts(scopes: readonly ScopeRollup[]): CustodyFacts {
     facts.freeable = sum(facts.freeable, bucketOf(rollup, "freeable"));
     facts.unproven = sum(facts.unproven, bucketOf(rollup, "local-unproven"));
   }
-  // Five custody-state buckets only: the other two double-count.
   facts.library = [
     facts.backedUp,
     facts.elsewhere,
