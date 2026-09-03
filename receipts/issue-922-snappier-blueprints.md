@@ -5,7 +5,7 @@ Umbrella receipt for [#922](https://github.com/srikanth235/centraid/issues/922).
 ## Checklist
 
 **Part 0**
-- [ ] No read on any seat truncates silently: the replica read plan and the gateway read report `truncated` when the default cap fills, undeclared unbounded reads are refused at the kit boundary, and the honesty grammar renders the truncation (test per layer)
+- [x] No read on any seat truncates silently: the replica read plan and the gateway read report `truncated` when the default cap fills, undeclared unbounded reads are refused at the kit boundary, and the honesty grammar renders the truncation (test per layer)
 - [ ] A text value above the old 64 KB ceiling is either present on the device or visibly absent; no client stores an oversized list it never reads (the decision in open question 7 recorded)
 
 **Part A**
@@ -49,7 +49,7 @@ Umbrella receipt for [#922](https://github.com/srikanth235/centraid/issues/922).
 
 ## What changed
 
-Wave 1, rulings slice — **documentation only**. No code file is touched, so no acceptance box is ticked: a ruling recorded ahead of its code wave is not by itself a satisfied acceptance criterion. The one Part-F clause this slice realizes is the **"F2/F4 closed as superseded"** half of the first Part-F box; its other half (F1/F3/F5 landed with provenance) belongs to the sibling instrument slices, so the box stays unticked until they land.
+Wave 1, rulings slice — **documentation only**. No code file is touched by THIS section's slice, so it ticks no acceptance box of its own: a ruling recorded ahead of its code wave is not by itself a satisfied acceptance criterion. (The wave-1 root doc commit later ticked Part 0 box 1 against the `## 0a` slice's evidence; see the crosswalk paragraph at the end of this section and `## w1 root doc commit`.) The one Part-F clause this slice realizes is the **"F2/F4 closed as superseded"** half of the first Part-F box; its other half (F1/F3/F5 landed with provenance) belongs to the sibling instrument slices, so the box stays unticked until they land.
 
 - `docs/decisions.md` — new section **`## Snappier blueprint apps (#922)`**, placed immediately before `## Related docs`, carrying:
   - a rulings table with nine ids — `SB-payload` (SSE payload frame wins; the doorbell-only pull-on-every-nudge path is deleted in wave 3; property: one hop from commit to a subscribed device), `SB-text` (per-entity declared text ceiling, text rides in full, only blob/binary stays deferred; property: a note the phone cannot show offline defeats the replica), `SB-pool` (`CONSTRAINED_WORKER_POOL_SIZE = 1` in `packages/server/src/engine/handlers/worker-pool.ts` is the single source; the `conserve` preset's `workerPoolSize: 0` and the `build-gateway.ts` boot override are deleted in wave 2), `SB-reuse` (fresh realm per run inside a reused thread; the property #404 buys is the thread boundary plus a hard timeout), `SB-tally` (the "one balance engine" ruling superseded — the engine is the pure module pair the web query handlers already import, which the phone imports directly from wave 4 (E7); until then the phone reaches the fold only through the gateway RPC this ruling supersedes), `SB-replica-sync` (ruled per seat: the wasm replica store runs `synchronous=NORMAL` unconditionally in wave 3, its outbox being IndexedDB and outside the pragma, while the mobile replica store stays `synchronous=FULL` until B4's fsync-per-offline-intent measurement on a phone justifies a change, with WAL + `NORMAL` plus a `FULL` bracket on outbox transactions as the preferred mechanism and the `journal_mode=DELETE` second-reader seam re-judged first), `SB-session` (replica sessions live as long as the tab/window, closing on hide or memory pressure), `SB-instrument` (F1 absorbed into #927's gateway trace slice; F2/F4 closed as superseded; F3/F5 plus #927's work counters are the interim), and `SB-loader` left **explicitly open** for the wave-1 Metro-loader spike to adopt or refuse with its reason. Every row names the property it keeps or the finding it files, and the wave that lands the code.
@@ -58,6 +58,8 @@ Wave 1, rulings slice — **documentation only**. No code file is touched, so no
 - `docs/decisions.md` — one sentence appended to the second paragraph of `## Performance and Rust byte plane`: the five evidence-gated designs take their gate from #927's journey ledger when it lands, with #922 wave 1's instruments as the interim. The paragraph is otherwise unchanged.
 - `docs/mobile-offline.md` — a forward-stated note at the Tally read carve-out: superseded by `SB-tally` (#922), reverts in #922 wave 4. The carve-out text itself is **kept**, because the code has not moved and the paragraph still describes the shipped seat.
 - `receipts/issue-922-snappier-blueprints.md` — this file, created as the umbrella receipt with the issue's acceptance criteria mirrored verbatim.
+
+Added by the wave-1 root doc commit (see `## w1 root doc commit` below), so the one box it ticks on this receipt crosswalks to evidence in this section, as `receipt-per-issue` rule 3 requires — the crosswalk reads only `## What changed` and `## Verification` and never an appended wave section. **No read on any seat truncates silently: the replica read plan and the gateway read report `truncated` when the default cap fills, undeclared unbounded reads are refused at the kit boundary, and the honesty grammar renders the truncation (test per layer)** — realized by the `## 0a` slice and its `### Verifier follow-ups`: `packages/client/src/replica/read-plan.ts` (`trimReplicaPage`, `UnboundedReplicaReadError`, `assertBoundedReplicaRead`) and `packages/vault/src/gateway/gateway.ts` both fetch one probe row past the window so a filled window is distinguished from a set that merely ends there; `apps/mobile/src/kit/hooks/useReplicaQuery.ts` on the phone and the web inline ctx (`assertBoundedReplicaRead` at `packages/client/src/react/blueprints/inlineQueryCtx.ts`) refuse an undeclared unbounded read at the kit boundary with `UnboundedReplicaReadError`; the honesty grammar renders it on every seat, and follow-up 1 closed the last silent layer by giving the replica FTS `search` path the same probe, named bounds (`REPLICA_DEFAULT_SEARCH_ROWS` 100, `REPLICA_MAX_SEARCH_ROWS` 1,000) and `truncated` + `appliedLimit`, rendered once per seat for all three phone search screens. Tests per layer: `packages/vault/src/gateway/read-truncation.test.ts`, `packages/client/src/replica/read-plan-truncation.test.ts`, `apps/mobile/src/kit/hooks/useReplicaQuery.truncation.test.tsx`, `apps/mobile/src/lib/replica/multi-vault-reader.test.ts`. Both verifier passes on the 0a section end PASS, the second re-deriving the numbers and closing five follow-ups.
 
 ## Out of scope
 
@@ -1329,13 +1331,15 @@ exists. Waves are named exactly as #922's Part G and execution plan state them.
   `expo export` **exit 0** with `apps/mobile/metro.config.js` untouched; `dashboard.ts` on
   the native session at **11.1 ms median (N=40)** and **188 ms (N=2,000)**, indicative; the
   property kept — **one query handler per app on both seats** — and the projection fork
-  deleted **app by app (E3/E7, Tally first)**; and E7's two preconditions, (a) one ctx
-  builder behind a DOM-free `@centraid/client` subpath with
-  `apps/mobile/src/lib/replica/inline-query-ctx.native.ts` deleted in the same slice —
-  **not done in wave 1**, since the Metro worker's de-duplication commit did not land and
-  the spike's adapter is a spike no product code imports — and (b) no `__centraid*`
-  provenance handed to a handler, stripped at the adapter until `SB-overlay-3`'s sidecar
-  makes it one key. Every number is taken verbatim from `## w1 Metro-loader spike — ADOPT`
+  deleted **app by app (E3/E7, Tally first)**; and the two preconditions, of which
+  **(a) is DONE in wave 1** — one ctx builder, `packages/client/src/replica/inline-query-ctx-core.ts`,
+  DOM-free and re-exported through `@centraid/client/replica/native`, both seats thin
+  callers (adapter 238 → 81 lines, web `inlineQueryCtx.ts` 294 → 173) and duplication
+  **93 of 238 lines (39.1 %) → 0 blocks, 0 lines (0.0 %)** — while **(b) remains for E7**,
+  no `__centraid*` provenance handed to a handler, now with **exactly one place to land**
+  (`inlineReadsFor`'s row callback) because both seats import one builder, until
+  `SB-overlay-3`'s sidecar makes it one key. Every number is taken verbatim from
+  `## w1 Metro-loader spike — ADOPT` and `## w1 Metro-loader spike — ctx-core de-duplication`
   above; none is new.
 - **`docs/decisions.md`**, same section — a new sub-table **Pending-write overlay
   (SB-overlay-1 … SB-overlay-9)** after the re-judged register and its `synchronous=FULL`
@@ -1370,12 +1374,26 @@ exists. Waves are named exactly as #922's Part G and execution plan state them.
 - **`receipts/issue-928-one-authority-plane.md`** — box 3 ticked with a crosswalk paragraph
   in `## What changed`, the checklist note rewritten, and a `## w1 root doc commit` section
   appended. Detailed there.
-- **`receipts/issue-922-snappier-blueprints.md`** — this section. **No box ticked here**; see
-  below.
+- **`packages/blueprints/manifest.json`** — **regenerated**, not hand-edited, with the
+  package's own tooling (`bun run --cwd packages/blueprints build:manifest`, i.e.
+  `packages/blueprints/scripts/build-manifest.mjs`; "wrote 37 templates"). It was stale on
+  the integration branch: #948 landed `queries/history.test.ts` in Notes and Docs without
+  regenerating it, so the gates regenerate it and the two entries appear as an unstaged
+  diff on every subsequent run. Exactly two lines are added
+  (`notes/queries/history.test.ts`, `docs/queries/history.test.ts`); nothing else in the
+  file moves. It rides this commit so the branch is clean for the next slice.
+- **`receipts/issue-922-snappier-blueprints.md`** — this section, plus the Part 0 box-1 tick
+  and its crosswalk paragraph in `## What changed`.
 
 ### Boxes ticked
 
-**None on this receipt.** Both candidates were judged and refused:
+**Part 0 box 1**, and only that box on this receipt:
+
+| Box | Ticked | Evidence |
+| --- | --- | --- |
+| Part 0 box 1 — no read on any seat truncates silently (replica read plan and gateway report `truncated`, undeclared unbounded reads refused at the kit boundary, honesty grammar renders it, test per layer) | **yes** | `## 0a — no silent truncation, on any seat, at any layer` and its `### Verifier follow-ups`: the one-probe-row mechanism in `read-plan.ts` and the gateway read, `UnboundedReplicaReadError` at both kit boundaries, the FTS `search` signal that closed the last silent layer, four per-layer test files, and two verifier passes both ending PASS |
+
+The other candidate was judged and refused:
 
 - **Part E — "The Metro-loadable `queries/*.ts` decision is recorded, adopted or refused with
   its reason; if adopted, at least Tally runs the web query handler on the phone and its
@@ -1385,21 +1403,20 @@ exists. Waves are named exactly as #922's Part G and execution plan state them.
   deleted. E7 does that, in wave 4. The box is one criterion with two clauses, so it stays
   **unticked** until E7 lands, and the wave-1 half is recorded here rather than by a
   half-tick.
-- **Part 0 box 1 — "No read on any seat truncates silently…"** Left **unticked** in this
-  commit: the 0a slice was not on `origin/claude/922-w1` when it was written. It is the root's
-  to tick once 0a and its verifier follow-up for the FTS search signal have landed on the
-  integration branch, in this same doc commit or a successor to it.
+
 
 ### Decisions
 
 - **The `SB-loader` row was rewritten, not appended to.** Docs are state: an Open row beside
   an ADOPT note would leave two answers on the page. The spike's own receipt section is the
   evidence and is untouched.
-- **Precondition (a) is recorded as NOT met.** The contract allowed for the Metro worker's
-  de-duplication commit (`refactor(client): one inline-query ctx core…`) having landed in
-  wave 1; `git log --all --grep` finds no such commit on any branch, so the row states the
-  precondition as E7's first line and names why the spike's adapter must not be wired in as
-  it stands.
+- **Precondition (a) is recorded as DONE, on the second pass.** The first draft of this
+  commit recorded (a) as unmet, because the Metro worker's ctx-core commits were not yet on
+  the integration branch. They landed (`44836b2c9`, receipt section in `7a6aa30de`) before
+  this commit was made, so the row was rewritten against the landed evidence rather than
+  against their absence. The numbers come from `## w1 Metro-loader spike — ctx-core
+  de-duplication`, which itself amends the ADOPT section byte-for-byte rather than editing
+  it — the same docs-are-state rule this commit follows in `docs/decisions.md`.
 - **No number in the new rows is new.** Every figure in the `SB-loader` row is quoted from
   `## w1 Metro-loader spike — ADOPT`, and every figure in `PS-trace` from
   `receipts/issue-927-perf-infra.md` § `## w1-core`. The root measured nothing.
