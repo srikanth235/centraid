@@ -8,6 +8,32 @@ bun run perf:gateway
 
 The default workload is 120 writes (60 `core.party`, 60 `core.place`) with 30 interleaved reads at concurrency 4, followed by a 65-second idle window that covers issue #456's active 30-second and 60-second recurring service cadences. Override the write count with `--requests`, plus `--concurrency` and `--idle-ms`, after the script name. Linux automatically runs a second child in `strace` when it is installed, making `fsyncCalls` and `fsyncPerWrite` exact syscall counts without contaminating the primary latency, resource, and idle measurements. Unique trace markers bracket only the authenticated measured workload (not boot, warmup, or shutdown), and split `<unfinished>`/`resumed` syscalls count once. Fsync totals are divided by the explicit write count, never by reads. CI sets `CENTRAID_BENCH_REQUIRE_FSYNC=1`, so losing that measurement fails the gate instead of silently reporting `null`. The parent injects the scoped syscall count into the untraced report and then applies the required gate. Linux gates physical write bytes from `/proc/self/io`; the raw `process.resourceUsage().fsWrite` value remains diagnostic because its unit is OS-specific (`ru_oublock` blocks on Linux), not a cross-platform operation count. macOS still reports that raw counter and context switches; exact SQLite fsync counts require the Linux CI lane because `fs_usage` requires elevated tracing privileges.
 
+## The standard profile, beside the constrained gate (#922 B4)
+
+`perf:low-end` pins `constrained`, where `sqliteSynchronous` is `NORMAL`. Desktop runs the same gateway at `standard`, i.e. `synchronous=FULL`, and nothing measured it. `bun run --cwd packages/server perf:low-end:standard` runs the identical workload with `CENTRAID_HARDWARE_PROFILE=standard` and **publishes without gating**: the ceilings in `low-end-budgets.json` are the constrained gate's and are neither tightened nor widened for it.
+
+## The journey benchmark (#922 F3)
+
+`bun run --cwd packages/server perf:journeys[:standard|:constrained]` measures what the low-end workload (`atlas.insert` + `vault.status`) never touched: a replica intent over HTTP, a blueprint handler worker cold and warm, an SSE projection under N subscribers, and a bootstrap page — all after seeding every bundled blueprint's demo profile plus `--fill` rows through the real write path (a direct SQLite insert would skip the journal sequence the replica cursor derives from, so it cannot stand in for volume). Flags: `--profile`, `--intents`, `--fill`, `--bootstrap-window`, `--subscribers`, `--commits`, `--output`. Fsyncs per intent come from a second, intent-only run under `strace -f` bracketed by trace-epoch markers, exactly as the low-end gate counts fsyncs per write; both scripts share `scripts/bench-support.mjs`.
+
+The intent path is measured **single only**: one intent per HTTP round trip is what the outbox drain does today, and the batch endpoint is [#922](https://github.com/srikanth235/centraid/issues/922) wave 3 (A6). The report states this rather than leaving the absence to be read as a zero.
+
+`results/issue-922-*.json` are the wave-1 baselines (2026-09-03, linux x64, 4 vCPU / 15 GiB shared container, Node 22.22.2, 2,936-row replica snapshot: seven demo profiles plus 2,000 filled `core.place` rows):
+
+| Number | standard (`FULL`) | constrained (`NORMAL`) |
+| --- | --: | --: |
+| `atlas.insert` p99 (low-end workload) | 45.19 ms | 44.54 ms |
+| fsync per `atlas.insert` write | 0.375 | 0 |
+| replica intent p50 / p99 (warm) | 171.0 / 190.0 ms | 223.1 / 404.6 ms |
+| first intent after boot (cold worker) | 198.1 ms | 231.3 ms |
+| resolved `workerPoolSize` | 2 | 0 |
+| **fsync per offline intent** | **3.05** | **0** |
+| bootstrap page, 2,936 rows / 1.36 MB | 316 ms (0.108 ms/row) | 268 ms (0.091 ms/row) |
+| commit → last subscriber, N=1 / N=10 (p50) | 168.2 / 121.6 ms | 129.3 / 133.6 ms |
+| boot `storageFsyncMs` | 0.69 ms | 0.93 ms |
+
+Two facts the runs establish for later waves, neither of them a budget: **an SSE fan-out of 40 is refused** — `SSE_MAX_SUBSCRIBERS` is 32 (`src/routes/sse-cap.ts`), so 8 of the golden household's 40 replicas get `503 sse_capacity` — and the boot `storageFsyncMs` of 0.69–0.93 ms is roughly a tenth of the 8 ms group-commit window, which is the input [#922](https://github.com/srikanth235/centraid/issues/922) B7 and the profile's sync choice owe a decision to.
+
 Ceilings live in `low-end-budgets.json`. Lower a ceiling whenever a measured optimization establishes a smaller stable baseline; never widen one merely to make a regression pass.
 
 `results/issue-883-baseline.json` is the current re-baseline (2026-08-28, linux x64, 4 vCPU shared container, `CENTRAID_HARDWARE_PROFILE=constrained`, exact strace fsync counts): request p99 32.07 ms, throughput 175.5 writes/s, peak RSS 214.97 MB, event-loop peak p99 12.39 ms, 0.25 fsync per write, 82.8 kB written per write, and a zero-growth 65-second idle window. Every check passed with no failures, so no ceiling moved — the file records where the gateway actually sits before the [#883](https://github.com/srikanth235/centraid/issues/883) hot-path work, so the same numbers can be compared after it.

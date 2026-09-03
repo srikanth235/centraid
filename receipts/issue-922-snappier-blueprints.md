@@ -887,3 +887,61 @@ The refusal is a developer-facing guard, not a member-facing state: every read t
 **First-run: unchanged.** A new vault has no entity anywhere near a thousand rows, so no window fills, `truncated` is absent on every read, and no line is drawn. Day one looks exactly as it did.
 
 **Evidence:** `artifacts/e2e/ui-impact/issue-922-web-truncation-status.png`, published by `apps/web/tests/e2e/tasks.spec.ts`. That case seeds 21 open tasks through the app's own write rail against the real harness gateway, asks the real `board` query for a window of 20 through `window.centraid.read`, and reads the phrase off the frame's one status line before capturing the frame. Twenty-one against twenty is the smallest honest way to fill a window end to end: the board clamps its open read to a floor of 20, and a thousand real writes would be a fixture this slice has no reason to add. The same phrase is asserted on the phone by `apps/mobile/src/kit/hooks/useReplicaQuery.truncation.test.tsx`, which mounts the real `StatusLine` over the render host and reads the text off it.
+## w1b(i) — F3/B4: the standard-profile run and the journey benchmark
+
+The low-end gate measured `atlas.insert` + `vault.status` under `constrained` only. The paths every blueprint app actually pays for — a replica intent, a handler worker, an SSE projection, a bootstrap page — had no instrument, and the desktop profile (`synchronous=FULL`) was never run. Both are fixed here. Nothing is gated: `low-end-budgets.json` is byte-identical, no ceiling moved in either direction.
+
+- `packages/server/scripts/bench-support.mjs` (new) — the measurement primitives both benchmarks share: `argReader`, `percentile`/`latencySummary`, `ratePerHour`, `readProcIo`, `resourceCounters`, `directoryBytes`, `quietLogger`, `markTraceEpoch`, `fsyncCallsIn`, `straceAvailable`, `hostRecord`, and `resolvedProfileFrom` (reads the gateway's own resolved class/sync/pool out of the `hardware-profile` health component instead of re-deriving them).
+- `packages/server/scripts/bench-low-end.mjs` — its eleven local copies of those helpers are **deleted** and imported; the gate's workload, epochs, budget checks and report schema are untouched (`-107` lines). Verified by re-running it: same schema, same checks, 0 failures.
+- `packages/server/scripts/bench-journeys.mjs` (new, 450 lines) — seeds every bundled blueprint's demo profile plus `--fill` rows through the real write path (a direct SQLite insert skips the journal sequence the replica cursor derives from, so it cannot stand in for volume), then measures a bootstrap page, `--intents` replica intents over HTTP, handler-worker cold vs warm, and an SSE fan-out at `--subscribers 1,10,40`. Fsyncs per intent come from a second intent-only run under `strace -f` bracketed by trace-epoch markers — the same method, and now the same code, as the gate's fsync-per-write.
+- `packages/server/scripts/bench-support.test.ts` (new) + `packages/server/vitest.config.ts` — the helpers' contract (flag spellings, percentile boundaries, empty-sample zeros, split-syscall counting, missing markers, profile parsing) is a test; the include list widens from the one named scripts test to `scripts/**/*.test.ts`.
+- `packages/server/package.json` — `perf:journeys[:standard|:constrained]` and `perf:low-end:standard`.
+- `packages/server/benchmarks/README.md` + `packages/server/benchmarks/results/issue-922-{low-end,journeys}-{standard,constrained}.json` — the four published runs and their provenance.
+
+### Numbers
+
+Provenance for every row: 2026-09-03, linux x64, 4 vCPU / 15 GiB shared container, Node 22.22.2, fresh auto-founded vault, gateway driven over loopback HTTP by `scripts/bench-journeys.mjs`; replica volume 2,936 rows / 1.36 MB (seven demo profiles + 2,000 filled `core.place` rows). Commands in the block below.
+
+| Number | standard (`FULL`) | constrained (`NORMAL`) |
+| --- | --: | --: |
+| `atlas.insert` p50 / p99 (low-end workload, 120 writes) | 26.65 / 45.19 ms | 25.32 / 44.54 ms |
+| fsync per `atlas.insert` write (strace) | 0.375 | 0 |
+| bytes written per write | 105,745 | 101,820 |
+| replica intent, warm p50 / p99 (19 samples) | 171.0 / 190.0 ms | 223.1 / 404.6 ms |
+| first intent after boot (cold worker) | 198.1 ms | 231.3 ms |
+| resolved `workerPoolSize` | 2 | 0 |
+| **fsync per offline intent (strace)** | **3.05** | **0** |
+| bootstrap page, 2,936 rows / 1.36 MB | 316 ms (0.108 ms/row) | 268 ms (0.091 ms/row) |
+| commit → last subscriber p50, N=1 / N=10 | 168.2 / 121.6 ms | 129.3 / 133.6 ms |
+| commit → last subscriber p50, N=40 (32 admitted) | 129.7 ms | 157.3 ms |
+| boot `storageFsyncMs` | 0.69 ms | 0.93 ms |
+
+`storageFsyncMs` is recorded as an **input**, not a curiosity: at 0.69–0.93 ms it is about a tenth of the 8 ms group-commit window, so on this host B7's amortisation window costs roughly ten fsyncs' worth of latency to save at most one. B4's other half — the profile's sync choice — now has its price: `FULL` costs 3.05 fsyncs per offline intent where `NORMAL` costs 0, at 171 ms vs 223 ms per intent warm (the pool, not the pragma, dominates). No window and no pragma is changed here; those are waves 2/3.
+
+The intent path is measured **single only**. One intent per HTTP round trip is what the drain does today and the batch endpoint is wave 3 (A6); the report says so in a field rather than leaving the absence to read as a zero.
+
+### Findings
+
+- **An SSE fan-out of 40 is refused.** `SSE_MAX_SUBSCRIBERS = 32` (`packages/server/src/routes/sse-cap.ts`) is global to the change stream, so 8 of the golden household's 40 replicas get `503 sse_capacity` with `Retry-After: 5`. The benchmark records `admitted`/`refused`/`refusalError` rather than failing. #922's Part A acceptance criterion "projections per commit per household ≤ 1" is stated at N = 40, which this gateway cannot currently seat; the cap is owned by neither this slice nor wave 2's file list, so it is filed here for the root.
+- The fan-out numbers do **not** yet show a per-subscriber projection cost (N = 10 is no slower than N = 1 at this volume). That is a measurement limit, not evidence against A2: the counter that would show it is #927's work counter on `hub.project()`, and this instrument only sees wall clock at the last subscriber.
+
+### Verification
+
+```sh
+bun run format                                   # clean
+bun run lint                                     # pass (oxlint --deny-warnings)
+bun run --cwd packages/server typecheck          # pass
+bun run --cwd packages/server test -- scripts/bench-support.test.ts   # 7 passed
+node packages/server/scripts/bench-low-end.mjs --requests 8 --idle-ms 2000   # gate re-run after the refactor: 0 failures
+cd packages/server && CENTRAID_HARDWARE_PROFILE=standard node scripts/bench-low-end.mjs --output benchmarks/results/issue-922-low-end-standard.json
+cd packages/server && CENTRAID_HARDWARE_PROFILE=constrained node scripts/bench-low-end.mjs --output benchmarks/results/issue-922-low-end-constrained.json
+cd packages/server && node scripts/bench-journeys.mjs --profile standard --output benchmarks/results/issue-922-journeys-standard.json
+cd packages/server && node scripts/bench-journeys.mjs --profile constrained --output benchmarks/results/issue-922-journeys-constrained.json
+bash .governance/run.sh
+```
+
+### Decisions
+
+- **A second script, not a bigger gate.** Adding the journeys to `bench-low-end.mjs` would have changed the denominators its budgets are stated over (fsync *per write*), which is a budget change by accident. The two share `bench-support.mjs` instead, and the duplicated helpers are deleted rather than left beside it.
+- **Volume comes from the demo seeds plus filled rows, not `@centraid/test-kit/year3-vault`.** That fixture is a TypeScript module and these are `node` `.mjs` scripts; seeding through the gateway's own write path also keeps the journal sequence the replica cursor is derived from, which a direct SQLite insert would skip. The row count and its composition are stated with every number.
+- **`no-await-in-loop` disabled per line, with the reason.** Serialisation *is* the measurement: one intent per round trip, one commit per fan-out sample. Twelve `oxlint-disable-next-line` comments each name why, matching the repo's existing pattern in `peer-commons-client.ts`.
