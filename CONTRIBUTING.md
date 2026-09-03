@@ -45,6 +45,8 @@ There is no guaranteed commit bit. Response cadence: see [README.md](README.md).
 - Docs write-back: if you learn a gotcha, update `docs/` ([AGENTS.md](AGENTS.md))
 - Tools via repo scripts only — never raw `npx <tool>` for the toolchain
 
+Receipts are **append-only**: a multi-PR issue keeps one receipt and each PR adds one section at the end, because `doc-integrity` requires the trunk's copy to stay a byte-prefix of yours. The root `.gitattributes` marks `receipts/*.md merge=union`, so two branches appending to the same receipt rebase cleanly with the upstream section first instead of conflicting. The driver cannot tell an append from an edit, so the rule it does not replace still stands: never change text above your own section — `doc-integrity` enforces that. Details and limits: [docs/dev-environment.md](docs/dev-environment.md#receipts-are-append-only-and-sibling-appends-merge-by-union).
+
 ## Security
 
 Report vulnerabilities privately per [SECURITY.md](SECURITY.md) — not as public issues.

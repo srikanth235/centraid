@@ -106,6 +106,12 @@ Agents often work in git worktrees (including under `.claude/worktrees/`).
 
 More traps: [traps/worktrees.md](traps/worktrees.md). Multi-agent rules: [multi-agent.md](multi-agent.md).
 
+### Receipts are append-only, and sibling appends merge by union
+
+One issue carries one receipt (`receipts/issue-<N>-<slug>.md`), and a slice adds exactly one section at the **end** of it: `doc-integrity` requires the trunk's copy to stay a byte-prefix of yours. Two sibling slices appending to the same receipt therefore conflict on every rebase, always with the same correct resolution — keep both hunks, upstream first. The root `.gitattributes` marks `receipts/*.md merge=union`, and git's built-in union driver concatenates a conflicting hunk ours-then-theirs; during a `git rebase` onto `main` "ours" is `main`, so main's section lands first and the prefix survives. Check the seam afterwards: union factors out the blank line both sides share, so the second section may need one blank line reinserted before its heading — still an append, still prefix-safe.
+
+Two things the driver does not do. It cannot tell an append from an edit — it resolves _any_ conflicting hunk the same way — so the rule it does not replace still stands: never touch text above your own section, and `doc-integrity` still fails you if you do. And GitHub's own PR mergeability check does not honour `.gitattributes` merge drivers, so this helps local rebases only; that is where the conflicts were being paid, because a branch is rebased onto `main` before it is pushed. Rebase, do not merge: `git merge` resolves union with the **checked-out** branch first, so merging `main` into a slice branch would put your section above main's and break the byte-prefix.
+
 ## Unattended desktop runs: `CENTRAID_INSECURE_DEVICE_SECRETS`
 
 Every read of the desktop's device credentials decrypts through Electron `safeStorage`, i.e. the OS keychain. A dev build is ad-hoc signed, so macOS does not durably trust it and **re-prompts for the login password on every restart**. That makes restart-heavy scenarios — fresh gateway, warm boot, crash recovery, credential desync — impossible to drive unattended by a test harness or agent.
