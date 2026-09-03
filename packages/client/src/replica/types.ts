@@ -168,8 +168,11 @@ export interface ReplicaSearchRequest {
   where?: ReplicaFilterClause[];
   limit?: number;
   purpose?: string;
-  /** As on a read (#922 0a): the caller takes the default window knowingly. */
-  acceptTruncation?: boolean;
+  // NO `acceptTruncation` HERE, deliberately (#922 0a). The flag exists so a
+  // READ that declares no window can still be admitted at the kit boundary;
+  // a search always has one — the default is 100 and the ceiling 1,000 — so
+  // there is no undeclared case for it to admit. A field nothing reads is a
+  // promise nothing keeps, so it is absent rather than accepted and ignored.
 }
 
 export interface ReplicaDependency {
