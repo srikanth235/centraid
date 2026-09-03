@@ -55,7 +55,7 @@ The shared, dependency-free contract that every emitter (gateway, web/desktop cl
   - `validateTraceRecord(unknown): TraceRecord` — strict: it throws on an unknown hop, seat or journey, a non-integer or negative or unknown counter, `endMs < startMs`, an empty id, a non-flat attr, a root with a `parentSpanId`, a root absent from `spans`, a duplicate `spanId`, a span from another trace, an unknown parent, and any span not reachable from the root (which is how a detached parent cycle is caught).
   - `waterfall(record)` — pure, ordering spans by start, nesting by parent and offsetting from the root: `{ name, hop, offsetMs, durationMs, depth }[]`. The developer command and the rigs both render from this one function.
   - `TraceSamplingPolicy`, `TRACE_SAMPLING_OFF`, `shouldSample(policy, counterValue)` — emission is off by default and sampled deterministically in the action counter (so two runs of the same rig sample the same actions and a waterfall diff is comparable). The always-on half is the integer counters.
-- **`packages/core/src/protocol/trace.test.ts` (new)** — 43 tests: the vocabulary is the closed nine/four/nine; the validator accepts a well-formed record (round-tripped through JSON) and a minimal one, and rejects each of 23 malformed classes; two fast-check properties over `@centraid/test-kit/fast-check` (`addCounters` associative with `zeroCounters()` as identity; `diffCounters` inverts `addCounters` on a running total) plus the backwards-counter refusal; `waterfall` nesting on a three-hop fixture with a sibling, its spanId tie-break and a lone root; `shouldSample` always true at `sampleEvery: 1`, always false while disabled (both under fast-check), one-in-N determinism, and the four argument refusals.
+- **`packages/core/src/protocol/trace.test.ts` (new)** — 43 tests: the vocabulary is the closed nine/four/nine; the validator accepts a well-formed record (structurally cloned first, so the parse is over foreign data rather than the fixture's own objects) and a minimal one, and rejects each of 23 malformed classes; two fast-check properties over `@centraid/test-kit/fast-check` (`addCounters` associative with `zeroCounters()` as identity; `diffCounters` inverts `addCounters` on a running total) plus the backwards-counter refusal; `waterfall` nesting on a three-hop fixture with a sibling, its spanId tie-break and a lone root; `shouldSample` always true at `sampleEvery: 1`, always false while disabled (both under fast-check), one-in-N determinism, and the four argument refusals.
 - **`packages/core/src/protocol/index.ts`** — the barrel re-exports the contract. `version.ts` is untouched: nothing here changes a wire shape, so no protocol version bump.
 - **`docs/logs.md`** — new section "Traces and work counters (#927)": the trace store is sovereign and local-only, lives under the vault's diagnostics, is purged with the vault, and is never egressed; spans are off by default and sampled while the integer work counters are always on; the trace id is the intent id for a write; and `centraid-gateway trace last` is named as the developer entry point for the last tap's waterfall, marked "lands in #927 w1-gateway".
 - **`receipts/issue-927-perf-infra.md`** — this file, created by this slice.
@@ -113,15 +113,50 @@ Functions    : 100% ( 20/20 )
 Lines        : 100% ( 126/126 )
 
 $ bun run check:push
-(green)
-
-$ bun run check:pr
-(green)
+✗ 15/17 gates passed — design:gallery, lint:product (test:ratchet + lint:ledgers)
+  Both reproduce on a clean origin/main checkout; see "Pre-existing reds" below.
 ```
+
+### Pre-existing reds, reproduced on `origin/main`
+
+Neither is caused by this slice — the diff touches no ledger, no floor and no
+rendering path — and both were reproduced on the root checkout sitting on
+`origin/main` (cf616a09) with a clean working tree:
+
+```
+$ git log --oneline -1
+cf616a09 refactor(vault)!: close the v0 ontology — one file, one baseline, entity supertype, access plane (#916)
+$ git status --short
+(clean)
+$ node scripts/check-ledgers.mjs
+check-ledgers: the ledgers may only tighten (base origin/main)
+  - tests/floors.json#minimumTests: flow replacement names unknown predecessor "schema-migration-corpus"
+$ bun run design:gallery
+Executable doesn't exist … npx playwright install
+```
+
+1. **`test:ratchet` / `lint:ledgers`** — `tests/floors.json#minimumTests` carries a `replacesMinimumTestsFlow` entry naming a predecessor flow, `schema-migration-corpus`, that no longer exists in the ledger. The check validates head's own mapping, so it fails on every branch cut from `main` regardless of diff. Not fixed here: `tests/floors.json` is outside this slice's contract, and repairing a rename mapping needs the owning issue's intent. Filed to the root.
+2. **`design:gallery`** — Playwright browsers are not installed in this container. Environment, not code; already recorded as container-only red in `receipts/issue-905-*.md`.
+
+Nothing was weakened to go green: no floor moved, no `approvedDeviation` extended, no allowlist touched.
 
 ### Audit
 
-Recorded verbatim from the fresh-context verifier below.
+**VERDICT: REFUTED — the fresh-context verifier required by the worker/verifier split has NOT run.**
+
+Recorded as REFUTED because the verdict defaults to REFUTED under uncertainty, and "nobody independent has looked" is the strongest form of that. It is a verdict about the audit's absence, not about a finding in the diff. Same shape as the record in `receipts/issue-905-mobile-gate-loop.md`.
+
+**Why it is absent.** The split wants a fresh-context sub-agent handed only `git diff origin/main...HEAD`, this section and the issue number. This slice ran in a harness with no sub-agent spawn tool and no way to read a spawned session's transcript back, so the verdict could not be obtained, let alone recorded verbatim. Writing PASS would be the author attesting to their own work in the section reserved for someone who has not seen their reasoning.
+
+**What to do before merging.** Hand a fresh-context agent only `git diff origin/main...HEAD` on `claude/927-w1-core-trace-contract`, this `## w1-core` section and issue #927; ask it adversarially whether the section describes the diff, whether the two pre-existing reds are really pre-existing, and whether any "deliberate" claim lacks a named property. Replace this verdict with its answer.
+
+**Author's own review, which is NOT that audit.** Recorded so an auditor has claims to attack rather than reconstruct:
+
+- Every number in this section is reproducible from the commands in Verification. The counts were checked mechanically, not asserted: 43 tests (`vitest --reporter=verbose`), 23 malformed classes in the `it.each` table, 100% of 133 statements / 87 branches / 20 functions / 126 lines on `trace.ts`, and `check:diff-coverage` reports 100.0% (253/253) over the diff.
+- The weakest claim is "no `deliberate` seam without a property". The five entries under Decisions each name one, but decision 3 (`traceIdOfIntent` as an identity function) is the one an auditor should push on: the property is review-time grep-ability, which is real but weaker than a runtime property. If the root disagrees, the fix is to delete the function and put the rule in the emitter slices' review checklist instead — nothing else in the contract depends on it.
+- The strict parser is a deliberate departure from `docs/protocol.md` C1, argued in the file header and in Decisions 1. If a trace record ever becomes something one machine sends to another, that argument dies with it, and the parser must change in the same slice.
+- Two `check:push` gates are red. Both were reproduced on a clean `origin/main` checkout, transcript in "Pre-existing reds" above. Nothing was weakened to go green; no floor, budget, allowlist or ratchet is touched by this diff.
+- Scope: `git diff origin/main --stat` is exactly the five files this slice's contract names. `packages/core/src/protocol/version.ts` is untouched, so no wire version moved.
 
 ## Session
 
