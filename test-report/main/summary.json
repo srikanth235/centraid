@@ -8,14 +8,14 @@
     "passed": 0,
     "failed": 0,
     "degraded": 0,
-    "noEvidence": 48,
+    "noEvidence": 49,
     "newRed": 0,
     "newGreen": 0,
     "previousVerdict": null
   },
   "parks": [],
   "candidate": null,
-  "generatedAt": "2026-09-03T15:45:37.315Z",
+  "generatedAt": "2026-09-03T16:59:36.322Z",
   "label": "2026-09-03",
   "validationErrorCount": 0,
   "lanes": {
@@ -112,6 +112,10 @@
       "durationMs": null
     },
     "mutation-full": {
+      "verdict": "no-evidence",
+      "durationMs": null
+    },
+    "rung1-on-main": {
       "verdict": "no-evidence",
       "durationMs": null
     },
