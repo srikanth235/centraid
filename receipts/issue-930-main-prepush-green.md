@@ -281,6 +281,88 @@ bun run check:ui-receipt   # ✓ UI receipt gate: evidence verified (over this r
   `/home/user/centraid-wt/claude/930-main-prepush-green` off `origin/main` at
   `cf616a09`.
 
+## Audit
+
+Verdict: PASS
+
+Fresh-context verifier, worktree `/home/user/centraid-wt/claude/930-main-prepush-green`
+at `cc5d6dad9` (three commits over `origin/main`), 4-core Linux container.
+
+- **Diff ↔ receipt.** `git diff origin/main...HEAD --stat` is 10 files; every one
+  is named and described by `## What changed` (items 1–4) or by the receipt's own
+  line. No file in the diff goes undescribed and nothing described is absent. Every
+  path is inside the slice contract's in-scope list; `tests/quality/classification-ratchet.json`
+  is the coupled re-pin the contract anticipated and `## Decisions` justifies it.
+- **Checklist ↔ issue.** #930 is a bug issue with no acceptance checkboxes; the three
+  checklist items are its **Expected** section (`lint:ledgers`, `test:ratchet`,
+  `repo-hygiene` green) plus the `check:ui-receipt` scope the issue's one comment
+  granted. All three are realized in the diff and confirmed by the gate runs below.
+- **No floor lowered.** `tests/floors.json` is byte-identical to `origin/main`
+  (`git diff origin/main...HEAD -- tests/floors.json` empty);
+  `golden-vault-archaeology` is `5` at base and at head. `FILE_SIZE_LIMIT=625` and
+  all of `.governance/**` are untouched. No waiver token, `@ts-expect-error`,
+  `oxlint-disable` or skip is added by the diff — the `@ts-nocheck` /
+  `oxlint-disable-next-line` header on `queries-reveal-access.test.ts` is the
+  origin/main `queries.test.ts` header moved verbatim, and the new fixtures module
+  carries none.
+- **Option (a) is consistent with the checker and strictly tightens.**
+  `scripts/test-report/ratchet-floors.mjs:172-198` resolves
+  `replacesMinimumTestsFlow` only against the **merge base**, so a landed marker can
+  only ever emit `flow replacement names unknown predecessor`; the field is
+  change-set scoped, and `scripts/test-report/ratchet-floors.test.mjs:130-235`
+  exercises it only inside change sets that contain the rename. Removing the paired
+  `approvedMinimumTestsDeviation` leaves **no** lower floor waivable — the opposite:
+  `ratchet-floors.mjs:236-244` treats a non-empty note as a standing permission for
+  any future decrease. Executed against the real module: base 5 → head 3 with the
+  note removed errors (`minimumTests decreased 5 → 3`); with the #916 note still in
+  place it returns `[]`. Keeping the marker would have kept a live waiver.
+- **Locker split loses nothing.** 22 `it(` on `origin/main`
+  (`git show origin/main:…/queries.test.ts | grep -c "^\s*it("`) vs 14 + 8 in the
+  two new files; a brace-matched extraction of all 22 blocks finds every original
+  body present **verbatim** (whitespace-normalized) in the split pair, 0 missing and
+  0 extra. A whole-file line-set comparison shows the only lines that left are
+  header prose and the `export` prefixing of `ctxOf` / `ReadCall` / `LIVE_ITEM` /
+  `OLD_CIPHERTEXT` / `OLDER_CIPHERTEXT`; the `ctxOf` body is character-identical.
+  Sizes 336 / 250 / 84, all under 625. `packages/blueprints/manifest.json`
+  regenerates byte-identically (`node packages/blueprints/scripts/build-manifest.mjs`
+  → clean tree).
+- **`validate-ui-receipt.mjs` narrows classification only.** The sole logic change
+  is `&& !TEST_FILE_RE.test(file)` on the blueprints arm; the `packages/client/**`
+  arm, the `apps/*/**.{tsx,css}` arm and the whole screenshot/emitter path are
+  byte-identical. Direct probes of the predicate: `queries/item.ts`,
+  `queries/access.ts`, `app-root.tsx`, `Chrome.module.css`, `testing.ts`,
+  `latest.ts`, `notes/logic.ts` and `packages/client/src/react/Shell.tsx` all still
+  DEMAND evidence; only `*.test.*` / `*.test-fixtures.*` are exempt, including
+  `states.test.tsx`. Of the 134 tracked paths under `packages/blueprints/apps/` that
+  match `TEST_FILE_RE`, every one is a genuine `.test`/`.test-fixtures` module — no
+  product file is caught.
+- **Gates run here** (not trusted from the receipt): `bun run format` → 5353 files,
+  tree clean · root `bun run lint` → 0 · `bun run lint:ledgers` → ok, 19 sections ·
+  `bun run test:ratchet` → ok, no decreases · `bun run test:claims` → 45 claims, 48
+  lanes · `bun run lint:quality-knobs` → no silent widening (the `tests/claims.json`
+  pin `a3d830db…` re-verified by independent sha256) · `bun run check:ui-receipt` →
+  evidence verified · `bun run scripts:test` → **589 pass / 0 fail** ·
+  `node --test scripts/validate-ui-receipt.test.mjs` → 5 pass · `bun run --cwd
+  packages/blueprints test -- locker/queries` → 2 files, **22 passed** · full
+  `bun run --cwd packages/blueprints test` → 207 files, 6584 passed (2 expected
+  fail) · `bun run --cwd packages/blueprints typecheck` → 0 ·
+  `bun run lint:product` → **39/39** · `bash .governance/run.sh` → only
+  `receipt-per-issue` red pending this section; `repo-hygiene`,
+  `toolchain-config-protection`, `format-check`, `lint-check` and
+  `no-unjustified-suppressions` all green. `check:push` deliberately not re-run
+  (host contention; `design:gallery` environment-only).
+- **Binary tripwire.** `git diff --numstat origin/main...HEAD` shows no `-  -` row;
+  `grep -lP '\x00'` over every changed file returns nothing.
+- **Falsification attempts.** (1) "22 tests before, 22 after, no assertion
+  weakened" — attacked by extracting and byte-comparing all 22 `it` bodies plus a
+  whole-file line-set diff; survived. (2) "the five cases genuinely bind" —
+  reproduced on a scratch copy with `&& !TEST_FILE_RE.test(file)` deleted:
+  `# pass 4 / # fail 1`, restored to 5/5; survived.
+- **Observation, not a finding.** `## Out of scope` says `.governance/run.sh`
+  reports a `commit-message-format` violation against HEAD; on this run that
+  directive is green. The note over-reports a red rather than hiding one and
+  concerns a commit already on the trunk.
+
 ## Session
 
 ### Identifiers
