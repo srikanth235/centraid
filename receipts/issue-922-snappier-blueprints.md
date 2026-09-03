@@ -295,7 +295,8 @@ it. The blockers are real but small, and none of them is Metro.
 (`people-model.ts`, `docs-projection*.ts`, `notes-model.ts`, `timeline-model.ts`,
 `useTasks`) becomes deletable app by app, the 1,000-row drift it carries goes with it,
 and Tally's seven gateway RPCs and 10-minute stale clock are replaced by a local read
-that runs in single-digit milliseconds at today's ledger size.
+that runs in the low tens of milliseconds at today's ledger size (11.1 ms median at
+N=40 on this host — the measured number, not a rounder claim).
 
 **If the root refuses instead**, the alternative is the parity oracle this slice already
 committed: keep the fork and hold it honest with
