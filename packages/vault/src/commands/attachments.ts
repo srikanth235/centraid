@@ -25,8 +25,6 @@ const SUBJECT_PK: Record<string, string> = {
   "knowledge.note": "note_id",
   "social.thread": "thread_id",
   "social.message": "message_id",
-  "health.vital": "vital_id",
-  "finance.recurring_series": "series_id",
   "media.asset": "asset_id",
   // Locker is byte-bearing (#872): one allow-list entry, not a second attach
   // command. HONEST BOUNDARY — the bytes ride the content spine and are NOT
