@@ -6,7 +6,6 @@ import { isPathWithinRoots, normalizeRoots } from "./policy.js";
 
 let roots: readonly string[] = Object.freeze([]);
 
-/** Empty roots refuse everything — correct failure direction. */
 export function setConfinedReadRoots(next: readonly string[]): void {
   roots = normalizeRoots(next);
 }
@@ -22,8 +21,6 @@ function toPathString(target: unknown): string | null {
   return null;
 }
 
-/** Links out of a root are refused after realpath; missing targets check via
- *  their nearest existing ancestor, else probes skip; TOCTOU swaps uncaught. */
 export function guardReadPath(operation: string, target: unknown): string {
   const raw = toPathString(target);
   if (raw === null) throw deniedPath(operation, String(target), roots);

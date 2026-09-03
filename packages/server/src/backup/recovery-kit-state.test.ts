@@ -45,8 +45,6 @@ describe("recovery-kit-state scenarios", () => {
         kitFingerprint: "first-fingerprint",
       });
 
-      // Exporting a NEW kit supersedes the confirmed one: the operator has to
-      // retain and verify the kit they now hold, not the one they replaced.
       await store.begin("second-fingerprint");
       await expect(store.status()).resolves.toStrictEqual({
         confirmedAt: null,

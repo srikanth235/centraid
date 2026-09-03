@@ -1,9 +1,3 @@
-/*
- * `recover()` — the recovery VERB (#439): a blank machine plus the kit and the
- * api-key becomes a live vault. Shells over it stay thin, never UI wrapping
- * CLI. Phase order is the `emit()` sequence below.
- */
-
 import { randomBytes } from "node:crypto";
 import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
@@ -63,7 +57,6 @@ export interface RecoverAdoptContext {
 export interface RecoverInput {
   kitDocument: unknown;
   password: string;
-  /** Deliberately NOT in the kit (FORMAT.md); supplied out-of-band. */
   apiKey: string;
   vaultRoot: string;
   gatewayDatabase?: GatewayDatabase;
@@ -77,11 +70,9 @@ export interface RecoverInput {
   log?: ReconcileLogger;
   onPhase?: (phase: RecoverPhase) => void;
   provider?: BackupProvider;
-  /** Return undefined to SKIP the warm pass honestly (#439). */
   resolveRemoteTier?: (
     ctx: RecoverAdoptContext
   ) => RemoteTier | undefined | Promise<RemoteTier | undefined>;
-  /** Runs after the adopt rename, before the warm pass (#439). */
   onAdopted?: (ctx: RecoverAdoptContext) => void | Promise<void>;
 }
 
@@ -108,12 +99,10 @@ export interface RecoverReport {
   inventoryConsulted: boolean;
   restoreCostClass: "free-egress" | "metered-egress" | undefined;
   previews: PreviewsRecoverOutcome;
-  /** `lost.length > 0` is CRITICAL: bytes are gone (#439). */
   reconcile: ReconcileReport;
   quarantine: string[];
 }
 
-/** The pre-restore facts (#439 R1/R6), gathered WITHOUT a manifest. */
 export interface RecoveryDiscovery {
   target: RecoveryKitTarget;
   provider: BackupProvider;
@@ -122,8 +111,6 @@ export interface RecoveryDiscovery {
   recoveredAsOf: number | undefined;
   restoreCostClass: "free-egress" | "metered-egress" | undefined;
   lazyAvailable: boolean;
-  /** `recover()`'s `appMeta` gate, run non-throwingly. Stays `true` when no
-   *  snapshot exists — that refusal is "nothing to recover". */
   compatible: boolean;
   incompatibleReason?: string;
 }
@@ -209,12 +196,8 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
         : `recover: no snapshot at or before ${new Date(input.at).toISOString()} for this vault`
     );
   }
-  // From the appMeta ALONE, BEFORE any egress byte: a refusal here can never
-  // bill a metered home.
   assertCompatibleAppMeta(row.appMeta, current);
 
-  // Collected ONCE for BOTH the skip-set and the R5 reconcile, gated on the
-  // capability alone: `--full` still needs it to prove `blob_replica`.
   const lazy = input.full !== true;
   const remoteShas = provider.listInventory
     ? await collectRemoteCasShas(provider, target.targetId)
@@ -229,8 +212,6 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       `recover: "${finalDir}" already exists — refusing to recover over an existing vault directory`
     );
   }
-  // INSIDE the vault root (same filesystem ⇒ the adopt is an atomic rename);
-  // the dot prefix keeps `VaultRegistry.scan()` off the half-written dir.
   const restoreWorkDir = path.join(
     input.vaultRoot,
     `.recover-work-${randomBytes(8).toString("hex")}`
@@ -269,8 +250,6 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       const existing = validateKeyring(
         JSON.parse(existingKeyring.toString("utf8"))
       );
-      // Canonical, not `JSON.stringify`: raw stringify compares FORMATTING and
-      // would refuse an identical keyring on every restore-after-erase (#568).
       if (canonicalJson(existing) !== canonicalJson(kit.keyring)) {
         throw new Error(
           "recover: gateway custody contains a different backup keyring; refusing to overwrite live key material"
@@ -294,7 +273,6 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       );
     }
     keyStore.import(`${target.vaultId}.sealkey`, sealKey);
-    // Restored beside the DEK (#726) so the vault signs as the SAME vault.
     if (
       typeof target.identitySeed !== "string" ||
       target.identitySeed.length === 0
@@ -313,7 +291,6 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
 
     emit("adopting");
     await fs.rename(restoreWorkDir, finalDir);
-    // Without this (#517) the vault mounts with data but no app code.
     await rehydrateCodeStore(finalDir, log);
     const adoptCtx: RecoverAdoptContext = {
       vaultId: target.vaultId,
@@ -322,7 +299,6 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       provider,
       keyring: kit.keyring,
     };
-    // Runs BEFORE the vault mounts: it must be `vault.db`'s single writer.
     const reconcile = await reconcileAdoptedInventory({
       vaultDir: finalDir,
       remoteShas,

@@ -1,5 +1,3 @@
-// SDK-typed coverage for session capabilities, modes, config snapshots, and pins.
-
 import type {
   SessionConfigOption,
   SessionConfigSelectOption,

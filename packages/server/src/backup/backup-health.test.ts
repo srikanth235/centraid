@@ -1,7 +1,3 @@
-// evaluateBackupHealth — the WAL foreign-checkpoint degraded signal (#411
-// action 1). A foreign checkpoint is a churn/perf event the shipper detected and
-// self-healed (generation break), so it surfaces as DEGRADED, not error, and
-// ages out on its last occurrence.
 import { describe, expect, test } from "vitest";
 
 import { evaluateBackupHealth } from "./backup-health.js";
@@ -10,7 +6,6 @@ import type { BackupState, BackupTargetState } from "./backup-state.js";
 const NOW = 1_800_000_000_000;
 const HOUR_MS = 60 * 60 * 1000;
 
-/** An otherwise-healthy target: fresh backup, fresh verify, fresh restore-verify. */
 function healthyTarget(
   over: Partial<BackupTargetState> = {}
 ): BackupTargetState {

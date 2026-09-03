@@ -24,8 +24,6 @@ describe("vault-plane WAL ownership + durability", () => {
   test("fresh bootstrap checkpoints the WAL before the shipper attaches", async () => {
     const dir = await tempDir("fresh-bootstrap-wal-");
     fixture.openPlane(dir);
-    // ONE FILE (#916): one database, one WAL. No `.catch(() => 0)` — that
-    // would let a missing file pass as a checkpointed one.
     const size = (await fs.stat(path.join(dir, "vault.db-wal"))).size;
     expect(size).toBeLessThanOrEqual(32 * 1024);
   });
@@ -196,8 +194,6 @@ describe("vault-plane WAL ownership + durability", () => {
     );
     expect(batchSpy).toHaveBeenCalledOnce();
     expect(batchSpy.mock.calls[0]?.[0]).toHaveLength(10);
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({
       ...plane.db.vault.prepare("SELECT count(*) AS n FROM core_event").get(),
     }).toStrictEqual({
@@ -299,7 +295,6 @@ describe("vault-plane WAL ownership + durability", () => {
       ownerName: "Priya",
     });
     expect(first.boot.fresh).toBe(true);
-    // Enroll with a medium ceiling so the reopened plane executes directly.
     ensureAppEnrolled(first.db, "planner", { riskCeiling: "medium" });
     first.approveGrant("planner", {
       purpose: "dpv:ServiceProvision",

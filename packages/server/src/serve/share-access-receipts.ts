@@ -2,10 +2,6 @@ import { randomUUID } from "node:crypto";
 
 import type { GatewayDatabase } from "./gateway-db.js";
 
-/**
- * One row per EDGE, not per item (#726): three photographs placed by one
- * edge leave one receipt carrying all three item ids, never three receipts.
- */
 export interface ShareAccessReceiptInput {
   edgeId?: string;
   ownerId?: string;
@@ -17,7 +13,6 @@ export interface ShareAccessReceiptInput {
   audienceItemIds: readonly string[];
 }
 
-/** Record one durable, replay-safe cross-vault access event. */
 export function recordShareAccessReceipt(
   database: GatewayDatabase,
   input: ShareAccessReceiptInput

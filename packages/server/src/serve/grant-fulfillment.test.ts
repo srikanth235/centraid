@@ -204,7 +204,6 @@ describe("serve/grant-fulfillment", () => {
       logger: { warn: (message: string) => warnings.push(message) },
     };
 
-    // Nila's grant is over its ceiling, Ravi's is not.
     const overCeiling = createShareGrant(priya.vault.vault, {
       audience: { kind: "party", id: nilaParty },
       subjectType: "core.document",
@@ -277,15 +276,12 @@ describe("serve/grant-fulfillment", () => {
       grantedBy: priya.boot.ownerPartyId,
     });
 
-    // A vault id and nothing else, exactly as the post-commit hint carries.
     const doorbell = createGrantRefreshDoorbell({ host });
     doorbell.ring(ORIGIN_VAULT);
     expect(audienceTitles(ravi)).toStrictEqual(["Trip plan"]);
     priya.vault.vault
       .prepare("UPDATE core_document SET title = ? WHERE document_id = ?")
       .run("Trip plan (final)", documentId);
-    // Inside the coalescing window a ring only marks work pending, so the
-    // direct pass is what proves the edit follows.
     expect(
       refreshGrantsAfterCommit({ host, originVaultId: ORIGIN_VAULT, now })
         .origin
@@ -296,7 +292,6 @@ describe("serve/grant-fulfillment", () => {
 
   test("an unmounted origin vault is a fact about the host, never an empty pass", () => {
     const host = { vaultFor: () => undefined };
-    // `unmounted` must never arrive as "no grants here" — an empty list.
     expect(
       fulfillGrantsForSubject({
         host,
@@ -326,7 +321,6 @@ describe("serve/grant-fulfillment", () => {
     ).toMatchObject({ outcome: "failed" });
   });
 
-  /** Priya, Ravi, one shared document, this host holding both vaults. */
   function sharedWorld(): {
     priya: Side;
     ravi: Side;
@@ -379,7 +373,6 @@ describe("serve/grant-fulfillment", () => {
     };
   }
 
-  /** Every statement the loop compiles against the ORIGIN vault. */
   function countStatements(db: VaultDb): {
     value: () => number;
     restore: () => void;
@@ -404,9 +397,6 @@ describe("serve/grant-fulfillment", () => {
   }
 
   test("a commit that touches no granted subject costs the delivery loop nothing", () => {
-    // Ruling V-delivery: the loop is doorbell-FILTERED. Delete the `touched`
-    // hint below (or pass `undefined`) and this fails with a non-zero count —
-    // the demonstrated red for the filter.
     const world = sharedWorld();
     refreshGrantsAfterCommit({
       host: world.host,
@@ -422,7 +412,6 @@ describe("serve/grant-fulfillment", () => {
         host: world.host,
         originVaultId: ORIGIN_VAULT,
         now: world.now,
-        // A task is in no share closure, so no grant can have moved.
         touched: ["schedule.task"],
       });
       expect(pass).toStrictEqual({ origin: "mounted", reports: [] });
@@ -431,7 +420,6 @@ describe("serve/grant-fulfillment", () => {
       counter.restore();
     }
 
-    // The filter is a skip, never a stop.
     world.priya.vault.vault
       .prepare("UPDATE core_document SET title = ? WHERE document_id = ?")
       .run("Trip plan (final)", world.documentId);
@@ -455,8 +443,6 @@ describe("serve/grant-fulfillment", () => {
       });
     pass();
 
-    // Ruling V-notice: fires ONCE per grant, at its first delivery — never per
-    // item, never as membership grows.
     const notices = new NoticeStore(world.ravi.vault.vault);
     const card = notices.getBySource(SHARE_RECEIVED_NOTICE_KIND, world.grantId);
     expect(card).toMatchObject({
@@ -472,7 +458,6 @@ describe("serve/grant-fulfillment", () => {
       SHARE_RECEIVED_NOTICE_KIND,
       world.grantId
     );
-    // A second put bumps `count` and clears `read_at`, resurfacing a read card.
     expect(after).toMatchObject({ count: 1 });
     expect(after?.readAt).toBeTypeOf("string");
   });
@@ -491,7 +476,6 @@ describe("serve/grant-fulfillment", () => {
       grantId: world.grantId,
       revokedAt: "2031-01-01T00:00:00.000Z",
     });
-    // Nothing else asked: the plane moved, and the loop owns removal.
     refreshGrantsAfterCommit({
       host: world.host,
       originVaultId: ORIGIN_VAULT,

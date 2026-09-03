@@ -1,10 +1,3 @@
-/*
- * The ceremony end to end (#726 P3 decision 3), both gateways in one process:
- * what the two halves cannot prove alone is that the link is MUTUAL (each side
- * holds the other's vault id, key, route and labels) and DIRECTION-FREE
- * (nothing about the resulting rows records who showed).
- */
-
 import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
@@ -53,7 +46,6 @@ function makeSide(name: string): Side {
   };
 }
 
-/** A peer request that lands on `side`'s handler, as the relay would deliver it. */
 function transportTo(side: Side, callerEndpointId: string): PeerRequest {
   const handler = makePeerPlaneHandler({
     links: side.links,
@@ -188,7 +180,6 @@ describe("link ceremony end to end", () => {
     const bob = makeSide("bob");
     const payload = parseLinkTicket(showTicket(alice))!;
     const result = await redeemLinkTicket({
-      // The advertised key is not the one the peer answers with — somebody rewrote one of the two.
       ticket: { ...payload, vaultPublicKey: bob.publicKey },
       links: bob.links,
       request: transportTo(alice, bob.endpointId),

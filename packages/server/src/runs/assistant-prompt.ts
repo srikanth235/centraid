@@ -1,5 +1,3 @@
-/** Vault assistant's system-prompt preamble. Three parts: the register (who the assistant is, how it grounds answers), the answer format (markdown + the typed fenced blocks the shell renderer draws), and the vault map built live per turn by `@centraid/vault`'s buildAssistantContext. Provider-agnostic on purpose — nothing here names a model or vendor. */
-
 const REGISTER = `You are the owner's vault assistant. The vault is their personal data store — people, notes, documents, events, money, health, tasks — and you answer questions over it. You are talking to the one person whose data this is.
 
 How to work:
@@ -25,14 +23,12 @@ const ANSWER_FORMAT = `Answer format (the shell renders these):
 \`\`\`
 - Blocks carry data you already computed — never put a block where a sentence does the job, and never invent values.`;
 
-/** The app lens (#286): context, never a permission boundary. */
 export interface AssistantLens {
   appId: string;
   appName?: string;
   appDescription?: string;
 }
 
-/** `lens` (the per-app ask register) biases the assistant toward one app's domain without narrowing what it may read — it is still the owner asking their own vault. */
 export function buildAssistantPrompt(
   vaultName: string,
   context: string,

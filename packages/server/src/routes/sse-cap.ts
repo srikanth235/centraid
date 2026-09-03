@@ -15,8 +15,6 @@ export class SseSubscriberCap {
     return this.count;
   }
 
-  /** #351 Tier 4 hygiene. Release fn MUST run once at stream end; saturation
-   *  → 503 + Retry-After, undefined, no write after. */
   admit(res: ServerResponse): (() => void) | undefined {
     if (this.count >= this.max) {
       res.setHeader("Retry-After", String(SSE_RETRY_AFTER_SECONDS));

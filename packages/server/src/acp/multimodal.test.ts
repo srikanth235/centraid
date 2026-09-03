@@ -12,13 +12,11 @@ import {
 } from "./multimodal.js";
 import type { PromptCapabilities } from "./multimodal.js";
 
-/** What both first-party ACP adapters actually advertise. */
 const FULL: PromptCapabilities = {
   image: true,
   audio: true,
   embeddedContext: true,
 };
-/** A baseline harness: text and resource links only. */
 const TEXT_ONLY: PromptCapabilities = {};
 
 describe(acpBlockFor, () => {

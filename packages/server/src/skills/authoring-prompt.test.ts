@@ -14,7 +14,6 @@ describe("authoring-prompt", () => {
   });
 
   test("buildAuthoringExtraPrompt for an app adds no authoring contract (#799)", () => {
-    // App front ends are written in this repo, not harness-authored: no app-authoring skill, no UI grounding — an `app` turn gets its preamble and nothing else.
     const prompt = buildAuthoringExtraPrompt({
       baseExtra: "## App context\n\nid: notes",
       appKind: "app",

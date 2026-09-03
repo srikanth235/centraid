@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
 import http from "node:http";
-/** BYO OAuth PKCE ceremony over HTTP, including sealed tokens and safe health output. */
 // governance: allow-repo-hygiene file-size-limit (#608) cohesive connection-route suite shares one real OAuth and sealed-store harness
 
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -51,7 +50,6 @@ describe("connections-routes", () => {
     return `http://127.0.0.1:${addr.port}`;
   }
 
-  /** A scriptable provider token endpoint recording each form POST. */
   async function startTokenServer(): Promise<{
     url: string;
     requests: Array<Record<string, string>>;
@@ -105,7 +103,6 @@ describe("connections-routes", () => {
     );
     const tokens = await startTokenServer();
 
-    // 1. Configure the BYO client.
     const configured = (await (
       await fetch(`${base}/centraid/_vault/connections`, {
         method: "POST",
@@ -113,7 +110,6 @@ describe("connections-routes", () => {
           kind: "pull.gmail",
           label: "personal",
           cred_kind: "oauth2",
-          // A custom provider keeps this test on the free-form BYO lane.
           provider: "test-oauth",
           auth_url: "https://accounts.google.com/o/oauth2/v2/auth",
           token_url: tokens.url,
@@ -550,7 +546,6 @@ describe("connections-routes", () => {
     };
     expect(stillListed.connections).toHaveLength(1);
 
-    // Clear the block, then the real delete succeeds.
     plane.db.vault
       .prepare(`DELETE FROM outbox_item WHERE item_id = 'item-1'`)
       .run();

@@ -1,6 +1,3 @@
-// The link-ticket store's sweep (#883 D4b): an abandoned pairing leaves a
-// public key and a secret hash on the row `hasPending` reads.
-
 import { describe, expect, test } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
@@ -60,8 +57,6 @@ describe("peer link tickets", () => {
   });
 
   test("asking about a FUTURE moment never deletes a ticket live now", async () => {
-    // `hasPending(now)` answers a hypothetical: sweeping on the caller's `now`
-    // would let a future-dated question destroy a ticket about to be redeemed.
     const { tickets, db, rows } = await store();
     const live = tickets.mint("vault-1", "key-1", DEFAULT_LINK_TICKET_TTL_MS);
     expect(tickets.hasPending(Date.now() + 16 * 60 * 1_000)).toBe(false);

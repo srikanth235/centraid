@@ -1,14 +1,3 @@
-/*
- * Exit evidence for #726 P3 gap 1 — "no production peer dial". Unlike the
- * protocol double in peer-link-ceremony.test.ts, this proves the TRANSPORT:
- * two gateways reaching each other ONLY through a real `centraid/gw-link/1`
- * QUIC connection — `startGatewayEndpoint` (accept) vs this package's
- * production `startPeerDial` (dial) — completing a link ceremony, a signed
- * route assertion, and a refused give frame. `relays: "disabled"` keeps it
- * offline; relay-hint rediscovery is proved in `packages/tunnel`; only HOW
- * tickets are obtained is test-simplified.
- */
-
 import crypto from "node:crypto";
 import { mkdirSync } from "node:fs";
 import http from "node:http";
@@ -44,7 +33,6 @@ import {
 import { isLinkApproved } from "./vault-link-row.js";
 import { VaultLinksStore } from "./vault-links-store.js";
 
-// Real iroh handshakes want more than vitest's 5s default under load.
 vi.setConfig({ testTimeout: 30_000 });
 
 const UPSTREAM_TOKEN = crypto.randomBytes(16).toString("hex");
@@ -66,9 +54,6 @@ interface Side {
   dial: PeerDialHandle;
 }
 
-/** One real gateway: a loopback HTTP upstream hosting the peer plane, a real
- * iroh endpoint accepting `centraid/gw-link/1`, and a real dial client sharing
- * the endpoint's own persistent identity. */
 async function makeSide(name: string): Promise<Side> {
   const root = tempDirSync(`centraid-peer-transport-${name}-`);
   const seed = crypto.randomBytes(32);
@@ -88,9 +73,6 @@ async function makeSide(name: string): Promise<Side> {
   const proof = crypto.randomBytes(32).toString("hex");
   const publicKey = vaultIdentityPublicKey(seed).toString("base64");
 
-  // Genuine cycle: the upstream must start before `startGatewayEndpoint`
-  // (it needs the upstream's `baseUrl`) while `localRoute` needs `endpoint` —
-  // broken by mutating a `const` cell's property.
   const endpointCell: { current?: GatewayEndpointHandle } = {};
   const localRoute = (): { endpointId?: string; relayHints: string[] } => ({
     endpointId: endpointCell.current?.endpointId,
@@ -166,10 +148,6 @@ async function closeSide(side: Side): Promise<void> {
   });
 }
 
-/** A `PeerDial` whose `request` is the REAL transport, but whose
- * `endpointTicketFor` returns the CALLEE's live dial ticket (reconstructing
- * one from a bare EndpointId needs n0 relay discovery — `packages/tunnel`'s
- * concern). Every byte still crosses real QUIC. */
 function dialFrom(caller: Side, callee: Side): PeerDial {
   return {
     request: caller.dial.request,
@@ -258,7 +236,6 @@ describe("peer transport over real iroh (#726 P3 gap 1)", () => {
       localLabel: audience.label,
     });
     expect(result.state).toBe("linked");
-    // Mutual: BOTH sides hold the other's vault id, key, and route, approved.
     const audienceSide = audience.links.findPair(
       origin.vaultId,
       audience.vaultId
@@ -288,10 +265,6 @@ describe("peer transport over real iroh (#726 P3 gap 1)", () => {
     ]);
   }, 30_000);
 
-  /*
-   * The peer wire serves no give plane (#825) — proved HERE over the real
-   * transport: every give frame answers `not_found`.
-   */
   test("every retired give frame answers not_found over the real transport", async () => {
     const photo = seedPhoto(origin, "retired-give");
     const dial = dialFrom(origin, audience);

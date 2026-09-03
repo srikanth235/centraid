@@ -1,10 +1,3 @@
-/*
- * Installing the sandbox in THIS thread (#842). Installation is thread-wide and
- * one-way; Vitest isolates each file, so this one owns the thread it dirties —
- * keep it the only caller of `resetWorkerSandboxForTests`. The resolve hook's
- * body is not coverable here; `sandbox-escape.test.ts` owns it.
- */
-
 import { realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -43,7 +36,6 @@ describe(installWorkerSandbox, () => {
     expect(handle.isTainted(url)).toBe(false);
     handle.taint(url);
     expect(handle.isTainted(url)).toBe(true);
-    // Identity survives `?query#hash`, or a handler sheds its taint.
     expect(handle.isTainted(`${url}?v=2`)).toBe(true);
     expect(handle.isTainted(`${url}#frag`)).toBe(true);
     expect(handle.isTainted("file:///tmp/centraid-untrusted/other.js")).toBe(
@@ -52,10 +44,6 @@ describe(installWorkerSandbox, () => {
   });
 
   test("taint identity survives macOS /var vs /private aliases of the same file", () => {
-    // os.tmpdir() on macOS is `/var/folders/...` while Node's loader reports
-    // `file:///private/var/folders/...`. The desktop e2e vault lives there;
-    // a taint mark that does not round-trip through realpath never matches
-    // parentURL and the handler graph runs unsandboxed.
     const handle = installWorkerSandbox(appHandlerPolicy());
     const dir = tempDirSync("sandbox-taint-");
     const file = path.join(dir, "handler.js");
@@ -82,7 +70,6 @@ describe(installWorkerSandbox, () => {
 
 describe("ambient-authority revocation", () => {
   test("process.getBuiltinModule re-filters through the same allowlist", () => {
-    // A documented loader bypass: it consults no module hook.
     const get = process.getBuiltinModule.bind(process);
     expect(get("path")).toBeDefined();
     expect(get("node:path")).toBeDefined();
@@ -103,9 +90,6 @@ describe("ambient-authority revocation", () => {
   });
 
   test("kill, abort, and report are revoked in every lane (#865)", () => {
-    // Worker threads share the gateway's PID, so kill/abort/report cannot be a
-    // lane grant at all — the same way getBuiltinModule is re-filtered rather
-    // than trusted. These observe the one install this thread already carries.
     const proc = process as unknown as {
       kill: (...args: unknown[]) => unknown;
       abort: () => unknown;
@@ -115,12 +99,9 @@ describe("ambient-authority revocation", () => {
     expect(() => proc.kill(process.pid, "SIGKILL")).toThrow(
       /share the gateway's PID/u
     );
-    // Existence probes (signal 0) stay live — worker internals use them.
     expect(() => proc.kill(process.pid, 0)).not.toThrow();
     expect(() => proc.abort()).toThrow(SandboxDeniedError);
     expect(() => proc.abort()).toThrow(/crashes the shared gateway process/u);
-    // getReport stays callable (Electron's crash reporter invokes it) but
-    // must not dump the real OS environ around the frozen process.env.
     const report = proc.report as {
       getReport: () => { environmentVariables?: Record<string, string> };
       writeReport: () => string;

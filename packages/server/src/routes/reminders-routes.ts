@@ -1,14 +1,3 @@
-/*
- * `GET /centraid/_reminders/due` — every task/event reminder whose fire
- * time has arrived (`schedule_task.remind_before_min` / `core_event`'s
- * `schedule_event_ext.reminders_json`), plus due Tally recurring previews
- * and outstanding household pairing invitations, computed live against
- * the request time. Stateless on purpose (see reminders/due-reminders.ts)
- * — the desktop main process's poller owns "have I already surfaced this
- * one" bookkeeping, the same split gateway-monitor.ts already uses for the
- * downtime alert. Behind the host bearer check like every non-public route.
- */
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { ROUTES } from "@centraid/core/protocol";

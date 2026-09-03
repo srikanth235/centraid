@@ -1,5 +1,3 @@
-/** Integrity scrub checks (#839). Every check is a pure function over an already-open handle (or CAS directory) returning an `IntegrityFinding` and touching no product state — the doctor verb, the scheduled scrub, and the crash lane all import these rather than reimplement the invariants. */
-
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
@@ -23,7 +21,6 @@ export interface IntegrityFinding {
   readonly check: IntegrityCheckName;
   readonly level: FindingLevel;
   readonly detail: string;
-  /** Db label or vault id, when the finding is scoped to one. */
   readonly target?: string;
 }
 
@@ -47,7 +44,6 @@ export interface DatabaseTarget {
   readonly db: DatabaseSync;
 }
 
-/** Full check, not the health probe's `quick_check`: pays for UNIQUE verify. */
 export function checkDatabaseIntegrity(
   target: DatabaseTarget
 ): IntegrityFinding {
@@ -87,9 +83,7 @@ export interface CasRehashInput {
   readonly vaultId: string;
   readonly local: Pick<LocalBlobStore, "listSync" | "getSync">;
   readonly full?: boolean;
-  /** Defaults to `DEFAULT_CAS_SAMPLE_SIZE`. */
   readonly sampleSize?: number;
-  /** RNG seam (tests) returning `[0, 1)`. Defaults to `Math.random`. */
   readonly random?: () => number;
 }
 
@@ -105,7 +99,6 @@ function sample(all: string[], size: number, random: () => number): string[] {
   return pool.slice(0, take);
 }
 
-/** `sha256(getSync(sha)) === sha`; a mis-hash or unreadable listing is rot. */
 export function checkCasRehash(input: CasRehashInput): IntegrityFinding {
   const all = input.local.listSync();
   if (all.length === 0) {
@@ -172,7 +165,6 @@ export function checkCasRehash(input: CasRehashInput): IntegrityFinding {
 
 export interface VaultCasRoot {
   readonly vaultId: string;
-  /** The vault's `blobs/` directory; the audit walks `blobs/sha256/`. */
   readonly casRoot: string;
 }
 
@@ -181,7 +173,6 @@ interface InodeRecord {
   paths: string[];
 }
 
-/** Link count IS the cross-vault refcount (#599 decision 11): a blob's `st_nlink` above its CAS entries across owned vaults is an outside link, so the refcount never reaches zero. Collect all vaults first — sharing is not a leak. */
 export function checkHardlinkRefcounts(
   vaults: readonly VaultCasRoot[]
 ): IntegrityFinding {
@@ -243,7 +234,6 @@ export interface ReplicaJournalInput {
   readonly vault: DatabaseSync;
 }
 
-/** Every violation here is a state the log's writers make unrepresentable. */
 export function checkReplicaJournalConsistency(
   input: ReplicaJournalInput
 ): IntegrityFinding {
@@ -327,14 +317,12 @@ export interface DoctorVaultTarget {
 
 export interface IntegrityScrubInput {
   readonly vaults: readonly DoctorVaultTarget[];
-  /** Extra owned databases to integrity-check, e.g. `gateway.db`. */
   readonly extraDatabases?: readonly DatabaseTarget[];
   readonly full?: boolean;
   readonly sampleSize?: number;
   readonly random?: () => number;
 }
 
-/** Order is a contract: extra dbs, then per vault, then the refcount audit. */
 export function runIntegrityScrub(
   input: IntegrityScrubInput
 ): IntegrityFinding[] {

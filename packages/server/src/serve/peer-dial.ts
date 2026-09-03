@@ -1,6 +1,3 @@
-// Production PeerDial (#726 P3). Dialing identity MUST be this gateway's
-// persistent secret. Never accepts. Sync: bind iroh on first dial.
-
 import {
   createTunnelClient,
   endpointTicketFor as ticketForRoute,

@@ -9,7 +9,6 @@ export interface RouteSecurityRegistration {
   readonly reason?: string;
 }
 
-/** Build one compact, typed group while keeping the complete registry enumerable. */
 function defineRouteGroup(
   auth: RouteAuthTier,
   vaultScope: RouteVaultScope,
@@ -31,11 +30,6 @@ function defineRouteGroup(
     });
 }
 
-/**
- * Runtime route-prefix registry. `buildGateway` validates its compiled prefix
- * dispatch against this table before returning, so a newly mounted HTTP
- * surface cannot boot without an explicit auth and vault-scope decision.
- */
 export const ROUTE_SECURITY_REGISTRY: readonly RouteSecurityRegistration[] = [
   ...defineRouteGroup(
     "device",

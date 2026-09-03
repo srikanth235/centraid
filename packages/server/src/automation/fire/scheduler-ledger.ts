@@ -1,8 +1,3 @@
-// Missed-automation-run ledger (#351): cron fires only while the scheduler
-// runs and there is no backfill (#149), so without this an outage and a quiet
-// day look alike. Entries are RECORDED, never retro-executed. One entry per
-// automation PER GAP, not per missed minute.
-
 import { cronTriggersOf } from "../manifest/manifest.js";
 import type { Trigger } from "../manifest/manifest.js";
 import { cronMatches } from "./cron-match.js";
@@ -10,7 +5,6 @@ import { cronMatches } from "./cron-match.js";
 export const SCHEDULER_LEDGER_AUTOMATION_ID = "__scheduler";
 export const SCHEDULER_LEDGER_KEY = "ledger";
 
-/** Ring-buffer bound: a neglected gateway must not grow this unbounded. */
 const MAX_MISSED_ENTRIES = 200;
 
 export interface MissedWindowEntry {
@@ -28,7 +22,6 @@ export interface SchedulerLedgerSnapshot {
 
 const EMPTY_SNAPSHOT: SchedulerLedgerSnapshot = { missed: [] };
 
-/** Never throws: a ledger read is diagnostics. */
 export function parseSchedulerLedgerSnapshot(
   json: string | null | undefined
 ): SchedulerLedgerSnapshot {
@@ -108,8 +101,6 @@ export class SchedulerLedgerStore {
   }
 }
 
-/** Caps worst-case CPU; beyond it the entry anchors to the recent window, not
- *  the true first missed minute. */
 const MAX_SCAN_MS = 7 * 24 * 60 * 60 * 1000;
 const PERIOD_MS = 60_000;
 
@@ -121,12 +112,9 @@ export interface ComputeMissedWindowsOptions {
     readonly crons: readonly string[];
     readonly cronTimeZones?: readonly (string | undefined)[];
   }[];
-  /** Below this a gap is jitter, not an outage. */
   readonly graceMs?: number;
 }
 
-/** One entry per automation whose cron matches a minute strictly inside
- *  `(lastTickAt, now)`. */
 export function computeMissedWindows(
   opts: ComputeMissedWindowsOptions
 ): MissedWindowEntry[] {
@@ -144,7 +132,6 @@ export function computeMissedWindows(
   for (const entry of opts.entries) {
     if (entry.crons.length === 0) continue;
     let scheduledForMs: number | undefined;
-    // Earliest-only, so an often-firing automation costs no full scan.
     for (
       let t = floorToMinute(scanStartMs) + PERIOD_MS;
       t < nowMinuteMs;

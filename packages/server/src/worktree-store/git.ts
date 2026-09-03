@@ -1,7 +1,3 @@
-// System `git` binary (Electron ships it; the system binary is the reference),
-// not a JS library. Identity is forced to the Centraid harness so the host's
-// `~/.gitconfig` user.name/email never leak into app history.
-
 import { spawn } from "node:child_process";
 
 export const HARNESS_IDENTITY = {
@@ -10,11 +6,9 @@ export const HARNESS_IDENTITY = {
 } as const;
 
 export interface GitRunOptions {
-  /** Required: we never assume `process.cwd()`. */
   cwd: string;
   env?: NodeJS.ProcessEnv;
   stdin?: string;
-  /** Don't throw on non-zero. Used by probes where "missing" is expected. */
   allowNonZero?: boolean;
 }
 
@@ -56,12 +50,10 @@ export function runRaw(
   return new Promise<GitRunResult>((resolve, reject) => {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
-      // Forced here, not per-commit `git -c user.*` — a new commit call site would forget it.
       GIT_AUTHOR_NAME: HARNESS_IDENTITY.name,
       GIT_AUTHOR_EMAIL: HARNESS_IDENTITY.email,
       GIT_COMMITTER_NAME: HARNESS_IDENTITY.name,
       GIT_COMMITTER_EMAIL: HARNESS_IDENTITY.email,
-      // No interactive prompts (askpass, credential helpers, editor).
       GIT_TERMINAL_PROMPT: "0",
       GIT_ASKPASS: "true",
       GIT_EDITOR: "true",
@@ -92,7 +84,6 @@ export function runRaw(
   });
 }
 
-/** `git rev-parse <ref>` → sha, or `undefined` if the ref doesn't resolve. */
 export async function revParse(
   cwd: string,
   ref: string

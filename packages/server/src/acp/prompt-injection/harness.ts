@@ -1,11 +1,3 @@
-/*
- * Prompt-injection corpus harness (#842). Boundary is the gateway grant, not
- * model compliance: real ACP turn (`runAcpTurn` / `fake-acp-harness.mjs` via
- * `test-fixtures.ts`) against a one-grant vault; fake harness plays the duped
- * agent. Assert structural enums only — never id, timestamp, or order;
- * `vi.useFakeTimers()` would wedge the real subprocess I/O.
- */
-
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,7 +53,6 @@ export type Attempt =
 
 const CORPUS_DIR = fileURLToPath(new URL("corpus/", import.meta.url));
 
-/** Grow-only: new `corpus/*.json` is picked up; nothing hardcodes the list. */
 export function loadCorpus(): Payload[] {
   return readdirSync(CORPUS_DIR)
     .filter((name) => name.endsWith(".json"))
@@ -80,7 +71,6 @@ export interface Scenario {
   agentCtx: ReturnType<typeof vaultToolContext>;
 }
 
-/** Agent grant is `schedule`+`locker` only; `locker.purge_item` is confirm-gated. */
 export function buildScenario(): Scenario {
   const db = openVaultDb();
   const boot = bootstrapVault(db, { ownerName: "Priya" });
@@ -120,9 +110,7 @@ export function buildScenario(): Scenario {
   };
 
   const agentCtx = vaultToolContext({
-    // vault_sql is the owner's whole-model surface; an agent turn is refused.
     vaultSql: (sql: string) => gw.sql(agentCred, { sql }),
-    // Out-of-grant denies; confirm-gated parks.
     vaultInvoke: (call) =>
       gw.invoke(agentCred, {
         command: call.command,
@@ -140,7 +128,6 @@ export interface TurnObservation {
   endedFinal: boolean;
 }
 
-/** Real turn; the only vault path is the confined executor on `agentCtx`. */
 export async function runInjectedTurn(
   payload: Payload,
   agentCtx: Scenario["agentCtx"]
@@ -181,7 +168,6 @@ export type AttemptOutcome =
   | { kind: "executed"; detail: string }
   | { kind: "allowed"; rowCount: number };
 
-/** Same confined executor the turn wired; report only the structural outcome. */
 export async function applyAttempt(
   scenario: Scenario,
   attempt: Attempt
@@ -222,28 +208,20 @@ export async function applyAttempt(
   return applyEgressAttempt(attempt.provider);
 }
 
-/**
- * Consent set seeded with codex only. Unlisted provider must not be added —
- * membership is content-independent; dispatch refused, grant set unchanged.
- */
 async function applyEgressAttempt(provider: string): Promise<AttemptOutcome> {
   const kind = provider as HarnessKind;
   const workdir = await tempDir("acp-inject-egress-");
-  // ONE FILE (#916): the ledger is a band of a migrated `vault.db`, so the
-  // harness mints one rather than pointing a store at a bare path.
   openVaultDb({ dir: workdir }).close({ skipOptimize: true });
   const ledgerDbFile = path.join(workdir, "vault.db");
   const automationRef = "demo/nightly";
   const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
   store.ensureAutomationConversation(automationRef, "demo", "Nightly", "codex");
   store.close();
-  // Ladder holds codex only; the injected provider is not a member.
   const consent = new ProviderEgressConsentStore(
     makeLedgerDbProvider(ledgerDbFile),
     (member) => member === "codex"
   );
   const before = consent.has(automationRef, kind, "automations");
-  // Egress refuses an unlisted provider BEFORE the turn; this body must not run.
   const runTurn: RunTurnFn = async (input) => {
     input.onEvent({ type: "final", text: "ok" });
     return { harnessKind: "codex" };

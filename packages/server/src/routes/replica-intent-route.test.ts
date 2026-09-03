@@ -527,8 +527,6 @@ describe("replica-intent-route suite", () => {
       dispatch,
     };
 
-    // A first successful replica HTTP response carries the live handler value,
-    // but neither the durable outcome nor a terminal retry can reproduce it.
     const liveInput = { title: "live output task" };
     const liveBody = {
       intentId: "intent-live-output-1",
@@ -594,8 +592,6 @@ describe("replica-intent-route suite", () => {
     const ambiguous = response();
     await handleReplicaIntent(request(body), ambiguous.res, context);
 
-    // The real worker action swallowed VAULT_ERROR and returned HTTP-success
-    // denial; the durable canonical marker must overrule that envelope.
     expect(rawResults.at(0)).toMatchObject({
       isError: false,
       structuredContent: {
@@ -931,8 +927,6 @@ describe("replica-intent-route suite", () => {
       {
         plane: vault,
         access: {
-          // A read-only caller (for example, a commons reader) is denied as a
-          // durable outcome, never a revocation-shaped 403.
           canWrite: false,
           rememberDevice: true,
           deviceId: "device-readonly",

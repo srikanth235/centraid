@@ -25,7 +25,6 @@ export interface ClassifyCaptureDeps {
   text: string;
   model?: string;
   timeoutMs?: number;
-  /** Host-owned provider-egress proof, rechecked at the TurnPlane door. */
   egressConsent: () => boolean | Promise<boolean>;
 }
 
@@ -69,7 +68,6 @@ export function parseCapturePreview(raw: string): CapturePreview | undefined {
   };
 }
 
-/** One bounded, tool-less harness turn used only for ambiguous capture text. */
 export async function classifyCaptureWithHarness(
   deps: ClassifyCaptureDeps
 ): Promise<CapturePreview | undefined> {

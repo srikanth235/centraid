@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-/** SSE streaming for automation runs (#158): `GET /centraid/_automations/turn/events?turnId=`. Drives `makeAutomationsRouteHandler` with a mock streaming req/res, a real per-app run ledger over a tempdir, and a `RunEventBus` for the live path. */
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
@@ -27,12 +26,10 @@ let handler: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
 
 const APP = "brief";
 
-/** Open the vault ledger the route reads (one vault.db, #280). */
 function ledger(): ConversationStore {
   return new ConversationStore(makeLedgerDbProvider(ledgerDbFileIn(dir)));
 }
 
-/** Seed one automation fire turn under its stable conversation. */
 function seedTurn(
   store: ConversationStore,
   ref: string,
@@ -215,7 +212,6 @@ describe("run-events-sse", () => {
   });
 
   test("a fire that fails before the ledger opens still closes via a bus turn.end", async () => {
-    // No insertRun: `fireAutomation` threw before the handler runner opened the ledger (bad ref / automation gone / dispatch failure). `run-now` already handed the caller this runId and the viewer subscribed, so without a terminal event the stream would hang — build-gateway's catch publishes a synthetic turn.end; this proves the SSE side honors it and closes.
     const runId = `${APP}/broken:${Date.now()}:dead0000`;
     const c = sseClient(
       `/centraid/_automations/turn/events?turnId=${encodeURIComponent(runId)}`

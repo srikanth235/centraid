@@ -1,8 +1,3 @@
-// Core turn behaviour of the generic ACP backend: handshake, streaming,
-// resume, cancellation, launch failure, and the auth handshake. Feature areas
-// live beside this file (attachments, model + usage, vault tools); shared
-// fixtures in test-fixtures.ts.
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -22,11 +17,8 @@ describe("backend suite", () => {
       extraArgs: ["--mode=normal", `--perm-marker=${permMarker}`],
     });
 
-    // Session id from session/new is returned for resume.
     expect(result.sessionId).toBe("sess-1");
 
-    // Continuity / permission notices may precede stream events; assistant
-    // text still starts exactly once and final is last.
     const t = types(events);
     expect(t).toContain("assistant.start");
     expect(t).toContain("reasoning.delta");
@@ -36,12 +28,10 @@ describe("backend suite", () => {
     expect(notices(events)).not.toContain("session_continuity");
     expect(notices(events)).toContain("permission_auto_allowed");
 
-    // Streamed assistant text accumulates across chunks.
     expect(deltas(events)).toBe("Hello world");
     const final = events.find((e) => e.type === "final");
     expect(final && final.type === "final" && final.text).toBe("Hello world");
 
-    // Tool result maps completed → ok:true.
     const toolResult = events.find((e) => e.type === "tool.result");
     expect(
       toolResult && toolResult.type === "tool.result" && toolResult.ok
@@ -51,7 +41,6 @@ describe("backend suite", () => {
       toolStart && toolStart.type === "tool.start" && toolStart.toolName
     ).toBe("read_file");
 
-    // Permission auto-allow picked the least-destructive allow_always option.
     await expect(fs.readFile(permMarker, "utf8")).resolves.toBe("always");
   });
 
@@ -62,7 +51,6 @@ describe("backend suite", () => {
     });
 
     expect(result.sessionId).toBe("prev-1");
-    // History replayed during session/load must not leak into the transcript.
     const allText = JSON.stringify(events);
     expect(allText).not.toContain("HISTORY_USER");
     expect(allText).not.toContain("HISTORY_AGENT");
@@ -108,13 +96,10 @@ describe("backend suite", () => {
     const cancelMarker = path.join(dir, "cancel");
     const { events } = await runFake({
       extraArgs: ["--mode=cancel", `--cancel-marker=${cancelMarker}`],
-      // Abort as soon as the first streamed chunk arrives.
       abortOn: (e) => e.type === "assistant.delta",
     });
 
-    // The harness observed session/cancel (wrote its marker).
     await expect(fs.readFile(cancelMarker, "utf8")).resolves.toBe("cancelled");
-    // Our side emits `aborted` and suppresses `final` once aborted.
     expect(types(events)).toContain("aborted");
     expect(types(events)).not.toContain("final");
   });
@@ -159,7 +144,6 @@ describe("backend suite", () => {
     expect(message).toContain("Gemini CLI");
     expect(message).toContain("isn’t signed in");
     expect(message).toContain("run `gemini` once");
-    // The raw JSON-RPC wording never reaches the transcript.
     expect(message).not.toContain("acp rpc");
     expect(message).not.toContain("-32000");
     expect(err && err.type === "error" && err.failureClass).toBe("auth");
@@ -221,7 +205,6 @@ describe("backend suite", () => {
     });
     expect(result.sessionId).toBe("prev-resume-1");
     expect(notices(events)).not.toContain("session_continuity");
-    // Resume must not leak load-style history replay.
     const allText = JSON.stringify(events);
     expect(allText).not.toContain("HISTORY_USER");
   });
@@ -254,19 +237,12 @@ describe("backend suite", () => {
     });
     expect(notices(events)).toContain("permission_denied");
     expect(notices(events)).not.toContain("permission_auto_allowed");
-    // The refusal names the harness's own reject option — NOT `cancelled`, which
-    // means "the prompt turn was cancelled" and would unwind the whole turn.
     await expect(fs.readFile(permMarker, "utf8")).resolves.toBe("reject");
-    // …so the turn keeps running on its pre-granted tools and still finishes,
-    // exactly as the `permission_denied` notice promises.
     expect(types(events).at(-1)).toBe("final");
     expect(deltas(events)).toBe("Hello world");
   });
 
   test("teardown escalates to SIGKILL for a harness that ignores SIGTERM", async () => {
-    // SIGTERM is a request, not a guarantee. A harness that ignores it (and
-    // stdin close) would leak one child process per turn for the lifetime of
-    // the gateway, so the teardown bound has to escalate.
     const dir = await tempDir("acp-teardown-");
     const pidMarker = path.join(dir, "pid");
     const { events } = await runFake({
@@ -281,7 +257,6 @@ describe("backend suite", () => {
 
     const pid = Number(await fs.readFile(pidMarker, "utf8"));
     expect(Number.isInteger(pid)).toBe(true);
-    // `kill(pid, 0)` is a liveness probe: ESRCH means the process is gone.
     expect(() => process.kill(pid, 0)).toThrow(/ESRCH/u);
   });
 });

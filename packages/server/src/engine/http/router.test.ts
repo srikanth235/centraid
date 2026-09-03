@@ -6,7 +6,6 @@ describe("parseRoute — app RPC routes (issue #505)", () => {
   it("parses POST /centraid/<id>/actions/<action>", () => {
     const r = parseRoute("POST", "/centraid/todos/actions/add");
     expect(r.kind).toBe("app-action");
-    // Narrows the route union so the per-kind assertions below always run.
     assert(r.kind === "app-action");
     expect(r.appId).toBe("todos");
     expect(r.action).toBe("add");
@@ -39,7 +38,6 @@ describe("parseRoute — app RPC routes (issue #505)", () => {
   });
 
   it("rejects non-POST action/query invocation", () => {
-    // No UI-byte serving (#799): the RPC plane is POST-only — a GET never falls through to a static read, everything else 404s.
     expect(parseRoute("GET", "/centraid/todos/queries/upcoming").kind).toBe(
       "not-found"
     );

@@ -67,7 +67,6 @@ describe("dispatcher", () => {
 
   describe("TypeScript handlers", () => {
     it("prefers a .ts handler over a .js of the same name", async () => {
-      // Both files exist; the dispatcher probes `.ts` first, so the TS handler must win.
       await writeFile(
         path.join(codeDir, "actions", "add_note.ts"),
         `interface Body { title: string }\n` +
@@ -143,7 +142,6 @@ describe("dispatcher", () => {
         input: { nope: 1 },
       });
       expect(out.isError).toBe(true);
-      // Narrows the result union so the code assertion below always runs.
       assert(out.isError);
       expect(out.structuredContent.code).toBe("INVALID_INPUT");
     });

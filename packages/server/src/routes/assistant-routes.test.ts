@@ -1,12 +1,4 @@
 import crypto from "node:crypto";
-/*
- * The vault assistant's shell-level surface: `_turn` drives the harness over
- * SSE with the assistant preamble (register + live vault map) and records
- * the turn under the reserved `_assistant` ledger scope; `resolve` turns
- * answer refs into owner-resolved cards. The registry is duck-typed — the
- * routes only touch current()/currentWorkspace() — and the harness is a stub,
- * so the tests stay hermetic.
- */
 import { promises as fs } from "node:fs";
 import { createServer } from "node:http";
 import type { Server } from "node:http";
@@ -157,13 +149,11 @@ describe("assistant-routes suite", () => {
     expect(text).toMatch(/event: final/u);
     expect(text).toMatch(/event: end/u);
 
-    // The preamble is the assistant register + the live vault map.
     expect(seenAppId).toBe(ASSISTANT_APP_ID);
     expect(seenPrompt).toContain("vault assistant");
     expect(seenPrompt).toContain("SCHEMA-DOC-MARKER");
     expect(seenPrompt).toContain("block:table");
 
-    // The turn landed in the ledger: transcript + auto-title off turn one.
     const loaded = store.getSession(ASSISTANT_APP_ID, session.id);
     expect(loaded?.title).toBe("how many?");
     const kinds = loaded?.messages.map(
@@ -292,7 +282,6 @@ describe("assistant-routes suite", () => {
     });
     const session = store.createSession(ASSISTANT_APP_ID);
 
-    // No explicit model in the body — falls through to the prefs resolution.
     let res = await fetch(`${base}/centraid/_vault/assistant/_turn`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -306,7 +295,6 @@ describe("assistant-routes suite", () => {
     });
     expect(seenModel).toBe("prefs-resolved-model");
 
-    // An explicit body model rides through as resolveModel's `explicit` arg.
     const session2 = store.createSession(ASSISTANT_APP_ID);
     res = await fetch(`${base}/centraid/_vault/assistant/_turn`, {
       method: "POST",

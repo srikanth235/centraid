@@ -1,10 +1,3 @@
-// Restore quarantine (FORMAT.md rule 4): a restored dir carries
-// RESTORE_QUARANTINE.json; mounting one parks undrained outbox items and
-// revokes standing grants — restoring must never re-send. Automations are NOT
-// auto-disabled (that needs the code store + publish, unavailable here): the
-// marker STAYS and the caller reports a health error until an operator pauses
-// them by hand.
-
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -16,7 +9,6 @@ export interface QuarantineStatus {
   sourceSeq: number;
   outboxParked: number;
   outboxGrantsRevoked: number;
-  /** Always true — see module header. */
   automationsNeedManualReview: true;
 }
 

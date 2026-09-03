@@ -11,7 +11,6 @@ export interface BlobCustodyCounts {
 export interface BlobSweepHealthVaultEntry {
   readonly vaultId: string;
   readonly s3Configured: () => boolean;
-  /** `custodyStateCounts(db.vault)` — no tier I/O. */
   readonly counts: () => BlobCustodyCounts;
   readonly sweepStatus: () => {
     lastCompletedAt: string | null;
@@ -64,7 +63,6 @@ export function createBlobSweepHealthProbe(
         continue;
       }
       if (!status.lastCompletedAt) {
-        // s3 configured, sweep never completed: report it, don't fabricate ok.
         recentlyFailingOrStale.push(`${tag} (sweep never ran)`);
         continue;
       }

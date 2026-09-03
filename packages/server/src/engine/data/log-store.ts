@@ -1,16 +1,11 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-/**
- * Per-app handler logs: JSONL appends to `<app-data-dir>/logs.jsonl`, rotated
- * to `.1` past MAX_BYTES; reads merge both files oldest-first.
- */
 export interface LogEntry {
   ts: number;
   level: "info" | "warn" | "error";
   msg: string;
   source: "query" | "action";
-  /** Handler id (filename stem under queries/ actions/). */
   handler: string;
 }
 
@@ -33,14 +28,12 @@ export async function appendLogs(
   try {
     await fs.appendFile(file, payload, "utf8");
   } catch (error) {
-    // Best-effort: never fail the handler request.
     console.error(
       `[centraid] log append failed for ${appDataDir}: ${error instanceof Error ? error.message : String(error)}`
     );
     return;
   }
 
-  // Rotate after write; failure here is non-fatal.
   try {
     const stat = await fs.stat(file);
     if (stat.size >= MAX_BYTES) {
@@ -48,7 +41,7 @@ export async function appendLogs(
       await fs.rename(file, rotated);
     }
   } catch {
-    /* best effort */
+    // Intentionally empty.
   }
 }
 
@@ -58,7 +51,6 @@ export interface ReadLogsOptions {
   level?: LogLevel;
 }
 
-/** Most recent matching entries, newest first, unified across rotation. */
 export async function readLogs(
   appDataDir: string,
   opts: ReadLogsOptions = {}
@@ -114,7 +106,7 @@ function parseJsonl(text: string): LogEntry[] {
         out.push(obj as LogEntry);
       }
     } catch {
-      /* skip corrupted line */
+      // Intentionally empty.
     }
   }
   return out;

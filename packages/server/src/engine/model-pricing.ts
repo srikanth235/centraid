@@ -1,8 +1,3 @@
-/*
- * Per-model token pricing (#90, #445). `items.cost_usd` freezes at write time; only the #445 backfill may rewrite frozen *estimated* costs, never `'harness'`.
- * Unknown is NULL — never 0, never a substituted ceiling. The single no-hardcoded-model-ids allowlisted seam.
- */
-
 import { lookupEntry } from "./pricing/catalog.js";
 import { costFromEntry, entryToModelPrice } from "./pricing/cost.js";
 
@@ -46,7 +41,6 @@ export interface ResolvedItemCost {
   readonly costSource?: CostSource;
 }
 
-/** Unpriceable ⇒ `{}`: cost and provenance both NULL (#514). */
 export function resolveItemCost(opts: {
   harnessCostUsd?: number;
   model?: string;

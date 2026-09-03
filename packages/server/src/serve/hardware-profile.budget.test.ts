@@ -3,12 +3,6 @@ import { describe, expect, test } from "vitest";
 import { resolveGatewayHardwareProfile } from "./hardware-profile.js";
 import type { ResourceMode } from "./hardware-profile.js";
 
-/*
- * #528 Phase E ground-truth guard: this table must stay byte-identical on
- * plain hosts (no cgroup limit, no steal) — only cgroup/steal-constrained
- * hosts (hardware-profile.test.ts) may resolve to smaller knobs.
- */
-
 interface ResolvedKnobs {
   class: "constrained" | "standard";
   sqliteSynchronous: "FULL" | "NORMAL";
@@ -60,8 +54,6 @@ const PERFORMANCE: Omit<ResolvedKnobs, "class" | "sqliteSynchronous"> = {
   outboxIdleIntervalMs: 60_000,
 };
 
-// class per (host, mode): constrained hosts stay constrained under auto;
-// conserve pins constrained; balanced/performance pin standard.
 const constrainedHost = (host: string): boolean =>
   host === "2c/4GB" || host === "4c/8GB" || host === "8c/16GB@12ms";
 
@@ -83,7 +75,6 @@ for (const host of Object.keys(HOSTS)) {
         : mode === "performance"
           ? PERFORMANCE
           : BALANCED;
-    // NORMAL durability only on the owner's explicit Conserve choice.
     const sqliteSynchronous = mode === "conserve" ? "NORMAL" : "FULL";
     SNAPSHOT[`${host} | ${mode}`] = { class: cls, sqliteSynchronous, ...knobs };
   }

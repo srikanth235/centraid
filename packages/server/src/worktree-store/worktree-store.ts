@@ -1,10 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit publish/rollback/delete critical sections share private state — keeping them in one file preserves the per-store mutex invariant
-// Gateway-owned git store for editing sessions. Draft DATA lives in the vault's
-// ext draft band, never in a branched data.sqlite beside the code. Rollback is a
-// NEW forward commit overlaying an older subtree, never a reset, so `git log
-// main` stays the audit of everything live. Publish and rollback serialize
-// through one per-store mutex, and fresh-path-per-publish rotates require()
-// cache lines, since the runtime keys its handler cache on path.
 
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -24,7 +18,6 @@ import type {
 
 const EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
-/** No dot, so a tree-traversing `..` is impossible by construction. */
 const SAFE_ID_RE = /^[a-z0-9][a-z0-9_-]*$/iu;
 
 const ACTIVE_MAIN_LINK = "active-main";
@@ -57,7 +50,6 @@ export class WorktreeStore {
 
     if (!(await pathExists(path.join(this.bareDir, "HEAD")))) {
       await fs.mkdir(this.bareDir, { recursive: true });
-      // `-b main` pins HEAD; otherwise `init.defaultBranch` wins.
       await run(["init", "--bare", "-b", "main", this.bareDir], {
         cwd: this.root,
       });
@@ -84,7 +76,6 @@ export class WorktreeStore {
     return this.activeMainDir;
   }
 
-  /** Never rotates, unlike `getActiveMainDir()`, so a caller that resolves it once survives a version swap. */
   getActiveMainLink(): string {
     return this.activeMainLink;
   }
@@ -139,7 +130,6 @@ export class WorktreeStore {
           ...(manifest.kind === "automation" || manifest.kind === "app"
             ? { kind: manifest.kind as "app" | "automation" }
             : {}),
-          // Pass-through: the shells validate against the token sets.
           ...(typeof manifest.iconKey === "string"
             ? { iconKey: manifest.iconKey }
             : {}),
@@ -152,7 +142,6 @@ export class WorktreeStore {
     return rows;
   }
 
-  /** FORWARD-ONLY: the deletion is a fresh commit. */
   deleteApp(
     appId: string
   ): Promise<{ sha: string; materializedMainDir: string }> {
@@ -168,7 +157,6 @@ export class WorktreeStore {
     return (await pathExists(appDir)) ? appDir : undefined;
   }
 
-  /** Refuses `session_missing` when the worktree is not registered: a typo'd id would otherwise materialize a plain directory that fails `git add`. */
   async snapshotSessionAppDir(
     sessionId: string,
     appId: string
@@ -258,12 +246,10 @@ export class WorktreeStore {
     }
   }
 
-  /** Serialized, so two parallel publishes cannot race on `main`. */
   publish(input: PublishInput): Promise<PublishResult> {
     return this.serialize(() => this.publishCritical(input));
   }
 
-  /** FORWARD-ONLY and untagged, so the log stays chronological and tag versions monotonic. CODE-ONLY: no pre-merge hook (#160/#144). */
   rollback(input: RollbackInput): Promise<RollbackResult> {
     return this.serialize(() => this.rollbackCritical(input));
   }
@@ -344,7 +330,6 @@ export class WorktreeStore {
     const subject = `${appId}: ${message}`;
     await run(["commit", "-m", subject], { cwd: sessionDir });
 
-    // Inside the mutex the only writer that can have advanced main is a completed publish, so `merge-base` is the exact divergence probe.
     const mainBeforeSha =
       (await revParse(this.bareDir, "refs/heads/main")) ?? "";
     const sessionBranch = sessionBranchName(sessionId);
@@ -360,17 +345,14 @@ export class WorktreeStore {
 
     const sessionTipSha = await run(["rev-parse", "HEAD"], { cwd: sessionDir });
 
-    // AFTER the rebase and BEFORE the ff-merge, inside the mutex: a throw here aborts before `main` advances or a tag is minted (#144/#286).
     if (input.beforeMerge) {
       await input.beforeMerge(path.join(sessionDir, "apps", appId));
     }
 
-    // BEFORE the tag write: a fresh store on the same disk is off this publish chain but still honors existing tags.
     const nextN = await this.nextVersionNumber(appId);
     const tag = `${appId}/v${nextN}`;
     await run(["tag", tag, sessionTipSha], { cwd: this.bareDir });
 
-    // After the rebase main is an ancestor of session-tip.
     await run(["update-ref", "refs/heads/main", sessionTipSha, mainBeforeSha], {
       cwd: this.bareDir,
     });
@@ -425,7 +407,6 @@ export class WorktreeStore {
       }
       const subject = `rollback: ${appId} -> ${versionTag}`;
       await run(["commit", "-m", subject], { cwd: txDir });
-      // NO pre-merge hook, deliberately (#160/#144): rollback is CODE-ONLY. Ext DDL is forward-only, so the band stays ahead of the rolled-back code.
       const newSha = await run(["rev-parse", "HEAD"], { cwd: txDir });
       const oldMainSha =
         (await revParse(this.bareDir, "refs/heads/main")) ?? "";
@@ -521,14 +502,12 @@ export class WorktreeStore {
   private async ensureMainMaterialization(sha: string): Promise<string> {
     const dir = path.join(this.mainWorktreesDir, sha);
     if (await pathExists(dir)) {
-      // If git no longer remembers the directory as a worktree, re-adding refuses on a non-empty path — trust the on-disk tree.
       return dir;
     }
     await run(["worktree", "add", "--detach", dir, sha], { cwd: this.bareDir });
     return dir;
   }
 
-  /** Repointed BEFORE the old dir is removed, so a reader resolving the stable path never observes a dangling link. */
   private async swapActiveMain(newDir: string): Promise<void> {
     const previous = this.activeMainDir;
     this.activeMainDir = newDir;
@@ -543,7 +522,6 @@ export class WorktreeStore {
     }
   }
 
-  /** RELATIVE to the store root, so the store moves wholesale. Write-temp-then-rename, so a reader never sees a half-written link. */
   private async updateActiveMainLink(targetDir: string): Promise<void> {
     const rel = path.relative(this.root, targetDir);
     const tmp = `${this.activeMainLink}.tmp-${crypto.randomBytes(6).toString("hex")}`;
@@ -564,7 +542,6 @@ export class WorktreeStore {
     }
   }
 
-  /** Earlier rejections are swallowed for chaining: the originator saw it. */
   private serialize<T>(fn: () => Promise<T>): Promise<T> {
     const next = this.publishChain.catch(() => undefined).then(fn);
     this.publishChain = next;

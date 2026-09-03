@@ -1,9 +1,3 @@
-/*
- * Automation turn context + audit budgets (#541). Prior-run text is
- * attacker-influenced — flatten, clip, fence, label as data. Residual: the
- * harness still has host-level permissions.
- */
-
 import type { Row as AutomationRow } from "@centraid/server/automation";
 import type { Turn } from "@centraid/server/engine";
 
@@ -12,7 +6,6 @@ export const RECENT_TURN_LIMIT = 6;
 const AUDIT_CHAR_BUDGET = 64 * 1024;
 const UNTRUSTED_TURN_CHAR_BUDGET = 400;
 const UNTRUSTED_HISTORY_CHAR_BUDGET = 3_000;
-/** Fence delimiting untrusted block; never emit from run content. */
 const UNTRUSTED_FENCE = "<<<CENTRAID-UNTRUSTED-RUN-OUTPUT>>>";
 
 export function safeJson(value: unknown): string {
@@ -29,7 +22,6 @@ export function safeJson(value: unknown): string {
   }
 }
 
-/** Same audit budget as `safeJson` for harness JSON strings. */
 export function boundedRawJson(
   rawJson: string | undefined
 ): string | undefined {
@@ -58,7 +50,6 @@ function contextTurnLine(turn: Turn): string | undefined {
   return `- ${turn.triggerKind} (${status}): ${clipped}`;
 }
 
-/** Ledger-sufficient; correctness must not depend on ACP resume. */
 export function automationContextPreamble(
   row: AutomationRow,
   recentTurns: readonly Turn[],
@@ -113,7 +104,6 @@ export function automationContextPreamble(
   ].filter(Boolean);
   const full = sections.join("\n\n");
   if (full.length <= budget) return full;
-  // Trim middle only; standing instructions and the current message stay.
   const head = Math.max(0, Math.floor(budget * 0.68));
   const tail = Math.max(0, budget - head - 40);
   return `${full.slice(0, head)}\n\n[context truncated]\n\n${full.slice(-tail)}`;

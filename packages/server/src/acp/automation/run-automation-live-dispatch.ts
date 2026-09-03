@@ -1,8 +1,3 @@
-// Live `ctx.delegate` dispatch: the one billed rail, through the same accounted
-// TurnPlane seam chat uses (#743). A fire that never calls `ctx.delegate` must
-// start ZERO child processes and ZERO HTTP servers — every other `ctx.*` rail is
-// serviced parent-side and the scratch dir is lazy (#484). cwd is the app (#91).
-
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -30,25 +25,18 @@ import {
 import { unrefTimer } from "../../lib/unref-timer.js";
 
 export interface LiveDispatchOptions {
-  /** The automation app directory — also the harness's cwd. */
   workdir: string;
   runId: string;
-  /** `<appId>/<automationId>`. */
   automationRef: string;
   ledgerDbFile: string;
-  /** Host-accounted dispatch seam. No automation may reach a harness directly. */
   runTurn: RunTurnFn;
   harness: HarnessKind;
-  /** Undefined means no override — the harness's own default applies. */
   model?: string;
   configPins?: Readonly<Record<string, string>>;
   harnessPrefsFor?: (harness: HarnessKind) => Promise<HarnessPrefs | undefined>;
   harnessHealth?: HarnessHealthController;
   harnessHealthContext?: string;
-  /** Required fail-closed controller for every unattended provider egress. */
   providerEgressConsent: ProviderEgressConsentController;
-  /** How the user authored this rung's harness (#567). Omit for a source the
-   *  user did not author, so the fire is denied without a real grant. */
   consentSource?: ProviderConsentSource;
   hydrationAttachmentPath?: (hash: string) => string;
   onLog: (level: "info" | "warn" | "error", msg: string) => void;
@@ -62,7 +50,6 @@ export interface LiveDispatch {
     turnId: string,
     ok: boolean
   ) => void;
-  /** Safe to call once. */
   close: () => Promise<void>;
 }
 
@@ -75,7 +62,6 @@ export interface AutomationDelegateFailure {
   explicitHarness?: boolean;
 }
 
-/** Preserves typed failure metadata across the handler worker boundary. */
 export function parseAutomationDelegateFailure(
   error: string | undefined
 ): AutomationDelegateFailure | undefined {
@@ -83,8 +69,6 @@ export function parseAutomationDelegateFailure(
   const at = error.indexOf(DELEGATE_FAILURE_PREFIX);
   if (at < 0) return undefined;
   try {
-    // Workers append a stack after a newline; the marker is one JSON line, so
-    // parse only that or the stack suppresses failover.
     const payload = error
       .slice(at + DELEGATE_FAILURE_PREFIX.length)
       .split(/\r?\n/u, 1)[0]
@@ -111,7 +95,6 @@ function delegateFailureError(failure: AutomationDelegateFailure): Error {
   return new Error(`${DELEGATE_FAILURE_PREFIX}${JSON.stringify(failure)}`);
 }
 
-/** Allocates nothing eagerly; the scratch dir is created on first stage. */
 export async function startLiveDispatch(
   opts: LiveDispatchOptions
 ): Promise<LiveDispatch> {
@@ -164,7 +147,6 @@ export async function startLiveDispatch(
     scratchReady = true;
   };
 
-  // Vault derivatives (#299) become scratch files for the harness's Read path.
   const stageAttachments = async (
     call: automation.DelegateCall
   ): Promise<{
@@ -190,8 +172,6 @@ export async function startLiveDispatch(
     return { prompt: call.prompt, attachments };
   };
 
-  // Two limits: ACP has no `--output-schema`, so `call.json` rests on
-  // `coerceDelegateAnswer`; and a fire carries only the harness KIND.
   const delegateDispatcher: automation.DelegateDispatcher = async (
     call,
     ctx
@@ -206,10 +186,7 @@ export async function startLiveDispatch(
       });
     }
     const harness = call.harness ?? opts.harness;
-    // Unattended egress is never prompted (#567): derive the grant, never mint
-    // one. A controller without the derived-consent seam denies.
     const consent = opts.providerEgressConsent;
-    // Untyped JS callers can still omit it; deny before anything is staged.
     if (!consent) {
       throw delegateFailureError({
         harness,
@@ -400,14 +377,12 @@ export async function startLiveDispatch(
       if (closed) return;
       closed = true;
       try {
-        // `finalizeTurn` owns binding/watermark settlement; close only frees
-        // process-local resources.
+        // Intentionally empty.
       } finally {
         clearInterval(lockLeaseHeartbeat);
         runsStore.releaseTurnLock(opts.automationRef, lockToken);
         runsStore.close();
       }
-      // An attachment-free fire must touch no disk here.
       if (scratchReady) {
         await fs
           .rm(scratchDir, { recursive: true, force: true })

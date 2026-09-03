@@ -1,14 +1,3 @@
-/*
- * Owners — the principal layer (#726). Authorization is two questions, neither
- * a role: whose device is this (`enrollment-store.ts` binds proved EndpointIds
- * to owners), and does that owner own this vault (`vault_owners`, one owner
- * per vault — the PRIMARY KEY is the invariant). The label is display only —
- * every binding and attribution keys on `ownerId`. Two removal verbs at
- * different layers on purpose: `EnrollmentStore.revoke` tombstones one device
- * binding; `OwnerStore.remove` removes a person and is refused while they
- * still own vaults, so deleting a person can never orphan a vault.
- */
-
 import crypto from "node:crypto";
 import path from "node:path";
 
@@ -72,7 +61,6 @@ export class OwnerStore {
     return row ? toOwner(row) : undefined;
   }
 
-  /** Resolve a CLI/UI selector: an exact id first, then an exact label. */
   find(selector: string): Owner | undefined {
     return (
       this.get(selector) ??
@@ -114,7 +102,6 @@ export class OwnerStore {
     return renamed;
   }
 
-  /** The one owner of a vault, or undefined for a vault nobody owns yet. */
   ownerOf(vaultId: string): string | undefined {
     const row = this.gatewayDatabase.db
       .prepare("SELECT owner_id FROM vault_owners WHERE vault_id = ?")
@@ -122,11 +109,6 @@ export class OwnerStore {
     return row?.owner_id;
   }
 
-  /**
-   * INSERT OR REPLACE is deliberate: a vault has exactly one owner, so
-   * re-pointing replaces rather than accumulates. Callers own the "may this
-   * ownership change" decision.
-   */
   setOwner(vaultId: string, ownerId: string): void {
     this.gatewayDatabase.db
       .prepare(
@@ -145,11 +127,6 @@ export class OwnerStore {
     ).map((row) => row.vault_id);
   }
 
-  /**
-   * One transaction dropping their device bindings and the owner row. Refused
-   * while they still own vaults — a last-admin guard, structural instead of
-   * counted.
-   */
   remove(ownerId: string): { removedEndpointIds: string[] } {
     return this.gatewayDatabase.transaction(() => {
       const owned = this.vaultsOwnedBy(ownerId);
@@ -176,7 +153,6 @@ export class OwnerStore {
     });
   }
 
-  /** Drop ownership of an erased vault; owners and devices survive. */
   removeVault(vaultId: string): void {
     this.gatewayDatabase.db
       .prepare("DELETE FROM vault_owners WHERE vault_id = ?")

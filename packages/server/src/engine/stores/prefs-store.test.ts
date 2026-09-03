@@ -20,7 +20,6 @@ function freshFile(): string {
   return path.join(tempDirSync("centraid-prefs-"), "prefs.json");
 }
 
-/** A minimal async-iterable IncomingMessage carrying an optional JSON body. */
 function mockReq(method: string, url: string, body?: unknown): IncomingMessage {
   const chunks = body === undefined ? [] : [Buffer.from(JSON.stringify(body))];
   const req = Readable.from(chunks) as unknown as IncomingMessage & {
@@ -74,12 +73,10 @@ describe(PrefsStore, () => {
     const store = new PrefsStore(f);
     const after = store.setPrefs({ harness: "codex", theme: "night" });
     expect(after).toStrictEqual({ harness: "codex", theme: "night" });
-    // A fresh instance reads the same bytes off disk (tmp + rename landed).
     expect(new PrefsStore(f).getAllPrefs()).toStrictEqual({
       harness: "codex",
       theme: "night",
     });
-    // getAllPrefs returns a defensive copy, not the live cache.
     const copy = store.getAllPrefs();
     copy.harness = "mutated";
     expect(store.getAllPrefs().harness).toBe("codex");
@@ -223,7 +220,6 @@ describe(resolveSubsystemHarness, () => {
   it("scopes pins by subsystem — an ask pin does not leak into builder resolution", () => {
     const prefs = { "harness.ask": "claude-code", "harness.kind": "codex" };
     expect(resolveSubsystemHarness(prefs, "ask")).toBe("claude-code");
-    // Every other subsystem still inherits the default harness.
     expect(resolveSubsystemHarness(prefs, "builder")).toBe("codex");
     expect(resolveSubsystemHarness(prefs, "assistant")).toBe("codex");
     expect(resolveSubsystemHarness(prefs, "automations")).toBe("codex");
@@ -232,7 +228,6 @@ describe(resolveSubsystemHarness, () => {
   it("treats an empty-string pin as unset and keeps falling through", () => {
     const prefs = { "harness.builder": "", "harness.kind": "claude-code" };
     expect(resolveSubsystemHarness(prefs, "builder")).toBe("claude-code");
-    // ...all the way to the built-in default when there's no default harness either.
     expect(resolveSubsystemHarness({ "harness.builder": "" }, "builder")).toBe(
       "codex"
     );
@@ -252,14 +247,10 @@ describe(resolveSubsystemHarness, () => {
     };
     expect(resolveSubsystemHarness(prefs, "assistant")).toBe("claude-code");
     expect(resolveSubsystemHarness(prefs, "automations")).toBe("codex");
-    // Unpinned subsystems still inherit the default harness.
     expect(resolveSubsystemHarness(prefs, "ask")).toBe("claude-code");
   });
 
   it("is byte-identical to the old global behavior when no harness.* key is set", () => {
-    // Back-compat is the hard requirement: with only `harness.kind`
-    // present, EVERY subsystem resolves to it — exactly what the single
-    // global active harness did before per-subsystem selection existed.
     for (const kind of ["codex", "claude-code"] as const) {
       const prefs = { "harness.kind": kind };
       for (const s of ["assistant", "ask", "builder", "automations"] as const) {
@@ -269,12 +260,6 @@ describe(resolveSubsystemHarness, () => {
   });
 });
 
-/**
- * The two resolvers compose the way the gateway's `resolveModel` uses them:
- * resolve the HARNESS for the subsystem first, then scope the model key by
- * THAT kind. Reading the model against the global kind instead is the bug
- * this pairing exists to prevent.
- */
 describe("resolveSubsystemHarness + resolveSubsystemModel compose", () => {
   it("reads the model key of the subsystem's OWN harness, not the default harness's", () => {
     const prefs = {
@@ -286,7 +271,6 @@ describe("resolveSubsystemHarness + resolveSubsystemModel compose", () => {
     const kind = resolveSubsystemHarness(prefs, "ask");
     expect(kind).toBe("claude-code");
     expect(resolveSubsystemModel(prefs, kind, "ask")).toBe("claude-ask-model");
-    // The builder, still unpinned, keeps reading the default harness's keys.
     expect(
       resolveSubsystemModel(
         prefs,

@@ -1,16 +1,3 @@
-/*
- * `centraid-gateway owners` — the people on this box (#726).
- *
- * Stopped-daemon filesystem maintenance, exactly like `devices`: mutations
- * take gateway.db's exclusive lock and refuse while the daemon is running,
- * because the running daemon owns that registry. This is the L0 host-custody
- * lane — the landlord on the box may author any binding, which is also the
- * only way back in once every device is lost.
- *
- * Removing a person is refused while they still own vaults: deleting a
- * person must never orphan a vault. Reassign (`vaults`) or erase first.
- */
-
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase, GatewayLockError } from "../serve/gateway-db.js";
 import { OwnerRemovalError, OwnerStore } from "../serve/owner-store.js";
@@ -120,8 +107,6 @@ export function commandOwners(
           2
         );
       }
-      // Renaming keeps the id, so every binding and prior journal
-      // attribution follows the person rather than the label.
       process.stdout.write(
         `${JSON.stringify(owners.rename(owner.ownerId, label))}\n`
       );

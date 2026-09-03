@@ -1,10 +1,3 @@
-/*
- * Launch planning per harness kind. Native kinds spawn their own CLI + ACP
- * flag; adapter-backed spawn `node <adapter entry>` with `binPath` redirected
- * into the adapter's CLI locator env var. `config.env` is the ONE launch-env
- * field for both flavours.
- */
-
 import type { TurnStreamEvent } from "@centraid/server/engine";
 
 import { harnessSpawnEnv } from "../../spawn-env.js";
@@ -17,7 +10,6 @@ export interface LaunchPlan {
   env: NodeJS.ProcessEnv;
 }
 
-/** Throws when impossible; owner-facing findings ride `notices` (turn order). */
 export function planLaunch(
   config: AcpTurnConfig,
   extraPath: string | undefined,
@@ -37,8 +29,6 @@ export function planLaunch(
       ...(config.binPath ? { binPath: config.binPath } : {}),
       ...(extraPath ? { extraPath } : {}),
     });
-    // Native kinds get the same per-kind launch env; auggie/droid need it to
-    // stop mid-session self-update.
     Object.assign(nativeEnv, config.env ?? {});
     return { bin, args: [...config.acpArgs, ...extraArgs], env: nativeEnv };
   }
@@ -52,8 +42,6 @@ export function planLaunch(
   if (config.binPath && adapter.binPathEnvVar)
     env[adapter.binPathEnvVar] = config.binPath;
 
-  // The claude adapter downgrades the requested mode when root-without-
-  // sandbox; opt in explicitly for root unattended gateways, and say so.
   if (adapter.bypassNeedsSandboxWhenRoot && isRoot() && !env.IS_SANDBOX) {
     env.IS_SANDBOX = "1";
     notices.push({
@@ -67,7 +55,6 @@ export function planLaunch(
     });
   }
 
-  // `process.execPath`, not a .bin shim — spawn-env strips .bin off PATH.
   return { bin: process.execPath, args: [entry, ...extraArgs], env };
 }
 

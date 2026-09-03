@@ -1,9 +1,3 @@
-/**
- * Outbox fixture builders for the executor suite: they take the plane
- * explicitly rather than closing over suite state, so they lift out of the
- * test file unchanged.
- */
-
 import type { VaultPlane } from "./vault-plane.js";
 
 export function configureApiKey(

@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest";
 
 import { probeHostLimits } from "./host-limits.js";
 
-/** Build an injected fs reader from a path→contents map (missing paths ⇒ null). */
 function reader(
   files: Record<string, string>
 ): (path: string) => string | null {

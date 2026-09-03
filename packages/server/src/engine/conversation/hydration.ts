@@ -1,9 +1,3 @@
-/**
- * Compile a bounded handoff prompt from the canonical conversation ledger.
- * It deliberately keeps user/assistant prose intact, reduces tool calls to a
- * one-line trace, and drops tool outputs so a switch cannot balloon context.
- */
-
 import type { Attachment, Item, Turn } from "./schema.js";
 
 export interface HydrationMessage {
@@ -16,7 +10,6 @@ export interface HydrationPlan {
   includedTurns: number;
   omittedTurns: number;
   estimatedTokens: number;
-  /** Uploaded user files belonging to the retained complete turns. */
   attachments: HydrationAttachmentReference[];
 }
 
@@ -48,17 +41,11 @@ function outputText(outputJson: string | undefined): string | undefined {
       if (typeof text === "string") return text;
     }
   } catch {
-    // Legacy plain-text outputs are still valid context.
     return outputJson;
   }
   return undefined;
 }
 
-/**
- * Project completed live-ledger rows into the hydrator's custody-safe input.
- * Tool outputs are intentionally excluded; workspace/CAS references survive
- * as labels so the next harness can re-read them without replaying vault data.
- */
 export function hydrationMessagesFromLedger(
   turns: readonly Turn[],
   itemsForTurn: (turnId: string) => readonly Item[],
@@ -128,11 +115,6 @@ export function hydrationMessagesFromLedger(
 const estimateTokens = (text: string): number =>
   Math.max(1, Math.ceil(text.length / 4));
 
-/**
- * Content each still-owed mandatory turn is guaranteed, so the `minTurns`
- * floor delivers turns with substance rather than truncation markers.
- * Scaled down when `tokenBudget` cannot fund `minTurns` shares of it.
- */
 const MANDATORY_TURN_MIN_TOKENS = 200;
 
 function truncateTurn(turn: TurnExcerpt, maxTokens: number): TurnExcerpt {
@@ -213,11 +195,6 @@ function compileTurns(
         typeof payload.sql === "string"
           ? ` — ${payload.sql.replace(/\s+/gu, " ").trim().slice(0, 240)}`
           : "";
-      // Two producers feed this compiler and they spell tool status
-      // differently: `hydrationMessagesFromLedger` projects the raw item's
-      // boolean `ok`, while the chat path's `foldTranscript` rows carry the
-      // renderer's `state: 'ok' | 'error'`. Read both, or every real chat
-      // hydration renders "→ unknown".
       const status =
         payload.ok === true || payload.state === "ok"
           ? "ok"
@@ -285,11 +262,6 @@ export function compileHydrationPlan(
       .join("\n");
   const headerTokens = estimateTokens(headerFor(omittedPrefix));
   const bodyBudget = Math.max(1, tokenBudget - headerTokens - 2);
-  // The minimum-turn floor only means something if each mandatory turn keeps
-  // real content. Reserving a single token per still-owed mandatory turn let
-  // the first turn eat the whole body budget and left the rest as nothing but
-  // the truncation marker — a floor of turns, not of context. Reserve a real
-  // per-turn share instead, shrinking it only when the budget cannot fund it.
   const mandatoryFloor = Math.max(
     1,
     Math.min(MANDATORY_TURN_MIN_TOKENS, Math.floor(bodyBudget / minTurns))

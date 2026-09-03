@@ -1,7 +1,3 @@
-// ConversationStore item rows: message_in at ordinal 0, the openItem/
-// closeItem lifecycle, the 64 KiB raw-envelope cap, attachments.
-// Conversation / turn / search behaviour stays in store.test.ts.
-
 import type { StatementSync } from "node:sqlite";
 
 import { describe, expect, it } from "vitest";
@@ -99,7 +95,6 @@ describe("ConversationStore — items + message_in", () => {
       triggerKind: "interactive",
       startedAt: 0,
     });
-    // ACP envelope around a whole-file read, written at open and at close.
     const huge = JSON.stringify({
       toolCallId: "call-9",
       stopReason: "end_turn",
@@ -127,7 +122,6 @@ describe("ConversationStore — items + message_in", () => {
     const [item] = store.listItems("t");
     const raw = item?.rawJson ?? "";
     expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(64 * 1024);
-    // Forensics survive; the payload does not — flagged via rawTruncated.
     expect(JSON.parse(raw)).toMatchObject({
       toolCallId: "call-9",
       stopReason: "end_turn",
@@ -228,10 +222,7 @@ describe("ConversationStore — attachments", () => {
   });
 });
 
-// #659 G5: conversation-wide batched reads must return what the per-row reads
-// return, with statement count not growing with turns.
 describe("ConversationStore — conversation-wide batched reads (#659 G5)", () => {
-  /** Counts every executed read, so "N+1" is measurable. */
   function countingProvider(): {
     provider: DatabaseProvider;
     reads: () => number;
@@ -340,8 +331,6 @@ describe("ConversationStore — conversation-wide batched reads (#659 G5)", () =
   });
 });
 
-// #659 G5: a first cap cut of `ORDER BY seq ASC LIMIT ?` returns the OLDEST
-// N — paginating with it would silently hide the recent part of the thread.
 describe("ConversationStore — transcript window (#659 G5)", () => {
   function seedTurns(store: ConversationStore, count: number): string {
     const c = store.createConversation({ kind: "chat", userId: "u1" });
@@ -368,11 +357,9 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
     const conversationId = seedTurns(store, 20);
 
     const page = store.listTurnWindow(conversationId, { limit: 5 });
-    // Oldest-first WITHIN the window, but the window is the tail.
     expect(page.turns.map((t) => t.seq)).toStrictEqual([15, 16, 17, 18, 19]);
     expect(page.oldestSeq).toBe(15);
     expect(page.hasMore).toBe(true);
-    // The precise regression: seq 0 must not be in a 5-turn window of 20.
     expect(page.turns.map((t) => t.turnId)).not.toContain("t0");
     store.close();
   });
@@ -381,12 +368,9 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
     const store = newStore();
     const conversationId = seedTurns(store, 23);
 
-    // Collect the pages, then assert: the walk itself makes no assertions.
     const pageSeqs: number[][] = [];
     let cursor: number | undefined;
     let exhausted = false;
-    // Termination guard: if paging never reaches the oldest turn, `exhausted`
-    // stays false and fails below.
     for (let guard = 0; guard < 10 && !exhausted; guard += 1) {
       const page: TurnWindow = store.listTurnWindow(conversationId, {
         limit: 5,
@@ -398,8 +382,6 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
     }
     expect(exhausted).toBe(true);
 
-    // Exact page boundaries — pins WHICH turns each page held, not just that
-    // the maximum moved down.
     expect(pageSeqs).toStrictEqual([
       [18, 19, 20, 21, 22],
       [13, 14, 15, 16, 17],
@@ -408,7 +390,6 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
       [0, 1, 2],
     ]);
 
-    // Every turn exactly once: no gaps, no repeats.
     const seen = pageSeqs.toReversed().flat();
     expect(seen).toStrictEqual(Array.from({ length: 23 }, (_, i) => i));
     expect(new Set(seen).size).toBe(23);
@@ -419,7 +400,6 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
     const store = newStore();
     const conversationId = seedTurns(store, 10);
 
-    // A window that reaches turn 0 is the end of the thread…
     const atOldest = store.listTurnWindow(conversationId, {
       beforeSeq: 4,
       limit: 4,
@@ -427,7 +407,6 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
     expect(atOldest.turns.map((t) => t.seq)).toStrictEqual([0, 1, 2, 3]);
     expect(atOldest.hasMore).toBe(false);
 
-    // …one turn shy of it is not.
     const oneShort = store.listTurnWindow(conversationId, {
       beforeSeq: 4,
       limit: 3,
@@ -435,13 +414,11 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
     expect(oneShort.turns.map((t) => t.seq)).toStrictEqual([1, 2, 3]);
     expect(oneShort.hasMore).toBe(true);
 
-    // A larger-than-thread window is also the end of it.
     const whole = store.listTurnWindow(conversationId, { limit: 500 });
     expect(whole.turns).toHaveLength(10);
     expect(whole.hasMore).toBe(false);
     expect(whole.oldestSeq).toBe(0);
 
-    // Empty conversation: no more, no cursor.
     const empty = store.createConversation({ kind: "chat", userId: "u1" });
     const none = store.listTurnWindow(empty.id);
     expect(none.turns).toStrictEqual([]);
@@ -450,9 +427,6 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
     store.close();
   });
 
-  // Every binding shape of the three windowed statements in one place:
-  // nullable filters bind a value TWICE per filter, and numbered `?N`
-  // placeholders bound positionally work on Node 22 but throw on Node 24.
   it("binds every window and range shape without a parameter mismatch", () => {
     const store = newStore();
     const conversationId = seedTurns(store, 8);
@@ -468,8 +442,6 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
       0, 1, 2, 3, 4, 5, 6, 7,
     ]);
 
-    // The two range reads: both bounds and each bound alone — shapes
-    // `seqRangeOf` never emits, but must not throw.
     const ranges = [
       {},
       { fromSeq: 2, toSeq: 5 },
@@ -483,7 +455,6 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
       ).not.toThrow();
     }
 
-    // The bounds actually filter, not silently ignored.
     expect(store.listItemsByTurn(conversationId, {}).size).toBe(8);
     expect(
       store.listItemsByTurn(conversationId, { fromSeq: 2, toSeq: 5 }).size
@@ -501,7 +472,6 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
       fromSeq: page.turns[0]!.seq,
       toSeq: page.turns.at(-1)!.seq,
     });
-    // Five turns' items, not twenty — batching and windowing compose.
     expect(items.size).toBe(5);
     expect([...items.keys()].sort()).toStrictEqual(
       page.turns.map((t) => t.turnId).sort()

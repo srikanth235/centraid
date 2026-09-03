@@ -1,13 +1,3 @@
-/*
- * The bundled-manifest scope-denial sweep (#839) — part 2 of 3.
- *
- * The negative half: every undeclared combination fails CLOSED with the exact
- * grammar, and one positive case per deny class proves the closed grammar is
- * the whole vocabulary. Loader, oracles, and vault fixture live in
- * `manifest-scope-denial.sweep.test-fixtures.ts`; the positive half is in
- * `manifest-scope-denial.sweep.test.ts`.
- */
-
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { DEFAULT_PURPOSE, uuidv7 } from "@centraid/vault";
@@ -46,7 +36,6 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       "%s",
       (_label, manifest) => {
         const identity = identityFor(sweep.clampedAgent, manifest.scopes);
-        /** What consent actually said, flattened to one comparable line. */
         const observed = (
           schema: string,
           table: string,
@@ -60,7 +49,6 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
                 decision.grantId ?? "null"
               }] ${decision.failing}`;
         };
-        /** What the clamp oracle says it MUST have said, to the exact sentence. */
         const required = (
           schema: string,
           table: string,
@@ -78,20 +66,14 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
 
         const probes: Array<[string, string, Verb]> = [];
         for (const verb of VERBS) {
-          // (1) An undeclared schema.
           probes.push([ALIEN_SCHEMA, PROBE_TABLE, verb]);
           for (const scope of manifest.scopes) {
             probes.push(
-              // (2) An undeclared table under a DECLARED schema.
               [scope.schema, ALIEN_TABLE, verb],
-              // (3) Verb escalation on the scope's own entity: read→act,
-              //     act→reveal, and everything the closure does not grade.
               [scope.schema, scope.table ?? PROBE_TABLE, verb]
             );
           }
         }
-        // One whole-shape comparison, so a divergence names the exact probe and
-        // the exact sentence rather than the first boolean that flipped.
         expect(probes.map((p) => observed(...p))).toStrictEqual(
           probes.map((p) => required(...p))
         );
@@ -119,17 +101,6 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
     });
 
     test("ABSENT clamp and EMPTY clamp are opposite answers — the seam must never hand over the absent one", () => {
-      // `release-notes-drafter` is the one bundled manifest declaring no vault
-      // access at all. `executionScopeBlock` (build-gateway.ts) maps that to
-      // `{scopes: []}` — "every automation execution is attenuated, including
-      // manifests declaring no vault access" — so the production fire path
-      // hands over an EMPTY clamp and the manifest layer refuses.
-      //
-      // One line apart in consent.ts, an ABSENT clamp means the opposite: "no
-      // manifest attenuation", which leaves the durable grant untouched. This
-      // pins the difference in both directions, because `agentBridgeFor`'s
-      // `block?` is optional in the TYPE and the safety therefore rests
-      // entirely on every call site supplying one.
       const blank = MANIFESTS.find((m) => m.scopes.length === 0);
       expect(blank?.label).toBe("automations/release-notes-drafter");
       const empty = decide(
@@ -150,8 +121,6 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
         absent:
           absent.decision === "deny" ? classifyDeny(absent.failing) : "allow",
       }).toStrictEqual({ empty: "manifest-undeclared", absent: "allow" });
-      // And with no grant behind it, an absent clamp still lands on the grant
-      // chain rather than on nothing.
       const ungranted = decide(
         identityFor(sweep.ungrantedAgent, undefined),
         "core",
@@ -208,7 +177,6 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
     test("[policy-forbids-purpose] a standing purpose rule bites before any grant", () => {
       sweep.db.vault
         .prepare(
-          // R10 (#916): one dotted `entity`; a bare pack name is the whole pack.
           `INSERT INTO access_policy
              (policy_id, kind, entity, rule_json,
               retention_days, effective_from, priority)
@@ -247,7 +215,6 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       if (decision.decision !== "deny") return;
       expect(decision.failing).toBe(undeclaredSentence("core", "task", "read"));
       expect(classifyDeny(decision.failing)).toBe("manifest-undeclared");
-      // grantId is null precisely because no grant was consulted.
       expect(decision.grantId).toBeNull();
     });
 
@@ -283,7 +250,6 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
         "no grant_scope covers core.event for verb read"
       );
       expect(classifyDeny(decision.failing)).toBe("no-grant-scope");
-      // This is the one deny that names the grant it was refused against.
       expect(decision.grantId).not.toBeNull();
     });
 

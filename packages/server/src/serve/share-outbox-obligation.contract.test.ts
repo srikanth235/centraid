@@ -1,10 +1,3 @@
-/*
- * The sharing plane's ONE effect outbox, as a law (#750): obligations keyed by
- * WHAT THEY ARE ABOUT, one unreadable row never blocking its neighbours,
- * failures backing off rather than spinning, a retired transport leaving the
- * queue and ending its edge honestly (#825). Deterministic by injection.
- */
-
 import { afterEach, describe, expect, test } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
@@ -24,7 +17,6 @@ import {
 
 const opened: GatewayDatabase[] = [];
 
-/** Epoch ms with no wall clock in it; every deadline is relative. */
 const T0 = 1_760_000_000_000;
 
 async function outbox(): Promise<GatewayDatabase> {
@@ -41,8 +33,6 @@ function dueIds(db: GatewayDatabase, now: number): string[] {
   return claimDueShareEffects(db, { now }).map((pending) => pending.effectId);
 }
 
-/** A row an older generation wrote (the CHECK applies only to tables this
- *  build CREATED). */
 function seedLegacyRow(
   db: GatewayDatabase,
   row: { effectId: string; edgeId: string; kind: string; payload: string }
@@ -123,12 +113,10 @@ describe("[law:share-outbox-obligation] every share obligation is durable, singl
     expect(again).toBe(first);
     expect(dueIds(db, T0)).toStrictEqual(["give:edge-1"]);
 
-    // A crash-replayed enqueue must not jump a backoff obligation's place.
     deferShareEffect(db, first, { attempts: 0, now: T0 });
     enqueueShareEffect(db, give("edge-1"), { now: T0 });
     expect(dueIds(db, T0)).toStrictEqual([]);
 
-    // Discharged is forward-only: no later tick picks it up.
     completeShareEffect(db, first);
     expect(dueIds(db, T0 + 86_400_000)).toStrictEqual([]);
   });
@@ -136,7 +124,6 @@ describe("[law:share-outbox-obligation] every share obligation is durable, singl
   test("[law:share-outbox-obligation] one unreadable row never blocks the obligations beside it", async () => {
     const db = await outbox();
     enqueueShareEffect(db, give("edge-early"), { now: T0 });
-    // A drifted payload must not reach a transport as well-formed.
     db.run(
       `INSERT INTO share_effects
          (effect_id, edge_id, kind, payload_json, status, attempts,
@@ -160,11 +147,9 @@ describe("[law:share-outbox-obligation] every share obligation is durable, singl
     const effectId = enqueueShareEffect(db, give("edge-retry"), { now: T0 });
 
     deferShareEffect(db, effectId, { attempts: 0, now: T0 });
-    // To the millisecond: a tick 1ms early finds nothing.
     expect(dueIds(db, T0 + 4_999)).toStrictEqual([]);
     expect(dueIds(db, T0 + 5_000)).toStrictEqual(["give:edge-retry"]);
 
-    // The second failure doubles the delay, not repeats it.
     const attempts = claimDueShareEffects(db, { now: T0 + 5_000 })[0]!.attempts;
     expect(attempts).toBe(1);
     deferShareEffect(db, effectId, { attempts, now: T0 + 5_000 });
@@ -184,20 +169,16 @@ describe("[law:share-outbox-obligation] every share obligation is durable, singl
 
     const drained = retireDeadShareEffects(db);
     expect(drained).toStrictEqual({ effects: 1, edges: 1 });
-    // Not skipped, not discharged — gone.
     expect(dueIds(db, T0 + 365 * 86_400_000)).toStrictEqual([]);
     const after = edgeRow(db, "edge-cross");
     expect(after.status).toBe("failed");
     expect(after.reason).toBe(
       "giving a copy to another person's vault was retired; share it as a grant instead"
     );
-    // Idempotent: a second open finds nothing left to drain.
     expect(retireDeadShareEffects(db)).toStrictEqual({ effects: 0, edges: 0 });
   });
 
   test("[law:share-outbox-obligation] the retirement drain runs once per file, not once per open", async () => {
-    // `GatewayDatabase.open` calls the MARKED variant, so an already-drained
-    // file answers from one key, not two SELECTs per writable open (#883 C2).
     const db = await outbox();
     const marked = (): string | undefined =>
       (
@@ -205,7 +186,6 @@ describe("[law:share-outbox-obligation] every share obligation is durable, singl
           .prepare("SELECT value FROM gateway_meta WHERE key = ?")
           .get("share_effects_retired") as { value: string } | undefined
       )?.value;
-    // `open()` already ran it, so a second call never touches share_effects.
     expect(marked()).toBe("1");
     seedEdge(db, "edge-late", "parked");
     seedLegacyRow(db, {
@@ -218,7 +198,6 @@ describe("[law:share-outbox-obligation] every share obligation is durable, singl
       effects: 0,
       edges: 0,
     });
-    // Untouched: the marked variant did not look. The unmarked drain does.
     expect(retireDeadShareEffects(db)).toStrictEqual({ effects: 1, edges: 1 });
   });
 

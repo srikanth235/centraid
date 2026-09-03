@@ -1,12 +1,3 @@
-/*
- * Exit evidence #2 (#726): host custody (the landlord bearer) keeps
- * process control, stop-hosting, and disk visibility — but it LOSES erase,
- * ticket-mint, and backup-target configuration for a vault it does not own.
- * Each refusal is typed `owner_only` and names the vault's actual owner,
- * because host custody can SEE the vault (it can read the disk) — unlike an
- * enrolled remote device, which keeps `not_found` topology hiding.
- */
-
 import { promises as fs } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -85,7 +76,6 @@ describe("host custody loses erase/mint/backup-config on a vault it does not own
       isHostCustody: HOST_CUSTODY,
     });
     const server = http.createServer((req, res) => {
-      // Host custody: no device key at all — proved via the bearer, not iroh.
       void runWithVaultContext(
         { vaultId: vault.vaultId, deviceKey: undefined },
         () => handler(req, res)
@@ -112,7 +102,6 @@ describe("host custody loses erase/mint/backup-config on a vault it does not own
       error: "owner_only",
       message: expect.stringContaining("Bob"),
     });
-    // Refused, not erased: the vault is still on disk, still Bob's.
     expect(registry.get(vault.vaultId)).toBeTruthy();
   });
 
@@ -154,7 +143,6 @@ describe("host custody loses erase/mint/backup-config on a vault it does not own
       `${base}/centraid/_gateway/backup/policy/${vault.vaultId}`,
       {
         method: "PUT",
-        // No AUTHED_DEVICE_HEADER — host custody, no device of its own.
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ rpoSeconds: 60 }),
       }
@@ -183,8 +171,6 @@ describe("host custody loses erase/mint/backup-config on a vault it does not own
       ownerLabel: "Bob",
     });
 
-    // Host custody names Alice explicitly (the local recovery lane) but asks
-    // for a ticket into Bob's vault — a vault Alice does not own either.
     const decision = resolveInvitation({
       enrollments,
       vaultName: (id) => registry.get(id)?.name,

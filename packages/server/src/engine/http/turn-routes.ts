@@ -1,11 +1,3 @@
-/*
- * HTTP routes for the per-app chat surface. The stream/ledger half — SSE
- * framing, the accumulator, the per-session lock, recordTurn/noteTurn — lives
- * in `turn-sse.ts`, shared with the vault assistant's route. This module keeps
- * what is APP-shaped: registry lookup, manifest reads, the handler-catalog
- * preamble, and attachment resolution.
- */
-
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
@@ -33,7 +25,6 @@ import {
 } from "./turn-sse.js";
 import type { TurnAttachmentRef } from "./turn-sse.js";
 
-/** Ids are CALLER-supplied and used verbatim as a scratch filename. */
 export function isValidConversationId(id: string): boolean {
   if (!id || id.length > 128) return false;
   if (id === "index.json") return false;
@@ -58,28 +49,21 @@ export interface AskModelPrefs {
   set: (model: string | null) => Promise<void>;
 }
 
-/** Injected so these routes never import `Runtime` (a circular shape). */
 export interface TurnRouteContext {
   registry: Registry;
-  /** Honors the git-store override: there is no `current.json` (#137). */
   resolveCodeDir: (entry: RegistryEntry) => Promise<string | undefined>;
   workspaceRoots?: (
     entry: RegistryEntry,
     conversationId: string
   ) => Promise<Partial<Record<ConversationWorkspaceKind, string>>>;
   runner?: ConversationRunner;
-  /** Unset ⇒ no resume handle is threaded and each turn starts fresh. */
   conversationStore?: ConversationHistoryStore;
   conversationHarnessSessionDir: string;
   appMeta?: (
     entry: RegistryEntry
   ) => Promise<{ name?: string; description?: string }>;
-  /** Never module-level: two gateways can collide on appId. */
   conversationLocks: Map<string, Promise<void>>;
-  /** Resolved PER REQUEST, so it bounds turns per vault, not per gateway
-   *  (#420). Absent ⇒ unbounded. */
   turnLimiter?: () => TurnLimiter | undefined;
-  /** Same machinery `resolveSubsystemModel` uses, so picker and turn agree. */
   askModel?: AskModelPrefs;
 }
 
@@ -244,8 +228,6 @@ async function handlePostTurn(
     sendError(res, 400, "bad_request", "Invalid conversationId.");
     return;
   }
-  // The client re-sends the WHOLE set, so a second cross-provider switch
-  // cannot revoke the first; a bare string is a one-element set (#567).
   const providerConsent = Array.isArray(body.providerConsent)
     ? body.providerConsent
     : body.providerConsent === undefined
@@ -304,8 +286,6 @@ async function handlePostTurn(
     prevHarnessUsageSnapshot = resume?.usageSnapshot;
   }
 
-  // The bytes already live in the per-app blob CAS (#190); the refs are kept
-  // to record `attachments` rows on the turn's `message_in` item.
   const attachmentRefs: TurnAttachmentRef[] = validateTurnAttachmentRefs(
     ctx.conversationStore,
     entry.id,
@@ -421,8 +401,6 @@ async function handlePostTurn(
   });
 }
 
-/** `undefined` when unreadable — the prompt still works, without the declared
- *  catalog. Goes through the runtime's resolver for the git-store override. */
 async function safeReadManifest(
   entry: RegistryEntry,
   resolveCodeDir: (entry: RegistryEntry) => Promise<string | undefined>

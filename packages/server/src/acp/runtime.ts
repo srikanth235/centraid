@@ -1,6 +1,3 @@
-// Dispatch by `harness.kind` (#479); session ids are opaque — pass back
-// as `prevSessionId`.
-
 import type {
   TurnConfig,
   TurnInput,

@@ -170,10 +170,6 @@ describe("blob-routes-hardening", () => {
       Buffer.from(page)
     );
 
-    // A stored HTML blob is attacker-authorable (imported email attachment):
-    // served inline it would be stored XSS in the shell's origin, so it
-    // downloads instead — and even a mislabeled type cannot be sniffed into
-    // a scriptable one or escape the sandbox.
     const page_ = await fetch(`${base}/${contentId}`);
     expect(page_.headers.get("content-type")).toBe("text/html");
     expect(page_.headers.get("content-disposition")).toMatch(/^attachment;/u);
@@ -181,7 +177,6 @@ describe("blob-routes-hardening", () => {
     expect(page_.headers.get("content-security-policy")).toBe("sandbox");
     await expect(page_.text()).resolves.toBe(page);
 
-    // Benign types keep their inline disposition but carry the same guards.
     const pngId = await stageAndClaim(base, plane, "guarded.png");
     const guarded = await fetch(`${base}/${pngId}`);
     expect(guarded.headers.get("content-disposition")).toBe(

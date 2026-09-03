@@ -1,16 +1,9 @@
-/*
- * Durable-ingress cursor reads (#541): a cursor may only advance to the last
- * element actually delivered. Rows past the catch-up cap are SURPLUS (next
- * tick delivers them); only unrecoverable losses become `skipped`/`gapReason`.
- */
-
 import type { CursorReadResult } from "@centraid/server/automation";
 import type {
   AutomationTriggerStore,
   PruneIngressResult,
 } from "@centraid/server/engine";
 
-/** Rows above `deliveredThrough` were never delivered — an unrecoverable TTL gap for this source. */
 export function ingressRetentionGap(
   prune: PruneIngressResult,
   sourceKey: string,
@@ -31,7 +24,6 @@ function parseIngressPosition(positionJson: string | undefined): number {
   }
 }
 
-/** Stored payloads are JSON; non-JSON rides through as raw text. */
 function parseIngressPayload(payloadJson: string | undefined): unknown {
   if (payloadJson === undefined) return undefined;
   try {
@@ -65,7 +57,6 @@ export function readIngressCursor(
   now: number
 ): CursorReadResult {
   const afterId = parseIngressPosition(positionJson);
-  // Prune where the delivered position is known: expired-before-delivery rows are accounted, not dropped.
   const retention = ingressRetentionGap(
     store.pruneIngress(now),
     sourceKey,

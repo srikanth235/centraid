@@ -1,9 +1,3 @@
-/*
- * The engine's pure support surface: how a write-ahead receipt is re-read
- * after a crash, and how one automation's triggers become cursor
- * registrations.
- */
-
 import { describe, expect, it } from "vitest";
 
 import type { Manifest } from "../manifest/manifest.js";
@@ -81,8 +75,6 @@ describe(readPendingBatch, () => {
       '{"elements":[{"position":"a","occurredAt":null}],"acknowledged":[]}',
     ],
   ])("reads %s as no pending batch at all", (_label, raw) => {
-    // A half-written receipt must not be mistaken for a partially delivered
-    // batch — the engine re-reads the source instead.
     expect(readPendingBatch(raw)).toBeUndefined();
   });
 
@@ -180,7 +172,6 @@ describe("scheduleExpr and cursorIdentity", () => {
         event: "new-message",
       })
     ).toBe("*/5 * * * *");
-    // A webhook has no cadence: it is doorbell-driven.
     expect(
       scheduleExpr({ kind: "webhook", id: "h", secretHash: "a".repeat(64) })
     ).toBeUndefined();

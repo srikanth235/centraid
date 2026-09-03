@@ -1,9 +1,3 @@
-// Webhook trigger dispatch (#96): the gateway mounts `makeWebhookRouteHandler`
-// at `/_centraid-hook`, ahead of its own bearer check. The shared secret is
-// minted server-side and shown once — `automation.json` is user-visible, so
-// only its SHA-256 hash is stored. After auth the handler writes a durable
-// ingress element, so a restarted fire can never drop a delivery.
-
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import type * as TypeImport_g9tn66 from "node:fs";
@@ -40,7 +34,6 @@ export function generateWebhookSecret(): string {
   return crypto.randomBytes(24).toString("hex");
 }
 
-/** What the manifest persists. */
 export function hashWebhookSecret(secret: string): string {
   return crypto.createHash("sha256").update(secret, "utf8").digest("hex");
 }
@@ -68,12 +61,9 @@ export interface ProvisionedWebhook {
   readonly automationId: string;
   readonly ownerApp: string;
   readonly webhookId: string;
-  /** Never written to disk. */
   readonly secret: string;
 }
 
-/** A pending trigger is what the builder harness writes: it cannot mint
- *  crypto-random credentials. */
 export async function provisionPendingWebhookAt(
   dir: string,
   ownerApp: string
@@ -135,14 +125,12 @@ export interface ProvisionedWebhookInFiles {
   readonly automationId: string;
   readonly ownerApp: string;
   readonly webhookId: string;
-  /** Never written to disk. */
   readonly secret: string;
 }
 
 const AUTOMATION_MANIFEST_RE =
   /^automations\/(?<automationId>[^/]+)\/automation\.json$/u;
 
-/** Only the hash is written, so plaintext never reaches the gateway (#141). */
 export function provisionPendingWebhooksInFiles(
   files: ReadonlyArray<WebhookFileMapEntry>,
   ownerApp: string
@@ -188,16 +176,10 @@ export function provisionPendingWebhooksInFiles(
 
 export interface RotatedWebhookInFiles {
   readonly path: string;
-  /** Unchanged, so any configured caller URL survives a rotation. */
   readonly webhookId: string;
-  /** Never written to disk. */
   readonly secret: string;
 }
 
-/** Rotate a PROVISIONED webhook's secret in a draft file map (#141). Only the
- *  hash persists, so an owner who missed the one-time reveal is left with an
- *  uncallable automation. The route id is kept, so a configured caller keeps
- *  working. `undefined` for a still-`pending` trigger: it needs a first mint. */
 export function rotateWebhookInFiles(
   current: ReadonlyArray<WebhookFileMapEntry>,
   automationId: string
@@ -263,8 +245,6 @@ function extractSecret(req: IncomingMessage): string | undefined {
   return undefined;
 }
 
-/** Only headers that are per-delivery BY CONTRACT: `x-request-id` is reused by
- *  some proxies, which would collapse two deliveries into one. */
 function deliveryId(req: IncomingMessage): string {
   for (const name of ["x-centraid-delivery-id", "x-github-delivery"]) {
     const value = req.headers[name];
@@ -303,9 +283,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(text);
 }
 
-/** `true` when it owns the request, so the gateway stops its chain. */
 export function makeWebhookRouteHandler(opts: WebhookRouteOptions) {
-  // Scoped to the closure, so each mounted route keeps its own limiter.
   const windows = new Map<string, { start: number; count: number }>();
 
   const overRateLimit = (webhookId: string): boolean => {
@@ -341,7 +319,6 @@ export function makeWebhookRouteHandler(opts: WebhookRouteOptions) {
       return true;
     }
     try {
-      // Webhook slugs are globally unique, so the first active-version match wins.
       const { rows } = await list(opts.appsDir);
       const target = rows.find(
         (r) => webhookTriggerOf(r.triggers)?.id === slug

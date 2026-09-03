@@ -1,10 +1,3 @@
-/*
- * The daemon's iroh endpoint host (#289). The per-boot proof header exists
- * because the HTTP listener also accepts the loopback landlord bearer (#505):
- * without it a holder could stamp any device key and dodge the per-vault ACL.
- * Loopback is not an identity either (#568 A/B).
- */
-
 import crypto from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import os from "node:os";
@@ -59,7 +52,6 @@ const COMPANION_MODULES = new Set([
   "people",
 ]);
 
-/** A read failure is an empty list: no relay hint ⇒ reachable directly. */
 function relayHintsOf(ticket: string): string[] {
   try {
     const hint = inspectEndpointTicket(ticket).relayHint;
@@ -94,10 +86,8 @@ export interface DaemonDevicePlane {
     enrollments: EnrollmentStore;
     tickets: PairingTicketStore;
   };
-  /** NOT auto-registered: the handler needs this process's peer proof (#726). */
   peerPlane: {
     links: VaultLinksStore;
-    /** Per-boot; the route layer verifies it. */
     proof: string;
     localRoute: () => { endpointId?: string; relayHints: string[] };
     dial: PeerDial;
@@ -112,7 +102,6 @@ export function makeDaemonDevicePlane(input: {
   logger: RuntimeLogger;
   controlSecret?: string;
   relays?: "n0" | "disabled";
-  /** Authorized through the same per-vault enrollment rows as iroh. */
   loopbackEndpointId?: string;
   keyStore?: KeyStore;
 }): DaemonDevicePlane {
@@ -126,8 +115,6 @@ export function makeDaemonDevicePlane(input: {
   const tickets = PairingTicketStore.open(
     input.gatewayDatabase ?? layout.gatewayDbFile
   );
-  // Synchronous, NOT inside `startEndpoint`: `buildGateway()` reads
-  // `peerPlane.dial` — built from this key — before `startEndpoint()` can run.
   const endpointSecretKey = loadEndpointSecret({
     persistence: {
       load: () => keyStore.load("endpoint-key.bin"),
@@ -152,23 +139,13 @@ export function makeDaemonDevicePlane(input: {
     input.controlSecret ?? crypto.randomBytes(32).toString("hex");
   let liveEndpointId: string | undefined;
   let liveRelayHints: string[] = [];
-  // An enrollment is the ONLY admission (#603): a gateway founds itself
-  // locally, so no unknown EndpointId needs to reach it first.
   const authorizeEndpoint = (endpointId: string): boolean =>
     enrollments.isEnrolled(endpointId);
 
-  /*
-   * The PEER lane (#726 P3, trap 2): its own proof and headers, pointedly NOT
-   * `enrollments.isEnrolled` — a linked gateway must never make "is this one of
-   * my owner's devices" answer yes. Coarse admission stays narrow: an
-   * unrecognised caller reaches only routes demanding their own secret.
-   */
   const links = VaultLinksStore.open(
     input.gatewayDatabase ?? layout.gatewayDbFile
   );
   const peerProof = crypto.randomBytes(32).toString("hex");
-  // The SAME identity that ACCEPTS peer connections also dials out (#726 P3);
-  // `startPeerDial` explains why that match is load bearing.
   const peerDial = startPeerDial({
     secretKey: endpointSecretKey,
     ...(input.relays ? { relays: input.relays } : {}),
@@ -177,7 +154,6 @@ export function makeDaemonDevicePlane(input: {
     links.isLinked(endpointId) ||
     links.hasAnyLink() ||
     links.tickets.hasPending();
-  /** Does NOT name a vault: an endpoint identifies a machine (#726 P3). */
   const peerForwardedHeaders = (
     endpointId: string
   ): Record<string, string> => ({
@@ -188,7 +164,6 @@ export function makeDaemonDevicePlane(input: {
 
   const deviceAccess: DeviceAccess = {
     deviceKeyFor: (req: IncomingMessage): string | undefined => {
-      // Trap 2, last line (#726): a link's reach is the peer plane or nothing.
       if (req.headers[PEER_ENDPOINT_HEADER] !== undefined) return undefined;
       const device = req.headers[DEVICE_HEADER];
       const proof = req.headers[DEVICE_PROOF_HEADER];
@@ -263,8 +238,6 @@ export function makeDaemonDevicePlane(input: {
         ownerPartyId: granted.boot.ownerPartyId,
         name: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
         ...(request.platform ? { platform: request.platform } : {}),
-        // `trust` only asks "may this device act" (#726); attenuation is
-        // grant_profile, orthogonal to it.
         trust: "full",
       });
     }
@@ -340,8 +313,6 @@ export function makeDaemonDevicePlane(input: {
     }
     liveEndpointId = handle.endpointId;
     liveRelayHints = relayHintsOf(handle.ticket());
-    // Route re-assertion, eager half (#750 invariant 3). Fire-and-forget:
-    // endpoint start must not wait on peers.
     const registry = input.vaults();
     if (registry) {
       void announceLocalRoutes({

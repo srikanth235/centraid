@@ -22,7 +22,6 @@ describe("vault-integrity-health", () => {
   });
 
   describe(createVaultIntegrityHealthProbe, () => {
-    // Issue #659 L6: an hourly full-file scan per vault must not scale with vault count or land during boot.
     it("scans at most one vault per tick, so N vaults never line up into one scan", async () => {
       const scanned: string[] = [];
       const traced = (id: string): DatabaseSync => {
@@ -78,7 +77,6 @@ describe("vault-integrity-health", () => {
       expect(integrityIntervalFor(1024, hour)).toBe(hour);
       expect(integrityIntervalFor(64 * 1024 * 1024, hour)).toBe(hour);
       expect(integrityIntervalFor(256 * 1024 * 1024, hour)).toBe(4 * hour);
-      // Never rarer than daily, however large the vault gets.
       expect(integrityIntervalFor(500 * 1024 ** 3, hour)).toBe(24 * hour);
     });
 
@@ -102,8 +100,6 @@ describe("vault-integrity-health", () => {
 
     it("reports error with the failure lines when quick_check itself throws", async () => {
       const vault = memDb();
-      // Simulate a corrupted-file read path — quick_check throwing outright
-      // is as real a failure mode as it returning non-'ok' rows.
       vault.prepare = () => {
         throw new Error("database disk image is malformed");
       };

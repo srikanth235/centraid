@@ -1,10 +1,3 @@
-/*
- * The gateway's read of the vault's egress-consent ledger (#807).
- *
- * Two laws are under test, and both are about the DIRECTION consent travels: a
- * specific scope's answer beats the vault-wide one, and a "no" nearby is never
- * fallen through in search of a "yes" further out.
- */
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { openVaultDb, recordEnrichConsent } from "@centraid/vault";

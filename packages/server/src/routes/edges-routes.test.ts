@@ -1,15 +1,3 @@
-/*
- * The owner-facing edge plane, end to end over the LOCAL transport (#726 P2,
- * reshaped by #750): the same reducer and the same outbox the peer transport
- * uses, with both vaults open in this process.
- *
- * What this pins that the reducer's unit tests cannot: an edge listed by
- * OWNER rather than by the device that made it (a phone must not show a
- * different share history than the laptop), a replayed POST that leaves
- * exactly one projection and one receipt, and a give this gateway could not
- * act on parking with an obligation that survives it.
- */
-
 import { mkdirSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
@@ -28,8 +16,6 @@ import { readEdgeRow } from "../serve/share-edge-row.js";
 import { VaultLinksStore } from "../serve/vault-links-store.js";
 import { makeEdgesRouteHandler } from "./edges-routes.js";
 
-/** Effect ids still queued in the outbox. A direct read: the outbox has one
- *  kind since #825 and no production inspection door of its own. */
 function queuedEffectIds(db: GatewayDatabase): string[] {
   return (
     db.db
@@ -53,7 +39,6 @@ interface Household {
 
 const WORK = "vlt_work";
 const PERSONAL = "vlt_personal";
-/** Another person's vault, co-hosted here and linked to Ada's. */
 const NEIGHBOUR = "vlt_neighbour";
 
 function openVault(root: string, name: string, vaultId: string): VaultDb {
@@ -64,7 +49,6 @@ function openVault(root: string, name: string, vaultId: string): VaultDb {
   return vault;
 }
 
-/** One owner, two of their own vaults, two of their own devices. */
 function household(): Household {
   const root = tempDirSync("centraid-edges-route-");
   const gatewayDb = GatewayDatabase.open(path.join(root, "gateway"));
@@ -81,8 +65,6 @@ function household(): Household {
     label: "phone",
     ownerId: laptop.ownerId,
   });
-  // A second PERSON on the same box: their own owner, their own vault. This
-  // is the pair `cross_owner_give_retired` exists for.
   enrollments.enroll({
     endpointId: "device-neighbour",
     vaultIds: [NEIGHBOUR],
@@ -120,8 +102,6 @@ function household(): Household {
   };
 }
 
-/** Both owners approve the WORK ↔ NEIGHBOUR link — an APPROVED cross-owner
- *  pair, so the refusal below is a ruling and not a missing permission. */
 function linkNeighbour(house: Household): void {
   const link = house.links.propose({
     fromVaultId: WORK,
@@ -164,7 +144,6 @@ async function call(
   return { status, body: raw ? JSON.parse(raw) : {} };
 }
 
-/** One content item, the smallest thing an edge can carry. */
 function seedNote(vault: VaultDb, title: string): string {
   const contentId = `content-${title}`;
   const now = new Date().toISOString();
@@ -242,7 +221,6 @@ describe("POST/GET /centraid/_gateway/edges", () => {
     expect(edges.map((edge) => edge.edgeId)).toStrictEqual([
       "edge-from-laptop",
     ]);
-    // Provenance survives the widening: the list says WHICH device acted.
     expect(edges[0]!.createdByDevice).toBe(house.laptop);
     const fromLaptop = await call(house, {
       method: "GET",
@@ -256,7 +234,6 @@ describe("POST/GET /centraid/_gateway/edges", () => {
     const noteId = seedNote(house.work, "replay");
     const first = await give(house, house.laptop, "edge-replay", [noteId]);
     const again = await give(house, house.phone, "edge-replay", [noteId]);
-    // A replay from ANOTHER of the owner's devices is still the same edge…
     expect(again.status).toBe(409);
     const third = await give(house, house.laptop, "edge-replay", [noteId]);
     expect(third.body.accessReceiptId).toBe(first.body.accessReceiptId);
@@ -268,7 +245,6 @@ describe("POST/GET /centraid/_gateway/edges", () => {
           .get() as { n: number }
       ).n
     ).toBe(1);
-    // The outbox holds ONE obligation for this edge, and it is discharged.
     expect(
       (
         house.gatewayDb.db
@@ -313,19 +289,16 @@ describe("POST/GET /centraid/_gateway/edges", () => {
         },
       }
     );
-    // 202: this gateway could not act — a state about US, not about a peer.
     expect(answer.status).toBe(202);
     expect(answer.body.status).toBe("parked");
     expect(answer.body.reason).toBe(
       "the audience vault is read-only right now"
     );
     expect(noteCount(house.personal)).toBe(0);
-    // The obligation outlives the attempt: still queued, ready to retry.
     expect(queuedEffectIds(house.gatewayDb)).toStrictEqual([
       "give:edge-parked",
     ]);
 
-    // A later attempt with a working vault completes the SAME edge.
     const retried = await give(house, house.laptop, "edge-parked", [noteId]);
     expect(retried.body.status).toBe("completed");
     expect(readEdgeRow(house.gatewayDb, "edge-parked")!.status).toBe(
@@ -352,19 +325,15 @@ describe("POST/GET /centraid/_gateway/edges", () => {
         verbs: "read",
       },
     });
-    // Not `not_found`: the link is real and approved, so hiding the pair would
-    // be a lie. The verb is not served, and the copy names the grant plane.
     expect(refused.status).toBe(400);
     expect(refused.body.error).toBe("cross_owner_give_retired");
     expect(refused.body.message).toBe(
       "giving a copy to another person's vault has been replaced by sharing — grant them the album, folder or document instead"
     );
-    // Refused at the door: no edge row, no effect, nothing in Bo's vault.
     expect(readEdgeRow(house.gatewayDb, "edge-to-bo")).toBeUndefined();
     expect(queuedEffectIds(house.gatewayDb)).toStrictEqual([]);
     expect(noteCount(house.neighbour)).toBe(0);
 
-    // The owner's own two vaults are untouched by the retirement.
     const placed = await give(house, house.laptop, "edge-own", [noteId]);
     expect(placed.status).toBe(200);
     expect(placed.body.status).toBe("completed");

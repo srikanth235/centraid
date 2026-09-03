@@ -19,24 +19,14 @@ export const DEFAULT_TRIGGER_CATCH_UP_CAP = 50;
 export type CursorSourceKind = Trigger["kind"];
 
 export interface CursorElement {
-  /** Stable source-native id; unique per DELIVERY OCCURRENCE (idempotency). */
   position: string;
   occurredAt: number;
   payload?: unknown;
-  /**
-   * Position committed once THIS element is acknowledged; enables safe
-   * truncation.
-   */
   positionJson?: string;
 }
 
 export interface CursorReadResult {
-  /**
-   * Ordered elements after the supplied cursor, oldest first; never past
-   * `limit`.
-   */
   elements: CursorElement[];
-  /** Serialized next source position; undefined preserves the current one. */
   positionJson?: string;
   skipped?: number;
   windowFrom?: number;
@@ -85,20 +75,15 @@ export interface CursorStore {
   deleteCursorsNotIn?: (retained: readonly CursorRetentionKey[]) => number;
 }
 
-/** One declared `(automation, trigger index)` slot whose cursor must survive. */
 export interface CursorRetentionKey {
   automationId: string;
   triggerIndex: number;
 }
 
 export interface VaultCursorEngineOptions {
-  /** Compatibility fire seam for cron-only callers. */
   fire: (ref: string) => void | Promise<void>;
-  /** Fire one source element. Production hosts use this for every kind. */
   fireCursor?: (input: TriggerCursorFireInput) => void | Promise<void>;
-  /** Read non-cron sources. */
   readCursor?: (input: TriggerCursorReadInput) => Promise<CursorReadResult>;
-  /** Legacy condition/data callback; retained only for injected schedulers. */
   evaluate?: (ref: string, triggerIndex: number) => void | Promise<void>;
   store?: CursorStore | AutomationTriggerStore;
   now?: () => Date;
@@ -107,14 +92,9 @@ export interface VaultCursorEngineOptions {
   onTick?: (at: Date) => void;
   onDormancyChange?: (dormant: boolean, at: Date) => void | Promise<void>;
   catchUpCap?: number;
-  /**
-   * Gateway default cron timezone (#570 tier 2); re-read each
-   * register/reconcile; absent/invalid → host-local.
-   */
   defaultCronTimeZone?: () => string | undefined;
 }
 
-/** One cron expression plus its resolved match zone (undefined = host-local). */
 export type CronSchedule = {
   readonly expr: string;
   readonly timeZone?: string;
@@ -124,17 +104,9 @@ export interface CursorRegistration {
   ref: string;
   triggerIndex: number;
   trigger: Trigger;
-  /**
-   * Every cron schedule this registration fires, zones resolved at
-   * registration time.
-   */
   cronSchedules?: readonly CronSchedule[];
 }
 
-/**
- * Cursor registrations one automation contributes — one per trigger, EXCEPT
- * cron: all cron triggers collapse into the first cron index's registration.
- */
 export function registrationsFor(
   row: Row,
   defaultTimeZone?: string | null
@@ -158,7 +130,6 @@ export function registrationsFor(
   });
 }
 
-/** Every `(automation, trigger index)` slot the desired set declares. */
 export function retentionKeysFor(
   rows: ReadonlyArray<Row>
 ): CursorRetentionKey[] {

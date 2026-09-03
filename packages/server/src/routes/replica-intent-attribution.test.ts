@@ -1,14 +1,4 @@
 import crypto from "node:crypto";
-/*
- * L4 attribution through the replica-intent path (#599 decision 8).
- *
- * A write replayed from a phone must name the PERSON who made it, not only
- * the hardware that carried it — and it must name them by id, so a rename on
- * the gateway cannot fork or strand their history. The owner travels with
- * the intent (`replica-intent-context.ts`), lands on the invoke request in
- * `VaultPlane.bridgeFor`, and is written into the invocation's journal
- * receipt.
- */
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
@@ -69,7 +59,6 @@ describe("replica-intent-attribution suite", () => {
     } as unknown as ServerResponse;
   }
 
-  /** The one receipt the invocation left, decoded. */
   function receiptDetail(vault: VaultPlane): Record<string, unknown> {
     const row = vault.db.audit
       .prepare(
@@ -113,7 +102,6 @@ describe("replica-intent-attribution suite", () => {
         appId: "planner",
         ...(access.ownerId === undefined ? {} : { ownerId: access.ownerId }),
       },
-      // The real bridge — this is the seam under test, so it is not stubbed.
       dispatch: async () => {
         const result = await vault.bridgeFor("planner")({
           op: "invoke",
@@ -169,8 +157,6 @@ describe("replica-intent-attribution suite", () => {
     const before = receiptDetail(vault);
     enrollments.owners.rename(sid.ownerId, "Siddharth");
 
-    // The journal is append-only and keys on the id — the row is untouched, and
-    // it still resolves to the (renamed) person.
     expect(receiptDetail(vault)).toStrictEqual(before);
     expect(before).toMatchObject({ actingOwner: sid.ownerId });
     expect(enrollments.owners.get(sid.ownerId)?.label).toBe("Siddharth");
@@ -178,14 +164,8 @@ describe("replica-intent-attribution suite", () => {
 
   test("an app cannot name another device to claim that device intent", async () => {
     const vault = await plane();
-    // Sid's phone queued a write offline; the gateway replayed it and the
-    // intent's outcome row now names `sid-phone`.
     const intentId = await replayOfflineWrite(vault, { deviceId: "sid-phone" });
 
-    // A later call arrives with NO host device context (no replica-intent scope,
-    // no request device key) and supplies the pair itself. `intentDeviceId` is
-    // the vault's only ownership evidence — if the payload could set it, the
-    // check would compare the forgery against itself and pass.
     const forged = await vault.bridgeFor("planner")({
       op: "invoke",
       payload: {
@@ -200,7 +180,6 @@ describe("replica-intent-attribution suite", () => {
     expect(String((forged as { error?: string }).error)).toContain(
       "is not owned by this device"
     );
-    // And nothing was written under the hijacked intent.
     expect(
       plainSqliteRow(
         vault.db.vault.prepare("SELECT count(*) AS n FROM schedule_task").get()

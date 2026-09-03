@@ -1,10 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Readable } from "node:stream";
 
-/** Browser media probes commonly send `bytes=0-`; bound each response window. */
 export const MAX_OPEN_RANGE_BYTES = 4 * 1024 * 1024;
 
-/** `bytes=<start>-<end?>` -> a single satisfiable range, else null. */
 export function parseRange(
   header: string | undefined,
   size: number
@@ -14,7 +12,6 @@ export function parseRange(
   const rawStart = match.groups?.rawStart;
   const rawEnd = match.groups?.rawEnd;
   if (rawStart === "" && rawEnd === "") return null;
-  // Suffix form `bytes=-N`: the final N bytes.
   const start =
     rawStart === "" ? Math.max(0, size - Number(rawEnd)) : Number(rawStart);
   const end =
@@ -28,7 +25,6 @@ export function parseRange(
   return { start, end: Math.min(end, size - 1) };
 }
 
-/** Pipe a local blob while releasing the file descriptor on disconnect or error. */
 export async function pipeBlobResponse(
   req: IncomingMessage,
   res: ServerResponse,
@@ -53,14 +49,9 @@ export async function pipeBlobResponse(
     const onAbort = (): void => {
       source.unpipe(res);
       source.destroy();
-      // A peer disconnect is a completed transport outcome, not a route error
-      // that can still be serialized onto the dead socket.
       settle();
     };
     const onSourceError = (): void => {
-      // Passing the storage error to destroy() emits it again on the HTTP
-      // response. With no consumer error listener that becomes a process-level
-      // unhandled error, so close the incomplete transport without re-emitting.
       if (!res.destroyed) res.destroy();
       settle();
     };

@@ -1,9 +1,3 @@
-/*
- * Durable PWA control sessions (#555): cookie hashes in gateway.db, joined to
- * device enrollments with ON DELETE CASCADE. A source-less store stays
- * in-memory for isolated tests.
- */
-
 import crypto from "node:crypto";
 import path from "node:path";
 import type { StatementSync } from "node:sqlite";
@@ -50,11 +44,6 @@ function toSession(row: StoredSessionRow): ControlSessionRow {
   };
 }
 
-/**
- * SQL prepared once per store (#659): `GatewayDatabase.db` is a `readonly`
- * handle for the process lifetime, so a statement compiled here stays valid;
- * re-preparing re-parses six statements per HTTP request.
- */
 interface SessionStatements {
   establish: StatementSync;
   findOne: StatementSync;
@@ -163,12 +152,6 @@ export class WebControlSessionStore {
     return row;
   }
 
-  /**
-   * The row is fetched by PRIMARY KEY, not by scanning live sessions (#659).
-   * Timing-safe comparison is safe on the key lookup: the matched value is
-   * already a SHA-256 of the cookie. Expired rows never match, so
-   * authorization does not depend on the sweep having run.
-   */
   find(tokenHash: string): ControlSessionRow | undefined {
     const expected = Buffer.from(tokenHash, "hex");
     const candidates = this.gatewayDatabase
@@ -194,21 +177,13 @@ export class WebControlSessionStore {
     const row = this.find(tokenHash);
     if (!row) return;
     const now = this.now();
-    // The absolute TTL is enforced HERE from the stored creation instant
-    // (#865): the cookie Max-Age is advisory — a stolen cookie file replays
-    // without any browser honoring it. The idle window can slide expiry, but
-    // never past creation + CONTROL_ABSOLUTE_TTL_MS.
     const created = Date.parse(row.createdAt);
-    // A malformed createdAt (Date.parse → NaN) would otherwise write NaN into
-    // expires_at: Math.min(idle, NaN) is NaN, and NaN <= now is false.
     if (Number.isNaN(created)) {
       this.remove(tokenHash);
       return;
     }
     const absolute = created + CONTROL_ABSOLUTE_TTL_MS;
     const nextExpiry = Math.min(now + CONTROL_IDLE_TTL_MS, absolute);
-    // A row already past its absolute lifetime (e.g. written by an older
-    // build without the cap) dies on first touch instead of sliding.
     if (nextExpiry <= now) {
       this.remove(tokenHash);
       return;

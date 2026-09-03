@@ -1,10 +1,3 @@
-/*
- * `centraid-gateway backup …` — same resolved config `serve` boots with.
- * `restore` always writes a fresh empty `--dest` (#439); never in-place
- * (FORMAT.md restore rule 3). Lazy by default; `--full` materializes every
- * blob. `metered-egress` homes refuse without `--yes`. `--at` is PITR (#408).
- */
-
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -118,7 +111,6 @@ export function formatBytes(bytes: number): string {
 export async function commandBackup(
   args: string[],
   fail: (msg: string, code?: number) => never,
-  /** Test seam only (#439): inject a provider with a chosen `restoreCostClass`. */
   deps?: { provider?: BackupProvider }
 ): Promise<void> {
   const [action, ...rest] = args;
@@ -262,7 +254,6 @@ export async function commandBackup(
           );
         }
         const vaultId = resolveVaultId(registry, parsed.vault, fail);
-        // Metered-egress confirm gate (#439 R2); free-egress / unknown skip.
         const estimate = await service.restoreEgressEstimate({
           vaultId,
           ...(parsed.seq === undefined ? {} : { seq: parsed.seq }),

@@ -1,14 +1,3 @@
-/*
- * Harness-kind routing for the automation dispatch path (#479).
- *
- * A fire has its OWN dispatch surface, separate from the conversation
- * `runTurn`: `ctx.delegate` is a one-shot against the user's real provider,
- * routed through the harness registry. The dispatch surface accepts no tool
- * dispatcher (#484): a fire whose handler only touches ctx.vault /
- * ctx.state constructs nothing and spawns nothing. These tests pin the
- * `ctx.delegate` routing at the one surviving seam.
- */
-
 import { describe, afterEach, expect, test } from "vitest";
 
 import {
@@ -42,7 +31,6 @@ const ACP_KINDS = [
   "acp",
 ] as const satisfies readonly HarnessKind[];
 
-/** Restore any harness a test swapped out of the registry table. */
 const restores: Array<() => void> = [];
 const openDispatches: LiveDispatch[] = [];
 const allowProviderEgress: ProviderEgressConsentController = {
@@ -58,10 +46,6 @@ describe("run-automation-dispatch suite", () => {
     for (const restore of restores.splice(0)) restore();
   });
 
-  /**
-   * Swap one harness's `runTurn` for a recording stub, mirroring the pattern
-   * `registry.test.ts` uses. Returns the recorder.
-   */
   function stubBackendRunTurn(
     kind: HarnessKind,
     impl: (
@@ -121,9 +105,6 @@ describe("run-automation-dispatch suite", () => {
   };
 
   test("the dispatch surface exposes only ctx.delegate — no tool dispatcher, nothing eager", async () => {
-    // The seam itself is the assertion: a vault-/state-only fire never touches
-    // this surface, and there is no `toolDispatcher` for it to reach. Opening
-    // the surface must be inert — no persistent mock session, no HTTP server.
     const dispatch = await openDispatch("codex");
     expect(dispatch).not.toHaveProperty("toolDispatcher");
     expect(dispatch.delegateDispatcher).toBeTypeOf("function");
@@ -151,7 +132,6 @@ describe("run-automation-dispatch suite", () => {
       ledgerDbFile,
       runTurn,
       harness: "codex",
-      // Exercise the runtime guard an untyped JavaScript host would hit.
       providerEgressConsent: undefined as never,
       onLog: () => undefined,
     });
@@ -184,7 +164,6 @@ describe("run-automation-dispatch suite", () => {
       expect(call?.input.message).toBe("summarise the inbox");
       expect(call?.input.model).toBe("some-model");
       expect(call?.config.prefs.kind).toBe(kind);
-      // The normalized stream reaches the run bus.
       expect(forwarded.map((e) => e.type)).toStrictEqual([
         "assistant.start",
         "final",
@@ -447,8 +426,6 @@ describe("run-automation-dispatch suite", () => {
     });
   });
 
-  // One integration path (#479): every kind enters the same registry
-  // seam, so nothing spawns a CLI from this file.
   test.each(["codex", "claude-code"] as const)(
     "ctx.delegate on %s routes through the registry like every other kind",
     async (kind) => {

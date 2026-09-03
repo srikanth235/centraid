@@ -1,11 +1,3 @@
-/**
- * A provider decorator for the takeover contract: the second `registerSnapshot`
- * and every one after it fails with `conflict_generation`, as a real provider
- * would once another machine has claimed the vault. Delegates everything else
- * to the real provider, so the test still exercises genuine behaviour on both
- * sides of the conflict.
- */
-
 import { BackupProviderError } from "@centraid/backup";
 import type { BackupProvider } from "@centraid/backup";
 

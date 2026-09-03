@@ -1,6 +1,3 @@
-// Lets a handler worker import TypeScript: production runs compiled dist under plain Node (runner.ts).
-// `load` compiles via esbuild; `resolve` fills extensionless/`.js` siblings.
-
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -40,12 +37,10 @@ type NextLoad = (
 
 const TS_URL_RE = /\.tsx?$/u;
 
-/** On-disk TS URLs for an unresolved relative specifier. */
 function tsCandidates(specifier: string, parentURL: string): string[] {
   if (!specifier.startsWith("./") && !specifier.startsWith("../")) return [];
   const bases: string[] = [];
   if (specifier.endsWith(".js")) {
-    // Source names the emitted `.js`; disk holds `.ts`.
     bases.push(specifier.slice(0, -3));
   } else if (path.extname(specifier) === "") {
     bases.push(specifier);
@@ -88,7 +83,6 @@ export async function load(
     loader: url.endsWith(".tsx") ? "tsx" : "ts",
     format: "esm",
     sourcefile: file,
-    // Automatic JSX runtime; inert for `.ts`.
     jsx: "automatic",
   });
   return { format: "module", source: code, shortCircuit: true };

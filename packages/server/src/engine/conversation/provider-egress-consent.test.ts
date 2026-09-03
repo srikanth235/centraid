@@ -35,8 +35,6 @@ describe("provider-egress-consent suite", () => {
     consent.grant(second.id, "codex", "direct", undefined, 1_005);
     consent.revokeLadderProvider("codex", "assistant", 1_006);
 
-    // Removing one lane neither revokes the same provider's other ladder lane
-    // nor overwrites/revokes a direct conversation grant.
     expect(consent.has(first.id, "codex", "assistant")).toBe(true);
     expect(consent.has(first.id, "codex", "automations")).toBe(true);
     expect(consent.has(second.id, "codex", "assistant")).toBe(true);
@@ -120,7 +118,6 @@ describe("provider-egress-consent suite", () => {
     ).toBe(false);
     expect(consent.has(conversation.id, "codex", "automations")).toBe(false);
 
-    // Only an attended grant re-opens the lane the user closed.
     consent.grant(conversation.id, "codex", "direct", undefined, 1_004);
     expect(consent.has(conversation.id, "codex", "automations")).toBe(true);
   });
@@ -171,7 +168,6 @@ describe("provider-egress-consent suite", () => {
     consent.revokeLadderProvider("codex", "automations", 1_001);
     expect(consent.has(conversation.id, "codex", "automations")).toBe(false);
 
-    // Re-authoring the ladder is re-consent (D13): membership IS the record.
     member = true;
     expect(
       consent.recordDerived(
@@ -204,7 +200,6 @@ describe("provider-egress-consent suite", () => {
     member = false;
     expect(consent.has(conversation.id, "codex", "assistant")).toBe(false);
 
-    // A separately approved direct grant remains valid after ladder removal.
     consent.grant(conversation.id, "codex", "direct", undefined, 1_001);
     expect(consent.has(conversation.id, "codex", "assistant")).toBe(true);
   });

@@ -1,4 +1,3 @@
-/** Package-local Stryker options (types from root @stryker-mutator/core). */
 export default {
   packageManager: "npm",
   inPlace: true,
@@ -8,7 +7,6 @@ export default {
     "src/cli/allowed-hosts.test.ts",
     "src/cli/allowed-hosts-properties.test.ts",
   ],
-  // Pure Host allowlist helpers (CLI + env merge) — not the whole gateway.
   mutate: ["src/cli/allowed-hosts.ts"],
   reporters: ["clear-text", "json"],
   jsonReporter: { fileName: "../../artifacts/mutation/gateway-report.json" },

@@ -132,7 +132,6 @@ describe("backup-sources", () => {
 
     expect(entries.map((e) => e.kind)).toStrictEqual(["db"]);
     expect(entries.map((e) => e.path)).toStrictEqual(["vault.db"]);
-    // Key FILE is minted on first open; the fingerprint stamp is the real "ever sealed" signal — no stamp, no seal-key entry.
     expect(entries.some((e) => e.kind === "seal-key")).toBe(false);
     expect(
       captured.info.some((m) => m.includes("no code store bare repo yet"))
@@ -221,7 +220,6 @@ describe("backup-sources", () => {
         "blob",
         "git-bundle",
       ]);
-      // Blob paths sort by path (deterministic manifests), not insertion order — random sha is not stable across runs.
       const smallBlobPath = `blobs/sha256/${inlineSha.slice(0, 2)}/${inlineSha}`;
       const bigBlobPath = `blobs/sha256/${bigSha.slice(0, 2)}/${bigSha}`;
       const expectedBlobPaths = [smallBlobPath, bigBlobPath].sort((a, b) =>
@@ -256,11 +254,9 @@ describe("backup-sources", () => {
       expect(path.basename(bigBlobEntry.absolutePath)).toBe(bigSha);
       const bigOnDisk = await fs.readFile(bigBlobEntry.absolutePath);
       expect(bigOnDisk.equals(bigBytes)).toBe(true);
-      // CAS in place — never duplicated into the bundle dir.
       expect(smallBlobEntry.absolutePath.startsWith(plane.dir)).toBe(true);
       expect(smallBlobEntry.absolutePath.startsWith(bundleDir)).toBe(false);
 
-      // `git bundle verify` needs a repo context — run against the bare repo (full `--all` bundle has no prerequisites).
       const bundleEntry = entries.find((e) => e.kind === "git-bundle")!;
       const bareRepoDir = path.join(plane.codeStoreRoot, "apps.git");
       await expect(
@@ -313,7 +309,6 @@ describe("backup-sources", () => {
       expect.arrayContaining([pendingSha, remoteSha])
     );
 
-    // HEAD-confirmed: local file stays resident, durable outbox no longer treats it as snapshot material.
     plane.db.blobTransfers.state.completeOutbox(remoteSha);
     new ReplicaIndex(plane.db.vault).mark(remoteSha, remoteBytes.length);
     plane.walTick();
@@ -336,7 +331,6 @@ describe("backup-sources", () => {
     const plane = await openPlane();
     const bundleDir = await tempDir("backup-sources-bundle");
 
-    // #408: db entries read the WAL shipper's pinned bases IN PLACE (`wal-ship/bases`), never copies. No code store → assembly writes nothing, and re-running accumulates nothing.
     plane.walTick();
     const first = await assembleSourceEntries({
       plane,
@@ -365,9 +359,6 @@ describe("backup-sources", () => {
     const bundleDir = await tempDir("backup-sources-bundle");
     plane.walTick();
 
-    // A busy checkpoint can leave the base unpinned. Registering anyway would
-    // anchor a manifest to a base that does not exist — every restore point
-    // since the last one, lost.
     const shipper = plane.walShipper!;
     const real = shipper.currentBase.bind(shipper);
     shipper.currentBase = () => null;
@@ -397,7 +388,6 @@ describe("backup-sources", () => {
     );
     const mtime1 = (await fs.stat(bundle1.absolutePath)).mtimeMs;
 
-    // Same refs → reuse UNTOUCHED (mtime is the fast-path key). A fresh `git bundle create` would have moved mtime.
     const second = capturingLogger();
     const e2 = await assembleSourceEntries({
       plane,

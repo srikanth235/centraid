@@ -1,11 +1,3 @@
-/*
- * Who a replica shape is FOR (#726). `access_grant` selects a
- * grantee two ways — `app_id` or `grantee_party_id` — and this module is the
- * only place that difference is visible. Everything downstream
- * (`evaluateAccess`, row filters, field masks, `projectReplicaPage`) works on
- * whichever comes back, because none of it ever knew which axis it was on.
- */
-
 import type { DatabaseSync } from "node:sqlite";
 
 export interface ReplicaGrantee {

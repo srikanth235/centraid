@@ -1,9 +1,3 @@
-/**
- * Successor-invitation delivery (#750). Consent is never fabricated.
- * Per seat: co-hosted queue, then linked-peer push, then an out-of-band
- * claim (not automatic). Runbook: docs/recovery/commons-steward-loss.md.
- */
-
 import {
   commonsCurrentSize,
   createCommonsClaimInvitation,
@@ -118,8 +112,6 @@ export async function deliverCommonsRecoveryInvitations(
         continue;
       }
     }
-    // Overwriting a previous claim for the same party is deliberate — an
-    // undelivered ticket is not consent.
     const claimed = createCommonsClaimInvitation({
       seat: input.seat.vault,
       invitation: base,

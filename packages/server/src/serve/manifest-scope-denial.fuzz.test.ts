@@ -1,13 +1,3 @@
-/*
- * The bundled-manifest scope-denial sweep (#839) — part 3 of 3.
- *
- * Property fuzz: arbitrary clamps and requests fail closed, never throw, never
- * widen. Loader, oracles, and vault fixture live in
- * `manifest-scope-denial.sweep.test-fixtures.ts`; the enumerated positive and
- * negative halves are in `manifest-scope-denial.sweep.test.ts` and
- * `manifest-scope-denial.closed-grammar.test.ts`.
- */
-
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { fc } from "@centraid/test-kit/fast-check";
@@ -71,8 +61,6 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
     );
 
     test("an arbitrary clamp allows EXACTLY what it covers — no more, no less", () => {
-      // The soundness half is the adversarial one: an allow the oracle does not
-      // cover would be the clamp widening rather than narrowing.
       fc.assert(
         fc.property(
           fc.array(arbScope, { maxLength: 6 }),
@@ -90,10 +78,6 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
             const refusedByManifest =
               decision.decision === "deny" &&
               decision.failing === undeclaredSentence(schema, table, verb);
-            // The biconditional IS the law: the manifest layer refuses exactly
-            // the combinations the declared scopes do not cover. `false === true`
-            // would be the clamp widening; `true === false` would be it refusing
-            // something it declared.
             expect(
               refusedByManifest,
               `${schema}.${table}/${verb} covered=${covered} decision=${
@@ -123,9 +107,6 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
               decision.decision === "allow"
                 ? "allow"
                 : classifyDeny(decision.failing);
-            // Closed vocabulary: "allow" or one of the six named refusals.
-            // Anything else means a new `failing` string escaped the receipt
-            // grammar without anyone naming it.
             expect(["allow", ...DENY_CLASSES]).toContain(outcome);
           }
         ),
@@ -165,11 +146,6 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
     });
 
     test("a malformed clamp entry denies rather than throwing — the one throw is the documented pin conflict", () => {
-      // Empty names, whitespace, unicode, and a very long name are all just
-      // names that match nothing. The ONLY input `executionClamp` refuses
-      // loudly is two scopes pinning one column to different values (a UNION
-      // the clamp vocabulary cannot express) — pinned here so "never throws"
-      // has an exact, intentional exception rather than a silent one.
       const malformed: ClampScope[] = [
         { schema: "", verbs: "read" },
         { schema: "  ", table: "", verbs: "act" },

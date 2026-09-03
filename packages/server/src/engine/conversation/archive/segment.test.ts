@@ -1,5 +1,3 @@
-/** Complements digest-parity (Insights union): `archiveRange` + `readArchivedConversationSegment` round-trip, and `conversation_digest` accretion. */
-
 import { createHash } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
@@ -105,7 +103,6 @@ describe("archiveRange + readArchivedConversationSegment", () => {
     expect(archive.segment_sha256).toBe(result.segmentSha256);
     expect(archive.pruned_at).toBeNull();
 
-    // Digest fold: ok + err counts, token/cost sums — Insights reads these after prune.
     const digest = journal
       .prepare(
         `SELECT run_count, ok_count, err_count, total_input_tokens, total_output_tokens,

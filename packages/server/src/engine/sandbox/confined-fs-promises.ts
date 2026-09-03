@@ -1,22 +1,8 @@
-/**
- * The module the sandbox substitutes for `node:fs/promises` inside an
- * untrusted handler graph — a READ-ONLY, ROOT-CONFINED mirror. Every path
- * argument goes through `guardReadPath` first, and every mutating entry point
- * throws.
- *
- * Deliberately a PARTIAL mirror: an entry point that is not exported here is
- * `undefined` in the untrusted graph and fails at the call site rather than
- * silently resolving to unconfined authority. Fail-closed by omission — which
- * is also why a lane that grants filesystem access must be integration-tested
- * against its real dependency graph rather than assumed to work.
- */
-
 import * as realFsPromises from "node:fs/promises";
 
 import { deniedWrite } from "./denied.js";
 import { guardReadPath } from "./fs-guard.js";
 
-/** Every write entry point resolves to the same refusal. */
 function refuseWrite(operation: string): () => never {
   return () => {
     throw deniedWrite(`promises.${operation}`);

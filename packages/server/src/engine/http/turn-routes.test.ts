@@ -45,25 +45,12 @@ describe("turn-routes", () => {
   });
 
   async function registerApp(appId: string): Promise<void> {
-    // Test apps are uploaded-mode shells — empty wrapper dir, no versions;
-    // the chat route surface doesn't read code, so no real version is needed.
     await runtime.registry.ensureUploaded(appId);
   }
 
-  /**
-   * A real `ConversationHistoryStore` over a fresh temp vault dir — mirrors
-   * how the gateway wires `Runtime.conversationHistoryStore` in production
-   * (`packages/server/src/serve/build-gateway.ts`). Wiring one turns on the
-   * `_turn` route's "the conversationId must be a real session" 404 guard
-   * (`turn-routes.ts` line ~195) — off by default in the tests above, which
-   * bootstrap without a store.
-   */
   function newHistoryStore(): ConversationHistoryStore {
     const dir = tempDirSync(`centraid-chat-history-${crypto.randomUUID()}-`);
     mkdirSync(path.join(dir, "apps"), { recursive: true });
-    // One cached journal provider for this dir (mirrors history.test.ts's
-    // `journalFor`) — a fresh `makeLedgerDbProvider` per `workspace()` call
-    // opens a second handle onto the same sqlite file and the turn hangs.
     const journal = makeLedgerDbProvider(ledgerDbFileIn(dir));
     const workspaceLocal: WorkspaceProvider = () => ({
       vaultId: "vault-test",
@@ -144,7 +131,6 @@ describe("turn-routes", () => {
       /text\/event-stream/u
     );
     const text = await res.text();
-    // SSE frames: each event line + data line + blank.
     expect(text).toMatch(/event: assistant.start/u);
     expect(text).toMatch(/event: assistant.delta/u);
     expect(text).toMatch(/"delta":"Hi "/u);
@@ -204,8 +190,6 @@ describe("turn-routes", () => {
           Authorization: `Bearer ${server.token}`,
           "content-type": "application/json",
         },
-        // A client-minted id (crypto.randomUUID(), never provisioned via
-        // `/_centraid-conversations/apps/demo/sessions`) has no matching row.
         body: JSON.stringify({
           conversationId: crypto.randomUUID(),
           message: "hi",
@@ -288,8 +272,6 @@ describe("turn-routes", () => {
       });
     const first = await (await post()).text();
     expect(first).toMatch(/event: final/u);
-    // Second POST, SAME key: the harness is NOT invoked again; the recorded final
-    // answer is replayed from the ledger as a fresh stream.
     const second = await (await post()).text();
     expect(runs).toBe(1);
     expect(second).toMatch(/event: final/u);
@@ -306,8 +288,6 @@ describe("turn-routes", () => {
     const runner: ConversationRunner = {
       async run(input) {
         runs += 1;
-        // Hold the first turn open so the duplicate arrives WHILE it is in flight;
-        // the per-conversation lock queues the duplicate behind it.
         await gate;
         input.onEvent({ type: "final", text: "once" });
       },
@@ -331,8 +311,6 @@ describe("turn-routes", () => {
       });
     const p1 = post();
     const p2 = post();
-    // Wait until the harness has entered the in-flight gate (both requests queued
-    // on the per-conversation lock), then release so the second can replay.
     await vi.waitFor(() => {
       expect(runs).toBe(1);
     });
@@ -461,9 +439,6 @@ describe("turn-routes", () => {
     };
     const { store } = await bootstrapWithStore({ runner });
     await registerApp("demo");
-    // Mirrors what the desktop's chat pane does (gateway-client-conversation.ts
-    // `createConversation`) and what the kit Ask panel's driver must now do
-    // too: mint the session server-side before ever POSTing a turn.
     const session = store.createSession("demo", "");
     const res = await fetch(`${server.url}/centraid/demo/_turn`, {
       method: "POST",
@@ -512,17 +487,6 @@ describe("turn-routes", () => {
   });
 
   test("conversationLocks are per-runtime — two runtimes sharing appId+conversationId do not cross-block (#113)", async () => {
-    // Cross-gateway isolation harness. `conversationLocks` belongs to the
-    // Runtime instance, never a module-level map keyed by
-    // `${appId}::${conversationId}`: unscoped, two profiles installing the same
-    // template app share one lock and serialise across users (#113).
-    //
-    // Setup: two runtimes A and B, each with their own apps dir + HTTP
-    // server. Both register the same `appId` ('demo') and both receive a
-    // POST with the same `conversationId` ('w1'). A's runner blocks on a
-    // promise we control; B's runner resolves immediately. If the locks
-    // were module-shared, B would queue behind A and never complete.
-
     let releaseA!: () => void;
     let aStarted = false;
     const aDone = new Promise<void>((resolve) => {
@@ -564,7 +528,6 @@ describe("turn-routes", () => {
     await runtimeB.registry.ensureUploaded("demo");
 
     try {
-      // Fire A first — its runner hangs. Don't await the response.
       const aResponsePromise = fetch(`${serverA.url}/centraid/demo/_turn`, {
         method: "POST",
         headers: {
@@ -578,9 +541,6 @@ describe("turn-routes", () => {
         expect(aStarted).toBe(true);
       });
 
-      // Now fire B with the SAME appId+conversationId. If locks are
-      // per-runtime (the fix), this resolves on its own without waiting
-      // for A. If locks are module-shared (the bug), it queues behind A.
       const bText = await Promise.race([
         fetch(`${serverB.url}/centraid/demo/_turn`, {
           method: "POST",
@@ -627,12 +587,6 @@ describe("turn-routes", () => {
   });
 
   test("chat prompt resolves the manifest via the git-store code-dir override (#137)", async () => {
-    // Under the git-store backend there is no legacy `current.json`, so the
-    // manifest must resolve through `codeDirOverride` — a `getActiveVersion`
-    // lookup misses and silently drops the declared-handler catalog, steering
-    // the agent to `_sql`. Point the override at a code dir holding an app.json
-    // with declared handlers; the turn's system prompt must name them (and must
-    // NOT report the manifest unavailable).
     let seenPrompt = "";
     const runner: ConversationRunner = {
       async run(input) {
@@ -697,7 +651,6 @@ describe("turn-routes", () => {
     expect(seenPrompt).not.toMatch(/manifest unavailable/u);
   });
 
-  /** An in-memory `AskModelPrefs` fake — mirrors the gateway's prefs-store + catalog wiring. */
   function fakeAskModel(opts?: {
     harnessKind?: string;
     defaultModel?: string;

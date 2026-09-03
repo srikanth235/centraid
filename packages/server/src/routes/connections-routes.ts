@@ -1,24 +1,3 @@
-/*
- * Connections routes (#304) — the owner surface over broker-carried
- * credentials and connection health. Everything except the OAuth callback
- * is an OWNER act behind the gateway's bearer auth, executed with the
- * owner-device credential through the registered sync commands (receipted,
- * sealed, journal-redacted). The callback is the ONE bearer-free path
- * (`publicPaths` on the http server): a provider redirects the owner's
- * browser here, and the request authenticates by its single-use `state`
- * capability instead.
- *
- *   GET    /centraid/_vault/connections                    — list + health (never a secret cell)
- *   GET    /centraid/_vault/connections/providers          — BYO-client wizard presets (Google, Microsoft, GitHub, …)
- *   POST   /centraid/_vault/connections                    — configure a credential (sync.configure_credential)
- *   PATCH  /centraid/_vault/connections/<id>               — {status, note?} pause / resume
- *   DELETE /centraid/_vault/connections/<id>               — remove entirely (sync.remove_connection); 404
- *                                                             unknown id, 409 when undecided outbox items or
- *                                                             receipted sync history block the delete
- *   POST   /centraid/_vault/connections/<id>/authorize     — {redirect_uri?} → {auth_url, state}
- *   GET    /centraid/_vault/oauth/callback?state=&code=    — finish the ceremony (browser-facing HTML)
- */
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { ROUTES } from "@centraid/core/protocol";
@@ -45,7 +24,6 @@ import { readJson, sendJson } from "./route-helpers.js";
 const PREFIX = ROUTES.vaultConnections;
 export const OAUTH_CALLBACK_PATH = ROUTES.vaultOAuthCallback;
 
-/** Health + identity of one connection — everything EXCEPT secret cells. */
 function listConnections(plane: VaultPlane): Record<string, unknown>[] {
   const rows = plane.db.vault
     .prepare(
@@ -96,7 +74,6 @@ async function invokeAsOwner(
   });
 }
 
-/** The browser-facing ceremony end: tiny self-contained HTML, no assets. */
 function sendCeremonyHtml(
   res: ServerResponse,
   ok: boolean,
@@ -139,13 +116,11 @@ export function makeConnectionsRouteHandler(
     const url = new URL(req.url ?? "/", "http://gateway.local");
     const method = req.method ?? "GET";
 
-    // The bearer-free ceremony end — authenticated by its single-use state.
     if (url.pathname === OAUTH_CALLBACK_PATH && method === "GET") {
       const state = url.searchParams.get("state") ?? "";
       const code = url.searchParams.get("code");
       const providerError = url.searchParams.get("error");
       if (providerError || !code) {
-        // Consume the state so a denied ceremony cannot be replayed.
         if (state) broker.cancelAuthorization({ state });
         sendCeremonyHtml(
           res,
@@ -209,8 +184,6 @@ export function makeConnectionsRouteHandler(
       return true;
     }
 
-    // Configure with public shared-client coordinates supplied by the
-    // gateway, never by the browser.
     if (
       segments.length === 1 &&
       segments[0] === "assist" &&
@@ -361,9 +334,6 @@ export function makeConnectionsRouteHandler(
       return true;
     }
 
-    // Checked for existence up front so an unknown id answers 404 rather
-    // than folding into the command's generic refusal 409 — the two are
-    // different problems (nothing to delete vs. won't delete this yet).
     if (segments.length === 1 && method === "DELETE") {
       const connectionId = segments[0]!;
       const exists = plane.db.vault
@@ -386,9 +356,6 @@ export function makeConnectionsRouteHandler(
         return true;
       }
       const reason = "reason" in outcome ? outcome.reason : outcome.status;
-      // A refused removal (undecided outbox items, or receipted sync
-      // history) is a real state conflict, not a bad request — 409, mirroring
-      // vault-routes.ts's outbox decide/revoke convention.
       sendJson(res, outcome.status === "denied" ? 403 : 409, {
         ok: false,
         error: reason,
@@ -404,8 +371,6 @@ export function makeConnectionsRouteHandler(
       const body = (await readJson(req).catch(() => undefined)) as
         | { redirect_uri?: string; surface?: "desktop" | "web" }
         | undefined;
-      // The gateway's own callback is the default redirect: reachable when
-      // the consenting browser can reach the gateway (loopback/desktop).
       const redirectUri =
         body?.redirect_uri ??
         `http://${req.headers.host ?? "127.0.0.1"}${OAUTH_CALLBACK_PATH}`;

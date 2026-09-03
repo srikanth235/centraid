@@ -1,24 +1,9 @@
-/**
- * Provider presets — the BYO-client wizard content (#304 decision 7).
- * Each preset carries everything `sync.configure_credential` needs except
- * the owner's own client_id/secret (that is the point: each owner registers
- * their OWN OAuth client — no shared Centraid app, no verification burden),
- * plus the agent-guided setup walkthrough with the known traps baked in:
- * Google's Testing-status 7-day refresh-token expiry, and the Photos API
- * restriction (Takeout/file-drop is the photos lane, not OAuth).
- *
- * `connectors` names which bundled connector template rides which scope +
- * host. `capabilities` declares syncs (pull blueprints) and actions
- * (send/tool ops) the UI and assistant can surface without secrets.
- */
-
 export interface ProviderConnectorRef {
   readonly templateId: string;
   readonly kind: string;
   readonly scope?: string;
 }
 
-/** Scheduled ingest capability — maps to a pull blueprint automation. */
 export interface ProviderSyncCapability {
   readonly id: string;
   readonly title: string;
@@ -28,11 +13,9 @@ export interface ProviderSyncCapability {
   readonly scope?: string;
 }
 
-/** On-demand operation — harness tool and/or send automation. */
 export interface ProviderActionCapability {
   readonly id: string;
   readonly title: string;
-  /** Stable tool name for the assistant registry (no secrets). */
   readonly toolName: string;
   readonly kind: string;
   readonly templateId?: string;
@@ -49,18 +32,13 @@ export interface ProviderPreset {
   readonly id: string;
   readonly name: string;
   readonly credKind: "oauth2" | "api_key";
-  /** The product ships an Assist onboarding path for this OAuth provider. */
   readonly assistOnboarding?: true;
   readonly authUrl?: string;
   readonly tokenUrl?: string;
-  /** Everything connectors need, pre-joined; trim to taste. */
   readonly scopes?: string;
   readonly allowedHosts: readonly string[];
-  /** Owner-facing one-time setup walkthrough, in order. */
   readonly setup: readonly string[];
-  /** Bundled connector templates this credential unlocks. */
   readonly connectors: readonly ProviderConnectorRef[];
-  /** Declared syncs + actions derived from connectors (+ optional extras). */
   readonly capabilities: ProviderCapabilities;
 }
 
@@ -79,7 +57,6 @@ function titleFromTemplate(templateId: string, kind: string): string {
   return base || humanizeKind(kind);
 }
 
-/** Build capability lists from connector refs (pull → sync, *-send → action). */
 export function capabilitiesFromConnectors(
   connectors: readonly ProviderConnectorRef[],
   extras?: { actions?: readonly ProviderActionCapability[] }
@@ -91,8 +68,6 @@ export function capabilitiesFromConnectors(
       actions.push({
         id: `action:${c.templateId}`,
         title: titleFromTemplate(c.templateId, c.kind),
-        // Send templates can share a connection kind (Gmail mail + calendar
-        // invite), so the template id—not kind—is the collision-free key.
         toolName: `connector.${c.templateId.replace(/-/gu, "_")}`,
         kind: c.kind,
         templateId: c.templateId,
@@ -109,7 +84,6 @@ export function capabilitiesFromConnectors(
       defaultCron: "0 * * * *",
       ...(c.scope ? { scope: c.scope } : {}),
     });
-    // Every live pull also exposes a read tool for the assistant.
     actions.push({
       id: `action:list:${c.kind}`,
       title: `List recent ${humanizeKind(c.kind)}`,
@@ -145,10 +119,6 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     tokenUrl: "https://oauth2.googleapis.com/token",
     scopes: [
       "https://www.googleapis.com/auth/gmail.readonly",
-      // gmail.send (not the broader gmail.modify) — outbound only, never
-      // reads or deletes existing mail. Unlocks the outbox-staged sends
-      // below (google-gmail-send, google-calendar-invite-send); every
-      // actual send still parks for the owner's approval regardless.
       "https://www.googleapis.com/auth/gmail.send",
       "https://www.googleapis.com/auth/calendar.events",
       "https://www.googleapis.com/auth/contacts",
@@ -332,7 +302,6 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     credKind: "oauth2",
     authUrl: "https://www.dropbox.com/oauth2/authorize",
     tokenUrl: "https://api.dropboxapi.com/oauth2/token",
-    // Dropbox token endpoint expects the app key/secret; scopes are set on the app.
     scopes: "files.metadata.read account_info.read",
     allowedHosts: [
       "api.dropboxapi.com",
@@ -349,11 +318,6 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
   }),
 ];
 
-/**
- * Providers offered for new connections. OAuth entries are derived from the
- * existence of a shipped Assist onboarding path; API-key providers continue
- * to use the owner-supplied credential flow.
- */
 export const OFFERED_PROVIDER_PRESETS: readonly ProviderPreset[] =
   PROVIDER_PRESETS.filter(
     (presetLocal) =>

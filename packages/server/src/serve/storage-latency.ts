@@ -1,21 +1,13 @@
-/* Boot-time storage characterization for #456 M3. */
-
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 
 export interface StorageLatencySample {
-  /** Time spent in the durability barrier for one freshly-written 4 KiB file. */
   fsyncMs: number;
-  /** Whole probe lifetime, useful for diagnosing unusually slow open/unlink metadata. */
   totalMs: number;
 }
 
-/**
- * Measure the filesystem the vault will actually use. The temporary file is
- * created in `dir`, synced once, closed, and always removed.
- */
 export async function measureStorageLatency(
   dir: string
 ): Promise<StorageLatencySample> {

@@ -1,5 +1,3 @@
-/** `centraid-gateway service` owns launchd/systemd user units; dry-run never mutates. */
-
 import { spawnSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
@@ -23,7 +21,6 @@ import type { ServiceUnitSpec } from "./service-unit.js";
 
 type Fail = (message: string, code?: number) => never;
 
-/** Stand-in for the real wrapping key under `--dry-run`; never leaves memory. */
 const DRY_RUN_CREDENTIAL = Buffer.alloc(32).toString("base64");
 
 interface ServiceArgs {
@@ -76,7 +73,6 @@ function parseServiceArgs(args: string[], fail: Fail): ServiceArgs {
   return out;
 }
 
-/** Resolve this module's compiled sibling instead of trusting `process.argv`. */
 function resolveCliEntry(): string {
   const here = import.meta.dirname;
   const ext = path.extname(import.meta.filename);
@@ -123,13 +119,6 @@ async function buildSpec(
         }
       : {}),
   };
-  // Never a fresh `randomBytes(32)`: a headless `serve` has already wrapped
-  // every key under the external host credential, and handing the service a
-  // key that cannot decrypt them poisons custody (#568). The
-  // desktop path still wins via `CENTRAID_KEYSTORE_MASTER_KEY`.
-  // `--dry-run` promises zero host mutation, and `hostCredentialKey` creates
-  // the fallback file on first call — so keep the placeholder there (every
-  // dry-run print redacts the value anyway).
   const encoded =
     process.env.CENTRAID_KEYSTORE_MASTER_KEY?.trim() ||
     (parsed.dryRun ? DRY_RUN_CREDENTIAL : hostCredentialKey(layout.keysDir));
@@ -153,9 +142,6 @@ async function buildSpec(
         ? ({
             kind: "keychain",
             service: "dev.centraid.gateway.keystore",
-            // Per data directory, not per label: one shared account name would
-            // let an install for one data dir overwrite (`-U`) the credential
-            // another data dir's keys are wrapped under (#568).
             account: keychainAccountFor(layout.keysDir, label),
             encoded,
             keysDir: layout.keysDir,
@@ -174,7 +160,6 @@ async function buildSpec(
     stdoutLog: path.join(logsDir, "service-stdout.log"),
     stderrLog: path.join(logsDir, "service-stderr.log"),
     workingDirectory: path.resolve(config.dataDir),
-    // Electron installs need ELECTRON_RUN_AS_NODE; real Node installs omit it.
     ...(Object.keys(env).length > 0 ? { env } : {}),
     ...(keyCredential?.kind === "systemd"
       ? {
@@ -247,12 +232,6 @@ async function launchdInstall(parsed: ServiceArgs, fail: Fail): Promise<void> {
   }
 
   if (prepared.keyCredential?.kind === "keychain") {
-    // Adopt FIRST, commit the Keychain entry LAST (#568).
-    // `add-generic-password -U` overwrites in place, so a credential written
-    // before validation and then rejected by adoption leaves the poisoned
-    // value behind — and `cli/key-store.ts` finds it on every darwin boot
-    // thereafter, making every key in the data dir undecryptable. Failing
-    // here leaves custody exactly as it was found.
     await adoptKeyStoreCredential(fail, prepared.keyCredential);
     const stored = run(fail, "/usr/bin/security", [
       "add-generic-password",
@@ -301,8 +280,6 @@ async function launchdUninstall(
     return;
   }
 
-  // bootout errors when the label isn't currently loaded — that's fine,
-  // uninstall is idempotent; the plist removal below is what matters.
   run(fail, "launchctl", ["bootout", `${guiTarget()}/${label}`]);
   await fs.rm(plistPath, { force: true });
   process.stdout.write(
@@ -310,7 +287,6 @@ async function launchdUninstall(
   );
 }
 
-/** Structured status for the combined gateway status command. */
 export interface ServiceStatusInfo {
   label: string;
   installed: boolean;
@@ -336,9 +312,6 @@ function launchdStatusInfo(label: string, fail: Fail): ServiceStatusInfo {
   };
 }
 
-/** systemd counterpart of {@link launchdStatusInfo} — `systemctl --user show`
- *  gives structured `Key=Value` properties directly, unlike `status`'s
- *  free-text report (which `systemdStatus` below still prints verbatim). */
 function systemdStatusInfo(unitName: string, fail: Fail): ServiceStatusInfo {
   const { code, output } = run(fail, "systemctl", [
     "--user",
@@ -353,8 +326,6 @@ function systemdStatusInfo(unitName: string, fail: Fail): ServiceStatusInfo {
     if (idx === -1) continue;
     props.set(line.slice(0, idx), line.slice(idx + 1).trim());
   }
-  // `systemctl show` on an unknown unit still exits 0 — LoadState is how it
-  // says "never heard of it" (`not-found`).
   const loadState = props.get("LoadState");
   const installed = loadState !== undefined && loadState !== "not-found";
   if (!installed) return { label: unitName, installed: false };
@@ -369,11 +340,6 @@ function systemdStatusInfo(unitName: string, fail: Fail): ServiceStatusInfo {
   };
 }
 
-/**
- * Platform-appropriate structured service status — no dry-run branch (a
- * read has nothing to preview or write). `label` falls back to each
- * platform's default the same way `install`/`uninstall`/`status` do.
- */
 export function queryServiceStatus(
   label: string | undefined,
   fail: Fail
@@ -444,8 +410,6 @@ async function systemdInstall(parsed: ServiceArgs, fail: Fail): Promise<void> {
   await fs.mkdir(path.dirname(unitPath), { recursive: true });
   await fs.mkdir(path.dirname(spec.stdoutLog), { recursive: true });
   if (prepared.keyCredential?.kind === "systemd") {
-    // Same ordering rule as the launchd path (#568): prove the
-    // credential reads this data dir's keys before committing it anywhere.
     await adoptKeyStoreCredential(fail, prepared.keyCredential);
     await fs.mkdir(path.dirname(prepared.keyCredential.path), {
       recursive: true,
@@ -500,7 +464,6 @@ async function systemdUninstall(
     return;
   }
 
-  // disable errors when the unit isn't loaded — uninstall stays idempotent.
   run(fail, "systemctl", ["--user", "disable", "--now", `${unitName}.service`]);
   await fs.rm(unitPath, { force: true });
   run(fail, "systemctl", ["--user", "daemon-reload"]);

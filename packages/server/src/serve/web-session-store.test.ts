@@ -50,7 +50,6 @@ describe("web-session-store", () => {
       shellOrigin: "http://shell",
     });
 
-    // Only the SHA-256 hash lands in gateway.db, never the raw token.
     expect(rows()[0]?.tokenHash).toBe(hash);
     expect(JSON.stringify(rows())).not.toContain("cookie-token");
 
@@ -71,11 +70,9 @@ describe("web-session-store", () => {
       shellOrigin: "http://shell",
     });
 
-    // Jump past the sliding idle wall.
     now += CONTROL_IDLE_TTL_MS + 1;
     expect(store.find(hash)).toBeUndefined();
 
-    // A fresh open at the same time drops the dead row from disk.
     const reopened = WebControlSessionStore.open(file, clock);
     expect(reopened.list()).toHaveLength(0);
     expect(rows()).toHaveLength(0);
@@ -93,12 +90,10 @@ describe("web-session-store", () => {
     });
     const firstExpiry = rows()[0]?.expiresAt as number;
 
-    // A use 30 minutes later is under the hourly throttle → no disk rewrite.
     now += 30 * 60 * 1000;
     store.touch(hash);
     expect(rows()[0]?.expiresAt).toBe(firstExpiry);
 
-    // A use past the hour extends the persisted window.
     now += 40 * 60 * 1000; // 70 min since establish
     store.touch(hash);
     expect(rows()[0]?.expiresAt).toBe(now + CONTROL_IDLE_TTL_MS);
@@ -117,18 +112,6 @@ describe("web-session-store", () => {
       shellOrigin: "http://shell",
     });
 
-    // Continuous use across the whole absolute lifetime. Without the
-    // server-side cap this slides expiry to ~now + idle forever; with it,
-    // the wall holds at creation + CONTROL_ABSOLUTE_TTL_MS even though every
-    // touch happens well inside the idle window.
-    //
-    // The step is half the IDLE window because that is what makes a touch a
-    // slide — landing inside the window that would otherwise extend the
-    // session. Walking the 180-day lifetime an hour at a time instead spent
-    // ~4,300 SQLite writes (each hourly step clears the disk throttle) to
-    // prove the same invariant, and that I/O is what timed this test out at
-    // 30 s on a loaded CI shard (#915). The hourly throttle itself is proven
-    // by the test above, where it belongs.
     const absoluteWall = start + CONTROL_ABSOLUTE_TTL_MS;
     const step = CONTROL_IDLE_TTL_MS / 2;
     while (now + step < absoluteWall) {
@@ -138,12 +121,10 @@ describe("web-session-store", () => {
     expect(rows()[0]?.expiresAt).toBe(absoluteWall);
     expect(store.find(hash)).toBeDefined();
 
-    // Past the wall the session is dead no matter how recently it was used.
     now = absoluteWall + 1;
     expect(store.find(hash)).toBeUndefined();
     store.touch(hash);
     expect(rows()[0]?.expiresAt).toBe(absoluteWall);
-    // It cannot authorize again, and the next open sweeps it off disk.
     const reopened = WebControlSessionStore.open(file, clock);
     expect(reopened.find(hash)).toBeUndefined();
     expect(reopened.list()).toHaveLength(0);
@@ -167,8 +148,6 @@ describe("web-session-store", () => {
       )
         .map((step) => step.detail)
         .join(" | ");
-    // #659 G3: the sweep must never run per HTTP request, and the lookup must
-    // not scan live rows — expires_at is indexed for both.
     const sweepPlan = plan("SELECT 1 FROM web_sessions WHERE expires_at <= 0");
     const findPlan = plan(
       "SELECT 1 FROM web_sessions WHERE token_hash = 'x' AND expires_at > 0"
@@ -195,7 +174,6 @@ describe("web-session-store", () => {
     });
     expect(store.list()).toHaveLength(2);
 
-    // Re-establishing `a` (a re-pair from the same browser) does not evict `b`.
     store.establish({
       tokenHash: a,
       vaultId: "v1",
@@ -217,7 +195,6 @@ describe("web-session-store", () => {
     expect(store.remove(hash)).toBe(true);
     expect(store.find(hash)).toBeUndefined();
     expect(rows()).toHaveLength(0);
-    // Idempotent — a second remove is a no-op.
     expect(store.remove(hash)).toBe(false);
   });
 
@@ -230,7 +207,6 @@ describe("web-session-store", () => {
       shellOrigin: "http://shell",
     });
     expect(store.find(hash)?.vaultId).toBe("v1");
-    // Nothing was written under the temp dir.
     expect(store.list()).toHaveLength(1);
   });
 

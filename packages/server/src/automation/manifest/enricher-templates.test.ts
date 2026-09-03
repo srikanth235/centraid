@@ -1,8 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit one suite over the whole enricher-template contract — each template’s manifest validity, determinism lint, and stub-ctx spine behavior share the one fixture (#299)
-// The enricher automation templates (#299): manifests must parse under the
-// runtime's real validator, handlers must pass the determinism lint, and —
-// driven with a stub ctx — they must enforce the spine's contract: derivatives
-// only, stage-don't-write, cursor watermarks, honest skips.
 
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -16,8 +12,6 @@ import { ENRICH_CAPABILITIES } from "../../enrich/capability-registry.js";
 import { lintHandlerSource } from "../handler/lint.js";
 import { parseManifest } from "./manifest.js";
 
-// Lives here beside bundled-templates.test.ts for the same reason: the
-// dependency points automation → blueprints, never the other way.
 const require = createRequire(import.meta.url);
 const PACKAGE_ROOT = path.dirname(
   require.resolve("@centraid/blueprints/package.json")
@@ -38,10 +32,8 @@ const ENRICHERS = [
   "obligation-extractor",
   "renewal-reminders",
 ] as const;
-/** The reminder's whole logic IS its condition trigger. */
 const CONDITION_ENRICHERS = new Set(["renewal-reminders"]);
 
-/** A valid one-page born-digital PDF for the generated handler's pdf.js path. */
 function searchablePdf(text: string): Buffer {
   const stream = deflateSync(
     Buffer.from(`BT /F1 12 Tf 72 720 Td (${text}) Tj ET`)
@@ -158,7 +150,6 @@ async function loadWorkspacePdfJs() {
   return import(pathToFileURL(resolved).href);
 }
 
-/** A recording stub ctx: canned reads/delegate turns, captured invokes. */
 function stubCtx(options: {
   reads: Record<string, Record<string, unknown>[]>;
   read?: (request: Record<string, unknown>) => Record<string, unknown>[];
@@ -282,11 +273,9 @@ describe("enricher template hygiene", () => {
 
   it.each([
     ["photo-ocr", true],
-    // The docs domain's delegate-capable enricher (#807).
     ["doc-text-extractor", true],
     ["embed-image", false],
     ["embed-text", false],
-    // Faces has no delegate variant anywhere, structurally (#807).
     ["faces", false],
   ] as const)("%s declares its delegate step honestly", (id, expected) => {
     const manifest = parseManifest(
@@ -295,10 +284,6 @@ describe("enricher template hygiene", () => {
     expect(manifest.enrich?.delegateStep !== undefined).toBe(expected);
   });
 
-  // The registry's `delegateCapable` is a claim ABOUT these manifests, read by
-  // Settings to say when a member's delegate profile would be inert. It is a
-  // second copy of the fact, so it is pinned to the first here rather than
-  // trusted.
   it.each(ENRICH_CAPABILITIES.map((cap) => [cap.id, cap] as const))(
     "%s's delegateCapable flag matches its shipped manifest",
     (_id, cap) => {
@@ -737,10 +722,6 @@ describe("recognition automation spine", () => {
 });
 
 describe("recognition automation: honest failure vs honest skip (issue #731)", () => {
-  // The recognition automations run self-contained local inference
-  // (no HTTP enrichment service): the only I/O a batch can fail on is the
-  // `ctx.vault.content` byte/text fetch. These tests drive that fetch
-  // directly through the stub's `content` hook rather than `fetch`.
   const photoAsset = {
     asset_id: "a1",
     content_id: "c1",
@@ -757,8 +738,6 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
       read: (request) => (request.entity === "media.asset" ? [photoAsset] : []),
       content: () => ({ status: "not-found" }),
     });
-    // An already-established cursor (not the first fire) — so a subsequent
-    // outage is the only thing under test, not the one-time seed.
     harness.state.set("selection", "deterministic:pp-ocrv4@1:local");
     harness.state.set("cursor", "a0");
     await expect(
@@ -838,12 +817,6 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
   });
 
   it("transcript treats an oversized original as a permanent skip, not a failure — the cursor still advances", async () => {
-    // MAX_SOURCE_BYTES is a fixed policy ceiling: retrying an oversized
-    // asset can never succeed, so — unlike a missing blob or a transient
-    // store error — it must not stall the batch. This is the one case
-    // `ctx.vault.content` reports as "too-large" rather than folding it
-    // into "not-found"/"no-variant", and the handler is expected to tell
-    // the two apart.
     const handler = await loadHandler("transcript");
     const harness = stubCtx({
       reads: {},
@@ -874,9 +847,6 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
         base64: "Zml4dHVyZQ==",
       }),
     });
-    // Override the transcript module directly so this one call returns
-    // honestly-empty text — loadHandler's shared default fixture always
-    // returns non-empty speech.
     const mod = await loadTranscriptModule();
     mod.setTranscriptRuntimeForTests({
       weightsPresent: () => true,
@@ -889,8 +859,6 @@ describe("recognition automation: honest failure vs honest skip (issue #731)", (
     expect(result.output).toMatchObject({ derived: 0, skipped: 1 });
     expect(harness.state.get("cursor")).toBe("a1");
     expect(harness.invokes).toHaveLength(0);
-    // loadHandler's default (non-empty) fixture must not leak into later
-    // tests that reuse the module's cached singleton.
     mod.setTranscriptRuntimeForTests({
       weightsPresent: () => true,
       transcribe: async () => ({ id: "test", text: "spoken fixture" }),
@@ -984,9 +952,6 @@ describe("doc-text-extractor behavior", () => {
     expect(result.summary).toContain("OCRed 1");
   });
 
-  // The delegate variant (#807): `doc-text` has no bundled deterministic engine
-  // — both variants take a model turn, and the delegate variant adds a PINNED
-  // engine whose answer is stamped: profile, ACP-confirmed model, prompt rev.
   it("stamps the resolved profile and confirmed model on a delegate transcription", async () => {
     const handler = await loadHandler("doc-text-extractor");
     const harness = stubCtx({
@@ -1013,7 +978,6 @@ describe("doc-text-extractor behavior", () => {
       content_id: "d1",
       text: "Warranty expires 2027-03-01",
       capability: "doc-text",
-      // The identity that ANSWERED, never the id that was asked for.
       model: "acp-confirmed@7",
       prompt_rev: "doc-text-v1",
       profile: "docs-vlm",
@@ -1137,8 +1101,6 @@ describe("doc-text-extractor behavior", () => {
     expect(harness.state.get("cursor")).toBe("d5");
     expect(harness.delegateCalls).toHaveLength(0);
 
-    // The parent no longer appears in the new-content page. Its independently
-    // ordered derivative row must pull it back into the automation.
     reads["core.content_item"] = [];
     reads["core.content_derivative"] = [
       { derivative_id: "dv-1", content_id: "d5", variant: "preview" },
@@ -1314,7 +1276,6 @@ describe("doc-filer behavior", () => {
         ],
       },
       delegate: (call) => {
-        // The existing folder labels ride into the prompt.
         expect(call.prompt).toContain("Insurance");
         expect(call.prompt).not.toContain("Documents,");
         return {

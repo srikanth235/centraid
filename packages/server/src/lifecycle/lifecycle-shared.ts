@@ -17,9 +17,7 @@ export interface LifecycleRouteOptions {
   store: WorktreeStore;
   codeAppsDir: () => string;
   templatesCacheDir?: string;
-  /** Registers WITHOUT publishing. */
   ensureRegistered: (appId: string) => Promise<void>;
-  /** Also deletes the app state dir. */
   deregister: (appId: string) => Promise<void>;
   reconcile: () => void;
   ext?: ExtBandOps;
@@ -34,15 +32,12 @@ export interface LifecycleRouteOptions {
     revisionTurnId: string;
     compileTurnId: string;
   }) => void;
-  /** Bundled ids are RESERVED: no code-store app may shadow one (#434). */
   isBundledAppId?: (id: string) => boolean;
-  /** Toggle + declared settings only; never delete, compile, or rewrite. */
   isSystemManagedAutomation?: (automationRef: string) => boolean;
   isSystemManagedApp?: (appId: string) => boolean;
   installBundledApp?: (
     templateId: string
   ) => Promise<InstalledBundledApp | undefined>;
-  /** False falls through to the code-store app.json rewrite. */
   renameBundledApp?: (appId: string, name: string | null) => boolean;
 }
 
@@ -79,8 +74,6 @@ export async function ensureSession(
   }
 }
 
-/** Ephemeral sessions start fresh off `main`: a leftover worktree may sit on a
- *  stale `main` and stage onto pre-delete state. */
 export async function prepareLifecycleSession(
   store: WorktreeStore,
   sessionId: string,
@@ -98,8 +91,6 @@ export function defaultSessionId(appId: string): string {
   return `lifecycle-${appId}`;
 }
 
-/** `"all"` is deliberately NOT accepted (#659); unrecognized reads as unset →
- *  the bounded default, never keep-everything. */
 export function parseHistoryKeep(
   raw: unknown
 ): automation.HistoryKeep | undefined {
@@ -112,7 +103,6 @@ export function parseHistoryKeep(
   return undefined;
 }
 
-/** Every publishing mutation funnels through here (#147). */
 export async function publishAndReconcile(
   opts: LifecycleRouteOptions,
   input: {
@@ -128,8 +118,6 @@ export async function publishAndReconcile(
   });
   if (validationError)
     throw new AppScaffoldError("invalid_manifest", validationError);
-  // Post-rebase, pre-ff-merge, inside the store mutex: a refused ext spec aborts
-  // the publish with the vault untouched (#286).
   const ext = opts.ext;
   const appId = input.appId;
   await opts.store.publish({
@@ -149,7 +137,6 @@ export async function publishAndReconcile(
   if (input.ephemeralSession) await opts.store.closeSession(input.sessionId);
 }
 
-/** The vault ext band is RETAINED; purging it is a separate owner act. */
 export async function deleteAppAndReconcile(
   opts: LifecycleRouteOptions,
   appId: string
@@ -167,7 +154,6 @@ export async function stageAndMaybePublish(
     files: ReadonlyArray<FileMapEntry>;
     publish: boolean;
     message: string;
-    /** Closes the one-shot session, or its worktree is orphaned. */
     ephemeralSession?: boolean;
   }
 ): Promise<void> {

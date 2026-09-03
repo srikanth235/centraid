@@ -1,8 +1,3 @@
-/*
- * Route dispatcher for the conversation-history store. Schema, SQL, and
- * per-user scoping stay in `history.ts` so they audit in one place.
- */
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type {
@@ -12,10 +7,6 @@ import type {
 } from "../conversation/history.js";
 import { sendJsonNegotiated } from "./compression.js";
 
-/**
- * Absent ⇒ whole transcript. Malformed is REJECTED, never ignored: a dropped
- * `beforeSeq` reads to the client as "the conversation ends here" (#659).
- */
 function parseTranscriptWindow(url: URL): TranscriptWindow | "invalid" {
   const window: TranscriptWindow = {};
   for (const [param, key] of [
@@ -69,12 +60,6 @@ function sendError(res: ServerResponse, status: number, message: string): void {
   sendJson(res, status, { error: message });
 }
 
-/**
- * Keep the store behind `getStore()`: SQLite must open only in the gateway
- * process, never in harness workers. Every route carries the owning `appId`
- * (#98); per-user scoping stays in the store's `userIdProvider`. Transcripts
- * are never appended over HTTP — a turn is a `runs` row from `_turn`.
- */
 export function makeConversationRouteHandler(
   getStore: () => ConversationHistoryStore
 ) {
@@ -83,7 +68,6 @@ export function makeConversationRouteHandler(
     res: ServerResponse
   ): Promise<boolean> => {
     if (!req.url || !req.url.startsWith(ROUTE_PREFIX)) return false;
-    // Dummy host: IncomingMessage.url is path-only.
     const url = new URL(req.url, "http://x");
     const sub = url.pathname.slice(ROUTE_PREFIX.length);
     const method = (req.method ?? "GET").toUpperCase();
@@ -165,7 +149,6 @@ export function makeConversationRouteHandler(
         return true;
       }
 
-      // Turn-settle poll (#420). Must match BEFORE sessions/<id>.
       const statusMatch = sub.match(
         /^\/apps\/(?<appId>[^/]+)\/sessions\/(?<sessionId>[^/]+)\/status\/?$/u
       );
@@ -189,7 +172,6 @@ export function makeConversationRouteHandler(
         return true;
       }
 
-      // Must match BEFORE sessions/<id> so "search" isn't read as a session id.
       const searchMatch = sub.match(
         /^\/apps\/(?<appId>[^/]+)\/sessions\/search\/?$/u
       );
@@ -239,8 +221,6 @@ export function makeConversationRouteHandler(
       }
 
       if (method === "GET") {
-        // Archive-aware (#438): merges pruned history from the CAS, read-only.
-        // A paged response carries ONLY that page's messages (#659).
         const window = parseTranscriptWindow(url);
         if (window === "invalid") {
           sendError(res, 400, "turns and beforeSeq must be positive integers");
@@ -251,7 +231,6 @@ export function makeConversationRouteHandler(
           sendError(res, 404, "session not found");
           return true;
         }
-        // Whole transcripts are the one large response here; negotiate (#659).
         await sendJsonNegotiated(req, res, 200, full);
         return true;
       }
@@ -259,7 +238,6 @@ export function makeConversationRouteHandler(
         const body = (await readJsonBody(req)) as
           | { title?: unknown; pinned?: unknown; archived?: unknown }
           | undefined;
-        // Any subset may be present; the last update's summary wins (#420).
         let updated: ConversationSummary | undefined;
         let touched = false;
         if (typeof body?.title === "string") {
@@ -287,7 +265,6 @@ export function makeConversationRouteHandler(
           }
         }
         if (!touched) {
-          // A bare PATCH with no recognized field is a rename to ''.
           updated = store.renameSession(appId, id, "");
         }
         if (!updated) {

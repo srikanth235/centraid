@@ -1,5 +1,3 @@
-/* No model-id literal in scanned .ts: snapshot stays JSON. Empty overlay never clobbers; lookups sync. */
-
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -13,7 +11,6 @@ function loadSnapshot(): PricingCatalog {
     const parsed = JSON.parse(raw) as { models?: PricingCatalog };
     return parsed.models ?? {};
   } catch {
-    // Never a wrong price.
     return {};
   }
 }

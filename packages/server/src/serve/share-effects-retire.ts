@@ -1,8 +1,3 @@
-// One-time drain of obligations copy-as-share retired (#825, ruling G-copy).
-// Not a schema migration — gateway.db refuses those. Left alone the sweep dials
-// `not_found` forever; marked `done` the audit lies. So: delete the row, move a
-// still-RUNNING edge to terminal `failed`, never rewrite a settled edge.
-
 import type { GatewayDatabase } from "./gateway-db.js";
 
 export interface RetiredShareEffects {
@@ -10,24 +5,17 @@ export interface RetiredShareEffects {
   edges: number;
 }
 
-/**
- * `gateway_meta` key stamped once the drain has run (#883 C2). Without it the
- * one-time check costs two SELECTs on the critical path of every writable open,
- * forever.
- */
 const RETIRED_MARKER = "share_effects_retired";
 
 const RETIRED_REASON =
   "giving a copy to another person's vault was retired; share it as a grant instead";
 
-/** Matched over stored JSON so an unparseable row is still found. */
 const RETIRED_WHERE = `
   kind <> 'deliver-give'
   OR payload_json LIKE '%"delivery":"peer"%'
   OR payload_json LIKE '%"crossOwner":true%'
 `;
 
-/** At most once per gateway.db file; marker stamped after the drain, so a crash mid-drain finishes on the next open. */
 export function retireDeadShareEffectsOnce(
   db: GatewayDatabase
 ): RetiredShareEffects {
@@ -40,7 +28,7 @@ export function retireDeadShareEffectsOnce(
           .get(RETIRED_MARKER) as { value: string } | undefined
       )?.value !== undefined;
   } catch {
-    // No gateway_meta on this file yet: drain, then stamp.
+    // Intentionally empty.
   }
   if (alreadyRetired) return { effects: 0, edges: 0 };
   const drained = retireDeadShareEffects(db);
@@ -51,7 +39,7 @@ export function retireDeadShareEffectsOnce(
       RETIRED_MARKER
     );
   } catch {
-    // Idempotent drain: failing to record it only costs redoing it, never a boot failure.
+    // Intentionally empty.
   }
   return drained;
 }
@@ -65,7 +53,6 @@ export function retireDeadShareEffects(
         WHERE status = 'queued' AND (${RETIRED_WHERE})`
     )
     .all() as unknown as { effect_id: string; edge_id: string }[];
-  // A gateway.db that never had the table is nothing to drain.
   const hasReceiveSettings =
     (
       db.db
@@ -84,7 +71,6 @@ export function retireDeadShareEffects(
     }
     const now = new Date().toISOString();
     for (const edgeId of edgeIds) {
-      // Only a still-RUNNING edge is ended; a settled one keeps its answer.
       db.run(
         `UPDATE share_edges
             SET status = 'failed', reason = ?, updated_at = ?

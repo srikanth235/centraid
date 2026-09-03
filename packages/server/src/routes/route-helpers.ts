@@ -1,5 +1,3 @@
-// HTTP helpers for gateway-runtime routes. app-engine http-utils is not exported.
-
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import type * as TypeImport_g9tn66 from "node:fs";
@@ -19,7 +17,6 @@ import {
 
 export const DEFAULT_MAX_BODY_BYTES = 1 * 1024 * 1024;
 
-/** Peer socket is loopback — Host/X-Forwarded-For do not count. */
 export function isLoopbackRequest(req: IncomingMessage): boolean {
   const address = req.socket.remoteAddress;
   if (!address) return false;
@@ -31,11 +28,6 @@ export function isLoopbackRequest(req: IncomingMessage): boolean {
   );
 }
 
-/**
- * Host-only (#568): loopback AND no forwarder marking. Loopback alone is
- * NOT identity — iroh, the byte relay, and the phone tunnel all deliver
- * remote peers to 127.0.0.1 with their stamps on.
- */
 export function isDirectHostRequest(req: IncomingMessage): boolean {
   return (
     isLoopbackRequest(req) &&
@@ -66,7 +58,6 @@ const EDITABLE_EXT = new Set([
 
 const MAX_FILE_MAP_BYTES = 1 * 1024 * 1024; // 1 MiB per file
 
-/** Paths confined under `appDir` (#141). */
 export async function writeFileMap(
   appDir: string,
   files: ReadonlyArray<FileMapEntry>
@@ -82,7 +73,6 @@ export async function writeFileMap(
     await fs.writeFile(abs, f.content, "utf8");
     return writeNext(index + 1);
   }
-  // Input order wins on a duplicate path.
   await writeNext(0);
 }
 
@@ -137,7 +127,6 @@ export function sendJson(
   return sendJsonBytes(res, status, Buffer.from(JSON.stringify(body)));
 }
 
-/** Already-serialized body. Re-stringify would discard the diagnostics tripwire (#846). */
 export function sendJsonText(
   res: ServerResponse,
   status: number,
@@ -174,10 +163,6 @@ function sendJsonBytes(
   return true;
 }
 
-/**
- * Conditional GET (#659). ETag is a strong validator over the serialized
- * body — never a timestamp or poll counter (stale 304 or a defeated 304).
- */
 export function sendJsonConditional(
   req: IncomingMessage,
   res: ServerResponse,
@@ -198,7 +183,6 @@ export function sendJsonConditional(
   return sendJsonBytes(res, status, bytes);
 }
 
-/** RFC 9110 If-None-Match: `*` or a list member. `W/` accepted (weak comparison). */
 function matchesEtag(header: string, etag: string): boolean {
   const trimmed = header.trim();
   if (trimmed === "*") return true;
@@ -251,10 +235,6 @@ export async function fileExists(p: string): Promise<boolean> {
   }
 }
 
-/**
- * One harness or an array — both shapes are accepted. Absent → `undefined`;
- * unregistered entry → `'invalid'` so the caller can 400 rather than drop it.
- */
 export function parseProviderConsent(
   value: unknown
 ): HarnessKind[] | undefined | "invalid" {

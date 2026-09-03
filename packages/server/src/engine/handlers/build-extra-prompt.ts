@@ -1,21 +1,3 @@
-/*
- * Build the app-context system prompt fragment the app-engine injects
- * into chat turns before delegating to the host's `ConversationRunner`.
- *
- * The codex/claude-code adapters splice this verbatim into their own CLI
- * system-prompt flag.
- *
- * Lives in app-engine so all hosts see identical app context. The harness
- * never assembles app-specific content itself.
- *
- * Post-silo (#286) there is no per-app database to describe:
- * the fragment carries the app's identity, its declared handler catalog
- * (the dispatcher's whole routing surface), and its vault declaration —
- * canonical scopes and/or ext-band tables. Data questions ride the vault
- * register's `vault_sql` / `vault_invoke` tools, which the host wires per
- * turn; they are not described here.
- */
-
 import type {
   Manifest,
   ManifestActionEntry,
@@ -27,11 +9,6 @@ export interface BuildExtraPromptInput {
   appId: string;
   appName?: string;
   appDescription?: string;
-  /**
-   * The app's manifest. When omitted, the prompt still works — the
-   * declared-handlers section just renders as "(none)". Hosts that have a
-   * manifest in hand should pass it so the catalog is part of the prompt.
-   */
   manifest?: Manifest;
 }
 
@@ -52,13 +29,6 @@ export function buildExtraPrompt(input: BuildExtraPromptInput): string {
   return lines.join("\n");
 }
 
-/**
- * The external-world contract (issues #304/#306, taught per #308 B1): how
- * generated code reads external APIs and — critically — how it writes to
- * them. Rendered unconditionally: "build me something that emails me" must
- * meet this grounding before any connection or scope exists, or the model
- * confidently authors a direct send the read-only ceiling then refuses.
- */
 const EXTERNAL_WORLD_BLOCK = `### The outside world: connections, reads, and the outbox
 
 External APIs are reached through owner-configured CONNECTIONS (\`sync.connection\` rows, keyed by kind + label), whose credentials live gateway-side — handler code never sees a token.
@@ -69,12 +39,6 @@ External APIs are reached through owner-configured CONNECTIONS (\`sync.connectio
   where \`kind\`/\`label\` name the connection, \`verb\`/\`target\` are the semantic act (e.g. \`gmail.send\` → the recipient list), \`artifact\` is the thing as the owner reads it (to/subject/body…), and \`request\` is the exact HTTP call — method/url/headers/body with \`{{connection:…}}\` placeholders, never real tokens. The item parks for the owner's approval (a standing "always allow" rule may auto-approve); the gateway executor performs the send and receipts the result. Staging returns \`status: 'pending' | 'approved'\` in the output — 'pending' means awaiting the owner; do NOT retry or work around it. Remember staged ids in \`ctx.state\` so re-runs don't stage duplicates.
 - **Least scope**: declare in \`app.json\` only the vault scopes the code actually uses (staging needs \`{schema: 'outbox', verbs: 'act'}\`). Installing grants the declared block once; a later publish that widens scopes does NOT auto-grant — it parks a request for the owner, so design within what was declared.`;
 
-/**
- * Personal-vault section — the app's whole data story. Documents the
- * `ctx.vault` primitive every handler receives, the declared scopes, and
- * (when the manifest declares an ext band) the app's own extension tables
- * with their typed write commands.
- */
 function renderVaultBlock(
   appId: string,
   manifest: Manifest | undefined

@@ -1,6 +1,3 @@
-// Cross-referencing (#272): the owner's pick IS the consent. A link the
-// owner asserts lets an app resolve the far end of a domain it was never
-// granted — and only for as long as both the grant and the link live.
 import { describe, expect, test } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
@@ -18,7 +15,6 @@ describe("vault-plane cross-references", () => {
     const PNG =
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
-    // The owner's vault holds a note and a photo (two different domains).
     const note = plane.gateway.invoke(owner, {
       command: "knowledge.create_note",
       input: { title: "Trip plan", body_text: "pack the camera" },
@@ -34,7 +30,6 @@ describe("vault-plane cross-references", () => {
     expect(photo.status).toBe("executed");
     const assetId = (photo as { output: { asset_id: string } }).output.asset_id;
 
-    // The shell picker finds both — term search rides FTS, browse rides pk order.
     const searched = plane.pickEntities({ term: "trip" });
     expect(
       searched.cards.some((c) => c.type === "knowledge.note" && c.id === noteId)
@@ -47,7 +42,6 @@ describe("vault-plane cross-references", () => {
       status: "live",
     });
 
-    // The pick is the consent: the shell asserts the link as the owner.
     const linked = await plane.linkAsOwner({
       from_type: "knowledge.note",
       from_id: noteId,
@@ -71,8 +65,6 @@ describe("vault-plane cross-references", () => {
       }),
     ]);
 
-    // A notes-shaped app (knowledge + core.link read, NO media scope) renders
-    // the photo's card through its own bridge via resolvable-if-linked.
     plane.enrollApp("notes");
     plane.approveGrant("notes", {
       purpose,
@@ -91,9 +83,6 @@ describe("vault-plane cross-references", () => {
       .cards;
     expect(cards[0]).toMatchObject({ status: "live", title: "Beach sunset" });
 
-    // The issue's acceptance test, revoke half: pull the app's grant and its
-    // projections go dark — while the note, the photo and the link all remain
-    // the owner's, untouched.
     const grants =
       plane.listApps().find((a) => a.name === "notes")?.grants ?? [];
     expect(grants).toHaveLength(1);
@@ -121,7 +110,6 @@ describe("vault-plane cross-references", () => {
       .get(noteId, assetId, linkId) as { n: number };
     expect(survivors.n).toBe(3);
 
-    // Re-grant, then end the link: unlink ends the authorization too.
     plane.approveGrant("notes", {
       purpose,
       scopes: [
@@ -170,7 +158,6 @@ describe("vault-plane cross-references", () => {
 
     const base = await fixture.serveOwnerRoutes(registry);
 
-    // Term search hits both kinds through their FTS indexes.
     const picked = (await (
       await fetch(`${base}/picker?term=camera`)
     ).json()) as {
@@ -183,7 +170,6 @@ describe("vault-plane cross-references", () => {
       picked.cards.some((c) => c.type === "schedule.task" && c.id === taskId)
     ).toBe(true);
 
-    // POST /links asserts the picked relationship as the owner.
     const linkRes = await fetch(`${base}/links`, {
       method: "POST",
       body: JSON.stringify({
@@ -207,14 +193,12 @@ describe("vault-plane cross-references", () => {
     };
     expect(row).toMatchObject({ asserted_by: "owner", valid_to: null });
 
-    // A malformed body is a 400, not a crash.
     const bad = await fetch(`${base}/links`, {
       method: "POST",
       body: JSON.stringify({}),
     });
     expect(bad.status).toBe(400);
 
-    // DELETE /links/<id> end-dates — temporal, the row survives.
     const unlinkRes = await fetch(`${base}/links/${linked.output.link_id}`, {
       method: "DELETE",
     });

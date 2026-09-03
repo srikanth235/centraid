@@ -433,7 +433,6 @@ describe("worktree-store", () => {
       };
       expect(appJson.marker).toBe("one");
 
-      // No new tag minted — listVersions still shows v1 and v2 only.
       const tagsAfter = await store.listVersions("todo");
       expect(tagsAfter.map((t) => t.tag)).toStrictEqual(["todo/v2", "todo/v1"]);
       expect(tagsAfter.map((t) => t.active)).toStrictEqual([false, true]);
@@ -550,9 +549,6 @@ describe("worktree-store", () => {
   });
 
   test("snapshotSessionAppDir refuses to create phantom dirs without a worktree", async () => {
-    // Auto-creating the dir materializes a phantom session: a later openSession
-    // 409s with `session_exists` and publish git-adds a plain directory and
-    // fails — `session_missing` forces the caller to open one.
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });

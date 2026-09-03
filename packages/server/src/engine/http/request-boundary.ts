@@ -1,5 +1,3 @@
-/** Loopback host allowlist + CORS (#504). Never reflect Origin with credentials. */
-
 export const DEFAULT_ALLOWED_HOSTNAMES: readonly string[] = Object.freeze([
   "localhost",
   "127.0.0.1",
@@ -16,7 +14,6 @@ export function hostnameFromHostHeader(
   const host = raw.trim();
   if (host === "") return undefined;
 
-  // IPv6 with brackets: `[::1]:8080` or `[::1]`.
   if (host.startsWith("[")) {
     const end = host.indexOf("]");
     if (end === -1) return undefined;
@@ -26,7 +23,6 @@ export function hostnameFromHostHeader(
     return hostname.toLowerCase();
   }
 
-  // Reject bare IPv6 (multiple colons) — those must use the bracket form.
   const colon = host.lastIndexOf(":");
   if (colon !== -1 && /^\d+$/u.test(host.slice(colon + 1))) {
     return host.slice(0, colon).toLowerCase();
@@ -61,7 +57,6 @@ export interface DecideCorsInput {
   bearerAuthIntent: boolean;
 }
 
-/** Foreign Origin without Bearer → `*` without credentials. Bearer is not ambient. */
 export function decideCors(input: DecideCorsInput): CorsDecision {
   const raw = input.origin;
   if (raw === undefined || Array.isArray(raw)) {
@@ -75,7 +70,6 @@ export function decideCors(input: DecideCorsInput): CorsDecision {
     return { allowOrigin: raw, credentials: true };
   }
 
-  // `*` cannot be used with credentials mode.
   return { allowOrigin: "*", credentials: false };
 }
 

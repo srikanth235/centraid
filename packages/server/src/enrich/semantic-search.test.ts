@@ -1,12 +1,3 @@
-// Semantic search (#721) — the property that matters most is PARITY:
-// a vault whose handle loaded sqlite-vec and one whose handle did not must
-// answer the same query with the same photographs in the same order. If they
-// ever diverge, the extension has stopped being an optimization and become a
-// feature the fifth platform does not have.
-//
-// The query vector comes from the embed-text automation; this pure ranker suite
-// injects that awaited automation result.
-
 import { describe, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
@@ -24,7 +15,6 @@ import type { VaultDb } from "@centraid/vault";
 import { searchPhotosByText } from "./semantic-search.js";
 import { hasSqliteVec, loadSqliteVec } from "./sqlite-vec.js";
 
-/** The fake advertises this for `embed-image`; it is the index's key. */
 const MODEL = "fake-clip@1";
 
 const PIXELS = [
@@ -33,11 +23,6 @@ const PIXELS = [
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQAAAAA3bvkkAAAACklEQVR4nGNgAAIAAAUAAen63NgAAAAASUVORK5CYII=",
 ];
 
-/**
- * Hand-planted vectors, chosen so the ranking is obvious by inspection: the
- * query below is `[1, 0]`, so the closer a vector leans on its first axis the
- * higher it ranks — beach, then park, then night.
- */
 const PLANTED: readonly (readonly [string, number[]])[] = [
   ["beach", [1, 0]],
   ["park", [0.7, 0.7]],
@@ -46,7 +31,6 @@ const PLANTED: readonly (readonly [string, number[]])[] = [
 
 const QUERY_VECTOR = [1, 0];
 
-/** Awaited embed-text automation result for one planted query vector. */
 const embedQuery =
   (vector: readonly number[] = QUERY_VECTOR) =>
   async () => ({
@@ -57,11 +41,9 @@ const embedQuery =
 
 interface Planted {
   db: VaultDb;
-  /** Asset ids in planted order (beach, park, night). */
   assetIds: string[];
 }
 
-/** A vault carrying the three planted photographs, with or without sqlite-vec. */
 function plantedVault(options: { withVec: boolean }): Planted {
   const db = options.withVec
     ? openVaultDb({ loadExtensions: (handle) => void loadSqliteVec(handle) })
@@ -174,7 +156,6 @@ describe("semantic-search", () => {
     expect(outcome.hits.map((hit) => hit.assetId)).toStrictEqual(assetIds);
     expect(outcome.hits[0]!.score).toBeCloseTo(1, 5);
     expect(outcome.hits[2]!.score).toBeCloseTo(0, 5);
-    // Every hit carries the content id the photo surface needs for bytes.
     for (const hit of outcome.hits) expect(hit.contentId).toMatch(/\S/u);
     db.close();
   });
@@ -182,9 +163,6 @@ describe("semantic-search", () => {
   test("the vec ranker and the exact scan agree on the same fixture", async () => {
     const withVec = plantedVault({ withVec: true });
     const withoutVec = plantedVault({ withVec: false });
-    // The whole test rests on the two handles genuinely differing; if the
-    // platform has no extension there is nothing to compare and saying so is
-    // better than a green run that proved nothing.
     expect(hasSqliteVec(withVec.db.vault)).toBe(true);
     expect(hasSqliteVec(withoutVec.db.vault)).toBe(false);
 
@@ -206,8 +184,6 @@ describe("semantic-search", () => {
         });
         if (vec.status !== "ok" || scan.status !== "ok")
           throw new Error("both rankers must answer");
-        // Ids are per-vault, so compare by PLANTED order (the two vaults plant
-        // the same three photographs in the same sequence).
         const label = (hits: typeof vec.hits, ids: string[]): string[] =>
           hits.map((hit) => PLANTED[ids.indexOf(hit.assetId)]![0]);
         expect(label(vec.hits, withVec.assetIds)).toStrictEqual(
@@ -242,10 +218,6 @@ describe("semantic-search", () => {
 
   test("a row whose model has a different width cannot turn a search into an error", async () => {
     const planted = plantedVault({ withVec: true });
-    // A leftover row from a WIDER generation under the same model key — the
-    // shape that makes `vec_distance_cosine` raise if the width guard is
-    // missing. It rides a real asset because every embedding row points at a
-    // live entity; a width mismatch is not an orphan.
     planted.db.vault
       .prepare(
         "UPDATE enrich_embedding SET dim = 3, vector = ? WHERE target_id = ?"
@@ -256,7 +228,6 @@ describe("semantic-search", () => {
       query: "a wide sunny shore",
     });
     if (outcome.status !== "ok") throw new Error("unreachable");
-    // Skipped, not scored 0 and not raised: the width guard leaves it out.
     expect(outcome.hits.map((hit) => hit.assetId)).toStrictEqual(
       planted.assetIds.slice(0, 2)
     );

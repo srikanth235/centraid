@@ -55,9 +55,6 @@ async function settle(): Promise<void> {
 }
 
 describe(VaultCursorEngine, () => {
-  // The gap-collapse arithmetic itself (which instant, how many skipped, the
-  // gap reason) is owned by cron-cursor.test.ts — this only proves the engine
-  // records the intent before firing and commits it after.
   it("writes cron fire intent ahead of the fire and commits it after", async () => {
     const cursors = store();
     cursors.putCursor({
@@ -88,7 +85,6 @@ describe(VaultCursorEngine, () => {
     await engine.reconcile([
       row("clock/minutely", [{ kind: "cron", expr: "* * * * *" }]),
     ]);
-    // Registration itself must never fire — the catch-up belongs to the tick.
     expect(fired).toStrictEqual([]);
 
     engine.tick();

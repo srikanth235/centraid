@@ -1,18 +1,6 @@
 import crypto from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit (#608) cohesive automation lifecycle suite shares one production HTTP and scheduler fixture
 import { promises as fs } from "node:fs";
-/*
- * Automation CRUD over HTTP (#141). The desktop does not
- * mutate an automation in a local worktree — it reads the app's draft
- * over HTTP, applies the file-map transform (toggle / delete), writes the
- * changed/removed files back through the git-store session routes, and
- * publishes. The gateway reconciles the OS scheduler on publish, so the
- * desktop registers nothing itself. This boots a real gateway and drives
- * two of those wire paths end to end:
- *   1. toggle an app-owned automation's `enabled` flag and republish, and
- *   2. delete an app-owned automation's subdir (file DELETE + republish)
- *      while the owning UI app survives.
- */
 import path from "node:path";
 
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
@@ -39,9 +27,6 @@ function auth(): Record<string, string> {
   return { Authorization: `Bearer ${handle.token}` };
 }
 
-// A UI app (kind defaults to 'app') that owns one automation under
-// `automations/digest/`. The app.json mirrors what a published app carries;
-// the automation manifest is appended manually.
 function uiAppWithAutomation(enabled: boolean): ScaffoldFile[] {
   return [
     {
@@ -172,7 +157,6 @@ describe("automation-lifecycle-over-http scenarios", () => {
     await putFiles("notes", "s1", uiAppWithAutomation(false));
     await publish("notes", "s1", "scaffold");
 
-    // Toggle enabled false → true, exactly as AUTOMATIONS_SET_ENABLED does.
     const current = await readDraft("notes", "s1");
     const changed = automation.setEnabledInFiles(current, "digest", true);
     expect(changed).toHaveLength(1);
@@ -186,13 +170,6 @@ describe("automation-lifecycle-over-http scenarios", () => {
     ) as { enabled: boolean };
     expect(manifest.enabled).toBe(true);
   });
-
-  // Which trigger shapes are legal is the manifest validator's law, owned by
-  // `packages/server/src/automation/manifest/manifest.test.ts`. The tests below prove
-  // only what the route itself does: the kind pre-check, the cron default, the
-  // hand-written wire→manifest mapping, and that a validator rejection comes
-  // back out as a 400 `bad_request` carrying the validator's own message. They
-  // deliberately do NOT re-enumerate malformed-trigger cases.
 
   test("create defaults an expr-only trigger entry to cron", async () => {
     const ok = await fetch(`${handle.url}/centraid/_automations`, {
@@ -277,7 +254,6 @@ describe("automation-lifecycle-over-http scenarios", () => {
     expect(res.status).toBe(400);
     const out = (await res.json()) as { error: string; message: string };
     expect(out.error).toBe("bad_request");
-    // Verbatim validator text, not a route-authored paraphrase.
     expect(out.message).toContain(
       "where must be an array of {column, op, value?} clauses"
     );
@@ -296,7 +272,6 @@ describe("automation-lifecycle-over-http scenarios", () => {
     const out = (await res.json()) as { error: string; message: string };
     expect(out.error).toBe("bad_request");
     expect(out.message).toContain("carrier-pigeon");
-    // The app must not exist — the guard fires before any scaffold/publish.
     const listRes = await fetch(`${handle.url}/centraid/_apps`, {
       headers: auth(),
     });
@@ -338,13 +313,10 @@ describe("automation-lifecycle-over-http scenarios", () => {
       webhook: { id: string; secret: string; url: string };
     };
     expect(rotated.ok).toBe(true);
-    // Same route id — any already-configured caller URL keeps working.
     expect(rotated.webhook.id).toBe(originalId);
     expect(rotated.webhook.secret).not.toBe(originalSecret);
     expect(rotated.webhook.url).toMatch(/\/_centraid-hook\//u);
 
-    // The old secret no longer verifies; the wire-level webhook route reflects
-    // the rotation (auth is the hash on `main`, which the publish landed).
     const oldRes = await fetch(`${handle.url}/_centraid-hook/${originalId}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${originalSecret}` },
@@ -385,13 +357,6 @@ describe("automation-lifecycle-over-http scenarios", () => {
   });
 
   test("publishing a draft edit with a malformed automation.json 400s instead of landing on main", async () => {
-    // Exactly how the builder's trigger editor applies changes: a scaffolded
-    // standalone automation app (`app.json#kind === 'automation'`, the shape
-    // POST /centraid/_automations produces) publishes fine, then a follow-up
-    // edit rewrites automation.json through the generic draft file-write route
-    // (not the dedicated create route, which validates trigger/vault shapes on
-    // the way in). `validateManifestAt` must parse `automation.json` itself, or
-    // a malformed edit rides through publish and only fails at fire/schedule time.
     await openSession("s4");
     await putFiles(
       "digest-app",
@@ -409,8 +374,6 @@ describe("automation-lifecycle-over-http scenarios", () => {
       version: "0.1.0",
       enabled: true,
       prompt: "summarize notes",
-      // A data trigger's `entities` must be an array of <schema>.<table>
-      // names — this is a string, which the manifest schema rejects.
       triggers: [{ kind: "data", entities: "core.content_derivative" }],
       requires: {},
       history: { keep: { count: 100 } },
@@ -440,8 +403,6 @@ describe("automation-lifecycle-over-http scenarios", () => {
     expect(out.message).toMatch(/automations\/digest-app\/automation\.json/u);
     expect(out.message).toMatch(/entities/u);
 
-    // main is untouched — a FRESH session (forked off current main) still
-    // reads the original cron trigger, not the rejected draft edit.
     await openSession("s4-check");
     const live = await readDraft("digest-app", "s4-check");
     const liveManifest = JSON.parse(
@@ -502,8 +463,6 @@ describe("automation-lifecycle-over-http scenarios", () => {
     await putFiles("notes", "s2", uiAppWithAutomation(true));
     await publish("notes", "s2", "scaffold");
 
-    // Delete the automation subdir, exactly as AUTOMATIONS_DELETE's app-owned
-    // branch does: file-map transform → DELETE each removed path → republish.
     const current = await readDraft("notes", "s2");
     const { removed } = automation.deleteFromFiles(current, "digest");
     expect(removed.sort()).toStrictEqual([
@@ -522,7 +481,6 @@ describe("automation-lifecycle-over-http scenarios", () => {
     });
     await publish("notes", "s2", "delete digest");
 
-    // The app survives on `main`; the automation's files are gone.
     const listRes = await fetch(`${handle.url}/centraid/_apps`, {
       headers: auth(),
     });

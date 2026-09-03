@@ -1,9 +1,3 @@
-/*
- * Probe an ACP harness for the capabilities Settings and pre-send checks
- * need: launch like a turn, run `initialize` (+ session/new when possible),
- * then tear down.
- */
-
 import { spawn } from "node:child_process";
 import type { ChildProcessByStdio } from "node:child_process";
 import { promises as fs } from "node:fs";
@@ -25,7 +19,6 @@ import {
 } from "./session-config.js";
 import type { AcpTurnConfig } from "./types.js";
 
-/** Persistable, adapter-neutral view of one ACP session config option. */
 export interface AcpConfigOptionSnapshot {
   id: string;
   category: string;
@@ -34,9 +27,7 @@ export interface AcpConfigOptionSnapshot {
   currentValue?: string;
 }
 
-/** Wire-stable capability snapshot for one harness kind on this host. */
 export interface AcpHarnessCapabilities {
-  /** CLI spawned and answered `initialize`. */
   reachable: boolean;
   loadSession: boolean;
   resume: boolean;
@@ -45,26 +36,18 @@ export interface AcpHarnessCapabilities {
   mcpHttp: boolean;
   mcpSse: boolean;
   mcpAcp: boolean;
-  /** Harness exposes a model config option we can pin. */
   modelConfigurable: boolean;
-  /** Full config option surface seen on session/new. */
   configOptions: AcpConfigOptionSnapshot[];
-  /** Opt-in diagnostic prompt ran; false ⇒ "not observed", not "unsupported". */
   livePromptProbed: boolean;
-  /** Seen during the diagnostic prompt. */
   usageUpdateObserved: boolean;
   configOptionUpdateObserved: boolean;
   locationsObserved: boolean;
-  /** session/new failed with AUTH_REQUIRED. */
   authRequired: boolean;
   promptImage: boolean;
   promptAudio: boolean;
   promptEmbeddedContext: boolean;
-  /** Epoch ms of collection. */
   probedAt: number;
-  /** Past TTL: verdicts are not evidence of the CURRENT state. */
   stale?: boolean;
-  /** Why `reachable` is false. */
   reason?: string;
 }
 
@@ -144,10 +127,6 @@ function snapshotConfigOptions(
   });
 }
 
-/**
- * Spawn → initialize → optional session/new → teardown; bounded so a wedged
- * harness can't hang Settings.
- */
 export async function probeAcpCapabilities(
   config: AcpTurnConfig,
   opts?: { cwd?: string; timeoutMs?: number; probeLivePrompt?: boolean }
@@ -199,7 +178,7 @@ export async function probeAcpCapabilities(
     try {
       child.kill("SIGTERM");
     } catch {
-      // ignore
+      // Intentionally empty.
     }
   }, timeoutMs);
 
@@ -246,8 +225,6 @@ export async function probeAcpCapabilities(
       caps.modelConfigurable = offered.models.length > 0;
       caps.configOptions = snapshotConfigOptions(configOptions);
 
-      // Optional runtime signals observable only by a real turn — hence the
-      // OPT-IN diagnostic prompt; without it these stay "not observed".
       const sessionId =
         typeof created.sessionId === "string" ? created.sessionId : undefined;
       if (sessionId && opts?.probeLivePrompt === true) {
@@ -256,8 +233,6 @@ export async function probeAcpCapabilities(
           (entry) => entry.value === offered.currentValue
         );
         if (model?.type === "select" && current) {
-          // Re-apply the observed value: some agents persist config-option
-          // changes globally — never move the owner's default.
           await conn
             .request(methods.agent.session.setConfigOption, {
               sessionId,
@@ -315,7 +290,7 @@ export async function probeAcpCapabilities(
     try {
       child.stdin.end();
     } catch {
-      // ignore
+      // Intentionally empty.
     }
     if (!child.killed) child.kill("SIGTERM");
     await conn.exited.catch(() => undefined);

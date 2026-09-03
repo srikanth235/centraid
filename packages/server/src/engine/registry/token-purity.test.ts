@@ -1,6 +1,3 @@
-// Token-purity scanner for authored app CSS (#686); the gateway publish gate runs this over every `.css` in an app dir.
-// These tests pin the detection rules and the instructiveness of the messages — an LLM app author reads them as its only feedback.
-
 import { describe, expect, test } from "vitest";
 
 import { formatTokenPurityError, scanCssTokenPurity } from "./token-purity.ts";

@@ -1,6 +1,3 @@
-// Admission classes (#883 C2, at the #842 boundary): the class changes ONE
-// decision — who leaves the queue next — and nothing else.
-
 import { setTimeout } from "node:timers";
 
 import { describe, expect, test } from "vitest";
@@ -8,7 +5,6 @@ import { describe, expect, test } from "vitest";
 import { unrefTimer } from "../../lib/unref-timer.js";
 import { WorkerAdmission } from "./worker-admission.js";
 
-// Settle every pending microtask so queued acquires observe their release.
 function drain(): Promise<void> {
   return new Promise((resolve) => {
     const timer = setTimeout(resolve, 0);
@@ -48,8 +44,6 @@ describe("worker admission classes", () => {
     admission.release();
     await Promise.all([first, second, third]);
 
-    // FIFO still holds within the background class — the half priority must
-    // not disturb.
     expect(order).toStrictEqual([
       "interactive",
       "background-1",
@@ -76,8 +70,6 @@ describe("worker admission classes", () => {
   });
 
   test("neither class is refused earlier, and neither can starve silently", async () => {
-    // The LENGTH bound is class-blind: a displaced background caller gets the
-    // same typed `busy` refusal and retries, so priority is not starvation.
     const admission = new WorkerAdmission(1, 1, 10_000);
     await admission.acquire("interactive");
     const queued = admission.acquire("background");

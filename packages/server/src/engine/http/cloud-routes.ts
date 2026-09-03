@@ -12,14 +12,6 @@ import {
 } from "../settings/app-settings.js";
 import { readBody, sendError, sendJson } from "./http-utils.js";
 
-/**
- * Cloud-panel logs route and per-app settings.json surface. App data lives in the vault (#286); only runtime STATE (logs, settings) stays per-app.
- */
-
-/**
- * Write one app-owned settings key (`PUT …/settings`, body `{ key, value }`; `value: null` deletes).
- * Runtime-owned keys (prefix `__`) are refused — those are the runtime's own (automation toggles).
- */
 export async function handleSettingsWrite(
   req: IncomingMessage,
   res: ServerResponse,

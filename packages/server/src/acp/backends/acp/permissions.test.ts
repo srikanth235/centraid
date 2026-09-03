@@ -1,7 +1,3 @@
-// Pure-function coverage for the permission auto-allow helpers: how the
-// `session/request_permission` options are read off the wire and which one the
-// headless policy picks.
-
 import type { PermissionOption } from "@agentclientprotocol/sdk";
 import { describe, expect, test } from "vitest";
 
@@ -84,8 +80,6 @@ describe("permissions", () => {
   });
 
   test("pickRejectPermissionOption never repurposes an allow as a refusal", () => {
-    // No reject option means the caller has to answer `cancelled` — picking an
-    // allow here would grant exactly what the policy denies.
     expect(pickRejectPermissionOption([])).toBeUndefined();
     expect(
       pickRejectPermissionOption([

@@ -1,11 +1,6 @@
 import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit (#408) one acceptance story sharing one fixture vocabulary — loop, PITR, multi-process break, offline drain, restore-verification, O(change)
-/*
- * System-level acceptance tests for the WAL segment shipper (#408). Capture-
- * level G1-G7 live in `packages/vault/src/wal-shipper*.test.ts`, format-level
- * damage/PITR in `packages/backup/src/wal-restore.test.ts` — not re-tested here.
- */
 import { existsSync, statSync, promises as fs } from "node:fs";
 import type { Dirent } from "node:fs";
 import path from "node:path";
@@ -84,8 +79,6 @@ describe("wal", () => {
     return validateKeyring(JSON.parse(bytes.toString("utf8")));
   }
 
-  /** `VaultRegistry` does not plumb `VaultPlaneOptions.walShipper` overrides,
-   *  so the plane is opened directly and served through these two methods. */
   function stubRegistry(planes: VaultPlane[]): VaultRegistry {
     return {
       get: (vaultId: string) => planes.find((p) => p.boot.vaultId === vaultId),
@@ -173,7 +166,6 @@ describe("wal", () => {
     return (out as { output: Record<string, unknown> }).output;
   }
 
-  /** ONE transaction: per-row commits blow the WAL up with page images. */
   function insertVault(
     plane: VaultPlane,
     rows: number,
@@ -258,7 +250,6 @@ describe("wal", () => {
     return out.sort();
   }
 
-  /** Sums the drain loop's "N sealed byte(s)" log lines since `from`. */
   function drainedBytes(
     logs: string[],
     from = 0
@@ -380,19 +371,11 @@ describe("wal", () => {
       const rv = openRestored(dest);
       expect(vaultTitles(rv)).toStrictEqual(point.titles);
       expect(probeCount(rv, "_wale2e_probe")).toBe(point.probe);
-      // The audit band rides the SAME file, so its rows and the life rows they
-      // receipt can never land on two different instants.
       expect(probeCount(rv, "_wale2e_jprobe")).toBe(point.jprobe);
       expect(receiptCount(rv)).toBe(point.receipts);
     });
   }, 30_000);
 
-  /**
-   * `run()` must stay SYNCHRONOUS: the tick is synchronous end to end, so a
-   * foreign commit INSIDE it cannot be awaited. `checkpoint: true` makes the
-   * child checkpoint too, which the pre-capture detectors catch before anything
-   * ships; `false` leaves its frames in the WAL, where the danger is timing.
-   */
   async function foreignVaultWriter(
     plane: VaultPlane,
     opts: { rows: number; marker: string; checkpoint: boolean }
@@ -435,9 +418,6 @@ describe("wal", () => {
   }
 
   test("G5 multi-process: a real child process COMMITTING inside the capture→TRUNCATE window is detected, and its rows survive the restore", async () => {
-    // A COMMIT between capture and `wal_checkpoint(TRUNCATE)` runs where no
-    // detector does: the checkpoint folds those frames in and zeroes the WAL,
-    // so they are in no segment and predate no base.
     const f = await fx();
     invoke(f.plane, "schedule.add_task", { title: "before-the-race" });
     await f.service.runBackup(f.vaultId);
@@ -445,8 +425,6 @@ describe("wal", () => {
     const genBefore = f.shipper.status().stream!.generation;
     const seqBefore = (await f.service.status())[f.vaultId]!.lastSeq!;
 
-    // Hooking `prepare()` is what makes the window reachable at all: the tick
-    // is synchronous, so anything awaited would land after it.
     const writer = await foreignVaultWriter(f.plane, {
       rows: 200,
       marker: "raced",
@@ -473,8 +451,6 @@ describe("wal", () => {
     expect(report.errors).toStrictEqual([]);
     expect(probeCount(f.plane.db.vault, "_wale2e_foreign")).toBe(200);
 
-    // Healed the only way it can be: a fresh base, cloned from the main file
-    // the frames were folded into.
     expect(report.breaks).toStrictEqual([
       { reason: "checkpoint-raced-writer" },
     ]);
@@ -485,8 +461,6 @@ describe("wal", () => {
     expect((await f.service.status())[f.vaultId]!.lastSeq).toBe(seqBefore + 1);
     await f.service.drainWal();
 
-    // Without the detection this carries NONE of the child's rows, reports no
-    // damage, and verifies green.
     const dest = await restoreTo(f);
     const rv = openRestored(dest);
     expect(probeCount(rv, "_wale2e_foreign")).toBe(200);
@@ -504,9 +478,6 @@ describe("wal", () => {
     const genBefore = f.shipper.status().stream!.generation;
     const seqBefore = (await f.service.status())[f.vaultId]!.lastSeq!;
 
-    // Lands BEFORE the next tick, so the pre-capture detectors break before a
-    // byte ships. A commit inside the capture→checkpoint window is a different
-    // failure, tested above.
     const writer = await foreignVaultWriter(f.plane, {
       rows: 1500,
       marker: "foreign",
@@ -525,7 +496,6 @@ describe("wal", () => {
     await f.service.runBackup(f.vaultId);
     expect((await f.service.status())[f.vaultId]!.lastSeq).toBe(seqBefore + 1);
 
-    // Degraded, not error (#411): correctness held, the stream self-re-based.
     const foreignTarget = (await f.service.status())[f.vaultId]!;
     expect(foreignTarget.walForeignCheckpointCount).toBeGreaterThanOrEqual(1);
     expect(foreignTarget.walLastForeignCheckpoint?.reason).toMatch(
@@ -542,7 +512,6 @@ describe("wal", () => {
       (e) => e.kind === "db" && e.path === "vault.db"
     )!;
     expect(vaultEntry.walGeneration).toBe(after.generation);
-    // The base's own instant: restore refuses an entry that cannot state it.
     expect(vaultEntry.baseTickMs).toBeGreaterThan(0);
     expect(f.shipper.status().stream!.basePending).toBe(false);
     await f.service.drainWal();
@@ -556,7 +525,6 @@ describe("wal", () => {
     expect(restored.danglingReceipts).toStrictEqual([]);
   }, 45_000);
 
-  /** "The network is down" — the only test double in this suite. */
   function offlineProvider(): BackupProvider {
     const offline = <T>(): Promise<T> =>
       Promise.reject(new Error("offline: provider unreachable"));
@@ -628,9 +596,6 @@ describe("wal", () => {
   const DAY_MS = 24 * HOUR_MS;
 
   test("offline for multiple days: daily base rotations fire, the WAL and the local dir stay bounded, and reconnect loses nothing", async () => {
-    // Drives a clock: the DAILY base cadence is a function of wall time, so a
-    // rapid loop never fires it. It STARTS at the real clock — an instant in the
-    // past would make every restore point predate its anchoring manifest.
     let clock = Date.now();
     const LOCAL_BUDGET = 8 * 1024 * 1024;
     const f = await fx({
@@ -691,9 +656,6 @@ describe("wal", () => {
     expect(day0.wal).toBeGreaterThan(0); // the measurement is live, not a no-op
     expect(day0.local).toBeGreaterThan(0);
     for (const day of perDay) {
-      // Bound FRAME COUNT, not payload bytes: an 8 KiB page makes twelve frames
-      // 98,624 bytes though their payload is 98,304. Daily rotation writes
-      // eleven fixed frames; twelve keeps the bound outage-length-independent.
       expect(day.wal).toBeLessThanOrEqual(
         WAL_HEADER_BYTES + 12 * WAL_FRAME_BYTES
       );
@@ -794,11 +756,6 @@ describe("wal", () => {
   }
 
   test("PITR at an ARBITRARY instant between two capture ticks restores the recorded content digest EXACTLY", async () => {
-    // Restoring AT a tick instant proves the segments replay but not that the
-    // CUT is right — an implementation ignoring `pointInTimeMs` passes it. This
-    // restores to an instant that is provably not any tick. The clock starts at
-    // the real one: a simulated instant in the past would predate the manifest
-    // anchoring every segment.
     let clock = Date.now();
     const f = await fx({ now: () => clock });
     await f.service.runBackup(f.vaultId);
@@ -875,9 +832,6 @@ describe("wal", () => {
   }
 
   test("a run that registers NOTHING must not mark the base registered — no manifest, no anchor", async () => {
-    // Clearing `basePending` unanchored stops the retries and lets the next
-    // prune delete those segments while health reads green. The registration
-    // seam is what makes that state reachable at all.
     let registerNothing = false;
     const f = await fx({
       snapshot: async (o) => (registerNothing ? null : createSnapshot(o)),
@@ -921,9 +875,6 @@ describe("wal", () => {
   }, 45_000);
 
   test("a no-change run whose PREVIOUS manifest still anchors the live base DOES clear it (no pending livelock)", async () => {
-    // The other direction: a base wrongly left PENDING is dropped by the next
-    // generation break, taking the un-drained tail of a generation a manifest
-    // DOES name. So the gate is "no MANIFEST ⇒ never clear", never "no row".
     let registerNothing = false;
     const f = await fx({
       snapshot: async (o) => (registerNothing ? null : createSnapshot(o)),
@@ -1392,10 +1343,6 @@ describe("wal", () => {
   }, 60_000);
 
   test("a generation break RESETS the confirmed tip — a fresh stream is never held to the old one's", async () => {
-    // The tip is keyed by GENERATION (backup-state `walMarkerTips`). Carrying
-    // the old stream's tick into a manifest for a fresh base would demand a
-    // marker the new stream never shipped, and every later verification would
-    // read the store as lossy.
     const f = await fx();
     invoke(f.plane, "schedule.add_task", { title: "before-the-roll" });
     await f.service.runBackup(f.vaultId);
@@ -1422,8 +1369,6 @@ describe("wal", () => {
   }, 45_000);
 
   test("an INTERRUPTED drain (segments up, marker not) does NOT flap the check red", async () => {
-    // The manifest's tip names only CONFIRMED markers, so a drain dying between
-    // a tick's segments and its marker yields a lower tip, never a false claim.
     const blocked = { on: false };
     // LAZY: `fx` mints the provider dir every read helper here also reads, and
     // a second root would be a different world.

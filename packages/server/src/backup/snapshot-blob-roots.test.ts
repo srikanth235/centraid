@@ -32,7 +32,6 @@ function keyring(): Keyring {
 }
 
 function blobEntry(sha: string): ManifestEntry {
-  // The content sha is the final path segment — mirrors the restore engine's parse.
   return {
     path: `blobs/sha256/${sha.slice(0, 2)}/${sha}`,
     kind: "blob",
@@ -42,10 +41,6 @@ function blobEntry(sha: string): ManifestEntry {
   };
 }
 
-/**
- * A minimal in-memory provider that only implements the two methods the roots
- * helper touches: `listSnapshots` (unpruned) and `openDataPlane(...).get`.
- */
 function fakeProvider(opts: {
   kr: Keyring;
   snapshots: {
@@ -85,7 +80,6 @@ function fakeProvider(opts: {
     if (row.prunedAt === null) unpruned.push(row);
   }
   const provider = {
-    // Default listSnapshots returns only retained (unpruned) rows.
     listSnapshots: async (
       _targetId: string,
       listOpts?: { includePruned?: boolean }
@@ -126,8 +120,6 @@ describe("snapshot-blob-roots", () => {
       vaultId: VAULT_ID,
     });
 
-    // The vault model no longer references retainedSha at all — the ONLY thing
-    // keeping it live is the retained snapshot. It must be in the root set.
     expect(roots.has(retainedSha)).toBe(true);
   });
 
@@ -149,8 +141,6 @@ describe("snapshot-blob-roots", () => {
     });
     expect(cache.get(unpruned[0]!.manifestHash)).toStrictEqual([sha]);
 
-    // Second run against a provider whose `get` would throw — proves the memo,
-    // not a re-open, produced the result.
     const memoOnly = {
       listSnapshots: async () => unpruned,
       openDataPlane: async () => ({

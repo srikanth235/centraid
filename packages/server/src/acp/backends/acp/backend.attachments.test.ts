@@ -1,8 +1,3 @@
-// Attachments on an ACP turn: mapped to real content blocks, gated on the
-// `promptCapabilities` the harness advertised, with a notice naming anything it
-// genuinely can't take. Core turn behaviour is in backend.test.ts; shared
-// fixtures in test-fixtures.ts.
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -52,7 +47,6 @@ describe("backend.attachments suite", () => {
         data: Buffer.from("PNGBYTES").toString("base64"),
         mimeType: "image/png",
       });
-      // The message text still leads; nothing was skipped, so no notice.
       expect(blocks[0]?.type).toBe("text");
       expect(notices(events)).not.toContain("attachment_unsupported");
     });

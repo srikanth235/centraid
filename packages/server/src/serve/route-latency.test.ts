@@ -1,7 +1,3 @@
-// The gateway reports event-loop lag; without per-route histograms it cannot
-// say WHICH route is slow, so every performance claim needs a bench rig to
-// reproduce (#659).
-
 import { describe, expect, it } from "vitest";
 
 import { RouteLatencyMetrics, routeLabel } from "./route-latency.js";
@@ -64,7 +60,6 @@ describe(RouteLatencyMetrics, () => {
     for (let index = 0; index < 5_000; index += 1)
       metrics.record(`/route-${index}/leaf`, 1);
     expect(metrics.snapshot().length).toBeLessThanOrEqual(64);
-    // The overflow is folded, not dropped: every sample is still counted.
     const total = metrics
       .snapshot()
       .reduce((sum, summary) => sum + summary.count, 0);

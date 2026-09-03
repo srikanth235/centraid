@@ -35,9 +35,7 @@ function seedRun(
     costSource?: "harness" | "estimated";
     retryOf?: string;
     startedAt?: number;
-    /** Defaults to 200ms. */
     runMs?: number;
-    /** Leave the turn OPEN — `run_summary` admits only finished turns. */
     unfinished?: boolean;
     ok?: boolean;
   }
@@ -355,7 +353,6 @@ describe("InsightsStore (#514)", () => {
     expect(today?.runs).toBe(2);
     expect(today?.failedRuns).toBe(1);
     expect(today?.failedCostUsd).toBeCloseTo(0.03, 4);
-    // Same failure predicate as the window-wide KPI.
     expect(s.kpis.failedRuns).toBe(1);
     expect(s.kpis.failedCostUsd).toBeCloseTo(0.03, 4);
   });
@@ -415,7 +412,6 @@ describe("InsightsStore (#514)", () => {
       unfinished: true,
     });
     const s = insights.summary();
-    // A turn with no end is not a run yet: absent, never "0s".
     expect("medianRunMs" in s.kpis).toBe(false);
     expect(s.kpis.generations).toBe(0);
   });
@@ -570,7 +566,6 @@ describe("InsightsStore digest union (#438 + #514)", () => {
     );
     expect(day?.runs).toBe(4);
     expect(day?.failedRuns).toBe(2);
-    // A digest has no failure-cost column: a floor, not an invented split.
     expect(day?.failedCostUsd).toBe(0);
   });
 

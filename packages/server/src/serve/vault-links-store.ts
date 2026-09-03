@@ -1,12 +1,4 @@
-/*
- * The one store answering "may an edge cross between these two vaults" and
- * "where does that vault live" (#726, #750 invariants 1–2). `vault_directory`
- * holds ONE identity record per vault, written by the ceremony and never by a
- * route assertion — a route is never identity. `vault_routes` holds ONE row
- * per vault that lives elsewhere, and its mere presence is what "remote"
- * means. `vault_links` is pure permission, stored smaller-id-first so lookup
- * is order-independent, and an edge crosses only with BOTH sides approved.
- */ import { randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { SQLInputValue } from "node:sqlite";
 
@@ -82,8 +74,6 @@ export class VaultLinksStore {
     return this.row("SELECT * FROM vault_links WHERE link_id = ?", linkId);
   }
 
-  /** Named `findPair`, not `find`: oxlint's
-   *  `unicorn/no-array-method-this-argument` mis-matches any two-arg `.find`. */
   findPair(vaultX: string, vaultY: string): VaultLink | undefined {
     const [a, b] = pairOf(vaultX, vaultY);
     return this.row(
@@ -124,7 +114,6 @@ export class VaultLinksStore {
     return directoryEntryOf(this.gatewayDatabase, vaultId);
   }
 
-  /** `undefined` when `vaultId` lives on this gateway (#750 invariant 2). */
   routeFor(vaultId: string): LinkRoute | undefined {
     return routeOf(this.gatewayDatabase, vaultId);
   }
@@ -191,7 +180,6 @@ export class VaultLinksStore {
         input.toLabel ?? null,
         createdAt
       );
-      // The other side stays NULL until that owner's device approves.
       this.gatewayDatabase.run(
         `INSERT INTO vault_links (
            link_id, vault_a, vault_b, approved_by_a, approved_by_b,
@@ -219,8 +207,6 @@ export class VaultLinksStore {
     return this.announce(proposed, "proposed");
   }
 
-  /** `undefined` when `vaultId` names neither side — the caller refuses
-   *  without leaking which side was wrong. */
   approve(
     linkId: string,
     vaultId: string,
@@ -260,7 +246,6 @@ export class VaultLinksStore {
     return peer;
   }
 
-  /** Callable inside an open transaction — SQLite's do not nest. */
   private writePeer(
     input: PeerLinkInput,
     approvals?: {
@@ -337,10 +322,6 @@ export class VaultLinksStore {
     return this.peerForVault(input.peerVaultId, input.localVaultId);
   }
 
-  /**
-   * Burn and write in ONE transaction, so a ticket can never be redeemed
-   * twice. The directory records the key the TICKET promised.
-   */
   redeem(input: LinkRedemption): LinkedPeer | undefined {
     const peer = this.gatewayDatabase.transaction(() => {
       const claimed = this.tickets.claim(input.ticketId, input.secret);
@@ -390,12 +371,6 @@ export class VaultLinksStore {
     return this.peerView(link, localVaultId);
   }
 
-  /**
-   * An endpoint is per-GATEWAY, so co-hosted vaults share one and
-   * `linkForEndpoint` cannot tell which a request concerns. Every route
-   * attributing an edge MUST resolve through here, on a vault id the REQUEST
-   * claims, so a stale claim resolves to nothing (#726).
-   */
   linkForPeer(
     peerEndpointId: string,
     peerVaultId: string
@@ -427,11 +402,6 @@ export class VaultLinksStore {
     return this.linkForEndpoint(peerEndpointId) !== undefined;
   }
 
-  /**
-   * A rotated peer dials from an EndpointId nothing here recognises, so
-   * admission is "I have someone to hear from at all", never "I know this
-   * endpoint".
-   */
   hasAnyLink(): boolean {
     return (
       this.gatewayDatabase.db
@@ -466,11 +436,6 @@ export class VaultLinksStore {
       .flatMap((link) => this.peerView(link, localVaultId) ?? []);
   }
 
-  /**
-   * Identity is deliberately NOT writable here: an assertion moves an address,
-   * never a key. A vault with no route row is local and one with no live link
-   * is nobody this gateway listens about, so both are refused (#750).
-   */
   recordRoute(input: {
     peerVaultId: string;
     peerEndpointId: string;

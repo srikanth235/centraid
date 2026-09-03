@@ -17,10 +17,6 @@ import {
 } from "./storage-limits.js";
 import type { StorageLimits } from "./storage-limits.js";
 
-// The owner's two limits (#544): pinning the dangerous cases — an
-// unsatisfiable limit, a malformed file becoming a real limit, and that the
-// disk budget classifies but never claims to block.
-
 const dirs: string[] = [];
 
 describe("storage-limits", () => {
@@ -55,7 +51,6 @@ describe("storage-limits", () => {
         journalLimitBytes: 1024 ** 3,
       });
       expect(withBoth.totalLimitBytes).toBe(30 * 1024 ** 3);
-      // Clearing one must not disturb the other — separate PUTs from the same panel.
       expect(
         applyLimitsPatch(withBoth, { totalLimitBytes: null })
       ).toMatchObject({
@@ -149,8 +144,6 @@ describe("storage-limits", () => {
     it("exposes the last-loaded limits synchronously for the sweep path", async () => {
       const dir = await storeDir();
       const store = new StorageLimitsStore(dir);
-      // Before any load, the safe direction is "limits off" — one delayed sweep
-      // beats archiving against a limit nobody set.
       expect(store.current().journalLimitBytes).toBeNull();
       await store.update({ journalLimitBytes: 2 * 1024 ** 3 });
       expect(store.current().journalLimitBytes).toBe(2 * 1024 ** 3);

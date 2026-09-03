@@ -1,6 +1,3 @@
-// Settings merge: global prefs ⊕ per-app settings ⊕ caller overrides, last layer winning.
-// Global keys must be in `KNOWN_KEYS`; anything outside it and the dynamic `app*` namespace is dropped.
-
 export interface SettingsInject {
   dataAttrs?: Record<string, string>;
   cssVars?: Record<string, string>;
@@ -25,7 +22,6 @@ export const KNOWN_KEYS: Record<string, KeySpec> = {
   theme: { kind: "data", attr: "theme", coerce: asString },
   density: { kind: "data", attr: "density", coerce: asString },
   cards: { kind: "data", attr: "cards", coerce: asString },
-  // Absent means the theme's own anchor governs — never default this.
   bgL: { kind: "css", cssVar: "bg-l", coerce: asPercent },
   accent: { kind: "css", cssVar: "accent", coerce: asString },
   accentLight: { kind: "css", cssVar: "accent-light", coerce: asString },
@@ -49,14 +45,12 @@ function camelTailToKebab(tail: string): string {
   );
 }
 
-/** `app<Capital>…` only, so a bare `app`/`apps` typo does not match. */
 function isAppKnobKey(key: string): key is `app${string}` {
   if (key.length <= 3 || !key.startsWith("app")) return false;
   const c = key.charCodeAt(3);
   return c >= 65 && c <= 90; // 'A'..'Z'
 }
 
-/** `Color`/`Accent` tails become CSS vars; the rest, data attrs. */
 function appKnobTarget(
   key: string
 ): { kind: "data"; attr: string } | { kind: "css"; cssVar: string } {

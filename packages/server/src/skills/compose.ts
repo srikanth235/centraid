@@ -11,7 +11,6 @@ export interface SkillMeta {
 const SKILL_FILE = "SKILL.md";
 const FRONTMATTER_RE = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---\r?\n?/u;
 
-/** Gateway `skills/` catalog; same path from dist/ and src/ layouts. */
 export function skillsDir(): string {
   return fileURLToPath(new URL("../../skills", import.meta.url).href);
 }
@@ -60,10 +59,6 @@ export function listSkills(dir: string = skillsDir()): SkillMeta[] {
   return out;
 }
 
-/**
- * Concatenate the named skills' bodies, in order. Throws on a missing
- * `SKILL.md` — that is a programming error, not a soft-fail.
- */
 export function composeSkills(
   names: readonly string[],
   dir: string = skillsDir()

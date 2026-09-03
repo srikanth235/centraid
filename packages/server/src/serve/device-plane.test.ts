@@ -1,13 +1,5 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
-/*
- * Device enrollment + pairing tickets (issues #289 phase 2, #726).
- *
- * The enrollment store is the whole ACL (device key ↔ owner ↔ owned vault)
- * and the ticket store is the SSH-bootstrap ceremony; both are cross-process
- * gateway.db rows (admin CLI and daemon share one control plane), so
- * cross-handle visibility and burn-on-first-attempt are load-bearing.
- */
 import path from "node:path";
 
 import { describe, afterEach, expect, test } from "vitest";
@@ -42,8 +34,6 @@ describe("device-plane scenarios", () => {
     const file = await tempFile("gateway.db");
     const store = EnrollmentStore.open(file);
 
-    // Authority is ownership (#726); the device is a binding, so enrolling
-    // it toward a second vault claims that vault for the same person.
     const laptop = store.enroll({
       endpointId: "ep-laptop",
       vaultIds: ["v1"],
@@ -68,8 +58,6 @@ describe("device-plane scenarios", () => {
     expect(store.vaultsFor("ep-phone")).toStrictEqual(["v3"]);
     expect(store.isEnrolled("ep-nobody")).toBe(false);
 
-    // A vault has exactly one owner: enrolling another person toward it is a
-    // typed refusal, never a transfer.
     expect(() =>
       store.enroll({
         endpointId: "ep-phone",
@@ -78,8 +66,6 @@ describe("device-plane scenarios", () => {
       })
     ).toThrow(VaultOwnedError);
 
-    // A second device for the SAME owner reaches every owned vault with no
-    // per-device authoring — this is the self-pair story.
     store.enroll({
       endpointId: "ep-tablet",
       label: "tablet",
@@ -87,7 +73,6 @@ describe("device-plane scenarios", () => {
     });
     expect(store.vaultsFor("ep-tablet")).toStrictEqual(["v1", "v2"]);
 
-    // Re-enrolling the same device refreshes, never duplicates.
     store.enroll({
       endpointId: "ep-laptop",
       vaultIds: ["v1"],
@@ -98,21 +83,15 @@ describe("device-plane scenarios", () => {
       store.list().find((e) => e.enrollmentId === laptop.enrollmentId)?.label
     ).toBe("renamed laptop");
 
-    // Revoke a DEVICE ("lost laptop"): every vault it reached dies with it,
-    // and the owner's other device is untouched.
     const removed = store.revoke("ep-laptop");
     expect(removed).toHaveLength(2);
     expect(store.isEnrolled("ep-laptop")).toBe(false);
     expect(store.vaultsFor("ep-tablet")).toStrictEqual(["v1", "v2"]);
 
-    // Removing the PERSON is refused while they still own vaults — the
-    // ownership analogue of a last-admin guard.
     expect(() => store.removeOwner(laptop.ownerId)).toThrow(OwnerRemovalError);
     store.removeVault("v1");
     store.removeVault("v2");
     const orphaned = store.removeOwner(laptop.ownerId);
-    // Ownership already gone, so no derived rows remain to report; the
-    // person's bindings die with the owner row.
     expect(orphaned).toStrictEqual([]);
     expect(store.isEnrolled("ep-tablet")).toBe(false);
     expect(store.listByVault("v3").map((row) => row.endpointId)).toStrictEqual([
@@ -147,7 +126,6 @@ describe("device-plane scenarios", () => {
     const daemon = EnrollmentStore.open(file, { statTtlMs: 0 });
     expect(daemon.isEnrolled("ep-new")).toBe(false);
 
-    // The admin CLI (separate process = separate store instance) enrolls.
     const cli = EnrollmentStore.open(file);
     cli.enroll({ endpointId: "ep-new", vaultIds: ["v1"], label: "new device" });
 
@@ -224,8 +202,6 @@ describe("device-plane scenarios", () => {
         schemaEpoch: 2,
       })
     ).toThrow(/not enrolled/u);
-    // Revocation is a device-level TOMBSTONE, not a delete: the binding is
-    // still visible and reaches nothing in practice.
     expect(EnrollmentStore.open(file).get("ep-lost", "v1")?.revoked).toBe(true);
     expect(EnrollmentStore.open(file).isEnrolled("ep-lost")).toBe(false);
     await expect(fs.stat(`${file}.lock`)).rejects.toMatchObject({
@@ -274,8 +250,6 @@ describe("device-plane scenarios", () => {
       })
     ).toMatchObject({ rememberDevice: false });
 
-    // Re-pairing the same endpoint as a non-extension full client clears a sticky
-    // companion allow-list (omit grantProfile must not leave the old clamp).
     store.enroll({
       endpointId: "ep-session",
       vaultIds: ["v1"],
@@ -324,23 +298,19 @@ describe("device-plane scenarios", () => {
     const minted = store.mint(invite(["v1"]));
     expect(store.listActive()).toHaveLength(1);
 
-    // A guessed secret must not burn the ticket before the secret is verified.
     expect(store.redeem(minted.ticketId, "guessed")).toBeUndefined();
     expect(store.redeem(minted.ticketId, minted.secret)).toStrictEqual({
       ownerId: priya.ownerId,
       vaultIds: ["v1"],
     });
 
-    // One invitation may carry several vaults — one scan.
     const second = store.mint(invite(["v2", "v3"]));
     expect(store.redeem(second.ticketId, second.secret)).toStrictEqual({
       ownerId: priya.ownerId,
       vaultIds: ["v2", "v3"],
     });
-    // …and it burned on success.
     expect(store.redeem(second.ticketId, second.secret)).toBeUndefined();
 
-    // Expiry: a stale ticket never redeems.
     const brief = store.mint(invite(["v3"]), 1);
     await new Promise((resolve) => {
       setTimeout(resolve, 5);
@@ -373,7 +343,6 @@ describe("device-plane scenarios", () => {
       )
     ).toThrow("injected crash");
     expect(tickets.listActive()).toHaveLength(1);
-    // A partial redemption leaves NO enrollment at all — never half-paired.
     expect(enrollments.get("phone", "v1")).toBeUndefined();
     expect(enrollments.get("phone", "v2")).toBeUndefined();
     expect(owners.vaultsOwnedBy(priya.ownerId)).toStrictEqual([]);
@@ -387,7 +356,6 @@ describe("device-plane scenarios", () => {
         label: "Phone",
       }
     );
-    // One scan, both vaults, in the invitation's order.
     expect(enrolled?.map((row) => row.vaultId)).toStrictEqual(["v1", "v2"]);
     expect(enrolled?.every((row) => row.ownerId === priya.ownerId)).toBe(true);
     expect(owners.vaultsOwnedBy(priya.ownerId)).toStrictEqual(["v1", "v2"]);

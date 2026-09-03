@@ -2,18 +2,6 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { startFakeProviderServer } from "@centraid/backup/dist/testing/fake-provider-server.js";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
-/*
- * Seal-key restore-verify (#439) — the scheduled `runRestoreVerify`
- * proves what FORMAT.md warns about: a restore whose sealed columns cannot
- * be opened is "a placebo". A real backup of a vault with a sealed secret is
- * restored into a scratch dir, and the standing verification asserts the
- * recovery-kit/KeyStore DEK matches the vault's stamped fingerprint — the same
- * proof the vault's own open path enforces (`resolveSealKey`).
- *
- *   - a genuinely sealed vault verifies clean (the key unseals), and
- *   - a vault whose stamped fingerprint no longer matches the restored key FAILS
- *     verify with the placebo problem (a real regression the check now catches).
- */
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { HealthRegistry } from "../serve/health-registry.js";
@@ -50,8 +38,6 @@ describe("restore-verify-sealkey", () => {
     vaultId: string;
   }
 
-  /** A real vault with a SEALED secret (mints its KeyStore DEK + stamps a fingerprint),
-   *  wired to a real BackupService over the fake HTTP provider. */
   async function makeSealedMachine(
     server: Awaited<ReturnType<typeof startFakeProviderServer>>
   ): Promise<Machine> {
@@ -81,7 +67,6 @@ describe("restore-verify-sealkey", () => {
       logger: silentLogger,
     });
     cleanups.push(() => service.stop());
-    // Sealing the api_key mints the seal key and stamps the vault's fingerprint.
     invoke(plane, "sync.configure_credential", {
       kind: "pull.gmail",
       label: "personal",
@@ -97,7 +82,6 @@ describe("restore-verify-sealkey", () => {
     cleanups.push(() => server.close());
     const m = await makeSealedMachine(server);
     await m.service.runBackup(m.vaultId);
-    // Restore verification supplies the KeyStore DEK and matches the fingerprint.
     await expect(
       m.service.runRestoreVerify(m.vaultId)
     ).resolves.toBeUndefined();
@@ -108,8 +92,6 @@ describe("restore-verify-sealkey", () => {
     cleanups.push(() => server.close());
     const m = await makeSealedMachine(server);
 
-    // Corrupt the stamped fingerprint so the (real) restored key will not match it
-    // — the shape of a snapshot whose sealed columns can never be opened.
     const row = m.plane.db.vault
       .prepare("SELECT settings_json FROM core_vault LIMIT 1")
       .get() as {

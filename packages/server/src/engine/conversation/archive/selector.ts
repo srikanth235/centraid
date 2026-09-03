@@ -1,18 +1,12 @@
-// Phase-A eligibility (#438 decision 1). Selects the cold turn-ranges a
-// conversation can seal away WITHOUT ever touching a live, pinned, in-flight, or
-// already-archived turn. Reads only — no lock held, no mutation.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import type { Row } from "./types.js";
 
-/** A contiguous seq-range of one conversation eligible for one segment. */
 export interface EligibleRange {
   conversationId: string;
   kind: string;
   seqFrom: number;
   seqTo: number;
-  /** Turn rows in the range, ascending by seq. */
   turns: Row[];
 }
 
@@ -22,7 +16,6 @@ interface ConversationHead {
   updated_at: number;
 }
 
-/** seq-ranges [from,to] already covered by a conversation_archive row. */
 function archivedRanges(
   journal: DatabaseSync,
   conversationId: string
@@ -43,8 +36,6 @@ function seqAlreadyArchived(
   return false;
 }
 
-/** Turn ids protected by an IN-FLIGHT retry: a still-unfinished turn's
- *  `retry_of` target must not be archived from under the live retry. */
 function retryProtectedTurnIds(
   journal: DatabaseSync,
   conversationId: string
@@ -58,8 +49,6 @@ function retryProtectedTurnIds(
   return new Set(rows.map((r) => r.retry_of));
 }
 
-/** Split eligible turns into contiguous seq-ranges at every gap; one segment
- *  candidate per run. */
 function toContiguousRanges(
   conversationId: string,
   kind: string,
@@ -89,11 +78,6 @@ function toContiguousRanges(
   return out;
 }
 
-/** Eligible ranges for ONE conversation. Automation threads are eternal:
- *  aged ranges, never the newest turn (the live head). Chat/build archive
- *  nothing unless wholly idle (updated_at < cutoff, no unfinished, no pinned
- *  turn); then the cold thread seals whole. Pinned = replay fixture, breaks
- *  ranges. */
 export function eligibleRangesForConversation(
   journal: DatabaseSync,
   head: ConversationHead,
@@ -110,7 +94,6 @@ export function eligibleRangesForConversation(
   const isAutomation = head.kind === "automation";
 
   if (!isAutomation) {
-    // chat/build: whole-conversation gate.
     if (head.updated_at >= cutoffMs) return [];
     for (const t of turns) {
       if ((t.pinned as number) !== 0) return [];
@@ -133,14 +116,11 @@ export function eligibleRangesForConversation(
   return toContiguousRanges(head.id, head.kind, eligible);
 }
 
-/** Conversations with ≥1 candidate range, bounded by `maxConversations`;
- *  chat/build pre-filtered to idle to keep the scan cheap. */
 export function selectEligibleRanges(
   journal: DatabaseSync,
   cutoffMs: number,
   maxConversations: number
 ): EligibleRange[] {
-  // Automations are eternal — never idle-filtered; one bounded pass.
   const heads = journal
     .prepare(
       `SELECT id, kind, updated_at FROM conversations

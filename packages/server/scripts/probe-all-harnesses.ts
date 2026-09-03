@@ -1,5 +1,3 @@
-/** One bounded capability record per registered harness; missing CLIs are honest `available:false` rows rather than omissions, so the dump proves full registry coverage. */
-
 import type { HarnessKind } from "@centraid/server/engine";
 
 import { probeAcpCapabilities } from "../src/acp/backends/acp/probe-capabilities.js";
@@ -11,10 +9,6 @@ const harnessKinds = Object.keys(HARNESSES) as HarnessKind[];
 const envKey = (kind: HarnessKind): string =>
   `CENTRAID_${kind.replaceAll("-", "_").toUpperCase()}_BIN`;
 
-/**
- * All ~31 at once would fire a burst of real, billable vendor requests —
- * evidence collection must not look like an attack.
- */
 const MAX_CONCURRENT_PROBES = 3;
 
 type Row = Record<string, unknown> & { kind: HarnessKind };
@@ -35,8 +29,6 @@ async function probeOne(kind: HarnessKind): Promise<Row> {
   }
   const capabilities = await probeAcpCapabilities(
     acpConfigFor(kind, configured ? { binPath: configured } : {}),
-    // This dump is the one place that WANTS the live prompt: the observed
-    // usage/config-update/locations signals are its whole point.
     { timeoutMs: 20_000, probeLivePrompt: true }
   );
   return {

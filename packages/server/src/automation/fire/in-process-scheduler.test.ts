@@ -19,7 +19,6 @@ describe("InProcessScheduler.reconcile", () => {
     expect(diff.removed).toStrictEqual([]);
     await expect(s.list()).resolves.toStrictEqual(["a/one"]);
 
-    // Change one's schedule, add one, drop the original.
     diff = await s.reconcile([
       row("a/one", true, ["30 8 * * *"]), // expr changed → updated
       row("b/four", true, ["0 10 * * *"]), // new → added
@@ -34,7 +33,6 @@ describe("InProcessScheduler.reconcile", () => {
     const s = new InProcessScheduler({ fire: () => {} });
     await s.register(row("a/one", true, ["0 8 * * *"]));
     await expect(s.list()).resolves.toStrictEqual(["a/one"]);
-    // Disabling via register drops it from the registry.
     await s.register(row("a/one", false, ["0 8 * * *"]));
     await expect(s.list()).resolves.toStrictEqual([]);
     await s.register(row("a/one", true, ["0 8 * * *"]));
@@ -44,8 +42,6 @@ describe("InProcessScheduler.reconcile", () => {
 });
 
 describe("InProcessScheduler.tick", () => {
-  // Catch-up across a slept window is owned by cron-cursor.test.ts; this owns
-  // the scheduler wiring around it.
   it("fires each due cron once per minute", async () => {
     const fired: string[] = [];
     const clock = at(8, 0);
@@ -57,17 +53,13 @@ describe("InProcessScheduler.tick", () => {
       row("a/morning", true, ["0 8 * * *"]),
       row("a/evening", true, ["0 20 * * *"]),
     ]);
-    // Registering at 08:00 does not run the 08:00 automation: cron has the
-    // same no-fire bootstrap data triggers get.
     await settle();
     expect(fired).toStrictEqual([]);
 
-    // 08:00 — only the morning automation matches.
     s.tick();
     await settle();
     expect(fired).toStrictEqual(["a/morning"]);
 
-    // Same minute again — de-duped, no second fire.
     s.tick();
     await settle();
     expect(fired).toStrictEqual(["a/morning"]);
@@ -125,8 +117,6 @@ describe("condition-trigger watches", () => {
     });
     await s.register(conditionRow("studio/chaser", "*/10 * * * *"));
 
-    // 08:00 — the cron fires AND the */10 gate opens; the condition trigger
-    // sits at index 1 of manifest.triggers (after the cron).
     s.tick();
     expect(fires).toStrictEqual(["studio/chaser"]);
     expect(evals).toStrictEqual([["studio/chaser", 1]]);
@@ -134,12 +124,10 @@ describe("condition-trigger watches", () => {
       setImmediate(resolve);
     });
 
-    // 08:05 — neither.
     clock = at(8, 5);
     s.tick();
     expect(evals).toHaveLength(1);
 
-    // 08:10 — gate only.
     clock = at(8, 10);
     s.tick();
     expect(fires).toHaveLength(1);
@@ -158,7 +146,6 @@ describe("condition-trigger watches", () => {
       now: () => clock,
     });
     const r = conditionRow("studio/chaser");
-    // Strip the cron so only the condition trigger remains (index 0).
     const only: Row = { ...r, triggers: [r.triggers[1]!] };
     await s.register(only);
     await expect(s.list()).resolves.toStrictEqual(["studio/chaser"]);
@@ -213,9 +200,6 @@ describe("InProcessScheduler.nudge", () => {
     ]);
     evals.length = 0;
 
-    // Model five committed write hints spread across a tight burst rather
-    // than five calls in the same JS turn. The fixed window starts at the
-    // first hint and all later hints inside it join the same pass.
     s.nudge(["schedule.task"]);
     await vi.advanceTimersByTimeAsync(5);
     s.nudge(["schedule.task"]);
@@ -251,7 +235,6 @@ describe("InProcessScheduler.nudge", () => {
       ["studio/condition", 0],
     ]);
     s.nudge(["schedule.task"]);
-    // nudgeDelayMs: 0 still schedules via setTimeout; advance the clock.
     await vi.advanceTimersByTimeAsync(0);
 
     expect(evals).toStrictEqual([
@@ -357,9 +340,6 @@ describe("InProcessScheduler.nudge", () => {
         fires++;
       },
     });
-    // register(), unlike reconcile(), models a restarted scheduler whose
-    // persisted data cursor already exists. The write lands while no live
-    // doorbell is present — the exact crash window the poll must cover.
     await s.register(dataRow("studio/data", ["core.party"]));
     journal.push("prov-2");
 
@@ -413,7 +393,6 @@ describe("InProcessScheduler onTick hook (issue #351)", () => {
     await settle();
     expect(order).toStrictEqual(["tick:8:0", "fire:a/one"]);
 
-    // Same minute again — de-duped, no second tick or fire.
     s.tick();
     await settle();
     expect(order).toStrictEqual(["tick:8:0", "fire:a/one"]);

@@ -1,8 +1,3 @@
-/* Provider CAS inventory resolution for the gateway audit (#414). Every
- * storage connection is a provider connection (#436), so inventory always
- * comes from the provider's attested `listInventory` capability; there is no
- * direct own-S3 bucket listing. */
-
 import { openRemoteBackupProvider } from "@centraid/backup";
 import { readBlobStoreSettings, ReplicaIndex } from "@centraid/vault";
 import type { ReplicaStore, VaultDb } from "@centraid/vault";
@@ -14,7 +9,6 @@ import type { StorageConnectionStore } from "./storage-connections.js";
 export interface CasInventoryResult {
   configured: boolean;
   collection?: CollectedInventory;
-  /** Same-key objects that failed the vault content-key AEAD audit. */
   authenticatedFailures?: string[];
   error?: string;
 }
@@ -37,8 +31,6 @@ async function authenticatedFailures(
   );
   const index = new ReplicaIndex(db.vault);
   const failures: string[] = [];
-  // Scope the AEAD re-audit to THIS store's rows (#425): a cas
-  // listing must never disprove derived evidence, and vice-versa.
   const audits = await Promise.all(
     [...index.all(store)]
       .filter((sha) => remote.has(sha))
@@ -61,9 +53,6 @@ async function verifiedResult(
   collection: CollectedInventory,
   store: ReplicaStore
 ): Promise<CasInventoryResult> {
-  // The AEAD re-audit reads via `auditRemoteReplica`, which addresses the cas
-  // store; run it only for cas. The derived pass is presence-diff only (its
-  // missing/orphan drift still surfaces + unmarks in the reconciler).
   const failures =
     store === "cas" ? await authenticatedFailures(db, collection, store) : [];
   return {
@@ -73,12 +62,6 @@ async function verifiedResult(
   };
 }
 
-/**
- * Collect one store class's remote inventory (#425). `store`
- * defaults to `cas` — the original behavior byte-for-byte. `derived` returns
- * `{configured:false}` when the vault has no `derivedPrefix` (the target never
- * granted the store), so the reconciler simply skips the derived pass.
- */
 export async function collectCasInventory(opts: {
   db: VaultDb;
   storageConnections?: StorageConnectionStore;

@@ -1,11 +1,3 @@
-/*
- * The CRON time zoo (#839). `cron-match.test.ts` states the DST doctrine on one
- * zone at two pinned transitions, which a matcher special-casing a whole-hour
- * northern positive-DST shift would pass. This re-states the same two laws from
- * docs/cron-timezone.md § "DST policy" (Gap → SKIP, Overlap → ONCE) over
- * adversarial zones and a seeded sample of minutes from each band.
- */
-
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { AutomationTriggerCursor } from "@centraid/server/engine";
@@ -32,8 +24,6 @@ type ZooZone = {
   readonly overlap?: Band;
 };
 
-/** Bands come from the runtime's own tzdata: a tzdata release that moves a
- *  zone's rules fails loudly here. */
 const ZOO: readonly ZooZone[] = [
   {
     zone: "America/New_York",
@@ -158,7 +148,6 @@ const OVERLAP_ZONES = ZOO.filter((entry) => entry.overlap !== undefined);
 
 describe("cron DST zoo", () => {
   beforeEach(() => {
-    // Pinned, so a live `Date.now()` cannot make this pass only off-transition.
     useFakeClock("2026-06-15T12:00:00.000Z");
   });
 
@@ -189,8 +178,6 @@ describe("cron DST zoo", () => {
       "%s still fires the minute immediately BELOW its gap band",
       (_zone, entry) => {
         const band = entry.gap as Band;
-        // The control: without an ordinary neighbouring minute, "never matched" is also
-        // satisfied by an expression the matcher cannot parse.
         const below = band.fromMinute - 1;
         const matches = absoluteMatches(
           entry.zone,
@@ -215,7 +202,6 @@ describe("cron DST zoo", () => {
       (_zone, entry) => {
         const band = entry.overlap as Band;
         const minutes = sampleMinutes(band, ZOO_SEED);
-        // Two matches is the point — the dedupe below turns them into one delivery.
         const counts = minutes.map(
           (minute) =>
             absoluteMatches(entry.zone, pinnedExpr(band, minute), band).length
@@ -229,8 +215,6 @@ describe("cron DST zoo", () => {
       (_zone, entry) => {
         const band = entry.overlap as Band;
         const minutes = sampleMinutes(band, ZOO_SEED);
-        // Keyed by `wallClockMinuteKey`: if the two copies keyed differently the
-        // Overlap row would be unimplementable, so the collision IS the mechanism.
         const distinctKeysPerMinute = minutes.map((minute) => {
           const copies = absoluteMatches(
             entry.zone,
@@ -251,7 +235,6 @@ describe("cron DST zoo", () => {
         const band = entry.overlap as Band;
         const minutes = sampleMinutes(band, ZOO_SEED);
         const centre = Date.parse(band.transitionUtc);
-        // One window spanning both copies — the restart-gap shape.
         const perMinute = minutes.map(
           (minute) =>
             dueInstants(
@@ -288,8 +271,6 @@ describe("cron DST zoo", () => {
 
   describe("fixed-offset control", () => {
     it("Asia/Kolkata has neither a gap nor an overlap anywhere in 2026", () => {
-      // The control zone: a matcher manufacturing a gap or overlap from the +05:30
-      // base offset shows up here.
       const fixed = ZOO.find((entry) => entry.zone === "Asia/Kolkata");
       expect(fixed?.gap).toBeUndefined();
       expect(fixed?.overlap).toBeUndefined();
@@ -322,14 +303,6 @@ describe("cron DST zoo", () => {
   });
 
   describe("a continuously-running gateway across a fall-back", () => {
-    /**
-     * REGRESSION LOCK (#846 P2) for the Overlap row's "fires once".
-     *
-     * `dueInstants`' `seen` set is local to ONE call, so a gateway ticking once a
-     * minute lands the two absolute minutes sharing a wall clock in two windows,
-     * each deduping against itself and firing. `readCronCursor` therefore looks
-     * back across windows, but only when the schedule's zone actually fell back.
-     */
     it.each(OVERLAP_ZONES.map((entry) => [entry.zone, entry] as const))(
       "%s fires the repeated wall minute ONCE across a continuous tick",
       (_zone, entry) => {
@@ -351,8 +324,6 @@ describe("cron DST zoo", () => {
         }
 
         expect(fires).toHaveLength(1);
-        // …and it is the EARLIER copy, the instant the policy names; the band is one
-        // shift wide, so the later copy is suppressed.
         const shiftMs = (band.toMinute - band.fromMinute) * 60_000;
         expect(fires[0]).toBe(centre - shiftMs);
         expect(wallClockMinuteKey(new Date(fires[0]!), entry.zone)).toBe(

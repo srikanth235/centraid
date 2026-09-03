@@ -1,6 +1,3 @@
-// Pure service-unit generators. No fs, no child_process, no `process.platform`
-// — impure glue lives in `service-admin.ts`.
-
 import path from "node:path";
 
 export const DEFAULT_LAUNCHD_LABEL = "dev.centraid.gateway";
@@ -14,8 +11,6 @@ export interface ServiceUnitSpec {
   stdoutLog: string;
   stderrLog: string;
   workingDirectory: string;
-  /** Must include `ELECTRON_RUN_AS_NODE=1` when `nodeBin` is Electron, or
-   *  KeepAlive/Restart launches the full desktop app. */
   env?: Record<string, string>;
   encryptedCredential?: { id: string; path: string };
 }
@@ -62,7 +57,6 @@ function xmlEscape(value: string): string {
     .replace(/'/gu, "&apos;");
 }
 
-// KeepAlive SuccessfulExit=false: restart on crash, not after a clean SIGTERM 0.
 export function buildLaunchdPlist(
   label: string,
   spec: ServiceUnitSpec

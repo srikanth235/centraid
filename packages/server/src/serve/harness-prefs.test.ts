@@ -78,15 +78,12 @@ describe(removedHarnessLadderMembers, () => {
   });
 
   it("rejects an unregistered harness instead of coercing it to the default", () => {
-    // The live-turn resolver must still hand back a usable harness…
     expect(
       resolveGatewayHarnessPrefs(
         { "harness.automations": "future-harness" },
         "automations"
       ).kind
     ).toBe("codex");
-    // …but the Settings patch path must not persist a choice this host cannot
-    // execute under a name that silently means `codex`.
     expect(
       resolveStrictGatewayHarnessPrefs(
         { "harness.automations": "future-harness" },
@@ -96,7 +93,6 @@ describe(removedHarnessLadderMembers, () => {
     expect(
       resolveStrictGatewayHarnessPrefs({ "harness.kind": "future-harness" })
     ).toBeUndefined();
-    // Unset means "the default harness" and stays valid.
     expect(resolveStrictGatewayHarnessPrefs({}, "automations")?.kind).toBe(
       "codex"
     );

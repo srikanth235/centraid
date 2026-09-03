@@ -5,7 +5,6 @@ export interface AutomationTriggerCursor {
   triggerIndex: number;
   sourceKind: string;
   positionJson?: string;
-  /** Engine-owned write-ahead fire receipt; never handed to a source reader. */
   pendingJson?: string;
   windowFrom?: number;
   windowTo?: number;
@@ -53,17 +52,14 @@ export interface TriggerIngressBounds {
   latestId?: number;
 }
 
-/** One declared `(automation, trigger index)` slot whose cursor must survive. */
 export interface CursorRetentionKey {
   automationId: string;
   triggerIndex: number;
 }
 
-/** Deliveries retention removed, per source, so the reader can account for them. */
 export interface TriggerIngressGap {
   sourceKey: string;
   pruned: number;
-  /** Highest ingress id retention removed — a cursor at or below it lost data. */
   throughId: number;
 }
 
@@ -124,7 +120,6 @@ function mapIngress(row: IngressRow): TriggerIngressRecord {
   };
 }
 
-/** Durable cursor + authenticated ingress access for the automation engine. */
 export class AutomationTriggerStore {
   constructor(private readonly dbProvider: DatabaseProvider) {}
 
@@ -174,16 +169,6 @@ export class AutomationTriggerStore {
       );
   }
 
-  /**
-   * Drop cursors for trigger slots the desired set no longer declares.
-   *
-   * Retention is per `(automation, trigger index)`: shrinking an automation's
-   * trigger list from three to one must not leave positions at index 1–2 that
-   * a later same-kind trigger would resurrect. An EMPTY retention set is a
-   * no-op, not a wipe — a transient empty listing (a git-store worktree swap,
-   * or every automation disabled) must never destroy the watermarks that make
-   * re-enabling lossless.
-   */
   deleteCursorsNotIn(retained: readonly CursorRetentionKey[]): number {
     if (retained.length === 0) return 0;
     const placeholders = retained.map(() => "(?, ?)").join(",");
@@ -202,20 +187,11 @@ export class AutomationTriggerStore {
     );
   }
 
-  /**
-   * Durably record one delivery, deduplicating on
-   * `(source, source_key, delivery_id)`. The insert and the id lookup share one
-   * transaction: a concurrent `pruneIngress` on another connection must not be
-   * able to delete the row between them and make a stored delivery look
-   * rejected.
-   */
   appendIngress(input: AppendTriggerIngress): {
     inserted: boolean;
     id: number;
   } {
     const db = this.dbProvider();
-    // SAVEPOINT (not BEGIN) so this nests safely inside a caller's transaction
-    // — vault.db is one connection shared with the conversation store.
     db.prepare("SAVEPOINT append_ingress").run();
     try {
       const result = db
@@ -294,18 +270,8 @@ export class AutomationTriggerStore {
     };
   }
 
-  /**
-   * Drop deliveries past their retention TTL and REPORT what that cost.
-   *
-   * An automation stalled longer than the TTL loses those deliveries; every
-   * other gap in this design is accounted for, so this one is too. The store
-   * cannot map a `source_key` onto the automation cursor that reads it (the
-   * position encoding belongs to the reader), so the loss is returned per
-   * source and the reader folds it into its `skipped` / `gapReason`.
-   */
   pruneIngress(now: number): PruneIngressResult {
     const db = this.dbProvider();
-    // One savepoint: the reported gap must describe exactly the rows deleted.
     db.prepare("SAVEPOINT prune_ingress").run();
     try {
       const gaps = (

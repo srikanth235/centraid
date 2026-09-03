@@ -1,12 +1,3 @@
-/*
- * Adversarial properties for the policy resolver (#839): each safety claim in
- * `enrich-resolve.ts`'s prose — per-field most-specific-wins, never raising the
- * egress ceiling, fail-closed on unstated policy, mis-keyed chains ignored —
- * is checked against an INDEPENDENT oracle, not a re-walk of the implementation.
- * Order: the fold is last-non-null-write over ARRAY POSITION (`rule.scope` is
- * never read); foreign capabilities change nothing from any position.
- */
-
 import { describe, expect, test } from "vitest";
 
 import { fc } from "@centraid/test-kit/fast-check";
@@ -33,13 +24,8 @@ import {
 } from "./enrich-resolve.js";
 import type { EnrichEgressCeiling } from "./enrich-resolve.js";
 
-/** Capability ids the chains are keyed on — small so collisions actually happen. */
 const CAPABILITIES = ["faces", "captions", "trips"] as const;
 
-/**
- * Ceiling ladder from the vault's class list, NOT `EGRESS_RANK` (module-private):
- * the oracle must not inherit the implementation's mistake.
- */
 const CEILING_LADDER: readonly EnrichEgressCeiling[] = [
   "off",
   ...ENRICH_EGRESS_CLASSES,
@@ -74,10 +60,6 @@ const arbTier: fc.Arbitrary<EnrichTier | undefined> = fc.constantFrom<
   (EnrichTier | undefined)[]
 >(...ENRICH_TIERS, undefined);
 
-/**
- * Independent oracle: fold per the module DOC's prose — last non-null write per
- * field, foreign capabilities skipped, base from the tier alone.
- */
 function expectedFold(
   rules: readonly EnrichPolicyRule[],
   tier: EnrichTier | undefined,
@@ -132,7 +114,6 @@ describe("enrichment policy cascade — resolver properties (#839 G10)", () => {
     });
 
     test("a rule that pins ONE field leaves the other two on the level below it", () => {
-      // A profile-only pin keeps the vault's enabled/trigger answers, not resets.
       fc.assert(
         fc.property(
           fc.constantFrom(...ENRICH_TRIGGERS),
@@ -229,8 +210,6 @@ describe("enrichment policy cascade — resolver properties (#839 G10)", () => {
     });
 
     test("a profile-pinning rule cannot widen what the vault's tier allows", () => {
-      // The named attack: a provider-backed profile pinned onto one album —
-      // the profile CHANGES; what it may reach does not.
       fc.assert(
         fc.property(
           fc.string({ minLength: 1, maxLength: 16 }),
@@ -265,8 +244,6 @@ describe("enrichment policy cascade — resolver properties (#839 G10)", () => {
     });
 
     test("egressWithinCeiling is monotone in both arguments over the ladder", () => {
-      // Narrowing only: a higher ceiling admits more, a higher class admits less;
-      // a rank table that stopped being a total order would break exactly here.
       fc.assert(
         fc.property(
           fc.nat({ max: CEILING_LADDER.length - 1 }),
@@ -282,8 +259,6 @@ describe("enrichment policy cascade — resolver properties (#839 G10)", () => {
             ] as EnrichEgressClass;
             const lower = CEILING_LADDER[lo] as EnrichEgressCeiling;
             const higher = CEILING_LADDER[hi] as EnrichEgressCeiling;
-            // Stated as an implication so the assertion stays unconditional and
-            // the counterexample prints both ceilings.
             expect(
               !egressWithinCeiling(egress, lower) ||
                 egressWithinCeiling(egress, higher),
@@ -330,8 +305,6 @@ describe("enrichment policy cascade — resolver properties (#839 G10)", () => {
     });
 
     test("an unreadable tier WITH rules falls back to the most conservative base", () => {
-      // Header contract: disabled, `on-device` ceiling; rules may enable,
-      // never past a device-local engine.
       fc.assert(
         fc.property(
           fc.array(arbRule(fc.constant("faces")), {
@@ -342,7 +315,6 @@ describe("enrichment policy cascade — resolver properties (#839 G10)", () => {
             const resolved = resolveEnrichmentPolicy(rules, undefined, "faces");
             expect(resolved?.egressCeiling).toBe("on-device");
             expect(egressWithinCeiling("gateway", "on-device")).toBe(false);
-            // Enabled only if a rule said so; silence never enables.
             const lastEnabled = rules.reduce<boolean | null>(
               (seen, rule) => (rule.enabled === null ? seen : rule.enabled),
               null
@@ -354,8 +326,6 @@ describe("enrichment policy cascade — resolver properties (#839 G10)", () => {
     });
 
     test("tier `off` disables regardless of any rule that tries to enable", () => {
-      // `off` is the absence of a lane: rules may flip `enabled`, but nothing
-      // the gate can run fits an `off` ceiling.
       fc.assert(
         fc.property(
           fc.array(arbRule(fc.constant("faces")), { maxLength: 6 }),
@@ -491,9 +461,6 @@ describe("enrichment policy cascade — resolver properties (#839 G10)", () => {
     });
 
     test("specificity is ARRAY POSITION, not `rule.scope` — the resolver never reads the scope", () => {
-      // Pinned: the store guarantees chain order (`readEnrichPolicyRuleChain`),
-      // the resolver trusts it — a hand-assembled most-specific-first chain
-      // silently inverts here.
       fc.assert(
         fc.property(
           fc.string({ minLength: 1, maxLength: 8 }),
@@ -508,7 +475,6 @@ describe("enrichment policy cascade — resolver properties (#839 G10)", () => {
               trigger: null,
               updatedAt: "2026-08-21T00:00:00.000Z",
             });
-            // Deliberately WRONG order (most specific first).
             expect(
               resolveEnrichmentPolicy(
                 [at("item", itemProfile), at("vault", vaultProfile)],

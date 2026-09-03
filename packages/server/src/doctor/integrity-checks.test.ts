@@ -1,10 +1,3 @@
-/*
- * Integrity-scrub check library (#839). Every check is exercised
- * BOTH ways over a real on-disk vault: clean (passes) and against an injected
- * REAL fault (a flipped CAS byte, an extra hardlink, a foreign-epoch change
- * row), so a green here means the check detects the corruption it claims to.
- */
-
 import {
   linkSync,
   mkdirSync,
@@ -36,7 +29,6 @@ describe("integrity check library", () => {
     while (open.length) open.pop()!();
   });
 
-  /** A bootstrapped on-disk vault with a few real CAS blobs. */
   function seededVault(vaultId?: string): {
     db: VaultDb;
     dir: string;
@@ -62,7 +54,6 @@ describe("integrity check library", () => {
     return path.join(dir, "blobs", "sha256", sha.slice(0, 2), sha);
   }
 
-  /** Flip one bit under a content address — exactly a bit-rot event. */
   function corruptCasFile(file: string): void {
     const bytes = readFileSync(file);
     bytes.writeUInt8(bytes.readUInt8(0) ^ 0xff, 0);
@@ -151,9 +142,6 @@ describe("integrity check library", () => {
       const source = casFile(a.dir, sha);
       const dest = casFile(b.dir, sha);
       mkdirSync(path.dirname(dest), { recursive: true });
-      // Both vaults seeded identical bytes, so B already holds its OWN copy of
-      // this address (a distinct inode). Replace it with a hardlink to A's
-      // inode — one inode now claimed by exactly two accounted CAS entries.
       rmSync(dest, { force: true });
       linkSync(source, dest);
       const finding = checkHardlinkRefcounts([
@@ -165,9 +153,6 @@ describe("integrity check library", () => {
 
     test("detects an unaccounted external hardlink (a byte no sweep can free)", () => {
       const { dir, vaultId, shas } = seededVault();
-      // A directory entry OUTSIDE any owned vault points at the same inode:
-      // nlink becomes 2 but only 1 CAS entry is accounted, so those bytes can
-      // never be reclaimed — a GC-contract violation.
       const stray = tempDirSync("doctor-stray-");
       linkSync(casFile(dir, shas[0]!), path.join(stray, "leaked"));
       const finding = checkHardlinkRefcounts([
@@ -191,8 +176,6 @@ describe("integrity check library", () => {
 
     test("detects a replica_change row from a foreign epoch", () => {
       const { db, vaultId } = seededVault();
-      // The retention prune deletes every row whose epoch != current, so a
-      // surviving foreign-epoch row is unrepresentable in a healthy log.
       db.vault
         .prepare(
           `INSERT INTO replica_change (epoch, commit_id, entity, row_id, op, old_values_json, changed_at)
@@ -209,9 +192,6 @@ describe("integrity check library", () => {
 
     test("detects an autoincrement watermark rewound below the max change seq", () => {
       const { db, vaultId } = seededVault();
-      // Bootstrap + blob ingests fire replica triggers, so there are rows and a
-      // sqlite_sequence entry. Rewinding it below the max seq is a rowid-reuse
-      // hazard the log's monotonic autoincrement is meant to prevent.
       db.vault
         .prepare(
           "UPDATE sqlite_sequence SET seq = 0 WHERE name = 'replica_change'"
@@ -256,8 +236,6 @@ describe("integrity check library", () => {
         full: true,
       });
       expect(hasError(findings)).toBe(false);
-      // ONE file (#916): vault.db integrity, cas-rehash, replica-journal, + 1
-      // cross-vault refcount audit.
       expect(findings).toHaveLength(4);
       expect(findings.map((f) => f.check)).toContain("hardlink-refcount");
     });

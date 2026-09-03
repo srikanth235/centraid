@@ -1,8 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#567) one fire-spine suite shares the real worker, stable automation conversation, audit store, failover notice, and onFailure fixtures
 import { promises as fs } from "node:fs";
 // governance: allow-repo-hygiene file-size-limit (#567) one fire-spine suite shares the real worker, stable automation conversation, audit store, failover notice, and onFailure fixtures
-// Automation fire spine (#147): real (trivial) `handler.js` through `runFire`
-// with a STUB dispatch surface — no agent-runtime CLI machinery.
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -51,9 +49,6 @@ async function writeAutomation(
   await fs.writeFile(path.join(dir, "handler.js"), handler);
 }
 
-/** A stub dispatch surface that records that it was opened + closed. The
- *  trivial handlers below never call `ctx.delegate`, so the dispatcher itself is
- *  never invoked. */
 function stubDispatch(opened: OpenDispatchArgs[], closes: { n: number }) {
   return (args: OpenDispatchArgs): Promise<DispatchSurface> => {
     opened.push(args);
@@ -92,8 +87,6 @@ describe(runFire, () => {
     expect(record.automationRef).toBe("notes/digest");
     expect(record.automationName).toBe("Digest");
 
-    // The spine opened exactly one dispatch surface, with the resolved app
-    // dir as workdir.
     expect(opened).toHaveLength(1);
     expect(opened[0]!.automationRef).toBe("notes/digest");
     expect(opened[0]!.workdir).toMatch(/notes[/\\]automations[/\\]digest$/u);
@@ -201,8 +194,6 @@ describe(runFire, () => {
   });
 
   it("emits a live turn stream: turn.start → item lifecycle per ctx call → turn.end", async () => {
-    // A handler that drives one ctx.delegate. The stub dispatch returns a fixed
-    // answer so the node lifecycle is deterministic.
     await writeAutomation(
       appsDir,
       "notes",
@@ -233,7 +224,6 @@ describe(runFire, () => {
     );
     expect(outcome.ok).toBe(true);
 
-    // turn.start first, turn.end last.
     expect(events.at(0)?.type).toBe("turn.start");
     expect(events.at(-1)?.type).toBe("turn.end");
     const end = events.at(-1) as Extract<
@@ -242,7 +232,6 @@ describe(runFire, () => {
     >;
     expect(end.ok).toBe(true);
 
-    // The delegate item opened (start) before it closed (end), at ordinal 0.
     const lifecycle = events.filter(
       (e) => e.type === "item.start" || e.type === "item.end"
     );
@@ -276,9 +265,6 @@ describe(runFire, () => {
        };`
     );
     const events: AutomationTurnStreamEvent[] = [];
-    // A stub delegate dispatcher that behaves like a streaming harness turn:
-    // forward token deltas + a usage event through `call.onEvent`, then
-    // return the final answer.
     const dispatch = (): Promise<DispatchSurface> =>
       Promise.resolve({
         delegateDispatcher: async (call) => {
@@ -312,7 +298,6 @@ describe(runFire, () => {
     );
     expect(outcome.ok).toBe(true);
 
-    // Token deltas surfaced as item.delta on the delegate item (ordinal 0).
     const deltas = events.filter((e) => e.type === "item.delta");
     expect(deltas.length >= 3).toBeTruthy();
     expect(
@@ -324,8 +309,6 @@ describe(runFire, () => {
     expect(deltaTypes.includes("assistant.delta")).toBeTruthy();
     expect(deltaTypes.includes("usage")).toBeTruthy();
 
-    // The usage event was persisted onto the delegate node's ledger row, so the
-    // run's token rollup is accurate.
     const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     const delegateNode = store
       .listItems(record.runId)
@@ -370,8 +353,6 @@ describe(runFire, () => {
             args: { path: "b.txt" },
             rawJson: '{"toolCallId":"call-b","status":"pending"}',
           });
-          // Finish out of start order: name/ordinal correlation would cross
-          // these results; callId correlation must not.
           call.onEvent?.({
             type: "tool.result",
             toolCallId: "call-b",
@@ -441,8 +422,6 @@ describe(runFire, () => {
             text: "done",
             rawJson: '{"stopReason":"end_turn"}',
           });
-          // A trailing error with no envelope of its own must not blank the
-          // one the final already captured.
           call.onEvent?.({ type: "error", message: "stream closed late" });
           return "done";
         },
@@ -501,8 +480,6 @@ describe(runFire, () => {
     const item = store
       .listItems(record.runId)
       .find((entry) => entry.kind === "delegate");
-    // The harness confirmed neither a model nor a cost, so the run books
-    // "unknown" — not the configured model, and not an invented number.
     expect(item?.model).toBeUndefined();
     expect(item?.costUsd).toBeUndefined();
     expect(item?.costSource).toBeUndefined();
@@ -552,8 +529,6 @@ describe(runFire, () => {
     const delegateItem = store
       .listItems(record.runId)
       .find((item) => item.kind === "delegate");
-    // Tokens without a priceable model are unknown, and unknown is NULL: a
-    // catalog-wide ceiling would be indistinguishable from a real estimate.
     expect(delegateItem?.costSource).toBeUndefined();
     expect(delegateItem?.costUsd).toBeUndefined();
     expect(delegateItem?.model).toBeUndefined();
@@ -561,9 +536,6 @@ describe(runFire, () => {
   });
 
   it("cascades onFailure through the injected surface with the target automation harness", async () => {
-    // `main` throws → its onFailure target `recover` fires, both via the one
-    // injected `openDispatch`. Proves the cascade stayed in the spine and did
-    // not leak back into the host.
     await writeAutomation(
       appsDir,
       "notes",
@@ -642,14 +614,10 @@ describe(runFire, () => {
       { openDispatch: dispatch }
     );
 
-    // The handler succeeded; a host-side binding write did not. The outcome
-    // must not be rewritten to failed (that would cascade onFailure).
     expect(outcome.ok).toBe(true);
 
     const store = new ConversationStore(makeLedgerDbProvider(ledgerDbFile));
     const turn = store.getTurn(record.runId);
-    // The failed transaction rolled its own finishTurn back; the turn is still
-    // settled durably rather than left running forever.
     expect(turn?.endedAt).toBeTypeOf("number");
     expect(turn?.ok).toBe(true);
     expect(turn?.error).toContain("harness binding write failed");

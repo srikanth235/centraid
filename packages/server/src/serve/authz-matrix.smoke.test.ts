@@ -4,11 +4,6 @@ import path from "node:path";
 
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
-/**
- * Authz matrix smoke (#496): table-driven role/session × critical routes
- * against a real `serve()` daemon. Complements the denser per-route suites
- * with one compact cross-surface table the matrix can own.
- */
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import type { GatewayPaths } from "../paths.js";
@@ -30,8 +25,6 @@ function pathsUnder(dir: string): GatewayPaths {
 describe("authz-matrix.smoke scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`authz-smoke-${crypto.randomUUID()}-`);
-    // Pairing stores share the gateway's own database, so the owners surface
-    // (an `admin` registry row) is mounted for the tier-enforcement cases.
     const database = GatewayDatabase.open(dataDir);
     handle = await serve({
       paths: pathsUnder(dataDir),
@@ -65,7 +58,6 @@ describe("authz-matrix.smoke scenarios", () => {
     route: string;
     authorization?: string;
     method?: string;
-    /** Status family or exact code */
     expect: number | ((status: number) => boolean);
   }> = [
     {
@@ -107,15 +99,8 @@ describe("authz-matrix.smoke scenarios", () => {
       route: "/_centraid/vault/sql",
       method: "POST",
       authorization: `Bearer ${ADMIN}`,
-      // Auth must succeed; body may still 4xx for missing SQL — never 401/403/5xx.
       expect: (s) => s !== 401 && s !== 403 && s < 500,
     },
-    /*
-     * `publicPaths` regression guard (#568). Only the handshake
-     * route is bearer-free; every capability-granting verb must 401 without a
-     * credential. Re-adding one to `serve()`'s `publicPaths` fails CI here
-     * rather than shipping an anonymous path to a capability.
-     */
     {
       name: "no bearer → 401 on the vault erase ceremony",
       route: "/centraid/_vault/vaults:erase",
@@ -145,12 +130,6 @@ describe("authz-matrix.smoke scenarios", () => {
     expect(passed, `status ${status} for ${c.route}`).toBe(true);
   });
 
-  /*
-   * Admin tier at dispatch (#865 F2). The gateway-wide operator surfaces —
-   * resource, diagnostics, storage, logs, owners — are registry `admin` rows,
-   * and a proved DEVICE plane must get a 403 on each while the loopback
-   * bearer (the owner's own path) still answers normally.
-   */
   const ADMIN_GATEWAY_WIDE_ROUTES: Array<{
     route: string;
     method?: string;
@@ -173,11 +152,6 @@ describe("authz-matrix.smoke scenarios", () => {
     }
   );
 
-  /**
-   * A PWA proxy session resolves to the host device key
-   * (`WebControlSessions.authorize` → `{plane:'device'}`), which is exactly
-   * the proved-device identity the admin tier must refuse (#865 F2).
-   */
   async function establishControlSession(): Promise<string> {
     const shellOrigin = "http://shell.local";
     const establish = await fetch(`${handle.url}/centraid/_web/control`, {
@@ -206,8 +180,6 @@ describe("authz-matrix.smoke scenarios", () => {
   );
 
   test("the control-session proxy itself still works below the admin tier", async () => {
-    // The refusal above must be the admin TIER, not the proxy lane breaking:
-    // the same cookie reaches a device-tier route normally.
     const cookie = await establishControlSession();
     const health = await fetch(
       `${handle.url}/centraid/_web/control?path=${encodeURIComponent("/centraid/_gateway/health")}`,
@@ -216,20 +188,10 @@ describe("authz-matrix.smoke scenarios", () => {
     expect(health.status).toBe(200);
   });
 
-  /*
-   * Issue #568 item C. `/centraid/_gateway/info` is public so a client can read
-   * the version/schema handshake before it can pair — but `endpointTicket` is
-   * this gateway's iroh DIAL ticket. A browser fetch to `http://127.0.0.1:<port>` from any
-   * page the owner visits IS a loopback socket, a plain GET needs no preflight,
-   * and `decideCors` answers a foreign origin `*` — so loopback cannot be the
-   * gate. Only a presented credential may see it.
-   */
   test("gateway info withholds the endpoint ticket from an unauthenticated caller", async () => {
     const anonymous = await fetch(`${handle.url}/centraid/_gateway/info`);
     expect(anonymous.status).toBe(200);
     const anonymousBody = (await anonymous.json()) as Record<string, unknown>;
-    // The handshake still answers: version + protocol are what a client needs
-    // before it can pair at all.
     expect(anonymousBody.protocolVersion).toStrictEqual(expect.any(Number));
     expect(anonymousBody).not.toHaveProperty("endpointTicket");
 
@@ -245,8 +207,6 @@ describe("authz-matrix.smoke scenarios", () => {
       anonymousBody.protocolVersion
     );
 
-    // A WRONG bearer is not a credential: it must be treated as anonymous on a
-    // public path, never as "close enough because it is loopback".
     const wrong = await fetch(`${handle.url}/centraid/_gateway/info`, {
       headers: { Authorization: "Bearer not-the-admin-token" },
     });

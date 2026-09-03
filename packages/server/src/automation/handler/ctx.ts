@@ -1,5 +1,3 @@
-/** Parent-side handlers for the worker's `ctx.*` messages (#80); replies in the worker's shape. */
-
 import type {
   ConversationStore,
   TurnStreamEvent,
@@ -25,7 +23,6 @@ export interface AuditState {
   runId: string;
   automationId: string;
   ordinal: number;
-  /** Live run-stream sink; no-op until the host wires a bus (#158). */
   emit: RunEventSink;
 }
 
@@ -39,23 +36,16 @@ export interface CtxReply {
   error?: string;
 }
 
-/** One `ctx.delegate` content reference, as sent by the worker (#299). */
 export interface DelegateContentRef {
   contentId: string;
   variant: string;
   maxBytes?: number;
 }
 
-/**
- * Resolve `ctx.delegate` content refs into attachments via the vault
- * bridge (#299), under the automation's grant. Fail-closed: denial fails
- * the call — never a silent partial prompt.
- */
 export async function resolveContentAttachments(
   vault: VaultBridge | undefined,
   refs: readonly DelegateContentRef[]
 ): Promise<DelegateAttachment[]> {
-  // Content-free calls need no vault authority (probes pass []).
   if (refs.length === 0) return [];
   if (!vault) {
     throw new Error(
@@ -106,10 +96,6 @@ export async function resolveContentAttachments(
   );
 }
 
-/**
- * Service one `ctx.delegate` call: open a `delegate` node, dispatch, forward
- * events as `item.delta`, settle with the token/model rollup.
- */
 export async function handleDelegateMessage(
   audit: AuditState,
   dispatchCtx: DispatchContext,
@@ -141,9 +127,6 @@ export async function handleDelegateMessage(
     },
     started,
   });
-  // Forward chat events as `item.delta` (#158); keep the last usage
-  // for closeRunNode's rollup. ACP tool calls become durable items keyed by
-  // toolCallId: parallel calls share names — ordinal/name correlation void.
   let lastUsage: Extract<TurnStreamEvent, { type: "usage" }> | undefined;
   let finalRawJson: string | undefined;
   const toolItems = new Map<
@@ -152,7 +135,6 @@ export async function handleDelegateMessage(
   >();
   const onEvent = (ev: TurnStreamEvent): void => {
     if (ev.type === "usage") lastUsage = ev;
-    // Keep the last envelope WITH one: an error after a final must not blank it.
     if (
       (ev.type === "final" || ev.type === "error") &&
       ev.rawJson !== undefined
@@ -219,7 +201,7 @@ export async function handleDelegateMessage(
       }
       audit.emit({ type: "item.delta", itemId: nodeId, ordinal, event: ev });
     } catch {
-      /* swallow */
+      // Intentionally empty.
     }
   };
   const closeDanglingTools = (error: string): void => {
@@ -414,10 +396,8 @@ export function handleRunsMessage(
   }
 ): CtxReply {
   try {
-    // An automation's runs are its ref-keyed conversation's turns.
     const automationRef = filter.automationId ?? audit.automationId;
     const limit = filter.limit ?? 50;
-    // One extra row drops the in-progress self-turn without shorting the limit.
     const rows = audit.store
       .listAutomationTurns(automationRef, {
         ...(filter.status ? { status: filter.status } : {}),

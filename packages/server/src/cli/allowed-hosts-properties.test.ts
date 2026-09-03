@@ -4,12 +4,6 @@ import { fc } from "@centraid/test-kit/fast-check";
 
 import { mergeAllowedHosts, parseAllowedHostsEnv } from "./allowed-hosts.js";
 
-/**
- * Property defense for Host allowlist merge (#545).
- *
- * Model: output hostnames are lowercased non-empty tokens; CLI order is
- * preserved ahead of env; duplicates (case-insensitive) appear once.
- */
 describe("allowed-hosts properties", () => {
   const hostToken = fc
     .stringMatching(/^[A-Za-z0-9][A-Za-z0-9.-]{0,24}$/u)

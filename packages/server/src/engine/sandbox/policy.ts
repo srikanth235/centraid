@@ -1,8 +1,3 @@
-/**
- * Fail-closed capability allowlist. WHAT IT IS NOT: an OS sandbox — it binds
- * JavaScript in THIS THREAD, never what has escaped it. Read `install.ts`.
- */
-
 import { realpathSync } from "node:fs";
 import { builtinModules } from "node:module";
 import path from "node:path";
@@ -29,9 +24,6 @@ export interface SandboxPolicy {
   readonly environment: "denied" | "inherited";
 }
 
-/** The shared floor: no ambient authority. Deliberately absent — `module`
- *  (`createRequire` bypasses the hooks), `process`, `os`, `v8`/`vm`,
- *  `worker_threads`, `inspector`. */
 export const COMPUTATIONAL_BUILTINS: readonly string[] = Object.freeze([
   "assert",
   "assert/strict",
@@ -99,7 +91,6 @@ export function automationHandlerPolicy(): SandboxPolicy {
   };
 }
 
-/** HONEST LIMIT: past `process.dlopen` nothing here constrains the addon. */
 export function modelRuntimePolicy(
   readRoots: readonly string[]
 ): SandboxPolicy {
@@ -118,8 +109,6 @@ export function modelRuntimePolicy(
   };
 }
 
-/** A SEPARATE lane, never a `subprocess` grant on `modelRuntimePolicy`, which
- *  would widen every bundle there. HONEST LIMIT: the child is unconstrained. */
 export function mediaTranscodePolicy(
   readRoots: readonly string[]
 ): SandboxPolicy {
@@ -139,11 +128,9 @@ export function normalizeRoots(roots: readonly string[]): readonly string[] {
     const absolute = path.resolve(root);
     let real = absolute;
     try {
-      // macOS tmpdirs are `/var/folders` and `/private/var/folders` for the
-      // same directory; confinement compares realpath(target) to these roots.
       real = realpathSync(absolute);
     } catch {
-      // Granted before the directory exists — keep the resolved form.
+      // Intentionally empty.
     }
     seen.add(real);
   }
@@ -154,7 +141,6 @@ export function builtinId(specifier: string): string | null {
   if (typeof specifier !== "string" || specifier === "") return null;
   const bare = specifier.startsWith("node:") ? specifier.slice(5) : specifier;
   if (bare === "" || bare.startsWith(".") || bare.startsWith("/")) return null;
-  // Check bare names so `crypto-js` is not read as `crypto`.
   if (specifier.startsWith("node:")) return bare;
   return KNOWN_BUILTINS.has(bare) ? bare : null;
 }
@@ -190,7 +176,6 @@ export function builtinDecision(
   };
 }
 
-/** TOCTOU: a symlink swapped after this check is not caught here. */
 export function isPathWithinRoots(
   target: string,
   roots: readonly string[]
@@ -199,7 +184,6 @@ export function isPathWithinRoots(
   const resolved = path.resolve(target);
   return roots.some((root) => {
     if (resolved === root) return true;
-    // `path.relative`, never `startsWith`: that accepts a `-evil` sibling.
     const rel = path.relative(root, resolved);
     return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
   });

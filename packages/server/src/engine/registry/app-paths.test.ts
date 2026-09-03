@@ -18,9 +18,7 @@ describe(isValidAppId, () => {
     expect(isValidAppId("_internal")).toBe(false);
     expect(isValidAppId("a/b")).toBe(false);
     expect(isValidAppId("up..dir")).toBe(false);
-    // Dots are not part of the grammar; automation apps are marked by the manifest `kind` field.
     expect(isValidAppId("auto.standup-bot")).toBe(false);
-    // The vault assistant's reserved scope is `_`-prefixed like any other plugin-internal id — `isValidAppId` still rejects it; `isValidAppOrAssistantId` is the gate that allows it.
     expect(isValidAppId(ASSISTANT_APP_ID)).toBe(false);
   });
 });

@@ -1,11 +1,3 @@
-/*
- * `gateway.db`'s DDL. Pre-1.0 there are NO migrations, on principle: a
- * gateway.db from an older generation is erased and re-onboarded, not
- * migrated in place. `installGatewaySchema` is the single source of truth
- * for the current shape and is pure over a `DatabaseSync` handle — no
- * lock/lease concerns belong here.
- */
-
 import type { DatabaseSync } from "node:sqlite";
 
 export function installGatewaySchema(db: DatabaseSync): void {

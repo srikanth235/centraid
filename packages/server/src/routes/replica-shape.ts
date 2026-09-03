@@ -1,7 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#406) consent selection, temporal membership, and opaque row identity form one security boundary
-// Server-derived replica shapes (#406): app consent scopes intersected with the
-// acting owner's write authority. Manifests carry no replica field; this module
-// projects gateway-enforced grants into a row/column-minimized offline shape.
 
 import crypto from "node:crypto";
 import type { DatabaseSync, SQLInputValue, StatementSync } from "node:sqlite";
@@ -27,10 +24,8 @@ export const REPLICA_MAX_VALUE_BYTES = 64 * 1024;
 export const REPLICA_SYNTHETIC_PRIMARY_KEY = "__centraid_row_id";
 
 export interface ReplicaShapeAccess {
-  /** Ownership-sourced write authority (#726), not a grant. */
   canWrite: boolean;
   rememberDevice: boolean;
-  /** Trusted web-app session header or an explicit shell selection. */
   appId?: string;
 }
 
@@ -38,7 +33,6 @@ export interface ReplicaEntitySchemaWire {
   entity: string;
   primaryKey: string;
   columns: string[];
-  /** Some undisclosed fields exist; names and values never cross the wire. */
   hasUnavailableFields?: boolean;
 }
 
@@ -67,7 +61,6 @@ export interface ReplicaEntityShape extends ReplicaEntitySchemaWire {
 export interface ReplicaServerShape extends ReplicaShapeWire {
   entities: ReplicaEntityShape[];
   entityMap: Map<string, ReplicaEntityShape>;
-  /** Epoch-scoped derivative of the app credential; never serialized. */
   rowKeySecret: string;
 }
 
@@ -79,28 +72,19 @@ interface TableColumn {
 
 interface TemporalFingerprintCacheEntry {
   epoch: string;
-  /** Last log seq touching THIS entity, never the global watermark (#659):
-   *  keyed on the watermark, any commit anywhere would force a rescan. */
   entitySeq: number;
   computedAt: number;
   validUntil: number;
   digest: string;
-  /** Membership behind `digest`; absent past `INCREMENTAL_MEMBERSHIP_LIMIT`. */
   membership?: Map<string, string[]>;
-  /** A row past its transition must be re-evaluated though nothing wrote it. */
   transitions?: Map<string, number>;
 }
 
 const DAY_MS = 86_400_000;
 
-/**
- * Bounds on WORK PER CALL: above either, recompute from the table. Incremental
- * costs a read + probe per CHANGED row, full one of each per row in the entity.
- */
 const INCREMENTAL_MEMBERSHIP_LIMIT = 50_000;
 const INCREMENTAL_CHANGE_LIMIT = 5_000;
 
-/** `undefined` past `limit`. Backed by `idx_replica_change_latest_row`. */
 function changedRowIdsSince(
   db: DatabaseSync,
   epoch: string,
@@ -117,7 +101,6 @@ function changedRowIdsSince(
   return rows.length > limit ? undefined : rows.map((row) => row.row_id);
 }
 
-/** Index probe, not a scan — `idx_replica_change_latest_row` covers it. */
 function entityChangeSeq(
   db: DatabaseSync,
   epoch: string,
@@ -134,11 +117,6 @@ const temporalFingerprintCache = new WeakMap<
   Map<string, TemporalFingerprintCacheEntry>
 >();
 
-/**
- * Cached: this runs once per vault ENTITY per subscriber per commit. `physical`
- * comes from the vault registry, never the wire — that is what makes the
- * interpolation safe.
- */
 function tableColumns(db: DatabaseSync, physical: string): TableColumn[] {
   return preparedStatement(
     db,
@@ -177,7 +155,6 @@ function alternativeFor(
     return undefined;
   }
   const actual = new Set(columns.map((column) => column.name));
-  // Fails closed: membership never widens because a replica cannot evaluate.
   if (
     filters.some(
       (filter) => !actual.has(filter.column) || unavailable.has(filter.column)
@@ -197,7 +174,6 @@ function alternativeFor(
           .map((column) => column.name)
           .filter((column) => !unavailable.has(column))
       : mask.filter((column) => actual.has(column) && !unavailable.has(column));
-  // Mirrors applyFieldMask: zero real fields is invalid, not identity-only.
   if (allowed.length === 0) return undefined;
   try {
     const compiled = compileFilters(db, physical, filters, now);
@@ -216,7 +192,6 @@ function alternativeFor(
       membershipParams: compiled.params,
       historicalParams: historical.params,
     } as ScopeAlternative;
-    // Non-enumerable: StatementSync exposes expandedSQL with its last bindings.
     Object.defineProperties(alternative, {
       membership: {
         value: db.prepare(
@@ -343,8 +318,6 @@ function temporalFingerprint(
     return soonest;
   };
 
-  // Incremental (#883 C2): only a row the log says was written, or one past its
-  // recorded transition, can have MOVED. The retained map carries the rest.
   const priorMembership = cached?.membership;
   const priorTransitions = cached?.transitions;
   const changed =
@@ -367,8 +340,6 @@ function temporalFingerprint(
       const row = readReplicaRow(db, entity.entity, rowId, {
         maxValueBytes: REPLICA_MAX_VALUE_BYTES,
       });
-      // Gone from the table is gone from the membership; the log's own delete
-      // entry is what put the id in `stale`.
       if (!row) {
         membership.delete(rowId);
         transitions.delete(rowId);
@@ -412,7 +383,6 @@ function temporalFingerprint(
     after = page.nextAfter;
   } while (after);
   const digest = digestOfMembership(membership);
-  // Retain the membership only while carrying it is cheaper than rebuilding it.
   const retainable =
     membership.size + transitions.size <= INCREMENTAL_MEMBERSHIP_LIMIT;
   cache.set(key, {
@@ -426,11 +396,6 @@ function temporalFingerprint(
   return digest;
 }
 
-/**
- * ONE CANONICAL ORDER, so incremental and full cannot disagree: the digest feeds
- * the shape id, and an id depending on WHICH path produced it would rebootstrap
- * every device. Row-id sort is the only order a mutated map can also reach.
- */
 function digestOfMembership(membership: Map<string, string[]>): string {
   const ordered = [...membership.entries()].sort(([left], [right]) =>
     left < right ? -1 : left > right ? 1 : 0
@@ -448,11 +413,6 @@ function soonestTransition(transitions: Map<string, number>): number {
 }
 
 export interface BuildReplicaShapesOptions {
-  /**
-   * Skip every other app's consent evaluation and pragmas (#883 C2). The id's
-   * `${appId}:` prefix only NARROWS the walk — the shape is still derived from
-   * live grants, so naming an app you hold no grant for yields nothing.
-   */
   onlyShapeId?: string;
 }
 
@@ -477,7 +437,6 @@ export function buildReplicaShapes(
     const purpose = grantee.purpose;
     const entities: ReplicaEntityShape[] = [];
     for (const entity of listVaultEntities(db)) {
-      // ONE file (#916): every entity `resolveEntity` names lives in it.
       const ref = resolveEntity(entity, db);
       if (!ref) continue;
       let effective: AccessAllow;
@@ -500,7 +459,6 @@ export function buildReplicaShapes(
         if (decision.decision !== "allow") continue;
         effective = decision;
       } catch {
-        // Fails closed; never falls through to a later, broader grant.
         continue;
       }
       const info = tableColumns(db, ref.physical);
@@ -521,8 +479,6 @@ export function buildReplicaShapes(
       if (!alternative) continue;
       const alternatives = [alternative];
       const allowed = new Set(alternatives.flatMap((scope) => scope.columns));
-      // Sticky over consent masks too: a handler touching a masked field must
-      // rerun online rather than see `undefined` and change its semantics.
       const hasUnavailableFields =
         unavailable.size > 0 ||
         alternatives.some((scope) =>
@@ -671,7 +627,6 @@ export interface ReplicaHistoricalRowState {
   columns?: Set<string>;
 }
 
-/** Evaluate logged OLD state with the same SQL operators and affinities as online reads. */
 export function replicaHistoricalRowState(
   shape: ReplicaServerShape,
   entity: string,
@@ -707,7 +662,6 @@ export function replicaHistoricalRowState(
   return { known: true, columns };
 }
 
-/** Public identity is canonical only when consent already exposes that PK. */
 export function replicaWireRowId(
   shape: ReplicaServerShape,
   entity: string,

@@ -80,7 +80,6 @@ function casShaOf(key: string): string | undefined {
     ?.sha;
 }
 
-/** A blob outside this set is materialized: the snapshot is its only copy. */
 export async function collectRemoteCasShas(
   provider: BackupProvider,
   targetId: string
@@ -103,11 +102,6 @@ export async function collectRemoteCasShas(
   return shas;
 }
 
-// Rehydrate the app code store from the restored git bundle (#517). Nothing
-// else bridges `apps.bundle` to the `code/apps.git` the runtime reads, so
-// without this a recovered vault mounts with all its data and an EMPTY code
-// store — the placebo restore FORMAT.md warns about. Guarded no-op when the
-// source code store was empty and shipped no bundle.
 export async function rehydrateCodeStore(
   vaultDir: string,
   log: EngineLogger
@@ -123,8 +117,6 @@ export async function rehydrateCodeStore(
   );
 }
 
-/** A NEW replica history: restored `blob_replica` rows attest capture-time
- *  durability, so the epoch bump stops anything trusting them (#439). */
 export function invalidateRestoredReplica(destDir: string): void {
   const vault = new DatabaseSync(path.join(destDir, "vault.db"));
   try {
@@ -141,7 +133,6 @@ export function recoveredAsOfMs(
   return walReplay.cutTickMs >= 0 ? walReplay.cutTickMs : row.createdAt * 1000;
 }
 
-/** Truncated = not replayable to the newest ACKNOWLEDGED tick. */
 export function walReplayTruncated(walReplay: WalReplayOutcome): boolean {
   const shortOfTip =
     walReplay.expectedCutMs >= 0 &&
@@ -202,14 +193,6 @@ export async function warmOrSkip(
   };
 }
 
-/**
- * Seed backup state at `generation = currentGeneration + 1`: the fencing TOKEN,
- * not the fence. The first post-recovery backup registers here and bumps the
- * provider's generation, and only THEN does the superseded machine 409.
- *
- * `providerRef` is deliberately OMITTED — `assertTargetBackend` reads its
- * absence as "trust a static config backend".
- */
 export async function seedFencedBackupState(opts: {
   gatewayDatabase: GatewayDatabase;
   sourceInstanceId: string;

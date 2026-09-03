@@ -53,7 +53,6 @@ describe("turn-replay", () => {
     expect(limiter.count()).toBe(1);
     const c = limiter.tryAcquire();
     expect(c).toBeDefined();
-    // Double-release is a no-op — the count can't go negative or leak a slot.
     a?.();
     expect(limiter.count()).toBe(2);
   });

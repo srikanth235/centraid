@@ -1,15 +1,3 @@
-/*
- * The peer lane where it meets the composed handler (#726).
- *
- * `mountUnauthed` is the honest model of the hole this file closes: the
- * gateway's own bearer is checked ABOVE the composed handler, and every
- * forwarder — the peer one included — carries that bearer on the requests it
- * delivers. So a peer that escapes path confinement arrives already past the
- * bearer, on loopback, where the embedded device resolver would otherwise
- * hand it the HOST's device key. A peer must never satisfy an owner-tier
- * check by ANY route.
- */
-
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import http from "node:http";
@@ -84,8 +72,6 @@ describe("peer lane at the composed handler", () => {
   });
 
   test("an owner-tier route refuses a peer-marked request", async () => {
-    // Same request without the peer marking is served: the refusal below is
-    // the marking, not a broken harness.
     expect((await fetch(`${base}/centraid/_apps`)).status).toBe(200);
     const asPeerRequest = await fetch(`${base}/centraid/_apps`, {
       headers: asPeer(),
@@ -96,9 +82,6 @@ describe("peer lane at the composed handler", () => {
     });
   });
 
-  /* (#865 F9) The backstop must judge EVERY peer identity header — the
-   * endpoint name and the Rust relay's forwarder-owned peer-vault name alike —
-   * so each alone is enough to refuse. */
   test.each([
     { [PEER_ENDPOINT_HEADER]: "ep-peer" },
     { [PEER_PROOF_HEADER]: PEER_PROOF },
@@ -129,10 +112,6 @@ describe("peer lane at the composed handler", () => {
   });
 
   test("a `..` escape lands on the peer handler's confinement, not the owner route", async () => {
-    // The HTTP router resolves `..` with `new URL()` BEFORE dispatch, so this
-    // target's pathname IS `/centraid/_gateway/devices`. The peer handler
-    // matches on the RAW url and refuses it. Confinement itself lives in the
-    // forwarders; this is the backstop for one that forgets.
     const response = await fetch(`${base}/centraid/_peer/../_gateway/devices`, {
       headers: asPeer(),
     });

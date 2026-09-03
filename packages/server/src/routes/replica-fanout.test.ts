@@ -1,6 +1,3 @@
-// The MECHANISM of the shared replica projection (#883 C2); the cost it buys is
-// proven by `tests/scale/replica-sse-fanout.scale.test.ts`.
-
 import { describe, expect, test } from "vitest";
 
 import {
@@ -27,7 +24,6 @@ function vault(): ReturnType<typeof openVaultDb> {
 const ACCESS = { canWrite: true, rememberDevice: false } as const;
 const CURSOR = { epoch: "", seq: 0 };
 
-// Count prepared statements on the handle across one window.
 function countStatements(
   db: ReturnType<typeof openVaultDb>,
   work: () => void
@@ -63,7 +59,6 @@ describe("replica projection hub", () => {
     const first = countStatements(db, () => {
       hub.project(ACCESS, since, 100);
     });
-    // Sixteen more askers in the SAME generation must cost nothing.
     const rest = countStatements(db, () => {
       for (let index = 0; index < 16; index += 1)
         hub.project(ACCESS, since, 100);
@@ -108,8 +103,6 @@ describe("replica projection hub", () => {
     hub.subscribe(() => undefined);
     hub.project(ACCESS, since, 100);
     expect(countStatements(db, () => hub.project(ACCESS, since, 100))).toBe(0);
-    // Only the CLOCK moved — a grant whose `expires_at` elapses in silence is
-    // this case, and it must not be served stale.
     now += PROJECTION_MEMO_TTL_MS;
     expect(
       countStatements(db, () => hub.project(ACCESS, since, 100))
@@ -154,8 +147,6 @@ describe("replica projection hub", () => {
     const since = { ...CURSOR, epoch: currentReplicaLogState(db.vault).epoch };
     const hub = new ReplicaProjectionHub(db.vault);
     hub.subscribe(() => undefined);
-    // Distinct page shapes, not cursors: a cursor past the watermark is a
-    // rebootstrap, a different question than eviction.
     for (let limit = 1; limit <= PROJECTION_MEMO_MAX_ENTRIES + 20; limit += 1) {
       hub.project(ACCESS, since, limit);
     }

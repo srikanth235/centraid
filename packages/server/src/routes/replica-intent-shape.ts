@@ -1,13 +1,3 @@
-/*
- * Pure intent-shape logic shared by every caller that admits an offline
- * intent against a consent-derived shape: the device-facing route
- * (`replica-intent-route.ts`) and the commons intent path. Shared so a
- * commons member's queued write is
- * checked for staleness with the EXACT SAME arithmetic a device's own
- * offline edit is — one answerer for "did this row change under you",
- * never two that could quietly disagree.
- */
-
 import crypto from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
@@ -63,11 +53,6 @@ export function canonicalJson(value: JsonValue): string {
     .join(",")}}`;
 }
 
-/**
- * The device path hashes `{action, appId, input, baseVersions?}`. Commons
- * uses a stable grant-scoped app id so a resent intent hashes identically
- * whichever transport delivered it.
- */
 export function expectedPayloadHash(
   appId: string,
   action: string,
@@ -117,11 +102,6 @@ export function parseBaseVersions(value: unknown): ReplicaIntentBaseVersion[] {
   );
 }
 
-/**
- * Durable proof that an intent crossed the canonical commit boundary —
- * shared so any retried intent replays
- * instead of re-running a possibly-already-committed command.
- */
 export function hasCanonicalCommit(
   vault: DatabaseSync,
   intentId: string,
@@ -140,13 +120,6 @@ export function hasCanonicalCommit(
   );
 }
 
-/**
- * Resolve `baseVersions` against the CURRENT change log for the caller's own
- * consent-derived shape. `access` is whatever the caller already resolved
- * for itself — a device's ordinary shape access, or a commons member's
- * access — so opaque (HMAC) row ids resolve through the SAME
- * shape the caller reads through, never a raw guess at the underlying id.
- */
 export function currentConflict(
   vault: DatabaseSync,
   access: ReplicaShapeAccess,
@@ -213,8 +186,6 @@ export function currentConflict(
           actualVersion: entityMax.seq ?? 0,
         };
       }
-      // A version-zero row with no matching current-epoch change is a valid
-      // unchanged snapshot row. There is no canonical version to compare.
       if (!resolved) continue;
     }
     const row = vault

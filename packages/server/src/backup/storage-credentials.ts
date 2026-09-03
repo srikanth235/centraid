@@ -1,9 +1,3 @@
-/*
- * `s3Credentials` resolver (#367): `connectionId` → live provider grant
- * (#436). Always `requestCasGrant` (PROTOCOL.md Layer 1), cached until near
- * expiry so a sweep does not mint a grant per blob.
- */
-
 import {
   HOME_PROFILE_CAPABILITIES,
   openRemoteBackupProvider,
@@ -34,7 +28,6 @@ export function makeStorageCredentialsResolver(
   settings: BlobStoreSettings,
   storeClass?: "cas" | "derived"
 ) => Promise<S3Credentials> {
-  // `${connectionId}:${store}` (#425): cas and derived grants cache apart.
   const grantCache = new Map<string, CachedGrant>();
 
   return async (
@@ -76,7 +69,6 @@ export function makeStorageCredentialsResolver(
   };
 }
 
-/** Whole status, not a boolean — Test names missing caps (#436). */
 export interface ProviderProfileStatus {
   profiles: ProviderProfile[];
   isHome: boolean;
@@ -132,11 +124,6 @@ function toCredentials(grant: S3Grant): S3Credentials {
   };
 }
 
-/**
- * Mint a Layer-1 target if missing, then one `cas` grant to learn the
- * stable `{endpoint, region, bucket, prefix}` so CAS-attach denormalizes
- * them once rather than every mount re-deriving from a grant.
- */
 export async function ensureProviderCasTarget(
   store: StorageConnectionStore,
   connectionId: string
@@ -146,7 +133,6 @@ export async function ensureProviderCasTarget(
   bucket: string;
   prefix: string;
   derivedPrefix?: string;
-  /** From discovery (#425). Direct-to-cold only when this includes `STANDARD_IA`. */
   supportedStorageClasses?: string[];
 }> {
   const connection = await store.get(connectionId);
@@ -172,7 +158,6 @@ export async function ensureProviderCasTarget(
     targetId,
     mode: "read-write",
   });
-  // `derived` is opt-in (#425): an unadvertised store is a 400, so gate on discovery.
   let derivedPrefix: string | undefined;
   const capabilities = await provider.capabilities().catch(() => undefined);
   if (capabilities?.capabilities.includes("derived")) {
@@ -184,7 +169,6 @@ export async function ensureProviderCasTarget(
     });
     derivedPrefix = derivedGrant.prefix;
   }
-  // Same discovery document (#425) — stamp so STANDARD_IA is known-safe.
   const supportedStorageClasses =
     capabilities?.storageClasses && capabilities.storageClasses.length > 0
       ? capabilities.storageClasses

@@ -1,12 +1,3 @@
-/*
- * Revise serialization + prompt/handler atomicity (#541 review).
- *
- * Regressions guarded:
- *  - two revises interleaving, so the second publish drops the first;
- *  - a failed compile (or a rewrite that throws after its publish) leaving the
- *    published prompt ahead of the compiled handler with nothing to reconcile.
- */
-
 import { describe, expect, test } from "vitest";
 
 import { validateManifest } from "@centraid/server/automation";
@@ -85,8 +76,6 @@ describe("automation-revision", () => {
       }),
     });
     await reviseAutomationInstructions(input);
-    // Publish new, then publish the ORIGINAL back — the enabled automation is
-    // never left firing the old handler under new instructions.
     expect(out.published).toStrictEqual([
       "Revised: only customer messages.",
       "Summarize account changes.",

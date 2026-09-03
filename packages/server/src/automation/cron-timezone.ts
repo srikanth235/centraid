@@ -1,5 +1,3 @@
-// Cron tz (#570): trigger tz → gateway pref → host-local; DST: docs/cron-timezone.md.
-
 import { isIanaTimeZone, wallWeekday, zonedParts } from "@centraid/core/time";
 
 export const CRON_DEFAULT_TIMEZONE_PREF = "automation.cron.defaultTimezone";
@@ -10,7 +8,6 @@ export type WallClockFields = {
   readonly day: number;
   readonly hour: number;
   readonly minute: number;
-  /** 0 = Sunday … 6 = Saturday. */
   readonly weekday: number;
 };
 
@@ -21,7 +18,6 @@ export function isValidIanaTimeZone(name: string): boolean {
   return isIanaTimeZone(trimmed);
 }
 
-/** `undefined` = legacy host-local. */
 export function resolveCronTimezone(
   triggerTz?: string | null,
   gatewayDefaultTz?: string | null
@@ -35,7 +31,6 @@ export function resolveCronTimezone(
   return undefined;
 }
 
-/** Absent tz keeps Date getters (pre-#570). */
 export function wallClockFields(
   date: Date,
   timeZone?: string
@@ -61,7 +56,6 @@ export function wallClockFields(
   };
 }
 
-/** DST dedupe key. */
 export function wallClockMinuteKey(date: Date, timeZone?: string): string {
   const w = wallClockFields(date, timeZone);
   return [w.year, w.month, w.day, w.hour, w.minute, timeZone ?? "local"].join(

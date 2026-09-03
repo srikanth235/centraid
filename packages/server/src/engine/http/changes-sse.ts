@@ -1,9 +1,3 @@
-/*
- * The change bus's HTTP face; auth belongs to the surrounding HTTP server. The
- * shells consume the bus over their own transports, so the absence of an
- * in-repo subscriber is not evidence this surface is dead.
- */
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { unrefTimer } from "../../lib/unref-timer.js";
@@ -11,10 +5,8 @@ import type { ChangeBus } from "../changes/change-bus.js";
 import { sendJson } from "./http-utils.js";
 import { SseStream } from "./sse-stream.js";
 
-// Stay under the ~60s idle cut of mobile NATs and reverse proxies (#404).
 const HEARTBEAT_MS = 55_000;
 
-/** Per appId, never global (#351): one app must not starve the others. */
 export const CHANGES_SSE_MAX_SUBSCRIBERS_PER_APP = 16;
 
 const CHANGES_SSE_RETRY_AFTER_SECONDS = 5;
@@ -36,7 +28,6 @@ export class ChangesSubscriberCap {
     return sum;
   }
 
-  /** Release exactly once; `undefined` means a 503 was already written. */
   admit(appId: string, res: ServerResponse): (() => void) | undefined {
     const count = this.counts.get(appId) ?? 0;
     if (count >= this.max) {
@@ -75,16 +66,13 @@ export async function handleAppChanges(
   const release = cap.admit(appId, res);
   if (!release) return;
 
-  // `X-Accel-Buffering: no` defeats nginx response buffering.
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
     Connection: "keep-alive",
     "X-Accel-Buffering": "no",
   });
-  // Bounded writer (#659): a subscriber that stops reading is dropped.
   const stream = new SseStream(res);
-  // Fires the client's `onopen` without waiting for a real event.
   stream.comment(`connected to ${appId}`);
 
   const unsubscribe = bus.subscribe(appId, (_change, serialized) => {
@@ -94,11 +82,8 @@ export async function handleAppChanges(
   const heartbeat = setInterval(() => {
     stream.comment("ping");
   }, HEARTBEAT_MS);
-  // The SSE socket owns the lifetime; don't block process exit.
   unrefTimer(heartbeat);
 
-  // Resolve only on disconnect, so the HTTP server keeps the socket open, and
-  // listen on the request socket: some proxies half-close oddly. Events race.
   await new Promise<void>((resolve) => {
     let done = false;
     const cleanup = (): void => {
@@ -111,7 +96,7 @@ export async function handleAppChanges(
         try {
           res.end();
         } catch {
-          /* swallow */
+          // Intentionally empty.
         }
       }
       // oxlint-disable-next-line promise/no-multiple-resolved -- `done` guard ensures single resolution (#247)

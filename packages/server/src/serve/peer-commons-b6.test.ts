@@ -1,7 +1,3 @@
-/* B6 peer-plane flagship: two real gateway/vault fixtures joined over the
- * repository's in-process peer dial. Consent, snapshot+CAS, signed writes,
- * catch-up and authenticated unshare all cross the actual peer routes. */
-
 import { describe, expect, test } from "vitest";
 
 import {
@@ -140,9 +136,6 @@ describe("B6 Commons peer plane", () => {
     );
 
     registerTallyCommands(origin.gateway);
-    // A Tally group names people, not vault addresses. The link/share
-    // ceremony normally materializes this remote party before the group UI
-    // submits member_ids; the low-level peer fixture does that explicitly.
     origin.vault.vault
       .prepare(
         `INSERT INTO core_party

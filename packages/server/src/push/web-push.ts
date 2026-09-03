@@ -8,7 +8,6 @@ export interface VapidKeys {
   privateKey: string;
 }
 
-/** Generate once and keep the self-hoster's VAPID identity in mode-0600 gateway.db. */
 export function webPushVapidKeys(database: GatewayDatabase): VapidKeys {
   const present = database.db
     .prepare(
@@ -62,7 +61,6 @@ export function createWebPushSender(database: GatewayDatabase): WebPushSender {
       await Promise.all(
         rows.map(async (row) => {
           try {
-            // Rows persisted without the guard (older build) never get a wake POST to a non-https or reserved-range IP endpoint (#865).
             if (!endpointHostIsPublicSync(row.endpoint)) return;
             await webPush.sendNotification(
               {

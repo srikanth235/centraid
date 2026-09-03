@@ -1,5 +1,3 @@
-/** Per-conversation, per-harness resume and hydration actor. */
-
 import type { HydrationMessage } from "./hydration.js";
 import { compileHydrationPlan } from "./hydration.js";
 import type { TurnResumePlan } from "./runner.js";
@@ -133,8 +131,6 @@ export class HarnessSessions {
           ? (usedPlan.recoveryHydrationContext?.estimatedTokens ?? 0)
           : (usedPlan.hydrationContext?.estimatedTokens ?? 0);
     }
-    // A later delegate call in the same turn must resume the session just observed, not the turn-start binding snapshot.
-    // Hydration intentionally absent: the first call either resumed the actor or got the bounded handoff/recovery context.
     this.plans.set(observation.kind, {
       ...(observation.sessionId ? { sessionId: observation.sessionId } : {}),
       ...(observation.usageSnapshot

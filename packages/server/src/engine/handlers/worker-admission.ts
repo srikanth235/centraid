@@ -1,5 +1,3 @@
-// Caps app-handler worker spawns: ungated, a burst OOMs the host.
-
 import { availableParallelism, totalmem } from "node:os";
 
 import { unrefTimer } from "../../lib/unref-timer.js";
@@ -19,7 +17,6 @@ export function isConstrainedWorkerHost(
   return host.cores <= 4 || host.totalMemoryBytes <= 4 * 1024 ** 3;
 }
 
-/** Explicit env beats host classification. */
 export function workerMaxConcurrentFromEnv(
   env: NodeJS.ProcessEnv = process.env,
   host: WorkerHostCapacity = currentHostCapacity()
@@ -42,13 +39,10 @@ export const WORKER_MAX_CONCURRENT = workerMaxConcurrentFromEnv();
 export const WORKER_MAX_QUEUE = 16;
 export const WORKER_MAX_QUEUE_WAIT_MS = 10_000;
 
-// Strict priority for interactive waiters only (#883 C2) — no per-class concurrency; the bounded queue and wait give a loser a typed busy, not a silent starvation.
 export type WorkerAdmissionClass = "interactive" | "background";
 
-/** Absent means `interactive`: default to the one someone waits for. */
 export const DEFAULT_ADMISSION_CLASS: WorkerAdmissionClass = "interactive";
 
-/** Factory, not a subclass: `runHandler` maps it to `busy`. */
 export function gatewayBusyError(
   message = "gateway busy: too many concurrent app handlers, try again shortly"
 ): Error {
@@ -157,7 +151,6 @@ export class WorkerAdmission {
 
 let sharedWorkerAdmissionInstance: WorkerAdmission | undefined;
 
-/** After the boot fsync probe, so the profile is resolved. */
 export function sharedWorkerAdmission(): WorkerAdmission {
   sharedWorkerAdmissionInstance ??= new WorkerAdmission(
     workerMaxConcurrentFromEnv()

@@ -1,14 +1,5 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
-/*
- * The ext band over HTTP (#286).
- *
- * Publishes an app whose manifest DECLARES extension tables and asserts
- * the vault side: publish applies the DDL to the live band (diffs on
- * re-publish), a draft session branches a scratch band seeded from live,
- * reset-data re-snapshots it, and a spec the vault refuses aborts the
- * publish with the vault untouched.
- */
 import path from "node:path";
 
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
@@ -97,7 +88,6 @@ describe("ext-band-over-http scenarios", () => {
     });
   }
 
-  /** Owner-side vault SQL — the assertion window into the band. */
   function ownerSql(sql: string): Record<string, unknown>[] {
     return handle.vaults.current().sqlAsOwner(sql).rows;
   }
@@ -114,10 +104,8 @@ describe("ext-band-over-http scenarios", () => {
     const body = (await pub.json()) as { ext?: { created: string[] } };
     expect(body.ext?.created).toStrictEqual(["workout"]);
 
-    // The live band exists inside vault.db, readable over the owner surface.
     expect(ownerSql("SELECT count(*) AS n FROM ext_gym_workout")[0]?.n).toBe(0);
 
-    // Re-publish with an added column + a second table → an additive diff.
     const extV2 = {
       tables: [
         {
@@ -155,7 +143,6 @@ describe("ext-band-over-http scenarios", () => {
       "index.html": "<!doctype html>gym",
     });
     expect((await publish("s1", "v1")).status).toBe(201);
-    // A live row the draft copy must carry.
     const plane = handle.vaults.current();
     const live = await plane.invokeAsAssistant({
       command: "ext.gym.insert",
@@ -164,7 +151,6 @@ describe("ext-band-over-http scenarios", () => {
     });
     expect(live.status).toBe("executed");
 
-    // First draft access (the draft code-dir resolver) seeds the band.
     await store.openSession("draft1");
     await writeWorktreeFiles("draft1", {
       "app.json": manifest(EXT_V1),
@@ -178,7 +164,6 @@ describe("ext-band-over-http scenarios", () => {
       plainRows(ownerSql("SELECT notes FROM extdraft_gym_workout"))
     ).toStrictEqual([{ notes: "live row" }]);
 
-    // Draft writes stay scratch.
     const draftWrite = await plane.invokeAsAssistant({
       command: "ext.gym.insert",
       input: {
@@ -194,7 +179,6 @@ describe("ext-band-over-http scenarios", () => {
     ).toBe(2);
     expect(ownerSql("SELECT count(*) AS n FROM ext_gym_workout")[0]?.n).toBe(1);
 
-    // Reset re-snapshots the scratch band from live.
     const reset = await fetch(`${handle.url}/centraid/_apps/gym/reset-data`, {
       method: "POST",
       headers: { ...auth(), "Content-Type": "application/json" },
@@ -205,7 +189,6 @@ describe("ext-band-over-http scenarios", () => {
       ownerSql("SELECT count(*) AS n FROM extdraft_gym_workout")[0]?.n
     ).toBe(1);
 
-    // Closing the session discards the scratch band entirely.
     const close = await fetch(`${handle.url}/centraid/_apps/_sessions/draft1`, {
       method: "DELETE",
       headers: auth(),
@@ -224,7 +207,6 @@ describe("ext-band-over-http scenarios", () => {
         tables: [
           {
             name: "bad",
-            // No primary key — the vault refuses the spec.
             columns: [{ name: "x", type: "text" }],
           },
         ],
@@ -236,7 +218,6 @@ describe("ext-band-over-http scenarios", () => {
     const body = (await pub.json()) as { error: string; message: string };
     expect(body.error).toBe("invalid_ext_spec");
     expect(body.message).toMatch(/exactly one primaryKey/u);
-    // Nothing went live: no versions, no ext table.
     const versions = await store.listVersions("gym");
     expect(versions).toStrictEqual([]);
     expect(() => ownerSql("SELECT 1 FROM ext_gym_bad")).toThrow(
@@ -253,7 +234,6 @@ describe("ext-band-over-http scenarios", () => {
     });
     expect((await publish("s1", "v1")).status).toBe(201);
 
-    // Seed a live row so the purge has something to reclaim.
     const plane = handle.vaults.current();
     expect(
       (
@@ -266,7 +246,6 @@ describe("ext-band-over-http scenarios", () => {
     ).toBe("executed");
     expect(ownerSql("SELECT count(*) AS n FROM ext_gym_workout")[0]?.n).toBe(1);
 
-    // The explicit second half of uninstall: the owner purges the band.
     const purge = await fetch(
       `${handle.url}/centraid/_vault/apps/gym/purge-ext`,
       {
@@ -278,7 +257,6 @@ describe("ext-band-over-http scenarios", () => {
     const body = (await purge.json()) as { purged: string[] };
     expect(body.purged).toStrictEqual(["workout"]);
 
-    // The physical table — and its rows — are gone for good.
     expect(() => ownerSql("SELECT 1 FROM ext_gym_workout")).toThrow(
       /no such table/u
     );

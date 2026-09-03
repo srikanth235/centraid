@@ -1,75 +1,5 @@
 #!/usr/bin/env node
 // governance: allow-repo-hygiene file-size-limit (#567) one scripted JSON-RPC fixture covers the shared ACP lifecycle; splitting modes would duplicate protocol state and weaken cross-mode parity
-/*
- * Scripted fake ACP harness — a test fixture, not shipped code.
- *
- * Speaks just enough of the Agent Client Protocol (JSON-RPC 2.0 over
- * newline-delimited stdio) to exercise `runAcpTurn`'s handshake, session
- * setup, streaming translation, permission round-trip, resume, and
- * cancellation paths. Behaviour is driven by argv flags so each test can
- * spawn it in a different mode:
- *
- *   --mode=normal   handshake → session/new → stream chunks + tool call +
- *                   permission request → end_turn
- *   --mode=resume   advertise loadSession; session/load replays history
- *                   (which the client must swallow) → stream → end_turn
- *   --mode=cancel   stream one chunk, then wait for session/cancel; write a
- *                   marker and reply stopReason=cancelled
- *   --mode=exit     exit(1) immediately (spawn/nonzero-exit failure path)
- *   --mode=vault    dial the loopback MCP server the client passed in
- *                   `mcpServers` — unauthenticated probe, initialize,
- *                   tools/list, tools/call — and report what happened
- *   --mode=vault-parity dial the same server and invoke one representative
- *                   typed write for every native blueprint, including a
- *                   high-risk command whose real harness can park it
- *   --mode=auth     reject session/new with ACP's AUTH_REQUIRED (-32000)
- *   --mode=auth-prompt accept session/new, then reject the diagnostic prompt
- *                   with an auth-ish Internal error (real Claude failure shape)
- *   --mode=quota    reject session/new with a rate-limit error
- *   --mode=timeout  never answer initialize/session setup
- *   --mode=wedge    start a prompt and emit no events or result
- *   --mode=crash    exit abnormally after accepting a prompt
- *   --mode=refusal  complete session/prompt with stopReason=refusal
- *   --mode=max_tokens complete with stopReason=max_tokens after some text
- *   --mode=resume-cap  like resume but via session/resume (no history replay)
- *
- *   --prompt-caps=a,b       advertise these promptCapabilities (image/audio/
- *                           embeddedContext); default is none
- *   --mcp-http              advertise mcpCapabilities.http
- *   --session-resume        advertise sessionCapabilities.resume
- *   --session-close         advertise sessionCapabilities.close
- *   --session-addl-dirs     advertise sessionCapabilities.additionalDirectories
- *   --mcp-marker=<path>     write the `mcpServers` array seen at session/new
- *   --prompt-marker=<path>  write the `session/prompt` content blocks
- *   --vault-marker=<path>   write the --mode=vault findings as JSON
- *   --mcp-announce          in --mode=vault, also stream the MCP call as an
- *                           ACP tool_call (the double-render guard's input)
- *
- *   --perm-marker=<path>    write the chosen permission optionId here
- *   --cancel-marker=<path>  write a marker when session/cancel is observed
- *   --config-marker=<path>  write `<configId>=<value>` on session/set_config_option
- *   --mode-marker=<path>    write the modeId on session/set_mode
- *   --no-model-option       advertise NO model selector (config-option-less harness)
- *   --no-effort-option      advertise model but no thought_level selector
- *   --no-usage-update       omit the optional usage_update notification
- *   --no-locations          omit tool-call workspace locations
- *   --no-config-update      omit config_option_update notifications
- *   --midturn-model=<value> mid-prompt, switch the active model and announce
- *                           the new full config set (config_option_update)
- *   --midturn-drop-effort   mid-prompt, announce a config set with NO
- *                           thought_level option (the harness withdrew it)
- *   --ignore-stdin-end      survive stdin end AND SIGTERM (teardown escalation
- *                           probe — only SIGKILL stops this process)
- *   --pid-marker=<path>     write this process's pid at startup (liveness probe)
- *   --cost=<amount>         emit a usage_update carrying this cumulative cost
- *   --currency=<code>       ISO 4217 code for --cost (default USD)
- *   --env-marker=<path>     write selected env vars as JSON at startup
- *
- * The config-option / usage shapes below mirror `@agentclientprotocol/sdk`'s
- * generated schema: model values are CONCRETE ids under a `category: "model"`
- * select, `usage_update` carries only context used/size + cumulative cost, and
- * the token breakdown rides on the `session/prompt` RESULT.
- */
 
 import { writeFileSync } from "node:fs";
 
@@ -156,7 +86,6 @@ const effortValues = () =>
         { value: "medium", name: "Medium" },
       ];
 
-/** A `session/new`/`session/load` config-option set shaped like the real schema. */
 const configOptions = () => [
   ...(noModelOption
     ? []
@@ -195,8 +124,6 @@ const sessionModes = () => ({
   ],
 });
 
-// Ignore SIGTERM: teardown is driven by stdin end (below), so a buffered
-// cancel line is always processed before we exit — makes cancel deterministic.
 process.on("SIGTERM", () => {});
 
 const send = (msg) => process.stdout.write(JSON.stringify(msg) + "\n");
@@ -227,9 +154,6 @@ async function requestPermission(sessionId, toolCallId) {
   return done;
 }
 
-// ---- MCP client (only used by --mode=vault) --------------------------------
-
-/** The loopback vault MCP server the client advertised at session/new. */
 let mcpServer;
 let mcpReqId = 0;
 
@@ -248,17 +172,12 @@ async function mcpCall(method, params, { auth = true } = {}) {
   return { status: res.status, body };
 }
 
-/**
- * Exercise the vault MCP endpoint and report what happened. Everything is
- * driven by request/response round-trips, never by waiting a fixed time.
- */
 async function runVaultPrompt(reqId, sessionId) {
   const out = { sawServer: Boolean(mcpServer) };
   if (mcpServer) {
     out.serverName = mcpServer.name;
     out.url = mcpServer.url;
 
-    // A request with no bearer must be refused before anything else.
     out.unauthStatus = (
       await mcpCall("tools/list", {}, { auth: false })
     ).status;
@@ -274,7 +193,6 @@ async function runVaultPrompt(reqId, sessionId) {
     ).map((t) => t.name);
 
     if (mcpAnnounce) {
-      // Announce the call the way a harness that surfaces MCP tools does…
       update(sessionId, {
         sessionUpdate: "tool_call",
         toolCallId: "mcp-1",
@@ -282,8 +200,6 @@ async function runVaultPrompt(reqId, sessionId) {
         kind: "other",
         status: "pending",
       });
-      // …and round-trip a request so the client has provably processed it
-      // before the HTTP call lands (stdio is ordered; the reply proves it).
       await requestPermission(sessionId, "mcp-1");
     }
 
@@ -412,7 +328,6 @@ async function runPrompt(reqId, sessionId) {
       sessionUpdate: "agent_message_chunk",
       content: { type: "text", text: "partial" },
     });
-    // Wait for session/cancel to drive the reply; do nothing else.
     return;
   }
 
@@ -494,8 +409,6 @@ async function runPrompt(reqId, sessionId) {
     content: { type: "text", text: "world" },
   });
 
-  // A mid-turn configuration change, announced the way the schema defines it:
-  // `configOptions` is the FULL set, so anything absent has been withdrawn.
   if (midturnModel !== undefined || midturnDropEffort) {
     if (midturnModel !== undefined) activeModel = midturnModel;
     update(sessionId, {
@@ -508,7 +421,6 @@ async function runPrompt(reqId, sessionId) {
     });
   }
 
-  // Per schema: context used/size, plus a CUMULATIVE cost. No tokens here.
   if (!noUsageUpdate) {
     update(sessionId, {
       sessionUpdate: "usage_update",
@@ -520,7 +432,6 @@ async function runPrompt(reqId, sessionId) {
     });
   }
 
-  // The authoritative token breakdown rides on the prompt RESULT.
   respond(reqId, {
     stopReason: "end_turn",
     usage: {
@@ -533,12 +444,10 @@ async function runPrompt(reqId, sessionId) {
   });
 }
 
-// In-flight prompt request id, so a later session/cancel can settle it.
 let promptReqId;
 let promptSessionId;
 
 function handle(msg) {
-  // Response to our client→agent request (permission).
   if (
     typeof msg.id === "number" &&
     (msg.result !== undefined || msg.error !== undefined) &&
@@ -585,8 +494,6 @@ function handle(msg) {
       writeFileSync(mcpMarker, JSON.stringify(params?.mcpServers ?? null));
     mcpServer = pickMcpServer(params?.mcpServers);
     if (mode === "auth") {
-      // ACP's AUTH_REQUIRED — what 18 of the 31 registry agents answer until
-      // their CLI has been signed in.
       send({
         jsonrpc: "2.0",
         id,
@@ -648,7 +555,6 @@ function handle(msg) {
     if (mcpMarker)
       writeFileSync(mcpMarker, JSON.stringify(params?.mcpServers ?? null));
     mcpServer = pickMcpServer(params?.mcpServers);
-    // No history replay — that is the whole point of resume vs load.
     respond(id, { configOptions: configOptions(), modes: sessionModes() });
     return;
   }
@@ -669,7 +575,6 @@ function handle(msg) {
       writeFileSync(mcpMarker, JSON.stringify(params?.mcpServers ?? null));
     mcpServer = pickMcpServer(params?.mcpServers);
     const sid = params?.sessionId ?? "sess-1";
-    // Replay history the client MUST swallow (promptStarted gate).
     update(sid, {
       sessionUpdate: "user_message_chunk",
       content: { type: "text", text: "HISTORY_USER" },
@@ -703,8 +608,6 @@ function handle(msg) {
   if (method === "session/cancel") {
     if (cancelMarker) writeFileSync(cancelMarker, "cancelled");
     if (promptReqId !== undefined) {
-      // A cancelled prompt still reports what it burned — real agents settle
-      // the request with their cumulative usage, and the client must book it.
       respond(promptReqId, {
         stopReason: "cancelled",
         usage: { totalTokens: 150, inputTokens: 100, outputTokens: 50 },
@@ -726,15 +629,12 @@ process.stdin.on("data", (chunk) => {
       try {
         handle(JSON.parse(line));
       } catch {
-        // ignore malformed line
+        // Intentionally empty.
       }
     }
     nl = buffer.indexOf("\n");
   }
 });
-// Client closed stdin → teardown. Exit cleanly so the parent's exit wait
-// resolves. `--ignore-stdin-end` models the harness that honours NEITHER stdin
-// close nor SIGTERM: only SIGKILL ends it.
 if (ignoreStdinEnd) {
   setInterval(() => {}, 1000);
 } else {

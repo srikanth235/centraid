@@ -15,39 +15,10 @@ import { PairingTicketStore } from "./pairing-store.js";
 import { serve } from "./serve.js";
 import type { GatewayServeHandle } from "./serve.js";
 
-/**
- * THE DENY MATRIX, GENERATED FROM THE ROUTE TABLE (#892 Phase 2).
- *
- * This suite enumerates `ROUTES` itself: a hand-written case list cannot notice
- * a route added tomorrow, and an unenumerated surface is where holes live
- * (#890's three `transfer-policy` bypasses shared exactly that shape). Every
- * entry is probed with every principal below and must DENY — where deny means
- * "does not answer 2xx": a 401, a 403 and a 404 are all refusals, and which one
- * a route picks is its own business. An answer is a failure UNLESS the route is
- * listed in `DELIBERATELY_PUBLIC` with a reason, so the default for a new route
- * is closed and opening one is a reviewable diff line.
- *
- * THE PRINCIPALS:
- *
- *   anonymous       no credential at all.
- *   forged bearer   syntactically fine, not honoured — the wire signature of a
- *                   revoked pair and an expired grant alike, hence one principal.
- *   proved device   a real control-session cookie. Not anonymous, not the owner:
- *                   the WRONG-AUTHORITY case a bearer-only matrix cannot see.
- *                   A legitimate principal for most of the product, so asserted
- *                   only against gateway-wide admin surfaces (#865 F2).
- */
-
 const ADMIN = "authz-deny-matrix-admin-token";
 const SHELL_ORIGIN = "http://shell.local";
-/** No stream may hold a probe open; every route must answer or be refused. */
 const PROBE_TIMEOUT_MS = 5_000;
 
-/**
- * Routes that answer without a credential, each with the reason it must. The
- * ONLY way a route escapes the matrix, and the reason is required reading: a
- * future entry has to make an equally specific decision (#568 item C).
- */
 const DELIBERATELY_PUBLIC: Partial<Record<RouteName, string>> = {
   gatewayInfo:
     "the pre-pairing handshake: a client must read version + protocolVersion " +
@@ -73,18 +44,13 @@ async function probe(
       headers: init.headers ?? {},
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
-    // Drain: an SSE route answers 200 and then streams forever, and an
-    // undrained body keeps the socket (and the suite) alive.
     await response.body?.cancel().catch(() => undefined);
     return response.status;
   } catch {
-    // A refused/aborted connection is a refusal, which is what this suite is
-    // asking about. Report it as one rather than failing the probe itself.
     return 599;
   }
 }
 
-/** The verbs a capability is plausibly reached through. */
 const METHODS = ["GET", "POST"] as const;
 
 const routeEntries = Object.entries(ROUTES) as [RouteName, string][];
@@ -109,18 +75,11 @@ describe("authz deny matrix (generated from ROUTES)", () => {
     if (dataDir) await fs.rm(dataDir, { recursive: true, force: true });
   });
 
-  // The generator having something to generate FROM is an assertion: an empty
-  // ROUTES import would make every `test.each` vanish and the file report green.
   test("the route table is non-empty and every entry is probed", () => {
     expect(routeEntries.length).toBeGreaterThan(20);
     expect(routeEntries.every(([, route]) => route.startsWith("/"))).toBe(true);
   });
 
-  /**
-   * Probe one route with one principal on every verb. The reduction to
-   * denied/answered happens HERE, before any `expect`: a conditional assertion
-   * inside the loop would let a run that asserted nothing report green.
-   */
   async function probeAllVerbs(
     route: string,
     headers?: Record<string, string>
@@ -151,8 +110,6 @@ describe("authz deny matrix (generated from ROUTES)", () => {
     async (name, route) => {
       const reason = DELIBERATELY_PUBLIC[name];
       const { statuses, denied, answered } = await probeAllVerbs(route);
-      // A deliberately-public route must still ANSWER its GET — a 401 there
-      // would mean the handshake broke, which is a different bug worth catching.
       const expectedDenied = reason
         ? METHODS.filter((method) => method !== "GET")
         : [...METHODS];
@@ -170,8 +127,6 @@ describe("authz deny matrix (generated from ROUTES)", () => {
     "%s denies a forged bearer on every verb",
     async (name, route) => {
       const reason = DELIBERATELY_PUBLIC[name];
-      // Shaped like the real thing, and wrong — the wire signature of a revoked
-      // pair and of an expired grant alike.
       const { statuses, denied } = await probeAllVerbs(route, {
         Authorization: "Bearer not-the-admin-token",
       });
@@ -185,11 +140,6 @@ describe("authz deny matrix (generated from ROUTES)", () => {
     }
   );
 
-  /**
-   * A control session is a REAL principal — how the PWA reaches the gateway —
-   * not "an attacker": the member on a surface that must not hold gateway-wide
-   * operator powers (#865 F2).
-   */
   describe("a proved device identity", () => {
     const ADMIN_TIER = [
       "/centraid/_gateway/diagnostics",
@@ -222,8 +172,6 @@ describe("authz deny matrix (generated from ROUTES)", () => {
   });
 
   test("every DELIBERATELY_PUBLIC entry names a real route and states why", () => {
-    // An allowlist entry that rots into a nonexistent route name would keep
-    // looking like a reviewed decision.
     for (const [name, reason] of Object.entries(DELIBERATELY_PUBLIC)) {
       expect(ROUTES).toHaveProperty(name);
       expect(reason.length).toBeGreaterThan(60);

@@ -1,15 +1,3 @@
-/*
- * Host power-context posture (#528) — courtesy & energy, NEVER a silent
- * durable mode flip. Reports battery/mains/server and whether a courteous
- * gateway should DEFER (not stop) safe background loops. Same gate as the
- * owner's pause and event-loop load-shed. Never writes prefs, never flips
- * Resource mode, never mutates pause state.
- *
- * Two feeds: BOOT PROBE (os-probe, ≤60s) establishes battery PRESENCE;
- * CLIENT PUSH (Electron, stale after 120s) is fresher. No timer of its own —
- * snapshot() lazily re-evaluates.
- */
-
 import { execFile } from "node:child_process";
 import { readFileSync, promises as fs } from "node:fs";
 
@@ -18,7 +6,6 @@ export type ThermalPressure = "nominal" | "fair" | "serious" | "critical";
 
 export interface PowerContextState {
   kind: PowerContextKind;
-  /** null when the host has no battery — this null gates ALL battery chrome in the UI */
   battery: { percent: number | null; charging: boolean | null } | null;
   deferringBackgroundWork: boolean;
   reason: "on-battery" | "low-battery" | "thermal" | null;
@@ -34,7 +21,6 @@ export interface PowerContextPushBody {
   thermalPressure?: ThermalPressure | null;
 }
 
-/** `present:false` means "no battery on this host". */
 export interface BatteryProbeResult {
   present: boolean;
   percent: number | null;
@@ -51,11 +37,6 @@ const PERCENT_LOW_FLOOR = 20;
 const CLIENT_PUSH_STALE_MS = 120_000;
 const READ_REFRESH_MS = 60_000;
 
-/**
- * Pure posture (#528). Single `reason`, precedence low-battery > thermal >
- * on-battery. `reason:null` never defers. `battery` is null exactly when no
- * battery is present — the UI's gate.
- */
 export function evaluatePosture(input: {
   platform: NodeJS.Platform;
   hasBattery: boolean;
@@ -103,7 +84,6 @@ export function evaluatePosture(input: {
   };
 }
 
-/** Failure-tolerant: resolves `null` on any error/unknown platform. */
 export async function defaultBatteryProbe(
   platform: NodeJS.Platform
 ): Promise<BatteryProbeResult | null> {
@@ -125,7 +105,6 @@ function runPmset(): Promise<string> {
   });
 }
 
-/** Parse `pmset -g batt`. No `InternalBattery` line ⇒ a desktop Mac (no battery). */
 export function parsePmset(out: string): BatteryProbeResult {
   if (!/-InternalBattery-/u.test(out)) {
     return { present: false, percent: null, charging: null, discharging: null };
@@ -192,7 +171,6 @@ async function readTextFile(path: string): Promise<string | null> {
   return fs.readFile(path, "utf8").catch(() => null);
 }
 
-/** Default linux steal sampler — the `cpu ` aggregate line of `/proc/stat`. */
 export function defaultStealSampler(
   platform: NodeJS.Platform
 ): () => CpuStealSample | null {
@@ -220,14 +198,9 @@ export interface PowerContextMonitorOptions {
     platform: NodeJS.Platform
   ) => Promise<BatteryProbeResult | null>;
   readStealSample?: () => CpuStealSample | null;
-  /** Fired when the deferring bit toggles (or first becomes true) — never on the boring boot false. */
   onDeferringChange?: (state: PowerContextState) => void;
 }
 
-/**
- * Boot probe + client-push, assembled on demand. No timer of its own.
- * Failure-tolerant — a missing probe leaves the posture at `none`.
- */
 export class PowerContextMonitor {
   private readonly platform: NodeJS.Platform;
   private readonly now: () => number;

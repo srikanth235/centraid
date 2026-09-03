@@ -28,7 +28,6 @@ export class NotificationsEventBus {
   }
 }
 
-/** Keyed structurally, not by class. */
 export interface NotificationsDecisionProjection {
   outbox: ReadonlyArray<{ itemId: string; stagedAt: string }>;
   needsAuth: ReadonlyArray<{ connectionId: string; attentionAt: string }>;
@@ -36,7 +35,6 @@ export interface NotificationsDecisionProjection {
   scopeRequests: ReadonlyArray<{ requestId: string }>;
 }
 
-/** Episode timestamps ride the key: reused rows read as new decisions. */
 export function notificationsDecisionKeys(
   decisions: NotificationsDecisionProjection
 ): string[] {
@@ -50,11 +48,6 @@ export function notificationsDecisionKeys(
   ];
 }
 
-/**
- * Keys, not counts: closing one decision while opening another must still
- * wake. First observation per vault only seeds — restarts must not re-wake
- * already-open decisions.
- */
 export function createNotificationsDecisionWakeTracker(): {
   observe: (vaultId: string, keys: readonly string[]) => boolean;
 } {

@@ -22,11 +22,6 @@ import { SseSubscriberCap } from "./sse-cap.js";
 export const MULTIPLEX_REPLICA_CHANGES_PATH =
   "/centraid/_gateway/replica/changes";
 
-/**
- * PER-MOUNT FAILURE VOCABULARY (#883 D1). One mount's trouble is a scoped fact,
- * never the whole radio's, so every failure settles into one terminal,
- * per-mount frame the phone can render.
- */
 export type MultiplexScopeKind =
   | "rebootstrap"
   | "change"
@@ -34,11 +29,6 @@ export type MultiplexScopeKind =
   | "revoked"
   | "error";
 
-/**
- * The phone acts on the FIRST frame; the rest cover one arriving mid-bootstrap.
- * Past that the mount is not listening and re-projecting it every pass is a
- * busy loop against a vault nobody is reading.
- */
 export const MAX_MOUNT_REBOOTSTRAP_NOTICES = 3;
 
 interface MountRequest {
@@ -50,24 +40,17 @@ interface MountRequest {
 interface MountedState extends MountRequest {
   baseline?: string[];
   terminal?: boolean;
-  /** Bounds the shape-changed re-emit. */
   rebootstrapNotices: number;
 }
 
 export interface MultiplexReplicaRouteOptions {
   heartbeatMs?: number;
   limit?: number;
-  /** Concurrent multiplex radios this gateway will hold open (#883 C2). */
   subscriberCap?: SseSubscriberCap;
 }
 
-/** One cap per process — the #351 Tier 4 bound the other streams carry. */
 const defaultMultiplexSubscriberCap = new SseSubscriberCap();
 
-/**
- * One radio, one SSE stream, N sovereign vault logs. No aggregate cursor:
- * each vault has its own epoch and retention floor.
- */
 export function makeMultiplexReplicaRouteHandler(
   vaults: VaultRegistry,
   enrollments: EnrollmentStore,
@@ -91,10 +74,6 @@ export function makeMultiplexReplicaRouteHandler(
         message: error instanceof Error ? error.message : String(error),
       });
     }
-    // A vault may have changed hands while the phone was offline: keep the
-    // formerly-known mount long enough to deliver its scoped tombstone, or the
-    // local projection is stranded forever. A tombstoned or unknown device
-    // still fails closed.
     if (
       !enrollments.ownerFor(deviceId) ||
       mounts.some(
@@ -106,8 +85,6 @@ export function makeMultiplexReplicaRouteHandler(
     )
       return sendJson(res, 403, { error: "replica_scope_not_enrolled" });
 
-    // Bounded BEFORE any header: a saturated gateway answers 503 +
-    // Retry-After and the phone resumes from its per-vault cursors.
     const releaseSlot = (
       options.subscriberCap ?? defaultMultiplexSubscriberCap
     ).admit(res);
@@ -135,9 +112,6 @@ export function makeMultiplexReplicaRouteHandler(
     };
     req.on("close", close);
     res.on("close", close);
-    // One hub per mounted vault (#883 C2): this radio shares each vault's
-    // registration and per-commit projection with every other stream at the
-    // same cursor.
     const hubs = new Map(
       states.map((state) => [
         state.vaultId,
@@ -154,17 +128,7 @@ export function makeMultiplexReplicaRouteHandler(
     let heartbeatAt = Date.now();
 
     try {
-      /*
-       * A LOOP, not recursion (#659), one page per mount per pass. `hasMore`
-       * re-enters immediately so a large backlog drains at projection speed,
-       * and round-robin rather than draining one mount first so a quiet vault
-       * is never starved behind a busy one. Mount state stays sovereign: each
-       * pass re-reads that mount's enrollment and projects from its own cursor.
-       */
       for (;;) {
-        // Re-read every pass, including after a multi-page `continue`: that
-        // path never yields, so `stream.closed` is the only in-band evidence
-        // of a drop mid-drain.
         if (closed || stream.closed) break;
         signaled = false;
         let drained = true;
@@ -179,10 +143,6 @@ export function makeMultiplexReplicaRouteHandler(
             state.terminal = true;
             continue;
           }
-          // Doorbell only: this plane wakes the phone, which pulls rows over
-          // that vault's own lane. The projection still predicate-tests each
-          // changed row (doorbell visibility and the wire row id need it) but
-          // stops short of copying values this route would drop.
           let page: ReplicaProjectedPage;
           try {
             page = (
@@ -197,9 +157,6 @@ export function makeMultiplexReplicaRouteHandler(
               { doorbellOnly: true }
             );
           } catch (error) {
-            // A scoped fact: rebootstrapping one mount must not take the other
-            // sovereign mounts down, so only this mount stops projecting and
-            // resumes on the phone's post-bootstrap reconnect.
             if (error instanceof ReplicaRebootstrapRequiredError) {
               writeScope(stream, state.vaultId, "rebootstrap", {
                 reason: error.reason,
@@ -208,8 +165,6 @@ export function makeMultiplexReplicaRouteHandler(
               state.terminal = true;
               continue;
             }
-            // Never rethrow (#883 D1): that ends the radio and every other
-            // sovereign mount on it. One mount's failure is one mount's fact.
             writeScope(stream, state.vaultId, "error", {
               reason: "projection-failed",
               message: error instanceof Error ? error.message : String(error),
@@ -227,9 +182,6 @@ export function makeMultiplexReplicaRouteHandler(
               reason: page.rebootstrapReason ?? "shape-changed",
               state: currentReplicaLogState(plane.db.vault),
             });
-            // The cursor cannot advance while the shape set disagrees, so
-            // without this bound the mount re-emits the same frame every pass
-            // (#883 D1).
             if (state.rebootstrapNotices >= MAX_MOUNT_REBOOTSTRAP_NOTICES) {
               writeScope(stream, state.vaultId, "error", {
                 reason: "rebootstrap-unacknowledged",
@@ -251,12 +203,9 @@ export function makeMultiplexReplicaRouteHandler(
             writeScope(stream, state.vaultId, "cursor", page.batch.to);
             state.cursor = page.batch.to;
           }
-          // `hasMore` only accompanies a page that advanced the cursor, so
-          // the drain below always progresses.
           if (page.batch.hasMore) drained = false;
         }
         if (closed || stream.closed) break;
-        // More pages waiting on some mount: project the next one right away.
         if (!drained) continue;
         if (Date.now() - heartbeatAt >= heartbeatMs) {
           stream.comment("heartbeat");
@@ -335,9 +284,6 @@ function callerDeviceId(req: IncomingMessage): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-// One frame, one vault: `vaultId` rides inside the payload so a scope frame
-// can never carry another mount's cursor or rows. Bounded writer (#659) — a
-// phone that stops draining is dropped and resumes from its own cursor.
 function writeScope(
   stream: SseStream,
   vaultId: string,

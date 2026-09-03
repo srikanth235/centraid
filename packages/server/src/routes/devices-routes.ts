@@ -29,7 +29,6 @@ import { readJson, sendJson } from "./route-helpers.js";
 const DEVICES_PATH = "/centraid/_gateway/devices";
 const DEVICES_TICKET_PATH = `${DEVICES_PATH}/ticket`;
 
-/** Kept in step with the client's `CentraidGatewayDevice` BY HAND. */
 interface DeviceDTO {
   deviceId: string;
   endpointId: string;
@@ -43,7 +42,6 @@ interface DeviceDTO {
   addedAt?: string;
   lastUsedAt?: string;
   current?: boolean;
-  /** A tombstone, never a role (#726). */
   revoked: boolean;
   rememberDevice: boolean;
   grantProfile?: string[];
@@ -60,12 +58,9 @@ export interface DevicesRouteDeps {
   enrollments: EnrollmentStore;
   tickets: PairingTicketStore;
   vaultName: (vaultId: string) => string | undefined;
-  /** Undefined must REFUSE `forPerson`, never self-pair instead (#726). */
   mintVaultForPerson?: (name: string) => { vaultId: string };
-  /** Undefined leaves an inert orphan dir, never partial rows (#750). */
   unmintVaultForPerson?: (vaultId: string) => void;
   endpointTicket?: () => string | undefined;
-  /** An untargeted pair invites here, not into whichever enrollment sorts first. */
   defaultVaultId?: () => string | undefined;
   canMintPairingTicket?: (req: IncomingMessage) => boolean;
   vaultIds?: () => string[];
@@ -118,7 +113,6 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       return sendJson(res, 200, { devices });
     }
 
-    // Must match BEFORE the DELETE `/:id` branch, or `ticket` reads as an id.
     if (url.pathname === DEVICES_TICKET_PATH) {
       return handleTicketMint(
         req,
@@ -196,7 +190,6 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
     }
     if (!enrollmentId) return false;
 
-    // Never acknowledge an enrollment outside the caller's vaults (#726).
     const target = deps.enrollments
       .list()
       .find((row) => row.enrollmentId === enrollmentId);
@@ -204,7 +197,6 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       return sendJson(res, 404, { error: "not_found" });
     }
 
-    // Revoking the owner's last device strands the vault: demand confirmation.
     if (target && lastDeviceOfOwner(deps, target)) {
       let body: Record<string, unknown>;
       try {
@@ -228,7 +220,6 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       return sendJson(res, 200, { removed: false });
     }
     await deps.onRevoked?.(removed);
-    // A device key with no remaining enrollment loses its live iroh transport.
     const deadKeys = new Set(
       removed
         .map((r) => r.endpointId)
@@ -245,7 +236,6 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
     );
     const sent = sendJson(res, 200, { removed: true });
     if (selfKey && deps.onEndpointRevoked) {
-      // Let the self-unpair response finish traversing the QUIC stream.
       const timer = setTimeout(
         () => void deps.onEndpointRevoked?.(selfKey),
         1_000

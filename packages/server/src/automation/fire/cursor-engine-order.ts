@@ -1,6 +1,5 @@
 import type { Trigger } from "../manifest/manifest.js";
 
-/** Apply work serially when each durable effect is the next operation's precondition. */
 export function applyInOrder<T>(
   values: readonly T[],
   apply: (value: T, index: number) => void | PromiseLike<void>,

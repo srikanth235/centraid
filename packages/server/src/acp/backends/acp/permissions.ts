@@ -1,9 +1,3 @@
-/*
- * Headless auto-answer: no surface can render an approval prompt, so waiting
- * would stall. `cancelled` unwinds the PROMPT TURN whole; a per-tool refusal
- * is `selected` naming reject_once/reject_always and keeps pre-granted tools.
- */
-
 import type {
   PermissionOption,
   RequestPermissionRequest,
@@ -27,7 +21,6 @@ export function readPermissionToolTitle(
   return "tool";
 }
 
-/** Undefined only when no reject option exists — caller then sends `cancelled`. */
 export function pickRejectPermissionOption(
   options: PermissionOption[]
 ): string | undefined {

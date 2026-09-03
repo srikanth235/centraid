@@ -29,7 +29,6 @@ const cleanups: Array<() => Promise<void> | void> = [];
 
 const access = { canWrite: true, rememberDevice: true, appId: "planner" };
 
-/** What doorbell-only leaves untouched. */
 function doorbellFacts(page: ReplicaProjectedPage): unknown {
   return {
     doorbell: page.doorbell,
@@ -165,7 +164,6 @@ describe("replica projection doorbell-only mode", () => {
 
   test("a consent change still rebootstraps identically in both modes", async () => {
     const { vault, since } = await mixedPage();
-    // Shape control: neither mode may advance past it as data.
     vault.approveGrant("planner", {
       purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", table: "event", verbs: "read" }],
@@ -188,11 +186,6 @@ describe("replica projection doorbell-only mode", () => {
   });
 });
 
-/**
- * RETENTION COMPACTION IS REPLAY-EQUIVALENT (#883 C6). The hard case: a row
- * leaving a filter projects as a DELETE decided from the state before the
- * oldest shown change — the very entry churn supersedes.
- */
 describe("replica projection under retention compaction", () => {
   afterEach(async () => {
     await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
@@ -230,8 +223,6 @@ describe("replica projection under retention compaction", () => {
         },
       ],
     });
-    // Consent settles before the replayed window; a grant change inside it
-    // would rebootstrap instead.
     const granted = currentReplicaLogState(vault.db.vault).watermark;
     const insert = vault.db.vault.prepare(
       `INSERT INTO schedule_task
@@ -253,8 +244,6 @@ describe("replica projection under retention compaction", () => {
       retitle.run(`hot-a ${index}`, "hot-a");
       retitle.run(`hot-b ${index}`, "hot-b");
     }
-    // Leaves the filter, then keeps changing: the superseded transition is
-    // what compaction must not lose.
     restatus.run("completed", "leaver");
     retitle.run("leaver later", "leaver");
     retitle.run("hot-a last", "hot-a");
@@ -264,7 +253,6 @@ describe("replica projection under retention compaction", () => {
     return { vault, since, base };
   }
 
-  /** In order, last write wins (docs/mobile-offline.md). */
   type ReplicaState = Map<string, { values: unknown; version: number }>;
 
   function replay(
@@ -275,8 +263,6 @@ describe("replica projection under retention compaction", () => {
     const rows: ReplicaState = new Map(base);
     let cursor = since;
     for (let page = 0; page < 200; page += 1) {
-      // Small on purpose: a folded entry and its survivor must be able to
-      // straddle a page boundary.
       const projected = projectReplicaPage(vault.db.vault, access, cursor, 3);
       expect(projected.rebootstrapReason).toBeUndefined();
       for (const change of projected.batch.changes) {
@@ -294,7 +280,6 @@ describe("replica projection under retention compaction", () => {
     return rows;
   }
 
-  /** The bytes two replays must agree on. */
   function snapshot(rows: ReplicaState): string {
     return JSON.stringify(
       [...rows.entries()]
@@ -303,10 +288,7 @@ describe("replica projection under retention compaction", () => {
     );
   }
 
-  /** The SAME vault the baseline replay read: row ids are per-vault HMACs. */
   function compact(vault: VaultPlane, since: { seq: number }): void {
-    // One entry over the cap: compaction clears the pressure by itself, so
-    // the count trim never runs and the floor stays put.
     const entries = (
       vault.db.vault
         .prepare(`SELECT COUNT(*) AS n FROM replica_change`)
@@ -334,7 +316,6 @@ describe("replica projection under retention compaction", () => {
 
   test("rowVersion is unchanged by compaction, because a row's last entry never folds", async () => {
     const { vault, since } = await churnedVault();
-    // rowVersion IS the newest change seq, and that entry never folds.
     const versions = (): unknown[] =>
       projectReplicaPage(vault.db.vault, access, since, 1_000)
         .batch.changes.map((change) => change.rowVersion)
@@ -350,7 +331,6 @@ describe("replica projection under retention compaction", () => {
     const { vault, since, base } = await churnedVault();
     const expected = snapshot(replay(vault, since, base));
     compact(vault, since);
-    // The bug this prevents: fold, keep the latest, forget the prior.
     vault.db.vault.exec(
       `UPDATE replica_change SET prior_op = NULL, prior_old_values_json = NULL`
     );
@@ -376,7 +356,6 @@ describe("replica projection under retention compaction", () => {
   });
 
   test("every shape-control entity is held out of compaction", () => {
-    // One verdict, one owner: the projection decides, compaction holds all.
     expect(
       [...SHAPE_CONTROL_ENTITIES].filter(
         (entity) => !REPLICA_COMPACTION_HELD_ENTITIES.includes(entity)

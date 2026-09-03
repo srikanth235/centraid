@@ -166,9 +166,6 @@ describe("demo routes", () => {
   });
 
   test("finds a BUNDLED app's generator, which lives outside the code store", async () => {
-    // The regression this dep exists for (#434, #708): bundled installs serve
-    // in place and are installed by default, so a handler scanning only the
-    // git store answers `{apps:[]}` and 404s every seed POST.
     const codeAppsDir = await tempDir("demo-routes-code-");
     const bundledRoot = await tempDir("demo-routes-bundled-");
     await writeSeed(bundledRoot, "tasks");
@@ -190,7 +187,6 @@ describe("demo routes", () => {
       method: "POST",
     });
     expect(loaded.status).toBe(200);
-    // It ran the BUNDLED generator, not a code-store path that does not exist.
     expect(mocks.runHandler.mock.calls[0]?.[0]).toMatchObject({
       handlerFile: path.join(bundledRoot, "tasks", "seed.js"),
     });

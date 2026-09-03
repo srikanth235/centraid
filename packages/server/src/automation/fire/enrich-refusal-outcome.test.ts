@@ -1,17 +1,3 @@
-/*
- * The tier refusal as something a HOST CAN SURFACE.
- *
- * `enrich-gate.test.ts` pins the decision. This file pins the other half of
- * the same defect: a refusal that only exists as prose in `outcome.error` is
- * one a host can either ignore or mis-parse, and skips are silent by default
- * (#647), so the member who asked for face proposals got nothing and no
- * account of why. The gate therefore hands the host a STRUCTURED refusal —
- * domain, capability, and the tier in force — which the gateway turns into
- * the one card that names the setting and points at its control.
- *
- * The gate's own decision logic is not touched here; this is about what the
- * fire spine reports after it.
- */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 

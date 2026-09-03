@@ -1,13 +1,3 @@
-/*
- * Gateway-level storage-connection routes (#367): CRUD over
- * `StorageConnectionStore`, a real signed connectivity probe, and per-vault
- * replication, usage, local-footprint and limit reads. Owner-facing, behind
- * the same bearer gate as health/diagnostics/backup.
- *
- * Every response mirrors `StorageConnectionRecord` and NEVER carries a
- * credential field, sealed or not.
- */
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { requestCasGrant } from "@centraid/backup";
@@ -52,8 +42,6 @@ export interface StorageRouteDeps extends StorageLocalRouteDeps {
   onConnectionsChanged?: () => Promise<void> | void;
 }
 
-/** `local-only` is excluded: unreplicated bytes would not compare fairly
- *  against a provider's own figure. */
 function localReplicatedBytesByConnection(
   vaults: VaultRegistry
 ): Map<string, number> {
@@ -88,8 +76,6 @@ function sendConnectionError(res: ServerResponse, err: unknown): true {
   return sendError(res, err);
 }
 
-/** One signed HEAD against a synthetic key: a 404 IS success, proving auth and
- *  reachability rather than object existence. Folds in home-profile status (#436). */
 async function probeConnection(
   store: StorageConnectionStore,
   id: string
@@ -102,8 +88,6 @@ async function probeConnection(
   const probeKey = "0".repeat(64);
   try {
     const apiKey = await store.resolveProviderApiKey(id);
-    // First: a non-home provider is a hard failure, named capability by
-    // capability rather than as a generic reachability error.
     const profile = await fetchProviderProfileStatus(
       connection.baseUrl,
       apiKey
@@ -161,17 +145,12 @@ function storageStatus(plane: StoragePlane) {
   const sweep = plane.db.blobs.sweepStatus();
   const metrics = plane.db.blobs.metrics();
   const outbox = plane.db.blobTransfers.status();
-  // READ, never recomputed: the standing blob sweep owns rebuilding it, and a
-  // per-request rebuild would be O(vault-size) on the request path.
-  // `computedAt: null` MUST reach the client as null — it separates "nothing is
-  // freeable" from "nobody has looked yet".
   const rollup = custodyRollup(plane.db.vault);
   return {
     vaultId: plane.boot.vaultId,
     name: plane.name,
     configured: settings.kind === "s3",
     ...(settings.connectionId ? { connectionId: settings.connectionId } : {}),
-    // `remote-only` is confirmed custody; only pending-offsite is undrained (#414).
     replicated: {
       count: counts.replicated + counts["remote-only"],
       bytes: bytes.replicated + bytes["remote-only"],
@@ -184,10 +163,6 @@ function storageStatus(plane: StoragePlane) {
       lastError: outbox.lastError,
     },
     localOnly: { count: counts["local-only"], bytes: bytes["local-only"] },
-    // Every storage number traces to one of these buckets (#712); `freeable`
-    // and `local-unproven` are the only two that license or refuse releasing a
-    // local copy. The custody-state buckets ride along so a client never has to
-    // reconcile this block against the pairs above.
     custody: { computedAt: rollup.computedAt, buckets: rollup.buckets },
     casAck: policy.casAck,
     outboxBudgetBytes: policy.outboxBudgetBytes,
@@ -317,8 +292,6 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
       }
     }
 
-    // A different question (this machine's disk, not the provider's), so it
-    // lives in its own module (#544).
     if (await tryStorageLocalRoutes(url, req, res, deps)) return true;
 
     if (url.pathname === CONNECTIONS_PATH) {
@@ -342,8 +315,6 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
             });
           }
           const body = raw as unknown as CreateStorageConnectionInput;
-          // Every connection is a home CAS bundle (#436), so the recovery-kit
-          // gate always applies before the first remote custody.
           const status = await deps.recoveryKit.status();
           const recoveryKitConfirmed = status.confirmedAt !== null;
           if (!recoveryKitConfirmed) {
@@ -354,8 +325,6 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
                 "export, re-select, and verify the recovery kit before enabling a remote storage tier",
             });
           }
-          // Only a `home`-profile provider may back a home connection (#436);
-          // throws `provider_not_home_profile` → 400.
           await assertProviderHomeProfile(body.baseUrl, body.apiKey);
           const connection = await deps.storageConnections.create(body);
           await deps.onConnectionsChanged?.();

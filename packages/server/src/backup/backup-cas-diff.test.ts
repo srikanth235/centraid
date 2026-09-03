@@ -87,7 +87,6 @@ describe("backup-cas-diff", () => {
     });
     expect(unmarked).toStrictEqual([SHA_C]);
     expect(state.missing).toStrictEqual({ count: 1, sample: [SHA_C] });
-    // SHA_B is remote but not live → orphan; unknown key also folds in.
     expect(state.orphans.count).toBe(2);
     expect(state.orphans.sample.sort()).toStrictEqual(
       [SHA_B, "not-a-cas-key"].sort()

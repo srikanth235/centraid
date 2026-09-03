@@ -5,10 +5,6 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 // governance: allow-repo-hygiene file-size-limit #526 Keep broker custody and Assist regression scenarios together.
-// The connection broker (#304): token custody correctness. The three
-// rot points each get a scenario — rotated pair persisted before use,
-// single-flight refresh under concurrency, invalid_grant flips needs-auth
-// with an owner-readable note while a 5xx stays transient (no flip).
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { sealAad, unsealValue } from "@centraid/vault";
 
@@ -51,12 +47,9 @@ describe("connection-broker", () => {
     ) => void;
   }
 
-  /** A token endpoint that accepts the connection but never answers — simulates a wedged IdP. */
   async function startHangingTokenServer(): Promise<{ url: string }> {
     const sockets = new Set<TypeImport_1cs0ag8.Socket>();
-    const server = http.createServer(() => {
-      /* never respond */
-    });
+    const server = http.createServer(() => {});
     server.on("connection", (socket) => {
       sockets.add(socket);
       socket.on("close", () => sockets.delete(socket));
@@ -74,7 +67,6 @@ describe("connection-broker", () => {
     return { url: `http://127.0.0.1:${port}/token` };
   }
 
-  /** A scriptable token endpoint: push one response per expected request. */
   async function startTokenServer(): Promise<TokenServer> {
     const responses: Array<{ status: number; body: Record<string, unknown> }> =
       [];
@@ -408,7 +400,6 @@ describe("connection-broker", () => {
     expect(auth && "values" in auth ? auth.values : undefined).toStrictEqual({
       access_token: "ya29.fresh",
     });
-    // The refresh grant carried the original token + the client pair.
     expect(tokens.requests).toHaveLength(1);
     expect(tokens.requests[0]).toMatchObject({
       grant_type: "refresh_token",
@@ -416,12 +407,10 @@ describe("connection-broker", () => {
       client_id: "cid.apps.googleusercontent.com",
       client_secret: "GOCSPX-broker-test",
     });
-    // The rotated pair is on the row, sealed, with a fresh expiry.
     const row = connectionRow(plane, connectionId);
     expect(String(row.access_token)).toMatch(/^sealed:v1:/u);
     expect(String(row.refresh_token)).toMatch(/^sealed:v1:/u);
     expect(row.status).toBe("active");
-    // A follow-up resolve uses the persisted rotated pair without refreshing.
     const again = await broker.resolveForFire({
       kind: "pull.gmail",
       label: "personal",
@@ -504,7 +493,6 @@ describe("connection-broker", () => {
     expect(auth && "refused" in auth ? auth.refused : undefined).toMatch(
       /transient/u
     );
-    // Retried once, then gave up for this fire — status untouched.
     expect(tokens.requests).toHaveLength(2);
     expect(connectionRow(plane, connectionId).status).toBe("active");
   });
@@ -518,7 +506,6 @@ describe("connection-broker", () => {
       refresh_token: "1//fine",
       expires_at: new Date(Date.now() - 1000).toISOString(),
     });
-    // A short token timeout so the test doesn't wait out the real 30s default.
     const broker = new ConnectionBroker(() => plane, 30);
     const auth = await broker.resolveForFire({
       kind: "pull.gmail",
@@ -527,7 +514,6 @@ describe("connection-broker", () => {
     expect(auth && "refused" in auth ? auth.refused : undefined).toMatch(
       /transient/u
     );
-    // Same outcome as the 5xx-transient case: no flip, connection stays active.
     expect(connectionRow(plane, connectionId).status).toBe("active");
   });
 
@@ -611,8 +597,6 @@ describe("connection-broker", () => {
       /openid|userinfo\.email|userinfo\.profile/u
     );
 
-    // A copied browser fragment cannot burn or redeem another device/session's
-    // state. The correctly-bound client can still complete afterwards.
     await expect(
       broker.completeAssistAuthorization({
         state: ceremony.state,
@@ -865,9 +849,6 @@ describe("connection-broker", () => {
     const fetchImpl = vi.fn<typeof fetch>(
       async (input: string | URL | Request) => {
         if (String(input).includes("gmail.googleapis.com")) {
-          // The profile call blows up: the connection still works (the first poll
-          // re-baselines), but a swallowed fallible action must at least warn
-          // (docs/coding-standards.md).
           throw new Error("gmail profile unreachable");
         }
         return Response.json({
@@ -895,7 +876,6 @@ describe("connection-broker", () => {
       connectionId,
       "http://127.0.0.1/oauth/callback"
     );
-    // The ceremony still completes — the baseline is best-effort.
     await expect(
       broker.completeAuthorization(ceremony.state, "authorization-code")
     ).resolves.toStrictEqual({ connectionId });
@@ -903,7 +883,6 @@ describe("connection-broker", () => {
       expect.stringContaining("Gmail history baseline failed"),
     ]);
     expect(warnings[0]).toContain("gmail profile unreachable");
-    // No baseline cursor landed, so the first poll re-baselines.
     const cursor = plane.db.vault
       .prepare(
         `SELECT value_json FROM sync_connection_cursor
@@ -970,9 +949,6 @@ describe("connection-broker", () => {
     expect(String(row.refresh_token)).toMatch(/^sealed:v1:/u);
   });
 
-  // Issue #865 regression: the capability round-trips sealed at rest —
-  // stored beside the refresh token, unsealed only to be sent to the Worker,
-  // and re-stored when Google rotates the pair.
   test("the Assist refresh capability round-trips sealed: stored, sent, rotated, re-stored", async () => {
     const plane = openPlane(await tempDir());
     const connectionId = configureAssist(plane);
@@ -1025,7 +1001,6 @@ describe("connection-broker", () => {
           )
           .get(connectionId) as { refresh_capability: string }
       ).refresh_capability;
-    // The rotated capability persisted sealed with the rotated token.
     const storedCipher = capabilityOf();
     expect(storedCipher).toMatch(/^sealed:v1:/u);
     expect(
@@ -1039,7 +1014,6 @@ describe("connection-broker", () => {
         storedCipher
       )
     ).toBe("cap-v2");
-    // The NEXT refresh presents the re-stored capability for the rotated token.
     await broker.ensureFreshToken(plane, connectionId, true);
     expect(requests[1]).toMatchObject({
       refresh_token: "1//rotated",

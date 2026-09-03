@@ -1,6 +1,3 @@
-/* Model-id matching (#445), ccusage-compatible: exact id, then normalized,
-   then boundary-safe prefix match. Unknown → undefined — never a default price. */
-
 import type { PricingCatalog, PricingEntry } from "./types.js";
 
 const REGIONAL_BEDROCK = /^(?:us|eu|apac|jp|au)\./u;
@@ -48,7 +45,6 @@ export function matchEntry(
     const hit = catalog[c];
     if (hit) return hit;
   }
-  // Fully-normalized id first, then pre-date-strip (dated-only catalogs).
   const noDate = cands[cands.length - 1] ?? "";
   const stripped = cands[cands.length - 2] ?? noDate;
   const key =

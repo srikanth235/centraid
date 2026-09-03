@@ -1,17 +1,8 @@
-/*
- * The `share_edges` ROW. A leaf on purpose: the reducer, the durable applier,
- * both transports and every route that answers an edge need this type, and
- * none of them should have to import a transport to get it (#750 abstraction 5).
- * Statuses live here as one union — which may follow which is
- * `share-coordinator.ts`'s single answer; this module holds no transition logic.
- */
-
 import type { ShareableItemType } from "@centraid/vault";
 
 import type { GatewayDatabase } from "./gateway-db.js";
 
 export type EdgeKind = "add" | "move";
-/** `snapshot` is the only mode there is — no live lending (#731). */
 export type EdgeMode = "snapshot";
 export type EdgeStatus =
   | "queued"
@@ -25,7 +16,6 @@ export type EdgeStatus =
 
 export interface EdgeRow {
   edge_id: string;
-  /** Provenance only — WHICH device acted. Listing scopes by owner (#750). */
   created_by_device: string;
   owner_id: string;
   kind: EdgeKind;

@@ -1,7 +1,3 @@
-// Consent as it is felt through the plane's bridges: deny-by-default until the
-// owner grants, allow while the grant lives, dark the moment the app or agent
-// is uninstalled — plus the owner's own HTTP routes for the same acts, the
-// sweep clock that lapses expired grants, and the feeds that ride the bridges.
 import { describe, expect, test } from "vitest";
 
 import type { VaultBridge } from "@centraid/server/engine";
@@ -16,23 +12,14 @@ import {
 } from "./vault-plane.test-fixtures.js";
 import { openVaultRegistry } from "./vault-registry.js";
 
-/**
- * The app plane and the agent plane are two doors onto ONE consent law. The
- * lifecycle below is that law; everything a single plane adds on top of it
- * (replay, parking, install-time top-ups) lives in its own test.
- */
 interface ConsentLifecycleCase {
   readonly plane: "app" | "agent";
   readonly entity: string;
-  /** Enroll the caller, then hand back its bridge. */
   readonly enroll: (plane: VaultPlane) => VaultBridge;
   readonly approve: (plane: VaultPlane) => void;
-  /** Grants visible to the owner once the approval lands. */
   readonly grantsAfterApprove: (plane: VaultPlane) => unknown[] | undefined;
   readonly uninstall: (plane: VaultPlane) => { grantsRevoked: number };
-  /** Substring the deny must carry, where the plane promises one. */
   readonly denyErrorIncludes?: string;
-  /** Rows the granted read must return, where the fixture pins them. */
   readonly allowedRows?: unknown[];
 }
 
@@ -55,8 +42,6 @@ const consentLifecycle: readonly ConsentLifecycleCase[] = [
     grantsAfterApprove: (plane) =>
       plane.listApps().find((app) => app.name === "planner")?.grants,
     uninstall: (plane) => plane.revokeApp("planner"),
-    // The deny is receipted, and says so — a hang or a silent empty read would
-    // both pass a bare `ok === false`.
     denyErrorIncludes: "receipt",
     allowedRows: [],
   },
@@ -65,7 +50,6 @@ const consentLifecycle: readonly ConsentLifecycleCase[] = [
     entity: "schedule.task",
     enroll: (plane) => {
       plane.enrollAutomationAgent("briefing");
-      // Idempotent — the reconcile loop calls this on every settle.
       plane.enrollAutomationAgent("briefing");
       expect(
         plane.listAgents().filter((agent) => agent.name === "Briefing")
@@ -104,18 +88,13 @@ describe("vault-plane consent", () => {
           },
         });
 
-      // Enrolled but ungranted: a receipted consent deny, not a hang or a leak.
       const denied = await read();
       expect(denied.ok).toBe(false);
       expect(denied.code).toBe("VAULT_ACCESS");
-      // Unconditional: a plane that promises nothing asserts against "", which
-      // every string contains. A conditional assertion would silently vanish
-      // if a scenario ever dropped the field.
       expect(String(denied.error ?? "")).toContain(
         scenario.denyErrorIncludes ?? ""
       );
 
-      // The owner approves the manifest-declared scopes.
       scenario.approve(plane);
       expect(scenario.grantsAfterApprove(plane)).toHaveLength(1);
       const allowed = await read();
@@ -124,7 +103,6 @@ describe("vault-plane consent", () => {
         scenario.allowedRows ? { rows: scenario.allowedRows } : {}
       );
 
-      // Uninstall: grants revoked (cascade), identity retired, calls go dark.
       expect(scenario.uninstall(plane).grantsRevoked).toBe(1);
       const dark = await read();
       expect(dark.ok).toBe(false);
@@ -145,7 +123,6 @@ describe("vault-plane consent", () => {
     });
     const bridge = plane.agentBridgeFor("briefing");
 
-    // A typed command executes under the agent identity (risk low).
     const invoked = await bridge({
       op: "invoke",
       payload: {
@@ -161,7 +138,6 @@ describe("vault-plane consent", () => {
       invocationId: "run-1:v0",
     });
 
-    // Replay: the same invocationId returns the recorded outcome, no double write.
     const replayed = await bridge({
       op: "invoke",
       payload: {
@@ -174,8 +150,6 @@ describe("vault-plane consent", () => {
     expect(replayed.ok).toBe(true);
     expect(replayed.result).toMatchObject({ status: "replayed" });
 
-    // Risk high > agent ceiling (medium): parks for the owner; the agent's own
-    // parked surface lists it.
     const ownerParty = plane.boot.ownerPartyId;
     const draft = await bridge({
       op: "invoke",
@@ -281,7 +255,6 @@ describe("vault-plane consent", () => {
     const plane = fixture.openPlane(await tempDir());
     const calendarId = seedCalendar(plane);
 
-    // Agent side: watch core.event through the consented change feed.
     plane.enrollAutomationAgent("reconciler");
     plane.approveAgentGrant("reconciler", {
       purpose: "dpv:ServiceProvision",
@@ -302,8 +275,6 @@ describe("vault-plane consent", () => {
     expect(bootstrap.ok).toBe(true);
     const cursor = (bootstrap.result as { cursor: string }).cursor;
 
-    // An app parks a confirm-gated booking request (#306: parking is a
-    // property of the command, not of risk)…
     plane.enrollApp("bookings");
     plane.approveGrant("bookings", {
       purpose: "dpv:ServiceProvision",
@@ -316,7 +287,6 @@ describe("vault-plane consent", () => {
       )
       .run();
     const appBridge = plane.bridgeFor("bookings");
-    // …a write that, once confirmed, lands in the agent's feed.
     const proposed = await appBridge({
       op: "invoke",
       payload: {
@@ -333,14 +303,12 @@ describe("vault-plane consent", () => {
     expect(proposed.ok).toBe(true);
     expect((proposed.result as { status: string }).status).toBe("parked");
 
-    // The parked op shows the app ITS pending approval (#260 seam).
     const parked = await appBridge({ op: "parked", payload: {} });
     expect(parked.ok).toBe(true);
     expect(parked.result).toMatchObject([
       { command: "schedule.propose_event", caller: "Bookings" },
     ]);
 
-    // Owner confirms → the write lands → the agent's next pull sees it.
     const invocationId = (parked.result as Array<{ invocationId: string }>)[0]!
       .invocationId;
     const confirmed = plane.confirmParked(invocationId, true);
@@ -361,7 +329,6 @@ describe("vault-plane consent", () => {
 
   test("owner routes: status, apps, grant, parked confirm, revoke", async () => {
     const dir = await tempDir();
-    // The route handler speaks to the registry; the acts land on its active plane.
     const registry = openVaultRegistry({
       rootDir: dir,
       logger: silentLogger,
@@ -377,7 +344,6 @@ describe("vault-plane consent", () => {
     const status = await (await fetch(`${base}/status`)).json();
     expect(status).toMatchObject({ vaultId: plane.boot.vaultId });
 
-    // Approve the requested scopes over HTTP — the owner act.
     const grantRes = await fetch(`${base}/apps/planner/grants`, {
       method: "POST",
       body: JSON.stringify({
@@ -394,8 +360,6 @@ describe("vault-plane consent", () => {
     expect(apps.apps[0]).toMatchObject({ name: "planner" });
     expect(apps.apps[0]?.grants).toHaveLength(1);
 
-    // Park an invocation through the bridge, confirm it over HTTP. Parking
-    // is confirm-gated (#306): mark the command loud-on-purpose first.
     plane.db.vault
       .prepare(
         `UPDATE agent_capability SET requires_confirmation=1
@@ -421,10 +385,6 @@ describe("vault-plane consent", () => {
       parked: unknown[];
     };
     expect(parkedList.parked).toHaveLength(1);
-    // The wire carries WHO and WHAT so the desktop confirmation UI can
-    // render "Planner wants schedule.propose_event: …" (issue: consent UX,
-    // parked-invocation trust legibility — the display name, not the raw
-    // enrollment slug).
     expect(parkedList.parked[0]).toMatchObject({
       invocationId,
       command: "schedule.propose_event",
@@ -441,7 +401,6 @@ describe("vault-plane consent", () => {
       "executed"
     );
 
-    // Revoke over HTTP; the app goes dark.
     const revoke = await fetch(`${base}/grants/${grantId}`, {
       method: "DELETE",
     });
@@ -452,7 +411,6 @@ describe("vault-plane consent", () => {
     });
     expect(dark.ok).toBe(false);
 
-    // Bad grant bodies are refused.
     const bad = await fetch(`${base}/apps/planner/grants`, {
       method: "POST",
       body: JSON.stringify({

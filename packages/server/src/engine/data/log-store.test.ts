@@ -106,7 +106,6 @@ describe("log-store", () => {
   });
 
   test("reads from both current and rotated file when both exist", async () => {
-    // Simulate post-rotation state: rotated has older entries, current has newer.
     await fs.writeFile(
       path.join(workspace, "logs.jsonl.1"),
       JSON.stringify(mk("info", "old", 1)) + "\n",
@@ -142,7 +141,6 @@ describe("log-store", () => {
     await appendLogs(workspace, [mk("info", "a", 1)]);
 
     const out = await readLogs(workspace, { limit: 999_999 });
-    // Hard cap is 500; with one entry the value is just 1 — the point is the call must not throw and stays bounded.
     expect(out.length <= 500).toBeTruthy();
   });
 

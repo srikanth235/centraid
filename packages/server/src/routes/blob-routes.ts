@@ -1,20 +1,3 @@
-// Blob custody routes (#296) — the two byte doors of the vault.
-//
-//   POST /centraid/_vault/blobs                       stage bytes (no receipt)
-//        raw body (any non-JSON content type) with ?filename=&media_type=
-//        &variant=&variant_of= — or JSON {base64, filename?, media_type?,
-//        variant?, variant_of?} for parity with the import route.
-//        → {sha256, mediaType, byteSize, existingContentId}
-//        Staging is NOT a vault write: the command that claims the sha
-//        (core.attach / core.add_document / media.add_asset with
-//        staged_sha) is, and that is where the receipt mints.
-//
-//   GET  /centraid/_vault/blobs/<contentId>[?variant=thumb|preview]
-//        consent + DERIVED-reachability gated: Range, ETag = sha256
-//        immutable caching), inline disposition — ?download=1 for saves.
-//        Outer Bearer + vault-scope auth (#289) is stamped onto <img>/<video>
-//        subresource loads without app-level token plumbing.
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { AUTHED_DEVICE_HEADER } from "@centraid/server/engine";
@@ -37,7 +20,6 @@ import { readBody, readJson, sendJson } from "./route-helpers.js";
 export { MAX_OPEN_RANGE_BYTES, parseRange } from "./blob-response.js";
 
 const PREFIX = "/centraid/_vault/blobs";
-/** Upload cap — a phone video fits; a Takeout goes through the import door. */
 const MAX_BLOB_BYTES = 512 * 1024 * 1024;
 const MAX_UPLOAD_CHUNK_BYTES = 32 * 1024 * 1024;
 
@@ -83,7 +65,6 @@ function optionalSize(value: unknown, field: string): number | undefined {
   return number;
 }
 
-/** Only host-stamped transport identity may receive per-blob key material. */
 function authenticatedDevice(req: IncomingMessage): string | undefined {
   const ambient = vaultContext()?.deviceKey;
   if (ambient) return ambient;
@@ -156,8 +137,6 @@ export function makeBlobRouteHandler(
           return sendCommitted(res, { ...staged, casAck, custody });
         }
 
-        // Derivative uploads retain the buffered preview pipeline. Originals
-        // use the persistent streaming coordinator below.
         if (variant !== undefined) {
           if (!isDerivativeVariant(variant)) {
             return sendJson(res, 400, {

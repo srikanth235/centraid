@@ -168,7 +168,6 @@ describe(HealthRegistry, () => {
       expect(snap.metrics.outboxPending).toBe(3);
       expect(snap.metrics.sseClients).toBe(2);
 
-      // Re-read on every call — not cached from registration time.
       pending = 7;
       snap = await registry.snapshot();
       expect(snap.metrics.outboxPending).toBe(7);

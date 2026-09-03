@@ -1,11 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#387) single dispatch surface for the automation read/turn/item/SSE wire (one switch over one HTTP contract); splitting scatters the route table without a seam
-// HTTP surface for automation runtime ops (#141), so the desktop is a thin
-// client for local AND remote gateways alike rather than reading local files.
-//
-// Refs and turn ids carry `/` and `:`, so they ride QUERY PARAMS, never path
-// segments. Manifests resolve from the materialized `main`, ledgers from the
-// stable `appsDir`. Turn-now executes on THIS host with the gateway's own
-// harness config — a remote fire never uses the desktop's provider key.
 
 import crypto from "node:crypto";
 import { existsSync } from "node:fs";
@@ -46,7 +39,6 @@ import {
 } from "./route-helpers.js";
 import { SseSubscriberCap } from "./sse-cap.js";
 
-/** One per process, so this count IS the real one (#351). */
 const defaultSubscriberCap = new SseSubscriberCap();
 
 export function turnEventsSubscriberCount(): number {
@@ -55,24 +47,19 @@ export function turnEventsSubscriberCount(): number {
 
 export interface AutomationsRouteOptions {
   store: WorktreeStore;
-  /** The vault's `vault.db`: every turn's full ledger (#280). */
   ledgerDbFile: string;
   analytics: AnalyticsStore;
   insights: InsightsStore;
-  /** The route mints the turnId and passes it in. */
   runAutomation: (input: { automationRef: string; turnId: string }) => void;
-  /** The same fire path, awaited for capture and Test run. */
   invokeAndAwait?: (input: {
     automationRef: string;
     turnId: string;
     payload?: unknown;
   }) => Promise<unknown>;
-  /** Omitted where nothing streams: SSE then replays and closes. */
   subscribeTurnEvents?: (
     turnId: string,
     listener: (ev: AutomationTurnStreamEvent, serialized: string) => void
   ) => () => void;
-  /** The route owns the SSE transport; the lifecycle owns ledger and fanout. */
   runInteractiveTurn?: (input: {
     row: automation.Row;
     turnId: string;
@@ -88,7 +75,6 @@ export interface AutomationsRouteOptions {
   subscriberCap?: SseSubscriberCap;
 }
 
-/** Raw string on parse failure. */
 function safeParseJson(json: string): unknown {
   try {
     return JSON.parse(json) as unknown;
@@ -99,14 +85,11 @@ function safeParseJson(json: string): unknown {
 
 interface AutomationTurnJson extends Turn {
   automationId?: string;
-  /** Last-known display name; see `RunSummary.automationName`. */
   automationName?: string;
   harnessKind?: string;
-  /** Built-in recognition runs stay in their own history lane. */
   systemLane?: "recognition";
 }
 
-/** An in-flight item replays start-only; `message_in` is filtered by the caller. */
 function replayItemEvents(item: Item): AutomationTurnStreamEvent[] {
   const start: AutomationTurnStreamEvent = {
     type: "item.start",
@@ -155,7 +138,6 @@ function turnToAutomationTurn(
   };
 }
 
-/** Resolves `true` when it owned the request. */
 export function makeAutomationsRouteHandler(
   opts: AutomationsRouteOptions
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
@@ -163,7 +145,6 @@ export function makeAutomationsRouteHandler(
     path.join(opts.store.getActiveMainLink(), "apps");
   const subscriberCap = opts.subscriberCap ?? defaultSubscriberCap;
 
-  // One `vault.db` per vault (#280); a missing file means no turn yet.
   const turnsStore = ledgerConversationStore(opts.ledgerDbFile);
   const turnsStoreForTurnId = (
     _turnId: string
@@ -172,8 +153,6 @@ export function makeAutomationsRouteHandler(
     return turnsStore;
   };
 
-  // Ledger-tail hybrid (#158): subscribe FIRST so events during replay are
-  // not lost, then replay the snapshot and drain until `turn.end`.
   const streamTurnEvents = (
     req: IncomingMessage,
     res: ServerResponse,
@@ -188,7 +167,6 @@ export function makeAutomationsRouteHandler(
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     });
-    // Bounded writer (#659) — a paused viewer is dropped, not buffered.
     const stream = new SseStream(res);
     stream.comment(`turn ${turnId}`);
     const heartbeat = setInterval(() => {
@@ -216,7 +194,6 @@ export function makeAutomationsRouteHandler(
       stream.event(ev.type, serialized);
     };
 
-    // Buffered during replay; the client dedupes by ordinal.
     const queue: Array<readonly [AutomationTurnStreamEvent, string]> = [];
     let replayed = false;
     const drain = (): void => {
@@ -244,7 +221,6 @@ export function makeAutomationsRouteHandler(
       for (const ev of replayItemEvents(item)) write(ev);
     }
 
-    // Already finished (late join): emit terminal and close.
     if (turn && turn.endedAt !== undefined) {
       write({
         type: "turn.end",
@@ -255,7 +231,6 @@ export function makeAutomationsRouteHandler(
       cleanup();
       return true;
     }
-    // No live transport and the run is open: close so the client polls.
     if (!opts.subscribeTurnEvents) {
       cleanup();
       return true;
@@ -317,7 +292,6 @@ export function makeAutomationsRouteHandler(
         });
       }
 
-      // The editor owns intent, but the compiled plan is what runs.
       if (sub === "source" && method === "GET") {
         const ref = automation.parseRef(url.searchParams.get("ref") ?? "");
         if (!ref)
@@ -377,10 +351,6 @@ export function makeAutomationsRouteHandler(
         const limit = Number(url.searchParams.get("limit"));
         const boundedLimit =
           Number.isFinite(limit) && limit > 0 ? Math.min(limit, 250) : 50;
-        // `systemLane` must split the feed AT THE FETCH (#731): one unscoped
-        // window fills with whatever ran most recently, so a photo import
-        // starves "Recent activity". Each lane is its own bounded query;
-        // omitting the param keeps the combined feed.
         const systemLaneParam = url.searchParams.get("systemLane");
         const laneFilter: "member" | "recognition" | undefined =
           systemLaneParam === "member" || systemLaneParam === "recognition"
@@ -522,8 +492,6 @@ export function makeAutomationsRouteHandler(
             ? body.thinking
             : undefined;
         const attachmentRefs = parseTurnAttachmentRefs(body.attachments);
-        // fd-exhaustion guard: each request holds a response, a heartbeat and
-        // eventually an ACP child, so a reconnect loop must not open N streams.
         const releaseSlot = subscriberCap.admit(res);
         if (!releaseSlot) return true; // 503 + Retry-After already written
         const turnId = `${row.ref}:interactive:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
@@ -538,7 +506,6 @@ export function makeAutomationsRouteHandler(
           "X-Accel-Buffering": "no",
           "X-Centraid-Turn-Id": turnId,
         });
-        // Bounded writer (#659).
         const stream = new SseStream(res);
         stream.comment(`automation ${row.ref} turn ${turnId}`);
         const heartbeat = setInterval(() => {
@@ -598,7 +565,6 @@ export function makeAutomationsRouteHandler(
         const turnId = url.searchParams.get("turnId") ?? "";
         const body = await readJson(req);
         const pinned = body.pinned === true;
-        // turns.pinned is the source — the run_summary view reflects it.
         turnsStoreForTurnId(turnId)?.setTurnPinned(turnId, pinned);
         return sendJson(res, 200, { ok: true });
       }

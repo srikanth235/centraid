@@ -1,13 +1,3 @@
-/*
- * CLOCK ADVERSITY against the automation scheduler (#842). The DST zoo
- * (`time-zoo-cron.test.ts`) attacks the CALENDAR and owns the fall-back Overlap
- * law; this attacks the DEVICE and the ENGINE. Three invariants: NO DOUBLE FIRE
- * (one zone wall-clock minute at most once, across ticks and devices), NO
- * SILENT SKIP (a swept due minute is delivered or counted in `skipped` with a
- * `gapReason`) and NO DRIFT (the committed position moves forward only, never
- * past the latest instant the clock showed).
- */
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AutomationTriggerCursor } from "@centraid/server/engine";
@@ -96,7 +86,6 @@ function device(
     tickAt: async (instant: number) => {
       state.at = instant;
       engine.tick();
-      // `processSafely` is fire-and-forget: a queue drain, not a sleep.
       await flushMacrotasks();
     },
   };
@@ -147,8 +136,6 @@ describe("a device clock that steps", () => {
 
     await dev.tickAt(Date.parse("2026-06-15T09:10:00.000Z"));
 
-    // NO SILENT SKIP: passed-over minutes are not backfilled (#149) but are
-    // COUNTED, with a reason the member can be shown.
     expect(dev.fires).toHaveLength(2);
     const jump = dev.fires[1] as TriggerCursorFireInput;
     expect(new Date(jump.element.occurredAt).toISOString()).toBe(
@@ -162,7 +149,6 @@ describe("a device clock that steps", () => {
   });
 
   it("degrades the missed count to a floor beyond the 31-day scan horizon, never to a phantom", () => {
-    // The backward scan is capped, so the COUNT degrades — in this direction.
     const to = Date.parse("2026-06-15T09:00:00.000Z");
     const stale = to - 90 * DAY;
     const result = readCronCursor(
@@ -180,7 +166,6 @@ describe("a device clock that steps", () => {
   });
 
   it("fires nothing while the clock is rewound behind the committed position", async () => {
-    // NTP correcting a fast clock: re-sweeping a rewound minute is the bug.
     const store = new MemoryCursorStore();
     const ref = "clock/minutely";
     const dev = device(store);
@@ -199,7 +184,6 @@ describe("a device clock that steps", () => {
     );
 
     expect(dev.fires).toHaveLength(5);
-    // …and NO DRIFT: a dragged-back position reopens the next real minute.
     expect(storedPosition(store, ref)).toBe(committed);
   });
 
@@ -225,8 +209,6 @@ describe("a device clock that steps", () => {
   });
 
   it("does not double-fire when ticks arrive slightly SHORT of a minute", async () => {
-    // Wakeups at 59.9s see the same wall minute twice, which `floorMinute` and
-    // the last-minute guard absorb.
     const store = new MemoryCursorStore();
     const ref = "clock/minutely";
     const dev = device(store);
@@ -301,8 +283,6 @@ describe("two devices that disagree about now", () => {
   });
 
   it("fires each due wall minute exactly once across a skewed pair sharing one cursor", async () => {
-    // Two schedulers 90s apart over one cursor row. The window is half-open on
-    // the committed position, so the pair must partition the minutes.
     const store = new MemoryCursorStore();
     const ref = "clock/quarterly";
     const expr = "0,15,30,45 * * * *";
@@ -332,17 +312,11 @@ describe("two devices that disagree about now", () => {
     ).map((instant) => wallClockMinuteKey(instant, "Etc/UTC"));
     expect([...keys].sort()).toStrictEqual([...expected].sort());
 
-    // THE LAW THIS PAIR STATES: the FURTHEST-AHEAD clock owns the schedule, so
-    // the lagging device's window is inverted and it delivers nothing. Asserted
-    // because a "let the lagging device sweep too" change would turn this exact
-    // configuration into a double fire.
     expect(behind.fires).toStrictEqual([]);
     expect(ahead.fires.length).toBeGreaterThan(0);
   });
 
   it("hands the schedule to the lagging device when the leader stops, without a repeat or a hole", async () => {
-    // Failover: the lagging device resumes from the SHARED committed position —
-    // replaying is the double fire, waiting out its lag is the hole.
     const store = new MemoryCursorStore();
     const ref = "clock/quarterly";
     const expr = "0,15,30,45 * * * *";
@@ -391,11 +365,6 @@ describe("a schedule whose timezone changes underneath it", () => {
     useFakeClock("2026-06-15T12:00:00.000Z", { toFake: ["Date"] });
   });
 
-  /**
-   * The gateway default is re-read on every register/reconcile, and the cursor
-   * stores an ABSOLUTE position — so a zone change moves the wall minute the
-   * schedule matches while leaving the position where it was.
-   */
   it("never re-delivers a wall minute already passed when the default zone moves west", async () => {
     const store = new MemoryCursorStore();
     const ref = "clock/daily";
@@ -426,7 +395,6 @@ describe("a schedule whose timezone changes underneath it", () => {
     zone.value = "Etc/GMT+2"; // UTC−02:00
     await engine.register(row);
 
-    // A DIFFERENT wall-clock minute: a new schedule, not a repeat.
     const afterNine = Array.from({ length: 180 }, (_unused, index) =>
       new Date(
         Date.parse("2026-06-15T09:00:00.000Z") + (index + 1) * MINUTE
@@ -439,7 +407,6 @@ describe("a schedule whose timezone changes underneath it", () => {
         (fires[1] as TriggerCursorFireInput).element.occurredAt
       ).toISOString()
     ).toBe("2026-06-15T11:00:00.000Z");
-    // NO DOUBLE FIRE where it is meaningful: no ABSOLUTE minute twice.
     expect(new Set(fires.map((fire) => fire.element.occurredAt)).size).toBe(2);
     expect(
       wallClockMinuteKey(new Date(fires[0]!.element.occurredAt), "Etc/UTC")
@@ -451,8 +418,6 @@ describe("a schedule whose timezone changes underneath it", () => {
   });
 
   it("skips the day rather than back-firing when the zone moves east past the committed position", async () => {
-    // The mirror case: the half-open window refuses a new zone's 09:00 that has
-    // already passed, which a re-derived "last matching minute" would fire.
     const store = new MemoryCursorStore();
     const ref = "clock/daily";
     const committed = Date.parse("2026-06-15T09:00:00.000Z");
@@ -486,8 +451,6 @@ describe("a schedule whose timezone changes underneath it", () => {
   });
 
   it("dedupes per schedule zone when two triggers on one automation disagree about the zone", () => {
-    // `dueInstants` dedupes per matching schedule's zone, so two zones naming
-    // one absolute minute must still be one due instant.
     const shared = dueInstants(
       [
         { expr: "0 9 * * *", timeZone: "Etc/UTC" },

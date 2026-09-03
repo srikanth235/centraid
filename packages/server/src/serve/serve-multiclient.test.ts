@@ -1,11 +1,4 @@
 import crypto from "node:crypto";
-/*
- * Two independent HTTP clients pointed at the same daemon (desktop + mobile on
- * a shared standalone gateway) must see consistent gateway state: publish onto
- * git-store `main` (#137), then verify client A sees it in the registry and
- * client B reads it back through the `/centraid/<id>/` static-serve path.
- * Drives `serve()` in-process; the CLI smoke lives in `cli.test.ts`.
- */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -27,7 +20,6 @@ function pathsUnder(dir: string): GatewayPaths {
   };
 }
 
-/** Publish one app onto the git-store `main`, before serve() boots. */
 async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
   const session = await store.openSession("seed");
   const appDir = path.join(session.worktreePath, "apps", appId);
@@ -66,8 +58,6 @@ describe("serve-multiclient scenarios", () => {
     const apps = (await list.json()) as Array<{ id: string }>;
     expect(apps.some((a) => a.id === "multiclient-test")).toBeTruthy();
 
-    // Proves the app plane resolves the live `main` worktree's manifest, not
-    // just the registry index.
     const described = await fetch(
       `${handle.url}/centraid/multiclient-test/_describe`,
       { headers: { Authorization: `Bearer ${handle.token}` } }

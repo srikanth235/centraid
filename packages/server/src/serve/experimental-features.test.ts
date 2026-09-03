@@ -1,8 +1,3 @@
-/*
- * The experimental gate's resolution order (env > prefs > option > off) and
- * its authoritative-env contract — the v0 early-feedback door.
- */
-
 import { describe, expect, it } from "vitest";
 
 import {

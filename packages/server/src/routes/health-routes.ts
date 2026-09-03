@@ -1,17 +1,3 @@
-/*
- * `GET /centraid/_gateway/health` — component-level health + recent
- * structured errors.
- *
- * `_gateway/info` answers "is a compatible gateway listening"; this
- * route answers "is everything BEHIND the listener actually working" —
- * per-subsystem status (vaults, schedulers, outbox, …), last errors,
- * and a bounded tail of warn/error events, aggregated by the
- * `HealthRegistry` the gateway wires through its subsystems. Behind
- * the host bearer check like every non-public route: health detail
- * (error messages, vault counts) is owner-facing, not liveness-probe
- * material — probes that just need liveness use `_gateway/info`.
- */
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { RouteHandler } from "../serve/build-gateway.js";

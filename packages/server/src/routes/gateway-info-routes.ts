@@ -1,9 +1,3 @@
-/*
- * `GET /centraid/_gateway/info` — identity + version handshake (#289/#504).
- * Read BEFORE trusting a gateway: schema epoch (exact-match or refuse in v0),
- * capabilities (C1), device vault addressing, runtime clock.
- */
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { ROUTES, buildGatewayInfoPayload } from "@centraid/core/protocol";
@@ -19,12 +13,9 @@ export interface GatewayInfoRouteOptions {
   instanceId: string;
   capabilities?: GatewayCapabilities;
   endpointId?: () => string | undefined;
-  /** Dial ticket — served ONLY with a valid credential (#568); the route
-   *  itself is public and loopback origin is NOT authentication. */
   endpointTicket?: () => string | undefined;
 }
 
-/** `AUTHED_PLANE_HEADER` is stamped server-side and stripped inbound: unforgable. */
 function isAuthenticated(req: IncomingMessage): boolean {
   return typeof req.headers[AUTHED_PLANE_HEADER] === "string";
 }
@@ -32,7 +23,6 @@ function isAuthenticated(req: IncomingMessage): boolean {
 export function makeGatewayInfoRouteHandler(
   options: GatewayInfoRouteOptions
 ): RouteHandler {
-  // Factory runs once inside buildGateway: process start.
   const startedAt = Date.now();
   return async (
     req: IncomingMessage,
@@ -47,16 +37,10 @@ export function makeGatewayInfoRouteHandler(
       });
     }
     const endpointId = options.endpointId?.();
-    // Reported on the payload (#603): a lost ticket must not read like
-    // "endpoint not yet up".
     const authenticated = isAuthenticated(req);
     const endpointTicket = authenticated
       ? options.endpointTicket?.()
       : undefined;
-    // The stable EndpointId is a dial address: serving it to anonymous
-    // callers turns the public handshake into a presence oracle and hands
-    // out a fingerprintable permanent identity (issue #865) — same gate as
-    // the ticket.
     return sendJson(
       res,
       200,

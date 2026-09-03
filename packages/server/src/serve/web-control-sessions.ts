@@ -1,9 +1,3 @@
-/*
- * The browser shell's CONTROL session (#504): a web PWA cannot hold the bearer
- * token in JS, so an HttpOnly, origin-bound, device-keyed cookie proxies every
- * call. No second, per-APP session plane (#799).
- */
-
 import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -31,10 +25,7 @@ const SERVICE_WORKER_WAKE_PATHS = new Set([
 
 export interface WebControlSessionsOptions {
   controlStore?: WebControlSessionStore;
-  /** Persists sessions across a gateway restart; omitted → in-memory only. */
   controlsFile?: string;
-  /** Revocation propagation (#376): `false` once the device is unenrolled, so
-   *  a revoked cookie stops authorizing instead of riding its TTL. */
   isDeviceValid?: (deviceKey: string) => boolean;
   now?: () => number;
 }
@@ -77,7 +68,6 @@ export class WebControlSessions {
     if (options.isDeviceValid) this.isDeviceValid = options.isDeviceValid;
   }
 
-  /** Sessions without a device key fail closed in `authorize()`. */
   private revoked(deviceKey: string | undefined): boolean {
     return deviceKey !== undefined && this.isDeviceValid !== undefined
       ? !this.isDeviceValid(deviceKey)
@@ -91,7 +81,6 @@ export class WebControlSessions {
     return this.establishControl(req, res);
   };
 
-  /** The credentialed CORS allowlist; it authorizes nothing by itself. */
   knownShellOrigins(): string[] {
     const origins = new Set<string>();
     for (const row of this.controlStore.list()) origins.add(row.shellOrigin);
@@ -99,7 +88,6 @@ export class WebControlSessions {
   }
 
   authorize(req: IncomingMessage): BearerAuthorization | undefined {
-    // No sweep here (#659): `expires_at > ?` in the store enforces expiry.
     if (requestPath(req) !== WEB_CONTROL_PATH) return undefined;
     const presented = cookies(req);
     const origin = safeOrigin(req.headers.origin);
@@ -121,13 +109,10 @@ export class WebControlSessions {
       SERVICE_WORKER_WAKE_PATHS.has(target);
     if (!control || (origin !== control.shellOrigin && !serviceWorkerWake))
       return undefined;
-    // A revoked device's cookie dies at once.
     if (this.revoked(control.deviceKey)) {
       this.controlStore.remove(control.tokenHash);
       return undefined;
     }
-    // Only a DELETE with NO `?path=` is a logout; one carrying a path must
-    // fall through to the rewrite.
     if (!target) {
       if ((req.method ?? "GET").toUpperCase() === "DELETE") {
         return control.deviceKey
@@ -138,7 +123,6 @@ export class WebControlSessions {
     }
     if (!target.startsWith("/") || target.startsWith(WEB_CONTROL_PATH))
       return undefined;
-    // Extend the sliding idle window (throttled disk write).
     this.controlStore.touch(control.tokenHash);
     req.url = target;
     req.headers[VAULT_HEADER] = control.vaultId;
@@ -162,8 +146,6 @@ export class WebControlSessions {
       return Promise.resolve(true);
     }
     const token = crypto.randomBytes(32).toString("base64url");
-    // `establish` replaces only the same-hash row: a second pairing must not
-    // invalidate the first browser's cookie.
     this.sweep();
     this.controlStore.establish({
       tokenHash: hashControlToken(token),
@@ -173,7 +155,6 @@ export class WebControlSessions {
     });
     const forwarded = req.headers["x-forwarded-proto"];
     const secure = forwarded === "https" ? "; Secure" : "";
-    // The cookie carries the ABSOLUTE wall; the idle window is tighter.
     res.setHeader(
       "Set-Cookie",
       `${CONTROL_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=${WEB_CONTROL_PATH}; Max-Age=${Math.floor(CONTROL_ABSOLUTE_TTL_MS / 1000)}${secure}`
@@ -182,7 +163,6 @@ export class WebControlSessions {
     return Promise.resolve(true);
   }
 
-  /** Idempotent: the row may already be gone. */
   private logout(req: IncomingMessage, res: ServerResponse): Promise<true> {
     const presentedToken = cookies(req).get(CONTROL_COOKIE);
     if (presentedToken !== undefined)
@@ -197,7 +177,6 @@ export class WebControlSessions {
     return Promise.resolve(true);
   }
 
-  /** On a timer, never per request (#659); `unref`d. */
   startSweeping(intervalMs = SWEEP_INTERVAL_MS): void {
     if (this.sweepTimer) return;
     this.sweepTimer = setInterval(() => this.sweep(), intervalMs);

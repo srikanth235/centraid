@@ -466,7 +466,6 @@ describe("interactive-automation-turn suite", () => {
       });
 
       const turn = store.getTurn("interactive-1");
-      // Deleting the turn would make the user retype after granting consent.
       expect(turn).toBeTruthy();
       expect(turn?.ok).toBe(false);
       expect(turn?.error).toBe("consent_required");

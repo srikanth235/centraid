@@ -1,14 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit the owner vault-consent surface is one route table — every handler shares the ambient-vault resolution + owner-device credential (#289)
-/*
- * Owner-facing vault routes (duality §12) under `/centraid/_vault` — the
- * consent surface over the mounted vault registry. Every handler is an OWNER
- * act: behind the gateway's host-level auth, answering for the vault the
- * request is addressed to, with the owner-device credential (#289). Apps never
- * call these — their door is `ctx.vault`. Vault create/delete are ADMIN acts on
- * the gateway host, not routes here (#289). The vault list is filtered to the
- * calling device's enrollments, and deny-by-default is structural — until a
- * POST …/grants lands, an enrolled app's every vault call is a receipted deny.
- */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -73,30 +63,21 @@ const PREFIX = "/centraid/_vault";
 const defaultNotificationsSubscriberCap = new SseSubscriberCap();
 
 export interface VaultRouteOptions {
-  /** Device-plane ACL; route harnesses may omit it (#289). */
   deviceAccess?: DeviceAccess;
-  /** Fire-and-forget: drains now, not on the next periodic pass. */
   onOutboxDecided?: (plane: VaultPlane) => void;
-  /** Manifest display name, so FIRST-touch enrollment does not fall back to `humanizeSlug(appId)`. */
   resolveAutomationName?: (
     appId: string
   ) => Promise<string | undefined> | string | undefined;
-  /** A `connectionId` in a blob-store body resolves against it, denormalizing endpoint/region/bucket/prefix and forcing `encrypt: true`; absent → caller supplies them (#367). */
   storageConnections?: StorageConnectionStore;
-  /** Attaching a `connectionId` is refused `409 recovery_kit_not_confirmed` until the kit is verified (#367). */
   recoveryKit?: RecoveryKitStateStore;
   enrollments?: EnrollmentStore;
-  /** Host custody gets a typed `owner_only` refusal naming the owner — never `not_found` topology hiding (#726). */
   isHostCustody?: (req: IncomingMessage) => boolean;
   gatewayDatabase?: GatewayDatabase;
   keys?: KeyStore;
-  /** Must land before an offsite-backed erase. */
   fenceVaultForErase?: (vaultId: string) => Promise<void>;
-  /** Crash seam: after state commit, before file unlink. */
   afterEraseStateCommitted?: (vaultId: string) => void;
   notificationsEvents?: NotificationsEventBus;
   notificationsSubscriberCap?: SseSubscriberCap;
-  /** Defaults to the bundled capability registry (#807). */
   enrichCapabilityKnown?: EnrichCapabilityCheck;
 }
 
@@ -104,7 +85,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-/** An overlay, not a plane field: the plane must not import the gateway's verb registry (#308). */
 function withCanEdit(
   items: readonly OutboxItemSummary[]
 ): Array<OutboxItemSummary & { canEdit: boolean }> {
@@ -120,7 +100,6 @@ export function makeVaultRouteHandler(
 ): RouteHandler {
   const notificationsSubscriberCap =
     options.notificationsSubscriberCap ?? defaultNotificationsSubscriberCap;
-  /** All vaults for keyless transports. */
   const visibleVaults = (): VaultInfo[] => {
     const deviceKey = vaultContext()?.deviceKey;
     if (deviceKey === undefined || !options.deviceAccess) return vaults.list();
@@ -207,8 +186,6 @@ export function makeVaultRouteHandler(
                ON CONFLICT(vault_id) DO NOTHING`
             )
             .run(vaultId, new Date().toISOString());
-          // The `vault_owners` row is the whole authority record (#726); web
-          // sessions and replica checkpoints are vault-keyed, so they go explicitly.
           options
             .gatewayDatabase!.db.prepare(
               "DELETE FROM vault_owners WHERE vault_id = ?"
@@ -247,10 +224,6 @@ export function makeVaultRouteHandler(
         options.afterEraseStateCommitted?.(vaultId);
         vaults.delete(vaultId);
         options.keys.destroy(`${vaultId}.sealkey`);
-        // Identity keypair shares the DEK's custody (#726); the public-key PIN
-        // goes with it (#750 invariant 1) — a pin outliving its seed is what
-        // `VaultIdentityMismatchError` refuses to open, so a leftover makes a
-        // re-created same-id vault unopenable.
         options.keys.destroy(`${vaultId}.identity`);
         options.keys.destroy(`${vaultId}.identity.pub`);
         options.gatewayDatabase.transaction(() => {
@@ -291,8 +264,6 @@ export function makeVaultRouteHandler(
         );
       }
 
-      // Static credentials are NEVER stored here — a `connectionId` resolves
-      // through the gateway-level `StorageConnectionStore` (#296, #367).
       if (segments[0] === "blob-store" && segments.length === 1) {
         if (method === "GET") {
           const settings = readBlobStoreSettings(plane.db.vault);
@@ -333,8 +304,6 @@ export function makeVaultRouteHandler(
                 message: 'blob_store.kind must be "fs" or "s3"',
               });
             }
-            // NO enum on storage class (#405): S3-compatibles define their own
-            // names, so the endpoint, not this route, decides what it accepts.
             const storageClass = (blobStore as Record<string, unknown>)
               .storageClass;
             if (storageClass === null) {
@@ -389,8 +358,6 @@ export function makeVaultRouteHandler(
             });
           }
 
-          // Coordinates come off the connection row, gated on the recovery kit
-          // before this vault starts replicating off-box (#367).
           let blobStorePatch = blobStore as
             | Record<string, unknown>
             | null
@@ -426,8 +393,6 @@ export function makeVaultRouteHandler(
                   "export, re-select, and verify the recovery kit before enabling a remote storage tier",
               });
             }
-            // A provider's coordinates aren't known until a grant is requested
-            // and never rotate per-grant, so this round-trips once, at attach.
             const target =
               connection.kind === "provider" &&
               !connection.endpoint &&
@@ -446,11 +411,9 @@ export function makeVaultRouteHandler(
               ...(target.region ? { region: target.region } : {}),
               ...(target.bucket ? { bucket: target.bucket } : {}),
               ...(target.prefix ? { prefix: target.prefix } : {}),
-              // Absent ⇒ derivatives stay on cas — graceful degradation (#425).
               ...("derivedPrefix" in target && target.derivedPrefix
                 ? { derivedPrefix: target.derivedPrefix }
                 : {}),
-              // Direct-to-cold engages only when STANDARD_IA is here (#425).
               ...("supportedStorageClasses" in target &&
               target.supportedStorageClasses
                 ? { supportedStorageClasses: target.supportedStorageClasses }
@@ -478,13 +441,7 @@ export function makeVaultRouteHandler(
               remoteIdentity(
                 priorBlobStore as unknown as Record<string, unknown>
               ) !== remoteIdentity(blobStorePatch));
-          // Seed the outbox BEFORE the settings write: a crash before it
-          // leaves harmless obligations, a crash after it would omit old local
-          // bytes from remote-primary custody.
           if (attachingRemote) {
-            // Replica evidence is scoped to the old target though the table has
-            // no target column — clear it before seeding, or resident bytes
-            // never reach the new store.
             plane.db.blobTransfers.resetRemoteEvidence();
             plane.db.blobTransfers.enqueueExistingLocal();
           }
@@ -524,8 +481,6 @@ export function makeVaultRouteHandler(
         }
       }
 
-      // The #807 cascade is a SIBLING resource under the same prefix
-      // (`vault-enrich-rules-routes.ts`): the tier's own bodies stay byte-for-byte.
       if (segments[0] === "enrich" && segments.length > 1) {
         const handled = await handleEnrichCascadeRoute({
           req,
@@ -544,7 +499,6 @@ export function makeVaultRouteHandler(
         if (method === "GET") {
           return sendJson(res, 200, {
             enrich: readEnrichSettings(plane.db),
-            // Additive (#807): clients reading only `enrich` are unaffected.
             rules: enrichRulesFor(plane),
           });
         }
@@ -571,8 +525,6 @@ export function makeVaultRouteHandler(
           const before = readEnrichSettings(plane.db);
           updateEnrichSettings(plane.db, patch);
           const after = readEnrichSettings(plane.db);
-          // `enrichRefusalNotice` describes the tier in force, so leaving it up
-          // would assert a dead setting. Archived, not deleted.
           for (const domain of ["photos", "docs"] as const) {
             if (before[domain] === after[domain]) continue;
             const stale = plane.notices.getBySource("enrichment", domain);
@@ -625,8 +577,6 @@ export function makeVaultRouteHandler(
         }
       }
 
-      // The explicit second half of uninstall (#286): uninstall RETAINS the
-      // app's ext band, this drops its tables + registry rows for good.
       if (
         method === "POST" &&
         segments[0] === "apps" &&
@@ -709,7 +659,6 @@ export function makeVaultRouteHandler(
         segments[0] === "parked" &&
         segments.length === 1
       ) {
-        // Mobile polls this and the list is usually unchanged (#659).
         return sendJsonConditional(req, res, 200, {
           parked: plane.listParked(),
         });
@@ -745,9 +694,6 @@ export function makeVaultRouteHandler(
               'outbox decision body needs {decision: "approve" | "discard"}',
           });
         }
-        // The owner surface edits the ARTIFACT only — the wire request carries
-        // `{{connection:…}}` placeholders it never parses. A raw `request` is
-        // refused outright so no caller thinks an edit landed.
         if (body.request !== undefined) {
           return sendJson(res, 400, {
             error: "bad_request",
@@ -758,7 +704,6 @@ export function makeVaultRouteHandler(
         const itemId = segments[1] ?? "";
         let rebuiltRequest: Record<string, unknown> | undefined;
         if (isRecord(body.artifact)) {
-          // Discarding sends nothing, so an edit could change no outcome.
           if (body.decision !== "approve") {
             return sendJson(res, 400, {
               error: "bad_request",
@@ -863,8 +808,6 @@ export function makeVaultRouteHandler(
         const notifications = plane.notificationsSummary(
           url.searchParams.get("include_archived") === "true"
         );
-        // Each projection ETags its OWN body (#659), so a grant-profiled
-        // caller can never revalidate into the other shape's cached response.
         if (vaultContext()?.grantProfile !== undefined) {
           return sendJsonConditional(req, res, 200, {
             count: notifications.decisions.count,
@@ -954,9 +897,6 @@ export function makeVaultRouteHandler(
             });
       }
 
-      // NO route here writes gateway health into Notifications (#665): health
-      // is STATUS, not an owner decision, and lives on the Gateway page.
-
       if (
         method === "GET" &&
         segments[0] === "scope-requests" &&
@@ -1006,8 +946,6 @@ export function makeVaultRouteHandler(
         });
       }
 
-      // Entity types are the ontology model, so @-tagging can name a kind
-      // ("@core.event") with no matching vault row (#272).
       if (
         method === "GET" &&
         segments[0] === "entities" &&
@@ -1016,7 +954,6 @@ export function makeVaultRouteHandler(
         return sendJson(res, 200, { entities: listVaultEntities() });
       }
 
-      // Computed on request: an owner ops screen, not a hot path (#441).
       if (
         method === "GET" &&
         segments[0] === "atlas" &&
@@ -1026,7 +963,6 @@ export function makeVaultRouteHandler(
           return sendJson(res, 200, atlasCensus(plane.db.vault));
         }
         if (segments[1] === "graph") {
-          // core_link aggregation stays a SEPARATE collection: FK ≠ core_link.
           return sendJson(res, 200, atlasGraph(plane.db.vault));
         }
         if (segments[1] === "pulse") {
@@ -1034,8 +970,6 @@ export function makeVaultRouteHandler(
         }
       }
 
-      // Browse writes ride the journalled `atlas.*` pipeline, so every edit is
-      // a receipted operator act and ships in the replica change log (#441).
       if (
         segments[0] === "atlas" &&
         segments[1] === "browse" &&
@@ -1137,8 +1071,6 @@ export function makeVaultRouteHandler(
           const delTable =
             typeof body["table"] === "string" ? body["table"] : "";
           const delId = typeof body["id"] === "string" ? body["id"] : "";
-          // Preflight so a blocked delete returns the FULL dependent payload;
-          // the command's own guard surfaces only a reason string.
           try {
             const deps = browseDependents(plane.db.vault, delTable, delId);
             if (deps.hasEngineDependents) {
@@ -1260,8 +1192,6 @@ export function makeVaultRouteHandler(
         return sendJson(res, 200, await plane.unlinkAsOwner(segments[1] ?? ""));
       }
 
-      // A locator write only (#282): `{selector: null}` demotes the reference
-      // to strip-only, and the link judgment is untouched either way.
       if (
         method === "PATCH" &&
         segments[0] === "links" &&
@@ -1337,9 +1267,6 @@ async function handleVaultsRoute(
 ): Promise<boolean> {
   try {
     if (method === "GET" && segments.length === 1) {
-      // Failed mounts are invisible in `vaults`; reporting them separates "you
-      // have one vault" from "one of two would not open" (#603). Entries carry
-      // a directory and the mount error, never vault contents.
       return sendJson(res, 200, {
         vaults: visibleVaults(),
         failedMounts: vaults.failedMounts(),
@@ -1372,7 +1299,6 @@ async function handleVaultsRoute(
           : undefined
       );
       try {
-        // `vault_owners` is the whole authority record (#726).
         options.enrollments.enroll({
           endpointId: current.endpointId,
           vaultIds: [created.vaultId],
@@ -1397,7 +1323,6 @@ async function handleVaultsRoute(
 
     if (method === "PATCH" && segments.length === 2) {
       const vaultId = segments[1] ?? "";
-      // A device may only touch what it can see.
       if (!visibleVaults().some((v) => v.vaultId === vaultId)) {
         return sendJson(res, 404, {
           error: "vault_not_found",
@@ -1439,7 +1364,6 @@ async function handleVaultsRoute(
           ? vaults.rename(vaultId, body.name)
           : undefined;
       if (hasPresentation) {
-        // Presentation lives IN the vault (#280), so it travels with an export.
         const patch: Partial<
           Record<"color" | "icon" | "blurb", string | null>
         > = {};
@@ -1460,7 +1384,6 @@ async function handleVaultsRoute(
   }
 }
 
-/** STRICT NOT NULL/CHECK violations and sealed-column or machinery refusals land here as a clean 4xx with a reason, never a crash (#441). */
 async function runBrowseWrite(
   res: ServerResponse,
   plane: VaultPlane,
@@ -1501,7 +1424,6 @@ function sendRegistryError(res: ServerResponse, err: unknown): boolean {
   });
 }
 
-/** Undefined on anything malformed — the routes turn that into a 400 (#282). */
 function parseSelector(raw: unknown): AnchorSelector | undefined {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw))
     return undefined;

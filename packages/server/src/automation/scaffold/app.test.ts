@@ -22,7 +22,6 @@ function manifest(over: Partial<Manifest> = {}): Manifest {
   };
 }
 
-/** Write a flat (draft-layout) automation at `<appsDir>/<appId>/automations/<id>/`. */
 async function writeAutomation(
   appsDir: string,
   appId: string,

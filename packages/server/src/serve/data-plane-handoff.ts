@@ -7,12 +7,6 @@ export interface DataPlaneHttpOptions {
   rootDir: string;
 }
 
-/**
- * Proof stamped by the trusted relay before it forwards a request to the
- * gateway. The gateway must never redirect an ordinary LAN/browser request
- * to its configured byte-plane address: that address is frequently loopback
- * from the gateway host's point of view.
- */
 export const DATA_PLANE_RELAY_HEADER = "x-centraid-data-plane-relay";
 
 export function isDataPlaneRelayRequest(

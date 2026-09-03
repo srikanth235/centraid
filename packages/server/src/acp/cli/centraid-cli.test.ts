@@ -1,13 +1,4 @@
 import { spawnSync } from "node:child_process";
-/*
- * End-to-end smoke test for the centraid CLI bin, invoked as a subprocess
- * (using the built dist/cli/centraid-cli.js). The surface is the
- * builder-session helper (`preview snapshot`) and its exit codes; there are
- * no `sql` subcommands (#286).
- *
- * The test depends on a prior `bun run build` for this package; turbo
- * configures `test` to run after `build` so the dist file exists.
- */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -15,7 +6,6 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
-// This test lives at src/acp/cli/; the built CLI is at <pkg>/dist/acp/cli/.
 const CLI_PATH = path.join(
   import.meta.dirname,
   "..",

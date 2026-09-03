@@ -1,6 +1,3 @@
-/**
- * Registry shape is the public contract every harness kind must satisfy.
- */
 import { describe, expect, test } from "vitest";
 
 import { HARNESS_KINDS } from "@centraid/server/engine";

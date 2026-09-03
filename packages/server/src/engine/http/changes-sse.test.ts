@@ -29,11 +29,6 @@ describe("changes-sse", () => {
     await fs.rm(workspace, { recursive: true, force: true });
   });
 
-  /**
-   * Read SSE frames until the predicate returns truthy. Returns the parsed
-   * data payloads of `event: change` frames seen so far. Cancels the response
-   * reader when done so the connection can close cleanly.
-   */
   type ChangeEvt = {
     tables: string[];
     source?: string;
@@ -78,7 +73,7 @@ describe("changes-sse", () => {
               try {
                 out.push(JSON.parse(data) as ChangeEvt);
               } catch {
-                /* skip non-JSON */
+                // Intentionally empty.
               }
             }
           }
@@ -91,7 +86,7 @@ describe("changes-sse", () => {
       try {
         await reader.cancel();
       } catch {
-        /* swallow */
+        // Intentionally empty.
       }
     }
     return out;
@@ -106,8 +101,6 @@ describe("changes-sse", () => {
       "text/event-stream; charset=utf-8"
     );
 
-    // Emit after the connection is open. We use the bus directly because the
-    // /_changes endpoint is the consumer side; producers are tested elsewhere.
     queueMicrotask(() => {
       runtime.changeBus.emit({
         appId: "myapp",
@@ -153,16 +146,12 @@ describe("changes-sse", () => {
       headers: { Authorization: `Bearer ${server.token}` },
     });
     expect(res.status).toBe(200);
-    // Drain a tiny bit so the connection is fully established and the
-    // subscribe() has run on the server.
     const reader = res.body!.getReader();
     await vi.waitFor(() => {
       expect(runtime.changeBus.listenerCount("cleanup-app")).toBe(1);
     });
 
-    // Cancel the reader → underlying socket closes → server cleanup fires.
     await reader.cancel();
-    // The cleanup runs on the next tick of the close event; poll for unsubscribe.
     await vi.waitFor(() => {
       expect(runtime.changeBus.listenerCount("cleanup-app")).toBe(0);
     });
@@ -219,11 +208,6 @@ describe("changes-sse", () => {
     expect(events[0]!.turnId).toBeUndefined();
   });
 
-  // Issue #351: unbounded concurrent `_changes` subscribers is a fd-exhaustion
-  // risk, same as the gateway's `_logs`/`_automations` streams. Exercised via
-  // `handleAppChanges` directly against a mock req/res (same lightweight
-  // harness shape as `logs-routes.test.ts`) so the small injected cap never
-  // touches the shared module-level singleton.
   interface MockClient {
     req: IncomingMessage;
     res: ServerResponse;
@@ -297,7 +281,6 @@ describe("changes-sse", () => {
     expect(b.status()).toBe(200);
     expect(cap.current("myapp")).toBe(2);
 
-    // The 3rd subscriber is over the cap — refused, never joins the stream.
     const c = mockClient();
     await handleAppChanges(c.req, c.res, bus, "myapp", cap);
     expect(c.status()).toBe(503);
@@ -307,7 +290,6 @@ describe("changes-sse", () => {
     expect(c.ended()).toBe(true);
     expect(cap.current("myapp")).toBe(2); // the refusal never incremented the count
 
-    // Disconnecting one subscriber frees a slot for the next one.
     a.close();
     await pendingA;
     expect(cap.current("myapp")).toBe(1);
@@ -334,14 +316,10 @@ describe("changes-sse", () => {
     expect(a.status()).toBe(200);
     expect(cap.current("app-one")).toBe(1);
 
-    // app-one is saturated (cap 1) — a 2nd app-one subscriber is refused...
     const b = mockClient();
     await handleAppChanges(b.req, b.res, bus, "app-one", cap);
     expect(b.status()).toBe(503);
 
-    // ...but a subscriber to a DIFFERENT app is admitted normally — the two
-    // apps have independent budgets, exactly the "several windows of one
-    // app shouldn't starve every other app's stream" property this is for.
     const c = mockClient();
     const pendingC = handleAppChanges(c.req, c.res, bus, "app-two", cap);
     await settle();

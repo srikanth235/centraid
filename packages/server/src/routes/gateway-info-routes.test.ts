@@ -49,7 +49,6 @@ describe("gateway-info-routes", () => {
     expect(anonymous.body.endpointTicket).toBeUndefined();
     expect(anonymous.body.authenticated).toBe(false);
 
-    // An authenticated caller gets both — same gate as the ticket.
     const authed = call(handler, { [AUTHED_PLANE_HEADER]: "device" });
     expect(authed.status).toBe(200);
     expect(authed.body.authenticated).toBe(true);

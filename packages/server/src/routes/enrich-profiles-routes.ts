@@ -1,6 +1,3 @@
-// Engine-profile read surface (#807). READ ONLY, nothing here spawns:
-// writes go through the prefs API's single validation gate.
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { listEngineProfiles } from "../enrich/engine-profiles.js";

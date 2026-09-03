@@ -73,13 +73,9 @@ describe(AutomationTriggerStore, () => {
       });
     }
 
-    // An empty listing (a worktree swap mid-read, or everything disabled) must
-    // never destroy watermarks — re-enabling has to resume, not bootstrap.
     expect(subject.deleteCursorsNotIn([])).toBe(0);
     expect(subject.getCursor("mail/digest", 0)?.positionJson).toBe('"p0"');
 
-    // Shrinking three triggers to one drops the orphaned indexes so a re-added
-    // same-kind trigger cannot inherit a stale position.
     expect(
       subject.deleteCursorsNotIn([
         { automationId: "mail/digest", triggerIndex: 0 },
@@ -169,7 +165,6 @@ describe(AutomationTriggerStore, () => {
     expect(pruned.gaps).toStrictEqual([
       { sourceKey: "hook-stalled", pruned: 2, throughId: stale.id + 1 },
     ]);
-    // Nothing expired for the live source, so it reports no gap at all.
     expect(subject.pruneIngress(200)).toStrictEqual({ deleted: 0, gaps: [] });
     expect(subject.ingressBoundsAfter("poll-live", 0).count).toBe(1);
   });

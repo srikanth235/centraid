@@ -1,7 +1,3 @@
-// What an installed app can actually do through `bridgeFor(appId)`: reveal a
-// sealed secret only behind a fresh user-presence permit, invoke a granted
-// command without parking (risk is salience, not a gate), and reach the canon
-// from a real handler file dispatched by the app engine.
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -51,8 +47,6 @@ describe("vault-plane app bridge", () => {
         },
       });
 
-    // Presence is opt-in until a credential is configured; after that, every
-    // UI reveal needs a one-time item permit (fill only needs an unlock session).
     const configured = await bridge({
       op: "authenticate",
       payload: {
@@ -89,12 +83,6 @@ describe("vault-plane app bridge", () => {
     });
   });
 
-  // The locker KDF runs on the threadpool (#659), so
-  // `authenticateLocker` returns a promise. `asVaultCallResult` takes a
-  // `() => unknown`, so leaving `authenticate` in the synchronous switch
-  // typechecks and wraps the PROMISE as the result — which reaches the app as
-  // `{}` over the worker boundary. This asserts the settled value directly,
-  // because a compiler cannot.
   test("an authenticate result is a settled value, never a promise (#659 G11)", async () => {
     const plane = fixture.openPlane(await tempDir("locker-async-plane-"));
     plane.installApp("locker", "Locker");
@@ -105,19 +93,10 @@ describe("vault-plane app bridge", () => {
       payload: { operation: "status" },
     });
     expect(status.ok).toBe(true);
-    // The precise failure mode: a thenable where a record belongs.
     expect(status.result).not.toBeInstanceOf(Promise);
     expect(
       (status.result as { then?: unknown } | undefined)?.then
     ).toBeUndefined();
-    // …and it survives the JSON hop to the app, which is where a promise
-    // would have flattened to an empty object.
-    //
-    // The JSON round-trip is the ASSERTION, not a convenient deep clone, so
-    // `structuredClone` is not a substitute: it THROWS DataCloneError on a
-    // promise, while JSON.stringify silently yields `{}`. Silently-empty is the
-    // exact product symptom this test exists to reproduce — swapping in
-    // structuredClone would test a different failure than the one that shipped.
     // oxlint-disable-next-line unicorn/prefer-structured-clone -- see above
     expect(JSON.parse(JSON.stringify(status.result))).toMatchObject({
       configured: false,
@@ -173,8 +152,6 @@ describe("vault-plane app bridge", () => {
         purpose: "dpv:ServiceProvision",
       },
     });
-    // propose_event is medium risk — installing granted the scope, so it
-    // executes; risk is a salience marker in the journal, not a park trigger.
     expect(outcome.ok).toBe(true);
     const executed = outcome.result as { status: string; receiptId: string };
     expect(executed.status).toBe("executed");
@@ -186,8 +163,6 @@ describe("vault-plane app bridge", () => {
     const events = plane.db.vault
       .prepare("SELECT summary, status FROM core_event")
       .all();
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect(events.map((row) => ({ ...row }))).toStrictEqual([
       { summary: "Design review", status: "tentative" },
     ]);
@@ -202,7 +177,6 @@ describe("vault-plane app bridge", () => {
       scopes: [{ schema: "schedule", verbs: "read+act" }],
     });
 
-    // App code on disk, dispatched exactly as the runtime would.
     const codeRoot = await tempDir();
     const dataRoot = await tempDir();
     const appDir = path.join(codeRoot, "planner");
@@ -271,7 +245,6 @@ describe("vault-plane app bridge", () => {
     expect(events.map((row) => ({ ...row }))).toStrictEqual([
       { summary: "Cross-plane standup" },
     ]);
-    // The write is receipted and attributed to the app, not the owner.
     const receipts = plane.db.audit
       .prepare(
         `SELECT decision FROM access_receipt WHERE action = 'act schedule.propose_event' AND decision = 'allow'`

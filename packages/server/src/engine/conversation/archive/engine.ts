@@ -1,14 +1,3 @@
-// The conversation-band archival engine entry (#438). One idempotent,
-// bounded call runs BOTH phases each invocation:
-//   Phase A — archive: seal cold turn-ranges into the vault blob CAS, index them
-//             in conversation_archive, fold their rollups into conversation_digest.
-//             NEVER deletes a raw row.
-//   Phase B — prune: delete the raw turns of any archive segment whose custody is
-//             proven, then reclaim freed pages. The custody latch (prune.ts) makes
-//             prune-before-custody structurally impossible.
-// Both phases no-op on a fresh vault (nothing is 90d idle), so a gateway that
-// never served conversations is unaffected.
-
 import { pruneCustodyProven, reclaimJournalPages } from "./prune.js";
 import { archiveRange } from "./segment.js";
 import { selectEligibleRanges } from "./selector.js";
@@ -57,9 +46,6 @@ export function runConversationArchival(
       if (!conv) continue;
       convCache.set(range.conversationId, conv);
     }
-    // Segment bytes ingest through the sink (idempotent by content address)
-    // before the index/digest writes; both writes share one transaction so a
-    // crash leaves neither a half-index nor a half-digest.
     journal.exec("BEGIN IMMEDIATE");
     try {
       const out = archiveRange(journal, blobSink, conv, range, nowMs);

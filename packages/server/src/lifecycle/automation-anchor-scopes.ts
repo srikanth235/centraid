@@ -1,14 +1,3 @@
-/*
- * Anchor resolution for automation instructions (#541).
- *
- * Every read here goes through the vault's consent gateway with the OWNER
- * credential, a declared purpose, and therefore a receipt — the same door
- * `vault-picker.ts` drives. Reading `core_link_anchor` / the physical source
- * table / `core_content_item` straight off the `VaultDb` handle would open a
- * second, unreceipted read path around consent policy (minimization included),
- * which is exactly what the gateway exists to prevent.
- */
-
 import { CARD_PK, SEARCHABLE } from "@centraid/vault";
 import type {
   Credential,
@@ -18,10 +7,8 @@ import type {
 } from "@centraid/vault";
 
 export const AUTOMATION_ANCHOR_ENTITY = "core.link_anchor";
-/** DPV purpose every anchor read is receipted under. */
 export const AUTOMATION_ANCHOR_PURPOSE = "dpv:ServiceProvision";
 
-/** The consent-gateway door anchor resolution reads through. */
 export interface AnchorVaultReads {
   gateway: VaultGateway;
   credential: Credential;
@@ -50,7 +37,6 @@ export interface AutomationAnchorSelector {
   start: number;
 }
 
-/** Trusted anchor facts resolved from the addressed vault, never token text. */
 export interface ResolvedAutomationAnchor {
   token: string;
   anchorId: string;
@@ -71,11 +57,6 @@ export class AutomationAnchorError extends Error {
   }
 }
 
-/**
- * Collapse same-table anchors into one consent scope. Vault row filters are
- * AND clauses, so separate same-table scopes would make evaluation pick only
- * the first row; one `in` filter expresses the intended bounded union.
- */
 export function scopesForAutomationAnchors(
   anchors: readonly ResolvedAutomationAnchor[]
 ): ScopeSpec[] {
@@ -127,10 +108,6 @@ export function scopesForAutomationAnchors(
     const valueFields = [...group.fields].filter(
       (field) => field !== group.idColumn
     );
-    // The current vault scope algebra applies one field mask to every row in
-    // a filter. A non-rectangular set such as row A/title + row B/description
-    // cannot be represented without exposing the two cross-pairs, so reject
-    // it instead of silently broadening consent.
     for (const id of ids) {
       const rowFields = group.fieldsById.get(id) ?? new Set<string>();
       if (valueFields.some((field) => !rowFields.has(field))) {
@@ -255,10 +232,6 @@ function sourceFieldFor(
   sourceId: string,
   selector: AutomationAnchorSelector
 ): { idColumn: string; field: string } {
-  // Own-property lookups only: a `sourceType` of `constructor`/`toString`
-  // would otherwise reach an inherited `Object` member, pass the guard below,
-  // and blow up as a `TypeError` when spread instead of raising an
-  // `AutomationAnchorError`.
   const searchable = Object.hasOwn(SEARCHABLE, sourceType)
     ? SEARCHABLE[sourceType]
     : undefined;
@@ -296,11 +269,6 @@ function sourceFieldFor(
   return { idColumn, field };
 }
 
-/**
- * The anchor row plus its still-live link, read through the consent gateway
- * as two receipted reads (the gateway's `read` is single-entity, so this is an
- * anchor read plus a link read rather than a JOIN).
- */
 function liveAnchorRows(
   vault: AnchorVaultReads,
   anchorIds: readonly string[]
@@ -336,7 +304,6 @@ function liveAnchorRows(
   return out;
 }
 
-/** Resolve every anchored @ token against live core_link rows in the addressed vault. */
 export function resolveAutomationAnchors(
   vault: AnchorVaultReads,
   instructions: string

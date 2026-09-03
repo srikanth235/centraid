@@ -10,7 +10,6 @@ import {
 
 type VaultMcpServerModule = typeof import("./vault-mcp-server.ts");
 
-// vitest hoists vi.mock above imports at run time.
 vi.mock(import("./vault-mcp-server.ts"), async (importOriginal) => {
   const actual = await importOriginal<VaultMcpServerModule>();
   return {
@@ -40,7 +39,6 @@ describe("turn-vault-tools", () => {
           ) as Promise<VaultMcpServerModule>
         ).then((m) => m.startVaultMcpServer(...args)) as never
     );
-    // Reset to real implementation for subsequent tests.
     const real = await vi.importActual<VaultMcpServerModule>(
       "./vault-mcp-server.ts"
     );

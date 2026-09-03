@@ -9,7 +9,6 @@ import {
 
 describe("compose", () => {
   test("skillsDir resolves to an existing catalog with the authoring skill", () => {
-    // One skill (#799): app front ends are not harness-authored, so no app-authoring skill ships.
     const skills = listSkills(skillsDir());
     const names = skills.map((s) => s.name).sort();
     expect(names).toStrictEqual(["automation-authoring"]);

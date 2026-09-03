@@ -1,14 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#865) every escape case runs a real hostile handler in a real worker; splitting the lanes would scatter the one enforcement story.
-/**
- * ESCAPE TESTS for the handler sandbox (#842): every case runs a hostile
- * handler in a REAL worker through the REAL runner entry point and asserts the
- * refusal. Nothing here inspects the policy object — a test that only read the
- * policy would prove nothing about enforcement.
- *
- * The last block is a CHARACTERIZATION pin: what an automation worker with NO
- * parent-chosen lane can still reach today. Deliberately green — removing the
- * reach must be a diff, not a discovery.
- */
 
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -26,13 +16,9 @@ const AUTOMATION_RUNNER = fileURLToPath(
   new URL("../../automation/worker/runner.ts", import.meta.url)
 );
 
-/** Seeded into the worker's environment so "env is empty" is a real assertion. */
 const CANARY_ENV = "CENTRAID_SANDBOX_CANARY";
 const CANARY_VALUE = "canary-value-that-must-not-be-readable";
 
-/** Module scope, not `beforeAll`: each worker is terminated by the helper that
- * spawned it, and a hook-free suite cannot leak a hostile worker by forgetting
- * cleanup. */
 const dir = tempDirSync("sandbox-escape-");
 
 async function handler(name: string, source: string): Promise<string> {
@@ -69,8 +55,6 @@ function awaitResult(worker: Worker, ms = 20_000): Promise<ResultMessage> {
 async function runAppHandler(handlerFile: string): Promise<ResultMessage> {
   const worker = new Worker(APP_RUNNER, {
     workerData: { handlerFile, handlerKind: "query", args: { body: {} } },
-    // Matches worker/runner.test.ts: vitest's own execArgv is not valid for a
-    // freshly spawned worker.
     execArgv: [],
     env: { [CANARY_ENV]: CANARY_VALUE },
   });
@@ -81,7 +65,6 @@ async function runAppHandler(handlerFile: string): Promise<ResultMessage> {
   }
 }
 
-/** Run one handler through the real automation worker entry point. */
 async function runAutomationHandler(
   handlerFile: string,
   sandbox?: {
@@ -143,9 +126,6 @@ describe("app-handler lane: filesystem", () => {
   });
 
   test("a CommonJS dependency's require('fs') is refused too", async () => {
-    // registerHooks (not register) is why this case passes: the async loader
-    // hooks never see a CJS require, so a hostile transitive dependency would
-    // have walked straight out.
     await handler(
       "cjs-dep.cjs",
       `const fs = require("node:fs");
@@ -250,9 +230,6 @@ describe("app-handler lane: network", () => {
   });
 
   test("the governed ctx.fetch capability still works after revocation", async () => {
-    // The point of revoking the global is to turn network reach into a
-    // capability, not to remove it. If this regressed to "denied" the sandbox
-    // would be breaking the product rather than containing it.
     const file = await handler(
       "ctx-fetch.mjs",
       `export default async ({ ctx }) => ({ kind: typeof ctx.fetch });`
@@ -327,9 +304,6 @@ describe("app-handler lane: process", () => {
   });
 
   test("process.kill signal 0 still probes existence after F4 wrapping (#865)", async () => {
-    // Node and Electron worker internals use kill(pid, 0) as a liveness
-    // check. Revoking that along with SIGKILL hung the thread; the probe
-    // must still return so a handler can post its result.
     const file = await handler(
       "kill-zero.mjs",
       `export default async () => {
@@ -343,9 +317,6 @@ describe("app-handler lane: process", () => {
   });
 
   test("process.kill and process.abort cannot take down the gateway (#865)", async () => {
-    // Worker threads share the gateway's PID: a successful SIGKILL here would
-    // end every lane at once, so the strongest assertion available is that this
-    // result was posted AT ALL — the process survived both attempts.
     const file = await handler(
       "self-destruct.mjs",
       `export default async () => {
@@ -362,11 +333,6 @@ describe("app-handler lane: process", () => {
   });
 
   test("process.report.getReport() cannot read the real OS environ (#865)", async () => {
-    // getReport reads environ at call time, past any frozen process.env. The
-    // worker here genuinely carries CANARY_ENV in its OS environment — a
-    // native report would leak it. The stub must stay callable (Electron
-    // invokes it) and still post a result: throwing from getReport hung
-    // handler workers so desktop writes never settled.
     const file = await handler(
       "diagnostic-report.mjs",
       `export default async () => {
@@ -404,8 +370,6 @@ describe("app-handler lane: process", () => {
     expect(result.ok).toBe(true);
     const value = result.value as { argv: string[]; execArgv: string[] };
     expect(value.execArgv).toStrictEqual([]);
-    // argv[0] is the worker binary (Electron reads it); nothing else, and
-    // never the canary that would have ridden a later slot.
     expect(value.argv.length).toBeLessThanOrEqual(1);
     expect(value.argv.join("\0")).not.toContain(CANARY_VALUE);
   });
@@ -431,8 +395,6 @@ describe("app-handler lane: the allowlist is not a blanket ban", () => {
   });
 });
 
-/** sha256("centraid") prefix — asserted rather than recomputed so a broken
- * crypto import cannot make the test pass by agreeing with itself. */
 function createHashPrefix(): string {
   return "bbec0fe3";
 }
@@ -528,9 +490,6 @@ describe("automation lane: model-runtime read confinement", () => {
 
   test("a symlink planted inside the root cannot be followed out of it", async () => {
     const { symlink } = await import("node:fs/promises");
-    // A real file outside the granted root — `/etc/hostname` is missing on
-    // macOS, so realpath of the link threw ENOENT and the ancestor walk
-    // treated the link's parent (inside the root) as the probe.
     const outside = path.join(path.dirname(dir), "sandbox-escape-outside.txt");
     await writeFile(outside, "leaked-secret");
     const link = path.join(dir, "escape-link");
@@ -554,12 +513,6 @@ describe("automation lane: model-runtime read confinement", () => {
 });
 
 describe("an automation worker given no lane gets the strict floor", () => {
-  /*
-   * An automation worker handed NO `sandboxLane` still gets the strict floor
-   * (#846): the filesystem outside every root, subprocesses, and the
-   * environment are all refused. A handler that needs more asks for it in its
-   * manifest, where the ask is reviewable.
-   */
   test("reads outside every root are refused with no lane requested", async () => {
     const file = await handler(
       "floor-fs.mjs",
@@ -570,8 +523,6 @@ describe("an automation worker given no lane gets the strict floor", () => {
        };`
     );
     const result = await runAutomationHandler(file);
-    // The floor has no filesystem grant at all: the STATIC `node:fs` import is
-    // refused at graph load, so the handler body never runs — nothing leaked.
     expect(result.ok).toBe(false);
     expect(result.value).toBeUndefined();
     expect(String(result.error)).toMatch(/filesystem grant|node:fs/u);
@@ -610,15 +561,6 @@ describe("an automation worker given no lane gets the strict floor", () => {
   });
 
   test("the host-planted runtime dir survives the environment revocation", async () => {
-    /*
-     * Why `sandboxRuntimeDir` exists (audit of #846 P9): every lane freezes
-     * `process.env` BEFORE the handler graph loads, and the five recognition
-     * bundles read `CENTRAID_AUTOMATION_RUNTIME_DIR` at module top level — the
-     * freeze silently killed that override and pointed them at a `runtime/`
-     * directory that exists only in the source tree. A path is not a
-     * capability, so the host resolves it and plants it on `globalThis` before
-     * installing the sandbox.
-     */
     const file = await handler(
       "planted-runtime-dir.mjs",
       `export default async () => ({

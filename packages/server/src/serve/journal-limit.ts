@@ -1,9 +1,3 @@
-/*
- * Size-triggered ledger archive (#544): over the limit the daily gate is
- * bypassed and the window narrows per sweep (90 → 30 → 14 → 7). SEVEN IS A
- * HARD FLOOR — the owner's working days are never archived.
- */
-
 export const JOURNAL_ARCHIVE_WINDOW_LADDER: readonly number[] = Object.freeze([
   90, 30, 14, 7,
 ]);

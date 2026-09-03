@@ -19,7 +19,6 @@ describe(scaffoldAppFiles, () => {
       scaffoldAppFiles("briefing", { name: "Briefing", cronExpr: "0 8 * * *" })
     );
     expect(out.has("app.json")).toBeTruthy();
-    // The app.json marks itself an automation app via `kind` (not a dotted id).
     expect((JSON.parse(out.get("app.json")!) as { kind?: string }).kind).toBe(
       "automation"
     );
@@ -84,7 +83,6 @@ describe(scaffoldAppFiles, () => {
         requires: { tools?: unknown; harness?: unknown; model?: unknown };
       }
     ).requires;
-    // No tools allowlist is scaffolded — there is no `ctx.tool` rail (#484).
     expect(reqs.tools).toBeUndefined();
     expect(reqs.harness).toBeUndefined();
     expect(reqs.model).toBeUndefined();

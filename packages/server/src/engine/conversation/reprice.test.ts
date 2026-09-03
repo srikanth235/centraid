@@ -15,7 +15,6 @@ import { repriceLedger } from "./reprice.js";
 const APP = "todos";
 const OWNER = "test-owner-uuid-0000";
 
-// haiku 4.5 input rate is $1/MTok, so 1,000,000 input tokens freeze at $1.
 const MODEL = "claude-haiku-4-5";
 const EXPECTED = 1;
 
@@ -45,7 +44,6 @@ describe(repriceLedger, () => {
     store = new ConversationHistoryStore(workspace);
   });
 
-  /** Record one priced step turn, return its turn id. */
   function recordStep(): string {
     const s = store.createSession(APP);
     const r = store.recordTurn(APP, {
@@ -71,7 +69,6 @@ describe(repriceLedger, () => {
 
   it("reprices a NULL-cost item and re-derives the turn total", () => {
     const turnId = recordStep();
-    // Simulate "priced NULL by a then-unknown model": blank the frozen cost.
     db.prepare(`UPDATE items SET cost_usd = NULL WHERE kind = 'step'`).run();
     db.prepare(`UPDATE turns SET total_cost_usd = NULL WHERE id = ?`).run(
       turnId
@@ -168,8 +165,6 @@ describe(repriceLedger, () => {
   it("leaves conversation_digest rows untouched (frozen #438 rollups are out of scope)", () => {
     recordStep();
     db.prepare(`UPDATE items SET cost_usd = NULL WHERE kind = 'step'`).run();
-    // A digest carries a frozen cost copy; reprice must not read or rewrite it.
-    // FK-safe: attach it to the conversation recordStep just created.
     const convId = (
       db.prepare(`SELECT id FROM conversations LIMIT 1`).get() as { id: string }
     ).id;

@@ -1,11 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit (#639) — the stopped-daemon
-// admin scenarios share one fixture and command-dispatch contract.
 import crypto from "node:crypto";
-/*
- * Stopped-daemon filesystem maintenance (#289):
- * `centraid-gateway vault|devices|pair` plus the daemon device plane. Tests
- * call the dispatched command functions, asserting stdout + gateway.db rows.
- */
 import { promises as fs } from "node:fs";
 import type http from "node:http";
 
@@ -40,10 +34,6 @@ const silentLogger = {
   warn: () => undefined,
   error: () => undefined,
 };
-// The slowest file in the suite: every test bootstraps a real vault/daemon
-// layout on disk (fsync-bound). Sizing: the slowest single test is ~5.6s on a
-// fast host; at the ~10x worst hosted-runner disk penalty that is ~56s, so 60s
-// — above the 30s node-project default in @centraid/test-kit/vitest.
 vi.setConfig({ testTimeout: 60_000 });
 
 let dataDir: string;
@@ -72,7 +62,6 @@ describe("admin scenarios", () => {
           : input.url
       );
       if (url.pathname === "/centraid/_gateway/info") {
-        // Mirror production #568 item C: dial tickets only for authenticated callers.
         const headers = new Headers(init?.headers);
         const authorized =
           headers.get("authorization") ===
@@ -97,9 +86,6 @@ describe("admin scenarios", () => {
       };
       const registry = openVaultRegistry({
         rootDir: layout.vaultDir,
-        // The daemon this stands in for opens custody the same way; a bare
-        // KeyStore cannot unwrap a protected sealkey and would mount nothing
-        // (#568).
         keyStore: daemonKeyStore(layout.keysDir),
         logger: silentLogger,
         enableWalShipper: false,
@@ -120,8 +106,6 @@ describe("admin scenarios", () => {
           );
         }
         const tickets = PairingTicketStore.open(layout.gatewayDbFile);
-        // The daemon owns the invitation: it names the owner and the vault
-        // list; the CLI only carries the token (#599 Decision 5, #726).
         const owners = OwnerStore.open(tickets.gatewayDatabase);
         const ownerId = owners.ownerOf(vault.vaultId);
         const owner =
@@ -265,8 +249,6 @@ describe("admin scenarios", () => {
       )
     );
 
-    // The owner and their vault_owners row survive the tombstone, so the
-    // host lane can bring a replacement device in for the SAME owner.
     const recovered = lastJson(
       await capture(() =>
         commandDevices(
@@ -299,8 +281,6 @@ describe("admin scenarios", () => {
   });
 
   test("pair needs the daemon endpoint identity, then mints a pasteable ticket", async () => {
-    // Host custody key is required before the daemon handshake (auth-gated
-    // endpointTicket, #568 item C) — empty data dir fails for that reason first.
     await expect(
       capture(() =>
         commandPair(["--data-dir", dataDir], fail, async () => {
@@ -333,7 +313,6 @@ describe("admin scenarios", () => {
     );
     expect(text).toMatch(/Pairing ticket for The owner/u);
     expect(text).toMatch(/Family \(.*\)/u);
-    // The pasteable token is the sole base64url line in the human block.
     const token = text
       .split("\n")
       .map((l) => l.trim())
@@ -425,8 +404,6 @@ describe("admin scenarios", () => {
     );
     const daemon = await fakePairDaemon();
 
-    // Ordinary pairing is never sensitive to whether this happens to be the
-    // first enrollment row.
     const first = lastJson(
       await capture(() =>
         commandPair(
@@ -445,7 +422,6 @@ describe("admin scenarios", () => {
       )
     );
 
-    // A later pairing mints for the same owner — access is ownership.
     const second = lastJson(
       await capture(() =>
         commandPair(
@@ -457,7 +433,6 @@ describe("admin scenarios", () => {
     );
     expect(second.ownerId).toBe(first.ownerId);
 
-    // The retired --role flag: refusal is the pair contract after #726.
     await expect(
       commandPair(
         ["--data-dir", dataDir, "--vault", "Family", "--role", "admin"],
@@ -519,14 +494,12 @@ describe("admin scenarios", () => {
     } as unknown as http.IncomingMessage;
     expect(plane.deviceAccess.deviceKeyFor(bare)).toBeUndefined();
 
-    // Kernel-observed loopback uses host custody; Iroh still proves remotes.
     const loopback = {
       headers: {},
       socket: { remoteAddress: "127.0.0.1" },
     } as unknown as http.IncomingMessage;
     expect(plane.deviceAccess.deviceKeyFor(loopback)).toBe("ep-host-custody");
 
-    // A device header without the process proof is refused.
     const spoof = {
       headers: { [DEVICE_HEADER]: "ep-known", [DEVICE_PROOF_HEADER]: "forged" },
     } as unknown as http.IncomingMessage;
@@ -552,13 +525,9 @@ describe("admin scenarios", () => {
       relays: "disabled",
     });
     expect(registry.isFresh()).toBe(true);
-    // An enrollment is the ONLY admission (#603), so an unknown EndpointId is
-    // refused even on a fresh dir.
     expect(plane.dataPlaneControl.authorize("first-device")).toMatchObject({
       allowed: false,
     });
-    // Relays disabled keeps the endpoint offline; identity remains derivable
-    // from the custody key without a stale address cache.
     const handle = await plane.startEndpoint({
       baseUrl: "http://127.0.0.1:1",
       token: "t",

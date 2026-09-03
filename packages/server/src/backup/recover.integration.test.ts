@@ -218,9 +218,6 @@ describe("backup/recover", () => {
 
     const { itemId, grantId } = seedSealedOutbox(plane);
 
-    // #630 P5 restore-after-erase canary: preserve both the new lifecycle
-    // columns and their durable pre-trash snapshot through kit/provider
-    // recovery after the source DEK file is destroyed.
     const peoplePartyId = invoke(plane, "people.add_person", {
       display_name: "Maya Chen",
       role: "Design lead",
@@ -282,9 +279,6 @@ describe("backup/recover", () => {
       await service.recoveryKitDocument(),
       KIT_PASSWORD
     );
-    // T1: erase through the product HTTP route before recovering on machine B.
-    // This chains both halves in one run and proves route auth,
-    // recovery-kit confirmation, state cascade, and key destruction together.
     const gatewayDataDir = await tempDir("recover-a-gateway");
     const gatewayDatabase = GatewayDatabase.open(gatewayDataDir);
     cleanups.push(() => gatewayDatabase.close());
@@ -609,13 +603,6 @@ describe("backup/recover", () => {
     if (report.previews.warmed)
       throw new Error("headless recovery must not pre-warm previews");
 
-    // …and the same kit + api-key REFUSES a snapshot written by newer software.
-    // The version-gate law itself is owned by packages/backup/src/engine.test.ts
-    // ("restoreSnapshot refuses a newer vaultUserVersion BEFORE fetching or
-    // materializing anything"); what recovery adds — and what is asserted here —
-    // is that the refusal leaves NO residue on the blank machine: no vault dir,
-    // no `.recover-staging-*` scratch, and no keyring escrowed into the key
-    // store. Folded into this test so one seeded machine A serves both halves.
     await providerClient.registerSnapshot(a.targetId, {
       idempotencyKey: "from-the-future",
       manifestKey: `u/${a.targetId}/backup/manifests/future.json`,

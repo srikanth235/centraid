@@ -9,22 +9,14 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { openLedgerDb, makeLedgerDbProvider } from "./gateway-db.js";
 import { ledgerDbFileIn } from "./ledger-db.test-fixtures.js";
 
-/**
- * ONE FILE (#916). The ledger band is composed by `migrateVault`, so what the
- * engine's stores open is a REAL vault file. These tests read that band as the
- * stores do: the band's exhaustive shape is the vault package's to state, and
- * what is stated here is the engine's dependency on it.
- */
 function freshDbPath(): string {
   return ledgerDbFileIn(tempDirSync("centraid-db-"));
 }
 
-/** A bare, unmigrated file — only the pragma behaviour applies to one. */
 function barePath(): string {
   return path.join(tempDirSync("centraid-bare-db-"), "db.sqlite");
 }
 
-/** The 14 ledger-band tables the engine's stores read and write. */
 const LEDGER_TABLES = [
   "attachments",
   "automation_state",
@@ -77,7 +69,6 @@ describe("openLedgerDb (the conversation-ledger band of vault.db)", () => {
   it("uses the bounded low-end read pragmas (#456 S1)", () => {
     const db = openLedgerDb(barePath());
     try {
-      // Spread the null-prototype node:sqlite rows to compare column data only.
       expect({ ...db.prepare("PRAGMA cache_size").get() }).toStrictEqual({
         cache_size: -16000,
       });
@@ -93,16 +84,11 @@ describe("openLedgerDb (the conversation-ledger band of vault.db)", () => {
   });
 
   it("ISSUES NO DDL — the vault composed the band, and the ladder is its own", () => {
-    // The engine no longer owns the band's shape (#916): it opens a file the
-    // vault already migrated, which is why the version it reads is the vault's
-    // and opening does not move it.
     const pathLocal = freshDbPath();
     const before = userVersion(pathLocal);
     expect(before).toBe(1);
     openLedgerDb(pathLocal).close();
     expect(userVersion(pathLocal)).toBe(before);
-    // A BARE path is not a ledger: without the vault's DDL there is no band,
-    // and the opener does not invent one.
     const bare = barePath();
     openLedgerDb(bare).close();
     expect(tableNames(bare)).toStrictEqual([]);
@@ -114,7 +100,6 @@ describe("openLedgerDb (the conversation-ledger band of vault.db)", () => {
     expect(LEDGER_TABLES.filter((t) => present.has(t))).toStrictEqual(
       LEDGER_TABLES
     );
-    // The search virtual table + its sync triggers exist.
     expect(present.has("fts_conversation")).toBe(true);
     const db = new DatabaseSync(pathLocal);
     try {
@@ -152,8 +137,6 @@ describe("openLedgerDb (the conversation-ledger band of vault.db)", () => {
   });
 
   it("conversations has NO foreign key (user_id carries the vault owner party id)", () => {
-    // The owner's party row lives in the vault's separate vault.db file;
-    // SQLite has no cross-file FKs, so the scoping is application-enforced.
     const pathLocal = freshDbPath();
     openLedgerDb(pathLocal).close();
     const db = new DatabaseSync(pathLocal);
@@ -181,7 +164,6 @@ describe("openLedgerDb (the conversation-ledger band of vault.db)", () => {
       expect(fk("turns", "conversations")?.on_delete).toBe("CASCADE");
       expect(fk("items", "turns")?.on_delete).toBe("CASCADE");
       expect(fk("attachments", "items")?.on_delete).toBe("CASCADE");
-      // parent_turn_id is FK-free (a sub-run's parent may land in the same batch).
       const turnFks = db
         .prepare(`PRAGMA foreign_key_list('turns')`)
         .all() as Array<{
@@ -288,7 +270,6 @@ describe("openLedgerDb (the conversation-ledger band of vault.db)", () => {
 
   it("converts a pre-#438 file (auto_vacuum=0) to INCREMENTAL on open (issue #438)", () => {
     const pathLocal = barePath();
-    // A file written before the pragma existed: WAL, freelist mode, non-empty.
     const seed = new DatabaseSync(pathLocal);
     seed.exec("PRAGMA journal_mode=WAL");
     seed.exec("CREATE TABLE legacy(a TEXT)");
@@ -398,7 +379,6 @@ describe("STRICT tables (issue #374 SQLite hardening)", () => {
     const db = openLedgerDb(pathLocal);
     try {
       const now = Date.now();
-      // turn_count is INTEGER; a non-numeric TEXT value violates STRICT.
       expect(() =>
         db
           .prepare(

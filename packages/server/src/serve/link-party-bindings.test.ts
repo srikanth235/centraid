@@ -1,14 +1,3 @@
-/*
- * The link ceremony's vault-side footprint (#821): approving a link on
- * both sides must leave a `share_party_vault_binding` row in the vault that
- * holds the party, revoking it must tombstone that row, and re-linking must
- * re-light the SAME row rather than trip the table's total UNIQUE key.
- *
- * The store is wired here exactly as `build-gateway.ts` wires it — a listener
- * that reconciles bindings — so these tests exercise the real path, not a
- * hand-called reconcile.
- */
-
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 
@@ -55,9 +44,6 @@ describe("link ceremony party↔vault bindings", () => {
     );
   });
 
-  /** Both vaults co-hosted, so ONE gateway holds both sides of the link —
-   *  the same-machine ceremony, and the case that exercises both directions
-   *  of the reconcile in a single run. */
   async function open(): Promise<{
     store: VaultLinksStore;
     home: VaultDb;
@@ -115,7 +101,6 @@ describe("link ceremony party↔vault bindings", () => {
     const link = proposeLink(store);
     store.approve(link.linkId, PEER);
 
-    // Home's vault learns "the person `party-peer` has vault `vault-peer`".
     const homeRows = bindings(home);
     expect(homeRows).toHaveLength(1);
     expect(homeRows[0]).toMatchObject({
@@ -124,16 +109,12 @@ describe("link ceremony party↔vault bindings", () => {
       vault_public_key: keyPeer,
       revoked_at: null,
     });
-    // …and the mirror image lands in the peer's vault, written by the same
-    // reconcile because both vaults happen to be mounted on this gateway.
     expect(bindings(peer)).toHaveLength(1);
     expect(bindings(peer)[0]).toMatchObject({
       party_id: HOME_PARTY,
       vault_id: HOME,
       revoked_at: null,
     });
-    // The binding's FK is satisfied by a mirrored party row, named from the
-    // vault directory rather than left as a bare id.
     const party = home.vault
       .prepare("SELECT display_name FROM core_party WHERE party_id = ?")
       .get(PEER_PARTY) as { display_name: string };
@@ -161,8 +142,6 @@ describe("link ceremony party↔vault bindings", () => {
     expect(revoked).toHaveLength(1);
     expect(revoked[0]!.revoked_at).not.toBeNull();
 
-    // Re-linking the same pair. UNIQUE(party_id, vault_id) is total — it does
-    // not exempt the tombstone — so this must re-light, never insert.
     store.gatewayDatabase.db
       .prepare("UPDATE vault_links SET revoked = 0 WHERE link_id = ?")
       .run(link.linkId);
@@ -174,9 +153,6 @@ describe("link ceremony party↔vault bindings", () => {
 
   test("a party already live-bound elsewhere is left alone, not re-pointed", async () => {
     const { store, home } = await open();
-    // The peer party is already bound to a THIRD vault — the one-live-vault
-    // rule says the standing binding wins and the ceremony reports a conflict
-    // instead of violating the partial unique index.
     const now = new Date().toISOString();
     home.vault
       .prepare(
@@ -195,7 +171,6 @@ describe("link ceremony party↔vault bindings", () => {
       .run(PEER_PARTY, now);
 
     const link = proposeLink(store);
-    // No throw: the conflict is an outcome the ceremony reports, not an error.
     expect(() => store.approve(link.linkId, PEER)).not.toThrow();
     const rows = bindings(home);
     expect(rows).toHaveLength(1);
@@ -209,8 +184,6 @@ describe("link ceremony party↔vault bindings", () => {
     const { store, home } = await open();
     const link = proposeLink(store);
     const approved = store.approve(link.linkId, PEER)!;
-    // Only HOME is mounted for this call: the peer side is somebody else's
-    // gateway, which is exactly what an absent `vaultFor` means (#750 inv. 2).
     const outcomes = reconcileLinkBindings(approved, {
       vaultFor: (vaultId) => (vaultId === HOME ? home : undefined),
     });

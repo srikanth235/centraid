@@ -8,7 +8,6 @@ import type { ReplicaShapeAccess } from "./replica-shape.js";
 export interface ReplicaRequestAccess extends ReplicaShapeAccess {
   deviceId: string;
   deviceKey?: string;
-  /** The acting owner behind the device (#599 L2/L4, #726). */
   ownerId?: string;
   enrollment?: DeviceEnrollment;
 }
@@ -17,14 +16,6 @@ export type ReplicaAccessResolution =
   | { ok: true; access: ReplicaRequestAccess }
   | { ok: false; status: number; body: Record<string, unknown> };
 
-/**
- * Resolve only host-authenticated ambient identity; no client device ids.
- *
- * The `?app=` selector names which replica SHAPE the caller wants, nothing
- * more: the caller's authority is its device enrollment, which covers the
- * whole vault either way. There is no narrower per-app identity to contradict
- * the selector (#799).
- */
 export function resolveReplicaAccess(
   url: URL,
   vaultId: string,
@@ -56,8 +47,6 @@ export function resolveReplicaAccess(
   return {
     ok: true,
     access: {
-      // The derived enrollment view only yields vaults the device's owner
-      // owns, so an un-revoked enrollment IS write authority (#726).
       canWrite: !enrollment.revoked,
       rememberDevice: enrollment.rememberDevice,
       deviceId: deviceKey,

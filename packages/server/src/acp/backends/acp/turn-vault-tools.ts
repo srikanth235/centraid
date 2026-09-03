@@ -1,13 +1,3 @@
-/*
- * Standing the turn's vault tools up as an MCP server the harness can dial.
- *
- * Prefer HTTP MCP when the harness advertises `mcpCapabilities.http` (the path
- * first-party adapters support). When it does not, still stand up the
- * loopback HTTP endpoint and advertise a **stdio MCP** entry that runs
- * `vault-mcp-stdio-proxy.mjs` — agents MUST support stdio MCP per ACP, so
- * vault tools reach them without silent loss.
- */
-
 import { fileURLToPath } from "node:url";
 
 import type { McpServer, McpServerStdio } from "@agentclientprotocol/sdk";
@@ -25,20 +15,15 @@ const STDIO_PROXY = fileURLToPath(
 );
 
 export interface TurnVaultTools {
-  /** What to name in `session/new` / `session/load` / `session/resume`'s `mcpServers`. */
   mcpServers: McpServer[];
-  /** The live HTTP endpoint, to be closed with the turn. Absent when none was started. */
   handle?: VaultMcpHandle;
-  /** How the harness was told to reach the vault (for capability notices). */
   transport?: "http" | "stdio";
 }
 
 export async function startTurnVaultTools(args: {
   toolContext: ToolContext | undefined;
-  /** Did the harness advertise `mcpCapabilities.http` in `initialize`? */
   httpMcp: boolean;
   emit: (event: TurnStreamEvent) => void;
-  /** The mapper's open-tool-call probe, used to avoid double-rendering. */
   harnessStreamsTool: (toolName: string) => boolean;
 }): Promise<TurnVaultTools> {
   const toolCtx = args.toolContext;
@@ -77,7 +62,6 @@ export async function startTurnVaultTools(args: {
       return { mcpServers: [handle.server], handle, transport: "http" };
     }
 
-    // Stdio bridge: harness spawns proxy; proxy dials our loopback HTTP.
     const bearer =
       handle.server.headers.find(
         (h) => h.name.toLowerCase() === "authorization"

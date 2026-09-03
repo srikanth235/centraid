@@ -1,8 +1,3 @@
-/**
- * Pins row mappers and the prepared-statement block independently of
- * `ConversationStore` orchestration.
- */
-
 import { describe, expect, it } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
@@ -239,16 +234,12 @@ describe("store-sql prepare()", () => {
     const db = openLedgerDb(ledgerDbFileIn(dir));
     const stmts = prepare(db);
 
-    // Every statement slot is a live prepared handle.
     expect(stmts.insertConversation.run).toBeTypeOf("function");
     expect(stmts.getConversation.get).toBeTypeOf("function");
     expect(stmts.insertTurn.run).toBeTypeOf("function");
     expect(stmts.insertItem.run).toBeTypeOf("function");
     expect(stmts.upsertState.run).toBeTypeOf("function");
 
-    // (id, kind, user_id, app_id, automation_id, title, harness_kind,
-    //  created_at, updated_at) — harness_session_id / harness_usage_json /
-    //  turn_count / pinned are fixed in SQL.
     stmts.insertConversation.run(
       "c-sql",
       "chat",
@@ -267,9 +258,6 @@ describe("store-sql prepare()", () => {
     expect(row?.title).toBe("T");
     expect(conversationFromRaw(row!).title).toBe("T");
 
-    // (id, conversation_id, seq, parent_turn_id, trigger, trigger_origin,
-    //  retry_of, idempotency_key, note, hydration_tokens, started_at) — ok is
-    //  fixed to 0 in SQL.
     stmts.insertTurn.run(
       "t-sql",
       "c-sql",

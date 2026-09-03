@@ -1,9 +1,3 @@
-/*
- * The cursor-advance invariant (#541 review): reporting the source's LATEST
- * durable id after returning only a capped prefix counted the surplus as
- * `skipped` — dropping webhook delivery for rows still sitting in ingress.
- */
-
 import { describe, expect, test } from "vitest";
 
 import type {
@@ -39,7 +33,6 @@ type IngressStore = Pick<
   "listIngressAfter" | "pruneIngress"
 >;
 
-/** Minimal `listIngressAfter` / `pruneIngress` over an in-memory ingress table. */
 function storeOf(
   rowsLocal: readonly Row[],
   prune?: PruneIngressResult
@@ -73,7 +66,6 @@ describe("trigger-ingress-cursor", () => {
     );
     expect(result.elements).toHaveLength(50);
     expect(result.elements.at(-1)?.position).toBe("50");
-    // NOT '60': rows 51..60 are still durable and undelivered.
     expect(result.positionJson).toBe("50");
     expect(result.skipped).toBeUndefined();
     expect(result.gapReason).toBeUndefined();
@@ -151,7 +143,6 @@ describe("trigger-ingress-cursor", () => {
       deleted: 7,
       gaps: [{ sourceKey: "hook-1", pruned: 7, throughId: 30 }],
     };
-    // The reader had delivered through 20, so rows 21..30 expired unread.
     const result = readIngressCursor(
       storeOf(rows(5, 31), prune),
       "hook-1",

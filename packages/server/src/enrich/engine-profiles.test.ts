@@ -1,5 +1,3 @@
-// Engine profiles (#807): built-ins are derived, not stored; egress is computed from the engine and unreachable from input; the write gate refuses out loud everything the reader drops.
-
 import { describe, expect, test } from "vitest";
 
 import { BUILT_IN_PROFILE } from "@centraid/vault";
@@ -23,7 +21,6 @@ import {
   validateEngineProfilePatch,
 } from "./engine-profiles.js";
 
-/** One well-formed stored profile; `model` is a fixture id, never a source literal. */
 function stored(overrides: Record<string, unknown> = {}) {
   return {
     capability: "ocr",
@@ -89,9 +86,7 @@ describe("egress is computed from the engine", () => {
     const prefs = {
       [engineProfilePrefsKey("mine")]: stored({ egress: "on-device" }),
     };
-    // Read: the claim is not a field the reader consults.
     expect(readEngineProfile(prefs, "mine")!.egress).toBe("provider");
-    // Write: it is refused rather than ignored.
     expect(validateEngineProfilePatch(prefs)).toContain("computed");
   });
 });
@@ -191,15 +186,10 @@ describe("prefs round-trip", () => {
 });
 
 describe("validation refuses out loud what the reader drops", () => {
-  // `readerDrops` marks the cases the lenient reader also refuses. Optional
-  // fields (label, model, prompt rev, pins) are typo-tolerant on read — a bad
-  // one is dropped and the profile still runs — but the writer refuses them
-  // rather than silently discarding what a member typed.
   interface RejectionCase {
     name: string;
     patch: Record<string, unknown>;
     fragment: string;
-    /** The lenient reader drops it too. False for the typo-tolerant optionals. */
     readerDrops?: boolean;
   }
   const cases: RejectionCase[] = [
@@ -282,7 +272,6 @@ describe("validation refuses out loud what the reader drops", () => {
   test.each(cases)("rejects $name", ({ patch, fragment, readerDrops }) => {
     expect(validateEngineProfilePatch(patch)).toContain(fragment);
     const id = Object.keys(patch)[0]!.slice(ENGINE_PROFILE_PREFS_PREFIX.length);
-    // Whatever the writer refuses structurally, the reader never surfaces.
     const read =
       isBuiltInProfileId(id) || readerDrops === false
         ? undefined

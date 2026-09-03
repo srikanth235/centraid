@@ -1,5 +1,3 @@
-/* Durable provider-egress consent at the automation TurnPlane door (#567, #743). */
-
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -33,7 +31,6 @@ describe("automation provider-egress consent", () => {
     );
   });
 
-  /** Exercise the durable controller over the fire's real journal. */
   async function openConsentedDispatch(opts: {
     harness: HarnessKind;
     ladderMembers: readonly HarnessKind[];

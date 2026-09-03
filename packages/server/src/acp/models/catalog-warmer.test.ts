@@ -33,9 +33,6 @@ describe("catalog-warmer", () => {
   test("concurrent warms for the same surface dedupe to one enumeration", async () => {
     const catalogPath = await tmpCatalogPath();
     let calls = 0;
-    // Event-driven gate instead of a fixed sleep: the enumeration stays
-    // in flight until the test has asserted the warming window, then the
-    // test releases it — no wall clock involved.
     let release: () => void = () => undefined;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -88,10 +85,6 @@ describe("catalog-warmer", () => {
     await expect(readCatalog(catalogPath)).resolves.toBeUndefined();
   });
 
-  // A harness that self-reports no models (opencode, grok) leaves the cache
-  // empty forever. The read path only re-kicks a warm while the question is
-  // unanswered — otherwise every poll restarted a warm, `isWarming` was true
-  // at read time, and the surface reported `loading` for good.
   test("records a completed warm even when it enumerated nothing", async () => {
     const catalogPath = await tmpCatalogPath();
     const warmer = new CatalogWarmer({
@@ -102,11 +95,9 @@ describe("catalog-warmer", () => {
     await warmer.warm("opencode", "models");
     expect(warmer.hasWarmed("opencode", "models")).toBe(true);
     expect(warmer.isWarming("opencode", "models")).toBe(false);
-    // The surface can now settle instead of spinning.
     expect(deriveStatus(0, warmer.isWarming("opencode", "models"))).toBe(
       "empty"
     );
-    // A different kind is still unasked.
     expect(warmer.hasWarmed("codex", "models")).toBe(false);
   });
 
@@ -126,7 +117,6 @@ describe("catalog-warmer", () => {
     expect(deriveStatus(0, false)).toBe("empty");
     expect(deriveStatus(0, true)).toBe("loading");
     expect(deriveStatus(3, false)).toBe("ready");
-    // A refresh over an existing list is still loading so the client polls.
     expect(deriveStatus(3, true)).toBe("loading");
   });
 });

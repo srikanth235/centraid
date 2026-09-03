@@ -1,12 +1,5 @@
 import crypto from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit (#608) cohesive automation-update route suite shares one real gateway and compiler-failover harness
-/*
- * `POST /centraid/_automations/update?ref=` — the instructions-first
- * editor's save path (automations UI revamp). Boots a real gateway and
- * drives the wire path end to end, mirroring
- * `../lifecycle/automation-lifecycle-over-http.test.ts`'s style for the
- * sibling create/set-enabled/rotate-webhook/delete routes.
- */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -18,7 +11,6 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import type { GatewayPaths } from "../paths.ts";
 import { serve } from "../serve/serve.ts";
 import type { GatewayServeHandle } from "../serve/serve.ts";
-// lifecycle-automation-routes is exercised through serve() HTTP paths below (#545).
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -46,7 +38,6 @@ interface CreatedAutomation {
   webhook?: { id: string; secret: string; url: string };
 }
 
-/** Scaffold + publish a fresh automation app via the real create route. */
 async function createAutomation(
   id: string,
   body: Record<string, unknown> = {}
@@ -88,9 +79,6 @@ async function update(
 describe("lifecycle-automation-routes scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-autoupdate-${crypto.randomUUID()}-`);
-    // Headless compile (and any builder turn) would spawn a real harness
-    // and hang on harnessless CI/local hosts. Inject a failing runTurn so the
-    // compile path still exercises ledger finish + HTTP 202 without ACP.
     handle = await serve({
       paths: pathsUnder(dataDir),
       experimental: { automations: true },
@@ -119,7 +107,6 @@ describe("lifecycle-automation-routes scenarios", () => {
     };
     expect(trigger.kind).toBe("webhook");
     expect(trigger.id).toBe(created.webhook!.id);
-    // Plaintext is returned once; the manifest stores only SHA-256(secret).
     expect(trigger.secretHash).toBe(hashWebhookSecret(secret));
     expect(JSON.stringify(created.row.manifest)).not.toContain(secret);
   });
@@ -293,9 +280,6 @@ describe("lifecycle-automation-routes scenarios", () => {
       }
     ).secretHash;
 
-    // Rename in the same edit that re-declares the webhook trigger — the
-    // webhook entry must be a no-op (no fresh mint, no `webhook` in the
-    // response) since it already existed.
     const { status, json } = await update(created.row.ref, {
       name: "Keeps Its Hook (renamed)",
       triggers: [{ kind: "webhook" }],
@@ -338,12 +322,6 @@ describe("lifecycle-automation-routes scenarios", () => {
     expect(json.error).toBe("not_found");
   });
 
-  // Trigger legality is the manifest validator's law
-  // (`packages/server/src/automation/manifest/manifest.test.ts`). These tests prove only
-  // that the update handler runs its own kind pre-check and that a validator
-  // rejection surfaces verbatim as a 400 `bad_request` — extend the validator
-  // suite instead of adding malformed-trigger shapes here.
-
   test("update rejects an unsupported trigger kind with a 400", async () => {
     const created = await createAutomation("bad-trigger-kind");
     const { status, json } = await update(created.row.ref, {
@@ -363,8 +341,6 @@ describe("lifecycle-automation-routes scenarios", () => {
     });
     expect(status).toBe(400);
     expect(json.error).toBe("bad_request");
-    // Verbatim validator text, not a route-authored paraphrase — this is what
-    // proves the handler delegates rather than re-implementing the rule.
     expect(json.message).toContain(
       "where must be an array of {column, op, value?} clauses"
     );
@@ -393,14 +369,6 @@ describe("lifecycle-automation-routes scenarios", () => {
     const { compileTurnId } = (await res.json()) as { compileTurnId: string };
     expect(compileTurnId).toContain(":compile:");
 
-    // Wait on a wall-clock deadline, not an iteration count (#496). A
-    // compile spawns a real app-server subprocess, and a fixed-iteration budget
-    // a loaded CI harness blows through simply falls through: the assertions
-    // below would then pass against a run row that had not ended yet, and
-    // afterEach would delete the data dir while the compile was still writing
-    // objects into code/apps.git (ENOTEMPTY from an unrelated-looking rm).
-    // Asserting endedAt is what makes the wait real: the run must be over before
-    // this test returns, which is also what makes teardown safe.
     await vi.waitFor(
       async () => {
         const feed = await fetch(
@@ -418,10 +386,6 @@ describe("lifecycle-automation-routes scenarios", () => {
         const found = body.turns.find(
           (candidate) => candidate.turnId === compileTurnId
         );
-        // Terminal failure: ok is false AND endedAt is a number. Accepting
-        // endedAt null/undefined reduced the wait to `ok === false` and
-        // reinstated the ENOTEMPTY teardown race this comment warns about —
-        // the run must be fully over before this test returns.
         expect(found).toMatchObject({ triggerKind: "compile", ok: false });
         expect(found?.endedAt).toBeTypeOf("number");
       },
@@ -699,10 +663,6 @@ describe("lifecycle-automation-routes scenarios", () => {
       },
     ]);
 
-    // This reads the production ResourceAccounting instance around the
-    // host-injected runTurn. Every observed compile/delegate harness call must
-    // increment the same counter; a direct registry/backend bypass would make
-    // the two sides diverge even though the handler itself still succeeded.
     const harnessRunsAfter = (await handle.health.snapshot()).metrics
       .resourceUsage?.subsystems.harnessRuns.runs;
     expect(harnessRunsAfter).toBe(compilePrompts.length + delegateCalls.length);

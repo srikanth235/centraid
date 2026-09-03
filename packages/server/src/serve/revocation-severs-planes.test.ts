@@ -1,9 +1,3 @@
-/*
- * Issue #555: one enrollment deletion severs every surviving device plane.
- * There is no direct bearer plane; the remaining durable planes are the
- * iroh admission row and device-bound web sessions.
- */
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 

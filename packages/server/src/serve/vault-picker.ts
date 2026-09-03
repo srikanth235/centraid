@@ -1,8 +1,3 @@
-/*
- * Shell entity picker (duaility §12, #272): OWNER-trust search/browse;
- * every read rides the receipted gateway — no new door.
- */
-
 import type { RuntimeLogger } from "@centraid/server/engine";
 import { CARD_PK, CARDED_ENTITIES, SEARCHABLE } from "@centraid/vault";
 import type {
@@ -19,7 +14,6 @@ import {
 
 export interface PickerRequest {
   term?: string;
-  /** Default = every carded entity. */
   kinds?: string[];
   limit?: number;
 }
@@ -60,7 +54,6 @@ export function pickAnchors(
 ): { anchors: AnchorPickerHit[] } {
   const term = request.term?.trim().toLowerCase() ?? "";
   const limit = Math.min(Math.max(request.limit ?? 8, 1), 25);
-  // Receipted owner read — a raw `db.vault` JOIN would be a second, unaudited read path (#541 review).
   const rows = gateway.read(cred, {
     entity: AUTOMATION_ANCHOR_ENTITY,
     orderBy: { column: "created_at", dir: "desc" },
@@ -103,7 +96,6 @@ export function pickAnchors(
   return { anchors };
 }
 
-/** Owner search/browse; one unreadable kind is logged and skipped, never sinking the picker. */
 export function pickEntities(
   gateway: VaultGateway,
   cred: Credential,
@@ -175,18 +167,15 @@ export function pickEntities(
   return { cards };
 }
 
-/** Endpoints of a link the owner asserts through the picker's write half. */
 export interface LinkInput {
   from_type: string;
   from_id: string;
   to_type: string;
   to_id: string;
   relation?: string;
-  /** Written atomically with the link (#282). */
   selector?: AnchorSelector;
 }
 
-/** Standoff-anchor selector (#282): W3C-style text quote plus position hint (UTF-16 code units). */
 export interface AnchorSelector {
   exact: string;
   prefix: string;

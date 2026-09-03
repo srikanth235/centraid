@@ -1,11 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit #190 — one ConversationStore class; its SQL and row mappers already live in store-sql.ts and schema.ts
-/*
- * The per-vault conversation ledger + automation KV, in the vault's
- * `vault.db`. A conversation binds to its vault at creation, and app scoping
- * is the `app_id` COLUMN, not a file (#280). The `DatabaseProvider` may resolve
- * "the ACTIVE vault", so the store re-prepares when the handle changes.
- * Runtime-owned: never reachable from the handler `db` proxy or `vault_sql`.
- */
 
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
@@ -63,7 +56,6 @@ export interface InsertTurnInput {
   readonly retryOf?: string;
   readonly idempotencyKey?: string;
   readonly note?: string;
-  /** Estimated handoff prompt tokens, never ACP usage. */
   readonly hydrationTokens?: number;
   readonly startedAt: number;
 }
@@ -112,7 +104,6 @@ export interface InsertItemInput {
   readonly harness?: string;
   readonly effort?: string;
   readonly costUsd?: number;
-  /** Issue #514 — `harness` (ACP) or `estimated` (catalog). */
   readonly costSource?: "harness" | "estimated";
   readonly appId?: string;
 }
@@ -148,7 +139,6 @@ export interface CloseItemInput {
   readonly harness?: string;
   readonly effort?: string;
   readonly costUsd?: number;
-  /** Issue #514 — `harness` (ACP) or `estimated` (catalog). */
   readonly costSource?: "harness" | "estimated";
 }
 
@@ -175,8 +165,6 @@ export type ConversationSearchHit = ConversationMeta & {
   readonly snippet: string;
 };
 
-/** QUOTING neutralizes FTS operators so they match as literals; a word with no
- *  letter or digit is dropped (an empty phrase is a syntax error). */
 export function conversationMatchExpression(query: string): string | null {
   const tokens = query
     .split(/\s+/u)
@@ -187,8 +175,6 @@ export function conversationMatchExpression(query: string): string | null {
   return tokens.map((t) => `"${t}"*`).join(" ");
 }
 
-/** Not page sizes (#659): the point past which a response stops being
- *  renderable at all, so raising one is a product decision. */
 export const MAX_TRANSCRIPT_TURNS = 2000;
 
 export interface TurnWindow {
@@ -203,14 +189,10 @@ export interface TurnSeqRange {
 }
 export const MAX_LISTED_CONVERSATIONS = 500;
 
-/** `raw_json` repeats the whole payload and is written TWICE per tool call.
- *  Enforced at the WRITE boundary so no producer can forget. */
 const RAW_JSON_MAX_BYTES = 64 * 1024;
 
 const RAW_JSON_KEPT_FIELD_MAX_CHARS = 256;
 
-/** Keeps top-level scalars short enough to be identifiers, drops the nested
- *  content that blew the cap, and returns `{}` for a non-JSON envelope. */
 function rawJsonForensics(raw: string): Record<string, unknown> {
   let parsed: unknown;
   try {
@@ -235,14 +217,12 @@ function rawJsonForensics(raw: string): Record<string, unknown> {
   return kept;
 }
 
-/** Verbatim under the cap, else forensics plus a truncation marker. */
 function cappedRawJson(raw: string | undefined): string | null {
   if (raw === undefined) return null;
   const originalBytes = Buffer.byteLength(raw, "utf8");
   if (originalBytes <= RAW_JSON_MAX_BYTES) return raw;
   const marker = { rawTruncated: true, rawOriginalBytes: originalBytes };
   const kept = JSON.stringify({ ...rawJsonForensics(raw), ...marker });
-  // A pathological envelope can still exceed the cap; the marker always fits.
   return Buffer.byteLength(kept, "utf8") <= RAW_JSON_MAX_BYTES
     ? kept
     : JSON.stringify(marker);
@@ -277,7 +257,7 @@ export class ConversationStore {
       try {
         db.exec("ROLLBACK");
       } catch {
-        /* already rolled back */
+        // Intentionally empty.
       }
       throw error;
     }
@@ -319,8 +299,6 @@ export class ConversationStore {
     };
   }
 
-  /** Harness ownership is a MUTABLE binding, never conversation identity, so a
-   *  switch keeps one contiguous history. */
   ensureAutomationConversation(
     automationRef: string,
     appId?: string,
@@ -394,7 +372,6 @@ export class ConversationStore {
     }));
   }
 
-  /** Archived threads are excluded. */
   searchConversations(
     userId: string,
     query: string,
@@ -505,8 +482,6 @@ export class ConversationStore {
     const hydrated = observation?.hydrated === true ? 1 : 0;
     let res;
     if (observation && observation.sessionId !== undefined) {
-      // `turns.seq` starts at 0, so the "nothing hydrated yet" sentinel is -1:
-      // a 0 would silently exclude the first turn from every later delta.
       const maxSeq = Number(
         (
           db
@@ -516,9 +491,6 @@ export class ConversationStore {
             .get(id) as { seq: number }
         ).seq
       );
-      // One active plus at most one warm candidate, without discarding older
-      // valid handles: a displaced warm binding goes COLD, and `stale` is
-      // reserved for handles that must never be resumed again.
       const active = db
         .prepare(
           `SELECT harness_kind, acp_session_id
@@ -572,8 +544,6 @@ export class ConversationStore {
         now,
         now
       );
-      // One resumable binding per harness; superseded ids stay as `stale`
-      // audit rows rather than silently disappearing.
       db.prepare(
         `UPDATE conversation_harness_sessions
             SET status = 'stale'
@@ -595,8 +565,6 @@ export class ConversationStore {
         id,
         userId
       );
-      // Set AFTER the conversation update, so the watermark always observes
-      // the inserting transaction's final seq.
       db.prepare(
         `UPDATE conversation_harness_sessions
             SET hydrated_through_seq = MAX(
@@ -621,8 +589,6 @@ export class ConversationStore {
     return Number(res.changes) > 0;
   }
 
-  /** Settles a SECOND harness touched in one turn, without bumping the turn
-   *  counter or replacing the active harness. */
   settleAdditionalHarness(
     id: string,
     observation: {
@@ -717,9 +683,6 @@ export class ConversationStore {
     );
   }
 
-  /** A new target session is deliberately NOT inserted: failure must never
-   *  replace the prior active binding. The hydration watermark is likewise NOT
-   *  advanced — the failed message never reached the model. */
   noteFailedTurn(
     id: string,
     userId: string,
@@ -798,7 +761,7 @@ export class ConversationStore {
           raw.usage_snapshot_json
         ) as HarnessUsageSnapshot;
       } catch {
-        // A corrupt accounting snapshot must not hide the resume handle.
+        // Intentionally empty.
       }
     }
     return {
@@ -844,7 +807,6 @@ export class ConversationStore {
     return Number(result.changes) > 0;
   }
 
-  /** A stale owner must not revive a lock another process has taken over. */
   refreshTurnLock(
     conversationId: string,
     token: string,
@@ -891,7 +853,7 @@ export class ConversationStore {
     try {
       parsed = JSON.parse(raw.additional_directories_json);
     } catch {
-      // Corrupt selections fail CLOSED to no additional roots.
+      // Intentionally empty.
     }
     const additionalDirectories = Array.isArray(parsed)
       ? parsed.filter((value): value is string => typeof value === "string")
@@ -949,7 +911,6 @@ export class ConversationStore {
     );
   }
 
-  /** Backs replay-on-duplicate: a re-POST never re-runs the model (#420). */
   getTurnByIdempotencyKey(
     conversationId: string,
     idempotencyKey: string
@@ -988,9 +949,6 @@ export class ConversationStore {
     return raw ? turnFromRaw(raw) : undefined;
   }
 
-  /** A FINISHED turn is refused on purpose: `seq` comes from `MAX(seq)+1`, so
-   *  deleting the newest hands its `seq` to the next, and
-   *  `conversation_archive`'s ranges assume `seq` is monotonic. */
   deleteTurn(turnId: string, userId?: string): boolean {
     const { stmts } = this.ensureReady();
     return (
@@ -1000,15 +958,10 @@ export class ConversationStore {
     );
   }
 
-  /** A transcript opens to its TAIL, so that is the end the ceiling keeps;
-   *  `limit` is a real ceiling, not a hint (#659). */
   listTurns(conversationId: string, limit = MAX_TRANSCRIPT_TURNS): Turn[] {
     return this.listTurnWindow(conversationId, { limit }).turns;
   }
 
-  /** `beforeSeq` walks STRICTLY backwards, so successive pages never overlap
-   *  and never skip; `hasMore` is answered by over-fetching one row rather
-   *  than a second COUNT (#659). */
   listTurnWindow(
     conversationId: string,
     options: { limit?: number; beforeSeq?: number } = {}
@@ -1021,14 +974,10 @@ export class ConversationStore {
     const beforeSeq = options.beforeSeq ?? null;
     const rows = stmts.listTurnsWindow.all(
       conversationId,
-      // Bound twice: the SQL tests the cursor for NULL then compares it, and
-      // anonymous placeholders take one value each.
       beforeSeq,
       beforeSeq,
-      // One past the window: its presence IS `hasMore`.
       limit + 1
     ) as unknown as RawTurn[];
-    // The over-fetched row is the OLDEST of the descending pick.
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(1) : rows;
     const turns = page.map(turnFromRaw);
@@ -1127,8 +1076,6 @@ export class ConversationStore {
     return rows.map(turnFromRaw);
   }
 
-  /** The handle filters apply in SQL, BEFORE `LIMIT` (#731), so a flood on one
-   *  handle cannot crowd the window. `excludeAutomationRefs` wins if both. */
   listInFlightAutomationTurns(
     limit = 50,
     opts: {
@@ -1166,7 +1113,6 @@ export class ConversationStore {
     stmts.setTurnPinned.run(pinned ? 1 : 0, turnId);
   }
 
-  /** False when the turn isn't in that conversation. */
   setTurnFeedback(
     conversationId: string,
     turnId: string,
@@ -1177,7 +1123,6 @@ export class ConversationStore {
     return Number(info.changes) > 0;
   }
 
-  /** Cascading FKs drop each pruned turn's items; pinned turns survive. */
   pruneAutomation(
     automationRef: string,
     keep: { count?: number; days?: number; errorsOnly?: boolean; all?: boolean }
@@ -1345,8 +1290,6 @@ export class ConversationStore {
     return new Set(rows.map((r) => r.hash));
   }
 
-  /** `pruned` ⇒ the raw turns are gone and the caller rehydrates from the
-   *  segment blob (#438). */
   listArchiveSegments(conversationId: string): ArchiveSegmentRef[] {
     const { stmts } = this.ensureReady();
     const rows = stmts.listArchiveSegments.all(conversationId) as unknown as {
@@ -1389,7 +1332,6 @@ export class ConversationStore {
     stmts.deleteState.run(automationId, key);
   }
 
-  /** A NO-OP close: the connection is the host's and shared. */
   close(): void {
     this.db = undefined;
     this.stmts = undefined;

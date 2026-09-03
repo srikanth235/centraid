@@ -1,8 +1,3 @@
-/*
- * Link row, readable from either side (#726 / #750). Symmetric AND slim: `a`/`b` plus approvals are pure permission. Identity lives in `vault_directory`, reachability in `vault_routes` — one row per vault (#750 invariants 1–2). Resolve key/label/route through `directoryEntry`/`routeFor`/`peerViewFor`.
- */
-
-/** `vault_routes` in memory — replaceable address data, never identity or an authorization input (P3 decision 1). */
 export interface LinkRoute {
   endpointId: string;
   relayHints: string[];
@@ -12,7 +7,6 @@ export interface LinkRoute {
 
 export interface VaultDirectoryEntry {
   vaultId: string;
-  /** Base64 raw Ed25519 — P1 identity signatures verify against. */
   publicKey: string;
   label: string | null;
   createdAt: string;
@@ -79,9 +73,6 @@ export type LinkChangeReason =
   | "parties"
   | "revoked";
 
-/**
- * After the gateway-database transaction closes, never inside it: a listener writes a DIFFERENT database (`share_party_vault_binding` via `link-party-bindings.ts`), which a rollback here could not take back.
- */
 export type LinkChangeListener = (
   link: VaultLink,
   reason: LinkChangeReason
@@ -100,7 +91,6 @@ export function peerViewOf(
   const mine = sideOf(link, localVaultId);
   if (mine === undefined) return undefined;
   const peerVaultId = mine === "a" ? link.vaultB : link.vaultA;
-  // A local pair has no far side.
   const route = lookups.routeFor(peerVaultId);
   if (!route) return undefined;
   const peer = lookups.directoryEntry(peerVaultId);
@@ -166,12 +156,10 @@ export function partyIdForLinkedVault(
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-/** Canonical pair order — smaller id first (the table's CHECK). */
 export function pairOf(vaultX: string, vaultY: string): [string, string] {
   return vaultX < vaultY ? [vaultX, vaultY] : [vaultY, vaultX];
 }
 
-/** Ceremony named a known vault under a different identity key (#750 invariant 1). Thrown, never coerced. */
 export class VaultDirectoryIdentityError extends Error {
   readonly code = "vault_directory_identity_mismatch";
   constructor(readonly vaultId: string) {

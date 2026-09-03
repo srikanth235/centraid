@@ -391,11 +391,6 @@ describe("backup-service", () => {
     );
   });
 
-  // No-change and incremental registration are the ENGINE's laws, owned by
-  // packages/backup/src/engine.test.ts ("no-change run registers nothing" and
-  // "incremental second snapshot … uploads far fewer chunks than the first").
-  // BackupService only forwards them, so restating them here bought nothing.
-
   test("scheduled backups do not postpone the first restore-verification forever", async () => {
     const h = await harness();
     await h.service.runBackup(h.vaultId);

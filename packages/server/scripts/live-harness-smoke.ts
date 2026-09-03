@@ -1,5 +1,3 @@
-/** Opt-in live smoke for #567 acceptance: exercises the two requested registry kinds through the same `runTurn` entry point as product surfaces. CI does not run it — it requires locally-authenticated CLIs and incurs one tiny provider turn per harness. */
-
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";

@@ -1,36 +1,3 @@
-/*
- * Loopback MCP server exposing the vault tools to whatever ACP harness the
- * turn spawned (#479). ACP has no client-hosted tool surface we can use
- * (`mcpCapabilities.acp: false` in both first-party adapters); what both DO
- * advertise is `mcpCapabilities.http: true`, so the vault is served as a real
- * MCP server over HTTP, named in the `mcpServers` array of `session/new` /
- * `session/load` — any harness with HTTP MCP support gets vault tools.
- *
- * Security posture: this endpoint hands out owner-credentialed SQL over the
- * whole vault plus the typed write path, so it is treated as sensitive:
- *   - bound to 127.0.0.1 on an ephemeral port, never 0.0.0.0;
- *   - every request must carry a per-turn `Authorization: Bearer <token>` of
- *     256 random bits, compared in constant time; the token is minted per
- *     turn, passed to the harness only through the `mcpServers` headers, and
- *     never logged;
- *   - the listener is closed (with its sockets) in the turn's `finally`, so
- *     no port outlives the turn that opened it — including on abort.
- *
- * Transport: a minimal hand-rolled MCP "Streamable HTTP" server rather than
- * `@modelcontextprotocol/sdk`, which would add express, hono, cors and jose
- * to a package whose entire need here is three tools behind one POST route.
- * The surface is exactly what a tools-only server needs — `initialize`,
- * `notifications/initialized`, `ping`, `tools/list`, `tools/call` — served as
- * plain JSON (the spec lets a server answer a POST with `application/json`
- * instead of SSE), with no session id (stateless is spec-legal, so clients
- * have nothing to echo back). GET/DELETE answer 405, the spec's way to
- * decline a standalone SSE stream.
- *
- * Tool names, descriptions and JSON schemas come verbatim from
- * `vault-sql-tool.ts`, so prompts and skills naming `vault_sql` /
- * `vault_invoke` / `vault_content` keep working unchanged.
- */
-
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
@@ -54,14 +21,12 @@ const MCP_PATH = "/mcp";
 export const VAULT_MCP_SERVER_NAME = "centraid";
 
 const DEFAULT_PROTOCOL_VERSION = "2025-06-18";
-// A tools-only surface is identical across these, so we echo the client's pick.
 const KNOWN_PROTOCOL_VERSIONS = new Set([
   "2024-11-05",
   "2025-03-26",
   "2025-06-18",
   "2025-11-25",
 ]);
-// Request bodies are three small JSON args; anything larger is not ours.
 const MAX_BODY_BYTES = 1024 * 1024;
 
 export interface VaultMcpToolStart {
@@ -78,18 +43,13 @@ export interface VaultMcpToolResult {
   errorText?: string;
 }
 
-// Observation hooks for the turn driver. The backend decides whether these
-// become `tool.start` / `tool.result` stream events — a harness that already
-// streams the MCP call as an ACP `tool_call` would otherwise double-render.
 export interface VaultMcpHooks {
   onStart?: (call: VaultMcpToolStart) => void;
   onResult?: (call: VaultMcpToolResult) => void;
 }
 
 export interface VaultMcpHandle {
-  // Hand this to the harness in `session/new` / `session/load`.
   readonly server: Extract<McpServer, { type: "http" }>;
-  // Close the listener and drop any live sockets. Idempotent.
   close: () => Promise<void>;
 }
 
@@ -110,9 +70,6 @@ export interface VaultMcpToolRegistration {
   ) => ReturnType<typeof runVaultSqlTool>;
 }
 
-// Single enumerable source of truth for the MCP surface. Adding a tool without
-// classifying consent, side effects, and ledger coverage is intentionally a
-// type error; list and dispatch both derive from this registry.
 export const VAULT_MCP_TOOL_REGISTRY: readonly VaultMcpToolRegistration[] = [
   {
     descriptor: VAULT_SQL_TOOL,
@@ -162,7 +119,6 @@ async function callTool(
   return { ok: false, errorText: `unknown tool "${name}"` };
 }
 
-// Constant-time bearer check. Never logs, never reports which half mismatched.
 function bearerOk(header: string | undefined, token: string): boolean {
   if (!header) return false;
   const match = /^Bearer[ \t]+(?<token>\S+)$/iu.exec(header.trim());
@@ -170,8 +126,6 @@ function bearerOk(header: string | undefined, token: string): boolean {
   if (!presented) return false;
   const given = Buffer.from(presented, "utf8");
   const want = Buffer.from(token, "utf8");
-  // timingSafeEqual throws on a length mismatch, so gate on length first.
-  // Token length is not secret (it is a fixed 64 hex chars).
   return given.length === want.length && timingSafeEqual(given, want);
 }
 
@@ -210,9 +164,6 @@ interface JsonRpcRequest {
   params?: Record<string, unknown>;
 }
 
-// Start the per-turn vault MCP endpoint. Resolves once the listener is bound,
-// so the URL handed to the harness is always live by the time `session/new`
-// mentions it.
 export async function startVaultMcpServer(
   ctx: ToolContext,
   hooks: VaultMcpHooks = {}
@@ -224,7 +175,6 @@ export async function startVaultMcpServer(
     body: JsonRpcRequest
   ): Promise<unknown | undefined> => {
     const { id, method } = body;
-    // A notification (no id) gets no response body — 202 is the reply.
     const isNotification = id === undefined || id === null;
     const ok = (result: unknown): unknown => ({ jsonrpc: "2.0", id, result });
     const fail = (code: number, message: string): unknown => ({
@@ -241,8 +191,6 @@ export async function startVaultMcpServer(
           : DEFAULT_PROTOCOL_VERSION;
       return ok({
         protocolVersion: version,
-        // Tools only: advertising nothing else keeps well-behaved clients
-        // from calling resources/* or prompts/* at all.
         capabilities: { tools: {} },
         serverInfo: { name: VAULT_MCP_SERVER_NAME, version: "1.0.0" },
       });
@@ -279,8 +227,6 @@ export async function startVaultMcpServer(
         result: null,
         errorText: out.errorText,
       });
-      // A tool that failed is a successful RPC carrying an error result —
-      // that is what lets the model read the message and correct itself.
       return ok({
         content: [{ type: "text", text: out.errorText }],
         isError: true,
@@ -305,7 +251,6 @@ export async function startVaultMcpServer(
       return;
     }
     if (req.method !== "POST") {
-      // Spec-legal way to decline a standalone SSE stream / session delete.
       res.setHeader("allow", "POST");
       sendJson(res, 405, { error: "method not allowed" });
       return;
@@ -316,7 +261,6 @@ export async function startVaultMcpServer(
       const text = await readBody(req);
       const parsed: unknown = JSON.parse(text);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        // JSON-RPC batching is gone as of the 2025-06-18 spec; one message per POST.
         sendJson(res, 400, {
           jsonrpc: "2.0",
           id: null,
@@ -338,7 +282,6 @@ export async function startVaultMcpServer(
     try {
       response = await dispatch(body);
     } catch (error) {
-      // A throwing tool runner must not take the listener (or the turn) down.
       sendJson(res, 200, {
         jsonrpc: "2.0",
         id: body.id ?? null,
@@ -368,7 +311,6 @@ export async function startVaultMcpServer(
 
   await new Promise<void>((resolve, reject) => {
     http.once("error", reject);
-    // Loopback only. An ephemeral port keeps concurrent turns from colliding.
     http.listen(0, "127.0.0.1", () => {
       http.removeListener("error", reject);
       resolve();
@@ -393,7 +335,6 @@ export async function startVaultMcpServer(
       if (closed) return;
       closed = true;
       await new Promise<void>((resolve) => {
-        // Keep-alive sockets would hold `close` open past the turn.
         http.closeAllConnections();
         http.close(() => resolve());
       });

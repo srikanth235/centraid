@@ -1,13 +1,3 @@
-/*
- * Conversational automation revision (#541).
- *
- * A tool-less, cheap-tier ACP turn rewrites only the standing instruction
- * text. The host persists the returned prompt through its ordinary lifecycle
- * publish seam, then starts the existing headless compile unchanged. The
- * revision itself is a small native interactive turn so the automation thread
- * reads: owner steering bubble → “Revised instructions” → compile turn.
- */
-
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 
@@ -106,9 +96,7 @@ export interface RewriteAutomationInstructionsOptions {
   runTurn: RunTurnFn;
   harnessPrefs: HarnessPrefs;
   model?: string;
-  /** Host-owned provider-egress proof, rechecked at the TurnPlane door. */
   egressConsent: () => boolean | Promise<boolean>;
-  /** Existing lifecycle manifest-update/publish seam. */
   persistPrompt: (prompt: string) => Promise<void>;
 }
 

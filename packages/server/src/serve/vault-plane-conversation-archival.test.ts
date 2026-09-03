@@ -2,10 +2,6 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { afterEach, describe, expect, test } from "vitest";
 
-// Sweep wiring for the conversation-ledger archival engine (#438
-// decision 7): the daily archival block in `runSweep` must invoke conversation
-// archival alongside journal archival and roll ONE shared journal generation
-// when either engine wrote or pruned rows.
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
@@ -67,7 +63,6 @@ describe("vault-plane-conversation-archival", () => {
     const now = Date.now();
     seedAgedAutomation(plane.db.audit, now);
 
-    // Count generation rolls without disturbing the shipper's state.
     let rolls = 0;
     const shipper = plane.walShipper!;
     const originalRoll = shipper.rollGeneration.bind(shipper);
@@ -76,13 +71,8 @@ describe("vault-plane-conversation-archival", () => {
       return originalRoll(...args);
     }) as typeof shipper.rollGeneration;
 
-    // Drive one sweep (the same entry `start()` invokes; lastJournalArchivalAt
-    // starts at 0 so the daily gate is open on the first pass).
     (plane as unknown as { runSweep: () => void }).runSweep();
 
-    // Phase A wrote an archive index row (the aged contiguous range t0..t1); the
-    // live head t2 stayed. On a local-only vault custody is proven immediately, so
-    // phase B pruned the raw rows in the same pass.
     const archiveRows = plane.db.audit
       .prepare(`SELECT seq_from, seq_to, pruned_at FROM conversation_archive`)
       .all() as {
@@ -101,7 +91,6 @@ describe("vault-plane-conversation-archival", () => {
       .all() as { id: string }[];
     expect(remaining.map((r) => r.id)).toStrictEqual(["t2"]);
 
-    // A digest row now backs Insights for the pruned range.
     const digest = plane.db.audit
       .prepare(
         `SELECT run_count FROM conversation_digest WHERE conversation_id = 'app/digest'`
@@ -109,7 +98,6 @@ describe("vault-plane-conversation-archival", () => {
       .get() as { run_count: number } | undefined;
     expect(digest?.run_count).toBe(2);
 
-    // Exactly one shared journal generation roll for the whole archival block.
     expect(rolls).toBe(1);
   });
 });

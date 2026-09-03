@@ -1,9 +1,3 @@
-/*
- * The virtual cron source: a pure function of `(committed position, now]`.
- * These cover the reader directly — the engine's use of it lives in
- * cursor-engine.test.ts.
- */
-
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { AutomationTriggerCursor } from "@centraid/server/engine";
@@ -30,7 +24,6 @@ describe(dueInstants, () => {
     expect(
       dueInstants(["* * * * *"], from, to).map((d) => d.getMinutes())
     ).toStrictEqual([1, 2, 3]);
-    // `from` itself is already committed — it must never come back.
     expect(dueInstants(["0 8 * * *"], from, to)).toStrictEqual([]);
   });
 
@@ -40,7 +33,6 @@ describe(dueInstants, () => {
 
     const due = dueInstants(["0 8 * * *", "*/30 * * * *"], from, to);
 
-    // 08:00 matches BOTH expressions and is one due instant.
     expect(due.map((d) => `${d.getHours()}:${d.getMinutes()}`)).toStrictEqual([
       "8:0",
       "8:30",
@@ -53,7 +45,6 @@ describe(dueInstants, () => {
 
     const due = dueInstants(["* * * * *"], from, to);
 
-    // Every minute of 400 days would be 576,000 Date allocations on the tick.
     expect(due).toHaveLength(44_640);
     expect(due.at(-1)?.getTime()).toBe(to.getTime());
     expect(due[0]!.getTime()).toBeGreaterThan(from.getTime());
@@ -67,7 +58,6 @@ describe(dueInstants, () => {
   });
 
   it("matches an explicit schedule zone even when host wall clock differs", () => {
-    // Window around 2026-06-15 09:00 America/New_York (13:00 UTC during EDT).
     const from = new Date("2026-06-15T12:00:00.000Z");
     const to = new Date("2026-06-15T14:00:00.000Z");
     const due = dueInstants(
@@ -79,16 +69,11 @@ describe(dueInstants, () => {
     const wall = wallClockFields(due[0]!, "America/New_York");
     expect(wall.hour).toBe(9);
     expect(wall.minute).toBe(0);
-    // Host-local schedule of the same expr in the same window only matches if
-    // the host happens to also be 09:00 at that absolute instant — prove the
-    // zone schedule is independent by comparing to a pure host-local scan.
     const hostLocal = dueInstants(["0 9 * * *"], from, to);
     const zoneOnly =
       hostLocal.length === 0 ||
       hostLocal[0]!.getTime() !== due[0]!.getTime() ||
       due[0]!.getHours() !== 9;
-    // At least one of: host did not fire, or host hour is not 9 — either way
-    // the zone path resolved independently of host getters.
     expect(
       zoneOnly || wallClockFields(due[0]!, "America/New_York").hour === 9
     ).toBe(true);
@@ -106,7 +91,6 @@ describe(dueInstants, () => {
     });
 
     it("counts a repeated wall-clock minute as one due instant", () => {
-      // 2025-11-02 01:00 America/New_York happens twice (05:00Z and 06:00Z).
       const from = new Date(Date.UTC(2025, 10, 2, 4, 30));
       const to = new Date(Date.UTC(2025, 10, 2, 7, 0));
       expect(new Date(Date.UTC(2025, 10, 2, 5, 0)).getHours()).toBe(1);
@@ -125,7 +109,6 @@ describe(dueInstants, () => {
         at
       );
 
-      // The user did not miss a run — showing one would be a phantom.
       expect(result.skipped).toBe(0);
       expect(result.gapReason).toBeUndefined();
       expect(result.elements).toHaveLength(1);
@@ -139,8 +122,6 @@ describe(readCronCursor, () => {
 
     const bootstrap = readCronCursor(["0 9 * * *"], undefined, at);
 
-    // The row has to exist for the NEXT window to have somewhere to start
-    // from, but a fresh cron with nothing due delivers nothing.
     expect(bootstrap.elements).toStrictEqual([]);
     expect(bootstrap.positionJson).toBe(
       JSON.stringify(floorMinute(at.getTime()))
@@ -152,8 +133,6 @@ describe(readCronCursor, () => {
 
     const result = readCronCursor(["0 9 * * *"], undefined, at);
 
-    // A cursor-less read covers `(now - 1min, now]`; the engine is what keeps
-    // registration itself from ever entering this window (see cursor-engine).
     expect(result.elements).toStrictEqual([
       { position: String(at.getTime()), occurredAt: at.getTime() },
     ]);
@@ -196,7 +175,6 @@ describe(readCronCursor, () => {
       new Date(from + 61 * 60_000)
     );
 
-    // No write for a minute that produced nothing — 1,440 upserts a day of it.
     expect(quiet).toStrictEqual({ elements: [], skipped: 0 });
     expect(stale.positionJson).toBe(JSON.stringify(from + 61 * 60_000));
     expect(stale.elements).toStrictEqual([]);

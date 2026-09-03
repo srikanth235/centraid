@@ -1,7 +1,3 @@
-// The harness-runtime wrapper over the fire spine (#98, #147): orchestration
-// stays in `runFire`; this file injects the `ctx.delegate` surface. No
-// `ctx.tool` rail (#484), so a handler that never delegates spawns nothing.
-
 import { randomUUID } from "node:crypto";
 
 import * as automation from "@centraid/server/automation";
@@ -27,9 +23,7 @@ export interface RunAutomationOptions {
   automationRef: string;
   runId?: string;
   appsDir: string;
-  /** The one per-vault run ledger (#280). */
   ledgerDbFile: string;
-  /** Required: a fire must not construct an unmetered door. */
   runTurn: RunTurnFn;
   codeAppsDir?: string;
   vaultFor?: (
@@ -37,17 +31,13 @@ export interface RunAutomationOptions {
     automationRef: string
   ) => VaultBridge | undefined | Promise<VaultBridge | undefined>;
   harness?: HarnessKind;
-  /** Only `prefs` is consent for unattended egress; a manifest pin must be a
-   *  live ladder member or carry a grant (#567). */
   harnessSelectionSource?: "prefs" | "manifest";
-  /** Fallback only: the manifest's `requires.model` always wins. */
   model?: string;
   configPins?: Readonly<Record<string, string>>;
   harnessLadder?: readonly HarnessKind[];
   harnessPrefsFor?: (harness: HarnessKind) => Promise<HarnessPrefs | undefined>;
   harnessHealth?: HarnessHealthController;
   harnessHealthContext?: string;
-  /** Required for unattended fires. */
   providerEgressConsent: ProviderEgressConsentController;
   hydrationAttachmentPath?: (hash: string) => string;
   onFailover?: (event: {
@@ -67,10 +57,8 @@ export interface RunAutomationOptions {
   note?: string;
   input?: unknown;
   parentRunId?: string;
-  /** Recursion guard: the runtime refuses to push the chain past depth 3. */
   failureDepth?: number;
   resolveConnection?: automation.ResolveConnection;
-  /** The spine refuses `manifest.enrich` when this is absent. */
   resolveEnrichPolicy?: automation.RunFireOptions["resolveEnrichPolicy"];
   resolveNestedRuntime?: (automationRef: string) => Promise<{
     harnessKind?: HarnessKind;
@@ -79,7 +67,6 @@ export interface RunAutomationOptions {
   }>;
 }
 
-/** A missing app throws; a handler failure is `outcome.ok === false`. */
 export async function runAutomation(opts: RunAutomationOptions): Promise<{
   outcome: automation.HandlerOutcome;
   record: automation.RunRecord;
@@ -101,9 +88,6 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
   const runRung = async (index: number): Promise<void> => {
     const harness = ladder[index]!;
     const isPrimary = index === 0;
-    // A known-open breaker is decided BEFORE the handler runs: by the time
-    // `ctx.delegate` checks, side effects have landed and the next rung replays
-    // them.
     if (opts.harnessHealthContext && opts.harnessHealth) {
       const breaker = opts.harnessHealth.canAttempt(
         opts.harnessHealthContext,
@@ -153,7 +137,6 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         ledgerDbFile: opts.ledgerDbFile,
         runTurn: opts.runTurn,
         harness: isHarnessKind(args.harnessKind) ? args.harnessKind : harness,
-        // Provider-specific owner pins are cleared after the first rung.
         ...((args.model ?? model) ? { model: args.model ?? model } : {}),
         ...((args.configPins ?? configPins)
           ? { configPins: args.configPins ?? configPins }
@@ -169,8 +152,6 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         ...(opts.hydrationAttachmentPath
           ? { hydrationAttachmentPath: opts.hydrationAttachmentPath }
           : {}),
-        // A manifest-pinned primary is not user-authored consent: it egresses
-        // only if the live ladder holds that harness.
         consentSource:
           isPrimary && opts.harnessSelectionSource !== "manifest"
             ? "direct"
@@ -200,7 +181,6 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         ...(opts.rearm ? { rearm: opts.rearm } : {}),
         ...(opts.triggerKind ? { triggerKind: opts.triggerKind } : {}),
         ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
-        // The caller's note stays on every rung; a failover notice is additive.
         ...(turnNote ? { note: turnNote } : {}),
         ...(failoverNotice ? { failoverNotice } : {}),
         ...(opts.input === undefined ? {} : { input: opts.input }),
@@ -254,8 +234,6 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
   await runRung(0);
 
   if (!last) {
-    // Throw, so the caller keeps its "failed before the ledger opened" path
-    // rather than inventing a record for work that never started.
     throw new Error(
       `automation ${opts.automationRef}: no harness available — ${condemned.join("; ")}`
     );

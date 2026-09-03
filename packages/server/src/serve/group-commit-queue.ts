@@ -4,13 +4,8 @@ export type GroupCommitResult =
   | { ok: true; value: unknown }
   | { ok: false; error: unknown };
 
-// Per-phase cap (#659).
 const DEFAULT_MAX_BATCH = 64;
 
-/**
- * Write coalescer: gathers arriving writes into one event-loop phase so
- * SQLite amortizes checkpoint work without crossing transaction boundaries.
- */
 export class GroupCommitQueue {
   private readonly pending: Array<{
     run: () => unknown;
@@ -34,7 +29,6 @@ export class GroupCommitQueue {
         resolve: (value) => resolve(value as T),
         reject,
       });
-      // A full batch does not wait out its window (#659): re-arm at zero.
       if (this.pending.length >= this.maxBatch) {
         if (this.timer) clearTimeout(this.timer);
         this.timer = setTimeout(() => this.flush(), 0);
@@ -74,7 +68,6 @@ export class GroupCommitQueue {
         }
       }
     }
-    // Recursive enqueues get their own window, not an unbounded batch.
     if (this.pending.length > 0 && !this.timer) {
       this.timer = setTimeout(() => this.flush(), this.windowMs);
       unrefTimer(this.timer);

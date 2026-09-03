@@ -18,9 +18,6 @@ const baseManifest = () => ({
   name: "Todos",
   version: "0.1.0",
   description: "tests",
-  // Loosely typed: these tests deliberately mutate/push partial and malformed
-  // actions/queries and feed the result to validateManifest(raw: unknown), so
-  // the fixture must not pin the arrays to the first element's narrow shape.
   actions: [
     {
       name: "add",
@@ -41,11 +38,6 @@ const baseManifest = () => ({
   ] as Array<Record<string, unknown>>,
 });
 
-/**
- * Runs `fn` and hands back whatever it threw — `undefined` when it returned
- * normally. Keeps the "it threw X with code Y" assertions unconditional: a
- * silent no-throw leaves `err` undefined and fails `toBeInstanceOf`.
- */
 function thrownBy(fn: () => unknown): unknown {
   try {
     fn();
@@ -210,10 +202,7 @@ describe(validateManifest, () => {
   });
 
   it("omits kind when absent and carries an automation kind through", () => {
-    // No `kind` → a normal UI app; the field is simply absent.
     expect(validateManifest(baseManifest()).kind).toBeUndefined();
-    // `kind: 'automation'` marks a UI-less automation app and round-trips
-    // through validation.
     const auto = { ...baseManifest(), kind: "automation" };
     expect(validateManifest(auto).kind).toBe("automation");
   });
@@ -256,10 +245,6 @@ describe(validateManifest, () => {
     expect(() => validateManifest(m)).toThrow(ManifestError);
   });
 
-  // The designed-state partition (#839). The block is optional so the
-  // UI-less automation manifests keep validating; when it IS present it must be
-  // a CLOSED partition, because a forgotten state would otherwise read as a
-  // deliberate non-goal.
   it("treats the states block as optional", () => {
     const out = validateManifest(baseManifest());
     expect(out.states).toBeUndefined();
@@ -399,8 +384,6 @@ describe(validateManifest, () => {
     ).toThrow(ManifestError);
   });
 
-  // An empty string is the cheapest way to satisfy "has a reason"; the schema's
-  // minLength: 1 is what keeps a blank from buying a structural exclusion.
   it("rejects an excluded entry whose reason is empty", () => {
     expect(() =>
       validateManifest({

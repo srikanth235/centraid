@@ -1,12 +1,3 @@
-/*
- * Owner door onto the enrichment policy cascade (#807). Sibling of
- * `vault-routes.ts`; the tier route delegates `enrich/…` here.
- * `effective` REPORTS what `decideEnrichmentGate` would fold — it decides
- * nothing and is not permission. Return the one resolver's
- * `ResolvedEnrichPolicy` verbatim; a second policy path is the failure.
- * `effective: null` is fail-closed (refusal, never a default).
- */
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import {
@@ -69,9 +60,6 @@ interface ScopeError {
   error: string;
 }
 
-/**
- * Do not resolve collection/item here: a rule for a gone id is inert, not wrong.
- */
 function parseScope(value: unknown, ref: unknown): ParsedScope | ScopeError {
   if (
     typeof value !== "string" ||
@@ -118,12 +106,10 @@ function badRequest(res: ServerResponse, message: string): true {
   return sendJson(res, 400, { error: "bad_request", message });
 }
 
-/** `false` when the path is not ours so the caller can 404/405. */
 export async function handleEnrichCascadeRoute(input: {
   req: IncomingMessage;
   res: ServerResponse;
   method: string;
-  /** Path segments AFTER `enrich` — `["rules"]`, `["effective"]`, … */
   segments: readonly string[];
   url: URL;
   plane: VaultPlane;
@@ -170,7 +156,6 @@ export async function handleEnrichCascadeRoute(input: {
       profile,
       trigger,
     });
-    // Read back, never echo.
     return sendJson(res, 200, {
       rule: readEnrichPolicyRule(plane.db.vault, parsed.scope, capability),
     });
@@ -192,9 +177,6 @@ export async function handleEnrichCascadeRoute(input: {
     return sendJson(res, 200, { deleted: true });
   }
 
-  // ── egress-consent ledger (#807) ───────────────────────────────────────
-  // A read and an answer, never a toggle. POST goes through the one writer
-  // `enrich.record_consent` with the owner credential — this route never writes.
   if (segments[0] === "consent" && method === "GET") {
     return sendJson(res, 200, {
       consent: listEnrichConsent(plane.db.vault),
@@ -224,7 +206,6 @@ export async function handleEnrichCascadeRoute(input: {
     const scopeRef = body["scopeRef"] ?? "";
     if (typeof scopeRef !== "string")
       return badRequest(res, "scopeRef must be text");
-    // Owner credential: consent-state (`confirm: true`) — an app/agent parks.
     const outcome = await plane.invoke(plane.ownerCredential, {
       command: "enrich.record_consent",
       input: { capability, egress, scope_ref: scopeRef, decision },
@@ -238,7 +219,6 @@ export async function handleEnrichCascadeRoute(input: {
             ? outcome.reason
             : `the vault ${outcome.status} the answer`,
       });
-    // Read back, never echo.
     return sendJson(res, 200, {
       consent: readEnrichConsent(plane.db.vault, {
         capability,
@@ -258,7 +238,6 @@ export async function handleEnrichCascadeRoute(input: {
         res,
         `capability must be one of ${ENRICH_CAPABILITY_IDS.join(", ")}`
       );
-    // `[vault, domain]` first, then caller-named deeper scopes (least-specific first).
     const chain: EnrichScope[] = [
       { type: "vault", ref: "" },
       { type: "domain", ref: domain },
@@ -281,7 +260,6 @@ export async function handleEnrichCascadeRoute(input: {
     return sendJson(res, 200, {
       tier: tier ?? null,
       rules,
-      // The one resolver. `null` = no honourable policy = refusal.
       effective: resolveEnrichmentPolicy(rules, tier, capability) ?? null,
     });
   }

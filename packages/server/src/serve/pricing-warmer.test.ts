@@ -8,8 +8,6 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { PricingWarmer } from "./pricing-warmer.js";
 
-// `claude-probe` is a synthetic id so a refresh is observable via costForUsage
-// without depending on the real bundled snapshot.
 function rawCatalog(inputRate: number): Record<string, unknown> {
   return {
     "claude-probe": {
@@ -33,7 +31,6 @@ function freshCacheFile(): string {
 
 describe("pricing-warmer", () => {
   afterEach(() => {
-    // Reset the process-global catalog to the bundled snapshot for other suites.
     setPricingCatalog({ "reset-marker": { input_cost_per_token: 0 } });
   });
 
@@ -46,7 +43,6 @@ describe("pricing-warmer", () => {
       });
       await warmer.refresh();
 
-      // Overlaid: 1,000,000 tokens × $1e-6 = $1.
       expect(
         costForUsage("claude-probe", { inputTokens: 1_000_000 })
       ).toBeCloseTo(1, 9);

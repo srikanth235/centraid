@@ -1,6 +1,3 @@
-// LiteLLM catalog filter (#445): Claude + GPT/Codex text families only.
-// NO concrete model ids — provider tags + generic stems.
-
 import type { PricingCatalog, PricingEntry } from "./types.js";
 
 const KEPT_FIELDS = [
@@ -12,7 +9,6 @@ const KEPT_FIELDS = [
   "litellm_provider",
 ] as const;
 
-// Text-completion families: mode gate + modality exclusion.
 const CLAUDE_STEM = /claude/u;
 const OPENAI_TEXT_STEM = /gpt|codex/u;
 const OPENAI_NON_TEXT = /image|audio|realtime|tts|transcribe|whisper/u;

@@ -64,7 +64,6 @@ describe("recover-internals", () => {
       snapshot({ seq: 1, createdAt: 100 }),
     ];
     expect(pickSnapshotRow(rows, undefined)?.seq).toBe(3);
-    // createdAt is seconds; --at is ms
     expect(pickSnapshotRow(rows, 200_000)?.seq).toBe(2);
     expect(pickSnapshotRow(rows, 50_000)).toBeUndefined();
     expect(pickSnapshotRow([], undefined)).toBeUndefined();
@@ -108,7 +107,6 @@ describe("recover-internals", () => {
       damaged: [],
     } as unknown as WalReplayOutcome;
     expect(walReplayTruncated(shortOfTip)).toBe(true);
-    // …and when the replay itself says so, however the ticks line up.
     const selfReported = {
       cutTickMs: 200,
       expectedCutMs: 200,

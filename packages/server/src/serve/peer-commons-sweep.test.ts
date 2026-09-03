@@ -1,12 +1,3 @@
-/*
- * Steward-absence status surfaced by the commons sweep (#731). The status
- * itself is computed and persisted by `pullPeerCommons`/`recordCommonsPull`
- * (`commons-observability.ts`) on every attempt regardless of this file; what
- * this suite pins is that `sweepPeerCommons` does not drop `result.steward`
- * on the floor — a concerning presence reaches the sweep's own logger, and a
- * healthy/unremarkable one stays quiet.
- */
-
 import { describe, expect, test } from "vitest";
 
 import {
@@ -28,8 +19,6 @@ import type { PeerDial } from "./peer-link-client.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Always resolves with a clean "not found" — never throws, so the sweep's
- *  device-reach evidence still records a completed round trip. */
 function unreachableDial(): PeerDial {
   return {
     endpointTicketFor: () => "ticket",
@@ -37,7 +26,6 @@ function unreachableDial(): PeerDial {
   };
 }
 
-/** The same dead steward, with a call counter for the backoff suite. */
 function countingUnreachableDial(): PeerDial & { calls: () => number } {
   let dialled = 0;
   return {
@@ -50,8 +38,6 @@ function countingUnreachableDial(): PeerDial & { calls: () => number } {
   };
 }
 
-/** A member holding a commons grant from a steward it will never actually
- *  reach in this suite — the fake dial above stands in for the wire. */
 async function memberWithGrant(label: string): Promise<{
   steward: ReturnType<typeof makeSide>;
   member: ReturnType<typeof makeSide>;
@@ -123,8 +109,6 @@ describe("sweepPeerCommons steward-status surfacing", () => {
     const links = member.links;
     const baseVaults = [{ vaultId: member.vaultId, db: member.vault }];
 
-    // First contact attempt opens the absence episode and proves the local
-    // link works (the dial resolved, even with a 404).
     await sweepPeerCommons({
       vaults: baseVaults,
       links,
@@ -167,8 +151,6 @@ describe("sweepPeerCommons backs off an absent steward (issue #750 defect e)", (
   test("recorded absence evidence gates re-dialing exponentially, intents included", async () => {
     const { member, grantId } = await memberWithGrant("sweep-backoff");
     const t0 = new Date().toISOString();
-    // A pending intent alongside the grant pull: without the gate the sweep
-    // dials the dead steward once per intent per grant per tick.
     queueCommonsIntent({
       seat: member.vault.vault,
       grantId,
@@ -190,20 +172,15 @@ describe("sweepPeerCommons backs off an absent steward (issue #750 defect e)", (
     await at(0);
     const firstTick = dial.calls();
     expect(firstTick).toBeGreaterThan(0);
-    // Inside the first backoff window: NOTHING is dialed — not the pull, not
-    // the queued intent.
     await at(COMMONS_SWEEP_BACKOFF_BASE_MS / 2);
     expect(dial.calls()).toBe(firstTick);
-    // Past the window the steward is probed again…
     await at(COMMONS_SWEEP_BACKOFF_BASE_MS + 1000);
     const secondProbe = dial.calls();
     expect(secondProbe).toBeGreaterThan(firstTick);
-    // …and the second consecutive failure doubles the window.
     await at(
       COMMONS_SWEEP_BACKOFF_BASE_MS + 1000 + COMMONS_SWEEP_BACKOFF_BASE_MS
     );
     expect(dial.calls()).toBe(secondProbe);
-    // The ceiling always allows an eventual re-probe.
     await at(
       COMMONS_SWEEP_BACKOFF_BASE_MS + 1000 + COMMONS_SWEEP_BACKOFF_MAX_MS
     );

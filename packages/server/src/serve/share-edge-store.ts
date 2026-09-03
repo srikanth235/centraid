@@ -1,8 +1,3 @@
-// The one door applying a share-coordinator transition DURABLY (#750): every
-// share_edges status change goes through `applyEdgeSignal` — no second UPDATE
-// anywhere. State, access receipt, and effects commit in ONE transaction, so
-// "durable before network" holds by construction, not by write ordering.
-
 import type { GatewayDatabase } from "./gateway-db.js";
 import { recordShareAccessReceipt } from "./share-access-receipts.js";
 import { reduceEdge } from "./share-coordinator.js";
@@ -28,7 +23,6 @@ export function edgeFactsOf(row: EdgeRow): EdgeFacts {
   return { edgeId: row.edge_id, kind: row.kind };
 }
 
-/** Returns the post-commit row, so callers never re-read (or see an unauthorized state). */
 export function applyEdgeSignal(
   db: GatewayDatabase,
   row: EdgeRow,
@@ -53,10 +47,6 @@ export function applyEdgeSignal(
       row.edge_id
     );
     if (signal.type === "target-projected") {
-      // One receipt per EDGE (edge_id UNIQUE — a replayed projection returns
-      // the existing receipt), same transaction as the state that earned it.
-      // Origin scope PARSED, never cast: a durable audit refuses a malformed
-      // scope loudly instead of recording an empty one.
       recordShareAccessReceipt(db, {
         edgeId: row.edge_id,
         ownerId: row.owner_id,

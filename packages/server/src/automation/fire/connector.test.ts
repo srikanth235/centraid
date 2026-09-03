@@ -1,12 +1,6 @@
 import { promises as fs } from "node:fs";
 import type * as TypeImport_rdfcd1 from "node:http";
 // governance: allow-repo-hygiene file-size-limit one suite over the whole connector contract — manifest, secret injection (#293) and connection-credential injection (#304) share the runFire fixture
-/*
- * Connector broker invariants (#290): manifest contract
- * (connector needs a vault block), ctx.delegate forbidden in connector handlers,
- * and the honest-liveness fire gate (paused/needs-auth connections never run
- * their connector).
- */
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -165,8 +159,6 @@ describe("connector runtime gates", () => {
       { openDispatch: openDispatch() }
     );
     expect(outcome.ok).toBe(false);
-    // Distinguishable from a run that failed: hosts must not report an
-    // owner-paused connection as an automation failure (#647).
     expect(outcome.skipped).toBe(true);
     expect(outcome.error).toMatch(/paused/u);
     expect(record.ok).toBe(false);
@@ -653,7 +645,6 @@ describe("connector secrets (issue #293)", () => {
     const server = createServer((req, res) => {
       seen.push(String(req.headers.authorization ?? ""));
       res.writeHead(200, { "content-type": "text/plain" });
-      // The response ECHOES the secret — the scrub net must catch it.
       res.end(`hello bearer ${req.headers.authorization ?? ""}`);
     });
     await new Promise<void>((resolve) => {
@@ -699,10 +690,8 @@ describe("connector secrets (issue #293)", () => {
         { openDispatch: noDispatch }
       );
       expect(outcome.ok).toBe(true);
-      // The wire carried the REAL secret (transport-level injection)…
       expect(seen).toStrictEqual(["Bearer imap-app-p4ss"]);
       expect(reveals).toStrictEqual(["item-1"]);
-      // …but nothing the run RECORDS holds it: the echoed body is scrubbed.
       expect(JSON.stringify(outcome.value)).not.toContain("imap-app-p4ss");
       expect(JSON.stringify(outcome.value)).toContain("«secret»");
       expect(JSON.stringify(outcome.logs)).not.toContain("imap-app-p4ss");
@@ -749,7 +738,6 @@ describe("connector secrets (issue #293)", () => {
       { openDispatch: noDispatch }
     );
     expect(aliases).toStrictEqual(["github-token"]);
-    // The ref carried an alias, never an entityId.
     expect(entityIds).toStrictEqual([undefined]);
   });
 
@@ -1188,7 +1176,6 @@ describe("broker-injected connection credentials (issue #304)", () => {
         appsDir,
         ledgerDbFile,
         vaultFor: () => activeBridge,
-        // No resolveConnection at all — the harness-ambient lane.
       },
       { openDispatch: noDispatch }
     );

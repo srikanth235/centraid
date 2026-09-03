@@ -104,7 +104,6 @@ describe("deregister-cleanup", () => {
 
     await cleanupDeregisteredApp(appsDir, a, logger);
 
-    // Sibling app dir + appsDir survive — only the targeted entry is touched.
     expect((await fs.stat(appsDir)).isDirectory()).toBeTruthy();
     expect((await fs.stat(b.path)).isDirectory()).toBeTruthy();
     await expect(fs.stat(a.path)).rejects.toThrow(/ENOENT/u);
@@ -175,11 +174,9 @@ describe("deregister-cleanup", () => {
 
   test("treats a missing wrapper dir as success (idempotent)", async () => {
     const entry = makeUploadedEntry("never-uploaded");
-    // Don't create entry.path — registry row exists but dir doesn't.
 
     const result = await cleanupDeregisteredApp(appsDir, entry, logger);
 
-    // fs.rm with force:true treats ENOENT as success — deregister stays idempotent even if disk state already drifted.
     expect(result).toStrictEqual({ kind: "removed" });
     expect(warnings).toHaveLength(0);
   });

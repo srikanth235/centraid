@@ -1,12 +1,4 @@
 /* oxlint-disable max-classes-per-file -- error and encrypted store form one persistence boundary (#408) */
-/*
- * Gateway-level storage connections (issues #367, #436, #555).
- *
- * Public metadata and sealed credentials live in gateway.db. The one
- * connection encryption key lives in KeyStore as `connections.sealkey`.
- * This keeps the control database complete without ever putting raw key
- * material in SQLite.
- */
 
 import { randomBytes } from "node:crypto";
 import path from "node:path";
@@ -41,7 +33,6 @@ interface StoredProviderRow {
   updated_at: string;
 }
 
-/** The public (never-secret) shape a route/UI reads. */
 export interface StorageConnectionRecord {
   id: string;
   kind: StorageConnectionKind;

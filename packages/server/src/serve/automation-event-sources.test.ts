@@ -166,8 +166,6 @@ describe(pollProviderEventSource, () => {
       new URL(vi.mocked(poll).mock.calls[1]![1]).searchParams.get("pageToken")
     ).toBe("page-2");
     expect(next.cursor).toStrictEqual({ provider: "gmail", historyId: "110" });
-    // The adapter returns the complete provider window. The durable ingress
-    // layer applies the fire cap and can therefore record the exact overflow.
     expect(next.events.map((event) => event.id)).toStrictEqual([
       "gmail:message:message-1",
       "gmail:message:message-2",

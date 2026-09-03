@@ -1,19 +1,3 @@
-/*
- * `centraid-gateway recover` (#439) — CLI shell over the service-layer
- * `recover()` verb (`backup/recover.ts`); also the blank-machine e2e harness.
- *
- *   centraid-gateway recover --kit <file> --password-file <file>
- *                            --api-key <key> --data-dir <dir>
- *                            [--at <iso-time>] [--full] [--vault <id>] [--yes]
- *
- * No daemon config needed. Prints the "found your vault" facts to stderr,
- * gates metered-egress homes behind `--yes` (PROTOCOL.md restoreCostClass),
- * streams phase progress to stderr, JSON report to stdout, and refuses a vault
- * root a live gateway holds. LAZY by default; `--full` materializes every
- * blob; `--at` is point-in-time recovery (#408). Resuming BACKUPS still needs
- * a `backup` config block — a separate operator step this command reminds of.
- */
-
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -67,7 +51,6 @@ function parseRecoverArgs(
   return out;
 }
 
-/** Phase → the user-facing progress line; machine vocabulary stays out. */
 const PHASE_LINES: Record<RecoverPhase, string> = {
   discovering: "finding your vault",
   fetching: "fetching your vault",
@@ -78,7 +61,6 @@ const PHASE_LINES: Record<RecoverPhase, string> = {
   done: "done",
 };
 
-/** The "found your vault" facts card (#439) — zero machine vocabulary. */
 function printFacts(discovery: RecoveryDiscovery): void {
   const size =
     discovery.fullBytes === undefined
@@ -158,8 +140,6 @@ export async function commandRecover(
       );
     }
 
-    // Discovery + facts card + metered-egress gate all BEFORE any restore;
-    // the provider client is reused by recover().
     let discovery: RecoveryDiscovery;
     try {
       discovery = await discoverRecovery({
@@ -213,8 +193,6 @@ export async function commandRecover(
 
     printJson(report);
 
-    // Adopt-time reconcile (#439): never fails the command, but LOST bytes
-    // surface as a prominent CRITICAL block; re-pins are a quieter FYI.
     const rec = report.reconcile;
     if (rec.lost.length > 0) {
       process.stderr.write(

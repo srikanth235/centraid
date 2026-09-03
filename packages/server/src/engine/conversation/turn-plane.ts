@@ -1,5 +1,3 @@
-/** The only host-agnostic door into a concrete harness turn. */
-
 import type { RunTurnFn, TurnInput, TurnResult, HarnessPrefs } from "./turn.js";
 
 export const TURN_HYDRATION_TOKEN_BUDGET = 8_000;
@@ -8,11 +6,6 @@ export const TURN_HYDRATION_MIN_TURNS = 2;
 export interface TurnPosture {
   readonly surface: "interactive" | "automation";
   readonly egress: "attended" | "unattended";
-  /**
-   * Host-owned proof that this exact dispatch may leave the vault. Keeping the
-   * check on the posture makes consent a property of the one door rather than
-   * a convention that a caller can accidentally skip.
-   */
   readonly egressConsent: () => boolean | Promise<boolean>;
   readonly failover: "turn-boundary" | "fire-boundary" | "none";
   readonly permissionPolicy: "auto-allow" | "deny";

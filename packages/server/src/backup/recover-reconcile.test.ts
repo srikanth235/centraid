@@ -1,14 +1,5 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
-/*
- * Adopt-time inventory reconcile (#439) — the four outcomes, in
- * isolation: a restored `blob_replica` index of beliefs, a provider inventory
- * that is truth, an injected `materialize` standing in for the engine's blob
- * re-pin, and the assertions that (a) a snapshot-carried missing blob is
- * re-pinned and unmarked, (b) a snapshot-less missing blob is LOST and unmarked,
- * (c) no inventory ⇒ honest skip with the index untouched, (d) full agreement ⇒
- * a clean report.
- */
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -33,8 +24,6 @@ describe("recover-reconcile", () => {
   const manifestPath = (s: string): string =>
     `blobs/sha256/${s.slice(0, 2)}/${s}`;
 
-  /** A minimal vault dir: a `vault.db` carrying just `blob_replica` (all the
-   *  reconcile reads) with the given shas marked 'cas'-durable, plus a `blobs/` store. */
   async function makeVault(
     believedCas: string[]
   ): Promise<{ dir: string; blobs: FsBlobStore }> {
@@ -53,7 +42,6 @@ describe("recover-reconcile", () => {
     return { dir, blobs: new FsBlobStore(path.join(dir, "blobs")) };
   }
 
-  /** Read back which shas `blob_replica` still believes 'cas'-durable. */
   function believedAfter(dir: string): Set<string> {
     const db = new DatabaseSync(path.join(dir, "vault.db"), { readOnly: true });
     try {
@@ -112,7 +100,6 @@ describe("recover-reconcile", () => {
     expect(report.skipped).toBeUndefined();
     expect(fetched).toStrictEqual([dropped]); // the reconcile asked the engine for exactly the gap
     expect(blobs.hasSync(dropped)).toBe(true); // it is local again
-    // The stale belief is gone; the kept one survives.
     const believed = believedAfter(dir);
     expect(believed.has(dropped)).toBe(false);
     expect(believed.has(kept)).toBe(true);

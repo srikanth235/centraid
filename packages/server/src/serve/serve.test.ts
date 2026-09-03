@@ -85,9 +85,6 @@ describe("serve scenarios", () => {
       headers: { Authorization: `Bearer ${handle.token}` },
     });
     expect(res.status).toBe(200);
-    // A mounted vault carries every bundled app (#708) — this is the listing
-    // union, not an empty code store. What is under test here is the bearer
-    // check, so the shape is what matters, not the roster.
     const body = (await res.json()) as { id: string }[];
     expect(body.map((a) => a.id)).toContain("tasks");
   });
@@ -120,10 +117,6 @@ describe("serve scenarios", () => {
     const res = await fetch(`${handle.url}/centraid/_turn/harness-status`, {
       headers: { Authorization: `Bearer ${handle.token}` },
     });
-    // Whether the harness shows `ok` depends on whether codex / claude-code
-    // is installed on the test host. We only assert the route is mounted
-    // and returns a well-shaped status (the Electron embed has the same
-    // default — prefs loader falls back to codex when no pref is set).
     expect(res.status).toBe(200);
     const body = (await res.json()) as { kind: string; ok: boolean };
     expect(typeof body.kind === "string" && body.kind.length > 0).toBeTruthy();
@@ -134,9 +127,6 @@ describe("serve scenarios", () => {
     const res = await fetch(`${handle.url}/centraid/_harnesses/status`, {
       headers: { Authorization: `Bearer ${handle.token}` },
     });
-    // Which CLIs show available depends on what's on the test host's PATH — we
-    // only assert the route is mounted and returns a well-shaped snapshot (the
-    // gateway probes its own host).
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       harnesses: Array<{
@@ -175,10 +165,6 @@ describe("serve scenarios", () => {
       headers: { Authorization: `Bearer ${handle.token}` },
     });
     expect(res.status).toBe(200);
-    // The endpoint serves the shareable support bundle (#846): one document,
-    // allowlist-by-construction. `logs` is a grouped histogram rather than a
-    // raw tail, and `storage` replaces `vaults` — same facts, minus the
-    // owner-authored vault name, which no policy emits.
     const body = (await res.json()) as {
       formatVersion: number;
       sharing: string;
@@ -203,11 +189,8 @@ describe("serve scenarios", () => {
     expect(body.logs.count).toBeTypeOf("number");
     expect(Array.isArray(body.logs.groups)).toBe(true);
     expect(body.redaction.level).toBe("standard");
-    // The auto-founded personal vault is mounted, sized off vault.db.
     expect(body.storage).toHaveLength(1);
     expect(body.storage[0]!.vaultDbBytes).toBeTypeOf("number");
-    // The vault is identified by a salted hash, correlatable inside this one
-    // document only — so it is a string, and it is NOT the raw id.
     expect(body.storage[0]!.vaultId).toBeTypeOf("string");
     expect(body.storage[0]!.vaultId).not.toBe(
       handle.vaults.planesList()[0]!.boot.vaultId
@@ -216,8 +199,6 @@ describe("serve scenarios", () => {
   });
 
   test("diagnostics config never leaks a secret-shaped value from the bearer token itself", async () => {
-    // The gateway's own bearer token is the most obvious secret already in
-    // process — prove the diagnostics bundle never echoes it back verbatim.
     const res = await fetch(`${handle.url}/centraid/_gateway/diagnostics`, {
       headers: { Authorization: `Bearer ${handle.token}` },
     });
@@ -244,10 +225,6 @@ describe("serve scenarios", () => {
       vaults: Array<Record<string, unknown>>;
       recoveryKit: { confirmedAt: number | null };
     };
-    // recoveryKit (#351) reads "never confirmed" — there's no
-    // BackupService (and so no state.json) to have recorded a confirmation.
-    // The status surface still inventories the active vault so the UI can show
-    // its local-only destination and policy before backup is configured.
     expect(body).toMatchObject({
       configured: false,
       recoveryKit: { confirmedAt: null },
@@ -282,7 +259,6 @@ describe("serve scenarios", () => {
         provider: { kind: "local", dir: providerDir },
       },
     });
-    // The only auto-founded plane is also the registry default.
     const vaultId = handle.vaults.planesList()[0]!.boot.vaultId;
     const auth = { Authorization: `Bearer ${handle.token}` };
 
@@ -304,8 +280,6 @@ describe("serve scenarios", () => {
     expect(beforeBody.vaults[0]).toMatchObject({ vaultId, running: false });
     expect(beforeBody.vaults[0]?.lastBackupAt).toBeUndefined();
 
-    // Reading status begins the recovery-kit ceremony. Export, re-select, and
-    // verify the exact password-wrapped artifact before backup mutations.
     await verifyCurrentRecoveryKit(handle, auth);
 
     const run = await fetch(`${handle.url}/centraid/_gateway/backup/run`, {
@@ -316,10 +290,6 @@ describe("serve scenarios", () => {
     const runBody = (await run.json()) as { accepted: boolean };
     expect(runBody.accepted).toBe(true);
 
-    // The run happens in the background — poll until it lands (bounded).
-    // Creating the first target intentionally stales the just-confirmed kit.
-    // Ordinary staleness is a re-download prompt, not a gateway outage; observe
-    // completion through the returned host-side service handle.
     let lastBackupAt: string | undefined;
     const awaitBackup = async (remaining: number): Promise<void> => {
       const poll = await handle.backup!.status();
@@ -335,10 +305,6 @@ describe("serve scenarios", () => {
   });
 
   test("recoveryKit confirmation survives a restart (issue #351 wave 4)", async () => {
-    // Real end-to-end: real HTTP server, real BackupService, real gateway.db
-    // on disk — `handle.close()` + a fresh `serve()` over the SAME dataDir is
-    // as close to "the gateway process restarted" as a unit test gets short
-    // of actually spawning a second process.
     await handle.close();
     const providerDir = await tempDir("backup-provider-");
     const backupConfig = {
@@ -365,8 +331,6 @@ describe("serve scenarios", () => {
     const confirmBody = await verifyCurrentRecoveryKit(handle, auth);
     expect(confirmBody.confirmedAt).toBeGreaterThan(0);
 
-    // Restart: close this instance, boot a fresh one over the identical
-    // on-disk dataDir (same gateway.db recovery-kit row).
     await handle.close();
     handle = await serve({
       paths: pathsUnder(dataDir),

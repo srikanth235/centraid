@@ -1,10 +1,3 @@
-/*
- * Grants ride the ORDINARY replica plane (#825): `share.authority` and
- * `share.fulfillment` are consent-shaped entities like any other. An
- * unapproved app gets nothing, which is what lets a surface say "we cannot
- * see" rather than "shared with nobody".
- */
-
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 
@@ -60,7 +53,6 @@ describe("grant plane on the replica", () => {
       rememberDevice: true,
       appId: "people",
     });
-    // The plane's own column names: one table, one vocabulary (#883).
     const grant = shape?.entityMap.get("share.authority");
     expect(grant?.columns).toStrictEqual(
       expect.arrayContaining<string>([
@@ -79,11 +71,6 @@ describe("grant plane on the replica", () => {
     );
   });
 
-  /*
-   * THE SHIPPED MANIFEST UNBLOCKS IT (#883): the test above approves a
-   * hand-written scope, proving the machinery, not the product. Read off disk
-   * because a scope typed here would pass while the shipped one drifted.
-   */
   test("People's SHIPPED manifest is what carries the authority plane to a seat", async () => {
     const manifest = JSON.parse(
       await fs.readFile(
@@ -117,8 +104,6 @@ describe("grant plane on the replica", () => {
         "revoked_at",
       ])
     );
-    // Every principal kind rides the SAME shape: one lens over one table
-    // (V-dashboard), not four reads.
     expect(authority?.primaryKey).toBe("authority_id");
   });
 
@@ -133,8 +118,6 @@ describe("grant plane on the replica", () => {
       rememberDevice: true,
       appId: "people",
     });
-    // Absent from the shape, not present-and-empty: no client can tell itself
-    // a story about who this vault shares with.
     expect(shape?.entityMap.has("share.authority")).toBe(false);
   });
 });

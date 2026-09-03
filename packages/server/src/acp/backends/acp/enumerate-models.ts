@@ -1,7 +1,3 @@
-// Generic ACP model enumeration (#484): probe the harness as a turn would and
-// echo its own `{ value, name }` pairs — no prompt is sent, no model id is
-// named here. ANY failure resolves to `[]`; never throws, never leaks a child.
-
 import { spawn } from "node:child_process";
 import type { ChildProcessByStdio } from "node:child_process";
 import { promises as fs } from "node:fs";
@@ -28,7 +24,6 @@ const KILL_GRACE_MS = 2_000;
 export async function enumerateAcpModels(
   config: AcpTurnConfig
 ): Promise<HarnessModel[]> {
-  // An unenumerable kind simply has no catalog.
   let launch: { bin: string; args: string[]; env: NodeJS.ProcessEnv };
   try {
     launch = planLaunch(config, undefined, []);
@@ -61,16 +56,14 @@ export async function enumerateAcpModels(
   try {
     return await withTimeout(probe(conn, cwd), PROBE_TIMEOUT_MS);
   } catch {
-    // Timeout, AUTH_REQUIRED, rejected session/new: no catalog this time.
     return [];
   } finally {
     try {
       child.stdin.end();
     } catch {
-      // stream already gone
+      // Intentionally empty.
     }
     if (!child.killed) child.kill("SIGTERM");
-    // A child ignoring SIGTERM must still die, or `conn.exited` hangs forever.
     const killTimer = setTimeout(() => {
       if (!child.killed) child.kill("SIGKILL");
     }, KILL_GRACE_MS);
@@ -98,7 +91,6 @@ async function probe(
     },
   });
 
-  // No vault MCP servers: this reads the harness's catalog, not the vault.
   const created = await conn.request(methods.agent.session.new, {
     cwd,
     mcpServers: [],

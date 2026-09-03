@@ -1,15 +1,3 @@
-// HTTP surface for the gateway-owned app lifecycle (#141): the deterministic
-// builder lives in the gateway, so a local and a remote gateway behave alike.
-// Each verb returns `false` so the apps-store and automations handlers keep
-// their own routes.
-//
-// STAGE VS PUBLISH. Every mutation stages into a session worktree. A falsy
-// `publish` (the default, #141/C6) only REGISTERS the app so its draft
-// previews; true validates, merges onto `main`, and reconciles cron.
-//
-// Webhook secrets are minted gateway-side: the plaintext returns ONCE and only
-// the hash reaches the manifest on `main`.
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import {
@@ -131,8 +119,6 @@ async function handleClone(
   }
   const publish = body.publish === true;
 
-  // A bundled blueprint APP installs in place, never clones (#434); a clone
-  // would fork it into the code store. Automation templates still clone.
   if (opts.isBundledAppId?.(templateId)) {
     throw new AppScaffoldError(
       "already_exists",
@@ -163,12 +149,10 @@ async function handleClone(
     templateFiles,
     newName,
     newDesc: tmpl.desc,
-    // Backfill only (#263): a declaring app.json wins in `cloneTemplateFiles`.
     iconKey: tmpl.iconKey,
     colorKey: tmpl.colorKey,
   });
 
-  // Templates ship `{kind:'webhook',pending:true}`; only the hash persists.
   const { files: provisioned, minted } = provisionPendingWebhooksInFiles(
     cloned,
     newAppId
@@ -244,7 +228,6 @@ async function handleInstall(
     );
   }
   const { alreadyInstalled, ...app } = installed;
-  // 200, not 201: install is idempotent.
   return sendJson(res, 200, { app, installed: true, alreadyInstalled });
 }
 
@@ -270,8 +253,6 @@ async function handleMeta(
     typeof body.description === "string" ? body.description : undefined;
   const publish = body.publish === true;
 
-  // A bundled app's code is read-only (#434): a rename sets the per-vault
-  // label override, null clears it, and false falls through to the code store.
   if (name !== undefined && opts.renameBundledApp?.(appId, name)) {
     return sendJson(res, 200, { ok: true, staged: false });
   }
@@ -305,7 +286,6 @@ async function handleMeta(
       ephemeralSession,
     });
   } else if (ephemeralSession) {
-    // A throwaway session may be open above: close it or it orphans a worktree.
     await opts.store.closeSession(sessionId);
   }
   return sendJson(res, 200, { ok: true, staged: !publish });

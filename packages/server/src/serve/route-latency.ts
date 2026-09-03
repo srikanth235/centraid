@@ -1,15 +1,9 @@
-/*
- * Per-route duration histograms (#659). A p99 of 250 means "at least 99%
- * finished within 250ms", never "the 99th took exactly 250ms".
- */
-
 const BUCKET_BOUNDS_MS = [
   1, 2, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000,
 ] as const;
 
 const BUCKET_COUNT = BUCKET_BOUNDS_MS.length + 1;
 
-/** Extra labels fold into `other` rather than growing the map. */
 const MAX_ROUTES = 64;
 
 const OTHER = "other";
@@ -28,7 +22,6 @@ function isVariableSegment(segment: string): boolean {
   return segment.length > 24;
 }
 
-/** First three segments, identifiers → `:id`. A label per conversation id is a leak. */
 export function routeLabel(pathname: string): string {
   const segments = pathname.split("/").filter((segment) => segment.length > 0);
   if (segments.length === 0) return "/";
@@ -76,7 +69,6 @@ export class RouteLatencyMetrics {
     const requested = routeLabel(pathname);
     let histogram = this.routes.get(requested);
     if (!histogram) {
-      // -1 reserves the slot the `other` bucket itself occupies.
       const label = this.routes.size >= MAX_ROUTES - 1 ? OTHER : requested;
       histogram = this.routes.get(label);
       if (!histogram) {

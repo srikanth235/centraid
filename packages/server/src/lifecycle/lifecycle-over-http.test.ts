@@ -1,7 +1,4 @@
 import crypto from "node:crypto";
-// Lifecycle over HTTP (#141). No blank-app scaffold (`POST /centraid/_apps`,
-// #799) — session/publish laws ride automation create on the same
-// `prepareLifecycleSession` + `stageAndMaybePublish` path.
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -12,7 +9,6 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import type { GatewayPaths } from "../paths.ts";
 import { serve } from "../serve/serve.ts";
 import type { GatewayServeHandle } from "../serve/serve.ts";
-// lifecycle-routes is exercised through serve() HTTP paths below (#545).
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -22,7 +18,6 @@ function pathsUnder(dir: string): GatewayPaths {
     vaultDir: path.join(dir, "vault"),
   };
 }
-/** Active vault's per-app data dir (#280). */
 function vaultAppsDir(): string {
   const vaultId = handle.vaults.current().boot.vaultId;
   return path.join(dataDir, "vault", vaultId, "apps");
@@ -97,7 +92,6 @@ describe("lifecycle-over-http scenarios", () => {
   });
 
   test("a bundled app is installed in place, not cloned (issue #434)", async () => {
-    // Bundled apps install in place; clone is refused (#434).
     const clone = await fetch(`${handle.url}/centraid/_apps/_clone`, {
       method: "POST",
       headers: auth({ "Content-Type": "application/json" }),
@@ -184,7 +178,6 @@ describe("lifecycle-over-http scenarios", () => {
     expect(delBody.deletedApp).toBe(true);
     expect((await listApps()).some((a) => a.id === "digest")).toBe(false);
 
-    // Delete must not resurrect the data dir via `ensureRegistered`.
     await expect(fs.stat(dataAppDir)).rejects.toThrow(/ENOENT/u);
   });
 

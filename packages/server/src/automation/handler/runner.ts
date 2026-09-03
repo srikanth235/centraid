@@ -1,8 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit the parent-side handler orchestrator is one message-pump — delegate/fetch/state/vault dispatch plus the #293 secret and #304 connection injection all share the one worker-boundary protocol, so splitting scatters the wire contract
-// Parent-side orchestrator for automation handlers (#98). Only
-// `delegateDispatcher` (the one billed rail) comes from the host; the rest of
-// the ctx surface is serviced here in-process. Every ctx call becomes one
-// `run_nodes` audit row, and there is NO runtime retry.
 
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -46,8 +42,6 @@ function resolveWorkerFile(): string {
   const here = import.meta.dirname;
   const jsPath = path.join(here, "..", "worker", "runner.js");
   if (existsSync(jsPath)) return jsPath;
-  // Under tsx no .js is emitted; its loader reaches spawned Workers via
-  // NODE_OPTIONS, so the .ts fallback works.
   return path.join(here, "..", "worker", "runner.ts");
 }
 
@@ -99,7 +93,6 @@ export interface RunHandlerOptions {
   automationName?: string;
   automationDir: string;
   handlerFile: string;
-  /** Absent is the strict `automation-handler` floor, never "no sandbox". */
   sandboxLane?: "model-runtime" | "media-transcode";
   sandboxReadRoots?: readonly string[];
   sandboxRuntimeDir?: string;
@@ -115,8 +108,6 @@ export interface RunHandlerOptions {
   ) => void;
   harnessKind?: string;
   model?: string;
-  /** Bound to this automation's enrolled agent credential; absent → every
-   *  `ctx.vault` call fails closed with `VAULT_UNAVAILABLE`. */
   vault?: VaultBridge;
   onRunEvent?: (ev: AutomationTurnStreamEvent) => void;
   triggerKind?: AutomationTriggerKind;
@@ -128,34 +119,23 @@ export interface RunHandlerOptions {
   outputSchema?: OutputSchema;
   history?: HistoryConfig;
   timeoutMs?: number;
-  /** Connector confinement (#290): `ctx.delegate` is forbidden entirely and
-   *  `ctx.fetch` is the only external rail. `secrets` is the allowlist for
-   *  `{{secret:…}}` placeholders (#293). */
   connector?: {
     readonly kind: string;
     readonly label: string;
     readonly secrets?: readonly string[];
-    /** Injected past the worker boundary (#524), so published handler code
-     *  cannot fork a label-based shadow connection after a rename. */
     readonly connectionId?: string;
   };
-  /** ref → plaintext (#293). Substitution happens on THIS side of the worker
-   *  boundary, and the value is scrubbed from every recorded string. */
   resolveSecret?: (ref: string) => Promise<string>;
   connectionAuth?: ConnectionAuth;
   fetchRetryDelaysMs?: readonly number[];
 }
 
-/** The token never crosses the worker boundary (#304): `values` substitute
- *  parent-side and `allowedHosts` is the anti-exfiltration pin. */
 export interface ConnectionAuth {
   readonly values: Readonly<Record<string, string>>;
   readonly allowedHosts: readonly string[];
   readonly refresh?: () => Promise<Readonly<Record<string, string>>>;
   readonly onAuthDead?: (reason: string) => Promise<void>;
   readonly limit?: <T>(fn: () => Promise<T>) => Promise<T>;
-  /** Default (unset) = READ-ONLY. Connector fires never set this: external
-   *  writes ride `outbox.stage` (#306), never raw ctx.fetch. */
   readonly allowWrites?: boolean;
   readonly readOnlyPosts?: readonly {
     readonly host: string;
@@ -183,7 +163,6 @@ export function isBrokerReadOnlyPost(
     ) {
       return false;
     }
-    // Erring closed: no GraphQL mutation through the read-only POST exception.
     const document = (parsed as { query: string }).query
       .replace(/#[^\r\n]*/gu, "")
       .replace(/"""[\s\S]*?"""/gu, '""')
@@ -216,13 +195,7 @@ function bindConnectorVaultPayload(
 
 export interface HandlerOutcome {
   ok: boolean;
-  /** The fire ended BEFORE the handler ran, on state the owner chose or has
-   *  seen. NOT a failure: reporting a skip as one spams a notice every tick
-   *  while a connection stays paused (#647). */
   skipped?: boolean;
-  /** Set when the ENRICHMENT TIER GATE refused the fire. Structured, not
-   *  pattern-matched out of `error`, because the host must name the domain and
-   *  the control that changes it. Absent on every other skip. */
   enrichRefusal?: {
     domain: string;
     capability: string;
@@ -287,8 +260,6 @@ type WorkerToParentMessage =
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
-/** Handler actions must stay in author order; independent work belongs behind
- *  an explicit concurrent helper. */
 function applyInOrder<T>(
   values: Iterable<T>,
   apply: (value: T, index: number) => void | PromiseLike<void>
@@ -319,7 +290,6 @@ export async function runHandler(
   const toolBatches = 0;
   let delegateCalls = 0;
 
-  // Transport-level substitution; this set powers the backstop scrub (#293).
   const resolvedSecretValues = new Set<string>();
   const scrub = (text: string): string => {
     let out = text;
@@ -359,8 +329,6 @@ export async function runHandler(
         }
         out = out.replaceAll(`{{secret:${ref}}}`, resolved.get(ref)!);
       });
-      // An unknown placeholder name — or no broker credential — is a handler
-      // bug surfaced as an error, never an empty substitution (#304).
       for (const match of out.matchAll(CONNECTION_REF_RE)) {
         const name = match.groups!.name!;
         const value = connectionValues[name];
@@ -397,9 +365,6 @@ export async function runHandler(
     };
   };
 
-  // Destination pin for EVERY ctx.fetch (#304, #865): https only (loopback
-  // excepted), and when a broker credential rides this fire, only toward its
-  // allowed_hosts.
   const hostAllowed = (url: URL): boolean =>
     (opts.connectionAuth?.allowedHosts ?? []).some((entry) =>
       entry.startsWith("*.")
@@ -432,9 +397,6 @@ export async function runHandler(
   ): void => {
     assertFetchDestination(rawUrl);
     const url = new URL(rawUrl);
-    // Read-only ceiling (#304): broker credentials inject toward SAFE methods
-    // only; writes ride the outbox (#306). The error names that path (#308)
-    // so a model can self-correct instead of retrying.
     const normalizedMethod = method.toUpperCase();
     if (
       !SAFE_METHODS.has(normalizedMethod) &&
@@ -475,8 +437,6 @@ export async function runHandler(
     text: string;
   }
 
-  // Never auto-follow redirects: a cross-host Location would carry the
-  // Authorization header past the pin; the handler sees the 3xx and follows.
   const fetchOnce = async (
     spec: FetchSpecWire,
     manualRedirects: boolean
@@ -501,10 +461,6 @@ export async function runHandler(
     };
   };
 
-  /** Broker-injected fetches only (#304): 429/5xx → backoff; 401 → one forced
-   *  refresh, then retry; 401 again or a 403 naming scopes → flip needs-auth
-   *  (re-consent is an owner act). Non-injected fetches stay single-shot past
-   *  the shared destination pin (#865). */
   const executeFetch = async (
     rawSpec: FetchSpecWire
   ): Promise<FetchWireResult> => {
@@ -514,8 +470,6 @@ export async function runHandler(
     );
     let { spec } = substituted;
     const { injected } = substituted;
-    // The pin applies to EVERY ctx.fetch regardless of injection (#865) — a
-    // placeholder-free template must not bypass the https/host-pin checks.
     assertFetchDestination(spec.url);
     if (!injected) return fetchOnce(spec, true);
     assertInjectable(spec.url, spec.method ?? "GET", spec.body);
@@ -581,8 +535,6 @@ export async function runHandler(
     emit,
   };
 
-  // Harness sessions are per-harness resume bindings BENEATH one canonical
-  // conversation, so A → B → A never forks execution history.
   const slash = audit.automationId.indexOf("/");
   const appId = slash > 0 ? audit.automationId.slice(0, slash) : undefined;
   const execConversationId = audit.store.ensureAutomationConversation(
@@ -603,8 +555,6 @@ export async function runHandler(
     ...(opts.parentRunId ? { parentTurnId: opts.parentRunId } : {}),
     startedAt,
   });
-  // The trigger payload is `message_in` at ordinal 0, the shape a chat turn
-  // records (#190); trace items start at 1.
   if (opts.input !== undefined) {
     audit.store.insertMessageIn({
       turnId: audit.runId,
@@ -633,7 +583,7 @@ export async function runHandler(
   try {
     emit({ type: "turn.start", turnId: audit.runId });
   } catch {
-    /* swallow */
+    // Intentionally empty.
   }
 
   const worker = automationWorkerPool().acquire();
@@ -794,7 +744,6 @@ export async function runHandler(
       if (state.resolved) return;
       state.resolved = true;
       if (timeoutHandle) clearTimeout(timeoutHandle);
-      // Backstop scrub: nothing a run RECORDS may carry a secret (#293).
       if (resolvedSecretValues.size > 0) {
         if (outcome.error) outcome.error = scrub(outcome.error);
         if (outcome.summary) outcome.summary = scrub(outcome.summary);
@@ -816,8 +765,6 @@ export async function runHandler(
           turnId: audit.runId,
           endedAt: Date.now(),
           ok: outcome.ok,
-          // A finalization failure is the host's: recorded on the turn, but it
-          // never rewrites the handler's own error.
           ...(outcome.error
             ? { error: outcome.error }
             : finalizationError
@@ -840,8 +787,6 @@ export async function runHandler(
           );
         });
       } catch (error) {
-        // The rollback took `finishTurn` with it, so without this second,
-        // non-transactional write the turn stays `running` forever.
         const finalizationError =
           error instanceof Error ? error.message : String(error);
         try {
@@ -882,7 +827,7 @@ export async function runHandler(
           ...(outcome.error ? { error: outcome.error } : {}),
         });
       } catch {
-        /* swallow */
+        // Intentionally empty.
       }
       applyRetention(audit.store, audit.automationId, opts.history);
       abortController.abort();
@@ -924,8 +869,6 @@ export async function runHandler(
         return;
       }
       if (msg.type === "fetch") {
-        // Connector-only (#293): the recorded spec keeps its placeholders, and
-        // the response is never journaled.
         if (!opts.connector) {
           send({
             type: "fetch-reply",
@@ -1030,7 +973,6 @@ export async function runHandler(
           try {
             let rawValue = msg.value;
             if (!msg.ok) {
-              // Best-effort: a close failure must not replace the real error.
               await closeConnectorRun(
                 false,
                 {},

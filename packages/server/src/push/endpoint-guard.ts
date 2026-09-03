@@ -1,5 +1,3 @@
-/** Push-endpoint SSRF guard (#865): the gateway replays a POST to every registered endpoint on each vault commit, so an endpoint pointing at loopback/LAN is blind SSRF replayed from the gateway host. Every registered endpoint must be https, credential-free, and resolve to public internet space (IP-literal or DNS), fail-closed. Send-time rechecks only IP literals — a name public at registration that later rebinds to loopback would still wake (residual in the #865 receipt). */
-
 import { promises as dns } from "node:dns";
 
 const IPV4_RE = /^(?<a>\d{1,3})\.(?<b>\d{1,3})\.(?<c>\d{1,3})\.(?<d>\d{1,3})$/u;
@@ -19,7 +17,6 @@ function parseIpv4(text: string): Ipv4 | undefined {
   return [a!, b!, c!, d!];
 }
 
-/** Reserved per #865: 0/8, RFC1918, loopback 127/8, link-local 169.254/16 (covers cloud-metadata 169.254.169.254), CGNAT 100.64/10, 192.0.0.0/24, Class E 240/4. */
 function ipv4IsReserved(parts: Ipv4): boolean {
   const [a, b, c] = parts;
   return (
@@ -35,15 +32,12 @@ function ipv4IsReserved(parts: Ipv4): boolean {
   );
 }
 
-/** Parse an IPv6 literal (with optional embedded IPv4 tail) to 8 groups. */
 function parseIpv6(text: string): readonly number[] | undefined {
-  // A zone index is never a routable push target — refuse by "unparseable".
   const embedded = /(?:^|:)(?<tail>\d{1,3}(?:\.\d{1,3}){3})$/u.exec(text);
   let rest = text;
   if (embedded) {
     const v4 = parseIpv4(embedded.groups!.tail!);
     if (!v4) return undefined;
-    // Dotted tail → two hextexts so the "::" grammar sees pure hex groups.
     rest =
       text.slice(0, embedded.index + 1) +
       [
@@ -71,7 +65,6 @@ function parseIpv6(text: string): readonly number[] | undefined {
   return [...head, ...Array.from({ length: 8 - total }, () => 0), ...rear];
 }
 
-/** IPv6 reserved set (#865): ::, ::/96 (IPv4-embedded, incl. IPv4-mapped ::ffff:0:0/96 — a mapped literal is never a clean push target), NAT64 64:ff9b::/96, link-local fe80::/10, unique-local fc00::/7, multicast ff00::/8. */
 function ipv6IsReserved(groups: readonly number[]): boolean {
   const leadingZeros = (count: number): boolean =>
     groups.slice(0, count).every((group) => group === 0);
@@ -87,7 +80,6 @@ function ipv6IsReserved(groups: readonly number[]): boolean {
   );
 }
 
-/** Parse a hostname that IS an IP literal; undefined when it is a name. */
 export type IpLiteral =
   | readonly [number, number, number, number]
   | readonly number[];
@@ -106,7 +98,6 @@ function ipIsReserved(literal: IpLiteral): boolean {
     : ipv6IsReserved(literal);
 }
 
-/** Send-time sync backstop (#865): refuse obvious reserved-range IP literals and non-https schemes. Hostnames are not re-resolved here — DNS on every vault commit would put a network round-trip on the wake path, and a name public at registration can rebind to loopback later (DNS-rebinding TOCTOU). */
 export function endpointHostIsPublicSync(endpoint: string): boolean {
   let url: URL;
   try {
@@ -120,7 +111,6 @@ export function endpointHostIsPublicSync(endpoint: string): boolean {
   return !(literal !== undefined && ipIsReserved(literal));
 }
 
-/** Registration-time check (#865): throws a device-readable reason; the route maps every throw to 400 invalid_push_registration. */
 export async function assertPublicPushEndpoint(
   endpoint: string
 ): Promise<void> {
@@ -143,7 +133,6 @@ export async function assertPublicPushEndpoint(
       );
     return;
   }
-  // Fail closed: a host we cannot resolve is refused, never assumed safe.
   let records: Array<{ address: string }> | undefined;
   try {
     records = await dns.lookup(bareHost, { all: true });

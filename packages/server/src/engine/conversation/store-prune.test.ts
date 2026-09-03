@@ -32,7 +32,6 @@ function seedAutomationTurn(
 }
 
 describe("ConversationStore — prune + delete", () => {
-  /** Seed one fire turn + a tool item in the stable conversation. */
   function seedFire(store: ConversationStore, i: number, ok = true): void {
     const id = `r${i}`;
     const conversationId = store.ensureAutomationConversation("app/foo", "app");

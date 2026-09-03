@@ -1,16 +1,3 @@
-/*
- * Restore-drill unit contracts (umbrella #842, slice W1.3).
- *
- * The grading rules and the deterministic sampler, exercised directly. The
- * end-to-end proof that a real backup restores to a usable vault — and the
- * demonstrated-red that the drill bites — is the sibling integration lane in
- * `restore-drill.integration.test.ts`; this file pins the judgement calls the
- * integration lane cannot vary cheaply.
- *
- * Determinism: no clock, no `Math.random`. The sampler's seed is the test's
- * own name, so any distribution assertion here replays exactly.
- */
-
 import { describe, expect, test } from "vitest";
 
 import { checkRestoredCensus, seededRandom } from "./restore-drill.js";
@@ -31,9 +18,6 @@ describe("restore-drill census grading", () => {
   });
 
   test("zero parties is an ERROR — a founded vault is never partyless", () => {
-    // The empty-shell restore: structurally perfect, nobody home. Every
-    // structural check in `verifyRestoredPair` passes on this pair, which is
-    // exactly why the drill has to be the check that fails it.
     const found = checkRestoredCensus({
       vaultId: "v1",
       restored: { party: 0, content: 0, media: 0, receipt: 0 },
@@ -44,8 +28,6 @@ describe("restore-drill census grading", () => {
   });
 
   test("zero parties fails even with no source to compare against", () => {
-    // The party invariant is intrinsic to the restored pair, so an unmounted
-    // plane never downgrades it to the softer 'could not compare' warning.
     const found = checkRestoredCensus({
       vaultId: "v1",
       restored: { party: 0, content: 9, media: 9, receipt: 9 },
@@ -54,8 +36,6 @@ describe("restore-drill census grading", () => {
   });
 
   test("a spine table that restored empty DEGRADES, it does not fail", () => {
-    // A snapshot taken before the owner added a photo restores zero media
-    // rows truthfully. Needs eyes; not an alarm.
     const found = checkRestoredCensus({
       vaultId: "v1",
       restored: { party: 1, content: 4, media: 0, receipt: 3 },
@@ -67,7 +47,6 @@ describe("restore-drill census grading", () => {
   });
 
   test("a restore merely BEHIND the source is ok, not a degrade", () => {
-    // Point-in-time is the whole point of a snapshot: fewer rows is expected.
     const found = checkRestoredCensus({
       vaultId: "v1",
       restored: { party: 1, content: 1, media: 1, receipt: 1 },
@@ -77,8 +56,6 @@ describe("restore-drill census grading", () => {
   });
 
   test("an unmounted source plane WARNS rather than passing vacuously", () => {
-    // A drill that could not make its comparison must say so — a silent ok
-    // here would be the gate reading as green because it did not run.
     const found = checkRestoredCensus({ vaultId: "v1", restored: FULL });
     expect(found.level).toBe("warning");
     expect(found.detail).toContain("not mounted");

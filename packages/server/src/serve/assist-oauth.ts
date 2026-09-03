@@ -1,12 +1,3 @@
-/**
- * Host-injected Centraid Assist OAuth configuration (#526).
- *
- * The gateway core never reads process.env. Desktop/daemon hosts may pass
- * public deployment coordinates through this shape; the Google client
- * secret and callback-receipt HMAC secret exist only as Cloudflare Worker
- * secret bindings and are deliberately absent here.
- */
-
 export const ASSIST_GOOGLE_AUTH_URL =
   "https://accounts.google.com/o/oauth2/v2/auth";
 export const ASSIST_GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -27,11 +18,8 @@ export const GOOGLE_ASSIST_SCOPE_TIERS = Object.freeze({
 });
 
 export interface AssistOAuthConfig {
-  /** Worker origin only; paths are fixed by the protocol. */
   readonly workerBaseUrl: string;
-  /** Public Google OAuth Web client id. Never a secret. */
   readonly googleClientId: string;
-  /** Release gate: restricted scopes stay unavailable until verification. */
   readonly restrictedScopesEnabled: boolean;
 }
 
@@ -41,10 +29,6 @@ export interface AssistOAuthEnvironment {
   readonly CENTRAID_ASSIST_RESTRICTED_SCOPES?: string;
 }
 
-/**
- * Parse the two public host settings. Both are required so half-configured
- * deployments fail closed and do not advertise Assist.
- */
 export function assistOAuthFromEnvironment(
   environment: AssistOAuthEnvironment
 ): AssistOAuthConfig | undefined {

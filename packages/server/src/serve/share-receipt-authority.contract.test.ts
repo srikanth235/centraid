@@ -1,23 +1,3 @@
-/*
- * The durable cross-vault ACCESS AUDIT, as a law (issues #726 P2 / #750
- * abstraction 5).
- *
- * `share_access_receipts` is what an owner is shown when they ask "what left
- * this vault, to whom?". Its worth is entirely in the two directions being
- * true at once: a receipt for every edge whose rows actually landed, and NO
- * receipt for an edge that was refused, parked, revoked, or handed to a peer
- * whose projection this gateway cannot observe. A receipt that appears for an
- * edge nobody accepted is a false accusation; one missing for an edge that
- * landed is exactly the silence the audit exists to prevent.
- *
- * Owned here rather than at a route because `share-edge-store.ts` is the ONE
- * door every status change goes through — the routes are four callers of it,
- * and pinning the invariant at the door is what stops a fifth from inventing
- * a receipt policy of its own. `edges-routes.test.ts` owns the HTTP surface's
- * replay behaviour; nothing there (or anywhere) asserts the negative cases or
- * that a malformed scope refuses ATOMICALLY.
- */
-
 import { afterEach, describe, expect, test } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
@@ -131,8 +111,6 @@ describe("[law:share-receipt-authority] the access audit names exactly what land
         action: "share",
         item_type: "media.asset",
         origin_vault_id: "vlt-priya",
-        // The audit records the scope the OWNER authorised, not the audience's
-        // account of what it took.
         origin_item_ids_json: JSON.stringify(["asset-a", "asset-b"]),
         audience_vault_id: "vlt-family",
         audience_item_ids_json: JSON.stringify(["audience-a", "audience-b"]),
@@ -149,8 +127,6 @@ describe("[law:share-receipt-authority] the access audit names exactly what land
     });
     const first = receiptIds(gateway.db);
 
-    // A crash-resumed reconcile pass replays the signal — with a DIFFERENT
-    // audience list, which the audit must not adopt after the fact.
     const again = applyEdgeSignal(gateway.db, landed, factsFor(landed), {
       type: "target-projected",
       targetItemIds: ["audience-a", "audience-forged"],
@@ -164,8 +140,6 @@ describe("[law:share-receipt-authority] the access audit names exactly what land
   });
 
   test.each([
-    // Every non-projection outcome. A receipt records what LANDED in an
-    // audience vault, so a transition that projected nothing may claim none.
     [
       "an edge this gateway could not act on",
       { type: "give-failed", reason: "the audience vault is not open here" },
@@ -191,9 +165,6 @@ describe("[law:share-receipt-authority] the access audit names exactly what land
 
   test("[law:share-receipt-authority] a malformed scope refuses the whole transition — no receipt, no moved state", async () => {
     const gateway = await origin("malformed");
-    // A hand edit, a half-written generation: the column drifted to something
-    // no scope parser accepts. Recording an EMPTY origin list here would be a
-    // durable audit that says a share carried nothing.
     const row = gateway.edge("edge-malformed", "{not json");
 
     expect(() =>
@@ -204,8 +175,6 @@ describe("[law:share-receipt-authority] the access audit names exactly what land
     ).toThrow(ShareScopeError);
 
     expect(receipts(gateway.db)).toStrictEqual([]);
-    // The status move and the receipt are one transaction, so the edge is
-    // still exactly where it was — a later fix can still land it honestly.
     const unchanged = readEdgeRow(gateway.db, "edge-malformed")!;
     expect(unchanged.status).toBe("in-flight");
     expect(unchanged.target_state).toBe("queued");

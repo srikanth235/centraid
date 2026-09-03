@@ -36,7 +36,6 @@ describe("wal-uploader", () => {
       discarded: 3,
       markerTips: {},
     });
-    // The reverse order loses the files while state still calls the base sound.
     expect(events).toStrictEqual([
       "holed",
       "dropped:segment",

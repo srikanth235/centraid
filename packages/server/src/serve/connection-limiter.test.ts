@@ -43,7 +43,6 @@ describe(ConnectionLimiter, () => {
     const second = limiter.run(async () => {
       order.push("second-start");
     });
-    // Let both microtasks settle: the second must be queued, not started.
     await delay(10);
     expect(order).toStrictEqual(["first-start"]);
     releaseFirst();

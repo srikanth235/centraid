@@ -1,8 +1,4 @@
 import { createHash } from "node:crypto";
-// Lazy read-only rehydration of archived conversations (#438).
-// Real vault.db on a temp file + an in-memory content-addressed blob sink
-// standing in for the vault CAS door, shared by the archival engine (writer)
-// and the history store's `archiveBlobReader` (reader). No SQL is mocked.
 import { mkdirSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
@@ -63,9 +59,6 @@ function workspaceFor(
   });
 }
 
-/** Seed one user-owned conversation. `automation` kind archives aged ranges
- *  while the newest turn stays live (the interleave case); `chat` archives
- *  whole once idle. */
 function seedConversation(
   journal: DatabaseSync,
   id: string,
@@ -76,8 +69,6 @@ function seedConversation(
       `INSERT INTO conversations (id, kind, user_id, app_id, automation_id, title, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, 'Thread', ?, ?)`
     )
-    // updated_at is idle (> 90d) so a chat conversation clears the whole-conv
-    // gate; an automation ignores it and archives aged ranges regardless.
     .run(
       id,
       kind,
@@ -89,7 +80,6 @@ function seedConversation(
     );
 }
 
-/** Seed a finished turn with a `message_in` + a `step` answer (and optional attachment). */
 function seedTurn(
   journal: DatabaseSync,
   a: {
@@ -164,7 +154,6 @@ function fixture(): Fixture {
   };
 }
 
-/** Strip the `fromArchive` marker so archived payloads compare byte-equal. */
 function withoutMarker(
   messages: Array<{ payload: unknown; createdAt: number }>
 ): unknown[] {
@@ -183,10 +172,6 @@ describe("conversation rehydration (issue #438 wave 3)", () => {
     f = fixture();
   });
 
-  // Issue #659 G5: the window has to hold ACROSS the archive boundary. Live
-  // rows can be windowed in SQL, archived turns cannot — if the window applied
-  // only to the live half, `hasMore` would describe a partial picture and a
-  // reader paging back would stop at the archive edge.
   it("windows and pages across the archive boundary, not just the live rows", async () => {
     const store = f.store();
     seedConversation(f.journal, "c1", "automation");
@@ -219,7 +204,6 @@ describe("conversation rehydration (issue #438 wave 3)", () => {
     );
     expect(archival.turnsPruned).toBeGreaterThan(0);
 
-    // A 2-turn window opens on the LIVE tail and still knows older turns exist.
     const newest = await store.getSessionRehydrated(APP, "c1", { limit: 2 });
     expect(newest?.messages).toHaveLength(4);
     expect(newest?.hasMore).toBe(true);
@@ -244,7 +228,6 @@ describe("conversation rehydration (issue #438 wave 3)", () => {
     expect(oldest?.oldestSeq).toBe(0);
     expect(oldest?.hasMore).toBe(false);
 
-    // No parameters still serves the whole merged thread.
     const whole = await store.getSessionRehydrated(APP, "c1");
     expect(whole?.messages).toHaveLength(12);
     expect(whole?.hasMore).toBe(false);
@@ -307,7 +290,6 @@ describe("conversation rehydration (issue #438 wave 3)", () => {
     expect(
       (liveHead!.payload as { fromArchive?: boolean }).fromArchive
     ).toBeUndefined();
-    // The archived user turn's attachment survives the prune (segment-embedded).
     const userZero = after!.messages.find(
       (m) => (m.payload as { text?: string }).text === "ask 0"
     );
@@ -338,9 +320,7 @@ describe("conversation rehydration (issue #438 wave 3)", () => {
       { nowMs: now }
     );
 
-    // t0's raw row is pruned → feedback matches nothing (read-only sealed history).
     expect(store.setTurnFeedback(APP, "c1", "t0", "up")).toBe(false);
-    // t1 is the live head → feedback still applies.
     expect(store.setTurnFeedback(APP, "c1", "t1", "up")).toBe(true);
   });
 
@@ -365,8 +345,6 @@ describe("conversation rehydration (issue #438 wave 3)", () => {
     const after = await store.getSessionRehydrated(APP, "c1");
     expect(after?.archiveUnavailable).toBe(true);
     expect(after?.hasArchivedHistory).toBe(true);
-    // The whole chat conversation was pruned → live rows are empty, but the read
-    // does not throw: it degrades to the marker.
     expect(after?.messages).toStrictEqual([]);
   });
 
@@ -380,7 +358,6 @@ describe("conversation rehydration (issue #438 wave 3)", () => {
       startedAt: daysAgo(120),
       reply: "still live",
     });
-    // Archive but DON'T prune (custody not proven) — raw rows stay live.
     const result = runConversationArchival(
       { journal: f.journal, blobSink: f.sink, custodyProven: () => false },
       { nowMs: now }
@@ -438,7 +415,6 @@ interface RouteBody {
   messages?: Array<{ payload: unknown; createdAt: number }>;
 }
 
-/** Drive the GET session route with a minimal fake req/res and parse its JSON. */
 async function getViaRoute(
   handler: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>,
   url: string
@@ -446,9 +422,7 @@ async function getViaRoute(
   const req = {
     method: "GET",
     url,
-    async *[Symbol.asyncIterator](): AsyncIterableIterator<Buffer> {
-      /* no body */
-    },
+    async *[Symbol.asyncIterator](): AsyncIterableIterator<Buffer> {},
   } as unknown as IncomingMessage;
   let bodyText = "";
   const res = {
@@ -456,10 +430,8 @@ async function getViaRoute(
     writeHead(): unknown {
       return res;
     },
-    // The transcript route negotiates compression (#659).
-    setHeader(): void {
-      /* headers are not asserted here */
-    },
+
+    setHeader(): void {},
     end(text?: string | Buffer): void {
       if (text) bodyText = Buffer.isBuffer(text) ? text.toString("utf8") : text;
     },

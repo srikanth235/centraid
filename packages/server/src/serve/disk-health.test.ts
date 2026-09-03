@@ -16,7 +16,6 @@ const GIB = 1024 ** 3;
 const MIB = 1024 ** 2;
 
 function statfsReturning(freeBytes: number, totalBytes: number) {
-  // bsize=1 keeps the math trivial to reason about in the assertions below.
   return () => ({ bavail: freeBytes, bsize: 1, blocks: totalBytes });
 }
 
@@ -29,8 +28,6 @@ describe("evaluateDiskFreeStatus (percent + absolute floor)", () => {
   });
 
   it("degrades a small volume by percent even when free exceeds the absolute floor", () => {
-    // 32 GiB SD with ~3.5 GiB free (~11%): absolute floor alone would keep
-    // this "ok" under a 2 GiB degraded threshold, but percent says degraded.
     const free = Math.floor(32 * GIB * 0.11);
     const result = evaluateDiskFreeStatus(free, 32 * GIB);
     expect(result.freePercent).toBeLessThan(DISK_DEGRADED_BELOW_PERCENT);
@@ -39,16 +36,12 @@ describe("evaluateDiskFreeStatus (percent + absolute floor)", () => {
   });
 
   it("keeps a small volume ok when free percent and absolute floor are both healthy", () => {
-    // 32 GiB with 10 GiB free (~31%) — absolute-only 5 GiB floor would have
-    // falsely degraded; percent+floor stays ok.
     const result = evaluateDiskFreeStatus(10 * GIB, 32 * GIB);
     expect(result.freePercent).toBeGreaterThan(DISK_DEGRADED_BELOW_PERCENT);
     expect(result.status).toBe("ok");
   });
 
   it("errors on low free percent of a huge volume even above the absolute error floor", () => {
-    // 2 TiB disk with 40 GiB free (~2%): well above 512 MiB floor but critical
-    // by percent.
     const total = 2 * 1024 * GIB;
     const free = 40 * GIB;
     const result = evaluateDiskFreeStatus(free, total);
@@ -64,9 +57,6 @@ describe("evaluateDiskFreeStatus (percent + absolute floor)", () => {
   });
 
   it("degrades under the absolute degraded floor when percent is still healthy", () => {
-    // 1.5 GiB free of 100 GiB (~1.5% free) is already error by percent.
-    // Use free that is under absolute degraded floor but above error percent:
-    // 1.5 GiB of 8 GiB = 18.75% free → percent ok-ish, absolute degraded.
     const free = 1.5 * GIB;
     const total = 8 * GIB;
     const result = evaluateDiskFreeStatus(free, total);
@@ -90,7 +80,6 @@ describe(createDiskHealthProbe, () => {
   });
 
   it("reports degraded just under the absolute degraded watermark", async () => {
-    // Total sized so free percent stays healthy; only the absolute floor trips.
     const probe = createDiskHealthProbe({
       rootDir: "/vaults",
       vaults: () => [],
@@ -110,7 +99,6 @@ describe(createDiskHealthProbe, () => {
   });
 
   it("stays ok exactly at the absolute degraded watermark when percent is healthy", async () => {
-    // 2 GiB free of 10 GiB = 20% free → above both percent and absolute floors.
     const probe = createDiskHealthProbe({
       rootDir: "/vaults",
       vaults: () => [],
@@ -212,8 +200,6 @@ describe("createDiskHealthProbe: disk-full tracker (issue #351 wave 4)", () => {
     const first = await probe();
     expect(first.status).toBe("error");
     expect(first.detail).toContain("ENOSPC observed");
-    // The recovered reading just served already cleared the event — the
-    // NEXT tick goes green, without needing a second recovered reading.
     expect(tracker.current()).toBeNull();
 
     const second = await probe();
@@ -239,8 +225,6 @@ describe("createDiskHealthProbe: disk-full tracker (issue #351 wave 4)", () => {
       vaults: () => [],
       statfs: statfsReturning(50 * GIB, 100 * GIB),
     });
-    // No tracker injected and nothing reported into the shared one in this
-    // test run — free space alone decides.
     expect((await probe()).status).toBe("ok");
   });
 });

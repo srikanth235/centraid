@@ -1,14 +1,4 @@
 import crypto from "node:crypto";
-/*
- * Webhook-trigger route on the CORE gateway (#96). The desktop/daemon
- * gateway (`serve()`) IS the always-on host for desktop-only users — a
- * `webhook` trigger must fire there directly. This boots a real
- * gateway, creates a webhook-triggered automation over the lifecycle HTTP
- * API (the desktop's real path — see `lifecycle-over-http.test.ts` for the
- * create-side assertions), then drives `/_centraid-hook/<id>` itself:
- * the shared secret is the whole auth story (no gateway owner bearer),
- * a wrong secret 401s, and an unknown id 404s.
- */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -34,7 +24,6 @@ function auth(extra: Record<string, string> = {}): Record<string, string> {
   return { Authorization: `Bearer ${handle.token}`, ...extra };
 }
 
-/** The DEFAULT vault's one file (#603, #916): the ledger band lives here too. */
 async function vaultDbPath(): Promise<string> {
   const vaultId = handle.vaults.defaultVaultId();
   const entries = await fs.readdir(dataDir, { recursive: true });
@@ -84,22 +73,6 @@ async function publish(
   expect(res.status).toBe(201);
 }
 
-/**
- * Create + publish a webhook-triggered automation over the real lifecycle
- * API (`POST /centraid/_automations`), then swap the scaffolded DRAFT
- * handler for a trivial one with no `ctx.delegate` call.
- *
- * WHY: `runFire` opens the dispatch surface per fire
- * (`packages/server/src/automation/fire/fire.ts`), but that surface is inert until a
- * `ctx.delegate` call routes a real model turn through the configured harness CLI
- * — "a fire whose handler never calls ctx.delegate starts zero child processes."
- * The scaffolded DEFAULT_HANDLER calls ctx.delegate, which would make this test's
- * outcome depend on whatever codex/claude CLI happens to be on the test
- * harness's PATH (or hang). Swapping in a handler with no `ctx.delegate` keeps the
- * fire hermetic while still exercising the REAL webhook auth, cross-vault
- * resolution, durable ingress, cursor advance, and asynchronous fire path
- * end to end — only the handler body is a stand-in.
- */
 async function createWebhookAutomation(
   appId: string
 ): Promise<{ id: string; secret: string; ref: string }> {
@@ -157,8 +130,6 @@ describe("webhook-route-over-http scenarios", () => {
   test("the correct secret durably ingresses then fires WITHOUT the gateway owner bearer token", async () => {
     const { id, secret, ref } = await createWebhookAutomation("hookapp");
 
-    // Deliberately no `auth()` header — the gateway owner's bearer is
-    // intentionally absent. The shared webhook secret is the only auth here.
     const res = await fetch(`${handle.url}/_centraid-hook/${id}`, {
       method: "POST",
       headers: {

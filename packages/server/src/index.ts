@@ -1,5 +1,3 @@
-/** Host-agnostic centraid gateway package `@centraid/server`. `serve()` wires app-engine, the ACP harness layer, stores and the conversation runner against injected paths/secrets and fronts it with HTTP; callers: `apps/desktop` (Electron main) and the `centraid-gateway` CLI daemon, which serves the same routes — no new wire protocol. */
-
 export {
   buildGateway,
   type BuildGatewayOptions,
@@ -21,7 +19,6 @@ export {
   type AssistOAuthConfig,
   type AssistOAuthEnvironment,
 } from "./serve/assist-oauth.js";
-// Component-level health: hosts push components (tunnel, disk) through `BuiltGateway.health`; clients read `GET /centraid/_gateway/health`.
 export {
   HealthRegistry,
   type ComponentHealth,
@@ -105,7 +102,6 @@ export {
   makeVaultLinksRouteHandler,
   LINKS_PATH,
 } from "./routes/vault-links-routes.js";
-// Gateway↔gateway lane (#726 P3 D6): mounted with the forwarder-minted peer proof.
 export {
   makePeerPlaneHandler,
   PEER_LINK_HELLO_PATH,
@@ -113,13 +109,11 @@ export {
   PEER_ROUTE_ASSERT_PATH,
   type PeerPlaneDeps,
 } from "./routes/peer-plane.js";
-// One table, one answerer for "may an edge cross to vault X" (D3).
 export { VaultLinksStore } from "./serve/vault-links-store.js";
 export {
   type LinkChangeListener,
   type LinkChangeReason,
 } from "./serve/vault-link-row.js";
-// Vault-side shadow of those rows: "is this person linked?" via vault query (#821).
 export {
   reconcileLinkBindings,
   type LinkBindingDeps,
@@ -136,7 +130,6 @@ export {
   PUSH_REGISTRATIONS_PATH,
   PushWakeRelay,
 } from "./routes/push-wake-routes.js";
-// Vault-register tool runners: vault_sql/vault_invoke/vault_content via the harness consent/receipt pipeline (#319).
 export {
   makeVaultToolRunners,
   assistantCwd,
@@ -148,7 +141,6 @@ export {
   type VaultRequestContext,
   type DeviceAccess,
 } from "./serve/vault-context.js";
-// Preview raster codec (#405): pure-JS downscaler hosts inject for the blob sweep's backstop derivatives.
 export { createImagePreviewCodec } from "./preview/codec.js";
 export { createWasmImagePreviewCodec } from "./preview/wasm-codec.js";
 export {
@@ -160,7 +152,5 @@ export {
   platformDefaultDataDir,
   type DefaultDataDirOptions,
 } from "./cli/data-dir.js";
-// Desktop → unspawned daemon: loopback bearer derived from custody (#568 F).
 export { landlordBearerForDataDir } from "./cli/landlord-auth.js";
-// Host-only gate (#568 A/B): wire into serve({isHostCustody}) so host lanes refuse anything a forwarder delivered to loopback.
 export { isDirectHostRequest } from "./routes/route-helpers.js";

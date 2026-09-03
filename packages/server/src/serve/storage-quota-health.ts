@@ -1,17 +1,9 @@
-// `storage-quota` health component (#367 §D2), reading a provider-reported
-// quota (packages/backup/PROTOCOL.md § Usage) instead of a local statfs call.
-// Only a connection with a provider-reported `quotaBytes` can go
-// degraded/error here — an unmetered provider reports `quotaBytes: null` and
-// reads as an honest "unmetered" ok, not a fabricated pass.
-
 import type { UsageByStore } from "@centraid/backup";
 
 import { formatBytes } from "./disk-health.js";
 import type { HealthProbe } from "./health-registry.js";
 
-/** Fraction of `quotaBytes` at which a store's usage flips to `degraded`. */
 export const QUOTA_DEGRADED_AT = 0.8;
-/** Fraction of `quotaBytes` at which a store's usage flips to `error`. */
 export const QUOTA_ERROR_AT = 0.95;
 
 const STORE_CLASSES = ["backup", "cas"] as const;
@@ -23,15 +15,12 @@ export interface StorageQuotaConnectionEntry {
 }
 
 export interface StorageQuotaHealthOptions {
-  /** Every configured storage connection (all `kind: 'provider'`). */
   readonly connections: () => Promise<readonly StorageQuotaConnectionEntry[]>;
-  /** The cached provider-reported usage for one connection (#367 §D1's poller). */
   readonly usageFor: (
     connectionId: string
   ) => Promise<{ providerReported: UsageByStore | null }>;
 }
 
-/** Builds the `storage-quota` component's `HealthProbe` (registered in `build-gateway.ts`). */
 export function createStorageQuotaHealthProbe(
   options: StorageQuotaHealthOptions
 ): HealthProbe {

@@ -1,7 +1,3 @@
-/*
- * Loader-safe entry (#842): worker type stripping can't map a `./sib.js` specifier onto its `.ts` source, so boot resolves by absolute path.
- */
-
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -25,7 +21,6 @@ describe(loadSandbox, () => {
 
   test("the policies it returns are the shipped ones, not re-derived", async () => {
     const boot = await loadSandbox();
-    // Absolute-path indirection must not fork the policy table.
     expect(boot.appHandlerPolicy()).toStrictEqual(appHandlerPolicy());
     const dir = path.resolve("/tmp/centraid-boot-seed");
     expect(boot.appSeedPolicy(dir)).toStrictEqual(appSeedPolicy(dir));
@@ -40,7 +35,6 @@ describe(loadSandbox, () => {
   });
 
   test("resolves against whichever layout is on disk", async () => {
-    // Exactly one install-sibling spelling must exist in either layout.
     const here = import.meta.dirname;
     const js = existsSync(path.join(here, "install.js"));
     const ts = existsSync(path.join(here, "install.ts"));

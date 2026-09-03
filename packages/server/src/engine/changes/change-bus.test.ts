@@ -62,7 +62,6 @@ describe(ChangeBus, () => {
     bus.subscribe("app1", () => {
       goodAfter = true;
     });
-    // Emit must not propagate the throw.
     expect(() =>
       bus.emit({ appId: "app1", tables: ["t"], ts: 1, source: "handler" })
     ).not.toThrow();

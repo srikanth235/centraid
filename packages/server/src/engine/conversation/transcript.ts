@@ -1,9 +1,5 @@
-// Transcript codec for a turn's `step`/`tool` items; bad JSON degrades, never throws.
-
 import type { Turn } from "./schema.js";
 
-/** Retry families (#420): root + transitive `retryOf`; dangling links are
- *  their own family. */
 export function groupRetryFamilies(turns: readonly Turn[]): Turn[][] {
   const byId = new Map(turns.map((t) => [t.turnId, t]));
   const rootOf = (turn: Turn): string => {
@@ -15,7 +11,6 @@ export function groupRetryFamilies(turns: readonly Turn[]): Turn[][] {
     }
     return cur.turnId;
   };
-  // Retries target earlier turns, so Map order is root-seq.
   const families = new Map<string, Turn[]>();
   for (const t of turns) {
     const root = rootOf(t);

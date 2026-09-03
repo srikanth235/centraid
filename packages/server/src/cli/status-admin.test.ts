@@ -1,14 +1,4 @@
 import crypto from "node:crypto";
-/*
- * `centraid-gateway status` (#382) — a data-dir-only unit test:
- * `--data-dir` given but no service ever installed, so `queryServiceStatus`
- * reports `installed: false` without shelling out to a real launchd/systemd
- * (both platforms handle "unit not found" as a normal, zero-exit read — see
- * `service-admin.ts`'s `launchdStatusInfo`/`systemdStatusInfo`). Darwin and
- * Linux CI runners both exercise the real OS probe this way; a `win32` CI
- * runner would hit the "not supported" branch instead — acceptable, `status`
- * inherits `service`'s two-platform scope.
- */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -74,14 +64,9 @@ describe("status-admin scenarios", () => {
     throw new Error("connection refused");
   }) as typeof fetch;
 
-  // #545 A10 — skipIf so report-signals sees the skip (bare return was false-green).
   test.skipIf(servicePlatform)(
     "status --json uses the shared default data dir (never-installed unit reads clean)",
     async () => {
-      // An explicit, per-run label. Without it the probe asks launchd/systemd
-      // about the DEFAULT label, so on any machine that actually runs Centraid
-      // the service is installed and "never-installed" reads `true` — a
-      // property of the host, not of the code (#656).
       const neverInstalled = `dev.centraid.never-installed.${crypto.randomUUID()}`;
       const parsed = lastJson(
         await capture(() =>
@@ -107,7 +92,6 @@ describe("status-admin scenarios", () => {
   test.skipIf(servicePlatform)(
     "status --json with --data-dir adds the data-dir summary (exists, endpoint identity, vault count)",
     async () => {
-      // A vault + endpoint custody key, same as a daemon that has booted once.
       await capture(() =>
         commandVault(
           ["create", "--data-dir", dataDir, "--name", "Family"],
@@ -122,7 +106,6 @@ describe("status-admin scenarios", () => {
         _input: string | URL | Request,
         init?: RequestInit
       ): Promise<Response> => {
-        // Mirror production #568 item C: dial tickets only for authenticated callers.
         const headers = new Headers(init?.headers);
         const authorized =
           headers.get("authorization") ===

@@ -1,7 +1,3 @@
-// Gateway backup target/fencing state in gateway.db (#555). Degrade fields are
-// PERSISTED because the health probe recomputes from this state and overrides
-// pushed reports, which would otherwise repaint a degrade green.
-
 import { createHmac, randomBytes } from "node:crypto";
 
 import { GatewayDatabase } from "../serve/gateway-db.js";
@@ -11,9 +7,7 @@ import type { BackupReconciliationState } from "./backup-reconciliation.js";
 export interface BackupTargetState {
   targetId: string;
   providerRef?: string;
-  /** Never the vault name. */
   label: string;
-  /** PROTOCOL.md § Generation fencing; starts at 1. */
   generation: number;
   firstBackupAt?: string;
   lastBackupAt?: string;
@@ -22,24 +16,14 @@ export interface BackupTargetState {
   providerPolicy?: ProviderPolicySyncState;
   reconciliation?: BackupReconciliationState;
   lastSeq?: number;
-  /** PROTOCOL.md: never bump a generation automatically. A manual run still
-   *  409s, so the operator sees it on demand. */
   fenced?: boolean;
   lastError?: string;
   lastVerifyError?: string;
   lastRestoreVerifiedAt?: string;
   lastRestoreVerifyError?: string;
-  /** Hard-deletes explain these: DEGRADED, not a failure. */
   lastRestoreVerifyDangling?: number;
-  /** Restore derives segment keys from the manifest, so a generation seals
-   *  under exactly one epoch for life (#408). */
   walGenerationEpochs?: Record<string, number>;
-  /** Written only after a PUT returns, never from local intent: it becomes the
-   *  next manifest's `walTipTickMs` floor, so an interrupted drain must yield a
-   *  LOWER tip. */
   walMarkerTips?: Record<string, number>;
-  /** A foreign checkpoint forces a generation break (#411). A churn signal,
-   *  never a correctness failure. */
   walForeignCheckpointCount?: number;
   walLastForeignCheckpoint?: { atMs: number; reason: string };
 }
@@ -50,7 +34,6 @@ export interface BackupState {
   sourceInstanceId: string;
 }
 
-/** Derived from gateway custody, never persisted. */
 export function deriveBackupSourceInstanceId(endpointSecret: Buffer): string {
   return createHmac("sha256", endpointSecret)
     .update("backup-source", "utf8")
@@ -145,7 +128,6 @@ export async function saveBackupState(
   }
 }
 
-/** PROTOCOL.md: "Clients MUST NOT send real vault names". */
 export function opaqueLabel(): string {
   return randomBytes(8).toString("hex");
 }

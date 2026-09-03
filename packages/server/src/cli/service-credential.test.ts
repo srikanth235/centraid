@@ -45,8 +45,6 @@ describe("service-credential", () => {
     const keysDir = path.join(root, "keys");
     const env = { CENTRAID_KEYSTORE_CREDENTIAL_ROOT: credentialRoot };
 
-    // A headless `serve` has already wrapped these under the 0600 host
-    // credential; `service install` hands the daemon that same credential.
     const encoded = hostCredentialKey(keysDir, env);
     const store = new KeyStore(keysDir, {
       protector: aesGcmKeyProtector(Buffer.from(encoded, "base64")),
@@ -75,9 +73,6 @@ describe("service-credential", () => {
       "utf8"
     );
 
-    // This is the failure that must happen BEFORE `security add-generic-password
-    // -U` overwrites custody in place — a poisoned credential makes every key in
-    // the data dir undecryptable on every subsequent darwin boot.
     await expect(
       adoptKeyStoreCredential(
         failing(),
@@ -117,7 +112,6 @@ describe("service-credential", () => {
     const encoded = Buffer.alloc(32, 0x33).toString("base64");
     await adoptKeyStoreCredential(failing(), credentialFor(keysDir, encoded));
 
-    // The install may now commit the credential: the key reads under it.
     const raw = await fs.readFile(
       path.join(keysDir, "endpoint-key.bin"),
       "utf8"
@@ -128,7 +122,6 @@ describe("service-credential", () => {
         protector: aesGcmKeyProtector(Buffer.from(encoded, "base64")),
       }).load("endpoint-key.bin")
     ).toStrictEqual(secret);
-    // A crashed writer's leftovers are not keys and must not fail the install.
     await expect(
       fs.readFile(path.join(keysDir, "endpoint-key.bin.tmp1234"), "utf8")
     ).resolves.toBe("partial write");

@@ -1,7 +1,3 @@
-/**
- * Ordered async primitives for work whose sequence is part of the contract.
- * Independent work should use `Promise.all` instead.
- */
 export function forEachSequentially<T>(
   values: Iterable<T>,
   visit: (value: T, index: number) => void | PromiseLike<void>

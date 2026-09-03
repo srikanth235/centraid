@@ -255,10 +255,6 @@ describe("support bundle — usefulness", () => {
     expect(redactedFraction).toBeLessThan(0.5);
   });
 
-  // C2 (#916): the audit and ledger bands are bands of `vault.db` now, so the
-  // one file's table breakdown names `access_receipt`, `items` and `turns`.
-  // A count is a diagnostic; a cell is the owner's evidence and the owner's
-  // conversation. The bundle carries the former and has no path to the latter.
   test("the audit and ledger bands contribute counts, never row contents", () => {
     const bundle = buildSupportBundle(
       input({
@@ -277,7 +273,6 @@ describe("support bundle — usefulness", () => {
     };
     expect(storage.tableRowCounts["access_receipt"]).toBe(9_104);
     expect(storage.tableRowCounts["items"]).toBe(2_311);
-    // Counts and bytes only — the emitter has no branch that reads a row.
     expect(Object.keys(storage).toSorted()).toStrictEqual([
       "tableRowCounts",
       "vaultDbBytes",

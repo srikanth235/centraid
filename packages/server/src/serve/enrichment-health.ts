@@ -1,11 +1,5 @@
-/*
- * Per-enricher recent-run health. Never-fired is `ok` (unknown, not a
- * failure) — do not fabricate run history from other automations' ledgers.
- */
-
 import type { HealthProbe } from "./health-registry.js";
 
-/** Bundled enricher ids (`ownerApp === id`); do not read blueprints at runtime. */
 export const ENRICHER_AUTOMATION_IDS = [
   "photo-ocr",
   "transcript",
@@ -69,7 +63,6 @@ export function createEnrichmentHealthProbe(
         try {
           return { vault, rows: await vault.listAutomations() };
         } catch {
-          // Unsettled/unmounted vault — `vaults` already flags a failed mount.
           return undefined;
         }
       })

@@ -98,7 +98,6 @@ describe("web-control-sessions.contract scenarios", () => {
     const second = await establish();
     expect(first).not.toBe(second);
 
-    // Both control cookies remain live after the second pairing.
     await forEachSequentially([first, second], async (cookie) => {
       const proxied = await fetch(
         `${handle.url}/centraid/_web/control?path=${encodeURIComponent("/centraid/_apps")}`,
@@ -201,7 +200,6 @@ describe("web-control-sessions.contract scenarios", () => {
 
   test("a persisted control session still authorizes after a gateway restart", async () => {
     const controlsFile = path.join(dataDir, "web-sessions.json");
-    // Re-serve the same dataDir WITH persistence wired.
     await handle.close();
     handle = await serve({
       paths: pathsUnder(dataDir),
@@ -211,8 +209,6 @@ describe("web-control-sessions.contract scenarios", () => {
     const cookie = await establishControl();
     expect((await proxyControl(cookie)).status).toBe(200);
 
-    // "Restart": a brand-new gateway process on the same file — the browser
-    // kept only its HttpOnly cookie, yet it must still authorize.
     await handle.close();
     handle = await serve({
       paths: pathsUnder(dataDir),
@@ -226,14 +222,12 @@ describe("web-control-sessions.contract scenarios", () => {
     const cookie = await establishControl();
     expect((await proxyControl(cookie)).status).toBe(200);
 
-    // An unauthenticated DELETE is rejected like any other.
     const noCookie = await fetch(`${handle.url}/centraid/_web/control`, {
       method: "DELETE",
       headers: { Origin: SHELL },
     });
     expect(noCookie.status).toBe(401);
 
-    // A DELETE with the cookie + matching Origin logs out: 200 + expiring cookie.
     const out = await fetch(`${handle.url}/centraid/_web/control`, {
       method: "DELETE",
       headers: { Cookie: cookie, Origin: SHELL },
@@ -241,7 +235,6 @@ describe("web-control-sessions.contract scenarios", () => {
     expect(out.status).toBe(200);
     expect(out.headers.get("set-cookie") ?? "").toContain("Max-Age=0");
 
-    // The cookie no longer authorizes.
     expect((await proxyControl(cookie)).status).toBe(401);
   });
 
@@ -249,26 +242,18 @@ describe("web-control-sessions.contract scenarios", () => {
     const cookie = await establishControl();
     expect((await proxyControl(cookie)).status).toBe(200);
 
-    // A DELETE carrying a proxied `?path=` is an ordinary API call (e.g. the
-    // shell revoking a device), NOT a control-session logout. It must reach the
-    // inner route — and, critically, must NOT expire the control cookie.
     const del = await fetch(
       `${handle.url}/centraid/_web/control?path=${encodeURIComponent("/centraid/_apps")}`,
       { method: "DELETE", headers: { Cookie: cookie, Origin: SHELL } }
     );
-    // Whatever the inner route answers (here _apps has no DELETE), it is not the
-    // logout's cookie-expiring response.
     expect(del.headers.get("set-cookie") ?? "").not.toContain("Max-Age=0");
 
-    // The session survived: the cookie still authorizes.
     expect((await proxyControl(cookie)).status).toBe(200);
   });
 
   test("a control session without a proved device identity fails closed", async () => {
     const controlsFile = path.join(dataDir, "web-sessions.json");
     await handle.close();
-    // There is no shared-bearer admin wildcard: a session without a device key
-    // cannot survive the enrollment check.
     handle = await serve({
       paths: pathsUnder(dataDir),
       webSessions: { controlsFile, isDeviceValid: () => false },
@@ -277,12 +262,6 @@ describe("web-control-sessions.contract scenarios", () => {
     const cookie = await establishControl();
     expect((await proxyControl(cookie)).status).toBe(401);
   });
-
-  // ── Revocation propagation for device-bound sessions ──────────────────────
-  // These drive `WebControlSessions` directly: the e2e serve() rig has no
-  // device plane, so a bearer-established session never carries a deviceKey.
-  // Seeding a deviceKey-bound session in isolation is the only way to exercise
-  // the `isDeviceValid` gate the daemon wires in cli.ts.
 
   function req(init: {
     url: string;
@@ -303,7 +282,6 @@ describe("web-control-sessions.contract scenarios", () => {
     const token = "control-secret-token";
     const hash = hashControlToken(token);
     const controlStore = WebControlSessionStore.open();
-    // Seed a persisted control row bound to a device key.
     controlStore.establish({
       tokenHash: hash,
       vaultId: "v1",
@@ -322,13 +300,11 @@ describe("web-control-sessions.contract scenarios", () => {
         headers: { cookie: `__centraid_control=${token}`, origin: SHELL },
       });
 
-    // Enrolled → authorizes as the device plane.
     expect(sessions.authorize(control())).toStrictEqual({
       plane: "device",
       deviceKey: "dev-1",
     });
 
-    // Revoke the enrollment → the very next authorize fails and drops the row.
     enrolled = false;
     expect(sessions.authorize(control())).toBeUndefined();
     expect(controlStore.find(hash)).toBeUndefined();

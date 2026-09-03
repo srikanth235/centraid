@@ -17,10 +17,6 @@ const HARNESS_SUBSYSTEMS: readonly ModelSubsystem[] = [
   "automations",
 ];
 
-/**
- * `binPath`/`extraArgs` are one configured harness's settings, not portable
- * flags — a different requested harness must use its registry defaults.
- */
 export function resolveGatewayHarnessPrefs(
   allPrefs: Record<string, unknown>,
   subsystem?: ModelSubsystem,
@@ -59,12 +55,6 @@ export function resolveGatewayHarnessPrefs(
   };
 }
 
-/**
- * Reject a harness this host cannot execute instead of coercing: the Settings
- * patch path must not silently persist an unregistered `harness.<subsystem>`
- * value as `codex` (the lenient variant deliberately degrades so a live turn
- * always has a harness).
- */
 export function resolveStrictGatewayHarnessPrefs(
   allPrefs: Record<string, unknown>,
   subsystem?: ModelSubsystem
@@ -72,16 +62,11 @@ export function resolveStrictGatewayHarnessPrefs(
   const kindRaw = subsystem
     ? resolveSubsystemHarness(allPrefs, subsystem)
     : allPrefs["harness.kind"];
-  // Unset is legitimate — it means the default harness.
   if (kindRaw !== undefined && kindRaw !== null && !isHarnessKind(kindRaw))
     return undefined;
   return resolveGatewayHarnessPrefs(allPrefs, subsystem);
 }
 
-/**
- * Membership is subsystem-scoped: retaining a harness in one ladder must not
- * preserve consent derived from a different ladder.
- */
 export function removedHarnessLadderMembers(
   before: Record<string, unknown>,
   after: Record<string, unknown>

@@ -1,12 +1,3 @@
-/*
- * Diagnostics redaction (#842): allowlist by construction, denylist as
- * belt-and-braces. Every field is emitted through a declared `LeafPolicy`, so
- * an unrecognised shape is replaced and a new upstream field cannot ride
- * along. `scrubProse` reduces free text — the one uncontrolled lane — to a
- * message SKELETON; since no pattern catches a short unquoted value, `strict`
- * (prose dropped) is the shareable default. No clock, no randomness.
- */
-
 import { createHash } from "node:crypto";
 
 export const REDACTION_LEVELS = ["strict", "standard"] as const;
@@ -37,7 +28,6 @@ export type RedactionRuleId = (typeof REDACTION_RULE_IDS)[number];
 
 export interface RedactionReport {
   level: RedactionLevel;
-  /** Zero-filled, never sparse. */
   byRule: Record<RedactionRuleId, number>;
   leaves: number;
   redactedLeaves: number;
@@ -55,14 +45,11 @@ function hit(report: RedactionReport, rule: RedactionRuleId, count = 1): void {
 
 const MARK = (rule: RedactionRuleId): string => `[REDACTED:${rule}]`;
 
-/** Short enough that a runaway interpolation cannot smuggle out a document. */
 export const PROSE_MAX_CHARS = 240;
 const MAX_DEPTH = 8;
 const MAX_ARRAY = 64;
 const MAX_KEYS = 128;
 
-/** Deliberately broad: a false positive redacts a harmless field, a false
- *  negative mails a credential to a stranger. */
 export const SECRET_KEY_PATTERN =
   /token|secret|password|passwd|passphrase|credential|api[-_]?key|private[-_]?key|seal[-_]?key|bearer|authorization|cookie|mnemonic|otp|seed|cvv|\bpin\b|signature|session[-_]?id/iu;
 
@@ -87,8 +74,6 @@ interface ProseRule {
   readonly replace?: (match: string) => string;
 }
 
-// Order is LOAD-BEARING: specific shapes run first so their replacement text
-// survives into the skeleton; blunt catch-alls run last.
 const PROSE_RULES: readonly ProseRule[] = [
   {
     id: "private-key-block",
@@ -102,14 +87,12 @@ const PROSE_RULES: readonly ProseRule[] = [
   { id: "email", pattern: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/gu },
   {
     id: "url",
-    // Keep the scheme; host, path, query and fragment all go.
     pattern: /\b(?<scheme>[A-Za-z][A-Za-z0-9+.-]*):\/\/[^\s"'`<>]+/gu,
     replace: (match) =>
       `${match.slice(0, match.indexOf(":"))}://[REDACTED:url]`,
   },
   {
     id: "absolute-path",
-    // Two or more segments only, so a bare "/" is left alone.
     pattern: /(?:[A-Za-z]:[\\/]|\/)(?:[\w %.~+-]+[\\/])+[\w %.~+-]*/gu,
   },
   {
@@ -117,39 +100,28 @@ const PROSE_RULES: readonly ProseRule[] = [
     pattern:
       /\b(?:\d{1,3}\.){3}\d{1,3}\b|\b(?:[0-9a-fA-F]{1,4}:){2,7}[0-9a-fA-F]{1,4}\b/gu,
   },
-  // BEFORE `phone`: whichever runs first wins the attribution, and a
-  // Luhn-invalid run falls through to `phone`, which redacts it anyway.
   {
     id: "payment-card",
     pattern: /\b(?:\d[ -]?){12,18}\d\b/gu,
     replace: (match) =>
       luhnValid(match.replaceAll(/[^\d]/gu, "")) ? MARK("payment-card") : match,
   },
-  // Lookarounds, not `\b`: otherwise a digit run INSIDE a longer handle
-  // matches and the replacement splits that handle into two surviving halves.
   {
     id: "phone",
     pattern: /(?<![A-Za-z0-9])\+?\d[\d ()-]{8,}\d(?![A-Za-z0-9])/gu,
   },
   {
     id: "quoted-value",
-    // This codebase interpolates owner values inside quotes.
     pattern: /"[^"\n]{1,4096}"|'[^'\n]{1,4096}'|`[^`\n]{1,4096}`/gu,
   },
   { id: "high-entropy", pattern: /[A-Za-z0-9+/=_-]{24,}/gu },
   { id: "long-token", pattern: /\S{64,}/gu },
-  // The catch-all for owner PROSE interpolated unquoted: a run of this many
-  // consecutive words is a sentence somebody wrote. LAST, so the structured
-  // rules keep their attribution. It is why `standard` is defensible at all,
-  // and why `strict` is still the default.
   {
     id: "sentence-run",
     pattern: /[\p{L}\p{N}'’]+(?:[ \t]+[\p{L}\p{N}'’]+){7,}/gu,
   },
 ];
 
-// `payment-card` can return its match unchanged, so a per-rule count cannot
-// come from `match().length` — every rule reports through this one path.
 function applyRule(
   text: string,
   rule: ProseRule,
@@ -165,8 +137,6 @@ function applyRule(
   return next;
 }
 
-/** Re-scrubbing is safe: the `[REDACTED:x]` marks are short, unquoted and
- *  low-entropy, so no rule matches them. */
 export function scrubProse(text: string, report: RedactionReport): string {
   let out = text;
   for (const rule of PROSE_RULES) out = applyRule(out, rule, report);
@@ -177,39 +147,32 @@ export function scrubProse(text: string, report: RedactionReport): string {
   return out;
 }
 
-/** Support quotes the digest; the owner greps their own local log. */
 export function digest12(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 12);
 }
 
-/** Correlates rows WITHIN one bundle; no cross-bundle linkability. */
 export function hashIdentifier(value: string, salt: string): string {
   return `id:${createHash("sha256").update(`${salt}\u0000${value}`).digest("hex").slice(0, 12)}`;
 }
 
 export type LeafPolicy =
   | "drop"
-  /** Scrubbed at `standard`, dropped entirely at `strict`. */
   | "prose"
   | "enum"
   | "number"
   | "timestamp"
-  /** Owner-scoped id, emitted as a salted hash. */
   | "identifier"
   | "verbatim";
 
-// `@` allowed so `fn@file.js:12` is an enum leaf, not a refused one.
 const ENUM_SHAPE = /^[A-Za-z0-9][A-Za-z0-9._:@-]{0,63}$/u;
 const TIMESTAMP_SHAPE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/u;
 const VERBATIM_SHAPE = /^[\w .+:/@-]{0,64}$/u;
 
 export interface LeafContext {
   readonly report: RedactionReport;
-  /** One per bundle. */
   readonly salt: string;
 }
 
-/** A value failing its policy's shape is REFUSED, never passed through. */
 export function emitLeaf(
   value: unknown,
   policy: LeafPolicy,
@@ -262,26 +225,13 @@ export function emitLeaf(
   }
 }
 
-/**
- * The ONE deliberate relaxation in the walk below: without it a `strict`
- * bundle reports every setting as `[REDACTED]`, which is a blank page rather
- * than a safe bundle. The residual risk — a short lowercase SECRET under a
- * key whose name is not secret-shaped — is covered by `SECRET_KEY_PATTERN`
- * and `applyTripwire`, and disclosed in the bundle itself.
- */
 const MACHINE_TOKEN = /^[a-z0-9][a-z0-9._:+-]{0,15}$/u;
-/** A long hex/base32 run is a handle or a key, never a setting name. */
 const OPAQUE_HANDLE = /^[0-9a-f]{12,}$/u;
 
 function isMachineSetting(value: string): boolean {
   return MACHINE_TOKEN.test(value) && !OPAQUE_HANDLE.test(value);
 }
 
-/**
- * The shape here is NOT under our control: secret-shaped keys drop by name,
- * machine tokens survive, other strings are prose-scrubbed. Depth and width
- * are capped so a surprise structure cannot balloon the bundle.
- */
 export function scrubUnknown(
   value: unknown,
   context: LeafContext,
@@ -333,12 +283,6 @@ export interface TripwireResult {
   readonly hits: number;
 }
 
-/**
- * The last gate. A hit means the policy above MISSED something: the value is
- * removed and the count rides in the bundle's own report, so the miss is
- * visible rather than silent. Values shorter than 4 characters are ignored —
- * they would match inside unrelated tokens and shred the document.
- */
 export function applyTripwire(
   text: string,
   forbidden: Iterable<string>,

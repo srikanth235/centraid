@@ -67,7 +67,6 @@ describe("rowToRunRef / extractReturnEnvelope / makeNodeId", () => {
       input: { k: 2 },
       output: { n: 1 },
     });
-    // Non-JSON input falls through as a string.
     expect(rowToRunRef(turn, "app/digest", "not-json").input).toBe("not-json");
   });
 
@@ -148,7 +147,6 @@ describe("applyRetention / usageCloseFields / open+closeRunNode", () => {
     const emit = vi.fn<RunEventSink>(() => {
       throw new Error("emit boom");
     });
-    // Swallowed failures — handler must not die on audit.
     const nodeId = openRunNode({
       store: store as never,
       emit,
@@ -188,7 +186,6 @@ describe("applyRetention / usageCloseFields / open+closeRunNode", () => {
       durationMs: 4,
     });
 
-    // Happy path still emits item.start / item.end when store+emit succeed.
     const goodStore = {
       openItem: vi.fn<ConversationStore["openItem"]>(),
       closeItem: vi.fn<ConversationStore["closeItem"]>(),

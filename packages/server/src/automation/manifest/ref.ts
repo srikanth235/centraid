@@ -1,5 +1,3 @@
-/** Automation identity: per-app slug ids, globally unique `<appId>/<id>` handles (#98). */
-
 import { isValidAppId } from "@centraid/server/engine";
 
 export function isValidId(id: string): boolean {
@@ -16,7 +14,6 @@ export function formatRef(appId: string, automationId: string): string {
   return `${appId}/${automationId}`;
 }
 
-/** Parses `<appId>/<id>` or bare `<id>` within an app. */
 export function parseRef(ref: string, withinApp?: string): Ref | undefined {
   const slash = ref.indexOf("/");
   if (slash === -1) {

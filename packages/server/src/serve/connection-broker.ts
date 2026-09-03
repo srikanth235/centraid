@@ -1,18 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit the broker core is one
-// connection lifecycle — resolve → single-flight refresh → placeholder
-// injection → the PKCE consent ceremony — held together by the three
-// rot-point defenses below; the rate gate + auth-dead helper already live in
-// connection-limiter.ts, and splitting the lifecycle itself would scatter
-// the token-correctness invariants across files.
-/**
- * Connection broker (#304): oauth2 / api_key sealed on `sync_connection`.
- * Law: injection only, never handout — plaintext substitutes parent-side
- * toward pinned `allowed_hosts`. Never return a token to handler code.
- *
- * Rot points (#304 d4): (1) persist rotated pair BEFORE use; (2) single-flight
- * refresh; (3) `invalid_grant` → `needs-auth`; network/5xx retries once then
- * skips WITHOUT flipping.
- */
 
 import { createHash, randomBytes } from "node:crypto";
 
@@ -46,10 +32,6 @@ const BROKER_PURPOSE = "dpv:ServiceProvision";
 const EXPIRY_SLACK_MS = 60 * 1000;
 const TRANSIENT_RETRY_DELAY_MS = 500;
 
-/**
- * Token-endpoint POST bound (#351). Timeout rides the transient path
- * (retry once, then skip WITHOUT flipping).
- */
 export const TOKEN_ENDPOINT_TIMEOUT_MS = 30_000;
 
 interface ConnectionCredRow {
@@ -113,13 +95,9 @@ interface PendingCeremony {
   verifier: string;
   redirectUri: string;
   expiresAt: number;
-  /** Assist: never placed in the authorization URL. */
   clientSessionId?: string;
-  /** Assist: enrolled transport identity, or null for admin/loopback. */
   deviceKey?: string | null;
-  /** Assist: Worker `/start` fragment — never in Google's authorization URL. */
   browserBinding?: string;
-  /** Assist: exact allowlisted scopes expected back from Google. */
   requestedScopes?: readonly string[];
 }
 
@@ -132,18 +110,12 @@ type TokenResponse =
       ok: true;
       accessToken: string;
       refreshToken?: string;
-      /**
-       * Issue #865: the Worker-minted HMAC capability that authenticates the
-       * refresh token at /refresh. Persisted sealed beside the token it
-       * authenticates and re-persisted whenever Google rotates it.
-       */
       refreshCapability?: string;
       expiresAt?: string;
     }
   | { ok: false; authDead: boolean; detail: string };
 
 export class ConnectionBroker {
-  /** Single-flight refresh per `<vaultId>:<connectionId>` (rot point 2). */
   private readonly refreshing = new Map<string, Promise<string>>();
   private readonly limiters = new Map<string, ConnectionLimiter>();
   private readonly pending = new Map<string, PendingCeremony>();
@@ -157,16 +129,11 @@ export class ConnectionBroker {
     private readonly now: () => number = Date.now,
     private readonly logger?: RuntimeLogger
   ) {
-    // Defense in depth: same fixed-origin validation even if the env parser is bypassed.
     this.assistOAuth = assistOAuth
       ? validateAssistOAuthConfig(assistOAuth)
       : undefined;
   }
 
-  /**
-   * Start consent (#304 d3): PKCE + single-use `state` (callback capability).
-   * `access_type=offline&prompt=consent` are Google refresh-token knobs.
-   */
   beginAuthorization(
     plane: VaultPlane,
     connectionId: string,
@@ -217,10 +184,6 @@ export class ConnectionBroker {
     return { authUrl: url.toString(), state };
   }
 
-  /**
-   * Assist start. Gateway owns state + PKCE. State prefix is a non-authorizing
-   * return-surface hint; validation stays gateway-owned.
-   */
   beginAssistAuthorization(input: {
     plane: VaultPlane;
     connectionId: string;
@@ -276,7 +239,6 @@ export class ConnectionBroker {
     return { authUrl: startUrl.toString(), state, redirectUri };
   }
 
-  /** Finish BYO: single-use `state` (consumed even on failure); persist via `sync.store_tokens`. */
   async completeAuthorization(
     state: string,
     code: string
@@ -333,10 +295,6 @@ export class ConnectionBroker {
     return { connectionId };
   }
 
-  /**
-   * Redeem Assist courier. Bind before consuming state so a copied fragment
-   * cannot burn the live ceremony. Bound attempt is single-use even on later refusal.
-   */
   async completeAssistAuthorization(input: {
     state: string;
     code: string;
@@ -383,8 +341,6 @@ export class ConnectionBroker {
       scopes: ceremony.requestedScopes,
     });
     if (!response.ok) {
-      // Additive until replacement tokens persist — a stale receipt must not
-      // disable an already-working connection.
       if (response.authDead && !row.access_token && !row.refresh_token) {
         await this.flipNeedsAuth(
           ceremony.plane,
@@ -424,9 +380,6 @@ export class ConnectionBroker {
     this.pending.delete(input.state);
   }
 
-  /**
-   * Per-fire seam (#304). `undefined` = no broker credential (harness-ambient).
-   */
   resolveForFire: ResolveConnection = async (
     connector
   ): Promise<ConnectionAuth | { refused: string } | undefined> => {
@@ -739,7 +692,6 @@ export class ConnectionBroker {
           })
         : await this.postByoRefresh(row, connectionId, plane, refreshToken);
     if (!response.ok && response.authDead) {
-      // Rot point 3: invalid_grant — only a new consent ceremony revives this.
       await this.flipNeedsAuth(
         plane,
         connectionId,
@@ -842,7 +794,7 @@ export class ConnectionBroker {
       try {
         body = JSON.parse(text) as Record<string, unknown>;
       } catch {
-        /* non-JSON error body — fall through to status handling */
+        // Intentionally empty.
       }
       if (status >= 400) {
         const code =

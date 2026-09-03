@@ -30,33 +30,18 @@ export interface HeadlessCompileOptions {
   harnessSessionDir: string;
   dataDir: string;
   appId: string;
-  /** A fresh, one-shot worktree session for this compile. */
   draftSessionId: string;
   automationRef: string;
   automationName: string;
   instructions: string;
-  /** Validated manifest harness override. */
   harnessKind?: HarnessKind;
-  /** Explicit manifest/prefs-resolved model for this compile. */
   model?: string;
-  /** Semantic ACP configuration pins for this compile. */
   configPins?: Readonly<Record<string, string>>;
-  /** Durable egress grant controller; compile attempts are unattended. */
   providerEgressConsent: ProviderEgressConsentController;
-  /**
-   * How the user authored this attempt's harness: `direct` = their automations
-   * primary, `ladder` = current failover membership. Omit when the harness came
-   * from a manifest pin the user never authored — the compile is then denied
-   * unless a real grant already exists (#567).
-   */
   consentSource?: ProviderConsentSource;
-  /** Resolve historical upload hashes into this automation app's blob CAS. */
   hydrationAttachmentPath?: (hash: string) => string;
-  /** Durable reader-facing notice when this attempt follows a failed rung. */
   failoverNotice?: string;
-  /** Anchor tokens resolved against the addressed vault before the model runs. */
   anchors?: readonly ResolvedAutomationAnchor[];
-  /** Fail-closed anchor resolution error, recorded as this compile turn. */
   preflightError?: string;
   onSuccess: () => Promise<void>;
   onFailure?: (
@@ -74,9 +59,7 @@ export interface RecordFailedAutomationCompileOptions {
   runId: string;
   error: string;
   harnessKind?: HarnessKind;
-  /** Turn note. Defaults to the "reserved id never started" wording. */
   note?: string;
-  /** Turn summary shown in the thread. Defaults to `Compile failed`. */
   summary?: string;
 }
 
@@ -130,7 +113,6 @@ function compileUsageFields(usage: UsageEvent | undefined): {
   };
 }
 
-/** Settle a compile id reserved before a prerequisite rewrite could start. */
 export function recordFailedAutomationCompile(
   opts: RecordFailedAutomationCompileOptions
 ): void {
@@ -211,7 +193,6 @@ export const HEADLESS_COMPILE_WORK_ORDER = (
   ].join("\n");
 };
 
-/** Apply gateway-owned lifecycle/provenance after the harness has written its draft. */
 export function finalizeCompiledManifest(
   manifest: Manifest,
   options: {
@@ -235,9 +216,6 @@ export function finalizeCompiledManifest(
   );
   const scopes: ManifestVaultScope[] = [...anchoredScopes];
   for (const existing of manifest.vault?.scopes ?? []) {
-    // A model-authored broad read on an anchored table must not coexist with
-    // the gateway's exact row/field attenuation. Preserve an act capability
-    // from read+act, but strip the broad read half.
     if (
       existing.table &&
       anchoredTables.has(`${existing.schema}.${existing.table}`) &&
@@ -288,7 +266,6 @@ export function finalizeCompiledManifest(
   });
 }
 
-/** Drive the existing unified builder runner without exposing a builder conversation UI. */
 export async function runHeadlessAutomationCompile(
   opts: HeadlessCompileOptions
 ): Promise<void> {
@@ -377,8 +354,6 @@ export async function runHeadlessAutomationCompile(
         turnId: runId,
         ordinal: 1,
         kind: "step",
-        // Machine-keyed like every other notice item (`notice:<level>:<code>`)
-        // so readers key off the code, not a human string.
         name: "notice:warn:failover",
         outputJson: JSON.stringify({ text: opts.failoverNotice }),
         ok: true,
@@ -419,9 +394,6 @@ export async function runHeadlessAutomationCompile(
         stopReason = event.stopReason;
       }
       if (event.type === "consent.required") {
-        // Headless compiles have no owner present to answer an egress prompt.
-        // Treat the unsent turn as blocked instead of publishing the untouched
-        // scaffold and falsely recording "Plan ready".
         errorMessage = event.message;
         stopReason = "consent_required";
       }
@@ -434,10 +406,6 @@ export async function runHeadlessAutomationCompile(
 
     try {
       if (opts.preflightError) throw new Error(opts.preflightError);
-      // A compile is unattended: no owner is present to answer an egress
-      // prompt, so consent must already exist or be derivable from what the
-      // user authored in Settings. Deriving must never resurrect a revocation
-      // or invent a lane for a provider absent from the ladder (#567 D5/D13).
       const consent = opts.providerEgressConsent;
       if (!consent) {
         throw new Error(
@@ -463,10 +431,6 @@ export async function runHeadlessAutomationCompile(
           );
         }
       }
-      // The injected unified gateway runner is intrinsically headless: its
-      // Claude ACP adapter pins bypassPermissions and its Codex ACP adapter pins
-      // approvalPolicy=never + workspace-write. There is deliberately no
-      // per-turn escape hatch on ConversationRunner that can weaken this.
       harnessObservation =
         (await opts.runner.run({
           appId: opts.appId,

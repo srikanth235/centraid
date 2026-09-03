@@ -54,7 +54,6 @@ function grantsScope(app: AppLike, required: RequiredScope): boolean {
   );
 }
 
-/** A module goes dark as soon as its own required owner grant is absent. */
 export function companionModuleState(
   selected: ReadonlySet<string>,
   module: CompanionModule,

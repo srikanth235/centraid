@@ -1,11 +1,3 @@
-/*
- * In-memory cache of `probeAcpCapabilities` results, keyed by harness kind +
- * effective launch overrides. Settings reads serve the cache; `?refresh=1`
- * forces a re-probe.
- * Probes are expensive (spawn + initialize), so we never run them on every
- * status poll.
- */
-
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";

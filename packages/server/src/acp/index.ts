@@ -1,9 +1,3 @@
-/*
- * @centraid/server/acp — every harness kind runs through ONE path, ACP over
- * stdio (#479), normalized to `TurnStreamEvent`. `runTurn` is the engine
- * primitive; scheduling lives in `@centraid/server/automation`.
- */
-
 export {
   makeConversationRunner,
   type MakeConversationRunnerOptions,

@@ -1,9 +1,3 @@
-/*
- * `centraid-gateway doctor` verb (#839), end-to-end over a real
- * data dir: it opens the gateway's vaults, runs the scrub, prints findings,
- * and exits nonzero when a real fault is present.
- */
-
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -22,7 +16,6 @@ const quiet = {
   error: () => undefined,
 };
 
-/** A data dir carrying one bootstrapped vault with a real CAS blob. */
 function dataDirWithVault(): { dataDir: string; vaultId: string; sha: string } {
   const dataDir = tempDirSync("doctor-cli-");
   const layout = daemonLayoutFor(dataDir);
@@ -55,7 +48,6 @@ function casFile(dataDir: string, vaultId: string, sha: string): string {
   );
 }
 
-/** Run the verb, capturing stdout and the resulting exit code. */
 async function runDoctor(
   args: string[]
 ): Promise<{ out: string; code: number }> {

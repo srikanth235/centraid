@@ -1,8 +1,3 @@
-/*
- * One `usage` event per turn; ACP totals are CUMULATIVE per session — book
- * monotonic deltas against the persisted snapshot.
- */
-
 import type { Cost, Usage } from "@agentclientprotocol/sdk";
 
 import type {
@@ -29,8 +24,6 @@ export interface DeltaCumulativeUsage {
   snapshot?: HarnessUsageSnapshot;
 }
 
-/** Regression, currency change, or fresh session = reset charged in full;
- *  missing fields keep their baseline. */
 export function deltaCumulativeUsage(
   currentTokens: TokenUsage,
   currentCost: UsageCost | undefined,
@@ -89,7 +82,6 @@ export function deltaCumulativeUsage(
   };
 }
 
-/** Token breakdown lives on the prompt RESULT, not `usage_update`. */
 export function readTokenUsage(source: Usage): TokenUsage {
   return {
     inputTokens: source.inputTokens,
@@ -103,13 +95,10 @@ export function readTokenUsage(source: Usage): TokenUsage {
   };
 }
 
-/** ISO 4217 — anything non-USD isn't `costUsd`. */
 export function readCost(raw: Cost | null | undefined): UsageCost | undefined {
   return raw ? { amount: raw.amount, currency: raw.currency } : undefined;
 }
 
-/** No real usage → no event. `model` stamped whenever known (repricing
- *  needs non-NULL). */
 export function buildUsageEvent(
   kind: HarnessKind,
   model: string | undefined,
@@ -119,7 +108,6 @@ export function buildUsageEvent(
 ): TurnStreamEvent | undefined {
   const costUsd =
     cost && cost.currency.toUpperCase() === "USD" ? cost.amount : undefined;
-  // Effort alone would book a zero-token, config-only row.
   if (Object.keys(tokens).length === 0 && costUsd === undefined) {
     return undefined;
   }

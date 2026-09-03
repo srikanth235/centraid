@@ -1,8 +1,5 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-// Scenario seeds end-to-end (#290): every blueprint seed.js runs in the real
-// handler worker against a real vault plane through the demo bridge, then
-// purges clean. Schema-drift tripwire: fails HERE, not on an owner's click.
 
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -90,7 +87,6 @@ describe("demo-seed", () => {
     for (const [appId, rows] of byApp)
       expect(rows, `${appId} seeded rows`).toBeGreaterThan(0);
 
-    // Provenance may hold several rows per entity; the registry exactly one.
     const provCounts = plane.db.audit
       .prepare(
         `SELECT count(DISTINCT entity_type || ':' || entity_id) AS n
@@ -104,7 +100,6 @@ describe("demo-seed", () => {
     };
     expect(provCounts.n).toBe(registered.n);
 
-    // Purge: registry and domain tables empty of demo rows.
     const purge = plane.purgeDemo();
     expect(purge.blocked).toStrictEqual([]);
     expect(purge.purged).toBe(registered.n);
@@ -127,9 +122,6 @@ describe("demo-seed", () => {
     }
   }, 60_000);
 
-  // The photo roll ships its bytes BESIDE its generator (#708): seed.js reads
-  // `sample/*.png` off its own dir; a missing image would still "seed" as
-  // zero assets.
   test("the photos scenario lands a full camera roll, favorites and an album", async () => {
     const dir = await tempDir();
     const plane = openPlane(dir);
@@ -141,7 +133,6 @@ describe("demo-seed", () => {
     expect(
       count("SELECT count(*) AS n FROM media_asset WHERE kind = 'video'")
     ).toBe(1);
-    // The star is a flags-scheme tag on the asset since #916, not a column.
     expect(
       count(
         `SELECT count(*) AS n FROM core_tag t
@@ -162,7 +153,6 @@ describe("demo-seed", () => {
             AND a.captured_at IS NOT NULL AND c.byte_size > 0`
       )
     ).toBe(19);
-    // The Years → Months → All drill-down needs a fresh vault to cross both.
     expect(
       count(
         "SELECT count(DISTINCT strftime('%Y-%m', captured_at)) AS n FROM media_asset"
@@ -173,9 +163,6 @@ describe("demo-seed", () => {
         "SELECT count(DISTINCT strftime('%Y', captured_at)) AS n FROM media_asset"
       )
     ).toBeGreaterThanOrEqual(2);
-    // Face proposals (#712) stage through the ordinary enrichment publisher;
-    // every seeded region arrives UNANSWERED — a pre-confirmed seed hides
-    // the one flow.
     expect(count("SELECT count(*) AS n FROM media_face_region")).toBe(8);
     expect(
       count(
@@ -187,9 +174,6 @@ describe("demo-seed", () => {
         "SELECT count(*) AS n FROM media_face_region WHERE bbox_json IS NULL"
       )
     ).toBe(0);
-    // Places: the shelf reads sections off `place_id`; a coordinate-less roll
-    // renders empty Places. Coordinates COLLAPSE (16 frames, 9 rows); some
-    // stay unlocated.
     expect(
       count("SELECT count(*) AS n FROM media_asset WHERE place_id IS NOT NULL")
     ).toBe(16);
@@ -197,7 +181,6 @@ describe("demo-seed", () => {
     expect(
       count("SELECT count(*) AS n FROM media_asset WHERE place_id IS NULL")
     ).toBe(3);
-    // Two people to name a confirmed face as; face review never invents one.
     expect(
       count(
         "SELECT count(*) AS n FROM core_party WHERE display_name IN ('Ana Ribeiro','Marco Salas')"

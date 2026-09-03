@@ -1,8 +1,5 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
-// Gate over a REAL boot: gate off → surfaces absent from the handshake AND
-// unroutable; a durable pref boots the surface on the next serve (read once
-// per boot).
 import path from "node:path";
 
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
@@ -23,8 +20,6 @@ import type {
 import { serve } from "./serve.ts";
 import type { GatewayServeHandle, ServeOptions } from "./serve.ts";
 
-/** URLs each feature's gate owns. Exhaustive by type: a new feature fails to
- * compile until it declares what it mounts. */
 const GATED_SURFACES: Record<ExperimentalFeature, readonly string[]> = {
   automations: [
     "/centraid/_automations",
@@ -33,7 +28,6 @@ const GATED_SURFACES: Record<ExperimentalFeature, readonly string[]> = {
   connectors: [ROUTES.vaultConnections, ROUTES.vaultOAuthCallback],
 };
 
-/** Full (not `Partial`) so a third feature breaks the build here. */
 function onlyGateOpen(open: ExperimentalFeature): ExperimentalFeatureSet {
   return {
     automations: open === "automations",
@@ -82,7 +76,6 @@ interface GateObservation {
   mounts: Record<string, boolean>;
 }
 
-/** Boot with exactly one gate open; record handshake + mounted surfaces. */
 async function observeGate(
   open: ExperimentalFeature
 ): Promise<GateObservation> {
@@ -99,14 +92,12 @@ async function observeGate(
       EXPERIMENTAL_FEATURES.map((feature) => [feature, caps[feature]] as const)
     ),
     gateOpen: open,
-    // 404 is the mounted-ness signal; a mounted route answers on its own terms.
     mounts: Object.fromEntries(
       probes.map((surface, index) => [surface, codes[index] !== 404] as const)
     ),
   };
 }
 
-/** The same shape, as the gate contract says it must be. */
 function expectedWith(open: ExperimentalFeature): GateObservation {
   return {
     advertises: Object.fromEntries(
@@ -134,11 +125,6 @@ describe("experimental-gating scenarios", () => {
     await fs.rm(dataDir, { recursive: true, force: true });
   });
 
-  /*
-   * Law: the handshake and the router must agree, per feature, in both
-   * directions (#765 regression shape). Enumerated over the registry so a
-   * third experiment inherits the law instead of needing a new test.
-   */
   test("[law:experimental-gate-parity] a feature is advertised exactly when its own surface is mounted", async () => {
     const observed: Record<ExperimentalFeature, GateObservation> = {
       automations: await observeGate("automations"),
@@ -173,7 +159,6 @@ describe("experimental-gating scenarios", () => {
     await expect(
       status("/centraid/_insights/summary?windowDays=30")
     ).resolves.toBe(404);
-    // _apps shares the registration and must stay reachable.
     await expect(status("/centraid/_apps/_sessions")).resolves.not.toBe(404);
   });
 
@@ -194,7 +179,6 @@ describe("experimental-gating scenarios", () => {
   test("the connections route and OAuth callback answer once opted in", async () => {
     await boot({ experimental: { connectors: true } });
     await expect(status(ROUTES.vaultConnections)).resolves.toBe(200);
-    // No `state` on the query: the route's own refusal proves it is mounted.
     await expect(status(ROUTES.vaultOAuthCallback)).resolves.not.toBe(404);
   });
 
@@ -206,7 +190,6 @@ describe("experimental-gating scenarios", () => {
       body: "{}",
     });
     expect(res.status).toBe(404);
-    // The ingress handler's 404 carries this body; the host chain's does not.
     await expect(res.json()).resolves.not.toMatchObject({
       error: "unknown webhook",
     });
@@ -234,7 +217,6 @@ describe("experimental-gating scenarios", () => {
     await first.close();
     handle = undefined;
 
-    // Same data dir, no host option: the pref alone opens the surface.
     await boot();
     await expect(capabilities()).resolves.toMatchObject({ automations: true });
     await expect(status("/centraid/_automations")).resolves.toBe(200);

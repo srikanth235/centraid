@@ -1,5 +1,3 @@
-/** Audit-row helpers for automation handler runs (#80). */
-
 import { randomUUID } from "node:crypto";
 
 import type {
@@ -14,15 +12,11 @@ import { resolveItemCost } from "@centraid/server/engine";
 
 import type { HistoryConfig } from "../manifest/manifest.js";
 
-/** Live run-stream sink (#158), host-wired to its `runId` bus; unwired = no-op
- *  (ledger still records all nodes). Every emit is guarded — a wedged
- *  sink must never fail the handler. */
 export type RunEventSink = (ev: AutomationTurnStreamEvent) => void;
 export const noopRunEventSink: RunEventSink = () => undefined;
 
 const AUDIT_FIELD_BYTE_CAP = 64 * 1024; // args_json / output_json per node.
 
-/** Capped stringify; oversize payloads become a `{_truncated, bytes, head}` envelope. */
 export function truncateForAudit(value: unknown): string | undefined {
   if (value === undefined) return undefined;
   let json: string;
@@ -52,7 +46,6 @@ export interface RunRef {
   output?: unknown;
 }
 
-/** Project a `turns` row into the handler-facing `ctx.runs` ref; `automationRef` is the automation's stable id, not a conversation id. */
 export function rowToRunRef(
   row: Turn,
   automationRef: string,
@@ -110,7 +103,6 @@ export interface HandlerReturnEnvelope {
   output?: unknown;
 }
 
-/** Pull `{ summary?, output? }` out of a handler's object return; anything else is ignored. */
 export function extractReturnEnvelope(value: unknown): HandlerReturnEnvelope {
   if (value !== null && typeof value === "object" && !Array.isArray(value)) {
     const v = value as Record<string, unknown>;
@@ -131,19 +123,15 @@ export interface OpenRunNodeArgs {
   emit: RunEventSink;
   runId: string;
   ordinal: number;
-  /** Harness-native correlation key for overlapping tool calls. */
   callId?: string;
   batchId?: number;
   kind: ItemKind;
-  /** Tool name or `'delegate'`. */
   name?: string;
   args?: unknown;
-  /** Lossless harness event envelope, if any. */
   rawJson?: string;
   started: number;
 }
 
-/** Open a durable "running" node (#158) AND publish `item.start`; failures swallowed. */
 export function openRunNode(args: OpenRunNodeArgs): string {
   const nodeId = makeNodeId(args.runId, args.ordinal);
   const argsJson =
@@ -162,7 +150,7 @@ export function openRunNode(args: OpenRunNodeArgs): string {
       startedAt: args.started,
     });
   } catch {
-    /* never let audit failures bubble */
+    // Intentionally empty.
   }
   try {
     args.emit({
@@ -177,17 +165,15 @@ export function openRunNode(args: OpenRunNodeArgs): string {
       ...(args.rawJson === undefined ? {} : { rawJson: args.rawJson }),
     });
   } catch {
-    /* swallow */
+    // Intentionally empty.
   }
   return nodeId;
 }
 
-/** Map a turn-stream `usage` event (#158) onto `closeRunNode`'s token/model fields; `{}` when none observed. */
 export function usageCloseFields(
   usage: Extract<TurnStreamEvent, { type: "usage" }> | undefined
 ): Partial<CloseRunNodeArgs> {
   if (!usage) return {};
-  // Prefer harness cost; catalog fill happens in closeRunNode (#514).
   const costSource =
     usage.costSource ??
     (usage.costUsd === undefined ? undefined : ("harness" as const));
@@ -219,14 +205,11 @@ export interface CloseRunNodeArgs {
   callId?: string;
   ok: boolean;
   result?: unknown;
-  /** Lossless harness completion envelope, if any. */
   rawJson?: string;
   error?: string;
-  /** Child turn id for an item that spawned one. Dormant: no producer. */
   childTurnId?: string;
   started: number;
   ended: number;
-  /** Token/model rollup for a `delegate` node (#158); feeds `runs.total_*`. */
   model?: string;
   harness?: string;
   inputTokens?: number;
@@ -237,8 +220,6 @@ export interface CloseRunNodeArgs {
   costSource?: "harness" | "estimated";
 }
 
-/** Settle an open node: ledger write AND `item.end`. Bus gets untruncated
- *  values (ephemeral); the ledger keeps the capped copies. */
 export function closeRunNode(args: CloseRunNodeArgs): void {
   const durationMs = args.ended - args.started;
   const outputJson =
@@ -303,7 +284,7 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
         : { costSource: priced.costSource }),
     });
   } catch {
-    /* swallow */
+    // Intentionally empty.
   }
   try {
     args.emit({
@@ -318,6 +299,6 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
       ...(args.rawJson === undefined ? {} : { rawJson: args.rawJson }),
     });
   } catch {
-    /* swallow */
+    // Intentionally empty.
   }
 }

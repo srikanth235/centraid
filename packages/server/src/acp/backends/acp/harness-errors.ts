@@ -1,9 +1,3 @@
-/*
- * Harness failures → owner-actionable messages. AUTH_REQUIRED (-32000) common,
- * but agents often fail session/new with Internal error (-32603) or stderr
- * login lines (goose). Taxonomy stays out of the turn orchestrator.
- */
-
 import { RequestError } from "@agentclientprotocol/sdk";
 
 import type { HarnessFailureClass } from "@centraid/server/engine";
@@ -11,16 +5,12 @@ import type { HarnessFailureClass } from "@centraid/server/engine";
 import { AUTH_REQUIRED_CODE } from "./connection.js";
 import type { AcpTurnConfig } from "./types.js";
 
-/** Owned by @centraid/server/engine; re-exported, never re-declared. */
 export { type HarnessFailureClass } from "@centraid/server/engine";
 
-/** ACP JSON-RPC "Internal error" — often a stand-in for "not configured". */
 const INTERNAL_ERROR_CODE = -32603;
 
-/** Provider slow-down: -32029 harness convention; 429 forwarded verbatim. */
 const QUOTA_ERROR_CODES = new Set([-32029, 429, -429]);
 
-/** Client-authored timeouts; the stage name is ours, so they outrank keyword scans. */
 const OWN_WEDGE = /idle watchdog timed out/iu;
 const OWN_STAGE_TIMEOUT = /^ACP (?<stage>.+?) timed out after \d+ms/iu;
 const INIT_STAGES =
@@ -75,8 +65,6 @@ export function classifyHarnessFailureDetail(
     return { failureClass: "auth", message: authRequiredMessage(config) };
   }
 
-  // Structured quota beats auth heuristics: throttled stderr says "api key"
-  // and would misroute to re-auth advice.
   if (err instanceof RequestError && QUOTA_ERROR_CODES.has(err.code)) {
     const tail = stderr.trim() ? `\n${stderr.trim().slice(-2000)}` : "";
     return { failureClass: "quota", message: `${err.message}${tail}` };
@@ -117,11 +105,6 @@ export function classifyHarnessFailureDetail(
   };
 }
 
-/**
- * Precedence, strongest first: RPC codes, client-authored errors, message
- * keywords, stderr. A crash whose stderr says "timeout" must not trip the
- * timeout breaker.
- */
 function failureClassOf(
   err: unknown,
   message: string,

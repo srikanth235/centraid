@@ -11,15 +11,6 @@ import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
 import { makeOwnersRouteHandler } from "./owners-routes.js";
 
-/*
- * `GET/PATCH /centraid/_gateway/owners` — the Household roster's owner read
- * (#726; #781 "sharing plane ownership"). These are the reads the desktop
- * Household journey renders from and the e2e mock gateway mirrors, so the
- * real handler's visibility scoping is pinned here: a device caller sees its
- * OWN person only (topology hiding, re-aimed), host custody sees everyone,
- * and an invisible person is indistinguishable from an unknown one.
- */
-
 const HOST_CUSTODY_HEADER = "x-test-host-custody";
 
 const servers: http.Server[] = [];
@@ -71,7 +62,6 @@ function deviceHeaders(endpointId: string): Record<string, string> {
   };
 }
 
-/** Two people on one gateway: Ada (the caller) and Sam (her housemate). */
 function household(f: Harness): { ada: string; sam: string } {
   const ada = f.enrollments.enroll({
     endpointId: "ep-ada",
@@ -111,9 +101,6 @@ describe("owners-routes roster scoping", () => {
     const body = (await response.json()) as {
       owners: Array<Record<string, unknown>>;
     };
-    // Exactly one row, and it is the whole DTO the Household roster renders:
-    // the person, the vaults they own (resolved to names), and their live
-    // hardware count. Sam does not appear at all — no forbidden row.
     expect(body.owners).toHaveLength(1);
     const owner = body.owners[0]!;
     expect({
@@ -167,7 +154,6 @@ describe("owners-routes roster scoping", () => {
     await expect(response.json()).resolves.toMatchObject({
       owner: { ownerId: ada, label: "Ada Lovelace" },
     });
-    // The rename is persisted where the roster reads it back.
     expect(f.enrollments.owners.get(ada)?.label).toBe("Ada Lovelace");
   });
 
@@ -185,8 +171,6 @@ describe("owners-routes roster scoping", () => {
     );
     expect(housemate!.status).toBe(404);
     expect(unknown!.status).toBe(404);
-    // Byte-identical refusals: probing a real housemate's id must teach the
-    // caller nothing an invented id would not.
     const bodies = await Promise.all([housemate!.json(), unknown!.json()]);
     expect(bodies[0]).toStrictEqual(bodies[1]);
     expect(f.enrollments.owners.get(sam)?.label).toBe("Sam");

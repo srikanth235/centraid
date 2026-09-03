@@ -1,10 +1,3 @@
-/*
- * Host-possession auth for the gateway's loopback control lane. The bearer is
- * HMAC(endpoint-key.bin, "centraid/landlord-http/v1") — stable for the
- * EndpointId lifetime, never persisted as an HTTP token. Rotating the key
- * rotates EndpointId; not a routine operation (SECURITY.md, #568 item J).
- */
-
 import { createHmac } from "node:crypto";
 
 import { aesGcmKeyProtector, KeyStore } from "@centraid/vault";
@@ -20,11 +13,6 @@ export function landlordBearerForEndpointSecret(secret: Uint8Array): string {
     .digest("hex");
 }
 
-/**
- * Bearer a daemon already serving `dataDir` derives when no parent pinned
- * `CENTRAID_GATEWAY_TOKEN`. Returns `undefined` when the endpoint identity is
- * unreadable. Never CREATES the key.
- */
 export function landlordBearerForDataDir(
   dataDir: string,
   options: { masterKey?: Buffer } = {}
@@ -39,7 +27,6 @@ export function landlordBearerForDataDir(
     const secret = store.load("endpoint-key.bin");
     return secret ? landlordBearerForEndpointSecret(secret) : undefined;
   } catch {
-    // Unreadable custody is "cannot derive"; the caller spawns its own daemon.
     return undefined;
   }
 }

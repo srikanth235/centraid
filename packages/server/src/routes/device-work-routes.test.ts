@@ -45,9 +45,6 @@ describe("device-work-routes", () => {
     derivativeText: (variant: string) => string | null;
   }> {
     const capability = options.capability ?? "poster";
-    // The two rungs the DEVICE lane still leases after #724's split: a
-    // poster frame off a video, and text out of a PDF. Both are format
-    // conversion, which is why they stayed on the device.
     const variant = capability === "poster" ? "poster" : "text";
     const sourceMediaType =
       capability === "poster" ? "video/mp4" : "application/pdf";
@@ -261,8 +258,6 @@ describe("device-work-routes", () => {
     const f = await fixture({ capability: "pdfText" });
     const leased = await post(f.base, "lease", f.deviceKey, {
       vaultId: f.vaultId,
-      // `transcript` is asked for and ignored: it left the device lane in
-      // #724, so a client that still advertises it leases only pdfText.
       capabilities: ["pdfText", "transcript"],
       charging: true,
       unmetered: true,
@@ -284,7 +279,6 @@ describe("device-work-routes", () => {
     });
     expect(completed.status).toBe(200);
     await expect(completed.json()).resolves.toStrictEqual({ completed: true });
-    // The rung the owner actually gets: the PDF's text layer, on the item.
     expect(f.derivativeText("text")).toContain("starlight");
   });
 });

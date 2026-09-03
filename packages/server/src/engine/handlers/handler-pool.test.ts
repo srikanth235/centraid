@@ -1,9 +1,4 @@
 import { writeFile } from "node:fs/promises";
-// Warm-spare worker pool (#404). These cover the four properties the
-// pool must hold beyond "dispatch still works": it keeps warm spares between
-// runs, it preserves per-run module isolation (a worker is never reused across
-// handlers), a hung handler is still terminable, and a worker crash doesn't
-// poison the pool for subsequent runs.
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -31,8 +26,6 @@ let admission: WorkerAdmission;
 describe("handler-pool", () => {
   beforeEach(async () => {
     appDir = await tempDir("centraid-worker-pool-");
-    // Private gate: these cases must not share the process-wide production
-    // admission slots with the rest of a coverage worker (#811).
     admission = new WorkerAdmission(4, 0, 1_000);
   });
 
@@ -40,7 +33,6 @@ describe("handler-pool", () => {
     pool?.dispose();
   });
 
-  /** Let queued microtasks (pool refill) and a beat of the loop settle. */
   function tick(ms = 40): Promise<void> {
     return new Promise((resolve) => {
       setTimeout(resolve, ms);
@@ -85,14 +77,11 @@ describe("handler-pool", () => {
     expect(outcome.ok).toBe(true);
     expect(outcome.value).toStrictEqual({ ok: 1 });
 
-    // The acquired spare was consumed and a replacement warmed — back to size.
     await tick();
     expect(pool.warm).toBe(2);
   });
 
   test("a warmed pool serves a dispatch even after its spares are drained cold", async () => {
-    // size 0 = warming disabled; every acquire spawns cold. Proves the pool is
-    // correct without any pre-warm, i.e. warmth is a latency optimization only.
     pool = new WorkerPool(HANDLER_WORKER_FILE, 0);
     expect(pool.warm).toBe(0);
     const handlerFile = await writeHandler(
@@ -112,9 +101,6 @@ describe("handler-pool", () => {
   test("module-level state from run A is not visible to run B (no worker reuse)", async () => {
     pool = new WorkerPool(HANDLER_WORKER_FILE, 2);
     pool.prewarm();
-    // A handler whose module-scope counter would climb across runs IF the worker
-    // (and thus its module registry) were reused. Single-use workers guarantee a
-    // fresh module each run, so both runs must observe the initial value.
     const handlerFile = await writeHandler(
       "stateful.js",
       `let seen = 0;\nexport default async () => { seen += 1; return { seen }; };`
@@ -129,15 +115,10 @@ describe("handler-pool", () => {
     const first = await run();
     const second = await run();
     expect(first.value).toStrictEqual({ seen: 1 });
-    // If the worker were reused, this would be { seen: 2 }.
     expect(second.value).toStrictEqual({ seen: 1 });
   });
 
   test("runs a TypeScript handler graph (typed source + relative .ts sibling import)", async () => {
-    // TS-authored apps ship `.ts` handlers; the worker installs the esbuild
-    // loader hook (worker/ts-loader-hooks) on demand so a `.ts` graph imports.
-    // The sibling is imported by its emitted `.js` name while the file on disk
-    // is `.ts` — the TS ESM convention the resolve hook bridges.
     await writeHandler(
       "util.ts",
       `export interface Sum { total: number }\n` +
@@ -177,7 +158,6 @@ describe("handler-pool", () => {
     expect(outcome.ok).toBe(false);
     expect(outcome.error).toMatch(/timed out after 100ms/iu);
 
-    // The pool is unharmed: a normal handler runs fine right after.
     const ok = await writeHandler(
       "ok.js",
       `export default async () => 'alive';`
@@ -256,14 +236,11 @@ describe("handler-pool", () => {
     expect(
       workerPoolSizeFromEnv({ ...standard, CENTRAID_WORKER_POOL_SIZE: "" })
     ).toBe(DEFAULT_WORKER_POOL_SIZE);
-    // A constrained host keeps ONE warm spare (#659): it is the target
-    // hardware, and it is where a cold worker boot hurts most.
     expect(
       workerPoolSizeFromEnv({
         CENTRAID_RESOLVED_HARDWARE_PROFILE: "constrained",
       })
     ).toBe(CONSTRAINED_WORKER_POOL_SIZE);
-    // Warming is still explicitly disableable.
     expect(
       workerPoolSizeFromEnv({
         CENTRAID_RESOLVED_HARDWARE_PROFILE: "constrained",

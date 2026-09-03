@@ -1,17 +1,4 @@
 import crypto from "node:crypto";
-/*
- * Draft preview through the gateway (#141, "preview first").
- *
- * With `appsStoreRoot` set, `serve()` wires a `draftCodeDir` resolver that
- * points an app's code dir at its OPEN session worktree. An RPC request
- * under `/centraid/_draft/<sessionId>/<appId>/…` then runs the STAGED
- * handlers against the app's live data, without publishing. #799 retired
- * the UI-byte half of this surface; the handler half is what remains.
- *
- * We seed + publish an app, then open a session and overwrite its query
- * handler (the draft). The live path keeps running the published handler;
- * the `_draft` path runs the staged one.
- */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -58,7 +45,6 @@ const MANIFEST = (appId: string): string =>
     2
   );
 
-/** Seed one published app on `main` via a session + publish. */
 async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
   const session = await store.openSession("seed");
   const appDir = path.join(session.worktreePath, "apps", appId);
@@ -92,7 +78,6 @@ describe("draft-preview-over-http scenarios", () => {
     await seedApp(store, "app");
     await handle.syncApps();
 
-    // Open a session and stage a draft: a changed query handler.
     await store.openSession("draft1");
     const draftDir = await store.snapshotSessionAppDir("draft1", "app");
     await fs.writeFile(
@@ -102,7 +87,6 @@ describe("draft-preview-over-http scenarios", () => {
 
     const auth = { Authorization: `Bearer ${handle.token}` };
 
-    // Live path: the published handler.
     const liveRead = await fetch(`${handle.url}/centraid/app/queries/ping`, {
       method: "POST",
       headers: { ...auth, "Content-Type": "application/json" },
@@ -112,7 +96,6 @@ describe("draft-preview-over-http scenarios", () => {
       marker: "published",
     });
 
-    // Draft path: the staged handler, against the same data.
     const draftRead = await fetch(
       `${handle.url}/centraid/_draft/draft1/app/queries/ping`,
       {
@@ -126,11 +109,6 @@ describe("draft-preview-over-http scenarios", () => {
   });
 
   test("an unknown draft session runs the app's published handler", async () => {
-    // The draft resolver returns `undefined` for a session it cannot
-    // snapshot, and the dispatcher then resolves the app's live code dir.
-    // A stale/mistyped session id therefore reads live data through the live
-    // handler rather than erroring — it never reaches another app's code,
-    // because the app id is still the one in the path.
     handle = await serve({ paths: pathsUnder(dataDir) });
     await seedApp(await handle.appsStore(), "app");
     await handle.syncApps();

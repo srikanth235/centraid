@@ -1,9 +1,3 @@
-// ACP has no per-prompt model field: a harness advertises `configOptions` and
-// the client pins one through `session/set_config_option`. Three rules govern
-// this file — only values the harness offered are echoed, so no provider id is
-// hardcoded; options are found by semantic `category`, never adapter ids; and a
-// request the harness cannot honour emits a `notice` rather than being dropped.
-
 import { methods } from "@agentclientprotocol/sdk";
 import type {
   AgentRequestMethod,
@@ -51,7 +45,6 @@ export function hasSessionCapability(
 ): boolean {
   if (!caps) return false;
   const v = caps[key];
-  // Spec: `{}` means supported; omit/null means not.
   return v !== undefined && v !== null;
 }
 
@@ -61,7 +54,6 @@ export function readConfigOptions(
   return result?.configOptions ?? [];
 }
 
-/** The FULL option set: an update replaces the tracked one, never merges. */
 export function readConfigOptionUpdate(
   params: SessionNotification
 ): SessionConfigOption[] | undefined {
@@ -100,7 +92,6 @@ export function findConfigOption(
   return options.find(
     (option) =>
       option.category === category ||
-      // The one spec-level compatibility alias; thought_level is category-only.
       (category === "model" && option.id === "model")
   );
 }
@@ -119,7 +110,6 @@ export function flattenSelectOptions(
   return out;
 }
 
-/** Empty when the harness exposes no model selector, never fabricated. */
 export function readOfferedModels(configOptions: SessionConfigOption[]): {
   models: OfferedConfigValue[];
   currentValue?: string;
@@ -132,8 +122,6 @@ export function readOfferedModels(configOptions: SessionConfigOption[]): {
   };
 }
 
-/** Exact, then case-insensitive, then substring — so a tier alias resolves
- *  without this module naming a concrete model id. */
 function matchModelValue(
   offered: OfferedConfigValue[],
   wanted: string
@@ -201,8 +189,6 @@ export async function pinModel(args: {
       configId: option.id,
       value,
     });
-    // A resolved RPC IS confirmation — the echo is optional. Only an echo that
-    // CONTRADICTS the request leaves the active value unknown.
     const echoed = readCurrentConfigValue(readConfigOptions(result), "model");
     if (echoed !== undefined && echoed !== value) {
       args.emit({
@@ -217,7 +203,6 @@ export async function pinModel(args: {
     }
     return value;
   } catch {
-    // The turn is still runnable on the default — say so, do not fail it.
     args.emit({
       type: "notice",
       level: "warn",
@@ -230,8 +215,6 @@ export async function pinModel(args: {
   }
 }
 
-/** Pinned after the model. Effort values are adapter vocabulary: never
- *  substring-translated like model aliases. */
 export async function pinThoughtLevel(args: {
   request: AcpBuiltinRequest;
   emit: (event: TurnStreamEvent) => void;
@@ -277,7 +260,6 @@ export async function pinThoughtLevel(args: {
       configId: option.id,
       value: selected,
     });
-    // Same rule as `pinModel`: only a contradicting echo makes it unknown.
     const echoed = readCurrentConfigValue(
       readConfigOptions(result),
       "thought_level"

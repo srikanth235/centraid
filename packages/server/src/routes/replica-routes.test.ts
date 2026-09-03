@@ -173,7 +173,6 @@ describe("replica-routes", () => {
   test("bootstrap at N, filtered pull, checkpoint, and the single resumable SSE tail agree", async () => {
     const { plane, enrollments, handler } = await fixture();
     const deviceKey = "device-1";
-    // Another device of the one owner (#726), never a second owner.
     enrollments.enroll({
       endpointId: deviceKey,
       ownerId: enrollments.owners.ownerOf(plane.boot.vaultId)!,
@@ -214,8 +213,6 @@ describe("replica-routes", () => {
         values: expect.objectContaining({ title: "Already present" }),
       })
     );
-    // Receiving a snapshot is not an acknowledgement: the client stamps its
-    // checkpoint only after the local SQLite bootstrap commits.
     expect(
       enrollments.get(deviceKey, plane.boot.vaultId)?.checkpoint
     ).toBeUndefined();
@@ -316,7 +313,6 @@ describe("replica-routes", () => {
   test("windowed bootstrap pages through every row, shapes only on page 1, then converges", async () => {
     const { plane, enrollments, handler } = await fixture();
     const deviceKey = "device-window";
-    // Another device of the one owner (#726), never a second owner.
     enrollments.enroll({
       endpointId: deviceKey,
       ownerId: enrollments.owners.ownerOf(plane.boot.vaultId)!,
@@ -327,7 +323,6 @@ describe("replica-routes", () => {
     const ids = ["task-01", "task-02", "task-03", "task-04", "task-05"];
     for (const id of ids) task(plane, id, `Title ${id}`);
 
-    // Page 1: the full envelope, the first window, a continuation token.
     const first = await bootstrapPage(
       handler,
       plane.boot.vaultId,
@@ -340,7 +335,6 @@ describe("replica-routes", () => {
     expect(first.page.next).toBeTruthy();
     expect(first.page.rows).toHaveLength(2);
 
-    // Follow the continuation until complete; later pages are lean.
     const collected = [...first.page.rows];
     let next = first.page.next;
     const cursors = [first.page.cursor];
@@ -360,13 +354,11 @@ describe("replica-routes", () => {
       if (!page.page.complete) await collectNextPage(guard + 1);
     };
     await collectNextPage();
-    // Every task arrived exactly once across the windows.
     const seen = collected
       .filter((row) => row.entity === "schedule.task")
       .map((row) => row.rowId)
       .sort();
     expect(seen).toStrictEqual(ids);
-    // The delta floor the client replays from is page 1's cursor.
     expect(cursors[0]!.seq).toBe(Math.min(...cursors.map((c) => c.seq)));
   });
 
@@ -407,7 +399,6 @@ describe("replica-routes", () => {
     for (const id of ["task-01", "task-02", "task-03"]) task(plane, id, id);
     const first = await bootstrapDirect(handler, "?window=1");
     expect(first.page.next).toBeTruthy();
-    // A continuation whose pinned schemaEpoch no longer matches the vault.
     const decoded = JSON.parse(
       Buffer.from(first.page.next!, "base64url").toString("utf8")
     );
@@ -447,10 +438,6 @@ describe("replica-routes", () => {
     expect(first.status).toBe(200);
     expect(first.page.next).toBeTruthy();
 
-    // A lagging walk: churn after page 1, then a retention sweep collecting
-    // the entries the token's pinned cursor needs. AGE is the lever — count
-    // pressure folds hot-row churn into survivors (#883 C6), so churn alone
-    // no longer strand this token.
     const update = plane.db.vault.prepare(
       "UPDATE schedule_task SET title = ? WHERE task_id = ?"
     );
@@ -472,8 +459,6 @@ describe("replica-routes", () => {
       reason: "snapshot-retention",
     });
 
-    // The defined recovery path: a FRESH page-1 walk pins a new (post-floor)
-    // delta cursor and pages the whole library again.
     const recovered = await bootstrapDirect(handler, "?window=10000");
     expect(recovered.status).toBe(200);
     expect(recovered.page.complete).toBe(true);
@@ -693,7 +678,6 @@ describe("replica-routes", () => {
   test("reconciles only explicitly pending, device-scoped outcomes through the snapshot cursor", async () => {
     const { plane, enrollments, handler } = await fixture();
     const deviceKey = "device-outcomes";
-    // Another device of the one owner (#726), never a second owner.
     enrollments.enroll({
       endpointId: deviceKey,
       ownerId: enrollments.owners.ownerOf(plane.boot.vaultId)!,

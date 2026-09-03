@@ -4,12 +4,6 @@ import { fc } from "@centraid/test-kit/fast-check";
 
 import { lowPriorityCommand } from "./low-priority.js";
 
-/**
- * Property defense for lowPriorityCommand (#545).
- *
- * Model: Windows / CENTRAID_CHILD_PRIORITY=normal is identity; otherwise the
- * original bin+args appear after the nice wrapper; niceness is stringified.
- */
 describe("lowPriorityCommand properties", () => {
   const prior = process.env.CENTRAID_CHILD_PRIORITY;
   afterEach(() => {
@@ -84,9 +78,6 @@ describe("lowPriorityCommand properties", () => {
     );
   });
 
-  // The ionice/nice choice is split into one property per branch so both sets
-  // of assertions always run — a single property with an `if` could have
-  // silently exercised only one arm.
   test("linux prefers ionice when it is present", () => {
     delete process.env.CENTRAID_CHILD_PRIORITY;
     fc.assert(

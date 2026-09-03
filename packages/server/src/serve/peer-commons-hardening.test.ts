@@ -1,8 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#865) each hardening case crosses the same two-vault peer transport; per-case files would re-boot that world per suite.
-/* Peer-plane commons hardening: the signed-command route must bind the
- * acted-as party to the PROVEN peer (never trust body.actorPartyId), and a
- * fully caught-up member's pull must be a no-op that neither scrubs nor counts
- * as sweep progress. Both cross the real peer routes on two in-process vaults. */
 
 import type { ServerResponse } from "node:http";
 
@@ -81,9 +77,6 @@ describe("commons peer-plane hardening", () => {
       now,
     });
     const commandInput = { asset_id: photo.assetId, title: "forged" };
-    // The member signs as the STEWARD's party — a forged attribution that, if
-    // honored, would skip capability/signature/replay (those short-circuit when
-    // actorPartyId === stewardPartyId).
     const forgery = await sendPeerCommonsCommand({
       dial: dialFrom(member, origin),
       route: routeFrom(member, origin),
@@ -101,13 +94,9 @@ describe("commons peer-plane hardening", () => {
         memberVaultId: member.vaultId,
         nonce: "forge-nonce",
       }),
-      // Member has never locally compiled this grant (never joined a seat
-      // above); 0 is the honest baseline for an unobserved history.
       basedOnSequence: 0,
       intentId: "forge-nonce",
     });
-    // The route refuses to resolve the caller as the steward: nothing executes,
-    // and no steward-attributed op is written to the log.
     expect(forgery.state).toBe("unavailable");
     expect(
       origin.vault.vault
@@ -117,9 +106,6 @@ describe("commons peer-plane hardening", () => {
         .get(grant.grantId, origin.ownerPartyId)
     ).toMatchObject({ n: 0 });
 
-    // The same member acting honestly as ITSELF reaches the steward and is
-    // refused on capability — proving the block above was the forgery, not the
-    // transport.
     const honest = await sendPeerCommonsCommand({
       dial: dialFrom(member, origin),
       route: routeFrom(member, origin),
@@ -188,7 +174,6 @@ describe("commons peer-plane hardening", () => {
       }),
       now,
     });
-    // First pull is a real bootstrap that lands the closure.
     const first = await pullPeerCommons({
       dial: dialFrom(member, origin),
       route: routeFrom(member, origin),
@@ -205,8 +190,6 @@ describe("commons peer-plane hardening", () => {
         .get(photo.assetId)
     ).toMatchObject({ n: 1 });
 
-    // A second pull, now fully caught up, must be a no-op: it neither ships nor
-    // re-applies the closure, and it must NOT count as sweep progress.
     const second = await pullPeerCommons({
       dial: dialFrom(member, origin),
       route: routeFrom(member, origin),
@@ -280,8 +263,6 @@ describe("commons peer-plane hardening", () => {
       });
     await expect(pull()).resolves.toMatchObject({ state: "current" });
 
-    // Restore-from-backup at the steward: the op the member already verified
-    // is replaced by a different one at the same sequence.
     origin.vault.vault
       .prepare(
         "DELETE FROM share_commons_op WHERE grant_id = ? AND sequence = ?"
@@ -309,10 +290,6 @@ describe("commons peer-plane hardening", () => {
       now,
     });
 
-    // The sweep learns WHICH fault this is, so it reports rather than retries,
-    // and the member's replica is left exactly as it was.
-    // (#731) every pull result also carries the seat's steward-absence status;
-    // a named fault parks the seat rather than aging it into "absent".
     await expect(pull()).resolves.toMatchObject({
       state: "parked",
       fault: "history-diverged",
@@ -401,8 +378,6 @@ describe("commons peer-plane hardening", () => {
         )
         .get(groupId) as { expense_id: string }
     ).expense_id;
-    // A steward-side edit is the intervening op a never-synced remote member
-    // missed.
     expect(
       executeCommonsCommand({
         steward: origin.vault,
@@ -462,10 +437,6 @@ describe("commons peer-plane hardening", () => {
       });
     };
 
-    // The member composed this edit before observing the steward's edit
-    // above (basedOnSequence: 0, the seat's unobserved-history baseline).
-    // If the receiving route failed to carry the wire's basedOnSequence into
-    // `executeCommonsCommand`, this would simply execute.
     const stale = await sendMember(
       "Ferry (member, stale)",
       0,
@@ -481,9 +452,6 @@ describe("commons peer-plane hardening", () => {
         .get(expenseId)
     ).toMatchObject({ description: "Ferry (updated)" });
 
-    // The SAME member, now naming the current head as its baseline, is not
-    // flagged — proving the prior refusal was the staleness, not a blanket
-    // block on member writes to this expense.
     const fresh = await sendMember(
       "Ferry (member, fresh)",
       readCommonsGrant(origin.vault.vault, grant.grantId).lastSequence,
@@ -551,7 +519,6 @@ describe("commons peer-plane hardening", () => {
         nonce: "missing-based-on-sequence",
       }),
       intentId: "missing-based-on-sequence",
-      // basedOnSequence deliberately omitted: v0 requires it explicitly.
     };
     const response = await dial.request({
       endpointTicket: dial.endpointTicketFor(
@@ -573,9 +540,6 @@ describe("commons peer-plane hardening", () => {
     ).toMatchObject({ n: 0 });
   });
 
-  /* (#865 F9) A nonce binds straight into SQLite as `signature_nonce`; a
-   * non-string value must surface as the route's normal refusal, never a 500
-   * from the binding. */
   test("a malformed signature nonce is refused on the wire, not surfaced as a 500", async () => {
     const origin = makeSide("nonce-steward");
     const member = makeSide("nonce-member");
@@ -629,8 +593,6 @@ describe("commons peer-plane hardening", () => {
         input: { asset_id: photo.assetId, title: "bad nonce" },
         memberSignature: {
           memberVaultId: member.vaultId,
-          // A write-capable member, a matching vault id — everything the old
-          // shape check looked at was honest except this one field.
           nonce: { forged: "not-a-string" },
           signature: "AAAA",
         },
@@ -649,9 +611,6 @@ describe("commons peer-plane hardening", () => {
     ).toMatchObject({ n: 0 });
   });
 
-  /* (#865 F9) The transfer-session store must sweep OPEN sessions too, not
-   * only expired ones — otherwise opens that outpace the TTL grow it without
-   * limit. Past the cap, the oldest session dies while fresh ones keep working. */
   test("transfer sessions evict oldest-first past the retention cap", async () => {
     const origin = makeSide("retention-steward");
     const member = makeSide("retention-member");
@@ -768,10 +727,8 @@ describe("commons peer-plane hardening", () => {
     expect(first.json).toMatchObject({ state: "authorized" });
     const oldestToken = first.json.token as string;
 
-    // The oldest session is alive and serves its proven sha set…
     expect(chunkWith(oldestToken).status).toBe(200);
 
-    // …and opening sessions past the cap evicts it while the newest survive.
     for (let opened = 1; opened <= PEER_COMMONS_SESSION_CAP; opened += 1)
       expect(authorize().status).toBe(200);
     expect(chunkWith(oldestToken).status).toBe(404);

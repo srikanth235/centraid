@@ -1,8 +1,3 @@
-// Install-time consent (#306) and what the owner may do to it afterwards
-// (#308): installing IS the grant, widening a manifest parks as a scope
-// request instead of auto-granting, a denial tombstones the ask, a revocation
-// is never re-minted by the top-up, and the per-execution clamp still cuts the
-// durable grant down to the anchor the run declared.
 import { describe, expect, test } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
@@ -24,7 +19,6 @@ describe("vault-plane install scopes + execution clamps", () => {
     });
     const calendarId = seedCalendar(plane);
 
-    // Installing IS the consent: no owner grant ceremony precedes the invoke.
     plane.ensureAppInstallGrant("planner", {
       purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", verbs: "read+act" }],
@@ -45,7 +39,6 @@ describe("vault-plane install scopes + execution clamps", () => {
     expect(outcome.ok).toBe(true);
     expect((outcome.result as { status: string }).status).toBe("executed");
 
-    // Idempotent: re-running with the same block mints no second grant.
     const before = plane.listApps().find((a) => a.name === "planner")
       ?.grants.length;
     plane.ensureAppInstallGrant("planner", {
@@ -55,8 +48,6 @@ describe("vault-plane install scopes + execution clamps", () => {
     const after = plane.listApps().find((a) => a.name === "planner")
       ?.grants.length;
     expect(after).toBe(before);
-    // A widened declaration no longer auto-grants (#308): agents
-    // author their own manifests, so the ask parks as a blocking request.
     plane.ensureAppInstallGrant("planner", {
       scopes: [
         { schema: "schedule", verbs: "read+act" },
@@ -75,13 +66,11 @@ describe("vault-plane install scopes + execution clamps", () => {
     expect(plane.blocking().scopeRequests).toHaveLength(1);
     expect(notificationsChanges).toStrictEqual([true]);
 
-    // The owner's approval mints exactly the asked scopes and closes the ask.
     plane.decideScopeRequest(requests[0]!.requestId, true);
     expect(notificationsChanges).toStrictEqual([true, false]);
     const approved = plane.listApps().find((a) => a.name === "planner");
     expect(approved?.grants.flatMap((g) => g.scopes) ?? []).toHaveLength(2);
     expect(plane.listScopeRequests()).toHaveLength(0);
-    // With the grant landed, the same manifest asks for nothing more.
     plane.ensureAppInstallGrant("planner", {
       scopes: [
         { schema: "schedule", verbs: "read+act" },
@@ -91,14 +80,12 @@ describe("vault-plane install scopes + execution clamps", () => {
     expect(plane.listScopeRequests()).toHaveLength(0);
     expect(notificationsChanges).toStrictEqual([true, false]);
 
-    // The agent-plane mirror covers automations.
     plane.ensureAgentInstallGrant("gmail-send", {
       scopes: [{ schema: "outbox", verbs: "act" }],
     });
     const agents = plane.listAgents();
     expect(agents.find((a) => a.name === "Gmail Send")?.grants).toHaveLength(1);
 
-    // The consent surface renders what was granted, salience included.
     const surface = plane.scopeSurface("planner");
     expect(surface.scopes).toStrictEqual(
       expect.arrayContaining([
@@ -142,8 +129,6 @@ describe("vault-plane install scopes + execution clamps", () => {
       purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", table: "task", verbs: "read" }],
     });
-    // Recompiling with an anchor cannot make an older, broader owner grant
-    // disappear. The execution credential must still attenuate it.
     plane.ensureAgentInstallGrant("anchored-automation", {
       purpose: "dpv:ServiceProvision",
       scopes: [scope],
@@ -211,14 +196,11 @@ describe("vault-plane install scopes + execution clamps", () => {
     const granted = plane.listApps().find((a) => a.name === "planner");
     expect(granted?.grants).toHaveLength(1);
 
-    // The owner tightens: revoke the install grant.
     plane.revokeGrant(granted!.grants[0]!.grantId);
     expect(
       plane.listApps().find((a) => a.name === "planner")?.grants
     ).toHaveLength(0);
 
-    // Mount/sync/publish re-run the top-up — the revocation survives all of
-    // them: no re-mint, and no nagging scope request either (the owner said no).
     plane.ensureAppInstallGrant("planner", block);
     plane.ensureAppInstallGrant("planner", block);
     expect(
@@ -226,12 +208,10 @@ describe("vault-plane install scopes + execution clamps", () => {
     ).toHaveLength(0);
     expect(plane.listScopeRequests()).toHaveLength(0);
 
-    // Only an explicit owner approval brings the scope back…
     plane.approveGrant("planner", block);
     expect(
       plane.listApps().find((a) => a.name === "planner")?.grants
     ).toHaveLength(1);
-    // …and from then on the top-up treats it as consented again.
     plane.ensureAppInstallGrant("planner", block);
     expect(
       plane.listApps().find((a) => a.name === "planner")?.grants
@@ -253,15 +233,12 @@ describe("vault-plane install scopes + execution clamps", () => {
     const request = plane.listScopeRequests()[0]!;
     plane.decideScopeRequest(request.requestId, false);
     expect(plane.listScopeRequests()).toHaveLength(0);
-    // The same manifest on the next mount does not re-ask — denial tombstoned it.
     plane.ensureAppInstallGrant("planner", widenedBlock);
     expect(plane.listScopeRequests()).toHaveLength(0);
     expect(
       plane.listApps().find((a) => a.name === "planner")?.grants
     ).toHaveLength(1);
 
-    // Uninstall wipes tombstones and open requests: reinstalling is a fresh
-    // install-time consent for whatever the manifest then declares.
     plane.revokeApp("planner");
     plane.ensureAppInstallGrant("planner", widenedBlock);
     const reinstalled = plane.listApps().find((a) => a.name === "planner");

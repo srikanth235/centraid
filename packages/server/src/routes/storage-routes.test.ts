@@ -523,11 +523,6 @@ describe("storage-routes", () => {
     expect(cache?.backpressureEvents).toBe(0);
   });
 
-  // #712 B3 — mobile read `blob_custody_state` counts off this route
-  // while web read the ROLLUP (`blob.custody_rollup`), so the two clients could
-  // disagree about what may be released. The route carries the rollup itself
-  // now, and `computedAt` is the load-bearing part: null must reach a client AS
-  // null, or the surface renders zeroes as facts.
   test("GET status carries the custody rollup — null computedAt before the sweep, the sweep's own numbers after", async () => {
     const dir = await tempDir();
     const storageConnections = await openStorageConnectionStore(dir);
@@ -554,8 +549,6 @@ describe("storage-routes", () => {
 
     const before = await read();
     expect(before.computedAt).toBeNull();
-    // Both buckets a free-up offer is decided by are present and zeroed, never
-    // absent — a client must not have to invent a `?? 0` for either.
     expect(before.buckets.freeable).toStrictEqual({ count: 0, bytes: 0 });
     expect(before.buckets["local-unproven"]).toStrictEqual({
       count: 0,
@@ -574,16 +567,12 @@ describe("storage-routes", () => {
     );
     const written = refreshCustodyRollup(db);
 
-    // Read, never recomputed: rebuilding a whole-library projection per
-    // request would be O(vault-size) on the request path.
     const after = await read();
     expect(after.computedAt).toBe(written.computedAt);
     expect(after.buckets["local-only"]).toStrictEqual({
       count: 1,
       bytes: blob.length,
     });
-    // No remote tier is configured, so the local copy is UNPROVEN and nothing
-    // is freeable — the rollup's safety rule, visible end-to-end on the wire.
     expect(after.buckets["local-unproven"]).toStrictEqual({
       count: 1,
       bytes: blob.length,

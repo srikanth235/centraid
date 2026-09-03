@@ -1,8 +1,3 @@
-// `/centraid/_gateway/links` (#726): the link ceremony a cross-owner edge needs
-// before it may cross. Same-owner edges never reach here — owning both vaults
-// already IS the authorization. Local propose/approve and remote
-// `ticket`/`redeem` write the SAME rows.
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { AUTHED_DEVICE_HEADER } from "@centraid/server/engine";
@@ -33,11 +28,8 @@ export interface VaultLinksRouteDeps {
   store: VaultLinksStore;
   gatewayDatabase: GatewayDatabase;
   vaultPublicKey: (vaultId: string) => string | undefined;
-  /** Absent only in a test double; the link is then labeled `null`. */
   vaultName?: (vaultId: string) => string | undefined;
   ownerPartyFor?: (vaultId: string) => string | undefined;
-  /** Absent means this build cannot dial out: `ticket` and `redeem` answer a
-   *  typed refusal rather than minting an unredeemable ticket. */
   peer?: {
     localRoute: () => { endpointId?: string; relayHints: string[] };
     dial: PeerDial;
@@ -58,7 +50,6 @@ function linkDto(
     linkId: link.linkId,
     vaultA: link.vaultA,
     vaultB: link.vaultB,
-    // `null` when unknown, never a raw id standing in for a name (#750).
     labelA: store.directoryEntry(link.vaultA)?.label ?? null,
     labelB: store.directoryEntry(link.vaultB)?.label ?? null,
     partyIdA: partyIdForLinkedVault(link, link.vaultA) ?? null,
@@ -66,7 +57,6 @@ function linkDto(
     approvedByA: link.approvedByA,
     approvedByB: link.approvedByB,
     approved: isLinkApproved(link),
-    // Remote exactly when it holds a `vault_routes` row (#750 invariant 2).
     remoteVaultId:
       store.routeFor(link.vaultA) === undefined
         ? store.routeFor(link.vaultB) === undefined
@@ -78,8 +68,6 @@ function linkDto(
   };
 }
 
-/** The SHOWING half. Owning the vault IS the authorization, so one the caller
- *  does not own is `not_found` — as if it did not exist. */
 async function handleMintTicket(
   req: IncomingMessage,
   res: ServerResponse,
@@ -144,8 +132,6 @@ const REDEEM_STATUS: Record<string, number> = {
   unreachable: 200,
 };
 
-/** The SCANNING half; `vaultId` is the LOCAL vault. Past the peer-plane gate
- *  `redeemLinkTicket`'s typed states are relayed as-is. */
 async function handleRedeemTicket(
   req: IncomingMessage,
   res: ServerResponse,
@@ -176,8 +162,6 @@ async function handleRedeemTicket(
       error: "invalid_ticket",
       message: "not a Centraid link ticket",
     });
-  // A missing `deps.peer` is a CAPABILITY this build lacks; keep it distinct
-  // from the 200-mapped `unreachable`, which is a fact about the network.
   if (!deps.peer) {
     return sendJson(res, 503, {
       error: "peer_plane_unavailable",
@@ -232,8 +216,6 @@ export function makeVaultLinksRouteHandler(
     const owners = deps.enrollments.owners;
     const method = req.method ?? "GET";
 
-    // Before the generic linkId sub-routes, which would read "ticket" as a
-    // malformed linkId and 404.
     if (url.pathname === TICKET_PATH) {
       if (method !== "POST")
         return sendJson(res, 405, { error: "method_not_allowed" });
@@ -275,13 +257,10 @@ export function makeVaultLinksRouteHandler(
           error: "invalid_link",
           message: "a vault cannot link to itself",
         });
-      // Own the vault you propose FROM; the other need only exist.
       if (owners.ownerOf(vaultId) !== caller.ownerId)
         return sendJson(res, 404, { error: "not_found" });
       if (owners.ownerOf(otherVaultId) === undefined)
         return sendJson(res, 404, { error: "not_found" });
-      // A vault that cannot produce its own key is refused, never linked
-      // keyless.
       const fromPublicKey = deps.vaultPublicKey(vaultId);
       const toPublicKey = deps.vaultPublicKey(otherVaultId);
       if (!fromPublicKey || !toPublicKey)
@@ -312,8 +291,6 @@ export function makeVaultLinksRouteHandler(
     if (!linkId || rest.length !== 2) return false;
     const link = deps.store.get(linkId);
     if (!link) return sendJson(res, 404, { error: "not_found" });
-    // Owning neither side is indistinguishable from the link not existing —
-    // topology hiding.
     const callerSide =
       owners.ownerOf(link.vaultA) === caller.ownerId
         ? link.vaultA

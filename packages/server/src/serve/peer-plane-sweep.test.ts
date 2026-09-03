@@ -1,16 +1,3 @@
-/*
- * Exit evidence for #726 P3 gap 2 (and gap 3's delivery half): the ONE share
- * outbox drains on a SCHEDULER TICK, not by a direct call — proved here by
- * calling only `.start()`/`.stop()` on the sweep and observing the durable row
- * disappear on its own. `runOnce()` (the test seam for direct-call assertions)
- * is deliberately NOT used in the "drains on a tick" test below.
- *
- * The outbox stopped being a PEER concern with #825's copy-as-share
- * retirement — its one surviving obligation is a same-owner placement — so
- * these tests wire no dial into the drain at all. The sweep's other two
- * concerns (route re-announcement, the commons rail) still dial.
- */
-
 import { describe, expect, it, vi } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
@@ -20,7 +7,6 @@ import { createPeerPlaneSweep } from "./peer-plane-sweep.js";
 import { enqueueShareEffect } from "./share-effects.js";
 import { VaultLinksStore } from "./vault-links-store.js";
 
-/** One `share_edges` row with the owner/device rows its foreign keys need. */
 function seedEdge(db: GatewayDatabase, edgeId: string): void {
   const now = new Date().toISOString();
   db.run(
@@ -85,16 +71,12 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
       },
     });
     await sweep.runOnce();
-    // The announce seam is the RETRY path for a rotated EndpointId a peer has
-    // not heard yet; the seam itself decides whether there is anything to say.
     expect(announced).toBe(1);
   });
 
   it("drains a durable obligation on a SCHEDULER TICK, not a direct call", async () => {
     const db = GatewayDatabase.open(tempDirSync("centraid-sweep-tick-"));
     const links = VaultLinksStore.open(db);
-    // An obligation whose edge no longer exists is ABANDONED by the executor —
-    // the shortest honest path to "the tick discharged this row by itself".
     enqueueShareEffect(db, { kind: "deliver-give", edgeId: "edge-tick" });
     const sweep = createPeerPlaneSweep({
       db,
@@ -141,7 +123,6 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
     expect(calls).toBe(1);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatch(/simulated db failure/u);
-    // The row is untouched — a failed tick parks, it never loses work.
     expect(queuedIds(db)).toStrictEqual(["give:edge-backoff"]);
   });
 });

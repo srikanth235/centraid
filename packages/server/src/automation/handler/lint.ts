@@ -1,8 +1,3 @@
-// Static handler lint for `handler.js` (#167). Outside effects must go through
-// `ctx.*` so they land in the run ledger; handlers must be deterministic, since
-// a crashed fire re-runs from the top and re-fires effects under new ids. A
-// lexical scan, not a sandbox: it only matches raw globals.
-
 export interface HandlerLintFinding {
   readonly rule: string;
   readonly message: string;
@@ -15,15 +10,12 @@ interface LintRule {
   readonly id: string;
   readonly re: RegExp;
   readonly message: string;
-  /** `withStrings` keeps strings, for the rule whose target IS a specifier. */
   readonly target?: "code" | "withStrings";
 }
 
-/** Each `re` runs over the masked source, so a match is real code. */
 const RULES: readonly LintRule[] = [
   {
     id: "no-ctx-tool",
-    // Bracket form too, hence the string-keeping view.
     re: /\bctx\s*(?:\.\s*tool|\[\s*['"]tool['"]\s*\])\s*\(/gu,
     message:
       "ctx.tool was removed: handlers do deterministic work with ctx.vault / ctx.fetch / ctx.state, and delegate judgment to ctx.delegate.",
@@ -67,8 +59,6 @@ const RULES: readonly LintRule[] = [
   },
   {
     id: "no-raw-fetch",
-    // `ctx.fetch` is exempt: it is the audited connector rail this rule steers
-    // toward. Everything else spelling `fetch(` is ambient I/O.
     re: /(?<!ctx\.)\bfetch\s*\(/gu,
     message:
       'A raw fetch() is network I/O that bypasses the run ledger. READS ride ctx.fetch (connector fires, broker-injected and host-pinned) or a ctx.vault read; an external WRITE (send an email, call a mutating API) is staged, never sent: ctx.vault.invoke({ command: "outbox.stage", … }) parks it for the owner and the gateway executor performs the send (issue #306).',
@@ -88,12 +78,8 @@ const RULES: readonly LintRule[] = [
   },
 ];
 
-/** A NUL, not a space: `new Date('x')` must stay distinguishable from the
- *  argless `new Date()`. */
 const MASK = "\0";
 
-/** Newlines are preserved so line/column math stays exact. String state is
- *  ALWAYS tracked, so a `//` inside a string is not read as a comment. */
 function maskNonCode(src: string, maskStrings: boolean): string {
   const out = src.split("");
   const mask = (k: number): void => {
@@ -219,8 +205,6 @@ export function lintHandlerSource(
   const lines = source.split("\n");
   const findings: HandlerLintFinding[] = [];
   for (const rule of RULES) {
-    // Release-managed recognition bundles may read their own local assets, from the
-    // reserved system lifecycle only. Authored handlers never get this exception.
     if (
       options.allowLocalModelAssets &&
       (rule.id === "no-node-io-import" || rule.id === "no-process-ambient")

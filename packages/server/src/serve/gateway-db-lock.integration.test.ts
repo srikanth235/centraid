@@ -113,9 +113,6 @@ describe("gateway-db-lock", () => {
       answering: false,
     });
     expect(wedged.detail).toMatch(/held but the daemon is not answering/iu);
-    // `holderPid` is intentionally best-effort: lsof may time out while the
-    // full suite saturates the host. When enrichment succeeds it must still
-    // identify the real holder and agree with the human-readable detail.
     expect([undefined, child.pid]).toContain(wedged.holderPid);
     expect(
       wedged.holderPid === undefined ||

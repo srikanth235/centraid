@@ -1,5 +1,3 @@
-// Semantic photo search (#721). Wire field names are a protocol contract. `unavailable` is 200.
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { searchPhotosByText } from "../enrich/semantic-search.js";

@@ -1,15 +1,3 @@
-/*
- * `POST /centraid/_gateway/edges` — cross-vault share/move plane (#726 P2):
- * one edge covers a SET of items through ONE reconcile pass. SAME-OWNER ONLY
- * (#825, ruling G-copy) — copies to another person's vault are refused;
- * sharing is a standing grant on `/centraid/_vault/grants`. Whether a pair
- * may be crossed is decided ONLY by `serve/link-crossing.ts` (D3);
- * unauthorized pairs answer `not_found` — topology hiding. The route
- * hand-writes no status (#750): reducer `begin` enqueues ONE `deliver-give`
- * effect, run inline for a synchronous answer. GET lists by OWNER;
- * `createdByDevice` stays as provenance. Live/lend not accepted (#731).
- */
-
 import type { IncomingMessage } from "node:http";
 
 import { ROUTES } from "@centraid/core/protocol";
@@ -49,7 +37,6 @@ interface EdgeInput {
   mode: EdgeMode;
   kind: EdgeKind;
   itemType: ShareableItemType;
-  /** Snapshot only: the fixed set of items the edge copies. */
   itemIds: string[];
   verbs: "read";
 }
@@ -59,7 +46,6 @@ export interface EdgesRouteDeps {
   enrollments: EnrollmentStore;
   links: VaultLinksStore;
   vaultFor: (vaultId: string) => ShareVaultRef | undefined;
-  /** The vault's own party — the principal an edge placement runs as (#916). */
   partyIdFor: (vaultId: string) => string | undefined;
   share?: typeof shareItemsToVault;
   move?: typeof moveOutOfVault;
@@ -100,8 +86,6 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
         message: error instanceof Error ? error.message : String(error),
       });
     }
-    // The ACTING owner must own the origin — an edge only leaves a vault you
-    // own; whether the PAIR may cross is `judgeEdgeCrossing`'s question alone.
     const owners = deps.enrollments.owners;
     if (owners.ownerOf(input.originVaultId) !== owner.ownerId)
       return sendJson(res, 404, { error: "not_found" });
@@ -110,12 +94,8 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
       input.originVaultId,
       input.audienceVaultId
     );
-    // No link, no information: all three refusals leave the same trace.
     if (crossing.state === "not_found")
       return sendJson(res, 404, { error: "not_found" });
-    // COPY-AS-SHARE RETIRED (#825, ruling G-copy): `linked` always means a
-    // cross-owner pair, and a copy is no longer a verb — refused cleanly,
-    // not hidden: the caller has an approved relationship with that vault.
     if (crossing.state === "linked")
       return sendJson(res, 400, {
         error: "cross_owner_give_retired",
@@ -123,7 +103,6 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
           "giving a copy to another person's vault has been replaced by sharing — grant them the album, folder or document instead",
       });
 
-    // Both vaults are on this machine by construction (#825).
     const origin = deps.vaultFor(input.originVaultId);
     const audience = deps.vaultFor(input.audienceVaultId);
     if (!origin || !audience) return sendJson(res, 404, { error: "not_found" });
@@ -147,7 +126,6 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
       outcome
     );
     const settled = readEdgeRow(deps.gatewayDatabase, row.edge_id) ?? row;
-    // 202 = this gateway could not act (vault call threw, vault not open here).
     return sendJson(
       res,
       outcome.state === "retry" && outcome.fault ? 202 : 200,
@@ -175,8 +153,6 @@ function insertOrRead(
   input: EdgeInput
 ): EdgeRow {
   const now = new Date().toISOString();
-  // Validated on the way in, parsed (never cast) on the way out
-  // (`serve/share-scope.ts`).
   const scopeJson = JSON.stringify(input.itemIds);
   db.run(
     `INSERT INTO share_edges
@@ -227,7 +203,6 @@ function edgeWire(
     originVaultId: row.origin_vault_id,
     audienceVaultId: row.audience_vault_id,
     verbs: row.verbs,
-    /** Provenance (#750). */
     createdByDevice: row.created_by_device,
     ...(row.target_item_ids_json
       ? { targetItemIds: parseTargetItemIds(row.target_item_ids_json) }
@@ -279,7 +254,6 @@ function parseInput(body: Record<string, unknown>): EdgeInput {
     mode,
     kind,
     itemType,
-    // Same total validator the stored scope is read back through.
     itemIds: validateItemIds(body.itemIds),
     verbs: "read",
   };

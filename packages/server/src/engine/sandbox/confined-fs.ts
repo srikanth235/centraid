@@ -1,26 +1,9 @@
-/**
- * The module the sandbox substitutes for `node:fs` inside an untrusted handler
- * graph — a READ-ONLY, ROOT-CONFINED mirror. Every path argument goes through
- * `guardReadPath` first, and every mutating entry point throws.
- *
- * Deliberately a PARTIAL mirror: an entry point that is not exported here is
- * `undefined` in the untrusted graph and fails at the call site rather than
- * silently resolving to unconfined authority. Fail-closed by omission — which
- * is also why a lane that grants filesystem access must be integration-tested
- * against its real dependency graph rather than assumed to work.
- *
- * The real `node:fs` is imported here and that import is not confined: this is
- * trusted sandbox code, and the hook in `install.ts` only confines graphs
- * rooted at the untrusted handler file.
- */
-
 import * as realFs from "node:fs";
 
 import * as confinedPromises from "./confined-fs-promises.js";
 import { deniedWrite } from "./denied.js";
 import { guardReadPath } from "./fs-guard.js";
 
-/** Every write entry point resolves to the same refusal. */
 function refuseWrite(operation: string): () => never {
   return () => {
     throw deniedWrite(operation);
@@ -38,8 +21,6 @@ export function readFileSync(
 }
 
 export function existsSync(target: unknown): boolean {
-  // A refusal must not be softened into `false`: a handler probing outside its
-  // roots is an escape attempt, and reporting "not there" would hide it.
   return realFs.existsSync(guardReadPath("existsSync", target));
 }
 
@@ -83,7 +64,6 @@ export function openSync(
   mode?: unknown
 ): number {
   const normalized = typeof flags === "string" ? flags : "r";
-  // Only read modes; `w`, `a`, `r+` and friends all reach the write path.
   if (!normalized.startsWith("r") || normalized.includes("+")) {
     throw deniedWrite("openSync");
   }
@@ -119,7 +99,6 @@ export const symlinkSync = refuseWrite("symlinkSync");
 export const createWriteStream = refuseWrite("createWriteStream");
 export const watch = refuseWrite("watch");
 
-/** `fs.promises`, the same confined surface `node:fs/promises` resolves to. */
 export const promises = confinedPromises;
 
 export default {

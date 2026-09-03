@@ -19,7 +19,6 @@ describe("tiers", () => {
     expect(resolveClaudeModel("smart")).toBe("opus");
     expect(resolveClaudeModel("balanced")).toBe("sonnet");
     expect(resolveClaudeModel("fast")).toBe("haiku");
-    // Full ids / unknown tokens pass through unchanged.
     expect(resolveClaudeModel("claude-opus-4-8")).toBe("claude-opus-4-8");
     expect(resolveClaudeModel("")).toBe("");
   });

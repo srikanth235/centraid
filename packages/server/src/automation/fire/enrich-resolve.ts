@@ -1,6 +1,3 @@
-// Policy gate resolver (#807): most-specific non-null per FIELD; ceiling
-// immovable. Fail-closed: no honourable policy → undefined.
-
 import { BUILT_IN_PROFILE } from "@centraid/vault";
 import type {
   EnrichConsentRecord,
@@ -13,7 +10,6 @@ import type {
 import type { HarnessKind } from "../../engine/conversation/turn.js";
 import type { EnrichDomain, EnrichLane, EnrichTier } from "./enrich-gate.js";
 
-/** Legacy tiers cannot reach `provider`. */
 export type EnrichEgressCeiling = EnrichEgressClass | "off";
 
 export interface ResolvedEnrichPolicy {
@@ -45,7 +41,6 @@ export function egressWithinCeiling(
   return EGRESS_RANK[egress] <= EGRESS_RANK[ceiling];
 }
 
-/** Stops at the domain — never the collection. */
 export function automationScopeChain(domain: EnrichDomain): EnrichScope[] {
   return [
     { type: "vault", ref: "" },
@@ -63,25 +58,20 @@ export interface EnrichPolicyRequest {
 export interface EnrichPolicyResolution {
   readonly tier: EnrichTier | undefined;
   readonly rules?: readonly EnrichPolicyRule[];
-  /** Unknown profile — the gate refuses. */
   readonly egressForProfile?: (
     profileId: string
   ) => EnrichEgressClass | undefined;
-  /** Prior consent; `null` = never asked; omitting fails closed. */
   readonly egressConsent?: (
     egress: EnrichEgressClass
   ) => EnrichConsentRecord | null | undefined;
-  /** Read only AFTER the gate allows the run. */
   readonly engineForProfile?: (
     profileId: string
   ) => ResolvedEngineBinding | undefined;
 }
 
-/** NOT the whole profile — harness kind + binding only. */
 export interface ResolvedEngineBinding {
   readonly kind: "built-in" | "delegate";
   readonly harness?: HarnessKind;
-  /** Harness-offered id — data, never a literal. */
   readonly model?: string;
   readonly configPins?: Readonly<Record<string, string>>;
   readonly promptRev?: string;
@@ -95,7 +85,6 @@ export type ResolveEnrichPolicy = (
   | EnrichTier
   | undefined;
 
-/** ONE capability's chain, least-specific first; `undefined` = refuse. */
 export function resolveEnrichmentPolicy(
   rules: readonly EnrichPolicyRule[],
   legacyTier: EnrichTier | undefined,

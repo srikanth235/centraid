@@ -1,15 +1,4 @@
 import crypto, { randomBytes } from "node:crypto";
-/*
- * Previews-first lazy restore (#405), scaled to tiny buffers: a seeded vault
- * goes through the REAL BackupService/LocalBackupProvider, a blob subset
- * replicates to an in-memory remote CAS, and a LAZY restore asserts the §5
- * contract — DB intact; remote-held blobs stay remote-only with read-through;
- * local-only blobs materialize; ALL tinies warm into the spool; deferred
- * originals read-through on demand; time-to-usable-grid reported.
- *
- * Snapshots carry EVERY local CAS blob (backup-sources.ts §b); the per-blob
- * lazy SKIP keyed on live `has(sha)` trims the restore.
- */
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -38,8 +27,6 @@ const silentLogger = {
   error: () => undefined,
 };
 
-/** Minimal async remote CAS keyed by plaintext sha, like S3BlobStore; no
- *  `putStream`, so small blobs ride the buffered `put` path. */
 class MemoryRemoteStore implements BlobStore {
   readonly kind = "memory-remote";
   private readonly objects = new Map<string, Buffer>();
@@ -82,7 +69,6 @@ function invoke(
   return (out as { output: Record<string, unknown> }).output;
 }
 
-/** Stage bytes into the vault's local CAS — same ingress `core.attach` uses. */
 function stage(plane: VaultPlane, bytes: Buffer, name: string): string {
   return plane.gateway.stageBlob(plane.ownerCredential, {
     bytes,
@@ -138,14 +124,11 @@ describe("restore-lazy", () => {
       logger: silentLogger,
     });
 
-    // The remote CAS + seal key; injected here, configured in production.
     const remoteStore = new MemoryRemoteStore();
     const sealKey = randomBytes(32);
     const remote: RemoteTier = { store: remoteStore, encryptKey: sealKey };
 
     try {
-      // Each item: an ORIGINAL blob plus a tiny THUMB derivative row — what
-      // the warm pass reads.
       const originals: { contentId: string; sha: string; bytes: Buffer }[] = [];
       const thumbs: { sha: string; bytes: Buffer }[] = [];
       for (let i = 0; i < 3; i++) {
@@ -181,8 +164,6 @@ describe("restore-lazy", () => {
         thumbs.push({ sha: thumbSha, bytes: thumbBytes });
       }
 
-      // originals[0..1] plus ALL thumbs replicate; originals[2] stays
-      // local-only so lazy still has to materialize it.
       const seedCustody = new BlobCustody(
         new FsBlobStore(path.join(plane.dir, "blobs")),
         () => remote
@@ -330,8 +311,6 @@ describe("restore-lazy", () => {
       });
       const restoredLocal = new FsBlobStore(path.join(destDir, "blobs"));
 
-      // Remote-primary originals never enter the snapshot; the restored DB
-      // still addresses them by SHA for later read-through.
       expect(result.entries.some((entry) => entry.endsWith(remoteSha))).toBe(
         false
       );

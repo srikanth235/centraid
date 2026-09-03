@@ -4,14 +4,6 @@ import path from "node:path";
 import { isReservedAppId } from "../http/security.js";
 import type { AppId, RegistryEntry } from "../types.js";
 
-/**
- * Persistent registry of registered apps stored at `<appsDir>/_registry.json`.
- *
- * Every app is created via `ensureUploaded(id)` from the upload route —
- * there is no way to register an external folder live. Older
- * rows carrying a `mode` field are loaded transparently and the field
- * is dropped on next persist.
- */
 /* oxlint-disable max-classes-per-file -- error class is colocated with its module (#247) */
 export class Registry {
   private cache = new Map<AppId, RegistryEntry>();
@@ -65,11 +57,6 @@ export class Registry {
     return this.cache.get(id);
   }
 
-  /**
-   * Idempotent upsert used by the upload endpoint. Creates the app
-   * record if missing (path = `<appsDir>/<id>`) and creates the
-   * directory on disk. The only way to add an app to the registry.
-   */
   async ensureUploaded(id: AppId): Promise<RegistryEntry> {
     if (isReservedAppId(id)) {
       throw new RegistryError(

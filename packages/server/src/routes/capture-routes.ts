@@ -15,7 +15,6 @@ export interface CaptureRouteOptions {
   recognizeOcr?: (input: Buffer, mediaType: string) => Promise<OcrExtraction>;
 }
 
-/** Harness fallback for ambiguous quick-capture text; deterministic cases stay local. */
 export function makeCaptureRouteHandler(
   options: CaptureRouteOptions
 ): RouteHandler {

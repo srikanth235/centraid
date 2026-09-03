@@ -1,31 +1,21 @@
 export type AppId = string;
 
-/**
- * Persisted in `<appsDir>/_registry.json`: code in the git store, app data in
- * the vault (#286).
- */
 export interface RegistryEntry {
   id: AppId;
   path: string;
   registeredAt: string;
 }
 
-/** Shape exported by `queries/<id>.js`. Default export only. */
 export interface QueryModule {
   default: HandlerFn<QueryHandlerArgs, unknown>;
 }
 
-/** Shape exported by `actions/<id>.js`. Default export only. */
 export interface ActionModule {
   default: HandlerFn<ActionHandlerArgs, ActionResult>;
 }
 
 export type HandlerFn<Args, Ret = void> = (args: Args) => Promise<Ret>;
 
-/**
- * Public handler type aliases. `ScopedVault` calls round-trip through the
- * worker boundary to the parent process — always await them.
- */
 export type QueryHandler = HandlerFn<QueryHandlerArgs, unknown>;
 export type ActionHandler = HandlerFn<ActionHandlerArgs, ActionResult>;
 
@@ -83,7 +73,6 @@ export interface ScopedTime {
     instances: readonly ScopedRecurrenceInstance[],
     exceptions: readonly ScopedRecurrenceException[]
   ) => ScopedRecurrenceInstance[];
-  /** The one member-facing recurrence summary; apps never render a raw rule. */
   describeRecurrence: (rrule: string) => string | null;
   collapseMissedOccurrences: (input: {
     rrule: string;

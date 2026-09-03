@@ -43,11 +43,8 @@ describe("preflight suite", () => {
 
   test("caches result per (kind, binPath)", async () => {
     invalidatePreflightCache();
-    // Use `true` (always succeeds, version output) and `false` (always fails)
-    // to exercise both branches without depending on any user-installed CLI.
     const first = await runPreflight({ kind: "codex", binPath: "true" });
     const second = await runPreflight({ kind: "codex", binPath: "true" });
-    // Same cache key → identical object (we don't deep-clone — fine for tests).
     expect(first).toBe(second);
   });
 
@@ -92,9 +89,6 @@ describe("preflight suite", () => {
 
   test("preflight surfaces versionAtLeast when version parses", async () => {
     invalidatePreflightCache();
-    // `true --version` exits 0 and prints empty output → version parses
-    // as undefined → versionAtLeast stays undefined. Confirm the field is
-    // absent (not falsely false) in that case.
     const status = await runPreflight({ kind: "codex", binPath: "true" });
     expect(status.ok).toBe(true);
     expect(status.versionAtLeast).toBeUndefined();
@@ -116,8 +110,6 @@ describe("preflight suite", () => {
   });
 
   test("session-ready preflight serves a warm capability cache without spawning the harness", async () => {
-    // Readiness must not force `refresh: true`: that spawns the harness on
-    // every poll AND buys a live provider turn from the diagnostic prompt.
     const dir = await tempDir("centraid-preflight-ready-");
     const pidMarker = path.join(dir, "pid");
     const promptMarker = path.join(dir, "prompt.json");
@@ -134,7 +126,6 @@ describe("preflight suite", () => {
     invalidatePreflightCache();
     const first = await runPreflight(prefs, { requireSessionReady: true });
     expect(first.ok).toBe(true);
-    // The cold check did spawn once — and did NOT prompt the provider.
     await fs.access(pidMarker);
     await expect(fs.access(promptMarker)).rejects.toThrow(/ENOENT/u);
 
@@ -142,7 +133,6 @@ describe("preflight suite", () => {
     invalidatePreflightCache();
     const second = await runPreflight(prefs, { requireSessionReady: true });
     expect(second.ok).toBe(true);
-    // No second spawn: the marker was never rewritten.
     await expect(fs.access(pidMarker)).rejects.toThrow(/ENOENT/u);
   });
 
@@ -158,8 +148,6 @@ describe("preflight suite", () => {
     const dir = await tempDir("centraid-preflight-");
     const catalogPath = path.join(dir, "model-catalog.json");
 
-    // Cold catalog → empty list (a loading/empty state, no seed). The read must
-    // not spawn anything, so no catalog file appears.
     const cold = await runPreflight(
       { kind: "codex", binPath: "true" },
       { catalogPath }
@@ -167,7 +155,6 @@ describe("preflight suite", () => {
     expect(cold.models).toStrictEqual([]);
     await expect(fs.access(catalogPath)).rejects.toThrow(/ENOENT/u);
 
-    // A populated catalog is read back verbatim.
     await writeCatalogEntry(catalogPath, "codex", {
       hash: "h",
       models: [{ id: "gpt-x", name: "GPT-X", default: true }],
@@ -208,8 +195,6 @@ describe("preflight suite", () => {
   });
 
   test("a missing opencode/grok/kimi binary reports unavailable with the install hint", async () => {
-    // The hint IS the "why not" the providers console shows, so an unavailable
-    // harness must never come back hintless.
     const expected = {
       opencode: /opencode-ai/u,
       grok: /SuperGrok|X Premium/u,
@@ -251,15 +236,10 @@ describe("preflight suite", () => {
   });
 
   test("cursor's CalVer floor survives the semver-shaped minVersion string", () => {
-    // 2026.07.16 is year.month.day, not semver — but it renders and compares
-    // through the same numeric path, so the reported floor is exactly the date.
     expect(minVersionString("cursor")).toBe("2026.7.16");
   });
 
   test("a missing binary for any added kind reports unavailable with its install hint", async () => {
-    // The hint IS the "why not" the providers console shows, so an unavailable
-    // harness must never come back hintless — and for these kinds it is often
-    // the only place the paid-plan / provider-config requirement appears.
     const expected = {
       copilot: /gh\.io\/copilot-install|copilot-cli/u,
       cursor: /cursor-agent login/u,
@@ -288,9 +268,6 @@ describe("preflight suite", () => {
   });
 
   test("probeCliAvailability defaults each added kind to its own binary", async () => {
-    // `vibe-acp` (not `vibe`) and `cursor-agent` (not `agent`) are the ones a
-    // regression would most plausibly get wrong, so probe with no binPath and
-    // confirm the default bin is the one that gets looked up and missed.
     await forEachSequentially(WAVE_7_KINDS, async (kind) => {
       const status = await probeCliAvailability(kind, `/no/such/${kind}`);
       expect(status.available, kind).toBe(false);
@@ -328,7 +305,6 @@ describe("preflight suite", () => {
   });
 
   test("probeCliAvailability reports available + version when the CLI runs", async () => {
-    // `true` always exits 0 (empty output) — stands in for an installed CLI.
     const status = await probeCliAvailability("codex", "true");
     expect(status.available).toBe(true);
   });
@@ -352,15 +328,6 @@ describe("preflight suite", () => {
       (await probeCliAvailability("codex", bin, { refresh: true })).available
     ).toBe(false);
   });
-
-  // PATH sanitization (stray ~/node_modules/.bin/claude shim): `npm run` /
-  // `bun run` prepend every ancestor directory's
-  // `node_modules/.bin` to PATH. If one of those ancestors (e.g. a user's
-  // HOME dir) happens to hold a stray npm install, a `claude`/`codex` shim
-  // living there silently shadows the user's real, PATH-resolved install —
-  // the app reports (and runs) whatever stale binary the shim points at.
-  // `sanitizeHarnessPath`/`harnessSpawnEnv` (spawn-env.ts) strip those entries
-  // before any bare-name `spawn('claude'|'codex', …)`.
 
   test("sanitizeHarnessPath strips node_modules/.bin entries, preserving order", () => {
     const input = [
@@ -445,9 +412,6 @@ describe("preflight suite", () => {
     }
   });
 
-  // End-to-end: probeCliAvailability resolves the real install, not a stray
-  // node_modules/.bin shim shadowing it on a polluted dev-run PATH.
-
   async function writeFakeBin(
     dir: string,
     name: string,
@@ -467,8 +431,6 @@ describe("preflight suite", () => {
     await writeFakeBin(realDir, "codex", "2.1.207");
 
     savedPath = process.env.PATH;
-    // Shim first — reproduces npm/bun `run`'s ancestor node_modules/.bin
-    // injection landing ahead of the user's real install on PATH.
     process.env.PATH = [shimDir, realDir].join(path.delimiter);
 
     const status = await probeCliAvailability("codex");

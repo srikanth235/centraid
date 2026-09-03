@@ -1,14 +1,3 @@
-/*
- * The bundled-manifest scope-denial sweep (#839) — part 1 of 3.
- *
- * Loading checks and the positive half: every declared scope × verb is
- * evaluable and allowed. The shared loader, oracles, and vault fixture live in
- * `manifest-scope-denial.sweep.test-fixtures.ts`; the negative-grammar half is in
- * `manifest-scope-denial.closed-grammar.test.ts` and the property fuzz in
- * `manifest-scope-denial.fuzz.test.ts`. See the fixtures header for why the
- * grant is maximal and why the sweep lives in `packages/server`.
- */
-
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { DEFAULT_PURPOSE } from "@centraid/vault";
@@ -34,8 +23,6 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
   });
 
   test("the sweep loaded every bundled manifest through its real validator", () => {
-    // A drop here means the template tree moved and the sweep is scanning
-    // fewer manifests — the exact way a tripwire rots to green.
     expect({
       apps: MANIFESTS.filter((m) => m.kind === "apps").length,
       automations: MANIFESTS.filter((m) => m.kind === "automations").length,
@@ -44,19 +31,9 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
     }).toStrictEqual({
       apps: 8,
       automations: 29,
-      // `release-notes-drafter` declares no vault block; its own case below
-      // pins what that means for consent.
       withScopes: 36,
-      // `app-manifest-reads.test.ts` is the gate keeping a manifest's declared
-      // reads and its seats' actual reads honest; this number only tracks them.
-      // 278 → 277 (#916): Locker's history pane moved off the dropped
-      // `locker.item_history` onto the shared revision ledger, and the two
-      // scopes that named the dead table (`read` and `reveal`) became one
-      // `core.entity_revision` read. Nothing may reveal a revision, so the
-      // reveal scope did not move — it is gone.
       declaredScopes: 277,
     });
-    // Every scope-carrying manifest rides the one defaulted DPV purpose.
     expect([
       ...new Set(
         MANIFESTS.filter((m) => m.scopes.length > 0).map((m) => m.purpose)
@@ -94,8 +71,6 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
             if (decision.decision === "allow") allowed += 1;
           }
         }
-        // Counted, not merely looped: a manifest whose scopes vanished must
-        // say so as a number, not as a silently empty loop body.
         expect(allowed).toBe(
           manifest.scopes.reduce((n, s) => n + verbsOf(s.verbs).length, 0)
         );
@@ -103,11 +78,6 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
     );
 
     test("a declared rowFilter/fieldMask reaches the allow decision intact", () => {
-      // Manifests anchoring a schema-wide read attenuate it: people and tally
-      // to their own entity type, locker (#872) `access.receipt` to its own
-      // object types. That last matters most — the gateway's structural
-      // per-entity guard covers `access.provenance` only, so here the
-      // rowFilter IS the boundary.
       const anchored = MANIFESTS.filter((manifest) =>
         manifest.scopes.some((scope) => scope.rowFilter !== undefined)
       );

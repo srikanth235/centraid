@@ -12,7 +12,6 @@ import type {
   ResourceKnobSource,
 } from "./hardware-profile.js";
 
-/** Every knob Linked to the preset — the no-override baseline. */
 const ALL_PRESET_SOURCES: Record<ResourceKnobName, ResourceKnobSource> = {
   workerMaxConcurrent: { source: "preset" },
   workerMaxOldGenerationMb: { source: "preset" },
@@ -30,8 +29,6 @@ describe("hardware-profile", () => {
     ).toMatchObject({
       class: "constrained",
       resourceMode: "auto",
-      // Detection tunes concurrency, but durability only relaxes on an
-      // explicit operator choice.
       sqliteSynchronous: "FULL",
       workerMaxConcurrent: 2,
       workerMaxOldGenerationMb: 128,
@@ -313,12 +310,10 @@ describe("hardware-profile", () => {
       { ...STANDARD_HOST, prefsOverrides: { workerMaxConcurrent: 5 } },
       {}
     );
-    // Balanced preset would be 8; the durable override lands 5.
     expect(profile.workerMaxConcurrent).toBe(5);
     expect(profile.sources.workerMaxConcurrent).toStrictEqual({
       source: "prefs",
     });
-    // Untouched knobs stay Linked to the preset.
     expect(profile.sources.replicationConcurrency).toStrictEqual({
       source: "preset",
     });
@@ -347,7 +342,6 @@ describe("hardware-profile", () => {
       },
       {}
     );
-    // Above-max clamps to the ceiling; below-min is rejected → preset carries.
     expect(profile.workerMaxConcurrent).toBe(
       RESOURCE_KNOB_BOUNDS.workerMaxConcurrent.max
     );

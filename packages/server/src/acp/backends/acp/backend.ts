@@ -120,8 +120,6 @@ export async function runAcpTurn(
   let vaultMcp: Awaited<ReturnType<typeof startTurnVaultTools>>["handle"];
   let activeModel: string | undefined;
   let activeEffort: string | undefined;
-  // Assigned on warm take or fresh spawn before any use; definite assignment
-  // assertion keeps the dual-path structure readable for tsc.
   let child!: ChildProcessByStdio<Writable, Readable, Readable>;
   let conn!: AcpConnectionOwner;
   let releaseTurnOwner = (): void => undefined;
@@ -179,11 +177,6 @@ export async function runAcpTurn(
       const options = readPermissionOptions(params);
       if (input.permissionPolicy === "deny") {
         emit(permissionDeniedNotice(toolTitle));
-        // Refuse THIS request, not the turn: `cancelled` is the wire's
-        // "the prompt turn was cancelled before an answer", and a harness
-        // that honours it unwinds everything — contradicting the notice
-        // above ("this turn may use only its pre-granted tools"). Only an
-        // harness offering no reject option leaves us with `cancelled`.
         const rejectId = pickRejectPermissionOption(options);
         return rejectId
           ? { outcome: { outcome: "selected", optionId: rejectId } }
@@ -200,14 +193,7 @@ export async function runAcpTurn(
       touchPromptIdleWatchdog();
       const optionUpdate = readConfigOptionUpdate(params);
       if (optionUpdate) {
-        // `ConfigOptionUpdate.configOptions` is "the full set" per the ACP
-        // schema — REPLACE, never merge, so an option the harness dropped stops
-        // being a pin target and stops feeding accounting.
         configOptions = optionUpdate;
-        // The harness just told us what is actually in effect, which is exactly
-        // the D4 "ACP-confirmed" evidence the usage stamp needs. A mid-turn
-        // model/effort switch has to book the rest of the turn under the new
-        // identity instead of the value pinned before the prompt started.
         activeModel = readCurrentConfigValue(configOptions, "model");
         activeEffort = readCurrentConfigValue(configOptions, "thought_level");
       }
@@ -216,7 +202,6 @@ export async function runAcpTurn(
     },
   });
 
-  // Warm reuse
   if (input.prevSessionId) {
     const warm = takeWarmSlot(
       config.kind,
@@ -259,7 +244,7 @@ export async function runAcpTurn(
           .notify(methods.agent.session.cancel, { sessionId })
           .catch(() => undefined);
       } catch {
-        // ignore
+        // Intentionally empty.
       }
     }
     if (!child.killed) child.kill("SIGTERM");
@@ -359,7 +344,6 @@ export async function runAcpTurn(
         modes = created?.modes ?? undefined;
         sessionId = freshId;
         continuity = "fresh";
-        // Announced only after the replacement session exists (see above).
         emit({
           type: "notice",
           level: "warn",
@@ -460,8 +444,6 @@ export async function runAcpTurn(
         modes = created?.modes ?? undefined;
         sessionId = id;
         continuity = "fresh";
-        // Only claim the self-heal once the fresh session really exists — a
-        // failing `session/new` must not leave the owner told we recovered.
         if (selfHealed) {
           emit({
             type: "notice",
@@ -591,18 +573,12 @@ export async function runAcpTurn(
       }
     }
 
-    // The persisted cumulative counters only apply when this turn really
-    // continues the session they were recorded against.
     const resumeBaseline =
       continuity !== "fresh" &&
       input.prevSessionId !== undefined &&
       sessionId === input.prevSessionId
         ? input.prevUsageSnapshot
         : undefined;
-    // Keep that baseline if the prompt never reports a total (killed child,
-    // transport failure). Returning NO snapshot would CLEAR the stored
-    // counters, so the next turn on this session would book the whole session
-    // total a second time.
     usageSnapshot = resumeBaseline;
 
     promptStarted = true;
@@ -629,8 +605,6 @@ export async function runAcpTurn(
       resumeBaseline,
       folded.context
     );
-    // Only the session's live config option / confirmed pin is authoritative.
-    // A requested model may be ignored or refused and must never be stamped.
     const usageEvent = buildUsageEvent(
       config.kind,
       activeModel,
@@ -638,13 +612,6 @@ export async function runAcpTurn(
       delta.tokens,
       delta.cost
     );
-    // Accounting is NOT cancellable. ACP session usage is cumulative, so the
-    // booked delta and the persisted snapshot have to advance together or not
-    // at all: dropping the event on an aborted turn while still advancing the
-    // snapshot would book the cancelled turn's tokens to nobody, and every
-    // later turn would subtract a baseline it was never charged for. Bypass
-    // `emit`'s abort gate — the consumer folds post-abort events (it still
-    // receives the `aborted` event below through the same channel).
     if (usageEvent) input.onEvent(usageEvent);
     usageSnapshot = delta.snapshot;
 
@@ -683,12 +650,6 @@ export async function runAcpTurn(
         conn.stderrTail(),
         config
       );
-      // The SDK rejects an in-flight request as soon as its NDJSON readable
-      // closes. Node may deliver the child `exit` event a tick later, so under
-      // instrumentation the generic connection rejection can otherwise win
-      // and turn a deterministic nonzero exit into `unknown`. Give only an
-      // otherwise-unknown failure a short process-event grace period, then use
-      // the stronger lifecycle evidence. Spawn errors keep their own class.
       if (failure.failureClass === "unknown" && !conn.hasExited()) {
         await Promise.race([
           conn.exited,
@@ -757,17 +718,16 @@ export async function runAcpTurn(
             "session/close"
           );
         } catch {
-          // ignore
+          // Intentionally empty.
         }
       }
       try {
         child.stdin.end();
       } catch {
-        // ignore
+        // Intentionally empty.
       }
       if (!child.killed) child.kill("SIGTERM");
       const exited = await requestWithTimeout(
-        // A rejected `exited` still means the process is gone.
         conn.exited.then(
           () => true,
           () => true
@@ -776,8 +736,6 @@ export async function runAcpTurn(
         "process exit"
       ).catch(() => false);
       if (!exited) {
-        // SIGTERM is a request. A harness that ignores it would otherwise leak
-        // one child per turn for the lifetime of the gateway.
         child.kill("SIGKILL");
         await conn.exited.catch(() => undefined);
       }

@@ -1,5 +1,3 @@
-/* KeyStore credential an installed OS service carries (#351, #568 item E). */
-
 import { promises as fs } from "node:fs";
 
 import { aesGcmKeyProtector, KeyStore } from "@centraid/vault";
@@ -14,7 +12,6 @@ export type ServiceKeyCredential =
       keysDir: string;
     };
 
-/** ADOPT BEFORE WRITING: prove every key here reads; aborts BEFORE anything commits. */
 export async function adoptKeyStoreCredential(
   fail: (message: string, code?: number) => never,
   credential: ServiceKeyCredential

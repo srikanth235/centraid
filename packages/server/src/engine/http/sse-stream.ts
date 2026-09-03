@@ -1,6 +1,3 @@
-// Bounded SSE writer (#659). Drop the stream when Node's outbound queue
-// exceeds the bound — EventSource reconnects; unbounded buffering does not.
-
 import type { ServerResponse } from "node:http";
 
 const DEFAULT_MAX_BUFFERED_BYTES = 1024 * 1024;
@@ -64,7 +61,6 @@ export class SseStream {
     this.overflowed = true;
     const buffered = this.res.writableLength;
     this.onOverflow?.(buffered);
-    // destroy(), not end(): end() would flush the backlog we are dropping.
     this.res.destroy();
   }
 }

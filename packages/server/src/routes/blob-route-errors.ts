@@ -11,11 +11,7 @@ import {
 
 import { sendJson } from "./route-helpers.js";
 
-/** Stable HTTP problem mapping for the blob transfer protocol. */
 export function sendBlobRouteError(res: ServerResponse, error: unknown): true {
-  // Once streaming has started there is no valid JSON error response left to
-  // write. Attempting to set headers here throws ERR_HTTP_HEADERS_SENT and can
-  // turn an ordinary source failure into an unhandled route rejection.
   if (res.headersSent || res.destroyed) {
     if (!res.destroyed) res.destroy();
     return true;

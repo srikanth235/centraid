@@ -12,7 +12,6 @@ import {
   readAnomalyLedger,
 } from "./anomaly-ledger.js";
 
-/** Injected clock — the ledger never reads the wall clock itself. */
 function fixedClock(startMs = Date.parse("2026-08-21T00:00:00.000Z")) {
   let tick = 0;
   return (): number => {
@@ -72,7 +71,6 @@ describe("the anomaly ledger", () => {
       code: 'failed for "Priya\'s note"',
       component: "Photos Import (Priya)",
       facts: {
-        // A string fact is the channel this ledger deliberately does not have.
         detail: "hunter2" as unknown as number,
         accessToken: 3,
         retries: 4,
@@ -130,7 +128,6 @@ describe("the anomaly ledger", () => {
   });
 
   test("a write failure is counted, never thrown — the observer cannot crash the observed", () => {
-    // A regular file where a directory has to be: `mkdirSync` fails ENOTDIR.
     const blocked = tempDirSync("anomaly-blocked-");
     fs.writeFileSync(path.join(blocked, "wall"), "x");
     const ledger = new AnomalyLedger({
@@ -146,7 +143,6 @@ describe("the anomaly ledger", () => {
       })
     ).not.toThrow();
     expect(ledger.dropped).toBe(1);
-    // The in-memory ring keeps working when persistence does not.
     expect(ledger.snapshot()).toHaveLength(1);
   });
 

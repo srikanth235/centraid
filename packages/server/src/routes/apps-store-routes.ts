@@ -1,9 +1,3 @@
-// HTTP surface for the gateway-owned git store (#137), under the reserved
-// `_apps` namespace. It lives in gateway-runtime, not app-engine, because it
-// is WorktreeStore-specific; app-engine stays backend-agnostic. Publish
-// validates the manifest against the SESSION WORKTREE before the merge,
-// gateway-side, because the gateway owns the data.
-
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
@@ -26,12 +20,9 @@ import {
 export { validateManifestAt } from "../validate-manifest.js";
 
 export interface AppsStoreRouteOptions {
-  /** Release-managed code is inspectable but never mutable through this door. */
   isReadOnlyApp?: (appId: string) => boolean;
-  /** Registers the app: one published mid-session missed the boot-time sync. */
   onAppLive?: (appId: string) => Promise<void>;
   onAppDeleted?: (appId: string) => Promise<void>;
-  /** The bundled half of the `GET /_apps` union (#434); omit with no vault. */
   bundledApps?: () => Promise<AppMetaRow[]>;
   ext?: ExtBandOps;
 }
@@ -45,7 +36,6 @@ export interface AppMetaRow {
   colorKey?: string;
 }
 
-/** Resolves `true` when it owned the request. */
 export function makeAppsStoreRouteHandler(
   store: WorktreeStore,
   opts: AppsStoreRouteOptions = {}
@@ -62,7 +52,6 @@ export function makeAppsStoreRouteHandler(
 
     try {
       if (segments.length === 1 && method === "GET") {
-        // Union (#434): bundled + git-store apps, bundled ids winning.
         const storeApps = await store.listAppsWithMeta();
         const bundled = opts.bundledApps ? await opts.bundledApps() : [];
         const bundledIds = new Set(bundled.map((a) => a.id));
@@ -70,7 +59,6 @@ export function makeAppsStoreRouteHandler(
           ...bundled,
           ...storeApps.filter((a) => !bundledIds.has(a.id)),
         ];
-        // Conditional GET (#659): polled every shelf render, rarely changed.
         return sendJsonConditional(req, res, 200, apps);
       }
 
@@ -97,8 +85,6 @@ export function makeAppsStoreRouteHandler(
       }
 
       if (segments.length === 2 && method === "DELETE") {
-        // Delete is idempotent: `no_changes` is normal for a never-published
-        // draft or a repeat DELETE, so teardown still runs and reports success.
         let codeRemoved = true;
         try {
           await store.deleteApp(appId);
@@ -176,13 +162,12 @@ async function handleSessions(
   }
   if (segments.length === 3 && method === "DELETE") {
     const sessionId = decodeURIComponent(segments[2] ?? "");
-    // A closed draft leaves no data residue; the band may already be gone.
     if (ext) {
       for (const appId of await store.sessionAppIds(sessionId)) {
         try {
           ext.dropAppExtDraft(appId);
         } catch {
-          /* draft cleanup must never block a session close */
+          // Intentionally empty.
         }
       }
     }
@@ -212,7 +197,6 @@ async function handlePublish(
     return true;
   }
 
-  // Validate BEFORE the merge, or an invalid manifest goes live dead.
   const appDir = await store.snapshotSessionAppDir(sessionId, appId);
   const validationError = await validateManifestAt(appDir);
   if (validationError) {
@@ -220,8 +204,6 @@ async function handlePublish(
     return true;
   }
 
-  // `beforeMerge` runs inside the store's mutex, post-rebase and pre-merge, so
-  // the applied specs are the tree going live; a refusal aborts publish (#286).
   let result;
   let extOutcome:
     | { created: string[]; dropped: string[]; altered: string[] }
@@ -279,7 +261,6 @@ async function handleRollback(
   return true;
 }
 
-/** A dress rehearsal of the publish DDL: a refused spec 400s here (#286). */
 async function handleResetData(
   store: WorktreeStore,
   req: IncomingMessage,
@@ -303,7 +284,6 @@ async function handleResetData(
     });
     return true;
   }
-  // Throws `session_missing` (404 via the outer handler) if not open.
   const worktreeAppDir = await store.snapshotSessionAppDir(sessionId, appId);
   try {
     const specs = await readExtSpecs(worktreeAppDir);

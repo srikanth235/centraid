@@ -1,12 +1,3 @@
-/**
- * Worker entry that executes one user handler. The app-handler sandbox is
- * installed before the handler graph is imported (#842), so network reach
- * survives only as `ctx.fetch` and the only data door is `ctx.vault`. It is
- * still NOT an OS sandbox — read `../sandbox/install.ts`'s limits before
- * describing this boundary in a threat model. A worker runs EXACTLY ONE
- * handler and is discarded (#404), so no thread ever imports two.
- */
-
 import { existsSync } from "node:fs";
 import { register } from "node:module";
 import path from "node:path";
@@ -22,7 +13,6 @@ async function loadSandboxBoot(): Promise<typeof import("../sandbox/boot.js")> {
   )) as typeof import("../sandbox/boot.js");
 }
 
-/** Captured BEFORE the sandbox revokes the global. */
 const hostFetch = globalThis.fetch;
 
 let tsLoaderRegistered = false;
@@ -73,7 +63,6 @@ interface VaultReplyMessage {
   result?: unknown;
   error?: string;
   code?: string;
-  /** Set when the refusal is a revocation; see VaultCallResult.revokedAt. */
   revokedAt?: string;
 }
 
@@ -117,9 +106,6 @@ port.on("message", (msg: VaultReplyMessage | RunMessage) => {
   }
 });
 
-// The parent enforces consent; a refusal rejects with the receipt id and a
-// machine `code`. No key or file handle ever enters this thread.
-
 let nextVaultCallId = 1;
 const pendingVaultCalls = new Map<
   number,
@@ -154,8 +140,6 @@ const vault = {
   parked(): Promise<unknown> {
     return vaultCall("parked", {});
   },
-  /** Resolvable only when a live `core.link` connects the ref to something
-   *  this caller reads (#272). */
   resolve(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("resolve", request);
   },
@@ -216,11 +200,8 @@ function execute(req: WorkerRequest): void {
         shiftTemporal: timeModule.shiftTemporal,
       });
       if (/\.tsx?$/u.test(req.handlerFile)) ensureTsLoader();
-      // Containment goes on LAST, immediately before the untrusted graph is
-      // reachable. The handler file is the taint root.
       const { loadSandbox } = await loadSandboxBoot();
       const sandboxApi = await loadSandbox();
-      // Lane chosen per file, so no handler inherits the seed's `fs` grant.
       const isSeed = /(?:^|[\\/])seed\.(?:m?js|tsx?)$/u.test(req.handlerFile);
       const sandbox = sandboxApi.installWorkerSandbox(
         isSeed

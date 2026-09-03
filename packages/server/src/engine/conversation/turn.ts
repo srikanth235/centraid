@@ -1,9 +1,6 @@
-/* Turn-driver contract, living BELOW every harness implementation. */
-
 import type { Dispatcher } from "../handlers/dispatcher.js";
 import type { TurnStreamEvent } from "./runner.js";
 
-/** Add a kind here and its launch spec to agent-runtime's `HarnessSpec`. */
 export const HARNESS_KINDS = [
   "codex",
   "claude-code",
@@ -66,7 +63,6 @@ export interface ToolContext {
   dispatcher: Dispatcher;
   turnId: string;
   overrideCodeDir?: string;
-  /** Set ⇒ the vault register REPLACES the `centraid_*` trio: never mixed. */
   vaultSql?: VaultSqlRunner;
   vaultInvoke?: VaultInvokeRunner;
   vaultContent?: VaultContentRunner;
@@ -78,8 +74,6 @@ export interface TurnAttachment {
   filename?: string;
 }
 
-/** ACP reports session TOTALS, not deltas: fed back only on a same-harness
- *  resume, so each turn books exactly once. */
 export interface HarnessUsageSnapshot {
   readonly inputTokens?: number;
   readonly outputTokens?: number;
@@ -110,7 +104,6 @@ export interface TurnInput {
   recoveryHydrationAttachments?: TurnAttachment[];
   forceHydration?: boolean;
   additionalDirectories?: string[];
-  /** Per-subprocess, never `process.env`: that races concurrent turns. */
   extraPath?: string;
   toolContext?: ToolContext;
   abortSignal: AbortSignal;

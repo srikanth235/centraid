@@ -1,5 +1,3 @@
-// Per-app CAS (#190): `<appsDir>/<appId>/blobs/<sha256>`. GC is refcount-by-hash.
-
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -49,10 +47,9 @@ export class BlobStore {
       await fs.access(dest);
       return { hash, sizeBytes: bytes.byteLength, deduped: true };
     } catch {
-      /* absent — write */
+      // Intentionally empty.
     }
     await fs.mkdir(this.blobDir(appId), { recursive: true });
-    // Temp sibling then rename so a crash never leaves a partial blob under its hash.
     const tmp = `${dest}.tmp-${process.pid}-${hash.slice(0, 8)}`;
     await fs.writeFile(tmp, bytes);
     await fs.rename(tmp, dest);

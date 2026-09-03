@@ -1,9 +1,3 @@
-/*
- * Data-chat config over `makeConversationRunnerCore` (#147). cwd =
- * `input.dataDir`; no vault runners, no draft worktree, no post-turn side
- * effects (those belong to `makeUnifiedConversationRunner`).
- */
-
 import { makeConversationRunnerCore } from "@centraid/server/engine";
 import type {
   ConversationRunner,
@@ -21,7 +15,6 @@ export interface MakeConversationRunnerOptions {
     harnessKind?: HarnessKind
   ) => Promise<HarnessPrefs | undefined>;
   subsystem?: ModelSubsystem;
-  /** Per turn so a host can cycle-break on first use (local-runtime). */
   getDispatcher: () => Dispatcher;
   providerEgressConsent: ProviderEgressConsentController;
 }

@@ -1,10 +1,3 @@
-/*
- * Condition/data cursor sources: consented read → row-content dedup →
- * delivered elements. Stub bridge; the committed position is handed in by the
- * engine, so these tests pin that a reader never reports a position ahead of
- * what it actually returned.
- */
-
 import { describe, expect, it } from "vitest";
 
 import type { VaultBridge } from "@centraid/server/engine";
@@ -18,11 +11,6 @@ const TRIGGER: ConditionTrigger = {
   where: [{ column: "due_at", op: "within-next-days", value: 3 }],
 };
 
-/*
- * The cursor-source readers hold no state of their own: the engine hands them
- * the committed position and commits whatever they return — so what they
- * return may never run ahead of what they delivered.
- */
 describe(readConditionCursor, () => {
   const read = (
     rows: Record<string, unknown>[],
@@ -50,17 +38,13 @@ describe(readConditionCursor, () => {
     const first = await read([invoiceA], undefined, new Date(1_000));
     expect(first.elements).toHaveLength(1);
 
-    // Still matching, already delivered: suppressed by content hash.
     const quiet = await read([invoiceA], first.positionJson, new Date(2_000));
     expect(quiet.elements).toStrictEqual([]);
     expect(quiet.positionJson).toBe(first.positionJson);
 
-    // It leaves the window (paid) — the hash is forgotten…
     const empty = await read([], quiet.positionJson, new Date(3_000));
     expect(empty.positionJson).toBe("[]");
 
-    // …so the next cycle re-enters with the SAME content and fires again,
-    // under a position the host has not already receipted a run for.
     const reentry = await read([invoiceA], empty.positionJson, new Date(4_000));
     expect(reentry.elements).toHaveLength(1);
     expect(reentry.elements[0]?.position).not.toBe(first.elements[0]?.position);
@@ -78,7 +62,6 @@ describe(readConditionCursor, () => {
     expect(capped.elements.map((element) => element.payload)).toStrictEqual([
       invoiceA,
     ]);
-    // The surplus row is still sitting in the vault — it is not a gap.
     expect(capped.skipped).toBe(0);
     expect(capped.gapReason).toBeUndefined();
     expect(JSON.parse(capped.positionJson ?? "[]")).toHaveLength(1);
@@ -176,8 +159,6 @@ describe(readDataCursor, () => {
       now: new Date(5_000),
     });
 
-    // The feed's watermark is its last returned row, so committing it is
-    // honest when every returned row is delivered.
     expect(requests).toStrictEqual([{ cursor: "p1", limit: 2 }]);
     expect(result.elements).toStrictEqual([
       {

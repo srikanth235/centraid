@@ -44,7 +44,6 @@ function pathInside(candidate: string, root: string): boolean {
   );
 }
 
-/** A harness-reported workspace file is no more trusted than an inline one. */
 const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 
 async function workspaceArtifact(
@@ -69,7 +68,6 @@ async function workspaceArtifact(
   const requested = path.isAbsolute(decoded)
     ? decoded
     : path.resolve(base, decoded);
-  // Silently: outside the roots is a boundary decision, not a failure.
   let candidate: string;
   try {
     candidate = await fs.realpath(requested);
@@ -81,8 +79,6 @@ async function workspaceArtifact(
   } catch {
     return undefined;
   }
-  // Past containment a miss is a real dropped artifact, so surface it. Stat
-  // BEFORE reading, or the cap decides after the bytes are already in memory.
   try {
     const stat = await fs.stat(candidate);
     if (!stat.isFile()) return undefined;
@@ -136,30 +132,23 @@ export interface DriveTurnOptions {
   conversationHarnessSessionDir: string;
   conversationLocks: Map<string, Promise<void>>;
   banner: string;
-  /** `'ask'` is the app copilot. */
   register?: "ask" | "build" | undefined;
   model?: string | undefined;
   thinking?: string | undefined;
   harnessKind?: TypeImport_nu6ai6.HarnessKind | undefined;
-  /** One provider, or the whole set the client has accumulated (#567). */
   providerConsent?:
     | TypeImport_nu6ai6.HarnessKind
     | readonly TypeImport_nu6ai6.HarnessKind[]
     | undefined;
   additionalDirectories?: string[];
   idempotencyKey?: string | undefined;
-  /** At capacity the driver writes 429 and never opens the stream (#420). */
   limiter?: TurnLimiter | undefined;
-  /** Recorded as `turns.retry_of`, collapsing the turn into a sibling pager. */
   retryOf?: string | undefined;
   prevHarnessSessionId?: string | undefined;
   prevHarnessKind?: string | undefined;
   prevHarnessUsageSnapshot?: TypeImport_nu6ai6.HarnessUsageSnapshot | undefined;
-  /** CAS refs recorded on the turn's `message_in` item. */
   attachmentRefs?: TurnAttachmentRef[];
   turnAttachments?: { path: string; mime: string; filename?: string }[];
-  /** Fired once on the naming turn and never awaited (#420); the callback
-   * owns the inference and the rename guard, the driver only the timing. */
   generateTitle?: (args: {
     conversationId: string;
     userMessage: string;
@@ -167,11 +156,9 @@ export interface DriveTurnOptions {
   }) => void;
 }
 
-/** The response is always closed here. */
 export async function driveTurnOverSse(opts: DriveTurnOptions): Promise<void> {
   const { res } = opts;
 
-  // 429 BEFORE any SSE header, so the client's retry can only replay (#420).
   const releaseSlot = opts.limiter?.tryAcquire();
   if (opts.limiter && !releaseSlot) {
     writeTurnBusy(res);
@@ -195,14 +182,12 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
     conversationStore,
   } = opts;
 
-  // Open before the harness spins up; heartbeats survive quiet stretches.
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
     Connection: "keep-alive",
     "X-Accel-Buffering": "no",
   });
-  // Bounded writer (#659): drop a stalled client; the ledger replays the turn.
   const stream = new SseStream(res);
   stream.comment(opts.banner);
   const heartbeat = setInterval(() => {
@@ -214,7 +199,6 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
     stream.event(event.type, JSON.stringify(event));
   };
 
-  // Folds events into the `runs`/`run_nodes` trace; `usage` lands on `step` (#90).
   const turnStartedAt = Date.now();
   const acc = {
     aiText: "",
@@ -287,7 +271,6 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         acc.finalText = acc.aiText || event.text;
         return;
       case "usage":
-        // Keep cost + provenance for the ledger (#514) — do not strip.
         acc.usage = {
           ...(event.model === undefined ? {} : { model: event.model }),
           ...(event.harness === undefined ? {} : { harness: event.harness }),
@@ -330,7 +313,6 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         });
         break;
       }
-      // Listed, never `default`: a new event type must fail exhaustiveness.
       case "assistant.start":
       case "reasoning.delta":
       case "context":
@@ -341,7 +323,6 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
     }
   };
   const onEvent = (event: TurnStreamEvent): void => {
-    // Prefer harness/ACP cost; fill catalog estimate only when missing (#514).
     let priced = event;
     if (priced.type === "usage") {
       if (priced.costUsd !== undefined && priced.costSource === undefined) {
@@ -406,8 +387,6 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         : undefined;
       unrefTimer(lockLeaseHeartbeat);
       try {
-        // A key naming a recorded turn replays it, skipping harness AND
-        // recordTurn; in-flight duplicates queue on the lock, so no 409 (#420).
         if (opts.idempotencyKey && conversationStore) {
           const recorded = conversationStore.findRecordedTurn(
             appId,
@@ -430,9 +409,6 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         );
         const targetHarnessKind =
           opts.harnessKind ?? (await runner.resolveHarnessKind?.());
-        // Every provider has its OWN binding and hydration watermark: resolve
-        // resume PER RUNG via `resumeForKind`. One eager plan reused down the
-        // ladder drops the conversation whenever rung 0 is skipped.
         const harnessSessions = conversationStore
           ? new HarnessSessions({
               binding: (kind) => {
@@ -548,8 +524,6 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           req.off("close", onClientClose);
           req.off("error", onClientClose);
           if (conversationStore && !acc.consentRequired) {
-            // Retire the binding the harness abandoned (D9); left active, the
-            // dead handle costs a failed resume + recovery fold every turn.
             if (
               runResult?.hydrationKind === "recovery" &&
               runResult.harnessKind
@@ -568,18 +542,15 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
                 );
               }
             }
-            // Read BEFORE recordTurn, which sets the derived title (#420).
             const wasUnnamed =
               conversationStore.getSessionMeta(appId, conversationId)?.title ===
               "";
-            // One `step` after the `tool` nodes: the shape `getSession` rebuilds.
             try {
               const endedAt = Date.now();
               const roots = [
                 opts.workspaceDirectory ?? opts.dataDir,
                 ...(opts.additionalDirectories ?? []),
               ];
-              // Strictly in order: a failure notice must stay beside its item.
               const attachNextCandidate = async (
                 index: number
               ): Promise<void> => {
@@ -626,7 +597,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
                       filename: inline.filename ?? "harness-artifact",
                     });
                   } catch {
-                    // A malformed optional ACP artifact never fails the turn.
+                    // Intentionally empty.
                   }
                   return uploadNextInline(inlineIndex + 1);
                 };
@@ -636,7 +607,6 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
               };
               await attachNextCandidate(0);
               const nodes: TurnNode[] = [...acc.toolNodes];
-              // Tokens were spent either way: usage applies to both step shapes.
               const usage = acc.usage ?? {};
               if (acc.errorMessage !== undefined) {
                 nodes.push({
@@ -658,7 +628,6 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
               }
               conversationStore.recordTurn(appId, {
                 conversationId,
-                // Off the runner, not the result: an errored turn still tags (#181).
                 ...(runner.runKind ? { kind: runner.runKind } : {}),
                 ...(opts.retryOf === undefined
                   ? {}
@@ -722,9 +691,8 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
                   : {}),
               });
             } catch {
-              /* best-effort — a ledger miss never fails the turn */
+              // Intentionally empty.
             }
-            // Only on the naming turn, and only when an answer was produced (#420).
             if (
               wasUnnamed &&
               opts.generateTitle &&
@@ -739,7 +707,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
                   assistantText: acc.finalText,
                 });
               } catch {
-                /* best-effort — a title miss never fails the turn */
+                // Intentionally empty.
               }
             }
           }

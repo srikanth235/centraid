@@ -1,13 +1,10 @@
-/* Gateway-wide recovery-kit fingerprint/confirmation row (#555). */
 import { GatewayDatabase } from "../serve/gateway-db.js";
 
 export interface RecoveryKitState {
-  /** Epoch SECONDS the operator last confirmed, or `null` if never. */
   confirmedAt: number | null;
   kitFingerprint?: string;
 }
 
-/** Thin object wrapper (constructor-injectable) — `BackupService` and the storage routes share one instance. */
 export class RecoveryKitStateStore {
   constructor(
     private readonly source: string | GatewayDatabase,

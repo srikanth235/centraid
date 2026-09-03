@@ -1,10 +1,3 @@
-/*
- * Per-app change bus. An event carries the action's DECLARED tables so
- * consumers invalidate per-table; without tables it is the wildcard (#883 D2).
- * Delivery is sync and fire-and-forget, with listener errors caught so one bad
- * subscriber cannot stall a write.
- */
-
 import type { RuntimeLogger } from "../runtime.js";
 
 export interface AppChange {
@@ -12,7 +5,6 @@ export interface AppChange {
   tables: string[];
   ts: number;
   source: "assistant" | "handler" | "external";
-  /** When `source === 'assistant'`, the harness dispatch id for the chat-pill. */
   toolCallId?: string;
   turnId?: string;
 }
@@ -30,7 +22,6 @@ function serializeChange(change: AppChange): string {
   return JSON.stringify(payload);
 }
 
-/** A no-op default is constructed when the host doesn't supply one. */
 export class ChangeBus {
   private readonly listeners = new Map<string, Set<ChangeListener>>();
   private readonly logger: RuntimeLogger | undefined;
@@ -54,14 +45,10 @@ export class ChangeBus {
     };
   }
 
-  /** An EMPTY table list is meaningful: writes ride ctx.vault, so the event
-   *  says "this app acted; re-derive what you render" (#286). */
   emit(change: AppChange): void {
     const set = this.listeners.get(change.appId);
     if (!set || set.size === 0) return;
     const serialized = serializeChange(change);
-    // Set iteration is safe under concurrent delete in JS (the deleted
-    // element is skipped, the rest still visit in insertion order).
     for (const listener of set) {
       try {
         listener(change, serialized);

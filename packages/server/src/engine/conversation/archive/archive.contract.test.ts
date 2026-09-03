@@ -1,7 +1,3 @@
-// Conversation-band archival engine (#438): custody-gated prune,
-// segment round-trip, and page reclamation. Selector-edge cases live in
-// selector.test.ts; shared fixtures in test-fixtures.ts.
-
 import { describe, expect, it } from "vitest";
 
 import { openLedgerDb } from "../../stores/gateway-db.js";
@@ -30,7 +26,6 @@ describe("custody-gated prune", () => {
       automationId: "a/digest",
       updatedAt: now,
     });
-    // Three aged finished turns + one fresh live turn (the newest, seq 3).
     seedTurn(journal, {
       turnId: "t0",
       conversationId: "a/digest",
@@ -66,11 +61,9 @@ describe("custody-gated prune", () => {
         { journal, blobSink, custodyProven: never },
         { nowMs: now }
       );
-      // Phase A still runs (once) — the range archives; phase B never prunes.
       expect(r.segmentsPruned).toBe(0);
       expect(r.turnsPruned).toBe(0);
     }
-    // Raw rows for the archived range remain fully intact.
     expect(countTurns(journal, "a/digest")).toBe(4);
     const archiveRows = journal
       .prepare(`SELECT pruned_at FROM conversation_archive`)
@@ -113,8 +106,6 @@ describe("custody-gated prune", () => {
       model: "m",
     });
 
-    // live head
-
     runConversationArchival(
       { journal, blobSink, custodyProven: () => false },
       { nowMs: now }
@@ -129,7 +120,6 @@ describe("custody-gated prune", () => {
     expect(pruned.segmentsPruned).toBe(1);
     expect(pruned.turnsPruned).toBe(2); // seq 0..1 gone
     expect(countTurns(journal, "a/digest")).toBe(1); // only the live head remains
-    // Items of the pruned turns CASCADE away.
     expect(
       (
         journal
@@ -148,7 +138,6 @@ describe("custody-gated prune", () => {
     };
     expect(latch.pruned_at).not.toBeNull();
 
-    // Idempotent: re-running prunes nothing new (the latch is set).
     const again = runConversationArchival(
       { journal, blobSink, custodyProven: always },
       { nowMs: now }
@@ -269,8 +258,6 @@ describe("segment round-trip", () => {
     expect(segment.version).toBe(1);
     expect(segment.conversationId).toBe("c1");
     expect(segment.conversation.title).toBe("Old chat");
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect(segment.turns).toStrictEqual([{ ...srcTurn }]);
     expect(segment.items).toStrictEqual(srcItems.map((row) => ({ ...row })));
     expect(segment.attachments).toStrictEqual(
@@ -290,7 +277,6 @@ describe("page reclamation", () => {
       appId: "app",
       updatedAt: daysAgo(120),
     });
-    // Enough bulky turns to occupy real pages worth reclaiming.
     for (let i = 0; i < 200; i++) {
       seedTurn(journal, {
         turnId: `t${i}`,

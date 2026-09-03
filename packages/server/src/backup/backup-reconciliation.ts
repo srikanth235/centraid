@@ -1,10 +1,3 @@
-/*
- * Non-destructive backup/CAS inventory reconciliation (#414).
- * This pass only observes and reports remote drift. Its sole mutation is the
- * safety-critical demotion of stale blob_replica evidence; it never deletes an
- * orphan and never repairs the provider, keeping the owner-facing audit honest.
- */
-
 import {
   openManifest,
   parseWalCloserKey,
@@ -333,11 +326,9 @@ export async function runBackupReconciliation(opts: {
   walMarkerTips?: Record<string, number>;
   verifyBucket?: boolean;
   checkedAt: string;
-  /** `manifestHash → blob shas` memo for the retained-snapshot root set (#436). */
   manifestBlobCache?: Map<string, string[]>;
 }): Promise<BackupReconciliationState> {
   const verifyBucket = opts.verifyBucket ?? false;
-  // Retained-snapshot GC roots (#436): the CAS diff treats them as live.
   const snapshotReferenced = await snapshotReferencedBlobShas({
     provider: opts.provider,
     targetId: opts.targetId,
@@ -371,13 +362,10 @@ export async function runBackupReconciliation(opts: {
 
   let cas = unavailableStore(casResult.configured, casResult.error);
   if (casResult.collection) {
-    // Shared, read-only base set + this caller's own extra roots (#659).
     const live = new Set(liveBlobShasCached(opts.db.vault));
     for (const sha of archivedSegmentShas(opts.db.vault)) live.add(sha);
     for (const sha of conversationArchiveShas(opts.db.vault)) live.add(sha);
     const index = new ReplicaIndex(opts.db.vault);
-    // Scope the cas diff to `store='cas'` rows (#425) so the cas
-    // listing never disproves derived evidence.
     const rows = index.rows().filter((row) => row.store === "cas");
     cas = reconcileCasInventory({
       collection: casResult.collection,
@@ -399,7 +387,6 @@ export async function runBackupReconciliation(opts: {
           .slice(0, SAMPLE_LIMIT),
       };
     }
-    // Diff the derived store class too, folding its drift into `cas`.
     await reconcileDerivedInto({
       cas,
       db: opts.db,

@@ -1,6 +1,3 @@
-// Own module so the output-schema validator can reference it without
-// circularly depending on the main parser entrypoint.
-
 export type ManifestValidationCode =
   | "invalid_json"
   | "missing_field"

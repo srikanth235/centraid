@@ -1,5 +1,3 @@
-/** [law:provider-egress-dispatch] — outbound provider work leaves centraid by ONE road (#839): ACP dispatch. `runTurn` resolves a `HARNESSES` spec and launches it through `harnessSpawnEnv`; an enrichment fire reaches it only past `decideEnrichmentGate`. No host-path or shell file may open its own road — no provider SDK, no bare fetch at a provider host, no dynamic import. Scope is the HOST; blueprint seats belong to `no-inference-client.test.ts`, so one law keeps one home (`scripts/lint-law-registry.mjs`). A TRIPWIRE, NOT A PROOF: aliases and computed specifiers dodge it, and the SABOTAGE cases are what keep it from rotting into a green no-op. */
-
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -13,7 +11,6 @@ import { decideEnrichmentGate } from "./automation/fire/enrich-gate.js";
 const SERVER_SRC = path.resolve(import.meta.dirname);
 const REPO_ROOT = path.resolve(SERVER_SRC, "../../..");
 
-/** `acp/` is INCLUDED: its road is a spawn, so an HTTP client there is a second. */
 const SCANNED_ROOTS = [
   ...["acp", "enrich", "engine", "routes", "serve"].map((dir) =>
     path.join(SERVER_SRC, dir)
@@ -23,7 +20,6 @@ const SCANNED_ROOTS = [
   ),
 ] as const;
 
-/** No host-path file has business importing one of these. */
 const PROVIDER_PACKAGES = [
   "openai",
   "@anthropic-ai/",
@@ -45,7 +41,6 @@ const PROVIDER_PACKAGES = [
   "openrouter",
 ] as const;
 
-/** The only part of `fetch(url, …)` a text scan can see, and cannot be omitted. */
 const PROVIDER_HOSTS = [
   "api.openai.com",
   "api.anthropic.com",
@@ -69,8 +64,6 @@ const PROVIDER_HOSTS = [
   "localhost:11434",
 ] as const;
 
-/** `node:http` is deliberately ABSENT: the gateway's own listener uses it, and
- * banning the server says nothing about egress. */
 const HTTP_CLIENT_MODULES = [
   "undici",
   "node:https",
@@ -80,11 +73,9 @@ const HTTP_CLIENT_MODULES = [
   "superagent",
 ] as const;
 
-/** Only real specifiers, never prose — same shape as the sibling law's matcher. */
 const IMPORT_SPECIFIER_RE =
   /(?:from\s+|require\(|import\()\s*["'](?<specifier>[^"']+)["']/gu;
 
-/** Hosts match only inside a literal, so prose naming a provider is safe. */
 const STRING_LITERAL_RE =
   /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/gu;
 
@@ -142,7 +133,6 @@ const ALL_FILES = SCANNED_ROOTS.flatMap((dir) => {
 const relative = (file: string): string =>
   path.relative(REPO_ROOT, file).split(path.sep).join("/");
 
-/** Keeps real violating text out of this file's own scannable source. */
 const fragments = (...parts: readonly string[]): string => parts.join("");
 
 function violations(
@@ -156,7 +146,6 @@ function violations(
 
 describe("[law:provider-egress-dispatch] provider requests leave only via the ACP dispatch path", () => {
   it("sanity: the scan reaches every declared root", () => {
-    // Without this the law goes green the first time a directory is renamed.
     const perRoot = Object.fromEntries(
       SCANNED_ROOTS.map((dir) => [
         relative(dir),
@@ -203,26 +192,20 @@ describe("[law:provider-egress-dispatch] provider requests leave only via the AC
   });
 
   it("[law:provider-egress-dispatch] the one legal road is present and is a spawned harness, not an HTTP client", () => {
-    // A negative scan over an absent path proves nothing: pin that the legal
-    // road still exists and still has the shape the law claims.
     expect(runTurn).toBeTypeOf("function");
     expect(getHarness).toBeTypeOf("function");
     expect(decideEnrichmentGate).toBeTypeOf("function");
     expect(Object.keys(HARNESSES).length).toBeGreaterThan(0);
-    // Provider reach is a subprocess boundary; that is why no HTTP client fits.
     for (const [kind, spec] of Object.entries(HARNESSES)) {
       expect(spec, `harness ${kind} has no spec`).toBeDefined();
       expect(getHarness(kind as keyof typeof HARNESSES)).toBe(spec);
     }
-    // Pure over an env bag: it never opens a socket.
     expect(harnessSpawnEnv({ baseEnv: { PATH: "/usr/bin" } })).toMatchObject({
       PATH: "/usr/bin",
     });
   });
 
   it("[law:provider-egress-dispatch] SABOTAGE: each detector catches a violation it would otherwise miss", () => {
-    // Interpolated so this file never trips its own scan, and so a roster that
-    // stopped matching fails HERE rather than leaving the scans green.
     const sdk = fragments("open", "ai");
     const scoped = fragments("@anthropic", "-ai/sdk");
     const host = fragments("api.", "openai", ".com");
@@ -248,7 +231,6 @@ describe("[law:provider-egress-dispatch] provider requests leave only via the AC
       importedHttpClients(`import client from "${nodeHttps}";`)
     ).toStrictEqual([nodeHttps]);
 
-    // A provider named in PROSE, or a model id carried as DATA, is not a road.
     expect(
       importedProviderSdks(`// never reach for ${sdk} or ${scoped} here`)
     ).toStrictEqual([]);

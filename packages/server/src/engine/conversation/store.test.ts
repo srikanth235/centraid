@@ -1,7 +1,3 @@
-// Conversation rows, turn rows, and the search / pin / archive surface. Item,
-// message_in, and attachment rows live in store-items.test.ts; retention
-// pruning in store-prune.test.ts. Shared fixtures in store-test-fixtures.ts.
-
 import { describe, expect, it } from "vitest";
 
 import { newProvider, newStore } from "./store-test-fixtures.js";
@@ -96,8 +92,6 @@ describe("ConversationStore — conversations", () => {
       automationId: "app/digest",
       harnessKind: "codex",
     });
-    // Ensuring a new target does not claim it before a turn succeeds; the
-    // ledger's post-turn harness update is the binding commit point.
     expect(store.getConversation(claude)?.harnessKind).toBe("codex");
     store.close();
   });
@@ -148,7 +142,6 @@ describe("ConversationStore — conversations", () => {
 
 describe("ConversationStore — search / pin / archive (issue #420)", () => {
   let clock = 1000;
-  /** Seed a chat conversation with one user message + a distinct updated_at. */
   function seedChat(
     store: ConversationStore,
     userId: string,
@@ -173,8 +166,6 @@ describe("ConversationStore — search / pin / archive (issue #420)", () => {
       text: userText,
       startedAt: 1,
     });
-    // Distinct, increasing updated_at so newest-first ordering is deterministic
-    // (real turns bump this; the test seeds it explicitly).
     store.touchConversation(c.id, userId, ++clock);
     return c.id;
   }
@@ -224,7 +215,6 @@ describe("ConversationStore — search / pin / archive (issue #420)", () => {
     const a = seedChat(store, "u1", "Alpha", "a");
     const b = seedChat(store, "u1", "Beta", "b");
     const c = seedChat(store, "u1", "Gamma", "g");
-    // Newest-first by default: c, b, a.
     expect(store.listConversationsMeta("u1").map((m) => m.id)).toStrictEqual([
       c,
       b,
@@ -232,7 +222,6 @@ describe("ConversationStore — search / pin / archive (issue #420)", () => {
     ]);
     expect(store.setConversationPinned(a, "u1", true)).toBe(true);
     expect(store.setConversationArchived(c, "u1", true)).toBe(true);
-    // Pinned a first, then unpinned b, then archived c last.
     expect(store.listConversationsMeta("u1").map((m) => m.id)).toStrictEqual([
       a,
       b,
@@ -254,9 +243,6 @@ describe("ConversationStore — search / pin / archive (issue #420)", () => {
       appId: "_assistant",
       title: "Long thread",
     });
-    // Issue #659 G4 made the FTS body incremental. The law it must not break:
-    // the searchable body is still every inbound message in the thread, in
-    // order — not just the newest one and not a stale prefix.
     const words = ["alpha", "bravo", "charlie", "delta", "echo"];
     words.forEach((word, index) => {
       const turnId = `${conv.id}-t${index}`;
@@ -279,7 +265,6 @@ describe("ConversationStore — search / pin / archive (issue #420)", () => {
       ).toStrictEqual([conv.id]);
     }
 
-    // Deleting a turn (prune) must retire that turn's words from the index.
     provider().prepare("DELETE FROM turns WHERE id = ?").run(`${conv.id}-t2`);
     expect(store.searchConversations("u1", "charlie")).toStrictEqual([]);
     for (const word of ["alpha", "bravo", "delta", "echo"]) {
@@ -356,13 +341,9 @@ describe("ConversationStore — turns", () => {
       startedAt: 3,
     });
 
-    // A finished turn is durable history: deleting it would hand its `seq` to
-    // the next insert and alias the archive's seq_from/seq_to ranges.
     expect(store.deleteTurn("r0")).toBe(false);
     expect(store.getTurn("r0")).toBeDefined();
 
-    // The interrupted newest turn is the retry path — its seq is recycled on
-    // purpose, and nothing archived can be covering it.
     expect(store.deleteTurn("r1")).toBe(true);
     expect(store.getTurn("r1")).toBeUndefined();
     store.insertTurn({
@@ -392,7 +373,6 @@ describe("ConversationStore — turns", () => {
       startedAt: 1,
     });
 
-    // A stray id must not reach across users.
     expect(store.deleteTurn("b", "u1")).toBe(false);
     expect(store.getTurn("b")).toBeDefined();
     expect(store.deleteTurn("a", "u1")).toBe(true);

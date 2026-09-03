@@ -10,7 +10,6 @@ import { Runtime } from "../runtime.ts";
 import { startRuntimeHttpServer, AUTHED_DEVICE_HEADER } from "./http-server.ts";
 import type { RuntimeHttpServerHandle } from "./http-server.ts";
 
-/** Raw HTTP so tests can set a custom Host header (undici forbids it). */
 function rawRequest(
   baseUrl: string,
   path: string,
@@ -32,8 +31,6 @@ function rawRequest(
         port: u.port,
         path: `${u.pathname}${u.search}`,
         method: opts.method ?? "GET",
-        // Preserve a custom Host (DNS-rebinding tests); Node defaults to
-        // rewriting Host to the connection target when setHost is true.
         setHost: opts.host === undefined,
         headers: {
           ...opts.headers,
@@ -137,9 +134,6 @@ describe("http-server", () => {
   });
 
   test("every transport-boundary response carries nosniff (#846 P10 / #844)", async () => {
-    // These three are written by http-server.ts ITSELF, before or instead of
-    // any route handler, so they never reach http-utils.ts's `sendJson` —
-    // which is where every other JSON response on this server gets the header.
     const unauthorized = await fetch(`${server.url}/centraid/_apps`);
     expect(unauthorized.status).toBe(401);
     expect(unauthorized.headers.get("x-content-type-options")).toBe("nosniff");
@@ -151,7 +145,6 @@ describe("http-server", () => {
     expect(badHost.status).toBe(400);
     expect(badHost.headers["x-content-type-options"]).toBe("nosniff");
 
-    // The 500 is the final catch, so it needs a handler that throws.
     const runtime = new Runtime({ appsDir: workspace });
     const guarded = await startRuntimeHttpServer({
       runtime,
@@ -181,7 +174,6 @@ describe("http-server", () => {
     expect(bad.status).toBe(400);
     expect(JSON.parse(bad.body)).toMatchObject({ error: "invalid_host" });
 
-    // Loopback Host still reaches auth/handlers.
     const port = new URL(server.url).port;
     const ok = await rawRequest(server.url, "/centraid/_apps", {
       host: `127.0.0.1:${port}`,
@@ -197,7 +189,6 @@ describe("http-server", () => {
       runtime,
       credentialedCorsOrigins: [shell],
       authorizeRequest: (req) => {
-        // Simulate cookie session: ambient cookie, no Bearer.
         if ((req.headers.cookie ?? "").includes("session=ok"))
           return { plane: "admin" };
         return undefined;
@@ -210,8 +201,6 @@ describe("http-server", () => {
           Cookie: "session=ok",
         },
       });
-      // Authorizer may accept the cookie, but CORS must not enable the attacker
-      // origin to read the body under credentials mode.
       expect(foreign.headers.get("access-control-allow-origin")).toBe("*");
       expect(
         foreign.headers.get("access-control-allow-credentials")
@@ -228,7 +217,6 @@ describe("http-server", () => {
         "true"
       );
 
-      // Bearer intent still gets reflective credentialed CORS (not ambient).
       const bearer = await fetch(`${hardened.url}/centraid/_apps`, {
         headers: {
           Origin: "http://127.0.0.1:9999",
@@ -303,13 +291,11 @@ describe("http-server", () => {
       ],
     });
     try {
-      // The exact public path answers with NO Authorization header at all.
       const open = await fetch(
         `${publicServer.url}/centraid/_vault/oauth/callback?state=x&code=y`
       );
       expect(open.status).toBe(200);
       await expect(open.text()).resolves.toContain("ceremony");
-      // Match is exact — a sibling path is NOT public.
       const sibling = await fetch(
         `${publicServer.url}/centraid/_vault/oauth/callback/deeper`
       );
@@ -345,13 +331,11 @@ describe("http-server", () => {
       },
     });
     try {
-      // An unrecognized bearer is refused, same 401 shape as the default check.
       const bad = await fetch(`${pluggableServer.url}/centraid/_apps`, {
         headers: { Authorization: "Bearer nope" },
       });
       expect(bad.status).toBe(401);
 
-      // Bearer-only access authenticates but stamps no device header.
       const admin = await fetch(
         `${pluggableServer.url}/centraid/_echo-device`,
         {
@@ -361,7 +345,6 @@ describe("http-server", () => {
       expect(admin.status).toBe(200);
       await expect(admin.json()).resolves.toStrictEqual({ deviceHeader: null });
 
-      // The device plane authenticates AND stamps the resolved device key.
       const device = await fetch(
         `${pluggableServer.url}/centraid/_echo-device`,
         {
@@ -373,8 +356,6 @@ describe("http-server", () => {
         deviceHeader: "dev-abc",
       });
 
-      // A client cannot forge the device header directly — it is always
-      // deleted before authorizeBearer decides anything.
       const forged = await fetch(
         `${pluggableServer.url}/centraid/_echo-device`,
         {
@@ -408,7 +389,6 @@ describe("http-server", () => {
       ],
     });
     try {
-      // Any slug under the prefix answers with NO Authorization header.
       const open = await fetch(`${publicServer.url}/_centraid-hook/abc123`, {
         method: "POST",
       });
@@ -417,7 +397,6 @@ describe("http-server", () => {
         ok: true,
         url: "/_centraid-hook/abc123",
       });
-      // A path outside the prefix still requires the bearer.
       const other = await fetch(`${publicServer.url}/centraid/_apps`);
       expect(other.status).toBe(401);
     } finally {

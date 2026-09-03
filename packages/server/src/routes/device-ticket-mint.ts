@@ -1,9 +1,3 @@
-/*
- * Pairing-ticket mint, sharing `devices-routes.ts`'s caller-scope shape. The
- * *Add someone* lane (`body.forPerson`) is a durable PROVISION (#750): every
- * refusable condition is preflighted BEFORE anything is created.
- */
-
 import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -48,8 +42,6 @@ function readProvisionOperation(
     : undefined;
 }
 
-/** ORDERED, never an object, so key order cannot perturb the hash. A different
- * hash means the id names a DIFFERENT request: refuse it (#750). */
 function hashProvisionRequest(input: {
   forPerson: ForPerson;
   ttlMs: number;
@@ -62,13 +54,6 @@ function hashProvisionRequest(input: {
   return createHash("sha256").update(JSON.stringify(fields)).digest("hex");
 }
 
-/**
- * Atomicity by CONSTRUCTION (#750): the one non-transactional step — the vault
- * dir, files and keys — MUST stay first, so a throw leaves nothing durable,
- * and every gateway.db row then commits in ONE transaction whose rollback
- * leaves only the orphan vault for `unmintVaultForPerson`. Replay returns the
- * recorded response VERBATIM; re-minting would make replay a write.
- */
 function executeForPersonMint(input: {
   deps: DevicesRouteDeps;
   database: GatewayDatabase;
@@ -81,7 +66,6 @@ function executeForPersonMint(input: {
   const { deps, database, forPerson } = input;
   const owners = deps.enrollments.owners;
   if (deps.tickets.gatewayDatabase.file !== database.file) {
-    // Single-transaction atomicity below needs both stores on one handle.
     throw new Error("ticket and owner stores must share gateway.db");
   }
   const mintVault = deps.mintVaultForPerson ?? mintVaultForPersonUnwired;
@@ -89,7 +73,6 @@ function executeForPersonMint(input: {
   try {
     return database.transaction(() => {
       const owner = owners.createWithinTransaction(forPerson.label);
-      // Disk first, then the ownership row.
       owners.setOwner(minted.vaultId, owner.ownerId);
       const ticket = deps.tickets.mint(
         { ownerId: owner.ownerId, vaultIds: [minted.vaultId] },
@@ -133,10 +116,9 @@ function executeForPersonMint(input: {
     });
   } catch (error) {
     try {
-      // Zero rows survive the rollback; remove the pre-transaction vault dir.
       deps.unmintVaultForPerson?.(minted.vaultId);
     } catch {
-      // Keep the ORIGINAL failure; an orphan dir is inert.
+      // Intentionally empty.
     }
     throw error;
   }
@@ -191,7 +173,6 @@ function handleForPersonMint(
   const recorded = readProvisionOperation(database, operationId);
   if (recorded !== undefined) {
     if (recorded.requestHash !== requestHash) {
-      // Replaying would hand the caller someone else's result (#750).
       return sendJson(res, 409, {
         error: "operation_id_conflict",
         message:
@@ -275,12 +256,10 @@ export async function handleTicketMint(
           (vaultId) =>
             vaultId === requested || deps.vaultName(vaultId) === requested
         );
-  // *Add someone* names no existing vault, so this guard skips it.
   if (forPerson === undefined) {
     if (target === undefined) {
       return sendJson(res, 400, { error: "vault_required" });
     }
-    // No existence leak: out-of-scope and unknown 404 alike.
     if (
       (!isAllowed(target) && !hostVaults.includes(target)) ||
       deps.vaultName(target) === undefined
@@ -295,7 +274,6 @@ export async function handleTicketMint(
       message: "vaultIds must be a list of vault ids",
     });
   }
-  // Stays BEFORE any minting (#750); nothing above here writes.
   const gw = deps.endpointTicket?.();
   if (gw === undefined) {
     return sendJson(res, 409, {
@@ -338,7 +316,6 @@ export async function handleTicketMint(
     { ownerId: invitation.ownerId, vaultIds: invitation.vaultIds },
     ttlMs
   );
-  // `resolveInvitation` never succeeds with empty `vaultIds`.
   const primaryVaultId = invitation.vaultIds[0]!;
   const token = encodePairingTicket({
     v: 1,

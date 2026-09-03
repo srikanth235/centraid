@@ -1,12 +1,5 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-/*
- * Issue #439 R2 — lazy-by-default restore, `--full` override, and the
- * metered-egress cost estimate, exercised at the SERVICE layer, where
- * `recover()` inherits the defaulting. A real `VaultRegistry` +
- * `LocalBackupProvider` over temp dirs, with the same injected
- * `assembleEntries` seam `backup-service.contract.test.ts` uses.
- */
 
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -42,10 +35,6 @@ describe("backup-service-restore", () => {
     vaultId: string;
   }
 
-  /** One default vault + a real local backend, with the DB-assembly seam that the
-   *  capture tests own; `blobEntry:false` yields a db-only snapshot so the lazy
-   *  resolution can be asserted without the auto-resolved remote tier ever being
-   *  dialed (no blob ⇒ no skipBlob call; no derivatives ⇒ no warm-pass fetch). */
   async function harness(
     wrapProvider?: (real: BackupProvider) => BackupProvider,
     opts: { blobEntry?: boolean } = {}
@@ -105,10 +94,6 @@ describe("backup-service-restore", () => {
     return { service, registry, vaultId };
   }
 
-  /** An s3 `blob_store` bag with a resolvable endpoint+bucket — the two fields
-   *  `remoteTier()` requires to hand back a non-null tier. The endpoint is
-   *  deliberately `.invalid`: these tests assert the RESOLUTION and never let a
-   *  store operation dial it. */
   function declareRemoteTier(registry: VaultRegistry): void {
     updateBlobStoreSettings(registry.current().db, {
       blob_store: {
@@ -119,8 +104,6 @@ describe("backup-service-restore", () => {
     });
   }
 
-  /** A remote CAS tier that MUST NOT be dialed — the db-only snapshots here never
-   *  consult skipBlob and carry no derivatives, so the warm pass reads nothing. */
   function undialedRemote(): RemoteTier {
     const store: BlobStore = {
       kind: "undialed-remote",
@@ -135,8 +118,6 @@ describe("backup-service-restore", () => {
     return { store };
   }
 
-  /** Wrap a real provider so its declared `restoreCostClass` is a chosen value —
-   *  stands in for a hosted (metered-egress) home without a real remote server. */
   function withRestoreCostClass(
     real: BackupProvider,
     restoreCostClass: "free-egress" | "metered-egress"
@@ -173,7 +154,6 @@ describe("backup-service-restore", () => {
     await h.service.runBackup(h.vaultId);
     const destDir = path.join(await tempDir("r439-auto-full-dest"), "restored");
     const result = await h.service.restore({ vaultId: h.vaultId, destDir });
-    // No `previewsWarm` ⇒ the full path ran; nothing was deferred.
     expect(result.previewsWarm).toBeUndefined();
     expect(result.skippedBlobs).toStrictEqual([]);
   });
@@ -184,9 +164,6 @@ describe("backup-service-restore", () => {
     await h.service.runBackup(h.vaultId);
     const destDir = path.join(await tempDir("r439-auto-lazy-dest"), "restored");
     const result = await h.service.restore({ vaultId: h.vaultId, destDir });
-    // `previewsWarm` present ⇒ the previews-first lazy path ran. The db-only
-    // snapshot carries no blobs and no derivatives, so the resolved tier is
-    // never actually dialed — the resolution alone is under test.
     expect(result.previewsWarm).toBeDefined();
     expect(result.previewsWarm?.tiniesTotal).toBe(0);
     expect(result.skippedBlobs).toStrictEqual([]);
@@ -233,7 +210,6 @@ describe("backup-service-restore", () => {
     expect(est.costClass).toBe("metered-egress");
     expect(est.seq).toBe(1);
     expect(est.fullBytes).toBeGreaterThan(0);
-    // The default vault has no remote tier ⇒ a restore would be full, not lazy.
     expect(est.lazyAvailable).toBe(false);
   });
 

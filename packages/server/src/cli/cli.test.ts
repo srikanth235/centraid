@@ -9,7 +9,6 @@ import { describe, afterEach, beforeEach, expect, test } from "vitest";
 import type { PrefsStore } from "@centraid/server/engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
-// Also name the pure helper module so cold-spot reachability is unambiguous.
 import { parseServeArgsPure as pureFromHelper } from "./cli-serve-args.ts";
 import {
   isProcessMainModule,
@@ -196,8 +195,6 @@ describe("cli scenarios", () => {
 
   test("buildPrefsPatch clears every harness key when no harness is configured", () => {
     const patch = buildPrefsPatch({ dataDir: "/x" });
-    // No harness → every key must clear to null so a removed entry in the
-    // config file actually wipes the DB.
     for (const v of Object.values(patch)) expect(v).toBeNull();
   });
 
@@ -212,9 +209,6 @@ describe("cli scenarios", () => {
   });
 
   test("seedHarnessPrefs calls setPrefs even on empty config so a removed harness is cleared", () => {
-    // Regression: an early `if (!harness) return` would skip setPrefs entirely
-    // when the block is absent, leaving a previously seeded `harness.*`
-    // row stale across reboots.
     const patches: Array<Record<string, unknown>> = [];
     const fakeStore = {
       setPrefs(p: Record<string, unknown>) {
@@ -236,24 +230,13 @@ describe("cli scenarios", () => {
   });
 
   test("daemonLayoutFor mounts the vault plane at <dataDir>/vault", () => {
-    // The daemon is a real host (duaility §12): a missing vaultDir would
-    // leave every projection blueprint dark with "no vault plane mounted".
     const layout = daemonLayoutFor("./relative");
     expect(
       layout.vaultDir.endsWith(path.join("relative", "vault"))
     ).toBeTruthy();
   });
 
-  // End-to-end: spawn the CLI via tsx, parse "listening on …" out of stdout,
-  // hit /centraid/_apps with the loopback secret, assert 200, send SIGTERM,
-  // confirm clean exit. There is no persistent `token.bin` and no printed
-  // bearer (#505) — the daemon mints an ephemeral per-boot
-  // loopback secret. A parent (here the test, mirroring the desktop's
-  // detached-gateway spawn) pins a known value via `CENTRAID_GATEWAY_TOKEN` so
-  // it can reach the loopback listener; the secret is never written to disk.
   test("serve subcommand boots, accepts the parent-supplied loopback secret, and exits cleanly on SIGTERM", async (t) => {
-    // Skip if tsx isn't installed locally — the gate is `bun install` having
-    // run at the monorepo root, not on every developer's machine.
     try {
       await fs.stat(TSX_BIN);
     } catch {
@@ -289,8 +272,6 @@ describe("cli scenarios", () => {
       stderr += b.toString();
     });
 
-    // Wait until the listening line has been printed. The bearer is NOT printed
-    // (phase 7) — the parent already knows it (it supplied CENTRAID_GATEWAY_TOKEN).
     const urlLocal = await new Promise<string>((resolve, reject) => {
       const timer = setTimeout(
         () => reject(new Error(`startup timeout; stderr=${stderr}`)),
@@ -307,7 +288,6 @@ describe("cli scenarios", () => {
       check();
     });
 
-    // The ephemeral secret must never leak to stdout.
     expect(stdout).not.toContain(token);
     expect(stdout).not.toMatch(/token:/u);
 

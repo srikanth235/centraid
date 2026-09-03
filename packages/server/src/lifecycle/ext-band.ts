@@ -1,7 +1,3 @@
-// Draft access seeds `extdraft_<app>_*` from live, then diffs the draft
-// `ext.tables`. Publish applies the post-rebase specs to LIVE inside the
-// publish mutex before the ff-merge, then drops the draft band (#286).
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -40,7 +36,6 @@ export async function applyExtOnPublish(
   return outcome;
 }
 
-/** Closed session → `undefined` (503). A refused spec must propagate, not look missing. */
 export function makeDraftCodeDirResolver(
   store: WorktreeStore,
   ext?: ExtBandOps
@@ -64,7 +59,6 @@ export async function ensureDraftBand(
 ): Promise<void> {
   const specs = await readExtSpecs(worktreeAppDir);
   if (specs.length === 0) {
-    // Zero tables still has to drop a previously declared draft table.
     ops.dropAppExtDraft(appId);
     return;
   }

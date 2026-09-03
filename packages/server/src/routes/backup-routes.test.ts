@@ -21,7 +21,6 @@ import type { VaultRegistry } from "../serve/vault-registry.js";
 import { makeBackupRouteHandler } from "./backup-routes.js";
 import type { BackupStatusBody } from "./backup-routes.js";
 
-/** Loosened GET-body shape for tests that only assert a slice of it. */
 type BackupStatusBodyForTest = Pick<BackupStatusBody, "recoveryKit">;
 
 const servers: http.Server[] = [];
@@ -102,7 +101,6 @@ describe("backup-routes", () => {
     vi.restoreAllMocks();
   });
 
-  /** A `VaultRegistry` stand-in with real in-memory policy/custody tables. */
   function fakeVaults(
     planes: Array<{ vaultId: string; name: string }>
   ): VaultRegistry {
@@ -129,9 +127,6 @@ describe("backup-routes", () => {
     } as unknown as VaultRegistry;
   }
 
-  /** A `BackupService` stand-in with controllable `status`/`isRunning`/`runAll`/
-   *  recovery-kit methods — deterministic in a way a real service's timing
-   *  isn't (e.g. the "already running" race). */
   function fakeBackupService(opts: {
     targets?: Record<string, BackupTargetState>;
     running?: Set<string> | boolean;
@@ -261,8 +256,6 @@ describe("backup-routes", () => {
       const res = await fetch(`${url}/centraid/_gateway/backup`, {
         method: "POST",
       });
-      // POST is a distinct sub-route (`/backup/run`) — POSTing the status
-      // path itself is method_not_allowed, not routed to `run`.
       expect(res.status).toBe(405);
     });
 
@@ -494,7 +487,6 @@ describe("backup-routes", () => {
       expect(body.confirmedAt).toBe(1_752_235_200);
       expect(recoveryKitStore.verify).toHaveBeenCalledWith(fingerprint);
 
-      // The next GET reflects the confirmation.
       const statusRes = await fetch(`${url}/centraid/_gateway/backup`);
       const status = (await statusRes.json()) as BackupStatusBodyForTest;
       expect(status.recoveryKit).toStrictEqual({ confirmedAt: 1_752_235_200 });

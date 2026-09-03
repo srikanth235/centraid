@@ -1,6 +1,3 @@
-/** The two member-facing Commons cards (#750): steward absence and a
- *  commons that outgrew the size its member consented to. */
-
 import { describe, expect, test } from "vitest";
 
 import {
@@ -105,8 +102,6 @@ describe("commons notices", () => {
     expect(card?.headline).toContain("Trip photos");
     expect(card?.detail["acceptedSizeBytes"]).toBe(1);
     expect(card?.detail["currentSizeBytes"]).toBe(current);
-    // ONE card: the consent that was given never changes, so the growth is
-    // stated once instead of on every byte added afterward.
     expect(
       raiseCommonsNotices({ db: member.vault, vaultId: member.vaultId })
     ).toStrictEqual([]);
@@ -127,11 +122,7 @@ describe("commons notices", () => {
     });
     expect(absent.headline).toContain("9 days");
     expect(absent.detail?.["recoverable"]).toBe(true);
-    // The card has to name a place a client can actually go: Household, whose
-    // People & circles panel offers the ceremony (#750).
     expect(absent.detail?.["deepLink"]).toBe("/household");
-    // A seat parked on a divergence fault must never be re-founded from state
-    // it could not verify, so its card does not offer the ceremony.
     const parked = commonsAbsenceNotice({
       grantId: "g1",
       containerType: "media.asset",

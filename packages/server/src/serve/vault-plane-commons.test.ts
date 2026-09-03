@@ -307,9 +307,6 @@ describe("VaultPlane ordinary Commons commands", () => {
       actor_party_id: member.boot.ownerPartyId,
       outcome: "executed",
     });
-    // Crash recovery: a committed signed nonce is authoritative, but a lost
-    // post-commit projection must be rebuilt before the intent becomes
-    // terminal. Replaying the same exact intent cannot append a second op.
     member.db.vault
       .prepare("DELETE FROM tally_expense WHERE group_id = ?")
       .run(groupId);

@@ -1,30 +1,13 @@
-/*
- * THE MORNING VIEW GOES THROUGH THE GATEWAY (#916, review-A 8.1). This is
- * LIFE DATA — events, tasks, photos, money — so it is read the way an app
- * reads it: `gateway.read` per entity, under a declared purpose, with consent
- * resolved and a receipt written. Nothing here prepares SQL against a physical
- * table, which is what `bun run lint:vault-sql` enforces.
- *
- * The four joins the old SQL did are folded HERE instead, over windowed reads.
- * That is the price of the boundary and it is the right one: a brief is a
- * handful of rows a day, and the alternative was a reader with no consent
- * check, no receipt, and — until #916 — no soft-delete filter either.
- */
-
 import { expandRecurrence } from "@centraid/core/time";
 import type { RecurrenceSemantics } from "@centraid/core/time";
 import type { Credential, ReadRequest, ReadResult } from "@centraid/vault";
 
-/** The gateway surface a brief needs — the whole of it. */
 export interface BriefVaultReader {
   read: (cred: Credential, request: ReadRequest) => ReadResult;
 }
 
-/** DPV purpose every read below declares; it lands on each receipt. */
 const PURPOSE = "dpv:ServiceProvision";
 
-/** Tasks are ordered by due date then priority, and `OrderBy` names ONE
- *  column — so the window is read wide and the tiebreak folded here. */
 const TASK_WINDOW = 64;
 const TASK_SHELF = 8;
 const EVENT_SHELF = 8;
@@ -76,7 +59,6 @@ function rowsOf<T>(result: ReadResult): T[] {
   return (result.rows ?? []) as unknown as T[];
 }
 
-/** One content-minimized, read-only morning view over the four daily domains. */
 export function buildDailyBrief(
   vault: BriefVaultReader,
   cred: Credential,
@@ -85,8 +67,6 @@ export function buildDailyBrief(
   const read = (request: ReadRequest): ReadResult =>
     vault.read(cred, { purpose: PURPOSE, ...request });
 
-  // Every live event, because a recurrence that started years ago can land
-  // inside today's window; the expansion below is what narrows it.
   const events = rowsOf<EventRow>(
     read({
       entity: "core.event",
@@ -172,17 +152,6 @@ export function buildDailyBrief(
       ? declared.toUpperCase()
       : "USD";
 
-  /*
-   * What this seat is owed, in ONE currency (#916, review-A 4.2). The fold
-   * read `tally_expense.paid_by` — the PRINCIPAL payer — so a multi-payer
-   * expense credited the whole amount to one person; `tally.expense_payer`
-   * carries the whole payer set (one degenerate row when there is one payer).
-   * An expense settling in another currency is EXCLUDED, not folded: there is
-   * no rate here that is not already applied, and adding minor units across
-   * currencies is worse than reporting the base-currency position.
-   * `tally.settlement` carries no currency, so it is base-currency by
-   * construction.
-   */
   const expenses = rowsOf<ExpenseRow>(
     read({
       entity: "tally.expense",

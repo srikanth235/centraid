@@ -1,5 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#750) the dialing half of Commons sync is one integrity boundary: frame fetch/pagination, transfer-session blob streaming, increment-vs-rebaseline fallback, and the signed command lane must agree on one wire vocabulary.
-/** Dialing half of Commons peer sync and signed member-command delivery. */
 
 import { createHash } from "node:crypto";
 import { appendFileSync, createReadStream, rmSync, statSync } from "node:fs";
@@ -82,7 +81,6 @@ function fileSizeOf(path: string): number {
   }
 }
 
-/** One transfer session per pull (#750); stream into promotion temp, not whole-blob RAM. */
 async function pullManifestBlobs(
   reached: Reached,
   input: {
@@ -179,7 +177,6 @@ interface PullFrameBody {
   pages?: number;
 }
 
-/** Reassemble paginated frames (#750). */
 async function fetchFrameBody(
   reached: Reached,
   input: {
@@ -239,9 +236,7 @@ export interface PullPeerCommonsInput {
   seat: VaultDb;
   acceptInvitation?: boolean;
   expectedSizeBytes?: number;
-  /** Member page budget (#750); steward clamps to its ceiling. */
   pageBytes?: number;
-  /** Replica executor for increment tails (#750.7); without it, full-frame catch-up. */
   gateway?: VaultGateway;
   credential?: Credential;
   now?: string;
@@ -254,7 +249,6 @@ type PullAttempt =
       kind: "tail" | "snapshot" | "tombstone";
     }
   | { state: "noop"; sequence: number }
-  // History fault, not transport: report, do not retry-loop; replica untouched.
   | { state: "parked"; fault: CommonsHistoryFaultTag }
   | { state: "unavailable" };
 
@@ -264,11 +258,9 @@ export type PullPeerCommonsResult = (
   | { state: "parked"; fault: CommonsHistoryFaultTag }
   | { state: "unavailable" }
 ) & {
-  /** Steward-absence status on every outcome, including `unavailable` (#731). */
   steward: CommonsStewardStatus;
 };
 
-/** Record this device's link evidence on every resolved dial. */
 async function attemptPullPeerCommons(
   input: PullPeerCommonsInput,
   now: string
@@ -284,7 +276,6 @@ async function attemptPullPeerCommons(
     recordCommonsDeviceReach(input.seat.vault, now);
     return response;
   };
-  // Canonical rail, host-only: replayed commands mint the steward's ids.
   const gateway = input.gateway;
   const credential = input.credential;
   const replicaExecutor =
@@ -355,7 +346,6 @@ async function attemptPullPeerCommons(
       input.grantId,
       input.memberVaultId
     );
-    // Ack always travels. No replica executor → ask for the full frame.
     if (cursor) params.set("afterSequence", String(cursor.sequence));
     if (!replicaExecutor) params.set("full", "1");
     let body = await fetchFrameBody(reached, input, params);
@@ -369,7 +359,6 @@ async function attemptPullPeerCommons(
       };
     }
     if (body.state === "current" && typeof body.currentSequence === "number") {
-      // Caught up only if the steward's head is the head we verified (#731).
       const verified = readCommonsVerified(input.seat.vault, input.grantId);
       if (
         verified?.sequence === body.currentSequence &&
@@ -378,7 +367,6 @@ async function attemptPullPeerCommons(
         return { state: "parked", fault: "history-diverged" };
       return { state: "noop", sequence: body.currentSequence };
     }
-    // Increment (#750.7): replay missed ops; unusable tail falls back to full frame.
     if (body.state === "increment" && body.increment && replicaExecutor) {
       const increment = body.increment;
       if (!(await pullManifestBlobs(reached, input, increment.blobs)))
@@ -432,7 +420,6 @@ function outcomeOf(attempt: PullAttempt): CommonsPullOutcome {
   return "unreachable";
 }
 
-/** Pull this seat forward; steward vs device unreachability are distinct. */
 export async function pullPeerCommons(
   input: PullPeerCommonsInput
 ): Promise<PullPeerCommonsResult> {
@@ -469,7 +456,6 @@ export async function sendPeerCommonsCommand(input: {
   command: string;
   commandInput: Record<string, unknown>;
   memberSignature: CommonsMemberSignature;
-  /** Required on the wire; no omitted-value compat (#731). */
   basedOnSequence: number;
   intentId: string;
 }): Promise<

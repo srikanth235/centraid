@@ -16,15 +16,10 @@ const TYPES: Record<string, string> = {
   ".json": "application/json; charset=utf-8",
   ".map": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
-  // `WebAssembly.instantiateStreaming` needs this exact type.
   ".wasm": "application/wasm",
   ".webmanifest": "application/manifest+json",
 };
 
-/**
- * NEVER hand a browser an immutable copy of a file whose URL never changes.
- * Only content-hashed `/assets/` files may be `immutable`.
- */
 function cacheControlFor(
   rootDir: string,
   served: string,
@@ -36,9 +31,7 @@ function cacheControlFor(
     return "public, max-age=31536000, immutable";
   }
   const base = path.basename(served);
-  // These gate app updates.
   if (base === "sw.js" || extension === ".webmanifest") return "no-cache";
-  // Unhashed root files: brief cache, always revalidating.
   return "public, max-age=3600, must-revalidate";
 }
 
@@ -152,11 +145,6 @@ export async function startWebUiServer(
       if (extension === ".html") {
         const scriptNonce = crypto.randomBytes(16).toString("base64");
         bytes = stampShellNonce(bytes, scriptNonce);
-        // Each relaxation below is load-bearing: `'wasm-unsafe-eval'` runs the
-        // Iroh module, `https:`/`wss:` reach the relay, `data:`/`blob:` carry
-        // the opaque-origin app document, and `blob:` in `frame-src` lets an
-        // inline app EMBED bytes it already fetched. NEVER admit
-        // `unsafe-inline`: the shell stays nonce-only.
         res.setHeader(
           "content-security-policy",
           `default-src 'self'; script-src 'self' 'nonce-${scriptNonce}' blob: 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self' ${apiOrigin} https: wss:; frame-src 'self' data: blob: ${apiOrigin}; object-src blob:; base-uri 'self'; frame-ancestors 'none'`
@@ -168,8 +156,6 @@ export async function startWebUiServer(
   });
   tuneGatewayHttpServer(server);
 
-  // NEVER let a port collision propagate — the API is the critical plane.
-  // `EADDRINUSE` retries once on an ephemeral port; `handle.url` is the truth.
   const requestedPort = options.port ?? 0;
   const listenOn = (port: number): Promise<void> =>
     new Promise<void>((resolve, reject) => {
@@ -200,9 +186,6 @@ export async function startWebUiServer(
     url: `http://${host}:${address.port}`,
     close: () =>
       new Promise<void>((resolve, reject) => {
-        // `server.close()` resolves only once every connection ends, and an
-        // open `text/event-stream` never does — one subscriber would wedge the
-        // teardown `serve()` awaits.
         let force: ReturnType<typeof setTimeout> | undefined = undefined;
         server.close((error) => {
           if (force) clearTimeout(force);

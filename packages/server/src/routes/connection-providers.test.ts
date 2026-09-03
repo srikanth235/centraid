@@ -13,12 +13,10 @@ describe("PROVIDER_PRESETS capabilities", () => {
       expect(
         p.capabilities.syncs.length + p.capabilities.actions.length
       ).toBeGreaterThan(0);
-      // Capability / action DTOs must never carry secret cells (credKind is not a secret).
       const capJson = JSON.stringify(p.capabilities);
       expect(capJson).not.toMatch(
         /client_secret|access_token|refresh_token|"apiKey"/u
       );
-      // Syncs map to real pull templates that are not -send.
       for (const s of p.capabilities.syncs) {
         expect(s.templateId.endsWith("-send")).toBe(false);
         expect(s.kind.length).toBeGreaterThan(0);

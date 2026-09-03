@@ -1,5 +1,3 @@
-// GitHub export/import of the apps repo; session branches are deliberately NOT pushed.
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -7,7 +5,6 @@ import { run, runRaw } from "./git.js";
 
 export interface ExportOptions {
   remoteName?: string;
-  /** Force-push (`+`) the refs. Off by default — a rejected push surfaces. */
   force?: boolean;
 }
 
@@ -24,7 +21,6 @@ export async function exportToRemote(
 ): Promise<ExportResult> {
   const remoteName = opts.remoteName ?? "origin";
 
-  // `remote add` fails if it exists — probe, then `set-url`.
   const existing = await runRaw(["remote", "get-url", remoteName], {
     cwd: bareDir,
     allowNonZero: true,
@@ -48,7 +44,6 @@ export interface ImportResult {
   bareDir: string;
 }
 
-/** Clone `remoteUrl` into `<root>/apps.git`; refuses if it exists. */
 export async function importFromRemote(
   root: string,
   remoteUrl: string

@@ -1,8 +1,3 @@
-// The semantic-search route (#721) over a real vault plane and a real
-// HTTP server. The assertions are deliberately about the WIRE — field names and
-// status codes — because the mobile Photos surface is coded against exactly
-// this shape and a rename here is a protocol break, not a refactor.
-
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import http from "node:http";
@@ -21,7 +16,6 @@ import {
   makeEnrichSearchRouteHandler,
 } from "./enrich-search-routes.js";
 
-/** What the fake advertises for `embed-image` — the index's key. */
 const MODEL = "fake-clip@1";
 
 const silentLogger = {
@@ -35,7 +29,6 @@ const PIXELS = [
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
 ];
 
-/** An embed-text automation whose encoder answers `[1, 0]`. */
 function searchAutomation(text: () => unknown = () => ({ vector: [1, 0] })) {
   return async () => {
     const result = text() as Record<string, unknown>;
@@ -90,8 +83,6 @@ describe("enrich-search-routes", () => {
           .asset_id
       );
     });
-    // Hand-planted vectors: [1,0] then [0,1], so a [1,0] query ranks the first
-    // photograph at 1 and the second at 0.
     [
       [1, 0],
       [0, 1],
@@ -166,7 +157,6 @@ describe("enrich-search-routes", () => {
     expect(body.status).toBe("ok");
     expect(body.model).toBe(MODEL);
     expect(body.hits!.map((hit) => hit.assetId)).toStrictEqual(assetIds);
-    // The exact wire keys the mobile surface reads.
     expect(Object.keys(body.hits![0]!).toSorted()).toStrictEqual([
       "assetId",
       "contentId",

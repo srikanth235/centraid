@@ -1,12 +1,3 @@
-/*
- * The `vault_sql` tool: name, description, schema, and the one dispatch
- * function.
- * The actual execution rides `ToolContext.vaultSql` — an owner-credentialed
- * runner the gateway threads in per turn — so this module stays a thin,
- * backend-neutral adapter exactly like the `centraid_*` trio's dispatcher
- * delegation.
- */
-
 import type { ToolContext } from "@centraid/server/engine";
 
 export const VAULT_SQL_TOOL = {
@@ -80,7 +71,6 @@ export type VaultSqlToolOutcome =
   | { ok: true; result: unknown }
   | { ok: false; errorText: string };
 
-/** Execute one `vault_content` call through the turn's owner-side executor. */
 export async function runVaultContentTool(
   ctx: ToolContext,
   args: unknown
@@ -107,7 +97,6 @@ export async function runVaultContentTool(
   }
 }
 
-/** Execute one `vault_invoke` call through the turn's harness tool executor. */
 export async function runVaultInvokeTool(
   ctx: ToolContext,
   args: unknown
@@ -138,7 +127,6 @@ export async function runVaultInvokeTool(
   }
 }
 
-/** Execute one `vault_sql` call through the turn's owner-side executor. */
 export async function runVaultSqlTool(
   ctx: ToolContext,
   sql: unknown

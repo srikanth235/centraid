@@ -1,9 +1,3 @@
-/*
- * Durable notices behind the Notifications surface (#647). Owner decisions
- * stay in their canonical tables, projected beside these rows by VaultPlane.
- * A `(kind, sourceRef)` pair is one card: repeats update count/read state.
- */
-
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
@@ -67,10 +61,6 @@ function fromRow(row: NoticeRow): Notice {
   };
 }
 
-/**
- * First non-empty line of a failure message, collapsed and bounded (#647);
- * `detail_json` keeps the full record — the headline only says WHICH failure.
- */
 export function noticeGist(
   message: string | undefined,
   maxLength = 80
@@ -82,7 +72,6 @@ export function noticeGist(
   if (!firstLine) return undefined;
   const collapsed = firstLine
     .replace(/\s+/gu, " ")
-    // A serialized `Error:` prefix is noise in a headline.
     .replace(/^[A-Za-z]*Error:\s*/u, "")
     .replace(/[.:;,]+$/u, "");
   if (collapsed === "") return undefined;
@@ -91,7 +80,6 @@ export function noticeGist(
     : collapsed;
 }
 
-/** Human label for an automation whose manifest could not be read (#647). */
 export function humanizeAutomationRef(ref: string): string {
   const segment = ref.split("/").at(-1) ?? ref;
   const words = segment.replace(/[-_]+/gu, " ").trim();
@@ -99,13 +87,6 @@ export function humanizeAutomationRef(ref: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/**
- * The card an ENRICHMENT-TIER REFUSAL raises (decision S9, #712, #647). A
- * refusal is a silent skip — not a failure, never wakes a device — so this
- * standing state is the owner's only account of it, with the control named.
- * Keyed by DOMAIN, not by automation: seven refusals for one reason are one
- * card about the owner's photographs, not seven cards.
- */
 export function enrichRefusalNotice(input: {
   domain: string;
   tier?: string;
@@ -116,8 +97,6 @@ export function enrichRefusalNotice(input: {
       : input.domain === "docs"
         ? "Document enrichment"
         : `Enrichment for ${input.domain}`;
-  // Each headline states the tier in force AND what it costs — the card
-  // explains, it does not nag.
   const headline =
     input.tier === "off"
       ? `${subject} is switched off`
@@ -135,16 +114,11 @@ export function enrichRefusalNotice(input: {
     },
     headline,
     kind: "enrichment",
-    // Unreadable setting = fault to act on; an owner-chosen tier = information.
     severity: input.tier === undefined ? "warning" : "info",
     sourceRef: input.domain,
   };
 }
 
-/**
- * Write once per (domain, tier): put clears read_at, so re-putting an
- * unchanged refusal would re-surface an already-read card on every tick.
- */
 export function shouldWriteEnrichRefusalNotice(
   prior: Notice | undefined,
   tier: string | undefined
@@ -174,7 +148,6 @@ export class NoticeStore {
       notice: Notice;
     }) => void = () => undefined
   ) {
-    // Enforce retention even when no new notices arrive.
     this.prune(new Date().toISOString());
   }
 

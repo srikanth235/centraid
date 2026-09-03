@@ -7,10 +7,6 @@ export interface LowPriorityCommand {
 
 const DEFAULT_NICENESS = 10;
 
-/**
- * OS CPU/I/O priority controls (#456/#528): nice (+ionice on Linux), none on
- * Windows. worker_threads DEFERRED — do not hack a tid lookup.
- */
 export function lowPriorityCommand(
   bin: string,
   args: readonly string[],

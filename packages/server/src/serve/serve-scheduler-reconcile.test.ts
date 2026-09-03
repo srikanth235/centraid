@@ -1,12 +1,5 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
-/*
- * Scheduler-on-publish reconcile (#149). A publish over HTTP must
- * resync the in-process cron scheduler — `serve()` reconciles in onAppLive
- * against the gateway's persistent scheduler instance. Boots a real
- * git-store gateway with an injected spy scheduler and asserts a publish
- * triggers a reconcile carrying the scanned automation rows.
- */
 import path from "node:path";
 
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
@@ -30,8 +23,6 @@ function pathsUnder(dir: string): GatewayPaths {
   };
 }
 
-// A spy `automation.LocalScheduler` — records the rows each reconcile receives and
-// never arms a real timer, so the test stays deterministic.
 function stubScheduler(): automation.LocalScheduler {
   return {
     async register() {},
@@ -182,18 +173,14 @@ describe("serve-scheduler-reconcile scenarios", () => {
   }
 
   test("publishing an automation triggers a scheduler reconcile with the new rows", async () => {
-    // Startup reconcile already ran (empty store). Record the baseline.
     await waitFor(() => reconcileCalls.length >= 1);
     const baseline = reconcileCalls.length;
 
-    // Open a session, lay down an automation app, publish.
     await publishBrief();
 
-    // The publish's onAppLive reconciled the scheduler with the new row.
     await waitFor(() => reconcileCalls.length > baseline);
     const last = reconcileCalls.at(-1)!;
     expect(last.rows.map((r) => r.ref)).toStrictEqual(["brief/brief"]);
-    // The gateway started its scheduler exactly once, on boot.
     expect(started).toBe(1);
   });
 
@@ -210,8 +197,6 @@ describe("serve-scheduler-reconcile scenarios", () => {
   });
 
   test("a committed watched entity fires a data automation in well under a second", async () => {
-    // Exercise the real scheduler behind a live HTTP gateway, not the spy used
-    // by the reconcile test above.
     await handle.close();
     handle = await serve({
       paths: pathsUnder(dataDir),
@@ -219,8 +204,6 @@ describe("serve-scheduler-reconcile scenarios", () => {
     });
     await publishBrief(DATA_AUTOMATION_JSON);
 
-    // Publishing awaits reconciliation, including the fresh watcher's
-    // no-history cursor bootstrap, before the app is considered live.
     const plane = handle.vaults.current();
     const cursor = plane.db.audit
       .prepare(
@@ -234,9 +217,6 @@ describe("serve-scheduler-reconcile scenarios", () => {
       input: { display_name: "Doorbell Test" },
       purpose: "dpv:ServiceProvision",
     });
-    // The commit is in-process and synchronous, so this is the instant the
-    // scheduler's nudge window opens — and it is the same clock the turn
-    // record below is stamped with.
     const committedAt = Date.now();
     expect(outcome.status).toBe("executed");
     expect(
@@ -271,18 +251,11 @@ describe("serve-scheduler-reconcile scenarios", () => {
       ).turns;
       return runs.length > 0;
     };
-    // How long the TEST is willing to watch — not the claim. The two are
-    // deliberately different: unifying them makes every HTTP round trip this
-    // poll loop makes count against the scheduler (on a contended shard the
-    // assertion read 1638 ms against a healthy gateway).
     await waitFor(async () => {
       return refreshRuns();
     }, 5_000);
 
     expect(runs).toHaveLength(1);
-    // A claim about the SCHEDULER — it reacted to the commit nudge, not a
-    // periodic sweep — measured on the turn's server-stamped start, owing
-    // nothing to how fast this process could poll for it.
     expect(
       (runs[0]?.startedAt ?? Number.POSITIVE_INFINITY) - committedAt
     ).toBeLessThan(1_000);
@@ -292,9 +265,6 @@ describe("serve-scheduler-reconcile scenarios", () => {
     });
     expect(runs[0]?.ok).toBe(true);
 
-    // A real burst of committed writes through the live gateway shares one
-    // fixed nudge window and therefore one cursor evaluation, while preserving
-    // one distinct native turn per source element.
     for (let i = 0; i < 8; i++) {
       const burst = plane.gateway.invoke(plane.ownerCredential, {
         command: "core.add_party",
@@ -311,12 +281,6 @@ describe("serve-scheduler-reconcile scenarios", () => {
     });
     expect(runs).toHaveLength(9);
 
-    // Simulate a kill in the only recoverable mid-write window: journal
-    // provenance is durable, but the process dies before the best-effort ring.
-    // The injected scheduler deliberately drops that ring, then a normal
-    // gateway restart consumes the persisted cursor and emits one catch-up
-    // fire. The scheduler unit suite separately pins the minute-tick fallback
-    // for the same persisted-cursor state.
     await handle.close();
     handle = await serve({
       paths: pathsUnder(dataDir),

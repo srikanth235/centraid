@@ -1,11 +1,3 @@
-/*
- * Owner-facing Resource mode (#521) — one durable preference feeding the
- * existing hardware-profile resolver (#456). Modes NEVER add a second policy
- * path: they only select class and throughput tier; Auto keeps boot-time
- * detection. Pref key lives under the gateway preferences table (`gateway.db`)
- * so the shell writes it via PUT `/_centraid-user/prefs` — no env vars.
- */
-
 export type ResourceMode = "auto" | "conserve" | "balanced" | "performance";
 
 export const RESOURCE_MODES: readonly ResourceMode[] = [
@@ -15,16 +7,8 @@ export const RESOURCE_MODES: readonly ResourceMode[] = [
   "performance",
 ] as const;
 
-/** Device-prefs key — runtime wins (docs/config-ownership.md). */
 export const RESOURCE_MODE_PREF_KEY = "gateway.resourceMode";
 
-/**
- * Prioritized per-knob UI overrides (#528): mode selects a budget preset;
- * these keys pin an individual knob above/below it from the shell. Absent key
- * = "Linked". Precedence per knob is env > prefs > preset, resolved in the ONE
- * hardware-profile resolver — never a second policy path. Positive integers;
- * the resolver clamps them like the matching env var.
- */
 export interface ResourceKnobOverrides {
   workerMaxConcurrent?: number;
   workerMaxOldGenerationMb?: number;
@@ -32,7 +16,6 @@ export interface ResourceKnobOverrides {
   replicationConcurrency?: number;
 }
 
-/** Device-prefs keys for the prioritized knobs — runtime wins, apply on next boot. */
 export const RESOURCE_KNOB_PREF_KEYS: Record<
   keyof ResourceKnobOverrides,
   string
@@ -43,18 +26,12 @@ export const RESOURCE_KNOB_PREF_KEYS: Record<
   replicationConcurrency: "gateway.resource.replicationConcurrency",
 };
 
-/** Accept only a safe, finite, positive integer; anything else is Linked. */
 function safePositiveInteger(value: unknown): number | undefined {
   return typeof value === "number" && Number.isInteger(value) && value > 0
     ? value
     : undefined;
 }
 
-/**
- * Read durable knob overrides from the flat prefs KV. Garbage (strings,
- * negatives, floats, NaN, missing) is silently dropped — a hand-edited pref
- * can never widen a bound or crash boot; the resolver still clamps survivors.
- */
 export function parseResourceKnobPrefs(
   prefs: Record<string, unknown>
 ): ResourceKnobOverrides {
@@ -81,7 +58,6 @@ export function parseResourceMode(value: unknown): ResourceMode | undefined {
   return isResourceMode(value) ? value : undefined;
 }
 
-/** Resolve the effective mode: operator env, then durable device prefs (owner UI), then daemon config option, else Auto. */
 export function resolveResourceMode(input: {
   env?: NodeJS.ProcessEnv;
   optionsMode?: unknown;
@@ -138,7 +114,6 @@ export function formatLoadShedClearedDetail(): string {
   return "Event-loop pressure cleared; background work resumes";
 }
 
-/** Owner-triggered background pause (#528 Phase B). Durability work — WAL/fsync and the consent outbox — is NEVER gated, so the copy names only loops that actually stop. */
 export function formatBackgroundPausedDetail(until: string | null): string {
   const scope =
     "Paused non-urgent background work (vault sweeps, backup retention)";
@@ -151,7 +126,6 @@ export function formatBackgroundResumedDetail(): string {
   return "Background work resumed";
 }
 
-/** Host power-context posture detail (#528 Phase D). Posture is a COURTESY, not a fault — stays `ok`, explains the deferral, never an alarm or durable mode flip. */
 export function formatPowerPostureDeferringDetail(
   reason: "on-battery" | "low-battery" | "thermal",
   kind: "battery" | "mains" | "server"

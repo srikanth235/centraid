@@ -1,20 +1,3 @@
-// File-drop import routes (#290) — the owner's staged-import
-// surface over the vault's staging spine. First contact with real data is
-// always a DRAFT: stage returns a disposition summary, the owner reviews,
-// then publishes or discards. Everything runs with the owner-device
-// credential; receipts and provenance are the vault gateway's.
-//
-//   POST   /centraid/_vault/imports                    stage a file
-//          body {filename, text? | base64?, accountName?, currency?}
-//   GET    /centraid/_vault/imports                    batches, newest first
-//   GET    /centraid/_vault/imports/<batchId>          the batch's rows
-//   POST   /centraid/_vault/imports/<batchId>/publish  apply the draft
-//   POST   /centraid/_vault/imports/<batchId>/discard  drop the draft
-//   GET    /centraid/_vault/imports/export               ciphertext-only bundle
-//   POST   /centraid/_vault/imports/export               body {passphrase?}
-//   GET    /centraid/_vault/imports/connections        connection health
-//   POST   /centraid/_vault/imports/connections/<id>/status  {status: paused|active}
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import {
@@ -28,7 +11,6 @@ import type { VaultRegistry } from "../serve/vault-registry.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
 const PREFIX = "/centraid/_vault/imports";
-/** Imports carry whole mailboxes / Takeout zips — cap well above chat bodies. */
 const MAX_IMPORT_BYTES = 128 * 1024 * 1024;
 
 const TARGET_FIELDS: Readonly<Record<string, string>> = {
@@ -41,11 +23,6 @@ const TARGET_FIELDS: Readonly<Record<string, string>> = {
   "social.message": "Message + attachments",
 };
 
-/**
- * Which base64 bodies are BINARY (#721). A zip always was; a dropped
- * photo or video is too, and forcing it through the UTF-8 decode below would
- * refuse every JPEG on the grounds that it is not text.
- */
 function isBinaryUpload(filename: string): boolean {
   return filename.toLowerCase().endsWith(".zip") || isMediaPath(filename);
 }
@@ -151,8 +128,6 @@ export function makeImportRouteHandler(
             return sendJson(res, 400, {
               error: "portable import requires replaceFreshVault: true",
             });
-          // The bundle's seal key rides password-wrapped (#630); the
-          // passphrase is the owner's and only passes through.
           const result = importPortableVault(plane.db, data, {
             replaceBootstrap: true,
             ...(typeof body.passphrase === "string"
@@ -170,9 +145,6 @@ export function makeImportRouteHandler(
           ...(typeof body.currency === "string"
             ? { currency: body.currency }
             : {}),
-          // Live Photo pairing for a single dropped photo/video (#724
-          // A2) — see `StageFileOptions.captureGroupId`. Absent for anything
-          // that is not the mobile camera-roll importer's own convention.
           ...(typeof body.captureGroupId === "string"
             ? { captureGroupId: body.captureGroupId }
             : {}),
@@ -185,8 +157,6 @@ export function makeImportRouteHandler(
         segments.length === 1 &&
         segments[0] === "export"
       ) {
-        // POST carries the custody-kit passphrase in a body; GET stays the
-        // key-free door, and a secret must never ride in a query string.
         const passphrase =
           method === "POST"
             ? String((await readJson(req)).passphrase ?? "")
@@ -246,8 +216,6 @@ export function makeImportRouteHandler(
         segments.length === 1 &&
         segments[0] === "connections"
       ) {
-        // The health surface (#290): every connection with its
-        // latest run — status is READABLE state, sync never dies silently.
         const connections = plane.gateway.read(owner, {
           entity: "sync.connection",
           orderBy: { column: "connection_id", dir: "desc" },

@@ -1,10 +1,3 @@
-/*
- * Provider usage cache (#367). Never poll on its own timer — network against
- * a billed account. Stale-while-refresh from `usageFor()`: first read awaits
- * inline; later reads return cache and background-refresh after
- * `pollIntervalMs`. A failed refresh keeps last-known-good plus `error`.
- */
-
 import { openRemoteBackupProvider } from "@centraid/backup";
 import type { UsageByStore } from "@centraid/backup";
 
@@ -56,7 +49,6 @@ export class StorageUsagePoller {
     return cached.result;
   }
 
-  /** Drop the cache when a connection is deleted or credentials rotate. */
   invalidate(connectionId: string): void {
     this.cache.delete(connectionId);
   }

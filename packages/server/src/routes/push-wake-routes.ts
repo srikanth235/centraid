@@ -88,9 +88,6 @@ export function makePushRegistrationRouteHandler(
         auth.length < 8
       )
         return sendJson(res, 400, { error: "invalid_push_registration" });
-      // Issue #865: the endpoint is POSTed by the gateway on every wake, so a
-      // loopback/LAN https target registered here is replayed blind SSRF from
-      // the host. Resolve-and-refuse before anything touches storage.
       try {
         await assertPublicPushEndpoint(endpoint);
       } catch (error) {
@@ -140,19 +137,12 @@ export function makePushRegistrationRouteHandler(
   };
 }
 
-/**
- * Minimal push-to-wake relay. It sends no vault id, item id, title, or content;
- * APNs/FCM delivery merely advances the same bounded background pull the
- * scheduler runs. Correctness never depends on push delivery.
- */
 export class PushWakeRelay {
   readonly #unsubscribes = new Map<string, () => void>();
   readonly #timers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #dueTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  /** Coalesced armDue debounce timers (distinct from the next-fire arm). */
   readonly #dueArmTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #dueKeys = new Map<string, Set<string>>();
-  /** Vaults waiting for a coalesced armDue after a commit storm. */
   readonly #dueArmPending = new Set<string>();
   #stopped = false;
 
@@ -180,15 +170,12 @@ export class PushWakeRelay {
       plane.boot.vaultId,
       subscribeReplicaCommits(plane.db.vault, () => {
         this.schedule(plane.boot.vaultId);
-        // Coalesce due-arming with the same 10s wake timer rather than
-        // scanning task/event/tally tables on every vault commit.
         this.scheduleDue(plane);
       })
     );
     this.armDue(plane);
   }
 
-  /** Request the same content-free, debounced wake used by replica commits. */
   requestWake(vaultId: string): void {
     this.schedule(vaultId);
   }
@@ -217,7 +204,6 @@ export class PushWakeRelay {
     this.#timers.set(vaultId, timer);
   }
 
-  /** Coalesce armDue onto a short timer so commit storms do not N-scan. */
   private scheduleDue(plane: VaultPlane): void {
     if (this.#stopped) return;
     const vaultId = plane.boot.vaultId;
@@ -244,19 +230,12 @@ export class PushWakeRelay {
     let due: DueReminder[];
     let next: string | null | undefined;
     try {
-      // ONE SCAN, ONE COMMIT (#916). Every read below is a `gateway.read`, and
-      // a gateway read appends a receipt — so this idle-path tick is a writer.
-      // `scanReminders` reads the sources once for both answers, and the
-      // enclosing transaction lands the receipts as a single fsync instead of
-      // one per read: the same evidence, a fifth of the WAL.
       const scan = plane.gateway.readBatch(() =>
         scanReminders(plane.gateway, plane.ownerCredential, now.toISOString())
       );
       due = scan.due.filter((reminder) => !seen.has(reminder.key));
       next = scan.nextFireAt;
     } catch (error) {
-      // Plane/tests may close the vault after stop(); never surface a
-      // closed-DB timer as an unhandled exception (vitest fails the suite).
       if (isClosedDatabaseError(error)) return;
       throw error;
     }

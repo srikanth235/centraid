@@ -1,6 +1,3 @@
-// Coverage for launch planning: native vs adapter-backed spawns, the per-kind
-// launch env, and the root-bypass opt-in notice.
-
 import { afterEach, describe, expect, test } from "vitest";
 
 import type { TurnStreamEvent } from "@centraid/server/engine";
@@ -13,7 +10,6 @@ const CLAUDE_ADAPTER = "@agentclientprotocol/claude-agent-acp";
 const originalGeteuid = process.geteuid;
 describe("launch", () => {
   afterEach(() => {
-    // Restore the real uid probe after any test that stubbed root.
     process.geteuid = originalGeteuid;
   });
 
@@ -35,9 +31,7 @@ describe("launch", () => {
     const plan = planLaunch(config, "/opt/centraid/bin", []);
     expect(plan.bin).toBe("/usr/local/bin/gemini");
     expect(plan.args).toStrictEqual(["--acp", "--verbose"]);
-    // The per-kind env var is applied on top of the sanitized spawn env…
     expect(plan.env.GEMINI_HEADLESS).toBe("1");
-    // …and extraPath is prepended to PATH.
     expect(plan.env.PATH?.startsWith("/opt/centraid/bin")).toBe(true);
   });
 
@@ -68,7 +62,6 @@ describe("launch", () => {
     expect(plan.bin).toBe(process.execPath);
     expect(plan.args[0]).toMatch(/claude-agent-acp/u);
     expect(plan.args.at(-1)).toBe("--foo");
-    // binPath is redirected into the adapter's "real CLI" env var.
     expect(plan.env.CLAUDE_CODE_EXECUTABLE).toBe("/home/me/.local/bin/claude");
     expect(plan.env.AUGMENT_DISABLE_AUTO_UPDATE).toBe("1");
   });

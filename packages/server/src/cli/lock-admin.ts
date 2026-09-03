@@ -1,12 +1,3 @@
-/*
- * `centraid-gateway lock-status` (#555).
- *
- * gateway.db is the process lock. A running daemon is asked first; when it
- * cannot answer, an exclusive open distinguishes "free" from "held by a live
- * process". lsof is diagnostic only and best-effort—the SQLite lock remains
- * authoritative on every platform.
- */
-
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 

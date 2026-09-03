@@ -1,7 +1,3 @@
-// The backend-agnostic automation engine: the fire spine (`runFire` + the
-// `OpenDispatch` seam) and the domain around it. `runTurn`, `openDispatch` and
-// `fire` are injected, so this package never depends on a harness.
-
 export {
   ManifestError,
   HANDLER_FILE,
@@ -46,8 +42,6 @@ export {
 } from "./cron-timezone.js";
 export { cronMatches } from "./fire/cron-match.js";
 
-// The only trigger evaluators: no caller advances a watermark past rows it
-// never delivered.
 export {
   readConditionCursor,
   readDataCursor,
@@ -57,7 +51,6 @@ export {
 
 export { parseRef, type Ref } from "./manifest/ref.js";
 
-// The automation directory is the source of truth, not a table (#98).
 export {
   manifestPath,
   readAppOwned,
@@ -69,7 +62,6 @@ export {
 
 export type { Host, ReconcileResult } from "./fire/host.js";
 
-// Minute timer: missed minutes during downtime are never backfilled (#149).
 export {
   InProcessScheduler,
   type InProcessSchedulerOptions,
@@ -90,7 +82,6 @@ export {
 } from "./fire/cursor-engine.js";
 export { dueInstants, type CronSchedule } from "./fire/cron-cursor.js";
 
-// The ledger that makes that silence legible (#351).
 export {
   SCHEDULER_LEDGER_AUTOMATION_ID,
   SCHEDULER_LEDGER_KEY,
@@ -133,7 +124,6 @@ export {
   type ConnectionAuth,
 } from "./handler/runner.js";
 export { coerceDelegateAnswer } from "./handler/delegate-answer.js";
-// Authoring-time handler lint (#167): rejected at publish time, not fire time.
 export {
   lintHandlerSource,
   formatHandlerLintError,
@@ -148,7 +138,6 @@ export {
   type OpenDispatchArgs,
   type ResolveConnection,
 } from "./fire/fire.js";
-// The enrichment tier gate, pure and exported so a host can explain a refusal.
 export {
   DEFAULT_ENRICH_TRIGGER,
   ENRICH_DOMAINS,

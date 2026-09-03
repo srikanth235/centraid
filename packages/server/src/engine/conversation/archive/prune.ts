@@ -1,5 +1,3 @@
-// Custody-gated prune (#438): deletes ONLY behind the `custodyProven` latch.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import type { CustodyProven } from "./types.js";
@@ -12,7 +10,6 @@ interface PendingArchiveRow {
   segment_sha256: string;
 }
 
-// Reclaims freed pages via `incremental_vacuum` (#438); never a whole-file VACUUM.
 export function reclaimJournalPages(journal: DatabaseSync): {
   mode: "incremental" | "none";
   ranVacuum: boolean;
@@ -32,7 +29,6 @@ export function reclaimJournalPages(journal: DatabaseSync): {
   return { mode, ranVacuum: false };
 }
 
-// One transaction per segment; `turn_count` is a LIFETIME counter — untouched.
 export function pruneCustodyProven(
   journal: DatabaseSync,
   custodyProven: CustodyProven,
@@ -52,7 +48,6 @@ export function pruneCustodyProven(
   let turnsPruned = 0;
   let segmentsPruned = 0;
   for (const row of pending) {
-    // THE LATCH. No delete path exists outside this branch.
     if (!custodyProven(row.segment_sha256)) continue;
     journal.exec("BEGIN IMMEDIATE");
     try {

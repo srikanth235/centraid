@@ -1,8 +1,3 @@
-// Vault tools over the per-turn loopback MCP server: what the harness is
-// handed, what the endpoint serves, how the transcript renders it, and that
-// no port outlives the turn. Core turn behaviour is in backend.test.ts;
-// shared fixtures in test-fixtures.ts.
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -23,7 +18,6 @@ interface VaultProbe {
   callIsError?: boolean | null;
 }
 
-/** Is anything still listening? A closed listener refuses immediately. */
 async function stillListening(url: string): Promise<boolean> {
   try {
     await fetch(url, { method: "POST", body: "{}" });
@@ -50,8 +44,6 @@ describe("backend.vault-tools", () => {
       toolContext: ctx,
     });
 
-    // The harness was handed exactly one HTTP MCP server, on loopback, with a
-    // bearer header — the ACP `McpServerHttp` wire shape.
     const advertised = JSON.parse(
       await fs.readFile(mcpMarker, "utf8")
     ) as Array<{
@@ -70,18 +62,14 @@ describe("backend.vault-tools", () => {
     const probe = JSON.parse(
       await fs.readFile(vaultMarker, "utf8")
     ) as VaultProbe;
-    // An unauthenticated request is refused before any tool runs.
     expect(probe.unauthStatus).toBe(401);
     expect(probe.serverInfoName).toBe("centraid");
-    // Only the tools this ToolContext can actually serve are advertised.
     expect(probe.tools).toStrictEqual(["vault_sql"]);
     expect(probe.callIsError).toBe(false);
     expect(probe.callText).toBe(JSON.stringify({ rows: [{ one: 1 }] }));
 
-    // The call reached the turn's own harness.
     expect(ctx.calls).toStrictEqual([{ sql: "SELECT 1" }]);
 
-    // …and the transcript rendered it.
     const start = events.find((e) => e.type === "tool.start");
     expect(start && start.type === "tool.start" && start.toolName).toBe(
       "vault_sql"
@@ -95,7 +83,6 @@ describe("backend.vault-tools", () => {
       rows: [{ one: 1 }],
     });
 
-    // No port outlives the turn.
     await expect(stillListening(String(probe.url))).resolves.toBe(false);
   });
 
@@ -135,8 +122,6 @@ describe("backend.vault-tools", () => {
       ],
       toolContext: vaultToolContext(),
     });
-    // The harness announced `mcp__centraid__vault_sql` before dialing, so exactly
-    // one tool card is emitted — the harness's, not ours on top of it.
     expect(events.filter((e) => e.type === "tool.start")).toHaveLength(1);
     expect(events.filter((e) => e.type === "tool.result")).toHaveLength(1);
     const start = events.find((e) => e.type === "tool.start");
@@ -189,7 +174,6 @@ describe("backend.vault-tools", () => {
         `--vault-marker=${vaultMarker}`,
       ],
       toolContext: vaultToolContext(),
-      // Abort the moment the vault tool call starts.
       abortOn: (e) => e.type === "tool.start",
     });
     expect(types(events)).toContain("aborted");

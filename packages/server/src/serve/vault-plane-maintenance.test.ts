@@ -1,12 +1,3 @@
-/*
- * Sweep wiring for the vault-side collectors (#659 L1/L3/L4/L5).
- *
- * `vault.db` is the sovereign asset and is meant to stay small, but two
- * families accreted in it with no collector at all: expired undo snapshots and
- * terminal operational rows. The vault package owns the policy; these tests own
- * the claim that the gateway's sweep actually RUNS it, and runs it bounded.
- */
-
 import { afterEach, describe, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
@@ -22,7 +13,6 @@ const silentLogger = {
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
-/** Drive the same sweep entry point `start()` invokes. */
 function sweep(plane: unknown): void {
   (plane as { runSweep: () => void }).runSweep();
 }
@@ -70,8 +60,6 @@ describe("vault-plane maintenance sweep", () => {
     });
     cleanups.push(() => plane.stop());
 
-    // Ten expired snapshots (no reader will ever return these) and five that
-    // are still inside their undo window.
     seedRevisions(plane, 10, new Date(Date.now() - 3_600_000).toISOString());
     const live = plane.db.vault.prepare(
       `INSERT INTO core_entity_revision
@@ -91,7 +79,6 @@ describe("vault-plane maintenance sweep", () => {
 
     sweep(plane);
 
-    // Only the undoable ones survive.
     expect(revisionCount(plane)).toBe(5);
     const survivors = plane.db.vault
       .prepare(
@@ -113,16 +100,12 @@ describe("vault-plane maintenance sweep", () => {
     });
     cleanups.push(() => plane.stop());
 
-    // More expired snapshots than one pass may delete (the vault's cap is
-    // 5000), so the first sweep must NOT clear them all…
     seedRevisions(plane, 5_600, new Date(Date.now() - 3_600_000).toISOString());
     sweep(plane);
     const afterFirst = revisionCount(plane);
     expect(afterFirst).toBeGreaterThan(0);
     expect(afterFirst).toBeLessThan(5_600);
 
-    // …and the daily gate must have been re-opened, so the NEXT ordinary sweep
-    // finishes the job instead of waiting twenty-four hours.
     sweep(plane);
     expect(revisionCount(plane)).toBe(0);
   }, 60_000);
@@ -141,8 +124,6 @@ describe("vault-plane maintenance sweep", () => {
     sweep(plane);
     expect(revisionCount(plane)).toBe(0);
 
-    // A second sweep in the same minute is inside the daily gate: a row
-    // inserted now must survive it, proving the pass did not re-run.
     seedRevisions(plane, 2, new Date(Date.now() - 3_600_000).toISOString());
     sweep(plane);
     expect(revisionCount(plane)).toBe(2);

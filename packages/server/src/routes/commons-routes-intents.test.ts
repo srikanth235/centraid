@@ -1,5 +1,3 @@
-// #731 gateway plumbing: goal 1 — the command route carries `based_on_sequence`
-// into `executeCommonsCommand`; goal 2 — the intent cancel route.
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
@@ -48,19 +46,9 @@ describe("Commons command route carries based_on_sequence (issue #731 goal 1)", 
       ownerVault: steward.vault,
       containerType: "tally.group",
       containerId: groupId,
-      // Deliberately no vaultId here: giving the member one would also mark
-      // its seat "current" (`createCommonsGrant`'s own coupling), and a
-      // "current" seat gets reconciled by every steward-side compile below —
-      // which would keep the member's local grant caught up and defeat the
-      // scenario. The member is registered read+write and gets its signing
-      // binding inserted directly below, but its seat stays "invited" so it
-      // never locally compiles this grant — the honest, unobserved-history
-      // baseline `queueCommonsIntent` records for it is 0.
       members: [{ partyId: member.ownerPartyId, capability: "read+write" }],
       now,
     });
-    // The member's vault signing identity, bound at the steward without
-    // going through `createCommonsGrant`'s vaultId path (see above).
     steward.vault.vault
       .prepare(
         `INSERT INTO share_party_vault_binding
@@ -140,8 +128,6 @@ describe("Commons command route carries based_on_sequence (issue #731 goal 1)", 
           .get(groupId) as { expense_id: string }
       ).expense_id;
 
-      // A steward-side edit to the SAME expense is the intervening op the
-      // member's (unobserved) mental model missed.
       const edited = await sendCommand(
         steward,
         "tally.edit_expense",
@@ -157,11 +143,6 @@ describe("Commons command route carries based_on_sequence (issue #731 goal 1)", 
       );
       expect(edited.status).toBe(200);
 
-      // The member's own edit of the SAME expense names based_on_sequence 0,
-      // strictly behind the steward's edit above. If the route failed to
-      // carry the recorded value into `executeCommonsCommand`, this would
-      // simply execute; carrying it correctly refuses it as a stale-context
-      // conflict instead.
       const conflicting = await sendCommand(
         member,
         "tally.edit_expense",
@@ -192,7 +173,6 @@ describe("Commons command route carries based_on_sequence (issue #731 goal 1)", 
           .get("based-on-sequence-conflict")
       ).toMatchObject({ based_on_sequence: 0, status: "denied" });
 
-      // The refusal never touched the domain row.
       expect(
         steward.vault.vault
           .prepare("SELECT description FROM tally_expense WHERE expense_id = ?")
@@ -235,8 +215,6 @@ describe("Commons intent cancel route (issue #731 goal 2)", () => {
       enrollments: EnrollmentStore.open(steward.gatewayDb),
       vaultFor: (vaultId) => sides.get(vaultId)?.vault,
       ownerPartyFor: (vaultId) => sides.get(vaultId)?.ownerPartyId,
-      // Neither resolves for the steward: the intent parks instead of
-      // executing, so it stays cancellable.
       gatewayFor: () => undefined,
       credentialFor: () => undefined,
     });
@@ -294,7 +272,6 @@ describe("Commons intent cancel route (issue #731 goal 2)", () => {
           .get("cancel-route-intent")
       ).toMatchObject({ status: "cancelled" });
 
-      // A second cancel of the SAME already-cancelled intent is idempotent.
       const repeat = await fetch(
         `http://127.0.0.1:${port}${COMMONS_PATH}/intents/${encodeURIComponent(
           "cancel-route-intent"
@@ -314,12 +291,6 @@ describe("Commons intent cancel route (issue #731 goal 2)", () => {
         cancelled: true,
       });
 
-      // A genuine race: the steward's real answer already settled this
-      // intent to a DIFFERENT terminal state before the member's cancel
-      // arrived. Cancel must never override that outcome — it reports the
-      // true status and `cancelled: false`, matching the documented race
-      // contract on `cancelCommonsIntent` (the WHERE clause only ever moves
-      // a still-open `pending`/`parked` row).
       member.vault.vault
         .prepare(
           `INSERT INTO share_commons_intent

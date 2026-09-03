@@ -1,9 +1,3 @@
-/*
- * Pure serve-flag parse + loopback-token compare (#545).
- * Kept free of process.exit / main() so unit tests can import without
- * booting the daemon entrypoint.
- */
-
 import crypto from "node:crypto";
 
 export interface ParsedServe {
@@ -11,21 +5,15 @@ export interface ParsedServe {
   dataDir?: string;
   host?: string;
   port?: number;
-  /** Extra Hostnames from repeated `--allowed-host` (#504 packaging). */
   allowedHosts?: string[];
 }
 
-/** Constant-time string compare — same posture as app-engine's bearer check. */
 export function timingSafeTokenEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a, "utf8");
   const bufB = Buffer.from(b, "utf8");
   return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
 }
 
-/**
- * Pure serve-flag parse. Returns a result instead of exiting so unit tests can
- * exercise every branch without spawning the process.
- */
 export type ParseServeArgsResult =
   | { ok: true; value: ParsedServe }
   | { ok: false; message: string; code: number }

@@ -1,5 +1,3 @@
-/** Vault-assistant config over `makeConversationRunnerCore`: host-side `vault_sql` with the active vault's owner credential, empty per-vault scratch cwd (`harness-sessions/assistant-cwd`), writes riding `_assistant` so confirm-gated commands park (#306). */
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -27,7 +25,6 @@ export interface AssistantConversationRunnerOptions {
     subsystem?: ModelSubsystem,
     harnessKind?: HarnessKind
   ) => Promise<HarnessPrefs | undefined>;
-  /** Gateway builds this twice: `'assistant'` (shell) and `'ask'` (per-app). */
   subsystem?: ModelSubsystem;
   getDispatcher: () => Dispatcher;
   vaults: VaultRegistry;
@@ -58,7 +55,6 @@ export function makeVaultToolRunners(vaults: VaultRegistry): {
   return {
     vaultSql: () => (sql: string) => {
       const result = vaults.current().sqlAsOwner(sql);
-      // Receipt id stays gateway-side; the model gets rows + caps only.
       const { receiptId: _receiptId, ...rows } = result;
       return rows;
     },

@@ -1,9 +1,3 @@
-// The gateway's raster preview codec (#405): the npm-dep side of the
-// `PreviewCodec` the vault declares dependency-free. The portable
-// implementation is the deterministic fallback and test oracle; production
-// picks sharp/libvips or wasm-vips through BuildGatewayOptions. JPEG and PNG
-// in, JPEG out — anything else is `null` for the placeholder contract (#404).
-
 import jpegJs from "jpeg-js";
 import { PNG } from "pngjs";
 
@@ -11,29 +5,23 @@ import type { PreviewCodec, PreviewOutput } from "@centraid/vault";
 
 import { rgbaToThumbHash } from "./thumbhash.js";
 
-/** ThumbHash requires ≤100 px on each edge. */
 const THUMBHASH_EDGE = 100;
 
-/** Memory bound (#405 §2): an edge cap AND a total-pixel ceiling. A refusal returns `null`, never a throw that could stall the sweep. */
 const MAX_INPUT_EDGE = 12_000;
 const MAX_INPUT_PIXELS = 40_000_000; // ~40 MP — comfortably above phone cameras
 
-/** ~0.8 for both rungs; jpeg-js scales 0-100. */
 const OUTPUT_QUALITY = 80;
 
 interface Raster {
   width: number;
   height: number;
-  /** Row-major RGBA, 4 bytes per pixel. */
   data: Uint8Array;
 }
 
-/** null for unsupported, over-cap or bad input. */
 function decode(source: Buffer, mediaType: string): Raster | null {
   const type = mediaType.toLowerCase();
   try {
     if (type === "image/jpeg" || type === "image/jpg") {
-      // `useTArray` avoids a Buffer copy; the decoder's own caps run first.
       const img = jpegJs.decode(source, {
         useTArray: true,
         maxResolutionInMP: MAX_INPUT_PIXELS / 1_000_000,
@@ -51,10 +39,8 @@ function decode(source: Buffer, mediaType: string): Raster | null {
         : null;
     }
   } catch {
-    // A corrupt file is a miss, not a crash (#404).
     return null;
   }
-  // GIF / WebP / video — unsupported in v0.
   return null;
 }
 
@@ -64,7 +50,6 @@ function withinCaps(width: number, height: number): boolean {
   return width * height <= MAX_INPUT_PIXELS;
 }
 
-/** Area-average downscale to `maxEdge`, NEVER upscaling: a source already within it comes back 1:1. Dependency-free on purpose. */
 function downscaleRaster(src: Raster, maxEdge: number): Raster {
   const longEdge = Math.max(src.width, src.height);
   const scale = Math.min(1, maxEdge / longEdge);
@@ -72,8 +57,6 @@ function downscaleRaster(src: Raster, maxEdge: number): Raster {
   const dh = Math.max(1, Math.round(src.height * scale));
   if (dw === src.width && dh === src.height) return src;
 
-  // Edge cells take fewer contributors when the ratio is not integral — what
-  // an area average wants. `?? 0` satisfies `noUncheckedIndexedAccess`.
   const cells = dw * dh;
   const sum = new Float64Array(cells * 4);
   const count = new Uint32Array(cells);
@@ -103,7 +86,6 @@ function downscaleRaster(src: Raster, maxEdge: number): Raster {
   return { width: dw, height: dh, data: out };
 }
 
-/** ITU-R BT.601 luma, matching the Photos client's canvas dHash. */
 function luminance(src: Raster, x: number, y: number): number {
   const offset = (y * src.width + x) * 4;
   return (
@@ -113,7 +95,6 @@ function luminance(src: Raster, x: number, y: number): number {
   );
 }
 
-/** Browser canvas scales every source to the fixed 9×8 dHash sample grid. */
 function sampledLuminance(
   src: Raster,
   targetX: number,
@@ -139,7 +120,6 @@ function sampledLuminance(
   return top * (1 - fy) + bottom * fy;
 }
 
-/** 64-bit dHash: left sample brighter than its right neighbour. */
 function perceptualHash(src: Raster): string {
   let hex = "";
   for (let row = 0; row < 8; row += 1) {
@@ -154,7 +134,6 @@ function perceptualHash(src: Raster): string {
   return hex;
 }
 
-/** Output is always JPEG whatever the input — a PNG screenshot's thumbnail is a JPEG — and `null` means "skip, the placeholder covers it". */
 export function createPortableImagePreviewCodec(): PreviewCodec {
   return {
     downscale(
@@ -190,7 +169,6 @@ export function createPortableImagePreviewCodec(): PreviewCodec {
       try {
         const small = downscaleRaster(raster, THUMBHASH_EDGE);
         const bytes = rgbaToThumbHash(small.width, small.height, small.data);
-        // Unpadded standard base64 — the canonical form ingress validates.
         return Buffer.from(bytes).toString("base64").replace(/=+$/u, "");
       } catch {
         return null;
@@ -199,7 +177,6 @@ export function createPortableImagePreviewCodec(): PreviewCodec {
   };
 }
 
-/** Production default: native libvips work stays off the gateway JS thread. */
 export function createImagePreviewCodec(
   nativeLoader: () => Promise<PreviewCodec | undefined> = () =>
     import("./native-codec.js").then(({ createNativeImagePreviewCodec }) =>

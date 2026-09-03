@@ -1,6 +1,3 @@
-// Adaptive peer maintenance: ONE queue to drain — the share outbox (#750);
-// the commons sweep and route re-announcement remain their own concerns.
-
 import type {
   Credential,
   Gateway as VaultGateway,
@@ -24,7 +21,6 @@ export interface PeerPlaneSweepOptions {
   db: GatewayDatabase;
   links: VaultLinksStore;
   vaultFor: (vaultId: string) => ShareVaultRef | undefined;
-  /** The vault's own party — the principal an edge placement runs as (#916). */
   partyIdFor: (vaultId: string) => string | undefined;
   commonsVaults?: () => readonly {
     vaultId: string;
@@ -33,12 +29,6 @@ export interface PeerPlaneSweepOptions {
     credential?: Credential;
   }[];
   dial: () => PeerDial | undefined;
-  /**
-   * Re-announce this gateway's EndpointId to linked peers when it changed and
-   * some peer has not heard it yet (#750 invariant 3 — retry half of
-   * `announceLocalRoutes`; eager half runs at endpoint start). Must never
-   * throw for a network condition.
-   */
   announceRoutes?: () => Promise<unknown>;
   rowLimit?: number;
   idleIntervalMs?: number;
@@ -50,7 +40,6 @@ export interface PeerPlaneSweepOptions {
 export interface PeerPlaneSweep {
   start: () => void;
   stop: () => void;
-  /** Doorbell only: durable rows remain the source of truth. */
   nudge: () => void;
   runOnce: () => Promise<void>;
 }
@@ -78,12 +67,7 @@ export function createPeerPlaneSweep(
     }
     const dial = options.dial();
     try {
-      // Route announcements first: a peer that moved cannot be dialed for
-      // commons work until it has re-asserted to us; our own move must not
-      // wait behind this tick's other work either way.
       if (options.announceRoutes) await options.announceRoutes();
-      // The outbox drains WITHOUT a dial (#825): its one surviving obligation
-      // is a same-owner placement between two vaults open here.
       const effects = drainShareEffects(
         {
           db: options.db,

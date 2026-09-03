@@ -1,11 +1,4 @@
 import crypto from "node:crypto";
-/*
- * `centraid-gateway backup …` (PROTOCOL.md/FORMAT.md CLI surface): status,
- * run, list, verify, restore, kit — constructed from the same `--config`
- * resolution `serve` uses. Exercises the real `LocalBackupProvider` and a
- * real explicitly-created vault dir, so this is closer to an integration test
- * than the unit-level `backup-service.contract.test.ts`.
- */
 import { promises as fs, existsSync } from "node:fs";
 import path from "node:path";
 
@@ -25,8 +18,6 @@ import { openVaultRegistry } from "../serve/vault-registry.js";
 import { commandBackup } from "./backup-admin.js";
 import { daemonLayoutFor } from "./paths.js";
 
-// See admin.test.ts: real vault/daemon bootstrap per test, so this file is
-// fsync-bound and gets the same 60s escalation above the 30s node-project default.
 vi.setConfig({ testTimeout: 60_000 });
 
 class CliFailError extends Error {
@@ -92,7 +83,6 @@ describe("backup-admin", () => {
         },
       })
     );
-    // CLI tests opt into a vault explicitly; a virgin gateway is legal.
     const layout = daemonLayoutFor(dataDir);
     const database = GatewayDatabase.open(dataDir);
     database.close();
@@ -177,7 +167,6 @@ describe("backup-admin", () => {
     expect(existsSync(path.join(destDir, "RESTORE_QUARANTINE.json"))).toBe(
       true
     );
-    // The live vault dir is untouched — restore only ever writes to --dest.
     const liveVaultDb = path.join(
       daemonLayoutFor(dataDir).vaultDir,
       vaultId,
@@ -237,11 +226,6 @@ describe("backup-admin", () => {
     ).rejects.toThrow(/not configured/u);
   });
 
-  /** A local provider that declares itself `metered-egress` (#439),
-   *  standing in for a hosted home without a real remote server. The SAME
-   *  instance must back both the `run` and `restore` calls — LocalBackupProvider
-   *  caches its registry per-instance and never re-reads another instance's
-   *  same-process writes. */
   function meteredLocalProvider(dir: string): BackupProvider {
     const real = openLocalBackupProvider({ rootDir: dir });
     return {
@@ -287,7 +271,6 @@ describe("backup-admin", () => {
     );
     const [result] = lines(out) as [{ seq: number; previewsWarm?: unknown }];
     expect(result.seq).toBe(1);
-    // A free-egress local home with no remote tier ⇒ a full restore: no warm pass.
     expect(result.previewsWarm).toBeUndefined();
     expect(existsSync(path.join(destDir, "vault.db"))).toBe(true);
   });
@@ -295,8 +278,6 @@ describe("backup-admin", () => {
   test("a free-egress home never gates the restore (#439 R2)", async () => {
     await capture(() => commandBackup(["run", "--config", configPath], fail));
     const destDir = path.join(dataDir, "restored-free");
-    // No --yes needed: the local provider is free-egress, so the metered gate
-    // stays silent and the restore proceeds.
     const out = await capture(() =>
       commandBackup(
         [
@@ -322,7 +303,6 @@ describe("backup-admin", () => {
       commandBackup(["run", "--config", configPath], fail, { provider })
     );
     const destDir = path.join(dataDir, "restored-metered");
-    // Without --yes: the metered gate refuses BEFORE any restore work.
     await expect(
       capture(() =>
         commandBackup(
@@ -364,9 +344,6 @@ describe("backup-admin", () => {
 
   test("restore refuses a --dest that already holds a vault — restore stays to-side (#439 R3)", async () => {
     await capture(() => commandBackup(["run", "--config", configPath], fail));
-    // Restore NEVER writes in place: a dest that already contains a live vault
-    // (vault.db present) is off-limits, so an accidental in-place PITR rollback
-    // cannot happen. Adopting a fresh restore is a separate, deliberate step.
     const destDir = path.join(dataDir, "occupied-vault");
     await fs.mkdir(destDir, { recursive: true });
     await fs.writeFile(path.join(destDir, "vault.db"), "live-bytes");
@@ -386,7 +363,6 @@ describe("backup-admin", () => {
         )
       )
     ).rejects.toThrow(/not empty|refusing to restore over/u);
-    // The pre-existing vault.db is untouched — nothing was overwritten.
     await expect(
       fs.readFile(path.join(destDir, "vault.db"), "utf8")
     ).resolves.toBe("live-bytes");

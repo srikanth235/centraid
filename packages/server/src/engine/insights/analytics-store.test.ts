@@ -9,9 +9,6 @@ import { makeLedgerDbProvider } from "../stores/gateway-db.js";
 import { ledgerDbFileIn } from "../stores/ledger-db.test-fixtures.js";
 import { AnalyticsStore } from "./analytics-store.js";
 
-/*
- * `run_summary` is a VIEW over the ledger tables, so tests seed through the ledger and assert what the read-only lens derives; there is no write path to test.
- */
 function setup(): { runs: ConversationStore; analytics: AnalyticsStore } {
   const dir = tempDirSync("centraid-analytics-");
   const ledger = makeLedgerDbProvider(ledgerDbFileIn(dir));
@@ -35,7 +32,6 @@ interface SeedOptions {
   finish?: boolean;
 }
 
-/** One automation fire appended to its stable conversation. */
 function seedFire(runs: ConversationStore, opts: SeedOptions = {}): string {
   const runId = opts.runId ?? randomUUID();
   const ref = opts.automationRef ?? "auto.todos/digest";
@@ -90,7 +86,6 @@ describe("AnalyticsStore (read-only lens over the run_summary view)", () => {
     const got = analytics.getSummary(runId);
     expect(got?.kind).toBe("automation");
     expect(got?.automationRef).toBe("auto.todos/digest");
-    // The `<appId>/<id>` handle's app id is the segment before the slash.
     expect(got?.appId).toBe("auto.todos");
     expect(got?.ok).toBe(true);
     expect(got?.totalInputTokens).toBe(100);

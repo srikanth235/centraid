@@ -1,8 +1,3 @@
-/*
- * Provider-policy declaration and inventory/audit collection (#414), kept out
- * of BackupService so the service stays the serialized lifecycle owner.
- */
-
 import { BackupProviderError } from "@centraid/backup";
 import type {
   BackupProvider,
@@ -23,7 +18,6 @@ export type ProviderPolicySyncStatus =
   | "unsupported"
   | "error";
 
-/** Sticky provider-policy state persisted beside the target. */
 export interface ProviderPolicySyncState {
   status: ProviderPolicySyncStatus;
   desired: ProviderPolicyDeclaration;
@@ -40,13 +34,10 @@ export interface CollectedInventory {
   source: InventorySource;
   providerAttested: boolean;
   objects: ProviderInventoryObject[];
-  /** Set when an advertised attestation failed and raw LIST kept the safety pass alive. */
   attestationError?: string;
-  /** Present for an explicit raw-LIST cross-check against provider attestation. */
   crossCheck?: {
     providerOnly: string[];
     bucketOnly: string[];
-    /** Same live key, but the provider's attestation differs from raw LIST metadata. */
     metadataMismatch: string[];
   };
 }
@@ -99,7 +90,6 @@ async function capabilities(
   return provider.capabilities();
 }
 
-/** PUT the desired policy and grade the provider's own response for drift. */
 export async function pushProviderPolicy(opts: {
   provider: BackupProvider;
   targetId: string;
@@ -130,7 +120,6 @@ export async function pushProviderPolicy(opts: {
   }
 }
 
-/** GET the current echo without mutating it; used by the weekly audit. */
 export async function inspectProviderPolicy(opts: {
   provider: BackupProvider;
   targetId: string;
@@ -219,13 +208,6 @@ function normalizedObjectHash(value: string): string {
   return value.trim().replace(/^"|"$/gu, "").toLowerCase();
 }
 
-/**
- * A key-only comparison can bless a provider attestation that names the right
- * object but reports stale/corrupt bytes. Raw LIST is the independent source:
- * size must match and, when both surfaces expose an ETag/hash, so must that
- * identity. Missing hashes do not manufacture drift; the exact-byte verifier
- * remains the authority for stores that cannot expose one through LIST.
- */
 function metadataMismatches(
   reported: Map<string, ProviderInventoryObject>,
   raw: Map<string, ProviderInventoryObject>
@@ -248,11 +230,6 @@ function metadataMismatches(
   return mismatches.sort();
 }
 
-/**
- * Scheduled mode prefers provider attestation and falls back to a raw read
- * grant. Explicit bucket mode always LISTs raw objects and, when supported,
- * cross-checks the provider's attestation in the same run.
- */
 export async function collectInventory(opts: {
   provider: BackupProvider;
   targetId: string;
@@ -328,7 +305,6 @@ export async function collectInventory(opts: {
   };
 }
 
-/** Collect the append-only audit feed, retaining only a bounded UI tail. */
 export async function collectAudit(
   provider: BackupProvider,
   targetId: string

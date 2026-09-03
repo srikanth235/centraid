@@ -3,11 +3,6 @@ import http from "node:http";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
-// The Vault Atlas Browse routes (#441): the owner-gated
-// table editor over HTTP. The read/write policy is proven in packages/vault;
-// here we prove the route surface — the picker, keyset rows, column metadata,
-// a journalled insert that comes back on a read, and the dependent-blocked
-// delete returning a 409 with the polymorphic + engine payload.
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import type { VaultPlane } from "../serve/vault-plane.js";
@@ -143,7 +138,6 @@ describe("vault-routes.browse", () => {
        VALUES ('idx','px','url','https://ravi.example',1,?)`
       )
       .run(now);
-    // A polymorphic pointer too, to prove the payload carries BOTH mechanisms.
     plane.db.vault
       .prepare(
         `INSERT INTO core_concept_scheme (scheme_id, uri, title, version) VALUES ('sx','urn:sx','Tags','1')`

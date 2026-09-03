@@ -14,7 +14,6 @@ import type { VaultCall, VaultCallResult } from "./vault-bridge.js";
 const writeJson = (file: string, data: unknown) =>
   fs.writeFile(file, JSON.stringify(data, null, 2), "utf8");
 
-/** An app whose handlers exercise ctx.vault — the second RPC channel. */
 async function makeVaultApp(codeRoot: string, appId: string): Promise<void> {
   const dir = path.join(codeRoot, appId);
   await fs.mkdir(path.join(dir, "actions"), { recursive: true });
@@ -279,11 +278,8 @@ describe("manifest vault block", () => {
       appId: "a",
       manifest: parseManifest(JSON.stringify(base)),
     });
-    // No declared access → no per-app vault block (scopes, read/search)…
     expect(without).not.toContain("### Personal vault");
     expect(without).not.toContain("ctx.vault.read");
-    // …but the external-world doctrine (#308) renders regardless:
-    // "build me something that emails" needs the outbox before scopes exist.
     expect(without).toContain("outbox.stage");
     expect(without).toContain("READ-ONLY");
     expect(without).toContain("{{connection:");

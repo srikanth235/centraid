@@ -3,15 +3,6 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
-/**
- * Harness-turn journey (#496): message → side effect → transcript.
- *
- * Owns `agent-runtime.journey`. Drives the real `runAcpTurn` against
- * `fake-acp-harness.mjs` (same seam as backend tests) so the primary loop is
- * exercised on every default CI run without Electron/Playwright. Desktop
- * copilot UI e2e remains blocked on mock blueprint serving (#470); this
- * integration journey is the product-risk owner until that unblocks.
- */
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { deltas, runFake, types, vaultToolContext } from "./test-fixtures.js";
@@ -31,15 +22,11 @@ describe("journey", () => {
       toolContext: ctx,
     });
 
-    // Session established (resume path available).
     expect(result.sessionId).toBeTruthy();
 
-    // Side effect: vault_sql ran with a real SQL payload via the loopback MCP.
     expect(ctx.calls.length).toBeGreaterThanOrEqual(1);
     expect(ctx.calls[0]?.sql).toBe("SELECT 1");
 
-    // Transcript includes tool lifecycle and a terminal final (vault mode may
-    // start with tool.start before assistant.start — order is not fixed).
     const t = types(events);
     expect(t).toContain("tool.start");
     expect(t).toContain("tool.result");
@@ -55,12 +42,10 @@ describe("journey", () => {
       toolResult && toolResult.type === "tool.result" && toolResult.ok
     ).toBe(true);
 
-    // Assistant text accumulated (fake harness streams in vault mode too).
     const probe = JSON.parse(await fs.readFile(vaultMarker, "utf8")) as {
       callIsError?: boolean | null;
     };
     expect(probe.callIsError).toBe(false);
-    // At least one assistant delta or a non-empty final when the harness speaks.
     const final = events.find((e) => e.type === "final");
     const spoken =
       deltas(events) || (final && final.type === "final" ? final.text : "");

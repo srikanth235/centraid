@@ -1,10 +1,3 @@
-/*
- * `centraid-gateway vault …` — stopped-daemon vault lifecycle maintenance
- * (#289). Create/delete are landlord acts guarded by shell access alone.
- * Mutations hold gateway.db's exclusive lock and refuse while the daemon
- * runs. `--json` (#382) = single line, not NDJSON.
- */
-
 import { GatewayDatabase, GatewayLockError } from "../serve/gateway-db.js";
 import {
   openVaultRegistry,
@@ -64,9 +57,7 @@ export async function commandVault(
   args: string[],
   fail: (msg: string, code?: number) => never
 ): Promise<void> {
-  // Pre-scan `--json`: it governs the whole run incl. arg-parse failures, any flag order.
   const json = args.includes("--json");
-  // Annotation required for TS never-return narrowing on a call-derived const.
   const localFail: Fail = jsonFail(json, fail);
   await runJson(json, fail, async () => {
     const [action, ...rest] = args;
@@ -91,7 +82,6 @@ export async function commandVault(
       }
     }
     const registry = openVaultRegistry({
-      // Protector-less store can't unwrap sealed keys (#568): mounts fail.
       keyStore: daemonKeyStore(layout.keysDir),
       rootDir: layout.vaultDir,
       logger: quietLogger,
@@ -101,7 +91,6 @@ export async function commandVault(
       switch (action) {
         case "list": {
           const vaults = registry.list();
-          // Unmountable vaults vanish from `list()` — surface failedMounts rather than silently fewer vaults (#603).
           const failedMounts = registry.failedMounts();
           if (json) {
             process.stdout.write(

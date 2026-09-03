@@ -3,13 +3,6 @@ import crypto from "node:crypto";
 import { afterAll, describe, expect, test } from "vitest";
 
 import { S3TestServer } from "@centraid/backup/dist/testing/s3-test-server.js";
-/*
- * `VaultPlane`'s blob-sweep scheduling (#367 §C5/§C6/§C9): the
- * failure-backoff decision (pure function, unit tests) plus a real S3-backed
- * integration covering lease-gated reconciliation and post-restart
- * resumability. Uses the same committed `S3TestServer` the backup storage
- * suite (`../backup/storage.integration.test.ts`) does — no mocked fetch.
- */
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { blobUriFor, updateBlobStoreSettings, uuidv7 } from "@centraid/vault";
@@ -53,11 +46,6 @@ describe("vault-plane-blob-sweep", () => {
     return poll();
   }
 
-  /**
-   * Poll `check` across a wall-clock window (poll, not a blind sleep) and report
-   * whether it stayed true for the whole window. The caller owns the assertion so
-   * a failure points at the behaviour under test, not at this helper.
-   */
   async function heldThroughout(
     check: () => boolean,
     holdMs: number
@@ -113,8 +101,6 @@ describe("vault-plane-blob-sweep", () => {
 
     test("many consecutive failures cap at the max backoff window, not unbounded growth", () => {
       const now = Date.now();
-      // 100 failures would be a huge linear window uncapped — assert it's
-      // capped at 30 minutes (BLOB_SWEEP_MAX_BACKOFF_MS), not ~100 minutes.
       const recentEnough = new Date(now - 31 * 60_000).toISOString(); // 31 minutes ago
       expect(
         blobSweepBackoff(
@@ -175,7 +161,6 @@ describe("vault-plane-blob-sweep", () => {
       );
 
       plane.start();
-      // Hold while conflicted across several sweep ticks — the orphan must survive.
       await expect(
         heldThroughout(
           () => server.hasObjectDirect("b", `p/blobs/sha256/${orphanSha}`),
@@ -198,11 +183,6 @@ describe("vault-plane-blob-sweep", () => {
         skipOrphanDelete: () => false,
       });
 
-      // Ingest local bytes but stop BEFORE the sweep clock (25ms) has a chance
-      // to replicate them — proves the backlog survives as on-disk custody
-      // state, not as in-memory sweep progress. A `core_content_item` row is
-      // what makes a sha "live" for `liveBlobShas()` — the sweep's ground
-      // truth for what SHOULD be replicated, not merely what the local CAS holds.
       const bytes = Buffer.from("resumable content");
       const { sha256: sha, byteSize } = plane1.db.blobs.ingestSync(bytes);
       plane1.db.vault
@@ -214,8 +194,6 @@ describe("vault-plane-blob-sweep", () => {
       plane1.stop();
       await expect(makeS3List(server)).resolves.not.toContain(sha);
 
-      // A brand-new VaultPlane instance (simulating a gateway restart) over
-      // the SAME directory: nothing in-process carried over, only the files.
       const plane2 = openPlane(dir, {
         endpoint: server.url,
         skipOrphanDelete: () => false,
@@ -251,12 +229,9 @@ describe("vault-plane-blob-sweep", () => {
         `p/blobs/sha256/${straySha}`,
         Buffer.from("stray")
       );
-      // The gateway (BackupService) supplies retained-snapshot roots; here we
-      // stand in for it directly on the plane.
       plane.snapshotBlobRoots = async () => new Set([pinnedSha]);
 
       plane.start();
-      // The stray orphan must be swept; the pinned root must never be.
       await until(
         () => !server.hasObjectDirect("b", `p/blobs/sha256/${straySha}`),
         3000
@@ -283,14 +258,11 @@ describe("vault-plane-blob-sweep", () => {
         `p/blobs/sha256/${orphanSha}`,
         Buffer.from("orphan")
       );
-      // Reachability cannot be established (e.g. an unreadable manifest) — the
-      // sweep must NOT delete, because it cannot prove the object is unreferenced.
       plane.snapshotBlobRoots = async () => {
         throw new Error("cannot read manifest");
       };
 
       plane.start();
-      // Across several sweep ticks the orphan must persist (fail-safe on throw).
       await expect(
         heldThroughout(
           () => server.hasObjectDirect("b", `p/blobs/sha256/${orphanSha}`),

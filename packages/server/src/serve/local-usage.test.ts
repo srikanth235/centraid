@@ -8,11 +8,6 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { LocalUsageScanner, walkDirBytes } from "./local-usage.js";
 import type { LocalUsageOptions } from "./local-usage.js";
 
-// The component walker (#544). What matters here is that the figures
-// are attributable — a byte lands under exactly one component — and that the
-// cache actually prevents re-walking, because the whole point of the TTL is
-// that a UI polling every minute must not re-read a blob CAS every minute.
-
 const roots: string[] = [];
 
 describe("local-usage", () => {
@@ -83,7 +78,6 @@ describe("local-usage", () => {
       await fs.mkdir(outside, { recursive: true });
       await fs.writeFile(path.join(outside, "huge.bin"), "x".repeat(100_000));
       await fs.symlink(outside, path.join(vaultDir, "code", "link"));
-      // A link into the user's home would otherwise bill their whole disk here.
       expect((await walkDirBytes(path.join(vaultDir, "code"))).bytes).toBe(50);
     });
   });
@@ -97,7 +91,6 @@ describe("local-usage", () => {
       const byComponent = new Map(
         vault.components.map((c) => [c.component, c.bytes])
       );
-      // ONE file (#916): `vault-db` is vault.db + its WAL, ledger band and all.
       expect(byComponent.get("vault-db")).toBe(1500);
       expect(byComponent.get("attachments")).toBe(5000);
       expect(byComponent.get("apps")).toBe(400);
@@ -147,8 +140,6 @@ describe("local-usage", () => {
       await scanner.report();
       expect(walks).toBe(1);
 
-      // Past the TTL the stale report is still served immediately, and the
-      // refresh it kicks lands for the NEXT read.
       clock += 60_001;
       await scanner.report();
       await Promise.resolve();
@@ -185,8 +176,6 @@ describe("local-usage", () => {
 
       fail = true;
       const second = await scanner.report({ force: true });
-      // Blanking a number that was true a moment ago is worse than showing it
-      // with an explanation attached.
       expect(second.totalBytes).toBe(first.totalBytes);
       expect(second.error).toContain("mid-remount");
     });

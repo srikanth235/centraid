@@ -1,10 +1,3 @@
-/*
- * The LOCAL-disk half of the storage surface (#544). GET .../storage/local
- * serves usage + limit evaluation (`?refresh=1` re-walks inline); GET|PUT
- * .../storage/limits manages the owner's warn-only limits. Other paths return
- * `false`; optional deps answer 503 when absent, never 404.
- */
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { LocalUsageScanner } from "../serve/local-usage.js";
@@ -24,9 +17,7 @@ const LOCAL_PATH = "/centraid/_gateway/storage/local";
 const LIMITS_PATH = "/centraid/_gateway/storage/limits";
 
 export interface StorageLocalRouteDeps {
-  /** Local component accounting — absent on a gateway built without it. */
   localUsage?: LocalUsageScanner;
-  /** The owner's disk budget + ledger limit. */
   storageLimits?: StorageLimitsStore;
 }
 
@@ -109,7 +100,6 @@ async function handleLimits(
   }
 }
 
-/** `false` when the path belongs to another storage handler. */
 export async function tryStorageLocalRoutes(
   url: URL,
   req: IncomingMessage,

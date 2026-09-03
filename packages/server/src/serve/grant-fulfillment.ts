@@ -1,9 +1,3 @@
-/*
- * Host seam for the fulfillment engine (#825): the engine must NOT learn which
- * vaults this host mounted. One audience never costs another — a failing grant
- * is that grant's failure. Nothing here retries or promotes `remove_sent`.
- */
-
 import {
   createGrantProjectionMemory,
   fulfillShareGrant,
@@ -27,16 +21,9 @@ import { unrefTimer } from "../lib/unref-timer.js";
 import { raiseShareReceivedNotice } from "./share-notices.js";
 
 export interface GrantFulfillmentHost {
-  /** `undefined` is a fact about this HOST, never about the grant. */
   vaultFor: (vaultId: string) => VaultDb | undefined;
   logger?: { warn: (message: string) => void };
 }
-
-/*
- * Ruling V-delivery: the loop's decision state is derived into HOST MEMORY,
- * keyed by host so it dies with the process, not with a member's data.
- * `delivered_at` (#846) is the one durable fact.
- */
 
 const AUTHORITY_ENTITY = "share.authority";
 
@@ -70,11 +57,6 @@ function buildIndex(origin: VaultDb): GrantSubjectIndex {
   };
 }
 
-/**
- * Rebuilt only when the plane moved: one door writes grants (ruling V-writer)
- * and commits `share.authority`, so a commit not naming it cannot have changed
- * which subjects are granted.
- */
 function indexFor(
   host: GrantFulfillmentHost,
   vaultId: string,
@@ -87,7 +69,6 @@ function indexFor(
     INDEXES.set(host, byVault);
   }
   const cached = byVault.get(vaultId);
-  // No hint is "something changed and nobody said what": rebuild.
   if (cached && touched && !touched.has(AUTHORITY_ENTITY)) return cached;
   const built = buildIndex(origin);
   byVault.set(vaultId, built);
@@ -98,8 +79,6 @@ export type GrantFulfillmentReport =
   | { grantId: string; outcome: "fulfilled"; result: GrantFulfillmentResult }
   | { grantId: string; outcome: "failed"; reason: string };
 
-/** `unmounted` is NOT an empty `reports` list: collapsing them tells an owner
- *  their share reached nobody when nobody looked. */
 export type GrantFulfillmentPass =
   | { origin: "mounted"; reports: readonly GrantFulfillmentReport[] }
   | { origin: "unmounted"; reason: string };
@@ -119,7 +98,6 @@ function unmounted(vaultId: string): { origin: "unmounted"; reason: string } {
   };
 }
 
-/** The audience learns about a share ONCE, at its first arrival (V-notice). */
 function announceFirstDeliveries(
   input: {
     host: GrantFulfillmentHost;
@@ -156,11 +134,6 @@ function announceFirstDeliveries(
   }
 }
 
-/**
- * Every ROSTER CHANGE (V-receipts). `masked` is the member's own refusal inside
- * a circle they granted (V-mask); `departed` is a peer still holding a
- * delivered copy this pass no longer reaches.
- */
 function receiptRosterDrift(
   input: { origin: VaultDb; grantId: string; now: string },
   result: GrantFulfillmentResult
@@ -244,7 +217,6 @@ export function fulfillGrantsForSubject(input: {
   };
 }
 
-/** The ONLY writer of `removed`. */
 export function propagateGrantRemoval(input: {
   host: GrantFulfillmentHost;
   originVaultId: string;
@@ -280,20 +252,12 @@ export function propagateGrantRemoval(input: {
   }
 }
 
-/*
- * A grant is not a snapshot (G-membership): the doorbell names committed ENTITY
- * TYPES, never rows, so a pass covers every live grant SUBJECT — a photo added
- * to a shared album commits the membership row, not the album.
- */
-
 function liveGrantSubjects(
   origin: VaultDb
 ): { subjectType: ShareableItemType; subjectId: string }[] {
   return (
     origin.vault
       .prepare(
-        // Share subjects only: the plane also answers for the member's own
-        // devices and engines (#883), which no audience vault receives.
         `SELECT DISTINCT subject_type, subject_id FROM share_authority
           WHERE revoked_at IS NULL AND decision = 'granted'
             AND principal_kind IN ('person','circle')
@@ -306,8 +270,6 @@ function liveGrantSubjects(
   }));
 }
 
-/** Ruling V-delivery: the loop owns removal, so a revoke is not a
- *  request-path errand. */
 function pendingRemovals(origin: VaultDb): string[] {
   return (
     origin.vault
@@ -323,11 +285,6 @@ function pendingRemovals(origin: VaultDb): string[] {
   ).map((row) => row.authority_id);
 }
 
-/**
- * The delivery loop (ruling V-delivery), failure-isolated by `passOne`. It runs
- * after EVERY commit, so `touched` must make a commit that cannot have moved a
- * granted subject cost NOTHING. Omit it and the loop walks everything.
- */
 export function refreshGrantsAfterCommit(input: {
   host: GrantFulfillmentHost;
   originVaultId: string;
@@ -345,8 +302,6 @@ export function refreshGrantsAfterCommit(input: {
     return { origin: "mounted", reports: [] };
   const reports: GrantFulfillmentReport[] = [];
   for (const subject of index.subjects) {
-    // Per SUBJECT TYPE, not just per plane: a photo commit must not re-walk a
-    // shared document.
     if (!planeMoved && touched && !subjectWokenBy(subject.subjectType, touched))
       continue;
     const pass = fulfillGrantsForSubject({
@@ -358,7 +313,6 @@ export function refreshGrantsAfterCommit(input: {
     });
     if (pass.origin === "mounted") reports.push(...pass.reports);
   }
-  // A revoke commits the plane; removal is carried here, not on the gesture.
   if (planeMoved)
     for (const grantId of pendingRemovals(origin))
       propagateGrantRemoval({
@@ -384,11 +338,6 @@ export interface GrantRefreshDoorbell {
   stop: () => void;
 }
 
-/**
- * First ring passes immediately; the window collapses into one trailing pass.
- * Failures are swallowed: a doorbell that threw would turn a committed vault
- * write into an apparent failure.
- */
 export function createGrantRefreshDoorbell(input: {
   host: GrantFulfillmentHost;
   windowMs?: number;
@@ -434,8 +383,6 @@ export function createGrantRefreshDoorbell(input: {
     ring: (vaultId, touched) => {
       const open = windows.get(vaultId);
       if (open) {
-        // A GRANT WRITE is not churn: making a member gesture wait behind a
-        // burst of content commits reports a sent share as unsent.
         if (touched?.includes(AUTHORITY_ENTITY) === true) {
           pass(vaultId, touched);
           return;

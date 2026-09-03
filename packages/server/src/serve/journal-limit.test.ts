@@ -7,11 +7,6 @@ import {
   decideJournalArchive,
 } from "./journal-limit.js";
 
-// The size-triggered ledger archive (#544). Two properties carry the
-// whole feature: with no limit set the behaviour must be indistinguishable
-// from before, and with one set the window must never reach inside the floor
-// no matter how low the limit or how long it stays exceeded.
-
 const GB = 1024 ** 3;
 
 describe("decideJournalArchive — no limit set", () => {
@@ -59,7 +54,6 @@ describe("decideJournalArchive — over the limit", () => {
   it("narrows one rung per over-limit sweep and stops at the floor", () => {
     const seen: number[] = [];
     let rung = 0;
-    // Ten consecutive over-limit sweeps — far more than the ladder is long.
     for (let i = 0; i < 10; i += 1) {
       const decision = decideJournalArchive({
         journalBytes: 2 * GB,
@@ -73,7 +67,6 @@ describe("decideJournalArchive — over the limit", () => {
     expect(seen.slice(0, JOURNAL_ARCHIVE_WINDOW_LADDER.length)).toStrictEqual([
       ...JOURNAL_ARCHIVE_WINDOW_LADDER,
     ]);
-    // Archival must never eat the window the owner is working in.
     expect(
       seen.every((days) => days >= JOURNAL_ARCHIVE_FLOOR_WINDOW_DAYS)
     ).toBe(true);

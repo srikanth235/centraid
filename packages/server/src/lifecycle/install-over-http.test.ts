@@ -1,13 +1,4 @@
 import crypto from "node:crypto";
-/*
- * Bundled-app install over HTTP (#434). Install registers the
- * app + grants its declared scopes and serves it in place from the shipped
- * @centraid/blueprints package — no code copy, no git. This boots a real
- * git-store gateway and drives that exact wire path: install → listing union
- * → catalog install-state → per-vault rename → uninstall (grants revoked,
- * nothing in git) → reinstall (fresh consent). `tasks` is a real bundled app
- * (kind 'app', 15 declared scopes) so the grants are load-bearing.
- */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -89,8 +80,6 @@ describe("install-over-http scenarios", () => {
   });
 
   test("a fresh vault mounts with EVERY bundled app installed in place (#708)", async () => {
-    // The catalogue is retired: nobody asks for a first-party app, so mount is
-    // what puts it there. No install call runs anywhere in this test.
     const ids = new Set((await listApps()).map((a) => a.id));
     for (const id of [
       "agenda",
@@ -104,14 +93,10 @@ describe("install-over-http scenarios", () => {
     ])
       expect(ids, `${id} installed at mount`).toContain(id);
 
-    // Metadata comes from the shipped blueprint dir (the display name proves
-    // the resolver read the package, not an empty code store), and the app
-    // keeps the blueprint's own id — no suggestCloneIdentityFrom minting.
     const row = (await listApps()).find((a) => a.id === "tasks");
     expect(row!.name).toBe("Tasks");
     expect(row!.kind).toBe("app");
 
-    // Nothing was written to the git code store — no versions exist.
     const versions = await fetch(
       `${handle.url}/centraid/_apps/tasks/git-versions`,
       {
@@ -121,8 +106,6 @@ describe("install-over-http scenarios", () => {
     const vbody = (await versions.json()) as { versions: unknown[] };
     expect(vbody.versions).toHaveLength(0);
 
-    // The declared scopes were granted at mount — being installed IS the
-    // consent, and the Privacy ledger is where it is reviewed and revoked.
     const enrolled = (await vaultApps()).find((a) => a.name === "tasks");
     expect(enrolled).toBeTruthy();
     expect(enrolled!.origin).toBe("installed");
@@ -311,9 +294,6 @@ describe("install-over-http scenarios", () => {
   });
 
   test("a mounted vault can seed its bundled apps — the demo plane reaches the shipped tree", async () => {
-    // The demo route must not scan the git code store (#708): bundled apps
-    // serve in place, so a vault owning every seedable app would answer
-    // `{apps:[]}` and 404 every seed request.
     const listed = (await (
       await fetch(`${handle.url}/centraid/_vault/demo`, { headers: auth() })
     ).json()) as { apps: { appId: string; rows: number; seedable: boolean }[] };
@@ -331,8 +311,6 @@ describe("install-over-http scenarios", () => {
     expect(body.ok).toBe(true);
     expect(body.rows).toBeGreaterThan(0);
 
-    // And it is all reversible in ONE act — which is what makes seeding a
-    // personal vault an offer rather than something done to it.
     const purged = await fetch(`${handle.url}/centraid/_vault/demo`, {
       method: "DELETE",
       headers: auth(),
@@ -355,8 +333,6 @@ describe("install-over-http scenarios", () => {
     expect(body.app.id).toBe("tasks");
     expect(body.app.name).toBe("Tasks");
     expect(body.installed).toBe(true);
-    // Mount got there first — the route reports the existing registration
-    // rather than minting a second one.
     expect(body.alreadyInstalled).toBe(true);
 
     const rows = (await listApps()).filter((a) => a.id === "tasks");
@@ -377,17 +353,11 @@ describe("install-over-http scenarios", () => {
       kind?: string;
       installed?: boolean;
     }[];
-    // Every APP-kind row reads installed on a mounted vault (#708). The flag
-    // survives because it is still the gateway's own answer, and an audience
-    // vault this owner reaches but which has not mounted yet can still
-    // say false — but on the vault you are looking at, it is always true.
     const appRows = rows.filter((t) => (t.kind ?? "app") !== "automation");
     expect(appRows.length).toBeGreaterThan(0);
     for (const row of appRows)
       expect(row.installed, `${row.id} install state`).toBe(true);
 
-    // Uninstalling flips exactly that one row back, so the flag still MEANS
-    // something rather than being a constant the route forgot to compute.
     const del = await fetch(`${handle.url}/centraid/_apps/tasks`, {
       method: "DELETE",
       headers: auth(),
@@ -403,8 +373,6 @@ describe("install-over-http scenarios", () => {
   test("the listing is a union — installed bundled app + code-store app, no duplicates", async () => {
     await install("tasks");
 
-    // Publish a code-store app. Automations are the only code the store takes
-    // (#799): there is no blank-app scaffold.
     const create = await fetch(`${handle.url}/centraid/_automations`, {
       method: "POST",
       headers: jsonAuth(),
@@ -443,7 +411,6 @@ describe("install-over-http scenarios", () => {
       headers: jsonAuth(),
       body: JSON.stringify({ templateId: "tasks", publish: true }),
     });
-    // Clone of a bundled app is rejected (install it instead).
     expect(clone.status).toBe(409);
   });
 
@@ -459,7 +426,6 @@ describe("install-over-http scenarios", () => {
     let row = (await listApps()).find((a) => a.id === "tasks");
     expect(row!.name).toBe("My To-Dos");
 
-    // Clearing (blank) falls back to the manifest name.
     const clear = await fetch(`${handle.url}/centraid/_apps/tasks/meta`, {
       method: "POST",
       headers: jsonAuth(),
@@ -477,7 +443,6 @@ describe("install-over-http scenarios", () => {
       .grants.reduce((n, g) => n + g.scopes.length, 0);
     expect(grantsBefore).toBeGreaterThan(0);
 
-    // Uninstall — DELETE tolerates "nothing in git" and runs the revoke cascade.
     const del = await fetch(`${handle.url}/centraid/_apps/tasks`, {
       method: "DELETE",
       headers: auth(),
@@ -490,7 +455,6 @@ describe("install-over-http scenarios", () => {
     expect(delBody.deleted).toBe(true);
     expect(delBody.codeRemoved).toBe(false); // there was never any code in git
 
-    // Gone from the listing and no longer an active enrollment.
     expect((await listApps()).some((a) => a.id === "tasks")).toBe(false);
     expect((await vaultApps()).some((a) => a.name === "tasks")).toBe(false);
     const afterCat = await fetch(`${handle.url}/centraid/_templates`, {
@@ -502,8 +466,6 @@ describe("install-over-http scenarios", () => {
     }[];
     expect(catRows.find((t) => t.id === "tasks")?.installed).toBe(false);
 
-    // Reinstall — fresh consent: the declared scopes are granted again (the
-    // revoke cascade cleared the tombstones).
     const re = await install("tasks");
     expect(re.status).toBe(200);
     const grantsAfter = (await vaultApps())

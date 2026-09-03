@@ -1,5 +1,3 @@
-// Coerce a host harness's final answer into the shape `ctx.delegate` promised —
-// shared here so hosts can't drift.
 export function coerceDelegateAnswer(text: string, json: unknown): unknown {
   const trimmed = text.trim();
   if (!json) return trimmed;

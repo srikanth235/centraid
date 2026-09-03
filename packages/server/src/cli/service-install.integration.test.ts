@@ -1,16 +1,3 @@
-/*
- * REAL launchd round-trip for `centraid-gateway service` (#351 wave
- * 4). Everything else in this directory tests unit-content generation and
- * `--dry-run` output against a faked $HOME; this test shells out to the
- * ACTUAL `launchctl` on the box.
- *
- * Gated behind `CENTRAID_LAUNCHD_E2E=1` (darwin only, skips otherwise) —
- * it mutates real launchd state under a TEST label
- * (`dev.centraid.gateway.e2e-test`), never the real `dev.centraid.gateway`
- * label a developer's own daemon might be bootstrapped under. The unit it
- * installs runs `/bin/sleep`, not the actual gateway binary.
- */
-
 import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
@@ -55,8 +42,6 @@ describe("service-install", () => {
     const stdoutLog = path.join(work, `${TEST_LABEL}-stdout.log`);
     const stderrLog = path.join(work, `${TEST_LABEL}-stderr.log`);
 
-    // A trivial long-running stand-in — NOT the real gateway — so this
-    // test never boots an actual centraid-gateway process under launchd.
     const spec: ServiceUnitSpec = {
       nodeBin: "/bin/sleep",
       cliEntry: "9999999",
@@ -101,7 +86,7 @@ describe("service-install", () => {
           stdio: "pipe",
         });
       } catch {
-        // already unloaded — fine, uninstall is idempotent
+        // Intentionally empty.
       }
       await fs.rm(plistPath, { force: true });
       await fs.rm(stdoutLog, { force: true });

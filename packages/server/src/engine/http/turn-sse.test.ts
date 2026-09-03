@@ -1,7 +1,3 @@
-/**
- * Pure attachment parsing / lock serialization — no live HTTP or runner.
- */
-
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
@@ -205,8 +201,6 @@ describe("driveTurnOverSse recovery hydration", () => {
       harnessObservation: { kind: "codex", sessionId: "codex-session" },
     });
 
-    // Read the plan DURING the turn: that is when the ladder resolves it, and
-    // before this turn's own rows land in the ledger.
     let codex: TurnResumePlan | undefined;
     const runner: ConversationRunner = {
       async run(input) {
@@ -230,9 +224,6 @@ describe("driveTurnOverSse recovery hydration", () => {
       banner: "test",
     });
 
-    // Resume + hydration are planned PER RUNG now, so the driver hands the
-    // conversation driver a planner instead of one precomputed plan; the codex rung's own
-    // plan is what must carry the seq-zero recovery context.
     expect(codex?.sessionId).toBe("codex-session");
     expect(codex?.hydrationContext).toBeUndefined();
     expect(codex?.recoveryHydrationContext).toMatchObject({ includedTurns: 1 });
@@ -245,10 +236,6 @@ describe("driveTurnOverSse recovery hydration", () => {
   });
 
   it("plans a failover rung against its OWN binding and the full ledger", async () => {
-    // Regression for the review blocker: the ladder rung the harness actually
-    // reaches may be a provider the route never targeted. Planned once against
-    // the primary target, a fallback rung starts with no session id AND no
-    // hydration — the entire conversation silently lost.
     const dir = await tempDir("centraid-turn-perrung-");
     const appsDir = path.join(dir, "apps");
     const appDir = path.join(appsDir, "notes");

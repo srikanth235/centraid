@@ -1,10 +1,3 @@
-/**
- * Enrichment tier enforcement — the decision half. Egress is a property of the
- * HARNESS reaching a provider, never the issuing machine (#567). Lanes are
- * DECLARED; the gate is rank(lane) <= rank(tier); an omitted lane reads as
- * `gateway` — assuming cheaper assumes consent.
- */
-
 import type { EnrichConsentRecord, EnrichEgressClass } from "@centraid/vault";
 
 import { egressWithinCeiling } from "./enrich-resolve.js";
@@ -43,11 +36,9 @@ export interface EnrichGateInput {
   readonly domain: EnrichDomain;
   readonly capability: string;
   readonly lane: EnrichLane;
-  /** undefined is a REFUSAL, never a default. */
   readonly tier: EnrichTier | undefined;
   readonly policy?: ResolvedEnrichPolicy;
   readonly profileEgress?: EnrichEgressClass | undefined;
-  /** LOOKUP NOT GRANT; wiring nothing fails closed; null = never asked. */
   readonly egressConsent?: EnrichEgressConsentLookup;
 }
 
@@ -58,7 +49,6 @@ export type EnrichEgressConsentLookup = (
 export type EnrichGateDecision =
   | {
       readonly allowed: true;
-      /** True under `device`: fire runs, ctx.delegate refused. */
       readonly sealModelTurns: boolean;
       readonly egressConsentNeeded?: EnrichEgressClass;
     }
@@ -76,7 +66,6 @@ export function decideEnrichmentGate(
         `and an unreadable policy is a refusal, not a default.`,
     };
   }
-  // Before the rank check so the refusal names the switch, not a tier.
   const policy = input.policy;
   if (policy && !policy.enabled && input.tier !== "off") {
     return {
@@ -105,7 +94,6 @@ export function decideEnrichmentGate(
   if (!policy)
     return { allowed: true, sealModelTurns: input.tier !== "gateway" };
 
-  // Deeper levels pick engines only within the vault ceiling.
   const egress = input.profileEgress;
   if (egress === undefined) {
     return {
@@ -115,8 +103,6 @@ export function decideEnrichmentGate(
         `"${policy.profileId}", which this gateway does not carry.`,
     };
   }
-  // Ceiling first, then answer: below gateway the tier refuses first; at it,
-  // `provider` defers to the ledger — no standing tier answers for that class.
   const providerOverGatewayCeiling =
     egress === "provider" && policy.egressCeiling === "gateway";
   if (
@@ -132,10 +118,6 @@ export function decideEnrichmentGate(
     };
   }
   if (egress === "provider") {
-    // INDEPENDENT of everything above; on-device/gateway are not asked — the
-    // standing tier IS their recorded answer (pre-#807 rows run with none).
-    // An ON-DEVICE ROW IS A RECORD, NOT A SECOND GATE (#712 C3): enforcing it
-    // binds every device.
     const record = input.egressConsent?.(egress) ?? null;
     if (record === null) {
       return {

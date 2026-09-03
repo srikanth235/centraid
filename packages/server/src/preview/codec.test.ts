@@ -1,8 +1,3 @@
-// Fixtures are synthesized with the SAME libraries the codec decodes with
-// (jpeg-js / pngjs), so these are true round-trips, plus the boundary
-// behaviors the orchestration relies on: no upscaling, and `null` for
-// unsupported / oversize / corrupt inputs (#405).
-
 import jpegJs from "jpeg-js";
 import { PNG } from "pngjs";
 import { describe, expect, test } from "vitest";
@@ -11,7 +6,6 @@ import { createImagePreviewCodec } from "./codec.js";
 
 const codec = createImagePreviewCodec();
 
-/** Synthesized RGBA raster with a deterministic gradient (never flat — a flat image compresses to a handful of bytes and hides size regressions). */
 function raster(width: number, height: number): Buffer {
   const data = Buffer.alloc(width * height * 4);
   for (let y = 0; y < height; y += 1) {
@@ -70,7 +64,6 @@ describe("codec", () => {
       width: out!.width,
       height: out!.height,
     });
-    // A 256 px JPEG is small but not empty — a loose band that catches gross regressions.
     expect(out!.bytes.length).toBeGreaterThan(300);
     expect(out!.bytes.length).toBeLessThan(60_000);
   });
@@ -91,8 +84,6 @@ describe("codec", () => {
   });
 
   test("perceptual hash matches the Photos 9x8 left-brighter dHash contract", async () => {
-    // Each source row encodes a chosen comparison byte, pinning comparison
-    // direction, bit order, row order and the fixed-width lowercase hex form.
     const pattern = [0x00, 0xff, 0xaa, 0x55, 0x80, 0x01, 0xf0, 0x0f];
     await expect(
       codec.perceptualHash(makeDhashPattern(pattern), "image/png")
@@ -103,16 +94,12 @@ describe("codec", () => {
   });
 
   test("thumbhash encodes a known raster to the exact reference value", async () => {
-    // The fixture is what the faithful ThumbHash reference port emits for this
-    // 64×64 gradient — a regression pin on the byte-identical algorithm. 24
-    // hash bytes → 32 unpadded base64 chars, standard alphabet.
     const hash = await codec.thumbhash(makePng(64, 64), "image/png");
     expect(hash).toBe("mOkFFwoywEiCh4eGeFiIV4eE0eBXA4sK");
     expect(Buffer.from(hash!, "base64")).toHaveLength(24);
     expect(
       Buffer.from(hash!, "base64").toString("base64").replace(/=+$/u, "")
     ).toBe(hash);
-    // A landscape source sets the landscape bit — a different, still-valid hash.
     await expect(codec.thumbhash(makePng(96, 48), "image/png")).resolves.toBe(
       "WQkGJIhABeJzh3dziIVPikSx9w"
     );
@@ -124,8 +111,6 @@ describe("codec", () => {
     ).resolves.toBeNull();
   });
 
-  // Generous timeout: pure-JS decode/downscale of a multi-MP source is
-  // hundreds of ms and can stretch under parallel-suite CPU contention.
   test("the medium rung of a large source is meaningfully bigger than the tiny rung", async () => {
     const src = makeJpeg(2600, 1800);
     const tiny = await codec.downscale(src, "image/jpeg", 256);
@@ -142,7 +127,6 @@ describe("codec", () => {
   });
 
   test("an input past the dimension cap returns null, never throws", async () => {
-    // 13000 px is over MAX_INPUT_EDGE — a cheap 13000×1 strip proves the guard fires before any heavy downscale work.
     await expect(
       codec.downscale(makePng(13_000, 1), "image/png", 256)
     ).resolves.toBeNull();

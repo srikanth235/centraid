@@ -1,5 +1,3 @@
-// Tiers, not model ids (hardcoded ids disallowed); adapters resolve natively. codex: neither.
-
 import type { HarnessModel } from "@centraid/server/engine";
 
 import type { HarnessKind } from "../types.js";

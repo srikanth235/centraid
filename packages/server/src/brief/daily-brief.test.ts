@@ -13,7 +13,6 @@ import { buildDailyBrief } from "./daily-brief.js";
 
 const open = [] as ReturnType<typeof openVaultDb>[];
 
-/** The owner's own device — the seat the brief route reads as. */
 function ownerCredential(boot: {
   deviceId: string;
   deviceKey: string;
@@ -117,8 +116,6 @@ describe("daily brief", () => {
     );
     split.run(expense, boot.ownerPartyId, 2000);
     split.run(expense, friend, 2000);
-    // The payer set is what the brief folds (#916, review-A 4.2); a
-    // single-payer expense writes the one degenerate row.
     db.vault
       .prepare(
         `INSERT INTO tally_expense_payer
@@ -193,15 +190,12 @@ describe("daily brief", () => {
       `INSERT INTO tally_expense_split
          (expense_id, party_id, share_minor) VALUES (?, ?, ?)`
     );
-    // Two payers: `paid_by` names only Sid, so a fold that reads it would
-    // score the owner's own 3000 as zero.
     const shared = uuidv7();
     addExpense.run(shared, "Taxi", 4000, friend, now, null);
     addPayer.run(shared, friend, 1000);
     addPayer.run(shared, boot.ownerPartyId, 3000);
     addSplit.run(shared, boot.ownerPartyId, 2000);
     addSplit.run(shared, friend, 2000);
-    // A rupee expense must not be added to a dollar position.
     const foreign = uuidv7();
     addExpense.run(foreign, "Chai", 90_000, boot.ownerPartyId, now, "INR");
     addPayer.run(foreign, boot.ownerPartyId, 90_000);

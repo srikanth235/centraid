@@ -1,7 +1,3 @@
-// Coverage for the session/update → TurnStreamEvent mapper. Drives the pure
-// factory directly with hand-built ACP notifications so every update variant,
-// guard, and accumulation branch is exercised without a live harness.
-
 import type { SessionNotification } from "@agentclientprotocol/sdk";
 import { describe, expect, test } from "vitest";
 
@@ -16,7 +12,6 @@ function harness() {
   return { events, mapper, types };
 }
 
-/** Exercise normalization guards below the SDK boundary with malformed fixtures. */
 function handle(
   mapper: ReturnType<typeof createSessionUpdateMapper>,
   params: unknown
@@ -26,7 +21,6 @@ function handle(
 describe("stream-events suite", () => {
   test("agent_message_chunk emits assistant.start once then deltas, accumulating finalText", () => {
     const { mapper, events, types } = harness();
-    // An empty chunk emits nothing (no start, no delta).
     handle(mapper, {
       update: { sessionUpdate: "agent_message_chunk", content: "" },
     });
@@ -130,9 +124,6 @@ describe("stream-events suite", () => {
   });
 
   test("an harness’s own rawOutput.content survives the renderable-content merge", () => {
-    // The merge must not spread rawOutput and then overwrite `content` with our
-    // renderable projection: that silently destroys the payload the harness
-    // chose to return under that key.
     const { mapper, events } = harness();
     handle(mapper, {
       update: {
@@ -152,11 +143,9 @@ describe("stream-events suite", () => {
     );
     const merged = result?.result as Record<string, unknown>;
     expect(merged.hits).toBe(1);
-    // The renderable projection is what the UI reads…
     expect(merged.content).toStrictEqual([
       { type: "text", text: "found 1 match" },
     ]);
-    // …and the harness's own payload is still there, not overwritten.
     expect(merged.rawOutputContent).toStrictEqual([
       { path: "a.txt", score: 0.9 },
     ]);
@@ -175,7 +164,6 @@ describe("stream-events suite", () => {
         content: "boom",
       },
     });
-    // A second terminal update for the same id must not emit twice.
     handle(mapper, {
       update: {
         sessionUpdate: "tool_call_update",
@@ -370,7 +358,6 @@ describe("stream-events suite", () => {
     });
     expect(mapper.harnessStreamsTool("vault_sql")).toBe(true);
     expect(mapper.harnessStreamsTool("other_tool")).toBe(false);
-    // Once the call closes it no longer counts as "streaming".
     handle(mapper, {
       update: {
         sessionUpdate: "tool_call_update",

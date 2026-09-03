@@ -1,9 +1,3 @@
-/*
- * Measured resource actuals (#528). Binding: proxies only — counts, bytes,
- * wall-clock, OS CPU/RSS, never a modeled watt; counts but never throttles;
- * no timers of its own and no sampling on a hot path.
- */
-
 const HOUR_MS = 60 * 60 * 1000;
 
 export interface ResourceUsageActuals {
@@ -20,7 +14,6 @@ export interface ResourceUsageActuals {
     sweeps: { passes: number; busyMs: number };
     harnessRuns: { runs: number; busyMs: number; cpuSeconds: number | null };
   };
-  /** Null until the first full rolling hour has elapsed. */
   backgroundTimerFiresLastHour: number | null;
 }
 
@@ -33,7 +26,6 @@ export interface ResourceAccountingOptions {
   now?: () => number;
   cpuUsage?: () => { user: number; system: number };
   rss?: () => number;
-  /** Pulled, not pushed: the #351 admission gate must not depend on the gateway. */
   workerPoolStats?: () => WorkerPoolActuals;
 }
 
@@ -42,7 +34,6 @@ interface SubsystemBusy {
   busyMs: number;
 }
 
-/** Every method must stay non-throwing: callers invoke them from detached promises. */
 export class ResourceAccounting {
   private readonly now: () => number;
   private readonly cpuUsage: () => { user: number; system: number };
@@ -97,7 +88,6 @@ export class ResourceAccounting {
     this.sampleRss();
   }
 
-  /** Record on failure too: the host spent the wall-clock either way. */
   recordHarnessRun(info: { durationMs: number }): void {
     this.harnessRuns += 1;
     this.harnessBusyMs += Math.max(0, info.durationMs);
@@ -136,7 +126,6 @@ export class ResourceAccounting {
         harnessRuns: {
           runs: this.harnessRuns,
           busyMs: this.harnessBusyMs,
-          // Stays null: no cheap cross-platform child rusage to measure.
           cpuSeconds: null,
         },
       },

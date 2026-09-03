@@ -1,8 +1,3 @@
-/*
- * Dialing half of the peer plane (#726 P3 d3+d4); transport injected;
- * nothing below knows about iroh.
- */
-
 import { judgePeerHandshake, peerHello } from "@centraid/core/protocol";
 
 import { routeAssertionBytes } from "./peer-route-assertion.js";
@@ -12,12 +7,10 @@ import type { VaultLinksStore } from "./vault-links-store.js";
 export interface LinkTicketPayload {
   v: 1;
   kind: "centraid-link";
-  /** The showing side's vault and its CURRENT identity key. */
   vaultId: string;
   vaultPublicKey: string;
-  /** iroh EndpointTicket — address data, never identity. */ endpointTicket: string;
+  endpointTicket: string;
   ticketId: string;
-  /** One-time secret, stored only hashed. */
   secret: string;
 }
 
@@ -28,13 +21,11 @@ export type PeerRequest = (input: {
   body?: unknown;
 }) => Promise<{ status: number; json: unknown }>;
 
-/** Where a dial goes. Address data, never identity (decision 1). */
 export interface PeerDialRoute {
   endpointId: string;
   relayHints: string[];
 }
 
-/** Transport plus EndpointTicket minting — nothing below learns iroh. */
 export interface PeerDial {
   request: PeerRequest;
   endpointTicketFor: (endpointId: string, relayHints: string[]) => string;
@@ -42,7 +33,6 @@ export interface PeerDial {
 
 export type LinkCeremonyResult =
   | { state: "linked"; link: LinkedPeer }
-  /** Unknown, expired, or redeemed — one answer for all three. */
   | { state: "not_found" }
   | { state: "protocol_refused"; detail: string }
   | { state: "bad_request"; detail: string }
@@ -52,7 +42,6 @@ export function encodeLinkTicket(payload: LinkTicketPayload): string {
   return JSON.stringify(payload);
 }
 
-/** Total parse: anything malformed is `undefined`. */
 export function parseLinkTicket(raw: string): LinkTicketPayload | undefined {
   let parsed: unknown;
   try {
@@ -92,18 +81,13 @@ export interface RedeemLinkTicketDeps {
   ticket: LinkTicketPayload;
   links: VaultLinksStore;
   request: PeerRequest;
-  /** What the peer will record about this side. */
   localVault: { vaultId: string; publicKey: string };
   localOwnerPartyId?: string;
-  /** This side's dial route, so the peer can reach back. */
   localRoute: { endpointId: string; relayHints: string[] };
   localLabel: string;
   permissions?: Record<string, unknown>;
 }
 
-/**
- * Local row is written ONLY after the peer confirms — no half-link on either side.
- */
 export async function redeemLinkTicket(
   deps: RedeemLinkTicketDeps
 ): Promise<LinkCeremonyResult> {
@@ -143,7 +127,6 @@ export async function redeemLinkTicket(
   if (body.state === "not_found" || response.status === 404) {
     return { state: "not_found" };
   }
-  // The wall is mutual: we judge the far side as it judged us.
   const verdict = judgePeerHandshake(body);
   if (
     verdict.state === "protocol_refused" ||
@@ -166,7 +149,6 @@ export async function redeemLinkTicket(
   if (typeof peerVaultId !== "string" || typeof peerPublicKey !== "string") {
     return { state: "bad_request", detail: "peer answer named no vault" };
   }
-  // Ticket identity disagreement = middleman rewrite.
   if (
     peerVaultId !== deps.ticket.vaultId ||
     peerPublicKey !== deps.ticket.vaultPublicKey
@@ -214,7 +196,6 @@ export async function redeemLinkTicket(
 export interface PushRouteDeps {
   links: VaultLinksStore;
   request: PeerRequest;
-  /** Sign as the LOCAL vault whose route moved. */
   signAsVault: (vaultId: string, bytes: Buffer) => Buffer | undefined;
   route: { vaultId: string; endpointId: string; relayHints: string[] };
   now?: () => number;
@@ -223,14 +204,9 @@ export interface PushRouteDeps {
 
 export interface RoutePushOutcome {
   peerVaultId: string;
-  /** Offline peers verify when they next reach us. */
   state: "accepted" | "stale" | "refused" | "offline";
 }
 
-/**
- * Push a signed route assertion to EVERY live link (decision 4, eager);
- * unreachable now = `offline`, not an error — idempotent and timestamped.
- */
 export async function pushRouteAssertion(
   deps: PushRouteDeps
 ): Promise<RoutePushOutcome[]> {
@@ -245,7 +221,6 @@ export async function pushRouteAssertion(
   if (!signature) return [];
   const body = { ...claim, signature: signature.toString("base64") };
   const targets = deps.links.peersOf(claim.vaultId);
-  // Peers are independent: one unreachable gateway delays no one.
   return Promise.all(
     targets.map(async (link): Promise<RoutePushOutcome> => {
       try {

@@ -1,10 +1,3 @@
-// ThumbHash encoder (#419): `rgbaToThumbHash` is a byte-identical port of
-// Evan Wallace's public-domain reference; only TS ergonomics differ.
-
-/**
- * Encode an RGBA raster (row-major, ≤100×100) to ThumbHash bytes. Throws past
- * 100 — callers downscale first.
- */
 export function rgbaToThumbHash(
   w: number,
   h: number,
@@ -39,7 +32,6 @@ export function rgbaToThumbHash(
   const q: number[] = [];
   const a: number[] = [];
 
-  // RGBA → LPQA, composite atop the average color.
   for (let i = 0, j = 0; i < w * h; i++, j += 4) {
     const alpha = (rgba[j + 3] ?? 0) / 255;
     const r = avg_r * (1 - alpha) + (alpha / 255) * (rgba[j] ?? 0);
@@ -51,7 +43,6 @@ export function rgbaToThumbHash(
     a[i] = alpha;
   }
 
-  // Encode via DCT into DC (constant) and normalized AC (varying) terms.
   const encodeChannel = (
     channel: number[],
     nx: number,
@@ -114,7 +105,6 @@ export function rgbaToThumbHash(
   let ac_index = 0;
   if (hasAlpha) hash.push(round(15 * a_dc) | (round(15 * a_scale) << 4));
 
-  // AC terms, two 4-bit nibbles per byte.
   for (const ac of hasAlpha ? [l_ac, p_ac, q_ac, a_ac] : [l_ac, p_ac, q_ac]) {
     for (const f of ac) {
       const idx = ac_start + (ac_index >> 1);

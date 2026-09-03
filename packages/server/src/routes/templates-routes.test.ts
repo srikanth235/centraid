@@ -1,11 +1,4 @@
 import crypto from "node:crypto";
-/*
- * Template catalog over HTTP (#141). The gateway owns the bundled
- * @centraid/blueprints catalog and serves its display metadata at
- * `GET /centraid/_templates`, so the renderer reads it directly instead of
- * through a desktop IPC. We boot serve() and assert the route returns the
- * stripped metadata rows (no `files`/`source`), behind the bearer check.
- */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -40,7 +33,6 @@ describe("templates-routes scenarios", () => {
   test("GET /centraid/_templates returns stripped bundled metadata behind auth", async () => {
     handle = await serve({ paths: pathsUnder(dataDir) });
 
-    // No bearer → 401.
     const unauth = await fetch(`${handle.url}/centraid/_templates`);
     expect(unauth.status).toBe(401);
 
@@ -53,7 +45,6 @@ describe("templates-routes scenarios", () => {
     expect(templates.length).toBeGreaterThan(0);
 
     for (const t of templates) {
-      // Display metadata present…
       for (const key of [
         "id",
         "name",
@@ -64,17 +55,13 @@ describe("templates-routes scenarios", () => {
       ]) {
         expect(t).toHaveProperty(key);
       }
-      // …and the bulky resolver internals stripped.
       expect(t).not.toHaveProperty("files");
       expect(t).not.toHaveProperty("source");
     }
 
-    // `kind` must cross the wire — the renderer's automation gallery filters on
-    // it, so dropping it left that surface permanently empty (regression guard).
     const automations = templates.filter((t) => t.kind === "automation");
     expect(automations.length).toBeGreaterThan(0);
     for (const t of automations) {
-      // The automation card renders from these display fields.
       for (const key of [
         "emoji",
         "category",
@@ -85,14 +72,10 @@ describe("templates-routes scenarios", () => {
         expect(t).toHaveProperty(key);
       }
     }
-    // Automations declare access on their own manifest, not the app-kind vault
-    // block — so they never carry `vault` here.
     for (const t of automations) {
       expect("vault" in t).toBeFalsy();
     }
 
-    // Issue #434: an app-kind template with a declared vault block carries it,
-    // so the Discover install/consent sheet can render the requested access.
     const photos = templates.find((t) => t.id === "photos");
     expect(photos).toBeDefined();
     const vault = photos?.vault as
@@ -112,9 +95,6 @@ describe("templates-routes scenarios", () => {
     ).toBe(true);
   });
 
-  // The catalog is served from the shipped @centraid/blueprints tree (plus an
-  // optional per-gateway cache dir). Constructing the handler must not reach
-  // the network for anything.
   test("constructing the handler performs no network fetch", async () => {
     const calls: string[] = [];
     const realFetch = globalThis.fetch;
@@ -126,7 +106,6 @@ describe("templates-routes scenarios", () => {
       makeTemplatesRouteHandler({
         cacheDir: path.join(dataDir, "tmpl-cache"),
       });
-      // Allow a microtask turn for any accidental fire-and-forget.
       await Promise.resolve();
       await Promise.resolve();
     } finally {

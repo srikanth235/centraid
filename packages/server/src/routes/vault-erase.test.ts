@@ -307,15 +307,6 @@ describe("vault-erase scenarios", () => {
     expect(keys.export(`${vault.vaultId}.sealkey`)).toBeNull();
   });
 
-  /*
-   * Every erase REFUSAL path (#568).
-   *
-   * #555's safety argument for putting erase in Settings rather than behind a
-   * CLI is typed-name confirmation plus a guaranteed recovery kit. Both guards
-   * are pinned here, so a regression that turns any of these into a 200 fails
-   * rather than shipping green. Erase is irreversible; each of these is the
-   * last thing standing between a mistaken click and a destroyed vault.
-   */
   async function eraseFixture(
     options: { owner?: boolean; custody?: boolean } = {}
   ): Promise<{
@@ -345,8 +336,6 @@ describe("vault-erase scenarios", () => {
     cleanups.push(() => registry.stop());
     const vault = registry.create("Family");
     const enrollments = EnrollmentStore.open(database);
-    // `owner: false` models a device whose owner does NOT own this vault —
-    // the enrollment view then simply has no row for (device, vault).
     enrollments.enroll({
       endpointId: "caller-device",
       vaultIds: options.owner === false ? ["vault-elsewhere"] : [vault.vaultId],
@@ -355,8 +344,6 @@ describe("vault-erase scenarios", () => {
     const recoveryKit = new RecoveryKitStateStore(database);
     const handler = makeVaultRouteHandler(registry, {
       enrollments,
-      // `custody: false` models a host wired without erase custody — the
-      // gateway must refuse rather than half-erase.
       ...(options.custody === false
         ? {}
         : { gatewayDatabase: database, keys, recoveryKit }),
@@ -442,7 +429,6 @@ describe("vault-erase scenarios", () => {
 
   test("erase refuses while the recovery kit is unverified", async () => {
     const fixture = await eraseFixture();
-    // Begun but never verified — the ceremony's own half-open state.
     await fixture.recoveryKit.begin("unverified-fingerprint");
     const response = await fixture.erase({ name: fixture.vaultName });
     expect(response.status).toBe(409);

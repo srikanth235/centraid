@@ -134,7 +134,6 @@ function newestReconciliation(
     : second;
 }
 
-/** Runs share mutable target state and WAL generations. */
 function applyInOrder<T>(
   values: Iterable<T>,
   apply: (value: T, index: number) => void | PromiseLike<void>
@@ -146,7 +145,6 @@ function applyInOrder<T>(
   );
 }
 
-/** A materialized restore is a new replica history, never a continuation. */
 function invalidateRestoredReplica(destDir: string): void {
   const vault = new DatabaseSync(path.join(destDir, "vault.db"));
   try {
@@ -168,7 +166,6 @@ export function buildBackupProvider(
 }
 
 export interface BackupServiceOptions {
-  /** Omitted ⇒ the active provider connection resolves live. */
   config?: BackupConfig;
   cacheDir: string;
   gatewayDatabase?: GatewayDatabase;
@@ -179,32 +176,24 @@ export interface BackupServiceOptions {
   logger: RuntimeLogger;
   now?: () => number;
   assembleEntries?: (opts: AssembleOptions) => Promise<SourceEntry[]>;
-  /** Test seam: no REAL source returns `null` with a base unanchored, so the
-   *  override is the only way to exercise base registration. */
   snapshot?: typeof createSnapshot;
   provider?: BackupProvider;
   storageConnections?: StorageConnectionStore;
   recoveryKit?: RecoveryKitStateStore;
   casReconcile?: typeof runCasOnlyReconciliation;
-  /** The WAL drain is RPO durability and is deliberately NOT gated (#528). */
   shouldDeferPosture?: () => boolean;
-  /** Accounting only, never a gate (#528). */
   onDrainAccounted?: (info: {
     bytesUploaded: number;
     durationMs: number;
   }) => void;
-  /** With `authorizedOwnerId` (#726): skip a vault owned by someone other
-   *  than this host. Either omitted ⇒ no filter. */
   ownerOf?: (vaultId: string) => string | undefined;
   authorizedOwnerId?: () => string | undefined;
 }
 
-/** `previewsWarm` is present only for a lazy restore (#405). */
 export type LazyRestoreResult = RestoreResult & {
   previewsWarm?: PreviewsWarmResult;
 };
 
-/** `restore()` AUTO-resolves one when neither `lazy` nor `full` is given. */
 export interface LazyRestoreOption {
   remote: RemoteTier;
   warmConcurrency?: number;
@@ -215,8 +204,6 @@ export interface HomeDiscovery {
   restoreCostClass: "free-egress" | "metered-egress";
 }
 
-/** The recovery window (#439) is the retention DAILY rung. `undefined` ⇒ the
- *  orphan-grace gate disengages. */
 export function recoveryWindowMs(
   retention: Retention | undefined
 ): number | undefined {
@@ -224,8 +211,6 @@ export function recoveryWindowMs(
   return undefined;
 }
 
-/** Upfront download is unknowable from the registry row, deliberately not
- *  fabricated (#439). */
 export interface RestoreEgressEstimate {
   costClass: "free-egress" | "metered-egress" | undefined;
   seq: number | undefined;
@@ -233,7 +218,6 @@ export interface RestoreEgressEstimate {
   lazyAvailable: boolean;
 }
 
-/** Requires NEWEST-FIRST rows. `createdAt` is epoch SECONDS. */
 function pickSnapshotRow(
   rows: SnapshotRow[],
   opts: { seq?: number; pointInTimeMs?: number }
@@ -278,11 +262,9 @@ export class BackupService {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private walTimer: ReturnType<typeof setTimeout> | undefined;
   private walTimerDueAtMs: number | undefined;
-  /** One drain pass at a time; ticks that land mid-pass are skipped. */
   private draining = false;
   private readonly lastWalDrainAttemptMs = new Map<string, number>();
   private stopped = false;
-  /** Serializes every run: no concurrent backups. */
   private chain: Promise<void> = Promise.resolve();
   private activeRun:
     | {
@@ -356,7 +338,6 @@ export class BackupService {
       : { configured: false };
   }
 
-  /** PROTOCOL.md § Layer 2 — backup. */
   async homeDiscovery(): Promise<HomeDiscovery | undefined> {
     const backend = await this.backend();
     if (!backend) return undefined;
@@ -553,9 +534,6 @@ export class BackupService {
     });
   }
 
-  /** Pins the blob sweep to the retained-snapshot GC roots (#436 §6) so
-   *  orphan-delete cannot evict an object a recovery-to-N needs. THROWS on a
-   *  read failure — the sweep then skips deleting (fail safe). */
   private attachSnapshotRoots(plane: VaultPlane): void {
     const vaultId = plane.boot.vaultId;
     plane.snapshotBlobRoots = async (): Promise<ReadonlySet<string>> => {
@@ -575,7 +553,6 @@ export class BackupService {
         manifestBlobCache: this.manifestBlobCache,
       });
     };
-    // The CAS orphan delete waits N past first-observed-orphaned (#439).
     plane.orphanGraceWindowMs = async (): Promise<number | undefined> => {
       const discovery = await this.homeDiscovery();
       return recoveryWindowMs(discovery?.retention);
@@ -617,8 +594,6 @@ export class BackupService {
       this.logger.warn(`backup: unknown vault "${vaultId}" — skipped`);
       return;
     }
-    // Hosting a vault confers no right to ship its bytes to THIS host's
-    // destination without its owner's say-so (#726) — skip + report, never silent.
     if (this.ownerOf && this.authorizedOwnerId) {
       const owner = this.ownerOf(vaultId);
       const authorized = this.authorizedOwnerId();
@@ -668,15 +643,12 @@ export class BackupService {
         label,
         generation: 1,
         providerRef: backend.providerRef,
-        // Health needs an honest fresh-target grace.
         firstBackupAt: new Date(this.now()).toISOString(),
       };
       createdTarget = true;
       state.targets[vaultId] = target;
       await saveBackupState(this.gatewayDatabase, state);
     }
-    // Pin the sweep the moment a target exists (#436 §6), before the first
-    // snapshot lands: no orphan-delete may race the reachability set.
     this.attachSnapshotRoots(plane);
     const desiredPolicy = providerPolicyFor(readBackupPolicy(plane.db.vault));
     if (
@@ -694,9 +666,6 @@ export class BackupService {
       await saveBackupState(this.gatewayDatabase, state);
     }
 
-    // Lives HERE, not in the injectable `assembleSourceEntries` seam: a
-    // listing function must not be all that stands between a run and a
-    // checkpoint.
     const shipper = plane.walShipper;
     plane.walTick();
     if (!shipper) {
@@ -711,9 +680,6 @@ export class BackupService {
       );
     }
 
-    // Fold the tally into THIS in-memory `target`, not via
-    // `syncWalForeignCheckpoints` (#411): the register path re-saves `state`
-    // below and would clobber a separately-written counter.
     const shipStatus = shipper.status();
     if (shipStatus.foreignCheckpointCount > 0) {
       target.walForeignCheckpointCount = shipStatus.foreignCheckpointCount;
@@ -724,8 +690,6 @@ export class BackupService {
       }
     }
 
-    // Pin each generation to ONE keyring epoch (#408), AFTER the tick: restore
-    // derives the segment key from the manifest's `keyEpoch`.
     if (shipper) {
       const pins = (target.walGenerationEpochs ??= {});
       const base = shipper.currentBase();
@@ -738,8 +702,6 @@ export class BackupService {
         const fresh = shipper.currentBase();
         const unrolled = fresh?.generation === base.generation;
         if (unrolled) {
-          // Busy checkpoint ⇒ an OLD generation is still live; re-pinning it
-          // would seal its segments under a key its manifest doesn't name.
           throw new Error(
             "backup: the key-epoch rotation roll did not complete (busy checkpoint) — retrying later"
           );
@@ -752,13 +714,10 @@ export class BackupService {
       await saveBackupState(this.gatewayDatabase, state);
     }
 
-    // Stamped into the manifest as a floor every later verification holds the
-    // store to — the only thing that makes a deleted `wal/tick/` visible.
     const walTipTickMs = shipper
       ? this.confirmedMarkerTip(shipper, target)
       : undefined;
 
-    // PERSISTENT (never wiped): re-bundles only when the refs move.
     const bundleDir = path.join(this.cacheDir, "code-bundle", vaultId);
     try {
       const entries = await this.assembleEntries({
@@ -791,12 +750,6 @@ export class BackupService {
       state.targets[vaultId] = target;
       await saveBackupState(this.gatewayDatabase, state);
       if (shipper) {
-        // WHY `basePending` IS CLEARED ONLY FOR A DEMONSTRABLY ANCHORED
-        // GENERATION. It is what makes the drain keep RETRYING registration;
-        // clearing it for a generation no manifest names stops the retries and
-        // the next prune deletes those segments while every surface reads
-        // green. A NULL `row` registered nothing, so the anchor is the previous
-        // manifest — READ, never assumed from another package's predicate.
         const dbEntries = entries.filter(
           (e): e is SourceEntry & { walGeneration: string } =>
             e.kind === "db" && e.walGeneration !== undefined
@@ -809,9 +762,6 @@ export class BackupService {
               keyring,
               vaultId
             );
-        // Pin every manifest-named generation NOW: deferred to the next drain
-        // it could land after an offline rotation and seal its segments under a
-        // different epoch than the manifest — unreadable.
         target.walGenerationEpochs ??= {};
         let pinsDirty = false;
         for (const entry of dbEntries) {
@@ -850,7 +800,6 @@ export class BackupService {
             }
           }
           if (target.walMarkerTips) {
-            // A tip belongs to one generation and dies with it.
             for (const generation of Object.keys(target.walMarkerTips)) {
               if (!pruned.keptGenerations.has(generation))
                 delete target.walMarkerTips[generation];
@@ -877,8 +826,6 @@ export class BackupService {
         error instanceof BackupProviderError &&
         error.code === "conflict_generation"
       ) {
-        // PROTOCOL.md § Generation fencing: never auto-retry with a bumped
-        // generation.
         target.fenced = true;
         target.lastError =
           "another machine has taken over this vault (conflict_generation) — backups stopped";
@@ -900,11 +847,8 @@ export class BackupService {
       );
       throw error;
     }
-    // The bundle dir is kept for the next tick's ref-digest check.
   }
 
-  /** Keyed by GENERATION: a generation break must reset the floor, not carry a
-   *  stale one into a stream that cannot satisfy it. */
   private confirmedMarkerTip(
     shipper: NonNullable<VaultPlane["walShipper"]>,
     target: BackupTargetState
@@ -914,9 +858,6 @@ export class BackupService {
     return target.walMarkerTips?.[base.generation];
   }
 
-  /** Sticky signals live in persisted `BackupTargetState` (#411): the probe
-   *  recomputes from state, not a pushed report it would overwrite. Merges only
-   *  these two fields. */
   private async syncWalForeignCheckpoints(
     vaultId: string,
     shipper: NonNullable<VaultPlane["walShipper"]>
@@ -1163,7 +1104,6 @@ export class BackupService {
     return summary;
   }
 
-  /** A REAL restore into a scratch dir plus every check #408 G9 names. */
   async runRestoreVerify(vaultId: string): Promise<void> {
     this.assertRunning();
     return this.enqueue(async () => {
@@ -1224,8 +1164,6 @@ export class BackupService {
       const problems: string[] = [];
       if (report.vault.integrity !== "ok")
         problems.push(`vault: ${report.vault.integrity}`);
-      // A restore whose sealed columns cannot be opened is a placebo
-      // (FORMAT.md, #439): the key must match the stamped fingerprint.
       if (report.sealKey.verdict === "missing") {
         problems.push(
           `seal key absent — this vault has sealed secrets (${report.sealKey.expected}) that a ` +
@@ -1242,8 +1180,6 @@ export class BackupService {
           `vault: ${report.vault.foreignKeyViolations} fk violation(s)`
         );
       }
-      // Depth half of the drill (#842): every structural check above passes on
-      // an empty spine and on rows pointing at unproducible bytes.
       const drill = runRestoreDrill({
         vaultId,
         destDir,
@@ -1258,10 +1194,6 @@ export class BackupService {
         if (damaged.length > 0)
           problems.push(`${damaged.length} damaged wal object(s) skipped`);
         else if (expectedCutMs >= 0 && cutTickMs < expectedCutMs) {
-          // A coherent restore at an earlier instant (G6) may not be quiet:
-          // falling short of the newest proved-or-acknowledged tick means
-          // objects are gone, and when those objects ARE the markers this is
-          // the only check that fires.
           problems.push(
             "the wal stream is not restorable at its newest registered point (tick " +
               `${expectedCutMs}); it could only be cut at ${cutTickMs} — ` +
@@ -1276,8 +1208,6 @@ export class BackupService {
         );
         throw new Error(`restore-verify failed: ${problems.join("; ")}`);
       }
-      // A signal, not proof of a bad restore (rows may be hard-deleted after
-      // their receipt). PERSISTED: the probe would flip a pushed-only degrade.
       const dangling = report.danglingReceipts.length;
       target.lastRestoreVerifiedAt = new Date(this.now()).toISOString();
       delete target.lastRestoreVerifyError;
@@ -1285,7 +1215,6 @@ export class BackupService {
       else delete target.lastRestoreVerifyDangling;
       state.targets[vaultId] = target;
       await saveBackupState(this.gatewayDatabase, state);
-      // Exactly ONE terminal report: an ok pushed after a degrade erases it.
       const ran =
         `vault ${vaultId}: restore-verify (seq ${result.seq}, ` +
         `${report.receiptsChecked} receipts cross-checked` +
@@ -1308,8 +1237,6 @@ export class BackupService {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      // Persist: the probe recomputes from STATE, so an unpersisted failure
-      // shows green.
       target.lastRestoreVerifyError = message;
       state.targets[vaultId] = target;
       await saveBackupState(this.gatewayDatabase, state).catch(() => undefined);
@@ -1325,7 +1252,6 @@ export class BackupService {
     }
   }
 
-  /** `undefined` when unmounted — the drill WARNS, never passes. */
   private liveSpineCensus(vaultId: string): SpineCensus | undefined {
     const plane = this.vaults
       .planesList()
@@ -1338,9 +1264,6 @@ export class BackupService {
   private readonly manifestGenerationCache = new Map<string, string[]>();
   private readonly manifestBlobCache = new Map<string, string[]>();
 
-  /** Every generation an AUTHENTICATED manifest names — the only thing allowed
-   *  to clear a base's `basePending`. Read failures never throw: a base then
-   *  stays PENDING and is retried. */
   private async manifestAnchoredGenerations(
     provider: BackupProvider,
     targetId: string,
@@ -1376,9 +1299,6 @@ export class BackupService {
     return anchored;
   }
 
-  /** Runs ON THE CHAIN: a drain saving a stale snapshot over a
-   *  restore-verify's persisted failure would flip health green over damaged
-   *  backups. */
   async drainWal(vaultIds?: ReadonlySet<string>): Promise<void> {
     if (this.draining || this.stopped) return;
     this.draining = true;
@@ -1413,14 +1333,10 @@ export class BackupService {
       const vaultId = plane.boot.vaultId;
       if (vaultIds && !vaultIds.has(vaultId)) return;
       if (!backend) {
-        // Capture-then-discard: the shipper must keep ticking (its rollovers
-        // bound the WALs), so with no provider its output is deleted.
         discardWalFiles(plane);
         return;
       }
       try {
-        // A holed stream must break to a fresh generation BEFORE its stale
-        // base could be registered: restoring one lands silently on the base.
         if (shipper.streamDiscarded()) {
           const rolled = shipper.rollGeneration(
             "backup-enabled-after-discard",
@@ -1446,7 +1362,6 @@ export class BackupService {
         if (target?.fenced) return;
         const needsRegistration = !target || shipper.pendingBase() !== null;
         if (needsRegistration) {
-          // Already on the chain: call the worker directly, backed off.
           const last = this.lastAutoBackupAttemptMs.get(vaultId) ?? 0;
           if (this.now() - last >= 5 * 60 * 1000) {
             this.lastAutoBackupAttemptMs.set(vaultId, this.now());
@@ -1488,8 +1403,6 @@ export class BackupService {
           durationMs: this.now() - drainStartedAt,
         });
         {
-          // Merge into a FRESH read: saving the opening snapshot could clobber
-          // fields other runs persisted mid-upload.
           const freshState = await loadBackupState(
             this.gatewayDatabase,
             this.sourceInstanceId
@@ -1501,9 +1414,6 @@ export class BackupService {
               ...freshTarget.walGenerationEpochs,
               ...newPins,
             };
-            // MONOTONIC per generation: a late-landing retry of an older
-            // marker must not walk the floor backwards and re-open the window
-            // this closes.
             const tips = (freshTarget.walMarkerTips ??= {});
             for (const [generation, tickMs] of Object.entries(
               result.markerTips
@@ -1536,8 +1446,6 @@ export class BackupService {
       );
     });
     const runScheduled = () => {
-      // A safe loop (#528). The WAL drain stays ungated — RPO durability is
-      // never paused or posture-gated.
       if (
         this.health.shouldDeferBackgroundWork() ||
         this.health.shouldPauseBackgroundWork() ||
@@ -1618,8 +1526,6 @@ export class BackupService {
     unrefTimer(this.walTimer);
   }
 
-  /** AWAITS the chain: provider calls are not cancellable and a run still
-   *  writing state would race the plane close that follows. */
   async stop(): Promise<void> {
     this.stopped = true;
     if (this.timer) {
@@ -1672,7 +1578,6 @@ export class BackupService {
             );
           });
         }
-        // Baselined at first backup so fresh targets get grace (#408 G9).
         const restoreBaseline =
           target?.lastRestoreVerifiedAt ??
           target?.firstBackupAt ??
@@ -1731,7 +1636,6 @@ export class BackupService {
     return state.casReconciliations;
   }
 
-  /** Generic on purpose: #367 reuses this flag for the S3-storage gate. */
   async recoveryKitStatus(): Promise<RecoveryKitState> {
     const status = await this.recoveryKit.status();
     const backend = await this.backend();
@@ -1743,7 +1647,6 @@ export class BackupService {
       : this.recoveryKit.begin(fingerprint);
   }
 
-  /** Deliberately no no-argument acknowledgement path. */
   async verifyRecoveryKit(input: {
     kit: unknown;
     password: string;
@@ -1785,7 +1688,6 @@ export class BackupService {
     return rotated;
   }
 
-  /** Re-registering the newest manifest is a zero-egress fencing write. */
   async fenceVaultForErase(vaultId: string): Promise<void> {
     const backend = await this.backend();
     if (!backend) return;
@@ -1864,13 +1766,8 @@ export class BackupService {
     vaultId: string;
     destDir: string;
     seq?: number;
-    /** Replay WAL segments only up to this instant (#408). */
     pointInTimeMs?: number;
-    /** IGNORED when an explicit `lazy` is supplied (#439). */
     full?: boolean;
-    /** Previews-first (#405): blobs the remote CAS holds are DEFERRED to the
-     *  custody read-through; blobs it LACKS are still materialized (the
-     *  snapshot is their only copy). */
     lazy?: LazyRestoreOption;
   }): Promise<LazyRestoreResult> {
     const backend = await this.backend();
@@ -1881,8 +1778,6 @@ export class BackupService {
     const target = await this.requireTarget(opts.vaultId);
     this.assertTargetBackend(target, backend);
     const keyring = await this.ensureKeyring();
-    // Lazy is the DEFAULT, full is the flag (#439 R2). No remote tier ⇒ the
-    // snapshot is the only copy ⇒ full.
     const lazy =
       opts.lazy ?? (opts.full ? undefined : this.autoLazyTier(opts.vaultId));
     const result = await restoreSnapshot({
@@ -1895,8 +1790,6 @@ export class BackupService {
         ? {}
         : { pointInTimeMs: opts.pointInTimeMs }),
       destDir: opts.destDir,
-      // A live `has(sha)` is durability evidence the registry row cannot carry.
-      // A blob the remote lacks is NOT skipped: the snapshot is its only copy.
       ...(lazy ? { skipBlob: ({ sha }) => lazy.remote.store.has(sha) } : {}),
       log: {
         info: (m) => this.logger.info(m),
@@ -1904,15 +1797,12 @@ export class BackupService {
       },
       current: {
         gatewayVersion: GATEWAY_VERSION,
-        // No live plane to read a PRAGMA off: "current" is this build.
         vaultUserVersion: String(VAULT_MIGRATIONS.length),
         ontologyVersion: ONTOLOGY_VERSION,
       },
     });
-    // Exactly once, before the restored dir can be adopted or lazy-warmed.
     invalidateRestoredReplica(opts.destDir);
     if (!lazy) return result;
-    // The grid is usable only once its tinies are local.
     const restoreCompleteMs = this.now();
     const previewsWarm = await warmPreviewTinies({
       destDir: opts.destDir,
@@ -1930,9 +1820,6 @@ export class BackupService {
     return { ...result, previewsWarm };
   }
 
-  /** Resolved through the plane's cached closure so the gateway never rebuilds
-   *  S3 config. `undefined` (⇒ full restore) when unmounted or without a
-   *  durable tier. */
   private autoLazyTier(vaultId: string): LazyRestoreOption | undefined {
     const remote = this.vaults.get(vaultId)?.db.remote() ?? null;
     return remote ? { remote } : undefined;

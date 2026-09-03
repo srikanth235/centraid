@@ -1,7 +1,5 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
-// The import routes (#290) over a real vault plane: stage a
-// file over HTTP, review its rows, publish, and see the batch in history.
 import http from "node:http";
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -170,8 +168,6 @@ describe("import-routes", () => {
     ).json()) as { batchId: string };
     await fetch(`${source.base}/${staged.batchId}/publish`, { method: "POST" });
 
-    // The seeded vault holds sealed cells, so the bundle needs its custody
-    // kit (#630) — POST carries the passphrase, GET stays the key-free door.
     const exportedResponse = await fetch(`${source.base}/export`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -224,12 +220,6 @@ describe("import-routes", () => {
     const reexported = Buffer.from(await reexportResponse.arrayBuffer());
     expect(reexportResponse.status, reexported.toString("utf8")).toBe(200);
     expect(() => verifyPortableVault(reexported)).not.toThrow();
-    // The canonical artifact round-trips EXCEPT where import is contractually
-    // obliged to change it (#630, rulings PX-reseal / PX-onewrap): a bundle
-    // never installs a foreign key, so every sealed cell is RE-SEALED under
-    // the target's own DEK and `core.vault` carries the target's fingerprint,
-    // not the source's. Asserting the whole hash is equal would be asserting
-    // that the target adopted the source's key.
     const canonicalTables = (bundle: Buffer): Record<string, unknown[]> =>
       (
         JSON.parse(
@@ -253,13 +243,10 @@ describe("import-routes", () => {
         JSON.stringify(before[entity]) !== JSON.stringify(after[entity])
     );
     expect(differing.sort()).toStrictEqual([...RESEALED].sort());
-    // Same rows, same count — a re-seal changes the cell, never the row set.
     for (const entity of RESEALED) {
       expect(after[entity], entity).toHaveLength(before[entity]!.length);
     }
 
-    // And the re-seal is real: the target's own key opens the cell, and what
-    // comes out is the plaintext the source sealed.
     const item = reopened.db.vault
       .prepare(
         `SELECT item_id, password FROM locker_item
@@ -284,8 +271,6 @@ describe("import-routes", () => {
 
   test("a sealed bundle exported without a passphrase is refused, writing nothing", async () => {
     const source = await fixture();
-    // One sealed cell is the whole premise; seeded directly so this pins the
-    // route's refusal rather than any fixture's breadth.
     const itemId = crypto.randomUUID();
     source.plane.db.vault
       .prepare(
@@ -379,7 +364,6 @@ describe("import-routes", () => {
       }),
     });
     expect(response.status, await response.clone().text()).toBe(200);
-    // Re-sealed under the target's own key, so the target opens it.
     expect(target.plane.db.sealKey).toStrictEqual(targetKey);
     const stored = target.plane.db.vault
       .prepare("SELECT password FROM locker_item WHERE item_id = ?")

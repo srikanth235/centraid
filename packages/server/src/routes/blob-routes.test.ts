@@ -1,8 +1,5 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
-// The blob routes (#296) over a real vault plane: stream bytes in,
-// claim them through a command, and serve them back with ETag/Range — the
-// full staged-upload loop an app performs.
 import http from "node:http";
 import { deflateSync } from "node:zlib";
 
@@ -53,7 +50,6 @@ describe("blob-routes", () => {
     });
   });
 
-  /** A structurally valid one-page PDF with a real Flate-compressed content stream. */
   function compressedPdf(text: string): Buffer {
     const stream = deflateSync(
       Buffer.from(`BT /F1 12 Tf 72 720 Td (${text}) Tj ET`)
@@ -163,7 +159,6 @@ describe("blob-routes", () => {
   test("raw upload → claim via core.add_document → serve with ETag/Range/304", async () => {
     const { base, plane } = await fixture();
 
-    // The streaming door: raw bytes, metadata in the query string.
     const staged = (await (
       await fetch(`${base}?filename=pixel.png`, {
         method: "POST",
@@ -174,7 +169,6 @@ describe("blob-routes", () => {
     expect(staged.mediaType).toBe("image/png"); // sniffed from magic bytes
     expect(staged.byteSize).toBe(PNG_BYTES.length);
 
-    // Claim: the command is the write; the journal records a sha, not bytes.
     const outcome = plane.gateway.invoke(plane.ownerCredential, {
       command: "core.add_document",
       input: { staged_sha: staged.sha256, title: "pixel.png" },
@@ -184,7 +178,6 @@ describe("blob-routes", () => {
     const contentId = (outcome as { output: { content_id: string } }).output
       .content_id;
 
-    // Serve: whole body, content-addressed caching headers.
     const whole = await fetch(`${base}/${contentId}`);
     expect(whole.status).toBe(200);
     expect(whole.headers.get("content-type")).toBe("image/png");
@@ -193,13 +186,11 @@ describe("blob-routes", () => {
     expect(whole.headers.get("accept-ranges")).toBe("bytes");
     expect(Buffer.from(await whole.arrayBuffer()).equals(PNG_BYTES)).toBe(true);
 
-    // Conditional revalidation: same ETag → 304, no body.
     const cached = await fetch(`${base}/${contentId}`, {
       headers: { "if-none-match": `"${staged.sha256}"` },
     });
     expect(cached.status).toBe(304);
 
-    // Range: the video-scrubbing contract.
     const range = await fetch(`${base}/${contentId}`, {
       headers: { range: "bytes=8-15" },
     });
@@ -211,13 +202,11 @@ describe("blob-routes", () => {
       Buffer.from(await range.arrayBuffer()).equals(PNG_BYTES.subarray(8, 16))
     ).toBe(true);
 
-    // Unsatisfiable range is a 416, not a 200-with-everything.
     const bad = await fetch(`${base}/${contentId}`, {
       headers: { range: "bytes=9999-" },
     });
     expect(bad.status).toBe(416);
 
-    // Download disposition on demand.
     const dl = await fetch(`${base}/${contentId}?download=1`);
     expect(dl.headers.get("content-disposition")).toBe(
       'attachment; filename="pixel.png"'
@@ -247,8 +236,6 @@ describe("blob-routes", () => {
     const output = (
       outcome as { output: { asset_id: string; content_id: string } }
     ).output;
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({
       ...plane.db.vault
         .prepare(
@@ -348,7 +335,6 @@ describe("blob-routes", () => {
         }),
       })
     ).json()) as { sha256: string };
-    // A client-produced thumb rides beside its parent.
     const thumbBytes = PNG_BYTES;
     const stagedThumb = await fetch(
       `${base}?variant=thumb&variant_of=${staged.sha256}&media_type=image/png`,
@@ -372,7 +358,6 @@ describe("blob-routes", () => {
     expect(Buffer.from(await thumb.arrayBuffer()).equals(thumbBytes)).toBe(
       true
     );
-    // A variant nobody produced is a clean 404.
     const missing = await fetch(`${base}/${contentId}?variant=preview`);
     expect(missing.status).toBe(404);
   });
@@ -514,7 +499,6 @@ describe("blob-routes", () => {
     expect((await nope.json()) as Record<string, unknown>).toStrictEqual({
       error: "not-found",
     });
-    // Empty uploads are refused.
     const empty = await fetch(base, {
       method: "POST",
       headers: { "content-type": "application/octet-stream" },

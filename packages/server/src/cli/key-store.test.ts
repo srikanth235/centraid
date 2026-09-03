@@ -10,12 +10,6 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { daemonKeyStore, headlessCredentialFile } from "./key-store.js";
 
-/**
- * The KeyStore reaches for exactly one `spawnSync` overload — utf8-encoded, with
- * an explicit argv array (`systemd-creds decrypt` / `security find-generic-password`).
- * `vi.fn` cannot carry an overload set, so the mock is typed to that one call
- * shape and cast back to the module's overloaded export at the mock boundary.
- */
 type SpawnSyncUtf8 = (
   command: string,
   args: readonly string[],
@@ -30,7 +24,6 @@ vi.mock(import("node:child_process"), () => ({
   spawnSync: mocked.spawnSync as unknown as typeof TypeImport_1u70gh7.spawnSync,
 }));
 
-/** A complete `SpawnSyncReturns<string>` so the mock answers exactly what the real call would. */
 function spawnResult(over: {
   status: number;
   stdout?: string;

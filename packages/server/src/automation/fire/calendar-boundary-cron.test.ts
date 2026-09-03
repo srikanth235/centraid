@@ -1,10 +1,3 @@
-/*
- * CALENDAR-BOUNDARY injection against the cron matcher and cursor (#842): the
- * month, year and leap-second seams, where the failure is an off-by-one that
- * hides behind every other minute. Every assertion names an explicit IANA zone,
- * so none of it turns on the runner's own TZ.
- */
-
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { AutomationTriggerCursor } from "@centraid/server/engine";
@@ -19,8 +12,6 @@ const DAY = 1_440 * MINUTE;
 
 const ZONE = "Etc/UTC";
 
-/** Longer spans are tiled; a `(from, to]` boundary that dropped an instant
- *  changes every count here. */
 const TILE_MS = 20 * DAY;
 
 function tileDueInstants(
@@ -56,7 +47,6 @@ function dates(instants: readonly Date[]): string[] {
   return instants.map((instant) => instant.toISOString().slice(0, 10));
 }
 
-/** One probe per day: a day-of-month law is a claim about which DAYS match. */
 function matchingDays(expr: string, year: number, hour: number): string[] {
   const out: string[] = [];
   const end = Date.UTC(year + 1, 0, 1);
@@ -75,8 +65,6 @@ describe("month-length boundaries", () => {
   });
 
   it("fires a day-31 expression in exactly the seven long months of 2026", () => {
-    // Vixie cron does not clamp: clamping `31` to the month end fires five times a
-    // year on a date nobody asked for.
     expect(matchingDays("0 3 31 * *", 2026, 3)).toStrictEqual([
       "2026-01-31",
       "2026-03-31",
@@ -95,7 +83,6 @@ describe("month-length boundaries", () => {
   });
 
   it("never fires a February 30 expression, in a leap year or a common one", () => {
-    // A clamp here would invent February 29, or worse, March 1.
     for (const year of [2027, 2028, 2100]) {
       expect(matchingDays("0 3 30 2 *", year, 3)).toStrictEqual([]);
     }
@@ -109,8 +96,6 @@ describe("month-length boundaries", () => {
   });
 
   it("delivers every minute of a month exactly once across both its seams", () => {
-    // One due instant per minute of the month, each with a distinct key. February
-    // in both year kinds: its length is the one most likely hard-coded.
     for (const [year, days] of [
       [2028, 29],
       [2027, 28],
@@ -120,7 +105,6 @@ describe("month-length boundaries", () => {
         `${year}-02-01T00:00:00.000Z`,
         `${year}-03-01T00:00:00.000Z`
       );
-      // Half-open, so it carries the month's minutes shifted by one.
       expect(minutes).toHaveLength(days * 1_440);
       const keys = new Set(
         minutes.map((instant) => wallClockMinuteKey(instant, ZONE))
@@ -132,7 +116,6 @@ describe("month-length boundaries", () => {
   });
 
   it("counts a month rollover as an ordinary gap, not a missed year", () => {
-    // The missed count is what the member is shown, so 31 → 1 is one day.
     const result = readCronCursor(
       [{ expr: "0 3 * * *", timeZone: ZONE }],
       cursorAt(Date.parse("2026-01-30T03:00:00.000Z")),
@@ -176,7 +159,6 @@ describe("year boundaries", () => {
   });
 
   it("keeps the weekday sequence unbroken across the year seam", () => {
-    // Re-anchoring on January 1 slips every `* * * <dow>` automation by a day.
     const weekdays = [
       "2026-12-30T12:00:00.000Z",
       "2026-12-31T12:00:00.000Z",
@@ -193,8 +175,6 @@ describe("year boundaries", () => {
   });
 
   it("fires one New Year per zone even when the extreme offsets are 26 hours apart", () => {
-    // +14 and −12 share a wall-clock minute 26 hours apart: a leaked offset would
-    // collapse or duplicate them.
     const east = tileDueInstants(
       "0 0 1 1 *",
       "2026-12-25T00:00:00.000Z",
@@ -219,7 +199,6 @@ describe("year boundaries", () => {
   });
 
   it("reports a year-spanning outage as a bounded gap, never as a phantom run", () => {
-    // The invariant is the direction of the degradation: under-report, never over.
     const to = Date.parse("2027-01-05T03:00:00.000Z");
     const result = readCronCursor(
       [{ expr: "0 3 * * *", timeZone: ZONE }],
@@ -243,14 +222,10 @@ describe("the leap second", () => {
     useFakeClock("2016-12-31T00:00:00.000Z");
   });
 
-  /** POSIX cannot represent 23:59:60, so a host repeats 23:59:59 or smears it:
-   *  either way 00:00 is approached twice. */
   const LEAP_MINUTE = "2016-12-31T23:59:00.000Z";
   const NEXT_MINUTE = "2017-01-01T00:00:00.000Z";
 
   it("gives the leap minute one absolute instant and one wall-clock key", () => {
-    // ECMA-262 rejects :60, so the minute keeps one identity. Stated separately to
-    // tell a wrong model from a wrong cron.
     expect(Number.isNaN(Date.parse("2016-12-31T23:59:60Z"))).toBe(true);
     expect(wallClockMinuteKey(new Date(LEAP_MINUTE), ZONE)).not.toBe(
       wallClockMinuteKey(new Date(NEXT_MINUTE), ZONE)
@@ -278,8 +253,6 @@ describe("the leap second", () => {
   });
 
   it("fires the leap minute once when a smeared clock re-reads it", () => {
-    // A smeared host's wakeups land in the SAME wall minute; only the committed
-    // position refuses the second fire.
     let cursor: AutomationTriggerCursor | undefined = cursorAt(
       Date.parse(LEAP_MINUTE) - MINUTE
     );

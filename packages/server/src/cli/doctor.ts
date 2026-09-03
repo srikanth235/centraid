@@ -1,11 +1,3 @@
-/*
- * `centraid-gateway doctor` — the in-product integrity scrub (#839). One line
- * per finding, nonzero exit when any check errored; exclusive-locks gateway.db
- * and refuses while the daemon runs.
- *
- *   centraid-gateway doctor --data-dir <path> [--vault <id>] [--full] [--json]
- */
-
 import path from "node:path";
 
 import { hasError, runIntegrityScrub } from "../doctor/index.js";
@@ -71,8 +63,6 @@ export async function commandDoctor(args: string[], fail: Fail): Promise<void> {
     if (!parsed.dataDir) localFail("--data-dir is required", 2);
     const layout = daemonLayoutFor(parsed.dataDir);
 
-    // A scrub racing a live writer reports false corruption: hold the
-    // maintenance verbs' exclusive lock, refusing while the daemon runs.
     let gatewayDb: GatewayDatabase;
     try {
       gatewayDb = GatewayDatabase.open(parsed.dataDir, { lock: "exclusive" });
@@ -111,7 +101,6 @@ export async function commandDoctor(args: string[], fail: Fail): Promise<void> {
         full: parsed.full,
       });
 
-      // An unmountable vault is an integrity fault of its own — never report clean.
       const failedMounts = registry.failedMounts();
 
       if (json) {
@@ -142,7 +131,6 @@ export async function commandDoctor(args: string[], fail: Fail): Promise<void> {
       }
 
       if (hasError(findings) || failedMounts.length > 0) {
-        // Clean run that FOUND defects: exit nonzero so a wrapper can gate.
         process.exitCode = 1;
       }
     } catch (error) {

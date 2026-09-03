@@ -1,10 +1,3 @@
-/*
- * The `disk` health component (#351, #521). Status trips on PERCENT FREE **or**
- * an ABSOLUTE FLOOR — absolute-only calls a 32 GiB card with 4 GiB free
- * degraded. statfs alone misses a quota, so a `sharedDiskFullTracker` event
- * forces `error` for the tick after it fires.
- */
-
 import fs from "node:fs";
 import path from "node:path";
 
@@ -36,9 +29,7 @@ export interface DiskHealthOptions {
   rootDir: string;
   vaults: () => VaultDiskEntry[];
   statfs?: (dir: string) => StatfsResult;
-  /** 0 for a missing file — no WAL yet is not an error. */
   fileSize?: (file: string) => number;
-  /** Defaults to `sharedDiskFullTracker`. */
   diskFullTracker?: DiskFullTracker;
 }
 
@@ -49,7 +40,6 @@ export interface DiskFreeEvaluation {
   freePercent: number;
 }
 
-/** Pure, so tests drive the shipped thresholds. */
 export function evaluateDiskFreeStatus(
   freeBytes: number,
   totalBytes: number
@@ -82,7 +72,6 @@ const defaultFileSize = (file: string): number => {
   }
 };
 
-/** The DB files only, never the blob CAS. */
 function vaultDbBytes(dir: string, fileSize: (file: string) => number): number {
   const files = ["vault.db", "vault.db-wal"];
   return files.reduce((sum, name) => sum + fileSize(path.join(dir, name)), 0);
@@ -121,8 +110,6 @@ export function createDiskHealthProbe(options: DiskHealthOptions): HealthProbe {
       ` (${evaluation.freePercent.toFixed(1)}% free)` +
       (perVault.length > 0 ? ` — ${perVault}` : "");
 
-    // Clear only above the absolute error floor: a tiny recovered pocket must
-    // not hide a prior ENOSPC.
     const diskFull = diskFullTracker.current();
     if (evaluation.freeBytes >= DISK_ERROR_BELOW_BYTES) diskFullTracker.clear();
     if (evaluation.status === "error") return { status: "error", detail };

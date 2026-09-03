@@ -1,8 +1,3 @@
-// `deltaCumulativeUsage` is where a turn's money is decided: ACP reports
-// CUMULATIVE session totals, so every branch here is either "book the right
-// delta" or "lose/duplicate spend". The end-to-end stamping lives in
-// backend.model-usage.test.ts; this file pins the arithmetic itself.
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -48,8 +43,6 @@ describe(deltaCumulativeUsage, () => {
   });
 
   it("treats a counter regression as a reset and charges the current value in full", () => {
-    // The harness restarted its session counters behind our back. Subtracting a
-    // larger baseline would book a NEGATIVE delta and credit spend back.
     const d = deltaCumulativeUsage({ inputTokens: 10 }, undefined, {
       inputTokens: 400,
     });
@@ -58,8 +51,6 @@ describe(deltaCumulativeUsage, () => {
   });
 
   it("carries prior baseline fields the harness stopped reporting", () => {
-    // A partial report must not invent a zero delta for the missing field, and
-    // must not drop its baseline — the next full report would then double-book.
     const d = deltaCumulativeUsage({ outputTokens: 90 }, undefined, {
       inputTokens: 40,
       outputTokens: 20,
@@ -90,7 +81,6 @@ describe(deltaCumulativeUsage, () => {
   });
 
   it("charges a changed currency in full instead of subtracting across units", () => {
-    // 0.42 EUR − 0.12 USD is not a number anyone should be billed.
     const d = deltaCumulativeUsage(
       {},
       { amount: 0.42, currency: "EUR" },
@@ -113,8 +103,6 @@ describe(deltaCumulativeUsage, () => {
   });
 
   it("preserves the prior snapshot when the harness reports nothing at all", () => {
-    // Returning no snapshot here would CLEAR the persisted baseline and make
-    // the next turn book the whole session total a second time.
     const d = deltaCumulativeUsage({}, undefined, {
       inputTokens: 40,
       outputTokens: 20,
@@ -195,11 +183,7 @@ describe(buildUsageEvent, () => {
   });
 
   it("does not book a usage row for effort alone", () => {
-    // Effort is a configuration label, not spend. Emitting for it wrote a
-    // zero-token, zero-cost ledger row for every turn a harness reported no
-    // usage at all.
     expect(buildUsageEvent("acp", "m", "high", {}, undefined)).toBeUndefined();
-    // It still rides along whenever there IS usage to book (see above).
     expect(
       buildUsageEvent("acp", "m", "high", { inputTokens: 1 }, undefined)
     ).toMatchObject({

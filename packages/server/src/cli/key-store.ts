@@ -26,15 +26,6 @@ const SYSTEMD_CREDENTIAL_ID = "centraid-keystore";
 const MACOS_KEYCHAIN_SERVICE = "dev.centraid.gateway.keystore";
 const warnedFallbacks = new Set<string>();
 
-/**
- * macOS Keychain account for one data directory's keys (#568).
- *
- * Keyed by `keysDir` the same way `headlessCredentialFile` is: one account
- * name shared by every install would let `service install` for one data dir
- * overwrite (`security add-generic-password -U`) the credential another data
- * dir's keys are wrapped under, leaving every key in that tree unable to
- * unwrap.
- */
 export function keychainAccountFor(
   keysDir: string,
   label = DEFAULT_LAUNCHD_LABEL
@@ -152,7 +143,7 @@ function loadOrCreateFileCredential(file: string): Buffer {
         try {
           unlinkSync(temp);
         } catch {
-          // The winning credential remains authoritative.
+          // Intentionally empty.
         }
       } else {
         throw error;
@@ -169,18 +160,6 @@ function loadOrCreateFileCredential(file: string): Buffer {
   return key;
 }
 
-/**
- * The external 0600 host credential `daemonKeyStore` falls back to, base64,
- * creating it when absent (#568).
- *
- * `service install` uses this instead of minting `randomBytes(32)`: a
- * headless `serve` has already wrapped every key under this credential, so a
- * fresh random key could not decrypt a single one of them — adoption would
- * throw AFTER the poisoned value had been committed to OS custody. Handing
- * the service the credential the keys are ALREADY wrapped under makes the
- * install idempotent and leaves a readable fallback if OS custody is later
- * cleared.
- */
 export function hostCredentialKey(
   keysDir: string,
   env: NodeJS.ProcessEnv = process.env
@@ -198,7 +177,6 @@ function lazyAesProtector(loadKey: () => Buffer): KeyProtector {
   };
 }
 
-/** Build the daemon KeyStore from OS custody or an external 0600 host credential. */
 export function daemonKeyStore(
   keysDir: string,
   options: {

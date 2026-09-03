@@ -1,6 +1,3 @@
-/* Durable half of the share-effect outbox (#750); payloads are parsed,
-   never cast: drifted JSON → undefined and skipped. */
-
 import type { GatewayDatabase } from "./gateway-db.js";
 import { effectIdFor } from "./share-coordinator.js";
 import type { ShareEffect } from "./share-coordinator.js";
@@ -26,11 +23,6 @@ export interface PendingShareEffect {
   effect: ShareEffect;
 }
 
-/**
- * Total parser: typed effect or undefined — one bad row must not stall the
- * drainer. Retired transports (#825) also parse to nothing; those rows are
- * cleared at open by share-effects-retire.ts, so seeing one is a hand edit.
- */
 export function parseShareEffectRow(
   row: ShareEffectRow
 ): ShareEffect | undefined {
@@ -52,7 +44,6 @@ export function parseShareEffectRow(
   return { kind: "deliver-give", edgeId };
 }
 
-/** Enqueue once: the DERIVED primary key makes crash re-enqueues idempotent. */
 export function enqueueShareEffect(
   db: GatewayDatabase,
   effect: ShareEffect,
@@ -107,7 +98,6 @@ export function claimDueShareEffects(
   });
 }
 
-/** Discharged — forward-only; the row stays as evidence it happened. */
 export function completeShareEffect(
   db: GatewayDatabase,
   effectId: string

@@ -1,9 +1,3 @@
-/*
- * Prompt-injection red-team over the agent LOOP (#842). Structural defense, independent of model compliance.
- * (1) out-of-grant read refuses (2) risk/confirm-gated commands PARK (3) egress never WIDENS from content (4) no tool call names an entity outside grant.
- * A breach is a security defect — pin with `test.fails`, do not patch the suite around it. Assert enums / parked queue / egress consent — never ids, timestamps, or ordering (a fake clock would wedge the subprocess turn).
- */
-
 import { describe, expect, test } from "vitest";
 
 import type { Payload, Scenario } from "./harness.js";
@@ -24,7 +18,6 @@ const EXPECTED_KIND = {
   allowed: "allowed",
 } as const;
 
-/** Only invoke+display_name can write a forbidden entity. */
 function forbiddenWriteHappened(scenario: Scenario, payload: Payload): boolean {
   const attempt = payload.attempt;
   if (

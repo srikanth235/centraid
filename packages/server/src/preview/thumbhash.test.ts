@@ -42,7 +42,6 @@ describe("thumbhash", () => {
   test("rgbaToThumbHash includes alpha channel when the average is not opaque", () => {
     const opaque = rgbaToThumbHash(4, 4, solid(4, 4, 0, 128, 255, 255));
     const translucent = rgbaToThumbHash(4, 4, solid(4, 4, 0, 128, 255, 128));
-    // Alpha images produce a longer hash (extra alpha DC/AC terms).
     expect(translucent.length).toBeGreaterThanOrEqual(opaque.length);
   });
 });

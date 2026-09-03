@@ -1,10 +1,3 @@
-// Engine profiles (#807) bind a CAPABILITY to an ENGINE, named once so the
-// policy cascade, derivation stamps and Settings refer to one choice by id.
-//
-// THE BUILT-IN PROFILE IS DERIVED, NEVER STORED: computed from the capability registry on every read, so no migration can let it drift from the shipped engine. Its id repeats across capabilities on purpose — profile identity is (capability, id). EGRESS IS LIKEWISE COMPUTED, never declared by a profile.
-//
-// WHERE THEY LIVE: gateway prefs under `enrich.profile.<id>`, one writer per path (docs/config-ownership.md); the vault stores which profile PRODUCED a value, never the binding.
-
 import type { EnrichEgressClass } from "@centraid/vault";
 import { BUILT_IN_PROFILE } from "@centraid/vault";
 
@@ -26,7 +19,6 @@ export function isBuiltInProfileId(id: string): boolean {
   return id === BUILT_IN_PROFILE;
 }
 
-/** A prefs key suffix AND a durable derivation-stamp value. */
 const PROFILE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/u;
 
 export type EngineProfileEngine =
@@ -44,14 +36,11 @@ export interface EngineProfile {
   readonly label: string;
   readonly capability: string;
   readonly engine: EngineProfileEngine;
-  /** Computed from `engine`, never read from stored input. */
   readonly egress: EnrichEgressClass;
   readonly builtIn: boolean;
-  /** Without it a delegate profile with no shipped variant looks live while the built-in engine runs. */
   readonly delegateCapable: boolean;
 }
 
-/** Absent ⇒ `gateway`: assuming the cheaper lane assumes consent. */
 export type CapabilityLaneResolver = (capability: string) => EnrichLane;
 
 export interface EngineProfileReadOptions {
@@ -62,7 +51,6 @@ export function laneEgress(lane: EnrichLane): EnrichEgressClass {
   return lane === "device" ? "on-device" : "gateway";
 }
 
-/** A property of the harness ROSTER, not a definition. */
 export function delegateEgress(_harness: HarnessKind): EnrichEgressClass {
   return "provider";
 }
@@ -77,7 +65,6 @@ export function engineProfileEgress(
   return laneEgress(lane);
 }
 
-/** Structural refusals, not defaults, so no policy row or hand-edited pref can reach them (#807 Q3). */
 const DELEGATE_REFUSALS: Readonly<Record<string, string>> = {
   faces:
     'The "faces" capability has no delegate profile: face recognition is ' +
@@ -156,7 +143,6 @@ function readConfigPins(value: unknown): Record<string, string> | undefined {
   return pins;
 }
 
-/** Total and SILENT: `validateEngineProfilePatch` is where refusals speak. */
 function toProfile(
   id: string,
   value: unknown,
@@ -218,7 +204,6 @@ export function listEngineProfiles(
   return [...builtInProfiles(options), ...userEngineProfiles(prefs, options)];
 }
 
-/** `capability` disambiguates the built-in, whose id repeats. */
 export function readEngineProfile(
   prefs: Record<string, unknown>,
   id: string,
@@ -240,7 +225,6 @@ export function engineProfilesForCapability(
   );
 }
 
-/** The ONLY writer-side gate, deliberately stricter than the reader: everything the reader would silently drop is refused out loud. */
 export function validateEngineProfilePatch(
   patch: Record<string, unknown>
 ): string | undefined {

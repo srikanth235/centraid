@@ -1,20 +1,3 @@
-/*
- * The vault assistant's shell-level HTTP surface (owner register — the
- * "ask your vault" chat, not any app's chat):
- *
- *   POST /centraid/_vault/assistant/_turn    ← drive one turn (SSE stream)
- *   POST /centraid/_vault/assistant/resolve  ← refs → renderable entity cards
- *
- * Conversation CRUD is NOT here: assistant threads live in the per-vault
- * conversation ledger under the reserved `_assistant` scope, so the existing
- * `/_centraid-conversations/apps/_assistant/sessions…` surface manages them
- * unchanged. The turn rides the shared SSE driver (`driveTurnOverSse`) with
- * the assistant runner: `vault_sql` as the one tool, and a preamble of
- * register + answer format + the ACTIVE vault's live schema/ontology map.
- * Everything executes with the owner-device credential, behind the gateway's
- * host-level auth like the rest of `_vault`.
- */
-
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -50,32 +33,17 @@ export interface AssistantRouteOptions {
   vaults: VaultRegistry;
   conversationStore: ConversationHistoryStore;
   runner: ConversationRunner;
-  /** Per-gateway lock map — assistant turns serialize per conversation. */
   conversationLocks: Map<string, Promise<void>>;
-  /**
-   * Model resolution (prefs plumbing): explicit `model` →
-   * `model.<harnessKind>.<subsystem>` prefs → `model.<harnessKind>.default`
-   * prefs → nothing. Optional so hermetic tests can omit it.
-   */
   resolveModel?: (
     subsystem: ModelSubsystem,
     explicit?: string,
     requestedHarness?: HarnessKind
   ) => Promise<string | undefined>;
-  /**
-   * Fire-and-forget LLM auto-title hook (#420): a cheap-tier one-shot
-   * inference fired once, after the first successful turn of a still-unnamed
-   * thread. Optional so hermetic tests omit it.
-   */
   generateTitle?: (args: {
     conversationId: string;
     userMessage: string;
     assistantText: string;
   }) => void;
-  /**
-   * Per-vault turn-concurrency gate (#420), shared with the per-app `_turn`
-   * route. Optional so hermetic tests omit it (unbounded).
-   */
   limiter?: () => TurnLimiter | undefined;
 }
 
@@ -147,8 +115,6 @@ export function makeAssistantRouteHandler(
           plane.assistantContext()
         );
 
-        // Attachments uploaded ahead of the turn (#190), mirroring the per-app
-        // `_turn` route exactly: the bytes already live in the `_assistant` blob CAS.
         const attachmentRefs: TurnAttachmentRef[] = validateTurnAttachmentRefs(
           opts.conversationStore,
           ASSISTANT_APP_ID,
@@ -217,8 +183,6 @@ export function makeAssistantRouteHandler(
         additionalDirectories = additionalDirectories.filter(
           (directory) => directory !== workspaceDirectory
         );
-        // The selection is per conversation and rarely moves, so compare
-        // first rather than rewriting this row on every turn.
         const selectionUnchanged =
           savedWorkspace?.primaryKind === workspaceKind &&
           savedWorkspace.additionalDirectories.length ===

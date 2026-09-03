@@ -1,16 +1,4 @@
 import crypto from "node:crypto";
-/*
- * Git-store backend integration (#137, per-vault since #280). The
- * gateway constructs a `WorktreeStore` inside the ACTIVE vault's directory,
- * syncs every app on `main` into the registry, and serves handlers +
- * static from the live `main` worktree.
- *
- * We drive `serve()` in-process: seed an app through the vault's own
- * WorktreeStore (open session → write files → publish), re-settle the
- * workspace, then prove the running gateway serves it — static index.html
- * + the three-tool dispatch + the registry list — all reading from the
- * git worktree.
- */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -32,7 +20,6 @@ function pathsUnder(dir: string): GatewayPaths {
   };
 }
 
-/** Seed one app on `main` via a session + publish, through the vault's store. */
 async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
   const session = await store.openSession("seed");
   const appDir = path.join(session.worktreePath, "apps", appId);
@@ -84,13 +71,10 @@ describe("serve-git-store scenarios", () => {
   test("runs an app from the git-store main worktree, not versions/", async () => {
     handle = await serve({ paths: pathsUnder(dataDir) });
 
-    // The ACTIVE vault owns the code store (#280) — seed through it, then
-    // re-settle the workspace so the registry syncs the published app.
     const store = await handle.appsStore();
     await seedApp(store, "gitapp");
     await handle.syncApps();
 
-    // Registry list reflects the app synced from main.
     const list = await fetch(`${handle.url}/centraid/_apps`, {
       headers: { Authorization: `Bearer ${handle.token}` },
     });
@@ -98,8 +82,6 @@ describe("serve-git-store scenarios", () => {
     const apps = (await list.json()) as Array<{ id: string }>;
     expect(apps.some((a) => a.id === "gitapp")).toBeTruthy();
 
-    // App RPC dispatch resolves the query handler from
-    // worktrees/main/<sha>/apps/gitapp/, not from versions/.
     const read = await fetch(`${handle.url}/centraid/gitapp/queries/ping`, {
       method: "POST",
       headers: {

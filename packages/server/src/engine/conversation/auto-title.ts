@@ -1,8 +1,3 @@
-/*
- * LLM auto-titles (#420). Fire-and-forget; the caller passes a TIER token (`fast`), never a model id; tool-less;
- * user-rename-wins (apply only while the stored title is still the exact `deriveTitle` output).
- */
-
 import { unrefTimer } from "../../lib/unref-timer.js";
 import type { TurnStreamEvent } from "./runner.js";
 import { TurnPlane } from "./turn-plane.js";
@@ -21,7 +16,6 @@ export interface GenerateTitleDeps {
   runTurn: RunTurnFn;
   harnessPrefs: HarnessPrefs;
   cwd: string;
-  /** TIER token like `fast`, never a concrete model id. */
   model: string;
   userMessage: string;
   assistantText: string;
@@ -43,7 +37,6 @@ export function cleanTitle(raw: string): string | undefined {
   ) {
     t = t.slice(1, -1).trim();
   }
-  // First line only — a stray explanation never becomes the title.
   const nl = t.indexOf("\n");
   if (nl >= 0) t = t.slice(0, nl).trim();
   t = t
@@ -55,7 +48,6 @@ export function cleanTitle(raw: string): string | undefined {
   return `${t.slice(0, MAX_TITLE_CHARS - 1).trimEnd()}…`;
 }
 
-/** Rejections propagate — the caller owns the fire-and-forget swallow. */
 export async function generateConversationTitle(
   deps: GenerateTitleDeps
 ): Promise<string | undefined> {

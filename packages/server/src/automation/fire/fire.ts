@@ -1,6 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit the fire spine is one per-fire orchestration — liveness, secret preflight (#293), broker preflight (#304) and the onFailure cascade share the run bracket
-// Automation fire spine (#147). The one thing it needs from agent-runtime is
-// the `ctx.delegate` dispatch surface, injected via `openDispatch`.
 
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -41,8 +39,6 @@ import type {
   ResolvedEnrichPolicy,
 } from "./enrich-gate.js";
 
-/** `undefined` = harness-ambient lane, `{ refused }` = the run skips with the
- *  health state already flipped (#304). */
 export type ResolveConnection = (connector: {
   kind: string;
   label: string;
@@ -83,10 +79,7 @@ export interface RunFireOptions {
   runId?: string;
   appsDir: string;
   ledgerDbFile: string;
-  /** Per-app CODE folders (#137); defaults to `appsDir` in the flat layout. */
   codeAppsDir?: string;
-  /** Bound to THAT app's enrolled agent credential, so a cross-app cascade acts
-   *  as its own agent. Absent → `ctx.vault` fails closed. */
   vaultFor?: (
     appId: string,
     automationRef: string
@@ -95,8 +88,6 @@ export interface RunFireOptions {
   onLog?: (level: "info" | "warn" | "error", msg: string) => void;
   harnessKind?: string;
   model?: string;
-  /** False for a failover rung: manifest provider pins belong to the primary
-   *  harness and must not cross the fire boundary. */
   allowManifestProviderPins?: boolean;
   configPins?: Readonly<Record<string, string>>;
   resolveNestedRuntime?: (
@@ -110,16 +101,10 @@ export interface RunFireOptions {
   input?: unknown;
   parentRunId?: string;
   failureDepth?: number;
-  /** Only while advancing a pre-consented harness ladder. */
   deferOnFailure?: boolean | ((outcome: HandlerOutcome) => boolean);
   resolveConnection?: ResolveConnection;
-  /** The privacy seam, off the gateway's OWNER plane and never the fired
-   *  automation's own bridge: a guard must not depend on the grants of the party
-   *  it guards. Absent or throwing REFUSES every `manifest.enrich`. */
   resolveEnrichPolicy?: ResolveEnrichPolicy;
   fetchRetryDelaysMs?: readonly number[];
-  /** The callback must ENQUEUE a fresh fire, never recurse on this stack, so
-   *  each pass gets its own run id, policy check and batch bound. */
   rearm?: (input: {
     automationRef: string;
     completedRunId: string;
@@ -139,9 +124,6 @@ export interface RunRecord {
   delegateCalls: number;
 }
 
-/** An absent block is read as the strict `automation-handler` floor, never "no
- *  sandbox" (#846). A sandboxed handler has no `process.env`, so the runtime-dir
- *  override must be planted here. */
 function sandboxRequest(
   sandbox: { lane: "model-runtime" | "media-transcode" } | undefined,
   automationDir: string
@@ -171,8 +153,6 @@ export async function runFire(
 ): Promise<{ outcome: HandlerOutcome; record: RunRecord }> {
   const onLog = opts.onLog ?? (() => undefined);
 
-  // Code from `codeAppsDir`, data from `appsDir`: they diverge under the
-  // git-store backend (#137).
   const codeAppsDir = opts.codeAppsDir ?? opts.appsDir;
 
   const parsed = parseRef(opts.automationRef);
@@ -210,8 +190,6 @@ export async function runFire(
 
   const skipRun = (
     error: string,
-    /** Only for the enrichment-tier refusal — the one skip the host must
-     *  surface. */
     enrichRefusal?: HandlerOutcome["enrichRefusal"]
   ): { outcome: HandlerOutcome; record: RunRecord } => {
     const endedAt = Date.now();
@@ -241,11 +219,7 @@ export async function runFire(
     };
   };
 
-  // ENRICHMENT TIER GATE — the privacy choke point. The ONE place the tier is
-  // enforced, BEFORE `openDispatch`, so a refused run starts no harness process.
-  // Fail-closed three ways: absent seam, throwing seam, unreadable tier.
   const enrich = row.manifest.enrich;
-  /** Set under the `device` tier: the domain that seals `ctx.delegate`. */
   let sealedDomain: EnrichDomain | undefined;
   let selectedProfileId: string | undefined;
   let selectedEngine: ResolvedEngineBinding | undefined;
@@ -305,17 +279,12 @@ export async function runFire(
       });
     }
     if (decision.sealModelTurns) sealedDomain = enrich.domain;
-    // ONLY on the allowed path: the engine must never decide whether it runs.
     if (policy) {
       selectedProfileId = policy.profileId;
       selectedEngine = engineForProfile?.(policy.profileId);
     }
   }
 
-  // WHICH ENGINE RUNS (#807), from policy rather than a manifest pin:
-  // `delegateStep` DECLARES a variant exists, the resolved profile is the
-  // CHOICE. A handler with no delegate variant is INERT under a delegate
-  // profile, and selection is policy state, never a fire option.
   const declaredDelegateStep = row.manifest.enrich?.delegateStep;
   const profileDelegate =
     selectedEngine?.kind === "delegate" ? selectedEngine : undefined;
@@ -364,8 +333,6 @@ export async function runFire(
       }
     : opts.input;
 
-  // A profile's model is the MEMBER's configuration, so it outranks a manifest
-  // pin. The harness rung is NOT switched here (TODO #807).
   const boundDelegate =
     selectedVariant === "delegate" ? profileDelegate : undefined;
   const effectiveModel =
@@ -384,7 +351,6 @@ export async function runFire(
     onLog,
   });
 
-  // The `device` tier's backstop: sealed shut, never left to good manners.
   const sealed = sealedDomain;
   const delegateDispatcher: DelegateDispatcher = sealed
     ? () => {
@@ -394,8 +360,6 @@ export async function runFire(
       }
     : dispatch.delegateDispatcher;
 
-  // Honest liveness (#290): a paused connection never fires and catches up on
-  // the next healthy run. An unreadable status defers to sync.begin_run.
   if (row.manifest.connector && vaultBridge) {
     const status = await connectionStatus(
       vaultBridge,
@@ -411,7 +375,6 @@ export async function runFire(
     }
   }
 
-  // Every declared secret reveals BEFORE the handler runs (#293).
   const secretRefs = row.manifest.requires.secrets ?? [];
   const secretCache = new Map<string, string>();
   if (row.manifest.connector && secretRefs.length > 0) {
@@ -650,8 +613,6 @@ export async function runFire(
   return { outcome, record };
 }
 
-/** Two ref forms: `locker:<item_id>:<column>`, and `locker:@<alias>:<column>`
- *  for bindings that survive delete+recreate (#293). */
 async function revealSecret(vault: VaultBridge, ref: string): Promise<string> {
   const [scheme, selector, column] = ref.split(":");
   if (scheme !== "locker" || !selector || !column) {
@@ -680,7 +641,6 @@ async function revealSecret(vault: VaultBridge, ref: string): Promise<string> {
   return value;
 }
 
-/** A missing secret item is the same honest-liveness state a wrong login is. */
 async function flipNeedsAuth(
   vault: VaultBridge,
   connector: { kind: string; label: string; connectionId?: string }

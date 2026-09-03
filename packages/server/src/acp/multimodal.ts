@@ -1,9 +1,3 @@
-/*
- * ACP `ContentBlock`s (#190, #479). `ImageContent { data, mimeType }` — NOT
- * Anthropic `source.media_type`. Gated on `initialize`; unaccepted
- * attachments are named in `skipped`.
- */
-
 import { readFileSync } from "node:fs";
 
 import type {
@@ -99,10 +93,6 @@ function looksBinary(text: string): boolean {
   return replacementCount / text.length > 0.01;
 }
 
-/**
- * `undefined` when the harness cannot accept it. Text is never gated. An
- * un-advertised block type is a protocol violation, not a degradation.
- */
 export function acpBlockFor(
   att: { mime: string; dataBase64: string; filename?: string; path?: string },
   caps: PromptCapabilities
@@ -136,7 +126,6 @@ export function acpBlockFor(
     };
   }
 
-  // Arbitrary bytes only fit an embedded resource, which needs `embeddedContext`.
   if (!caps.embeddedContext) return undefined;
   return {
     type: "resource",
@@ -155,7 +144,6 @@ export interface AcpAttachmentBlocks {
   skipped: string[];
 }
 
-/** Never throws: an unreadable blob is skipped rather than failing the turn. */
 export function acpAttachmentBlocks(
   attachments: readonly TurnAttachment[],
   caps: PromptCapabilities

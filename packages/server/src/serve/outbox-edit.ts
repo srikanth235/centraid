@@ -1,8 +1,3 @@
-// Server-side outbox edit support (#308): `outbox.decide` needs the artifact
-// and its wire request to replace TOGETHER, so the gateway rebuilds the request
-// from an edited artifact, per verb. `rawRfc2822` duplicates the gmail-send
-// handler's copy deliberately — mirror any change by hand.
-
 export interface OutboxWireRequest {
   method: string;
   url: string;
@@ -68,8 +63,6 @@ export function rebuilderForVerb(
   return REBUILDERS[verb];
 }
 
-/** No added/removed fields, no changed kinds; the rest must come back
- *  byte-identical. Throws 400-safe messages. */
 export function assertArtifactShapeUnchanged(
   staged: Record<string, unknown>,
   edited: Record<string, unknown>

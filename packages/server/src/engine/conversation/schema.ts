@@ -1,9 +1,3 @@
-/*
- * Conversation ⊃ turn ⊃ item row types (#190). The DDL is the vault's LEDGER
- * BAND (`packages/vault/src/schema/ledger.ts`, #916). The CONVERSATION is the spine — `RunKind` lives on it,
- * never re-stamped per turn — and ordinal 0 is the inbound message.
- */
-
 import type { HarnessUsageSnapshot } from "./turn.js";
 
 export type RunKind = "automation" | "chat" | "build";
@@ -45,9 +39,6 @@ export interface Conversation {
   readonly updatedAt: number;
 }
 
-/** One per harness the conversation has used; `stale` means unusable.
- *  `hydratedThroughSeq` is the last turn that session observed, so A → B → A
- *  resumes A and hydrates only B's delta. */
 export interface ConversationHarnessSession {
   readonly id: string;
   readonly conversationId: string;
@@ -101,7 +92,6 @@ export interface Item {
   readonly itemId: string;
   readonly turnId: string;
   readonly ordinal: number;
-  /** ACP tool calls OVERLAP: correlate on this, never name or ordinal. */
   readonly callId?: string;
   readonly batchId?: number;
   readonly kind: ItemKind;
@@ -137,7 +127,6 @@ export interface Attachment {
   readonly sizeBytes: number;
   readonly source?: string;
   readonly filename?: string;
-  /** Present ⇒ the bytes are NOT in CAS. */
   readonly workspacePath?: string;
   readonly createdAt: number;
 }

@@ -1,5 +1,4 @@
 import { writeFile } from "node:fs/promises";
-// Admission gate (#351): small WorkerAdmission per test, not the production default.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -18,7 +17,6 @@ describe("handler-runner", () => {
   beforeEach(async () => {
     appDir = await tempDir("centraid-worker-admission-");
     handlerFile = path.join(appDir, "slow.js");
-    // Park on `import()` of a gate file, not `fs.access` (#842): the sandbox refuses `node:fs/promises`, and a missing module rejects uncached.
     await writeFile(
       handlerFile,
       `const gate = ${JSON.stringify(pathToFileURL(path.join(appDir, "release.gate.mjs")).href)};
@@ -51,7 +49,6 @@ describe("handler-runner", () => {
       run(admission, seq)
     );
 
-    // 5th refused immediately — causal order, not a wall-clock threshold.
     const admittedPromise = Promise.all([c1!, c2!, c3!, c4!]);
     let admittedSettled = false;
     void admittedPromise.finally(() => {
@@ -71,7 +68,6 @@ describe("handler-runner", () => {
       .toSorted((a, b) => a - b);
     expect(seqs).toStrictEqual([1, 2, 3, 4]);
 
-    // Refused 5th never acquired a slot, so it is not a task (#528).
     const settled = admission.stats();
     expect(settled.inFlight).toBe(0);
     expect(settled.queued).toBe(0);

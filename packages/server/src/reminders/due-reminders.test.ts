@@ -94,7 +94,6 @@ describe("due-reminders", () => {
     ).toStrictEqual([]);
   });
 
-  // #916 review-A 8.2: trash is invisible, not merely un-listed.
   test("a trashed task fires no reminder", () => {
     const outcome = invoke("schedule.add_task", {
       title: "Call the dentist",
@@ -157,8 +156,6 @@ describe("due-reminders", () => {
   });
 
   test("a recurring event's reminder fires on each occurrence", () => {
-    // `start_tz` is what makes this ZONED (#916, ONT-recur): a zoneless event
-    // is a floating wall clock, and the reminder below asserts an instant.
     const outcome = invoke("schedule.propose_event", {
       summary: "Weekly standup",
       dtstart: "2026-07-06T09:00:00.000Z",

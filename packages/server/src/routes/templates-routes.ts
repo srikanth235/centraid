@@ -1,7 +1,3 @@
-// The gateway-owned template catalog (#141). Only display metadata crosses the
-// wire (`files`/`source` stripped); `kind` and the automation display fields
-// ARE sent — the renderer's gallery filters on them.
-
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
@@ -23,7 +19,6 @@ interface TemplateVault {
   scopes: TemplateVaultScope[];
 }
 
-/** Best-effort: an unreadable manifest yields `undefined`, never a failure. */
 async function readTemplateVault(
   t: ResolvedTemplate,
   cacheDir?: string
@@ -62,13 +57,11 @@ async function readTemplateVault(
 }
 
 export interface TemplatesRouteOptions {
-  /** A newer copy under it shadows the bundled template. */
   cacheDir?: string;
 
   installedAppIds?: () => Set<string>;
 }
 
-/** Resolves `true` when it owned the request (`extraHandlers` seam). */
 export function makeTemplatesRouteHandler(
   opts: TemplatesRouteOptions = {}
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {

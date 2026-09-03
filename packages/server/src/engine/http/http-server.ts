@@ -32,12 +32,8 @@ export interface RuntimeHttpServerOptions {
   extraHandlers?: Array<
     (req: IncomingMessage, res: ServerResponse) => Promise<boolean>
   >;
-  /** WITHOUT the bearer check (#304). EXACT match, never a prefix. */
   publicPaths?: readonly string[];
-  /** A `startsWith` match (#96): a prefix bypasses auth for its WHOLE subtree,
-   *  so its handler must enforce its own credential on every request. */
   publicPathPrefixes?: readonly string[];
-  /** REPLACES the shared-token check; comparisons must be timing-safe. */
   authorizeBearer?: (bearer: string) => BearerAuthorization | undefined;
   authorizeRequest?: (req: IncomingMessage) => BearerAuthorization | undefined;
 }
@@ -51,8 +47,6 @@ export interface RuntimeHttpServerHandle {
 const CONVERSATIONS_PREFIX = "/_centraid-conversations";
 const USER_STORE_PREFIX = "/_centraid-user";
 
-/** Server-stamped, never client-supplied: deleted from every request before
- *  auth, so a bearer-holder cannot forge a downstream identity (#376). */
 export const AUTHED_DEVICE_HEADER = "x-centraid-authed-device";
 export const AUTHED_PLANE_HEADER = "x-centraid-authed-plane";
 const WEB_APP_HEADER = "x-centraid-web-app";
@@ -61,8 +55,6 @@ export type BearerAuthorization =
   | { plane: "admin" }
   | { plane: "device"; deviceKey: string };
 
-/** Cookie/session clients must never get `Allow-Origin: <attacker>` with
- *  `Allow-Credentials: true` (#504). Set on EVERY response. */
 function setCorsHeaders(
   req: IncomingMessage,
   res: ServerResponse,
@@ -116,8 +108,6 @@ function resolveAllowedHosts(
   return extra;
 }
 
-/** Written before or instead of any handler, so they cannot reach `sendJson`
- *  and its `nosniff` (#846 P10). `close` is wrong for a 401. */
 function endTransportJson(
   res: ServerResponse,
   status: number,
@@ -131,8 +121,6 @@ function endTransportJson(
   res.end(JSON.stringify(body));
 }
 
-/** Loopback bind, an allowlisted Host header (DNS rebinding refused before
- *  auth or handlers, #504), a bearer unless a public path says otherwise. */
 export async function startRuntimeHttpServer(
   opts: RuntimeHttpServerOptions
 ): Promise<RuntimeHttpServerHandle> {
@@ -183,7 +171,6 @@ export async function startRuntimeHttpServer(
     }
 
     setCorsHeaders(req, res, opts.credentialedCorsOrigins);
-    // Preflight carries no Authorization header: answer it before the gate.
     if ((req.method ?? "").toUpperCase() === "OPTIONS") {
       res.statusCode = 204;
       res.end();
@@ -195,8 +182,6 @@ export async function startRuntimeHttpServer(
       (opts.publicPathPrefixes ?? []).some((prefix) =>
         pathname.startsWith(prefix)
       );
-    // Deleted UNCONDITIONALLY before auth: only the verified branch below may
-    // re-set these (#376).
     delete req.headers[AUTHED_DEVICE_HEADER];
     delete req.headers[AUTHED_PLANE_HEADER];
     delete req.headers[COMPANION_GRANTS_HEADER];
@@ -270,8 +255,6 @@ export async function startRuntimeHttpServer(
     token,
     close: () =>
       new Promise<void>((resolve, reject) => {
-        // `server.close()` waits for EVERY connection and an SSE response
-        // never ends, so idle sockets drop and the rest are forced.
         let force: ReturnType<typeof setTimeout> | undefined = undefined;
         server.close((err) => {
           if (force) clearTimeout(force);

@@ -1,12 +1,3 @@
-/*
- * The production route-assertion wiring end to end (#750 invariant 3),
- * over the same in-process transport the ceremony tests use: a gateway whose
- * EndpointId rotated announces once, and every peer re-discovers it WITHOUT a
- * new link ceremony. Also proves the retry contract (an unheard peer keeps
- * the announcement armed) and the receiving-side invariant (one assertion
- * re-routes every co-hosted link at once, #750 invariants 1–2).
- */
-
 import { describe, expect, test } from "vitest";
 
 import {
@@ -65,15 +56,12 @@ describe("route announcement (#750 invariant 3)", () => {
     };
     await expect(announceLocalRoutes(deps)).resolves.toBe("asserted");
 
-    // Bob re-discovered the moved gateway — same link, new route.
     const onBob = bob.links.peerForVault(alice.vaultId);
     expect(onBob?.route.endpointId).toBe(rotated);
     expect(onBob?.route.relayHints).toStrictEqual(["https://relay.example"]);
     expect(onBob?.peerPublicKey).toBe(alice.publicKey);
     expect(bob.links.list()).toHaveLength(1);
 
-    // The delivered endpoint is pinned, so an unchanged endpoint costs no
-    // dial on the next start/tick.
     expect(lastAssertedEndpoint(alice)).toBe(rotated);
     const dialsAfterFirst = dials;
     await expect(announceLocalRoutes(deps)).resolves.toBe("idle");
@@ -107,13 +95,11 @@ describe("route announcement (#750 invariant 3)", () => {
     ).resolves.toBe("partial");
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatch(/offline/u);
-    // No pin: the endpoint change is still owed to the peer.
     expect(lastAssertedEndpoint(alice)).toBeUndefined();
     expect(bob.links.peerForVault(alice.vaultId)?.route.endpointId).toBe(
       alice.endpointId
     );
 
-    // The retry (next start or sweep tick) delivers and pins.
     await expect(
       announceLocalRoutes({
         ...base,
@@ -131,10 +117,6 @@ describe("route announcement (#750 invariant 3)", () => {
   });
 
   test("two co-hosted links to one peer vault both resolve the new route after ONE announcement", async () => {
-    // The receiving gateway hosts TWO local vaults linked to the SAME remote
-    // vault (the household shape) — its `vault_routes` row for that vault is
-    // singular by construction (#750 invariants 1–2), so the remote's
-    // announcement lands once and every link resolves through it.
     const [x, y] = makeCoHostedSides(
       "announce-host",
       "announce-x",
@@ -165,7 +147,6 @@ describe("route announcement (#750 invariant 3)", () => {
       expect(view?.route.endpointId).toBe(rotated);
       expect(view?.peerPublicKey).toBe(remote.publicKey);
     }
-    // Still exactly one route row on the host — the invariant, structurally.
     const routeRows = x.gatewayDb.db
       .prepare("SELECT count(*) AS n FROM vault_routes WHERE vault_id = ?")
       .get(remote.vaultId) as { n: number };

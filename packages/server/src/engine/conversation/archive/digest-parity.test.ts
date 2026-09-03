@@ -1,10 +1,4 @@
 import { createHash } from "node:crypto";
-// Digest parity (#438 decision 5): the numbers Insights reports must be
-// identical before archive (all live run_summary rows) and after archive+prune
-// (live rows + conversation_digest rollups), driven through the REAL
-// InsightsStore over the same journal handle. `recent` is live-only by design,
-// so this compares the aggregate surfaces the issue names: kpis, bySource,
-// byModel.
 import type { DatabaseSync } from "node:sqlite";
 
 import { describe, expect, it } from "vitest";
@@ -74,8 +68,6 @@ function seedFinishedTurn(
       a.steps,
       a.tools
     );
-  // Two step items so the dominant-model pick is exercised: the model under
-  // test carries the bulk of the tokens; a decoy model carries fewer.
   journal
     .prepare(
       `INSERT INTO items (id, turn_id, ordinal, kind, model, effort, input_tokens, output_tokens, ok, started_at)
@@ -105,9 +97,6 @@ describe("digest parity with pre-archive rollups", () => {
     const journal = openLedgerDb(dbPath);
     const blobSink = new MemoryBlobSink();
 
-    // Two automation threads + one chat thread, all with aged runs. Automation
-    // threads keep their newest turn live (stays in run_summary); chat archives
-    // whole. Cross-model, cross-status, with a retry.
     journal
       .prepare(
         `INSERT INTO conversations (id, kind, user_id, app_id, automation_id, title, created_at, updated_at)
@@ -232,8 +221,6 @@ describe("digest parity with pre-archive rollups", () => {
     });
 
     const insights = new InsightsStore(makeLedgerDbProvider(dbPath));
-    // A window wide enough to include every aged run in BOTH the live and the
-    // digest arms (their span reaches back ~160d).
     const opts = { windowDays: 400 };
     const before = insights.summary(opts);
 
@@ -243,7 +230,6 @@ describe("digest parity with pre-archive rollups", () => {
     );
     expect(r.segmentsWritten).toBeGreaterThan(0);
     expect(r.turnsPruned).toBeGreaterThan(0);
-    // Confirm raw archived rows are actually gone (Insights now leans on digests).
     expect(
       (
         journal.prepare(`SELECT COUNT(*) AS n FROM turns`).get() as {

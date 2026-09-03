@@ -1,12 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit — provider writeback extends
-// the same end-to-end broker/executor harness so auth loss, reconnect, reviewed
-// outbox state, and emitted HTTP can be asserted as one lifecycle (#630).
 import http from "node:http";
 
 import { afterEach, describe, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
-/** The only approved-artifact-to-network path: credentials, host pins, retries, and review. */
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { ConnectionBroker } from "./connection-broker.js";
@@ -43,7 +40,6 @@ describe("outbox-executor", () => {
     return plane;
   }
 
-  /** A recording fetch double for the API host — the executor's fetchImpl. */
   interface FetchDouble {
     impl: typeof fetch;
     calls: Array<{
@@ -84,7 +80,6 @@ describe("outbox-executor", () => {
     };
   }
 
-  /** A fetch double that settles only when the caller's AbortSignal fires. */
   function hangingFetch(): typeof fetch {
     return ((_url: string | URL, init?: RequestInit): Promise<Response> => {
       return new Promise((_resolve, reject) => {
@@ -131,8 +126,6 @@ describe("outbox-executor", () => {
       method: "POST",
       body: '{"raw":"x"}',
     });
-    // Injection happened executor-side: the row still holds the placeholder,
-    // the wire carried the plaintext.
     expect(api.calls[0]?.headers.authorization).toBe(
       "Bearer sk-outbox-test-key"
     );
@@ -148,7 +141,6 @@ describe("outbox-executor", () => {
       }),
       severity: "info",
     });
-    // The drain is receipted through outbox.record_result.
     const receipts = plane.db.audit
       .prepare(
         `SELECT count(*) AS n FROM access_receipt
@@ -352,7 +344,6 @@ describe("outbox-executor", () => {
       "allowed_hosts"
     );
     expect(plane.notices.getBySource("outbox", itemId)).toMatchObject({
-      // D4: the reason rides the headline; the full detail stays in the card.
       headline: expect.stringContaining("failed: "),
       detail: expect.objectContaining({ outcome: "failed", itemId }),
       severity: "high",
@@ -361,7 +352,6 @@ describe("outbox-executor", () => {
 
   test("a 401 gets one forced refresh, then the drain succeeds (oauth2 lane)", async () => {
     const plane = openPlane(await tempDir());
-    // Scriptable token endpoint for the broker's refresh.
     const tokenResponses: Array<Record<string, unknown>> = [
       { access_token: "fresh-token", expires_in: 3600 },
     ];
@@ -435,13 +425,10 @@ describe("outbox-executor", () => {
     await plane.decideOutbox({ itemId, decision: "approve" });
 
     const broker = new ConnectionBroker(() => plane);
-    // A short write timeout so the test doesn't wait out the real 60s default.
     const executor = new OutboxExecutor(broker, silentLogger, hangingFetch(), {
       writeTimeoutMs: 30,
     });
     const report = await executor.drain(plane);
-    // Same disposition as any other network failure (see drainItem's catch):
-    // the item stays approved for a later pass, nothing terminal happens.
     expect(report).toMatchObject({
       approved: 1,
       sent: 0,
@@ -453,7 +440,6 @@ describe("outbox-executor", () => {
 
   test("a credential-less connection defers the item — it survives for the reconnect", async () => {
     const plane = openPlane(await tempDir());
-    // A connection with no credential sidecar (harness-ambient lane).
     plane.db.vault
       .prepare(
         `INSERT INTO sync_connection (connection_id, kind, label, principal, status, trust, created_at)
@@ -479,7 +465,6 @@ describe("outbox-executor", () => {
     configureApiKey(plane);
     const itemId = stageItem(plane);
     await plane.decideOutbox({ itemId, decision: "approve" });
-    // Monday's approval, Thursday's drain: age the decision past the window.
     plane.db.vault
       .prepare("UPDATE outbox_item SET decided_at = ? WHERE item_id = ?")
       .run(new Date(Date.now() - 25 * 3_600_000).toISOString(), itemId);
@@ -491,7 +476,6 @@ describe("outbox-executor", () => {
       failed: 0,
       reparked: 1,
     });
-    // Zero egress; the item waits for a FRESH decision, with the delay named.
     expect(api.calls).toHaveLength(0);
     const row = plane.db.vault
       .prepare(
@@ -510,7 +494,6 @@ describe("outbox-executor", () => {
       detail: expect.objectContaining({ outcome: "reparked", itemId }),
       severity: "warning",
     });
-    // A fresh approval within the window drains normally.
     await plane.decideOutbox({ itemId, decision: "approve" });
     api.respond(200, '{"id":"msg-9"}');
     const second = await executorFor(plane, api).drain(plane);
@@ -537,7 +520,6 @@ describe("outbox-executor", () => {
       )
       .get() as { n: number };
     expect(remaining.n).toBe(1);
-    // The next pass finishes the queue — bounded, never dropped.
     api.respond(200);
     const next = await executorFor(plane, api, { maxItemsPerDrain: 2 }).drain(
       plane
@@ -573,7 +555,6 @@ describe("outbox-executor", () => {
     });
     expect(blocking.parked).toHaveLength(0);
 
-    // needs-auth connections surface with their note.
     plane.gateway.invoke(plane.ownerCredential, {
       command: "sync.set_connection_status",
       input: {
@@ -589,20 +570,14 @@ describe("outbox-executor", () => {
       note: expect.stringContaining("reconnect"),
     });
 
-    // The review feed carries acts with their salience marker, and widens
-    // actorKind / grantId for the Approvals activity surface (#552).
     const feed = plane.reviewFeed(10);
     expect(feed.length).toBeGreaterThan(0);
     expect(feed.every((e) => e.action.startsWith("act "))).toBe(true);
     expect(feed.some((e) => e.risk !== null)).toBe(true);
-    // Owner-staged acts refine to an actor kind (or null only when no
-    // invocation was attached — every staged act here has one).
     expect(
       feed.every((e) => "actorKind" in e && "grantId" in e && "actor" in e)
     ).toBe(true);
 
-    // Explicit Locker fills join the same review-after-the-fact surface with
-    // the normalized origin, but never the revealed secret.
     const added = plane.gateway.invoke(plane.ownerCredential, {
       command: "locker.add_item",
       input: {
@@ -629,8 +604,6 @@ describe("outbox-executor", () => {
         expect.objectContaining({
           objectType: "locker.item",
           context: { kind: "fill", origin: "https://example.test" },
-          // Owner-direct reveals have no agent invocation — actorId null and
-          // refined fields stay null (#552).
           actorId: null,
           actorKind: null,
           actor: null,
@@ -644,7 +617,6 @@ describe("outbox-executor", () => {
   test("review feed surfaces standing outbox grant id and refined actorKind (issue #552)", async () => {
     const plane = openPlane(await tempDir());
     configureApiKey(plane);
-    // Mint a standing grant, then stage under it so auto-approve carries grant_id.
     const stage1 = plane.gateway.invoke(plane.ownerCredential, {
       command: "outbox.stage",
       input: {
@@ -673,7 +645,6 @@ describe("outbox-executor", () => {
       .grant_id;
     expect(grantId).toBeTruthy();
 
-    // Second stage under the standing grant — auto-approved at staging time.
     const stage2 = plane.gateway.invoke(plane.ownerCredential, {
       command: "outbox.stage",
       input: {
@@ -706,10 +677,8 @@ describe("outbox-executor", () => {
     expect(autoAllowed).toMatchObject({
       grantId,
       decision: "allow",
-      // Owner-device stages refine to owner (or null only if table miss).
       actorKind: expect.stringMatching(/owner|app|agent|assistant/u),
     });
-    // Null-actor receipts (no invocation) still shape-correct.
     expect(
       feed
         .filter((entry) => entry.actorId === null)

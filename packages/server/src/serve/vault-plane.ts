@@ -1,13 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit one cohesive plane (mount + both bridge planes + workspace accessors, #280; #282 adds anchorAsOwner, a one-line delegation like its link/unlink siblings); pending split of the bridge executors into a sibling module
-/*
- * The vault plane (duality §12) — the gateway's mount of the owner's vault.
- *
- * The gateway process is the SOLE holder of the vault connection. Apps reach
- * it only through `ctx.vault`, and the running app is resolved to its enrolled
- * `access.app` credential HERE, host-side: no signing key ever crosses into a
- * handler worker. Consent, contracts, receipts and provenance are the vault
- * gateway's own pipeline; this module adds nothing and takes nothing away.
- */
 
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
@@ -149,12 +140,10 @@ import type {
 import { applyRestoreQuarantine } from "./vault-quarantine.js";
 import type { QuarantineStatus } from "./vault-quarantine.js";
 
-/** For a vault with no backup provider (#599). */
 const LOCAL_ORPHAN_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 const BLOB_SWEEP_BACKOFF_STEP_MS = 60_000;
 const BLOB_SWEEP_MAX_BACKOFF_MS = 30 * 60_000;
 
-/** The window runs from the last ATTEMPT, not the last success. */
 export function blobSweepBackoff(
   status: { consecutiveFailures: number; lastAttemptedAt: string | null },
   nowMs: number
@@ -192,8 +181,6 @@ function defaultEnvS3Credentials(): Promise<S3Credentials> {
 
 export interface VaultPlaneOptions {
   dir: string;
-  /** DISPOSABLE cache OUTSIDE the vault tree: safe to wipe, never backed up
-   *  with the sovereign pair. */
   cacheDir?: string;
   logger: RuntimeLogger;
   ownerName?: string;
@@ -204,12 +191,9 @@ export interface VaultPlaneOptions {
   sweepIntervalMs?: number;
   walTickMs?: number;
   enableWalShipper?: boolean;
-  /** Gates the CAPTURE CLOCK only: WAL ownership and the shipper object stay
-   *  unconditional while the process owns the vault. */
   walCaptureConfigured?: () => boolean;
   walShipper?: Partial<Omit<WalShipperOptions, "db" | "log">>;
   skipOrphanDelete?: () => boolean;
-  /** Defaults to the harness-ambient `CENTRAID_S3_*` lane (#296). */
   s3Credentials?: (settings: BlobStoreSettings) => Promise<S3Credentials>;
   previewCodec?: PreviewCodec;
   onProvenanceCommitted?: (
@@ -227,12 +211,8 @@ export interface VaultPlaneOptions {
     bytesReplicated: number;
     durationMs: number;
   }) => void;
-  /** Read fresh EVERY sweep, so a limit change lands without a remount.
-   *  `null` ⇒ time-only cadence. */
   journalLimitBytes?: () => number | null;
   vaultLimitBytes?: () => number | null;
-  /** A TOTAL across both databases, so the host divides one ceiling by the
-   *  mounted-plane count and does no other arithmetic (#659). */
   footprint?: Partial<VaultFootprintBudget>;
 }
 
@@ -283,8 +263,6 @@ export interface ReviewEntry {
   actorId: string | null;
   actorKind: string | null;
   actor: string | null;
-  /** The STANDING grant that auto-allowed this receipt; distinct from
-   *  `access.grant` on the row (#552). */
   grantId: string | null;
   context: { kind: "fill"; origin: string } | null;
 }
@@ -308,12 +286,6 @@ function asVaultCallResult(fn: () => unknown): VaultCallResult {
   }
 }
 
-/**
- * Tombstoned scopes are the owner's standing "no" (#308). `scopeCovers` is the
- * vault package's CANONICAL extent comparison, never a local copy: one
- * definition keeps consent memory and install-grant reconciliation in
- * lockstep (#541).
- */
 function missingScopes(
   grants: GrantSummary[],
   declared: InstallScopeBlock["scopes"],
@@ -367,23 +339,13 @@ const JOURNAL_ARCHIVAL_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 const VAULT_MAINTENANCE_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-/** Sized for bounded work on the CONSTRAINED host (#659). */
 const LOCAL_ORPHAN_SWEEP_MAX_ENTRIES = 2_000;
 
-/**
- * Both fields are HOST-resolved and re-set by the caller (#599).
- * `intentDeviceId` is the ONLY thing the vault checks when an app claims a
- * replica intent, so a caller-supplied one could settle another device's
- * queued write as its own. Stripping makes the check compare host truth
- * against stored truth, and fails closed with no device.
- */
 function withoutForgedIdentity(payload: InvokeRequest): InvokeRequest {
   const { actingOwnerId: _owner, intentDeviceId: _device, ...rest } = payload;
   return rest;
 }
 
-/** An agent NEVER runs under a replica intent, so any `intentId` reaching
- *  this bridge is caller-invented and is dropped. */
 function withoutAgentIntent(payload: InvokeRequest): InvokeRequest {
   const { intentId: _claimed, ...rest } = payload;
   return rest;
@@ -398,7 +360,6 @@ export class VaultPlane {
   readonly cacheDir: string;
   private readonly groupCommitQueue: GroupCommitQueue;
   readonly quarantine: QuarantineStatus | null;
-  /** The capture clock sleeps until a backup destination exists (#408). */
   walShipper: WalShipper | undefined;
   private readonly logger: RuntimeLogger;
   private readonly sweepIntervalMs: number;
@@ -429,22 +390,11 @@ export class VaultPlane {
   private lastVaultMaintenanceAt = 0;
   private readonly vaultLimitBytes: () => number | null;
   private vaultMaintenanceRung = 0;
-  /** In memory BY DESIGN: restarting at the top costs a pass, not
-   *  correctness. */
   private localOrphanCursor: string | null = null;
   private repriceCursor = 0;
   private closed = false;
   private displayName: string;
-  /** GC roots, so an orphan-delete can never evict an object a recovery-to-N
-   *  still needs. A supplier that THROWS fails safe: the delete phase is
-   *  skipped rather than run against an incomplete root set (#436). */
   snapshotBlobRoots?: () => Promise<ReadonlySet<string>>;
-  /**
-   * The recovery window N in ms, or `undefined` when none is knowable (#439).
-   * The orphan delete waits N past first-observed-orphaned before evicting a
-   * byte a recovery-to-N would replay. Unset ⇒ orphans delete immediately.
-   * When the supplier THROWS the sweep fails safe: nothing deletes.
-   */
   orphanGraceWindowMs?: () => Promise<number | undefined>;
   private personalFlag: boolean | undefined;
 
@@ -465,8 +415,6 @@ export class VaultPlane {
       ...(options.keyStore ? { keyStore: options.keyStore } : {}),
       s3Credentials: options.s3Credentials ?? defaultEnvS3Credentials,
       ...(options.previewCodec ? { previewCodec: options.previewCodec } : {}),
-      // A platform without the extension falls back to the exact JS cosine
-      // scan and NEVER fails the open (#721).
       loadExtensions: (db) => {
         loadSqliteVec(db, (reason) => {
           this.logger.info(
@@ -554,23 +502,17 @@ export class VaultPlane {
     registerOutboxCommands(this.gateway);
     registerShareCommands(this.gateway);
     registerAtlasCommands(this.gateway);
-    // Handlers live in gateway memory, contract rows in the vault, so every
-    // installed app's ext trios must be re-armed here (#286).
     this.gateway.registerAllExtCommands();
-    // The ONE safe early checkpoint: the shipper has not attached yet.
     if (this.boot.fresh) checkpointVault(this.db);
     this.logger.info(
       this.boot.fresh
         ? `vault plane: bootstrapped a fresh vault at ${options.dir}`
         : `vault plane: recovered vault ${this.boot.vaultId} at ${options.dir}`
     );
-    // FORMAT.md rule 4; the automations gap stays manual by design.
     this.quarantine = applyRestoreQuarantine(options.dir, this.db, this.logger);
     if ((this.quarantine?.outboxParked ?? 0) > 0) {
       this.ringNotificationsChanged(true);
     }
-    // A restored directory mints a fresh generation on its first tick — the
-    // stream break FORMAT.md rule 6 requires.
     this.walTickOverrideMs = options.walTickMs;
     this.walLifecycleEnabled = options.enableWalShipper !== false;
     this.walCaptureConfigured = options.walCaptureConfigured ?? (() => true);
@@ -623,8 +565,6 @@ export class VaultPlane {
     return this.displayName;
   }
 
-  /** The ledger and per-app dirs live BESIDE the sovereign pair; the harness
-   *  scratch is the exception, in `cacheDir` outside the tree (#280). */
   get workspace(): VaultWorkspace {
     return {
       vaultId: this.boot.vaultId,
@@ -640,8 +580,6 @@ export class VaultPlane {
     return path.join(this.dir, "code");
   }
 
-  /** The ledger band of the one file (#916) — the same handle every other
-   *  band is served from; the vault composes the band when it opens. */
   private ledger(): DatabaseSync {
     if (this.closed)
       throw new Error(`vault plane ${this.boot.vaultId} is stopped`);
@@ -660,9 +598,6 @@ export class VaultPlane {
     return readVaultPresentation(this.db);
   }
 
-  /** Memoized and NEVER throwing: `defaultVaultId()` consults this on every
-   *  unscoped request, so an unreadable plane must not take down routing —
-   *  it simply is not the default. */
   get personal(): boolean {
     if (this.personalFlag === undefined) {
       try {
@@ -691,8 +626,6 @@ export class VaultPlane {
       this.logger.info(`vault plane: enrolled app "${appId}"`);
   }
 
-  /** Identity ONLY: declared scopes are granted by the install-time grant
-   *  path (#434). */
   installApp(appId: string, displayName?: string): { created: boolean } {
     const enrolled = ensureAppEnrolled(
       this.db,
@@ -716,7 +649,6 @@ export class VaultPlane {
     setAppLabel(this.db, appId, label);
   }
 
-  /** Automation fires ride an ENROLLED AGENT, never an app credential. */
   enrollAutomationAgent(appId: string, displayName?: string): void {
     const enrolled = ensureAgentEnrolled(this.db, appId, {
       modelRef: "centraid-automation",
@@ -726,8 +658,6 @@ export class VaultPlane {
       this.logger.info(`vault plane: enrolled automation agent "${appId}"`);
   }
 
-  /** The ext band is RETAINED: the data is the owner's and purge is a
-   *  separate act. Model rows and receipts remain. */
   revokeApp(appId: string): { grantsRevoked: number } {
     const hadOpenScopeRequest = this.listScopeRequests().some(
       (request) => request.appId === appId
@@ -759,7 +689,6 @@ export class VaultPlane {
       }
       markAgentRevoked(this.db, agent.agentId);
     }
-    // Standing grants die WITH the actor (#306).
     const outboxRevocations: string[] = [];
     for (const actorId of [app?.appId, agent?.agentId]) {
       if (!actorId) continue;
@@ -788,8 +717,6 @@ export class VaultPlane {
         `vault plane: revoked standing outbox grant ${revokedGrantId} for "${appId}"`
       );
     }
-    // Uninstall WIPES the consent memory (#308): it is "no to the whole app",
-    // not "no to these scopes forever" — a reinstall is a fresh consent.
     if (app) clearAllScopeTombstones(this.db, { appId: app.appId });
     if (agent)
       clearAllScopeTombstones(this.db, { granteePartyId: agent.partyId });
@@ -799,7 +726,6 @@ export class VaultPlane {
     return { grantsRevoked: revoked };
   }
 
-  /** An app may request `ext.*` scopes only on its OWN band. */
   approveGrant(appId: string, request: GrantRequest): string {
     const app = ensureAppEnrolled(this.db, appId);
     const purpose = purposeConceptId(this.db, request.purpose);
@@ -819,8 +745,6 @@ export class VaultPlane {
     });
   }
 
-  /** A grant can be the FIRST touch an agent gets, and without `displayName`
-   *  it is stuck with a bare `humanizeSlug(appId)` until a later reconcile. */
   approveAgentGrant(
     appId: string,
     request: GrantRequest,
@@ -849,9 +773,6 @@ export class VaultPlane {
     });
   }
 
-  /** Installing WAS the consent, for the scopes declared AT install. The
-   *  top-up NEVER widens on its own afterwards: agents author their own
-   *  manifests, so a re-publish would steer its own containment (#306). */
   ensureAppInstallGrant(appId: string, block: InstallScopeBlock): void {
     const app = ensureAppEnrolled(this.db, appId);
     this.ensureInstallGrant({
@@ -971,7 +892,7 @@ export class VaultPlane {
     try {
       this.onNotificationsChanged?.(this.boot.vaultId, wake);
     } catch {
-      // A listener's throw must not break the mutation that rang it.
+      // Intentionally empty.
     }
   }
 
@@ -1073,8 +994,6 @@ export class VaultPlane {
     return deleteReplicaIntentOutcomesForDevice(this.db.vault, deviceId);
   }
 
-  /** `request_json` stays SERVER-SIDE: it may carry placeholder plumbing the
-   *  owner should never have to parse. */
   listOutbox(statuses?: readonly string[]): OutboxItemSummary[] {
     const filter = statuses && statuses.length > 0 ? statuses : null;
     const rows = this.db.vault
@@ -1124,7 +1043,6 @@ export class VaultPlane {
     }));
   }
 
-  /** SERVER-SIDE ONLY: never rides an owner-facing response. */
   rawOutboxItem(itemId: string):
     | {
         verb: string;
@@ -1515,22 +1433,11 @@ export class VaultPlane {
     return row?.name ?? null;
   }
 
-  /**
-   * THE ASSISTANT'S AUTHORITY, WRITTEN DOWN (#308). Writes ride an enrolled
-   * `_assistant` agent, not the owner-device credential, so confirm-gated
-   * commands park for the owner. `_assistant` holds a standing `act` grant
-   * over EVERY command schema — more privileged than any installed app — and
-   * that is intentional; the containment is that confirm-gated commands park,
-   * it cannot decide the outbox or reveal sealed plaintext, and every act is
-   * receipted under its own identity. The owner can narrow it durably: a
-   * revoked grant tombstones its schemas and the self-heal skips them.
-   */
   async invokeAsAssistant(request: InvokeRequest): Promise<InvokeOutcome> {
     const agent = ensureAgentEnrolled(this.db, "_assistant", {
       modelRef: "centraid-assistant",
       displayName: "Assistant",
     });
-    // Self-healing: a later app's ext band joins with no re-enrollment.
     const schemas = this.db.vault
       .prepare(
         `SELECT DISTINCT owner_schema FROM agent_command ORDER BY owner_schema`
@@ -1540,9 +1447,6 @@ export class VaultPlane {
       (
         this.db.vault
           .prepare(
-            // R10 (#916): one dotted `entity` column, so the schema half is
-            // the text before the dot — a whole-schema scope has no dot and
-            // is its own schema name.
             `SELECT DISTINCT s.entity FROM access_grant_scope s
                JOIN access_grant g ON g.grant_id = s.grant_id
               WHERE g.grantee_party_id = ? AND g.status = 'active' AND g.revoked_at IS NULL`
@@ -1554,7 +1458,6 @@ export class VaultPlane {
           : r.entity
       )
     );
-    // The owner's "no" binds the assistant too (#308 A4/B3).
     for (const t of listScopeTombstones(this.db, {
       granteePartyId: agent.partyId,
     })) {
@@ -1587,7 +1490,6 @@ export class VaultPlane {
     return this.invoke(cred, request);
   }
 
-  /** OWNER-DEVICE credential: no grant keyhole applies. */
   sqlAsOwner(sql: string, maxRows?: number): VaultSqlResult {
     return this.gateway.sql(this.ownerCredential, {
       sql,
@@ -1668,8 +1570,6 @@ export class VaultPlane {
     return asVaultCallResultAsync(() => this.invoke(cred, request));
   }
 
-  /** Every write stamps `seed.demo` provenance: purgeable in one act,
-   *  invisible to the automation plane (#290). */
   demoBridgeFor(appId: string): VaultBridge {
     return async (call): Promise<VaultCallResult> => {
       if (call.op === "invoke") {
@@ -1719,12 +1619,6 @@ export class VaultPlane {
     return this.gateway.demoStatus(this.ownerCredential);
   }
 
-  /**
-   * The host attaches WHEN the grant went: `access_grant.revoked_at`
-   * records it, but the app cannot read that table — losing the grant is what
-   * put it here. Absent when the refusal was never a revocation (a scope never
-   * granted, a purpose the policy forbids); no caller may invent one.
-   */
   private withRevocationTime(
     appId: string,
     result: VaultCallResult
@@ -1742,14 +1636,9 @@ export class VaultPlane {
     return row ? { ...result, revokedAt: row.revoked_at } : result;
   }
 
-  /** Resolution happens PER CALL, so a revocation lands immediately. */
   bridgeFor(appId: string): VaultBridge {
-    // Captured HERE, in the replica-intent async scope, so worker-message
-    // scheduling cannot lose the binding.
     const replicaIntent = replicaIntentContext();
     const requestDeviceId = vaultContext()?.deviceKey;
-    // An offline intent carries its own acting owner — the person who made the
-    // write on the phone, not whoever's request replayed it (#599).
     const actingOwnerId = replicaIntent?.ownerId ?? vaultContext()?.ownerId;
     const serve = async (call: VaultCall): Promise<VaultCallResult> => {
       const app = lookupAppByName(this.db, appId);
@@ -1774,9 +1663,6 @@ export class VaultPlane {
         );
       }
       if (call.op === "authenticate") {
-        // MUST be awaited: `asVaultCallResult` takes `() => unknown`, so an
-        // unawaited promise typechecks and reaches the app as an empty object
-        // — a silent wrong answer on an AUTH path, with no compile error.
         if (appId !== "locker") {
           return asVaultCallResult(() => {
             throw new GatewayError(
@@ -1822,7 +1708,6 @@ export class VaultPlane {
           case "describe":
             return this.gateway.discover(cred);
           case "parked":
-            // Matched on `callerId`, NOT the display name.
             return this.gateway
               .listParked()
               .filter(
@@ -1834,8 +1719,6 @@ export class VaultPlane {
               call.payload as unknown as RefRequest
             );
           case "reveal":
-            // Locker lock/permit enforcement is data-keyed INSIDE
-            // `gateway.reveal`, so fill, UI and agent arms share one gate.
             return this.gateway.reveal(
               cred,
               call.payload as unknown as RevealRequest
@@ -1857,11 +1740,7 @@ export class VaultPlane {
     return async (call) => this.withRevocationTime(appId, await serve(call));
   }
 
-  /** The agent-plane mirror of `bridgeFor`, resolving the credential per call
-   *  so a revocation lands immediately. */
   agentBridgeFor(appId: string, block?: InstallScopeBlock): VaultBridge {
-    // Absent for a scheduler-fired automation, which has no human behind it
-    // to be capped at (#599).
     const scope = vaultContext();
     const onBehalfOfOwner =
       scope?.ownerId === undefined
@@ -1904,8 +1783,6 @@ export class VaultPlane {
         ...(onBehalfOfOwner ? { onBehalfOfOwner } : {}),
       };
       if (call.op === "content") {
-        // Visual originals are structurally refused; bounded AV originals are
-        // the ONE exception, since ASR has no derivative rung (#299).
         return asVaultCallResultAsync(() =>
           this.gateway.contentForAgent(
             cred,
@@ -1978,14 +1855,10 @@ export class VaultPlane {
 
   walTick(): void {
     if (this.closed) return;
-    // A read-only registry may open the databases but must NEVER capture,
-    // checkpoint, or mutate shipper state.
     if (!this.ownsWalLifecycle()) return;
     if (!this.walCaptureConfigured()) return;
     this.ensureWalShipper();
     if (!this.walShipper) {
-      // `wal_autocheckpoint = 0` is set regardless, so without a checkpointer
-      // the WALs grow unboundedly for the whole gateway uptime.
       try {
         const wal = path.join(this.dir, "vault.db-wal");
         const oversized = (p: string) =>
@@ -2097,8 +1970,6 @@ export class VaultPlane {
   }
 
   start(): void {
-    // DEFERRED off the mount critical path: `start()` is awaited by boot and
-    // nothing here is time-critical at second zero (#659).
     this.firstSweep = setImmediate(() => {
       this.firstSweep = undefined;
       if (!this.closed) this.runSweep();
@@ -2106,8 +1977,6 @@ export class VaultPlane {
     unrefTimer(this.firstSweep);
     this.scheduleSweep();
     if (!this.walLifecycleEnabled) return;
-    // Also deferred (#411): the first tick mints the generation base, which
-    // is not advertised until it exists, so correctness is unaffected.
     this.armWalCapture();
   }
 
@@ -2125,9 +1994,6 @@ export class VaultPlane {
         result.retentionDeleted +
         result.blobsReclaimed +
         result.stagingExpired;
-      // The operator log and the journal receipt must tell the SAME story: a
-      // sweep that declines purges touches nothing, and an operator would see
-      // silence while the receipt records the refusal (#712).
       const blockedByLineage =
         result.assetsBlockedByLineage.length +
         result.contentBlockedByLineage.length;
@@ -2156,8 +2022,6 @@ export class VaultPlane {
             `priorEpochs=${replicaPrune.discardedPriorEpochs} retained=${replicaPrune.retained}`
         );
       }
-      // DETACHED, so remote latency never blocks the sweep (#296). Backoff
-      // (#367): one that keeps throwing would re-attempt every tick.
       const sweepStatus = this.db.blobs.sweepStatus();
       const backoff = blobSweepBackoff(sweepStatus, Date.now());
       if (backoff.skip) {
@@ -2168,8 +2032,6 @@ export class VaultPlane {
       } else {
         this.runBlobSweep();
       }
-      // Over an owner limit the daily gate is bypassed and the window narrows
-      // a rung per sweep (#544).
       const archiveDecision = decideJournalArchive({
         journalBytes: vaultFileBytes(this.dir),
         limitBytes: this.journalLimitBytes(),
@@ -2190,8 +2052,6 @@ export class VaultPlane {
         }
         const archiveWindow = { windowDays: archiveDecision.windowDays };
         try {
-          // Ship BEFORE archival: the VACUUM rewrites the whole file through
-          // the WAL, and the roll below absorbs it into a fresh base (#408).
           this.walTick();
           const archived = runJournalArchival(this.db, archiveWindow);
           if (archived.rowsArchived > 0) {
@@ -2200,15 +2060,12 @@ export class VaultPlane {
                 `manifests=${archived.manifests.length} vacuum=${archived.reclaim.mode}`
             );
           }
-          // Row-capped, so re-open the daily gate rather than looping: no
-          // tick may block the event loop (#659).
           if (archived.capped) {
             this.lastJournalArchivalAt = 0;
             this.logger.info(
               "vault plane: journal archival hit its row cap — resuming next sweep"
             );
           }
-          // Runs BEFORE archival so live rows get honest costs first (#445).
           const repriced = repriceLedger(this.db.vault, {
             cursor: this.repriceCursor,
           });
@@ -2240,8 +2097,6 @@ export class VaultPlane {
                 `turnsPruned=${convArchival.turnsPruned} vacuum=${convArchival.reclaim.mode}`
             );
           }
-          // Both engines rewrite the one file through the WAL, so a roll
-          // absorbs the VACUUM into a fresh base (#408).
           if (
             archived.rowsArchived > 0 ||
             convArchival.segmentsWritten > 0 ||
@@ -2258,7 +2113,6 @@ export class VaultPlane {
         }
       }
 
-      // `vault.db` is the sovereign asset and must stay small (#659).
       const maintenanceDecision = decideVaultMaintenance({
         vaultBytes: vaultFileBytes(this.dir),
         limitBytes: this.vaultLimitBytes(),
@@ -2296,8 +2150,6 @@ export class VaultPlane {
     }
   }
 
-  /** The orphan-DELETE phase pauses while a second gateway instance appears
-   *  live against this vault root (#367). */
   private runBlobSweep(): void {
     const replicationStartedAt = Date.now();
     void Promise.all([
@@ -2353,16 +2205,12 @@ export class VaultPlane {
       });
   }
 
-  /** Nothing else reclaims a local-only CAS entry (#599). It shares the
-   *  remote phase's safety envelope and tombstone table, so the grace clock is
-   *  ONE clock and an infinite window holds everything. */
   private runLocalOrphanSweep(options: {
     skipOrphanDelete: boolean;
     extraLiveRoots: ReadonlySet<string> | undefined;
     graceWindowMs: number | undefined;
   }): void {
     if (options.skipOrphanDelete) return;
-    // Bounded slice + carried cursor, so per-tick cost is CONSTANT (#659).
     const result = sweepLocalOrphans(this.db, {
       graceWindowMs: options.graceWindowMs ?? LOCAL_ORPHAN_GRACE_MS,
       maxEntries: LOCAL_ORPHAN_SWEEP_MAX_ENTRIES,
@@ -2382,9 +2230,6 @@ export class VaultPlane {
     }
   }
 
-  /** `'unavailable'` skips the orphan-DELETE phase entirely: a delete against
-   *  an unknown reachability set could evict a byte a recovery-to-N still
-   *  needs. Fail safe, NEVER fail open (#436). */
   private async resolveSnapshotBlobRoots(): Promise<
     ReadonlySet<string> | undefined | "unavailable"
   > {
@@ -2400,9 +2245,6 @@ export class VaultPlane {
     }
   }
 
-  /** A supplier that THROWS fails safe to an infinite grace: a window that
-   *  SHOULD exist but could not be resolved must not license evicting an
-   *  intra-interval recovery byte (#439). */
   private async resolveOrphanGraceWindowMs(): Promise<number | undefined> {
     if (!this.orphanGraceWindowMs) return undefined;
     try {
@@ -2429,8 +2271,6 @@ export class VaultPlane {
       this.walShipper &&
       this.walCaptureConfigured()
     ) {
-      // The shipper is the ONLY checkpointer (#408 I2), so close without a
-      // second optimize: SQLite would fold its WAL writes behind its back.
       try {
         this.walShipper.close();
       } catch (error) {
@@ -2450,8 +2290,6 @@ export class VaultPlane {
         );
       }
     }
-    // An unconfigured owner relies on ordinary SQLite close-checkpointing: a
-    // forced TRUNCATE here can block behind the memoized ledger handle.
     this.db.close({ skipOptimize: !this.ownsWalLifecycle() });
   }
 }

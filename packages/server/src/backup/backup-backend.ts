@@ -30,9 +30,6 @@ export async function resolveBackupBackend(opts: {
     };
   }
   if (!opts.storageConnections) return undefined;
-  // One home connection (#436): a provider connection is the full home
-  // bundle (snapshots + cas + derived), so the backup engine and the CAS-tier
-  // attach both key off the same single connection — no `uses` filter.
   const matches = await opts.storageConnections.list();
   if (matches.length === 0) return undefined;
   if (matches.length > 1)

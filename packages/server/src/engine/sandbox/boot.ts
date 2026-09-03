@@ -1,9 +1,3 @@
-/**
- * Loader-safe sandbox entry: ZERO relative imports — type stripping doesn't
- * map `.js`→`.ts` outside `dist/`; installs a resolution-failure fallback
- * (never an override).
- */
-
 import { existsSync } from "node:fs";
 import { registerHooks } from "node:module";
 import path from "node:path";
@@ -34,7 +28,6 @@ function enableTsSiblingResolution(): void {
         }
         const candidate = new URL(`${specifier.slice(0, -3)}.ts`, parent);
         if (!existsSync(fileURLToPath(candidate))) throw error;
-        // `module` would skip Node's type stripping → parse failure.
         return {
           url: candidate.href,
           format: "module-typescript",
@@ -45,7 +38,6 @@ function enableTsSiblingResolution(): void {
   });
 }
 
-/** Absolute URL of a sandbox module, compiled `.js` over `.ts`. */
 function sandboxModuleUrl(base: string): string {
   const js = path.join(SANDBOX_DIR, `${base}.js`);
   if (existsSync(js)) return pathToFileURL(js).href;
@@ -65,10 +57,6 @@ export interface SandboxBoot {
   modelRuntimePolicy: (readRoots: readonly string[]) => SandboxPolicy;
 }
 
-/*
- * No try/catch on purpose: if the sandbox can't load, the handler must not
- * run — catching would execute untrusted code uncontained.
- */
 export async function loadSandbox(): Promise<SandboxBoot> {
   const install = (await import(sandboxModuleUrl("install"))) as {
     installWorkerSandbox: SandboxBoot["installWorkerSandbox"];

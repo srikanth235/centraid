@@ -68,9 +68,6 @@ async function directoryBytes(dir) {
   try {
     entries = await fs.readdir(dir, { withFileTypes: true });
   } catch (error) {
-    // The live vault owns temporary/WAL paths that can disappear between a
-    // directory walk and the next syscall. A vanished entry contributes zero
-    // bytes; it must not make the performance gate flaky.
     if (error?.code === "ENOENT") return 0;
     throw error;
   }
@@ -107,8 +104,6 @@ async function markTraceEpoch(suffix) {
 async function runInternal() {
   const writes = positiveInteger("--requests", 120);
   const concurrency = positiveInteger("--concurrency", 4);
-  // Cover issue #456's active 30/60-second service cadences so idle rates
-  // include real timer work instead of extrapolating a scheduler blip.
   const idleMs = positiveInteger("--idle-ms", 65_000);
   const root = await fs.mkdtemp(
     path.join(os.tmpdir(), "centraid-low-end-bench-")
@@ -116,7 +111,6 @@ async function runInternal() {
   let handle;
   try {
     handle = await serve({
-      // A fresh vaultDir auto-founds Personal at construction (#603).
       paths: { vaultDir: path.join(root, "vault") },
       logger: quietLogger(),
       token: "centraid-low-end-benchmark-token",
@@ -161,8 +155,6 @@ async function runInternal() {
         );
     };
 
-    // Warm routing, auth, prepared statements, and the native lag histogram
-    // without adding unmeasured writes to the fsync denominator.
     await Promise.all(
       Array.from({ length: 12 }, async () => {
         const response = await fetch(`${handle.url}/centraid/_vault/status`, {
@@ -174,14 +166,9 @@ async function runInternal() {
           );
       })
     );
-    // The measured mix is atlas.insert, not status. Compile those statements
-    // and one SQLite write of each shape before the lag epoch starts.
     await insert("core.party", "Gateway benchmark warmup party");
     await insert("core.place", "Gateway benchmark warmup place");
 
-    // Boot/install prewarming has its own latency metrics. Start the CI lag
-    // epoch here so peak p99 describes the authenticated write workload, not
-    // one-time esbuild/module initialization that completed before readiness.
     handle.health.resetPerformanceMetrics();
 
     const resourcesBeforeWrites = resourceCounters();
@@ -263,9 +250,6 @@ async function runInternal() {
         ? procAfterWrites.write_bytes - procBeforeWrites.write_bytes
         : null;
 
-    // Peak p99 is a completed rolling window. Wait one sample interval so the
-    // window that covered the writes can close instead of snapshotting a
-    // handful of in-progress samples.
     await new Promise((resolve) => {
       setTimeout(resolve, 1_100);
     });
@@ -394,9 +378,6 @@ function fsyncCallsIn(trace, marker) {
   if (start < 0 || end < 0)
     throw new Error("strace workload epoch markers are missing");
   return lines.slice(start + 1, end).filter((line) => {
-    // A blocking syscall can be split into `<unfinished ...>` and a later
-    // `<... fsync resumed>` record. Count the resumed record exactly once;
-    // ordinary one-line calls count through the opening-call form.
     if (/<\.\.\. (?:fsync|fdatasync) resumed>/u.test(line)) return true;
     return (
       /\b(?:fsync|fdatasync)\(/u.test(line) &&
@@ -491,8 +472,6 @@ async function traceFsyncCalls() {
     }
     childArgs.push(arg);
   }
-  // The trace epoch ends before idle measurement, so do not repeat the
-  // primary run's 65-second observation window in this fsync-only child.
   childArgs.push("--internal", "--idle-ms=1");
   try {
     const result = spawnSync(
@@ -514,7 +493,6 @@ async function traceFsyncCalls() {
           ...process.env,
           CENTRAID_BENCH_QUIET: "1",
           CENTRAID_BENCH_TRACE_MARKER: traceMarker,
-          // The parent applies the required gate after it injects the parsed trace count.
           CENTRAID_BENCH_REQUIRE_FSYNC: "0",
         },
       }

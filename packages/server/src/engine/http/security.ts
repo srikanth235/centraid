@@ -1,11 +1,9 @@
-/** Apps whose ids start with `_` are reserved for plugin internals. */
 export function isReservedAppId(id: string): boolean {
   return (
     id.startsWith("_") || id === "" || id.includes("/") || id.includes("..")
   );
 }
 
-/** Constant-time comparison for bearer tokens. */
 export function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;

@@ -1,15 +1,11 @@
-// Host limits probe (#528): any read failure → null = unconstrained host.
-
 import { readFileSync } from "node:fs";
 
 import { defaultStealSampler } from "./power-context.js";
 import type { CpuStealSample } from "./power-context.js";
 
 export interface HostLimits {
-  /** Fractional cores (quota/period), or null when unlimited/unknown. */
   cgroupCpuLimit: number | null;
   cgroupMemoryLimitBytes: number | null;
-  /** Cumulative steal% since host boot, or null off-Linux/unknown. */
   stealPercent: number | null;
 }
 
@@ -25,7 +21,6 @@ const CGROUP_V1_CPU_QUOTA = "/sys/fs/cgroup/cpu/cpu.cfs_quota_us";
 const CGROUP_V1_CPU_PERIOD = "/sys/fs/cgroup/cpu/cpu.cfs_period_us";
 const CGROUP_V1_MEMORY_LIMIT = "/sys/fs/cgroup/memory/memory.limit_in_bytes";
 
-// cgroup v1's ~2^63 "no limit" sentinel exceeds JS safe ints: treat as unset.
 const MEMORY_NO_LIMIT_FLOOR = 2 ** 53;
 
 function defaultReadText(path: string): string | null {
@@ -46,7 +41,6 @@ function parseCpuMaxV2(text: string): number | null {
   return q / p;
 }
 
-/** quota -1 ⇒ unlimited. */
 function parseCpuCfsV1(
   quotaText: string | null,
   periodText: string | null

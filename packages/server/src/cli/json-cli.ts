@@ -1,5 +1,3 @@
-/* `--json` error contract (#382) for the SSH-driven caller. */
-
 export type Fail = (message: string, code?: number) => never;
 
 export class CliJsonError extends Error {
@@ -19,7 +17,6 @@ export function jsonFail(json: boolean, fail: Fail): Fail {
   };
 }
 
-/** One JSON error line; exit-derived coarse code; exits via the ORIGINAL `fail`. */
 export async function runJson(
   json: boolean,
   realFail: Fail,

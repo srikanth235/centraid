@@ -125,7 +125,6 @@ describe("route-helpers scenarios", () => {
         "export const x = 1;"
       );
       const map = await readFileMap(dir);
-      // Sorted, text-only, no dotfiles or non-editable extensions.
       expect(map.map((f) => f.path)).toStrictEqual([
         "index.html",
         "nested/app.js",
@@ -208,17 +207,6 @@ describe("route-helpers scenarios", () => {
     });
   });
 
-  /*
-   * `isDirectHostRequest` — the real host-only capability gate (#568
-   * items A/B). Route tests stub `isHostCustody: () => true`, so
-   * without this nothing exercises the predicate the product actually installs.
-   *
-   * The organising rule: LOOPBACK IS NOT AN IDENTITY. Every forwarder in the
-   * product — the daemon's iroh endpoint, the Rust byte relay, and the desktop
-   * phone tunnel — delivers a REMOTE peer to 127.0.0.1, and each marks the hop
-   * on the way through. A host-only capability needs a loopback socket AND the
-   * absence of every marking.
-   */
   function fakeRequest(
     remoteAddress: string | undefined,
     headers: Record<string, string> = {}
@@ -244,7 +232,6 @@ describe("route-helpers scenarios", () => {
     });
 
     it("refuses a loopback peer carrying ANY forwarder marking", () => {
-      // The iroh forwarder stamps the proved identity + proof…
       expect(
         isDirectHostRequest(
           fakeRequest("127.0.0.1", { [DEVICE_IDENTITY_HEADER]: "remote-peer" })
@@ -255,9 +242,6 @@ describe("route-helpers scenarios", () => {
           fakeRequest("127.0.0.1", { [DEVICE_PROOF_HEADER]: "per-boot-proof" })
         )
       ).toBe(false);
-      // …and the desktop phone tunnel, which has no device key to stamp, marks
-      // the hop instead. This is the header that closes item A: a QR-paired
-      // phone reaches 127.0.0.1 carrying the host's admin bearer.
       expect(
         isDirectHostRequest(
           fakeRequest("127.0.0.1", { [TUNNEL_FORWARDED_HEADER]: "1" })
@@ -266,8 +250,6 @@ describe("route-helpers scenarios", () => {
     });
 
     it("is strictly stronger than the bare-loopback gate it replaced", () => {
-      // The bare-loopback gate says yes to exactly this request; the
-      // host-custody gate does not (#566).
       const forwarded = fakeRequest("127.0.0.1", {
         [TUNNEL_FORWARDED_HEADER]: "1",
       });

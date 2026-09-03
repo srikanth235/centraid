@@ -1,11 +1,3 @@
-/*
- * HTTP-level coverage for the local-disk half of the storage routes (issue
- * #544): `GET storage/local` and `GET|PUT storage/limits`. Kept out of
- * `storage-routes.test.ts` because that file is about provider CONNECTIONS
- * and needs a fake provider server; these two need a real directory tree and
- * a real limits file, and nothing else.
- */
-
 import { promises as fs } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -112,7 +104,6 @@ describe("storage-local-routes", () => {
     expect(byComponent.get("attachments")).toBe(4096);
     expect(body.components.some((c) => c.component === "cache")).toBe(true);
     expect(body.disk).toStrictEqual({ freeBytes: 500, totalBytes: 5000 });
-    // No budget set yet — ok with no fraction, not a fabricated denominator.
     expect(body.limits.totalLimitBytes).toBeNull();
     expect(body.limit).toMatchObject({ status: "ok", fractionUsed: null });
     expect(body.totalBytes).toBeGreaterThanOrEqual(6144);
@@ -149,7 +140,6 @@ describe("storage-local-routes", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ totalLimitBytes: null }),
     });
-    // Clearing one leaves the other alone — two controls, two PUTs.
     expect(
       ((await cleared.json()) as { limits: Record<string, unknown> }).limits
     ).toMatchObject({
@@ -167,8 +157,6 @@ describe("storage-local-routes", () => {
       body: JSON.stringify({ totalLimitBytes: budget }),
     });
 
-    // `?refresh=1` — the page's Rescan; also the only way to bypass the TTL
-    // cache the first GET populated.
     const res = await fetch(
       `${base}/centraid/_gateway/storage/local?refresh=1`
     );
@@ -182,8 +170,6 @@ describe("storage-local-routes", () => {
     };
     expect(res.status).toBe(200);
     expect(body.limits.totalLimitBytes).toBe(budget);
-    // A fraction only exists once there is a denominator — the ok/degraded/error
-    // thresholds themselves are exercised in `storage-limits.test.ts`.
     expect(body.limit).toMatchObject({ status: "ok", limitBytes: budget });
     expect(body.limit.fractionUsed).toBeGreaterThan(0);
   });

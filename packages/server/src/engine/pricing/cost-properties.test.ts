@@ -51,10 +51,6 @@ const usageArb = fc.record({
   }),
 });
 
-/**
- * Pricing cost formula properties (#532 core expansion): cost is linear in each token bucket; missing rates/tokens count as 0;
- * cache-write prefers 5m rate over 1h; per-mtok view scales by 1e6.
- */
 describe("pricing cost property", () => {
   test("cost is non-negative for non-negative rates and tokens", () => {
     fc.assert(
@@ -84,10 +80,7 @@ describe("pricing cost property", () => {
           cacheReadTokens: (usage.cacheReadTokens ?? 0) * 2,
           cacheWriteTokens: (usage.cacheWriteTokens ?? 0) * 2,
         });
-        // A zero base must double to EXACT zero — no float slop is tolerable
-        // when there is nothing to scale.
         expect(doubled === 0).toBe(base === 0);
-        // Otherwise: floating point — allow tiny relative error.
         expect(Math.abs(doubled - base * 2)).toBeLessThan(
           1e-12 * Math.max(1, Math.abs(base))
         );

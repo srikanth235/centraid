@@ -1,12 +1,3 @@
-/*
- * Catalog warmer — the single owner of host-capability enumeration.
- *
- * Empty enumerator result never clobbers a prior good entry. A finished warm
- * is RECORDED (`hasWarmed`) even when empty; without that, "empty cache → kick
- * a warm" re-kicks every poll and `deriveStatus` never leaves `loading`.
- * Reads stay in `./catalog.ts`; this module only writes.
- */
-
 import type {
   HarnessKind,
   HarnessModel,
@@ -21,7 +12,6 @@ export type CatalogSurface = "models";
 
 export interface CatalogWarmerOptions {
   catalogPath: string;
-  /** Live model self-report for a kind. Best-effort; should resolve `[]` on failure. */
   enumerateModels: (kind: HarnessKind) => Promise<HarnessModel[]>;
 }
 
@@ -39,7 +29,6 @@ export class CatalogWarmer {
     return this.inflight.has(this.key(kind, surface));
   }
 
-  /** True even when it enumerated nothing — empty is an answer, not a retry. */
   hasWarmed(kind: HarnessKind, surface: CatalogSurface): boolean {
     return this.warmed.has(this.key(kind, surface));
   }
@@ -66,7 +55,6 @@ export class CatalogWarmer {
     } catch {
       models = [];
     }
-    // Empty result → never clobber a prior good entry (no write).
     if (models.length) {
       await writeCatalogEntry(this.opts.catalogPath, kind, {
         hash: hashModelIds(models),
@@ -77,11 +65,6 @@ export class CatalogWarmer {
   }
 }
 
-/**
- * `loading` wins over a non-empty cache so an in-flight warm reports `loading`
- * and the client polls. Blank-avoidance is the renderer's job: it keeps showing
- * the cached list while `loading` rather than clearing it.
- */
 export function deriveStatus(
   cachedLen: number,
   warming: boolean

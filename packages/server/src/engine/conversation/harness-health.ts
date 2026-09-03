@@ -1,8 +1,3 @@
-/*
- * Persistent ACP harness health and circuit breakers (#567), scoped to workspace context × harness × failure class.
- * Auth breaks indefinitely until a real ACP preflight succeeds; quota heals on a backed-off vendor clock; timeout/wedge expiry admits one half-open probe.
- */
-
 import type { DatabaseProvider } from "../stores/gateway-db.js";
 import type { HarnessFailureClass } from "./runner.js";
 import type { HarnessKind } from "./turn.js";

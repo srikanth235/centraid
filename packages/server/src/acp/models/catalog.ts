@@ -1,8 +1,3 @@
-/* Gateway-owned pure storage; enumeration belongs to CatalogWarmer
- * (./catalog-warmer.ts), NEVER this module. I/O best-effort: failures
- * degrade silently.
- */
-
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -44,7 +39,6 @@ export async function readCatalog(
   }
 }
 
-/** RMW one harness entry; patch writes only its fields. */
 export async function writeCatalogEntry(
   catalogPath: string,
   kind: HarnessKind,
@@ -60,11 +54,10 @@ export async function writeCatalogEntry(
     await fs.mkdir(path.dirname(catalogPath), { recursive: true });
     await fs.writeFile(catalogPath, JSON.stringify(existing, null, 2), "utf8");
   } catch {
-    /* catalog is best-effort */
+    // Intentionally empty.
   }
 }
 
-/** Cached models only — no enumeration. */
 export async function readHarnessModels(
   catalogPath: string,
   kind: HarnessKind

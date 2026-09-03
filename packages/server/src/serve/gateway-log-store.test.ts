@@ -1,10 +1,4 @@
 import fs from "node:fs";
-/*
- * GatewayLogStore: ring buffer + fan-out + the RuntimeLogger tee that
- * feeds the realtime Logs surface, plus the optional JSONL persistence
- * (#351): rotation, boot-tail reload, and the dropped-writes
- * counter for an unwritable dir.
- */
 import path from "node:path";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -16,17 +10,8 @@ import { DiskFullTracker } from "@centraid/vault";
 import { GatewayLogStore } from "./gateway-log-store.ts";
 import type { GatewayLogEntry } from "./gateway-log-store.ts";
 
-// ESM's `node:fs` module namespace isn't configurable, so `vi.spyOn` can't
-// stub a single export (vitest's documented limitation) — mock the whole
-// module through to the real implementation, with `appendFileSync` swapped
-// for a toggleable stub, so the disk-full tests below can force an
-// ENOSPC-shaped failure deterministically without touching any other test
-// in this file (every other fs call in this file keeps its real behavior).
 let appendFileSyncShouldFail = false;
 vi.mock(import("node:fs"), async (importOriginal) => {
-  // No type argument on importOriginal: passing the module as `import(...)`
-  // already types it, and restating `typeof import('node:fs')` here conflicts
-  // with the inferred namespace (which carries a synthetic `default`).
   const actual = await importOriginal();
   const appendFileSync: typeof actual.appendFileSync = (...args) => {
     if (appendFileSyncShouldFail) {
@@ -80,8 +65,6 @@ describe("gateway-log-store", () => {
       "line 4",
       "line 5",
     ]);
-    // Eviction never reuses seqs — a resuming client can't be handed a
-    // different line under a seq it already saw.
     expect(all.map((e) => e.seq)).toStrictEqual([3, 4, 5]);
   });
 
@@ -162,14 +145,11 @@ describe("gateway-log-store", () => {
   test("rotation: writing past ~4 MiB rotates generations and keeps 3", () => {
     const dir = makeTmpDir();
     const store = new GatewayLogStore(100_000, { dir });
-    // Each line is ~1 KiB of message; ~4200 lines pushes well past a single
-    // 4 MiB file, forcing several rotations.
     const bigMessage = "x".repeat(1000);
     for (let i = 0; i < 4200; i++) store.append("info", bigMessage);
 
     expect(fs.existsSync(path.join(dir, "gateway.jsonl"))).toBe(true);
     expect(fs.existsSync(path.join(dir, "gateway.1.jsonl"))).toBe(true);
-    // At most 3 rotated generations are kept — no gateway.4.jsonl.
     expect(fs.existsSync(path.join(dir, "gateway.4.jsonl"))).toBe(false);
     const files = fs.readdirSync(dir).filter((f) => f.startsWith("gateway."));
     expect(files.length).toBeLessThanOrEqual(4); // current + up to 3 rotated
@@ -189,11 +169,8 @@ describe("gateway-log-store", () => {
       "before restart 2",
       "before restart 3",
     ]);
-    // Original timestamps + seqs are preserved, not reassigned.
     expect(tail.map((e) => e.seq)).toStrictEqual([1, 2, 3]);
 
-    // The resumed store continues the seq sequence rather than restarting
-    // at 1, so a client's `?after=` cursor never collides with old data.
     const appended = second.append("info", "after restart");
     expect(appended.seq).toBe(4);
   });
@@ -212,9 +189,6 @@ describe("gateway-log-store", () => {
   });
 
   test("dropped-writes counter increments on an unwritable dir, never throws", () => {
-    // Point the store's "directory" at a path that is actually a FILE — every
-    // mkdir/append underneath it fails, but construction and append() must
-    // not throw.
     const parent = makeTmpDir();
     const blocker = path.join(parent, "blocker");
     fs.writeFileSync(blocker, "not a directory");
@@ -225,7 +199,6 @@ describe("gateway-log-store", () => {
     store.append("error", "another");
 
     expect(store.droppedWriteCount()).toBeGreaterThan(0);
-    // In-memory behavior is unaffected by the persistence failure.
     expect(store.snapshot().map((e) => e.message)).toStrictEqual([
       "should not throw",
       "another",
@@ -243,9 +216,6 @@ describe("gateway-log-store", () => {
       expect(store.diskFullSuspended()).toBe(true);
       expect(tracker.current()?.context).toBe("gateway log persistence");
 
-      // Backed off: a second append during the retry window must NOT call
-      // appendFileSync again — droppedWrites still counts it, but the ring
-      // (the thing that must survive) keeps growing regardless.
       const before = store.droppedWriteCount();
       store.append("error", "two");
       expect(store.droppedWriteCount()).toBe(before + 1);
@@ -268,7 +238,6 @@ describe("gateway-log-store", () => {
     expect(store.diskFullSuspended()).toBe(true);
     appendFileSyncShouldFail = false;
 
-    // Force the retry window to have elapsed without a real sleep.
     vi.spyOn(Date, "now").mockReturnValue(Date.now() + 60_000);
     try {
       store.append("info", "after recovery");

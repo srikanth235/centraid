@@ -1,10 +1,3 @@
-/*
- * Enrichment tier end to end: owner control → vault → mirror → gate.
- * Axis is `off | device | gateway` (#712); no separate `provider` tier
- * (provider egress is per-call #567). Gateway is the one package that
- * depends on both halves.
- */
-
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { decideEnrichmentGate } from "@centraid/server/automation";
@@ -73,7 +66,6 @@ describe("enrichment tier control", () => {
     updateEnrichSettings(db, { photos: "device" });
 
     expect(gateFor("gateway").allowed).toBe(false);
-    // Device-lane is untouched: `device` still permits it, with model turns sealed.
     expect(gateFor("device")).toStrictEqual({
       allowed: true,
       sealModelTurns: true,
@@ -97,14 +89,6 @@ describe("enrichment tier control", () => {
     expect(gateFor("gateway").allowed).toBe(false);
   });
 
-  // [C5 SABOTAGE TEST] pinned with `packages/vault/src/enrich/enrich.test.ts`
-  // ("a legacy 'local' row reads as device, not gateway"). That file proves
-  // the READ; this proves the READ reaches the ENFORCED gate.
-  //
-  // SABOTAGE: map `LEGACY_TIER.local` to `"gateway"` in
-  // `packages/vault/src/enrich/policy.ts` (or `host.ts`'s copy) and the first
-  // assertion goes green when it must be red — a vault that said "local"
-  // would silently allow gateway-lane fires with no owner action.
   it("[C5 sabotage] a vault at the legacy 'local' tier produces no gateway-lane fire until the owner raises it", () => {
     db.vault
       .prepare(

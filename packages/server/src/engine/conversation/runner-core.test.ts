@@ -1,13 +1,3 @@
-/*
- * Runner-core: per-subsystem harness selection + session-resume gating.
- *
- * The spine resolves prefs PER TURN via the injected `prefsLoader`, and the
- * register's `subsystem` tag rides along on every call. That's what makes
- * per-subsystem harness selection work without restructuring the boot-time
- * wiring: a host builds one harness per register at boot, but neither the
- * harness kind nor the model is chosen until the turn actually runs.
- */
-
 import { describe, expect, it, vi } from "vitest";
 
 import type { Dispatcher } from "../handlers/dispatcher.js";
@@ -43,7 +33,6 @@ function turnInput(
   };
 }
 
-/** A core wired to a stub turn driver; captures what the driver received. */
 function build(opts: { prefsLoader: PrefsLoader; subsystem?: ModelSubsystem }) {
   const seen: TurnInput[] = [];
   const runTurn = vi.fn<RunTurnFn>(async (input) => {
@@ -85,8 +74,6 @@ describe("makeConversationRunnerCore — per-subsystem prefs loading", () => {
     await runner.run(turnInput());
     await runner.run(turnInput());
 
-    // Called PER TURN (not once at construction) and always tagged with the
-    // register's subsystem — that's the seam per-subsystem selection rides.
     expect(prefsLoader).toHaveBeenCalledTimes(2);
     expect(prefsLoader).toHaveBeenNthCalledWith(1, "ask");
     expect(prefsLoader).toHaveBeenNthCalledWith(2, "ask");
@@ -100,8 +87,6 @@ describe("makeConversationRunnerCore — per-subsystem prefs loading", () => {
 
     await runner.run(turnInput());
 
-    // An untagged register inherits the host default — byte-identical to the
-    // pre-per-subsystem behavior, which called the loader with no args.
     expect(prefsLoader).toHaveBeenCalledWith(undefined);
   });
 
@@ -117,7 +102,6 @@ describe("makeConversationRunnerCore — per-subsystem prefs loading", () => {
       prefs: { kind: "codex" },
     });
 
-    // The owner re-pins `harness.assistant` between turns.
     kind = "claude-code";
     await runner.run(turnInput());
     expect(runTurn.mock.calls[1]![1]).toStrictEqual({
@@ -252,9 +236,6 @@ describe("makeConversationRunnerCore — session resume gating", () => {
   });
 
   it("invalidates the session when the subsystem's harness has changed", async () => {
-    // The prior turn ran on codex and left a codex thread id; the owner has
-    // since pinned `harness.assistant` to claude-code. Resuming a codex thread
-    // against the Claude harness is meaningless — the turn must start fresh.
     const { runner, seen } = build({
       prefsLoader: async () => ({ kind: "claude-code" }),
       subsystem: "assistant",
@@ -272,9 +253,6 @@ describe("makeConversationRunnerCore — session resume gating", () => {
   });
 
   it("invalidates independently per subsystem", async () => {
-    // Two registers over the same spine: ask has been re-pinned to
-    // claude-code, the builder still rides codex. The builder's session
-    // must survive the ask re-pin — cross-subsystem isolation.
     const ask = build({
       prefsLoader: async () => ({ kind: "claude-code" }),
       subsystem: "ask",

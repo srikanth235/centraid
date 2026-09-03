@@ -33,8 +33,6 @@ interface VipsRuntime {
   };
 }
 
-// Avoid pulling wasm-vips' 260 KiB generated operation declaration into every
-// gateway typecheck; this narrow seam is the only API surface the codec uses.
 const require = createRequire(import.meta.url);
 const Vips = require("wasm-vips") as () => Promise<VipsRuntime>;
 
@@ -42,8 +40,6 @@ let runtime: Promise<VipsRuntime> | undefined;
 
 function getRuntime(): Promise<VipsRuntime> {
   runtime ??= Vips().then((vips) => {
-    // A long-lived Electron process must not inherit libvips' effectively
-    // unbounded operation/file cache defaults.
     vips.Cache.max(32);
     vips.Cache.maxMem(128 * 1024 * 1024);
     vips.Cache.maxFiles(16);
@@ -52,8 +48,6 @@ function getRuntime(): Promise<VipsRuntime> {
   return runtime;
 }
 
-// Serialize wasm-vips jobs. Each decoded image is independently capped, and
-// this gate prevents concurrent 40 MP rasters from multiplying heap growth.
 let operationTail: Promise<void> = Promise.resolve();
 function bounded<T>(operation: () => Promise<T>): Promise<T> {
   const current = operationTail.then(operation, operation);
@@ -87,7 +81,6 @@ function dispose(images: VipsImage[]): void {
   }
 }
 
-/** Electron codec: libvips compiled to WebAssembly, with no native-addon ABI coupling. */
 export function createWasmImagePreviewCodec(): PreviewCodec {
   const codec: PreviewCodec = {
     async downscale(

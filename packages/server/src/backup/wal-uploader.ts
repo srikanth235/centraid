@@ -1,6 +1,3 @@
-// WAL segment drain + remote generation GC (#408). The deterministic /1 crypto
-// makes a retry an idempotent PUT; a local file dies only after acceptance.
-
 import { promises as fs } from "node:fs";
 
 import {
@@ -25,8 +22,6 @@ export interface DrainResult {
   uploaded: number;
   bytes: number;
   discarded: number;
-  /** Per WAL generation, recorded only after the PUT resolves: it becomes a
-   *  floor. */
   markerTips: Record<string, number>;
 }
 
@@ -60,25 +55,15 @@ async function applyAvailableInOrder<T>(
   }
 }
 
-/** Runs when NO backend is configured: the shipper's rollovers bound the WAL,
- *  so its output still needs a consumer. */
 export function discardWalFiles(plane: VaultPlane): DrainResult {
   const shipper = plane.walShipper;
   if (!shipper) return { uploaded: 0, bytes: 0, discarded: 0, markerTips: {} };
   const items = shipper.listUploadable();
-  // Intent BEFORE deletion: the reverse order loses files while state calls the
-  // base sound. Any dropped object — segment, closer or marker — holes the
-  // stream: the tick it belonged to stops being a restorable point.
   if (items.length > 0) shipper.noteStreamDiscarded();
   for (const item of items) shipper.noteUploaded(item);
-  // It breaks the generation before a stale base can be registered: restoring a
-  // holed stream lands on the base, which is quiet truncation.
   return { uploaded: 0, bytes: 0, discarded: items.length, markerTips: {} };
 }
 
-/** `epochForGeneration` pins a generation to ONE keyring epoch: restore derives
- *  the segment key from the MANIFEST, so a tail sealed under a newer epoch is
- *  unreadable exactly when rotation should protect it. */
 export async function drainWalFiles(opts: {
   plane: VaultPlane;
   provider: BackupProvider;
@@ -127,8 +112,6 @@ export async function drainWalFiles(opts: {
         item.closer!
       );
     } else {
-      // A tick marker seals under its generation's epoch — the one its manifest
-      // names — or restore cannot open it.
       const marker = item.marker!;
       sealed = sealWalTickMarker(
         dataKeyFor(marker.generation),
@@ -138,7 +121,6 @@ export async function drainWalFiles(opts: {
     }
     await store.put(item.key, sealed);
     if (item.kind === "marker") {
-      // AFTER the PUT resolved: this is a floor held to at every verification.
       const { generation, tickMs } = item.marker!;
       markerTips[generation] = Math.max(markerTips[generation] ?? -1, tickMs);
     }
@@ -149,9 +131,6 @@ export async function drainWalFiles(opts: {
   return { uploaded, bytes, discarded: 0, markerTips };
 }
 
-/** Client-side GC: the provider prunes REGISTRY rows, never objects. Keep every
- *  generation an authenticated manifest references, and every one still being
- *  written. */
 export async function pruneWalGenerations(opts: {
   plane: VaultPlane;
   provider: BackupProvider;
@@ -196,7 +175,6 @@ export async function pruneWalGenerations(opts: {
       }
       cache?.set(row.manifestHash, generations);
     } catch (error) {
-      // An unreadable manifest FAILS the prune, never shrinks the keep set.
       throw new Error(
         `wal prune: cannot read manifest seq ${row.seq}: ${error instanceof Error ? error.message : String(error)}`,
         { cause: error }
@@ -216,7 +194,6 @@ export async function pruneWalGenerations(opts: {
     await store.delete(key);
     deletedObjects++;
   });
-  // Markers live outside the stream prefix, so they need their own pass.
   const doomedMarkers: string[] = [];
   await applyAvailableInOrder(store.list(walTickMarkerRootPrefix()), (obj) => {
     const addr = parseWalTickMarkerKey(obj.key);

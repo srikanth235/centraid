@@ -1,8 +1,3 @@
-// One commit registration and one projection per generation, fanned to every
-// replica subscriber (#883 C2). THE MEMO KEY MUST DETERMINE THE ANSWER: a new
-// input to `projectReplicaPage` that misses `memoKey` serves one subscriber's
-// page to all. The clock is bounded by the generation bump and the TTL.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { subscribeReplicaCommits } from "@centraid/vault";
@@ -83,7 +78,6 @@ export class ReplicaProjectionHub {
     };
   }
 
-  /** The returned page is SHARED across subscribers — read it, never mutate. */
   project(
     access: ReplicaHubAccess,
     since: ReplicaCursor,
@@ -102,8 +96,6 @@ export class ReplicaProjectionHub {
       return cached.page;
     }
     const page = projectReplicaPage(this.db, access, since, limit, options);
-    // Re-set moves the key to the end of insertion order, so eviction drops
-    // the least recently computed.
     this.memo.delete(key);
     this.memo.set(key, { generation: this.generation, computedAt: now, page });
     while (this.memo.size > PROJECTION_MEMO_MAX_ENTRIES) {

@@ -126,7 +126,6 @@ describe(parsePmset, () => {
   });
 });
 
-/** A monitor whose boot probe is resolved and awaited before the first snapshot. */
 async function monitorWith(
   opts: {
     platform?: NodeJS.Platform;
@@ -243,7 +242,6 @@ describe(PowerContextMonitor, () => {
       },
       steal: () => samples[Math.min(i++, samples.length - 1)] ?? null,
     });
-    // First snapshot at boot took sample[0]; no delta yet.
     expect(m.snapshot().stealPercent).toBeNull();
     t = 60_001;
     expect(m.snapshot().stealPercent).toBeCloseTo(10, 5);

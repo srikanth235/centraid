@@ -1,8 +1,3 @@
-/*
- * Compress only when the request offers `Accept-Encoding` (#404): the PWA service worker and browser iroh transport synthesize `Response`s that never decode `Content-Encoding`.
- * Never compress unconditionally, and add no custom opt-in header.
- */
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 import zlib from "node:zlib";
 
@@ -40,7 +35,6 @@ export interface CompressQuality {
   gzip: number;
 }
 
-/** Hot path: favour speed over ratio (#799). */
 export const DYNAMIC_QUALITY: CompressQuality = { brotli: 4, gzip: 6 };
 
 export function compress(

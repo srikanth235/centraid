@@ -1,18 +1,3 @@
-/*
- * The policy cascade's fold (#807). Four things are pinned here,
- * because each of them is a promise someone can read on a screen:
- *
- *  - INHERITANCE. A level that says nothing changes nothing.
- *  - MOST-SPECIFIC-WINS, PER FIELD. A collection that pins only a profile does
- *    not silently re-answer "enabled" or the trigger.
- *  - THE LEGACY TIER IS A CEILING. `off | device | gateway` migrate to the
- *    vault-default layer as `off | on-device | gateway`, and NO rule at any
- *    depth can raise one — a member pinning a provider engine onto one album
- *    cannot widen what the vault allows.
- *  - FAIL-CLOSED. No tier and no rules is not "the default"; it is the absence
- *    of a policy, and the gate refuses.
- */
-
 import { describe, expect, it } from "vitest";
 
 import { BUILT_IN_PROFILE } from "@centraid/vault";
@@ -67,8 +52,6 @@ describe(resolveEnrichmentPolicy, () => {
       "ocr"
     );
 
-    // enabled came from the vault, trigger from the domain, profile from the
-    // collection — three levels, one answer, nothing overwritten by silence.
     expect(resolved).toStrictEqual({
       capability: "ocr",
       enabled: true,
@@ -125,8 +108,6 @@ describe(resolveEnrichmentPolicy, () => {
       "ocr"
     );
 
-    // The item picked a provider-backed engine. The ceiling did not move, so
-    // the gate is the thing that refuses it — the cascade never widens.
     expect(resolved?.egressCeiling).toBe("on-device");
     expect(egressWithinCeiling("provider", resolved!.egressCeiling)).toBe(
       false

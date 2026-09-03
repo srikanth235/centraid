@@ -1,8 +1,3 @@
-/*
- * Per-turn chat loop. Hosts differ by four seams (#147): `resolveCwd`,
- * `buildExtraSystemPrompt`, `onTurnComplete`, `extraPath`.
- */
-
 import { randomUUID } from "node:crypto";
 
 import type {
@@ -54,9 +49,6 @@ export function makeConversationRunnerCore(
         });
         throw new Error("no harness configured");
       }
-      // A host that predates the harnessKind loader argument may still return
-      // another harness's launch settings. Keep the requested kind; discard the
-      // mismatched binary/args.
       const primaryPrefs: HarnessPrefs =
         input.harnessKind && loadedPrefs.kind !== input.harnessKind
           ? { kind: input.harnessKind }
@@ -92,8 +84,6 @@ export function makeConversationRunnerCore(
       let consumedHydrationTokens: number | undefined;
       const activeHarnessKind =
         input.activeHarnessKind ?? input.prevHarnessKind;
-      // Consulted kinds + last refusal class: an all-rungs-unavailable turn
-      // must name them, not blame "every configured harness" as 'unknown'.
       const consulted: HarnessKind[] = [];
       let lastBreakerClass: HarnessFailureClass | undefined;
       const consented: readonly HarnessKind[] =
@@ -103,7 +93,6 @@ export function makeConversationRunnerCore(
             ? [input.providerConsent]
             : input.providerConsent;
 
-      // Ladder rungs are turn boundaries, not parallel retries.
       const attemptRung = async (
         rung: number
       ): Promise<ConversationTurnResult | undefined> => {
@@ -124,9 +113,6 @@ export function makeConversationRunnerCore(
             activeHarnessKind === kind ||
             consented.includes(kind)
           ) {
-            // Initial use is implicit in choosing the surface. A ladder rung
-            // is authorized by Settings membership (D13). Only an attended
-            // cross-provider switch needs the one-time gate.
             opts.providerEgressConsent.grant(
               input.conversationId,
               kind,
@@ -194,10 +180,7 @@ export function makeConversationRunnerCore(
           ? await opts.buildExtraSystemPrompt(turnCtx)
           : input.extraSystemPrompt;
 
-        // Resume and hydration are PER RUNG — a failover has its own binding
-        // and watermark. Ask the driver for THIS kind's plan.
         const plan = input.resumeForKind?.(kind);
-        // Resume only against the harness that minted the opaque session id.
         const resumeId = plan
           ? plan.sessionId
           : input.prevHarnessKind === prefs.kind
@@ -222,12 +205,8 @@ export function makeConversationRunnerCore(
         const recoveryHydrationAttachments = plan
           ? plan.recoveryHydrationAttachments
           : input.recoveryHydrationAttachments;
-        // A supplied hydration plan is an explicit instruction, not a
-        // harness-kind mismatch heuristic (A → B → A still carries a delta).
         const forceHydration = hydrationContext !== undefined;
 
-        // Failover rungs get only their own persisted defaults — do not carry
-        // a Codex model or thought level into Claude.
         const configPins: Record<string, string> = {
           ...prefs.configPins,
           ...(rung === 0 ? input.configPins : {}),
@@ -306,7 +285,6 @@ export function makeConversationRunnerCore(
         if (!failure) {
           opts.harnessHealth?.reportOk(healthContext, kind);
           completedCtx = turnCtx;
-          // Bill the hydration THIS rung was handed, not the route's original plan.
           if (lastResult?.hydrated) {
             consumedHydrationTokens =
               lastResult.hydrationKind === "recovery"
@@ -325,16 +303,12 @@ export function makeConversationRunnerCore(
           failure.message
         );
         lastError = failure;
-        // Never silently replay a failed turn through another stateful session.
-        // The breaker affects the next turn boundary, before any prompt is sent.
         input.onEvent(failure);
       };
       const consentResult = await attemptRung(0);
       if (consentResult) return consentResult;
 
       if (!completedCtx && !lastResult) {
-        // Name the harnesses consulted and carry the breaker's failure class.
-        // "Every configured harness" + 'unknown' hides a one-rung auth/quota.
         const unavailable: Extract<TurnStreamEvent, { type: "error" }> =
           lastError ?? {
             type: "error",
@@ -351,7 +325,7 @@ export function makeConversationRunnerCore(
         try {
           await opts.onTurnComplete(completedCtx);
         } catch {
-          /* post-turn hook is best-effort — never fails the turn */
+          // Intentionally empty.
         }
       }
 
@@ -365,7 +339,6 @@ export function makeConversationRunnerCore(
           ? { harnessUsageSnapshot: result.usageSnapshot }
           : {}),
         ...(result.hydrated ? { hydrated: true } : {}),
-        // So the driver can retire a binding whose resume handle was abandoned.
         ...(result.hydrationKind
           ? { hydrationKind: result.hydrationKind }
           : {}),

@@ -14,8 +14,6 @@ describe(validateOutputSchema, () => {
   it("rejects non-object roots", () => {
     for (const raw of [null, "x", 1, true, []]) {
       expect(() => validateOutputSchema(raw)).toThrow(ManifestError);
-      // Captured outside a catch so the code/field assertion always runs —
-      // `thrown` stays undefined if the call silently returns.
       let thrown: unknown;
       try {
         validateOutputSchema(raw);

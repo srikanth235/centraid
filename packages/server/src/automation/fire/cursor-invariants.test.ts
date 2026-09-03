@@ -1,12 +1,3 @@
-/*
- * The cursor invariants themselves (#541 review): a committed position
- * never runs ahead of a delivered element, a disable never destroys a
- * watermark, a failed batch never swallows a doorbell, and a quiet minute
- * never costs a write. Cron enumeration and gap collapse belong to
- * cron-cursor.test.ts; the one-registration-per-automation collapse belongs to
- * cursor-engine-support.test.ts.
- */
-
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -68,8 +59,6 @@ describe("VaultCursorEngine cursor invariants", () => {
       store: cursors,
       catchUpCap: 2,
       fire: vi.fn<VaultCursorEngineOptions["fire"]>(),
-      // A reader that ignores `limit` — the engine must still not advance the
-      // committed position past what it actually delivered.
       readCursor: async ({ cursor }) => {
         reads.push(cursor?.positionJson);
         const after =
@@ -94,7 +83,6 @@ describe("VaultCursorEngine cursor invariants", () => {
     expect(fired).toStrictEqual(["1", "2"]);
     expect(cursors.getCursor("mail/backlog", 0)).toMatchObject({
       positionJson: '"2"',
-      // Cap overflow is durable data waiting its turn, never a gap.
       skipped: 0,
     });
     expect(cursors.getCursor("mail/backlog", 0)?.gapReason).toBeUndefined();
@@ -130,8 +118,6 @@ describe("VaultCursorEngine cursor invariants", () => {
     ]);
 
     expect(fired).toStrictEqual(["a"]);
-    // `b` was never delivered, and nothing says where `a` ends — the honest
-    // answer is to stay put rather than skip `b`.
     expect(cursors.getCursor("mail/opaque", 0)?.positionJson).toBeUndefined();
   });
 
@@ -153,8 +139,6 @@ describe("VaultCursorEngine cursor invariants", () => {
     await engine.reconcile([row("watch/pair", triggers)]);
     expect(cursors.getCursor("watch/pair", 1)?.positionJson).toBe('"p1"');
 
-    // Disabled is not deleted: the watermark has to survive so re-enabling
-    // resumes instead of silently skipping the off period.
     await engine.reconcile([
       { ...row("watch/pair", triggers), enabled: false },
     ]);
@@ -162,12 +146,9 @@ describe("VaultCursorEngine cursor invariants", () => {
     expect(cursors.getCursor("watch/pair", 0)?.positionJson).toBe('"p0"');
     expect(cursors.getCursor("watch/pair", 1)?.positionJson).toBe('"p1"');
 
-    // A transient empty listing must never wipe the vault's cursors.
     await engine.reconcile([]);
     expect(cursors.getCursor("watch/pair", 0)?.positionJson).toBe('"p0"');
 
-    // Shrinking the trigger list drops the orphaned index so a later trigger
-    // reusing that slot cannot inherit a stale position.
     await engine.reconcile([row("watch/pair", [triggers[0]!])]);
     expect(cursors.getCursor("watch/pair", 0)?.positionJson).toBe('"p0"');
     expect(cursors.getCursor("watch/pair", 1)).toBeUndefined();
@@ -186,9 +167,6 @@ describe("VaultCursorEngine cursor invariants", () => {
       fireCursor: ({ element }) => {
         attempts.push(element.position);
         if (attempts.length > 1) return;
-        // A delivery lands mid-failure. Webhook triggers are reached by
-        // neither `tick` nor `nudge`, so a swallowed flag strands it until the
-        // next POST or a restart.
         engine.nudgeIngress("hook-id");
         throw new Error("gateway stopped");
       },
@@ -203,8 +181,6 @@ describe("VaultCursorEngine cursor invariants", () => {
       engine.reconcile([row("hooks/doorbell", [trigger])])
     ).rejects.toThrow("gateway stopped");
 
-    // The doorbell was drained inside the same serialized run — and the
-    // failure was still surfaced rather than swallowed by the retry.
     expect(attempts).toStrictEqual(["9", "9"]);
     expect(cursors.getCursor("hooks/doorbell", 0)).toMatchObject({
       positionJson: "9",
@@ -249,7 +225,6 @@ describe("VaultCursorEngine cursor invariants", () => {
     };
     await tickNextMinute(0);
 
-    // One bootstrap row, then silence — 1,440 upserts a day buys nothing.
     expect(afterBootstrap).toBe(1);
     expect(writes).toBe(1);
   });

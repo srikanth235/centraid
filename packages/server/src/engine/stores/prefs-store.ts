@@ -1,7 +1,3 @@
-// Gateway prefs (#280): device-level config only — the vault owner IS the
-// user, so there is no gateway-side identity. A JSON file, not a database.
-// The wire prefix stays `/_centraid-user` for desktop-client compatibility.
-
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
@@ -37,7 +33,6 @@ export class PrefsStore {
           ? (parsed as Record<string, unknown>)
           : {};
     } catch {
-      // Missing or unreadable — a fresh host starts empty.
       this.cache = {};
     }
     return this.cache;
@@ -60,7 +55,6 @@ export class PrefsStore {
     return { ...this.load() };
   }
 
-  /** `undefined` and `null` are deletions. Atomic (tmp + rename). */
   setPrefs(patch: Record<string, unknown>): Record<string, unknown> {
     const keys = Object.keys(patch);
     if (keys.length === 0) return this.getAllPrefs();
@@ -75,11 +69,8 @@ export class PrefsStore {
   }
 }
 
-/** `assistant` is the shell's vault assistant, `automations` `ctx.delegate`. */
 export type ModelSubsystem = "assistant" | "ask" | "builder" | "automations";
 
-/** `harness.<subsystem>`, then `harness.kind`, then `codex`. An empty string
- *  is unset, so a cleared pin falls back rather than pinning `''`. */
 export function resolveSubsystemHarness(
   prefs: Record<string, unknown>,
   subsystem: ModelSubsystem
@@ -91,7 +82,6 @@ export function resolveSubsystemHarness(
   return "codex";
 }
 
-/** The primary is always first; duplicate and unknown kinds are dropped. */
 export function resolveSubsystemHarnessLadder(
   prefs: Record<string, unknown>,
   subsystem: ModelSubsystem,
@@ -115,8 +105,6 @@ export function resolveSubsystemHarnessLadder(
   return ladder;
 }
 
-/** `explicit`, then `model.<harnessKind>.<subsystem>`, then `.default`, then
- *  `undefined` — send no `model` at all so the harness uses its own. */
 export function resolveSubsystemModel(
   prefs: Record<string, unknown>,
   harnessKind: string,
@@ -131,8 +119,6 @@ export function resolveSubsystemModel(
   return undefined;
 }
 
-/** Keys are `config.<harnessKind>.<slot>.<category>`. The result stays
- *  category-keyed so adapter-specific ids never leak into policy. */
 export function resolveSubsystemConfigPins(
   prefs: Record<string, unknown>,
   harnessKind: string,
@@ -194,7 +180,6 @@ function sendError(res: ServerResponse, status: number, message: string): void {
 }
 
 export interface UserStoreRouteHooks {
-  /** Return a user-facing reason to reject the patch. */
   validatePatch?: (
     patch: Record<string, unknown>,
     current: Record<string, unknown>
@@ -206,8 +191,6 @@ export interface UserStoreRouteHooks {
   ) => Promise<void> | void;
 }
 
-/** `getOwnerId` backs `/id` with the ACTIVE vault's owner party id; without a
- *  provider that route 404s. */
 export function makeUserStoreRouteHandler(
   getStore: () => PrefsStore,
   getOwnerId?: () => string,

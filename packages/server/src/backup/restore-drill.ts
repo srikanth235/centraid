@@ -1,9 +1,3 @@
-/*
- * The restore drill's DEPTH half (#842 W1.3), run AFTER `verifyRestoredPair`
- * over the same scratch directory. Every structural check passes on a restored
- * vault whose CONTENT is gone: `integrity_check` speaks about pages, not rows.
- */
-
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -56,7 +50,6 @@ function preview(values: readonly string[]): string {
   return rest > 0 ? `${head.join(", ")}, +${rest} more` : head.join(", ");
 }
 
-/** `Math.random` is banned: a drill must re-run over the sample that failed. */
 export function seededRandom(seed: string): () => number {
   let state = createHash("sha256").update(seed).digest().readUInt32LE(0);
   return () => {
@@ -68,8 +61,6 @@ export function seededRandom(seed: string): () => number {
   };
 }
 
-/** The tables whose emptiness means the data is gone; transient ones
- *  legitimately differ from the capture instant. */
 export interface SpineCensus {
   readonly party: number;
   readonly content: number;
@@ -94,10 +85,6 @@ export function spineCensus(vault: DatabaseSync): SpineCensus {
 
 const SPINE_KEYS = ["party", "content", "media", "receipt"] as const;
 
-/** ERROR on `party = 0`: founding enrols the owner party, so a founded vault
- *  is never partyless at any instant a snapshot could capture. WARNING, never
- *  error, on a spine table with rows live and none restored — a stale snapshot
- *  restores fewer rows truthfully. No source census ⇒ WARN, never silence. */
 export function checkRestoredCensus(input: {
   readonly vaultId: string;
   readonly restored: SpineCensus;
@@ -149,8 +136,6 @@ export function checkRestoredCensus(input: {
   );
 }
 
-/** Narrower than `liveBlobShas`: `blob_staging` is a TTL'd ingress buffer no
- *  snapshot must carry, and counting it reddens a good mid-ingest backup. */
 export function claimedBlobShas(vault: DatabaseSync): Set<string> {
   const claimed = new Set<string>();
   const uris = vault
@@ -178,9 +163,6 @@ export interface BlobCoverageInput {
   readonly skippedBlobs?: readonly string[] | undefined;
 }
 
-/** A claimed sha resolves three ways — restored CAS, the RESTORED vault's own
- *  `blob_replica`, or a lazy restore's predicate. One that resolves none is
- *  already-lost data. */
 export function checkRestoredBlobCoverage(
   input: BlobCoverageInput
 ): RestoreDrillFinding {
@@ -234,7 +216,6 @@ export interface RestoreDrillInput {
   readonly casSampleSize?: number | undefined;
 }
 
-/** A file too damaged to open returns an error FINDING, never a throw. */
 export function runRestoreDrill(
   input: RestoreDrillInput
 ): RestoreDrillFinding[] {

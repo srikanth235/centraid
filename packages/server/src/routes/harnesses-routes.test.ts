@@ -1,11 +1,3 @@
-/*
- * The harnesses-status route reports the v0-supported harness roster while the
- * broader harness registry remains available to persisted configuration.
- * These tests cover the offered list shape and resolver plumbing; the CLI
- * probe itself runs for real and is not asserted on (its result varies by
- * host).
- */
-
 import { describe, expect, test } from "vitest";
 
 import { SUPPORTED_HARNESS_KINDS } from "@centraid/server/acp";
@@ -16,7 +8,6 @@ import {
   readHarnessesStatus,
 } from "./harnesses-routes.ts";
 
-/** A probed snapshot carrying only the axes these tests read. */
 function caps(
   configOptions: HarnessAcpCapabilities["configOptions"]
 ): HarnessAcpCapabilities {
@@ -52,8 +43,6 @@ describe("harnesses-routes", () => {
     expect(
       s.harnesses.map((a) => a.kind).sort(compareStringValues)
     ).toStrictEqual([...SUPPORTED_HARNESS_KINDS].sort(compareStringValues));
-    // Every entry is self-describing: the client renders off these, never off a
-    // local table keyed on kinds it happens to know.
     for (const harness of s.harnesses) {
       expect(harness.label).toBeTypeOf("string");
       expect(harness.label.length).toBeGreaterThan(0);
@@ -97,7 +86,6 @@ describe("harnesses-routes", () => {
         return kind === "pi" ? "/nonexistent/custom-harness" : undefined;
       },
     });
-    // Every product-supported kind is offered the override, not just a known pair.
     expect(seen.sort(compareStringValues)).toStrictEqual(
       [...SUPPORTED_HARNESS_KINDS].sort(compareStringValues)
     );
@@ -123,7 +111,6 @@ describe("harnesses-routes", () => {
         };
       },
     });
-    // Asked once per registered kind, and each answer landed on its own entry.
     expect(calls.map(([k]) => k).sort()).toStrictEqual(
       [...SUPPORTED_HARNESS_KINDS].sort((a, b) => a.localeCompare(b))
     );
@@ -132,7 +119,6 @@ describe("harnesses-routes", () => {
       { id: "codex-x", name: "X", default: true },
     ]);
     expect(codex?.modelsStatus).toBe("ready");
-    // The catalog's own default is surfaced so a picker can name what it inherits.
     expect(codex?.defaultModel).toBe("codex-x");
   });
 
@@ -155,10 +141,6 @@ describe("harnesses-routes", () => {
     expect(seen).toStrictEqual(SUPPORTED_HARNESS_KINDS.map(() => true));
   });
 
-  // Catalog enumeration is opt-in per kind (codex + claude-code), but the
-  // capability probe launches every available harness anyway and reads the same
-  // session/new model option. Consulting only the (empty) catalog shows
-  // "Built-in model" while opencode advertises 76 models there.
   test("falls an empty catalog back to the models the capability probe saw", () => {
     const models = modelsFromCapabilities(
       caps([
@@ -174,7 +156,6 @@ describe("harnesses-routes", () => {
         },
       ])
     );
-    // Only what the harness itself offered — and its own current pick is the default.
     expect(models).toStrictEqual([
       { id: "opencode/sonnet", name: "OpenCode Zen/Sonnet", default: true },
       { id: "opencode/haiku" },
@@ -198,8 +179,6 @@ describe("harnesses-routes", () => {
     ).toStrictEqual([]);
   });
 
-  // An in-flight warm may still fill the catalog, so `loading` is never
-  // overwritten — the client keeps polling rather than latching a fallback.
   test("never overrides a loading catalog with the capability fallback", async () => {
     const s = await readHarnessesStatus({
       resolveModels: async () => ({ list: [], status: "loading" }),
@@ -229,7 +208,6 @@ describe("harnesses-routes", () => {
     const codex = s.harnesses.find((a) => a.kind === "codex");
     expect(codex?.models).toStrictEqual([]);
     expect(codex?.modelsStatus).toBe("empty");
-    // One harness's failure never takes the rest of the list down with it.
     expect(s.harnesses.find((a) => a.kind === "opencode")?.modelsStatus).toBe(
       "ready"
     );

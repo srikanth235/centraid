@@ -1,11 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit the manifest types, their JSON meta-schema and the validator only ever change together
-/**
- * App manifest — the per-app contract on disk as `app.json`, and the single
- * source of truth for what handlers exist and what they accept (handler files
- * are pure function bodies) plus the `vault` and `ext` data declarations.
- * `manifestVersion` is required at the root so a future incompatible change
- * fails loudly instead of reading as an old manifest.
- */
 
 import type { ValidateFunction } from "ajv";
 import { Ajv2020 } from "ajv/dist/2020.js";
@@ -49,7 +42,6 @@ export type AppActionSideEffect = "vault-write";
 export interface ManifestActionEntry {
   readonly name: string;
   readonly description?: string;
-  /** The dispatcher is PERMISSIONLESS; the conversation surface checks this. */
   readonly confirmation: HandlerConfirmation;
   readonly input: JsonSchema;
   readonly output?: JsonSchema;
@@ -88,15 +80,12 @@ export interface ManifestVaultScope {
   readonly fieldMask?: readonly string[];
 }
 
-/** A REQUEST, never a grant: deny-by-default until the owner approves. */
 export interface ManifestVaultBlock {
   readonly purpose: string;
   readonly why?: string;
   readonly scopes: readonly ManifestVaultScope[];
 }
 
-/** Declared by the app, created by the GATEWAY inside vault.db (#286).
- *  Mirrors the vault's `ExtTableSpec`; app-engine stays vault-agnostic. */
 export interface ManifestExtColumn {
   readonly name: string;
   readonly type: "text" | "integer" | "real" | "blob";
@@ -122,9 +111,6 @@ export interface ManifestExtBlock {
   readonly tables: readonly ManifestExtTable[];
 }
 
-/** `byteBearing: false` is a record-only app and must not import custody
- *  machinery (docs/blueprint-seats.md S2; `blueprint-seats.test.ts` is the
- *  tripwire). `disabledOn` is read generically, never per app id. */
 export interface ManifestSeatsBlock {
   readonly byteBearing: boolean;
   readonly originActs: readonly string[];
@@ -132,8 +118,6 @@ export interface ManifestSeatsBlock {
   readonly northStar: string;
 }
 
-/** Facts about the vault/replica plane, never per-app inventions (#839). The
- *  ORDER is what manifests declare and reports render in — keep it stable. */
 export const CANONICAL_DESIGNED_STATES = [
   "dayone",
   "pending",
@@ -146,16 +130,12 @@ export const CANONICAL_DESIGNED_STATES = [
 
 export type ManifestDesignedState = (typeof CANONICAL_DESIGNED_STATES)[number];
 
-/** `reason` says why the case is UNREPRESENTABLE; an unbuilt state is a gap
- *  and belongs in `designed`. */
 export interface ManifestStateExclusion {
   readonly state: ManifestDesignedState;
   readonly reason: string;
   readonly citation: string;
 }
 
-/** A CLOSED partition (#839): a manifest that forgets a state fails
- *  validation instead of reading as "it does not apply here". */
 export interface ManifestStatesBlock {
   readonly designed: readonly ManifestDesignedState[];
   readonly excluded: readonly ManifestStateExclusion[];
@@ -178,7 +158,6 @@ export interface Manifest {
   readonly states?: ManifestStatesBlock;
 }
 
-// The JSON Schema for the manifest ITSELF, exported for external tooling.
 export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://centraid.dev/schemas/app-manifest/v1.json",
@@ -380,9 +359,6 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
   },
 };
 
-/** `coerceTypes` off (JSON inputs are typed), `useDefaults` off (it would mask
- *  a missing required field), `removeAdditional` off (a manifest may set
- *  `additionalProperties: true` deliberately). */
 let sharedAjv: Ajv2020 | undefined;
 function getAjv(): Ajv2020 {
   if (!sharedAjv) {
@@ -421,7 +397,6 @@ export function parseManifest(json: string): Manifest {
   return validateManifest(raw);
 }
 
-/** Ajv, then the manual cross-cuts a schema cannot state. */
 export function validateManifest(raw: unknown): Manifest {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     throw new ManifestError(
@@ -459,8 +434,6 @@ export function validateManifest(raw: unknown): Manifest {
     );
   }
 
-  // One name in BOTH actions and queries is allowed (different tools); two
-  // actions with one name would let the dispatcher silently pick one.
   const actions = (r.actions as ManifestActionEntry[] | undefined) ?? [];
   const queries = (r.queries as ManifestQueryEntry[] | undefined) ?? [];
 
@@ -501,8 +474,6 @@ export function validateManifest(raw: unknown): Manifest {
     seenQueries.add(q.name);
   }
 
-  // Ajv can say each entry is one of the seven; only this pass can say each of
-  // the seven is claimed exactly once.
   const states = r.states as ManifestStatesBlock | undefined;
   if (states && typeof states === "object") {
     const claimed = new Map<ManifestDesignedState, "designed" | "excluded">();

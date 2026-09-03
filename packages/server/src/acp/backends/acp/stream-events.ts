@@ -1,17 +1,3 @@
-/*
- * Translating ACP `session/update` notifications into the normalized
- * `TurnStreamEvent` shape every surface (chat + builder) consumes. Wire shape
- * (verified against the public ACP spec): `session/update`
- * { sessionId, update: { sessionUpdate, ... } } — variants
- * agent_message_chunk, agent_thought_chunk, tool_call, tool_call_update,
- * plan, user_message_chunk, available_commands_update, current_mode_update,
- * usage_update.
- *
- * The mapper owns the per-turn accumulation only it can see: the assistant
- * text assembled from chunks, which tool calls are open, and the usage folded
- * off `usage_update`. The orchestrator reads those back at the end of the turn.
- */
-
 import type { SessionNotification, Usage } from "@agentclientprotocol/sdk";
 
 import type { TurnStreamEvent } from "@centraid/server/engine";
@@ -21,20 +7,10 @@ import { readCost, readTokenUsage } from "./usage.js";
 import type { TokenUsage, UsageCost } from "./usage.js";
 
 export interface SessionUpdateMapper {
-  /** Feed one `session/update` notification's `params`. */
   handleSessionUpdate: (params: SessionNotification) => void;
-  // Is the harness itself already streaming a tool call by this name? A
-  // harness that surfaces its MCP calls announces `tool_call` before dialing
-  // our endpoint, so a matching open ACP tool call means our own events would
-  // double-render it; private-MCP harnesses leave nothing open, so we emit.
-  // The `includes` is deliberate: namespacing harnesses surface the tool as
-  // `mcp__centraid__vault_sql`.
   harnessStreamsTool: (toolName: string) => boolean;
-  /** Assistant text accumulated across `agent_message_chunk`s. */
   finalText: () => string;
-  /** Merge a token breakdown read elsewhere (the `session/prompt` result). */
   foldTokenUsage: (source: Usage) => void;
-  /** Everything folded so far, for the single end-of-turn `usage` event. */
   usage: () => {
     tokens: TokenUsage;
     cost: UsageCost | undefined;
@@ -64,7 +40,6 @@ function normalizeLocations(value: unknown): ToolLocation[] {
   return out;
 }
 
-/** ACP blocks with bytes but no workspace location become CAS artifacts. */
 function extractInlineArtifacts(value: unknown): InlineArtifact[] {
   const content = Array.isArray(value)
     ? value
@@ -168,10 +143,8 @@ function renderableToolContent(value: unknown): unknown[] {
   });
 }
 
-/** Pull `type: "diff"` content blocks out of ACP tool content arrays. */
 export function extractToolDiffs(content: unknown): ToolDiff[] {
   if (!Array.isArray(content)) {
-    // Some agents put a single block or nest under { content: [...] }.
     if (
       content &&
       typeof content === "object" &&
@@ -201,7 +174,6 @@ export function extractToolDiffs(content: unknown): ToolDiff[] {
   return out;
 }
 
-/** Normalize plan entries from ACP `sessionUpdate: "plan"`. */
 export function normalizePlanEntries(entries: unknown): PlanEntry[] {
   if (!Array.isArray(entries)) return [];
   const out: PlanEntry[] = [];
@@ -273,9 +245,6 @@ export function createSessionUpdateMapper(
             ...(renderableContent.length
               ? {
                   content: renderableContent,
-                  // The harness's own `rawOutput.content` is its payload, not
-                  // our renderable projection — overwriting the key would
-                  // silently drop tool output the harness chose to return.
                   ...((update.rawOutput as Record<string, unknown>).content ===
                   undefined
                     ? {}
@@ -344,8 +313,6 @@ export function createSessionUpdateMapper(
       ...(locations.length ? { locations } : {}),
       ...(artifacts.length ? { artifacts } : {}),
     });
-    // Builder-friendly parallel signal: each file change as a phase so UIs
-    // that only listen for `phase` still see diffs.
     for (const d of diffs) {
       emit({ type: "phase", phase: "diff", detail: d });
     }
@@ -406,8 +373,6 @@ export function createSessionUpdateMapper(
       return;
     }
     if (kind === "usage_update") {
-      // Per the SDK schema, `usage_update` carries context-window used/size
-      // plus cumulative cost; token totals come from `PromptResponse.usage`.
       const cost = readCost(update.cost);
       if (cost) usageCost = cost;
       const used =
@@ -423,8 +388,6 @@ export function createSessionUpdateMapper(
           ? update.size
           : undefined;
       if (used !== undefined || size !== undefined) {
-        // ACP sessions may self-compact, so `used` is deliberately a latest
-        // snapshot rather than a monotonic max.
         contextUsage = {
           ...(used === undefined ? {} : { used }),
           ...(size === undefined ? {} : { size }),
@@ -432,9 +395,6 @@ export function createSessionUpdateMapper(
         emit({ type: "context", ...contextUsage });
       }
     }
-    // user_message_chunk / available_commands_update / current_mode_update /
-    // config_option_update: product owns slash commands; config updates are
-    // consumed by the backend's pin state.
   };
 
   return {

@@ -1,11 +1,3 @@
-/*
- * The on-behalf-of cap (#599 decision 7; ownership since #726): an agent turn
- * acts FOR an owner and is hard-capped at that owner's authority — Sid's
- * assistant must fail exactly where Sid would. The owner and vault-ownership
- * travel on the request scope into `VaultPlane.agentBridgeFor`; the consent
- * stage enforces the cap and journals both principals.
- */
-
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 
@@ -52,7 +44,6 @@ describe("agent-owner-cap suite", () => {
     return opened;
   }
 
-  /** The automation's `ctx.vault`, built inside the acting owner's scope. */
   function bridgeAs(vault: VaultPlane, ownsVault: boolean): VaultBridge {
     return runWithVaultContext(
       {
@@ -113,8 +104,6 @@ describe("agent-owner-cap suite", () => {
     expect(taskCount(vault)).toBe(0);
     const receipt = lastReceipt(vault);
     expect(receipt.decision).toBe("deny");
-    // "agent, for <owner>": the owner on the receipt, the agent on provenance
-    // and the invocation's caller id.
     expect(receipt.detail).toMatchObject({ actingOwner: SID });
     expect(String(receipt.detail.failing)).toContain(SID);
   });

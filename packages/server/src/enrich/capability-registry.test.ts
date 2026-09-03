@@ -1,6 +1,3 @@
-// The capability registry (#807): contracts cover what this build actually
-// ships, and output-schema ids obey the vault's one version-identity convention.
-
 import { describe, expect, test } from "vitest";
 
 import { parseModelId } from "@centraid/vault";
@@ -34,7 +31,6 @@ describe("capability registry", () => {
   });
 
   test("every output schema parses as <name>@<version>", () => {
-    // The convention is model-id.ts's, not a second one invented here — a consumer pinned to `ocr@1` compares versions with the same helpers.
     for (const contract of ENRICH_CAPABILITIES) {
       expect(
         parseModelId(contract.outputSchema),
@@ -75,7 +71,6 @@ describe("capability registry", () => {
   });
 
   test("a coordinate is its own input kind", () => {
-    // `place-names` (#816) consumes a fact the vault already holds rather than bytes it has to read — the kind union grew rather than filing the capability under "image" because a photograph is nearby.
     expect(CAPABILITY_INPUT_KINDS).toContain("coordinate");
     const places = capabilityContract("place-names");
     expect(places?.input).toBe("coordinate");
@@ -87,7 +82,6 @@ describe("capability registry", () => {
   });
 
   test("naming a coordinate is never delegated to anyone", () => {
-    // Not "no delegate implementation yet": naming a coordinate to a third party tells them where the member was. The bundled table exists so that question is never asked.
     expect(capabilityContract("place-names")?.delegateCapable).toBe(false);
   });
 

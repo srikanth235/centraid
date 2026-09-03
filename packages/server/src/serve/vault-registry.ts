@@ -1,12 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#439) the vault registry is one cohesive mount/lifecycle owner — scan, create, rename, delete, and now adopt (issue #439) all manipulate the same private plane map + auto-created-default set, so splitting the adopt seam into its own module would either expose that internal state across a boundary or duplicate the scan/delete plumbing it reuses
-/*
- * The gateway's sovereign vaults under one root. A vault's identity and name
- * live in its own `core_vault` row, so the registry persists NOTHING at the
- * root. There is no server-global active seat: every request resolves from the
- * ambient scope, and the unscoped fallback is the owner's PERSONAL vault,
- * identified by a durable marker and NEVER by creation order. Lifecycle splits
- * by AUTHORITY, not transport — `create`/`delete` are ADMIN acts (#289).
- */
 
 import { readdirSync, rmSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -39,8 +31,6 @@ import { runWithVaultContext, vaultContext } from "./vault-context.js";
 import type { InstallScopeBlock, VaultPlane } from "./vault-plane.js";
 import { openVaultPlane } from "./vault-plane.js";
 
-/** `scan()` runs on every health-probe tick, so without a backoff a broken
- *  directory reopens its corrupt file on every poll forever (#351). */
 const MOUNT_RETRY_BACKOFF_MS = 30_000;
 
 export interface FailedMount {
@@ -78,7 +68,6 @@ export interface VaultRegistryOptions {
   synchronous?: "FULL" | "NORMAL";
   shouldDeferBackgroundWork?: () => boolean;
   replicationConcurrency?: number;
-  /** Divided evenly: without it, N vaults cost N times one (#659). */
   footprintBudget?: VaultFootprintBudget;
   onSweepPass?: (info: { durationMs: number }) => void;
   onReplicationPass?: (info: {
@@ -92,7 +81,6 @@ export interface VaultInfo {
   vaultId: string;
   name: string;
   ownerPartyId: string;
-  /** The durable default marker written at founding. */
   personal?: boolean;
   color?: string;
   icon?: string;

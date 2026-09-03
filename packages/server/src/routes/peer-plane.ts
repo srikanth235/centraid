@@ -1,11 +1,3 @@
-/*
- * The peer plane (#726 P3 decision 6). IDENTITY: only the forwarder's peer
- * proof makes a peer request, a device header is NEVER read. CONFINEMENT: the
- * handler re-checks `isPeerPlaneTarget` itself. TOPOLOGY HIDING: unknown link,
- * revoked link, unknown vault and unknown route answer alike. Refusals are
- * STATES, never exceptions — the caller is protocol code.
- */
-
 import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -69,14 +61,8 @@ export interface PeerPlaneDeps {
 
 export interface PeerIdentity {
   endpointId: string;
-  /** Coarse admission ONLY: a stranger's malformed body answers `not_found`,
-   *  never `bad_request`. Attribution is `linkFor`'s job. */
   linked: boolean;
-  /** An endpoint is per-GATEWAY, not per-vault (D1 inv. 2): feed this a vault
-   * id the REQUEST claims, never a guess. Prefer `linkForPair` (#726). */
   linkFor: (peerVaultId: string) => LinkedPeer | undefined;
-  /** Exact pair, verified against the proved endpoint: immune to both
-   * directions of the co-hosting ambiguity `linkFor` is not. */
   linkForPair: (
     localVaultId: string,
     peerVaultId: string
@@ -143,7 +129,6 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
     } catch {
       return sendJson(res, 400, { state: "bad_request" });
     }
-    // BEFORE the ticket: a mismatched peer must not burn one it cannot redeem.
     const verdict = judgePeerHandshake(body);
     if (verdict.state !== "ok") {
       return sendJson(res, verdict.state === "bad_request" ? 400 : 409, {
@@ -160,12 +145,9 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
     if (!ticketId || !secret || !peerVaultId || !peerPublicKey) {
       return sendJson(res, 400, { state: "bad_request" });
     }
-    // A redemption naming a vault THIS gateway holds claims an identity it
-    // cannot have; accepting it exports the owner's own give (#750 inv. 2).
     if (deps.vaultPublicKey(peerVaultId) !== undefined) {
       return sendJson(res, 400, { state: "bad_request" });
     }
-    // Bind to the PROVED endpoint; a differing body is a relay attempt.
     if (claimedEndpoint !== undefined && claimedEndpoint !== peer.endpointId) {
       return sendJson(res, 400, { state: "bad_request" });
     }
@@ -231,8 +213,6 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
     }
     const assertion = parseRouteAssertion(body);
     if (!assertion) return sendJson(res, 400, { state: "bad_request" });
-    // A rotated peer dials from a NEW EndpointId: authority is the vault
-    // SIGNATURE plus the asserted endpoint being the dialing one.
     if (assertion.endpointId !== peer.endpointId) {
       return sendJson(res, 400, { state: "bad_request" });
     }
@@ -274,9 +254,6 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
     if (pathname === PEER_ROUTE_ASSERT_PATH && method === "POST") {
       return assertRoute(req, res, peer);
     }
-    // COPY-AS-SHARE IS OFF THIS WIRE (#825, ruling G-copy): remote-give frames
-    // and the ranged byte pull answer `not_found` like any unknown path.
-    // Closure reading survives only BENEATH a grant, never as a peer frame.
     if (
       deps.commonsVaultFor &&
       deps.commonsGatewayFor &&

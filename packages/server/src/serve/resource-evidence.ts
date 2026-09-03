@@ -1,12 +1,3 @@
-/*
- * Mobile resource evidence ledger (#842). The validator refuses rot:
- * a blocked row must say what unblocks it (`blocked-external` requires
- * `blockedReason` + `unblockCondition` and forbids a value); a measured
- * row must be re-derivable (`measured`/`derived` require `recomputedBy`
- * + `tolerance`). A `derived` row may only claim device class
- * `host-proxy`. No clock here: writers supply `at`.
- */
-
 export const RESOURCE_SURFACES = ["ios", "android", "host-proxy"] as const;
 export type ResourceSurface = (typeof RESOURCE_SURFACES)[number];
 
@@ -46,17 +37,12 @@ export interface ResourceObservation {
   readonly surface: ResourceSurface;
   readonly metric: ResourceMetric;
   readonly method: ResourceMethod;
-  /** `null` exactly when `method` is `blocked-external`. */
   readonly value: number | null;
   readonly unit: string;
   readonly device: ResourceDevice;
-  /** ISO instant or measurement date. */
   readonly at: string;
-  /** Repo-relative path or issue link. */
   readonly evidence: string;
-  /** Test reproducing `value`; required for measured/derived rows. */
   readonly recomputedBy?: string;
-  /** Recomputation band, e.g. 0.2 = ±20%. */
   readonly tolerance?: number;
   readonly blockedReason?: string;
   readonly unblockCondition?: string;
@@ -70,7 +56,6 @@ export interface ResourceLedger {
 
 export const RESOURCE_LEDGER_SCHEMA_VERSION = 1;
 
-/** Every (surface, metric) lane the validator demands a row for. */
 export const REQUIRED_RESOURCE_LANES: readonly (readonly [
   ResourceSurface,
   ResourceMetric,
@@ -167,7 +152,6 @@ export function validateResourceLedger(
   };
 }
 
-/** True when `observed` is inside the row's tolerance band. */
 export function withinTolerance(
   row: ResourceObservation,
   observed: number

@@ -1,13 +1,3 @@
-/*
- * `GET /centraid/_gateway/backup` (+ `/run`, `/kit-confirmed`) — the HTTP
- * surface over `BackupService` (#351), mounted in `extraHandlers` behind the
- * host bearer gate. When backup is unconfigured, this handler is built with
- * `backupService: undefined` and answers `configured: false` (not 404) so the
- * UI renders an explainer without a separate probe. `recoveryKit` is
- * deliberately generic — #367 reuses the `{confirmedAt}` shape and POST to
- * gate the S3-storage enable flow.
- */
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import {
@@ -74,26 +64,13 @@ export interface BackupStatusBody {
   provider?: string;
   vaults: BackupVaultStatus[];
   recoveryKit: RecoveryKitState;
-  /** Provider-declared promises (#436): Recovery retention + Exit
-   *  restoreCostClass. Absent when backup isn't configured or unreadable. */
   home?: HomeDiscovery;
 }
 
 export interface BackupRouteDeps {
-  /** `undefined` when `options.backup?.enabled` is false — no service exists. */
   backupService?: BackupService;
-  /**
-   * Gateway-level recovery-kit state (#367), present even without backup so
-   * the shared confirmation gate can be satisfied, not only bypassed.
-   */
   recoveryKitStore?: RecoveryKitStateStore;
-  /** Real per-vault enrollments used to keep live key export owner-only. */
   enrollments?: EnrollmentStore;
-  /**
-   * Direct host-custody request (bearer, never iroh-forwarded). It sees every
-   * vault, so its refusals are `owner_only` (real owner named), not
-   * `not_found` topology hiding (#726).
-   */
   isHostCustody?: (req: IncomingMessage) => boolean;
   vaults: VaultRegistry;
 }
@@ -142,8 +119,6 @@ async function buildStatus(deps: BackupRouteDeps): Promise<BackupStatusBody> {
       backupService.casReconciliationStatus?.() ??
         Promise.resolve<Record<string, BackupReconciliationState>>({}),
       backupService.recoveryKitStatus(),
-      // Discovery is a provider round-trip; failure must never blank the
-      // status body — degrade to unknown recovery/exit.
       typeof backupService.homeDiscovery === "function"
         ? backupService.homeDiscovery().catch(() => undefined)
         : Promise.resolve<HomeDiscovery | undefined>(undefined),
@@ -183,7 +158,6 @@ function vaultStatus(
   casReconciliation?: BackupReconciliationState
 ): BackupVaultStatus {
   const store = readBlobStoreSettings(plane.db.vault);
-  // Every remote CAS connection is a provider home bundle (#436).
   const destination: BackupDestinationStatus =
     store.kind === "s3"
       ? {
@@ -227,10 +201,6 @@ function newestReconciliation(
     : second;
 }
 
-// Owner-editable policy keys (#436). Excluded: `casAck` (remote custody is
-// always receipt-acked — not an owner knob) and store-class vocabulary
-// (`storageClass` / `directToColdOriginals`, routed internally, not
-// user-facing).
 const POLICY_KEYS: readonly (keyof BackupPolicy)[] = [
   "rpoSeconds",
   "snapshotIntervalHours",
@@ -286,8 +256,6 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
           message: "GET, PUT only",
         });
       }
-      // Owner act (#726): hosting a vault confers no authority over ITS
-      // destination/policy.
       const configRefusal = vaultOwnerRefusal(
         req,
         deps,
@@ -401,14 +369,9 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
             'backup is not configured — add a "backup" block to the gateway config',
         });
       }
-      // Serialize: a run in flight covers every mounted vault (`runAll`), so
-      // a second POST observes it rather than enqueueing a duplicate pass.
       if (backupService.isRunning()) {
         return sendJson(res, 202, { accepted: true, alreadyRunning: true });
       }
-      // Fire-and-forget: `doRunBackup` records failures in backup state +
-      // health; this catch only silences unhandled-rejection. The UI learns
-      // the outcome from the next GET.
       void backupService.runAll().catch(() => undefined);
       return sendJson(res, 202, { accepted: true });
     }
@@ -461,8 +424,6 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
             message: "a recovery-kit password is required",
           });
         }
-        // Owner-held (#726): a kit carries only vaults the REQUESTING owner
-        // owns — hosting someone else's vault earns nothing.
         const document = scopeKitToRequestingOwner(
           await deps.backupService.recoveryKitDocument(),
           req,

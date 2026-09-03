@@ -1,5 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#731) the Commons route owns invitation, claim, accept, command, resident-save, and reconciliation doors under one authenticated vault boundary.
-/** Owner/member control surface for circle-backed Commons (#731). */
 
 import type { IncomingMessage } from "node:http";
 
@@ -47,7 +46,6 @@ import type { EnrollmentStore } from "../serve/enrollment-store.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
 export const COMMONS_PATH = "/centraid/_gateway/commons";
-/** What the product offers as a shared space today. */
 const COMMONS_CONTAINER_TYPES = new Set<ShareableItemType>([
   "core.collection",
   "core.content_item",
@@ -56,12 +54,6 @@ const COMMONS_CONTAINER_TYPES = new Set<ShareableItemType>([
   "media.asset",
   "tally.group",
 ]);
-/**
- * Container types the DECLARED routing table can address (#750). A
- * container nobody can route a write to would accept the share and then
- * silently revert every member edit at the next compile, so the routing table
- * — not a second hand-kept list — decides whether offering it is honest.
- */
 const ROUTABLE_CONTAINER_TYPES = new Set<ShareableItemType>(
   COMMONS_COMMAND_ROUTES.map((route) => route.containerType)
 );
@@ -345,15 +337,6 @@ export function makeCommonsRouteHandler(deps: CommonsRouteDeps): RouteHandler {
           })
         );
       }
-      /**
-       * The STEWARD's per-intent answer (#872), beside the member's cancel
-       * above. `actorVaultId` names the deciding seat — the vault the caller
-       * owns and is acting from — while the intent row itself lives in whoever
-       * composed it; `decideCommonsIntent` locates that seat through the same
-       * mounted-vault resolver the rest of this route uses. Authorization is
-       * the vault's, not the route's: only the grant's steward party may
-       * answer, and a member deciding their own request is refused there.
-       */
       if (
         parts[0] === "intents" &&
         parts[1] &&
@@ -369,9 +352,6 @@ export function makeCommonsRouteHandler(deps: CommonsRouteDeps): RouteHandler {
         const actor = deps.vaultFor(actorVaultId);
         const gateway = deps.gatewayFor(actorVaultId);
         const credential = deps.credentialFor(actorVaultId);
-        // Approving RUNS the command here, so a seat without its own rail
-        // cannot answer at all — it would settle the intent on a promise it
-        // has no way to keep.
         if (!actor || !gateway || !credential)
           throw new Error("deciding vault is not mounted");
         return sendJson(
@@ -601,8 +581,6 @@ export function makeCommonsRouteHandler(deps: CommonsRouteDeps): RouteHandler {
             : {}),
           containerType,
           containerId,
-          // ShareSheet creates invitations. A vault id is an address and a
-          // party binding is identity; neither is receiver consent.
           members: members.map(({ partyId, capability, displayName }) => ({
             partyId,
             capability,
@@ -782,10 +760,6 @@ export function makeCommonsRouteHandler(deps: CommonsRouteDeps): RouteHandler {
                 nonce: intentId,
               });
         const now = new Date().toISOString();
-        // The baseline `queueCommonsIntent` recorded above from the actor's
-        // OWN seat, read back rather than re-derived, so authorization sees
-        // exactly the sequence the actor's mental model was composed against
-        // (#731 goal 1) — never a caller-supplied or re-guessed value.
         const basedOnSequence = readCommonsIntentBasedOnSequence(
           actor.vault,
           intentId

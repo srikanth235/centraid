@@ -93,7 +93,6 @@ describe("prose scrubbing", () => {
 
   test("caps runaway interpolation and reports it", () => {
     const report = emptyRedactionReport("standard");
-    // Punctuation between every token, so no rule but the cap applies.
     const out = scrubProse(`note: ${"a; ".repeat(400)}`, report);
     expect(out.length).toBeLessThanOrEqual(PROSE_MAX_CHARS + 32);
     expect(report.byRule["length-cap"]).toBe(1);
@@ -115,9 +114,6 @@ describe("prose scrubbing", () => {
       "locker: [REDACTED:payment-card] declined"
     );
     expect(valid.byRule["payment-card"]).toBe(1);
-    // Luhn refuses this one, so `payment-card` does not claim it — but the
-    // long-digit-run shape is still a value, and `phone` removes it. A rule
-    // declining a match must never mean the value survives.
     const invalid = emptyRedactionReport("standard");
     const out = scrubProse("seq 4111111111111112 seen", invalid);
     expect(out).not.toContain("4111111111111112");

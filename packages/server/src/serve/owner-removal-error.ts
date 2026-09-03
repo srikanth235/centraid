@@ -1,7 +1,3 @@
-/*
- * Removing a person who still owns vaults would orphan them — refused.
- */
-
 export class OwnerRemovalError extends Error {
   constructor(
     readonly ownerId: string,

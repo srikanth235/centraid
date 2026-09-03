@@ -73,11 +73,9 @@ describe(provisionPendingWebhooksInFiles, () => {
     expect(mf.triggers[0]!.kind).toBe("webhook");
     expect(mf.triggers[0]!.id).toBe(minted[0]!.webhookId);
     expect(mf.triggers[0]!.pending).toBeUndefined();
-    // The manifest stores only the hash; the plaintext verifies against it.
     expect(
       verifyWebhookSecret(minted[0]!.secret, mf.triggers[0]!.secretHash)
     ).toBeTruthy();
-    // Non-manifest files pass through untouched.
     expect(out.find((f) => f.path === "app.json")!.content).toBe("{}");
   });
 
@@ -133,7 +131,6 @@ describe(rotateWebhookInFiles, () => {
     expect(
       verifyWebhookSecret(rotated!.secret, mf.triggers[0]!.secretHash)
     ).toBeTruthy();
-    // The old secret (whatever it was) no longer verifies against the new hash.
     expect(
       verifyWebhookSecret(
         "whatever-the-old-plaintext-was",
@@ -197,7 +194,6 @@ describe("webhook secret helpers", () => {
     const hash = hashWebhookSecret(secret);
     expect(verifyWebhookSecret(secret, hash)).toBe(true);
     expect(verifyWebhookSecret("wrong", hash)).toBe(false);
-    // Length / empty-hash mismatches must fail closed without throwing.
     expect(verifyWebhookSecret(secret, "")).toBe(false);
     expect(verifyWebhookSecret(secret, "ab")).toBe(false);
   });
@@ -400,9 +396,6 @@ describe(makeWebhookRouteHandler, () => {
     };
     await verifyHeader(0);
 
-    // `x-request-id` is a transport correlation id; some proxies reuse one
-    // across requests, and INSERT OR IGNORE would then swallow a real
-    // delivery. Two posts sharing it must get two distinct ids.
     const shared = {
       authorization: `Bearer ${secret}`,
       "x-request-id": "proxy-reused",
@@ -453,7 +446,6 @@ describe(makeWebhookRouteHandler, () => {
     });
     const failed = mockRes();
     await expect(handler(mockReq({}), failed)).resolves.toBe(true);
-    // Re-use failHandler for the actual ingress path.
     const failed2 = mockRes();
     await expect(failHandler(mockReq({}), failed2)).resolves.toBe(true);
     expect(failed2.status).toBe(500);

@@ -12,16 +12,6 @@ import { GatewayDatabase } from "../serve/gateway-db.js";
 import { makeScopesRouteHandler } from "./scopes-routes.js";
 import type { ScopeVault } from "./scopes-routes.js";
 
-/*
- * `GET /centraid/_vault/scopes` — the owner-scope registry read (#599 Phase 4,
- * ownership #726; #781 "sharing plane ownership"). Household's "Vaults you
- * own" block and every "which vault?" picker resolve from this one answer, and
- * the desktop e2e mock gateway mirrors it, so the real route's law is pinned
- * here: the caller's OWNED ∩ MOUNTED vaults in registry order, `canWrite`
- * sourced from ownership, a topology that never leaks by absence-not-refusal,
- * and `installed` answered only when an app was actually named.
- */
-
 const HOST_CUSTODY_HEADER = "x-test-host-custody";
 
 const servers: http.Server[] = [];
@@ -36,8 +26,6 @@ async function cleanup(): Promise<void> {
   );
 }
 
-/** Registry order: the default (personal) vault first, then oldest-first —
- *  including a vault the caller does NOT own, which must never appear. */
 const MOUNTED: readonly ScopeVault[] = [
   { vaultId: "vault-a", name: "Personal", personal: true, color: "#5847e0" },
   { vaultId: "vault-b", name: "Sam's vault" },
@@ -77,7 +65,6 @@ function deviceHeaders(endpointId: string): Record<string, string> {
   return { [AUTHED_DEVICE_HEADER]: endpointId };
 }
 
-/** Ada owns vault-a and vault-c; Sam owns vault-b. Ada is the caller. */
 function household(f: Harness): void {
   f.enrollments.enroll({
     endpointId: "ep-ada",
@@ -113,12 +100,6 @@ describe("scopes-routes owner-scope registry", () => {
       headers: deviceHeaders("ep-ada"),
     });
     expect(response.status).toBe(200);
-    // The exact wire body Household and the pickers resolve from: ownership
-    // is the visibility filter AND the source of `canWrite`; the `personal`
-    // founding marker survives; Sam's vault-b is ABSENT — the listing leaks
-    // no topology, so there is no "forbidden" row, only absence. No
-    // `installed` key anywhere: no app was named, and "not asked" must stay
-    // distinguishable from "not installed".
     await expect(response.json()).resolves.toStrictEqual({
       scopes: [
         {
@@ -139,8 +120,6 @@ describe("scopes-routes owner-scope registry", () => {
   });
 
   test("an owned vault the gateway no longer mounts is not a scope", async () => {
-    // vault-c stays owned by Ada in gateway.db but is unmounted from the
-    // registry: a place the caller cannot work must not be offered.
     const f = await harness(MOUNTED.filter((v) => v.vaultId !== "vault-c"));
     household(f);
     const response = await fetch(`${f.base}/centraid/_vault/scopes`, {

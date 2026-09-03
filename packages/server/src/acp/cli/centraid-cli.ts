@@ -1,23 +1,4 @@
 #!/usr/bin/env node
-/*
- * `centraid-acp` CLI — shipped as a binary the builder harness's shell can
- * call by bare name (the session injects this package's dist dir onto PATH).
- *
- * There are no `sql` subcommands (#286): data questions ride the
- * in-process vault-register tools (`vault_sql` / `vault_invoke`), and there is
- * no per-app database for a shell to poke.
- *
- * Output: JSON on stdout plus a short human-readable summary on stderr.
- *
- * Subcommands:
- *   centraid-acp preview snapshot
- *   centraid-acp --help
- *
- * Exit codes:
- *   0  — success
- *   1  — runtime error
- *   2  — bad usage (missing arg, unknown subcommand)
- */
 
 import { statSync } from "node:fs";
 import path from "node:path";

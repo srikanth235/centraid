@@ -1,17 +1,3 @@
-/*
- * The CLI minting lane stays open with no paired device, at any tier.
- *
- * `centraid-gateway pair` runs with shell access on the gateway host and no
- * device identity — the devices route authorizes it through its own
- * host-custody check (`canMintPairingTicket` → `isDirectHostRequest`). The
- * composed handler's global "proved enrolled device" gate must not run first:
- * that would make the hatch unreachable, and a headless daemon could not
- * enroll any device from the CLI at all.
- *
- * The bypass must stay narrow — a loopback, non-forwarded caller only. An
- * iroh-forwarded request carries device headers and must still be gated.
- */
-
 import { promises as fs } from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -28,7 +14,6 @@ import { GatewayDatabase } from "./gateway-db.ts";
 import { PairingTicketStore } from "./pairing-store.ts";
 
 const TICKET_PATH = "/centraid/_gateway/devices/ticket";
-/** Stands in for the daemon's per-boot device proof. */
 const PROOF = "per-boot-device-proof";
 
 let dataDir: string;
@@ -52,9 +37,6 @@ describe("pairing-ticket-host-custody scenarios", () => {
         endpointTicket: () => "endpoint-ticket",
       },
       isHostCustody: isDirectHostRequest,
-      // Mirrors the daemon's resolver rather than letting buildGateway fall back
-      // to `embeddedAccess`, which resolves EVERY loopback request to the
-      // embedded owner and would make the negative case pass vacuously.
       deviceAccess: {
         deviceKeyFor: (req) => {
           const device = req.headers["x-centraid-device"];
@@ -114,12 +96,6 @@ describe("pairing-ticket-host-custody scenarios", () => {
     });
 
     expect(forwarded.status).toBe(403);
-    // Asserting the MESSAGE, not just the shared `device_identity_required`
-    // code: the devices route refuses an unproved caller too, with the same
-    // code but its own wording. Pinning the gate's wording is what proves the
-    // forwarded request was stopped BEFORE the route — drop
-    // `isDirectHostRequest` from the bypass and this flips to the route's
-    // "pairing tickets require…" text.
     await expect(forwarded.json()).resolves.toMatchObject({
       error: "device_identity_required",
       message: "this request has no proved enrolled device identity",
@@ -142,8 +118,6 @@ describe("pairing-ticket-host-custody scenarios", () => {
     });
 
     expect(minted.status).toBe(200);
-    // The second mint targets the SAME person — access is ownership, and a
-    // machine's host lane never invents a second owner for an owned vault.
     await expect(minted.json()).resolves.toMatchObject({
       ok: true,
       ownerId: first.ownerId,

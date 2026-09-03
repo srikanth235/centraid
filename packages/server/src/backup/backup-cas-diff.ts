@@ -1,11 +1,3 @@
-/*
- * The remote-CAS inventory diff primitive (#414) — the one
- * CAS-vs-model comparison, shared verbatim by every reconciliation fork:
- * the backup-configured pass (`runBackupReconciliation`), the BYO-S3 pass (`runCasOnlyReconciliation`),
- * and the derived-store diff. Observe-and-report only — its sole mutation is
- * the safety-critical demotion of stale replica evidence via `unmark`.
- */
-
 import type { ProviderInventoryObject } from "@centraid/backup";
 
 import type { CollectedInventory } from "./backup-provider-observability.js";
@@ -82,19 +74,12 @@ function casSha(key: string): string | undefined {
     ?.sha;
 }
 
-/**
- * Diff remote CAS truth against both the live model and durable replica
- * evidence. `unmark` calls happen synchronously before this function returns:
- * the next cache eviction cannot rely on an object the inventory did not see.
- */
 export function reconcileCasInventory(opts: {
   collection: CollectedInventory;
   live: Set<string>;
   indexed: Set<string>;
   unmark: (sha: string) => void;
-  /** Marks created after inventory began cannot be disproved by that listing. */
   recentlyIndexed?: ReadonlySet<string>;
-  /** Retained-snapshot GC roots (#436): never orphans; absent-from-remote ⇒ critical missing. */
   snapshotReferenced?: ReadonlySet<string>;
 }): StoreReconciliationState {
   const remote = new Set<string>();
@@ -109,14 +94,10 @@ export function reconcileCasInventory(opts: {
     (sha) => !remote.has(sha) && !opts.recentlyIndexed?.has(sha)
   );
   for (const sha of missing) opts.unmark(sha);
-  // A retained-snapshot root absent from the remote folds into `missing`
-  // (→ 'error'/CRITICAL, per #414 D14); a pure root has no index row to demote.
   const snapshotMissing = [...(opts.snapshotReferenced ?? [])].filter(
     (sha) => !remote.has(sha) && !opts.recentlyIndexed?.has(sha)
   );
   const allMissing = [...new Set([...missing, ...snapshotMissing])];
-  // Snapshot roots pin against the orphan diff only (the shared `live` that
-  // feeds the derived diff is untouched).
   const orphans = [...remote].filter(
     (sha) => !opts.live.has(sha) && !opts.snapshotReferenced?.has(sha)
   );

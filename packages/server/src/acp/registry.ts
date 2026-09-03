@@ -54,7 +54,6 @@ interface AcpHarnessSpec {
   env?: Readonly<Record<string, string>>;
   adapter?: AcpAdapterSpec;
   resolveModel?: (model: string) => string;
-  /** Off by default: the probe SPAWNS the harness at boot. */
   probeModels?: boolean;
 }
 
@@ -196,7 +195,6 @@ const claudeHarness = makeAcpHarness({
   adapter: {
     packageName: "@agentclientprotocol/claude-agent-acp",
     binPathEnvVar: "CLAUDE_CODE_EXECUTABLE",
-    // Gateway turns have no approval UI: the default mode deadlocks.
     sessionModeId: "bypassPermissions",
     bypassNeedsSandboxWhenRoot: true,
   },
@@ -229,8 +227,6 @@ const opencodeHarness = makeAcpHarness({
   label: "opencode",
   defaultBin: "opencode",
   // SAFETY: never add `--mdns` to these args, and be wary of a user who puts it
-  // in `extraArgs` — it defaults opencode's listen host to 0.0.0.0, publishing
-  // an unauthenticated code-execution harness to the whole LAN.
   acpArgs: ["acp"],
   minVersion: { major: 1, minor: 18, patch: 4 },
   installHint:
@@ -251,7 +247,6 @@ const kimiHarness = makeAcpHarness({
   kind: "kimi",
   label: "Kimi",
   defaultBin: "kimi",
-  // The `acp` SUBCOMMAND, never the flag: the flag has no `session/load`.
   acpArgs: ["acp"],
   minVersion: { major: 1, minor: 17, patch: 0 },
   installHint:
@@ -261,10 +256,7 @@ const kimiHarness = makeAcpHarness({
 const copilotHarness = makeAcpHarness({
   kind: "copilot",
   label: "GitHub Copilot CLI",
-  // The BINARY is `copilot`, not the package name; the language-server package
-  // is not this harness.
   defaultBin: "copilot",
-  // Stdio only: `--port` would sit the harness on an unread socket.
   acpArgs: ["--acp"],
   minVersion: { major: 1, minor: 0, patch: 71 },
   installHint:
@@ -274,7 +266,6 @@ const copilotHarness = makeAcpHarness({
 const cursorHarness = makeAcpHarness({
   kind: "cursor",
   label: "Cursor",
-  // Never `agent`, the installer's other symlink: too generic on PATH.
   defaultBin: "cursor-agent",
   acpArgs: ["acp"],
   minVersion: { major: 2026, minor: 7, patch: 16 },
@@ -306,8 +297,6 @@ const gooseHarness = makeAcpHarness({
   defaultBin: "goose",
   acpArgs: ["acp"],
   minVersion: { major: 1, minor: 43, patch: 0 },
-  // goose answers an unconfigured provider with `-32603`, never
-  // `AUTH_REQUIRED`, so keep `goose configure` in this hint.
   installHint:
     "Install goose (`brew install block-goose-cli`; the binary is `goose`) and run `goose configure` to set a provider before use.",
 });
@@ -350,7 +339,6 @@ const droidHarness = makeAcpHarness({
 const piHarness = makeAcpHarness({
   kind: "pi",
   label: "pi",
-  // A SEPARATE ACP server binary, not a mode: `pi acp` does not exist.
   defaultBin: "pi-acp",
   acpArgs: [],
   minVersion: { major: 0, minor: 0, patch: 31 },
@@ -397,7 +385,6 @@ export const SUPPORTED_HARNESS_KINDS = [
 export const SUPPORTED_HARNESSES: readonly HarnessSpec[] =
   SUPPORTED_HARNESS_KINDS.map((kind) => HARNESSES[kind]);
 
-/** THROWS on an unregistered kind. */
 export function getHarness(kind: HarnessKind): HarnessSpec {
   const harness = HARNESSES[kind];
   if (!harness)

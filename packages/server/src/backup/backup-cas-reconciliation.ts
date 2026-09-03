@@ -1,8 +1,3 @@
-/*
- * Target-independent remote-CAS reconciliation (#414): models "backup not
- * configured, CAS configured" — never a fake backup target.
- */
-
 import {
   ReplicaIndex,
   archivedSegmentShas,
@@ -65,7 +60,6 @@ export interface CasOnlyReconciliationOptions {
   collect?: typeof collectCasInventory;
 }
 
-/** Persistable failure shape, honest about the absent backup store. */
 export function failedCasOnlyReconciliation(
   checkedAt: string,
   mode: BackupReconciliationState["mode"],
@@ -90,7 +84,6 @@ export function failedCasOnlyReconciliation(
   };
 }
 
-/** Reconcile remote CAS custody without requiring a backup target. */
 export async function runCasOnlyReconciliation(
   opts: CasOnlyReconciliationOptions
 ): Promise<BackupReconciliationState> {
@@ -104,17 +97,11 @@ export async function runCasOnlyReconciliation(
   });
   let cas = unavailableStore(result.configured, result.error);
   if (result.collection) {
-    // Live GC roots (#436) = liveBlobShas ∪ archivedSegmentShas ∪ retained-
-    // snapshot roots — third term provably EMPTY here (no backup store ⇒ no
-    // manifests; the configured fork lives in `runBackupReconciliation`). The
-    // base set is SHARED/read-only (#659): union into a local copy, never
-    // mutate it.
     const live = new Set(liveBlobShasCached(opts.db.vault));
     for (const sha of archivedSegmentShas(opts.db.vault)) live.add(sha);
     for (const sha of conversationArchiveShas(opts.db.vault)) live.add(sha);
     const index = new ReplicaIndex(opts.db.vault);
     for (const sha of result.authenticatedFailures ?? []) index.unmark(sha);
-    // Scope the cas diff to `store='cas'` rows (#425).
     const rows = index.rows().filter((row) => row.store === "cas");
     cas = reconcileCasInventory({
       collection: result.collection,
@@ -128,7 +115,6 @@ export async function runCasOnlyReconciliation(
       unmark: (sha) => index.unmark(sha),
     });
     addAuthenticatedFailures(cas, result.authenticatedFailures ?? []);
-    // Fold the derived store class's drift into `cas` via the same collect seam.
     await reconcileDerivedInto({
       cas,
       db: opts.db,

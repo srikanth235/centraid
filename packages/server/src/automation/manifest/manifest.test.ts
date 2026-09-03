@@ -11,7 +11,6 @@ import {
 } from "./manifest.js";
 import type { Manifest } from "./manifest.js";
 
-/** A minimal valid `automation.json` object. */
 function baseManifest(
   over: Record<string, unknown> = {}
 ): Record<string, unknown> {
@@ -197,10 +196,6 @@ describe(validateManifest, () => {
     ).toThrow(ManifestError);
   });
 
-  // The single owner of "which trigger kinds exist". The gateway's create and
-  // update routes each keep a thin pre-check with the same vocabulary, but the
-  // rule itself — and the message that names the offending kind — is proven
-  // here, not re-enumerated over HTTP (#656 1D).
   it("rejects an unsupported trigger kind and names it in the message", () => {
     expect(() =>
       validateManifest(baseManifest({ triggers: [{ kind: "carrier-pigeon" }] }))
@@ -256,12 +251,7 @@ describe(validateManifest, () => {
     expect(m.history.keep).toStrictEqual({ count: 100 });
   });
 
-  // #659 L9: `keep: "all"` would disable retention entirely, letting a
-  // per-minute automation grow the journal unbounded.
   it('rejects history.keep "all" — run history may not be unbounded', () => {
-    // Capture in the branch, assert outside it: every assertion below runs on
-    // every execution, so a validator that stopped throwing fails loudly at
-    // `toBeInstanceOf` instead of silently skipping the catch block.
     let thrown: unknown;
     try {
       validateManifest(baseManifest({ history: { keep: "all" } }));
@@ -270,7 +260,6 @@ describe(validateManifest, () => {
     }
     expect(thrown).toBeInstanceOf(ManifestError);
     expect((thrown as ManifestError).code).toBe("invalid_history");
-    // The error names the bounded alternatives rather than just refusing.
     expect((thrown as ManifestError).message).toContain("{count:N}");
   });
 
@@ -281,7 +270,6 @@ describe(validateManifest, () => {
     expect(() =>
       validateManifest(baseManifest({ history: { keep: { days: 366 } } }))
     ).toThrow(/days may not exceed/u);
-    // The ceilings themselves are legal.
     expect(
       validateManifest(baseManifest({ history: { keep: { count: 10_000 } } }))
         .history.keep
@@ -360,8 +348,6 @@ describe("condition triggers", () => {
     ).toThrow(/vault block/u);
   });
 
-  // Field-scoped `where` rejection. The gateway routes surface this exact
-  // message body as their 400; they no longer re-prove the rule (#656 1D).
   it("rejects a where that is not an array of clauses", () => {
     expect(() =>
       validateManifest({
@@ -444,7 +430,6 @@ describe("data triggers", () => {
     expect(() =>
       validateManifest({ ...base, triggers: [{ kind: "data", entities: [] }] })
     ).toThrow(/entities/u);
-    // Omitted entirely, not just empty (#656 1D).
     expect(() =>
       validateManifest({ ...base, triggers: [{ kind: "data" }] })
     ).toThrow(/entities must be a non-empty array/u);
@@ -542,7 +527,6 @@ describe("provider event triggers and cursor loop guard", () => {
     "denies the bare runtime ledger table %s at the cursor guard",
     (entity) => {
       expect(isDeniedTriggerCursorEntity(entity)).toBe(true);
-      // A user's own vault table that merely ends in the same word is data.
       expect(isDeniedTriggerCursorEntity(`shop.${entity}`)).toBe(false);
     }
   );

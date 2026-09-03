@@ -1,8 +1,3 @@
-/*
- * Host-agnostic chat-runner interface: the route handler implements no model
- * loop, it only translates `TurnStreamEvent`s into SSE frames.
- */
-
 import type { ConversationWorkspaceKind, RunKind } from "./schema.js";
 import type {
   HarnessUsageSnapshot,
@@ -25,7 +20,6 @@ export type TurnStreamEvent =
   | { type: "assistant.start" }
   | { type: "assistant.delta"; delta: string }
   | { type: "reasoning.delta"; delta: string }
-  /** `used` may DECREASE after compaction: render the latest, never a max. */
   | { type: "context"; used?: number; size?: number }
   | {
       type: "tool.start";
@@ -80,7 +74,6 @@ export type TurnStreamEvent =
       message: string;
     }
   | { type: "notice"; level: "warn" | "info"; code?: string; message: string }
-  /** Surfaced once; `secret` is never persisted (#141). */
   | {
       type: "webhooks";
       minted: Array<{
@@ -107,7 +100,6 @@ export type TurnStreamEvent =
 export interface ConversationTurnInput {
   appId: string;
   draftSessionId?: string;
-  /** A subprocess harness MUST spawn with this cwd. */
   dataDir: string;
   conversationId: string;
   sessionFile: string;
@@ -123,7 +115,6 @@ export interface ConversationTurnInput {
   workspaceDirectory?: string;
   workspaceKind?: ConversationWorkspaceKind;
   thinking?: string;
-  /** `deny`: the harness may never widen its grants through a prompt. */
   permissionPolicy?: "auto-allow" | "deny";
   abortSignal: AbortSignal;
   idempotencyKey?: string;
@@ -146,8 +137,6 @@ export interface ConversationTurnInput {
     estimatedTokens: number;
   };
   recoveryHydrationAttachments?: TypeImport_bjbigq.TurnAttachment[];
-  /** Every failover rung has its OWN binding and watermark: resolve per rung,
-   *  or a fallback starts with neither. */
   resumeForKind?: (kind: HarnessKind) => TurnResumePlan | undefined;
   onEvent: (event: TurnStreamEvent) => void;
 }
@@ -174,7 +163,5 @@ export interface ConversationTurnResult {
 export interface ConversationRunner {
   resolveHarnessKind?: () => Promise<HarnessKind | undefined>;
   readonly runKind?: RunKind;
-  /** Errors REJECT as well as emitting: the route needs the rejection to
-   *  release the per-session lock. */
   run: (input: ConversationTurnInput) => Promise<ConversationTurnResult | void>;
 }

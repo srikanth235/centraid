@@ -1,11 +1,3 @@
-/**
- * Owner-tier Commons steward-absence recovery doors (#731), owner-
- * authenticated like `commons-routes.ts`. GET: steward status per grant.
- * POST { actorVaultId, grantId, reason? }: named-refusal ceremony; seats are
- * INVITED, never auto-consented; delivers invitations (#750)
- * (docs/recovery/commons-steward-loss.md).
- */
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { AUTHED_DEVICE_HEADER } from "@centraid/server/engine";
@@ -23,11 +15,9 @@ export const COMMONS_RECOVERY_PATH = "/centraid/_gateway/commons/recovery";
 export interface CommonsRecoveryRouteDeps {
   enrollments: EnrollmentStore;
   vaultFor: (vaultId: string) => VaultDb | undefined;
-  /** Peer-plane invitation push, shared with the ordinary door. */
   invitePeer?: DeliverCommonsRecoveryInvitationsInput["invitePeer"];
 }
 
-/** Same shape `RouteHandler` has in `build-gateway.ts`, restated locally. */
 export type CommonsRecoveryRouteHandler = (
   req: IncomingMessage,
   res: ServerResponse
@@ -88,7 +78,6 @@ export function makeCommonsRecoveryRouteHandler(
         now,
       });
       if (result.state !== "recovered") return sendJson(res, 409, result);
-      // Delivery is part of the ceremony, not a follow-up.
       const invitations = await deliverCommonsRecoveryInvitations({
         seat: vault,
         stewardVaultId: actorVaultId,

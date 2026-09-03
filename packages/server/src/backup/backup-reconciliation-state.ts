@@ -17,7 +17,6 @@ export interface StoreReconciliationState {
   configured: boolean;
   source: InventorySource | "not-configured" | "unavailable";
   providerAttested: boolean;
-  /** Total objects/bytes the provider still holds, including soft-deleted custody. */
   objectCount: number;
   bytes: number;
   liveObjectCount: number;

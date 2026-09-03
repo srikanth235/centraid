@@ -39,8 +39,6 @@ export interface RuntimeLogger {
 }
 
 export interface RuntimeOptions {
-  /** A provider re-roots the whole app surface on a vault switch (#280); the
-   *  runtime keeps one `Registry` per resolved dir. */
   appsDir: string | (() => string);
   logger?: RuntimeLogger;
   changeBus?: ChangeBus;
@@ -52,11 +50,7 @@ export interface RuntimeOptions {
     entry: RegistryEntry
   ) => Promise<{ name?: string; description?: string }>;
   harnessStatus?: (opts?: HarnessStatusOptions) => Promise<HarnessStatus>;
-  /** Separates CODE (the git worktree this resolves) from STATE (`entry.path`,
-   *  which keeps logs, settings and blobs) — #137. */
   codeDirOverride?: (appId: string) => Promise<string | undefined>;
-  /** `undefined` for an unknown session/app falls back to the live code dir,
-   *  so the live path is unaffected when no draft resolver is wired (#141). */
   draftCodeDir?: (
     appId: string,
     sessionId: string
@@ -65,13 +59,9 @@ export interface RuntimeOptions {
     appId: string,
     conversationId: string
   ) => Promise<Partial<Record<ConversationWorkspaceKind, string>>>;
-  /** Without it `ctx.vault.*` fails CLOSED with VAULT_UNAVAILABLE. */
   vaultFor?: (appId: string) => VaultBridge;
   timeModuleUrl?: string;
-  /** The SAME key `resolveSubsystemModel` reads at turn time, so the picker
-   *  and the actual turn always agree. */
   askModel?: AskModelPrefs;
-  /** Resolved PER REQUEST, so it bounds turns per ambient vault (#420). */
   turnLimiter?: () => TurnLimiter | undefined;
 }
 
@@ -84,8 +74,6 @@ export interface HarnessModel {
   tier?: ModelTier;
 }
 
-/** `ready` means a cached list exists even mid-refresh; `empty` means
- *  enumeration found nothing, CLI-unavailable included. */
 export type SurfaceStatus = "loading" | "ready" | "empty";
 
 export interface HarnessStatusOptions {
@@ -110,8 +98,6 @@ const noopLogger: RuntimeLogger = {
   error: () => undefined,
 };
 
-/** The transport-agnostic engine: a host constructs it, calls `bootstrap()`
- *  once, then routes requests through `handle(req, res)`. */
 export class Runtime {
   readonly dispatcher: Dispatcher;
   readonly changeBus: ChangeBus;
@@ -128,8 +114,6 @@ export class Runtime {
   private readonly turnLimiter?: () => TurnLimiter | undefined;
   private readonly appsDirProvider: () => string;
   private readonly sessionDirProvider: () => string;
-  /** One per resolved apps dir: a vault switch lands on a different registry,
-   *  loaded by the host's post-switch `bootstrap()` (#280). */
   private readonly registries = new Map<string, Registry>();
   private readonly logger: RuntimeLogger;
   private readonly codeDirOverride?: (
@@ -140,8 +124,6 @@ export class Runtime {
     sessionId: string
   ) => Promise<string | undefined>;
   private readonly conversationWorkspaceRoots?: RuntimeOptions["conversationWorkspaceRoots"];
-  /** Per-runtime, never module-level (#113): two gateways sharing an `appId`
-   *  must not collide on one lock key. */
   private readonly conversationLocks = new Map<string, Promise<void>>();
 
   constructor(opts: RuntimeOptions) {
@@ -203,8 +185,6 @@ export class Runtime {
     appId: string,
     source: "handler" | "external"
   ): (tables: string[]) => void {
-    // Empty `tables` still notifies: handler writes ride ctx.vault, so "the
-    // app acted" is all the runtime knows.
     return (tables) => {
       this.changeBus.emit({ appId, tables, ts: Date.now(), source });
     };
@@ -256,7 +236,6 @@ export class Runtime {
   private async resolveCodeDir(
     entry: RegistryEntry
   ): Promise<string | undefined> {
-    // Mirrors `Dispatcher.resolveCodeDir`: no override ⇒ no servable code.
     return this.codeDirOverride ? this.codeDirOverride(entry.id) : undefined;
   }
 
@@ -264,8 +243,6 @@ export class Runtime {
     return { id: entry.id, dir: appDataDir(entry) };
   }
 
-  /** The ONLY path non-MCP callers take to invoke handlers (#505). Maps the
-   *  MCP-shaped `ToolResult` to HTTP via `statusForToolError`. */
   private async handleAppRpc(
     req: IncomingMessage,
     res: ServerResponse,
@@ -388,8 +365,6 @@ export class Runtime {
       : undefined;
   }
 
-  /** Negotiates br/gzip off Accept-Encoding (#404); the PWA service-worker
-   *  path never forwards it, so it receives raw JSON. */
   private async sendToolResult(
     req: IncomingMessage,
     res: ServerResponse,
@@ -407,8 +382,6 @@ export class Runtime {
     await sendJsonNegotiated(req, res, 200, result.structuredContent ?? null);
   }
 
-  /** Assumes the host has ALREADY authenticated the caller: app-engine
-   *  enforces no auth of its own. */
   async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const { route, draftSessionId } = parseWithDraft(
       req.method ?? "GET",

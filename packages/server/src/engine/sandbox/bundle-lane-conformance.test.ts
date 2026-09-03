@@ -1,11 +1,3 @@
-/*
- * Which lane every SHIPPED bundle could run under (#846). The worker installs
- * the strict floor unconditionally, so a bundle that grows a builtin without
- * declaring its lane breaks on first fire; this suite moves that to commit
- * time, measured on the BUILT artifact the loader hook actually rules on.
- * Every lane refuses `node:module`: a `createRequire` resolves through Node's
- * own loader and skips the hooks. Nothing here proves the native ONNX runtime.
- */
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -35,7 +27,6 @@ const SHELLS_OUT = new Set(["transcript"]);
 interface Bundle {
   readonly id: string;
   readonly builtins: readonly string[];
-  /** `manifest.sandbox.lane`, or undefined for the strict floor. */
   readonly declared: "model-runtime" | "media-transcode" | undefined;
 }
 
@@ -138,7 +129,6 @@ describe("shipped automation bundles against the sandbox lanes", () => {
       .map((bundle) => ({ id: bundle.id, denied: refusals(bundle, policy) }))
       .filter((entry) => entry.denied.length > 0);
     expect(blocked).toStrictEqual([]);
-    // …and they really do reach for it, so the confinement is not vacuous.
     for (const bundle of ALL.filter((entry) => RECOGNITION.has(entry.id)))
       expect(bundle.builtins).toContain("fs");
   });
@@ -153,7 +143,6 @@ describe("shipped automation bundles against the sandbox lanes", () => {
   });
 
   test("no bundle declares a lane wider than it needs", () => {
-    // The grants are holes: an unneeded one is a hole for nothing.
     const overreaching = ALL.filter(
       (bundle) =>
         bundle.declared !== undefined &&
@@ -170,7 +159,6 @@ describe("shipped automation bundles against the sandbox lanes", () => {
   });
 
   test("transcript is the ONE bundle that needs a subprocess, and it declares it", () => {
-    // Asserted, not tolerated: a second one shelling out is a deliberate change.
     const needsSubprocess = ALL.filter(
       (bundle) =>
         refusals(bundle, automationHandlerPolicy()).length > 0 &&

@@ -1,6 +1,3 @@
-// Reprice frozen `items.cost_usd` from frozen tokens vs current catalog (#445).
-// Never rewrite token columns or harness costs (#514); digests (#438) out of scope.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { costForUsage } from "../model-pricing.js";
@@ -30,7 +27,6 @@ interface ItemRow {
   cost_source: string | null;
 }
 
-// Float noise must not force a write (matches 4-dp ledger rounding).
 const EPSILON = 1e-9;
 
 function differs(a: number | null, b: number | null): boolean {
@@ -61,7 +57,6 @@ export function repriceLedger(
   const updateItem = db.prepare(
     `UPDATE items SET cost_usd = ?, cost_source = CASE WHEN ? IS NULL THEN NULL ELSE 'estimated' END WHERE rowid = ?`
   );
-  // Same SUM shape as finishTurn — NULL when every child cost is NULL.
   const rederiveTurn = db.prepare(
     `UPDATE turns SET total_cost_usd = (
         SELECT SUM(cost_usd) FROM items
@@ -73,7 +68,6 @@ export function repriceLedger(
   let itemsRepriced = 0;
   let lastRowid = cursor;
 
-  // SAVEPOINT, not BEGIN — nests if the caller already holds a transaction.
   db.prepare("SAVEPOINT reprice").run();
   try {
     for (const row of rows) {

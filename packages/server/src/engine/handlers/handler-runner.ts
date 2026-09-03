@@ -20,7 +20,6 @@ function resolveWorkerFile(): string {
   const here = import.meta.dirname;
   const jsPath = path.join(here, "..", "worker", "runner.js");
   if (existsSync(jsPath)) return jsPath;
-  // tsx: no .js from src/; its loader reaches Workers.
   return path.join(here, "..", "worker", "runner.ts");
 }
 
@@ -28,7 +27,6 @@ const WORKER_FILE = resolveWorkerFile();
 
 export const HANDLER_WORKER_FILE = WORKER_FILE;
 
-/** Lazy: import must not spawn threads (#404). */
 let sharedWorkerPoolInstance: WorkerPool | undefined;
 function sharedWorkerPool(): WorkerPool {
   if (!sharedWorkerPoolInstance) {
@@ -48,11 +46,8 @@ export interface RunHandlerOptions {
   handlerKind: "query" | "action";
   args: Record<string, unknown>;
   timeoutMs?: number;
-  /** ACTION turns only, on success. */
   onWrite?: (tables: string[]) => void;
-  /** Absent ⇒ `ctx.vault.*` fails closed: `VAULT_UNAVAILABLE`. */
   vault?: VaultBridge;
-  /** Host-mounted; must not need a host. */
   timeModuleUrl?: string;
   admission?: WorkerAdmission;
   admissionClass?: WorkerAdmissionClass;
@@ -72,7 +67,6 @@ export async function runHandler(
   opts: RunHandlerOptions
 ): Promise<HandlerOutcome> {
   const admission = opts.admission ?? sharedWorkerAdmission();
-  // Gate the spawn (#351): fail before a thread.
   try {
     await admission.acquire(opts.admissionClass);
   } catch (error) {
@@ -121,10 +115,9 @@ export async function runHandler(
       if (timeoutHandle) clearTimeout(timeoutHandle);
       if (opts.onWrite && opts.handlerKind !== "query" && outcome.ok) {
         try {
-          // Declared tables name `_changes`; `[]` still says it acted (#883).
           opts.onWrite([...(opts.declaredWrites ?? [])]);
         } catch {
-          /* must not change the outcome */
+          // Intentionally empty.
         }
       }
       worker.removeAllListeners();

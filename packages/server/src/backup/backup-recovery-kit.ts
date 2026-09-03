@@ -18,8 +18,6 @@ function targets(
     vaultId,
     label: target.label,
     sealKey: requiredSealKey(keyStore, vaultId).toString("base64"),
-    // The identity seed rides beside the DEK (#726) — same custody,
-    // so `recover()` can restore both from one kit.
     identitySeed: requiredIdentitySeed(keyStore, vaultId).toString("base64"),
   }));
 }
@@ -42,7 +40,6 @@ function requiredIdentitySeed(keyStore: KeyStore, vaultId: string): Buffer {
   return seed;
 }
 
-/** Build the in-memory plaintext document immediately before password wrapping. */
 export function recoveryKitDocument(opts: {
   keyring: Keyring;
   state: BackupState;

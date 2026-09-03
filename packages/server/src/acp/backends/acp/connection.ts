@@ -1,12 +1,3 @@
-/**
- * Stable ACP SDK connection owner for one spawned harness process.
- *
- * The SDK owns JSON-RPC framing, request correlation, cancellation, and
- * method-not-found responses. Centraid owns only process lifecycle, stderr
- * diagnostics, and the explicit turn lease that routes the two client-side
- * ACP callbacks carrying turn-local state.
- */
-
 import type { ChildProcessByStdio } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import type {
@@ -28,10 +19,8 @@ export interface AcpTurnHandlers {
 }
 
 export interface AcpConnectionOwner {
-  /** Stable SDK method overloads preserve request/response pairs at every caller. */
   request: acp.ClientContext["request"];
   notify: acp.ClientContext["notify"];
-  /** Claim this process for exactly one turn. The returned release is mandatory. */
   bindTurn: (handlers: AcpTurnHandlers) => () => void;
   readonly exited: Promise<void>;
   hasExited: () => boolean;

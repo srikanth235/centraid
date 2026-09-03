@@ -1,17 +1,4 @@
 import { promises as fs } from "node:fs";
-/*
- * ctx.vault in automation handlers (duaility §12): the fire spine plumbs a
- * host-injected VaultBridge factory (keyed by app id) down to the worker's
- * `ctx.vault` RPC surface. These tests drive a real handler through
- * `runFire` with a STUB bridge, proving:
- *
- *   - vault calls round-trip worker → parent → bridge and back;
- *   - an `invoke` without a caller invocationId gets a DETERMINISTIC one
- *     derived from runId + node ordinal, so re-firing the same runId
- *     replays inside the vault instead of double-executing;
- *   - without a bridge every call fails closed with VAULT_UNAVAILABLE;
- *   - bridge errors surface to the handler with their machine code.
- */
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -127,9 +114,6 @@ describe("runFire + ctx.vault", () => {
     expect(ids[1]).toMatch(/^run-fixed:v\d+$/u);
     expect(ids[0]).not.toBe(ids[1]);
 
-    // Re-firing the same runId (fresh ledger, as a crash-replay would see)
-    // reproduces the same invocation ids — the vault-side replay key. (The
-    // deterministic-handler contract is what the handler lint enforces.)
     const before = ids.slice();
     calls.length = 0;
     const replayDir = await tempDir("centraid-fire-vault-replay-");

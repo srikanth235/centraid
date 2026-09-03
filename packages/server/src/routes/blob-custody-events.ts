@@ -5,7 +5,6 @@ import type { BlobTransferCoordinator } from "@centraid/vault";
 
 import { unrefTimer } from "../lib/unref-timer.js";
 
-/** Blob-scoped custody stream: no all-vault backlog/status disclosure. */
 export async function openBlobCustodyEvents(input: {
   req: IncomingMessage;
   res: ServerResponse;
@@ -15,8 +14,6 @@ export async function openBlobCustodyEvents(input: {
 }): Promise<void> {
   const { req, res, transfers, casAck } = input;
   const sha256 = assertSha(input.sha256);
-  // Validate and obtain the first snapshot before committing SSE headers so a
-  // bad request or provider failure can still use the route's JSON error path.
   let firstState:
     | Awaited<ReturnType<BlobTransferCoordinator["preflight"]>>
     | undefined = await transfers.preflight(sha256);

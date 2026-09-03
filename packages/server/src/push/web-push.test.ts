@@ -36,7 +36,6 @@ describe("self-hosted Web Push identity", () => {
     const database = GatewayDatabase.open(await tempDir("web-push-send-"));
     opened.push(database);
     const enrollments = EnrollmentStore.open(database);
-    // Both devices belong to the vault's one owner (#726).
     const first = enrollments.enroll({
       endpointId: "device-1",
       label: "device-1",

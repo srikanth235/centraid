@@ -1,16 +1,5 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
-/*
- * Template clone over HTTP (#141). The desktop does not write a
- * cloned template into a local worktree — it reads the bundled catalog,
- * rewrites the file map in memory (`cloneTemplateFiles`), provisions any
- * pending webhook triggers (`provisionPendingWebhooksInFiles`), then
- * pushes the result into an editing session and publishes, all over the
- * same HTTP surface a remote gateway exposes. This boots a real git-store
- * gateway and drives that exact wire path end to end: the published app
- * lands on `main` with a plain-slug id, `kind: 'automation'`, and a
- * provisioned webhook (hashed secret, no plaintext, no `pending` flag).
- */
 import path from "node:path";
 
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
@@ -37,8 +26,6 @@ function auth(): Record<string, string> {
   return { Authorization: `Bearer ${handle.token}` };
 }
 
-// A minimal automation template: an automation app whose manifest ships a
-// pending webhook trigger the author can't pre-mint.
 function templateFiles(): { path: string; content: string }[] {
   return [
     {
@@ -96,14 +83,10 @@ describe("clone-over-http scenarios", () => {
   });
 
   test("cloning a template over HTTP publishes a plain-slug automation app with a provisioned webhook", async () => {
-    // Rewrite the template's file map for a fresh id + name, exactly as the
-    //    desktop's TEMPLATES_CLONE handler does.
     const cloned = cloneTemplateFiles({
       newAppId: "inbound-2",
       templateFiles: templateFiles(),
       newName: "Inbound 2",
-      // The catalog entry's tile identity backfills app.json (#263) —
-      // the template's own copy predates the keys.
       iconKey: "Sparkle",
       colorKey: "rose",
     });
@@ -124,8 +107,6 @@ describe("clone-over-http scenarios", () => {
     expect(appJson.iconKey).toBe("Sparkle");
     expect(appJson.colorKey).toBe("rose");
 
-    // Provision the pending webhook (secret minted here; only its hash is
-    //    written into the manifest).
     const { files, minted } = provisionPendingWebhooksInFiles(
       cloned,
       "inbound-2"
@@ -135,8 +116,6 @@ describe("clone-over-http scenarios", () => {
     expect(minted[0]!.automationId).toBe("inbound");
     expect(minted[0]!.secret.length > 0).toBeTruthy();
 
-    // Open a session, PUT every file, publish — the HTTP path that works
-    //    against a remote gateway.
     await fetch(`${handle.url}/centraid/_apps/_sessions`, {
       method: "POST",
       headers: { ...auth(), "Content-Type": "application/json" },

@@ -1,9 +1,3 @@
-/*
- * Broker credential health (#351 tier 2): broker-carried connections needing
- * re-auth plus oauth2 tokens past expiry — refresh is LAZY (next fire), so
- * the grace window ignores momentary pre-refresh staleness.
- */
-
 import type { DatabaseSync } from "node:sqlite";
 
 import type { HealthProbe } from "./health-registry.js";
@@ -52,7 +46,6 @@ export function createBrokerHealthProbe(
           )
           .all() as unknown as BrokerCredRow[];
       } catch {
-        // Fresh/unmounted vault: no sync tables yet; the vaults probe flags mounts.
         continue;
       }
       for (const row of rows) {

@@ -1,14 +1,3 @@
-/*
- * Restore drill (#842 W1.3): same `runRestoreVerify` the scheduler calls
- * (#408 G9) over real vault + provider + `core.attach`.
- *
- * WHAT CI COVERS THAT THE PRODUCT CANNOT. Product only meets a healthy store.
- * Only CI can sabotage and demand the alarm. Comment out `doRunRestoreVerify`
- * and both red lanes go green while the vault is broken.
- *
- * Determinism: no clock, no `Math.random`. CAS sample is `<vaultId>:<seq>`.
- */
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -112,10 +101,6 @@ describe("restore-drill", () => {
     return path.join(plane.dir, "blobs", "sha256", sha.slice(0, 2), sha);
   }
 
-  /**
-   * Wipe parties, leave FK-clean — else `verifyRestoredPair` catches it first.
-   * Cascade from `foreign_key_check`, not a hardcoded table list.
-   */
   function emptyOutParties(plane: VaultPlane): void {
     const db = plane.db.vault;
     db.exec("PRAGMA foreign_keys = OFF");
@@ -161,7 +146,6 @@ describe("restore-drill", () => {
 
     const target = (await m.service.status())[m.vaultId];
     expect(target?.lastRestoreVerifyError).toBeUndefined();
-    // Real ISO instant — health probe and 14-day staleness parse this.
     expect(
       Number.isFinite(Date.parse(target?.lastRestoreVerifiedAt ?? ""))
     ).toBe(true);
@@ -169,7 +153,6 @@ describe("restore-drill", () => {
   }, 60_000);
 
   test("a claimed blob whose bytes were never captured FAILS the drill", async () => {
-    // Structural half is blind: the row survives; bytes are gone.
     const m = await makeMachine(await providerServer(), "drill-blob");
     const sha = attachPhoto(m.plane);
     await fs.rm(casPathFor(m.plane, sha));
@@ -179,7 +162,6 @@ describe("restore-drill", () => {
       /unrecoverable from this restore/u
     );
 
-    // Persisted: a push-only failure would go green at the next tick.
     const target = (await m.service.status())[m.vaultId];
     expect(target?.lastRestoreVerifyError).toMatch(/restore-verify failed/u);
     expect(target?.lastRestoreVerifyError).toMatch(/claimed blob/u);
@@ -187,8 +169,6 @@ describe("restore-drill", () => {
   }, 60_000);
 
   test("an empty-shell restore FAILS the drill though every structural check passes", async () => {
-    // Structurally perfect, empty. Message naming ONLY the empty shell proves
-    // the drill (not integrity/fk/G8/seal) caught this.
     const m = await makeMachine(await providerServer(), "drill-shell");
     emptyOutParties(m.plane);
 

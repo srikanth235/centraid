@@ -1,11 +1,3 @@
-// Issue #872: the per-intent decide door — the steward's answer to ONE member
-// request, beside the member's own cancel in `commons-routes-intents.test.ts`.
-//
-// Two co-hosted vaults and a real shared Tally group, so approving here writes
-// an actual `tally_expense` row through the signed rail rather than flipping a
-// status column. The intent is queued the way the product queues one — the
-// command door, naming an origin vault this host cannot reach, so it parks.
-
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
@@ -21,8 +13,6 @@ import { COMMONS_PATH, makeCommonsRouteHandler } from "./commons-routes.js";
 
 const closers: Array<() => Promise<void>> = [];
 
-/** Steward + member co-hosted on one gateway, one Tally group shared between
- *  them, and a helper that parks a member expense the steward can then answer. */
 async function decideWorld(name: string) {
   const [steward, member] = makeCoHostedSides(name, "steward", "member");
   const now = new Date().toISOString();
@@ -55,9 +45,6 @@ async function decideWorld(name: string) {
     [steward.vaultId, steward],
     [member.vaultId, member],
   ]);
-  // Both seats are mounted with their own rail, as a real co-hosting gateway
-  // holds them — what makes a member command park below is that it names an
-  // origin vault this host does not have, not a missing rail.
   const handler = makeCommonsRouteHandler({
     enrollments: EnrollmentStore.open(steward.gatewayDb),
     vaultFor: (vaultId) => sides.get(vaultId)?.vault,
@@ -87,14 +74,11 @@ async function decideWorld(name: string) {
       },
       body: JSON.stringify(body),
     });
-  /** Park one member command as a durable intent, the way the product does. */
   const park = async (intentId: string, description: string) => {
     const queued = await post(
       `${COMMONS_PATH}/${grant.grantId}/commands`,
       member.deviceId,
       {
-        // No origin vault this host can reach: the command parks rather than
-        // executing, which is the state a steward decision answers.
         originVaultId: "vlt_unreachable",
         actorVaultId: member.vaultId,
         command: "tally.add_expense",
@@ -164,8 +148,6 @@ describe("Commons intent decide route (issue #872)", () => {
     expect(world.intentStatus("decide-approve")).toMatchObject({
       status: "executed",
     });
-    // The row landed on the steward's seat, attributed to the member who
-    // composed it — approving is the rail, not a status flip.
     expect(
       world.steward.vault.vault
         .prepare(
@@ -224,8 +206,6 @@ describe("Commons intent decide route (issue #872)", () => {
     const world = await decideWorld("commons-decide-owner");
     await world.park("decide-owner", "Someone else's vault");
 
-    // The member's device naming the STEWARD's vault as its actor: two
-    // co-hosted vaults, two different owners.
     const refused = await world.decide(
       world.member.deviceId,
       world.steward.vaultId,

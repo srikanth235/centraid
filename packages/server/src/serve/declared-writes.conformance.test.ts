@@ -1,11 +1,3 @@
-// DECLARED ⊇ OBSERVED, the half `scripts/lint-engine-conformance.mjs` cannot
-// check (#883 D2): real actions over a real `serve()` gateway, every write the
-// vault handle issues compared to the action's own manifest.
-//
-// ANTI-VACUITY IS PART OF THE GATE — a test that observed nothing would pass
-// every action in the product, so corpus size, app spread and the
-// observed-entity floor are asserted before any verdict is read.
-
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
@@ -51,8 +43,6 @@ function declaredWritesOf(appId: string, action: string): string[] {
   return entry.writes;
 }
 
-// The SQL is the ground truth: the handler's rows, the engine's cascades, and
-// anything a future change adds without telling anyone.
 function watchWrites(db: DatabaseSync): {
   reset: () => void;
   tables: () => Set<string>;
@@ -87,13 +77,9 @@ interface CorpusAction {
   action: string;
   input: (state: Record<string, string>) => Record<string, unknown>;
   remember?: (output: Record<string, unknown>) => Record<string, string>;
-  // Named per action, never applied globally: a blanket union would exempt
-  // most of the product.
   cascades?: Array<"poly-refs" | "party-repoint">;
 }
 
-// A CHAINED corpus, not a bag of calls: each action consumes an id the one
-// before it minted, so the multi-table cases are reached with real inputs.
 const CORPUS: CorpusAction[] = [
   {
     app: "notes",
@@ -184,8 +170,6 @@ describe("declared-writes.conformance", () => {
     const watcher = watchWrites(plane.db.vault);
     onTestFinished(() => watcher.restore());
 
-    // One DISCARDED dispatch first: a freshly mounted plane's boot writes are
-    // the plane's, not any action's, and an exemption list would be dishonest.
     await fetch(`${handle.url}/centraid/tasks/actions/add`, {
       method: "POST",
       headers: {
@@ -207,8 +191,6 @@ describe("declared-writes.conformance", () => {
 
     for (const entry of CORPUS) {
       watcher.reset();
-      // Serial: each action consumes the previous ids, and the watcher is
-      // per-action.
       // oxlint-disable-next-line no-await-in-loop
       const response = await fetch(
         `${handle.url}/centraid/${entry.app}/actions/${entry.action}`,
@@ -247,7 +229,6 @@ describe("declared-writes.conformance", () => {
       });
     }
 
-    // Anti-vacuity, before any verdict is read.
     expect(covered).toHaveLength(CORPUS.length);
     expect(
       new Set(covered.map((entry) => entry.app)).size
@@ -262,14 +243,8 @@ describe("declared-writes.conformance", () => {
       covered.some((entry) => entry.observed.length >= 3),
       "no action in the corpus wrote three tables — the multi-table cases are not being reached"
     ).toBe(true);
-    // An ALWAYS set that swallowed the conditional cascades is worse than one
-    // that went empty.
     expect(always.has("access.app")).toBe(true);
-    // #916 ruling ONT-revisions: the pre-mutation snapshot is the engine's,
-    // taken through generated triggers, so no action declares it.
     expect(always.has("core.entity_revision")).toBe(true);
-    // The audit band is band-excluded (#916): a receipt write has no logical
-    // name, so it cannot be declared and cannot be observed.
     expect(entityForPhysical("access_receipt", entities)).toBeUndefined();
     expect(always.has("core.link")).toBe(false);
     expect(always.has("schedule.task")).toBe(false);
@@ -279,8 +254,6 @@ describe("declared-writes.conformance", () => {
       conditional["party-repoint"].size,
       "the core_party foreign-key walk found nothing — the merge cascade set has gone vacuous"
     ).toBeGreaterThanOrEqual(10);
-    // `core.merge_party` PARKS for owner confirmation by design, so an
-    // unattended corpus cannot drive it: shape only, until it is reachable.
     expect(conditional["party-repoint"].has("people.profile")).toBe(true);
 
     const failures = covered
@@ -302,8 +275,6 @@ describe("declared-writes.conformance", () => {
   });
 
   test("the _changes event names the action's declared tables end to end", async () => {
-    // D2's other half (#883): the declaration has to REACH the surface, or
-    // every listener hears "something moved" and re-derives the whole app.
     const dataDir = await tempDir("declared-writes-sse-");
     const token = "declared-writes-sse-token";
     const handle = await serve({
@@ -330,7 +301,6 @@ describe("declared-writes.conformance", () => {
       let buffer = "";
       const pump = async (): Promise<void> => {
         for (;;) {
-          // Sequential by construction: one chunk at a time off one socket.
           // oxlint-disable-next-line no-await-in-loop
           const chunk = await reader.read();
           if (chunk.done) return;
@@ -346,7 +316,7 @@ describe("declared-writes.conformance", () => {
                 return;
               }
             } catch {
-              // Not the frame we are waiting for.
+              // Intentionally empty.
             }
           }
         }
@@ -375,8 +345,6 @@ describe("declared-writes.conformance", () => {
   });
 
   test("an undeclared write goes red — the gate can fail", () => {
-    // SABOTAGE, over a real observation: take the first corpus action's shape
-    // and remove one entity from its declaration. The comparison must name it.
     const cascade = new Set(["access.receipt", "core.link"]);
     const honest = conformDeclaredWrites({
       declared: ["knowledge.note", "core.content_item"],
@@ -392,7 +360,6 @@ describe("declared-writes.conformance", () => {
     });
     expect(sabotaged.undeclared).toStrictEqual(["core.content_item"]);
 
-    // The engine cascade is not a hiding place, however the union grows.
     expect(
       conformDeclaredWrites({
         declared: [],

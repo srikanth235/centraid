@@ -52,8 +52,6 @@ function ledgerOf(rows: ResourceObservation[]): ResourceLedger {
   };
 }
 
-/** A ledger that satisfies the lane requirement, so single-row cases can
- *  assert on the row's own errors rather than on missing-lane noise. */
 function fullLanes(extra: ResourceObservation[] = []): ResourceObservation[] {
   return [
     ...REQUIRED_RESOURCE_LANES.map(([surface, metric], index) =>

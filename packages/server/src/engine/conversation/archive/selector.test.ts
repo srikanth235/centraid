@@ -1,6 +1,3 @@
-// Conversation-band archival selector edges + referencedHashes union (issue
-// #438). Shared fixtures in test-fixtures.ts.
-
 import { describe, expect, it } from "vitest";
 
 import { makeLedgerDbProvider } from "../../stores/gateway-db.js";
@@ -42,7 +39,6 @@ describe("selector edges", () => {
       endedAt: null,
     });
 
-    // unfinished, old
     seedTurn(journal, {
       turnId: "t2",
       conversationId: "a/x",
@@ -51,14 +47,10 @@ describe("selector edges", () => {
       model: "m",
     });
 
-    // newest
-
     runConversationArchival(
       { journal, blobSink, custodyProven: () => true },
       { nowMs: now }
     );
-    // Only t0 was eligible (t1 unfinished breaks the range before the newest t2,
-    // and t2 is the live head) — so only one turn pruned.
     const remaining = (
       journal
         .prepare(
@@ -111,13 +103,10 @@ describe("selector edges", () => {
       model: "m",
     });
 
-    // live head
-
     const r = runConversationArchival(
       { journal, blobSink, custodyProven: () => true },
       { nowMs: now }
     );
-    // Two ranges: [t0] and [t2] (t1 pinned splits them; t3 is the live head).
     expect(r.segmentsWritten).toBe(2);
     expect(r.turnsPruned).toBe(2);
     const remaining = (
@@ -136,7 +125,6 @@ describe("selector edges", () => {
   it("a chat conversation still active (not wholly idle) is untouched", () => {
     const { journal } = openTempJournal();
     const blobSink = new MemoryBlobSink();
-    // updated_at is recent even though its turns are old — an active thread.
     seedConversation(journal, {
       id: "c1",
       kind: "chat",
@@ -208,7 +196,6 @@ describe("selector edges", () => {
       startedAt: daysAgo(120),
       model: "m",
     });
-    // t1 is an unfinished retry of t0 — t0 must not archive out from under it.
     seedTurn(journal, {
       turnId: "t1",
       conversationId: "a/x",
@@ -279,7 +266,6 @@ describe("selector edges", () => {
           .get() as { n: number }
       ).n
     ).toBe(1);
-    // automation_state is never touched.
     expect(
       (
         journal
@@ -301,7 +287,6 @@ describe("referencedHashes union", () => {
     const blobSink = new MemoryBlobSink();
     const liveHash = "l".repeat(64);
     const archivedHash = "r".repeat(64);
-    // A live chat thread with an attachment (stays live — recent).
     seedConversation(journal, {
       id: "live",
       kind: "chat",
@@ -316,7 +301,6 @@ describe("referencedHashes union", () => {
       model: "m",
     });
     seedAttachment(journal, "lt0", liveHash);
-    // An old chat thread whose attachment rides an archived-then-pruned turn.
     seedConversation(journal, {
       id: "old",
       kind: "chat",
@@ -336,8 +320,6 @@ describe("referencedHashes union", () => {
       { journal, blobSink, custodyProven: () => true },
       { nowMs: now }
     );
-    // The archived turn (and its attachment row) is pruned — but the hash is
-    // recorded in conversation_archive.attachment_hashes_json.
     expect(
       (
         journal

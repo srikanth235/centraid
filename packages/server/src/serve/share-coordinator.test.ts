@@ -1,11 +1,3 @@
-/*
- * The edge lifecycle's legal transitions, as one table (#750 abstraction 5).
- * Pure-function tests on purpose: without the reducer these questions can only
- * be asked through a route, a database and a transport, which is how separate
- * files come to disagree. The transport's behaviour over these transitions is
- * pinned by `edges-routes.test.ts` (#825, ruling G-copy).
- */
-
 import { describe, expect, test } from "vitest";
 
 import { effectIdFor, reduceEdge } from "./share-coordinator.js";
@@ -50,7 +42,6 @@ describe("reduceEdge — one lifecycle for the placement plane", () => {
       queued({ status: "in-flight", sourceState: "queued" }),
       projected
     );
-    // The audience projection ALWAYS commits before the source is released.
     expect(move.state.status).toBe("in-flight");
     expect(move.state.targetState).toBe("executed");
     const released = reduceEdge(MOVE, move.state, { type: "source-released" });
@@ -68,7 +59,6 @@ describe("reduceEdge — one lifecycle for the placement plane", () => {
       targetItemIds: ["item-1", "item-2"],
     });
     expect(replayed.changed).toBe(false);
-    // Crucially: the replay does NOT undo the source release that followed.
     expect(replayed.state.sourceState).toBe("executed");
     expect(replayed.state.targetItemIds).toStrictEqual(["item-1"]);
   });
@@ -82,7 +72,6 @@ describe("reduceEdge — one lifecycle for the placement plane", () => {
     expect(reduceEdge(MOVE, both, { type: "settled" }).state.status).toBe(
       "completed"
     );
-    // Half-done stays half-done — `settled` never invents completion.
     const half = queued({ status: "in-flight", targetState: "executed" });
     expect(
       reduceEdge(MOVE, { ...half, sourceState: "queued" }, { type: "settled" })
@@ -112,7 +101,6 @@ describe("reduceEdge — one lifecycle for the placement plane", () => {
       reason: "the audience vault is not open here",
     });
     expect(parked.state.status).toBe("parked");
-    // Repeating the same reason is a legal no-op, not a second write.
     expect(
       reduceEdge(ADD, parked.state, {
         type: "give-failed",

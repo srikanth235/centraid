@@ -4,7 +4,6 @@ import { ResourceAccounting } from "./resource-accounting.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 
-/** A ResourceAccounting whose clock, CPU, and RSS readers are all driven by tests. */
 function makeAccounting(init?: {
   start?: number;
   rss?: () => number;
@@ -147,7 +146,6 @@ describe(ResourceAccounting, () => {
       acc.recordBackgroundTimerFire(); // t=0
       advance(HOUR_MS); // now t=HOUR_MS — window complete
       acc.recordBackgroundTimerFire(); // t=HOUR_MS
-      // The t=0 fire is exactly one hour old and pruned; only the t=HOUR_MS fire remains.
       expect(acc.snapshot().backgroundTimerFiresLastHour).toBe(1);
     });
 

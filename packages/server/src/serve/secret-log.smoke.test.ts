@@ -5,12 +5,6 @@ import path from "node:path";
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
-/**
- * Secret-in-logs / token leakage smoke (#496).
- * Drives a real `serve()` instance and asserts error/auth paths never echo
- * bearer tokens or seal-key material back in response bodies **or** in the
- * on-disk gateway JSONL log ring (when logsDir is configured).
- */
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import type { GatewayPaths } from "../paths.js";
@@ -31,7 +25,6 @@ function pathsUnder(dir: string, logs: string): GatewayPaths {
   };
 }
 
-/** Concatenate every *.jsonl under logsDir (if any). */
 async function readAllLogs(): Promise<string> {
   try {
     const names = await fs.readdir(logsDir);
@@ -81,7 +74,6 @@ describe("secret-log.smoke scenarios", () => {
     const res = await fetch(`${handle.url}/centraid/_apps`, {
       headers: { Authorization: `Bearer ${ADMIN}` },
     });
-    // Any non-5xx is fine; body must not contain the raw token.
     expect(res.status).toBeLessThan(500);
     const body = await res.text();
     expect(body).not.toContain(ADMIN);
@@ -93,8 +85,6 @@ describe("secret-log.smoke scenarios", () => {
   });
 
   test("error path with seal-key-shaped payload does not reflect raw key material in body or logs", async () => {
-    // POST a nonsense body that includes seal-key-looking content; the server
-    // must not reflect it in an error message or persist it into JSONL logs.
     const res = await fetch(`${handle.url}/_centraid/vault/sql`, {
       method: "POST",
       headers: {

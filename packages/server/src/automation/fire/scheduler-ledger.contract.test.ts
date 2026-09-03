@@ -53,11 +53,6 @@ describe(computeMissedWindows, () => {
     expect(missed).toStrictEqual([]);
   });
 
-  /**
-   * No-backfill property (#532): for any outage gap on a once-a-minute cron,
-   * the ledger records at most ONE entry per automation (earliest missed fire),
-   * never one per missed minute — the product stance is "record, don't backfill".
-   */
   test("property: at most one missed entry per automation per gap (no backfill)", () => {
     fc.assert(
       fc.property(
@@ -70,7 +65,6 @@ describe(computeMissedWindows, () => {
           { minLength: 1, maxLength: 6 }
         ),
         (gapMinutes, rawEntries) => {
-          // Deduplicate refs so the model matches product identity.
           const seen = new Set<string>();
           const entries = rawEntries
             .map(([id, cron]) => ({
@@ -93,7 +87,6 @@ describe(computeMissedWindows, () => {
             expect(count).toBe(1);
             expect(ref.startsWith("a/")).toBe(true);
           }
-          // Never more entries than automations (no per-minute backfill flood).
           expect(missed.length).toBeLessThanOrEqual(entries.length);
         }
       ),
@@ -131,9 +124,6 @@ describe(computeMissedWindows, () => {
   test("property: sub-grace gaps never emit misses", () => {
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 179 }), (seconds) => {
-        // Default grace is 3 minutes — gaps under grace are quiet restarts.
-        // Generated in seconds so fractional-minute restarts (e.g. the 2.5min
-        // fast restart) are inside the range, not just whole minutes (#656).
         const lastTickAt = at(8, 0);
         const now = new Date(lastTickAt.getTime() + seconds * 1_000);
         const missed = computeMissedWindows({
@@ -208,8 +198,6 @@ describe(parseSchedulerLedgerSnapshot, () => {
   });
 });
 
-/** An in-memory `ConversationStore`-shaped fake — exercises the KV contract
- *  `SchedulerLedgerStore` relies on without spinning up real SQLite. */
 function fakeConversationStore(): {
   stateGet: (
     automationId: string,
@@ -250,7 +238,6 @@ describe(SchedulerLedgerStore, () => {
     };
     store.recordMissed([entry]);
     expect(store.load().missed).toStrictEqual([entry]);
-    // recordTick after doesn't clobber missed entries.
     store.recordTick(at(8, 11));
     expect(store.load()).toStrictEqual({
       lastTickAt: at(8, 11).toISOString(),
@@ -268,7 +255,6 @@ describe(SchedulerLedgerStore, () => {
     }));
     store.recordMissed(many);
     expect(store.load().missed).toHaveLength(200);
-    // Bounded FIFO — the oldest entries drop first.
     expect(store.load().missed[0]!.automationRef).toBe("a/50");
   });
 
@@ -279,7 +265,6 @@ describe(SchedulerLedgerStore, () => {
     expect(
       raw.stateGet(SCHEDULER_LEDGER_AUTOMATION_ID, SCHEDULER_LEDGER_KEY)
     ).toBeDefined();
-    // Real refs are always `<appId>/<id>` — the sentinel deliberately has no slash.
     expect(SCHEDULER_LEDGER_AUTOMATION_ID).not.toContain("/");
   });
 
@@ -327,7 +312,6 @@ describe(recordSchedulerTick, () => {
       ],
     });
 
-    // The gateway "restarts" 20 minutes later — a real outage gap.
     const missed = recordSchedulerTick({
       ledger,
       now: at(8, 20),
@@ -414,7 +398,6 @@ describe(recordSchedulerTick, () => {
         });
         expect(missed.every((m) => m.automationRef === "a/on")).toBe(true);
         expect(missed.some((m) => m.automationRef === "a/off")).toBe(false);
-        // One entry max per enabled automation per gap.
         expect(
           missed.filter((m) => m.automationRef === "a/on").length
         ).toBeLessThanOrEqual(1);

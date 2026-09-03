@@ -1,8 +1,3 @@
-/*
- * The engine-profiles route (#807): one read of gateway prefs, no
- * spawns, and a wire shape the Settings surface renders directly.
- */
-
 import { describe, expect, test } from "vitest";
 
 import { BUILT_IN_PROFILE } from "@centraid/vault";
@@ -15,7 +10,6 @@ import {
   makeEnrichProfilesRouteHandler,
 } from "./enrich-profiles-routes.js";
 
-/** A response recorder — these handlers only ever write one JSON body. */
 function recorder() {
   const chunks: string[] = [];
   let status = 0;

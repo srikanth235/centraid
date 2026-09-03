@@ -1,10 +1,3 @@
-/*
- * Shared `--config <path>` / `--data-dir <path>` resolution — `serve` and
- * `backup` both need the daemon's full config (the backup CLI constructs
- * its `BackupService` from the SAME resolved config `serve` boots with),
- * so it lives here rather than duplicated in each.
- */
-
 import { loadConfigFile, validateConfig, DaemonConfigError } from "./config.js";
 import type { DaemonConfig } from "./config.js";
 import { DEFAULT_GATEWAY_PORT, platformDefaultDataDir } from "./data-dir.js";

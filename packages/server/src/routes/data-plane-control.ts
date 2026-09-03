@@ -6,12 +6,6 @@ import { readJson, sendJson } from "./route-helpers.js";
 
 export const DATA_PLANE_AUTHORIZE_PATH = "/centraid/_gateway/tunnel/authorize";
 export const DATA_PLANE_PAIR_PATH = "/centraid/_gateway/tunnel/pair";
-/**
- * Peer-plane admission for the Rust relay (#726). A SEPARATE route
- * from `DATA_PLANE_AUTHORIZE_PATH` on purpose: that one answers device
- * enrollment, and answering it for a linked gateway would make a peer
- * indistinguishable from a paired owner device.
- */
 export const DATA_PLANE_PEER_AUTHORIZE_PATH =
   "/centraid/_gateway/tunnel/peer-authorize";
 
@@ -23,10 +17,6 @@ export interface DataPlaneAuthorization {
 export interface DataPlaneControlOptions {
   secret: string;
   authorize: (endpointId: string) => DataPlaneAuthorization;
-  /**
-   * Peer admission. Absent means this gateway does not speak the peer plane —
-   * every peer stream is then refused, which is the fail-closed reading.
-   */
   authorizePeer?: (endpointId: string) => DataPlaneAuthorization;
   pair: (request: unknown, endpointId: string) => unknown | Promise<unknown>;
 }

@@ -1,11 +1,3 @@
-/*
- * Local crash/anomaly ledger (#842): structured low-cardinality facts, so a
- * bundle carries it without a redaction pass. No free text ever enters — a
- * message is kept as a digest, a stack as `function@basename:line` frames whose
- * directories go at RECORD time. Bounded, local, opens no socket; the clock is
- * injected, so a seeded test replays byte-identically.
- */
-
 import fs from "node:fs";
 import path from "node:path";
 
@@ -57,7 +49,6 @@ const DEFAULT_CAPACITY = 512;
 const FILE_NAME = "anomalies.jsonl";
 const ROTATE_BYTES = 1024 * 1024;
 const MAX_STACK_FRAMES = 12;
-/** Machine tokens only: no smuggling channel for interpolated owner data. */
 const TOKEN_SHAPE = /^[a-z0-9][a-z0-9.:-]{0,63}$/u;
 const UNKNOWN_TOKEN = "unknown";
 
@@ -65,7 +56,6 @@ function token(value: string): string {
   return TOKEN_SHAPE.test(value) ? value : UNKNOWN_TOKEN;
 }
 
-/** An unparsed frame is dropped: that is where a path would survive. */
 export function fingerprintStack(stack: string | undefined): string[] {
   if (typeof stack !== "string") return [];
   const frames: string[] = [];
@@ -87,7 +77,6 @@ export function fingerprintStack(stack: string | undefined): string[] {
   return frames;
 }
 
-/** Strings and secret-shaped keys are dropped, not coerced. */
 function sanitizeFacts(
   facts: Readonly<Record<string, AnomalyFact>> | undefined
 ): Record<string, AnomalyFact> {
@@ -162,7 +151,6 @@ export class AnomalyLedger {
     return this.droppedWrites;
   }
 
-  /** Crashing the observed process is worse than no ledger: failures counted. */
   private persist(entry: AnomalyRecord): void {
     const file = this.file;
     if (!file) return;
@@ -172,7 +160,7 @@ export class AnomalyLedger {
         if (fs.statSync(file).size > ROTATE_BYTES)
           fs.renameSync(file, `${file}.1`);
       } catch {
-        // No file yet, or an unreadable stat: the append decides.
+        // Intentionally empty.
       }
       fs.appendFileSync(file, `${JSON.stringify(entry)}\n`);
     } catch {
@@ -181,7 +169,6 @@ export class AnomalyLedger {
   }
 }
 
-/** Unparseable lines are skipped: a torn line must not cost the post-mortem. */
 export function readAnomalyLedger(dir: string): AnomalyRecord[] {
   const out: AnomalyRecord[] = [];
   for (const name of [`${FILE_NAME}.1`, FILE_NAME]) {

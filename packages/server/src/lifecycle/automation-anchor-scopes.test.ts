@@ -127,8 +127,6 @@ describe("automation-anchor-scopes", () => {
       { kind: "app", appId: app.appId, signingKey: app.signingKey },
       { entity: "schedule.task", purpose: "dpv:ServiceProvision" }
     );
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect(result.rows.map((row) => ({ ...row }))).toStrictEqual([
       { task_id: "task-anchored", title: "Prepare quarterly report today" },
     ]);
@@ -243,8 +241,6 @@ describe("automation-anchor-scopes", () => {
         n: number;
       }
     ).n;
-    // These three reads ride the consent gateway; straight at `db.vault` there
-    // is no credential, no purpose, and no audit trail (#541 review).
     expect(after).toBeGreaterThan(before);
     expect(rows.map((r) => r.object_type)).toStrictEqual(
       expect.arrayContaining(["core.link_anchor", "core.link", "schedule.task"])
@@ -259,8 +255,6 @@ describe("automation-anchor-scopes", () => {
   test("an anchor source type that only names an Object member fails closed", () => {
     const { db, vault } = anchoredTaskFixture();
 
-    // First guard, and why the row below is forged in memory: `(from_type,
-    // from_id)` is a composite FK into the entity supertype (#916).
     expect(() =>
       db.vault
         .prepare(
@@ -269,9 +263,6 @@ describe("automation-anchor-scopes", () => {
         .run()
     ).toThrow(/FOREIGN KEY/iu);
 
-    // Second guard: hand the resolver such a row anyway.
-    // `SEARCHABLE['constructor']` inherits an `Object` member, so a lookup
-    // trusting inherited members would pass and then throw a bare TypeError.
     const forged: AnchorVaultReads = {
       credential: vault.credential,
       gateway: {

@@ -1,11 +1,3 @@
-/*
- * Production route-assertion wiring (#750 invariant 3; #726 P3 decision 4).
- * When this gateway's EndpointId becomes known, sign a `RouteClaim` per local
- * vault and push it to every linked peer. Best-effort: an offline peer is
- * logged and the meta key is left unset so the next start/tick retries.
- * `stale` counts as delivered.
- */
-
 import type { PeerDial } from "./peer-link-client.js";
 import { pushRouteAssertion } from "./peer-link-client.js";
 import type { VaultLinksStore } from "./vault-links-store.js";
@@ -54,7 +46,6 @@ export async function announceLocalRoutes(
   for (const { vaultId, outcomes } of pushes) {
     for (const outcome of outcomes) {
       if (outcome.state === "accepted" || outcome.state === "stale") {
-        // stale = heard
         delivered += 1;
       } else {
         undelivered += 1;

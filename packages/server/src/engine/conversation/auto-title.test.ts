@@ -10,7 +10,6 @@ interface Capture {
   prefsKind?: string;
 }
 
-/** A RunTurnFn stub that emits the given text via assistant.delta + final. */
 function stubRunTurn(text: string, capture?: Capture): RunTurnFn {
   return async (input, config) => {
     if (capture) {
@@ -65,9 +64,7 @@ describe(generateConversationTitle, () => {
       egressConsent: () => true,
     });
     expect(title).toBe("Budget planning");
-    // Provider-agnostic tier token flows straight through as the model.
     expect(capture.model).toBe("fast");
-    // Tool-less: no toolContext handed to the harness.
     expect(capture.toolContext).toBeUndefined();
     expect(capture.permissionPolicy).toBe("deny");
     expect(capture.prefsKind).toBe("claude-code");

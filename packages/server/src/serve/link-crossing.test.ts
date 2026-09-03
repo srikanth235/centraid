@@ -1,13 +1,3 @@
-/*
- * The matrix that proves ONE function answers "may an edge cross from vault A
- * to vault B" for both localities (#726 P2 §3 + P3 decision 6).
- *
- * Same-owner, cross-owner-approved, cross-owner-unapproved, remote-linked,
- * remote-unlinked and remote-revoked all go through `judgeEdgeCrossing`. The
- * two refusing localities answer the SAME `not_found`: an unapproved local
- * link and a stranger's remote vault must be indistinguishable.
- */
-
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 
@@ -26,7 +16,6 @@ const dirs: string[] = [];
 const key = (): string =>
   vaultIdentityPublicKey(crypto.randomBytes(32)).toString("base64");
 
-/* Two vaults of one owner, two of another, and one that lives elsewhere. */
 const OWNERS: Record<string, string> = {
   "vlt-work": "owner-priya",
   "vlt-personal": "owner-priya",

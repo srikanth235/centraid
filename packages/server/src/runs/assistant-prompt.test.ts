@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest";
 
 import { buildAssistantPrompt } from "./assistant-prompt.js";
 
-// REGISTER is shared by the vault assistant and per-app kit-ask; the guard exists because an agent once claimed a destructive purge completed without calling `vault_invoke` (real-app E2E).
 describe("assistant-prompt", () => {
   test("the register warns against claiming a write completed without calling vault_invoke", () => {
     const prompt = buildAssistantPrompt("My vault", "schema…");

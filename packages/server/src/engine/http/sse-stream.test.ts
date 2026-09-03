@@ -1,8 +1,3 @@
-// The bound that keeps a stalled SSE client from becoming gateway memory
-// (#659). Driven over a real TCP socket with a reader that never
-// reads, because the failure being prevented is Node's own outbound buffering —
-// a mocked ServerResponse would have no writableLength to grow.
-
 import { createServer } from "node:http";
 import type { Server } from "node:http";
 import net from "node:net";
@@ -13,10 +8,6 @@ import { SseStream } from "./sse-stream.js";
 
 let server: Server | undefined;
 
-/**
- * Opens a raw socket that sends a request and then never reads the response, so
- * the kernel buffers fill and `res.write()` starts queueing in Node.
- */
 async function stalledClient(
   onStream: (stream: SseStream) => void
 ): Promise<{ overflowBytes: number | undefined; delivered: number }> {
@@ -32,7 +23,6 @@ async function stalledClient(
         },
       });
       onStream(stream);
-      // Push until the stream refuses, or until far past any sane bound.
       const payload = "x".repeat(4096);
       for (let index = 0; index < 100_000; index++) {
         if (!stream.event("blob", payload)) break;
@@ -47,7 +37,6 @@ async function stalledClient(
   const port = (server!.address() as net.AddressInfo).port;
   const socket = net.connect(port, "127.0.0.1");
   socket.on("error", () => undefined);
-  // Pause immediately: bytes arrive at the kernel and are never consumed.
   socket.pause();
   socket.write(`GET /stream HTTP/1.1\r\nHost: localhost\r\n\r\n`);
   await done;
@@ -67,12 +56,8 @@ describe(SseStream, () => {
 
   it("drops a client that stops reading instead of buffering it without bound", async () => {
     const { overflowBytes, delivered } = await stalledClient(() => undefined);
-    // The stream stopped on its own — it did not write all 100k frames.
     expect(delivered).toBeLessThan(100_000);
     expect(overflowBytes).toBeDefined();
-    // Whatever Node had queued when we gave up is bounded by roughly the
-    // configured ceiling plus the one frame that crossed it, not by the ~400 MB
-    // the loop offered.
     expect(overflowBytes!).toBeLessThan(2 * 64 * 1024 + 8192);
   }, 20_000);
 
@@ -83,7 +68,6 @@ describe(SseStream, () => {
     });
     expect(observed?.droppedForBackpressure).toBe(true);
     expect(observed?.closed).toBe(true);
-    // Further writes are refused rather than resurrecting the socket.
     expect(observed?.write("event: late\ndata: {}\n\n")).toBe(false);
   }, 20_000);
 

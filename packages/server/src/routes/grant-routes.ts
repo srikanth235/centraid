@@ -1,16 +1,3 @@
-/*
- * The GRANT PLANE's owner surface (#825). A share is a standing grant, never a
- * copy. AUDIENCE-FIRST `?partyId=` (G-audience) unions a party's own grants
- * with the circle grants she is on the roster of; LITERAL AUDIENCE never merges
- * the two; SUBJECT-FIRST is the object side.
- *
- * ABSENT IS NEVER EMPTY here. The SUBJECT read alone cannot split that way:
- * subject ids are app-polymorphic, so no existence check belongs here (#750).
- *
- * THIS FILE WRITES NOTHING (V-writer): the `share.*` pack is the only writer
- * and the post-commit loop owns delivery (V-delivery).
- */
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { ROUTES } from "@centraid/core/protocol";
@@ -52,7 +39,6 @@ export interface GrantVault {
   vaultId: string;
   db: VaultDb;
   ownerPartyId: string;
-  /** The command door (V-writer) — the plane's only writer. */
   invoke: (
     command: string,
     input: Record<string, unknown>
@@ -74,13 +60,11 @@ function grantWire(
   db: VaultDb,
   grant: ShareGrantRecord
 ): Record<string, unknown> {
-  // `[]` is "no audience vault addressed yet", not "unreadable".
   const fulfillment = listFulfillment(db.vault, grant.grantId);
   const locus = enforcementLocus(
     grant.audience.kind === "party" ? "person" : "circle"
   );
   return {
-    // Derived on every read, never stored, never re-derived (V-locus).
     locus,
     promise: revokePromiseCopy(locus),
     grantId: grant.grantId,
@@ -93,7 +77,6 @@ function grantWire(
     grantedBy: grant.grantedBy,
     maxSizeBytes: grant.maxSizeBytes,
     fulfillment,
-    // Verbatim (V-phrases), so no two surfaces word it apart.
     ...grantPhrase({ revokedAt: grant.revokedAt, fulfillment, locus }),
   };
 }
@@ -121,11 +104,6 @@ function subjectsWire(): Record<string, unknown>[] {
   }));
 }
 
-/**
- * What a revoke can promise, per locus (V-locus). It rides the registry read
- * because a surface needs it BEFORE offering to revoke, and a replica-backed
- * dashboard has no route body to take the sentence from.
- */
 function lociWire(): Record<string, string> {
   return Object.fromEntries(
     (["person", "device", "harness"] as const).map((kind) => {
@@ -152,7 +130,6 @@ function badRequest(res: ServerResponse, error: string, message: string): true {
   return sendJson(res, 400, { error, message });
 }
 
-/** A command refusal IS the answer; its reason is member-facing copy. */
 function refused(res: ServerResponse, outcome: InvokeOutcome): true {
   const reason =
     "reason" in outcome && typeof outcome.reason === "string"
@@ -203,8 +180,6 @@ async function createGrant(
       "invalid_capability",
       "capability must be view or edit; comment is reserved and unimplemented"
     );
-  // Two refusal CODES, not one (V-registry): "cannot share that at all" and
-  // "can, but not for that verb" are different facts to a share sheet.
   if (!isOfferableSubjectType(subjectType))
     return badRequest(
       res,
@@ -258,11 +233,9 @@ async function revokeGrant(
   return sendJson(res, 200, {
     outcome: output.outcome,
     ...(wire ? { grant: wire } : {}),
-    // Per enforcement locus (V-locus), not one sentence over three mechanisms.
     promise: revokePromiseCopy(
       enforcementLocus(grant?.audience.kind === "circle" ? "circle" : "person")
     ),
-    // `withdrawn` reads as ASKED until the peer acknowledges (V-phrases).
     message:
       (wire?.reason as string | undefined) ??
       "no longer shared; nothing had been delivered",
@@ -280,7 +253,6 @@ function listGrants(res: ServerResponse, vault: GrantVault, url: URL): boolean {
       });
     return sendJson(res, 200, {
       partyId,
-      // `null` is "never reached them", not a severed channel.
       channel: channelForParty(db.vault, partyId),
       grants: grantsWire(db, listLiveGrantsReachingParty(db.vault, partyId)),
     });
@@ -355,7 +327,6 @@ export function makeGrantRouteHandler(deps: GrantRouteDeps): RouteHandler {
     if (!owner)
       return sendJson(res, 403, { error: "device_identity_required" });
 
-    // Discloses nothing about any vault, so it answers before one is picked.
     if (url.pathname === SUBJECTS_PATH) {
       if (method !== "GET")
         return sendJson(res, 405, { error: "method_not_allowed" });
@@ -368,7 +339,6 @@ export function makeGrantRouteHandler(deps: GrantRouteDeps): RouteHandler {
         error: "vault_unavailable",
         message: "no vault is mounted for this request",
       });
-    // A vault this owner does not hold is nothing at all, not a refusal.
     if (deps.enrollments.owners.ownerOf(vault.vaultId) !== owner.ownerId)
       return sendJson(res, 404, { error: "not_found" });
 

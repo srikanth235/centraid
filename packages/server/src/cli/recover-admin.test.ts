@@ -1,13 +1,5 @@
 import { existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
-/*
- * `centraid-gateway recover` (#439) — the CLI shell over `recover()`.
- * Exercised against the real in-process fake provider server (real HTTP, real
- * grant + snapshot flow), which advertises `metered-egress`, so the `--yes`
- * gate is real. Machine A backs up a vault against it and exports a kit FILE;
- * the CLI then recovers it into a blank data dir with nothing but that file and
- * the api-key.
- */
 
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -48,7 +40,6 @@ describe("recover-admin", () => {
     );
   });
 
-  /** Capture stdout + stderr around one call. */
   async function capture(
     fn: () => Promise<void> | void
   ): Promise<{ out: string; err: string }> {
@@ -73,8 +64,6 @@ describe("recover-admin", () => {
     return { out: out.join(""), err: err.join("") };
   }
 
-  /** Machine A: a real vault backed up against the fake HTTP provider, with its
-   *  recovery kit exported to `kitFile`. Returns the kit file + api-key + vaultId. */
   async function seedAndExportKit(
     server: Awaited<ReturnType<typeof startFakeProviderServer>>
   ): Promise<{
@@ -128,8 +117,6 @@ describe("recover-admin", () => {
       await seedAndExportKit(server);
     const dataDir = await tempDir("recover-cli-blank");
 
-    // Without --yes: the fake home is metered-egress, so the gate refuses after
-    // printing the facts, and nothing is written.
     const refused = await capture(() =>
       expect(
         commandRecover(
@@ -152,8 +139,6 @@ describe("recover-admin", () => {
       existsSync(path.join(daemonLayoutFor(dataDir).vaultDir, vaultId))
     ).toBe(false);
 
-    // With --yes: the recovery runs to completion; the JSON report lands on
-    // stdout and the phase progress + fence reminder on stderr.
     const done = await capture(() =>
       commandRecover(
         [

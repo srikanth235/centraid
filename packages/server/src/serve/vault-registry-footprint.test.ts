@@ -1,14 +1,3 @@
-/*
- * The mounted-plane memory budget (#659).
- *
- * `mmap_size` and `cache_size` are a HOST budget, not per-FILE constants: at
- * per-file numbers every mounted vault opens two databases at the full figure
- * and a household's memory bill grows linearly with its vault count — on
- * exactly the small always-on box that cannot absorb it. The claim under test
- * is that the summed footprint across N planes stays inside ONE host ceiling:
- * flat in vault count, not linear in it.
- */
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -37,7 +26,6 @@ function mmapBytesOf(db: DatabaseSync): number {
   );
 }
 
-/** `cache_size` is NEGATIVE kibibytes when expressed as memory, not pages. */
 function cacheBytesOf(db: DatabaseSync): number {
   const raw = Number(
     (db.prepare("PRAGMA cache_size").get() as { cache_size: number }).cache_size
@@ -46,8 +34,6 @@ function cacheBytesOf(db: DatabaseSync): number {
   return Math.abs(raw) * 1024;
 }
 
-/** Every open database handle across every mounted plane — ONE per vault
- *  since #916, the audit and ledger bands sharing the file's handle. */
 function handlesOf(registry: VaultRegistry): DatabaseSync[] {
   return registry.planesList().map((plane) => plane.db.vault);
 }
@@ -85,15 +71,9 @@ describe("vault-registry footprint budget (#659 L8)", () => {
     const totalMmap = handles.reduce((sum, db) => sum + mmapBytesOf(db), 0);
     const totalCache = handles.reduce((sum, db) => sum + cacheBytesOf(db), 0);
 
-    // The whole point: the SUM across every handle is within one vault's budget.
     expect(totalMmap).toBeLessThanOrEqual(DEFAULT_VAULT_FOOTPRINT.mmapBytes);
     expect(totalCache).toBeLessThanOrEqual(DEFAULT_VAULT_FOOTPRINT.cacheBytes);
 
-    // …and it lands JUST under it, not merely somewhere below. Both divisions
-    // (budget → per vault → per file) floor, so the shortfall is rounding dust
-    // — a few bytes per division — never a whole plane's share. Asserting the
-    // gap's SIZE is what distinguishes "the budget was divided" from "the
-    // budget was quietly under-spent", which a `> half` bound would not.
     const slack = 4 * planes;
     expect(
       DEFAULT_VAULT_FOOTPRINT.mmapBytes - totalMmap
@@ -134,8 +114,6 @@ describe("vault-registry footprint budget (#659 L8)", () => {
     const five = handlesOf(await registryWith(5));
     const sum = (handles: DatabaseSync[]): number =>
       handles.reduce((total, db) => total + cacheBytesOf(db), 0);
-    // Five unbudgeted vaults cost five times one. This is the shape the
-    // budgeted case above must NOT have.
     expect(sum(five)).toBe(sum(one) * 5);
   }, 60_000);
 });

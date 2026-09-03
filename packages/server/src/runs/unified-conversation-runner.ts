@@ -1,5 +1,3 @@
-/** Builder chat: the data-chat spine plus three seams — DRAFT-worktree cwd, a unified authoring prompt, post-turn webhook minting. Ext changes are DECLARED in the draft manifest and mirrored to the vault's draft band, so preview data stays scratch until Publish (#141, #147, #286). */
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -41,11 +39,9 @@ export interface UnifiedConversationRunnerOptions {
   ) => Promise<HarnessPrefs | undefined>;
   subsystem?: ModelSubsystem;
   getDispatcher: () => Dispatcher;
-  /** A thunk: the ephemeral port is only known after the server starts. */
   publicBaseUrl: () => string;
   ext?: ExtBandOps;
   vaultSql?: () => VaultSqlRunner;
-  /** Rides the `_assistant` agent — high-risk commands park as usual. */
   vaultInvoke?: () => VaultInvokeRunner;
   vaultContent?: () => VaultContentRunner;
   sessionIdFor?: (appId: string) => string;
@@ -74,10 +70,6 @@ async function readAppKind(appDir: string): Promise<"app" | "automation"> {
   }
 }
 
-/**
- * The harness can't generate crypto-random credentials, so an authored webhook
- * stages `pending: true` and mints here. Best-effort — never fails the turn.
- */
 async function mintPendingWebhooks(
   cwd: string,
   publicBaseUrl: () => string,

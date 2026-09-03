@@ -1,12 +1,3 @@
-/*
- * Peer-rail catch-up cost (#750 invariant 7): the blob lane authorizes ONCE
- * per transfer session and streams chunks to the vault's own temp file; a
- * member on the op chain receives an increment that leaves its seat-local
- * derived rows alone; and a full bootstrap frame past the member's page
- * budget arrives as bounded pages, never one response serializing the whole
- * commons.
- */
-
 import crypto from "node:crypto";
 
 import { describe, expect, test, vi } from "vitest";
@@ -31,11 +22,8 @@ import { dialFrom, link, makeSide } from "./peer-give.test-fixtures.js";
 import type { Side } from "./peer-give.test-fixtures.js";
 import type { PeerDial } from "./peer-link-client.js";
 
-// Real vault fixtures plus a multi-mebibyte CAS transfer: cold setup under
-// the concurrent pre-push gate can exceed the small unit default.
 vi.setConfig({ testTimeout: 60_000 });
 
-/** Wrap a dial so the suite can count exactly which doors were knocked. */
 function countingDial(dial: PeerDial): { dial: PeerDial; targets: string[] } {
   const targets: string[] = [];
   return {
@@ -142,7 +130,6 @@ async function commonsPair(
 
 describe("peer commons pull cost (#750 invariant 7)", () => {
   test("a multi-chunk blob pull authorizes once and streams through the temp file", async () => {
-    // 2.5 MiB → three 1 MiB chunk requests.
     const bytes = crypto.randomBytes(2_500_000);
     const pair = await commonsPair("blob-session", bytes);
     const counted = countingDial(dialFrom(pair.member, pair.origin));
@@ -167,8 +154,6 @@ describe("peer commons pull cost (#750 invariant 7)", () => {
     });
     expect(result).toMatchObject({ state: "current" });
     expect(store.getSync(pair.sha256)?.equals(bytes)).toBe(true);
-    // Steward-side authorization work is bounded: ONE transfer session for
-    // the whole blob, never a closure export per chunk.
     const authCalls = counted.targets.filter((target) =>
       target.startsWith(PEER_COMMONS_BLOB_AUTH_PATH)
     );
@@ -178,8 +163,6 @@ describe("peer commons pull cost (#750 invariant 7)", () => {
     expect(authCalls).toHaveLength(1);
     expect(chunkCalls).toHaveLength(3);
     for (const call of chunkCalls) expect(call).toContain("token=");
-    // Member-side peak memory is one chunk: the bytes streamed through the
-    // vault's promotion temp file and were adopted, not assembled in RAM.
     expect(adopted).toStrictEqual([pair.sha256]);
   });
 
@@ -224,7 +207,6 @@ describe("peer commons pull cost (#750 invariant 7)", () => {
       seat: pair.member.vault,
     });
     expect(first).toMatchObject({ state: "current" });
-    // Seat-local derived state a full re-baseline would scrub.
     const memberContent = pair.member.vault.vault
       .prepare("SELECT content_id FROM media_asset WHERE asset_id = ?")
       .get(pair.assetId) as { content_id: string };
@@ -240,9 +222,6 @@ describe("peer commons pull cost (#750 invariant 7)", () => {
         Buffer.from(new Float32Array([1]).buffer),
         new Date().toISOString()
       );
-    // One steward write, executed and sequenced the way the rail does it: the
-    // invocation is seeded with the operation's own replica key so the member
-    // re-executing it lands on identical rows (#750 invariant 7).
     registerMediaCommands(pair.origin.gateway);
     registerMediaCommands(pair.member.gateway);
     const sequence =
@@ -276,8 +255,6 @@ describe("peer commons pull cost (#750 invariant 7)", () => {
       memberVaultId: pair.member.vaultId,
       grantId: pair.grantId,
       seat: pair.member.vault,
-      // The replica executor: without it this seat cannot replay a tail and
-      // every increment re-baselines instead.
       gateway: pair.member.gateway,
       credential: pair.member.ownerCredential,
     });
@@ -294,9 +271,6 @@ describe("peer commons pull cost (#750 invariant 7)", () => {
         )
         .get(memberContent.content_id)
     ).toMatchObject({ n: 1 });
-    // Both pulls were appliable without a destructive re-baseline: the
-    // durable record shows tails only — the fixed-window plan's signal that
-    // no member was forced through the snapshot lane.
     expect(
       pair.member.vault.vault
         .prepare(
@@ -311,7 +285,6 @@ describe("peer commons pull cost (#750 invariant 7)", () => {
   test("a bootstrap frame past the member's page budget arrives as bounded pages", async () => {
     const bytes = crypto.randomBytes(64);
     const pair = await commonsPair("paged", bytes);
-    // Inflate the frame well past the requested page budget.
     pair.origin.vault.vault
       .prepare("UPDATE core_content_item SET title = ? WHERE sha256 = ?")
       .run(`padded ${"x".repeat(16_000)}`, pair.sha256);

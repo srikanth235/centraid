@@ -133,7 +133,6 @@ describe("compression", () => {
       const { res, data } = mockRes();
       await sendJsonNegotiated(mockReq(), res, 200, big);
       expect(data.headers["Content-Encoding"]).toBeUndefined();
-      // Still sets Vary so a cache keys per Accept-Encoding.
       expect(data.headers["Vary"]).toBe("Accept-Encoding");
       expect(JSON.parse(data.body.toString("utf8"))).toStrictEqual(big);
     });

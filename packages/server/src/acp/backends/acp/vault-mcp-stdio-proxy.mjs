@@ -1,17 +1,4 @@
 #!/usr/bin/env node
-/*
- * Stdio MCP proxy for harnesses that only support stdio MCP transports.
- *
- * Centraid's vault tools live as a loopback HTTP MCP server (per-turn bearer).
- * Agents that lack `mcpCapabilities.http` can still spawn this process via
- * ACP's default stdio MCP shape; we forward initialize / tools/list /
- * tools/call / ping to the HTTP endpoint named in env:
- *
- *   CENTRAID_VAULT_MCP_URL   — e.g. http://127.0.0.1:PORT/mcp
- *   CENTRAID_VAULT_MCP_TOKEN — bearer token for Authorization
- *
- * Not a public API — launched only by the ACP turn backend.
- */
 
 import { createInterface } from "node:readline";
 
@@ -64,7 +51,6 @@ rl.on("line", (line) => {
   } catch {
     return;
   }
-  // Notifications: forward fire-and-forget (no response expected).
   if (msg.method && msg.id === undefined) {
     void forward(msg).catch(() => undefined);
     return;

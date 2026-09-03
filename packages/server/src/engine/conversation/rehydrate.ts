@@ -1,14 +1,8 @@
-// Lazy read-only rehydration of archived conversation history (#438 d9).
-// Pruned archive-index ranges: fetch the sealed CAS blob, fold turns in
-// marked `fromArchive`. NEVER writes the ledger; mutation by turn id fails
-// because the pruned rows no longer exist.
-
 import { readArchivedConversationSegment } from "./archive/index.js";
 import type { Attachment, Item, Turn } from "./schema.js";
 import { attachmentFromRaw, itemFromRaw, turnFromRaw } from "./store-sql.js";
 import type { RawAttachment, RawItem, RawTurn } from "./store-sql.js";
 
-/** Undefined (standalone) → `archiveUnavailable`. `null` = absent; throw = fetch failure. */
 export type ArchiveBlobReader = (sha: string) => Promise<Uint8Array | null>;
 
 export interface ArchiveSegmentRef {
@@ -24,7 +18,6 @@ export interface ArchivedRows {
   itemsByTurn: Map<string, Item[]>;
   attachmentsByItem: Map<string, Attachment[]>;
   turnIds: Set<string>;
-  /** Any pruned segment missed → surface `archiveUnavailable`, never a partial thread. */
   unavailable: boolean;
 }
 
@@ -40,7 +33,6 @@ export async function collectArchivedRows(
     unavailable: false,
   };
   if (prunedRefs.length === 0) return out;
-  // No custody door (standalone host) ⇒ nothing to fetch.
   if (!reader) {
     out.unavailable = true;
     return out;
@@ -80,7 +72,6 @@ export async function collectArchivedRows(
       else out.attachmentsByItem.set(a.itemId, [a]);
     }
   }
-  // Serialized `ORDER BY turn_id, ordinal`; sort so the fold never sees mixed ordinals.
   for (const list of out.itemsByTurn.values())
     list.sort((x, y) => x.ordinal - y.ordinal);
   return out;

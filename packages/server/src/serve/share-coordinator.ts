@@ -1,6 +1,3 @@
-// The only legal-transition table for edges (#750): pure, storage-free. Never
-// add a route-local UPDATE over `share_edges`. Same-owner placements only (#825).
-
 import type { EdgeKind, EdgeStatus } from "./share-edge-row.js";
 
 export interface EdgeState {
@@ -50,14 +47,12 @@ function unchanged(state: EdgeState): EdgeOutcome {
   return { state, effects: [], changed: false };
 }
 
-/** Total: an illegal (state, signal) pair is a no-op, never a throw. */
 export function reduceEdge(
   facts: EdgeFacts,
   state: EdgeState,
   signal: EdgeSignal
 ): EdgeOutcome {
   if (signal.type === "revoked") {
-    // The one signal a terminal edge hears: revoking a completed edge works.
     if (state.status === "revoked") return unchanged(state);
     return {
       state: { ...state, status: "revoked", reason: signal.reason },
@@ -75,8 +70,6 @@ export function reduceEdge(
         changed: true,
       };
     case "target-projected": {
-      // Projection commits before a move deletes its source; a repeat must not
-      // undo the source step.
       if (state.targetState === "executed") return unchanged(state);
       const next: EdgeState = {
         ...state,
@@ -110,7 +103,6 @@ export function reduceEdge(
         changed: true,
       };
     case "give-failed":
-      // Parked, not failed: the effect row outlives the attempt and retries.
       return park(state, signal.reason);
   }
 }

@@ -1,6 +1,3 @@
-// CLI preflight: `<bin> --version` cached in memory. Older than min is
-// `ok: true` with `versionAtLeast: false` — warn, do not hard-block.
-
 import { spawn } from "node:child_process";
 
 import type { HarnessStatus } from "@centraid/server/engine";
@@ -107,7 +104,6 @@ export async function runPreflight(
   cached = { status, cacheKey: key };
 
   if (status.ok && opts.requireSessionReady) {
-    // Never spawn a billed live diagnostic on a session-ready check.
     const caps = await resolveAcpCapabilities(prefs.kind, {
       ...(prefs.binPath ? { binPath: prefs.binPath } : {}),
       ...(prefs.extraArgs?.length ? { extraArgs: prefs.extraArgs } : {}),
@@ -194,7 +190,6 @@ async function probe(prefs: HarnessPrefs): Promise<HarnessStatus> {
 }
 
 export function parseSemver(text: string): SemVer | undefined {
-  // No leading `\b` — `v1.2.3` has a word char before the digit.
   const m = text.match(/(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)/u);
   if (!m) return undefined;
   return {

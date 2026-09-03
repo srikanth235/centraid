@@ -1,11 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#807) one gate suite — tier ranks, the scoped cascade, profile egress and the consent step are one decision and share the real fire spine, policy seam and dispatch fixtures
-/*
- * The enrichment gate — the privacy promise as behaviour: refused with a stated
- * reason under `off`, under `device` when it needs the `gateway` lane, and when
- * the policy cannot be read at all — an unreadable policy is not consent.
- * Exercised through `runFire` with a stub dispatch surface, so a refusal is
- * observable exactly as the ledger sees it.
- */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -69,7 +62,6 @@ describe("enrichment tier gate", () => {
     await fs.rm(appsDir, { recursive: true, force: true });
   });
 
-  /** Records whether the host was ever asked for a dispatch surface. */
   function countingDispatch(opened: OpenDispatchArgs[]) {
     return (args: OpenDispatchArgs): Promise<DispatchSurface> => {
       opened.push(args);
@@ -169,7 +161,6 @@ describe("enrichment tier gate", () => {
       handler: `export default async ({ ctx }) => ({ output: await ctx.delegate({ prompt: 'sneak a model turn' }) });`,
     });
 
-    // The fire starts (device-tier work); the model turn inside fails loudly.
     expect(outcome.skipped).toBeUndefined();
     expect(outcome.ok).toBe(false);
     expect(outcome.error).toContain("ctx.delegate is refused");
@@ -243,9 +234,6 @@ describe("enrichment tier gate", () => {
     }
   );
 
-  // The cascade on the fire path (#807): a bare tier gets the legacy
-  // decision; the cascade is the same gate, one resolver deeper.
-
   it("refuses when a rule switches the capability off, even at the gateway tier", async () => {
     const { outcome, opened } = await fire({
       lane: "gateway",
@@ -273,7 +261,6 @@ describe("enrichment tier gate", () => {
 
   it("refuses a profile whose egress reaches further than the vault's ceiling", async () => {
     const { outcome, opened } = await fire({
-      // The lane fits; the refusal below is the CEILING's, not the lane's.
       lane: "device",
       resolveEnrichPolicy: (request) => ({
         tier: "device",
@@ -297,10 +284,6 @@ describe("enrichment tier gate", () => {
     expect(opened).toStrictEqual([]);
   });
 
-  // Egress consent on the fire path (#807): the tier says how far work may
-  // RUN; the consent ledger says whether the member ever agreed.
-
-  /** A cascade that pins a provider-backed engine under a `gateway` vault. */
   function providerCascade(consent?: EnrichConsentRecord | null) {
     return ((request) => ({
       tier: "gateway" as const,
@@ -368,9 +351,6 @@ describe("enrichment tier gate", () => {
     expect(opened).toHaveLength(1);
   });
 
-  // THE BACK-COMPAT LAW, proved: tier-only vaults holding NO consent rows keep
-  // running every shipped enricher — the tier IS standing consent for the
-  // two classes it can express.
   it.each(["device", "gateway"] as const)(
     "runs a tier-only vault's own engine under %s with an empty consent ledger",
     async (tier) => {
@@ -390,14 +370,10 @@ describe("enrichment tier gate", () => {
 
       expect(outcome.ok).toBe(true);
       expect(opened).toHaveLength(1);
-      // The ledger was never even consulted: the tier already answered.
       expect(asked).toStrictEqual([]);
     }
   );
 
-  // Stated so nobody "fixes" it later: the phone's capture-time OCR latch does
-  // write an `on-device` row, but it is per-device by law (#712) — enforcing
-  // one phone's "not now" here would bind every device and the gateway.
   it("does not let a device-scoped on-device decline refuse the gateway's own work", async () => {
     const { outcome, opened } = await fire({
       lane: "device",
@@ -541,7 +517,6 @@ describe(decideEnrichmentGate, () => {
     expect(decision).toStrictEqual({ allowed: true, sealModelTurns: false });
   });
 
-  // The profile-aware form (#807).
   const resolved = (tier: EnrichTier, profileId = "built-in") =>
     resolveEnrichmentPolicy(
       [
@@ -604,9 +579,6 @@ describe(decideEnrichmentGate, () => {
     );
   });
 
-  // FAIL-CLOSED OFF THE REGISTRY (#807): manifest.ts accepts any capability
-  // string, and work whose egress class cannot be named cannot be judged safe,
-  // so the gate refuses rather than running it on the tier alone.
   it("refuses an enricher whose capability this gateway carries no contract for", () => {
     const policy = resolveEnrichmentPolicy([], "gateway", "sentiment")!;
     const decision = decideEnrichmentGate({
@@ -616,7 +588,6 @@ describe(decideEnrichmentGate, () => {
       lane: "gateway",
       tier: "gateway",
       policy,
-      // Exactly what the host supplies: undefined off the registry.
       profileEgress: readEngineProfile({}, policy.profileId, "sentiment")
         ?.egress,
     });

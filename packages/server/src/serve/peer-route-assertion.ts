@@ -8,7 +8,6 @@ export const MAX_ASSERTION_SKEW_MS = 5 * 60 * 1000;
 
 export interface RouteClaim {
   vaultId: string;
-  /** Cache only — an EndpointId is never an identity (decision 1). */
   endpointId: string;
   relayHints: string[];
   ts: number;
@@ -18,7 +17,6 @@ export interface RouteAssertion extends RouteClaim {
   signature: string;
 }
 
-/** The exact bytes both sides sign; order and framing are the contract. */
 export function routeAssertionBytes(claim: RouteClaim): Buffer {
   return Buffer.from(
     [
@@ -60,7 +58,6 @@ export function parseRouteAssertion(raw: unknown): RouteAssertion | undefined {
   return { vaultId, endpointId, relayHints, ts, signature };
 }
 
-/** Signed route assertion (#726 P3 decision 4): verified against the key RECORDED FOR THAT VAULT at link time — a peer cannot re-key itself by asserting. */
 export function verifyRouteAssertion(
   assertion: RouteAssertion,
   storedPeerPublicKeyBase64: string,

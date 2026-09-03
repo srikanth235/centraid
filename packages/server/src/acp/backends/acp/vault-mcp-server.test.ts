@@ -1,8 +1,3 @@
-// Coverage for the per-turn loopback MCP endpoint: routing, the bearer gate,
-// the JSON-RPC dispatch surface (initialize / ping / tools/list / tools/call),
-// malformed-request handling, and idempotent teardown. Driven with raw fetch
-// against the real listener rather than through a spawned harness.
-
 import { afterEach, describe, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
@@ -29,7 +24,6 @@ describe("vault-mcp-server", () => {
     return { handle, url: handle.server.url, bearer };
   }
 
-  /** POST a JSON-RPC message with the correct bearer. */
   async function rpc(
     url: string,
     bearer: string,
@@ -210,7 +204,6 @@ describe("vault-mcp-server", () => {
     const body = (await res.json()) as {
       result: { isError: boolean; content: { text: string }[] };
     };
-    // Empty args → vault_sql reports its usage error rather than crashing.
     expect(body.result.isError).toBe(true);
     expect(body.result.content[0]?.text).toMatch(/requires/u);
   });

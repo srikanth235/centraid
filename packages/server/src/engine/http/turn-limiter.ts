@@ -1,5 +1,3 @@
-// Per-vault cap on running turns (#420); overflow gets 429 + Retry-After.
-
 import type { ServerResponse } from "node:http";
 
 export const DEFAULT_MAX_CONCURRENT_TURNS = 4;
@@ -19,7 +17,6 @@ export class TurnLimiter {
     return this.active >= this.max;
   }
 
-  /** Release fn MUST be invoked exactly once at stream end. */
   tryAcquire(): (() => void) | undefined {
     if (this.active >= this.max) return undefined;
     this.active += 1;

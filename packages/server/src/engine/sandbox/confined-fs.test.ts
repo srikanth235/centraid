@@ -1,10 +1,3 @@
-/*
- * Direct tests of sandbox fs enforcement (#842). Worker-thread coverage
- * does not instrument these modules; `policy.test.ts` pins POLICY, this
- * pins the guard. Arrangement: granted root, prefix-sharing sibling, and
- * an in-root symlink pointing out.
- */
-
 import { promises as fs, realpathSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -48,7 +41,6 @@ describe("sandbox filesystem confinement", () => {
     test("refuses everything while no root is granted", () => {
       setConfinedReadRoots([]);
       expect(confinedReadRoots()).toStrictEqual([]);
-      // Empty grant is "nothing is readable", not "no restriction".
       expect(() => guardReadPath("readFileSync", insideFile)).toThrow(
         SandboxDeniedError
       );
@@ -64,7 +56,6 @@ describe("sandbox filesystem confinement", () => {
 
     test("refuses a sibling directory that merely shares the root's prefix", () => {
       setConfinedReadRoots([root]);
-      // Prefix sibling: `startsWith` admits `/granted-evil`; `path.relative` does not.
       expect(() => guardReadPath("readFileSync", outsideFile)).toThrow(
         /refused|denied/iu
       );
@@ -82,7 +73,6 @@ describe("sandbox filesystem confinement", () => {
       expect(guardReadPath("statSync", path.join(root, "a/b/c.txt"))).toBe(
         path.join(root, "a/b/c.txt")
       );
-      // Missing-file probes still walk ancestors — skip would leak existence.
       expect(() =>
         guardReadPath("statSync", path.join(sibling, "a/b/c.txt"))
       ).toThrow(SandboxDeniedError);
@@ -148,7 +138,6 @@ describe("sandbox filesystem confinement", () => {
 
     test("openSync refuses every mode that can write, inside the root too", () => {
       setConfinedReadRoots([root]);
-      // `openSync` modes that write (`w`/`a`/`+`) refuse even on a granted file.
       for (const mode of ["w", "a", "w+", "r+", "a+", "wx", "as+"])
         expect(
           () => confined.openSync(insideFile, mode),
@@ -159,7 +148,6 @@ describe("sandbox filesystem confinement", () => {
 
     test("existsSync REFUSES rather than answering false for an outside path", () => {
       setConfinedReadRoots([root]);
-      // False would be a side channel; refuse rather than answer.
       expect(() => confined.existsSync(outsideFile)).toThrow(
         SandboxDeniedError
       );

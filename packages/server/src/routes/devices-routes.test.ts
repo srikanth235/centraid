@@ -111,8 +111,6 @@ describe("devices-routes scenarios", () => {
       body: JSON.stringify({ confirmLastDevice: "Personal" }),
     });
     expect(confirmed.status).toBe(200);
-    // Revocation tombstones the BINDING; the owner and their vault_owners
-    // row survive so `devices add` from the box can bring a replacement in.
     expect(
       f.enrollments.listByVault("vault-a").map((row) => row.revoked)
     ).toStrictEqual([true]);
@@ -166,16 +164,6 @@ describe("devices-routes scenarios", () => {
     });
   });
 
-  /*
-   * Branch coverage the #566 rewrite dropped (#568).
-   *
-   * These live branches would otherwise go unexercised: DELETE idempotency,
-   * the 405s, the foreign-vault 404, sibling revoke, `vault_required`, and
-   * the no-endpoint 409. Each is a refusal or a safe-default that would fail
-   * silently — every one returns a plausible-looking status, so nothing
-   * downstream would notice a regression.
-   */
-
   test("DELETE of an already-revoked enrollment is idempotent, not an error", async () => {
     const f = await harness();
     const owner = f.enrollments.enroll({
@@ -196,8 +184,6 @@ describe("devices-routes scenarios", () => {
       headers: deviceHeaders("owner-key"),
     });
     expect(first.status).toBe(200);
-    // A client retrying after a dropped response must not see a 404 or a 500 —
-    // the row is already gone and that IS the requested end state.
     const again = await fetch(url, {
       method: "DELETE",
       headers: deviceHeaders("owner-key"),
@@ -306,9 +292,6 @@ describe("devices-routes scenarios", () => {
       ownerId: owner.ownerId,
     });
 
-    // Every device a caller can see is its own owner's (one owner per vault,
-    // #726), so revoking a sibling is the owner acting on their own gear —
-    // there is no role lattice left to refuse it.
     const revoked = await fetch(
       `${f.base}/centraid/_gateway/devices/${encodeURIComponent(owner.enrollmentId)}`,
       { method: "DELETE", headers: deviceHeaders("phone-key") }
@@ -316,8 +299,6 @@ describe("devices-routes scenarios", () => {
     expect(revoked.status).toBe(200);
     expect(f.enrollments.isEnrolled("owner-key")).toBe(false);
 
-    // Self-unpair stays allowed — leaving is always the device's own call.
-    // It is now the owner's last device, so the typed confirmation gates it.
     const selfUnpair = await fetch(
       `${f.base}/centraid/_gateway/devices/${encodeURIComponent(phone.enrollmentId)}`,
       {

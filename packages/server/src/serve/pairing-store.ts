@@ -1,11 +1,3 @@
-/*
- * One-time gateway enrollment tickets (#555, #603, #726). A ticket is an
- * INVITATION: it names the owner a joining device binds to and the exact
- * vault-id list the device lands in (no roles — access is ownership).
- * Redemption is a conditional DELETE, so concurrency is decided by the
- * affected row rather than an in-process mutex.
- */
-
 import crypto from "node:crypto";
 import path from "node:path";
 
@@ -31,7 +23,6 @@ interface TicketRow {
 const TICKET_COLUMNS =
   "ticket_id, secret_hash, owner_id, grants_json, created_at, expires_at";
 
-/** An invitation: which owner joins, and the vaults the device lands in. */
 export interface TicketInvitation {
   ownerId: string;
   vaultIds: string[];
@@ -48,7 +39,6 @@ function parseVaultIds(raw: string): string[] {
   });
 }
 
-/** Every stored ticket carries an owner and vaults — the mint guard says so. */
 function invitationOf(row: TicketRow): TicketInvitation {
   return { ownerId: row.owner_id, vaultIds: parseVaultIds(row.grants_json) };
 }
@@ -73,12 +63,6 @@ export class PairingTicketStore {
     return new PairingTicketStore(databaseFor(source));
   }
 
-  /**
-   * Mint an INVITATION. The owner and the full vault list are decided here,
-   * server-side, and burned into the ticket; the joining device can name
-   * neither. Authorization for WHO may mint WHAT lives in
-   * `routes/devices-routes.ts` — this store only records the decision.
-   */
   mint(
     invitation: TicketInvitation,
     ttlMs = DEFAULT_TICKET_TTL_MS
@@ -94,12 +78,6 @@ export class PairingTicketStore {
     return row ? invitationOf(row) : undefined;
   }
 
-  /**
-   * One scan, every vault, ONE transaction: the burn, the ownership rows,
-   * and the device binding commit together or not at all. A failure anywhere
-   * — including the injected `beforeEnroll` seam — rolls the ticket back and
-   * leaves zero enrollment, never a half-paired device (#599 AC).
-   */
   redeemAndEnroll(
     ticketId: string,
     secret: string,
@@ -215,8 +193,6 @@ export class PairingTicketStore {
     const deleted = this.gatewayDatabase.db
       .prepare("DELETE FROM tickets WHERE ticket_id = ?")
       .run(ticketId);
-    // BEGIN IMMEDIATE serializes contenders. The affected row count, rather
-    // than any in-process mutex, is the single-use authority.
     if (deleted.changes !== 1) return undefined;
     return row;
   }

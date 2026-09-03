@@ -53,10 +53,6 @@ describe("lock-admin scenarios", () => {
           fail
         )
       ).rejects.toThrow(/running daemon|another Centraid gateway/iu);
-      // `vault list` answers from the on-disk vault registry and never issues a
-      // `gateway.db` read — it is unaffected by the lock BY CONSTRUCTION, which
-      // is why it cannot stand in for the read-only-open behaviour asserted in
-      // the next test (#568).
       await expect(
         capture(() =>
           commandVault(["list", "--data-dir", dataDir, "--json"], fail)
@@ -72,9 +68,6 @@ describe("lock-admin scenarios", () => {
     roots.push(dataDir);
     const held = GatewayDatabase.open(dataDir, { lock: "exclusive" });
     try {
-      // The open itself succeeds against an EXCLUSIVE lock — no page is touched
-      // until the first SELECT — so `open()` must probe, or every read-only verb
-      // dies with `ERR_SQLITE_ERROR: database is locked` and a stack trace.
       expect(() =>
         GatewayDatabase.open(dataDir, { lock: "read-only" })
       ).toThrow(/another Centraid gateway|database is locked/iu);

@@ -1,6 +1,3 @@
-// Pricing warmer (#445): fetch LiteLLM, filter, overlay the snapshot,
-// cache to disk — failure non-fatal, never invent a price.
-
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -11,7 +8,6 @@ const LITELLM_URL =
   "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 10_000;
-/** ~1.6 MB upstream; bounded so a bad URL can't OOM. */
 const MAX_BYTES = 8 * 1024 * 1024;
 
 interface DiskCache {
@@ -25,7 +21,6 @@ interface WarmerLogger {
 }
 
 export interface PricingWarmerOptions {
-  /** Disk cache path; omit for memory-only refresh. */
   cacheFile?: string;
   ttlMs?: number;
   now?: () => number;
@@ -50,7 +45,6 @@ export class PricingWarmer {
     if (opts.logger) this.logger = opts.logger;
   }
 
-  /** Seed from fresh-enough disk cache, background-refresh stale; never throws; no `cacheFile` → no network. */
   async boot(): Promise<void> {
     if (!this.cacheFile) return;
     const disk = await this.readDisk();
@@ -63,7 +57,6 @@ export class PricingWarmer {
     }
   }
 
-  /** Fetch + filter + overlay + persist; collapses concurrent calls. */
   async refresh(): Promise<void> {
     if (this.refreshing) return;
     this.refreshing = true;
@@ -79,7 +72,6 @@ export class PricingWarmer {
       });
       this.logger?.info(`pricing catalog refreshed: ${count} models`);
     } catch (error) {
-      // Keep last-good or bundled snapshot — never a guess.
       this.logger?.warn(
         `pricing catalog refresh failed: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -114,7 +106,7 @@ export class PricingWarmer {
       if (parsed?.models && Object.keys(parsed.models).length > 0)
         return parsed;
     } catch {
-      // No/unreadable cache — fall through to the bundled snapshot.
+      // Intentionally empty.
     }
     return undefined;
   }

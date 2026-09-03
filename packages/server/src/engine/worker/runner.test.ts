@@ -1,7 +1,4 @@
 /* oxlint-disable unicorn/require-post-message-target-origin -- node:worker_threads postMessage has no targetOrigin */
-/**
- * The entry requires worker_threads, so it is driven as a pooled Worker.
- */
 
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -53,14 +50,9 @@ describe("runner", () => {
 
     worker = new Worker(RUNNER, {
       workerData: { pooled: true },
-      // A bare [] rather than a filtered `process.execArgv`: vitest 4 runs the
-      // suite with `--require <vitest>/suppress-warnings.cjs`, and dropping only
-      // the entries containing "vitest" orphaned the `--require` flag, which
-      // `new Worker()` rejects. The worker under test needs none of these.
       execArgv: [],
     });
 
-    // worker_threads queues messages until a listener attaches — no fixed sleep.
     worker.postMessage({
       type: "run",
       request: {
@@ -89,10 +81,6 @@ describe("runner", () => {
         handlerKind: "action",
         args: {},
       },
-      // A bare [] rather than a filtered `process.execArgv`: vitest 4 runs the
-      // suite with `--require <vitest>/suppress-warnings.cjs`, and dropping only
-      // the entries containing "vitest" orphaned the `--require` flag, which
-      // `new Worker()` rejects. The worker under test needs none of these.
       execArgv: [],
     });
 

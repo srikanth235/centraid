@@ -1,12 +1,5 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-/*
- * Coverage for the provider-usage poller (#367) against a REAL
- * in-process HTTP fake implementing just `GET /v1/storage/vaults/:id/usage`
- * (PROTOCOL.md § Usage) — same "fake mirrors the real gateway" philosophy
- * `remote-provider.test.ts` uses, scoped down to the one route this module
- * calls. No mocked `fetch`.
- */
 
 import { afterEach, describe, expect, test, vi } from "vitest";
 
@@ -26,7 +19,6 @@ describe("storage-usage", () => {
     );
   });
 
-  /** Minimal fake provider — one route, PROTOCOL.md's exact envelope + shape. */
   function startFakeUsageServer(opts: {
     apiKey: string;
     targetId: string;
@@ -146,7 +138,6 @@ describe("storage-usage", () => {
     expect(result.fetchedAt).not.toBeNull();
     expect(fake.requestCount()).toBe(1);
 
-    // Second read within the poll window is served from cache — no second request.
     const second = await poller.usageFor(connectionId);
     expect(second.providerReported?.backup?.bytesStored).toBe(1000);
     expect(fake.requestCount()).toBe(1);
@@ -185,12 +176,9 @@ describe("storage-usage", () => {
     expect(first.providerReported?.backup?.bytesStored).toBe(500);
     expect(fake.requestCount()).toBe(1);
 
-    // Advance past the poll window — usageFor returns the STALE cached value
-    // synchronously-ish (no await on the network) while a refresh fires.
     now = 5000;
     const stale = await poller.usageFor(connectionId);
     expect(stale.providerReported?.backup?.bytesStored).toBe(500); // still the old number, served instantly
-    // Event-driven wait for the background refresh, not a fixed sleep.
     await vi.waitFor(() => expect(fake.requestCount()).toBe(2));
   });
 

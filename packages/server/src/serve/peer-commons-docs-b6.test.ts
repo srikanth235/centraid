@@ -146,8 +146,6 @@ describe("B6 Docs folder Commons across a real peer", () => {
         .get(claim.invitation.invitationId)
     ).toMatchObject({ member_vault_id: null });
 
-    // Only now does the invitee install Centraid and create a vault. The raw
-    // token is redeemable only after the existing link ceremony approves it.
     const writer = makeSide("docs-b6-writer-after-install");
     registerDocumentCommands(writer.gateway);
     await link(origin, writer);
@@ -277,7 +275,6 @@ describe("B6 Docs folder Commons across a real peer", () => {
         now,
       })
     ).toMatchObject({ retained: true, grantIds: [grant.grantId] });
-    // A later ordinary catch-up cannot reattach the retained receiver copy.
     await pullFrom(writer, origin, grant.grantId, now);
     revokeCommonsGrant({
       steward: origin.vault.vault,

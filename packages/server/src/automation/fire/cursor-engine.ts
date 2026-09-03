@@ -1,8 +1,3 @@
-// One durable cursor engine for every automation trigger (#541): a write-ahead
-// pending batch precedes firing, each terminal turn is acknowledged, and
-// position advances only when the batch settles. Cron is a virtual source
-// computed on read.
-
 import { unrefTimer } from "../../lib/unref-timer.js";
 import type { Trigger } from "../manifest/manifest.js";
 import type { Row } from "../scaffold/app.js";
@@ -89,8 +84,6 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     const wasDormant = this.registrations.size === 0;
     this.dropRegistrations(row.ref);
     if (row.enabled) {
-      // Disabling keeps stored cursors: re-enabling resumes from the
-      // recorded position instead of skipping what happened while off.
       for (const registration of registrationsFor(
         row,
         this.defaultCronTimeZone?.()
@@ -123,7 +116,6 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     const before = this.signatureByRef(previous);
     const next = new Map<string, CursorRegistration>();
     for (const row of rows) {
-      // A disabled row stays validated: its triggers must remain legal.
       const registrations = registrationsFor(row, this.defaultCronTimeZone?.());
       if (!row.enabled) continue;
       for (const registration of registrations) {
@@ -147,10 +139,6 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       for (const [key, value] of previous) this.registrations.set(key, value);
       throw error;
     }
-    // Retention follows the DECLARED trigger slots, enabled or not: a
-    // disabled automation keeps its watermark; an empty desired set is a
-    // no-op, not a wipe. Dropped slots go by (automation, index) so a
-    // shrunk list can't resurrect a stale position at a reused index.
     const retained = retentionKeysFor(rows);
     if (retained.length > 0) this.store.deleteCursorsNotIn?.(retained);
     await this.notifyDormancy(wasDormant);
@@ -170,9 +158,6 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     }
     for (const registration of this.registrations.values()) {
       const expr = scheduleExpr(registration.trigger);
-      // A cron reader owns its whole (cursor, now] window: resuming at
-      // 10:00 still catches a 09:00 due instant; current-minute matching
-      // would defer it a day. Only pure cron carries a zone.
       if (
         registration.trigger.kind === "cron" ||
         (expr !== undefined && cronMatches(expr, at))
@@ -200,10 +185,6 @@ export class VaultCursorEngine implements LocalCursorScheduler {
         (trigger.kind === "webhook" &&
           "id" in trigger &&
           trigger.id === sourceKey) ||
-        // Event ingress keys are per-connection: the host appends the bound
-        // `connectionId` + filter hash onto `eventSourceKey(trigger)` so a
-        // multi-account connector can't cross-deliver (#541 review). Match
-        // that prefix.
         (trigger.kind === "event" &&
           sourceKey.startsWith(`${eventSourceKey(trigger)}:`));
       if (selected) this.processSafely(registration, at);
@@ -283,9 +264,6 @@ export class VaultCursorEngine implements LocalCursorScheduler {
         try {
           await this.process(registration, at);
         } catch (error) {
-          // A doorbell rung DURING a failed batch still owes a delivery
-          // (webhook triggers are reached by neither `tick` nor `nudge`):
-          // drain, then surface the failure.
           failure ??= { error };
         }
         if (state.dirty) return drainDirtyWork();
@@ -307,8 +285,6 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       registration.ref,
       registration.triggerIndex
     );
-    // Trigger changed in place at the same index: the old position is
-    // meaningless to its replacement.
     const cursor =
       storedCursor?.sourceKind === cursorIdentity(registration.trigger)
         ? storedCursor
@@ -316,9 +292,6 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     const priorPending = readPendingBatch(cursor?.pendingJson);
     let result: CursorReadResult;
     if (priorPending) {
-      // A write-ahead batch is authoritative until it settles: re-reading
-      // could collapse cron to a newer due instant or let retention drop
-      // payloads before restart delivery.
       result = {
         elements: priorPending.elements,
         ...(priorPending.targetPositionJson === undefined
@@ -359,9 +332,6 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     const skipped = Math.max(0, result.skipped ?? 0);
     const identity = cursorIdentity(registration.trigger);
     const elements = result.elements.slice(0, this.catchUpCap);
-    // INVARIANT: the committed position may never point past the last
-    // element this batch delivers; capped overflow stays durable for the
-    // next tick, not a gap.
     const overflowed = elements.length < result.elements.length;
     const targetPositionJson = overflowed
       ? (elements.at(-1)?.positionJson ?? cursor?.positionJson)
@@ -392,8 +362,6 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       });
     };
     if (elements.length === 0) {
-      // Only a real state change earns a write; an idle cron minute would
-      // otherwise upsert this row 1,440 times a day.
       const positionMoved =
         targetPositionJson !== undefined &&
         targetPositionJson !== cursor?.positionJson;
@@ -420,8 +388,6 @@ export class VaultCursorEngine implements LocalCursorScheduler {
         ? {}
         : { gapReason: result.gapReason }),
     });
-    // Durable intent precedes any side effect; the committed position stays
-    // unchanged until all terminal turns are receipted.
     put(pending());
     const deliverNext = async (index: number): Promise<void> => {
       const element = elements[index];
@@ -469,17 +435,10 @@ export class VaultCursorEngine implements LocalCursorScheduler {
           registration.trigger.kind === "event")
     );
     await applyInOrder(eligible, async (registration) => {
-      // Cron is absent from bootstrap: its window includes the current
-      // minute, so bootstrapping a `0 9 * * *` automation created at
-      // 09:00:30 would fire instantly; cron catches up on the next tick.
       if (!canReadExternal) return;
       try {
         await this.process(registration, at);
       } catch (error) {
-        // Provider availability is not definition readiness: event triggers
-        // stay registered when offline or unauthenticated (next cadence
-        // retries); data/condition bootstrap stays strict — install-time
-        // grant readiness.
         if (registration.trigger.kind !== "event") throw error;
         this.onError?.(error, registration.ref);
       }
@@ -498,8 +457,6 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     try {
       await this.onDormancyChange(dormant, this.now());
     } catch (error) {
-      // A dormancy ledger write is observability, not registration state:
-      // surfaced, never swallowed, but it must not fail the reconcile.
       this.onError?.(error, "<scheduler-dormancy>");
     }
   }
@@ -524,8 +481,6 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       list.push({
         index: registration.triggerIndex,
         trigger: registration.trigger,
-        // Collapsed cron schedules + zones are part of the definition:
-        // editing the second cron or its timezone must read as "updated".
         ...(registration.cronSchedules
           ? { cronSchedules: registration.cronSchedules }
           : {}),

@@ -1,8 +1,3 @@
-/*
- * Per-vault scheduler liveness + missed-run visibility (#351 tier 2/3).
- * Never escalates past `degraded`: behind schedule ≠ gateway down.
- */
-
 import type { SchedulerLedgerSnapshot } from "@centraid/server/automation";
 
 import type { HealthProbe } from "./health-registry.js";
@@ -35,7 +30,6 @@ export function createSchedulerHealthProbe(
     for (const vault of vaults) {
       const snapshot = vault.snapshot();
       const tag = vault.vaultId.slice(0, 8);
-      // No baseline before the first tick; dormant schedulers stop ticking (the transition hook resets on re-enable).
       if (snapshot.lastTickAt && !snapshot.dormant) {
         const age = now() - Date.parse(snapshot.lastTickAt);
         if (Number.isFinite(age) && age > staleMs) {

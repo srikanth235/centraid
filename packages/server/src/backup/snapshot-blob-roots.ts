@@ -1,25 +1,6 @@
-/*
- * GC-pins-snapshots reachability (#436).
- *
- * A client that owns CAS garbage collection MUST treat every blob referenced
- * by any RETAINED snapshot manifest as a LIVE GC root — even when that blob
- * is no longer in the live vault. CAS has no history of its own: snapshot
- * manifests ARE the attachment history. This helper is the one place that
- * computes that root set, so observability and client-owned CAS GC cannot
- * disagree about "reachable".
- *
- * Manifests are opened and AUTHENTICATED (never trusted by bare key). An
- * unreadable manifest THROWS rather than silently shrinking the root set.
- */
-
 import { openManifest } from "@centraid/backup";
 import type { BackupProvider, Keyring, ManifestEntry } from "@centraid/backup";
 
-/**
- * A `blob` entry's content sha is the final path segment of
- * `blobs/sha256/<fan>/<sha>` — the same parse the restore engine uses for
- * `skipBlob`. Only `kind: 'blob'` entries name CAS objects.
- */
 export function blobShasFromManifestEntries(
   entries: readonly ManifestEntry[]
 ): string[] {
@@ -32,14 +13,6 @@ export function blobShasFromManifestEntries(
   return shas;
 }
 
-/**
- * `listSnapshots` (default) returns only unpruned rows, so a blob whose last
- * reference has aged out of the retention window is NOT a root.
- *
- * `manifestBlobCache` is a `manifestHash → blob shas` memo. Manifests are
- * immutable; hand the same Map back every run so only NEW manifests are
- * fetched.
- */
 export async function snapshotReferencedBlobShas(opts: {
   provider: BackupProvider;
   targetId: string;
@@ -72,7 +45,6 @@ export async function snapshotReferencedBlobShas(opts: {
         row.manifestHash
       );
     } catch (error) {
-      // Unreadable retained manifest must FAIL the root set, never shrink it.
       throw new Error(
         `snapshot roots: cannot read manifest seq ${row.seq}: ${error instanceof Error ? error.message : String(error)}`,
         { cause: error }

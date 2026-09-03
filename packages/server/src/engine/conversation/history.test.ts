@@ -3,8 +3,6 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 
 // governance: allow-repo-hygiene file-size-limit #181 — cohesive
-// conversation-history suite; the build-kind coverage tips it just over 500
-// lines, not worth a split.
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
@@ -19,18 +17,14 @@ import { ConversationHistoryStore, deriveTitle } from "./history.js";
 import type { RecordTurnInput } from "./history.js";
 import { ConversationStore } from "./store.js";
 
-// Tests that don't care about cross-user isolation share this stub owner id.
 const TEST_USER_ID = "test-user-uuid-0000";
 
-// Chat is app-scoped by the `app_id` column inside ONE per-vault
-// `vault.db` (#280). Tests build a workspace over a temp vault dir.
 const APP = "todos";
 
 function plainRows<T extends object>(rows: T[]): T[] {
   return rows.map((row) => ({ ...row }));
 }
 
-/** A fresh temp vault dir with per-app data folders (default `APP`). */
 function freshVaultDir(...appIds: string[]): string {
   const dir = tempDirSync("centraid-chat-history-");
   for (const id of appIds.length ? appIds : [APP]) {
@@ -39,9 +33,6 @@ function freshVaultDir(...appIds: string[]): string {
   return dir;
 }
 
-// One cached journal provider per vault dir — mirrors the plane's
-// one-connection-per-file doctrine so two stores over the same dir share
-// the handle.
 const providersByDir = new Map<string, DatabaseProvider>();
 function journalFor(dir: string): DatabaseProvider {
   let provider = providersByDir.get(dir);
@@ -52,7 +43,6 @@ function journalFor(dir: string): DatabaseProvider {
   return provider;
 }
 
-/** Workspace provider over a temp vault dir, owned by `ownerPartyId`. */
 function workspaceFor(
   dir: string,
   ownerPartyId: string = TEST_USER_ID
@@ -75,7 +65,6 @@ function newStore(
   );
 }
 
-/** Build a minimal one-step chat turn for `recordTurn`. */
 function turn(
   conversationId: string,
   userMessage: string,
@@ -201,20 +190,17 @@ describe(ConversationHistoryStore, () => {
     expect(ai.usage?.inputTokens).toBe(1200);
     expect(ai.usage?.outputTokens).toBe(340);
     expect(ai.usage?.model).toBe("claude-sonnet-4-5");
-    // Frozen cost = 1200/1e6*3 + 340/1e6*15 = 0.0036 + 0.0051 = 0.0087.
     expect(ai.usage?.costUsd).toBeCloseTo(0.0087, 6);
   });
 
   it("collapses a regenerate into a retry pager showing the latest attempt (#420)", () => {
     const s = store.createSession(APP);
     const first = store.recordTurn(APP, turn(s.id, "why?", "because A", 1_000));
-    // A regenerate re-sends the same prompt, pointing retryOf at the first turn.
     const second = store.recordTurn(APP, {
       ...turn(s.id, "why?", "because B", 2_000),
       retryOf: first?.turnId,
     });
     const loaded = store.getSession(APP, s.id);
-    // One user row + one ai row (the family is collapsed), not two of each.
     expect(loaded?.messages.length).toBe(2);
     expect(loaded?.messages[0]!.payload).toStrictEqual({
       kind: "user",
@@ -229,10 +215,8 @@ describe(ConversationHistoryStore, () => {
         attempts: Array<{ turnId: string; text: string }>;
       };
     };
-    // The latest attempt is shown inline...
     expect(ai.text).toBe("because B");
     expect(ai.turnId).toBe(second?.turnId);
-    // ...with both attempts carried for the client pager, oldest→newest.
     expect(ai.retry?.count).toBe(2);
     expect(ai.retry?.index).toBe(2);
     expect(ai.retry?.attempts.map((a) => a.text)).toStrictEqual([
@@ -279,7 +263,6 @@ describe(ConversationHistoryStore, () => {
     const found = store.findRecordedTurn(APP, s.id, key);
     expect(found?.ok).toBe(true);
     expect(found?.finalText).toBe("the answer");
-    // An unknown key (and a wrong app) both read as not-found.
     expect(store.findRecordedTurn(APP, s.id, "no-such-key")).toBeUndefined();
     expect(store.findRecordedTurn("other", s.id, key)).toBeUndefined();
   });
@@ -472,9 +455,6 @@ describe(ConversationHistoryStore, () => {
   });
 
   it("hydrates turn seq 0 into a binding minted before the conversation had turns", () => {
-    // `seq` starts at 0, so an empty conversation's watermark must be -1. A 0
-    // sentinel would read as "turn 0 already delivered" and silently drop the
-    // very first exchange from the binding's next delta hydration.
     const dir = freshVaultDir();
     const durable = new ConversationHistoryStore(workspaceFor(dir));
     const session = durable.createSession(APP);
@@ -505,8 +485,6 @@ describe(ConversationHistoryStore, () => {
   });
 
   it("keeps a failed turn inside the next delta instead of advancing the watermark", () => {
-    // The failed prompt never reached the model, so marking it "hydrated"
-    // would erase that user message from every later handoff.
     const dir = freshVaultDir();
     const durable = new ConversationHistoryStore(workspaceFor(dir));
     const session = durable.createSession(APP);
@@ -767,15 +745,10 @@ describe(ConversationHistoryStore, () => {
       kind: "build",
     });
 
-    // The kind moved UP onto the conversation (#190): a builder turn
-    // sets its thread to `kind: 'build'`; a data chat stays `'chat'`. Read the
-    // persisted conversations back through a fresh store on the same file.
     const conv = new ConversationStore(journalFor(appsDir));
     expect(conv.getConversation(chat.id)?.kind).toBe("chat");
     expect(conv.getConversation(build.id)?.kind).toBe("build");
 
-    // Transcript reconstruction is kind-agnostic — a build turn round-trips
-    // exactly like a chat turn.
     const loaded = local.getSession(APP, build.id);
     expect(loaded?.messages[0]!.payload).toStrictEqual({
       kind: "user",
@@ -934,8 +907,6 @@ describe(ConversationHistoryStore, () => {
   });
 
   it("listSessions orders by updatedAt desc", () => {
-    // Freeze only Date (the store stamps rows with Date.now()) and jump it
-    // between creates — deterministic ordering with no fixed sleep.
     const clock = useFakeClock(undefined, { toFake: ["Date"] });
     const a = store.createSession(APP, "A");
     clock.set(clock.now() + 10);
@@ -963,13 +934,11 @@ describe(ConversationHistoryStore, () => {
     expect(after1?.harnessKind).toBe("codex");
     expect(after1?.harnessSessionId).toBe("cx-1");
 
-    // Harness observation omitted — counters move, harness columns stay.
     const after2 = store.noteTurn(APP, s.id);
     expect(after2?.turnCount).toBe(2);
     expect(after2?.harnessKind).toBe("codex");
     expect(after2?.harnessSessionId).toBe("cx-1");
 
-    // Harness observation present but no sessionId — kind updates, session id is kept.
     const after3 = store.noteTurn(APP, s.id, { kind: "claude-code" });
     expect(after3?.turnCount).toBe(3);
     expect(after3?.harnessKind).toBe("claude-code");
@@ -992,14 +961,6 @@ describe(ConversationHistoryStore, () => {
   });
 });
 
-/*
- * Two axes, ONE law: a conversation is visible only to the (app, user) pair
- * that created it — `listSessions` never leaks a neighbour's row and
- * `getSession` never resolves a foreign id. The app axis partitions one store
- * across app ids; the user axis partitions one vault's `vault.db` across
- * owner identities. The body is identical, so it runs from a table instead of
- * two hand-copied blocks that could drift apart.
- */
 type ListedSession = ReturnType<
   ConversationHistoryStore["listSessions"]
 >[number];
@@ -1010,11 +971,8 @@ interface ScopeSide {
 }
 
 interface ScopeAxis {
-  /** Axis name (used in the test title). */
   name: string;
-  /** Both sides address the SAME vault.db — isolation is a query law, not a file boundary. */
   make: () => { a: ScopeSide; b: ScopeSide };
-  /** Axis-specific stamp every row handed to a side must carry, when the axis has one. */
   expectStamp?: (side: "a" | "b", rows: ListedSession[]) => void;
 }
 
@@ -1070,7 +1028,6 @@ describe("ConversationHistoryStore scoping", () => {
       expect(bList.map((s) => s.title)).toStrictEqual(["b-1"]);
       expectStamp?.("b", bList);
 
-      // A session id resolves only under the side that created it.
       expect(a.store.getSession(a.app, mine.id)).toBeTruthy();
       expect(b.store.getSession(b.app, mine.id)).toBeUndefined();
     }
@@ -1078,7 +1035,6 @@ describe("ConversationHistoryStore scoping", () => {
 });
 
 describe("ConversationHistoryStore per-user scoping", () => {
-  // Two stores on the same vault's vault.db, different owner identities.
   function pair(): {
     alice: ConversationHistoryStore;
     bob: ConversationHistoryStore;
@@ -1096,11 +1052,6 @@ describe("ConversationHistoryStore per-user scoping", () => {
     expect(s.userId).toBe("alice");
     expect(store.getSession(APP, s.id)?.userId).toBe("alice");
   });
-
-  // listSessions / getSession isolation for this axis is asserted by the
-  // table-driven "ConversationHistoryStore scoping" suite above. What remains
-  // here is user-axis-only: the ownership stamp and the WRITE refusals, which
-  // have no app-axis twin.
 
   it("recordTurn refuses to write into another user's session", () => {
     const { alice, bob } = pair();
@@ -1134,7 +1085,6 @@ describe("ConversationHistoryStore data persistence", () => {
   });
 });
 
-// HTTP route dispatcher — minimal fake req/res, no real port bound.
 interface FakeReq {
   url: string;
   method: string;
@@ -1147,8 +1097,6 @@ interface FakeRes {
   headers: Record<string, string>;
   bodyText: string;
   writeHead: (status: number, headers: Record<string, string>) => FakeRes;
-  // The transcript route negotiates compression (#659), so the fake speaks
-  // the setHeader/statusCode half of ServerResponse too.
   setHeader: (name: string, value: string) => void;
   end: (text?: string | Buffer) => void;
   readonly body: unknown;
@@ -1164,10 +1112,6 @@ function makeReq(
   return {
     method,
     url,
-    // A real request always has headers. The transcript route negotiates
-    // compression (#659) and only reads them once a body clears 1 KiB, so a
-    // fixture without them passed every small-payload test and threw on the
-    // first realistic transcript.
     headers,
     async *[Symbol.asyncIterator](): AsyncIterableIterator<Buffer> {
       if (bodyJson !== undefined) yield Buffer.from(bodyJson, "utf8");
@@ -1244,8 +1188,6 @@ describe(makeConversationRouteHandler, () => {
     expect((res.body as { title: string }).title).toBe("named");
   });
 
-  // Issue #659 G5, HTTP half. The window is what makes a long thread openable;
-  // these prove it opens to the RIGHT end and that paging back is exhaustive.
   it("GET a session windows to the newest turns and pages back with beforeSeq", async () => {
     const s = store.createSession(APP);
     for (let index = 0; index < 12; index += 1) {
@@ -1257,7 +1199,6 @@ describe(makeConversationRouteHandler, () => {
     const load = async (query = ""): Promise<FakeRes> =>
       call(handler, "GET", `${BASE}/${s.id}${query}`);
 
-    // No parameters ⇒ the whole thread, unchanged for an existing caller.
     const whole = await load();
     expect(whole.status).toBe(200);
     const wholeBody = whole.body as {
@@ -1269,7 +1210,6 @@ describe(makeConversationRouteHandler, () => {
     expect(wholeBody.hasMore).toBe(false);
     expect(wholeBody.oldestSeq).toBe(0);
 
-    // ?turns=3 ⇒ the NEWEST three turns, not the oldest three.
     const newest = await load("?turns=3");
     const newestBody = newest.body as {
       messages: Array<{ payload: { text?: string } }>;
@@ -1282,10 +1222,7 @@ describe(makeConversationRouteHandler, () => {
     expect(newestBody.hasMore).toBe(true);
     expect(newestBody.oldestSeq).toBe(9);
 
-    // Page back until the start; collect every user message exactly once.
     const texts: string[] = [];
-    // Each page is older than the last, so pages prepend — but the messages
-    // WITHIN a page are already oldest-first and must keep that order.
     const collect = (body: {
       messages: Array<{ payload: { kind?: string; text?: string } }>;
     }): void => {
@@ -1299,8 +1236,6 @@ describe(makeConversationRouteHandler, () => {
     let hasMore = newestBody.hasMore;
     let pages = 1;
     while (hasMore) {
-      // Each request's cursor comes from the previous page's response, so these
-      // cannot be issued together — that is what paging backwards means.
       // oxlint-disable-next-line no-await-in-loop -- cursor depends on the prior page
       const page = await load(`?turns=3&beforeSeq=${cursor}`);
       const body = page.body as {
@@ -1328,13 +1263,11 @@ describe(makeConversationRouteHandler, () => {
         turn(s.id, `ask ${index}`, `reply ${index}`, 2000 + index)
       );
     }
-    // No Accept-Encoding (the opaque-tunnel transports) → raw bytes.
     const raw = await call(handler, "GET", `${BASE}/${s.id}`);
     expect(raw.status).toBe(200);
     expect(raw.headers["content-encoding"]).toBeUndefined();
     expect((raw.body as { messages: unknown[] }).messages).toHaveLength(24);
 
-    // A real HTTP stack offers one and gets it, with Vary set for caches.
     const negotiated = await call(
       handler,
       "GET",
@@ -1352,7 +1285,6 @@ describe(makeConversationRouteHandler, () => {
   it("rejects a malformed window rather than silently serving the newest page", async () => {
     const s = store.createSession(APP);
     store.recordTurn(APP, turn(s.id, "only", "reply"));
-    // A dropped beforeSeq would read to the client as "the thread ends here".
     const queries = [
       "?beforeSeq=abc",
       "?turns=0",
@@ -1416,7 +1348,6 @@ describe(makeConversationRouteHandler, () => {
       loaded.body as { messages: Array<{ payload: { feedback?: unknown } }> }
     ).messages[1]!.payload;
     expect(ai.feedback).toBe("up");
-    // An unknown value clears it back to null.
     const clear = await call(
       handler,
       "PATCH",
@@ -1455,7 +1386,6 @@ describe(makeConversationRouteHandler, () => {
     ).results;
     expect(results.map((r) => r.id)).toStrictEqual([id]);
     expect(results[0]!.snippet).toContain("⟦");
-    // A blank query yields no results, not an error.
     const empty = await call(handler, "GET", `${BASE}/search?q=`);
     expect((empty.body as { results: unknown[] }).results).toStrictEqual([]);
   });
@@ -1475,14 +1405,12 @@ describe(makeConversationRouteHandler, () => {
     const list = (await call(handler, "GET", BASE)).body as {
       sessions: Array<{ id: string; pinned: boolean; archived: boolean }>;
     };
-    // Pinned a sorts before b regardless of recency.
     expect(list.sessions[0]!.id).toBe(a.id);
     expect(list.sessions[0]!.pinned).toBe(true);
     const archived = await call(handler, "PATCH", `${BASE}/${b.id}`, {
       archived: true,
     });
     expect((archived.body as { archived: boolean }).archived).toBe(true);
-    // Archived b drops out of search.
     store.recordTurn(APP, turn(b.id, "beta needle text", "ok"));
     const res = await call(handler, "GET", `${BASE}/search?q=needle`);
     expect((res.body as { results: unknown[] }).results).toStrictEqual([]);

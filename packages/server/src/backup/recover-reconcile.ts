@@ -1,12 +1,3 @@
-/*
- * Adopt-time inventory reconcile (#439), always run from recover()'s
- * `onAdopted` position. A restored `blob_replica` attests only what was durable
- * AT CAPTURE TIME, so the provider's live inventory replaces that belief: a
- * divergent sha is `unmark`ed (eviction must never drop the last local copy),
- * re-pinned when the snapshot carries it, LOST when it does not. A provider
- * attesting no inventory skips instead of second-guessing it.
- */
-
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 

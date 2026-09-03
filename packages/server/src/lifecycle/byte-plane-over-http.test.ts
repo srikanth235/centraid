@@ -51,7 +51,7 @@ async function waitForHealth(): Promise<void> {
     try {
       if ((await fetch(`${baseUrl}/v1/health`)).ok) return;
     } catch {
-      // Process is still binding.
+      // Intentionally empty.
     }
     if (attempt >= 99)
       throw new Error("byte-plane test daemon did not become healthy");
@@ -77,7 +77,6 @@ describe.skipIf(!enabled)(
         root = path.resolve(externalRoot);
         baseUrl = externalBaseUrl.replace(/\/+$/u, "");
       } else {
-        // tempDir cleans owned roots after the file; external roots stay.
         root = await tempDir("centraid-byte-plane-contract-");
       }
       blobFile = path.join(root, "vault", "blobs", "fixture.bin");

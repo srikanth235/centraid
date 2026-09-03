@@ -1,7 +1,3 @@
-// Revise orchestration (#541): serialized under the per-conversation turn
-// lock; transactional — publish+compile are one unit, failure rolls back
-// and reports into the thread.
-
 import type { Row as AutomationRow } from "@centraid/server/automation";
 import { withConversationLock } from "@centraid/server/engine";
 
@@ -9,9 +5,7 @@ export interface AutomationRevisionDeps {
   row: AutomationRow;
   conversationLocks: Map<string, Promise<void>>;
   publishPrompt: (prompt: string, message: string) => Promise<void>;
-  /** MUST call `persistPrompt`; that call marks the prompt published. */
   rewrite: (persistPrompt: (prompt: string) => Promise<void>) => Promise<void>;
-  /** Headless compile; reports its outcome, never rejects. */
   compile: () => Promise<{ ok: boolean; error?: string }>;
   onRolledBack: (detail: string) => void;
   onFailed: (message: string) => void;

@@ -1,12 +1,3 @@
-/*
- * `centraid-gateway key …` — stopped-daemon seal-key inspection + rotation.
- * Recovery travels only through a password-wrapped recovery kit; this command
- * deliberately has no raw export/restore surface.
- *
- *   centraid-gateway key status  --data-dir <path> --vault <name-or-id>
- *   centraid-gateway key rotate  --data-dir <path> --vault <name-or-id>
- */
-
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -54,7 +45,6 @@ interface VaultRow {
   fingerprint: string | null;
 }
 
-/** Read identity + stamped fingerprint of one vault, without opening a plane. */
 function readVaultRow(dir: string): VaultRow | null {
   const file = path.join(dir, "vault.db");
   if (!existsSync(file)) return null;
@@ -86,7 +76,6 @@ function readVaultRow(dir: string): VaultRow | null {
   }
 }
 
-/** Resolve --vault by id or display name across the vault root, registry-free. */
 function resolveVaultDir(
   rootDir: string,
   nameOrId: string,
@@ -144,8 +133,6 @@ export async function commandKey(
       return;
     }
     case "rotate": {
-      // Full open (migrates + custody-checks) — rotation only makes sense
-      // for a vault that opens with its current key.
       const db = openVaultDb({
         dir: row.dir,
         keyStore,

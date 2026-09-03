@@ -34,7 +34,6 @@ function startHandlerServer(handler: RouteHandler): Promise<string> {
 const PAUSE = "/centraid/_gateway/resource/pause";
 const POWER = "/centraid/_gateway/resource/power-context";
 
-/** A monitor with a resolved no-battery probe (darwin ⇒ mains) for route tests. */
 async function readyMonitor(): Promise<PowerContextMonitor> {
   const m = new PowerContextMonitor({
     platform: "darwin",
@@ -101,7 +100,6 @@ describe("resource-routes", () => {
           }
         )
       );
-      // A rejected request never pauses.
       expect(registry.shouldPauseBackgroundWork()).toBe(false);
     });
 

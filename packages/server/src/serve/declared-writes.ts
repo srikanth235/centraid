@@ -1,5 +1,3 @@
-// DECLARED ⊇ OBSERVED for an action's `writes:`; gated by declared-writes.conformance.test.ts (#883 D2).
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { ENTITY_POINTERS, PARTY_POINTER_REGISTRY } from "@centraid/vault";
@@ -17,29 +15,10 @@ export function entityForPhysical(
   return undefined;
 }
 
-/**
- * What the ENGINE writes on every dispatch, whatever the action declared.
- *
- * `core.entity_revision` joined it in #916 (ruling ONT-revisions): the
- * pre-mutation snapshot moved out of seven call sites into the pipeline
- * (`gateway/revision-capture.ts`), which captures through generated triggers.
- * An action cannot declare a write it does not make.
- *
- * The audit band — `access_receipt`, `access_provenance` and the agent evidence
- * tables — is BAND-EXCLUDED from the entity registry
- * (`schema/local-tables.ts`), so a receipt write has no logical name for an
- * action to declare and never reaches `observed` in the first place; it is out
- * of the comparison by construction rather than by exemption.
- */
 export function engineCascadeEntities(): Set<string> {
   return new Set(["access.app", "core.entity_revision"]);
 }
 
-// Cascades are unioned per-action, never by default: nearly every table carries a
-// `core_party` FK, so a blanket union would exempt most of the product.
-/** The entity-pointer tables (#916, rung ten): every `(type, id)` mechanism
- *  that is now a composite foreign key into `core_entity`. A purge cascades
- *  through them, so an action that purges writes them without declaring them. */
 export function polyRefCascadeEntities(
   entities: Iterable<string>
 ): Set<string> {
@@ -72,7 +51,6 @@ export function partyRepointEntities(
     const entity = entityForPhysical(name, all);
     if (entity) cascade.add(entity);
   }
-  // Party pointers no FK describes; same registry the merge walks, so the two cannot drift.
   for (const pointer of PARTY_POINTER_REGISTRY) {
     const entity = entityForPhysical(pointer.table, all);
     if (entity) cascade.add(entity);
@@ -92,7 +70,6 @@ export interface DeclaredWritesVerdict {
   unexercised: string[];
 }
 
-// Asymmetric: `undeclared` is the defect; `unexercised` is a missed branch.
 export function conformDeclaredWrites(input: {
   declared: Iterable<string>;
   observed: Iterable<string>;

@@ -88,7 +88,6 @@ describe("backup-cas-reconciliation", () => {
     Parameters<typeof runCasOnlyReconciliation>[0]["collect"]
   >;
 
-  /** A single-object live provider collection for one store class. */
   function liveObject(sha: string): {
     source: "provider";
     providerAttested: true;
@@ -122,8 +121,6 @@ describe("backup-cas-reconciliation", () => {
     const derivedSha = "2".repeat(64);
     index.mark(casSha, 10, "cas");
     index.mark(derivedSha, 20, "derived");
-    // Each store's listing carries ONLY its own object; the cas pass must not see
-    // the derived sha as "missing", nor the derived pass the cas sha.
     const collect: CasCollect = async (opts) => ({
       configured: true,
       collection: liveObject(opts.store === "derived" ? derivedSha : casSha),
@@ -145,7 +142,6 @@ describe("backup-cas-reconciliation", () => {
     const index = new ReplicaIndex(vault.vault);
     const derivedSha = "3".repeat(64);
     index.mark(derivedSha, 20, "derived");
-    // cas listing healthy (empty); derived listing empty ⇒ the derived row is missing.
     const collect: CasCollect = async () => ({
       configured: true,
       collection: { source: "provider", providerAttested: true, objects: [] },

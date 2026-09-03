@@ -1,17 +1,3 @@
-/*
- * WHICH ENGINE RUNS (#807) — selection as policy. The engine profile decides
- * the variant; the manifest's `delegateStep` DECLARES a delegate variant
- * exists. Four laws pinned here:
- *
- *   1. BACK-COMPAT: no rules and no profiles → fires exactly as before.
- *   2. SELECTION: a delegate profile selects the delegate variant, binding
- *      carried into the fire, dispatch surface included.
- *   3. REFUSAL: delegate with no model anywhere → refused before dispatch.
- *   4. INERTNESS: no declared delegate variant → untouched by a delegate
- *      profile, nothing silently reaches a provider.
- *
- * Gate owned by `enrich-gate.test.ts`; every cascade below is allowed.
- */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -28,7 +14,6 @@ import type {
 import { runFire } from "./fire.js";
 import type { DispatchSurface, OpenDispatchArgs } from "./fire.js";
 
-/** The declaration that a delegate variant exists — not the choice of one. */
 const DELEGATE_STEP: NonNullable<ManifestEnrich["delegateStep"]> = {
   selected: "deterministic",
   promptRev: "ocr-v1",
@@ -53,7 +38,6 @@ function manifest(options: {
   };
 }
 
-/** A cascade that pins one profile and answers what engine it binds. */
 function cascade(
   profileId: string,
   engine: ResolvedEngineBinding | undefined
@@ -72,7 +56,6 @@ function cascade(
     ],
     egressForProfile: () =>
       engine?.kind === "delegate" ? "provider" : "gateway",
-    // The gate's provider question, already answered.
     egressConsent: () => ({
       capability: request.capability,
       egress: "provider",
@@ -97,7 +80,6 @@ describe("engine-profile selection on the fire path", () => {
     await fs.rm(appsDir, { recursive: true, force: true });
   });
 
-  /** Echoes the input the spine injected, so selection is observable. */
   const ECHO_HANDLER =
     "export default async ({ ctx }) => ({ output: { input: ctx.input ?? null } });";
 
@@ -179,8 +161,6 @@ describe("engine-profile selection on the fire path", () => {
   });
 
   it("[law 1] a member's per-recipe delegate pin still selects the delegate variant", async () => {
-    // The manifest switch writes `selected: "delegate"`; a built-in profile
-    // must not revoke it.
     const { outcome } = await fire({
       manifest: manifest({
         enrich: {
@@ -220,7 +200,6 @@ describe("engine-profile selection on the fire path", () => {
       delegateConfigPins: { thought_level: "high" },
       promptRev: "ocr-v1",
     });
-    // The turn itself runs on the member's binding, not the ambient one.
     expect(opened[0]?.model).toBe("owner/pin");
     expect(opened[0]?.configPins).toStrictEqual({ thought_level: "high" });
   });
@@ -257,9 +236,6 @@ describe("engine-profile selection on the fire path", () => {
   });
 
   it("[law 4] a delegate profile is inert for a capability whose handler has no delegate variant", async () => {
-    // Embeddings declare no `delegateStep`: selection may still pick a
-    // delegate engine, but this build ships no delegate code path — the
-    // selection must change nothing.
     const { outcome, opened, logs } = await fire({
       manifest: manifest({
         enrich: { domain: "docs", capability: "embed-text", lane: "device" },
@@ -272,11 +248,9 @@ describe("engine-profile selection on the fire path", () => {
     });
 
     expect(outcome.ok).toBe(true);
-    // No `variant`, no `delegateModel`, no `profileId` — input untouched.
     expect(injectedInput(outcome)).toBeNull();
     expect(opened).toHaveLength(1);
     expect(opened[0]?.model).toBeUndefined();
-    // The choice is stated, not silently dropped.
     expect(
       logs.some((line) => line.includes("declares no delegate variant"))
     ).toBe(true);

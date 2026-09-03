@@ -1,15 +1,3 @@
-/*
- * Aggregates over three sources in the vault's `vault.db` (#514):
- *   · LIVE — `run_summary` (VIEW: finished turns ⋈ conversations)
- *   · COST PROVENANCE — `items.cost_source` ('harness' | 'estimated')
- *   · ARCHIVED — `conversation_digest` rollups after prune (#438)
- *
- * Digests carry totals only: no harness/estimated split, no failure-cost
- * column, no per-run timing. So provenance KPIs and `medianRunMs` are live-arm
- * outright, the daily failed-spend figure is a live-arm floor, and `recent` is
- * live-only (archived runs are ≥90d idle).
- */
-
 import type { DatabaseSync } from "node:sqlite";
 
 import type { DatabaseProvider } from "../stores/gateway-db.js";
@@ -32,7 +20,6 @@ export type { InsightsSummary } from "./insights-types.js";
 
 const DEFAULT_WINDOW_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
-/** Share of spend that triggers the attention callout. */
 const ATTENTION_SHARE = 0.4;
 
 export class InsightsStore {
@@ -114,7 +101,6 @@ export class InsightsStore {
       appsTouched: apps.size,
       unpricedRuns: k.unpriced ?? 0,
       unreportedRuns: k.unreported ?? 0,
-      // Omitted, not zeroed: no finished run means no typical duration.
       ...(medianRunMs === undefined ? {} : { medianRunMs }),
     };
 
@@ -177,7 +163,6 @@ function foldDaily(
     cost: number;
     runs: number;
     failedRuns: number;
-    /** Live arm only. */
     failedCost: number;
   }
   const dayBuckets = new Map<string, DayAcc>();
@@ -219,7 +204,6 @@ function foldDaily(
       d.failed_runs ?? 0,
       d.failed_cost ?? 0
     );
-  // Archived days contribute a failure COUNT and nothing to failed spend.
   for (const d of stmts.dailyDigest.all(since) as Array<{
     day: string;
     tokens: number | null;

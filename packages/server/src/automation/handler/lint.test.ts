@@ -53,7 +53,6 @@ describe(lintHandlerSource, () => {
        const t = performance.now();`
     ).map((f) => f.rule);
     expect(rules.includes("no-math-random")).toBeTruthy();
-    // crypto.randomUUID() and bare randomUUID() both match the same rule.
     expect(rules.filter((r) => r === "no-random-uuid")).toHaveLength(2);
     expect(rules.includes("no-random-bytes")).toBeTruthy();
     expect(rules.includes("no-performance-now")).toBeTruthy();
@@ -64,13 +63,10 @@ describe(lintHandlerSource, () => {
       "const r = await fetch('https://x');"
     );
     expect(fetchFindings[0]!.rule).toBe("no-raw-fetch");
-    // The steer names the actual external-write path (#308).
     expect(fetchFindings[0]!.message).toContain("outbox.stage");
-    // ctx.fetch is the audited connector rail, not ambient I/O — exempt…
     expect(
       lintHandlerSource("const r = await ctx.fetch({ url });")
     ).toStrictEqual([]);
-    // …but other member spellings stay flagged.
     expect(lintHandlerSource('globalThis.fetch("https://x");')[0]!.rule).toBe(
       "no-raw-fetch"
     );
@@ -146,18 +142,15 @@ describe(lintHandlerSource, () => {
     expect(lintHandlerSource('await ctx.tool("x.list", {});')[0]!.rule).toBe(
       "no-ctx-tool"
     );
-    // Optional whitespace before the call parens.
     expect(lintHandlerSource('await ctx.tool ("x", {});')[0]!.rule).toBe(
       "no-ctx-tool"
     );
-    // Bracket-access forms.
     expect(lintHandlerSource("await ctx['tool']('x', {});")[0]!.rule).toBe(
       "no-ctx-tool"
     );
     expect(lintHandlerSource('await ctx["tool"]("x", {});')[0]!.rule).toBe(
       "no-ctx-tool"
     );
-    // The message steers to the surviving rails.
     const msg = lintHandlerSource('ctx.tool("x", {});')[0]!.message;
     expect(msg).toContain("ctx.tool was removed");
     expect(msg).toContain("ctx.delegate");

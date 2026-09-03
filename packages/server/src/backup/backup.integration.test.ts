@@ -1,12 +1,6 @@
 import crypto, { randomBytes } from "node:crypto";
 import { existsSync, promises as fs } from "node:fs";
 // governance: allow-repo-hygiene file-size-limit (#363) the full-story end-to-end test built exactly the way build-gateway.ts constructs BackupService (no injected provider/assembleEntries); splitting the story would break the point of an end-to-end test
-/*
- * Full-story backup E2E (PROTOCOL.md/FORMAT.md): no injected provider or
- * `assembleEntries` — constructed as `build-gateway.ts` does, real vault,
- * real LocalBackupProvider, real CLI restore, adopted as a live vault.
- * Shared seeded vault in beforeAll; mutating tests last.
- */
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -320,7 +314,6 @@ describe("backup", () => {
 
     const { itemId: outboxItemId } = seedApprovedOutboxItem(h.plane);
 
-    // #630 P5: lifecycle columns and pre-trash revision survive snapshot/adoption.
     const peoplePartyId = invoke(h.plane, "people.add_person", {
       display_name: "Maya Chen",
       role: "Design lead",
@@ -330,7 +323,6 @@ describe("backup", () => {
       party_id: peoplePartyId,
     })["revision_id"] as string;
 
-    // #630 P1/P5: receipt graph (expense, OCR, lines, allocations, attach) must survive.
     const ownerPartyId = (
       h.plane.db.vault
         .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
@@ -399,12 +391,8 @@ describe("backup", () => {
     );
   });
 
-  // No-change / incremental laws live in engine.test.ts; vault-shaped input
-  // in backup-sources.test.ts. This file: fencing, policy echo, CLI restore.
-
   test("CLI restore materializes a fresh dest, and adopting it as a live vault mounts, returns real data, and fires quarantine", async () => {
     const sourceReplica = currentReplicaLogState(h.plane.db.vault);
-    // Close the shared registry before the CLI opens the same vault.db.
     await h.service.stop();
     h.registry.stop();
     h.gatewayDatabase.close();
@@ -439,7 +427,6 @@ describe("backup", () => {
     expect(restoredReplica.epoch).not.toBe(sourceReplica.epoch);
     expect(restoredReplica.epochReason).toBe("backup-restore");
 
-    // Adopt as a live vault: layout is sealKeyFileFor's; rebuild code store from the bundle.
     const freshRoot = await tempDir("e2e-adopted-root");
     const adoptedDir = path.join(freshRoot, h.vaultId);
     await fs.mkdir(adoptedDir, { recursive: true });
@@ -480,16 +467,13 @@ describe("backup", () => {
       ownerName: "Priya",
     });
     try {
-      // Mount catches garbage DB and seal-key fingerprint mismatch together.
       const adopted = adoptedRegistry.get(h.vaultId);
       expect(adopted).toBeTruthy();
       const plane = adopted!;
-      // Restore already epoch-bumped after WAL; adoption must not bump again.
       expect(currentReplicaLogState(plane.db.vault).epoch).toBe(
         restoredReplica.epoch
       );
 
-      // Quarantine parked the pre-staged approved outbox item.
       expect(plane.quarantine).not.toBeNull();
       expect(plane.quarantine?.outboxParked).toBeGreaterThanOrEqual(1);
       const outboxRow = plane.db.vault
@@ -594,7 +578,6 @@ describe("backup", () => {
       );
       expect(decrypted).toBe(h.seeded.lockerPlaintext);
 
-      // #630: presence is durable; live session capabilities were memory-only.
       await expect(
         plane.gateway.authenticateLocker({ operation: "status" })
       ).resolves.toMatchObject({
@@ -639,7 +622,6 @@ describe("backup", () => {
     });
     const beforeGen = (await provider.getTarget(targetId)).currentGeneration;
 
-    // Restore-takeover: copy state+keyring, bump generation +1 (PROTOCOL.md fencing).
     const backupDir2 = await tempDir("e2e-backupdir-takeover");
     const gatewayDatabase2 = GatewayDatabase.open(backupDir2);
     const keyStore2 = daemonKeyStore(path.join(backupDir2, "keys"));
@@ -669,9 +651,6 @@ describe("backup", () => {
     const afterGen = (await provider.getTarget(targetId)).currentGeneration;
     expect(afterGen).toBe(beforeGen + 1);
 
-    // Service A (old generation) must fence: health error, no bump, no throw.
-    // Separate provider instances (cross-process). B moved the pinned bases,
-    // so A has real work and hits the 409.
     const before = (await h.service.status())[h.vaultId];
     await h.service.runBackup(h.vaultId);
     const after = (await h.service.status())[h.vaultId];
@@ -684,7 +663,4 @@ describe("backup", () => {
       "error"
     );
   });
-
-  // Verify/refusal laws: engine.test.ts. Blank-machine residue:
-  // recover.integration.test.ts. This file: fencing, policy echo, CLI restore.
 });

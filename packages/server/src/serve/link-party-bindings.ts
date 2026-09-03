@@ -1,11 +1,3 @@
-/*
- * The link ceremony's vault-side footprint (#821). A binding is written ONLY
- * for a link approved on both sides and not revoked; revocation tombstones
- * rather than deletes, so a re-link re-lights the row; only the LOCAL side is
- * written (#750 inv. 2). Runs OUTSIDE the gateway transaction, whose rollback
- * would otherwise leave the binding standing.
- */
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { bindPartyToVault, revokePartyVaultBinding } from "@centraid/vault";
@@ -16,8 +8,6 @@ import { isLinkApproved, partyIdForLinkedVault } from "./vault-link-row.js";
 export type LinkBindingState =
   | "bound"
   | "conflict"
-  /** R9 (#916): the link named this vault or its own party — a member is not
-   *  their own peer, and the binding is refused rather than written. */
   | "self"
   | "revoked"
   | "absent"
@@ -42,7 +32,6 @@ export interface LinkBindingDeps {
   now?: () => number;
 }
 
-/** Total and idempotent: every link state maps to a defined outcome. */
 export function reconcileLinkBindings(
   link: VaultLink,
   deps: LinkBindingDeps
@@ -74,8 +63,6 @@ export function reconcileLinkBindings(
       continue;
     }
     if (!isLinkApproved(link)) {
-      // No undo needed: approvals are only ever added, so a link never falls
-      // back from approved to pending — only to revoked.
       outcomes.push({ localVaultId, peerVaultId, partyId, state: "pending" });
       continue;
     }

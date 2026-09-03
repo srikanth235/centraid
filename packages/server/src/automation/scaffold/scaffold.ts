@@ -1,7 +1,3 @@
-// Scaffold a new automation app (#98). An automation is never standalone: it
-// is one app folder declaring `kind: 'automation'`, holding exactly one
-// automation under `automations/<id>/`. The handle is `<appId>/<autoId>`.
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -29,22 +25,16 @@ export interface ScaffoldOptions {
   name?: string;
   description?: string;
   prompt?: string;
-  /** Defaults to daily 9am; ignored when `triggers` is set. */
   cronExpr?: string;
-  /** Overrides `cronExpr`; an empty array is a legal manual-fire-only one. */
   triggers?: readonly Trigger[];
   apps?: readonly string[];
   harness?: string;
   model?: string;
-  /** Defaults to the last 100 runs. */
   historyKeep?: HistoryKeep;
   onFailure?: string;
-  /** Required whenever `triggers` carries a condition/data entry — omitting it
-   *  fails validation rather than scaffolding an unevaluable trigger. */
   vault?: ManifestVault;
   connector?: ConnectorSpec;
   connections?: readonly ConnectionBinding[];
-  /** Defaults to `true`; the builder scaffolds a draft so cron waits. */
   enabled?: boolean;
   automationId?: string;
 }
@@ -135,8 +125,6 @@ function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
     opts.triggers === undefined
       ? [{ kind: "cron", expr: opts.cronExpr?.trim() || "0 9 * * *" }]
       : opts.triggers;
-  // `requires` slots stay empty until chosen (#167): a default here would be
-  // misleading, and a handler that never delegates needs none at all.
   const requires: Record<string, unknown> = {};
   if (opts.harness?.trim()) requires.harness = opts.harness.trim();
   if (opts.model?.trim()) requires.model = opts.model.trim();
@@ -157,11 +145,9 @@ function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
   if (opts.connector) raw.connector = opts.connector;
   if (opts.connections && opts.connections.length > 0)
     raw.connections = [...opts.connections];
-  // Round-trip: a scaffold must never write a manifest the runtime rejects.
   return validateManifest(raw);
 }
 
-/** Filesystem-free (#141): the caller PUTs these into a git-store session. */
 export function scaffoldAppFiles(
   appId: string,
   opts: ScaffoldOptions = {}
@@ -171,7 +157,6 @@ export function scaffoldAppFiles(
   validateId(automationId);
 
   const name = opts.name?.trim() || appId;
-  // No user-facing actions/queries, but the #107 schema requires both keys.
   const appJson: Record<string, unknown> = {
     manifestVersion: 1,
     id: appId,
@@ -194,7 +179,6 @@ export function scaffoldAppFiles(
   ];
 }
 
-/** Returns `[]` when the automation is absent or already in that state. */
 export function setEnabledInFiles(
   current: ScaffoldFile[],
   automationId: string,
@@ -214,7 +198,6 @@ export function setEnabledInFiles(
   return [{ path: target, content: JSON.stringify(manifest, null, 2) + "\n" }];
 }
 
-/** Returns survivors plus removed paths, for the caller to DELETE. */
 export function deleteFromFiles(
   current: ScaffoldFile[],
   automationId: string
@@ -229,7 +212,6 @@ export function deleteFromFiles(
   return { keep, removed };
 }
 
-/** Throws `AppScaffoldError` on a bad id or an existing app folder. */
 export async function scaffoldApp(
   appsDir: string,
   appId: string,
@@ -245,7 +227,6 @@ export async function scaffoldApp(
     );
   } catch (error) {
     if (error instanceof AppScaffoldError) throw error;
-    // ENOENT — the directory is free, proceed.
   }
 
   await Promise.all(

@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 
 import { createBrokerHealthProbe } from "./broker-health.js";
 
-/** A minimal in-memory `sync_connection*` trio — just enough for the probe's join. */
 function fakeVaultDb(): DatabaseSync {
   const db = new DatabaseSync(":memory:");
   db.exec(`

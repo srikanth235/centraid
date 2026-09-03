@@ -1,10 +1,4 @@
 import crypto from "node:crypto";
-/*
- * Automation/insights HTTP routes (#141). Drives
- * `makeAutomationsRouteHandler` with mock req/res, real (empty) stores
- * over a tempdir, and a stub `runAutomation` so turn-now is observable
- * without spawning a CLI.
- */
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
@@ -186,9 +180,6 @@ describe("automations-routes suite", () => {
     expect(r.body).toStrictEqual({ turns: [] });
   });
 
-  // The `run_summary` view only covers finished turns; the thread screen stays
-  // put on "Run now", so the ref-scoped feed must surface an IN-FLIGHT fire
-  // (started, not ended) as a running record or a slow run is invisible.
   test("GET turns includes an in-flight fire in both thread and global feeds", async () => {
     const store = new ConversationStore(
       makeLedgerDbProvider(ledgerDbFileIn(dir))
@@ -244,7 +235,6 @@ describe("automations-routes suite", () => {
       "copilot",
       "copilot",
     ]);
-    // No ref filter → the fleet activity feed also sees the in-flight turn.
     const all = await call("GET", "/centraid/_automations/turns?limit=10");
     const allRuns = (all.body as { turns: Array<{ turnId: string }> }).turns;
     expect(allRuns.map((x) => x.turnId)).toStrictEqual([
@@ -378,10 +368,6 @@ describe("automations-routes suite", () => {
     expect(r.body).not.toBeNull();
   });
 
-  // The run/events SSE subscriber count is capped (#351) — a small cap (2)
-  // makes the "cap+1" scenario cheap to exercise. `subscribeTurnEvents` is wired to a
-  // no-op unsub (never fires `turn.end`) so the stream stays open under test,
-  // same as a real live run being watched.
   interface SseMockClient {
     req: IncomingMessage;
     res: ServerResponse;
@@ -392,7 +378,6 @@ describe("automations-routes suite", () => {
     close: () => void;
   }
 
-  /** The same mock client as a POST with a JSON steering body. */
   function turnPost(
     client: SseMockClient,
     message = "What changed?"
@@ -458,7 +443,6 @@ describe("automations-routes suite", () => {
     };
   }
 
-  /** Put one publishable automation where `codeAppsDir()` will find it. */
   async function seedAutomation(
     store: WorktreeStore,
     appId: string
@@ -496,7 +480,6 @@ describe("automations-routes suite", () => {
       analytics,
       insights,
       runAutomation: (input) => fired.push(input),
-      // Holds the turn open (like a real ACP child) so the slot stays taken.
       runInteractiveTurn: () =>
         new Promise((resolve) => {
           released = () => resolve();
@@ -515,7 +498,6 @@ describe("automations-routes suite", () => {
     expect((JSON.parse(second.body()) as { error: string }).error).toBe(
       "sse_capacity"
     );
-    // A refusal is a complete, distinguishable response — not a half-open stream.
     expect(second.ended()).toBe(true);
 
     released?.();

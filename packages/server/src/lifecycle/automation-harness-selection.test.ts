@@ -23,8 +23,6 @@ describe(resolveAutomationHarnessSelection, () => {
       )
     ).toStrictEqual({
       harness: "claude-code",
-      // The manifest named a provider the user's automations lane does not
-      // use, so this selection is not consent for unattended egress (#567).
       selectionSource: "manifest",
       model: "claude-explicit",
       configPins: { thought_level: "high" },
@@ -40,7 +38,6 @@ describe(resolveAutomationHarnessSelection, () => {
       )
     ).toStrictEqual({
       harness: "codex",
-      // Falling back lands on the user's own automations harness.
       selectionSource: "prefs",
       model: "codex-auto",
     });

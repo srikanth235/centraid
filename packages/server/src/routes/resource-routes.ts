@@ -1,25 +1,3 @@
-/*
- * `POST /centraid/_gateway/resource/pause` + `DELETE …/pause` — the owner's
- * hot-apply "pause background work" control (#528).
- *
- * `POST /centraid/_gateway/resource/power-context` + `DELETE …/power-context`
- * — the Electron desktop pushes live host power state (on battery / charging /
- * thermal), which composes into the same safe-loop deferral as the pause
- * (#528). Client-pushed state goes stale after 120s (the monitor's
- * own clock enforces it); a DELETE clears it, falling back to the boot probe.
- *
- * A self-hoster on a busy or thermally-throttled machine can suspend the
- * non-urgent background loops (vault sweeps, backup retention) without
- * touching their durable Resource mode. The pause is deliberately
- * runtime-only and in-memory: a restart resumes normally, and this never
- * writes prefs or flips a mode. Durability work — WAL/fsync, the consent
- * outbox — is NEVER gated (see `HealthRegistry.pauseBackgroundWork` and
- * `PowerContextMonitor`).
- *
- * Thin wiring in the same family as `health-routes.ts`: mounted behind the
- * same host bearer gate.
- */
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { RouteHandler } from "../serve/build-gateway.js";
@@ -141,7 +119,6 @@ async function handlePowerContext(
   return sendJson(res, 200, { ok: true });
 }
 
-/** Strict validation — garbage is a 400, not a coerced push. */
 function parsePowerContextBody(
   body: Record<string, unknown>
 ): { body: PowerContextPushBody } | { error: string } {

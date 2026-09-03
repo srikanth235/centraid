@@ -1,16 +1,3 @@
-/**
- * The steward-absence DRILL (#750): the whole path an operator walks in
- * docs/recovery/commons-steward-loss.md, end to end, over the in-process
- * transport — absence evidence recorded → a notice surfaces → the ceremony
- * runs → successor invitations are actually delivered → a member converges on
- * the successor group.
- *
- * Three seats on purpose: N=2 hides the hard case. Here one member is
- * co-hosted with the recovering seat, one is reachable over a peer link, and
- * one has no link to the successor at all (its only link was to the vault that
- * disappeared) — the case that ends in an out-of-band claim ticket.
- */
-
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
@@ -53,8 +40,6 @@ interface Drill {
   grantId: string;
 }
 
-/** One commons, one steward, three members — all four seats co-hosted for the
- *  founding compile, which is what gives every member a full replica. */
 function drill(label: string): Drill {
   const steward = makeSide(`${label}-steward`);
   const ana = makeSide(`${label}-ana`);
@@ -95,8 +80,6 @@ function drill(label: string): Drill {
   return { steward, ana, bo, cy, grantId: grant.grantId };
 }
 
-/** A week of failed pulls with a working local link — the exact evidence the
- *  member's own pull path records, written here without a network. */
 function recordAbsence(member: Side, grantId: string, stewardVaultId: string) {
   const now = Date.now();
   const silentSince = new Date(
@@ -137,8 +120,6 @@ function serve(
     enrollments: EnrollmentStore.open(member.gatewayDb),
     vaultFor: (vaultId): VaultDb | undefined =>
       [member, ...cohosted].find((side) => side.vaultId === vaultId)?.vault,
-    // The peer plane, stubbed at exactly the seam production uses: a linked
-    // peer accepts the push, an unlinked one is not reachable at all.
     invitePeer: async (invitation) => {
       if (!invited.includes(invitation.memberVaultId)) return false;
       return true;
@@ -170,7 +151,6 @@ describe("steward-loss drill", () => {
     const { steward, ana, bo, cy, grantId } = drill("loss");
     recordAbsence(ana, grantId, steward.vaultId);
 
-    // 1. DETECT — the recorded evidence becomes a card the owner can see.
     const raised = raiseCommonsNotices({
       db: ana.vault,
       vaultId: ana.vaultId,
@@ -184,13 +164,10 @@ describe("steward-loss drill", () => {
     );
     expect(card?.severity).toBe("high");
     expect(card?.detail["recoverable"]).toBe(true);
-    // Idempotent: an unchanged condition does not re-raise the same card.
     expect(
       raiseCommonsNotices({ db: ana.vault, vaultId: ana.vaultId })
     ).toStrictEqual([]);
 
-    // 2. RUN THE CEREMONY — Ana re-founds from her replica. Bo is co-hosted
-    // with her, Cy is linked to the successor, the old steward is not.
     const url = await serve(ana, [bo], [cy.vaultId]);
     const res = await fetch(`${url}${COMMONS_RECOVERY_PATH}`, {
       method: "POST",
@@ -213,22 +190,16 @@ describe("steward-loss drill", () => {
     };
     expect(body.state).toBe("recovered");
 
-    // 3. DELIVERY — every invited seat has an outcome, and no seat is silently
-    // dropped. This is the report the runbook tells an operator to read.
     const byParty = new Map(
       body.invitations.map((entry) => [entry.partyId, entry])
     );
     expect(byParty.get(bo.ownerPartyId)?.state).toBe("queued");
     expect(byParty.get(cy.ownerPartyId)?.state).toBe("delivered");
-    // The vault that disappeared is invited like anyone else — and, with no
-    // link to the successor, ends as a carry-by-hand claim ticket.
     const orphan = byParty.get(steward.ownerPartyId);
     expect(orphan?.state).toBe("unreachable");
     expect(orphan?.claimToken).toBeTruthy();
     expect(byParty.size).toBe(3);
 
-    // The co-hosted member really holds the invitation, with the successor's
-    // id — not the dead grant's.
     const boInvites = listCommonsInvitations({
       seat: bo.vault.vault,
       memberVaultId: bo.vaultId,
@@ -237,8 +208,6 @@ describe("steward-loss drill", () => {
     expect(invite?.status).toBe("pending");
     expect(invite?.stewardVaultId).toBe(ana.vaultId);
 
-    // 4. CONVERGE — Bo accepts, the successor steward admits the seat and
-    // compiles: Bo now projects the successor grant, not the abandoned one.
     answerCommonsInvitation({
       seat: bo.vault,
       invitationId: invite!.invitationId,
@@ -282,8 +251,6 @@ describe("steward-loss drill", () => {
     );
     expect(successor).toBeDefined();
     expect(successor?.grant.stewardPartyId).toBe(ana.ownerPartyId);
-    // The superseded grant is not deleted — it is stopped. Its history stays
-    // exactly where it was on every seat that held it.
     expect(readCommonsGrant(ana.vault.vault, grantId).revokedAt).toBeTruthy();
     expect(boGrants.some((entry) => entry.grant.grantId === grantId)).toBe(
       true

@@ -1,8 +1,3 @@
-/*
- * One vault's `SourceEntry[]` for `createSnapshot` (FORMAT.md). Long-lived keys
- * never enter a snapshot, and remote-CAS config is not durability evidence.
- */
-
 import { createHash } from "node:crypto";
 import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
@@ -65,8 +60,6 @@ async function codeRefsDigest(bareDir: string): Promise<string> {
   return createHash("sha256").update(`${head}\n${refs}`).digest("hex");
 }
 
-/** Gated on `codeRefsDigest`: an unchanged store leaves the bundle UNTOUCHED
- *  so the upload path's `(size, mtime)` fast path reuses its chunks. */
 async function bundleCodeStore(
   plane: VaultPlane,
   bundleDir: string,
@@ -99,7 +92,6 @@ async function bundleCodeStore(
   }
 
   try {
-    // `pack.threads=1` is byte-deterministic, so unchanged history dedups.
     await run(
       ["-c", "pack.threads=1", "bundle", "create", bundlePath, "--all"],
       { cwd: bareDir }
@@ -151,13 +143,11 @@ export async function assembleSourceEntries(
     sha256: base.sha256,
     walGeneration: base.generation,
     baseTickMs: base.createdAtMs,
-    // A floor: without it a deleted `wal/tick/` prefix is silent.
     ...(opts.walTipTickMs === undefined
       ? {}
       : { walTipTickMs: opts.walTipTickMs }),
   });
 
-  // Remote-primary snapshots only bytes lacking replica evidence.
   const remotePrimary = readBlobStoreSettings(plane.db.vault).kind === "s3";
   let pending: Set<string> | undefined;
   if (remotePrimary) {

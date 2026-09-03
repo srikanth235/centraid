@@ -1,7 +1,3 @@
-// Output-schema validator for automation handlers (#80). Deliberately minimal
-// — `type: 'object'` + `properties` + `required` — enough to flag obvious
-// shape drift; not a general JSON-Schema engine.
-
 import { ManifestError } from "./manifest-errors.js";
 
 export interface OutputSchema {
@@ -106,7 +102,6 @@ export function validateOutputSchema(raw: unknown): OutputSchema | undefined {
   };
 }
 
-// Null on pass, an error message on fail; the runtime flips `runs.ok=0` with it.
 export function validateOutputAgainstSchema(
   schema: OutputSchema,
   output: unknown

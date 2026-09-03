@@ -75,7 +75,6 @@ describe("vault-registry scenarios", () => {
     const shared = registry.create("Shared");
     const personal = registry.create("Personal", { personal: true });
 
-    // The listing leads with the DEFAULT vault, not the oldest (#665).
     expect(registry.list().map((v) => v.vaultId)).toStrictEqual([
       personal.vaultId,
       shared.vaultId,
@@ -86,12 +85,9 @@ describe("vault-registry scenarios", () => {
     ]);
     expect(registry.defaultVaultId()).toBe(personal.vaultId);
 
-    // Desktop fresh path renames it; the marker lives in the vault, so the
-    // default does not move.
     registry.rename(personal.vaultId, "Priya");
     expect(registry.defaultVaultId()).toBe(personal.vaultId);
 
-    // No marked vault at all → previous oldest-first behaviour.
     registry.delete(personal.vaultId);
     expect(registry.defaultVaultId()).toBe(shared.vaultId);
     registry.delete(shared.vaultId);
@@ -111,8 +107,6 @@ describe("vault-registry scenarios", () => {
     const personal = registry.create("Personal", { personal: true });
     const family = registry.create("Family");
 
-    // Marked vault founded in the MIDDLE still heads the list; the remainder
-    // keeps creation order (a hoist, never a shuffle).
     expect(registry.list().map((v) => v.vaultId)).toStrictEqual([
       personal.vaultId,
       shared.vaultId,
@@ -120,14 +114,12 @@ describe("vault-registry scenarios", () => {
     ]);
     expect(registry.list()[0]!.vaultId).toBe(registry.defaultVaultId());
 
-    // Background iteration deliberately NOT reordered: creation order.
     expect(registry.planesList().map((p) => p.boot.vaultId)).toStrictEqual([
       shared.vaultId,
       personal.vaultId,
       family.vaultId,
     ]);
 
-    // No marked vault → byte-for-byte the old oldest-first order.
     registry.delete(personal.vaultId);
     expect(registry.list().map((v) => v.vaultId)).toStrictEqual([
       shared.vaultId,
@@ -172,9 +164,6 @@ describe("vault-registry scenarios", () => {
     const first = registry.list()[0]!;
 
     const ws = registry.get(first.vaultId)!.workspace;
-    // Harness scratch is NOT under the vault dir (vault.db is the one
-    // sovereign file; this is disposable) — it's the per-vault `-cache`
-    // sibling.
     expect(
       ws.harnessSessionDir.startsWith(path.join(root, first.vaultId) + path.sep)
     ).toBe(false);
@@ -182,7 +171,6 @@ describe("vault-registry scenarios", () => {
       path.join(cacheRoot, first.vaultId, "harness-sessions")
     );
 
-    // Deleting a vault also purges its cache dir (vault-dir rmSync can't reach).
     const family = registry.create("Family");
     const famCache = path.join(cacheRoot, family.vaultId);
     await fs.mkdir(path.join(famCache, "harness-sessions"), {
@@ -241,19 +229,15 @@ describe("vault-registry scenarios", () => {
       payload: { entity: "schedule.task", purpose: "dpv:ServiceProvision" },
     };
 
-    // Unscoped call rides the default vault, where the grant lives.
     const allowed = await bridge(readReq);
     expect(allowed.ok).toBe(true);
 
-    // Same bridge, addressed to the other vault: identity ensured on first
-    // call, no grant exists — a receipted deny.
     const denied = await runWithVaultContext({ vaultId: work.vaultId }, () =>
       bridge(readReq)
     );
     expect(denied.ok).toBe(false);
     expect(denied.code).toBe("VAULT_ACCESS");
 
-    // Two "clients" on two vaults, concurrently — neither disturbs the other.
     const [a, b] = await Promise.all([
       runWithVaultContext({ vaultId: personal.vaultId }, () => bridge(readReq)),
       runWithVaultContext({ vaultId: work.vaultId }, () => bridge(readReq)),
@@ -290,7 +274,6 @@ describe("vault-registry scenarios", () => {
       runWithReplicaIntent(intent, () => registry.bridgeFor("photos"))
     );
 
-    // The worker message arrives after both ambient scopes have unwound.
     await bridge({ op: "read", payload: {} });
 
     expect(observed).toStrictEqual([{ vaultId: work.vaultId, intent }]);
@@ -301,7 +284,6 @@ describe("vault-registry scenarios", () => {
     const root = await tempDir();
     const registry = openRegistry(root);
 
-    // Second process (admin CLI) creates a vault in the same root.
     const cli = openVaultRegistry({
       rootDir: root,
       logger: silentLogger,
@@ -310,7 +292,6 @@ describe("vault-registry scenarios", () => {
     const fresh = cli.create("Guest");
     cli.stop();
 
-    // The running registry picks it up on the miss — no restart.
     expect(registry.get(fresh.vaultId)?.name).toBe("Guest");
     expect(registry.list().map((v) => v.vaultId)).toContain(fresh.vaultId);
   });
@@ -352,7 +333,6 @@ describe("vault-registry scenarios", () => {
     });
     const handler = makeVaultRouteHandler(registry, { enrollments });
     const server = http.createServer((req, res) => {
-      // Stand-in handler: scope each request to the addressing header, else default.
       const requested = req.headers["x-centraid-vault"];
       const vaultId =
         typeof requested === "string" ? requested : registry.defaultVaultId();
@@ -378,21 +358,18 @@ describe("vault-registry scenarios", () => {
     if (!addr || typeof addr === "string") throw new Error("no address");
     const base = `http://127.0.0.1:${addr.port}/centraid/_vault`;
 
-    // Status names the request's vault.
     const status = (await (await fetch(`${base}/status`)).json()) as Record<
       string,
       unknown
     >;
     expect(status).toMatchObject({ name: "Priya's vault" });
 
-    // Proved owner creates another vault; real enrollment results.
     const created = await fetch(`${base}/vaults`, {
       method: "POST",
       body: JSON.stringify({ name: "Family" }),
     });
     expect(created.status).toBe(201);
     const family = (await created.json()) as { vaultId: string; name: string };
-    // The creating owner claims the fresh vault (#726).
     expect(enrollments.get("owner-device", family.vaultId)?.revoked).toBe(
       false
     );
@@ -404,8 +381,6 @@ describe("vault-registry scenarios", () => {
     };
     expect(listed.vaults).toHaveLength(2);
 
-    // Per-vault addressing: enroll planner only in the new vault, then read
-    // both consent surfaces — disjoint.
     registry.get(family.vaultId)!.enrollApp("planner");
     const defaultApps = (await (await fetch(`${base}/apps`)).json()) as {
       apps: unknown[];
@@ -418,7 +393,6 @@ describe("vault-registry scenarios", () => {
     ).json()) as { apps: Array<{ name: string }> };
     expect(familyApps.apps).toMatchObject([{ name: "planner" }]);
 
-    // Rename + presentation ride PATCH; activation is not a server concept.
     const patched = (await (
       await fetch(`${base}/vaults/${family.vaultId}`, {
         method: "PATCH",
@@ -427,7 +401,6 @@ describe("vault-registry scenarios", () => {
     ).json()) as { name: string; color?: string };
     expect(patched).toMatchObject({ name: "Sharma family", color: "#aa3355" });
 
-    // DELETE cannot bypass the typed-name recovery-kit erase ceremony.
     const veto = await fetch(`${base}/vaults/${family.vaultId}`, {
       method: "DELETE",
     });
@@ -435,20 +408,16 @@ describe("vault-registry scenarios", () => {
     expect(registry.list()).toHaveLength(2);
   });
 
-  // Issue #351: corrupt vaults are recorded, retried past backoff, cleared once mountable.
   test("a directory that fails to mount is recorded in failedMounts, retried on a later scan (past backoff), and cleared once mountable", async () => {
     const clock = useFakeClock();
     try {
       const root = await tempDir();
       const donorRoot = await tempDir();
 
-      // A `vault.db` that isn't valid SQLite at all — cheapest reliable way
-      // to make openVaultDb throw.
       const badDir = path.join(root, "badvault");
       await fs.mkdir(badDir, { recursive: true });
       await fs.writeFile(path.join(badDir, "vault.db"), "not a sqlite file");
 
-      // Donor vault via a real registry: genuinely valid files, own vaultId.
       const donor = openVaultRegistry({
         rootDir: donorRoot,
         logger: silentLogger,
@@ -465,22 +434,16 @@ describe("vault-registry scenarios", () => {
       });
       cleanups.push(() => registry.stop());
 
-      // Construction's initial scan tried badvault, failed, did NOT swallow it.
       let failed = registry.failedMounts();
       expect(failed).toHaveLength(1);
       expect(failed[0]).toMatchObject({ dir: badDir });
       expect(failed[0]!.message.length).toBeGreaterThan(0);
       const firstAttemptAt = failed[0]!.at;
-      // A corrupt directory never triggers an unrelated bootstrap.
       expect(registry.list()).toHaveLength(0);
 
-      // Immediate rescan stays within backoff: record untouched, not refreshed.
       registry.rescan();
       expect(registry.failedMounts()).toStrictEqual(failed);
 
-      // Mountable now: the one sovereign file plus its -wal sibling (#408
-      // leaves recent writes in the WAL, so a bare vault.db would bootstrap
-      // EMPTY under a fresh id).
       await forEachSequentially(["vault.db", "vault.db-wal"], async (name) => {
         await fs
           .copyFile(
@@ -492,7 +455,6 @@ describe("vault-registry scenarios", () => {
           });
       });
 
-      // Past the backoff window, the next scan retries.
       vi.advanceTimersByTime(31_000);
       registry.rescan();
 
@@ -507,10 +469,7 @@ describe("vault-registry scenarios", () => {
     }
   });
 
-  // Issue #439 R1: recover() renames the restored dir into place; the running
-  // gateway then adopt()s it, dropping the pristine auto-created default.
   test("adopt() mounts a recovered vault dir and removes the pristine auto-created default", async () => {
-    // Recovered vault from a donor registry (older id than any auto-default).
     const donorRoot = await tempDir();
     const donor = openVaultRegistry({
       rootDir: donorRoot,
@@ -522,7 +481,6 @@ describe("vault-registry scenarios", () => {
     donor.rename(recoveredId, "Recovered");
     donor.stop();
 
-    // Blank machine stays empty until adoption.
     const root = await tempDir();
     const registry = openVaultRegistry({
       rootDir: root,
@@ -532,7 +490,6 @@ describe("vault-registry scenarios", () => {
     cleanups.push(() => registry.stop());
     expect(registry.list()).toHaveLength(0);
 
-    // recover() renamed the restored dir into place; simulate with a copy.
     await fs.cp(
       path.join(donorRoot, recoveredId),
       path.join(root, recoveredId),
@@ -550,7 +507,6 @@ describe("vault-registry scenarios", () => {
 
     expect(adopted.vaultId).toBe(recoveredId);
     expect(adopted.name).toBe("Recovered");
-    // The recovered vault stands alone and is the effective default.
     expect(registry.list().map((v) => v.vaultId)).toStrictEqual([recoveredId]);
     expect(registry.defaultVaultId()).toBe(recoveredId);
   });
@@ -561,10 +517,6 @@ describe("vault-registry scenarios", () => {
     const first = registry.list()[0]!;
     const firstDir = path.join(root, first.vaultId);
 
-    // Clone mounted vault files into a second dir — same vaultId, can never
-    // mount alongside. Include -wal siblings (#408 wal_autocheckpoint=0):
-    // recent writes live in WAL, so a bare vault.db copy would bootstrap EMPTY
-    // under a new id instead of colliding.
     const dupeDir = path.join(root, "dupe-of-first");
     await fs.mkdir(dupeDir, { recursive: true });
     await forEachSequentially(["vault.db", "vault.db-wal"], async (name) => {

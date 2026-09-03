@@ -1,17 +1,4 @@
 import crypto from "node:crypto";
-/*
- * (gateway, vault) addressing over HTTP (#289).
- *
- * Proves the landlord model end-to-end against a real `serve()` daemon:
- *
- *   1. Two vaults on one gateway hold DISJOINT app worlds; the
- *      `x-centraid-vault` header addresses one per request, concurrently,
- *      with no server-side switch.
- *   2. An unknown vault header fails loudly (404), never falls back.
- *   3. A device-scoped transport (deviceAccess) is confined to its
- *      enrollments: implied vault with no header, 403 outside it, and a
- *      vault list that shows no evidence of the others.
- */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -60,8 +47,6 @@ describe("serve-vault-addressing scenarios", () => {
     dataDir = await tempDir(`addr-gateway-${crypto.randomUUID()}-`);
     handle = await serve({
       paths: pathsUnder(dataDir),
-      // A fake device transport: the test names its device in a header the
-      // way the iroh forwarder stamps the QUIC-proved EndpointId.
       deviceAccess: {
         deviceKeyFor: (req) => {
           const v = req.headers[DEVICE_HEADER];
@@ -78,7 +63,6 @@ describe("serve-vault-addressing scenarios", () => {
     vaultA = handle.vaults.defaultVaultId();
     vaultB = handle.vaults.create("Family").vaultId;
 
-    // Seed one app into EACH vault's own code store, out of band.
     await seedApp(await handle.appsStore(), "app-a");
     await handle.syncApps(vaultA);
     await runWithVaultContext({ vaultId: vaultB }, async () => {
@@ -117,7 +101,6 @@ describe("serve-vault-addressing scenarios", () => {
     expect(bApps.map((a) => a.id)).toContain("app-b");
     expect(bApps.map((a) => a.id)).not.toContain("app-a");
 
-    // The app plane resolves each vault's own live `main` worktree.
     const described = await get("/centraid/app-b/_describe", {
       "x-centraid-vault": vaultB,
     });
@@ -126,7 +109,6 @@ describe("serve-vault-addressing scenarios", () => {
       manifest: { id: "app-b" },
     });
 
-    // No header → the default vault; nothing changed server-side after B's requests.
     const defaulted = (await (await get("/centraid/_vault/status")).json()) as {
       vaultId: string;
     };
@@ -142,13 +124,11 @@ describe("serve-vault-addressing scenarios", () => {
   });
 
   test("a device is confined to its enrollments (issue #289 phase 2)", async () => {
-    // Single enrollment: no header needed — the vault is implied by the key.
     const implied = (await (
       await get("/centraid/_vault/status", { [DEVICE_HEADER]: "family-phone" })
     ).json()) as { vaultId: string };
     expect(implied.vaultId).toBe(vaultB);
 
-    // Addressing a non-enrolled vault is a 403, not a fallback.
     const denied = await get("/centraid/_vault/status", {
       [DEVICE_HEADER]: "family-phone",
       "x-centraid-vault": vaultA,
@@ -158,7 +138,6 @@ describe("serve-vault-addressing scenarios", () => {
       error: "vault_not_enrolled",
     });
 
-    // A device with no enrollments opens nothing.
     const stranger = await get("/centraid/_apps", {
       [DEVICE_HEADER]: "stolen-laptop",
     });
@@ -167,13 +146,11 @@ describe("serve-vault-addressing scenarios", () => {
       error: "device_not_enrolled",
     });
 
-    // The vault list shows the device ITS vaults — no evidence of others.
     const listed = (await (
       await get("/centraid/_vault/vaults", { [DEVICE_HEADER]: "family-phone" })
     ).json()) as { vaults: Array<{ vaultId: string }> };
     expect(listed.vaults.map((v) => v.vaultId)).toStrictEqual([vaultB]);
 
-    // The owner device is explicitly enrolled in both vaults.
     const all = (await (
       await get("/centraid/_vault/vaults", { [DEVICE_HEADER]: "owner-laptop" })
     ).json()) as { vaults: Array<{ vaultId: string }> };

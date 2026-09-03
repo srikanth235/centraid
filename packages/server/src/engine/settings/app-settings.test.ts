@@ -92,7 +92,6 @@ describe("readAppSetting / writeAppSetting / deleteAppSetting", () => {
   });
 
   it("delete is a no-op when file / key is missing", () => {
-    // None of these should throw; missing path/key leaves state unchanged.
     expect(() => deleteAppSetting("/nonexistent/app/dir", "k")).not.toThrow();
     const dir = newAppDir();
     expect(() => deleteAppSetting(dir, "k")).not.toThrow(); // no file yet

@@ -1,13 +1,3 @@
-/*
- * Exit evidence #3 (#726): the vault identity keypair rides beside
- * the sealing key on the SAME recovery-kit path. `recover()` restores a
- * vault into a fresh data dir carrying its id, its identity keypair, AND its
- * data (grants included, since the whole `vault.db` restores) — proven here
- * by signing a challenge on the recovered vault and verifying it against the
- * public key recorded BEFORE the move. A local backup provider is enough:
- * this test is about key custody surviving the move, not the snapshot wire.
- */
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -69,12 +59,8 @@ describe("recover() restores the vault identity keypair alongside the DEK (#726 
     const vaultId = registryA.defaultVaultId();
     const planeA = registryA.get(vaultId)!;
 
-    // The vault's identity, recorded BEFORE the move — this is what a peer
-    // would have pinned ahead of time.
     const publicKeyBeforeMove = vaultIdentityPublicKey(planeA.db.identitySeed);
 
-    // A real data row, so "recovers with data intact" is more than the
-    // schema alone.
     const taskId = invoke(planeA, "schedule.add_task", {
       title: "Frame the print",
     })["task_id"] as string;
@@ -95,7 +81,6 @@ describe("recover() restores the vault identity keypair alongside the DEK (#726 
       await serviceA.recoveryKitDocument(),
       KIT_PASSWORD
     );
-    // The kit MUST carry the identity seed beside the seal key.
     expect(kitDocument.fingerprint, "kit did not wrap").toBeTruthy();
 
     await serviceA.stop();
@@ -122,8 +107,6 @@ describe("recover() restores the vault identity keypair alongside the DEK (#726 
       fs.stat(path.join(vaultRootB, vaultId, "vault.db"))
     ).resolves.toBeDefined();
 
-    // Mount the recovered vault and pull ITS identity seed — restored from
-    // the kit, not re-minted (a re-mint would fail the signature check below).
     const registryB = openVaultRegistry({
       rootDir: vaultRootB,
       keyStore: keysB,
@@ -138,7 +121,6 @@ describe("recover() restores the vault identity keypair alongside the DEK (#726 
     expect(
       verifyVaultIdentitySignature(publicKeyBeforeMove, challenge, signature)
     ).toBe(true);
-    // A tampered challenge must NOT verify — the check is load-bearing.
     expect(
       verifyVaultIdentitySignature(
         publicKeyBeforeMove,

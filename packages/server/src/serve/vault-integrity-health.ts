@@ -1,11 +1,3 @@
-/*
- * `vault-integrity` health component (#374, #659): `PRAGMA quick_check` over
- * `vault.db`, the one file (#916). It is a FULL file scan, never a per-tick
- * read — so a vault is re-checked on a size-scaled interval (1h floor, a day at
- * the ceiling), at most `maxChecksPerTick` vaults land in one tick, and nothing
- * is scanned during the startup grace, keeping a full read off the boot path.
- */
-
 import type { DatabaseSync } from "node:sqlite";
 
 import type { ComponentStatus, HealthProbe } from "./health-registry.js";
@@ -48,7 +40,6 @@ function fileBytes(db: DatabaseSync): number {
   return (pageCount ?? 0) * (pageSize ?? 0);
 }
 
-/** Linear in size, so cost per unit time stays roughly constant. */
 export function integrityIntervalFor(bytes: number, floorMs: number): number {
   const multiplier = Math.min(
     MAX_INTERVAL_MULTIPLIER,
@@ -57,7 +48,6 @@ export function integrityIntervalFor(bytes: number, floorMs: number): number {
   return Math.round(floorMs * multiplier);
 }
 
-/** `ok` iff the sole result row is literally `'ok'`. */
 function runQuickCheck(
   db: DatabaseSync,
   file: "vault.db",
@@ -118,7 +108,6 @@ export function createVaultIntegrityHealthProbe(
       const vaultCheck = runQuickCheck(entry.vault, "vault.db", maxLines);
       const ok = vaultCheck.ok;
       const lines = vaultCheck.lines.slice(0, maxLines);
-      // Size scaling is for HEALTHY vaults only; a failing one uses the floor.
       const nextIntervalMs = ok
         ? integrityIntervalFor(fileBytes(entry.vault), intervalMs)
         : intervalMs;

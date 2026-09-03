@@ -7,16 +7,11 @@ export interface DeregisterLogger {
   warn: (message: string) => void;
 }
 
-/** Deregister cleanup outcome; tests assert on it, the production handler just calls and logs. */
 export type CleanupOutcome =
   | { kind: "removed" }
   | { kind: "skipped"; reason: "outside-appsdir" }
   | { kind: "failed"; error: Error };
 
-/**
- * Remove an app's wrapper dir (`<appsDir>/<id>/`) after the registry entry is dropped.
- * `entry.path` must resolve inside `appsDir` before the recursive delete — a corrupt registry row must not wipe anything outside our state.
- */
 export async function cleanupDeregisteredApp(
   appsDir: string,
   entry: RegistryEntry,

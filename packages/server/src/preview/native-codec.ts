@@ -30,7 +30,6 @@ async function dimensionsAllowed(source: Buffer): Promise<boolean> {
   );
 }
 
-/** Native libvips codec: decode, resize and encode all run off the JS thread. */
 export function createNativeImagePreviewCodec(): PreviewCodec {
   return {
     async downscale(

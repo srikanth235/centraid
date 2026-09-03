@@ -13,8 +13,6 @@ export function floorMinute(time: number): number {
   return Math.floor(time / 60_000) * 60_000;
 }
 
-/** Bounds a synchronous scan from an old cursor; past it only the missed-run
- *  COUNT degrades, to a floor. */
 const MAX_SCAN_MINUTES = 44_640;
 
 const IDLE_POSITION_REFRESH_MS = 60 * 60 * 1_000;
@@ -29,7 +27,6 @@ function asSchedules(
   );
 }
 
-/** No DST shift has exceeded two hours, so three covers every overlap. */
 const DST_OVERLAP_LOOKBACK_MS = 3 * 60 * 60 * 1_000;
 
 function zoneOffsetMinutes(date: Date, timeZone?: string): number {
@@ -59,9 +56,6 @@ function wallClockKeysAt(
     .map((s) => wallClockMinuteKey(candidate, s.timeZone));
 }
 
-/** Matching ANY schedule makes a minute due ONCE. Cron is a wall-clock
- *  contract, so a fall-back's repeat is the same instant and the EARLIER copy
- *  survives (docs/cron-timezone.md). */
 export function dueInstants(
   exprsOrSchedules: readonly string[] | readonly CronSchedule[],
   from: Date,
@@ -95,9 +89,6 @@ export function dueInstants(
   return out;
 }
 
-/** `dueInstants` dedupes only within its own window, so a gateway up across a
- *  fall-back would fire one wall minute twice (#846). The memory is DERIVED,
- *  never persisted — the cursor row stays a bare millisecond position. */
 function deliverableInstants(
   schedules: readonly CronSchedule[],
   from: number,

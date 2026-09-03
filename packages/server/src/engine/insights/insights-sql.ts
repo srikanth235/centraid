@@ -152,8 +152,6 @@ export function prepareInsightsStatements(
         ORDER BY cost DESC, tokens DESC
         LIMIT 5
       `),
-    // `ended_at >= started_at` drops clock-skew rows the subtraction would
-    // otherwise report as negative runs.
     runDurationMedian: db.prepare(`
         SELECT AVG(duration_ms) AS median_ms FROM (
           SELECT

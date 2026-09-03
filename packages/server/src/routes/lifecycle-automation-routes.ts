@@ -1,6 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#387) one cohesive lifecycle handler family (create/update/set-enabled/rotate/delete) sharing the same session+stage+publish plumbing; splitting duplicates the shared helpers
-// Automation lifecycle handlers for the gateway-owned builder (#141), dispatched
-// from `makeLifecycleRouteHandler`. Webhook secrets: plaintext returned once, only the hash persists.
 
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -140,8 +138,6 @@ export async function handleAutomationCreate(
   const sessionId = explicitSession || defaultSessionId(id);
   const ephemeralSession = !explicitSession;
 
-  // Bundled ids are RESERVED (#434): a code-store app must never shadow a
-  // shipped blueprint. This create is the code store's only door (#799).
   if (opts.isBundledAppId?.(id)) {
     throw new AppScaffoldError(
       "already_exists",
@@ -157,9 +153,6 @@ export async function handleAutomationCreate(
     );
   }
 
-  // The closed trigger vocabulary: an unknown kind is rejected loudly rather
-  // than coerced; `validateManifest` owns condition/data spec validation so its
-  // field-scoped message is the one callers see.
   const ALLOWED_TRIGGER_KINDS = new Set([
     "cron",
     "webhook",
@@ -224,8 +217,6 @@ export async function handleAutomationCreate(
       ...(tz === undefined ? {} : { tz }),
     };
   });
-  // `validateManifest` refuses condition/data triggers without a vault grant,
-  // so `{ vault }` is passed through untouched for it to judge.
   const vaultInput =
     body.vault !== null &&
     typeof body.vault === "object" &&
@@ -283,7 +274,6 @@ export async function handleAutomationCreate(
     ephemeralSession,
   });
 
-  // The published row, for the renderer (only on `main`).
   let row: unknown = null;
   if (publish) {
     const { rows } = await automation.list(opts.codeAppsDir());
@@ -341,18 +331,11 @@ export async function handleAutomationSetEnabled(
       ephemeralSession,
     });
   } else if (ephemeralSession) {
-    // Close the throwaway session so it doesn't orphan a worktree.
     await opts.store.closeSession(sessionId);
   }
   return sendJson(res, 200, { ok: true, staged: !publish });
 }
 
-/**
- * PATCH semantics over POST: only a present field is applied. A
- * `{kind:'webhook'}` entry mints a fresh id + secret ONLY when there was no
- * webhook before — an edit must never silently rotate a configured caller's
- * secret, which is `rotate-webhook`'s job; omitting `webhook` drops it.
- */
 export async function handleAutomationUpdate(
   opts: LifecycleRouteOptions,
   req: IncomingMessage,
@@ -453,10 +436,8 @@ export async function handleAutomationUpdate(
     });
   }
 
-  // A corrupt-on-disk manifest 400s like an invalid patch, never 500s.
   const existing = automation.parseManifest(file.content);
 
-  // Same closed vocabulary as create.
   const ALLOWED_TRIGGER_KINDS = new Set([
     "cron",
     "webhook",
@@ -481,8 +462,6 @@ export async function handleAutomationUpdate(
     const existingWebhook = automation.webhookTriggerOf(existing.triggers);
     triggers = triggersInput.map((t) => {
       if (t.kind === "webhook") {
-        // The wire carries no id/secretHash, so an already-provisioned
-        // webhook is the only signal for "keep" rather than "mint".
         if (existingWebhook) return existingWebhook;
         const wid = automation.generateWebhookId();
         const secret = automation.generateWebhookSecret();
@@ -528,8 +507,6 @@ export async function handleAutomationUpdate(
     });
   }
 
-  // Round-tripped through the real validator so a patch cannot land a shape
-  // the runtime would reject; untouched fields survive the spread.
   const patched: Record<string, unknown> = {
     ...existing,
     ...(nameInput === undefined ? {} : { name: nameInput }),
@@ -592,9 +569,6 @@ export async function handleAutomationUpdate(
           "delegate recognition requires an explicit pinned model before provider egress can be consented",
       });
     }
-    // The RECIPE's own switch, one of two selectors since #807: an engine
-    // profile can also elect delegate, so `selected: "deterministic"` means
-    // "this recipe does not elect delegate", never "this run is deterministic".
     patched.enrich = {
       ...enrich,
       delegateStep: { ...enrich.delegateStep, selected: body.recognitionStep },
@@ -615,12 +589,9 @@ export async function handleAutomationUpdate(
     ephemeralSession,
   });
 
-  // The published row, for the renderer.
   let row: unknown = null;
   if (publish) {
     const { rows } = await automation.list(opts.codeAppsDir());
-    // Compare on the parsed handle: `rawRef` need not be byte-identical to
-    // the canonical form `Row.ref` always carries.
     const wantRef = `${ref.appId}/${ref.automationId}`;
     row = rows.find((r) => r.ref === wantRef) ?? null;
   }
@@ -631,11 +602,6 @@ export async function handleAutomationUpdate(
   });
 }
 
-/**
- * Mints a fresh secret over the SAME route id, so a caller already configured
- * with the webhook URL keeps working and only its credential changes. The
- * plaintext is revealed once; only the SHA-256 hash persists.
- */
 export async function handleAutomationRotateWebhook(
   opts: LifecycleRouteOptions,
   req: IncomingMessage,
@@ -709,10 +675,6 @@ export async function handleAutomationRotateWebhook(
   });
 }
 
-/**
- * ONE owner decision (#306): every installed enricher flips in one act.
- * Enrichers are the catalog's `category: "Enrichment"` template ids.
- */
 export async function handleEnrichmentToggle(
   opts: LifecycleRouteOptions,
   req: IncomingMessage,
@@ -770,7 +732,6 @@ export async function handleEnrichmentToggle(
     }
     return toggleNext(index + 1);
   }
-  // Rows can share an owner app/session; mutate and publish them in order.
   await toggleNext(0);
   return sendJson(res, 200, { ok: true, enabled, toggled, unchanged });
 }
@@ -791,20 +752,14 @@ export async function handleAutomationDelete(
   if (refused) return refused;
   const publish = url.searchParams.get("publish") === "true";
 
-  // An automation app goes wholesale; an app-owned automation loses only its
-  // `automations/<id>/` subdir.
   const apps = await opts.store.listAppsWithMeta().catch(() => []);
   const appKind = apps.find((a) => a.id === ref.appId)?.kind;
 
   if (appKind === "automation") {
-    // Deregistering removes the data dir and run ledgers; never follow it
-    // with `ensureRegistered`, which would re-create them.
     await deleteAppAndReconcile(opts, ref.appId);
     return sendJson(res, 200, { ok: true, deletedApp: true });
   }
 
-  // One-shot off `main` in a throwaway session, closed so it doesn't orphan
-  // a worktree.
   const sessionId = defaultSessionId(ref.appId);
   await prepareLifecycleSession(opts.store, sessionId, true);
   const appDir = await opts.store.snapshotSessionAppDir(sessionId, ref.appId);
@@ -818,8 +773,6 @@ export async function handleAutomationDelete(
     return sendJson(res, 200, { ok: true, staged: !publish });
   }
 
-  // Drop the removed subdir, then optionally publish so `main` stops listing
-  // it; the publish→reconcile→close sequence lives in lifecycle-shared.
   await Promise.all(
     removed.map((rel) => fs.rm(nodePath.resolve(appDir, rel), { force: true }))
   );

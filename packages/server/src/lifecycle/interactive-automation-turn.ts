@@ -114,24 +114,17 @@ export interface InteractiveAutomationTurnOptions {
   harnessKind: HarnessKind;
   model?: string;
   configPins?: Readonly<Record<string, string>>;
-  /** Egress consent answered by the user for this turn — one harness, or the
-   *  set a ladder attempt asked about. */
   providerConsent?: HarnessKind | readonly HarnessKind[];
   attachmentRefs?: ConversationTurnAttachment[];
   turnAttachments?: TurnAttachment[];
-  /** Resolve historical upload hashes into this automation app's blob CAS. */
   hydrationAttachmentPath?: (hash: string) => string;
-  /** Trusted roots for harness-reported file locations. */
   artifactRoots?: string[];
-  /** Persist homeless inline terminal/content artifacts in the app CAS. */
   uploadInlineArtifact?: (
     bytes: Uint8Array
   ) => Promise<{ hash: string; sizeBytes: number }>;
   abortSignal: AbortSignal;
   conversationLocks: Map<string, Promise<void>>;
-  /** Direct SSE sink. */
   onEvent: (event: TurnStreamEvent) => void;
-  /** Automation bus sink for replay/second-viewer parity. */
   onTurnEvent?: (event: AutomationTurnStreamEvent) => void;
 }
 
@@ -149,21 +142,8 @@ function pathInside(candidate: string, root: string): boolean {
   );
 }
 
-/**
- * Inline artifacts and workspace-located ones share one ceiling — a reported
- * file is read fully into memory to hash it, so the cap has to apply to both.
- */
 const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 
-/**
- * Resolve one harness-reported file location into a durable attachment.
- *
- * A path that does not resolve, resolves outside the trusted roots, or is not
- * a regular file is a normal negative — agents name build outputs and scratch
- * paths that were never written. A file that IS inside the workspace but
- * cannot be persisted is a real failure and is reported to the caller, which
- * records it as a turn notice rather than swallowing it.
- */
 async function workspaceArtifact(
   reportedPath: string,
   roots: readonly string[],
@@ -181,8 +161,6 @@ async function workspaceArtifact(
   );
   if (!allowedRoots.some((root) => pathInside(candidate, root)))
     return undefined;
-  // Stat first: an oversized or non-regular file must never be read into
-  // memory just to be discarded.
   const stat = await fs.stat(candidate).catch(() => undefined);
   if (!stat?.isFile()) return undefined;
   if (stat.size === 0 || stat.size > MAX_ARTIFACT_BYTES) {
@@ -204,8 +182,6 @@ async function workspaceArtifact(
   if (bytes === undefined) return undefined;
   return {
     hash: createHash("sha256").update(bytes).digest("hex"),
-    // ACP reports no content type for file locations, and sniffing bytes is a
-    // separate concern; the generic type is the honest answer here.
     mime: "application/octet-stream",
     sizeBytes: stat.size,
     source: "harness",
@@ -214,22 +190,15 @@ async function workspaceArtifact(
   };
 }
 
-/** `file:` URLs from a harness are foreign input and may be malformed. */
 function decodeReportedPath(reportedPath: string): string | undefined {
   if (!reportedPath.startsWith("file:")) return reportedPath;
   try {
     return fileURLToPath(reportedPath);
   } catch {
-    // Not a decodable file URL — a typed translation to "no artifact here".
     return undefined;
   }
 }
 
-/**
- * Run one steering turn. The lock covers ledger context selection, runner
- * dispatch, and resume-handle update so two messages on one automation cannot
- * race the same cached ACP session.
- */
 export async function runInteractiveAutomationTurn(
   opts: InteractiveAutomationTurnOptions
 ): Promise<InteractiveAutomationTurnResult> {
@@ -331,7 +300,7 @@ export async function runInteractiveAutomationTurn(
           try {
             opts.onTurnEvent?.(event);
           } catch {
-            /* a subscriber must not fail the turn */
+            // Intentionally empty.
           }
         };
         emitTurn({ type: "turn.start", turnId: opts.turnId });
@@ -538,7 +507,7 @@ export async function runInteractiveAutomationTurn(
           try {
             opts.onEvent(event);
           } catch {
-            /* transport teardown is handled by abortSignal */
+            // Intentionally empty.
           }
         };
 
@@ -625,10 +594,6 @@ export async function runInteractiveAutomationTurn(
         }
 
         if (consentRequired) {
-          // The user's message is already durable and `turn.start`/`item.start`
-          // already streamed. Deleting the turn destroys what they typed and
-          // makes them retype it after granting consent. Settle it as a failed
-          // turn instead — the same shape the headless compile path records.
           const consentEndedAt = Date.now();
           const consentOutput = { stopReason: "consent_required" };
           store.runInTransaction(() => {
@@ -681,8 +646,6 @@ export async function runInteractiveAutomationTurn(
         const ok = failure === undefined && !opts.abortSignal.aborted;
         const artifactsByItem = new Map<string, ConversationTurnAttachment[]>();
         const uploadInlineArtifact = opts.uploadInlineArtifact;
-        // An artifact that could not be persisted is user-visible evidence, not
-        // a silent drop (docs/coding-standards.md — fallible-action contract).
         const noteArtifactProblem = (message: string): void => {
           notices.push({
             itemId: itemId(opts.turnId, nextOrdinal),
@@ -693,8 +656,6 @@ export async function runInteractiveAutomationTurn(
             at: Date.now(),
           });
         };
-        // Ledger nodes and their notices are ordered; attach each candidate
-        // before advancing so optional inline uploads stay attributable.
         const attachNextCandidate = async (index: number): Promise<void> => {
           const candidate = artifactCandidates[index];
           if (!candidate) return;
@@ -731,7 +692,7 @@ export async function runInteractiveAutomationTurn(
                   filename: inline.filename ?? "harness-artifact",
                 });
               } catch {
-                // A malformed optional ACP artifact never fails the turn.
+                // Intentionally empty.
               }
               return uploadNextInline(inlineIndex + 1);
             };

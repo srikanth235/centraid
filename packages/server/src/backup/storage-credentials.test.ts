@@ -2,13 +2,6 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { startFakeProviderServer } from "@centraid/backup/dist/testing/fake-provider-server.js";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
-/*
- * `ensureProviderCasTarget` learns the provider's declared storage-class list
- * from the SAME discovery document it already reads for the `derived` grant
- * (#425), so the CAS-attach route can stamp
- * `blob_store.supportedStorageClasses` into the vault. Exercised against the
- * real in-process fake provider server (real HTTP, real grant flow).
- */
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { openStorageConnectionStore } from "./storage-connections.js";
@@ -34,7 +27,6 @@ describe("storage-credentials", () => {
 
     const target = await ensureProviderCasTarget(store, connection.id);
 
-    // The fake advertises ['STANDARD', 'STANDARD_IA'] + the `derived` capability.
     expect(target.supportedStorageClasses).toStrictEqual([
       "STANDARD",
       "STANDARD_IA",

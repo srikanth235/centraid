@@ -1,9 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit ctx.vault bridge threading (duaility §12); validation/envelope split tracked separately
-/**
- * Declared-handler dispatcher (#107, #286): validate `input` against `app.json`
- * with Ajv, hand off to `handler-runner`. No `_sql` built-ins — handlers reach
- * data via `ctx.vault`. Errors stay MCP-shaped for the HTTP shim.
- */
 
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -39,7 +34,6 @@ export type ToolErrorCode =
   | "INVALID_MANIFEST"
   | "NO_ACTIVE_VERSION"
   | "HANDLER_ERROR"
-  /** Admission gate refused a slot (#351): nothing ran, so retry is safe. */
   | "GATEWAY_BUSY";
 
 export interface ToolErrorContent {
@@ -90,7 +84,6 @@ export interface CentraidWriteInput {
   readonly app: string;
   readonly action: string;
   readonly input?: unknown;
-  /** Binds every vault invocation to replay-safe ids. */
   readonly intentId?: string;
 }
 
@@ -107,19 +100,13 @@ export interface CentraidDescribeInput {
 }
 
 export interface DispatcherOptions {
-  /** A resolver keeps dispatch on the ACTIVE vault's registry (#280). */
   readonly registry: Registry | (() => Registry);
-  /** Feeds the `_changes` SSE stream. */
   readonly onWriteFor?: (appId: string) => (tables: string[]) => void;
-  /** The git store owns all code (#137); unresolved means not live. */
   readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
-  /** Absent must fail `ctx.vault.*` closed with VAULT_UNAVAILABLE. */
   readonly vaultFor?: (appId: string) => VaultBridge;
-  /** Mounted as handler `ctx.time`. */
   readonly timeModuleUrl?: string;
 }
 
-/** Keyed by code dir + mtime, so a version swap drops it. */
 interface ManifestCacheEntry {
   readonly codeDir: string;
   readonly mtimeMs: number;
@@ -192,13 +179,11 @@ export class Dispatcher {
     return v;
   }
 
-  /** Call when a version is activated. */
   invalidate(codeDir?: string): void {
     if (codeDir === undefined) this.manifestCache.clear();
     else this.manifestCache.delete(codeDir);
   }
 
-  // `overrideCodeDir` is the draft-preview path (#141), on all three verbs.
   async describe(
     input: CentraidDescribeInput,
     overrideCodeDir?: string
@@ -244,7 +229,6 @@ export class Dispatcher {
     }
 
     if (action === undefined && query === undefined) {
-      // The manifest IS the app's shape; there is no per-app SQLite schema.
       return successResult({ manifest });
     }
     if (action !== undefined) {
@@ -281,7 +265,6 @@ export class Dispatcher {
         query: q,
       });
     }
-    // unreachable
     return successResult(manifest);
   }
 
@@ -305,7 +288,6 @@ export class Dispatcher {
     if (!entry) {
       return errorResult("UNKNOWN_APP", `app "${appId}" is not registered`);
     }
-    // Draft mode: logs land beside the draft code.
     const dataDir = overrideCodeDir ?? appDataDir(entry);
     const codeDir = overrideCodeDir ?? (await this.resolveCodeDir(entry));
     if (!codeDir) {
@@ -320,7 +302,6 @@ export class Dispatcher {
     } catch (error) {
       return manifestErrorToResult(appId, error);
     }
-    // WRONG_KIND, not UNKNOWN_ACTION: the handler exists, the route is wrong.
     if (findQuery(manifest, actionName) && !findAction(manifest, actionName)) {
       return errorResult(
         "WRONG_KIND",
@@ -348,8 +329,6 @@ export class Dispatcher {
       handlerKind: "action",
       args: { params: {}, body: handlerInput },
       timeoutMs: 30_000,
-      // The one place that knows which action ran, so `_changes` names tables
-      // instead of making every listener re-derive the app (#883 D2).
       declaredWrites: entryDef.writes ?? [],
       ...(this.onWriteFor ? { onWrite: this.onWriteFor(appId) } : {}),
       ...(this.vaultFor
@@ -370,8 +349,6 @@ export class Dispatcher {
         outcome.error ?? "action handler failed"
       );
     }
-    // Unwrap `{ status, body }`; a >=400 status must become HANDLER_ERROR
-    // rather than pass the error JSON through as success.
     const result = (outcome.value ?? null) as {
       status?: number;
       body?: unknown;
@@ -447,7 +424,6 @@ export class Dispatcher {
       handlerKind: "query",
       args: {
         params: {},
-        // Both names: dropping either breaks one generation of handlers.
         query: (handlerInput ?? {}) as Record<string, unknown>,
         input: handlerInput,
       },
@@ -482,7 +458,6 @@ export class Dispatcher {
         `manifest ${kind} "${entry.name}" has an invalid input schema: ${error instanceof Error ? error.message : String(error)}`
       );
     }
-    // Ajv needs an explicit value; omitting `input` on a no-arg handler is legal.
     const data = input === undefined ? {} : input;
     if (validate(data)) return undefined;
     const errs = validate.errors ?? [];
@@ -497,8 +472,6 @@ export class Dispatcher {
   }
 }
 
-/** Intent + call ordinal, so a crash after canonical commit cannot
- *  re-execute the command on retry. */
 function bindIntentToVaultBridge(
   bridge: VaultBridge,
   intentId: string
@@ -506,8 +479,6 @@ function bindIntentToVaultBridge(
   let invocationIndex = 0;
   return (call) => {
     if (call.op !== "invoke") return bridge(call);
-    // JSON framing keeps [intent, ordinal] injective; the prefix keeps the
-    // lane disjoint.
     const generatedInvocationId = `replica:v1:${createHash("sha256")
       .update(
         JSON.stringify([
@@ -523,14 +494,12 @@ function bindIntentToVaultBridge(
       payload: {
         ...call.payload,
         intentId,
-        // Never a handler-selected id: a random one re-executes on every retry.
         invocationId: generatedInvocationId,
       },
     });
   };
 }
 
-/** `.ts` wins over `.js`; the worker's esbuild hook loads either. */
 async function resolveHandlerFile(
   codeDir: string,
   dir: "actions" | "queries",
@@ -540,7 +509,7 @@ async function resolveHandlerFile(
   try {
     if ((await fs.stat(tsPath)).isFile()) return tsPath;
   } catch {
-    /* no .ts source — fall back to .js */
+    // Intentionally empty.
   }
   return path.join(codeDir, dir, `${name}.js`);
 }

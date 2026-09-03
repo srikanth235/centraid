@@ -66,14 +66,11 @@ describe("web-ui-server", () => {
     const response = await fetch(server.url);
     const html = await response.text();
     const csp = response.headers.get("content-security-policy") ?? "";
-    // WebAssembly.instantiate needs 'wasm-unsafe-eval' in script-src.
     expect(csp).toContain("script-src 'self' 'nonce-");
     expect(csp).toContain("blob: 'wasm-unsafe-eval'");
-    // Browser Iroh is relay-only (wss + https to the n0 relay): connect-src must admit both.
     expect(csp).toContain(
       "connect-src 'self' http://127.0.0.1:8765 https: wss:"
     );
-    // Iroh-mode apps use a sandboxed data document; direct HTTP retains its API origin.
     expect(csp).toContain("frame-src 'self' data: blob: http://127.0.0.1:8765");
     const nonce =
       /<meta name="centraid-csp-nonce" content="(?<nonce>[^"]+)">/u.exec(
@@ -97,7 +94,6 @@ describe("web-ui-server", () => {
     const hashed = await fetch(`${server.url}/assets/app.js`);
     expect(hashed.headers.get("cache-control")).toContain("immutable");
 
-    // A year-immutable root file would strand redeploys; sw + manifest gate updates.
     const sw = await fetch(`${server.url}/sw.js`);
     expect(sw.headers.get("cache-control")).not.toContain("immutable");
     expect(sw.headers.get("cache-control")).toBe("no-cache");

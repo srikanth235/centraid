@@ -1,9 +1,3 @@
-/*
- * @centraid/server/engine — transport-agnostic engine for centraid apps: the
- * registry, the handler runner, and the whole `/centraid/...` URL surface as a
- * `Runtime.handle(req, res)` function.
- */
-
 export {
   WorkerPool,
   workerPoolSizeFromEnv,
@@ -204,8 +198,6 @@ export {
   type AppChange,
   type ChangeListener,
 } from "./changes/change-bus.js";
-// The cap is per-appId, never global: a user may legitimately have several
-// windows of the SAME app open.
 export {
   changesSubscriberCount,
   ChangesSubscriberCap,
@@ -269,10 +261,6 @@ export {
   type PutResult,
 } from "./data/blob-store.js";
 
-// app-engine reads and writes the conversation-ledger BAND of `vault.db`
-// (#280, #916); the vault package composes its shape. `conversations.user_id`
-// names a gateway owner, which lives in another file, so it is
-// application-enforced.
 export {
   openLedgerDb,
   makeLedgerDbProvider,
@@ -297,8 +285,6 @@ export type {
   WorkspaceProvider,
 } from "./stores/vault-workspace.js";
 
-// `run_summary` is a VIEW, with no write-through sink. The type stays at the
-// package root so the `insights/` boundary remains one-way (#151).
 export type { RunSummary } from "./conversation/run-summary-sink.js";
 export {
   compileHydrationPlan,
@@ -321,7 +307,6 @@ export {
   type ProviderConsentSource,
 } from "./conversation/provider-egress-consent.js";
 
-// A JSON file, not a DB (#280); the wire prefix stays `/_centraid-user`.
 export {
   PrefsStore,
   makeUserStoreRouteHandler,
@@ -383,7 +368,6 @@ export type {
   RunKind,
 } from "./conversation/schema.js";
 
-// Prefer harness-reported USD, else the catalog. Unknown → NULL (#514).
 export {
   priceForModel,
   costForUsage,
@@ -404,6 +388,4 @@ export {
   type RepriceOptions,
 } from "./conversation/reprice.js";
 
-// A ONE-WAY boundary: `insights/` consumes a journal `DatabaseProvider` and
-// the `run_summary` view; the rest of app-engine never imports back into it.
 export * from "./insights/index.js";

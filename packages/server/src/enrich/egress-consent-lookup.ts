@@ -1,5 +1,3 @@
-// Gateway read of vault egress-consent (#807): most-specific scope first, a decline stops the walk. Read-only — exports no writer.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { readEnrichConsent } from "@centraid/vault";

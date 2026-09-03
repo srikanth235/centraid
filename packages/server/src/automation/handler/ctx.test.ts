@@ -76,7 +76,6 @@ describe(handleStateMessage, () => {
       result: { n: 1 },
     });
 
-    // Non-JSON valueJson is returned as the raw string.
     store.stateGet.mockReturnValueOnce({
       automationId: "app/digest",
       key: "raw",
@@ -180,7 +179,6 @@ describe(handleRunsMessage, () => {
     expect(last.ok).toBe(true);
     expect((last.result as { runId: string }).runId).toBe("t1");
 
-    // Empty history → last is undefined.
     store.listAutomationTurns.mockReturnValueOnce([]);
     expect(handleRunsMessage(a, "last", {}).result).toBeUndefined();
   });

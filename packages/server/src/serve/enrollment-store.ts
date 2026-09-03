@@ -22,14 +22,11 @@ export { VaultOwnedError } from "./vault-owned-error.js";
 export interface DeviceEnrollment {
   enrollmentId: string;
   endpointId: string;
-  /** Attribution principal. */
   ownerId: string;
-  /** Display label; never a key. */
   ownerLabel: string;
   vaultId: string;
   label: string;
   platform?: string;
-  /** Device-level tombstone ("this phone was stolen") — never a role. */
   revoked: boolean;
   rememberDevice: boolean;
   grantProfile?: string[];
@@ -68,11 +65,8 @@ export interface EnrollInput {
   platform?: string;
   rememberDevice?: boolean;
   grantProfile?: string[];
-  /** Bind to this existing owner. */
   ownerId?: string;
-  /** …or create an owner with this label first. */
   ownerLabel?: string;
-  /** Caller order matters (`enrolled[0]` is the redeeming device's landing vault, B12); unowned → claimed for the owner, foreign-owned → the whole enrollment refuses; omitted → existing vaults. */
   vaultIds?: readonly string[];
 }
 
@@ -104,7 +98,6 @@ const ENROLLMENT_VIEW_SQL = `
 
 function databaseFor(source: string | GatewayDatabase): GatewayDatabase {
   if (source instanceof GatewayDatabase) return source;
-  // Open the containing directory, never the file itself.
   return GatewayDatabase.open(path.dirname(path.resolve(source)));
 }
 
@@ -172,7 +165,6 @@ export class EnrollmentStore {
     return this.list().filter((row) => row.vaultId === vaultId);
   }
 
-  /** Principal a proved EndpointId acts as, tombstone excluded. */
   ownerFor(endpointId: string): Owner | undefined {
     const row = this.gatewayDatabase.db
       .prepare(
@@ -209,7 +201,6 @@ export class EnrollmentStore {
     });
   }
 
-  /** Shared by ticket redemption so burn, ownership rows, and device binding commit as ONE transaction — a partial redemption leaves zero enrollment. */
   enrollWithinTransaction(input: EnrollInput): DeviceEnrollment[] {
     const ownerId = this.resolveOwnerWithinTransaction(input);
     const label = this.uniqueDeviceLabel(input.label, input.endpointId);
@@ -217,7 +208,6 @@ export class EnrollmentStore {
     for (const vaultId of requested) {
       const current = this.owners.ownerOf(vaultId);
       if (current === undefined) {
-        // Founding, `vault create`, and the stopped-daemon host lane land here.
         this.owners.setOwner(vaultId, ownerId);
       } else if (current !== ownerId) {
         throw new VaultOwnedError(vaultId);
@@ -280,8 +270,6 @@ export class EnrollmentStore {
     const vaultIds = new Set(
       requested.length > 0 ? requested : this.owners.vaultsOwnedBy(ownerId)
     );
-    // Row order is the CALLER's vault order: `enrolled[0]` is the ticket's
-    // primary vault (scenario B12).
     const rank = new Map(
       requested.map((vaultId, index) => [vaultId, index] as const)
     );
@@ -297,7 +285,6 @@ export class EnrollmentStore {
       );
   }
 
-  /** Collision resolution is atomic here — the gateway alone has the full live roster. */
   private uniqueDeviceLabel(requested: string, endpointId: string): string {
     const used = new Set(
       (
@@ -327,7 +314,6 @@ export class EnrollmentStore {
     return row ? toEnrollment(row) : undefined;
   }
 
-  /** Durable proof that this device previously mounted the scope. */
   hadReplicaScope(endpointId: string, vaultId: string): boolean {
     return Boolean(
       this.gatewayDatabase.db
@@ -395,7 +381,6 @@ export class EnrollmentStore {
     return row;
   }
 
-  /** Revoke a DEVICE (tombstone + checkpoint drop); removing a person is `OwnerStore.remove`, a different layer. */
   revoke(idOrEndpointId: string): DeviceEnrollment[] {
     return this.gatewayDatabase.transaction(() => {
       const removed = this.list().filter(
@@ -428,7 +413,6 @@ export class EnrollmentStore {
     return row;
   }
 
-  /** L2 revocation: remove the person and every binding; refused while they still own vaults. */
   removeOwner(ownerId: string): DeviceEnrollment[] {
     const removed = this.list().filter((row) => row.ownerId === ownerId);
     this.owners.remove(ownerId);
@@ -453,9 +437,6 @@ export class EnrollmentStore {
     this.gatewayDatabase.db
       .prepare("DELETE FROM device_checkpoints WHERE endpoint_id = ?")
       .run(endpointId);
-    // The tombstone survives, so the DELETE-time web_sessions FK cascade
-    // never runs; kill durable browser sessions here or a revoked laptop
-    // keeps its cookie alive.
     this.gatewayDatabase.db
       .prepare("DELETE FROM web_sessions WHERE device_key = ?")
       .run(endpointId);
@@ -474,7 +455,6 @@ export class EnrollmentStore {
       .prepare("SELECT owner_id FROM devices WHERE endpoint_id = ?")
       .get(input.endpointId) as { owner_id: string } | undefined;
     if (bound) return bound.owner_id;
-    // Host-custody lane names no person: the device becomes its own owner.
     return this.owners.createWithinTransaction(input.label).ownerId;
   }
 

@@ -6,20 +6,17 @@ import type { ResourceKnobOverrides, ResourceMode } from "./resource-mode.js";
 export { type ResourceMode } from "./resource-mode.js";
 export type HardwareClass = "constrained" | "standard";
 
-/** Each takes a durable UI override (#528). No static compression quality here (#799). */
 export type ResourceKnobName =
   | "workerMaxConcurrent"
   | "workerMaxOldGenerationMb"
   | "workerPoolSize"
   | "replicationConcurrency";
 
-/** `envVar` is the operator variable name, present ONLY when `source === 'env'` (#528). */
 export interface ResourceKnobSource {
   source: "env" | "prefs" | "preset";
   envVar?: string;
 }
 
-/** Hard reject bounds; the client mirrors these. */
 export const RESOURCE_KNOB_BOUNDS: Record<
   ResourceKnobName,
   { min: number; max: number }
@@ -40,20 +37,17 @@ const RESOURCE_KNOB_ENV_VARS: Record<ResourceKnobName, string> = {
 export interface GatewayHardwareProfile {
   class: HardwareClass;
   resourceMode: ResourceMode;
-  /** RAW host facts, not the cgroup-granted share. */
   cores: number;
   totalMemoryBytes: number;
   storageFsyncMs: number | null;
   cgroupLimitedCpu: boolean;
   cgroupLimitedMemory: boolean;
-  /** Cumulative steal% since host boot; null off-Linux/unknown. */
   stealPercent: number | null;
   sqliteSynchronous: "FULL" | "NORMAL";
   workerMaxConcurrent: number;
   workerMaxOldGenerationMb: number;
   workerPoolSize: number;
   replicationConcurrency: number;
-  /** Lazy mount stays gated on the scheduler index; correctness selects eager. */
   vaultMountStrategy: "eager";
   vaultSweepIntervalMs: number;
   outboxIdleIntervalMs: number;
@@ -61,10 +55,6 @@ export interface GatewayHardwareProfile {
   sources: Record<ResourceKnobName, ResourceKnobSource>;
 }
 
-/**
- * A budget is spent over the *granted share* of the host, never the raw
- * machine (#528); values are pinned by hardware-profile.budget.test.ts.
- */
 type BudgetPresetName = "conserve" | "balanced" | "performance";
 interface BudgetPreset {
   cpuShare: number;
@@ -106,16 +96,11 @@ const BUDGET_PRESETS: Record<BudgetPresetName, BudgetPreset> = {
   },
 };
 
-/** At or above this steal%, size for the share we keep, not the advertised vCPUs (#528). */
 const STEAL_CONSTRAINED_THRESHOLD_PERCENT = 10;
 const CONSTRAINED_CORE_CEILING = 4;
 const CONSTRAINED_MEMORY_CEILING_BYTES = 4 * 1024 ** 3;
 const SLOW_STORAGE_FSYNC_MS = 8;
 
-/**
- * The ONE chain: env > prefs > preset, all clamped through [min, max]. A bad
- * env value falls THROUGH to prefs, never straight to preset (#528).
- */
 function resolveKnob(params: {
   envRaw: string | undefined;
   envVar: string;
@@ -146,7 +131,6 @@ function resolveKnob(params: {
   return { value: params.fallback, source: { source: "preset" } };
 }
 
-/** Applies only when `CENTRAID_HARDWARE_PROFILE` is unpinned; Auto keeps detection. */
 export function hardwareClassForResourceMode(
   mode: ResourceMode,
   detected: HardwareClass
@@ -162,7 +146,6 @@ export function hardwareClassForResourceMode(
   }
 }
 
-/** The only source of the shape `GET /_gateway/health` publishes (#528). */
 export interface StructuredResourceProfile {
   class: HardwareClass;
   mode: ResourceMode;
@@ -220,7 +203,6 @@ export function toStructuredResourceProfile(
 export function formatHardwareProfileDetail(
   profile: GatewayHardwareProfile
 ): string {
-  // Name the share framing only when a quota or steal actually shrank the host (#528).
   const shareNote =
     profile.cgroupLimitedCpu ||
     profile.cgroupLimitedMemory ||
@@ -241,12 +223,10 @@ export function resolveGatewayHardwareProfile(
     cores?: number;
     totalMemoryBytes?: number;
     storageFsyncMs?: number;
-    /** cgroup CPU quota as fractional cores (quota/period); null/absent = unlimited. */
     cgroupCpuLimit?: number | null;
     cgroupMemoryLimitBytes?: number | null;
     stealPercent?: number | null;
     resourceMode?: ResourceMode;
-    /** Per-knob overrides: beat the preset, lose to env, clamp through the same bounds (#528). */
     prefsOverrides?: ResourceKnobOverrides;
   } = {},
   env: NodeJS.ProcessEnv = process.env
@@ -256,8 +236,6 @@ export function resolveGatewayHardwareProfile(
   const storageFsyncMs = input.storageFsyncMs ?? null;
   const stealPercent = input.stealPercent ?? null;
 
-  // Class and every knob derive from the EFFECTIVE (granted) host, not the
-  // machine; CPU quota rounds up to whole cores, both floor at the raw host.
   const cpuLimit = input.cgroupCpuLimit ?? null;
   const effectiveCores =
     cpuLimit !== null && cpuLimit > 0
@@ -290,8 +268,6 @@ export function resolveGatewayHardwareProfile(
       ? requested
       : hardwareClassForResourceMode(resourceMode, detected);
 
-  // NORMAL durability only on an explicit constrained choice (env pin or
-  // Conserve), never on auto-detection of a small host (#456).
   const syncOverride = env.CENTRAID_SQLITE_SYNCHRONOUS?.toUpperCase();
   const explicitConstrained =
     requested === "constrained" ||
@@ -370,7 +346,6 @@ export function resolveGatewayHardwareProfile(
     vaultMountStrategy: "eager",
     vaultSweepIntervalMs: preset.vaultSweepIntervalMs,
     outboxIdleIntervalMs: preset.outboxIdleIntervalMs,
-    // memoryCapMb is `cpuShare` of the EFFECTIVE memory, in MiB (#528).
     budget: {
       cpuShare: preset.cpuShare,
       memoryCapMb: Math.round(

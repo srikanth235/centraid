@@ -13,7 +13,6 @@ import {
   hydrationMessagesFromLedger,
 } from "./hydration.js";
 
-/** A real history store on a fresh temp vault — the actual hydration producer. */
 async function newHistory(): Promise<ConversationHistoryStore> {
   const dir = await tempDir("centraid-hydration-");
   const appsDir = path.join(dir, "apps");
@@ -64,8 +63,6 @@ describe(compileHydrationPlan, () => {
   });
 
   it("preserves terminal tool status without carrying tool output", async () => {
-    // Fed by the REAL producer: `getHydrationDelta` spells tool status `state: 'ok' | 'error'`,
-    // not the ledger projection's boolean `ok` — a hand-built payload hid that mismatch.
     const history = await newHistory();
     const conversation = history.createSession("notes");
     history.recordTurn("notes", {
@@ -115,7 +112,6 @@ describe(compileHydrationPlan, () => {
     expect(plan.prompt).toContain("[turn truncated to hydration budget]");
     expect(plan.prompt).toContain("[End session handoff]");
     expect(plan.estimatedTokens).toBeLessThanOrEqual(256);
-    // The floor is a floor of CONTEXT, not turn count: each turn it forced in must carry real content, not just the marker.
     expect(plan.prompt).toContain(`u3 ${"x".repeat(100)}`);
     expect(plan.prompt).toContain(`u4 ${"x".repeat(100)}`);
   });

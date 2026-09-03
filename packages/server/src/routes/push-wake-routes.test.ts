@@ -38,9 +38,6 @@ const dirs: string[] = [];
 const relays: PushWakeRelay[] = [];
 
 describe("push-wake-routes", () => {
-  // Registration resolves the endpoint host (issue #865); tests run offline,
-  // so named hosts default to a public resolution. Individual tests override
-  // this spy for reserved-range cases.
   beforeEach(() => {
     vi.spyOn(dnsPromises, "lookup").mockResolvedValue([
       { address: "93.184.216.34", family: 4 },
@@ -161,7 +158,6 @@ describe("push-wake-routes", () => {
     });
     expect(wrongMethod.status).toBe(405);
 
-    // Non-matching path: handler returns false; our server ends without body.
     const unknownPath = await fetch(`${base}/centraid/_gateway/push/other`, {
       method: "POST",
       headers: { [AUTHED_DEVICE_HEADER]: "phone-1" },
@@ -236,7 +232,6 @@ describe("push-wake-routes", () => {
         }),
       });
 
-    // Reserved-range IP literals are refused without touching DNS at all.
     await Promise.all(
       [
         "https://127.0.0.1:8080/fcm",
@@ -255,7 +250,6 @@ describe("push-wake-routes", () => {
       })
     );
 
-    // A DNS name resolving to a private address is refused too.
     vi.spyOn(dnsPromises, "lookup").mockResolvedValue([
       { address: "192.168.0.20", family: 4 },
     ] as never);
@@ -266,7 +260,6 @@ describe("push-wake-routes", () => {
       reason: expect.stringContaining("reserved-range"),
     });
 
-    // Nothing from the refusals ever reached storage.
     expect(webRegistrationRows(database)).toStrictEqual([]);
   });
 
@@ -280,7 +273,6 @@ describe("push-wake-routes", () => {
       ownerLabel: "Priya",
       vaultIds: [plane.boot.vaultId],
     });
-    // Revoked sibling still registered for push must never receive a wake.
     enrollments.enroll({
       endpointId: "revoked-phone",
       label: "Revoked phone",
@@ -303,7 +295,6 @@ describe("push-wake-routes", () => {
     relays.push(relay);
     relay.start();
 
-    // Real doorbell path the vault uses after a committed write.
     notifyReplicaCommit(plane.db.vault);
     notifyReplicaCommit(plane.db.vault); // second ring still one debounce timer
     expect(send).not.toHaveBeenCalled();
@@ -333,7 +324,6 @@ describe("push-wake-routes", () => {
         ttl: 60,
       },
     ]);
-    // Opacity: no vault id or content identity in the Expo payload.
     expect(JSON.stringify(body)).not.toContain(plane.boot.vaultId);
     expect(JSON.stringify(body)).not.toContain("revoked");
 
@@ -368,13 +358,11 @@ describe("push-wake-routes", () => {
     relays.push(relay);
     relay.start();
 
-    // Enrolled device but no push registration → wake is a no-op.
     notifyReplicaCommit(plane.db.vault);
     await clock.advance(10_000);
     await flushMicrotasks();
     expect(send).not.toHaveBeenCalled();
 
-    // Registered audience + failing Expo delivery must not throw out of wake.
     insertRegistration(
       database,
       "silent-phone",
@@ -438,11 +426,6 @@ describe("push-wake-routes", () => {
   });
 
   test("PushWakeRelay costs one idle tick three receipts, not five", async () => {
-    // #916 routed the reminder scan through the gateway, so this timer is a
-    // WRITER: every read appends an access.receipt. It used to ask twice for
-    // the same two entities — `computeDueReminders` then `nextReminderFireAt`,
-    // same instant, same rows — and commit all five receipts separately, which
-    // is what pushed idle disk writes past their budget. One scan, one commit.
     const clock = useFakeClock();
     const { plane, enrollments, database, vaults } = await wakeFixture();
     enrollments.enroll({
@@ -471,7 +454,6 @@ describe("push-wake-routes", () => {
     await clock.advance(10_000);
     await flushMicrotasks();
 
-    // schedule.task, schedule.event_ext, tally.recurring_expense — once each.
     expect(receipts() - afterFirstScan).toBe(3);
     expect(plane.db.vault.isTransaction).toBe(false);
   });
@@ -492,9 +474,6 @@ describe("push-wake-routes", () => {
     relays.push(relay);
     relay.start();
 
-    // Schedule a coalesced armDue, then tear down the plane + relay before it
-    // fires. Without clearing #dueArmTimers this re-entered armDue on a closed
-    // DatabaseSync and surfaced as vitest unhandled ERR_INVALID_STATE.
     notifyReplicaCommit(plane.db.vault);
     plane.stop();
     relay.stop();
@@ -533,12 +512,9 @@ describe("push-wake-routes", () => {
     const relay = new PushWakeRelay(vaults, enrollments, database, send);
     relays.push(relay);
     relay.start();
-    // Close the vault while the next-fire timer is still armed, without
-    // stop()ing the relay — exercises the closed-DB catch in armDue.
     plane.stop();
     await clock.advance(5_000);
     await flushMicrotasks();
-    // No unhandled rejection; wake must not fire against a dead plane.
     expect(send).not.toHaveBeenCalled();
     relay.stop();
   });

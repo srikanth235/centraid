@@ -1,5 +1,3 @@
-/** In-process runId-keyed bus (#158): fire publishes automation turn events, the SSE endpoint replays the durable ledger then forwards live until `turn.end`. Events are ephemeral — a run with no subscriber drops them; the ledger is the durable record (see `automations-routes.ts`). */
-
 import type { AutomationTurnStreamEvent } from "@centraid/server/engine";
 
 export type RunEventListener = (
@@ -14,17 +12,15 @@ export class RunEventBus {
     const set = this.listeners.get(runId);
     if (!set) return;
     const serialized = JSON.stringify(ev);
-    // Snapshot: a listener may unsubscribe itself (e.g. on `turn.end`) mid-fanout.
     for (const fn of Array.from(set)) {
       try {
         fn(ev, serialized);
       } catch {
-        /* one wedged subscriber must not break the fanout */
+        // Intentionally empty.
       }
     }
   }
 
-  /** Returns an idempotent unsubscribe. */
   subscribe(runId: string, fn: RunEventListener): () => void {
     let set = this.listeners.get(runId);
     if (!set) {

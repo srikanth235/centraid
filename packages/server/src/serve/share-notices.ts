@@ -1,9 +1,3 @@
-// One card per received share, on the AUDIENCE's notices store (#883
-// V-notice). ONCE PER GRANT, never per item: `(kind, sourceRef)` makes it
-// idempotent, but the read guard still earns its place — `put` clears
-// `read_at`, so a re-put resurfaces a read card on every pass. No `deepLink`:
-// no route means "the thing Priya just shared".
-
 import type { VaultDb } from "@centraid/vault";
 
 import { NoticeStore } from "./notices.js";
@@ -56,7 +50,6 @@ function granterName(origin: VaultDb, granterPartyId: string): string {
   return vault?.display_name ?? "A vault you are linked with";
 }
 
-// Never throws: a card must not turn a delivered share into a failed pass.
 export function raiseShareReceivedNotice(input: {
   origin: VaultDb;
   originVaultId: string;

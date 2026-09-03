@@ -1,10 +1,3 @@
-/*
- * Token-purity lint for authored app CSS (#686). App CSS consumes
- * `var(--token)` and never restates design tokens. `contractProps` is
- * injected so app-engine does not depend on `@centraid/design`. No live
- * consumer in this repo (#799).
- */
-
 export interface TokenPurityFinding {
   line: number;
   kind: "hex" | "functional-color" | "font-family" | "reserved-custom-prop";
@@ -12,10 +5,6 @@ export interface TokenPurityFinding {
   fix: string;
 }
 
-/**
- * Custom-property namespaces owned by `packages/design`. Declaring one
- * shadows the token so the app silently stops tracking theme changes.
- */
 const RESERVED_PREFIXES = [
   "--c-",
   "--t-",
@@ -25,14 +14,8 @@ const RESERVED_PREFIXES = [
   "--text-",
 ] as const;
 
-/**
- * The two identity knobs an app may declare (`DESIGN.md`). Everything else
- * in the contract is read-only to an app.
- */
 const APP_OWNED_PROPS = new Set(["--app-hue", "--app-identity"]);
 
-// `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`. Longest alternative first so a
-// 6-digit literal is never reported as a 3-digit one plus trailing junk.
 const HEX = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b/gu;
 const FUNCTIONAL = /\b(?:rgba?|hsla?)\(/gu;
 const FONT_FAMILY = /(?:^|[;{])\s*font-family\s*:(?<value>[^;}]*)/gmu;
@@ -58,11 +41,6 @@ const FONT_FAMILY_FIX =
   "--t-control / --t-mono), and if you must name a family use " +
   "var(--font-sans), or var(--font-code) only for code, a literal, or a path";
 
-/**
- * Replace every CSS comment with the same number of newlines, so a documented
- * `/* was #fff *\/` note does not read as a live literal while line numbers
- * stay accurate.
- */
 function blankComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//gu, (block) =>
     "\n".repeat((block.match(/\n/gu) ?? []).length)
@@ -87,11 +65,9 @@ function isTokenOnlyFontFamily(value: string): boolean {
 }
 
 export interface TokenPurityOptions {
-  /** `BLUEPRINT_TOKEN_CONTRACT` names. Injected so this module stays free of `@centraid/design`. */
   contractProps?: readonly string[];
 }
 
-/** Pure scan. `color-mix(..., #fff, ...)` is still a violation — the hex is matched regardless of wrapping. */
 export function scanCssTokenPurity(
   source: string,
   options: TokenPurityOptions = {}
@@ -151,7 +127,6 @@ export function scanCssTokenPurity(
   return findings.sort((a, b) => a.line - b.line);
 }
 
-/** Publish-blocking error string, or `""` when clean. Instructive for an LLM app author. */
 export function formatTokenPurityError(
   findings: readonly TokenPurityFinding[],
   relPath: string

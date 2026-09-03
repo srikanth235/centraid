@@ -1,9 +1,3 @@
-/* Steward-absence detection and local Commons instrumentation (#731).
- *
- * The load-bearing claims: absence escalates on ELAPSED SILENCE (not failure
- * count), it never escalates while this device itself cannot show a working
- * link, and the counters the fixed-window-sync decision needs actually move. */
-
 import { describe, expect, test } from "vitest";
 
 import {
@@ -37,7 +31,6 @@ describe("commons steward-absence detection", () => {
     const base = Date.parse("2026-08-01T00:00:00.000Z");
     const pull = (offsetMs: number, ok: boolean) => {
       const now = at(base, offsetMs);
-      // A resolved dial — even a refusal — proves the local link works.
       recordCommonsDeviceReach(vault.vault, now);
       return recordCommonsPull({
         db: vault.vault,
@@ -50,8 +43,6 @@ describe("commons steward-absence detection", () => {
     };
 
     expect(pull(0, true).presence).toBe("reachable");
-    // Many consecutive failures inside the window are still "reachable": a
-    // laptop closed overnight fails a lot and its steward is fine.
     expect(pull(HOUR, false).presence).toBe("reachable");
     expect(pull(2 * HOUR, false).presence).toBe("reachable");
     expect(pull(6 * HOUR, false).consecutiveFailures).toBe(3);
@@ -70,7 +61,6 @@ describe("commons steward-absence detection", () => {
     expect(absent.lastContactAt).toBe(at(base, 0));
     expect(absent.stewardVaultId).toBe("vlt_steward");
 
-    // Contact closes the episode and banks its duration.
     const back = pull(9 * DAY + HOUR, true);
     expect(back.presence).toBe("reachable");
     expect(back.silentForMs).toBeUndefined();
@@ -92,8 +82,6 @@ describe("commons steward-absence detection", () => {
   test("never cries absence while this device has no working link", () => {
     const vault = seat("absence-offline");
     const base = Date.parse("2026-08-01T00:00:00.000Z");
-    // One successful contact, with link evidence, then the device goes dark:
-    // every later dial THROWS, so no round trip is ever recorded again.
     recordCommonsDeviceReach(vault.vault, at(base, 0));
     recordCommonsPull({
       db: vault.vault,
@@ -113,16 +101,11 @@ describe("commons steward-absence detection", () => {
 
     expect(fail(HOUR).presence).toBe("reachable");
     expect(fail(2 * DAY).presence).toBe("link-down");
-    // Nine days of failures on a device that cannot show a single round trip
-    // is still NOT an absent steward — we simply do not know.
     expect(fail(9 * DAY).presence).toBe("link-down");
     expect(fail(30 * DAY).presence).toBe("link-down");
 
-    // A device that touched the network once and then flew for a week proves
-    // nothing either: stale link evidence must not unlock escalation.
     recordCommonsDeviceReach(vault.vault, at(base, 3 * DAY));
     expect(fail(30 * DAY).presence).toBe("link-down");
-    // Fresh evidence, gathered while this steward stayed silent, does.
     recordCommonsDeviceReach(vault.vault, at(base, 30 * DAY));
     expect(fail(30 * DAY).presence).toBe("absent");
   });
@@ -141,7 +124,6 @@ describe("commons steward-absence detection", () => {
     });
     expect(parked.presence).toBe("parked");
     expect(parked.fault).toBe("history-diverged");
-    // The steward ANSWERED, so this is not an absence episode.
     expect(parked.silentForMs).toBeUndefined();
   });
 });
@@ -185,8 +167,6 @@ describe("commons sync instrumentation", () => {
           WHERE grant_id = ? AND member_vault_id = ?`
       )
       .get(GRANT, SEAT);
-    // Spread: node:sqlite hands back a null-prototype row, and toStrictEqual
-    // compares prototypes.
     expect({ ...row }).toStrictEqual({
       attempts: 6,
       contacts: 4,
@@ -194,7 +174,6 @@ describe("commons sync instrumentation", () => {
       pull_tail: 1,
       pull_snapshot: 1,
       pull_unreachable: 2,
-      // One episode: opened at +2h, closed by the contact at +4h.
       absence_episodes: 1,
       absent_ms: 2 * HOUR,
       longest_absence_ms: 2 * HOUR,
@@ -290,7 +269,6 @@ describe("pull path instrumentation", () => {
       seat: vault,
     });
     expect(answered.state).toBe("unavailable");
-    // The status rides on EVERY outcome — that is the whole point.
     expect(answered.steward.presence).toBe("reachable");
     expect(answered.steward.consecutiveFailures).toBe(1);
     expect(answered.steward.deviceLinkAt).toBeDefined();

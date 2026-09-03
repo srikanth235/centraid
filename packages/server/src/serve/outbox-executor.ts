@@ -1,18 +1,3 @@
-/**
- * The ONLY path from an outbox artifact to the network (#306 decision 3), and
- * the only holder of the broker's `allowWrites` lane. Runs OUTSIDE the fire
- * loop: connectors stage items and stay read-only (#304).
- *
- * `{{connection:…}}` substitutes HERE (tokens never sit in rows). Substituted
- * URL must satisfy `allowed_hosts` over https (loopback excepted). Redirects
- * are never auto-followed. A 401 gets exactly one forced refresh.
- * 2xx → `sent`; other 4xx → `failed` (terminal); 429/5xx/network → stay
- * approved and retry; auth-dead → needs-auth, stay approved until reconnect.
- *
- * #308: stale approvals repark; each pass is a bounded batch with a per-actor
- * cap so a standing grant cannot flush an unbounded queue.
- */
-
 import type { ConnectionAuth } from "@centraid/server/automation";
 import type { RuntimeLogger } from "@centraid/server/engine";
 
@@ -26,11 +11,6 @@ const BODY_SNIPPET_CHARS = 300;
 const DEFAULT_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_MAX_ITEMS_PER_DRAIN = 25;
 const DEFAULT_MAX_ITEMS_PER_ACTOR = 10;
-/**
- * Bound on one external write (#351): a hung endpoint would wedge the whole
- * drain pass. Timeout lands in the existing network-failure catch — item stays
- * approved and retries; no new state.
- */
 export const DEFAULT_WRITE_TIMEOUT_MS = 60_000;
 
 interface ApprovedRow {
@@ -43,11 +23,6 @@ interface ApprovedRow {
   decided_at: string | null;
 }
 
-/**
- * An approved outbox is a consent ledger: later rows must not start until the
- * preceding row has settled, so per-actor caps and durable receipts remain
- * deterministic.
- */
 function drainApprovedRowsInOrder(
   rows: readonly ApprovedRow[],
   drain: (row: ApprovedRow) => void | PromiseLike<void>
@@ -130,8 +105,6 @@ export class OutboxExecutor {
     const perActor = new Map<string, number>();
     let drained = 0;
     await drainApprovedRowsInOrder(rows, async (row) => {
-      // Stale approval never drains (#308). Repark first so staleness is judged
-      // even when the caps would have deferred the item.
       const decidedAtMs = row.decided_at
         ? Date.parse(row.decided_at)
         : Number.NaN;
@@ -147,7 +120,6 @@ export class OutboxExecutor {
         report.reparked += 1;
         return;
       }
-      // Bounded passes (#308): surplus stays approved; no silent drop.
       const actorCount = perActor.get(row.actor_id) ?? 0;
       if (
         drained >= this.maxItemsPerDrain ||
@@ -212,7 +184,6 @@ export class OutboxExecutor {
       injectedSpec = substitute(spec, auth.values);
       assertDrainable(injectedSpec.url, auth);
     } catch (error) {
-      // Structural refusals (bad row, host outside the pin) are terminal.
       await this.recordResult(
         plane,
         row.item_id,
@@ -237,7 +208,6 @@ export class OutboxExecutor {
         refreshed = true;
         try {
           injectedSpec = substitute(spec, await auth.refresh());
-          // Re-assert the pin on the RE-substituted URL.
           assertDrainable(injectedSpec.url, auth);
           return send();
         } catch (error) {
@@ -291,8 +261,6 @@ export class OutboxExecutor {
         method: spec.method,
         ...(spec.headers ? { headers: spec.headers } : {}),
         ...(spec.body === undefined ? {} : { body: spec.body }),
-        // Injected requests never auto-follow: a cross-host Location would
-        // carry the Authorization header past the pin (#304).
         redirect: "manual",
         signal: timeoutSignal(this.writeTimeoutMs),
       });
@@ -344,7 +312,6 @@ export class OutboxExecutor {
           typeof value === "string" && value.trim() !== ""
       );
     const target = artifactLabel?.trim() ?? item?.target ?? "External write";
-    // D4: a failure headline names the reason, not just the disposition.
     const gist = disposition === "sent" ? undefined : noticeGist(detail);
     const suffix =
       disposition === "sent"

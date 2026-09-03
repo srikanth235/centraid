@@ -3,11 +3,6 @@ import http from "node:http";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
-// The Vault Atlas owner routes (#441): stats / graph / pulse.
-// These assert the gateway wires the vault-package builders to owner-gated
-// GET routes and returns the census/graph/pulse payloads. The ghost-semantics
-// and FK≠core_link invariants are proven in packages/vault; here we prove the
-// route surface and that numbers are computed from the live schema.
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import type { VaultPlane } from "../serve/vault-plane.js";
@@ -95,10 +90,8 @@ describe("vault-routes.atlas", () => {
       totals: { rows: number; kinds: number; populatedKinds: number };
     };
     expect(["dbstat", "estimate"]).toContain(body.method);
-    // ONE FILE (#916): a pack no longer names which database it lives in.
     const core = body.packs.find((p) => p.pack === "core");
     expect(core?.rows).toBeGreaterThanOrEqual(1);
-    // Ontology packs sort ahead of machinery.
     const firstMachinery = body.packs.findIndex(
       (p) => p.packKind === "machinery"
     );
@@ -114,7 +107,6 @@ describe("vault-routes.atlas", () => {
     insertParty(plane, "p1", "Ravi");
     insertParty(plane, "p2", "Asha");
     const now = new Date().toISOString();
-    // A non-empty NOT NULL child edge, and an authored core_link.
     plane.db.vault
       .prepare(
         `INSERT INTO core_party_identifier (identifier_id, party_id, scheme, value, is_primary, valid_from)
@@ -166,7 +158,6 @@ describe("vault-routes.atlas", () => {
     expect(body.edgeCount).toBe(body.fkEdges.length);
     expect(body.centerEdgeCount).toBeGreaterThan(0);
 
-    // The populated NOT NULL edge is present and NOT a ghost.
     const populated = body.fkEdges.find(
       (e) => e.fromTable === "core_party_identifier" && e.col === "party_id"
     );
@@ -174,7 +165,6 @@ describe("vault-routes.atlas", () => {
     expect(populated?.ghost).toBe(false);
     expect(populated?.fill).toBe(populated?.childRows);
 
-    // The authored link rides authoredLinks ONLY — never fkEdges.
     expect(body.authoredLinks).toHaveLength(1);
     expect(body.authoredLinks[0]!.relationLabel).toBe("Spouse");
     expect(
@@ -183,7 +173,6 @@ describe("vault-routes.atlas", () => {
       )
     ).toBe(false);
 
-    // core_party at the centre; the locker/sync island surfaced honestly.
     expect(
       body.nodes.find((n) => n.physical === "core_party")?.hopDistance
     ).toBe(0);

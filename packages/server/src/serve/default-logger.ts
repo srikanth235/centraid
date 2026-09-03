@@ -1,9 +1,3 @@
-/*
- * Default `RuntimeLogger` for `buildGateway` — a console logger with an
- * optional `[tag]` prefix. Hosts that want structured logging pass their
- * own via `BuildGatewayOptions.logger`.
- */
-
 import type { RuntimeLogger } from "@centraid/server/engine";
 
 export function defaultLogger(tag?: string): RuntimeLogger {

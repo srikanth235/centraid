@@ -1,8 +1,3 @@
-/*
- * Peer plane route layer (#726): the ceremony, the update wall, the
- * signed route assertion, and the two traps as seen from the HTTP side.
- */
-
 import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
@@ -111,7 +106,6 @@ describe("peer plane identity", () => {
     expect(result.handled).toBe(false);
   });
 
-  /* TRAP 1, route half. */
   it.each([
     "/centraid/_peer/../_gateway/devices",
     "/centraid/_peer/%2e%2e/_gateway/devices",
@@ -125,7 +119,6 @@ describe("peer plane identity", () => {
     expect(result.json).toStrictEqual({ state: "not_found" });
   });
 
-  /* TRAP 2, route half: a device identity is never a peer identity. */
   it("refuses a request carrying a device identity instead of a peer proof", async () => {
     const result = await call(makeHandler(openStore()), {
       method: "GET",
@@ -231,9 +224,6 @@ describe("link ceremony", () => {
     const links = openStore();
     const handler = makeHandler(links);
     const ticket = links.tickets.mint(LOCAL_VAULT, LOCAL_KEY);
-    // The redeemer names the gateway's OWN vault as the far side. Accepting
-    // it would give a local vault a route row — the definition of "lives
-    // elsewhere" — and the owner's next give to it would leave the house.
     const stolen = await call(handler, {
       method: "POST",
       url: "/centraid/_peer/link/redeem",
@@ -245,13 +235,10 @@ describe("link ceremony", () => {
       }),
     });
     expect(stolen.status).toBe(400);
-    // The refusal is total: no route was installed, so the local vault is
-    // still local, and its directory identity was not overwritten.
     expect(links.routeFor(LOCAL_VAULT)).toBeUndefined();
     expect(links.directoryEntry(LOCAL_VAULT)?.publicKey).not.toBe(
       peerPublicKey
     );
-    // The ticket survives an attempt that never became a ceremony.
     const honest = await call(handler, {
       method: "POST",
       url: "/centraid/_peer/link/redeem",
@@ -282,7 +269,6 @@ describe("link ceremony", () => {
       expect(result.status).toBe(404);
       expect(result.json).toStrictEqual({ state: "not_found" });
     }
-    // The live ticket survived every failed attempt.
     expect(links.tickets.hasPending()).toBe(true);
   });
 
@@ -369,8 +355,6 @@ describe("route assertion", () => {
   it("moves the route cache for a peer that rotated its endpoint", async () => {
     const links = openStore();
     link(links);
-    // The ceremony seeds the route clock, so only an assertion made AFTER the
-    // link was formed can move it — a replayed older one never wins.
     const result = await call(makeHandler(links), {
       method: "POST",
       url: "/centraid/_peer/route/assert",
@@ -439,11 +423,6 @@ describe("route assertion", () => {
   });
 });
 
-/*
- * No give plane rides the peer wire (#825, ruling G-copy). A linked peer
- * asking for these frames learns exactly what it learns about a path that
- * never existed.
- */
 describe("retired give frames (#825)", () => {
   it.each([
     ["POST", "/centraid/_peer/edge/give"],

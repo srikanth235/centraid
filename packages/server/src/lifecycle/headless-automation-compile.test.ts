@@ -389,8 +389,6 @@ describe("headless-automation-compile suite", () => {
       dirs.push(dir);
       const ledgerDbFile = ledgerDbFileIn(dir);
       const run = vi.fn<ConversationRunner["run"]>();
-      // The live automations ladder does not contain claude-code, so a manifest
-      // pin naming it is not consent for unattended egress (#567).
       const consent = new ProviderEgressConsentStore(
         makeLedgerDbProvider(ledgerDbFile),
         () => false

@@ -1,5 +1,3 @@
-/* Sweep MUST diff every granted store class (#425): derived replicas absent from the DERIVED listing are missing even if the sha sits under cas. */
-
 import { ReplicaIndex } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
 
@@ -12,7 +10,6 @@ import type { StorageConnectionStore } from "./storage-connections.js";
 
 const SAMPLE_LIMIT = 25;
 
-// Prefix-agnostic sha extraction; breaks the module cycle with the cas diff.
 function casSha(key: string): string | undefined {
   return /(?:^|\/)blobs\/(?:sha256\/)?(?<sha>[0-9a-f]{64})$/u.exec(key)?.groups
     ?.sha;
@@ -30,7 +27,6 @@ function mergeDrift(a: DriftSummary, b: DriftSummary): DriftSummary {
   return { count: a.count + b.count, sample };
 }
 
-/** Diff derived store into cas state; mirrors reconcileCasInventory (acyclic modules). */
 export async function reconcileDerivedInto(opts: {
   cas: StoreReconciliationState;
   db: VaultDb;
@@ -66,7 +62,6 @@ export async function reconcileDerivedInto(opts: {
     if (sha) remote.add(sha);
     else unknownKeys.push(object.key);
   }
-  // Unmark synchronously so the next eviction cannot trust it.
   const missing = [...indexed].filter(
     (sha) => !remote.has(sha) && !recentlyIndexed.has(sha)
   );

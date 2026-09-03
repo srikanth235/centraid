@@ -21,7 +21,6 @@ describe("Companion capability profile", () => {
     expect(
       companionHandlerAllowed(locker, "action", "notes", "create-note")
     ).toBe(false);
-    // add-item is an action, not a query, on locker.
     expect(companionHandlerAllowed(locker, "query", "locker", "add-item")).toBe(
       false
     );

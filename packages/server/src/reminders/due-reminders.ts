@@ -1,33 +1,11 @@
-// Reminders. Deliberately stateless on the gateway side — no
-// "already fired" bookkeeping here, no resident timer. Each call is a pure
-// read of the vault's own `remind_before_min` (schedule_task) and
-// `reminders_json` (schedule_event_ext) columns against `now`, returning
-// every reminder whose fire time has arrived and hasn't gone stale. The
-// caller (the desktop main process's poller) owns de-duplication — it
-// remembers which `key`s it already surfaced an OS notification for, the
-// same posture as gateway-monitor.ts's in-memory downtime-alert state.
-//
-// Tally recurring materialization previews and outstanding household pairing
-// tickets ride the same feed so mobile categories for those kinds can fire.
-
 import { expandRecurrence, inspectRrule } from "@centraid/core/time";
 import type { RecurrenceSemantics } from "@centraid/core/time";
 import type { Credential, ReadRequest, ReadResult } from "@centraid/vault";
 
-/*
- * THROUGH THE GATEWAY (#916, review-A 8.1). Reminders are life data, so every
- * read below is a `gateway.read` under a declared purpose — consent resolved,
- * receipt written — and never SQL against a physical table. The one join the
- * old query did (`core_event` × `schedule_event_ext`) is folded here over two
- * windowed reads; `bun run lint:vault-sql` is what keeps it that way.
- */
-
-/** The gateway surface the reminder feed needs — the whole of it. */
 export interface ReminderVaultReader {
   read: (cred: Credential, request: ReadRequest) => ReadResult;
 }
 
-/** DPV purpose every read below declares; it lands on each receipt. */
 const PURPOSE = "dpv:ServiceProvision";
 
 function rowsOf<T>(result: ReadResult): T[] {
@@ -48,7 +26,6 @@ interface EventCoreRow {
   recurrence_semantics: string | null;
 }
 
-/** The live reminder-bearing events, one read per table, joined here. */
 function reminderEvents(
   vault: ReminderVaultReader,
   cred: Credential
@@ -65,7 +42,6 @@ function reminderEvents(
   const remindersByEvent = new Map(
     exts.map((ext) => [ext.event_id, ext.reminders_json] as const)
   );
-  // Trash is invisible, not merely un-listed (#916, review-A 8.2).
   return rowsOf<EventCoreRow>(
     read({
       entity: "core.event",
@@ -81,7 +57,6 @@ function reminderEvents(
   });
 }
 
-/** The live, reminder-bearing tasks. */
 function reminderTasks(
   vault: ReminderVaultReader,
   cred: Credential
@@ -101,14 +76,11 @@ function reminderTasks(
 }
 
 export interface DueReminder {
-  /** Stable per-reminder id: de-dup key for the poller. */
   key: string;
   kind: "task" | "event" | "tally" | "invite";
   id: string;
   title: string;
-  /** ISO instant the reminder is anchored to (due_at or dtstart). */
   at: string;
-  /** Minutes before `at` this reminder was set to fire. */
   minutesBefore: number;
 }
 
@@ -119,7 +91,6 @@ export interface PendingInvitation {
   expiresAt: number;
 }
 
-/** A reminder older than this (past its `at`) is stale — no longer surfaced. */
 const DEFAULT_STALE_AFTER_MINUTES = 24 * 60;
 
 interface TaskReminderRow {
@@ -147,7 +118,6 @@ function occurrenceStarts(
   if (!event.rrule) {
     return [{ at: event.dtstart, originalStart: event.dtstart }];
   }
-  // A refused rule names no occurrence; the fallback below would misfire.
   if (!inspectRrule(event.rrule).ok) return [];
   const semantics = (event.recurrence_semantics ??
     "zoned") as RecurrenceSemantics;
@@ -188,11 +158,6 @@ function parseReminders(json: string): { minutes_before: number }[] {
   }
 }
 
-/**
- * The reminder-bearing rows one scan works from. Read ONCE per scan: since
- * #916 every read here is a `gateway.read`, and a gateway read appends a
- * receipt — so a re-read is not a free SELECT, it is another durable row.
- */
 interface ReminderSources {
   tasks: TaskReminderRow[];
   events: EventReminderRow[];
@@ -202,21 +167,12 @@ function readReminderSources(
   vault: ReminderVaultReader,
   cred: Credential
 ): ReminderSources {
-  // Trash is invisible, not merely un-listed (#916, review-A 8.2): every read
-  // here clamps `deleted_at IS NULL`, or a task the owner threw away keeps
-  // ringing until its purge lapses.
   return {
     tasks: reminderTasks(vault, cred),
     events: reminderEvents(vault, cred),
   };
 }
 
-/**
- * Every task/event reminder whose fire time (`at` minus `minutesBefore`) has
- * arrived by `nowIso`, and hasn't gone stale (more than `staleAfterMinutes`
- * past its own `at`). Pure given `nowIso` — no wall-clock reads — so it's
- * directly unit-testable.
- */
 export function computeDueReminders(
   vault: ReminderVaultReader,
   cred: Credential,
@@ -292,8 +248,6 @@ function dueFrom(
     }
   }
 
-  // Active recurring expense templates whose next occurrence is due (and not
-  // yet materialized) surface as Tally settle/review notifications.
   const day = nowIso.slice(0, 10);
   const rangeFrom = `${day}T00:00:00.000Z`;
   const rangeTo = new Date(Date.parse(rangeFrom) + 86_400_000).toISOString();
@@ -382,7 +336,6 @@ function dueFrom(
   return out.sort((a, b) => a.at.localeCompare(b.at));
 }
 
-/** Earliest future fire instant, used by the gateway's durable wake scheduler. */
 export function nextReminderFireAt(
   vault: ReminderVaultReader,
   cred: Credential,
@@ -391,14 +344,6 @@ export function nextReminderFireAt(
   return nextFireFrom(readReminderSources(vault, cred), nowIso);
 }
 
-/**
- * One scan, both answers (#916). The push relay needs what is due NOW and when
- * to wake NEXT, at the same instant; asking for them separately re-read
- * `schedule.task` and `schedule.event_ext` a second time with the same `now` —
- * duplicate work on base, and since #916 two extra receipt commits per idle
- * tick on top of it. The two answers now come off one read of the sources, so
- * they can also never disagree about what the vault held.
- */
 export function scanReminders(
   vault: ReminderVaultReader,
   cred: Credential,

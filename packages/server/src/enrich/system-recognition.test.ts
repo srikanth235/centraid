@@ -1,14 +1,3 @@
-/*
- * The system recognition lane, `place-names` included (#816).
- *
- * This list is small and load-bearing in three different places, and one of them
- * is easy to get backwards: membership here is what makes the scheduler reconcile
- * honour a recipe's `enabled` bit instead of the experimental-automations gate
- * (`serve/build-gateway.ts`). An off-by-default recipe therefore BELONGS here —
- * leaving it out would make it an ordinary automation that only arms when the
- * experimental gate is on, which is a different product promise than "opt-in".
- * The assertions below pin that reading against the shipped manifests.
- */
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -72,7 +61,6 @@ describe("system recognition lane", () => {
   });
 
   it("place-names ships disabled, which is what makes it opt-in", () => {
-    // The reconcile in build-gateway.ts filters these rows on `row.enabled`, so this one bit is the whole opt-in mechanism: no scheduler registration and no data cursor until a member turns it on.
     expect(manifestOf("place-names").enabled).toBe(false);
   });
 });

@@ -1,16 +1,3 @@
-/*
- * *Add someone* — the mint ceremony on `POST /centraid/_gateway/devices/ticket`
- * (#726): `body.forPerson` creates a new owner, mints them a vault
- * of their own (identity keypair included — `VaultRegistry.create`), claims
- * it, and mints a ticket bound to that NEW owner. Mutually exclusive with
- * the P0 self-pair `ownerId`/`vaultIds` lane.
- *
- * The lane is a durable PROVISION (#750): the endpoint/ticket capability
- * preflights BEFORE anything is created, the workflow is idempotent under a
- * client-chosen `operationId`, and a failed attempt leaves ZERO
- * owners/vaults/ownership rows/tickets behind.
- */
-
 import { describe, afterEach, expect, test, vi } from "vitest";
 
 import { parsePairingTicket } from "../serve/pairing-store.js";
@@ -21,10 +8,6 @@ import {
   harness,
 } from "./devices-routes.test-fixtures.js";
 
-/** A `mintVaultForPerson` stub: hands out fresh ids and remembers names so
- *  the harness's `vaultName` can resolve them right back. `live` stands in
- *  for the filesystem — a minted vault dir that `unmintVaultForPerson` has
- *  not removed. */
 function mintStub(): {
   vaultNames: Map<string, string>;
   live: Set<string>;
@@ -53,7 +36,6 @@ function mintStub(): {
   };
 }
 
-/** Row counts of every durable artefact the mint workflow touches. */
 function rowCounts(f: DevicesHarness): {
   owners: number;
   vaultOwners: number;
@@ -89,9 +71,6 @@ async function mintForPerson(
 describe("devices-routes mint-for-person scenarios (#726 P1)", () => {
   afterEach(cleanupHarnesses);
 
-  // Exit evidence #1: add someone → ticket redeems → their device reaches
-  // EXACTLY their vault (never the founder's) — "a family member scans one
-  // code and has their own Photos library" (#726).
   test("add someone: redemption lands the new person's device in exactly their new vault", async () => {
     const stub = mintStub();
     const f = await harness({
@@ -119,10 +98,8 @@ describe("devices-routes mint-for-person scenarios (#726 P1)", () => {
       vaultName: string;
       vaults: Array<{ vaultId: string; vaultName?: string }>;
     };
-    // A NEW owner, distinct from the founder — the whole point of the mint.
     expect(payload.ownerId).not.toBe(founder.ownerId);
     expect(payload.ownerLabel).toBe("Kid");
-    // No explicit `vaultName` → "<label>'s vault".
     expect(payload.vaultName).toBe("Kid's vault");
     expect(payload.vaults).toStrictEqual([
       { vaultId: payload.vaultId, vaultName: "Kid's vault" },
@@ -146,8 +123,6 @@ describe("devices-routes mint-for-person scenarios (#726 P1)", () => {
     ]);
     expect(enrolled![0]!.ownerId).toBe(payload.ownerId);
 
-    // Scope listing = their vault, and ONLY their vault (covers "Photos opens
-    // as their library" — the app-level surface just reads this scope).
     expect(f.enrollments.vaultsFor("kid-phone")).toStrictEqual([
       payload.vaultId,
     ]);
@@ -252,7 +227,6 @@ describe("mint-for-person is a durable provision (#750)", () => {
     await expect(response.json()).resolves.toMatchObject({
       error: "no_iroh_endpoint",
     });
-    // Zero new owners/vaults/ownership rows/tickets — the dud refused first.
     expect(rowCounts(f)).toStrictEqual(before);
     expect(stub.mintCalls()).toBe(0);
     expect(stub.live.size).toBe(0);
@@ -327,7 +301,6 @@ describe("mint-for-person is a durable provision (#750)", () => {
       operationId: "op-retry-1",
     });
     expect(retried.status).toBe(200);
-    // Exactly ONE owner/vault/ownership/ticket/operation from the whole saga.
     expect(rowCounts(f)).toStrictEqual({
       owners: before.owners + 1,
       vaultOwners: before.vaultOwners + 1,
@@ -350,9 +323,6 @@ describe("mint-for-person is a durable provision (#750)", () => {
       label: "Founder laptop",
     });
     const before = rowCounts(f);
-    // The owner row and ownership row have already been written inside the
-    // open transaction when this throws — the rollback must drop BOTH, and
-    // the cleanup hook must remove the already-minted vault.
     vi.spyOn(f.tickets, "mint").mockImplementationOnce(() => {
       throw new Error("ticket store exploded");
     });
@@ -379,7 +349,6 @@ describe("mint-for-person is a durable provision (#750)", () => {
       tickets: before.tickets + 1,
       operations: before.operations + 1,
     });
-    // Two mint attempts, but the first attempt's vault was cleaned up.
     expect(stub.mintCalls()).toBe(2);
     expect(stub.live.size).toBe(1);
   });
@@ -410,16 +379,12 @@ describe("mint-for-person is a durable provision (#750)", () => {
       operationId: "op-replay",
     });
     expect(replayed.status).toBe(200);
-    // The FULL original response — same ticket, same ownerId, same vaultId.
     await expect(replayed.json()).resolves.toStrictEqual(original);
     expect(rowCounts(f)).toStrictEqual(after);
     expect(stub.mintCalls()).toBe(1);
     expect(stub.live.size).toBe(1);
   });
 
-  // Audit finding (#750): replaying an operationId with DIFFERENT inputs must
-  // never silently hand back the first request's result — the caller would
-  // believe their new request succeeded when it was never performed.
   test("reusing an operationId with a DIFFERENT request is refused, not replayed", async () => {
     const stub = mintStub();
     const f = await harness({
@@ -441,7 +406,6 @@ describe("mint-for-person is a durable provision (#750)", () => {
     const original = (await first.json()) as Record<string, unknown>;
     const after = rowCounts(f);
 
-    // Same operationId, but a DIFFERENT person label — a different request.
     const conflicting = await mintForPerson(f, {
       forPerson: { label: "Someone Else" },
       operationId: "op-conflict",
@@ -450,12 +414,9 @@ describe("mint-for-person is a durable provision (#750)", () => {
     await expect(conflicting.json()).resolves.toMatchObject({
       error: "operation_id_conflict",
     });
-    // Nothing new was created — not a second owner/vault, not a second
-    // operation record.
     expect(rowCounts(f)).toStrictEqual(after);
     expect(stub.mintCalls()).toBe(1);
 
-    // The ORIGINAL request still replays cleanly afterward.
     const replayed = await mintForPerson(f, {
       forPerson: { label: "Kid" },
       operationId: "op-conflict",

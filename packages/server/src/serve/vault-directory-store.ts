@@ -1,8 +1,3 @@
-/*
- * The single-row-per-vault tables behind #750 invariants 1–2; keeping the SQL
- * here makes "one identity, one route" checkable by reading one file.
- */
-
 import type { GatewayDatabase } from "./gateway-db.js";
 import type { LinkRoute, VaultDirectoryEntry } from "./vault-link-row.js";
 import { VaultDirectoryIdentityError } from "./vault-link-row.js";
@@ -50,7 +45,6 @@ export function directoryEntryOf(
   };
 }
 
-/** undefined when the vault is local (#750 invariant 2). */
 export function routeOf(
   gatewayDatabase: GatewayDatabase,
   vaultId: string
@@ -61,8 +55,6 @@ export function routeOf(
   return row ? toRoute(row) : undefined;
 }
 
-/** Key is write-ONCE (#750 invariant 1): a second ceremony naming the vault
- * with a different key throws rather than re-binds; only the label moves. */
 export function upsertDirectoryRow(
   gatewayDatabase: GatewayDatabase,
   vaultId: string,
@@ -86,7 +78,6 @@ export function upsertDirectoryRow(
   );
 }
 
-/** Install/replace the peer's single route row (ceremony authority). */
 export function upsertRouteRow(
   gatewayDatabase: GatewayDatabase,
   vaultId: string,

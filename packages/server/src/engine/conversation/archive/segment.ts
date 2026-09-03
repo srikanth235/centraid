@@ -1,9 +1,3 @@
-// Segment serialization + digest materialization (#438 decisions 1/4/5).
-// Builds one gzip(JSON) segment per eligible range, records its
-// conversation_archive index row, and folds the range's rollups into the
-// conversation_digest so Insights/Executions read identical numbers before
-// archive and after prune (the digest union lives in insights-store.ts).
-
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { gunzipSync, gzipSync } from "node:zlib";
@@ -12,7 +6,6 @@ import type { EligibleRange } from "./selector.js";
 import { CONVERSATION_SEGMENT_VERSION } from "./types.js";
 import type { ArchivedConversationSegment, BlobSink, Row } from "./types.js";
 
-/** Per-model rollup entry stored in `conversation_digest.models_json`. */
 interface ModelRollup {
   model: string;
   runs: number;
@@ -20,7 +13,6 @@ interface ModelRollup {
   cost: number;
 }
 
-/** Per-effort rollup entry stored in `conversation_digest.efforts_json`. */
 interface EffortRollup {
   effort: string;
   runs: number;
@@ -51,11 +43,6 @@ function num(v: unknown): number {
   return typeof v === "number" ? v : 0;
 }
 
-/**
- * The run's dominant model — the SAME pick `run_summary.model` computes
- * (the step/delegate model with the most input+output tokens). Insights' byModel
- * union depends on this exact contract (see the SQL comment in insights-store).
- */
 function dominantModelOf(journal: DatabaseSync, turnId: string): string | null {
   const row = journal
     .prepare(
@@ -69,7 +56,6 @@ function dominantModelOf(journal: DatabaseSync, turnId: string): string | null {
   return row?.model ?? null;
 }
 
-/** The run's dominant confirmed thought_level, matching `run_summary.effort`. */
 function dominantEffortOf(
   journal: DatabaseSync,
   turnId: string
@@ -86,7 +72,6 @@ function dominantEffortOf(
   return row?.effort ?? null;
 }
 
-/** Fold one eligible range into a digest delta (rollups over its finished turns). */
 function computeDelta(
   journal: DatabaseSync,
   range: EligibleRange
@@ -138,8 +123,6 @@ function computeDelta(
       (delta.lastEndedAt === null || endedAt > delta.lastEndedAt)
     )
       delta.lastEndedAt = endedAt;
-    // byModel keys off the run's dominant model (matching run_summary); a run
-    // with no step/delegate model contributes to KPIs but not to byModel.
     const model = dominantModelOf(journal, t.id as string);
     if (model !== null) {
       const roll = delta.models.get(model) ?? {
@@ -153,7 +136,6 @@ function computeDelta(
       roll.cost += num(t.total_cost_usd);
       delta.models.set(model, roll);
     }
-    // No "default" bucket: only a harness-confirmed thought_level is durable.
     const effort = dominantEffortOf(journal, t.id as string);
     if (effort !== null) {
       const roll = delta.efforts.get(effort) ?? {
@@ -171,7 +153,6 @@ function computeDelta(
   return delta;
 }
 
-/** run_summary's app_id derivation for a conversation (automation prefix or app_id). */
 function derivedAppId(conv: Row): string | null {
   const kind = conv.kind as string;
   const automationId = (conv.automation_id as string | null) ?? null;
@@ -190,7 +171,7 @@ function mergeModels(
     for (const e of JSON.parse(existingJson) as ModelRollup[])
       merged.set(e.model, { ...e });
   } catch {
-    /* legacy/empty — start clean */
+    // Intentionally empty.
   }
   for (const [model, roll] of delta) {
     const cur = merged.get(model) ?? { model, runs: 0, tokens: 0, cost: 0 };
@@ -211,7 +192,7 @@ function mergeEfforts(
     for (const e of JSON.parse(existingJson) as EffortRollup[])
       merged.set(e.effort, { ...e });
   } catch {
-    /* legacy/empty — start clean */
+    // Intentionally empty.
   }
   for (const [effort, roll] of delta) {
     const cur = merged.get(effort) ?? { effort, runs: 0, tokens: 0, cost: 0 };
@@ -223,12 +204,6 @@ function mergeEfforts(
   return JSON.stringify([...merged.values()]);
 }
 
-/**
- * UPSERT the digest by ADDING the range's deltas (an eternal automation archives
- * many ranges over time — each fold accretes). first_started_at/last_ended_at
- * extend; kind/app_id/automation_ref/automation_name/title snapshot the latest
- * conversation state. Read-modify-write in JS keeps the models_json merge simple.
- */
 function upsertDigest(
   journal: DatabaseSync,
   conv: Row,
@@ -327,7 +302,6 @@ function upsertDigest(
       modelsJson,
       effortsJson,
       nowMs,
-      // ON CONFLICT bound params (first/last/models recomputed in JS):
       firstStartedAt,
       lastEndedAt,
       modelsJson,
@@ -335,7 +309,6 @@ function upsertDigest(
     );
 }
 
-/** Distinct attachment hashes referenced by an item set, in insertion order. */
 function distinctHashes(attachments: Row[]): string[] {
   const seen = new Set<string>();
   for (const a of attachments) {
@@ -347,13 +320,6 @@ function distinctHashes(attachments: Row[]): string[] {
   return [...seen];
 }
 
-/**
- * Archive ONE eligible range: build + ingest the segment, write the
- * conversation_archive index row, and fold the digest — all inside the caller's
- * transaction. The blob is ingested BEFORE the txn body writes the row (the sink
- * is idempotent by content address), and `has` asserts the bytes actually
- * landed so a broken sink can never leave a dangling index row.
- */
 export function archiveRange(
   journal: DatabaseSync,
   blobSink: BlobSink,
@@ -435,11 +401,6 @@ export function archiveRange(
   };
 }
 
-/**
- * Decode one archived segment back into its rows — the round-trip read
- * rehydration reuses. Verifies the sha the caller asked for is what the bytes
- * hash to is the sink's job (custody read-back); this just gunzips + parses.
- */
 export function readArchivedConversationSegment(
   bytes: Buffer
 ): ArchivedConversationSegment {

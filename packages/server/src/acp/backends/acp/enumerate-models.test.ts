@@ -1,8 +1,3 @@
-// The generic ACP model probe (#484). Driven against the scripted
-// `fake-acp-harness.mjs`, the same fixture the turn backend uses — so happy
-// path, no-model-option, AUTH_REQUIRED, and missing-binary are all exercised
-// against a real launch → initialize → session/new exchange, not a mock.
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,7 +13,6 @@ const FAKE_HARNESS = fileURLToPath(
   new URL("fake-acp-harness.mjs", import.meta.url)
 );
 
-/** An `AcpTurnConfig` that launches the fake harness (native path, no adapter). */
 function fakeConfig(
   extraArgs: string[],
   over: Partial<AcpTurnConfig> = {}
@@ -35,8 +29,6 @@ function fakeConfig(
 describe("enumerate-models", () => {
   test("maps the harness’s advertised model options to HarnessModel[]", async () => {
     const models = await enumerateAcpModels(fakeConfig(["--mode=normal"]));
-    // The fake advertises a `model` select with a default + one more, exactly
-    // the shape both real adapters emit.
     expect(models).toStrictEqual([
       { id: "fake-model-default", name: "Default", default: true },
       { id: "fake-opus-9-1", name: "Most capable" },
@@ -75,8 +67,6 @@ describe("enumerate-models", () => {
 
     const pid = Number((await fs.readFile(pidMarker, "utf8")).trim());
     expect(pid).toBeGreaterThan(0);
-    // signal 0 probes liveness without delivering a signal: ESRCH means the
-    // child has already been reaped, which is the invariant we require.
     expect(() => process.kill(pid, 0)).toThrow(/ESRCH/u);
   });
 

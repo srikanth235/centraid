@@ -1,12 +1,3 @@
-/*
- * Daemon config-file loader for `centraid-gateway serve`. Every field is
- * optional except `dataDir`; CLI flags (`--host`/`--port`/`--data-dir`)
- * override file fields. The `harness` block is seeded into the gateway's
- * identity DB on first boot. `harness.kind: "acp"` is configurable only here
- * and REQUIRES `binPath` (no default binary), e.g.
- * `{"kind":"acp","binPath":"/usr/local/bin/my-agent","extraArgs":["--acp"]}`.
- */
-
 import { promises as fs } from "node:fs";
 
 import { HARNESS_KINDS, isHarnessKind } from "@centraid/server/engine";
@@ -18,13 +9,7 @@ import { EXPERIMENTAL_FEATURES } from "../serve/experimental-features.js";
 import type { ExperimentalFeature } from "../serve/experimental-features.js";
 
 export interface DaemonHarnessConfig {
-  /** Any kind the runtime registers — validated against `HARNESS_KINDS`. */
   kind: HarnessKind;
-  /**
-   * Override the binary location; defaults to the kind's own PATH lookup.
-   * REQUIRED for the custom `acp` kind, which ships no default binary (its
-   * ACP flag goes in `extraArgs`).
-   */
   binPath?: string;
   extraArgs?: string[];
 }
@@ -40,24 +25,9 @@ export interface DaemonConfig {
   host?: string;
   port?: number;
   harness?: DaemonHarnessConfig;
-  /**
-   * Whether the daemon binds its iroh endpoint (#289). Defaults to
-   * true — the endpoint IS the remote story; set false for HTTP-only
-   * setups (tests, boxes fronted by their own transport).
-   */
   endpoint?: boolean;
-  /** Offsite backup engine (PROTOCOL.md/FORMAT.md), off by default. */
   backup?: BackupConfig;
-  /**
-   * Owner Resource mode (#521). Feeds hardware-profile resolution when prefs
-   * have not set `gateway.resourceMode`. Env `CENTRAID_RESOURCE_MODE` wins.
-   */
   resourceMode?: DaemonResourceMode;
-  /**
-   * Experimental feature gate (v0 early feedback), each feature off unless
-   * named. Durable prefs (`gateway.experimental.*`) win over this block, and
-   * `CENTRAID_EXPERIMENTAL` wins over both.
-   */
   experimental?: Partial<Record<ExperimentalFeature, boolean>>;
 }
 

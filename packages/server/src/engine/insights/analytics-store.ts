@@ -1,8 +1,3 @@
-/*
- * Live `run_summary` VIEW, row-grain only — do not fabricate from `conversation_digest` (#438); archived-and-pruned runs drop out.
- * `ensureReady` re-prepares on vault switch.
- */
-
 import type { DatabaseSync, StatementSync } from "node:sqlite";
 
 import type { RunSummary } from "../conversation/run-summary-sink.js";
@@ -11,10 +6,6 @@ import type { DatabaseProvider } from "../stores/gateway-db.js";
 
 export interface ListSummariesOptions {
   readonly automationRef?: string;
-  /**
-   * Applied in SQL before `LIMIT` so an excluded flood cannot crowd the
-   * window (#731 M2). Ignored when `automationRef` is also set.
-   */
   readonly excludeAutomationRefs?: readonly string[];
   readonly limit?: number;
 }
@@ -105,7 +96,6 @@ export class AnalyticsStore {
   private readonly provider: DatabaseProvider;
   private db: DatabaseSync | undefined;
   private stmts: PreparedStatements | undefined;
-  /** `NOT IN (...)` keyed by placeholder count; rebuilt on vault switch. */
   private excludeStmts = new Map<number, StatementSync>();
 
   constructor(provider: DatabaseProvider) {

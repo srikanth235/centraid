@@ -1,6 +1,3 @@
-// Scenario-seed routes (#290). Writes ride the demo register (`seed.demo`),
-// invisible to automations, purgeable in one act.
-
 import { existsSync, readdirSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
@@ -16,7 +13,6 @@ const TIME_ENGINE_MODULE_URL = import.meta.resolve("@centraid/core/time");
 
 export interface DemoRouteDeps {
   codeAppsDir: () => string;
-  /** Bundled blueprint dirs by id. Without this, GET /demo is `{apps:[]}` (#434). */
   bundledAppDirs: () => ReadonlyMap<string, string>;
 }
 
@@ -27,9 +23,8 @@ function appDirsFor(deps: DemoRouteDeps): Map<string, string> {
     for (const entry of readdirSync(codeAppsDir))
       dirs.set(entry, path.join(codeAppsDir, entry));
   } catch {
-    /* a vault with no code store yet is the normal case */
+    // Intentionally empty.
   }
-  // Bundled last so an installed blueprint wins over a same-named store entry.
   for (const [appId, dir] of deps.bundledAppDirs()) dirs.set(appId, dir);
   return dirs;
 }
@@ -90,7 +85,6 @@ export function makeDemoRouteHandler(
         },
         handlerFile: seedFile,
         handlerKind: "action",
-        // Generators derive randomness from `input.seed` and dates from `input.now`.
         args: { input: { seed: 1, now: new Date().toISOString() } },
         timeoutMs: 60_000,
         vault: vaults.demoBridgeFor(appId),

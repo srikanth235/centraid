@@ -1,12 +1,4 @@
-/*
- * HOSTILE-PEER PROTOCOL HARNESS (#842, #726). The fuzz suites attack the
- * DECODER; this one attacks a peer that speaks the wire CORRECTLY BUT
- * MALICIOUSLY — every frame parses, and the abuse is in the STATE MACHINE.
- * The rig drives a REAL endpoint into the REAL peer handler, with production
- * admission, so each abuse happens inside the window it would in the wild.
- * Every assertion reads REAL server-side state: a breach here is a defect to
- * PIN, not a test to soften. Every abuse is STRUCTURAL — no wall-clock sleep.
- */ import { promises as fs } from "node:fs";
+import { promises as fs } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
@@ -38,7 +30,6 @@ import { VaultLinksStore } from "./vault-links-store.ts";
 const PEER_PROOF = "h".repeat(64);
 const UPSTREAM_TOKEN = "hostile-peer-loopback-secret";
 
-/** Fixed seeds keep signatures replayable. */
 function vaultIdentity(seedByte: number, vaultId: string) {
   const seed = Buffer.alloc(32, seedByte);
   return {
@@ -50,7 +41,6 @@ function vaultIdentity(seedByte: number, vaultId: string) {
 }
 
 const HOST = vaultIdentity(0x11, "vlt-host");
-/** A DIFFERENT owner's vault, as the ceremony requires. */
 const PEER = vaultIdentity(0x22, "vlt-peer");
 
 interface HostileWorld {
@@ -58,8 +48,6 @@ interface HostileWorld {
   endpoint: GatewayEndpointHandle;
   client: TunnelClient;
   server: http.Server;
-  /** Admission is decided AT CONNECT, so every test mints its ticket or
-   *  establishes its link BEFORE calling this. */
   connect: () => Promise<Connection>;
   linkRowCount: () => number;
   ticketRowCount: () => number;
@@ -239,7 +227,6 @@ function signedAssertion(
 describe("hostile peer: protocol-level state-machine abuse", () => {
   afterEach(closeEverything);
 
-  // The burn is ATOMIC with the link write: no second link, no resurrection.
   test("a redeemed link ticket cannot be replayed as a fresh redemption", async () => {
     const world = await hostileWorld();
     const ticket = world.links.tickets.mint(HOST.vaultId, HOST.publicKey);
@@ -271,7 +258,6 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
     expect(world.ticketRowCount()).toBe(0);
   }, 60_000);
 
-  // Sent before the link, it must write nothing and leave the ticket live.
   test("a valid route assertion sent before the link writes nothing", async () => {
     const world = await hostileWorld();
     world.links.tickets.mint(HOST.vaultId, HOST.publicKey);
@@ -289,8 +275,6 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
     expect(world.links.tickets.hasPending()).toBe(true);
   }, 60_000);
 
-  // The version wall fires BEFORE `tickets.claim`, so an incompletable
-  // handshake never burns the one-time ticket.
   test("a version-refused handshake never burns the one-time ticket", async () => {
     const world = await hostileWorld();
     const ticket = world.links.tickets.mint(HOST.vaultId, HOST.publicKey);
@@ -322,9 +306,6 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
     expect(world.linkRowCount()).toBe(1);
   }, 60_000);
 
-  // `recordRoute` advances only on a strictly newer timestamp, so a replayed
-  // assertion cannot re-point the gateway. `Date.now() + 60_000` is an
-  // ordering key, not randomness (oxlint.config.ts).
   test("a duplicated route assertion is stale, never re-applied as fresh", async () => {
     const world = await hostileWorld();
     const ticket = world.links.tickets.mint(HOST.vaultId, HOST.publicKey);
@@ -355,13 +336,11 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
     expect(world.links.routeFor(PEER.vaultId)?.assertedAt).toBe(ts);
   }, 60_000);
 
-  // Streams are served independently, so a parked read wedges nothing.
   test("a stalled stream neither wedges the connection nor mints a link", async () => {
     const world = await hostileWorld();
     world.links.tickets.mint(HOST.vaultId, HOST.publicKey);
     const connection = await world.connect();
 
-    // Deliberately never finished: the header read parks.
     const stalled = await connection.openBi();
     await stalled.send.writeAll([0, 0, 4, 0]);
     await stalled.send.writeAll([0x7b, 0x22, 0x74]);
@@ -375,7 +354,6 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
     expect(world.linkRowCount()).toBe(0);
   }, 60_000);
 
-  // Past capacity, requests are refused as a typed state, never queued.
   test("a per-link request flood is bounded by the hygiene budget", async () => {
     const world = await hostileWorld({ budgetCapacity: 3 });
     world.links.tickets.mint(HOST.vaultId, HOST.publicKey);
@@ -397,13 +375,9 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
     expect(outcomes[3]!.json).toStrictEqual({ state: "rate_limited" });
   }, 60_000);
 
-  // The ceremony is a live moment, not a standing invitation. The injectable
-  // `now` keeps this off the wall clock.
   test("an expired, abandoned ticket is reclaimed and admits no one", async () => {
     const world = await hostileWorld();
 
-    // The door is a function of the clock, so a never-redeemed ticket cannot
-    // keep the plane open forever.
     const live = world.links.tickets.mint(HOST.vaultId, HOST.publicKey);
     const now0 = Date.now();
     expect(world.links.tickets.hasPending(now0)).toBe(true);
@@ -418,8 +392,6 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
       { vaultId: HOST.vaultId }
     );
 
-    // With no link and no live ticket, a fresh dial is refused at the
-    // transport, not served.
     const stranger = await createTunnelClient({ relays: "disabled" });
     const strangerConn = await stranger.connectPeer(world.endpoint.ticket());
     await expect(
@@ -433,8 +405,6 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
   }, 60_000);
 });
 
-// The forwarders' `isPeerPlaneTarget` is what keeps every request above inside
-// the plane.
 describe("hostile peer: the plane the abuses ride is confined", () => {
   test("the abuse targets are peer-plane, an owner path is not", () => {
     expect(isPeerPlaneTarget("/centraid/_peer/link/redeem")).toBe(true);

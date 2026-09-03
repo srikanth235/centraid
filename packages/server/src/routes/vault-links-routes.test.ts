@@ -50,8 +50,6 @@ describe("vault-links-routes", () => {
       enrollments,
       store,
       gatewayDatabase: database,
-      // Every vault has an identity keypair (P1); the fixture stands in for
-      // the registry that mints them.
       vaultPublicKey: (vaultId) =>
         vaultId.startsWith("vault-") ? `key-${vaultId}` : undefined,
       ownerPartyFor: (vaultId) =>
@@ -105,7 +103,6 @@ describe("vault-links-routes", () => {
       )
     ).toStrictEqual(["party-daughter", "party-father"]);
 
-    // Father already sees it as proposed.
     const fatherList = await fetch(base, {
       headers: { [AUTHED_DEVICE_HEADER]: "father-phone" },
     });
@@ -113,7 +110,6 @@ describe("vault-links-routes", () => {
       links: [expect.objectContaining({ linkId: proposedBody.link.linkId })],
     });
 
-    // Daughter sees the same pending link on her side.
     const daughterList = await fetch(base, {
       headers: { [AUTHED_DEVICE_HEADER]: "daughter-phone" },
     });
@@ -244,7 +240,6 @@ describe("vault-links-routes", () => {
     const body = (await proposed.json()) as {
       link: { labelA: string | null; labelB: string | null };
     };
-    // Names, not raw ids — never null when both vaults are known locally.
     expect([body.link.labelA, body.link.labelB]).toStrictEqual([
       "Daughter's Vault",
       "Father's Vault",

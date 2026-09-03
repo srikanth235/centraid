@@ -1,24 +1,9 @@
-/*
- * Two local-disk limits (#544), two enforcement models, both default `null`.
- *
- *   totalLimitBytes — WARN-ONLY. Crossing `warnAtPercent` degrades health;
- *     crossing the limit turns it red. NEVER refuses a write: a soft budget
- *     that fails a save trades a number for data loss. The hard floor is
- *     `disk-health.ts` reacting to real free space.
- *
- *   journalLimitBytes — actuating: archival starts EARLY. Non-destructive
- *     (CAS segments; prune already gated by custody, #438). Changes WHEN
- *     archival runs, never what it may delete.
- */
-
 /* oxlint-disable max-classes-per-file -- the typed refusal error is colocated with the store that throws it (#247) */
 
 import { GatewayDatabase } from "./gateway-db.js";
 
 export const DEFAULT_WARN_AT_PERCENT = 80;
 
-/** Floor: a VACUUMed journal plus the 7-day window still occupies this much;
- *  a smaller limit would narrow the window on every sweep forever. */
 export const MIN_JOURNAL_LIMIT_BYTES = 64 * 1024 ** 2; // 64 MiB
 
 export const MIN_TOTAL_LIMIT_BYTES = 256 * 1024 ** 2; // 256 MiB
@@ -144,10 +129,6 @@ export interface StorageLimitEvaluation {
   limitBytes: number | null;
 }
 
-/**
- * Total-budget classifier. No limit ⇒ `ok` + `null` fraction: unset is not
- * unhealthy; free-space pressure is `disk-health.ts`.
- */
 export function evaluateStorageLimit(
   usedBytes: number,
   limits: StorageLimits
@@ -182,11 +163,6 @@ export class StorageLimitsStore {
     return limits;
   }
 
-  /**
-   * Last-loaded limits, no disk. `VaultPlane`'s sweep is sync and must not
-   * await a file read. `load()` runs at build; a race returns defaults
-   * (limits off) — delays archival one sweep rather than firing on unset.
-   */
   current(): StorageLimits {
     return this.cached ?? { ...DEFAULT_STORAGE_LIMITS };
   }

@@ -1,16 +1,7 @@
-/*
- * Local disk accounting by component (#544) — the only surface counting
- * `blobs/` and `code/`. A full CAS walk is too costly for a timer or a 10s
- * poll: reads are stale-while-refresh, a failed walk keeps last-known-good.
- * Bytes are apparent `stat.size` sums.
- */
-
 import { promises as fs, statfsSync } from "node:fs";
 import type { Dirent } from "node:fs";
 import path from "node:path";
 
-/** Wire identifiers. `vault-db` is the ONE file (#916): the ontology, the
- *  audit band and the conversation ledger band all live in `vault.db`. */
 export type LocalComponentId =
   | "vault-db"
   | "attachments"
@@ -23,9 +14,7 @@ export type LocalComponentId =
 export interface LocalComponentUsage {
   component: LocalComponentId;
   bytes: number;
-  /** `null` for the DB-file components. */
   files: number | null;
-  /** Set when part of the tree was unreadable — `bytes` is a floor. */
   unreadable?: string;
 }
 
@@ -42,7 +31,6 @@ export interface LocalUsageReport {
   components: LocalComponentUsage[];
   vaults: LocalVaultUsage[];
   disk: { freeBytes: number; totalBytes: number } | null;
-  /** Last refresh threw; figures are last-known-good. */
   error?: string;
 }
 
@@ -66,14 +54,12 @@ export interface LocalUsageOptions {
   ) => { bavail: number; bsize: number; blocks: number } | null;
 }
 
-/** Never throws; an unreadable subtree yields a floor plus a note. */
 export async function walkDirBytes(
   dir: string
 ): Promise<{ bytes: number; files: number; unreadable?: string }> {
   let bytes = 0;
   let files = 0;
   let unreadable: string | undefined;
-  // Iterative: a deep `code/` tree must not cost stack depth.
   const queue: string[] = [dir];
   async function walkNextDirectory(): Promise<void> {
     const current = queue.pop();
@@ -84,7 +70,6 @@ export async function walkDirBytes(
       entries = await fs.readdir(currentDir, { withFileTypes: true });
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      // A never-created component dir is 0 bytes, not an error.
       if (code !== "ENOENT")
         unreadable ??= `${currentDir}: ${code ?? "unreadable"}`;
       return walkNextDirectory();
@@ -96,7 +81,6 @@ export async function walkDirBytes(
       if (entry.isDirectory()) {
         queue.push(full);
       } else if (entry.isFile()) {
-        // Never follow symlinks: a link into $HOME bills their whole disk.
         try {
           const stat = await fs.stat(full);
           bytes += stat.size;
@@ -179,7 +163,6 @@ const defaultStatfs = (
   }
 };
 
-/** One per gateway: route and `storage-limit` probe share `report()`. */
 export class LocalUsageScanner {
   private readonly options: LocalUsageOptions;
   private readonly ttlMs: number;
@@ -197,12 +180,10 @@ export class LocalUsageScanner {
     this.statfs = options.statfs ?? defaultStatfs;
   }
 
-  /** `force` re-walks inline: explicit refresh only, never a poll. */
   async report(opts: { force?: boolean } = {}): Promise<LocalUsageReport> {
     const cached = this.cached;
     if (!cached || opts.force) return this.refresh();
     if (this.now() - cached.scannedAt >= this.ttlMs && !this.refreshing) {
-      // Detached; `refresh` folds rejections into `error`, nothing escapes.
       void this.refresh().catch(() => {});
     }
     return cached;

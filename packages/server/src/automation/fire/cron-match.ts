@@ -1,9 +1,3 @@
-/**
- * Numeric 5-field cron matcher (#149): wildcards, values, ranges, lists, steps.
- * Vixie dom/dow OR semantics when both fields restricted; unparseable fields
- * never match — fail-safe.
- * Wall-clock + DST semantics: docs/cron-timezone.md.
- */
 import { wallClockFields } from "../cron-timezone.js";
 
 export function cronMatches(
@@ -29,7 +23,6 @@ export function cronMatches(
   const domStar = isWildcard(dom);
   const dowStar = isWildcard(dow);
   const domMatch = matchField(dom, wall.day, 1, 31);
-  // cron day-of-week: 0 and 7 both mean Sunday.
   const weekday = wall.weekday;
   const dowMatch =
     matchField(dow, weekday, 0, 7) ||

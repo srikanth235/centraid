@@ -1,10 +1,3 @@
-/*
- * `centraid-gateway status [--json]` — one-shot health summary (#382):
- * service-supervision state (same OS probe as `service status`) plus a
- * data-dir identity summary (endpoint id, vault count). Dial tickets come
- * only from the live daemon.
- */
-
 import fs from "node:fs";
 import path from "node:path";
 
@@ -68,15 +61,11 @@ function parseStatusArgs(args: string[], fail: Fail): StatusArgs {
 interface DataDirSummary {
   dataDir: string;
   exists: boolean;
-  /** Stable iroh identity from `keys/endpoint-key.bin`. */
   endpointId?: string;
-  /** Live dial address, from the running daemon only. */
   endpointTicket?: string;
   daemonRunning?: boolean;
   vaultCount?: number;
-  /** Vault dirs that would not open (#603). */
   failedMounts?: FailedMount[];
-  /** Why the vault root was unreadable; `vaultCount` is absent then. */
   vaultReadError?: string;
 }
 
@@ -93,7 +82,6 @@ function buildDataDirSummary(dataDir: string): DataDirSummary {
   let vaultReadError: string | undefined;
   try {
     const registry = openVaultRegistry({
-      // Same custody as the daemon, or every vault fails to mount (#568).
       keyStore: daemonKeyStore(layout.keysDir),
       rootDir: layout.vaultDir,
       logger: quietLogger,
@@ -106,7 +94,6 @@ function buildDataDirSummary(dataDir: string): DataDirSummary {
       registry.stop();
     }
   } catch (error) {
-    // A missing root is legal but REPORTED, not swallowed.
     vaultReadError = error instanceof Error ? error.message : String(error);
   }
 
@@ -133,10 +120,7 @@ export async function commandStatus(
   fail: Fail,
   fetchImpl: typeof fetch = fetch
 ): Promise<void> {
-  // Pre-scan `--json` so it governs the run even when parsing fails.
   const json = args.includes("--json");
-  // Annotated const: TS never-return narrowing (on `parsed.dataDir`) needs
-  // the call-derived const annotated.
   const localFail: Fail = jsonFail(json, fail);
   await runJson(json, fail, async () => {
     const parsed = parseStatusArgs(args, localFail);
@@ -148,8 +132,6 @@ export async function commandStatus(
     );
     const dataDir = buildDataDirSummary(config.dataDir);
     if (config.port !== undefined && config.port !== 0) {
-      // Dial tickets are auth-gated (#568): present the custody bearer when
-      // we hold the key; anonymous still answers "is the daemon up".
       const endpointSecret = daemonKeyStore(
         daemonLayoutFor(config.dataDir).keysDir
       ).load("endpoint-key.bin");

@@ -120,7 +120,7 @@ export function conversationFromRaw(raw: RawConversation): Conversation {
         raw.harness_usage_json
       ) as HarnessUsageSnapshot;
     } catch {
-      // Corrupt optional snapshot must not hide the conversation.
+      // Intentionally empty.
     }
   }
   return {
@@ -460,7 +460,6 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       WHERE conversation_id = ? AND idempotency_key = ?
       ORDER BY seq DESC LIMIT 1
     `),
-    // Newest N older than the cursor (#659). Subquery ORDER BY seq DESC is load-bearing. Cursor bound twice: numbered `?N` is not positionally bindable on pinned node:sqlite.
     listTurnsWindow: db.prepare(`
       SELECT * FROM (
         SELECT * FROM turns

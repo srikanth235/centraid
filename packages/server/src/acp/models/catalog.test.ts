@@ -72,7 +72,6 @@ describe("catalog", () => {
       models: [{ id: "sonnet" }],
       enumeratedAt: "2026-01-01T00:00:00.000Z",
     });
-    // A later write of just the timestamp must NOT clobber the models field.
     await writeCatalogEntry(catalogPath, "claude-code", {
       enumeratedAt: "2026-02-02T00:00:00.000Z",
     });

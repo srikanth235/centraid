@@ -1,5 +1,3 @@
-// URL parser for the /centraid prefix route — the only place URL shape lives.
-
 export type Route =
   | { kind: "registry-list" }
   | { kind: "registry-deregister"; appId: string }
@@ -21,7 +19,6 @@ export type Route =
 const PREFIX = "/centraid";
 const DRAFT_PREFIX = "/centraid/_draft/";
 
-/** `#141` draft-preview prefix: rewrite to inner `/centraid/…` + session id. */
 export function parseWithDraft(
   method: string,
   rawUrl: string
@@ -96,7 +93,6 @@ export function parseRoute(method: string, rawUrl: string): Route {
   const appId = decodeURIComponent(segments[0] ?? "");
   if (!appId || appId.startsWith("_")) return { kind: "not-found" };
 
-  // `/centraid/<id>` names no endpoint (#799).
   if (segments.length === 1) return { kind: "not-found" };
 
   const second = decodeURIComponent(segments[1] ?? "");

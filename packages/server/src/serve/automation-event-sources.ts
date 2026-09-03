@@ -1,10 +1,3 @@
-/**
- * First-party read-only provider cursor adapters for automation event
- * triggers. Credentials stay inside ConnectionBroker; this module receives
- * only a bounded JSON fetch capability and emits normalized, secret-free
- * events plus the provider's next cursor.
- */
-
 import type {
   ConnectionBinding,
   EventTrigger,
@@ -94,14 +87,7 @@ function githubCursor(value: unknown): GitHubCursor | undefined {
   };
 }
 
-/** Default provider poll spacing when the response carries no hint. */
 const DEFAULT_POLL_INTERVAL_SECONDS = 60;
-/**
- * Upper bound on a PROVIDER-controlled `x-poll-interval`. GitHub's real
- * values are seconds-to-minutes; an unbounded one (from a hostile response or
- * a misbehaving proxy inside `allowed_hosts`) would park the trigger for
- * years with no health signal.
- */
 const MAX_POLL_INTERVAL_SECONDS = 15 * 60;
 
 function pollDelay(
@@ -142,10 +128,6 @@ async function gmailPoll(
   let pages = 0;
   const readPage = async (): Promise<ProviderPollResult | undefined> => {
     if (pages++ >= MAX_PROVIDER_PAGES_PER_POLL) {
-      // The provider window is larger than this poll's safety budget. Move
-      // explicitly to "now", retain the bounded prefix already collected,
-      // and record an unknown-size gap. Throwing here would preserve the old
-      // cursor and retry the same 100 pages forever.
       const profile = await input.pollJson(input.connection, profileUrl);
       const historyId = string(object(profile.body)?.historyId);
       if (profile.status !== 200 || !historyId) {
@@ -172,8 +154,6 @@ async function gmailPoll(
     if (pageToken) url.searchParams.set("pageToken", pageToken);
     const response = await input.pollJson(input.connection, url.toString());
     if (response.status === 404) {
-      // Gmail history cursors expire. Re-baseline from profile ("now") and
-      // record one explicit unknown-size gap; never enumerate the mailbox.
       const profile = await input.pollJson(input.connection, profileUrl);
       const historyId = string(object(profile.body)?.historyId);
       if (profile.status !== 200 || !historyId) {
@@ -347,8 +327,6 @@ async function githubPoll(
     return { events: [], cursor: { ...cursor, ...next } };
   if (response.status !== 200)
     throw new Error(`GitHub events poll failed (${response.status})`);
-  // A newly-authored watcher starts at the provider's current conditional
-  // token. Existing repository history is not an automation event.
   if (!storedCursor) return { events: [], cursor: { ...cursor, ...next } };
   const rows = Array.isArray(response.body) ? [...response.body] : [];
   let nextPage = githubNextPage(response.headers);
@@ -358,9 +336,6 @@ async function githubPoll(
   const readNextPage = async (): Promise<void> => {
     if (!nextPage) return;
     if (pages++ >= MAX_PROVIDER_PAGES_PER_POLL) {
-      // The first-page ETag is the new durable provider position. Commit the
-      // bounded newest prefix and mark the unknown older tail as skipped
-      // instead of retrying the same page window indefinitely.
       skipped = 1;
       gapReason = "github_events_page_limit";
       return;
@@ -390,7 +365,6 @@ async function githubPoll(
   };
 }
 
-/** Route a declarative event trigger to one first-party provider adapter. */
 export function pollProviderEventSource(
   input: PollProviderEventSourceInput
 ): Promise<ProviderPollResult> {

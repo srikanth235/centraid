@@ -1,10 +1,3 @@
-/**
- * Unit tests for the sandbox RULING (#842). These prove the
- * decision function says the right thing; they prove nothing about whether the
- * decision is enforced. Enforcement is `sandbox-escape.test.ts`, which runs
- * hostile handlers in real worker threads and asserts the refusals.
- */
-
 import { realpathSync } from "node:fs";
 import path from "node:path";
 
@@ -29,8 +22,6 @@ describe("builtin specifier recognition", () => {
     expect(builtinId("node:fs")).toBe("fs");
     expect(builtinId("fs")).toBe("fs");
     expect(builtinId("node:fs/promises")).toBe("fs/promises");
-    // A userland package whose name merely starts like a builtin must not be
-    // mistaken for one, or the allowlist would refuse innocent dependencies.
     expect(builtinId("crypto-js")).toBeNull();
     expect(builtinId("./local.js")).toBeNull();
     expect(builtinId("/abs/path.js")).toBeNull();
@@ -96,7 +87,6 @@ describe("automation-handler lane", () => {
     expect(automation.filesystem).toBe("denied");
     expect(automation.nativeAddons).toBe(false);
     expect(automation.allowedBuiltins).toStrictEqual(app.allowedBuiltins);
-    // Separate lanes: widening one must never silently widen the other.
     expect(automation.lane).not.toBe(app.lane);
   });
 });
@@ -105,10 +95,6 @@ describe("app-seed lane", () => {
   const appDir = path.resolve("/tmp/centraid-sandbox-roots/apps/photos");
   const policy = appSeedPolicy(appDir);
 
-  // The regression this lane exists for: photos/seed.js reads its bundled
-  // sample images with readFileSync, and the app-handler lane refuses `fs`
-  // outright, so demo seeding dies with "lane app-handler has no filesystem
-  // grant". Revert the runner to appHandlerPolicy for seeds and this fails.
   test("grants fs, confined to the seed's own app directory", () => {
     expect(policy.filesystem).toStrictEqual({
       mode: "read-confined",
@@ -123,13 +109,10 @@ describe("app-seed lane", () => {
     expect(policy.network).toBe("denied");
     expect(policy.subprocess).toBe("denied");
     expect(policy.environment).toBe("denied");
-    // No native addons: a seed reads files, it does not load binaries.
     expect(policy.nativeAddons).toBe(false);
-    // The ONLY widening over the handler lane is the two fs ids.
     expect([...policy.allowedBuiltins].sort()).toStrictEqual(
       [...app.allowedBuiltins, "fs", "fs/promises"].sort()
     );
-    // Separate lanes: restoring what a seed needs must never widen handlers.
     expect(policy.lane).not.toBe(app.lane);
     expect(app.filesystem).toBe("denied");
   });
@@ -164,9 +147,6 @@ describe("model-runtime lane", () => {
   });
 
   test("declares its native-addon hole rather than hiding it", () => {
-    // Not an accident: the lane loads onnxruntime-node, and a .node binary is
-    // outside every check the sandbox makes. The test exists so the hole can
-    // only be widened deliberately.
     expect(policy.nativeAddons).toBe(true);
   });
 });
@@ -201,7 +181,6 @@ describe("root containment", () => {
   });
 
   test("refuses siblings whose name merely shares the root's prefix", () => {
-    // The classic off-by-one: a naive startsWith would accept this.
     expect(isPathWithinRoots("/srv/models-evil/secret", roots)).toBe(false);
   });
 
@@ -212,9 +191,6 @@ describe("root containment", () => {
   });
 
   test("a bare filesystem root really does contain everything", () => {
-    // Regression: the string form `resolved.startsWith(root + sep)` compares
-    // against "//" for a "/" root and matches nothing, so a lane granted the
-    // whole filesystem would silently have refused every read.
     expect(isPathWithinRoots("/etc/hostname", normalizeRoots(["/"]))).toBe(
       true
     );

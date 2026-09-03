@@ -32,11 +32,9 @@ describe("landlord-auth", () => {
       landlordBearerForEndpointSecret(Buffer.alloc(32, 0x7a))
     );
     expect(bearer).toMatch(/^[0-9a-f]{64}$/u);
-    // A different identity must not derive the same loopback admin bearer.
     expect(landlordBearerForEndpointSecret(Buffer.alloc(32, 0x7b))).not.toBe(
       bearer
     );
-    // The bearer must not simply be the key material in another encoding.
     expect(bearer).not.toBe(secret.toString("hex"));
   });
 
@@ -48,8 +46,6 @@ describe("landlord-auth", () => {
     const keysDir = daemonLayoutFor(dataDir).keysDir;
     const secret = daemonKeyStore(keysDir, { env }).create("endpoint-key.bin");
 
-    // `landlordBearerForDataDir` reads process.env for custody, so point the
-    // fallback credential root at this test's directory for the duration.
     const previous = process.env.CENTRAID_KEYSTORE_CREDENTIAL_ROOT;
     process.env.CENTRAID_KEYSTORE_CREDENTIAL_ROOT = credentialRoot;
     try {
@@ -83,15 +79,11 @@ describe("landlord-auth", () => {
     const keysDir = daemonLayoutFor(dataDir).keysDir;
     const masterKey = Buffer.alloc(32, 0x41);
 
-    // No keys yet: a first-run desktop must get "cannot derive", not a new
-    // permanent EndpointId as a side effect of asking.
     expect(landlordBearerForDataDir(dataDir, { masterKey })).toBeUndefined();
     await expect(fs.readdir(keysDir).catch(() => [])).resolves.not.toContain(
       "endpoint-key.bin"
     );
 
-    // Custody this process cannot open is also a "cannot derive" answer, so the
-    // caller falls back to spawning its own daemon instead of hard-failing.
     new KeyStore(keysDir, { protector: aesGcmKeyProtector(masterKey) }).create(
       "endpoint-key.bin"
     );
@@ -102,8 +94,6 @@ describe("landlord-auth", () => {
       /^[0-9a-f]{64}$/u
     );
 
-    // A copied data directory yields a DIFFERENT identity's bearer only if it
-    // carries that identity's key; it can never derive one it does not hold.
     const copied = await tempDir("landlord-copied-");
     roots.push(copied);
     await fs.cp(dataDir, copied, { recursive: true });

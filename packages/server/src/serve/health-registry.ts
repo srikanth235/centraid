@@ -1,14 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#679) component state, registry enumeration, failure induction, and snapshot aggregation form one health contract whose completeness is audited together
-// Component-level health for a self-hosted gateway: WHICH subsystem stopped
-// working and its last error, not just "the process answers". Two feeds —
-// PUSH: subsystems report at their own success/failure points, and
-// `loggerFor(component)` routes a wrapped RuntimeLogger's existing warn/error
-// calls here without touching call sites; PULL: `registerProbe` adds a
-// snapshot-time check for state nobody pushes. Semantics: a logged `warn`
-// records an event but does NOT flip component status (transient warns must
-// not leave a component sticky-red); a logged `error` flips it until the next
-// explicit ok; probe status wins for probed components ("now"); overall =
-// worst component (error > degraded > ok).
 
 import type { RuntimeLogger } from "@centraid/server/engine";
 
@@ -24,14 +14,11 @@ import {
 } from "./resource-mode.js";
 import type { RouteLatencySummary } from "./route-latency.js";
 
-/** Owner-triggered background-pause window (#528) — in-memory only. */
 export interface BackgroundPauseState {
   paused: boolean;
-  /** ISO timestamp when the pause auto-lifts; `null` when indefinite or not paused. */
   until: string | null;
 }
 
-/** Longest a single background pause may last before it auto-lifts (24h). */
 export const MAX_BACKGROUND_PAUSE_MS = 86_400_000;
 
 const BACKGROUND_PAUSE_COMPONENT = "background-pause";
@@ -51,10 +38,6 @@ function defineExpectedHealthGroup(
   return components.map((component) => ({ component, owner, induction }));
 }
 
-/**
- * Expected production health surface. The drill iterates this list rather
- * than whatever happened to register, so a deleted registration is visible.
- */
 export const EXPECTED_HEALTH_COMPONENTS: readonly ExpectedHealthComponent[] = [
   ...defineExpectedHealthGroup("build-gateway", "report-error", [
     "harness-failover",
@@ -95,12 +78,10 @@ export type ComponentStatus = "ok" | "degraded" | "error";
 export interface ComponentHealth {
   component: string;
   status: ComponentStatus;
-  /** Human-oriented "what this looks like right now" (counts, mode). */
   detail?: string;
   lastOkAt?: string;
   lastErrorAt?: string;
   lastError?: string;
-  /** Errors since gateway start (events + explicit reportError). */
   errorCount: number;
 }
 
@@ -111,78 +92,27 @@ export interface HealthEvent {
   message: string;
 }
 
-/**
- * Coarse numeric signals (#351 tier 3) — deliberately separate from
- * `ComponentHealth.detail`, which stays a plain human-readable string (an
- * existing contract kept as-is). Everything here is a raw number a
- * self-hoster's own monitoring can graph without parsing prose.
- */
 export interface HealthMetrics {
-  /** `process.memoryUsage().rss` at snapshot time. */
   rssBytes: number;
-  /** Outbox items awaiting drain, summed across mounted vaults. */
   outboxPending: number;
-  /**
-   * Live SSE subscriber count across every open run stream. Optional and
-   * commonly absent: needs a global `RunEventBus` counter wired via
-   * `build-gateway.ts`'s `setMetricsSource` call.
-   */
   sseClients?: number;
-  /**
-   * Mounted vault planes (#659). Present so `rssBytes` has a denominator: the
-   * per-plane memory RESERVATION is flat in vault count, but each mounted
-   * plane still costs real resident memory the pragmas do not bound — without
-   * this, a household growing from one vault to five looks like a leak.
-   */
   mountedVaults?: number;
-  /** Rolling event-loop delay window from `perf_hooks.monitorEventLoopDelay`. */
   eventLoopLagP50Ms?: number;
   eventLoopLagP99Ms?: number;
   eventLoopLagMaxMs?: number;
-  /** Highest rolling-window p99 observed since process start. */
   eventLoopLagPeakP99Ms?: number;
   eventLoopLagSamples?: number;
-  /** Boot-time durability-barrier latency for one 4 KiB write. */
   storageFsyncMs?: number;
-  /**
-   * Per-route request-duration percentiles (#659) — fixed-bucket histograms,
-   * so "which route is slow on THIS gateway" is answerable from a production
-   * snapshot, not only a bench rig.
-   */
   routeLatency?: RouteLatencySummary[];
-  /**
-   * Resolved hardware class and owner Resource mode (#521). Present once
-   * `buildGateway` publishes them via the metrics source.
-   */
   hardwareProfileClass?: string;
   resourceMode?: string;
-  /**
-   * Machine-readable resolved Resource profile (#528): host class, owner mode,
-   * host facts, every resolved knob. Present once `buildGateway` publishes it
-   * via the metrics source; the string fields above stay for compatibility.
-   */
   resourceProfile?: StructuredResourceProfile;
-  /**
-   * Measured per-subsystem resource ACTUALS (#528) — honest measured proxies
-   * only, no modeled energy. Present once `buildGateway` publishes it via the
-   * metrics source.
-   */
   resourceUsage?: ResourceUsageActuals;
-  /**
-   * Host power-context posture (#528): battery/mains/server, whether
-   * background work is being courteously deferred, and why. Present once
-   * `buildGateway` publishes it via the metrics source.
-   */
   powerContext?: PowerContextState;
-  /**
-   * Owner-triggered background-pause window (#528). Always present;
-   * `paused` is false with `until: null` when nothing is paused.
-   */
   backgroundPause: BackgroundPauseState;
   uptimeMs: number;
 }
 
-/** What a host-injected metrics source contributes — `rssBytes`/`uptimeMs` are computed here. */
 export type MetricsSourceResult = Partial<
   Pick<
     HealthMetrics,
@@ -213,23 +143,14 @@ export type PerformanceMetricsSourceResult = Partial<
 export type PerformanceMetricsSource = () => PerformanceMetricsSourceResult;
 
 export interface HealthSnapshot {
-  /** Worst component status — `ok` when every component is ok. */
   status: ComponentStatus;
   startedAt: string;
   uptimeMs: number;
   components: ComponentHealth[];
-  /** Newest-first structured log tail (warns + errors), bounded. */
   recentEvents: HealthEvent[];
-  /**
-   * Coarse numeric signals — see `HealthMetrics`. Always present:
-   * `rssBytes`/`uptimeMs` need no host wiring; `outboxPending` defaults to 0
-   * until a host calls `setMetricsSource`; `sseClients` stays absent until
-   * one is supplied.
-   */
   metrics: HealthMetrics;
 }
 
-/** A snapshot-time check for state no subsystem pushes. */
 export type HealthProbe = () => Promise<{
   status: ComponentStatus;
   detail?: string;
@@ -245,11 +166,8 @@ const worseOf = (a: ComponentStatus, b: ComponentStatus): ComponentStatus =>
   SEVERITY[a] >= SEVERITY[b] ? a : b;
 
 export interface HealthRegistryOptions {
-  /** Ring-buffer bound for `recentEvents`. */
   maxEvents?: number;
-  /** Clock override (tests). */
   now?: () => number;
-  /** Longest continuous lag interval before one bounded background pass is forced. */
   maxLoadShedMs?: number;
 }
 
@@ -282,7 +200,6 @@ export class HealthRegistry {
   private performanceMetricsSource?: PerformanceMetricsSource;
   private resetPerformanceMetricsSource?: () => void;
   private backgroundPaused = false;
-  /** Wall-clock ms when the pause auto-lifts; `undefined` when indefinite. */
   private backgroundPauseUntilMs?: number;
 
   constructor(options: HealthRegistryOptions = {}) {
@@ -292,11 +209,6 @@ export class HealthRegistry {
     this.maxLoadShedMs = options.maxLoadShedMs ?? DEFAULT_MAX_LOAD_SHED_MS;
   }
 
-  /**
-   * Register the host's numeric-metrics source (#351 tier 3), called once at
-   * `buildGateway()` time. Only `outboxPending`/`sseClients` come from here;
-   * `rssBytes`/`uptimeMs` are computed inside `snapshot()` itself.
-   */
   setMetricsSource(source: MetricsSource): void {
     this.metricsSource = source;
   }
@@ -309,12 +221,10 @@ export class HealthRegistry {
     this.resetPerformanceMetricsSource = reset;
   }
 
-  /** Start a fresh metrics epoch; used by the in-process benchmark after warmup. */
   resetPerformanceMetrics(): void {
     this.resetPerformanceMetricsSource?.();
   }
 
-  /** Runtime backpressure signal shared by every background subsystem (#456). */
   shouldDeferBackgroundWork(maxP99Ms = 50): boolean {
     const p99 = this.performanceMetricsSource?.().eventLoopLagP99Ms;
     const now = this.now();
@@ -329,14 +239,10 @@ export class HealthRegistry {
     this.loadShedSinceMs ??= now;
     const deferredMs = now - this.loadShedSinceMs;
     if (deferredMs < this.maxLoadShedMs) {
-      // Keep the component detail current while deferring so Diagnostics
-      // shows owner-facing copy, not only the forced-pass line.
       this.reportDegraded("load-shed", formatLoadShedDeferringDetail(p99));
       return true;
     }
 
-    // Never silently starve WAL/outbox/backup work forever: permit one caller
-    // through per max-age interval, degraded until pressure clears.
     this.reportDegraded(
       "load-shed",
       formatLoadShedForcedPassDetail(p99, deferredMs)
@@ -345,14 +251,6 @@ export class HealthRegistry {
     return false;
   }
 
-  /**
-   * Owner-triggered "pause background work" control (#528). `durationMs`
-   * `undefined` pauses indefinitely; callers validate the bound. In-memory
-   * only — NEVER touches durable prefs or flips a Resource mode. The returned
-   * window (and `shouldPauseBackgroundWork`) gates only the safe loops — vault
-   * sweeps and backup retention — never WAL/fsync durability, the consent
-   * outbox, or request-path work.
-   */
   pauseBackgroundWork(durationMs?: number): BackgroundPauseState {
     this.backgroundPaused = true;
     this.backgroundPauseUntilMs =
@@ -364,18 +262,15 @@ export class HealthRegistry {
     return state;
   }
 
-  /** Lift an active pause; idempotent when nothing is paused. */
   resumeBackgroundWork(): BackgroundPauseState {
     if (this.backgroundPaused) this.clearBackgroundPause();
     return this.readBackgroundPause();
   }
 
-  /** Current pause window; an expired `until` auto-lifts on read. */
   backgroundPauseState(): BackgroundPauseState {
     return this.readBackgroundPause();
   }
 
-  /** True while a pause is active — the signal safe background loops honor. */
   shouldPauseBackgroundWork(): boolean {
     return this.readBackgroundPause().paused;
   }
@@ -413,13 +308,11 @@ export class HealthRegistry {
     if (detail !== undefined) state.detail = detail;
   }
 
-  /** Register a push-reported production component before its first failure. */
   registerPush(component: string): void {
     this.noteRegistration(component, "report-error");
     this.stateFor(component);
   }
 
-  /** Install the push half of the exported expected-components registry. */
   registerExpectedPushComponents(): void {
     for (const expected of EXPECTED_HEALTH_COMPONENTS)
       if (expected.induction === "report-error")
@@ -443,10 +336,6 @@ export class HealthRegistry {
     this.pushEvent(component, "error", message);
   }
 
-  /**
-   * Wrap a `RuntimeLogger` so a component's existing log calls feed the
-   * registry: `warn` → event only, `error` → event + error status.
-   */
   loggerFor(component: string, base: RuntimeLogger): RuntimeLogger {
     this.noteRegistration(component, "logger");
     return {
@@ -463,14 +352,12 @@ export class HealthRegistry {
     };
   }
 
-  /** Snapshot-time check; its result wins the component's status. */
   registerProbe(component: string, probe: HealthProbe): void {
     this.noteRegistration(component, "probe");
     this.stateFor(component);
     this.probes.set(component, probe);
   }
 
-  /** Expected production components absent from their declared registration seam. */
   expectedRegistrationGaps(): ExpectedHealthComponent[] {
     return EXPECTED_HEALTH_COMPONENTS.filter(
       ({ component, induction }) =>
@@ -478,12 +365,6 @@ export class HealthRegistry {
     );
   }
 
-  /**
-   * Deterministic health-drill seam. Probe components replace the *registered
-   * production probe* for one snapshot; push/logger components drive the same
-   * report path production failures use. Missing registration throws, making
-   * a deleted probe a red gate rather than an invisible omission.
-   */
   induceExpectedFailureForTest(component: string): () => void {
     if (process.env.NODE_ENV !== "test")
       throw new Error("health failure induction is test-only");

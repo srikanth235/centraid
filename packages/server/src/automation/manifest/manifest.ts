@@ -1,24 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit manifest schema + validator are one closed vocabulary — the trigger/step/analytics shapes validate each other, so splitting scatters the invariants
-/**
- * Automation manifest schema + validator.
- *
- * Issue #98 (unified folder model): an automation is a first-class
- * *unit* that always lives inside an app folder, at
- * `<appCodeDir>/automations/<id>/`. `automation.json` is the automation
- * manifest (this module's shape); the generated handler is a single
- * `handler.js` in the same directory.
- *
- * The manifest is the source of truth — there is no SQLite definition
- * table. `enabled` lives here (toggling it rewrites the file), so a
- * scheduler host can register/suppress from the manifest alone.
- *
- * Trigger shape is `triggers: Trigger[]` — a plural list of `cron`,
- * `webhook`, `condition` and `data` entries.
- *
- * Output-schema validation + `validateOutputAgainstSchema` live in
- * `manifest-output.ts` to keep this file focused. Error class
- * + validation-code union live in `manifest-errors.ts`.
- */
 
 import { isValidIanaTimeZone } from "../cron-timezone.js";
 import { ENRICH_DOMAINS, ENRICH_LANES } from "../fire/enrich-gate.js";
@@ -36,91 +16,26 @@ export {
 } from "./manifest-errors.js";
 export { type OutputSchema } from "./manifest-output.js";
 
-/** Conventional handler filename inside an automation app directory. */
 export const HANDLER_FILE = "handler.js";
-/** Conventional manifest filename inside an automation app directory. */
 export const MANIFEST_FILE = "automation.json";
 
 export interface ManifestRequires {
-  /** MCP server ids the handler requires (`["github", "linear"]`). */
   readonly mcps?: readonly string[];
-  /**
-   * Harness used by compile, interactive turns, and `ctx.delegate`.
-   * This is an open registry key: manifests validate only that it is non-empty;
-   * the executing gateway decides whether the key is registered and otherwise
-   * falls back to the automations subsystem preference.
-   */
   readonly harness?: string;
-  /**
-   * Model the `ctx.delegate` calls should route through. Format: `provider/model-id`
-   * (`"anthropic/claude-3-5-sonnet"`, `"openai/gpt-4o"`). Must not target the
-   * mock provider (`centraid-mock/*`) — that would recurse into the mock
-   * StreamFn. Validation rejects it.
-   */
   readonly model?: string;
-  /**
-   * ACP semantic `thought_level` pin. Open string by design: each harness
-   * advertises its own values and the runtime never translates across rungs.
-   */
   readonly thoughtLevel?: string;
-  /**
-   * Sealed Locker cells this connector's `ctx.fetch` may reference (issue
-   * #293 decision 8), as `locker:<item_id>:<column>` or the rotation-stable
-   * `locker:@<alias>:<column>` (#298). The allowlist for
-   * `{{secret:…}}` placeholders — resolution rides a `reveal` grant on the
-   * automation's agent; the plaintext is injected at the transport layer
-   * and never enters the handler worker. Connector-only.
-   */
   readonly secrets?: readonly string[];
 }
 
-/**
- * The containment lane this automation's handler runs under (#846).
- *
- * A DECLARATION, and one that only ever asks for MORE than the floor: the
- * floor is `automation-handler` (no filesystem, no sockets, no subprocess, no
- * native addons, empty environment) and an absent block reads as exactly that.
- * Fail-closed on purpose, the same reasoning `enrich.lane` states — a manifest
- * is harness-writable, so an omitted lane must never be the permissive one.
- */
 export interface ManifestSandbox {
-  /**
-   * `model-runtime` — read-confined filesystem plus native addons, for the
-   * ONNX-backed recognition bundles.
-   * `media-transcode` — the same plus a subprocess grant, for a handler that
-   * decodes media by shelling out. See policy.ts for why each is a named hole.
-   */
   readonly lane: "model-runtime" | "media-transcode";
 }
 
-/**
- * Declares this automation an ENRICHER governed by the vault's per-domain
- * enrichment tier (`enrich_policy`). Without this block nothing on the
- * execution path can tell which owner setting an automation is subject to —
- * see `packages/server/src/automation/fire/enrich-gate.ts`.
- *
- * The block is a DECLARATION, not a permission: `runFire` reads the vault's
- * tier for `domain` and refuses the fire when the tier does not allow this
- * enricher's lane.
- */
 export interface ManifestEnrich {
-  /** Which `enrich_policy` row governs this automation. */
   readonly domain: EnrichDomain;
-  /**
-   * Stable capability id for this enricher (`faces`, `captions`, `trips`, …).
-   * Named in refusals, and the scope key an on-demand `enrich_request` is
-   * tagged with so consenting to one enricher does not enable the rest.
-   */
   readonly capability: string;
-  /**
-   * `model` = the handler takes a `ctx.delegate` turn (provider egress).
-   * `device` = deterministic / device-lease work only. Omitted reads as
-   * `model`: assuming the cheaper lane would be assuming consent.
-   */
   readonly lane: EnrichLane;
-  /** Optional billed ACP step offered by this template instead of deterministic fetch. */
   readonly delegateStep?: {
-    /** Persisted capability choice. Scheduled and manual fires use the same path. */
     readonly selected: "deterministic" | "delegate";
     readonly promptRev: string;
     readonly latency: string;
@@ -133,7 +48,6 @@ export interface CostEstimate {
   readonly tokensPerFire: number;
 }
 
-/** One consent row predicate carried from a manifest into a vault grant. */
 export interface ManifestVaultFilterClause {
   readonly column: string;
   readonly op:
@@ -151,13 +65,6 @@ export interface ManifestVaultFilterClause {
   readonly value?: unknown;
 }
 
-/**
- * One requested vault scope — the same grammar an app's `app.json` vault
- * block uses. `schema` alone covers the whole domain; `table` narrows to a
- * single entity or command name. `rowFilter` and `fieldMask` are the
- * minimization boundary for anchored automation references: the compiler
- * derives them from the trusted `core_link_anchor`, never from token text.
- */
 export interface ManifestVaultScope {
   readonly schema: string;
   readonly table?: string;
@@ -166,16 +73,8 @@ export interface ManifestVaultScope {
   readonly fieldMask?: readonly string[];
 }
 
-/**
- * The automation's requested vault access (duaility §12). Fires authenticate
- * as an enrolled `access.agent`; this block is a *request* the owner approves
- * into a grant on the agent's party — never a grant by itself. Until
- * approval every `ctx.vault` call is a receipted deny.
- */
 export interface ManifestVault {
-  /** DPV purpose notation, e.g. `dpv:ServiceProvision`. */
   readonly purpose: string;
-  /** Owner-facing one-liner: why this automation needs the access. */
   readonly why?: string;
   readonly scopes: readonly ManifestVaultScope[];
 }
@@ -185,40 +84,21 @@ export interface GeneratedMeta {
   readonly at: string;
 }
 
-/**
- * A wall-clock schedule. `expr` is the 5-field cron; optional `tz` is an IANA
- * zone name (#570). Absent `tz` means host-local (pre-#570 behavior),
- * unless a gateway-wide default timezone is configured.
- */
 export type CronTrigger = {
   readonly kind: "cron";
   readonly expr: string;
-  /** Optional IANA timezone (e.g. `America/New_York`). Validated at write. */
   readonly tz?: string;
 };
 export type WebhookTrigger = {
   readonly kind: "webhook";
-  /** Generated route slug — the path segment under `/_centraid-hook/`. */
   readonly id: string;
-  /**
-   * SHA-256 hex of the shared secret. The plaintext secret is generated
-   * server-side and shown once at creation; only this hash is persisted
-   * because `automation.json` is user-visible.
-   */
   readonly secretHash: string;
 };
-/**
- * A webhook trigger the builder harness declared but cannot provision —
- * minting the route `id` + `secret` is a privileged server step. The
- * desktop's `provisionPendingWebhookAt` pass rewrites it to a
- * `WebhookTrigger`; this is the harness→builder handoff form.
- */
 export type PendingWebhookTrigger = {
   readonly kind: "webhook";
   readonly pending: true;
 };
 
-/** Filter ops a condition trigger may use — the vault's FilterClause grammar. */
 export const CONDITION_OPS = [
   "eq",
   "ne",
@@ -240,48 +120,20 @@ export interface ConditionWhereClause {
   readonly value?: unknown;
 }
 
-/** Cron gate a condition trigger evaluates on when `every` is omitted. */
 export const CONDITION_DEFAULT_EVERY = "*/5 * * * *";
 
-/**
- * A data-derived time trigger: on the `every` gate the host runs the
- * declared consented read under the automation's agent grant and fires once
- * per row it has not seen before (row-content dedup — a row that changes
- * fires again; one that merely stays matched does not). This is how "invoice
- * due in 3 days" or "warranty ends next week" become fires without wall-clock
- * cron guesswork: the time semantics live in the data, the trigger just
- * watches the window. Requires a manifest `vault` block — the read runs
- * under that grant, and a receipted deny disables the evaluation, never
- * widens it.
- */
 export type ConditionTrigger = {
   readonly kind: "condition";
-  /** Logical vault entity, e.g. `schedule.task`. */
   readonly entity: string;
-  /** Filter ANDed into the consented read. */
   readonly where?: readonly ConditionWhereClause[];
-  /** 5-field cron gate for evaluation. Default: every 5 minutes. */
   readonly every?: string;
 };
 
-/** Cron gate a data trigger polls the change feed on when `every` is omitted. */
 export const DATA_DEFAULT_EVERY = "* * * * *";
 
-/**
- * A data-change trigger: the host pulls the vault's consented provenance
- * feed (`ctx.vault.changes`) for the watched entities on the `every` gate
- * and fires with the new change entries as input. The cursor is a strictly
- * time-ordered journal id persisted across evaluations, bootstrapped at the
- * current watermark — a fresh watcher reacts to what happens next, never to
- * history. This is how "a credit posted → reconcile the invoice" and
- * "my parked send was confirmed → resume" become fires. Requires a manifest
- * `vault` block whose grant covers reading every watched entity.
- */
 export type DataTrigger = {
   readonly kind: "data";
-  /** Logical vault entities to watch, e.g. `['core.transaction']`. */
   readonly entities: readonly string[];
-  /** 5-field cron gate for polling. Default: every minute. */
   readonly every?: string;
 };
 
@@ -291,11 +143,6 @@ export const EVENT_TRIGGER_CATALOG = {
   "pull.github": ["pull-request", "issue"],
 } as const;
 
-/**
- * A provider change-feed cursor over one explicitly bound connection.
- * Provider adapters interpret `event` + `filter`; the engine sees only an
- * ordered cursor source and normalized ingress elements.
- */
 export type EventTrigger = {
   readonly kind: "event";
   readonly connectorKind: string;
@@ -304,13 +151,6 @@ export type EventTrigger = {
   readonly every?: string;
 };
 
-/**
- * Trigger surface. A `cron` trigger fires on a 5-field schedule; a
- * `webhook` trigger fires on an inbound HTTP POST to a gateway route
- * (remote-gateway only — the desktop preserves the entry but never
- * registers it). An automation may carry many cron triggers but at
- * most one webhook.
- */
 export type Trigger =
   | CronTrigger
   | WebhookTrigger
@@ -321,11 +161,6 @@ export type Trigger =
 
 export type AutomationTriggerKind = Trigger["kind"];
 
-/**
- * Enumerable trigger contract used by validation, consent, health, and ledger
- * coverage gates. New kinds must declare their deterministic side-effect and
- * consent posture here before they can enter the wire vocabulary.
- */
 export const AUTOMATION_TRIGGER_REGISTRY = {
   cron: {
     sideEffect: "schedule",
@@ -385,15 +220,6 @@ const TRIGGER_CURSOR_DENIED_TABLES = new Set([
   "conversation_digest",
 ]);
 
-/**
- * Shared authoring/runtime loop guard for cursor-targeted vault entities.
- *
- * The denied names are runtime ledger tables — they are the ledger band
- * of `vault.db` (#916) and
- * are only ever referenced bare. A QUALIFIED entity is a user's own vault
- * table: `inventory.items`, `shop.attachments`, and `crm.conversations` are
- * ordinary data and must stay watchable.
- */
 export function isDeniedTriggerCursorEntity(entity: string): boolean {
   const [schema = "", table] = entity.split(".", 2);
   if (schema === "outbox") return true;
@@ -409,25 +235,18 @@ function rejectDeniedTriggerEntity(entity: string, field: string): void {
   );
 }
 
-/** The cron triggers from a trigger list, in declaration order. */
 export function cronTriggersOf(
   triggers: readonly Trigger[]
 ): readonly CronTrigger[] {
   return triggers.filter((t): t is CronTrigger => t.kind === "cron");
 }
 
-/** True for a webhook trigger still awaiting server-side provisioning. */
 export function isPendingWebhookTrigger(
   t: Trigger
 ): t is PendingWebhookTrigger {
   return t.kind === "webhook" && "pending" in t;
 }
 
-/**
- * The single *provisioned* webhook trigger from a trigger list, if any.
- * A pending (un-minted) webhook trigger is skipped — it has no `id` to
- * route on yet.
- */
 export function webhookTriggerOf(
   triggers: readonly Trigger[]
 ): WebhookTrigger | undefined {
@@ -436,22 +255,12 @@ export function webhookTriggerOf(
   );
 }
 
-/** The single pending (un-provisioned) webhook trigger, if any. */
 export function pendingWebhookTriggerOf(
   triggers: readonly Trigger[]
 ): PendingWebhookTrigger | undefined {
   return triggers.find(isPendingWebhookTrigger);
 }
 
-/**
- * Retention policy applied at end-of-run to `runs` (and via CASCADE,
- * `run_nodes`). One of: `{count: N}` keep newest N, `{days: N}` drop
- * older than N days, `"errors"` keep only failed runs. Default at validation
- * time is `{count: 100}`. `"all"` remains in the type as the historical wire
- * vocabulary that `applyRetention` still recognizes, but `validateHistory`
- * REJECTS it (#659) — an automation may not declare unbounded run
- * history.
- */
 export type HistoryKeep =
   | { readonly count: number }
   | { readonly days: number }
@@ -462,97 +271,36 @@ export interface HistoryConfig {
   readonly keep: HistoryKeep;
 }
 
-/**
- * Connector declaration (#290): this automation is a PUBLISHED
- * CONNECTOR — deterministic code syncing one external source into the vault.
- * The broker invariants hang off this block:
- *   - `ctx.delegate` is forbidden at runtime (agents write code, not data —
- *     an LLM turn inside a sync loop breaks determinism, cost and audit);
- *   - external reads ride `ctx.fetch` (broker-injected, host-pinned,
- *     read-only) and external writes are STAGED through the outbox;
- *   - `principal`, when set, pins the external account: `sync.begin_run`
- *     refuses a mismatched observed principal and flips the connection to
- *     `needs-auth` (liveness is honest, never silent).
- */
 export interface ConnectorSpec {
-  /** Source kind, e.g. `mcp.gmail` — names WHAT is synced. */
   readonly kind: string;
-  /** Connection label (account handle, calendar name…) — names WHICH. */
   readonly label: string;
-  /** Pinned external principal; unset pins on first successful run. */
   readonly principal?: string;
-  /**
-   * Durable vault connection id (preferred over kind+label lookup when set).
-   * Keeps automations bound to one credential row across renames.
-   */
   readonly connectionId?: string;
 }
 
-/**
- * Soft binding for delegate-using automations that need a vault credential
- * without becoming a published connector (which forbids `ctx.delegate`).
- * Distinct from `connector` — those are deterministic pull/send loops.
- */
 export interface ConnectionBinding {
   readonly connectionId: string;
   readonly kind: string;
   readonly label: string;
 }
 
-/**
- * The `automation.json` app manifest.
- *
- * `name` / `version` / `description` mirror `app.json`. `enabled` is the
- * user's on/off toggle — it lives in the manifest because the directory
- * is the only source of truth. `prompt` is the human intent the builder
- * harness translated into `handler.js`; `apps` lists the app ids this
- * automation is associated with (reverse-looked-up by the app Settings
- * screen).
- */
 export interface Manifest {
   readonly name: string;
   readonly version: string;
   readonly description?: string;
   readonly enabled: boolean;
-  /**
-   * Notifications delivery policy for fire outcomes. `failures` includes the first
-   * success after a failure so the owner sees recovery, then goes quiet.
-   */
   readonly notify?: "always" | "failures" | "never";
   readonly prompt: string;
-  /**
-   * Trigger list. Empty is legal — an automation with no triggers fires
-   * only via an explicit "Run now". At most one entry is a webhook.
-   */
   readonly triggers: readonly Trigger[];
   readonly requires: ManifestRequires;
-  /** Declares this automation a connector (#290). */
   readonly connector?: ConnectorSpec;
-  /**
-   * Credential bindings for non-connector automations (assistant tools /
-   * editor-selected connections). Never includes secret cells — ids only.
-   */
   readonly connections?: readonly ConnectionBinding[];
-  /** Requested vault access — owner-approved into a grant on the automation's agent. */
   readonly vault?: ManifestVault;
-  /**
-   * Declares this automation subject to the vault's per-domain enrichment
-   * tier. Present = every fire passes the tier gate in `runFire`.
-   */
   readonly enrich?: ManifestEnrich;
-  /**
-   * Containment lane for this automation's handler. Absent = the strict
-   * `automation-handler` floor; see {@link ManifestSandbox}.
-   */
   readonly sandbox?: ManifestSandbox;
-  /** App ids this automation is associated with. */
   readonly apps?: readonly string[];
   readonly costEstimate?: CostEstimate;
   readonly outputSchema?: OutputSchema;
-  /**
-   * Automation to fire when this one fails — a `<appId>/<id>` handle, or
-   * a bare `<id>` for a sibling within the same app.
-   */
   readonly onFailure?: string;
   readonly history: HistoryConfig;
   readonly generated: GeneratedMeta;
@@ -603,7 +351,6 @@ function optionalStringArray(
   });
 }
 
-/** Webhook route slugs use the same filesystem-safe grammar as ids. */
 function isValidWebhookId(id: string): boolean {
   return typeof id === "string" && /^[A-Za-z0-9_-]+$/u.test(id);
 }
@@ -645,9 +392,6 @@ function parseWebhookTrigger(
   t: Record<string, unknown>,
   field: string
 ): WebhookTrigger | PendingWebhookTrigger {
-  // A pending webhook (`{ kind: 'webhook', pending: true }`) the
-  // builder harness declared but cannot provision — accepted here so
-  // the manifest round-trips until the builder mints id + secret.
   if (t.id === undefined && t.secretHash === undefined) {
     if (t.pending !== true) {
       throw new ManifestError(
@@ -861,11 +605,6 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
   );
 }
 
-/**
- * Trigger resolution. `triggers` is a plural array; a manifest without one
- * is legal — an empty list means "manual fire only". At most one webhook
- * trigger is allowed.
- */
 function resolveTriggers(r: Record<string, unknown>): readonly Trigger[] {
   let list: Trigger[];
   if (r.triggers === undefined) {
@@ -892,22 +631,6 @@ function resolveTriggers(r: Record<string, unknown>): readonly Trigger[] {
 
 const DEFAULT_HISTORY_KEEP_COUNT = 100;
 
-/*
- * Retention ceilings (#659).
- *
- * `keep: "all"` — "never prune this automation's run history" — is REJECTED
- * rather than coerced. A per-minute automation writes ~500k turns a year
- * into the vault's journal, each with its items, so the one declaration that
- * most needs a bound is the one that would remove every bound: a
- * manifest that asks for unbounded growth is asking for something the runtime
- * will not do, and silently rewriting it to `{count: 100}` would let an author
- * keep believing their history is complete. v0 carries no back-compat
- * obligation, so the honest error is available and is the cleaner contract.
- *
- * The numeric forms get ceilings for the same reason: `{days: 100000}` is
- * `"all"` spelled differently, and a hole that can be re-opened by arithmetic
- * was never closed.
- */
 const MAX_HISTORY_KEEP_COUNT = 10_000;
 const MAX_HISTORY_KEEP_DAYS = 365;
 
@@ -1032,9 +755,6 @@ function validateRequires(raw: unknown): ManifestRequires {
   const secrets = optionalStringArray(req.secrets, "requires.secrets");
   if (secrets) {
     for (const ref of secrets) {
-      // Two forms: the raw UUID (`locker:<item_id>:<column>`) or a stable
-      // alias that survives delete+recreate (`locker:@<alias>:<column>`,
-      // #298 item 4).
       if (!/^locker:(?:@[A-Za-z0-9._-]{1,64}|[^:@][^:]*):[a-z_]+$/u.test(ref)) {
         throw new ManifestError(
           "invalid_field",
@@ -1259,18 +979,6 @@ function validateVault(raw: unknown): ManifestVault | undefined {
   return { purpose, ...(why === undefined ? {} : { why }), scopes };
 }
 
-/**
- * The `enrich` block. Every field is required except `lane`, which defaults
- * to the EXPENSIVE reading (`gateway`) — a manifest is harness-writable, so an
- * omitted lane must never be the one that escapes the gate.
- */
-/**
- * The `sandbox` block. Absent is the strict floor, so this only ever validates
- * a request for MORE — which is why an unknown lane is a hard error rather
- * than a fallback: silently reading a typo as the floor would break a handler
- * that genuinely needs the grant, and silently reading it as a grant would
- * hand out one nobody named.
- */
 function validateSandbox(raw: unknown): ManifestSandbox | undefined {
   if (raw === undefined) return undefined;
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
@@ -1467,8 +1175,6 @@ export function validateManifest(raw: unknown): Manifest {
   const vault = validateVault(r.vault);
   const enrich = validateEnrich(r.enrich);
   const sandbox = validateSandbox(r.sandbox);
-  // A connector's whole job is writing staged rows into the vault — a
-  // connector manifest without a vault block can never do anything.
   if (connector && !vault) {
     throw new ManifestError(
       "invalid_field",
@@ -1476,9 +1182,6 @@ export function validateManifest(raw: unknown): Manifest {
       "connector"
     );
   }
-  // Secrets are connector-plumbing (#293): only a connector's
-  // `ctx.fetch` can reference them, so a non-connector declaring them is a
-  // manifest bug, not a latent capability.
   if (!connector && requires.secrets && requires.secrets.length > 0) {
     throw new ManifestError(
       "invalid_field",
@@ -1486,9 +1189,6 @@ export function validateManifest(raw: unknown): Manifest {
       "requires.secrets"
     );
   }
-  // A condition/data trigger IS a consented vault read — without a vault
-  // block there is no grant to evaluate it under, so the manifest is
-  // incoherent.
   if (
     !vault &&
     triggers.some((t) => t.kind === "condition" || t.kind === "data")

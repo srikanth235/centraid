@@ -1,7 +1,3 @@
-// Capture is deliberately not a second recognition implementation: it invokes
-// and awaits the stable Photo OCR automation, whose generated handler owns
-// model loading and inference.
-
 import { SYSTEM_CAPTURE_OCR_REF } from "../enrich/system-recognition.js";
 
 export interface OcrExtraction {

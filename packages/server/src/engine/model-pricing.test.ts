@@ -8,9 +8,6 @@ import {
   filterLiteLLM,
 } from "./model-pricing.js";
 
-// costForUsage prices PER TOKEN, so a call of 1,000,000 tokens costs exactly the
-// per-MTok anchor. Expected USD are hand-computed from the Anthropic anchors in
-// the #445 brief (input / 5m-write / 1h-write / read / output, per MTok).
 describe("resolveItemCost (#514)", () => {
   it("F2 runtime pricing gate rejects an unpriced model automatically in test mode", () => {
     expect(() =>
@@ -49,10 +46,6 @@ describe("resolveItemCost (#514)", () => {
   });
 
   it("does not invent a rate for an unpriceable model", () => {
-    // A local / self-hosted model, or one newer than the snapshot. Pricing a
-    // 2M-token run at any invented rate — least of all the catalog-wide
-    // maximum — would stamp `estimated` on a figure that is indistinguishable
-    // from a real catalog estimate and can be orders of magnitude high.
     expect(() =>
       resolveItemCost({
         model: "llama-on-my-laptop",
@@ -62,8 +55,6 @@ describe("resolveItemCost (#514)", () => {
   });
 
   it("books a real non-zero cost whenever usage is reported AND priceable", () => {
-    // The automation acceptance criterion: a fire on any harness that reports
-    // usage for a catalog model shows honest money, never 0 and never NULL.
     const r = resolveItemCost({
       model: "claude-haiku-4-5",
       usage: { inputTokens: 12_000, outputTokens: 3_000 },
@@ -110,7 +101,6 @@ describe("costForUsage — Anthropic price anchors (live LiteLLM catalog)", () =
     expect(
       costForUsage("claude-opus-4-1", { outputTokens: 1_000_000 })
     ).toBeCloseTo(75, 9);
-    // Same family, newer generation, different price:
     expect(
       costForUsage("claude-opus-4-5", { inputTokens: 1_000_000 })
     ).toBeCloseTo(5, 9);
@@ -147,7 +137,6 @@ describe("costForUsage — Anthropic price anchors (live LiteLLM catalog)", () =
   });
 
   it("sums input + output + cacheRead + cacheWrite in one call", () => {
-    // haiku: 100k×1 + 50k×5 + 200k×0.1 + 20k×1.25 per MTok = 0.1+0.25+0.02+0.025
     const cost = costForUsage("claude-haiku-4-5", {
       inputTokens: 100_000,
       outputTokens: 50_000,
@@ -243,8 +232,6 @@ describe(filterLiteLLM, () => {
   });
 });
 
-// These MUTATE the process-global catalog, so they run LAST (vitest isolates
-// modules per file, so this never leaks to other test files).
 describe("setPricingCatalog overlay", () => {
   it("overlay replaces the table; longest boundary match beats a shorter prefix", () => {
     setPricingCatalog({
@@ -260,7 +247,6 @@ describe("setPricingCatalog overlay", () => {
       },
       "model-x": { input_cost_per_token: 1e-6, output_cost_per_token: 2e-6 },
     });
-    // -sonnet-<date> resolves via the LONGER key, not claude-3-5.
     expect(
       costForUsage("claude-3-5-sonnet-20240620", { inputTokens: 1_000_000 })
     ).toBeCloseTo(3, 9);
@@ -268,14 +254,11 @@ describe("setPricingCatalog overlay", () => {
     expect(
       costForUsage("claude-3-55-foo", { inputTokens: 1_000_000 })
     ).toBeUndefined();
-    // The overlay replaces the bundled snapshot outright.
     expect(priceForModel("claude-opus-4-8")).toBeUndefined();
     expect(costForUsage("model-x", { inputTokens: 1_000_000 })).toBeCloseTo(
       1,
       9
     );
-    // A model absent from the overlay stays unpriced — the overlay's most
-    // expensive entry is never borrowed to stand in for it.
     expect(() =>
       resolveItemCost({
         model: "not-in-this-overlay",

@@ -1,10 +1,3 @@
-/*
- * Runner-core: turn-boundary failover + provider egress consent.
- *
- * This file owns the ladder loop — breaker-gated rung selection, per-rung resume/hydration
- * planning, and the attended cross-provider consent gate.
- */
-
 import { describe, expect, it, vi } from "vitest";
 
 import type { Dispatcher } from "../handlers/dispatcher.js";
@@ -164,11 +157,6 @@ describe("makeConversationRunnerCore — turn-boundary failover", () => {
   });
 
   it("hydrates the rung it actually reaches, not the rung the route targeted", async () => {
-    // Resume + hydration are resolved against the rung actually reached, not
-    // ONCE against the primary target. A fallback rung that inherits the
-    // primary's plan gets "no session id and no hydration" whenever the
-    // primary sits at the ledger's head — the whole conversation silently
-    // vanishing on the very turn a failover happens.
     const planned: HarnessPrefs["kind"][] = [];
     let seen: TurnInput | undefined;
     const runner = makeConversationRunnerCore({
@@ -199,8 +187,6 @@ describe("makeConversationRunnerCore — turn-boundary failover", () => {
         prevHarnessKind: "codex",
         resumeForKind: (kind) => {
           planned.push(kind);
-          // The primary is caught up (nothing to replay); the fallback has
-          // never seen this conversation and needs the whole ledger.
           return kind === "codex"
             ? { sessionId: "codex-session", bindingId: "binding-codex" }
             : {
@@ -215,7 +201,6 @@ describe("makeConversationRunnerCore — turn-boundary failover", () => {
       })
     );
 
-    // Only the rung actually attempted is planned — no wasted ledger folds.
     expect(planned).toStrictEqual(["claude-code"]);
     expect(seen?.prevSessionId).toBeUndefined();
     expect(seen?.hydrationContext).toBe("earlier turns");
@@ -306,8 +291,6 @@ describe("makeConversationRunnerCore — provider egress consent", () => {
   });
 
   it("accepts an accumulated consent set, not just the single newest provider", async () => {
-    // The client re-sends every provider the owner has approved on this
-    // conversation, so switching back to an earlier one does not re-prompt.
     const grants = new Set<string>();
     const runTurn = vi.fn<RunTurnFn>(
       async (): Promise<TurnResult> => ({ harnessKind: "gemini" })

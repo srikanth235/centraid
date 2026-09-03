@@ -1,15 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit orchestration hub already at the cap; pending split of the route-handler wiring into a sibling module
-/*
- * `buildGateway()` — the host-agnostic gateway core (#280, #289).
- *
- * Every personal surface resolves through the vault the CURRENT REQUEST is
- * addressed to: `composedHandler` runs the whole chain inside that ambient
- * scope. There is NO server-global active vault — switching is a client-side
- * view change, and N clients ride N vaults concurrently. The per-vault host
- * bundle is built lazily and cached by vault id; `start()` mounts every
- * vault's workspace and starts its scheduler, so automations fire in every
- * vault regardless of what a client looks at.
- */
 
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -350,34 +339,14 @@ export interface BuildGatewayOptions {
   gatewayDatabase?: GatewayDatabase;
   assistOAuth?: AssistOAuthConfig;
   resourceMode?: ResourceMode;
-  /**
-   * When a feature is off the gateway does not advertise its capability,
-   * mount its routes, or start its background work — durable data stays
-   * intact. Resolution: `CENTRAID_EXPERIMENTAL` > durable prefs > this > off.
-   */
   experimental?: Partial<ExperimentalFeatureSet>;
-  /**
-   * One in-process cron scheduler PER VAULT (#149, #289), each a
-   * minute-boundary timer firing through the same `runAutomation` path as
-   * "run now". No OS scheduler, and missed minutes are skipped — no backfill.
-   * An injected override becomes the DEFAULT vault's scheduler only.
-   */
   scheduler?: automation.LocalScheduler;
   logger?: RuntimeLogger;
   logTag?: string;
-  /** Defaults to `chat-<appId>`; a host sharing the draft with another editor
-   *  injects its own scheme so both edit ONE worktree. */
   sessionIdFor?: (appId: string) => string;
-  /** A loopback embed omitting this seam gets a persisted host enrollment
-   *  keyed by the gateway endpoint id (#289). */
   deviceAccess?: DeviceAccess;
   keyStore?: KeyStore;
   hostDeviceEndpointId?: string;
-  /**
-   * An authenticated caller on this box that is NOT iroh-forwarded (whose
-   * upstream socket is loopback too). Gates the host-only lanes:
-   * pairing-ticket mint, owner administration, cross-vault scopes listing.
-   */
   isHostCustody?: (req: IncomingMessage) => boolean;
   dataPlaneHttp?: DataPlaneHttpOptions;
   dataPlaneControl?: DataPlaneControlOptions;
@@ -389,41 +358,19 @@ export interface BuildGatewayOptions {
     endpointId?: () => string | undefined;
     onEndpointRevoked?: (endpointId: string) => void | Promise<void>;
   };
-  /**
-   * The gateway↔gateway peer lane (#726). Absent means this build serves no
-   * peer plane and every peer-marked request is `not_found`. `proof` is the
-   * per-boot secret ONLY the forwarder and the peer route layer know —
-   * nothing else in this file may read it.
-   */
   peerPlane?: {
     proof: string;
     localRoute: () => { endpointId?: string; relayHints: string[] };
-    /** Absent ⇒ this build can receive peer requests but never initiate one;
-     *  a remote edge or D9 accept parks instead of dialing (#726). */
     dial?: PeerDial;
     blobPullIntervalMs?: number;
   };
-  /**
-   * When `controlsFile` is set, CONTROL cookies persist there so a web pairing
-   * survives a restart and the sliding 30-day idle window (#376).
-   * `isDeviceValid` propagates `devices revoke` to live cookies at once.
-   * Absent → in-memory control sessions with no revocation hook.
-   */
   webSessions?: {
     controlStore?: WebControlSessionStore;
     controlsFile?: string;
     isDeviceValid?: (deviceKey: string) => boolean;
   };
-  /** A stub lets HTTP lifecycle paths finish without spawning a harness, so
-   *  check:pr stays green on harnessless hosts (#504). */
   runTurn?: RunTurnFn;
   backup?: BackupConfig;
-  /**
-   * Coalescing window for the Notifications doorbell (#647): otherwise every
-   * journalled commit recomputes the whole projection and rings SSE to every
-   * subscriber. First commit after idle fires promptly; the burst collapses
-   * into one trailing recomputation. Tests shorten it, hosts leave it alone.
-   */
   notificationsDoorbellWindowMs?: number;
 }
 
@@ -435,9 +382,7 @@ export type FireAutomation = (
     triggerOrigin: AutomationTriggerOrigin;
     input?: unknown;
     note?: string;
-    /** Reuse a source-stable run id and replay an interrupted ledger turn. */
     idempotent?: boolean;
-    /** Let the cursor engine retain its pending receipt on infra failure. */
     propagateError?: boolean;
   }
 ) => Promise<{
@@ -535,9 +480,6 @@ export function replicaDispatchOutcome(
     return denied
       ? { status: "denied", reason: result.structuredContent.message }
       : {
-          // HANDLER_ERROR can mean a bridge failure after the command
-          // committed, so retry is safe: the route keeps the intent in
-          // `sending` and deterministic intent-bound invocation ids dedupe it.
           status: "retryable",
           reason: result.structuredContent.message,
         };
@@ -606,23 +548,11 @@ export interface BuiltGateway {
   conversationHistoryStore: ConversationHistoryStore;
   vaults: VaultRegistry;
   appsStore: () => Promise<WorktreeStore>;
-  /** The request vault's live `main` apps dir, rotating atomically per
-   *  publish/rollback. Throws before `start()` mounted the workspace. */
   codeAppsDir: () => string;
   syncApps: (vaultId?: string) => Promise<void>;
   webControlSessions: WebControlSessions;
-  /**
-   * Handlers run after auth, before `runtime.handle`. They resolve the
-   * request's vault from the AMBIENT context, so mount them through
-   * `composedHandler` unless the host establishes that scope itself.
-   */
   extraHandlers: RouteHandler[];
   composedHandler: RouteHandler;
-  /**
-   * The `/_centraid-hook/<id>` route (#96), mounted AHEAD of the bearer check —
-   * the shared secret in the request IS the auth. Returns `false` on a
-   * non-matching URL so the host falls through to `composedHandler`.
-   */
   webhookHandler: RouteHandler;
   logs: GatewayLogStore;
   start: (publicBaseUrl: string) => Promise<void>;
@@ -744,8 +674,6 @@ export async function buildGateway(
       WebControlSessionStore.open(gatewayDatabase),
   });
 
-  // Bundled blueprint ids are RESERVED — a code-store app must never shadow
-  // one (#434). The set is the release's catalog, fixed for the process life.
   const bundledAppIds = new Set(
     (await listBundledAppTemplates()).map((t) => t.id)
   );
@@ -817,9 +745,6 @@ export async function buildGateway(
     workerPoolStats: workerAdmissionStats,
   });
 
-  // A third "not now" signal in the SAME safe-loop gate as the owner pause
-  // and load-shed — never a durable mode flip. A COURTESY, so the health
-  // component stays `ok` and only its detail changes (#528).
   const powerContext = new PowerContextMonitor({
     onDeferringChange: (state) => {
       health.reportOk(
@@ -1200,7 +1125,7 @@ export async function buildGateway(
           .get() as { n: number } | undefined;
         outboxPending += row?.n ?? 0;
       } catch {
-        /* a vault whose outbox table isn't there yet contributes 0 */
+        // Intentionally empty.
       }
     }
     return {
@@ -1270,12 +1195,6 @@ export async function buildGateway(
       kitlessHostIdentity(gatewayKeys.loadOrCreate("endpoint-key.bin")));
   const embeddedAccess: DeviceAccess | undefined = embeddedEndpointId
     ? {
-        // Deliberately `isLoopbackRequest`, NOT `isDirectHostRequest`: the
-        // phone tunnel forwards a paired phone under the host bearer with no
-        // device key, so tightening this severs phone-link. Host-ONLY
-        // capabilities use the stricter `isHostCustody` gate. The peer lane
-        // MUST be excluded: a forwarder also delivers to loopback, and a
-        // linked gateway must never inherit the HOST's owner-tier reach.
         deviceKeyFor: (req) =>
           isLoopbackRequest(req) &&
           req.headers[PEER_ENDPOINT_HEADER] === undefined
@@ -1693,9 +1612,6 @@ export async function buildGateway(
       outcome: "success" | "failure" | "skipped",
       error?: string
     ): void => {
-      // Skips are SILENT (#647): the owner-chosen state behind them already
-      // carries its own decision, and a notice per cron tick would reset read
-      // state and wake devices forever.
       if (outcome === "skipped") return;
       const plane = vaultRegistry.current();
       const prior = plane.notices.getBySource("automation", automationRef);
@@ -1774,9 +1690,6 @@ export async function buildGateway(
         };
       }
       if (opts.idempotent && opts.runId) {
-        // MEMOIZED deliberately: a data-triggered automation can fire every
-        // few seconds, and a fresh provider per fire would leak an unclosed
-        // `DatabaseSync` (64 MiB mapping + an fd) each time.
         const ledger = ledgerConversationStore(ws.ledgerDbFile);
         const prior = ledger.getTurn(opts.runId);
         if (prior?.endedAt !== undefined) return { turnId: runId };
@@ -1992,8 +1905,6 @@ export async function buildGateway(
       await reconcileScheduler(vaultId);
       return host;
     }).catch((error) => {
-      // A failed mount must not poison the cache — drop it so the next request
-      // retries after a transient failure.
       hosts.delete(vaultId);
       throw error;
     });
@@ -2343,9 +2254,6 @@ export async function buildGateway(
       },
       deregister: deregisterAndCleanup,
       reconcile: () => {
-        // Fire-and-forget on purpose: the reconciler already reports failures.
-        // Awaited publish/start paths call `reconcileScheduler` directly so a
-        // failed data-cursor bootstrap cannot look ready.
         void reconcileScheduler(vaultId).catch(() => undefined);
       },
       isBundledAppId,
@@ -3380,10 +3288,6 @@ export async function buildGateway(
     conversationRunner: {
       runKind: "build",
       run: async (input) => {
-        // An explicit `input.model` always wins. Neither runner PICKS a
-        // harness at construction — each carries a subsystem tag and calls
-        // `prefsLoader(subsystem)` per turn, so the model key and the backend
-        // that receives it cannot disagree, and a re-pin needs no restart.
         const subsystem: ModelSubsystem =
           input.register === "ask" ? "ask" : "builder";
         const model = await resolveModel(
@@ -3527,7 +3431,7 @@ export async function buildGateway(
           title
         );
       } catch {
-        /* fire-and-forget — a title miss never affects the turn */
+        // Intentionally empty.
       }
     })();
   };
@@ -3884,8 +3788,6 @@ export async function buildGateway(
       makeGrantRouteHandler({
         enrollments: enrollmentStore,
         currentVault: () => {
-          // `current()` throws when this host has no vault for the request's
-          // scope; that is a STATE (409), not a fault.
           let plane;
           try {
             plane = vaultRegistry.current();
@@ -3927,9 +3829,6 @@ export async function buildGateway(
     forRoutePrefixes(
       ["/centraid/_vault/replica", "/centraid/_vault/changes"],
       makeReplicaRouteHandler(vaultRegistry, {
-        // The embedded desktop host is enrolled in the canonical store despite
-        // having no remote-pairing plane, so replica access MUST consult that
-        // same store or it proves an unresolvable EndpointId.
         enrollments: enrollmentStore,
         dispatchIntent: async (input) =>
           replicaDispatchOutcome(
@@ -4090,8 +3989,6 @@ export async function buildGateway(
     () => currentWorkspace().ownerPartyId,
     {
       validatePatch: async (patch, before) => {
-        // Profiles FIRST: the check is pure, so a malformed profile is refused
-        // without spawning a harness preflight (#807).
         const profileRejection = validateEngineProfilePatch(patch);
         if (profileRejection) return profileRejection;
         const next = patchedPrefs(before, patch);
@@ -4540,9 +4437,6 @@ export async function buildGateway(
       {
         vaultId,
         deviceKey,
-        // Resolve the ACTING OWNER once, so downstream reads it off the
-        // request scope, never from hardware (#599). `ownsVault` is the ONE
-        // write predicate: the view yields only owned vaults (#726).
         ...(enrollment
           ? { ownerId: enrollment.ownerId, ownsVault: !enrollment.revoked }
           : {}),

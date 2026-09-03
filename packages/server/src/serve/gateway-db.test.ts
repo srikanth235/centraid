@@ -67,11 +67,7 @@ describe("gateway-db scenarios", () => {
       "web_sessions",
     ]);
     expect(tables).not.toContain("vaults");
-    // #726 P3 merged the two link tables into one: locality is routing, not
-    // semantics, so there is exactly one answerer for "may an edge cross".
     expect(tables).not.toContain("peer_links");
-    // No founding ceremony (#603): no reservation table, and a ticket
-    // has one shape (an invitation) rather than a `kind` discriminant.
     expect(tables).not.toContain("founding_ticket_reservations");
     expect(
       (
@@ -274,11 +270,6 @@ describe("gateway-db scenarios", () => {
     }
   });
 
-  /*
-   * #568 item I: `/usr/bin/stat -f '%T'` is the `ls -F` type indicator, not a
-   * filesystem type — never shell out to it for darwin detection. These cover
-   * the mount-table probe (`f_fstypename` as `/sbin/mount` prints it).
-   */
   const MOUNT_TABLE = [
     "/dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)",
     "/dev/disk3s5 on /System/Volumes/Data (apfs, local, journaled, nobrowse)",
@@ -297,8 +288,6 @@ describe("gateway-db scenarios", () => {
     expect(parseDarwinFileSystemType(MOUNT_TABLE, "/Volumes/backups")).toBe(
       "nfs"
     );
-    // `/System/Volumes/Data/home` must not lose to the shorter `/` or
-    // `/System/Volumes/Data` prefixes.
     expect(
       parseDarwinFileSystemType(MOUNT_TABLE, "/System/Volumes/Data/home/x")
     ).toBe("autofs");
@@ -319,7 +308,6 @@ describe("gateway-db scenarios", () => {
     expect(
       darwinNetworkFileSystem("/anywhere", () => undefined)
     ).toBeUndefined();
-    // A path under no listed mount point is equally inconclusive.
     expect(
       darwinNetworkFileSystem("relative/not/absolute", () => MOUNT_TABLE)
     ).toBeUndefined();

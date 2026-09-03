@@ -116,12 +116,6 @@ describe("harness-errors suite", () => {
     ).toBe(failureClass);
   });
 
-  // CLASSIFICATION PRECEDENCE: the class drives a per-class circuit breaker
-  // (#567), so a misclassification trips the wrong breaker. Structured signals
-  // must beat keyword scans, and the primary message must beat vendor stderr —
-  // these stderr strings are the full, realistic multi-line dumps agents
-  // actually print, not one hand-picked line.
-
   const CRASH_STDERR = [
     "thread 'main' panicked at src/session.rs:214:",
     "called `Result::unwrap()` on an `Err` value: Elapsed(())",
@@ -137,7 +131,6 @@ describe("harness-errors suite", () => {
       config
     );
     expect(detail.failureClass).toBe("exit");
-    // The evidence is still reported to the owner verbatim.
     expect(detail.message).toContain("panicked");
   });
 
@@ -153,8 +146,6 @@ describe("harness-errors suite", () => {
 
   test("a quota RPC code outranks a message with no quota wording", () => {
     const detail = classifyHarnessFailureDetail(
-      // -32029 is what the scripted harnesses in this space answer for
-      // a rate limit; the text alone would fall through to `init`.
       new RequestError(-32029, "The model is overloaded, please retry"),
       "HTTP 429 from provider\nretry-after: 60",
       config
@@ -173,8 +164,6 @@ describe("harness-errors suite", () => {
   });
 
   test("our own stage timeouts classify by stage, not by keyword", () => {
-    // These strings are authored by the backend's `requestWithTimeout`, so the
-    // stage name in them is structured evidence.
     expect(
       classifyHarnessFailureDetail(
         new Error("ACP session/new timed out after 20000ms"),

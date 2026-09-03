@@ -1,16 +1,3 @@
-/*
- * Live-gateway adapter for the shareable support bundle (#842), kept separate
- * so the pure builder in `support-bundle.ts` stays trivially testable and its
- * "no network primitive" source scan means something. Second job, the one that
- * makes the tripwire real: HARVESTING the literals this machine considers
- * sensitive (vault names, owner display name, seal key/identity seed
- * encodings, host bearer tokens) — a redaction policy can only refuse shapes
- * it recognises, so a literal hit means the policy missed something; the value
- * is removed either way and the miss counted in the bundle's own report.
- * Parameter types are structural, not the concrete classes: importing them
- * would knot the serve graph for no gain.
- */
-
 import { dbSizeBreakdown } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
 
@@ -56,32 +43,20 @@ export interface SupportBundlePlaneLike {
 export interface SupportBundleSourceOptions {
   readonly health: SupportBundleHealthLike;
   readonly logs: SupportBundleLogsLike;
-  /** Structural: an `AnomalyLedger` satisfies it, as does a reader over the on-disk mirror `readAnomalyLedger` returns. */
   readonly anomalies: { snapshot: () => readonly AnomalyRecord[] };
   readonly planes: readonly SupportBundlePlaneLike[];
   readonly gateway: SupportBundleInput["gateway"];
   readonly runtime: SupportBundleInput["runtime"];
-  /** Injected instant — this module never reads the wall clock. */
   readonly generatedAtMs: number;
-  /** Per-bundle identifier salt, supplied by the caller. */
   readonly salt: string;
   readonly level?: RedactionLevel;
   readonly config?: unknown;
-  /** Host-known secrets (bearer tokens, provider credentials) to sweep. */
   readonly extraSensitive?: readonly string[];
 }
 
-/** How many of the biggest tables carry a row count into the bundle. */
 const TOP_TABLES = 24;
-/** Log tail depth. Grouped and digested downstream, so this is cheap. */
 const LOG_TAIL = 1000;
 
-/**
- * COUNTS ONLY (#916, C2). `dbSizeBreakdown` reads `sqlite_stat1`/`dbstat`, not
- * the tables, so the audit and ledger bands — now bands of the one file —
- * contribute a name, a row count and a page count and nothing else. A support
- * bundle must never carry a receipt's detail or a conversation item's text.
- */
 function rowCounts(db: VaultDb | undefined): Record<string, number> {
   if (!db) return {};
   try {
@@ -91,7 +66,6 @@ function rowCounts(db: VaultDb | undefined): Record<string, number> {
       out[entry.table] = entry.rows ?? entry.pages ?? 0;
     return out;
   } catch {
-    // Stats are a nice-to-have; a failed query must not fail the bundle.
     return {};
   }
 }
@@ -110,7 +84,6 @@ function ownerNames(db: VaultDb | undefined): string[] {
   }
 }
 
-/** Every encoding of key material that could plausibly appear in a stringified structure — the alternative is trusting no lane ever hex-encodes a key into a log line. */
 function keyEncodings(db: VaultDb | undefined): string[] {
   if (!db) return [];
   const out: string[] = [];
@@ -121,7 +94,6 @@ function keyEncodings(db: VaultDb | undefined): string[] {
   return out;
 }
 
-/** Reads live gateway state into a bundle input, harvesting sensitive literals for the tripwire. */
 export async function collectSupportBundleInput(
   options: SupportBundleSourceOptions
 ): Promise<SupportBundleInput> {

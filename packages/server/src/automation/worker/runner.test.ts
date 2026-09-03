@@ -1,8 +1,4 @@
 /* oxlint-disable unicorn/require-post-message-target-origin -- node:worker_threads postMessage has no targetOrigin */
-/**
- * The entry throws without a worker_thread parentPort, so it is driven as a
- * Worker (#545).
- */
 
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -61,14 +57,9 @@ describe("runner", () => {
       workerData: {
         pooled: true,
       },
-      // A bare [] rather than a filtered `process.execArgv`: vitest 4 runs the
-      // suite with `--require <vitest>/suppress-warnings.cjs`, and dropping only
-      // the entries containing "vitest" orphaned the `--require` flag, which
-      // `new Worker()` rejects. The worker under test needs none of these.
       execArgv: [],
     });
 
-    // worker_threads queues messages until a listener attaches — no fixed sleep.
     worker.postMessage({
       type: "run",
       request: {
@@ -79,7 +70,6 @@ describe("runner", () => {
       },
     });
 
-    // Service state.get / state.set from the parent side.
     worker.on("message", (msg: Record<string, unknown>) => {
       if (msg.type === "state" && msg.method === "get") {
         worker!.postMessage({
@@ -99,7 +89,6 @@ describe("runner", () => {
   }, 15_000);
 
   test("importing runner as a non-worker throws the parentPort guard", async () => {
-    // The module evaluates parentPort at load and refuses to run on the main thread.
     await expect(
       import(/* @vite-ignore */ `${RUNNER}?guard=${Date.now()}`)
     ).rejects.toThrow(/must be run as a worker_thread/u);

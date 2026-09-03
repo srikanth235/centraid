@@ -1,14 +1,3 @@
-/*
- * Steward-absence detection (#731). Status is derived from ELAPSED TIME since
- * last proven contact, never from a failure count (a laptop closed overnight
- * fails a lot and is not absent).
- *
- * Cry-wolf: absence is never inferred while THIS device has no working link.
- * Escalate past "reachable" only when the device was reaching something while
- * that grant's steward stayed silent; otherwise `link-down`, which never
- * escalates. Not telemetry: no egress, no sampling, no background timer.
- */
-
 import type { DatabaseSync } from "node:sqlite";
 
 import type { CommonsHistoryFaultTag, VaultDb } from "@centraid/vault";
@@ -21,16 +10,6 @@ export type CommonsPullOutcome =
   | "parked"
   | "unreachable";
 
-/**
- * - `unknown` — never attempted.
- * - `reachable` — contacted recently, or failing for less than the degraded
- *   threshold. A closed laptop lives here.
- * - `degraded` / `absent` — silent past the named threshold, with a working
- *   local link. `absent` should offer replica-export recovery.
- * - `link-down` — silent, but this device cannot show it reached anything
- *   either. Do not claim the steward died.
- * - `parked` — named history/digest fault, not an absence.
- */
 export type CommonsStewardPresence =
   | "unknown"
   | "reachable"
@@ -41,11 +20,6 @@ export type CommonsStewardPresence =
 
 export const COMMONS_STEWARD_DEGRADED_AFTER_MS = 24 * 60 * 60 * 1000;
 export const COMMONS_STEWARD_ABSENT_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
-/**
- * The op window documented in `docs/decisions.md#commons` proposes as K. Lag
- * beyond it is the measurement that flips that plan's go/no-go, so the
- * summary counts members sitting past it rather than just reporting a max.
- */
 export const COMMONS_LAG_WINDOW_OPS = 256;
 
 export interface CommonsStewardStatus {
@@ -97,7 +71,6 @@ function ms(value: string | null | undefined): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-/** Call whenever a dial RESOLVES: a 404 still proves the local network works. */
 export function recordCommonsDeviceReach(db: DatabaseSync, now: string): void {
   db.prepare(
     `INSERT INTO share_commons_device_reach
@@ -128,10 +101,6 @@ function presenceFor(
   if (since === undefined) return "reachable";
   const silentMs = nowMs - since;
   if (silentMs < COMMONS_STEWARD_DEGRADED_AFTER_MS) return "reachable";
-  // The device must be able to show it was reaching SOMETHING, both since this
-  // absence began and recently enough to still count. A device that touched
-  // the network once and then flew for a week proves nothing about the
-  // steward, so it stays `link-down` rather than crying absence.
   const linkMs = ms(deviceLinkAt);
   if (
     linkMs === undefined ||
@@ -226,10 +195,6 @@ const OUTCOME_COLUMN: Record<CommonsPullOutcome, string> = {
   unreachable: "pull_unreachable",
 };
 
-/**
- * A `parked` outcome is NOT an absence: the steward answered, history did not
- * verify — close the episode and pin a named fault.
- */
 export function recordCommonsPull(input: {
   db: DatabaseSync;
   grantId: string;
@@ -245,8 +210,6 @@ export function recordCommonsPull(input: {
   const before = contactRow(input.db, input.grantId, input.memberVaultId);
   const failed = input.outcome === "unreachable";
   const openedAt = ms(before.absence_since);
-  // A reached steward closes the episode and banks its duration, whether it
-  // answered with data or with a fault.
   const closing = !failed && openedAt !== undefined;
   const episodeMs = closing ? Math.max(0, nowMs - (openedAt ?? nowMs)) : 0;
   const next: ContactRow = {
@@ -518,7 +481,6 @@ export function commonsObservabilityForVault(input: {
   };
 }
 
-/** Diagnostics-bundle section — slots into `scrubUnknown`, no second surface. */
 export function commonsObservabilitySection(input: {
   vaults: readonly { vaultId: string; db?: VaultDb }[];
   now?: string;
@@ -536,7 +498,7 @@ export function commonsObservabilitySection(input: {
         })
       );
     } catch {
-      // A stats read must never fail a working diagnostics bundle.
+      // Intentionally empty.
     }
   }
   return { commons };

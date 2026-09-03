@@ -1,13 +1,3 @@
-/*
- * The owner's door onto the enrichment policy cascade (#807).
- *
- * The laws under test are the ones a member's privacy depends on: a rule may
- * be written only for a scope and a capability this build understands; the
- * `effective` read is the ONE resolver's answer rather than a second opinion
- * assembled in the route; and the legacy tier resource keeps its exact
- * pre-#807 request and response shapes, because four client seam laws pin
- * them.
- */
 import http from "node:http";
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -86,8 +76,6 @@ describe("vault enrichment cascade routes", () => {
       rule: {
         scope: { type: "domain", ref: "photos" },
         capability: "ocr",
-        // The fields the scope did NOT decide come back as inherit, which is
-        // the whole point of a rule stating only its own decision.
         enabled: null,
         profile: null,
         trigger: "on-view",
@@ -99,7 +87,6 @@ describe("vault enrichment cascade routes", () => {
       enrich: Record<string, string>;
       rules: unknown[];
     };
-    // Additive: the legacy tiers are exactly where they were.
     expect(body.enrich).toStrictEqual({ photos: "gateway", docs: "gateway" });
     expect(body.rules).toHaveLength(1);
   });
@@ -199,7 +186,6 @@ describe("vault enrichment cascade routes", () => {
         enabled: true,
         profileId: "item-choice",
         trigger: "on-ingest",
-        // The item picked an engine; it could not move the ceiling.
         egressCeiling: "on-device",
       },
     });
@@ -234,7 +220,6 @@ describe("vault enrichment cascade routes", () => {
       },
     });
 
-    // A decline is a RECORD, not a deletion — the ledger keeps the answer.
     const declined = await postConsent(base, {
       capability: "faces",
       egress: "provider",

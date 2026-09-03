@@ -1,5 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#406) one protocol route keeps bootstrap, pull/SSE, lazy-row, checkpoint, and intent admission semantics together
-/* Replica HTTP protocol: authenticated bootstrap, pull/stream, lazy row and intent lanes. */
 import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type * as TypeImport_18fk7n9 from "node:sqlite";
@@ -70,10 +69,8 @@ export const REPLICA_INTENTS_PATH = "/centraid/_vault/replica/intents";
 const OUTCOME_RECONCILE_LIMIT = 500;
 const DEFAULT_MAX_BOOTSTRAP_ROWS = 100_000;
 const DEFAULT_MAX_SYNTHETIC_LOOKUP_ROWS = 25_000;
-/** Windowed bootstrap page size bounds (#419). */
 const DEFAULT_BOOTSTRAP_WINDOW = 5_000;
 const MAX_BOOTSTRAP_WINDOW = 20_000;
-/** Internal read-page size while filling one window from the snapshot reader. */
 const BOOTSTRAP_READ_PAGE = 10_000;
 
 class ReplicaWorkLimitError extends Error {
@@ -90,28 +87,12 @@ type BootstrapValue = {
 
 type BootstrapWireRow = NonNullable<ReturnType<typeof shapeReplicaRow>>;
 
-// Windowed bootstrap (#419), an ADDITIVE paging protocol: `?window=<1..20000>`
-// and/or `?after=<token>` opt in, and absent both the single-shot body below is
-// byte-for-byte unchanged. Page 1 carries the shapes; continuations do not.
-//
-// Each page opens its OWN read snapshot, so pages are NOT globally consistent
-// and every page reports its own cursor. CONVERGENCE IS REQUIRED OF THE CLIENT:
-// after `complete`, pull `GET /changes?since=<page-1 cursor>` — page 1 holds the
-// minimum cursor, so replaying from it is idempotent and repairs whatever moved
-// between snapshots. Skip it and deletions between pages leak.
-//
-// 409 mid-pagination on an epoch, schemaEpoch or shape-set change, or a log
-// floor past the pinned page-1 cursor; 400 on a tampered token.
-
 interface BootstrapWindowToken {
   v: 1;
   epoch: string;
   schemaEpoch: number;
-  /** Page-1 cursor — the delta floor the client replays from after completion. */
   first: { epoch: string; seq: number };
-  /** Fingerprint of the page-1 shape set; a mismatch mid-pagination ⇒ 409. */
   shapeSig: string;
-  /** Iteration position: shape index, entity index within it, and row `after`. */
   shapeIdx: number;
   entityIdx: number;
   after: string | null;
@@ -171,7 +152,6 @@ function decodeBootstrapToken(raw: string): BootstrapWindowToken {
   };
 }
 
-/** `?window` bound (1..20000); default when omitted on a continuation. */
 function parseBootstrapWindow(url: URL): number | "invalid" {
   const raw = url.searchParams.get("window");
   if (raw === null) return DEFAULT_BOOTSTRAP_WINDOW;
@@ -187,7 +167,6 @@ interface BootstrapPosition {
   after: string | null;
 }
 
-/** Throws (⇒ 400) only on a malformed `after` row id the reader rejects. */
 function collectBootstrapWindow(
   reader: ReplicaSnapshotReader,
   shapes: ReplicaServerShape[],
@@ -234,11 +213,6 @@ function collectBootstrapWindow(
   };
 }
 
-/**
- * First-paint window for native Photos/Docs, deliberately a DUPLICATE prefix:
- * the continuation still starts the canonical walk at zero, so lazy backfill
- * cannot skip anything and ordinary upserts collapse the repeated rows.
- */
 function collectNewestVisibleRows(
   db: TypeImport_18fk7n9.DatabaseSync,
   reader: ReplicaSnapshotReader,
@@ -320,31 +294,13 @@ export interface ReplicaRouteOptions {
   dispatchIntent: ReplicaIntentDispatcher;
   pollIntervalMs?: number;
   heartbeatMs?: number;
-  /** Authenticated-DoS bounds; overrides are used by focused route tests. */
   maxBootstrapRows?: number;
   maxSyntheticLookupRows?: number;
-  /** Concurrent change streams this gateway will hold open (#883 C2). */
   subscriberCap?: SseSubscriberCap;
 }
 
-/**
- * One cap per gateway process. A shared projection still costs a socket, a
- * bounded writer and a wake per subscriber, so this stream carries the same
- * #351 Tier 4 bound as logs, automations and notifications.
- */
 const defaultReplicaSubscriberCap = new SseSubscriberCap();
 
-/**
- * The CLOSED set of verdicts a client is told to start over with (#883 C6).
- * Closed is the point: `packages/client`'s `replica/rebootstrap-copy.ts` maps
- * every one to a sentence a member can act on, so a verdict added here without
- * copy there is a type error rather than a generic error screen.
- *
- * `retention` (cursor below the log's collected floor — the deltas are GONE) is
- * distinct from `snapshot-retention` (a bootstrap walk outliving its own pinned
- * page-1 cursor): different member stories, different copy. The first three are
- * the vault's own `ReplicaRebootstrapReason` values, carried through verbatim.
- */
 export const REPLICA_REBOOTSTRAP_VERDICTS = [
   "epoch-mismatch",
   "retention",
@@ -360,10 +316,6 @@ export const REPLICA_REBOOTSTRAP_VERDICTS = [
 export type ReplicaRebootstrapVerdict =
   (typeof REPLICA_REBOOTSTRAP_VERDICTS)[number];
 
-/**
- * Anything unrecognised becomes `invalid-cursor`: no raw `Error.message` may
- * reach the wire, where it is neither branchable nor readable by a member.
- */
 function normalizeRebootstrapReason(reason: string): ReplicaRebootstrapVerdict {
   return (REPLICA_REBOOTSTRAP_VERDICTS as readonly string[]).includes(reason)
     ? (reason as ReplicaRebootstrapVerdict)
@@ -384,8 +336,6 @@ function rebootstrapBody(
       watermark: state.watermark,
       epochReason: state.epochReason,
     },
-    // The facts behind the reason, so the client describes THIS gateway's
-    // retention rather than a number it made up.
     retention: {
       days: REPLICA_RETENTION_DAYS,
       maxEntries: REPLICA_RETENTION_MAX_ENTRIES,
@@ -418,8 +368,6 @@ function isNdjson(req: IncomingMessage): boolean {
   return String(req.headers.accept ?? "").includes("application/x-ndjson");
 }
 
-// Bounded writer (#659): a device that stops draining is dropped and re-syncs
-// from its checkpoint, rather than accumulating in gateway memory.
 function writeSse(stream: SseStream, event: string, data: unknown): void {
   stream.event(event, JSON.stringify(data));
 }
@@ -441,10 +389,6 @@ function quoteIdentifier(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-/**
- * Cached (#883 C2) — a lazy-row GET otherwise re-prepares this pragma twice per
- * request. The table name comes from a server-derived shape, never the wire.
- */
 function primaryKeyColumns(
   db: TypeImport_18fk7n9.DatabaseSync,
   schema: ReplicaEntityShape
@@ -649,8 +593,6 @@ async function streamChanges(
   subscriberCap: SseSubscriberCap
 ): Promise<true> {
   const rawSince = url.searchParams.get("since");
-  // Bounded BEFORE any header is written (#351 Tier 4): a saturated gateway
-  // answers 503 + Retry-After, and the device resumes from its own checkpoint.
   const releaseSlot = subscriberCap.admit(res);
   if (!releaseSlot) return true;
   res.statusCode = 200;
@@ -688,9 +630,6 @@ async function streamChanges(
   };
   req.on("close", close);
   res.on("close", close);
-  // ONE projection per commit for the whole household (#883 C2): the hub fans
-  // the same page to every subscriber sharing this cursor and authorization.
-  // That page is SHARED — read it, never mutate it.
   const hub = replicaProjectionHub(db);
   const unsubscribe = hub.subscribe(() => {
     signalPending = true;
@@ -698,17 +637,7 @@ async function streamChanges(
   });
   let heartbeatAt = Date.now();
   const heartbeatMs = options.heartbeatMs ?? 15_000;
-  /*
-   * A LOOP, not recursion (#659): a `streamNext()` tail-calling itself per page
-   * and per wake grows a promise chain with the connection's age.
-   *
-   * `for (;;)` + explicit `if (closed) break` rather than `while (!closed)`:
-   * `closed` is set from socket-close listeners no reader can see from the loop
-   * header, so every exit sits in the body — this one, the two rebootstrap
-   * breaks, and the access break.
-   */
   for (;;) {
-    // Re-read every pass, including after a multi-page `continue` and the wake.
     if (closed) break;
     const access = resolveReplicaAccess(url, vaultId, options.enrollments);
     if (!access.ok) {
@@ -754,13 +683,11 @@ async function streamChanges(
         message: error instanceof Error ? error.message : String(error),
       });
     }
-    // More pages waiting: project the next one right away.
     if (!drained) continue;
     if (Date.now() - heartbeatAt >= heartbeatMs) {
       stream.comment("heartbeat");
       heartbeatAt = Date.now();
     }
-    // The loop IS the wait: each pass blocks until a commit, wake or heartbeat.
     // oxlint-disable-next-line no-await-in-loop -- sequential by construction
     await new Promise<void>((resolve) => {
       let settled = false;
@@ -809,7 +736,6 @@ type WindowedBootstrapResult =
       next?: string;
     };
 
-/** One page of the windowed bootstrap (#419 — contract above). */
 function handleWindowedBootstrap(
   res: ServerResponse,
   url: URL,
@@ -850,8 +776,6 @@ function handleWindowedBootstrap(
         ) {
           return { rebootstrap: "epoch-changed" };
         }
-        // The delta the client will replay after completion must still be in the
-        // log; a floor past our pinned page-1 cursor means it was GC'd.
         if (token.first.seq < state.floor.seq)
           return { rebootstrap: "snapshot-retention" };
         if (token.shapeSig !== shapeSig)
@@ -916,8 +840,6 @@ function handleWindowedBootstrap(
   if ("badToken" in value) {
     return sendJson(res, 400, { error: "invalid_replica_bootstrap_token" });
   }
-  // 403 only on the first page: a continuation already proved the shapes
-  // existed and would 409 on any shape change.
   if (!token && access.appId && value.shapes.length === 0) {
     return sendJson(res, 403, { error: "replica_shape_empty" });
   }
@@ -991,8 +913,6 @@ export function makeReplicaRouteHandler(
                 WHERE epoch = ? AND entity = 'replica.intent' AND row_id = ?`
             )
             .get(reader.state.epoch, intentId) as { seq: number | null };
-          // A transition newer than the bootstrap watermark remains visible
-          // through incremental pull and must not clear its overlay early.
           if (latest.seq !== null && latest.seq > requested.through.seq)
             return [];
           const outcome = readReplicaIntentOutcome(
@@ -1022,8 +942,6 @@ export function makeReplicaRouteHandler(
 
     if (url.pathname === BOOTSTRAP_PATH) {
       if (method !== "GET") return methodAllowed(res, "GET");
-      // Windowed mode (#419): additive, and only when the client opts in
-      // via `?window`/`?after`. The single-shot path below is untouched.
       if (url.searchParams.has("window") || url.searchParams.has("after")) {
         return handleWindowedBootstrap(
           res,
@@ -1176,7 +1094,6 @@ export function makeReplicaRouteHandler(
       try {
         const result = withReplicaSnapshot(plane.db.vault, (reader) => {
           const nowMs = Date.now();
-          // Only the named shape is built (#883 C2).
           const shape = buildReplicaShapes(
             plane.db.vault,
             access,
@@ -1258,9 +1175,6 @@ export function makeReplicaRouteHandler(
         }
         if (!access.deviceKey || !options.enrollments)
           return sendJson(res, 200, { ok: true, persisted: false, cursor });
-        // The server offering a snapshot is not an acknowledgement: only the
-        // client POST after its SQLite commit initializes/replaces an epoch.
-        // Within one epoch, acknowledgements remain strictly monotonic.
         const previous = options.enrollments.get(
           access.deviceKey,
           vaultId

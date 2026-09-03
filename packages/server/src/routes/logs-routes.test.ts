@@ -1,9 +1,3 @@
-/*
- * Gateway log routes: the JSON tail + the replay-then-live SSE stream
- * over `GatewayLogStore`. Mock streaming req/res, same harness shape as
- * run-events-sse.test.ts.
- */
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { beforeEach, describe, expect, test } from "vitest";
@@ -136,7 +130,6 @@ describe("logs-routes", () => {
     await expect(handler(c.req, c.res)).resolves.toBe(true);
     expect(c.status()).toBe(200);
 
-    // Replay landed, stream still open, subscriber registered.
     expect(c.events().map((e) => e.message)).toStrictEqual(["boot line"]);
     expect(c.ended()).toBe(false);
     expect(store.subscriberCount()).toBe(1);
@@ -148,7 +141,6 @@ describe("logs-routes", () => {
       "live failure",
     ]);
     expect(evs[1]?.level).toBe("error");
-    // seq-ordered, gapless.
     expect(evs.map((e) => e.seq)).toStrictEqual([1, 2]);
   });
 
@@ -170,12 +162,9 @@ describe("logs-routes", () => {
     expect(store.subscriberCount()).toBe(0);
     expect(c.ended()).toBe(true);
 
-    // A line after disconnect reaches no one and doesn't throw.
     store.append("info", "after close");
   });
 
-  // Issue #351: unbounded concurrent SSE subscribers is a fd-exhaustion risk.
-  // A small cap (2) makes the "cap+1" scenario cheap to exercise directly.
   test("SSE subscribers past the cap get 503 + Retry-After; the count decrements on disconnect", async () => {
     const cap = new SseSubscriberCap(2);
     const capped = makeLogsRouteHandler(store, { subscriberCap: cap });
@@ -188,7 +177,6 @@ describe("logs-routes", () => {
     expect(b.status()).toBe(200);
     expect(cap.current()).toBe(2);
 
-    // The 3rd subscriber is over the cap — refused, never joins the stream.
     const c = client("/centraid/_logs/events");
     await expect(capped(c.req, c.res)).resolves.toBe(true);
     expect(c.status()).toBe(503);
@@ -198,7 +186,6 @@ describe("logs-routes", () => {
     expect(c.ended()).toBe(true);
     expect(cap.current()).toBe(2); // the refusal never incremented the count
 
-    // Disconnecting one live subscriber frees a slot for the next comer.
     a.close();
     expect(cap.current()).toBe(1);
     const d = client("/centraid/_logs/events");

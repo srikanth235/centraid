@@ -1,8 +1,3 @@
-/*
- * Capture point behind the realtime Logs surface: persistence is optional
- * (#351) and its failures are swallowed and counted — logging must never
- * crash or recurse into logging.
- */
 import fs from "node:fs";
 import path from "node:path";
 
@@ -62,7 +57,7 @@ export class GatewayLogStore {
       try {
         fs.mkdirSync(this.dir, { recursive: true });
       } catch {
-        /* persistence degrades to a no-op, never a crash */
+        // Intentionally empty.
       }
       this.loadTail();
     }
@@ -85,7 +80,7 @@ export class GatewayLogStore {
       try {
         fn(entry, serialized);
       } catch {
-        /* a wedged subscriber must not break the fanout */
+        // Intentionally empty.
       }
     }
     return entry;
@@ -134,7 +129,6 @@ export class GatewayLogStore {
 
   private persist(serialized: string): void {
     if (!this.dir || !this.currentFile) return;
-    // The next append() past the window IS the retry — no timer, and a full disk is not hammered per line.
     if (this.diskFullUntil !== null && Date.now() < this.diskFullUntil) {
       this.droppedWrites += 1;
       return;
@@ -168,12 +162,12 @@ export class GatewayLogStore {
         try {
           fs.rmSync(dest, { force: true });
         } catch {
-          /* may not exist */
+          // Intentionally empty.
         }
         try {
           fs.renameSync(src, dest);
         } catch {
-          /* may not exist */
+          // Intentionally empty.
         }
       }
       fs.renameSync(this.currentFile, path.join(this.dir, rotatedFileName(1)));
@@ -182,7 +176,6 @@ export class GatewayLogStore {
     }
   }
 
-  /** nextSeq resumes from the highest persisted seq, so a post-restart entry never collides with one a client saw. */
   private loadTail(): void {
     if (!this.dir || !this.currentFile) return;
     const files = [
@@ -199,7 +192,7 @@ export class GatewayLogStore {
           if (line.length > 0) lines.push(line);
         }
       } catch {
-        /* generation absent */
+        // Intentionally empty.
       }
     }
     const tail = lines.slice(-this.capacity);

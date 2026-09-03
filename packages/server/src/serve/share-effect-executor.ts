@@ -1,9 +1,3 @@
-/*
- * The ONE executor of the sharing plane's effect outbox (#750): one retry
- * policy around one vault call. A vault this gateway cannot open right now
- * is a RETRY, never a throw.
- */
-
 import { moveOutOfVault, shareItemsToVault } from "@centraid/vault";
 import type { ShareVaultRef } from "@centraid/vault";
 
@@ -23,7 +17,6 @@ import type { PendingShareEffect } from "./share-effects.js";
 export interface ShareEffectDeps {
   db: GatewayDatabase;
   vaultFor: (vaultId: string) => ShareVaultRef | undefined;
-  /** The vault's own party — the principal an edge placement runs as (#916). */
   partyIdFor: (vaultId: string) => string | undefined;
   share?: typeof shareItemsToVault;
   move?: typeof moveOutOfVault;
@@ -34,10 +27,6 @@ export type ShareEffectOutcome =
   | {
       state: "retry";
       reason: string;
-      /**
-       * True when THIS gateway could not act: the edge route answers 202
-       * for a fault, 200 otherwise.
-       */
       fault: boolean;
     }
   | { state: "abandoned"; reason: string };
@@ -49,7 +38,6 @@ export function runShareEffect(
   const row = readEdgeRow(deps.db, effect.edgeId);
   if (!row) return { state: "abandoned", reason: "no such edge" };
   const facts = edgeFactsOf(row);
-  // Terminal already — the obligation is discharged, not retried.
   if (isTerminalEdgeStatus(row.status)) return { state: "done" };
   const origin = deps.vaultFor(row.origin_vault_id);
   if (!origin) {
@@ -91,7 +79,6 @@ export function runShareEffect(
   }
 }
 
-/** Park the edge with a reason, and report the attempt as this gateway's own failure. */
 function fault(
   deps: ShareEffectDeps,
   edgeId: string,
@@ -111,7 +98,6 @@ export interface DrainShareEffectsResult {
   abandoned: string[];
 }
 
-/** One background tick: advance every effect due now. */
 export function drainShareEffects(
   deps: ShareEffectDeps,
   options: { limit?: number; now?: number } = {}
@@ -132,7 +118,6 @@ export function drainShareEffects(
   return result;
 }
 
-/** Write an attempt's verdict back to the outbox — the only place that does. */
 export function settle(
   db: GatewayDatabase,
   pending: PendingShareEffect,

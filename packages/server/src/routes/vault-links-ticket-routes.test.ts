@@ -1,11 +1,3 @@
-/*
- * The remote half's owner-facing door (audit #726 finding 1): mint a ticket
- * for a vault you own, and redeem one someone showed you. Two SEPARATE
- * gateways (own `GatewayDatabase`, own `VaultLinksStore`) — the same
- * in-process transport pattern `peer-link-ceremony.test.ts` uses for the
- * ceremony itself, wired one layer up so it's this route, not
- * `redeemLinkTicket` directly, doing the dialing.
- */
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import http from "node:http";
@@ -49,8 +41,6 @@ describe("vault-links-routes: remote ticket/redeem (#726 audit finding 1)", () =
     proof: string;
   }
 
-  /** A peer request landing on `gw`'s OWN peer-plane handler, as the relay
-   *  would deliver it — the redeeming side's `dial.request`. */
   function transportTo(
     gw: TicketGateway,
     callerEndpointId: string
@@ -92,7 +82,6 @@ describe("vault-links-routes: remote ticket/redeem (#726 audit finding 1)", () =
     };
   }
 
-  /** `dial` for a gateway whose redeem route reaches OUT to `peer`. */
   function dialTo(peer: TicketGateway, ownEndpointId: string): PeerDial {
     return {
       request: transportTo(peer, ownEndpointId),
@@ -103,7 +92,6 @@ describe("vault-links-routes: remote ticket/redeem (#726 audit finding 1)", () =
   async function setupTicketGateway(
     name: string,
     vaultId: string,
-    /** Omit to build a gateway with NO wired peer transport at all. */
     dial?: PeerDial
   ): Promise<TicketGateway> {
     const dir = await tempDir(`vault-links-routes-ticket-${name}-`);
@@ -195,8 +183,6 @@ describe("vault-links-routes: remote ticket/redeem (#726 audit finding 1)", () =
         [AUTHED_DEVICE_HEADER]: raj.deviceKey,
         "content-type": "application/json",
       },
-      // A well-formed, PARSEABLE ticket — proving the 503 comes from the
-      // missing capability, not from failing to parse the ticket first.
       body: JSON.stringify({
         vaultId: "vault-raj",
         ticket: JSON.stringify({
@@ -217,10 +203,6 @@ describe("vault-links-routes: remote ticket/redeem (#726 audit finding 1)", () =
   });
 
   test("redeeming when the peer plane IS wired but the dial itself fails answers the network fact, not the capability refusal", async () => {
-    // Distinguishes the two: a build that CAN dial out, but whose dial rejects
-    // (the counterparty is offline, unreachable, etc.), must answer a
-    // DIFFERENT shape than "this build cannot do that" — `redeemLinkTicket`'s
-    // own `state: "unreachable"`, mapped to 200 (a fact about the network).
     const raj = await setupTicketGateway("raj", "vault-raj", {
       request: () => Promise.reject(new Error("simulated network drop")),
       endpointTicketFor: (id) => `ticket-for-${id}`,
@@ -251,11 +233,6 @@ describe("vault-links-routes: remote ticket/redeem (#726 audit finding 1)", () =
   });
 
   test("the full remote ceremony: mint on one gateway, redeem on another, links both sides", async () => {
-    // `priya` only ever MINTS in this test — her own dial is never actually
-    // called, only its `endpointTicketFor` — so a dummy suffices for her.
-    // `raj`'s dial is real: it reaches `priya`'s in-process peer-plane
-    // handler directly, built straight off `priya`'s own store/proof — the
-    // same in-process transport pattern `peer-link-ceremony.test.ts` uses.
     const priya = await setupTicketGateway("priya", "vault-priya", dummyDial());
     const raj = await setupTicketGateway(
       "raj",
@@ -293,13 +270,10 @@ describe("vault-links-routes: remote ticket/redeem (#726 audit finding 1)", () =
       [redeemedBody.link.vaultA, redeemedBody.link.vaultB].sort()
     ).toStrictEqual(["vault-priya", "vault-raj"].sort());
 
-    // Mutual: priya's own store holds the link too, without a second
-    // ceremony — minting WAS her side's approval (P3 decision 3).
     expect(priya.store.peerForVault("vault-raj", "vault-priya")).toMatchObject({
       peerVaultId: "vault-raj",
     });
 
-    // The ticket is single-use: redeeming it again finds nothing.
     const second = await fetch(`${raj.base}/redeem`, {
       method: "POST",
       headers: {
@@ -329,17 +303,12 @@ describe("vault-links-routes: remote ticket/redeem (#726 audit finding 1)", () =
   });
 
   test("redeeming for a vault you do not own is refused not_found (topology hiding), before any dial", async () => {
-    const raj = await setupTicketGateway(
-      "raj",
-      "vault-raj",
-      // A dial that would throw if ever called — ownership must gate FIRST.
-      {
-        request: () => {
-          throw new Error("must not dial for an unowned vault");
-        },
-        endpointTicketFor: (id) => `ticket-for-${id}`,
-      }
-    );
+    const raj = await setupTicketGateway("raj", "vault-raj", {
+      request: () => {
+        throw new Error("must not dial for an unowned vault");
+      },
+      endpointTicketFor: (id) => `ticket-for-${id}`,
+    });
     const response = await fetch(`${raj.base}/redeem`, {
       method: "POST",
       headers: {

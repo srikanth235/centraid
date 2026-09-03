@@ -1,6 +1,3 @@
-/* Sole cross-vault edge judge (#726): ONE policy for both localities; every
-   refusal is not_found — refusals must never map the topology. */
-
 import type { LinkRoute } from "./vault-link-row.js";
 import { isLinkApproved } from "./vault-link-row.js";
 import type { VaultLinksStore } from "./vault-links-store.js";
@@ -28,7 +25,6 @@ export function judgeEdgeCrossing(
     return { state: "same-owner" };
   const link = deps.links.findPair(originVaultId, audienceVaultId);
   if (!link || !isLinkApproved(link)) return { state: "not_found" };
-  // route exists iff the audience is remote (#750).
   const route = deps.links.routeFor(audienceVaultId);
   if (audienceOwner === undefined && !route) return { state: "not_found" };
   return {

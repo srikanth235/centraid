@@ -1,5 +1,3 @@
-// Socket-free construction stays in `build-gateway.ts`; bind/auth/lifecycle here.
-
 import { ROUTES } from "@centraid/core/protocol";
 import { WEBHOOK_ROUTE_PREFIX } from "@centraid/server/automation";
 import { startRuntimeHttpServer } from "@centraid/server/engine";
@@ -37,14 +35,11 @@ export async function serve(
 ): Promise<GatewayServeHandle> {
   const gateway = await buildGateway(options);
 
-  // Composed handler owns the post-auth chain: the vault scope (#289) wraps all.
   const serverOptions: Parameters<typeof startRuntimeHttpServer>[0] = {
     runtime: gateway.runtime,
     extraHandlers: [gateway.webhookHandler, gateway.composedHandler],
     exposeUserStoreRoute: false,
     exposeConversationRoute: false,
-    // Bearer-free by exception only: `state` (#304), webhook secret (#96). Never
-    // add a pairing-redemption path — tickets redeem over iroh (#555).
     publicPaths: [OAUTH_CALLBACK_PATH, ROUTES.gatewayInfo],
     publicPathPrefixes: [WEBHOOK_ROUTE_PREFIX],
   };
@@ -56,7 +51,6 @@ export async function serve(
   if (options.token !== undefined) serverOptions.token = options.token;
   serverOptions.authorizeRequest = (req) =>
     gateway.webControlSessions.authorize(req);
-  // Session-bound only (#504); empty yields plain `*`.
   serverOptions.credentialedCorsOrigins = () =>
     gateway.webControlSessions.knownShellOrigins();
   const server = await startRuntimeHttpServer(serverOptions);
@@ -74,7 +68,6 @@ export async function serve(
     url: server.url,
     token: server.token,
     ...(web ? { webUrl: web.url } : {}),
-    // Cron stops first: no fire may dispatch mid-teardown.
     close: async () => {
       await gateway.stop();
       await web?.close();

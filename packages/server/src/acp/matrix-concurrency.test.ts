@@ -1,6 +1,3 @@
-/**
- * lowPriorityCommand is pure per call — concurrent invocations must not share state.
- */
 import { describe, expect, test } from "vitest";
 
 import { lowPriorityCommand } from "./low-priority.ts";
@@ -17,7 +14,6 @@ describe("matrix-concurrency", () => {
     for (let i = 0; i < results.length; i += 1) {
       expect(results[i]!.args.join(" ")).toContain(`--slot=${i}`);
     }
-    // Mutating one result's argv must not rewrite sibling arrays.
     results[0]!.args.push("mutated");
     for (let i = 1; i < results.length; i += 1) {
       expect(results[i]!.args).not.toContain("mutated");

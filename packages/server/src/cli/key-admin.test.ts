@@ -1,8 +1,4 @@
 import crypto from "node:crypto";
-/*
- * Seal-key custody CLI: status + in-place rotation only. Recovery uses the
- * password-wrapped recovery-kit path and this surface never exports raw keys.
- */
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 
@@ -15,9 +11,6 @@ import { commandKey } from "./key-admin.ts";
 import { daemonLayoutFor } from "./paths.ts";
 import { commandVault } from "./vault-admin.ts";
 
-// See admin.test.ts: real vault/daemon bootstrap per test, so this file is
-// fsync-bound and needs an escalation above the 30s node-project default.
-// Same 60s budget as its sibling CLI suites.
 vi.setConfig({ testTimeout: 60_000 });
 
 class CliFailError extends Error {

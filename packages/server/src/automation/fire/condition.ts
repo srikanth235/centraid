@@ -1,11 +1,3 @@
-/**
- * Condition-trigger evaluation — "time lives in the data".
- * Dedup is by row CONTENT hash; the matching-hash set is the cursor.
- * Stays matched → fires once; changes → fires again; leave-and-reenter →
- * fires again. Consent deny or bridge error throws: failure never widens
- * access and never advances past undelivered rows.
- */
-
 import { createHash } from "node:crypto";
 
 import type { VaultBridge } from "@centraid/server/engine";
@@ -14,14 +6,6 @@ import type { ConditionTrigger, DataTrigger } from "../manifest/manifest.js";
 import { parseRef } from "../manifest/ref.js";
 import type { CursorReadResult } from "./cursor-engine.js";
 
-/*
- * `__trigger:` stays a reserved `automation_state` key prefix: handlers share
- * that KV namespace via `ctx.state`. Durable trigger positions live in
- * `automation_trigger_cursor` (see `cursor-engine.ts`), so nothing in this
- * module writes the prefix.
- */
-
-/** Cap on remembered hashes — beyond this the oldest matches re-fire. */
 const MAX_SEEN_HASHES = 2000;
 
 function rowHash(row: Record<string, unknown>): string {
@@ -52,7 +36,6 @@ function stringArrayPosition(positionJson: string | undefined): string[] {
   }
 }
 
-/** Derived-query cursor source: content hashes are its ordered position set. */
 export async function readConditionCursor(
   options: ReadConditionCursorOptions
 ): Promise<CursorReadResult> {
@@ -83,19 +66,12 @@ export async function readConditionCursor(
     .filter(({ hash }) => !seen.has(hash));
   const delivered = fresh.slice(0, options.limit);
   const deliveredHashes = new Set(delivered.map(({ hash }) => hash));
-  // Committed position advances over DELIVERED rows only: a match beyond the
-  // cap stays unseen and arrives on the next gate tick. Rows that left the
-  // window drop from the set, which is what makes a re-entry fire again.
   const position = current.filter(
     (hash) => seen.has(hash) || deliveredHashes.has(hash)
   );
   const occurredAt = options.now.getTime();
   return {
     elements: delivered.map(({ row, hash }) => ({
-      // One position per DELIVERY OCCURRENCE, not per row content. The host
-      // derives its idempotency run id from this, so a row that leaves and
-      // re-enters unchanged must not collide with the first fire. Rows still
-      // matching are suppressed by the hash set above, never by this id.
       position: `${hash}:${occurredAt}`,
       occurredAt,
       payload: row,
@@ -125,7 +101,6 @@ function scalarPosition(positionJson: string | undefined): string | null {
   }
 }
 
-/** Feed-native watermark of one change entry, when it carries one. */
 function changeId(change: Record<string, unknown>): string | undefined {
   for (const key of ["id", "provId", "provenanceId", "cursor"]) {
     const value = change[key];
@@ -141,7 +116,6 @@ function changePosition(
   return changeId(change) ?? `${rowHash(change)}:${index}`;
 }
 
-/** Vault provenance cursor source. Missing position bootstraps from now. */
 export async function readDataCursor(
   options: ReadDataCursorOptions
 ): Promise<CursorReadResult> {
@@ -149,10 +123,6 @@ export async function readDataCursor(
     throw new Error(`invalid ref ${options.automationRef}`);
   }
   const cursor = scalarPosition(options.positionJson);
-  // Pull exactly what one fire may carry. The feed's returned watermark is the
-  // last row it returned, so delivering the whole pull is the ONLY way the
-  // committed position stays at a delivered element; over-pulling and slicing
-  // would advance past entries no fire ever saw.
   const result = await options.vault({
     op: "changes",
     payload: {
@@ -172,13 +142,9 @@ export async function readDataCursor(
     cursor?: string;
   };
   const changes = feed.changes ?? [];
-  // Bootstrap pull (no stored position) never fires: a fresh watcher reacts
-  // to what happens next, not to the whole journal.
   const visible = cursor === null ? [] : changes;
   return {
     elements: visible.map((change, index) => {
-      // Only a feed-native id is a legal watermark; a synthesized position
-      // identifies the delivery but must never be committed as one.
       const watermark = changeId(change);
       return {
         position: changePosition(change, index),

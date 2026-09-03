@@ -1,12 +1,3 @@
-/*
- * TRAP 2 at the daemon seam (#726): a linked gateway must never be
- * able to become a paired owner device.
- *
- * The two lanes meet in exactly one file — `endpoint-host.ts` — and each of
- * these assertions fails if someone reuses the device decision, the device
- * headers, or the device resolution for a peer.
- */
-
 import type http from "node:http";
 
 import { describe, expect, it } from "vitest";
@@ -56,8 +47,6 @@ const loopbackRequest = (headers: Record<string, string>) =>
 describe("peer lane separation", () => {
   it("does not answer the peer question with the device answer", () => {
     const { plane } = makePlane();
-    // An ENROLLED DEVICE is admitted on the device lane and refused on the
-    // peer lane: pairing is not linking.
     expect(plane.dataPlaneControl.authorize("ep-device").allowed).toBe(true);
     expect(plane.dataPlaneControl.authorizePeer?.("ep-device").allowed).toBe(
       false
@@ -83,7 +72,6 @@ describe("peer lane separation", () => {
     expect(headers[PEER_ENDPOINT_HEADER]).toBe("ep-scanner");
     expect(headers[PEER_PROOF_HEADER]).toBe(plane.peerPlane.proof);
     expect(headers[TUNNEL_FORWARDED_HEADER]).toBe("1");
-    // And nothing a device route reads.
     expect(headers[DEVICE_HEADER]).toBeUndefined();
     const deviceHeaders =
       plane.dataPlaneControl.authorize("ep-device").headers ?? {};
@@ -91,11 +79,6 @@ describe("peer lane separation", () => {
   });
 
   it("never claims a vault on the wire, even once a link exists", () => {
-    // An endpoint identifies a machine, not a vault: a linked peer may hold
-    // routes to several of the owner's vaults, so the forwarder must not pick
-    // one via an endpoint-only lookup and stamp it as THE vault for this
-    // caller. The route layer resolves the (endpoint, vault) pair itself, per
-    // request — see `identify()` in `routes/peer-plane.ts`.
     const { plane } = makePlane();
     const ticket = plane.peerPlane.links.tickets.mint(
       "vlt_local",
@@ -119,11 +102,6 @@ describe("peer lane separation", () => {
     expect(Object.keys(headers)).not.toContain("x-centraid-peer-vault");
   });
 
-  /*
-   * The last line of the trap: even if a peer-forwarded request reached a
-   * device-tier route, it resolves to NO device — so it can never act for the
-   * gateway's owner.
-   */
   it("never resolves a device key for a peer-forwarded request", () => {
     const { plane } = makePlane();
     expect(plane.deviceAccess.deviceKeyFor(loopbackRequest({}))).toBe(

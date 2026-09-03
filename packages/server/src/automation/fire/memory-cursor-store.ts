@@ -9,7 +9,6 @@ function rowKey(automationId: string, triggerIndex: number): string {
   return `${automationId}\u0000${triggerIndex}`;
 }
 
-/** Process-local cursor store for injected/test schedulers without a durable host store. */
 export class MemoryCursorStore {
   private readonly rows = new Map<string, AutomationTriggerCursor>();
 
@@ -41,17 +40,12 @@ export class MemoryCursorStore {
     });
   }
 
-  /**
-   * Drop cursors for trigger slots the desired set no longer declares. An
-   * empty retention set is a no-op, never a wipe — see `AutomationTriggerStore`.
-   */
   deleteCursorsNotIn(retained: readonly CursorRetentionKey[]): number {
     if (retained.length === 0) return 0;
     const keep = new Set(
       retained.map((entry) => rowKey(entry.automationId, entry.triggerIndex))
     );
     let deleted = 0;
-    // Deleting the current entry mid-iteration is well-defined for a Map.
     for (const key of this.rows.keys()) {
       if (keep.has(key)) continue;
       this.rows.delete(key);

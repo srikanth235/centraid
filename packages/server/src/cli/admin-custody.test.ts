@@ -1,24 +1,3 @@
-/*
- * The admin CLIs against a PROTECTOR-FUL data directory (#568).
- *
- * `daemonKeyStore` always installs a protector, so every `keys/<id>.sealkey`
- * a running daemon writes is an `aes-256-gcm-v1` envelope. Every
- * `openVaultRegistry` call in `vault-admin` / `device-admin` / `status-admin`
- * must therefore pass the `keyStore`: a protector-less store throws
- * `unsupported_scheme`, `vault-registry.ts` swallows it into
- * `failedMountsByDir`, and `list()` answers `[]`.
- *
- * That failure is silent, which is why only a positive assertion catches it:
- * `vault list` prints nothing, `status` reports zero vaults, `devices add
- * --vault` fails with "no vault matches" — and `devices revoke` opens
- * `cleanupRegistry` for the vault-local data-erasure step, finds no vault, and
- * SKIPS IT.
- *
- * These drive the CLI verbs against a data dir whose sealing keys are
- * protected exactly as a daemon leaves them, and assert the revoke erasure
- * positively rather than by absence of an error.
- */
-
 import { promises as fs, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
@@ -72,7 +51,6 @@ describe("admin-custody suite", () => {
     return chunks.join("");
   }
 
-  /** A data dir whose vault was created the way the DAEMON creates one. */
   async function daemonDataDir(name: string): Promise<{
     dataDir: string;
     vaultId: string;
@@ -90,9 +68,6 @@ describe("admin-custody suite", () => {
     });
     const created = registry.create(name);
     registry.stop();
-    // A daemon mints the per-vault sealing key through its own custody store,
-    // so the on-disk envelope is `aes-256-gcm-v1`. Writing it here reproduces
-    // exactly that artifact without needing a sealed write.
     daemonKeyStore(layout.keysDir).create(`${created.vaultId}.sealkey`);
     return { dataDir, vaultId: created.vaultId, layout };
   }
@@ -109,8 +84,6 @@ describe("admin-custody suite", () => {
     ).toMatchObject({
       scheme: "aes-256-gcm-v1",
     });
-    // The precondition these tests exist for: a protector-less reader sees
-    // NOTHING, silently.
     const blind = openVaultRegistry({
       rootDir: layout.vaultDir,
       cacheRootDir: layout.cacheDir,
@@ -161,10 +134,6 @@ describe("admin-custody suite", () => {
       )
     );
 
-    // Give the phone something vault-local to lose. `forgetReplicaDevice` — the
-    // durable offline-intent outcomes a revoked device must not keep — is
-    // exactly what `devices revoke` reaches, and exactly what it silently
-    // skipped when the registry mounted nothing.
     const seed = openVaultRegistry({
       rootDir: layout.vaultDir,
       cacheRootDir: layout.cacheDir,
@@ -205,7 +174,6 @@ describe("admin-custody suite", () => {
       enableWalShipper: false,
     });
     try {
-      // Positively asserted, not inferred from the absence of an error.
       expect(
         listReplicaIntentOutcomes(after.get(vaultId)!.db.vault, "ep-phone")
       ).toStrictEqual([]);

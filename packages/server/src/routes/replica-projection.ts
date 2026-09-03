@@ -70,7 +70,6 @@ export interface ReplicaChangeBatchWire {
   changes: ReplicaChangeWire[];
   outcomes?: ReplicaIntentOutcomeWire[];
   hasMore?: boolean;
-  /** Lets transports detect trust/expiry changes. */
   shapeIds: string[];
 }
 
@@ -81,7 +80,6 @@ export interface ReplicaDoorbellChange {
   rowId: string;
   op: ReplicaChangeEntry["op"];
   changedAt: string;
-  /** The authorized shapes this opaque wake-up affects. */
   shapeIds: string[];
 }
 
@@ -92,13 +90,6 @@ export interface ReplicaProjectedPage {
   rebootstrapReason?: "shape-changed";
 }
 
-// These rows change what a client may retain: advancing past one as ordinary
-// data leaves a stale local shape behind.
-//
-// The verdict below reads the ENTRY, not the row's end state: a grant that
-// went active, revoked, then active again must force a bootstrap for the
-// middle transition too. Retention compaction therefore may not fold these
-// entries away — `REPLICA_COMPACTION_HELD_ENTITIES` covers exactly this set.
 export const SHAPE_CONTROL_ENTITIES = new Set([
   "access.app",
   "access.app_ext",
@@ -218,7 +209,6 @@ function currentRow(
   key: string,
   rowId: string
 ): Record<string, unknown> | undefined {
-  // Table/key come from a closed set of consent tables, never the wire.
   return preparedStatement(
     db,
     `SELECT * FROM "${table}" WHERE "${key}" = ?`
@@ -294,7 +284,7 @@ function shapeControlChange(
     const key = JSON.parse(change.rowId) as unknown;
     if (Array.isArray(key)) keyAppId = key[0];
   } catch {
-    // Invalid internal row ids fail closed below.
+    // Intentionally empty.
   }
   return appMatches(db, access, before?.app_id ?? keyAppId);
 }
@@ -305,11 +295,6 @@ interface CoalescedChange {
 }
 
 export interface ReplicaProjectionOptions {
-  /**
-   * The caller sends `doorbell` and drops `batch.changes` (the multiplex plane,
-   * where each vault's rows travel over its own lane). Visibility and the wire
-   * row id are still computed; only the shaped `values` copy is skipped.
-   */
   doorbellOnly?: boolean;
 }
 
@@ -329,16 +314,11 @@ function shapedChangeRow(
     const wire = shapeReplicaRow(shape, entity, row, nowMs);
     return wire ? { rowId: wire.rowId, wire } : undefined;
   }
-  // `shapeReplicaRow`'s predicate + field-mask pass, minus the `values` copy.
   return replicaRowColumns(shape, entity, row, nowMs)
     ? { rowId: replicaWireRowId(shape, entity, row.rowId) }
     : undefined;
 }
 
-/**
- * One stable metadata page through current consent: the read transaction pins
- * the watermark and every changed-row read together.
- */
 export function projectReplicaPage(
   db: DatabaseSync,
   access: ReplicaShapeAccess & { deviceId?: string },
@@ -448,10 +428,6 @@ export function projectReplicaPage(
         { op: ReplicaChangeEntry["op"]; shapeIds: string[] }
       >();
       for (const shape of interested) {
-        // The PRIOR pair, never `first.op`/`first.oldValuesJson`: compaction
-        // may have folded older entries into `first`, and membership at the
-        // client's cursor is decided by the state before the OLDEST change
-        // `first` stands for (#883 C6). An unfolded entry reports itself.
         const previous =
           first.priorOp === "insert"
             ? { known: true }

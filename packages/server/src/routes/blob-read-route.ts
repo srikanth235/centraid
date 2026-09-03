@@ -12,14 +12,6 @@ import type { DataPlaneHttpOptions } from "../serve/data-plane-handoff.js";
 import { parseRange, pipeBlobResponse } from "./blob-response.js";
 import { sendJson } from "./route-helpers.js";
 
-/**
- * Media types a browser executes in the origin of whatever page embeds them
- * (issue #865). Blob bytes can be attacker-authored — an imported email
- * attachment, a shared file — so a stored `text/html` blob served inline is
- * a stored XSS against the PWA shell origin. These are never rendered
- * inline from the gateway: they download instead. `nosniff` plus the
- * `sandbox` CSP below keep even a mislabeled type inert.
- */
 const INLINE_EXECUTABLE_MEDIA_TYPES = new Set([
   "text/html",
   "application/xhtml+xml",
@@ -53,13 +45,7 @@ export async function serveBlobRead(input: {
   const setRepresentationHeaders = (): void => {
     res.setHeader("ETag", etag);
     res.setHeader("Accept-Ranges", "bytes");
-    // Content-addressed bytes never change under their id+variant — cache
-    // forever, privately (this is the owner's data).
     res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
-    // Blob bytes are not always owner-authored; a browser must never guess a
-    // scriptable type from them, and any document it does open gets an
-    // opaque sandboxed origin — no same-origin access to the shell (issue
-    // #865).
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Content-Security-Policy", "sandbox");
     res.setHeader("Content-Type", blob.mediaType);
@@ -92,8 +78,6 @@ export async function serveBlobRead(input: {
   if (handoff) {
     res.statusCode = 307;
     res.setHeader("Location", handoff);
-    // Tickets expire after ten seconds and are single-use. A permanent
-    // immutable cache policy would preserve an already-spent Location.
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Content-Length", "0");
     res.end();
@@ -113,8 +97,6 @@ export async function serveBlobRead(input: {
   let source =
     opened?.stream ??
     custody.openRemoteReadStream(blob.sha256, blob.byteSize, requestedRange);
-  // Memory-backed vaults have no file-descriptor stream primitive. Preserve
-  // the bounded buffered custody fallback for those stores.
   if (!source) {
     const bytes = await custody.open(blob.sha256, requestedRange);
     if (bytes) source = Readable.from(bytes);

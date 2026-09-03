@@ -1,13 +1,4 @@
 #!/usr/bin/env node
-/**
- * Import-boundary checker for `@centraid/server`.
- *
- * Seams that used to be package.json edges:
- *   - engine/** never imports automation/** or acp/**
- *   - automation/** never imports acp/**
- *
- * The trees still link into one process; this file is the mechanical gate.
- */
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 

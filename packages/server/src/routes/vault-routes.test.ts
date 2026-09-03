@@ -4,12 +4,6 @@ import http from "node:http";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
-// The outbox edit-before-send route slice (#308 A5 UI slice):
-// approve-with-edit rebuilds the gmail.send wire request server-side from
-// the edited artifact, an unsupported verb 4xx's instead of silently
-// dropping the edit, shape-drifted artifacts are refused, and a
-// client-supplied raw "request" is refused outright (the owner surface
-// never handles the wire request — see `outbox-edit.ts`).
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { GatewayDatabase } from "../serve/gateway-db.js";
@@ -239,13 +233,10 @@ describe("vault-routes", () => {
     expect(blockingById.get(gmailItem)).toBe(true);
     expect(blockingById.get(otherItem)).toBe(false);
 
-    // The raw request never rides either read surface.
     expect(JSON.stringify(listed)).not.toContain("request_json");
     expect(JSON.stringify(listed)).not.toContain("{{connection:access_token}}");
   });
 
-  // Issue #659 M5 (gateway half): apps/mobile revalidates these two polled
-  // reads with If-None-Match, which does nothing unless the server tags them.
   test("Notifications and Parked answer 304 on an unchanged body and re-tag when it changes", async () => {
     const dir = await tempDir();
     const registry = openVaultRegistry({
@@ -268,9 +259,6 @@ describe("vault-routes", () => {
         headers: etag === undefined ? {} : { "If-None-Match": etag },
       });
 
-    // The steps WITHIN a surface are sequential by necessity — you need the
-    // ETag before you can revalidate with it — but the two surfaces are
-    // independent, so they run together.
     const revalidates = async (path: string): Promise<void> => {
       const first = await get(path);
       expect(first.status).toBe(200);
@@ -282,7 +270,6 @@ describe("vault-routes", () => {
       expect(revalidated.status).toBe(304);
       await expect(revalidated.text()).resolves.toBe("");
 
-      // A client that does not revalidate still sees the identical payload.
       await expect(get(path).then((r) => r.text())).resolves.toBe(body);
     };
     await Promise.all([
@@ -290,8 +277,6 @@ describe("vault-routes", () => {
       revalidates("/centraid/_vault/parked"),
     ]);
 
-    // Mutate BOTH surfaces: a notice changes Notifications, a confirm-gated
-    // assistant invocation parks and changes Parked.
     const notificationsEtag = (
       await get("/centraid/_vault/notifications")
     ).headers.get("etag");
@@ -503,7 +488,6 @@ describe("vault-routes", () => {
       headers: Record<string, string>;
       body: string;
     };
-    // Everything not derived from the artifact stayed as staged.
     expect(parsed.method).toBe("POST");
     expect(parsed.url).toBe(
       "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
@@ -511,7 +495,6 @@ describe("vault-routes", () => {
     expect(parsed.headers.authorization).toBe(
       "Bearer {{connection:access_token}}"
     );
-    // The raw RFC 2822 message reflects the EDITED subject/body/recipients.
     const raw = (JSON.parse(parsed.body) as { raw: string }).raw;
     const decoded = Buffer.from(raw, "base64url").toString("utf8");
     expect(decoded).toContain("To: ravi@example.com, asha@example.com");
@@ -537,7 +520,6 @@ describe("vault-routes", () => {
       /editing isn't supported for gcal\.create_event/u
     );
 
-    // Nothing changed — the item is still pending, request untouched.
     const { status } = rawOf(plane, itemId);
     expect(status).toBe("pending");
   });
@@ -604,7 +586,6 @@ describe("vault-routes", () => {
       /must stay a string/u
     );
 
-    // None of the refused edits touched the staged rows.
     for (const id of [addedFieldItem, removedFieldItem, typeChangedItem]) {
       expect(rawOf(plane, id).status).toBe("pending");
     }
@@ -625,7 +606,6 @@ describe("vault-routes", () => {
     const body = (await res.json()) as { message: string };
     expect(body.message).toMatch(/never accepts a raw "request"/u);
 
-    // The staged request is untouched — no path let a raw request through.
     const { requestBody, status } = rawOf(plane, itemId);
     expect(status).toBe("pending");
     expect(requestBody).not.toContain("evil.example.com");
@@ -668,17 +648,8 @@ describe("vault-routes", () => {
     expect(requestBody).toContain("original-raw-placeholder");
   });
 
-  // The owner-only tier writer uses this route. Two things must hold: the
-  // write reaches the mirror the
-  // runtime gate reads, and the standing "enrichment isn't running" card goes
-  // away with the tier it describes — a card left asserting a setting the
-  // owner has just changed is a second silent lie.
   test("the enrichment tier route writes the mirror the gate reads and retires the stale refusal card", async () => {
     const { base, plane } = await setup();
-    // Start both domains at `device` (a fresh vault's bootstrap default is
-    // `gateway` since #712 C5 — lower them explicitly so the PUT below
-    // has a real change to make, same as an owner who narrowed the tier
-    // once already).
     const patch: Partial<Record<"photos" | "docs", "device">> = {
       photos: "device",
       docs: "device",
@@ -717,11 +688,9 @@ describe("vault-routes", () => {
       .prepare("SELECT tier FROM enrich_policy WHERE domain = ?")
       .get("photos") as { tier: string };
     expect(mirrored.tier).toBe("gateway");
-    // Archived, not deleted — the record of what was refused stays readable.
     expect(
       plane.notices.getBySource("enrichment", "photos")?.archivedAt
     ).not.toBeNull();
-    // The domain that did not move keeps its card, unread state and all.
     expect(plane.notices.getBySource("enrichment", "docs")).toStrictEqual(
       untouched
     );

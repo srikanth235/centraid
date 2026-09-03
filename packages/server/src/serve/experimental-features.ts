@@ -1,9 +1,3 @@
-/*
- * Experimental gate — OFF unless opted in; hides surface, never deletes
- * state. Resolution mirrors Resource mode (#521/#528): env > durable prefs >
- * host option > off; a SET `CENTRAID_EXPERIMENTAL` is authoritative.
- */
-
 export type ExperimentalFeature = "automations" | "connectors";
 
 export const EXPERIMENTAL_FEATURES: readonly ExperimentalFeature[] = [
@@ -11,7 +5,6 @@ export const EXPERIMENTAL_FEATURES: readonly ExperimentalFeature[] = [
   "connectors",
 ] as const;
 
-/** Pref keys — runtime wins (docs/config-ownership.md). */
 export const EXPERIMENTAL_FEATURE_PREF_KEYS: Record<
   ExperimentalFeature,
   string
@@ -26,7 +19,6 @@ export type ExperimentalFeatureSet = Record<ExperimentalFeature, boolean>;
 
 export interface ExperimentalResolution {
   features: ExperimentalFeatureSet;
-  /** Surfaced so boot can log typos. */
   unknownEnvTokens: string[];
 }
 

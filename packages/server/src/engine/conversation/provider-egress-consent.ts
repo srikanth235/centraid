@@ -1,8 +1,3 @@
-/*
- * Conversation-scoped provider egress consent (#567). Revocation is
- * retained as evidence, not deleted.
- */
-
 import type { DatabaseProvider } from "../stores/gateway-db.js";
 import type { ModelSubsystem } from "../stores/prefs-store.js";
 import type { HarnessKind } from "./turn.js";
@@ -15,7 +10,6 @@ export interface ProviderEgressConsentController {
     harnessKind: HarnessKind,
     subsystem?: ModelSubsystem
   ) => boolean;
-  /** Attended: the user answered an egress prompt; clears a prior revocation. */
   grant: (
     conversationId: string,
     harnessKind: HarnessKind,
@@ -23,10 +17,6 @@ export interface ProviderEgressConsentController {
     subsystem?: ModelSubsystem,
     now?: number
   ) => void;
-  /**
-   * Unattended, derived from authoring; never resurrects a revoked row.
-   * Absent ⇒ unattended egress is denied, never assumed.
-   */
   recordDerived?: (
     conversationId: string,
     harnessKind: HarnessKind,
@@ -39,7 +29,6 @@ export interface ProviderEgressConsentController {
     harnessKind: HarnessKind,
     now?: number
   ) => void;
-  /** Revoke grants created by one subsystem's ladder membership. */
   revokeLadderProvider?: (
     harnessKind: HarnessKind,
     subsystem: ModelSubsystem,
@@ -125,7 +114,6 @@ export class ProviderEgressConsentStore implements ProviderEgressConsentControll
   ): boolean {
     const consentSubsystem = consentSubsystemFor(source, subsystem);
     const db = this.dbProvider();
-    // An explicit `revoke()` tombstone: only an attended grant re-opens.
     const revokedDirectly =
       db
         .prepare(
@@ -137,13 +125,10 @@ export class ProviderEgressConsentStore implements ProviderEgressConsentControll
         .get(conversationId, harnessKind) !== undefined;
     if (revokedDirectly) return false;
     if (source === "ladder" && subsystem !== undefined) {
-      // Ladder membership IS the authorization (D13); re-add clears a
-      // membership-removal revocation, absence is denial.
       if (!this.isCurrentLadderMember(harnessKind, subsystem)) return false;
       this.grant(conversationId, harnessKind, source, subsystem, now);
       return true;
     }
-    // `DO UPDATE … WHERE revoked_at IS NULL` never resurrects a revoked row.
     db.prepare(
       `INSERT INTO conversation_provider_consent (
          conversation_id, harness_kind, source, subsystem, granted_at, revoked_at
@@ -171,8 +156,6 @@ export class ProviderEgressConsentStore implements ProviderEgressConsentControll
     now = Date.now()
   ): void {
     const db = this.dbProvider();
-    // Direct row is the durable tombstone; membership removal writes none —
-    // re-adding a harness re-authorizes (D13).
     db.prepare(
       `INSERT INTO conversation_provider_consent (
          conversation_id, harness_kind, source, subsystem, granted_at, revoked_at

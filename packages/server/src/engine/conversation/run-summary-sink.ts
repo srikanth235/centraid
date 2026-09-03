@@ -1,12 +1,8 @@
-// One row per finished harness run. `run_summary` is a VIEW — the journal
-// ledger is the source (#151).
-
 import type { RunKind } from "./schema.js";
 
 export interface RunSummary {
   readonly runId: string;
   readonly kind: RunKind;
-  /** `<appId>/<id>` handle. */
   readonly automationRef?: string;
   readonly automationName?: string;
   readonly appId?: string;

@@ -1,9 +1,6 @@
-// Idempotency replay (#420): a seen idempotencyKey replays the recorded stream; never re-run the model.
-
 import type { RecordedTurnReplay } from "../conversation/history.js";
 import type { TurnStreamEvent } from "../conversation/runner.js";
 
-/** The ordered `TurnStreamEvent`s that replay a recorded turn. */
 export function buildReplayEvents(
   recorded: RecordedTurnReplay
 ): TurnStreamEvent[] {

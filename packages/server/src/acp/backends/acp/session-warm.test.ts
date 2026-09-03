@@ -1,5 +1,3 @@
-// Warm-pool lifecycle: put / take / dispose / idle eviction edges.
-
 import { describe, expect, test, afterEach } from "vitest";
 
 import type { AcpConnectionOwner } from "./connection.js";
@@ -102,9 +100,7 @@ describe("session-warm suite", () => {
     expect(slot?.sessionId).toBe("sess-a");
     expect(slot?.canResume).toBe(true);
     expect(slot?.httpMcp).toBe(true);
-    // Second take misses — slot was claimed.
     expect(takeWarmSlot("goose", "/tmp/w", "sess-a")).toBeUndefined();
-    // Drop the claimed slot so afterEach clearWarmPool isn't needed for it.
     await disposeSlot(slot!);
   });
 

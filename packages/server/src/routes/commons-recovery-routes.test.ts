@@ -1,6 +1,3 @@
-/* The owner-tier doors for Commons steward-absence recovery (#731): the read
- * surface a member renders its steward status from, and the ceremony itself. */
-
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
@@ -48,7 +45,6 @@ function serve(member: Side): Promise<string> {
   });
 }
 
-/** A steward with one shared photo and a member holding the full replica. */
 function shared(label: string): {
   steward: Side;
   member: Side;
@@ -121,7 +117,6 @@ describe("commons recovery routes", () => {
     };
     expect(body.vaultId).toBe(member.vaultId);
     const grant = body.grants.find((entry) => entry.grantId === grantId);
-    // Never pulled yet, so the seat says so rather than inventing an absence.
     expect(grant?.steward.presence).toBe("unknown");
     expect(grant?.reachableRatio).toBeNull();
     expect(grant?.containerType).toBe("media.asset");
@@ -153,7 +148,6 @@ describe("commons recovery routes", () => {
     };
     expect(firstBody.state).toBe("recovered");
     expect(firstBody.replayed).toBe(false);
-    // The old steward is invited, not joined: consent stays theirs to give.
     expect(firstBody.invitedPartyIds).toContain(
       readCommonsGrant(member.vault.vault, grantId).stewardPartyId
     );

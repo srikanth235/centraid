@@ -1,14 +1,3 @@
-/*
- * Opt-in live automation-fire failover smoke for #567. The primary is
- * deliberately configured with a missing binary; the fallback is a real,
- * locally-authenticated provider. The test then audits the shared ledger to
- * prove the failed and successful attempts are distinct turns and that the
- * handoff notice names the failure class.
- *
- * This is skipped by the ordinary suite. Run it through
- * `bun run --cwd packages/server test:live-automation-failover`.
- */
-
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 

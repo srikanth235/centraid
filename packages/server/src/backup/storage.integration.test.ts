@@ -1,14 +1,5 @@
 import crypto from "node:crypto";
 import path from "node:path";
-/*
- * End-to-end coverage for #367 §C — the vault blob CAS's S3-compatible
- * remote tier — against a REAL S3-compatible HTTP server (`S3TestServer`):
- * real SigV4 over real sockets, real AES-256-GCM sealing; assertions read
- * back through the client or the server's direct object map. Covers
- * round-trip incl. multipart (§C8), replication + sealed-object verification
- * (§C3/C4), reconcile orphan deletion, lease-gate skip (§C6), rotation reset
- * (§C9).
- */
 import { Readable } from "node:stream";
 
 import { afterAll, describe, expect, test, vi } from "vitest";
@@ -82,7 +73,6 @@ describe("storage", () => {
 
       await s3.putStream(sha, Readable.from([bytes]), size);
 
-      // Prove multipart ran, not a silent single-PUT fallback.
       const initiated = server.requests.some(
         (r) => r.method === "POST" && r.path.includes("uploads")
       );
@@ -146,7 +136,6 @@ describe("storage", () => {
       const moved = await custody.replicate([sha]);
       expect(moved).toStrictEqual([sha]);
 
-      // Raw bytes off the server's object map, not the client's unseal path.
       const raw = server.getObjectDirect(BUCKET, `vaultA/blobs/sha256/${sha}`);
       expect(raw).toBeDefined();
       expect(raw!.equals(plaintext)).toBe(false); // NOT plaintext on the wire
@@ -164,7 +153,6 @@ describe("storage", () => {
       const { sha256: liveSha } = custody.ingestSync(
         Buffer.from("live content")
       );
-      // Orphan: seeded remotely, no local claim, not in the live set.
       const orphanSha = crypto
         .createHash("sha256")
         .update("orphan")
@@ -204,12 +192,10 @@ describe("storage", () => {
       });
       expect(result.orphansDeleted).toStrictEqual([]);
       expect(result.orphansSkipped).toContain(orphanSha);
-      // Still there — a conflicted gateway must never delete the other's live write.
       expect(
         server.hasObjectDirect(BUCKET, `vaultD/blobs/sha256/${orphanSha}`)
       ).toBe(true);
 
-      // Lease conflict cleared: a normal reconcile finishes the job.
       const cleared = await custody.reconcile(new Set());
       expect(cleared.orphansDeleted).toContain(orphanSha);
     });
@@ -233,16 +219,12 @@ describe("storage", () => {
         sha,
       ]);
 
-      // Rotate at the `remoteTier()` seam — what a real caller does in settings.
       currentPrefix = "vaultE-new";
 
-      // Old prefix untouched — nothing addresses it again.
       expect(
         server.hasObjectDirect(BUCKET, "vaultE-old/blobs/sha256/" + sha)
       ).toBe(true);
 
-      // New prefix is empty: reconcile must read the sha as local-only and
-      // replicate fresh, never treating the old remote copy as coverage.
       const before = await custody.statusFor([sha]);
       expect(before.get(sha)).toBe("local-only");
       const result = await custody.reconcile(new Set([sha]));
@@ -253,17 +235,11 @@ describe("storage", () => {
     });
 
     test("sealBlob/sealBlobStream produce the same framed wire shape (modulo per-frame nonces) and both round-trip through unsealBlob", async () => {
-      // Issue #405 §1: the seal is FRAMED (CBSF header, per-frame GCM
-      // `nonce|ct|tag` + `[algoId]`, trailer). The buffered and streaming
-      // sealers implement ONE format: identical lengths (only nonces differ,
-      // compression verdicts deterministic), both must round-trip.
       const key = ephemeralSealKey();
       const sha = crypto
         .createHash("sha256")
         .update("stream-vs-buffer")
         .digest("hex");
-      // Multiple frames at a small frame size with an odd tail, incompressible
-      // so both paths store frames verbatim at equal lengths.
       const frameSize = 64 * 1024;
       const plaintext = crypto.randomBytes(frameSize * 3 + 777);
 
@@ -281,9 +257,7 @@ describe("storage", () => {
       });
       const streamed = Buffer.concat(chunks);
 
-      // Same wire shape: identical total length (nonce size fixed, count invariant).
       expect(streamed).toHaveLength(buffered.length);
-      // Both decrypt back; sealed bytes differ because nonces differ.
       expect(unsealBlob(key, sha, buffered).equals(plaintext)).toBe(true);
       expect(unsealBlob(key, sha, streamed).equals(plaintext)).toBe(true);
     });

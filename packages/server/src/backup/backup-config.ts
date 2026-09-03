@@ -1,17 +1,10 @@
-/*
- * One backup config shape for both the daemon JSON config file (`cli/config.ts`)
- * and the in-process desktop embed — `BuildGatewayOptions.backup` (`build-gateway.ts`).
- */
-
 export interface LocalBackupProviderConfig {
   kind: "local";
-  /** Root directory the `LocalBackupProvider` writes `objects/` + `registry.json` under. */
   dir: string;
 }
 
 export interface RemoteBackupProviderConfig {
   kind: "remote";
-  /** e.g. `https://api.clawgnition.com`. */
   endpoint: string;
   apiKey: string;
 }
@@ -22,7 +15,6 @@ export type BackupProviderConfig =
 
 export interface BackupConfig {
   enabled: boolean;
-  /** Backup keyring name in the gateway KeyStore (`keys/keyring.key`). */
   keyringPath?: string;
   provider: BackupProviderConfig;
 }
@@ -38,7 +30,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Validate an untyped JSON value (the daemon config file's `"backup"` key). */
 export function validateBackupConfig(value: unknown): BackupConfig {
   if (!isRecord(value)) throw new BackupConfigError("must be an object");
   for (const retired of ["intervalHours", "verifyEveryDays"]) {

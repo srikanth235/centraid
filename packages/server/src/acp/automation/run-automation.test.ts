@@ -1,8 +1,4 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
-/**
- * Mocks the automation fire spine, so `openDispatch` wiring is asserted
- * without a full fire (#545).
- */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -148,7 +144,6 @@ describe("run-automation suite", () => {
         })
       );
 
-      // Fallback to opts.model when manifest does not name one.
       deps.openDispatch({
         workdir: "/w",
         automationRef: "app/digest",
@@ -325,8 +320,6 @@ describe("run-automation suite", () => {
         onFailover,
       });
 
-      // Exactly one fire: the condemned primary's handler never executed, so its
-      // ctx.fetch / vault writes cannot be replayed by the fallback rung.
       expect(runFire).toHaveBeenCalledOnce();
       expect(runFire.mock.calls[0]![0]).toMatchObject({
         runId: "run-fire:failover:1:claude-code",

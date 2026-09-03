@@ -1,16 +1,3 @@
-/*
- * Optional warm ACP process pool — reuse a still-live harness process across
- * sequential turns that share kind + cwd + sessionId.
- *
- * Spawning and killing a harness on every conversation turn costs multi-turn
- * latency and session/load effectiveness. When a turn ends cleanly we keep the
- * child for a short idle window; the next turn with the same session id can
- * skip spawn + initialize and reattach via session/resume (or load).
- *
- * Vault MCP is still per-turn (fresh ToolContext); only the harness process is
- * reused. Concurrent turns never share a slot.
- */
-
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 
@@ -38,7 +25,6 @@ async function bounded<T>(promise: Promise<T>): Promise<T | undefined> {
 export interface WarmHarnessSlot {
   key: string;
   kind: string;
-  /** Stable ledger identity; unlike cwd, this does not alias other threads. */
   conversationId?: string;
   cwd: string;
   sessionId: string;
@@ -48,7 +34,6 @@ export interface WarmHarnessSlot {
   canLoad: boolean;
   canClose: boolean;
   canAdditional: boolean;
-  /** Harness still has HTTP MCP capability from the original initialize. */
   httpMcp: boolean;
   promptCaps: PromptCapabilities;
   lastUsed: number;
@@ -90,8 +75,6 @@ export function putWarmSlot(
 ): void {
   const conversationId = slot.conversationId ?? slot.sessionId;
   const key = warmKey(slot.kind, slot.cwd, slot.sessionId, conversationId);
-  // A conversation keeps exactly one warm process. cwd is not an identity:
-  // unrelated conversations can legitimately share the same workspace.
   for (const [existingKey, existing] of pool) {
     if (
       existingKey === key ||
@@ -102,7 +85,6 @@ export function putWarmSlot(
     clearTimeout(existing.timer);
     void disposeSlot(existing);
   }
-  // Replace any stale entry for this session.
   const prev = pool.get(key);
   if (prev) {
     pool.delete(key);
@@ -122,7 +104,6 @@ export function putWarmSlot(
       }
     }, IDLE_MS),
   };
-  // Don't keep the event loop alive solely for idle eviction.
   unrefTimer(entry.timer);
   pool.set(key, entry);
   if (pool.size > MAX_WARM_SLOTS) {
@@ -150,13 +131,13 @@ export async function disposeSlot(
         })
       );
     } catch {
-      // ignore — kill path follows
+      // Intentionally empty.
     }
   }
   try {
     child.stdin.end();
   } catch {
-    // ignore
+    // Intentionally empty.
   }
   if (!child.killed) child.kill("SIGTERM");
   const exited = await bounded(
@@ -166,8 +147,6 @@ export async function disposeSlot(
     )
   );
   if (!exited) {
-    // SIGTERM is a request. A harness that ignores it would leak one warm
-    // child per evicted slot, so the dispose path escalates.
     child.kill("SIGKILL");
     await conn.exited.catch(() => undefined);
   }

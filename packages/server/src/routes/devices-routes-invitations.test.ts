@@ -1,14 +1,3 @@
-/*
- * Invitation minting on `POST /centraid/_gateway/devices/ticket` (issues
- * #599, #726).
- *
- * Minting splits by TARGET: self-pair is open to any enrolled owner and
- * lands a new device in the vaults they already own; inviting another person
- * is refused (`owner_vaults_only`) until the P1 mint ceremony gives that
- * person a vault of their own. Host custody may mint for an existing owner
- * — the local recovery path.
- */
-
 import { describe, afterEach, expect, test } from "vitest";
 
 import { parsePairingTicket } from "../serve/pairing-store.js";
@@ -41,8 +30,6 @@ describe("devices-routes-invitations scenarios", () => {
     );
     expect(anonymous.status).toBe(403);
 
-    // Self-pair: an owner pairs their OWN new phone with no second party —
-    // "ask your spouse for a QR" fails the family test.
     const selfPair = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
       method: "POST",
       headers: deviceHeaders("owner-key"),
@@ -55,8 +42,6 @@ describe("devices-routes-invitations scenarios", () => {
       vaultId: "vault-a",
     });
 
-    // Inviting another person is refused: access is ownership, so a ticket
-    // cannot land someone in YOUR vaults — P1 mints them their own.
     const denied = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
       method: "POST",
       headers: deviceHeaders("owner-key"),
@@ -78,8 +63,6 @@ describe("devices-routes-invitations scenarios", () => {
     expect(parsed).toBeDefined();
     if (!parsed) throw new Error("ticket did not parse");
     expect(parsed.gw).toBe("endpoint-ticket");
-    // Self-pair bakes the owner's CURRENT vaults, target first, so the second
-    // device lands in the named vault and still reaches the rest.
     expect(f.tickets.redeem(parsed.t, parsed.s)).toMatchObject({
       ownerId: owner.ownerId,
       vaultIds: ["vault-a", "vault-b"],
@@ -106,8 +89,6 @@ describe("devices-routes-invitations scenarios", () => {
     const payload = (await minted.json()) as { ticket: string };
     const parsed = parsePairingTicket(payload.ticket);
     if (!parsed) throw new Error("ticket did not parse");
-    // Target-first ordering (scenario B12): grants[0] decides where the
-    // redeeming device lands.
     expect(f.tickets.redeem(parsed.t, parsed.s)).toMatchObject({
       ownerId: owner.ownerId,
       vaultIds: ["vault-b", "vault-a"],
@@ -132,8 +113,6 @@ describe("devices-routes-invitations scenarios", () => {
       ownerLabel: "Sid",
     });
 
-    // A vault someone else owns is indistinguishable from one that does not
-    // exist — `not_found`, never `forbidden` (topology hiding, re-aimed).
     const outside = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
       method: "POST",
       headers: deviceHeaders("owner-key"),
@@ -160,8 +139,6 @@ describe("devices-routes-invitations scenarios", () => {
 
   test("minting a ticket with no resolvable vault answers vault_required", async () => {
     const f = await harness();
-    // Enrolled in a vault the handler's `vaultName` does not know, and no
-    // explicit target — nothing to scope the ticket to.
     f.enrollments.enroll({
       endpointId: "owner-key",
       vaultIds: ["vault-b"],
@@ -236,8 +213,6 @@ describe("devices-routes-invitations scenarios", () => {
       body: JSON.stringify({}),
     });
     expect(response.status).toBe(200);
-    // Not `vault-a` (the shared vault), which sorts first among the caller's
-    // enrollments — the default is the owner's own vault.
     await expect(response.json()).resolves.toMatchObject({
       vaultId: "vault-personal",
       vaultName: "Personal",
@@ -285,8 +260,6 @@ describe("devices-routes-invitations scenarios", () => {
       vaults: [{ vaultId: "vault-a", vaultName: "Personal" }],
     });
 
-    // Even L0 cannot invite a NEW person into someone's vaults — the P1 mint
-    // ceremony is the only door for a new owner.
     const newPerson = await fetch(
       `${f.base}/centraid/_gateway/devices/ticket`,
       {

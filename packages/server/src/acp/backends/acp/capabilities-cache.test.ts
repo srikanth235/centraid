@@ -1,6 +1,3 @@
-// Cache + probe path for Settings capability status. Uses the real fake ACP
-// harness so the shipped resolve/probe entry points run end-to-end.
-
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -60,8 +57,6 @@ describe("capabilities-cache suite", () => {
   });
 
   test("without probeLivePrompt the probe sends no session/prompt", async () => {
-    // The diagnostic prompt is a REAL provider turn. A readiness check must not
-    // buy one, so the observed-signal flags stay honest-false instead.
     const dir = await tempDir("acp-probe-noprompt-");
     const promptMarker = path.join(dir, "prompt.json");
     const caps = await probeAcpCapabilities(
@@ -74,7 +69,6 @@ describe("capabilities-cache suite", () => {
       { timeoutMs: 8_000 }
     );
     expect(caps.reachable).toBe(true);
-    // Config options still come from session/new — no prompt needed for those.
     expect(caps.modelConfigurable).toBe(true);
     expect(caps.livePromptProbed).toBe(false);
     expect(caps.usageUpdateObserved).toBe(false);
@@ -88,19 +82,14 @@ describe("capabilities-cache suite", () => {
     });
     expect(first?.reachable).toBe(true);
 
-    // Age the cached snapshot past the TTL. Only `Date` is faked — the probe
-    // still spawns a real child on real timers.
     const clock = useFakeClock(undefined, { toFake: ["Date"] });
     clock.set(new Date(Date.now() + CAPABILITIES_TTL_MS + 1));
     const stale = await resolveAcpCapabilities("acp", {
       binPath: FAKE_HARNESS,
     });
-    // Still displayable…
     expect(stale?.reachable).toBe(true);
-    // …but no longer presented as the current verdict.
     expect(stale?.stale).toBe(true);
 
-    // A caller that is allowed to probe gets fresh evidence instead.
     const refreshed = await resolveAcpCapabilities("acp", {
       binPath: FAKE_HARNESS,
       probeIfMissing: true,
@@ -182,8 +171,6 @@ describe("capabilities-cache suite", () => {
       },
     },
   ])("capability matrix: $name", async ({ args, expected }) => {
-    // The `*Observed` expectations are exactly what the live diagnostic prompt
-    // exists to establish, so this matrix opts into it.
     const caps = await probeAcpCapabilities(
       { kind: "acp", acpArgs: [], binPath: FAKE_HARNESS, extraArgs: args },
       { timeoutMs: 8_000, probeLivePrompt: true }
@@ -220,8 +207,6 @@ describe("capabilities-cache suite", () => {
         binPath: FAKE_HARNESS,
         extraArgs: ["--mode=auth-prompt"],
       },
-      // A harness that only reveals its expired sign-in when prompted is the
-      // reason the live prompt exists at all.
       { timeoutMs: 8_000, probeLivePrompt: true }
     );
     expect(caps.reachable).toBe(true);
@@ -232,7 +217,6 @@ describe("capabilities-cache suite", () => {
     const caps = await probeAcpCapabilities({
       kind: "acp",
       acpArgs: [],
-      // No binPath / defaultBin → planLaunch throws.
     });
     expect(caps.reachable).toBe(false);
     expect(caps.reason).toMatch(/binary/iu);
@@ -273,7 +257,6 @@ describe("capabilities-cache suite", () => {
     });
     expect(withoutModel?.modelConfigurable).toBe(false);
 
-    // A different profile must not collide with the first profile's cache.
     await expect(
       resolveAcpCapabilities("acp", {
         binPath: FAKE_HARNESS,

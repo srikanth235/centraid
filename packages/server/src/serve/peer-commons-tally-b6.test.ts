@@ -110,8 +110,6 @@ describe("B6 Tally Commons across a real peer", () => {
       });
     compileOrigin();
 
-    // The remote receives metadata first. No Tally row crosses until the
-    // current-size invitation is explicitly accepted.
     const initialWire = exportCommonsBootstrap({
       steward: origin.vault.vault,
       identitySeed: origin.vault.identitySeed,
@@ -317,8 +315,6 @@ describe("B6 Tally Commons across a real peer", () => {
     await syncRemote();
     expectLocalNets([origin, local, remote], groupId);
 
-    // A consistent backup of the remote member's own resident vault is the
-    // restore source. A later local command creates a real catch-up gap.
     const backupDir = tempDirSync("tally-b6-remote-own-backup-");
     mkdirSync(backupDir, { recursive: true });
     const sealKey = Buffer.from(remote.vault.sealKey);

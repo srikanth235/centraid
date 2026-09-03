@@ -1,11 +1,3 @@
-/*
- * Durable vault erase completion (#555). Gateway rows are removed and an
- * erase_intents row commits before any filesystem unlink, so a crash leaves
- * one recoverable intermediate state: "rows gone, intent present, bytes
- * possibly present". Boot completes every such intent before mounting the
- * registry — it can never resurrect a half-erased vault.
- */
-
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
@@ -28,7 +20,6 @@ function removeIfEmpty(dir: string): void {
   }
 }
 
-/** Finish all state-first erases. Idempotent across repeated crashes. */
 export function recoverPendingVaultErases(
   options: PendingEraseRecoveryOptions
 ): string[] {
