@@ -1,16 +1,7 @@
-// Derivation provenance (#724): derived VALUES scatter across ontology tables
-// that record no producer, so this sidecar answers "which model wrote this".
-// Several ENGINE PROFILES may hold a result for one target and variant, so
-// `preferredDerivation` is THE reader — picking a row by hand mints a divergent
-// notion of "the" result (#807). STAMP AND VALUE MUST LAND TOGETHER: neither
-// function opens a transaction, because a stamp committed without its value
-// tells the automation cursor the work is done.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { nowIso, uuidv7 } from "../ids.js";
 
-/** What a caller naming no profile writes, and the fallback rung. */
 export const BUILT_IN_PROFILE = "built-in";
 
 export interface DerivationStamp {
@@ -18,9 +9,7 @@ export interface DerivationStamp {
   targetId: string;
   variant: string;
   capability: string;
-  /** Defaults to {@link BUILT_IN_PROFILE}. */
   profile?: string;
-  /** `"<name>@<version>"` — what an upgrade queries against. */
   model: string;
   payload?: unknown;
   now?: string;
@@ -44,10 +33,6 @@ export interface DerivationQuery {
   preferredProfile?: string;
 }
 
-/**
- * Re-running the SAME profile REPLACES its stamp: the row always names the
- * model whose output is on disk now. Another profile is another row (#807).
- */
 export function stampDerivation(
   vault: DatabaseSync,
   input: DerivationStamp
@@ -77,10 +62,6 @@ export function stampDerivation(
     );
 }
 
-/**
- * Preferred profile, else built-in, else lowest profile name — an arbitrary tie
- * broken STABLY, so two readers never disagree about which result they read.
- */
 export function preferredDerivation(
   vault: DatabaseSync,
   input: DerivationQuery
@@ -120,13 +101,11 @@ export function preferredDerivation(
     capability: row.capability,
     profile: row.profile,
     model: row.model,
-    // Unguarded: the DDL's `json_valid` CHECK makes bad payloads unstorable.
     payload: row.payload_json === null ? null : JSON.parse(row.payload_json),
     producedAt: row.produced_at,
   };
 }
 
-/** Resolves through `preferredDerivation`, so it names the row consumers read. */
 export function stampedModel(
   vault: DatabaseSync,
   input: DerivationQuery

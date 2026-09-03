@@ -1,5 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#731) the typed enrichment command pack keeps OCR, transcript, embedding, face, and provenance validation in one derivative-write boundary.
-// Enrichment commands (#299): verbs staging cannot express. OCR → inline `text` derivative (FTS on parent, #296). Face loop is one verb with three answers (#712).
 
 import { stampDerivation } from "../enrich/derivation.js";
 import {
@@ -15,7 +14,6 @@ import { encodeVector } from "../enrich/similarity.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 
-/** Embedding dimension ceiling — bounds one row at ~16 KiB of float32. */
 const MAX_EMBEDDING_DIM = 4096;
 
 const SET_EXTRACTED_TEXT: CommandDefinition = {
@@ -31,8 +29,6 @@ const SET_EXTRACTED_TEXT: CommandDefinition = {
       variant: { type: "string", enum: ["text", "transcript"] },
       capability: { type: "string", minLength: 1 },
       model: { type: "string", minLength: 1 },
-      // Which engine profile produced this text (#807). Absent means the
-      // bundled engine — see `BUILT_IN_PROFILE`.
       profile: { type: "string", minLength: 1 },
       prompt_rev: { type: "string", minLength: 1 },
       confidence: { type: "number", minimum: 0, maximum: 1 },
@@ -138,7 +134,6 @@ function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
   return result;
 }
 
-/** Drop out-of-bounds OCR boxes (#731); never fail the write or invent `[0,0,0,0]`. */
 function dropOutOfBoundsRegions(
   ctx: HandlerCtx,
   contentId: string,
@@ -164,7 +159,6 @@ function dropOutOfBoundsRegions(
   });
 }
 
-/** Canonical derivative writer. Rewrite = fresh `derivative_id` (never in-place UPDATE) so `embed-text`'s cursor still sees it (#731). Identity is `(content_id, variant)`. */
 export function writeExtractedText(
   ctx: HandlerCtx,
   contentId: string,
@@ -198,10 +192,6 @@ export function writeExtractedText(
   return { content_id: contentId, replaced: existing ? 1 : 0 };
 }
 
-/**
- * Triage verb (#712): one answer, discriminated on `answer`. Only writer of `media_face_region.review_state`.
- * `confirm` carries `party_id`; `reject`/`dismiss` must not (precondition — json-schema has no `oneOf`).
- */
 const ANSWER_FACE_PROPOSAL: CommandDefinition = {
   name: "media.answer_face_proposal",
   ownerSchema: "media",
@@ -211,9 +201,7 @@ const ANSWER_FACE_PROPOSAL: CommandDefinition = {
     additionalProperties: false,
     properties: {
       region_id: { type: "string", minLength: 1 },
-      /** The discriminant (protocol.md C3): one field, three members. */
       answer: { type: "string", enum: ["confirm", "reject", "dismiss"] },
-      /** `confirm` only — who the face is. See the precondition below. */
       party_id: { type: "string", minLength: 1 },
     },
   },
@@ -234,10 +222,6 @@ const ANSWER_FACE_PROPOSAL: CommandDefinition = {
       value: 1,
     },
     {
-      // The union rule in one predicate: `confirm` names a party that exists
-      // here; `reject`/`dismiss` name none. An optional input binds as NULL
-      // (contract.ts), which is what lets ONE condition branch on the
-      // discriminant instead of two conflicting ones.
       name: "answer_names_a_party_iff_confirm",
       sql: `SELECT CASE
                      WHEN :answer = 'confirm'
@@ -265,18 +249,11 @@ const ANSWER_FACE_PROPOSAL: CommandDefinition = {
       value: 1,
     },
   ],
-  // Retry-safe, NOT `once`: answering the same region twice is how a member
-  // corrects themself, so the second answer must land, not be refused.
   idempotency: "retry-safe",
-  // Low by design: this curates DERIVED proposals, the same class as
-  // captioning, so the in-app loop stays live under the app ceiling.
   risk: "low",
   handler: answerFaceProposal,
 };
 
-/** A table, not a branch chain (coding-standards.md), so a fourth answer is one
- *  row rather than an edit at every site. `keepsParty` is the invariant the DDL
- *  also enforces: only proposed and confirmed regions carry a party. */
 const FACE_ANSWERS = {
   confirm: {
     state: "confirmed",
@@ -314,8 +291,6 @@ function answerFaceProposal(ctx: HandlerCtx): Record<string, unknown> {
     party_id?: string;
   };
   const answer = FACE_ANSWERS[input.answer];
-  // The confirmer is the acting party — the owner when an app or device calls.
-  // Only a confirm has one, and the DDL refuses the pair coming apart.
   const confirmer = answer.keepsParty
     ? (ctx.identity.partyId ?? ownerPartyId(ctx))
     : null;
@@ -346,8 +321,6 @@ const SET_CONNECTION_TRUST: CommandDefinition = {
     properties: {
       connection_id: { type: "string", minLength: 1 },
       trust: { type: "string", enum: ["staged", "auto-publish"] },
-      // Per-class standing consent (#310). Omitted = all classes; an array
-      // narrows it, and everything else stages for review.
       enrich_classes: {
         type: "array",
         items: {
@@ -384,8 +357,6 @@ const SET_CONNECTION_TRUST: CommandDefinition = {
     },
   ],
   idempotency: "retry-safe",
-  // The standing-consent lever (#306 Tier 4): widening a connection to
-  // auto-publish is a consent-state change, so a proposal PARKS.
   risk: "high",
   confirm: true,
   handler: (ctx) => {
@@ -422,14 +393,8 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
     properties: {
       entity_type: { type: "string", minLength: 1 },
       entity_id: { type: "string", minLength: 1 },
-      // `manual` (#352): an owner-driven on-demand ask from an app, distinct
-      // from a passive search-miss or on-view signal.
       reason: { type: "string", enum: ["search-miss", "on-view", "manual"] },
       detail: { type: "string" },
-      // CONSENT SCOPE (schema/enrich.ts `capability`): which enricher this ask
-      // is for. Required for `manual` — an owner's "detect faces now" must not
-      // read as consent for captioning, OCR and every other enabled enricher,
-      // which is what an untagged row would mean.
       capability: { type: "string", minLength: 1, maxLength: 64 },
     },
   },
@@ -458,8 +423,6 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
       detail?: string;
       capability?: string;
     };
-    // The DDL enforces this too; refusing here buys the caller a sentence
-    // instead of a CHECK-constraint stack trace.
     if (input.reason === "manual" && !input.capability)
       throw new Error(
         "enrich.request_enrichment: a 'manual' request must name the `capability` it is asking for — " +
@@ -481,13 +444,6 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
         ctx.now
       );
     ctx.wrote("enrich.request", requestId);
-    // RE-KEY THE ANSWER (#807). A `manual` request IS the member's answer to a
-    // consent moment: Photos' enrichment panel has exactly one write, and its
-    // answer is the ON-DEVICE one, so the row it re-keys is capability ×
-    // `on-device`, vault-wide. Recording it HERE rather than in the app keeps
-    // blueprints powerless — the consent ledger is written by the vault.
-    // Nothing widens: `on-device` is the narrowest egress class, and the fire
-    // gate reads a stored answer only to refuse, never to permit.
     if (input.reason === "manual" && input.capability) {
       recordEnrichConsent(ctx.db, {
         capability: input.capability,
@@ -507,12 +463,6 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
   },
 };
 
-/**
- * One writer of the enrichment egress answers (#807), rows of the one
- * authority plane (#883). Decline is a record (`declined` ≠ never asked).
- * `confirm: true` so an app or agent parks. `receipt_id` is minted after
- * commit.
- */
 const RECORD_CONSENT: CommandDefinition = {
   name: "enrich.record_consent",
   ownerSchema: "enrich",
@@ -523,7 +473,6 @@ const RECORD_CONSENT: CommandDefinition = {
     properties: {
       capability: { type: "string", minLength: 1, maxLength: 64 },
       egress: { type: "string", enum: ["on-device", "gateway", "provider"] },
-      /** '' (or omitted) = the answer covers this vault. */
       scope_ref: { type: "string", maxLength: 128 },
       decision: { type: "string", enum: ["granted", "declined"] },
     },
@@ -553,8 +502,6 @@ const RECORD_CONSENT: CommandDefinition = {
     },
   ],
   idempotency: "idempotent",
-  // Salience, not a gate: an answer about where a member's data may travel is
-  // the first thing their review feed should surface.
   risk: "high",
   confirm: true,
   handler: (ctx) => {
@@ -572,8 +519,6 @@ const RECORD_CONSENT: CommandDefinition = {
       decision: input.decision,
       now: ctx.now,
     });
-    // Read the row's own id back rather than mint one: a re-given answer keeps
-    // the id it was first recorded under, so provenance chains per ANSWER.
     const storedId = readEnrichConsentId(ctx.db, {
       capability: input.capability,
       egress: input.egress,
@@ -607,11 +552,6 @@ const UPSERT_EMBEDDING: CommandDefinition = {
         items: { type: "number" },
       },
       capability: { type: "string", enum: ["embed-image", "embed-text"] },
-      // Which version of the SOURCE the vector was computed from, so a caller
-      // can tell "this target's embedding is current" from "the model is
-      // current but the source was rewritten since" (#731) — a model-only
-      // staleness check misses a same-model text rewrite. Optional because
-      // `embed-image` has no versioned source: its target IS the asset.
       source_version: { type: "string", minLength: 1 },
     },
   },

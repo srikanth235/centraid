@@ -12,10 +12,7 @@ import type {
   SettingsConnectionsBridgeProps,
 } from "./SettingsConnectionsScreen.js";
 
-/** The verbs the screen claims on the app bar — captured, then fired the way
- *  the bar's buttons fire them. */
 let verbs: RouteVerbs = {};
-/** Everything the screen reported to the frame, newest last. */
 let signals: Parameters<
   NonNullable<SettingsConnectionsBridgeProps["onSignals"]>
 >[0][] = [];
@@ -87,7 +84,6 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The section head + rows the given block label introduces. */
 function sectionRows(el: ParentNode, label: string): string[] {
   const heads = [...el.querySelectorAll("h2")];
   const head = heads.find((h) => h.textContent === label);
@@ -121,13 +117,10 @@ describe("screens/SettingsConnectionsScreen", () => {
       root = createRoot(container as HTMLDivElement);
       root.render(<SettingsConnectionsScreen {...props} />);
     });
-    // Connections + providers load in effects
     await settle();
     return container;
   }
 
-  /** Open the connection's own sheet the way the page does: the row's quiet
-   *  Configure control (lapsed/paused rows) or its trailing action (healthy). */
   async function openConnectionSheet(el: ParentNode): Promise<void> {
     await click(byText(el, "Configure"));
   }
@@ -155,8 +148,6 @@ describe("screens/SettingsConnectionsScreen", () => {
       expect(sectionRows(el, "Connections")).toStrictEqual(["Google · Gmail"]);
       expect(el.textContent).toContain("Needs re-auth");
       expect(byText(el, "Re-authorize")).toBeTruthy();
-      // The sync section names the connection it rides and the note explains
-      // what a sync is allowed to do — both verbatim.
       expect(sectionRows(el, "Attached data syncs")).toStrictEqual([
         "Google · Gmail → messages",
       ]);
@@ -172,7 +163,6 @@ describe("screens/SettingsConnectionsScreen", () => {
       expect(last?.count).toBe("1 connection · 1 needs re-authorization");
       expect(last?.health?.label).toBe("Google · Gmail needs re-authorization");
       expect(last?.health?.action?.label).toBe("Re-authorize");
-      // Loading is reported first, so the bar can withdraw its verbs.
       expect(signals[0]?.state).toBe("loading");
     });
 
@@ -200,12 +190,7 @@ describe("screens/SettingsConnectionsScreen", () => {
         makeProps({
           loadConnections: vi
             .fn<SettingsConnectionsBridgeProps["loadConnections"]>()
-            .mockReturnValue(
-              // Never settles: the page must hold the row geometry, not blink.
-              new Promise<ConnectionRowDTO[]>(() => {
-                /* the gateway has not answered */
-              })
-            ),
+            .mockReturnValue(new Promise<ConnectionRowDTO[]>(() => {})),
         })
       );
       expect(
@@ -229,7 +214,6 @@ describe("screens/SettingsConnectionsScreen", () => {
       );
       expect(signals.at(-1)?.state).toBe("error");
 
-      // The cause is available, but never in the reader's way by default.
       expect(el.textContent).not.toContain("ECONNREFUSED");
       await click(byText(el, "Show the technical detail"));
       expect(el.textContent).toContain("ECONNREFUSED");
@@ -256,7 +240,6 @@ describe("screens/SettingsConnectionsScreen", () => {
       );
       expect(signals.at(-1)?.state).toBe("full");
       expect(signals.at(-1)?.count).toBe("7 connections · 1 paused");
-      // Nothing is hidden yet, so the caption states the total and stops.
       const meta = el.querySelector(".meta");
       expect(meta?.textContent).toBe("7");
 
@@ -427,7 +410,6 @@ describe("screens/SettingsConnectionsScreen", () => {
           providerId: "google",
         })
       );
-      // OAuth2 must open the provider consent screen after save.
       expect(props.beginAuthorize).toHaveBeenCalledWith("c-new");
       expect(window.open).toHaveBeenCalledWith(
         "https://accounts.google.com/authorize?state=s1",
@@ -474,7 +456,6 @@ describe("screens/SettingsConnectionsScreen", () => {
       });
       const el = await mount(props);
       await click(byText(el, "Open the catalog"));
-      // The second catalog row is Google Calendar; its Connect is the second.
       await click(buttons(el).filter((b) => b.textContent === "Connect")[1]);
       expect(el.textContent).toContain("Connect with Centraid");
       expect(el.textContent).toContain("Use my own OAuth app (Advanced)");
@@ -553,8 +534,6 @@ describe("screens/SettingsConnectionsScreen", () => {
     });
 
     it("differentiates the label and warns when adding a second account for a connected provider", async () => {
-      // Default props already carry one Gmail connection (kind pull.gmail, label
-      // "Google · Gmail"). Adding another must not silently reuse that identity.
       const el = await mount(makeProps());
       await act(async () => verbs.onSecondary?.());
       await click(byText(el, "Add another"));
@@ -564,10 +543,8 @@ describe("screens/SettingsConnectionsScreen", () => {
       const labelInput = wizard?.querySelector<HTMLInputElement>(
         '[data-testid="connector-label-input"]'
       );
-      // A distinct default so a save can't overwrite the existing account…
       expect(labelInput?.value).not.toBe("Google · Gmail");
       expect(labelInput?.value.startsWith("Google · Gmail")).toBe(true);
-      // …and the owner is told why. The redundant in-form auth banner is gone.
       expect(wizard?.textContent).toMatch(/1 account connected here/iu);
       expect(wizard?.textContent).not.toContain(
         "Use your own client ID and secret (BYO)"

@@ -15,31 +15,13 @@ import SectionBlock from "../ui/SectionBlock.js";
 
 import styles from "./GatewayScreen.module.css";
 
-// System → Alert history (binding layer v11). Two statements, in the order
-// they are asked: what this gateway has already raised, and when it should
-// raise the next one.
-//
-// NOT BORDERED CARDS WITH THEIR HEADS INSIDE THEM, and not a bespoke switch
-// or a second copy of one. The heads sit above their containers, the ladder is
-// the kit's chip picker, the history is rows whose meta is the alert's own
-// state, and each switch is a row that STATES what it is doing and offers the
-// one verb that changes it. A row
-// reading "Alert when unreachable · on · [Turn off]" says in the reading order
-// what a track-and-knob says only to someone who already knows the convention.
-//
-// The prototype's own note is kept: a thing that keeps clearing itself is a
-// pattern, and the pattern is the finding.
-
 export interface GatewayAlertsTabProps {
   snapshot: GatewayRuntimeSnapshot;
-  /** True while a settings write is in flight — the alert card locks. */
   savingAlert?: boolean;
   onAlertSecondsChange?: (seconds: number) => void;
   onAlertsEnabledChange?: (enabled: boolean) => void;
-  /** Optional launch-at-login toggle; defaults false for older hosts/tests. */
   launchAtLogin?: boolean;
   onLaunchAtLoginChange?: (enabled: boolean) => void;
-  /** True while the launch-at-login write is in flight — locks just that switch. */
   savingLaunchAtLogin?: boolean;
   readOnly?: boolean;
 }
@@ -56,8 +38,6 @@ export default function GatewayAlertsTab(
   const cleared = rows.filter((row) => row.kind === "recovered").length;
   const launchAtLogin = props.launchAtLogin ?? false;
 
-  // WHEN, not what: the history head counts what is on record, and how much of
-  // it resolved without anyone doing anything.
   const historyMeta =
     rows.length === 0
       ? "nothing raised yet"

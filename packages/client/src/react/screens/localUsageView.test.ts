@@ -13,16 +13,9 @@ import {
   presentationFor,
 } from "./localUsageView.js";
 
-// The Storage page's presentation derivation (#544). Every assertion
-// here is about a claim the UI makes to the owner, so a wrong one is a lie on
-// screen rather than a cosmetic slip.
-
 const GB = 1024 ** 3;
 const MB = 1024 ** 2;
 
-/** A component id the wire sent that this build's `LocalComponentId` union
- *  does not name — what a newer gateway can do, since the union is a
- *  compile-time-only guarantee over what is really just a JSON string. */
 const unknown = (id: string): LocalComponentId =>
   id as unknown as LocalComponentId;
 
@@ -73,7 +66,6 @@ describe(footprintSlices, () => {
       "ledger",
       "logs",
     ]);
-    // Attachments sums across BOTH vaults; logs is gateway-level.
     expect(slices[0]!.bytes).toBe(7 * GB);
     expect(slices[1]!.bytes).toBe(2 * GB);
     expect(slices[2]!.bytes).toBe(GB);
@@ -198,8 +190,6 @@ describe(footprintScale, () => {
 
   it("falls back to the disk TOTAL, never to free space", () => {
     const scale = footprintScale(report());
-    // Free space moves whenever anything else on the machine writes; total
-    // is a stable denominator.
     expect(scale).toMatchObject({ kind: "disk", againstBytes: 500 * GB });
   });
 

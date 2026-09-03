@@ -1,6 +1,3 @@
-// Desktop and mobile draw the SAME Home in two renderers, so a string either
-// can show has exactly one spelling here (#708).
-
 export const HOME_FIRST_RUN_TITLE = "Nothing in here yet";
 
 export const HOME_FIRST_RUN_BODY =
@@ -14,14 +11,12 @@ export function homeDayOneFoot(appsInstalled: number, things: number): string {
   return `${appsInstalled} apps installed · ${things} things · sample content can be removed in one action`;
 }
 
-// FOUR, never one-per-installed-app: eight reads as eight empty tiles.
 export const HOME_FIRST_RUN_PLACEHOLDERS = 4;
 
 export const HOME_START_TITLE = "Fill this out";
 
 export const HOME_START_LEAD = "Start with";
 
-// VERB FIRST, and each must land somewhere that can take content.
 export interface HomeFirstMoveCopy {
   label: string;
   hint: string;
@@ -43,8 +38,6 @@ export const HOME_FIRST_MOVE_COPY: Readonly<Record<string, HomeFirstMoveCopy>> =
     tasks: { hint: "The next thing to do.", label: "Add a task" },
   };
 
-// Sample copy says "sample" before anything else, says who made it up, and says
-// how to remove it — in that order, every time it appears.
 export const HOME_SAMPLE_OFFER_LEAD = "Not sure what this looks like full?";
 
 export const HOME_SAMPLE_OFFER_LABEL = "Fill it with a sample week";

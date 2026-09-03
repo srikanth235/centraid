@@ -1,13 +1,3 @@
-// Locker's second command pack (#872): archive, duplicate, custom fields and
-// sections, extra addresses, the passkey slot, and the counts the type rail
-// and the window-end line read.
-//
-// The seal boundary is the reason for two shapes here that would otherwise
-// look inconsistent:
-//  - a custom field is written ONE AT A TIME, because a sealed value has to be
-//    a top-level input for `sealedInput` to hash it out of the journal;
-//  - addresses are written as a whole list, because none of them is a secret.
-
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { LOCKER_ITEM_TYPE, setTags } from "./locker-shared.js";
@@ -40,12 +30,6 @@ const ITEM_ID_OUTPUT = {
   properties: { item_id: { type: "string" } },
 } as const;
 
-/**
- * Archive: "keep forever, hide from lists" (GAPS §3.3 #9). NOT trash — no
- * purge date is set and none is ever set, which is the whole distinction. The
- * schema CHECK makes archived-and-trashed unrepresentable, so this is the one
- * place the two states meet.
- */
 const ARCHIVE_ITEM: CommandDefinition = {
   name: "locker.archive_item",
   ownerSchema: "locker",
@@ -108,7 +92,6 @@ const UNARCHIVE_ITEM: CommandDefinition = {
   },
 };
 
-/** Every column a duplicate copies verbatim, minus the sealed ones. */
 const PLAIN_COPY_COLUMNS = [
   "type",
   "username",
@@ -135,15 +118,6 @@ const SEALED_ITEM_COLUMNS = [
   "content",
 ] as const;
 
-/**
- * Clone-and-edit for sibling accounts (GAPS §3.3 #10). Sealed values are
- * copied INSIDE the vault — unsealed here and written back as plaintext for
- * the seal sweep to re-seal against the NEW row, because the ciphertext's AAD
- * binds it to the old row's id. No secret round-trips through the client.
- *
- * NOT starred, NOT archived, and the alias is NOT copied: an alias is unique
- * among live items, so a copy carrying it would steal the connector binding.
- */
 const DUPLICATE_ITEM: CommandDefinition = {
   name: "locker.duplicate_item",
   ownerSchema: "locker",
@@ -240,12 +214,6 @@ function tagLabels(ctx: HandlerCtx, itemId: string): string[] {
   ).map((tag) => tag.label);
 }
 
-/**
- * One custom field, created or rewritten. `value` is declared `sealedInput`
- * so the journal records a keyed hash of a secret custom value, never the
- * value — the same treatment `locker_item.password` gets. Sending `«sealed»`
- * back leaves the stored secret alone.
- */
 const SET_FIELD: CommandDefinition = {
   name: "locker.set_field",
   ownerSchema: "locker",
@@ -326,7 +294,6 @@ const REMOVE_FIELD: CommandDefinition = {
   },
 };
 
-/** Replace the item's ADDITIONAL addresses; the primary stays on the item. */
 const SET_ADDRESSES: CommandDefinition = {
   name: "locker.set_addresses",
   ownerSchema: "locker",
@@ -381,12 +348,6 @@ const SET_ADDRESSES: CommandDefinition = {
   },
 };
 
-/**
- * The passkey slot (GAPS §3.3 #3). Storage only: this mints no challenge,
- * signs nothing and speaks no WebAuthn. `private_key` is `sealedInput` and
- * lands in a sealed column, so key material is ciphertext at rest and a keyed
- * hash in the journal.
- */
 const SET_PASSKEY: CommandDefinition = {
   name: "locker.set_passkey",
   ownerSchema: "locker",
@@ -452,13 +413,6 @@ const CLEAR_PASSKEY: CommandDefinition = {
   },
 };
 
-/**
- * The counts the window-end line ("300 of 312") and the rail's per-type rows
- * read. A COUNT runs INSIDE the vault so the answer is exact without shipping
- * every row to get it — the alternative was reading the 2,000-row ceiling
- * back just to call `.length` on it. Bounded by the locker's own size, which
- * is the one collection in this product that is a member's hand-entered list.
- */
 const COUNTS: CommandDefinition = {
   name: "locker.counts",
   ownerSchema: "locker",

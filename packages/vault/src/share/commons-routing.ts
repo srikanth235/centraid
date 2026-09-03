@@ -1,21 +1,5 @@
-// DECLARED command→container routing for the Commons plane (#750). Routing is
-// decided by DECLARATION here, never by the shape of a command name or input
-// keys. A command that writes a shared container but misses the rail lands as
-// a PRIVATE local mutation that the next compile reverts.
-//
-// ROUTABLE — input can address this container type, so it must reach the rail.
-// ACTABLE — the container type DECLARES this command as its shared write
-// surface. Routable-but-not-actable is refused by name. UI filtering is never
-// the security boundary.
-
 import type { ShareableItemType } from "./closure.js";
 
-/**
- * How a declared input key names the grant's container.
- * `container` — the key holds the container's own id.
- * `folder-descendant` / `folder-document` — under the granted `docs.folder`.
- * `tally-expense` — expense whose group is the granted `tally.group`.
- */
 export type CommonsRouteResolution =
   | "container"
   | "folder-descendant"
@@ -31,11 +15,6 @@ export interface CommonsCommandRoute {
   actable: boolean;
 }
 
-/**
- * Key vocabulary for the conformance test: a new command that grows a
- * `group_id` cannot quietly skip the rail. Scoped by owner schema on purpose:
- * `locker.save_item` and `outbox.decide` also carry `item_id`.
- */
 export interface CommonsContainerKey {
   ownerSchema: string;
   inputKey: string;
@@ -176,14 +155,7 @@ const onAlbum = (command: string): CommonsCommandRoute =>
 const onLockerItem = (command: string): CommonsCommandRoute =>
   route(command, "locker", "item_id", "locker.item", "container");
 
-/**
- * Declaration order IS resolution order: `commonsGrantForCommand` walks a
- * command's routes top to bottom and returns the first active grant. A
- * document that lives inside a shared folder resolves to the FOLDER's grant
- * before its own, which is what keeps a shared subtree one commons.
- */
 export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
-  // Tally — full declared write surface.
   tallyGroup("tally.add_expense", true),
   tallyGroup("tally.add_group_member", true),
   tallyGroup("tally.remove_group_member", true),
@@ -192,31 +164,18 @@ export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
   tallyExpense("tally.edit_expense", true),
   tallyExpense("tally.delete_expense", true),
   tallyExpense("tally.restore_expense", true),
-  // Routable, NOT declared: these reach the rail so the steward refuses them
-  // by name instead of writing privately into a shared group.
   tallyGroup("tally.add_receipt_expense"),
   tallyGroup("tally.delete_group"),
   tallyGroup("tally.save_recurring_expense"),
-  // Archiving hides the group from every member's lists and turning
-  // simplification on rewires who owes whom — both are the steward's call
-  // about the container itself, not a member's write inside it.
   tallyGroup("tally.archive_group"),
   tallyGroup("tally.set_group_simplification"),
-  // Leaving is remove_group_member WITHOUT the on-ledger guard, so declaring
-  // it would hand every member an eject verb the guarded one refuses. It stays
-  // refused by name; a shared departure is the steward's act.
   tallyGroup("tally.leave_group"),
-  // A prepared reminder is the owner's own intention about a person, and it
-  // carries `confirm: true` regardless — it is never a shared write.
   tallyGroup("tally.nudge"),
   tallyExpense("tally.bind_txn"),
   tallyExpense("tally.set_expense_memo"),
   tallyExpense("tally.undo_expense"),
-  // Re-allocation rewrites every member's share of an expense already agreed.
-  // Same stance as add_receipt_expense: routed so the refusal names it.
   tallyExpense("tally.reallocate_receipt"),
 
-  // Documents/folders: enclosing shared folder first, then the document's own grant.
   onFolder("core.add_document", "folder_id", true),
   onFolder("core.create_folder", "parent_folder_id", true),
   onFolder("core.rename_folder", "folder_id", true),
@@ -245,7 +204,6 @@ export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
   onContent("core.set_extracted_text"),
   onContent("knowledge.restore_note_version", "knowledge"),
 
-  // Albums/photos: no declared write surface — refused, never applied privately.
   onAlbum("media.add_to_album"),
   onAsset("media.add_to_album"),
   onAlbum("media.remove_from_album"),
@@ -264,10 +222,6 @@ export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
   onAsset("media.update_asset"),
   onAsset("enrich.upsert_faces", "enrich"),
 
-  // Locker items are single-vault — none of these is declared actable, so the
-  // rail refuses them by NAME rather than letting a write land privately.
-  // Every command carrying `item_id` must be here (#750 conformance), which
-  // is why the #872 surface joins the list rather than quietly bypassing it.
   onLockerItem("locker.archive_item"),
   onLockerItem("locker.clear_passkey"),
   onLockerItem("locker.duplicate_item"),
@@ -299,7 +253,6 @@ export function commonsRoutesForCommand(
   return ROUTES_BY_COMMAND.get(command) ?? [];
 }
 
-/** Declared write surface? The rail refuses everything else, including routed commands. */
 export function isCommonsCommandActable(
   containerType: ShareableItemType,
   command: string

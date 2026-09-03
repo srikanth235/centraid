@@ -1,7 +1,3 @@
-/**
- * IndexedDB replica identity inventory (#545).
- */
-
 import { IDBFactory } from "fake-indexeddb";
 import { describe, expect, it } from "vitest";
 
@@ -26,7 +22,6 @@ describe(createIndexedDbReplicaIdentityInventory, () => {
     expect(terminal?.state).toBe("terminal-pending");
     expect(terminal?.purgeAttempts).toBe(0);
 
-    // activate refuses while terminal-pending
     await expect(inv.activate(a)).resolves.toBe(false);
 
     const failedAt = 1_000_000;
@@ -39,7 +34,6 @@ describe(createIndexedDbReplicaIdentityInventory, () => {
     await inv.deferTerminal(a, failedAt, 100, 150);
     const capped = (await inv.list()).find((r) => r.vaultId === "v1")!;
     expect(capped.purgeAttempts).toBe(2);
-    // baseDelay * 2^(attempts-1) = 200, capped at maxDelay 150
     expect(capped.retryAt).toBe(failedAt + 150);
 
     await inv.remove(a);

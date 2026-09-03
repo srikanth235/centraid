@@ -1,10 +1,3 @@
-// The shell's one stale-while-revalidate cache (#659, doctrine D4): settled
-// values outlive the component that fetched them and refetches run BEHIND what
-// is on screen. Keying is the caller's job (docs/client-keying.md); the one
-// axis this primitive owns is ambient — a gateway or vault change invalidates
-// EVERYTHING via `resetQueryCache()`, which the shell's re-scope listener calls
-// (never wired here, so this module has no import-time side effects).
-
 import {
   useCallback,
   useEffect,
@@ -17,18 +10,10 @@ import {
 import { optimisticUpdate } from "./optimisticUpdate.js";
 import { Store } from "./store.js";
 
-// ── surviving a reload ──────────────────────────────────────────────────────
-//
-// Write-through to localStorage is OPT-IN per call site — only the call site
-// can judge whether the content may sit in unencrypted browser storage —
-// purged by `resetQueryCache()`, and byte-capped.
-
 const PERSIST_NAMESPACE = "queryCache.";
 
-/** Guards against a value that has grown a data-URI thumbnail. */
 const PERSIST_MAX_BYTES = 64 * 1024;
 
-/** Write-through keys and their shaping step (`null` = as-is). */
 const persisted = new Map<string, ((data: unknown) => unknown) | null>();
 
 interface PersistedRecord<T> {
@@ -40,8 +25,6 @@ function persistKey(key: string): string {
   return `${PERSIST_NAMESPACE}${key}`;
 }
 
-/** Seeds only a key that never settled here, and keeps the record's timestamp
- *  so `staleAfterMs` measures the data's age, not the page's. */
 function hydrateQuery<T>(
   key: string,
   shape: ((data: T) => T) | undefined
@@ -63,9 +46,6 @@ function readPersisted<T>(key: string): PersistedRecord<T> | undefined {
 function writePersisted<T>(key: string, value: T): void {
   const shape = persisted.get(key);
   const data = shape ? (shape(value) as T) : value;
-  // `JSON.stringify(undefined)` is not a string, so the byte check below throws
-  // OUTSIDE the settle handler's try — killing the publish and stranding the
-  // key on its hydrated copy.
   if (data === undefined) {
     Store.remove(persistKey(key));
     return;
@@ -86,8 +66,6 @@ function writePersisted<T>(key: string, value: T): void {
   } satisfies PersistedRecord<T>);
 }
 
-/** `error` rides ALONGSIDE ready data: a failed revalidation must not destroy
- *  a value already on screen. */
 export type QueryState<T> =
   | {
       status: "loading";
@@ -213,7 +191,6 @@ export function resetQueryCache(prefix?: string): void {
 }
 
 export interface CachedQueryOptions<T = unknown> {
-  /** `0` (default) always revalidates — stale-WHILE-revalidate. */
   staleAfterMs?: number;
   /** Opt in to write-through; it still revalidates on mount. */
   persist?: boolean;
@@ -237,7 +214,6 @@ export function useCachedQuery<T>(
   load: () => Promise<T>,
   options: CachedQueryOptions<T> = {}
 ): CachedQuery<T> {
-  // Re-read every commit: the KEY is the identity, not the closure.
   const loadRef = useRef(load);
   useEffect(() => {
     loadRef.current = load;

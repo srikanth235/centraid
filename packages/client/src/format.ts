@@ -1,11 +1,7 @@
-// Pure formatting helpers: no DOM, network or IPC — deterministic only.
-
 import { formatBytes as sharedFormatBytes } from "@centraid/design";
 
-// Callers name a language through `languageHint`/`LANG_DISPLAY`.
 type CodeLang = "html" | "js" | "ts" | "css" | "json" | "md" | "other";
 
-/** Escape &, <, > so source text renders inert. */
 export function escapeHtml(s: string): string {
   return s
     .replaceAll("&", "&amp;")
@@ -21,7 +17,6 @@ export interface TokenClasses {
   com: string;
 }
 
-/** Unscoped `tok-*` defaults for tests/plain hosts. */
 export const DEFAULT_TOKEN_CLASSES: TokenClasses = {
   attr: "tok-attr",
   com: "tok-com",
@@ -30,11 +25,6 @@ export const DEFAULT_TOKEN_CLASSES: TokenClasses = {
   tag: "tok-tag",
 };
 
-/**
- * Emits HTML with per-kind span classes (`classes`, default `tok-*`). Tokens
- * wrap placeholder control chars first so a later regex cannot match injected
- * text; spans swap in at the end.
- */
 export function tokenize(
   src: string,
   lang: CodeLang,
@@ -109,7 +99,6 @@ export const LANG_DISPLAY: Record<CodeLang, string> = {
   other: "TXT",
 };
 
-/** App-id slug grammar: lowercase, hyphenated, capped at 40 chars. */
 export function slugify(s: string): string {
   return s
     .toLowerCase()
@@ -118,7 +107,6 @@ export function slugify(s: string): string {
     .slice(0, 40);
 }
 
-/** Slug seed + short random suffix, e.g. `morning-digest-a1b2c3`. */
 export function generateAppId(seed: string): string {
   const slug = slugify(seed) || "app";
   const suffix = Math.random().toString(36).slice(2, 8);
@@ -143,12 +131,10 @@ export function relativeWhen(iso: string): string {
   }
 }
 
-/** One decimal KB→TB; integer bytes below 1 KiB (#367). */
 export function formatBytes(n: number): string {
   return sharedFormatBytes(n);
 }
 
-/** Declared semver, else datetime from `v_<iso>_<sha>`, else a prefix. */
 export function shortVersionTitle(v: {
   versionId: string;
   declaredVersion?: string;

@@ -1,7 +1,5 @@
 const TICK_INTERVAL_MS = 1000;
 
-/** Wakeup hygiene (#528/#659): tick every `intervalMs` (1s default) while
- *  visible; pause hidden, catch up on return. SSR-safe without `document`. */
 export function startVisibilityTicker(
   tick: () => void,
   intervalMs: number = TICK_INTERVAL_MS

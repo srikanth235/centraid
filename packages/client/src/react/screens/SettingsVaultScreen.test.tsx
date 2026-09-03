@@ -6,11 +6,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActiveVaultData } from "../shell/routes/settingsAccountData.js";
 import SettingsVaultScreen from "./SettingsVaultScreen.js";
 
-// Settings → Vault is where the owner acts on the vault they are in, including
-// leaving it behind on this device (#665). The gate is the CONNECTION
-// being a remote one — the
-// primordial local host is this machine, and it has nothing to disconnect from.
-
 const vault = (over: Partial<ActiveVaultData> = {}): ActiveVaultData => ({
   vaultId: "v1",
   name: "Work",
@@ -80,8 +75,6 @@ describe("screens/SettingsVaultScreen", () => {
       onDisconnect: vi.fn<() => void>(),
       onDelete: vi.fn<() => void>(),
     });
-    // Leaving this device is reversible; erasing the vault is not. They must
-    // never read as two labels for the same button.
     expect(button(el, "Disconnect")).toBeDefined();
     expect(button(el, "Erase")).toBeDefined();
     expect(el.textContent).toContain("Leaving");
@@ -93,9 +86,6 @@ describe("screens/SettingsVaultScreen", () => {
     expect(el.textContent?.toLowerCase()).not.toContain("gateway");
   });
 
-  // The offline copy moved here when Settings → This device was retired. It is
-  // still the whole of the owner's control over the replica — pairing stopped
-  // asking — so the three laws that guarded it there guard it here.
   describe("the offline copy", () => {
     const toggle = (el: HTMLElement): HTMLInputElement =>
       el.querySelector('input[type="checkbox"]') as HTMLInputElement;
@@ -119,7 +109,6 @@ describe("screens/SettingsVaultScreen", () => {
       await act(async () => {
         toggle(el).click();
       });
-      // Nothing is written by the flip itself — the confirm is the act.
       expect(onOfflineCopy).not.toHaveBeenCalled();
       expect(el.textContent).toContain("The local copy is erased");
       await act(async () => {
@@ -144,8 +133,6 @@ describe("screens/SettingsVaultScreen", () => {
       expect(toggle(el).checked).toBe(false);
     });
 
-    // The switch reports the DEVICE's state, never the user's intent: a
-    // refused or failed write must leave it where it was.
     it("a rejected change leaves the switch where it was", async () => {
       const onOfflineCopy = vi.fn<(next: boolean) => Promise<boolean>>(
         async () => true
@@ -161,8 +148,6 @@ describe("screens/SettingsVaultScreen", () => {
       expect(toggle(el).checked).toBe(true);
     });
 
-    // Desktop runs the gateway in-process: there is no second copy to keep, so
-    // the row is absent rather than present-and-inert.
     it("is absent when the host does not offer one", async () => {
       const el = await mount({ onDisconnect: vi.fn<() => void>() });
       expect(el.querySelector('input[type="checkbox"]')).toBeNull();

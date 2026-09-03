@@ -1,7 +1,3 @@
-// Markdown directory adapter (#630): one file becomes one staged note.
-// The tiny front matter vocabulary is intentionally not general YAML; export
-// emits JSON string values and import accepts only those known scalar keys.
-
 import { sha256Hex } from "../ids.js";
 
 export interface MarkdownNote {

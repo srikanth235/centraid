@@ -1,9 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#367) one coherent archival engine — the eligibility closure, segment builder, hash-chained manifest writer, and its verifier are one integrity unit; splitting the chain-hash writer from its verifier invites drift
-// Audit archival (#367 §E2, one file since #916): seal rows past the window
-// into CAS; keep the manifest. Two streams match FK topology (provenance
-// chain; invocation↔receipt cluster under deferred FKs), and the same run
-// prunes the LEDGER band behind its own custody latch.
-// NEEDS-WIRING (#367): nothing calls `runJournalArchival` automatically. Window-gated AND call-gated.
 
 import type { DatabaseSync } from "node:sqlite";
 import { gunzipSync, gzipSync } from "node:zlib";
@@ -13,21 +8,10 @@ import type { VaultDb } from "./db.js";
 import { nowIso, sha256Hex, uuidv7 } from "./ids.js";
 import { RETENTION_WINDOWS } from "./schema/audit.js";
 
-/**
- * Rows older than this are eligible for archival, unless overridden.
- *
- * DECLARED IN THE SCHEMA, NOT HERE (#916). Both bands now live in `vault.db`
- * and the window that governs each is part of what the band IS, so the numbers
- * come from `RETENTION_WINDOWS` — a retention window that lives in whichever
- * sweep happens to run is not a policy.
- */
 export const DEFAULT_JOURNAL_ARCHIVE_WINDOW_DAYS = RETENTION_WINDOWS.audit.days;
 
-/** The ledger band's own window: conversation turns are pruned behind their
- *  archive's custody latch, never on the audit band's schedule. */
 export const DEFAULT_LEDGER_PRUNE_WINDOW_DAYS = RETENTION_WINDOWS.ledger.days;
 
-/** Cap per run (#659 L2) — without it a first archival is an unbounded memory spike. */
 export const DEFAULT_JOURNAL_ARCHIVE_MAX_ROWS = 5_000;
 
 const SEGMENT_VERSION = 1;
@@ -50,45 +34,29 @@ export interface JournalArchiveManifestRow {
 }
 
 export interface JournalArchivalOptions {
-  /** Audit rows fully older than this many days from `now` are eligible. */
   windowDays?: number;
-  /** Ledger rows behind a durable archive older than this are pruned. */
   ledgerWindowDays?: number;
   now?: string;
-  /** Default `DEFAULT_JOURNAL_ARCHIVE_MAX_ROWS`. */
   maxRowsPerRun?: number;
 }
 
 export interface JournalArchivalResult {
-  /** One manifest per stream that produced a segment this run (0, 1, or 2). */
   manifests: JournalArchiveManifestRow[];
   rowsArchived: number;
   reclaim: { mode: "incremental" | "none"; ranVacuum: boolean };
-  /**
-   * A stream hit `maxRowsPerRun`: there is more to archive and the host should
-   * run again rather than wait for the next daily gate.
-   */
   capped: boolean;
-  /** The ledger band's half of the same run (#916). */
   ledger: LedgerPruneResult;
 }
 
 export interface LedgerPruneResult {
-  /** `conversation_archive` rows whose raw turns were dropped this run. */
   segmentsPruned: number;
   turnsPruned: number;
-  /**
-   * Archives past the window this run did NOT prune, because the segment they
-   * name is not in the local CAS. The latch is the point: a conversation's raw
-   * rows go only once its archive is provably durable.
-   */
   heldForCustody: number;
 }
 
 export interface ArchivedSegmentRows {
   version: number;
   stream: JournalArchiveStream;
-  /** Physical table name → the exact rows deleted (`SELECT *` shape). */
   rows: Record<string, Record<string, unknown>[]>;
 }
 
@@ -96,7 +64,6 @@ export interface ArchiveVerification {
   manifestId: string;
   segmentPresent: boolean;
   segmentHashOk: boolean;
-  /** Recomputed chain_hash (folding the prior manifest's) matches. */
   chainHashOk: boolean;
   rowCountOk: boolean;
   ok: boolean;
@@ -116,7 +83,6 @@ function chunk<T>(arr: readonly T[], size: number): T[][] {
   return out;
 }
 
-/** SQLite bind-parameter limits mean big IN() lists need chunking. */
 const ID_CHUNK = 500;
 
 function selectByIds(
@@ -166,10 +132,6 @@ function selectColumnsByIds<T>(
   return out;
 }
 
-/**
- * Invocation⇄receipt mutual-FK closure: oldest `maxRows` invocations, then drop any whose linked receipt is too young, missing, or shared.
- * Cost (#659 L2): id-scoped queries over candidates, never full scans. Worklist fixed-point, linear in edges.
- */
 function computeEligibleCluster(
   journal: DatabaseSync,
   cutoff: string,
@@ -215,14 +177,11 @@ function computeEligibleCluster(
     candidateIds
   );
 
-  // Every receipt any candidate touches, in either FK direction.
   const touchedReceiptIds = new Set<string>();
   for (const r of ownReceipts) touchedReceiptIds.add(r.receipt_id);
   for (const r of receiptsOfCandidates) touchedReceiptIds.add(r.receipt_id);
   const receiptIdList = [...touchedReceiptIds];
 
-  // …and every invocation touching one of THOSE receipts, candidate or not: an
-  // outside referrer is exactly what blocks a shared receipt.
   const receiptRows = selectColumnsByIds<{
     receipt_id: string;
     invocation_id: string | null;
@@ -664,8 +623,6 @@ export function runJournalArchival(
   };
   journal.exec("BEGIN");
   try {
-    // Deferred FK checking is what makes the invocation⇄receipt mutual
-    // reference deletable at all — see the module header.
     journal.exec("PRAGMA defer_foreign_keys = ON");
     // THE ARCHIVE PASS'S DOOR (#916). Every audit table refuses DELETE unless
     // a row stands in `audit_archive_pass`, so the one legitimate deleter

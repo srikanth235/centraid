@@ -1,49 +1,8 @@
-// The AUDIT BAND — the append-only evidence stream: what was asked, who asked,
-// what the gateway decided, and the provenance chain behind every claim.
-//
-// ONE FILE (#916). The band used to live in a sibling `journal.db`, on the
-// argument that it grows faster than the model and keeping it out kept the
-// sovereign asset small. What it actually bought was a boundary no foreign key
-// could cross: a revision could not name the invocation that caused it, a
-// mutation and its receipt could not roll back together, and every pointer
-// across the seam was "gateway-enforced", which means enforced by whoever
-// remembered. Size is answered by RETENTION, not by a second file — see
-// `RETENTION_WINDOWS` below — so the band is here, and a write and its receipt
-// share one transaction.
-//
-// APPEND-ONLY IS A TRIGGER NOW, not a convention. Every table below refuses
-// UPDATE and DELETE unless the archive pass is open (`audit_archive_pass`
-// holds a row only inside the archival transaction, which is the one
-// legitimate deleter). Pointers into the model half stay VALUE columns: an
-// audit outlives its subject, so a foreign key would either block the member's
-// purge or quietly rewrite the evidence.
-//
-// The band is registered names-only machinery: excluded from the portable
-// export and from the replica BY BAND. A backup carries it, encrypted, with
-// the rest of the file — by design: a backup that dropped the evidence would
-// restore a vault that could not prove its own history.
-
-/**
- * How long each append-heavy band keeps rows in the LIVE file, and who
- * enforces it. Declared once, here, rather than per call site: a retention
- * window that lives in the sweep that happens to run is not a policy.
- *
- * The archive pass seals rows older than the window into a content-addressed
- * segment in the blob CAS and then deletes them from the live file — the
- * audit band through `audit_archive_manifest` (a hash CHAIN, so verifying the
- * newest manifest attests every earlier run), the ledger band through
- * `conversation_archive` (a custody LATCH, so raw rows are pruned only once
- * the segment is provably durable). Two records because they answer two
- * questions; neither is a copy of the other.
- */
 export const RETENTION_WINDOWS = {
-  /** `audit`: provenance and invocation clusters. */
   audit: { days: 365, duty: "journal-archive" },
-  /** `ledger`: conversation turn ranges (#438). */
   ledger: { days: 90, duty: "ledger-archive" },
 } as const;
 
-/** Every physical table of the `audit` band, in composition order. */
 export const AUDIT_BAND_TABLES: readonly string[] = [
   "audit_archive_pass",
   "access_provenance",
@@ -55,14 +14,6 @@ export const AUDIT_BAND_TABLES: readonly string[] = [
   "audit_archive_manifest",
 ];
 
-/**
- * The band's WRITE-ONCE tables: both RAISE triggers, no exceptions.
- *
- * `agent_command_invocation` is deliberately not here. It is the one audit row
- * with a lifecycle — proposed, checked, settled — so it refuses DELETE and
- * refuses an UPDATE of what was ASKED, while `status`, `executed_at` and
- * `receipt_id` settle. See its triggers at the foot of `AUDIT_DDL`.
- */
 export const AUDIT_APPEND_ONLY_TABLES: readonly string[] = [
   "access_provenance",
   "access_receipt",

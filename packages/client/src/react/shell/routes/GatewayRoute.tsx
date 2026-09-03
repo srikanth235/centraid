@@ -37,10 +37,6 @@ import {
 } from "./settingsDiagnosticsData.js";
 import { startVisibilityTicker } from "./visibility-ticker.js";
 
-// React-owned Gateway route over the main-process heartbeat monitor:
-// pushed snapshots (useGatewayRuntime), polled health (useGatewayHealth).
-/** Shell-root half of the Connections section — acts only; rows come from
- *  this route's own `loadConnectionRows`. */
 export interface GatewayConnectionsProps {
   refreshKey: number;
   onTest: (gatewayId: string, label: string) => void;
@@ -63,8 +59,6 @@ export default function GatewayRoute({
     | "restart";
   focus?: "backups" | "capacity";
   cause?: "backup-alert";
-  /** #665 host plumbing: acts open shell-root-owned modals, so App hands
-   *  callbacks down; `refreshKey` bumps once one commits. */
   connections?: GatewayConnectionsProps;
 } = {}): JSX.Element {
   const { navigate, showToast } = useShellActions();
@@ -72,11 +66,9 @@ export default function GatewayRoute({
   const { health, refresh: refreshHealth } = useGatewayHealth();
   const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  // Launch-at-login (#351) isn't in the pushed snapshot — read once on mount.
   const [launchAtLogin, setLaunchAtLogin] = useState(false);
   const [savingLaunchAtLogin, setSavingLaunchAtLogin] = useState(false);
 
-  // 1s uptime ticker, suspended while the tab is hidden (#528 Phase D).
   useEffect(() => startVisibilityTicker(() => setNow(Date.now())), []);
 
   useEffect(() => {
@@ -121,7 +113,6 @@ export default function GatewayRoute({
     }
   };
 
-  // Stable so ResourceModeCard doesn't re-fetch prefs on every tick.
   const loadResourceMode = useCallback(
     async (): Promise<ResourceMode> =>
       parseResourceModePref(await getUserPrefs()),
@@ -130,7 +121,6 @@ export default function GatewayRoute({
   const saveResourceMode = useCallback(async (mode: ResourceMode) => {
     await saveUserPrefs({ [RESOURCE_MODE_PREF_KEY]: mode });
   }, []);
-  // L3 "Tune" rung knob overrides (#528); stable identities vs the 1s tick.
   const loadKnobPrefs = useCallback(
     async (): Promise<ResourceKnobPrefs> =>
       parseResourceKnobPrefs(await getUserPrefs()),
@@ -146,7 +136,6 @@ export default function GatewayRoute({
     },
     []
   );
-  // Pause/resume hot-apply, then nudge health so paused state reconciles.
   const pauseBackground = useCallback(
     async (durationMs?: number) => {
       const res = await pauseBackgroundWork(durationMs);
@@ -160,9 +149,6 @@ export default function GatewayRoute({
     refreshHealth();
     return res;
   }, [refreshHealth]);
-  // A DRILL-IN IS A HISTORY ENTRY: System pages are ROUTES, not local state
-  // under a second back control; `routeKey` keys routes by tab so each is
-  // a distinct entry.
   const openTab = useCallback(
     (
       tab: "overview" | "components" | "storage" | "logs" | "alerts" | "restart"

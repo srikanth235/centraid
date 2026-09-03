@@ -1,9 +1,5 @@
-// Google Takeout sidecar pairing (#721): a missed rule must still import the
-// photo on its own EXIF. Pure.
-
 import { sha256Hex } from "../ids.js";
 
-/** Only what blob/pipeline.ts's `sniffMediaType` recognises; the rest lands as `kind = 'scan'`. */
 const MEDIA_EXTENSIONS: ReadonlySet<string> = new Set([
   "jpg",
   "jpeg",
@@ -33,11 +29,8 @@ const STRUCTURAL_FOLDERS: ReadonlySet<string> = new Set([
   "google photos",
 ]);
 
-// Shortest stem accepted as a TRUNCATED match (Takeout cuts ~46–51) — below
-// it a shared prefix is coincidence; prefer no sidecar to the wrong one.
 const MIN_TRUNCATED_STEM = 40;
 
-/** Takeout writes "0" for an unknown capture time — not the epoch. */
 const MIN_EPOCH_S = 1;
 const MAX_EPOCH_S = 32_503_680_000;
 
@@ -58,7 +51,6 @@ export const NO_SIDECAR_FACTS: SidecarFacts = {
 };
 
 export interface TakeoutMediaEntry {
-  /** Archive-relative, slash-normalised — the stable external id. */
   path: string;
   sidecarPath: string | null;
   sidecar: SidecarFacts;
@@ -68,7 +60,6 @@ export interface TakeoutMediaEntry {
 
 export interface TakeoutPlan {
   media: TakeoutMediaEntry[];
-  /** Consumed AS metadata — reported neither as media nor unrouted. */
   metadata: ReadonlySet<string>;
 }
 
@@ -99,7 +90,6 @@ export function isMediaPath(path: string): boolean {
 }
 
 function isoFromEpochSeconds(raw: unknown): string | null {
-  // "0"/missing/absurd mean NULL — never 1970 (see MIN_EPOCH_S).
   const seconds =
     typeof raw === "string"
       ? Number(raw)
@@ -121,8 +111,6 @@ function numberAt(source: unknown, key: string): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-// EXACT (0, 0) MEANS ABSENT — Takeout writes `0.0` for every unlocated photo;
-// `geoDataExif` ignored (the spool pipeline reads that EXIF).
 function geoOf(sidecar: Record<string, unknown>): {
   latitude: number | null;
   longitude: number | null;
@@ -167,8 +155,6 @@ export function parseTakeoutSidecar(text: string): SidecarFacts {
   };
 }
 
-// Google's conventions, most-certain first: exact `.json`; the
-// `.supplemental-metadata` family; `(n)`-moved; `-edited`.
 function sidecarStems(fileName: string): string[] {
   const stems = [fileName];
   const duplicate = /^(?<stem>.*)(?<marker>\(\d+\))(?<ext>\.[^.]+)$/u.exec(
@@ -208,7 +194,6 @@ function resolveSidecar(
   return best?.path ?? null;
 }
 
-// `(n)`/`-edited`/extension stripped, directory-scoped per album.
 function pairingKey(path: string): string {
   const fileName = fileNameOf(path);
   const dot = fileName.lastIndexOf(".");
@@ -219,7 +204,6 @@ function pairingKey(path: string): string {
     .toLowerCase()}`;
 }
 
-// The folder IS the album, minus the exclusions above.
 function albumTitleFor(
   directory: string,
   folderTitles: Map<string, string>
@@ -237,7 +221,6 @@ function folderTitleOf(data: Buffer): string | null {
   try {
     parsed = JSON.parse(data.toString("utf8"));
   } catch {
-    // Folder name still names the album.
     return null;
   }
   if (typeof parsed !== "object" || parsed === null) return null;
@@ -266,7 +249,6 @@ export function planTakeout(
     const fileName = fileNameOf(path);
     const directory = directoryOf(path);
     if (fileName === "metadata.json") {
-      // Consumed whether or not it parses — never reported as unimported.
       metadata.add(path);
       const title = folderTitleOf(entry.data);
       if (title) folderTitles.set(directory, title);
@@ -282,7 +264,6 @@ export function planTakeout(
     sidecarBytes.set(path, entry.data);
   }
 
-  // A group needs an image AND video on one key; a lone `.MOV` is just a video.
   const byPairingKey = new Map<string, string[]>();
   for (const path of mediaPaths) {
     const key = pairingKey(path);
@@ -310,7 +291,6 @@ export function planTakeout(
         ? parseTakeoutSidecar(sidecarBytes.get(sidecarPath)!.toString("utf8"))
         : NO_SIDECAR_FACTS,
       album: albumTitleFor(directory, folderTitles),
-      // Key-only id: re-import's COALESCE completes a half-done pair.
       captureGroupId: paired ? `takeout:${sha256Hex(key).slice(0, 32)}` : null,
     } satisfies TakeoutMediaEntry;
   });

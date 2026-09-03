@@ -4,14 +4,6 @@ import { pathToFileURL } from "node:url";
 
 import { RUNTIME_DIR } from "./config.js";
 
-// WHY NOT A STATIC `import "onnxruntime-node"`.
-// Setup installs it into `runtime/node_modules` alone, and a root `bun install`
-// must never need it.
-//
-// WHY RESOLUTION IS HAND-WRITTEN, NOT `createRequire`.
-// Every sandbox lane refuses `node:module`, and an automation worker loading a
-// recognition bundle must run under a lane (#846).
-
 export type OrtModule = typeof import("onnxruntime-node");
 
 let cachedOrt: OrtModule | undefined;
@@ -37,7 +29,6 @@ export function resolveRuntimeModule(
   if (!existsSync(modulesDir)) {
     throw new RuntimeNotInstalledError(specifier);
   }
-  // Split on "/", never the platform separator: specifiers are POSIX.
   const packageDir = path.join(modulesDir, ...specifier.split("/"));
   try {
     const entry = resolveRuntimeEntry(packageDir);
@@ -48,8 +39,6 @@ export function resolveRuntimeModule(
   }
 }
 
-/** Node's precedence, checked on disk: a bad manifest misses here, not deeper
- *  in. */
 export function resolveRuntimeEntry(
   packageDir: string,
   depth = 0
@@ -73,7 +62,6 @@ export function resolveRuntimeEntry(
   return null;
 }
 
-/** Bounded: a directory's manifest can name another directory. */
 function resolveFileTarget(target: string, depth: number): string | null {
   const found = statOrNull(target);
   if (found?.isFile()) return target;
@@ -102,8 +90,6 @@ function readDotExport(exportsField: unknown): unknown {
   return "." in record ? record["."] : record;
 }
 
-/** `runtime/` is all CommonJS, so `require` is the truthful condition; others
- *  are skipped, never guessed at. */
 function conditionalTargets(target: unknown, depth = 0): string[] {
   if (typeof target === "string") return [target];
   if (depth > 8 || target === null || typeof target !== "object") return [];
@@ -137,7 +123,6 @@ let cachedSessions:
   | Map<string, Promise<InstanceType<OrtModule["InferenceSession"]>>>
   | undefined;
 
-/** One session per path: capability modules never construct their own. */
 export async function getOrCreateSession(
   modelPath: string
 ): Promise<InstanceType<OrtModule["InferenceSession"]>> {

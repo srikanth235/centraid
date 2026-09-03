@@ -18,7 +18,6 @@ import SectionBlock from "./SectionBlock.js";
 
 const SAMPLE_ICONS = Object.keys(icons).slice(0, 12) as IconName[];
 
-/** Sample data for the block kit — the blocks themselves ship no copy. */
 const GALLERY_BARS = [0, 1, 2, 3, 4, 5, 6].map((day) => ({
   fail: day === 3 ? 8 : 0,
   id: `day-${day}`,
@@ -33,7 +32,6 @@ function Section({
 }: {
   title: string;
   children: ReactNode;
-  /** Blocks are full-width and read top to bottom, unlike the control row. */
   stack?: boolean;
 }): JSX.Element {
   return (
@@ -64,11 +62,6 @@ function Section({
   );
 }
 
-/**
- * Component gallery — the single preview surface for the local UI library.
- * Every primitive is drawn from the real design tokens so the gallery matches
- * the shell exactly.
- */
 export default function Gallery(): JSX.Element {
   return (
     <div

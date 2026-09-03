@@ -14,10 +14,6 @@ export interface DistributionBlockProps {
   className?: string;
 }
 
-/**
- * Labelled proportional rows — ordering and arithmetic live in the shared
- * `distributionRows` model, not here.
- */
 export default function DistributionBlock({
   rows,
   ariaLabel,

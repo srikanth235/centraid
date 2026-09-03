@@ -1,22 +1,10 @@
-// Links (core §01/§08, #272): the typed, temporal relationship fabric as
-// commands. All cross-entity meaning goes through core.link — a SKOS-governed
-// relation concept, valid_from/valid_to, who asserted it — never an ad-hoc
-// junction table. These two commands are the whole write surface; backlinks
-// come free as a reverse read. Unlink is temporal, not destructive: history is
-// never rewritten (R3); the gateway's dangling-link sweep end-dates the rest.
-
 import { evaluateAccess } from "../gateway/access.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { resolveEntity } from "../schema/tables.js";
 
-/** The SKOS scheme link relations come from (seeded at bootstrap + v3). */
 export const RELATIONS_SCHEME_URI = "urn:duaility:relations";
 
-// Condition SQL treats `:word` as a named parameter even inside string
-// literals (the issue-258 colon-literal trap), so the urn is assembled with
-// char(58) when it appears in a precondition. Exported: documents.ts needs
-// the same literal in its own version-lineage preconditions.
 export const RELATIONS_SCHEME_URI_SQL = RELATIONS_SCHEME_URI.split(":")
   .map((part) => `'${part}'`)
   .join(" || char(58) || ");
@@ -33,10 +21,6 @@ function pkOf(ctx: HandlerCtx, physical: string): string {
   return pk;
 }
 
-/**
- * An endpoint must resolve in the registry, exist live, and be READABLE under
- * the caller's grant and purpose — never link to a row the caller can't see.
- */
 function requireEndpoint(
   ctx: HandlerCtx,
   role: "from" | "to",
@@ -71,9 +55,6 @@ function requireEndpoint(
   }
 }
 
-// Standoff anchor selector (#282): W3C text-quote selector + position hint
-// into the from-endpoint's decoded body; `start` is UTF-16 code units. A
-// locator, never a second judgment — resolution is presentation-side.
 const SELECTOR_SCHEMA = {
   type: "object",
   required: ["exact", "prefix", "suffix", "start"],
@@ -93,7 +74,6 @@ interface AnchorSelector {
   start: number;
 }
 
-/** Upsert the one anchor a link may carry; returns the anchor row id. */
 function writeAnchor(
   ctx: HandlerCtx,
   linkId: string,
@@ -138,9 +118,7 @@ const LINK: CommandDefinition = {
       from_id: { type: "string", minLength: 1 },
       to_type: { type: "string", minLength: 1 },
       to_id: { type: "string", minLength: 1 },
-      /** Notation into the relations scheme, e.g. `references`, `about`. */
       relation: { type: "string", minLength: 1 },
-      /** Optional inline anchor written atomically with the link (#282). */
       selector: SELECTOR_SCHEMA,
     },
   },
@@ -154,8 +132,6 @@ const LINK: CommandDefinition = {
   },
   preconditions: [
     {
-      // Relations are vocabulary: the notation must already be a concept in
-      // the relations scheme, never caller-invented.
       name: "relation_in_scheme",
       sql: `SELECT count(*) AS n FROM core_concept c
              JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
@@ -165,8 +141,6 @@ const LINK: CommandDefinition = {
       value: 1,
     },
     {
-      // Refuse an exact duplicate while the first assertion is still live;
-      // after an unlink the same relationship may be reasserted.
       name: "no_identical_live_link",
       sql: `SELECT count(*) AS n FROM core_link l
              JOIN core_concept c ON c.concept_id = l.relation_concept_id
@@ -277,7 +251,6 @@ const UNLINK: CommandDefinition = {
   ],
   postconditions: [
     {
-      // Ended, not erased: the row survives with valid_to set (rule R3).
       name: "link_ended",
       sql: `SELECT count(*) AS n FROM core_link
              WHERE link_id = :link_id AND valid_to IS NOT NULL`,
@@ -300,10 +273,6 @@ function unlinkEntities(ctx: HandlerCtx): Record<string, unknown> {
   return { link_id: input.link_id };
 }
 
-// Re-anchor / re-baseline (#282): move (or clear) a live link's standoff
-// anchor — a locator write, not a new judgment; endpoints, relation, validity
-// untouched. With selector: upsert. Without: clear → strip-only (and exempt
-// from orphan auto-retract).
 const ANCHOR: CommandDefinition = {
   name: "core.anchor_link",
   ownerSchema: "core",
@@ -326,8 +295,6 @@ const ANCHOR: CommandDefinition = {
   },
   preconditions: [
     {
-      // Anchors ride live judgments only — an ended link keeps its history
-      // but takes no new locator.
       name: "link_live",
       sql: "SELECT count(*) AS n FROM core_link WHERE link_id = :link_id AND valid_to IS NULL",
       column: "n",
@@ -360,7 +327,6 @@ function anchorLink(ctx: HandlerCtx): Record<string, unknown> {
     .prepare("SELECT anchor_id FROM core_link_anchor WHERE link_id = ?")
     .get(input.link_id) as { anchor_id: string } | undefined;
   if (existing) {
-    // A locator is presentation, not history — clearing it is a hard delete.
     ctx.db
       .prepare("DELETE FROM core_link_anchor WHERE anchor_id = ?")
       .run(existing.anchor_id);

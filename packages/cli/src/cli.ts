@@ -1,13 +1,4 @@
 #!/usr/bin/env node
-/*
- * `centraid` — product CLI over the gateway wire protocol (#504 batch 3).
- *
- * Auth: --token | CENTRAID_TOKEN | CENTRAID_GATEWAY_TOKEN (the daemon keeps no
- * on-disk `token.bin` (#505), so there is nothing to auto-read from a
- * data dir — supply the loopback secret the daemon was started with, or a
- * per-device token from pairing).
- * Streaming verbs are deferred (documented below and in README).
- */
 
 import { resolveToken } from "./auth.js";
 import { getHealth, getInfo, handshake, listApps } from "./client.js";
@@ -124,11 +115,9 @@ export async function main(
       fail(`unknown command '${command}'`, 2);
   }
 
-  // silence unused in some paths
   void getInfo;
 }
 
-// Always run when executed as the process entry (bin / bun / node).
 const entry = process.argv[1] ?? "";
 if (
   entry.endsWith("cli.js") ||

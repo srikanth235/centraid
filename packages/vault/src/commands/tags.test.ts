@@ -90,8 +90,6 @@ describe("tags", () => {
     const scheme = db.vault
       .prepare("SELECT title FROM core_concept_scheme WHERE uri = ?")
       .get("centraid:tags:v1") as { title: string } | undefined;
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({ ...scheme }).toStrictEqual({ title: "Tags" });
     const concept = db.vault
       .prepare(
@@ -209,9 +207,6 @@ describe("tags", () => {
       subject_id: documentId,
       label: "Important",
     });
-    // Scoped to the Tags scheme — core.add_document also files one
-    // folders-scheme tag on every document (documents.ts), a separate
-    // single-tag mechanism this count must not conflate with.
     const count = db.vault
       .prepare(
         `SELECT count(*) AS n FROM core_tag t
@@ -285,8 +280,6 @@ describe("tags", () => {
       subject_id: documentId,
       label: "Taxes",
     });
-    // The exact three-read pattern an app-plane query already uses for the
-    // flags-scheme star (photos/queries/library.js) works verbatim for labels.
     const scheme = gw.read(owner, {
       entity: "core.concept_scheme",
       where: [{ column: "uri", op: "eq", value: "centraid:tags:v1" }],

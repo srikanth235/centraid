@@ -1,12 +1,3 @@
-/*
- * The grant plane's store (#825): a lens over the `person`/`circle` rows of
- * the one authority table, translating to `principal_kind`/`verb` here alone.
- * `share_authority` holds MEANING, `share_fulfillment` MECHANISM — where the
- * delivering strategy stands, one row per audience vault. Nothing here
- * delivers. Audience rows read LITERALLY: a party grant and a circle grant
- * containing that party differ.
- */
-
 import type { ShareableItemType } from "../share/closure.js";
 
 export type ShareGrantCapability = "view" | "edit";
@@ -15,14 +6,9 @@ export type ShareGrantAudienceKind = "party" | "circle";
 
 export interface ShareGrantAudience {
   kind: ShareGrantAudienceKind;
-  /** Polymorphic by kind: the column carries no FK. */
   id: string;
 }
 
-/** `awaiting_channel`: the peer vault is known and the link to it has ended
- *  (#903 narrowed this from "no channel yet, an invitation is recorded" — a
- *  party who was never linked cannot be granted at all, and no longer has a
- *  row here to park in). `remove_sent`: revocation in flight. */
 export type ShareFulfillmentState =
   | "awaiting_channel"
   | "syncing"
@@ -48,11 +34,6 @@ export interface ShareFulfillmentRecord {
   state: ShareFulfillmentState;
   updatedAt: string;
   detail: string | null;
-  /**
-   * When the subject FIRST reached this peer. Not derivable from `state`
-   * (#846), which degrades to `syncing`: without the durable fact a degraded
-   * grant has "nothing to remove".
-   */
   deliveredAt: string | null;
 }
 
@@ -69,16 +50,8 @@ export interface CreateShareGrantInput {
 export type CreateShareGrantResult =
   | { outcome: "created"; grantId: string; grant: ShareGrantRecord }
   | { outcome: "exists"; grantId: string; grant: ShareGrantRecord }
-  /**
-   * A live grant stands here with a DIFFERENT verb. Reported, never answered
-   * with the standing grant, which would swallow an attempt to change it.
-   */
   | { outcome: "conflict"; grantId: string; grant: ShareGrantRecord };
 
-/**
- * No strategy answers this subject × capability, so the grant would accept a
- * gesture the vault cannot keep (#750). Arriving here is an upstream bug.
- */
 export class UnofferableSubjectError extends Error {
   readonly subjectType: string;
   readonly capability: ShareGrantCapability;
@@ -94,7 +67,6 @@ export class UnofferableSubjectError extends Error {
 
 export interface RevokeShareGrantResult {
   outcome: "revoked" | "already-revoked" | "absent";
-  /** Propagating removal over these is the strategy's job. */
   fulfillment: ShareFulfillmentRecord[];
 }
 
@@ -120,7 +92,6 @@ export type ShareFulfillmentRow = {
   delivered_at: string | null;
 };
 
-/** The two vocabularies meet here and nowhere else (#883). */
 export const PRINCIPAL_OF_AUDIENCE: Readonly<
   Record<ShareGrantAudienceKind, string>
 > = {
@@ -132,7 +103,6 @@ function audienceKindOf(principalKind: string): ShareGrantAudienceKind {
   return principalKind === "person" ? "party" : "circle";
 }
 
-// CHECK constraints make the narrowing casts sound.
 export function toGrant(row: ShareGrantRow): ShareGrantRecord {
   return {
     grantId: row.grant_id,
@@ -166,8 +136,6 @@ export function toFulfillment(
 export const FULFILLMENT_COLUMNS = `grant_id, peer_vault_id, state, updated_at,
   detail, delivered_at`;
 
-/** A `declined` row is a refusal mask: reading one as a grant would hand out
- * refused authority. */
 export const GRANT_SELECT = `SELECT a.authority_id AS grant_id,
     a.principal_kind AS audience_kind, a.principal_id AS audience_id,
     a.subject_type AS subject_type, a.subject_id AS subject_id,

@@ -204,8 +204,6 @@ describe("links", () => {
     };
     const purposeId = boot.concepts["dpv:ServiceProvision"] ?? "";
 
-    // Grant: act on both link commands, read on knowledge only — schedule is
-    // deliberately NOT covered, so the to-endpoint fails the readable rule.
     createGrant(db, {
       appId: app.appId,
       purposeConceptId: purposeId,
@@ -230,8 +228,6 @@ describe("links", () => {
       "grant does not cover read of schedule.task"
     );
 
-    // A second grant widens read to schedule — now the same assertion lands,
-    // stamped as app-asserted.
     createGrant(db, {
       appId: app.appId,
       purposeConceptId: purposeId,
@@ -265,8 +261,6 @@ describe("links", () => {
     });
     const linkId = (out as { output: { link_id: string } }).output.link_id;
 
-    // Trash keeps the note (and its links) alive for the grace window
-    // (#308): the real deletion is the sweep's purge.
     expect(
       invoke(owner, "knowledge.delete_note", { note_id: noteId }).status
     ).toBe("executed");
@@ -277,14 +271,8 @@ describe("links", () => {
       )
       .run(noteId);
     gw.sweep(owner);
-    // THE RELATION GOES WITH ITS ENDPOINT (#916, superseding #272). End-dating
-    // kept an edge naming a row that is not there: it still showed in history,
-    // and an id reused later inherited a relation nobody drew. Both endpoints
-    // are composite foreign keys into `core_entity` now, so the purge cascades
-    // the edge away.
     expect(liveLink(linkId)).toBeUndefined();
 
-    // The purge of the note it hung off is what the trail records.
     const prov = db.audit
       .prepare(
         `SELECT count(*) AS n FROM access_provenance
@@ -326,8 +314,6 @@ describe("links", () => {
   });
 
   test("bootstrap seeds the cross-referencing relation notations", () => {
-    // v0 stance: the ladder is one rung and a fresh vault gets every relation
-    // notation from the bootstrap seed — there are no backfill rungs to replay.
     const n = db.vault
       .prepare(
         `SELECT count(*) AS n FROM core_concept c
@@ -337,8 +323,6 @@ describe("links", () => {
       .get() as { n: number };
     expect(n.n).toBe(2);
   });
-
-  // ────────── Standoff anchors (issue #282) ──────────
 
   const SELECTOR = {
     exact: "Priya Menon",

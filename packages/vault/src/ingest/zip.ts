@@ -1,8 +1,3 @@
-// Minimal ZIP reading (#290) — enough for a Google Takeout
-// archive: central-directory walk, stored (0) and deflated (8) entries via
-// node:zlib. No zip64, no encryption, no data descriptors beyond what the
-// central directory already records — Takeout archives satisfy all three.
-
 import { inflateRawSync } from "node:zlib";
 
 export interface ZipEntry {
@@ -47,7 +42,6 @@ function safeEntryName(name: string): boolean {
   );
 }
 
-/** CRC-32 (IEEE) used by the ZIP container. */
 function crc32(data: Buffer): number {
   let crc = 0xffffffff;
   for (const byte of data) {
@@ -59,12 +53,6 @@ function crc32(data: Buffer): number {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-/**
- * Write a deterministic, uncompressed ZIP archive. Portable vault exports
- * favor verifiability over compression: every entry's bytes hash exactly as
- * stored, and the deliberately small writer has no streaming/data-descriptor
- * ambiguity for importers on another machine.
- */
 export function writeZipEntries(entries: readonly ZipEntry[]): Buffer {
   if (entries.length > MAX_ZIP_ENTRIES)
     throw new Error(`zip contains too many entries (max ${MAX_ZIP_ENTRIES})`);
@@ -118,11 +106,9 @@ export function writeZipEntries(entries: readonly ZipEntry[]): Buffer {
   return Buffer.concat([...locals, ...central, eocd]);
 }
 
-/** Extract every file entry (directories skipped). Throws on a non-zip. */
 export function readZipEntries(buffer: Buffer): ZipEntry[] {
   if (buffer.length < 22)
     throw new Error("not a zip file (no end-of-central-directory)");
-  // EOCD: scan back past a possible trailing comment (max 64 KiB).
   let eocd = -1;
   const scanFloor = Math.max(0, buffer.length - 65_557);
   for (let i = buffer.length - 22; i >= scanFloor; i -= 1) {

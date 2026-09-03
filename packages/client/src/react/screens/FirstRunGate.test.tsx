@@ -9,9 +9,6 @@ import FirstRunGate from "./FirstRunGate.js";
 import type { FirstRunGateProps } from "./FirstRunGate.js";
 import type { OnboardingCompleteInput } from "./OnboardingScreen.js";
 
-// FirstRunGate pulls in OnboardingScreen (→ ConnectFlow → gateway-client),
-// which reaches gateway-client-core's module-load window.CentraidApi listeners.
-// `vi.hoisted` is lifted above the import, so this stub is installed first.
 vi.hoisted(() => {
   (window as unknown as { CentraidApi: Record<string, unknown> }).CentraidApi =
     {
@@ -84,7 +81,6 @@ describe("FirstRunGate scenarios", () => {
       clickIncludes(el, "Start fresh on this Mac");
       await flush();
       expect(el.querySelector('[data-testid="onboarding-view"]')).toBeTruthy();
-      // A first-time user sees the connection threshold, not a profile form.
       expect(el.textContent).not.toContain("Make yourself");
     });
 
@@ -110,9 +106,6 @@ describe("FirstRunGate scenarios", () => {
       expect(el.querySelector('[data-testid="first-run-choice"]')).toBeNull();
       expect(el.textContent).toContain("Connect your");
       expect(el.textContent).not.toContain("this Mac");
-      // No chooser to go back to, so neither escape is offered: the flow was
-      // opened with a single method, so ConnectFlow's own "Back" (which would
-      // land on a one-option chooser) is suppressed too.
       expect(
         [...el.querySelectorAll("button")].some((b) =>
           ["Back", "Start over"].includes(b.textContent ?? "")

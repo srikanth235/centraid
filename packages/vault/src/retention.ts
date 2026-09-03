@@ -1,6 +1,3 @@
-// Bounded retention for the vault's silent growers (#659): only TERMINAL rows,
-// and never the newest evidence a surface still shows. Every pass is capped.
-
 import type { DatabaseSync } from "node:sqlite";
 
 export const RETENTION_ROW_CAP = 5_000;
@@ -29,8 +26,6 @@ const POLICIES: Record<
   RetentionTable,
   { idColumn: string; eligibleSql: string }
 > = {
-  // Terminal = finished; the newest run per connection is pinned — it is what
-  // "last synced" reads.
   sync_connection_run: {
     idColumn: "run_id",
     eligibleSql: `SELECT r.run_id AS id FROM sync_connection_run r
@@ -45,7 +40,6 @@ const POLICIES: Record<
                    ORDER BY r.finished_at
                    LIMIT :limit`,
   },
-  // Terminal = drained; an open request is queued work, leased or not.
   enrich_request: {
     idColumn: "request_id",
     eligibleSql: `SELECT request_id AS id FROM enrich_request
@@ -53,7 +47,6 @@ const POLICIES: Record<
                    ORDER BY drained_at
                    LIMIT :limit`,
   },
-  // Terminal = decided AND executed; `failed` stays for a retry.
   outbox_item: {
     idColumn: "item_id",
     eligibleSql: `SELECT item_id AS id FROM outbox_item

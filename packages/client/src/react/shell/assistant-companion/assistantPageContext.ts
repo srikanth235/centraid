@@ -43,7 +43,6 @@ function collectReadableText(node: Node, parts: string[]): void {
   if (block) parts.push("\n");
 }
 
-/** Snapshot the rendered route, rather than merely naming it, for a page chip. */
 export function readAssistantPageText(root: ParentNode = document): string {
   const source =
     root.querySelector<HTMLElement>('[data-assistant-page="true"]') ??

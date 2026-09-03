@@ -1,9 +1,3 @@
-/*
- * Peer handshake (#726 P3 decision 5). The contract under test is that
- * NOTHING a far gateway sends produces an exception: every input — absent,
- * malformed, hostile, or merely old — leaves as a named state.
- */
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -34,12 +28,6 @@ describe(judgePeerHandshake, () => {
     });
   });
 
-  /*
-   * The "peer is too old" arm is unreachable while the floor is 1 — there is
-   * no valid protocol number below it, so such a hello is malformed, not old.
-   * This asserts that reading, so raising the floor later makes the arm live
-   * without changing the shape of the answer.
-   */
   it("treats a hello below the lowest valid number as malformed", () => {
     expect(PEER_MIN_PROTOCOL_VERSION).toBe(1);
     expect(judgePeerHandshake({ peerProtocolVersion: 0 }).state).toBe(

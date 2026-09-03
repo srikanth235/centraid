@@ -6,25 +6,9 @@ import RowsBlock from "../ui/RowsBlock.js";
 import type { RowDef } from "../ui/RowsBlock.js";
 import SectionBlock from "../ui/SectionBlock.js";
 
-// "Who can reach it" — the second of the Vault surface's three questions (v11).
-//
-// THREE POINTERS, NO COPIES, and that is the whole design. Every fact this
-// section could restate — which apps hold a store, which grants answer without
-// asking again, what enrichment reads — is already authored somewhere a member
-// can change it. A second list of grants is a second thing to keep true, and
-// the first time the two disagree the member has no way to know which one the
-// gateway obeys.
-//
-// So the rows carry no counts either. A count is a copy: it is read from one
-// place and drawn in another, and it goes stale exactly as silently as a list
-// would. Each row names the question and the place that answers it.
-
 export interface VaultReachSectionProps {
-  /** Notifications — where a decision about a store or a grant is answered. */
   onOpenApprovals: () => void;
-  /** Settings → Enrichment — what Centraid reads of the member's own data. */
   onOpenEnrichment: () => void;
-  /** Disclosure state — the parent owns it, and renders no body when closed. */
   collapsed: boolean;
   onToggle: () => void;
 }

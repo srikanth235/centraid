@@ -16,15 +16,6 @@ import {
 import HarnessLadder from "./SettingsHarnessLadder.js";
 import PickRow from "./SettingsPickRow.js";
 
-// Settings → Agents, THE LANES (binding layer v11). A lane is
-// harness · model · level, resolved independently. An INHERITING lane has no
-// model or level of its own: one pick only, caption states what it inherits.
-// Setting a harness earns the other two picks. The screen owns all writes.
-
-/**
- * The routing lanes; each resolves independently to a (harness, model, level)
- * triple — a lane left unset inherits the default lane.
- */
 export const ALL_SUBSYSTEM_ROWS: ReadonlyArray<{
   key: ModelSubsystem;
   label: string;
@@ -40,16 +31,10 @@ export const ALL_SUBSYSTEM_ROWS: ReadonlyArray<{
   },
 ];
 
-/** The lanes that get a row. Builder withheld: its entry points are hidden by
- *  default (#434) — a control for an unopenable surface configures nothing.
- *  It stays in ALL_SUBSYSTEM_ROWS so a stored builder pin keeps resolving and
- *  the inventory's "used by" reading still sees it. */
 export const ROUTING_ROWS = ALL_SUBSYSTEM_ROWS.filter(
   (row) => row.key !== "builder"
 );
 
-/** What a lane inherits, in one clause: agent, model, level — for an
- *  inheriting lane this caption is the ONLY place the level is stated. */
 export function inheritedClause(
   card: HarnessCardDTO | undefined,
   model: string,
@@ -61,8 +46,6 @@ export function inheritedClause(
   )} · ${effortLabel(card, effort).toLowerCase()}`;
 }
 
-/** One lane. `harness === ''` inherits the default lane; the caption names
- *  what that resolves to — "Use default model" alone says nothing real. */
 export default function RouteRow({
   label,
   hint,
@@ -89,7 +72,6 @@ export default function RouteRow({
   model: string;
   effort: string;
   resolvedCard: HarnessCardDTO | undefined;
-  /** The resolved harness's own default model id — what this lane inherits. */
   resolvedHarnessDefault: string;
   resolvedHarnessDefaultEffort: string;
   defaultCard: HarnessCardDTO | undefined;

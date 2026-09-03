@@ -1,9 +1,3 @@
-/*
- * Maps backup-status + usage DTOs onto one `deriveStorageMetrics` call
- * (#436 §6). Oldest vault wins each clock; a clock any vault never reached
- * is `null`. Declared cadence is the slowest of RPO/snapshot/verify.
- */
-
 import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
 
 import type { StorageConnectionUsageDTO } from "../../gateway-client.js";
@@ -23,7 +17,6 @@ function parseIso(iso: string | undefined): number | null {
   return Number.isNaN(at) ? null : at;
 }
 
-/** Oldest non-null, or `null` if any vault is missing it. */
 function oldestOrMissing(values: (number | null)[]): number | null {
   if (values.length === 0) return null;
   if (values.some((v) => v === null)) return null;
@@ -70,8 +63,6 @@ export function deriveLossSummary(
       pendingCount,
     };
   }
-  // Pending offsite is a known loss — don't fold it into "unknown" just
-  // because a nonzero pending count also blanks the outbox-drain clock.
   if (pendingBytes > 0) {
     return {
       tone: "exposed",
@@ -130,7 +121,6 @@ export function computeStorageMetrics(
   const snapshotClocks = vaults.map((v) => parseIso(v.lastBackupAt));
   const verifyClocks = vaults.map((v) => parseIso(v.lastVerifyAt));
   const walClocks = vaults.map((v) => parseIso(v.lastWalDrainAt));
-  // Outbox is drained only when nothing is pending; else the edge is unproven.
   const outboxClocks = vaults.map((v) =>
     (v.pendingOffsite?.count ?? 0) === 0 ? parseIso(v.lastWalDrainAt) : null
   );

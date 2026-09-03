@@ -160,7 +160,6 @@ describe("recurrence lifecycle", () => {
 });
 
 describe(describeRecurrence, () => {
-  // One summariser, one register: every surface renders these exact phrases.
   it.each([
     ["FREQ=DAILY", "Daily"],
     ["FREQ=DAILY;INTERVAL=2", "Every other day"],
@@ -182,7 +181,6 @@ describe(describeRecurrence, () => {
     ["FREQ=WEEKLY;BYDAY=TH;COUNT=5", "Every Thursday · 5 times"],
     ["FREQ=WEEKLY;BYDAY=TH;COUNT=1", "Every Thursday · once"],
     ["FREQ=DAILY;UNTIL=20260905T000000Z", "Daily · until Sep 5, 2026"],
-    // An unparseable UNTIL drops the tail rather than leaking the rule text.
     ["FREQ=DAILY;UNTIL=SOON", "Daily"],
   ])("summarises %s as %s", (rrule, expected) => {
     expect(describeRecurrence(rrule)).toBe(expected);

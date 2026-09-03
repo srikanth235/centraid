@@ -1,7 +1,3 @@
-// HEADLESS BLOCK LAYER (#765): arithmetic/state rules shared by the React DOM
-// and React Native block kits. Reached at `@centraid/design/blocks`, NOT the
-// package barrel (oxlint caps it at 100 modules).
-
 export { barShares, barStack, barWindow, dayFold, dayMark } from "./bars";
 export type {
   BarSegments,
@@ -45,7 +41,6 @@ export type {
   InsightWords,
 } from "./insights";
 
-// Data half of the block props — types only; see contracts.ts for why.
 export type {
   ActionData,
   ButtonData,

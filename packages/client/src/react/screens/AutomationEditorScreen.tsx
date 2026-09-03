@@ -22,31 +22,12 @@ import { AutomationEditorHarnessPicker } from "./AutomationEditorHarnessPicker.j
 import au from "../styles/automation.module.css";
 import styles from "./AutomationEditorScreen.module.css";
 
-// The COMPILE SCREEN — one of the two automation surfaces, and the only one
-// that may change an automation.
-//
-// Left column: the source of intent (Name, Instructions, Triggers,
-// Connectors, Notifications) — and, at its foot, the save bar that commits it.
-// Right column: the compiler's readout (AutomationCompilePane) — compile in
-// place, watch the steps, read the failure, test the plan.
-//
-// One writer, one field. INSTRUCTIONS is the only prose surface in the product
-// that changes what an automation does; the rail reports on it and never
-// edits it, and the run screen neither edits nor compiles. That is the whole
-// division. Compiling is NOT a side effect of Save that navigates straight to
-// the run screen — a failed compile would have nowhere to be read. Save
-// compiles WITHOUT leaving, and the rail owns the loop.
-
 type TriggerKind = "cron" | "webhook" | "condition" | "data" | "event";
-/** One row of a condition trigger's `where` builder. `value` is the raw text
- *  the user typed; it is coerced per-op into the manifest clause shape at save
- *  time (see `whereClauseOf`). */
 type WhereRowDraft = { column: string; op: ConditionOp; value: string };
 type TriggerDraft = {
   key: string;
   kind: TriggerKind;
   expr: string;
-  /** Optional IANA timezone for cron triggers (#570). Empty = gateway default / host-local. */
   tz: string;
   entity: string;
   whereRows: WhereRowDraft[];
@@ -56,8 +37,6 @@ type TriggerDraft = {
   event: string;
   filterRepo: string;
 };
-// Mirrors `CONDITION_OPS` in the automation manifest — hand-synced, because the
-// renderer bundle cannot pull in the main-process-only automation runtime.
 const CONDITION_OPS = [
   "eq",
   "ne",
@@ -72,10 +51,6 @@ const CONDITION_OPS = [
   "within-next-days",
 ] as const;
 type ConditionOp = (typeof CONDITION_OPS)[number];
-/** Kinds the owner can add from the create/edit form. Webhook + condition
- *  remain editable when already present on a loaded automation, but new
- *  authoring matches the Grok-style surface: schedule (cron) and vault data
- *  changes only. */
 const BASE_ADDABLE_TRIGGER_KINDS = [
   "cron",
   "data",
@@ -99,36 +74,25 @@ const EVENTS_BY_CONNECTOR = {
     { id: "issue", label: "Issue event" },
   ],
 } as const;
-/** Run-outcome notifications. Failures surface on Home under needs attention;
- *  only App / Off are wired, and the control must promise nothing else. */
 type NotifyMode = "app" | "off";
 const NOTIFY_OPTIONS: readonly { id: NotifyMode; label: string }[] = [
   { id: "app", label: "In the app" },
   { id: "off", label: "Off" },
 ];
-/** Ops that take no `value` (unary null checks). */
 const NO_VALUE_OPS: ReadonlySet<string> = new Set(["is-null", "not-null"]);
-/** Ops whose value is a comma-separated list. */
 const LIST_OPS: ReadonlySet<string> = new Set(["in"]);
-/** Ops whose value is a bare day count (a number). */
 const NUMERIC_OPS: ReadonlySet<string> = new Set([
   "within-days",
   "within-next-days",
 ]);
 
-/** An `@[<entityType>/<entityId>]` mention token, exactly as `insertMention`
- *  writes it into the instructions. Global, but every read goes through
- *  `matchAll`, which clones the regex — no shared `lastIndex`. */
 const ENTITY_TOKEN_RE = /@\[(?<entityType>[^/\]]+)\/(?<entityId>[^\]]+)\]/gu;
 
-/** Turn a clean numeric string into a number; leave everything else a string
- *  (so `eq status open` stays `"open"`, `eq amount 100` becomes `100`). */
 function coerceScalar(raw: string): string | number {
   const t = raw.trim();
   return t !== "" && /^-?\d+(?:\.\d+)?$/u.test(t) ? Number(t) : t;
 }
 
-/** A DTO where clause (value is `unknown` on the wire) → an editable row. */
 function whereRowOf(raw: unknown): WhereRowDraft {
   const c = (raw && typeof raw === "object" ? raw : {}) as Record<
     string,
@@ -146,8 +110,6 @@ function whereRowOf(raw: unknown): WhereRowDraft {
   return { column: typeof c.column === "string" ? c.column : "", op, value };
 }
 
-/** An editable row → a manifest where clause, coerced per-op. Drops the row
- *  (returns null) when it has no column. */
 function whereClauseOf(
   row: WhereRowDraft
 ): { column: string; op: string; value?: unknown } | null {
@@ -222,16 +184,6 @@ function autogrow(el: HTMLTextAreaElement): void {
   el.style.height = `${el.scrollHeight}px`;
 }
 
-/** Inline entity-KIND picker for the data/condition trigger inputs — the same
- *  at-token idiom as the Instructions at-mention (`.mentionPopover` /
- *  `.mentionOption` surface), applied to the trigger entity fields. It offers
- *  canonical entity TYPES (e.g. `core.transaction`) from the lazily-loaded
- *  `list`, filtered client-side and capped at eight; it never offers row
- *  instances (those live in the at-mention search, not here). Keyboard-navigable
- *  — ArrowUp/ArrowDown move, Enter accepts, Escape dismisses — and click to
- *  accept. When `segmented`, the value is a comma-separated list and only the
- *  trailing segment (after the last comma) is matched and completed, leaving
- *  the earlier entities intact. */
 function EntityKindPicker({
   value,
   list,
@@ -248,8 +200,6 @@ function EntityKindPicker({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
 
-  // For a comma-separated value everything up to and including the last comma
-  // is a fixed prefix; the trailing segment is what we match and complete.
   const lastComma = segmented ? value.lastIndexOf(",") : -1;
   const prefix = value.slice(0, lastComma + 1);
   const query = value
@@ -426,8 +376,6 @@ export default function AutomationEditorScreen({
   const [enabled, setEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  /** Bumped after a successful save so the compile rail compiles what was
-   *  just persisted. See `AutomationCompilePane`'s `compileNonce`. */
   const [compileNonce, setCompileNonce] = useState(0);
   const [toggleBusy, setToggleBusy] = useState(false);
   const [regenBusy, setRegenBusy] = useState(false);
@@ -439,35 +387,20 @@ export default function AutomationEditorScreen({
   const [selectedConnectors, setSelectedConnectors] = useState<Set<string>>(
     () => new Set()
   );
-  /** Durable connection bindings keyed by catalog kind (connection id + label). */
   const [connectionBindings, setConnectionBindings] = useState<
     Map<string, { connectionId: string; kind: string; label: string }>
   >(() => new Map());
 
-  // Mirrors `selectedConnectors` so `refreshCatalog` — an async event-handler
-  // continuation — can read the current selection without nesting a setState
-  // inside another state updater (updaters must stay pure).
   const selectedConnectorsRef = useRef(selectedConnectors);
   useEffect(() => {
     selectedConnectorsRef.current = selectedConnectors;
   }, [selectedConnectors]);
 
-  // The last persisted instructions. State, not a ref: `dirty` is computed
-  // during render from it, and a ref read during render is not a value React
-  // can keep the UI consistent with.
   const [baselineInstructions, setBaselineInstructions] = useState("");
   const instructionsRef = useRef<HTMLTextAreaElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const connectorsWrapRef = useRef<HTMLDivElement | null>(null);
 
-  // Applies a freshly-loaded DTO to `state` plus, on the initial load
-  // (`resetForm: true`), every editable field derived from it. Actions that
-  // only need to pick up server-derived data that the form itself never
-  // edits — a rotated webhook's URL, a grant's `revokedAt` — pass
-  // `resetForm: false` so they don't clobber in-progress edits or the
-  // just-earned "Recompile plan" affordance (see `doSave`, which
-  // deliberately does NOT reload after a successful save: the local form
-  // state is already authoritative for what was just persisted).
   const applyLoaded = useCallback(
     (d: AutomationEditorData, resetForm: boolean): void => {
       setState(d);
@@ -501,13 +434,11 @@ export default function AutomationEditorScreen({
     }
   }, [applyLoaded, loadData]);
 
-  /** Re-fetch server-derived data (webhook, consent) without resetting the
-   *  fields the owner may be mid-edit on. */
   const refreshConsent = useCallback(async () => {
     try {
       applyLoaded(await loadData(), false);
     } catch {
-      // Best-effort background refresh — keep showing the last-known state.
+      // Intentionally empty.
     }
   }, [applyLoaded, loadData]);
 
@@ -518,10 +449,6 @@ export default function AutomationEditorScreen({
     void reload();
   }, [reload]);
 
-  // Lazily fetch the canonical entity-type list the first time a data/condition
-  // trigger is present — feeds the `EntityKindPicker` autocomplete on their
-  // entity inputs. The route caches the underlying gateway read, so re-fetches
-  // are cheap even if this fires again after a reload.
   const needsEntityTypes = triggers.some(
     (t) => t.kind === "data" || t.kind === "condition"
   );
@@ -547,9 +474,6 @@ export default function AutomationEditorScreen({
     if (instructionsRef.current) autogrow(instructionsRef.current);
   }, [instructions]);
 
-  // Leaving an @-mention (or backspacing it down to the sigil) discards the
-  // last result set. Adjusted during render so the popover closes on the same
-  // paint the mention ends, instead of one cascading render later.
   const mentionIdle = !mention || mention.query.length < 1;
   const [seenMentionIdle, setSeenMentionIdle] = useState(mentionIdle);
   if (seenMentionIdle !== mentionIdle) {
@@ -584,25 +508,11 @@ export default function AutomationEditorScreen({
     try {
       const next = await loadConnectorCatalog();
       setCatalog(next);
-      // Rehydrate durable bindings for any selected kinds that now have a
-      // live vault connection (covers select-then-connect + post-refresh).
-      // Read `selectedConnectors` off a ref, never from inside another
-      // updater: React requires updaters to be pure and StrictMode
-      // double-invokes them.
       const selected = selectedConnectorsRef.current;
       setConnectionBindings((prev) => {
         let copy: typeof prev | undefined;
         for (const cat of next) {
           if (!selected.has(cat.kind) || !cat.connection) continue;
-          // A catalog refresh may make a formerly unique kind ambiguous.
-          // Preserve the owner's explicit account choice; only hydrate a
-          // binding when the form does not already carry one.
-          //
-          // A binding whose connection has VANISHED from the catalog (the
-          // account was revoked) is deliberately left alone too — silently
-          // re-pointing it at whatever account survives would change the
-          // principal the automation acts as without the owner ever seeing
-          // it. `danglingConnectorKinds` surfaces it instead (#541).
           if (prev.has(cat.kind)) continue;
           copy ??= new Map(prev);
           copy.set(cat.kind, {
@@ -620,7 +530,6 @@ export default function AutomationEditorScreen({
     }
   }, [loadConnectorCatalog]);
 
-  // Dismiss the connectors popover on outside click or Escape.
   useEffect(() => {
     if (!connectorsOpen) return;
     const onDoc = (event: MouseEvent): void => {
@@ -639,7 +548,6 @@ export default function AutomationEditorScreen({
     };
   }, [connectorsOpen]);
 
-  // Create mode: land the caret in Name so the first action is obvious.
   const createFocused = useRef(false);
   useEffect(() => {
     if (createFocused.current) return;
@@ -664,12 +572,6 @@ export default function AutomationEditorScreen({
   }
 
   const d = state;
-  // Identity hue/glyph key on `row.id` — the same field Overview/Thread key
-  // on (`automationsData.ts`, `automationThreadData.ts`) — not `automationId`
-  // (`row.ref`, a `<ownerApp>/<id>` handle), so the editor's identity matches
-  // the rest of the app. `rowId` is optional/additive on the DTO, so a
-  // `loadData` that hasn't been updated to populate it falls back to
-  // `automationId`.
   const identityId = d.rowId ?? d.automationId ?? "draft";
   const hue = hueForId(identityId);
   const glyph = glyphForId(identityId);
@@ -693,7 +595,6 @@ export default function AutomationEditorScreen({
           .split(",")
           .map((e) => e.trim())
           .filter(Boolean);
-        // Skip an empty data trigger — same spirit as the cron empty-expr skip.
         return entities.length
           ? [
               {
@@ -720,7 +621,6 @@ export default function AutomationEditorScreen({
           },
         ];
       }
-      // condition — skip when no entity is named.
       if (!trigger.entity.trim()) return [];
       const where = trigger.whereRows
         .map(whereClauseOf)
@@ -755,15 +655,7 @@ export default function AutomationEditorScreen({
       });
       if (ok) {
         setBaselineInstructions(instructions);
-        // Save no longer navigates. A create always needs its first compile;
-        // an edit only when the instructions actually changed (renaming or
-        // retiming a trigger does not invalidate the compiled handler). The
-        // rail takes it from here — the owner stays on this screen and
-        // watches, which is the whole point of the split.
         if (d.mode === "create") {
-          // The automation exists on the gateway now — reload so the form
-          // leaves create mode and the rail becomes live. Compiling is left
-          // to the rail's own nonce below, after the reload settles.
           await reload();
           setCompileNonce((n) => n + 1);
         } else if (changed) {
@@ -771,7 +663,7 @@ export default function AutomationEditorScreen({
         }
       }
     } catch {
-      // Validation errors are rendered next to their field.
+      // Intentionally empty.
     } finally {
       setSaving(false);
     }
@@ -838,13 +730,6 @@ export default function AutomationEditorScreen({
 
   const connectorCount = selectedConnectors.size;
   const isCreate = d.mode === "create";
-  /**
-   * Bound connections that no longer exist in the live catalog — the owner
-   * revoked the account after this automation was saved. The binding is kept
-   * (never silently swapped for a surviving account), but it is a dead
-   * principal: it must not keep offering connector-event triggers, and the
-   * owner is told about it (#541).
-   */
   const danglingConnectorKinds = new Set(
     [...connectionBindings.values()]
       .filter((binding) => {
@@ -951,7 +836,6 @@ export default function AutomationEditorScreen({
           trigger.every.trim()
             ? cronNextRuns(trigger.every.trim(), 3).map(relativeRunLabel)
             : [];
-        // New authoring only offers cron + data; keep legacy kinds when loaded.
         const kindOptions: TriggerKind[] =
           trigger.kind === "webhook" || trigger.kind === "condition"
             ? [trigger.kind, ...addableTriggerKinds]
@@ -1416,7 +1300,6 @@ export default function AutomationEditorScreen({
     });
   };
 
-  /** After picker configure/authorize — always select + persist durable id. */
   const bindConnection = (binding: {
     connectionId: string;
     kind: string;
@@ -1446,9 +1329,6 @@ export default function AutomationEditorScreen({
       <textarea
         ref={instructionsRef}
         className={styles.textarea}
-        // `rows` is the FLOOR `autogrow` can shrink to: a textarea's
-        // scrollHeight never drops below its row count, so rows={6} pinned a
-        // two-line instruction to a six-line well of empty space.
         rows={3}
         value={instructions}
         onChange={onInstructionsChange}

@@ -25,7 +25,6 @@ const { doFetch } = vi.hoisted(() => ({
   doFetch: vi.fn<typeof TypeImport_nod2nz.doFetch>(),
 }));
 
-// Heavy shell + gateway deps stubbed to their inline-relevant surface.
 vi.mock(import("../../../gateway-client.js") as Promise<unknown>, () => ({
   deleteApp: vi.fn<typeof TypeImport_1gl5zx7.deleteApp>(),
   updateAppMeta: vi.fn<typeof TypeImport_1gl5zx7.updateAppMeta>(),
@@ -93,7 +92,6 @@ const fakeSession = {
   ReplicaShellSession,
   "read" | "search" | "write" | "subscribe"
 >;
-// This route only touches the explicit read/search/write/subscription boundary.
 const fakeShellSession = fakeSession as unknown as ReplicaShellSession;
 vi.mock(
   import("../../../replica/shell-session.js") as Promise<unknown>,
@@ -109,8 +107,6 @@ vi.mock(
     })),
   })
 );
-// The scope set is resolved over HTTP (#599); this route's suite is about
-// mounting, so it gets one ready scope rather than a gateway round-trip.
 vi.mock(import("./useAppScopes.js") as Promise<unknown>, () => {
   const ready = {
     status: "ready",
@@ -154,8 +150,6 @@ const nav: ShellNav = {
 };
 const prefs = { sidebarOpen: true, theme: "dark" } as never;
 
-// A distinct appId per test — InlineAppRoute keys its module-level descriptor
-// cache on (appId, attempt), so reusing an id would serve a prior test's chunk.
 function routeEl(
   loader: () => Promise<{ default: InlineAppModule }>,
   appId: string,
@@ -183,7 +177,6 @@ async function mount(el: JSX.Element): Promise<void> {
   await act(async () => {
     root!.render(el);
   });
-  // let the lazy descriptor + session promises settle through Suspense
   await flush();
 }
 
@@ -218,7 +211,6 @@ describe("InlineAppRoute suite", () => {
     host = null;
   });
 
-  /** A Root that reads the board through window.centraid on mount. */
   function makeApp(RootImpl: InlineAppModule["Root"]): InlineAppModule {
     return {
       appId: "tasks",
@@ -265,19 +257,9 @@ describe("InlineAppRoute suite", () => {
       expect(
         host!.querySelector('[data-testid="tasks-root"]')?.textContent
       ).toBe("Buy milk");
-      // THE FRAME CONTRIBUTES NOTHING TO THE BAR (InlineAppRoute.tsx). No
-      // settings gear sits ahead of the app's own actions; every bundled app
-      // draws its bar to a design handoff and none of those handoffs has a
-      // frame control in it. What a gear would open is unreachable until a
-      // door is designed - recorded there, and pinned here.
       expect(host!.querySelector('[aria-label="App settings"]')).toBeNull();
-      // Offline first paint: no gateway tool route touched.
       expect(doFetch).not.toHaveBeenCalled();
-      // window.centraid is installed for the app.
       expect((window as { centraid?: unknown }).centraid).toBeDefined();
-      // Pointer typography must land on the inline app scope, including the
-      // pointer media block — never on the document root where it can bleed
-      // into shell chrome or leave the app on its touch scale.
       const tokenStyle = document.querySelector(
         "style[data-centraid-inline-tokens]"
       );
@@ -286,10 +268,6 @@ describe("InlineAppRoute suite", () => {
       );
     });
 
-    // Photos was the FIRST app to refuse the generic sheet, back when the gear
-    // was still contributed for everyone else. It is now the rule rather than
-    // the exception, and this case survives as the second app proving it - one
-    // that draws its own bar and never had a frame control at all.
     it("does not expose the generic app-settings sheet for Photos", async () => {
       const photos = { ...app, id: "photos", name: "Photos" };
       function Root({ rootRef }: InlineAppProps): JSX.Element {
@@ -339,10 +317,6 @@ describe("InlineAppRoute suite", () => {
       expect((window as { centraid?: unknown }).centraid).toBe(installed);
     });
 
-    // The blank-photo-grid bug: `rootRef` was an inline arrow, so every shell
-    // re-render changed the ref's identity, React detached and reattached the
-    // SAME element, and the mount callback's teardown revoked every live blob:
-    // object URL out from under the mounted <img>s (ERR_FILE_NOT_FOUND).
     it("keeps a mounted image's blob: URL alive across a shell re-render, and revokes it on unmount", async () => {
       const createObjectURL = (
         URL as unknown as { createObjectURL?: (b: Blob) => string }
@@ -352,7 +326,6 @@ describe("InlineAppRoute suite", () => {
       ).revokeObjectURL;
       const revoked: string[] = [];
       let seq = 0;
-      // jsdom implements neither; supply both for the duration of this test.
       (
         URL as unknown as { createObjectURL: (b: Blob) => string }
       ).createObjectURL = () => `blob:mock/${++seq}`;
@@ -395,7 +368,6 @@ describe("InlineAppRoute suite", () => {
         expect(revoked).toStrictEqual([]);
         expect(tile.getAttribute("src")).toBe(authed);
 
-        // A REAL unmount still revokes — the fix must not trade the bug for a leak.
         act(() => root?.unmount());
         root = null;
         expect(revoked).toStrictEqual([authed]);
@@ -417,7 +389,6 @@ describe("InlineAppRoute suite", () => {
           </div>
         );
       }
-      // The lazy chunk fails to load the first time; Retry must re-import it.
       let calls = 0;
       const loader = vi.fn<() => Promise<{ default: InlineAppModule }>>(
         async () => {
@@ -427,7 +398,6 @@ describe("InlineAppRoute suite", () => {
       );
       await mount(routeEl(loader, "tasks-retry"));
       await flush();
-      // Error boundary fallback is showing its Try again control.
       const retry = [...host!.querySelectorAll("button")].find((b) =>
         /try again/iu.test(b.textContent ?? "")
       );
@@ -441,14 +411,10 @@ describe("InlineAppRoute suite", () => {
       expect(
         host!.querySelector('[data-testid="tasks-root"]')?.textContent
       ).toBe("recovered");
-      // The retry re-imported the descriptor (fresh chunk load path).
       expect(loader.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
 
     it("refuses to mount Locker on the viewer seat (docs/blueprint-seats.md S5)", async () => {
-      // `seat()` (host-platform.ts) reads `window.CentraidIroh` as the
-      // synchronous first-paint web-host marker — installing it here is the
-      // same signal the real web shell installs before this bundle loads.
       (window as unknown as { CentraidIroh?: unknown }).CentraidIroh = {};
       const loader = vi.fn<() => Promise<{ default: InlineAppModule }>>(
         async () => ({ default: makeApp(() => <div>should not mount</div>) })
@@ -463,10 +429,7 @@ describe("InlineAppRoute suite", () => {
           /does not open on a shared browser/iu
         );
         expect(refusal?.textContent ?? "").toMatch(/user-presence boundary/iu);
-        // The way in is named — a refusal without one reads as broken.
         expect(refusal?.textContent ?? "").toMatch(/desktop app|your phone/iu);
-        // The wall means "does not mount" — the app's lazy chunk is never
-        // even fetched, not merely hidden after mounting.
         expect(loader).not.toHaveBeenCalled();
       } finally {
         delete (window as unknown as { CentraidIroh?: unknown }).CentraidIroh;

@@ -4,14 +4,10 @@ import Button from "../ui/Button.js";
 
 import styles from "./MeterRows.module.css";
 
-// Share-of-largest bar (#814). Do not fold into `RowsBlock`. Empty rows keep
-// their place; trailing cell is inert text, never a disabled button.
-
 export interface MeterRowDef {
   id: string;
   name: string;
   pack: string;
-  /** 0–100, share of the largest row — not of the total. */
   share: number;
   count: string;
   when?: string | undefined;

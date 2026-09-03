@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import { createFrameBatch } from "./frameBatch.js";
 import type { FrameScheduler } from "./frameBatch.js";
 
-/** A hand-driven frame clock, so "one run per frame" is asserted, not timed. */
 function manualScheduler(): FrameScheduler & { tick: () => void } {
   const pending = new Map<number, () => void>();
   let next = 1;

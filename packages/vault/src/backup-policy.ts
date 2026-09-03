@@ -1,25 +1,15 @@
 import type { DatabaseSync } from "node:sqlite";
 
-/** One owner-visible policy for every backup/custody clock and byte budget (#414). */
 export interface BackupPolicy {
-  /** Offsite WAL lag; also the vault WAL capture tick. */
   rpoSeconds: number;
   snapshotIntervalHours: number;
   verifyEveryDays: number;
-  /** Receipt is durable locally; replicated waits for provider custody. */
   casAck: "receipt" | "replicated";
   outboxBudgetBytes: number;
   reservedHeadroomBytes: number;
-  /** Omitted means derive a cache budget from the real volume. */
   cacheBudgetBytes?: number;
-  /** Omitted/zero means unthrottled. */
   throttleBytesPerSec?: number;
-  /** When set, wins over `directToColdOriginals`. Whitespace-only is unset. */
   storageClass?: string;
-  /**
-   * Direct-to-cold for large video/audio originals (#425). Unset ⇒ ON, 25 MiB,
-   * `['video/','audio/']`. Never derivatives/WAL/snapshots. Needs `STANDARD_IA`.
-   */
   directToColdOriginals?: {
     enabled?: boolean;
     minBytes?: number;
@@ -153,8 +143,6 @@ export function resolveBackupPolicy(value: unknown): BackupPolicy {
   ) {
     throw new BackupPolicyError("`storageClass` must be a string when set");
   }
-  // Empty/whitespace-only is UNSET (not an error): db.ts treats falsy as no
-  // header, so the heuristic-precedence check downstream stays in agreement.
   const storageClass =
     typeof storageClassRaw === "string" && storageClassRaw.trim() !== ""
       ? storageClassRaw.trim()
@@ -215,7 +203,6 @@ export function readBackupPolicy(vault: DatabaseSync): BackupPolicy {
   const legacy = record(settings.blob_store);
   return resolveBackupPolicy({
     ...policy,
-    // One-way read migration for pre-policy settings written before #414.
     ...(policy.throttleBytesPerSec === undefined &&
     legacy.throttleBytesPerSec !== undefined
       ? { throttleBytesPerSec: legacy.throttleBytesPerSec }
@@ -226,7 +213,6 @@ export function readBackupPolicy(vault: DatabaseSync): BackupPolicy {
   });
 }
 
-/** `null` clears an optional knob or restores a required knob to its default. */
 export function updateBackupPolicy(
   vault: DatabaseSync,
   patch: BackupPolicyPatch

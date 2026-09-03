@@ -7,12 +7,6 @@ import GatewayServiceTip from "./GatewayServiceTip.js";
 
 type Api = NonNullable<typeof window.CentraidApi>;
 
-/**
- * Minimal bridge stub — only the three methods this component touches.
- * Overrides are loose on purpose: `CentraidApi` is the full desktop surface,
- * and pinning stubs to its exact signatures would drag the whole settings DTO
- * into every case for no gain.
- */
 function makeApi(over: Record<string, unknown> = {}): Api {
   return {
     getSettings: () => Promise.resolve({}),
@@ -36,15 +30,12 @@ describe("GatewayServiceTip — the H5 service offer", () => {
     host.remove();
   });
 
-  // Each mount is a fresh instance (`key`), so a second call models a relaunch
-  // reading persisted settings rather than a re-render of live state.
   let generation = 0;
   const mount = async (api: Api): Promise<void> => {
     generation += 1;
     await act(async () => {
       root.render(<GatewayServiceTip api={api} key={generation} />);
     });
-    // The settings read resolves a microtask after the effect runs.
     await act(async () => {});
   };
   const q = (id: string): HTMLElement | null =>
@@ -59,7 +50,6 @@ describe("GatewayServiceTip — the H5 service offer", () => {
     expect(q("gateway-service-tip")).not.toBeNull();
     expect(host.textContent).toContain("Keep your vault reachable");
 
-    // Installed — nothing left to offer, in either shape.
     await mount(
       makeApi({
         getSettings: () => Promise.resolve({ offerGatewayService: true }),
@@ -68,7 +58,6 @@ describe("GatewayServiceTip — the H5 service offer", () => {
     expect(q("gateway-service-tip")).toBeNull();
     expect(q("gateway-service-standing")).toBeNull();
 
-    // Declined — the pitch is gone for good.
     await mount(
       makeApi({
         getSettings: () => Promise.resolve({ offerGatewayService: false }),
@@ -110,9 +99,7 @@ describe("GatewayServiceTip — the H5 service offer", () => {
     expect(q("gateway-service-tip")).not.toBeNull();
     const alert = host.querySelector('[role="alert"]');
     expect(alert?.textContent).toBe("launchctl refused");
-    // A failed install is not a decision — nothing may be persisted.
     expect(saveSettings).not.toHaveBeenCalled();
-    // …and the button is live again for a retry.
     expect(
       (q("gateway-service-tip-accept") as HTMLButtonElement).disabled
     ).toBe(false);
@@ -127,9 +114,6 @@ describe("GatewayServiceTip — the H5 service offer", () => {
     expect(q("gateway-service-tip")).toBeNull();
   });
 
-  // The strand this component nearly caused: it is the ONLY caller of
-  // `installGatewayService` in the client, so a dismissal that hid it
-  // completely would retire the whole feature on one click, with no way back.
   it("keeps the service installable after a dismissal — this session and the next", async () => {
     const installGatewayService = vi.fn<() => Promise<{ ok: true }>>(() =>
       Promise.resolve({ ok: true as const })
@@ -138,13 +122,10 @@ describe("GatewayServiceTip — the H5 service offer", () => {
     await mount(makeApi({ installGatewayService, saveSettings }));
     await click("gateway-service-tip-dismiss");
 
-    // Same session: the pitch is gone, the action is not.
     expect(q("gateway-service-tip")).toBeNull();
     expect(q("gateway-service-standing")).not.toBeNull();
     expect(q("gateway-service-install")).not.toBeNull();
 
-    // Next launch: the persisted `false` still yields the standing control,
-    // and it still installs.
     await mount(
       makeApi({
         getSettings: () => Promise.resolve({ offerGatewayService: false }),
@@ -169,7 +150,6 @@ describe("GatewayServiceTip — the H5 service offer", () => {
         getSettings: () => Promise.reject(new Error("gateway.db locked")),
       })
     );
-    // An unreadable preference must not silently swallow the offer.
     expect(q("gateway-service-tip")).not.toBeNull();
   });
 });

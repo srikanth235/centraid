@@ -6,8 +6,6 @@ import type { PaletteDeps } from "./paletteData.js";
 import type { PaletteEntitySearch } from "./paletteEntitySearch.js";
 import type { PaletteRecentHit, PaletteRecents } from "./paletteRecents.js";
 
-// `vi.mock` is hoisted above the import by vitest, so iconSvg's design-tokens
-// dependency resolves before paletteData.js loads.
 vi.mock(import("../iconSvg.js"), () => ({
   iconSvg: (name: string) => `<svg data-icon="${name}"/>`,
 }));
@@ -54,10 +52,7 @@ describe("paletteData", () => {
       expect(
         groups.find((g) => g.group === "Apps")?.items.map((r) => r.label)
       ).toStrictEqual(["Todos"]);
-      // No nav target matches "todo", so that group is dropped.
       expect(groups.find((g) => g.group === "Go to")).toBeUndefined();
-      // There is no served-app plane, and no builder producing apps for one
-      // (#799): no query offers a "Build a new app…" row.
       expect(groups.find((g) => g.group === "Create")).toBeUndefined();
       expect(
         buildPaletteGroups("budget tracker", deps()).find(
@@ -94,7 +89,6 @@ describe("paletteData", () => {
       expect(ensure).toHaveBeenCalledWith("budget");
       const convo = groups.find((g) => g.group === "Conversations")!;
       expect(convo.items[0]!.label).toBe("Budget chat");
-      // Snippet markers are stripped for the plain sub text.
       expect(convo.items[0]!.sub).toBe("the budget plan");
       convo.items[0]!.run();
       expect(onClose).toHaveBeenCalledOnce();
@@ -150,19 +144,13 @@ describe("paletteData", () => {
       );
       expect(ensure).toHaveBeenCalledWith("notes: café");
       const notes = groups.find((group) => group.group === "Notes")!;
-      // Group header carries the owning app's icon + identity hue (point 2).
       expect(notes.icon).toMatchObject({ hue: "var(--c-slate)" });
-      // Row anatomy (point 3): kind (MONO), title, sub — no `meta` here since
-      // this hit has none, and it must not restate the app label the group
-      // header already carries.
       expect(notes.items[0]).toMatchObject({
         label: "Café plans",
         sub: "旅行 ✨",
         kind: "note",
       });
       expect(notes.items[0]!.meta).toBeUndefined();
-      // Objects, not apps: the known seam is opening the owning app (no
-      // deep-link plumbing exists yet — see paletteData.ts's `entityRow` doc).
       notes.items[0]!.run();
       expect(onClose).toHaveBeenCalledOnce();
       expect(navigate).toHaveBeenCalledWith({ kind: "app", id: "notes" });

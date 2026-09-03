@@ -8,12 +8,6 @@ import controlsCss from "../../styles/controls.module.css";
 import buttonCss from "../../ui/Button.module.css";
 import styles from "./ConnectFlow.module.css";
 
-// The 'details' step's panel — split out of ConnectFlow.tsx (#382)
-// purely to keep that file under the repo's file-size cap; it is pure
-// presentation over `connectFlow-core.ts`'s state/reducer, no logic lives
-// here that isn't also in ConnectFlow.tsx's effects. Its SSH sibling was
-// deleted with the SSH method (#603).
-
 type Field = "ticket" | "label";
 
 function fieldSetter(
@@ -32,9 +26,6 @@ export function GatewayDetailsStep({
   state: ConnectFlowState;
   dispatch: Dispatch<ConnectFlowEvent>;
   ticketRef: RefObject<HTMLTextAreaElement | null>;
-  /** False when the caller forced a single method: "back" would land on a
-   *  chooser with one option, which is where onboarding's first screen sits.
-   *  The host's own escape (`onCancel` → "Start over") is the way out. */
   canGoBack?: boolean;
 }): JSX.Element {
   const setField = (field: Field) => fieldSetter(dispatch, field);
@@ -45,8 +36,6 @@ export function GatewayDetailsStep({
         <textarea
           ref={ticketRef}
           className={styles.textarea}
-          // The label carries the meaning; the placeholder is the CLI, quoted
-          // verbatim because the person minting the ticket has to type it.
           placeholder="centraid-gateway pair --vault <name>"
           rows={3}
           spellCheck={false}

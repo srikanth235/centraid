@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { File as NodeFile } from "node:buffer";
 import { createHash } from "node:crypto";
 
@@ -19,8 +18,6 @@ describe("streaming sha-256", () => {
     for (const size of [0, 1, 55, 56, 63, 64, 65, 200]) {
       const bytes = new Uint8Array(size).map((_, i) => (i * 7) % 256);
       const hash = new StreamingSha256();
-      // Feed it in ragged pieces: the pending-buffer join is the part a
-      // single-chunk test would never reach.
       for (let at = 0; at < size; at += 17)
         hash.update(bytes.subarray(at, Math.min(size, at + 17)));
       expect(hash.digestHex(), `${size} bytes`).toBe(
@@ -54,3 +51,4 @@ describe("streaming sha-256", () => {
     );
   });
 });
+// @vitest-environment jsdom

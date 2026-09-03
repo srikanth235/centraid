@@ -1,8 +1,3 @@
-/**
- * The browser seat's half of the grant transport (#883): the wire law lives
- * once in `apps/_shared/grant-transport.ts`.
- */
-
 import {
   grantWireCalls,
   queuedGrantWireCalls,
@@ -43,8 +38,6 @@ export function grantBridge(auth: () => Promise<GatewayAuth>): GrantBridge {
   return grantWireCalls(seatHttp(auth));
 }
 
-/** No durable store → the unqueued bridge: unreachable keeps reading as
- *  unreachable, never as a queued promise. */
 export async function queuedGrantBridge(
   auth: () => Promise<GatewayAuth>,
   queue?: GrantIntentQueue

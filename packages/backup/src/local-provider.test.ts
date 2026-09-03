@@ -23,7 +23,6 @@ describe("conformance suite", () => {
     providerConformanceCases(makeHarness).map((c) => [c.name, c] as const)
   )("%s", async (_name, c) => {
     await c.run();
-    // Conformance kit uses node:assert (framework-agnostic); pin a vitest expect for requireAssertions (#496).
     expect(true).toBe(true);
   });
 });
@@ -50,8 +49,6 @@ describe("LocalBackupProvider lifecycle edge cases", () => {
       appMeta: {},
     };
     const first = await provider.registerSnapshot(targetId, reg);
-    // Same idempotencyKey, generation now "stale" relative to currentGeneration (5) —
-    // replay must win over fencing (spec-mandated order).
     const replay = await provider.registerSnapshot(targetId, {
       ...reg,
       generation: 1,
@@ -63,7 +60,6 @@ describe("LocalBackupProvider lifecycle edge cases", () => {
     const provider = new LocalBackupProvider({ rootDir: await tempDir() });
     const { targetId } = await provider.createTarget({ label: "t" });
     await provider.deleteTarget(targetId);
-    // Rewrite the registry with a deletedAt far in the past to simulate an expired window.
     const dir = (provider as unknown as { rootDir: string }).rootDir;
     const registryFile = path.join(dir, "registry.json");
     const raw = JSON.parse(await fs.readFile(registryFile, "utf8"));
@@ -129,8 +125,6 @@ describe("LocalBackupProvider lifecycle edge cases", () => {
       format: "centraid-snapshot/2",
       appMeta: {},
     });
-    // Captured rather than caught, so all three assertions always run — a
-    // silent success leaves `err` a non-error and fails `toBeInstanceOf`.
     const err: unknown = await provider
       .registerSnapshot(targetId, {
         idempotencyKey: "k2",
@@ -227,15 +221,8 @@ describe("LocalBackupProvider lifecycle edge cases", () => {
     ]);
   });
 
-  // Gap 1 (the whole point of generation fencing, PROTOCOL.md: "two
-  // gateways, one vault"): a SECOND provider instance opened on the same
-  // rootDir BEFORE the first instance's write must still observe it on its
-  // next operation — no in-memory cache may shadow a sibling instance's (or,
-  // in production, a sibling PROCESS's) write to registry.json.
   test("two independent instances sharing one rootDir observe each other's writes (cross-process fencing)", async () => {
     const dir = await tempDir();
-    // Instance A creates the target and registers generation 1 first, so
-    // both instances open with a real target already on disk.
     const a = new LocalBackupProvider({ rootDir: dir });
     const { targetId } = await a.createTarget({ label: "t" });
     await a.registerSnapshot(targetId, {
@@ -249,13 +236,8 @@ describe("LocalBackupProvider lifecycle edge cases", () => {
       appMeta: {},
     });
 
-    // Instance B is opened AFTER A's gen-1 write but has performed no
-    // operation of its own yet — simulating a second gateway process that
-    // mounted the same NAS-backed provider dir sometime after the first.
     const b = new LocalBackupProvider({ rootDir: dir });
 
-    // A takes over (a restore-takeover, PROTOCOL.md's fencing story):
-    // registers generation 2, bumping currentGeneration on disk.
     await a.registerSnapshot(targetId, {
       idempotencyKey: "k2",
       manifestKey: "manifests/2.json",
@@ -267,14 +249,9 @@ describe("LocalBackupProvider lifecycle edge cases", () => {
       appMeta: {},
     });
 
-    // B — despite having been constructed before A's gen-2 write, and never
-    // itself having read the registry until now — must observe
-    // currentGeneration 2 on its very next operation (no stale cache).
     const targetInfo = await b.getTarget(targetId);
     expect(targetInfo.currentGeneration).toBe(2);
 
-    // And B's next registration at the now-stale generation 1 must fence —
-    // the real cross-process split-brain detection this bug defeated.
     await expect(
       b.registerSnapshot(targetId, {
         idempotencyKey: "k3-from-b",

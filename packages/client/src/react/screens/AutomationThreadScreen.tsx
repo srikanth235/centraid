@@ -30,50 +30,6 @@ import ChatComposer from "./ChatComposer.js";
 import au from "../styles/automation.module.css";
 import styles from "./AutomationThreadScreen.module.css";
 
-// The RUN SCREEN — one of the two automation surfaces, and the one that
-// changes nothing.
-//
-// It answers exactly two questions: what has this automation DONE, and what
-// can you tell me about it. Every fire is a turn on a flight-recorder spine
-// (oldest→newest, date-grouped); the run summary is the message, telemetry
-// sits in a quiet footer, a failed run speaks as an error, and the composer
-// asks questions ABOUT those runs.
-//
-// What deliberately is NOT here, and why:
-//   - compile turns: they are the compiler's working, not executions, so they
-//     are no part of this list of real runs.
-//   - "Retry compile": compiling is the compiler's job; the plan banner links
-//     there instead of doing it from here.
-//   - "Apply to future runs": a reply that silently rewrote the standing
-//     instructions was authoring performed from the reading surface. The
-//     composer is read-only now, and the rewrite path lives in the compiler.
-// Anything the reader wants to CHANGE resolves to one call: `onOpenCompiler`.
-//
-// Purely presentational: the route wrapper (`AutomationViewRoute.tsx`) owns
-// IO, confirm dialogs, toasts, and navigation.
-
-/**
- * `AutomationThreadData` plus two additive, OPTIONAL route-derived fields —
- * both documented DTO gaps (see the file's PR / lane report):
- *
- * - `triggerDetail`: `AutomationThreadHeaderDTO` carries only the human
- *   `triggerSummary` string (e.g. "Every day at 8am") and relative
- *   `nextRuns` labels — no raw cron expression and no data/condition
- *   entity+cadence detail (that richer shape lives on `AutomationHeroDTO`,
- *   the screen this one supersedes). The route derives it from the SAME
- *   row via `automationsData.ts`'s already-exported `deriveAutomationHero`
- *   (no new endpoint), so the trigger-chips row can show the mono cron expr
- *   / "watches `<entity>` · every `<cadence>`" text the brief calls for.
- * - `runTokens`: `ThreadRunDTO` carries `costUsd`/`durationMs` but no
- *   per-run token count. The route derives a `runId → tokens` map from the
- *   same `listAutomationTurns` call `automationThreadData.ts` already makes
- *   internally, so the run meta can show a token count when present.
- *
- * Both are optional so a bare `AutomationThreadData` — the documented
- * contract shape — still satisfies this prop at the type level; the screen
- * degrades gracefully (no cron/entity chip beyond the human summary, no
- * token figure) when they're absent.
- */
 export interface AutomationThreadDataEx extends AutomationThreadData {
   triggerDetail?: {
     cronExprs: string[];
@@ -85,7 +41,6 @@ export interface AutomationThreadDataEx extends AutomationThreadData {
     } | null;
   };
   runTokens?: Record<string, number>;
-  /** Capability-backed attended harness controls for the Q&A conversation. */
   harnessConfig?: AsstModelPickerDTO;
 }
 
@@ -105,12 +60,6 @@ const STATUS_ICON: Record<AuStatusKind, IconName> = {
   failed: "AlertTriangle",
 };
 
-/**
- * Backoff between rejoin attempts for a dropped/refused turn stream. Bounded
- * on purpose: four quick tries cover a gateway restart or a momentarily full
- * subscriber cap, and anything longer is a real outage the reader should be
- * told about rather than a spinner that never resolves.
- */
 const WATCH_REJOIN_DELAYS_MS = [500, 1500, 4000, 10_000];
 
 function withoutId(
@@ -177,13 +126,6 @@ async function watchNativeTurnWithBackoff(
   return watchNativeTurnWithBackoff(turnId, controller, io, attempt + 1);
 }
 
-/**
- * Cold-read one turn's trace, marking it in-flight first so the effect that
- * warms the latest turn cannot start a second read for the same turn.
- *
- * Module scope, taking its setters as arguments: this is an IO routine, not a
- * render value, and the in-flight mark HAS to land before the read starts.
- */
 function fetchTurnTrace(
   turnId: string,
   io: {
@@ -202,10 +144,6 @@ function fetchTurnTrace(
         setTraceErrors((current) => withoutId(current, turnId));
       },
       () => {
-        // A failed cold read is NOT an empty turn. Writing `[]` here would be
-        // indistinguishable from "no messages yet" — the turn would show the
-        // spinner and the Done/Failed footer at once and lose "Show trace".
-        // Leave `traces` untouched and flag the turn so it offers a retry.
         setTraceErrors((current) => new Set(current).add(turnId));
       }
     )
@@ -241,9 +179,6 @@ interface RunGroup {
   dateGroup: string;
   runs: ThreadRunDTO[];
 }
-/** Oldest→newest within each calendar-day group, groups in the order their
- *  first run appears — the thread reads top-to-bottom like a growing
- *  conversation, most recent at the bottom. */
 function groupRuns(runs: readonly ThreadRunDTO[]): RunGroup[] {
   const chronological = [...runs].sort((a, b) => a.startedAt - b.startedAt);
   const groups: RunGroup[] = [];
@@ -521,16 +456,9 @@ function GrantsLine({
   );
 }
 
-// The node icon sits on the thread spine and encodes the trigger *origin*
-// (not just the run's outcome): a running run always spins its loader, a
-// failed one shows the alert, otherwise we read the origin label — the only
-// origin signal `ThreadRunDTO` carries — to distinguish a scheduled fire from
-// a manual/webhook/data one. Keeps the chip honest without a DTO change.
 function nodeIconFor(run: ThreadRunDTO): IconName {
   if (run.status === "running") return "Loader";
   if (run.status === "fail") return "AlertTriangle";
-  // An ask is the reader's own question sitting in the history — it must not
-  // wear an execution's trigger glyph.
   if (run.entryKind === "ask") return "Send";
   const origin = run.originLabel.toLowerCase();
   if (origin.includes("manual")) return "Play";
@@ -540,12 +468,6 @@ function nodeIconFor(run: ThreadRunDTO): IconName {
   return "Clock";
 }
 
-// One run = one chat turn. The automation "speaks" each time it fires: the
-// spine node marks the trigger, the header names the origin + time, the run
-// summary is the message body, and a quiet footer carries the telemetry. A
-// failed run speaks as an error you can retry in place; either way "Details"
-// opens the full step-by-step run-view. This is the compact register turned
-// into a conversation, over the same `ThreadRunDTO` (#539).
 function RunTurn({
   run,
   tokens,
@@ -564,9 +486,7 @@ function RunTurn({
   tokens?: number;
   messages?: readonly AsstMsgDTO[];
   traceLoading: boolean;
-  /** The cold trace read failed — the turn offers a retry instead of lying. */
   traceFailed: boolean;
-  /** The live stream is gone after bounded rejoins — offer Reconnect. */
   watchLost: boolean;
   onLoadTrace: () => void;
   onRetryWatch: () => void;
@@ -582,8 +502,6 @@ function RunTurn({
   const running = run.status === "running";
   const failed = run.status === "fail";
   const hasTrace = messages !== undefined;
-  // "Run again" re-fires the automation. Offering it on an ask would re-run
-  // the automation in answer to a question — never what the reader meant.
   const rerunnable = run.entryKind === "run";
   const messageCallbacks: MessageCallbacks = {
     hydrateRefs: () => undefined,
@@ -780,16 +698,6 @@ function RunTurn({
   );
 }
 
-/**
- * The plan banner — the ONLY thing the run screen says about compilation, and
- * it says it without offering to do anything about it.
- *
- * A `ready` plan is silent: a working automation should not carry a status
- * bar. Compiling, failed, and never-compiled each explain what that means for
- * the runs below, and hand off to the compiler. There is no "Retry compile"
- * button: it would kick the compiler from the surface that has no way to show
- * you whether it worked.
- */
 function PlanBanner({
   plan,
   onOpenCompiler,
@@ -841,13 +749,6 @@ function PlanBanner({
   );
 }
 
-/**
- * The question composer. Read-only by construction: it asks about the runs
- * above and never writes to the automation. The hint line is load-bearing —
- * it tells a reader who arrived wanting to change something exactly where to
- * go, which is the affordance the old "Apply to future runs" toggle was
- * standing in for.
- */
 function Composer({
   busy,
   onSend,
@@ -1132,11 +1033,9 @@ export default function AutomationThreadScreen({
   const [loadingTraces, setLoadingTraces] = useState<ReadonlySet<string>>(
     new Set()
   );
-  /** Turns whose cold trace read failed — distinct from "no messages yet". */
   const [traceErrors, setTraceErrors] = useState<ReadonlySet<string>>(
     new Set()
   );
-  /** Running turns whose live stream is gone and stayed gone after rejoins. */
   const [lostWatches, setLostWatches] = useState<ReadonlySet<string>>(
     new Set()
   );
@@ -1149,9 +1048,6 @@ export default function AutomationThreadScreen({
   const streamControllersRef = useRef(new Map<string, AbortController>());
   const [regenBusy, setRegenBusy] = useState(false);
   const [decidingId, setDecidingId] = useState<string | null>(null);
-  // The header's overflow menu (Edit / Pause-Resume / Delete). Closes on
-  // Escape or an outside click — the document listeners are only attached
-  // while it's open and torn down on close/unmount.
   const [menuOpen, setMenuOpen] = useState(false);
   const menuWrapRef = useRef<HTMLDivElement | null>(null);
 
@@ -1181,15 +1077,6 @@ export default function AutomationThreadScreen({
     [loadTurnTrace]
   );
 
-  /**
-   * Join a running turn's live stream, rejoining with backoff when the join is
-   * refused or the stream drops with the turn still open (the gateway's
-   * subscriber cap answers 503; a restart or proxy idle timeout just closes
-   * the socket). Nothing polls behind this, so without a rejoin a still-running
-   * turn would spin "Working through your instructions…" until the reader
-   * navigated away and back. Bounded: after the last delay the turn
-   * is marked lost and the reader gets an explicit Reconnect.
-   */
   const watchNativeTurn = useCallback(
     (turnId: string): void => {
       if (watchedTurnsRef.current.has(turnId)) return;
@@ -1203,9 +1090,6 @@ export default function AutomationThreadScreen({
         setTraces,
         setLostWatches,
       }).finally(() => {
-        // Only retire our own registration: `retryWatch` aborts this loop and
-        // registers a replacement under the same turn id, and this `finally`
-        // runs after that — deleting blindly would orphan the live stream.
         if (streamControllersRef.current.get(turnId) === controller) {
           streamControllersRef.current.delete(turnId);
         }
@@ -1223,9 +1107,6 @@ export default function AutomationThreadScreen({
     [watchNativeTurn]
   );
 
-  // Latest history is warm; older turns stay collapsed until the reader asks
-  // for their trace. If the latest turn is still open (including one fired by
-  // an external trigger), join its event stream instead of polling.
   useEffect(() => {
     if (state === "loading" || state === "error" || state === "missing") return;
     const latest = state.runs[0];
@@ -1249,8 +1130,6 @@ export default function AutomationThreadScreen({
     []
   );
 
-  // Dismiss the overflow menu on Escape or an outside click. Listeners live
-  // only for the menu's open lifetime.
   useEffect(() => {
     if (!menuOpen) return;
     const onKey = (e: KeyboardEvent): void => {

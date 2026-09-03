@@ -119,8 +119,6 @@ describe("ingest", () => {
       sort_name: "Kumar, Ravi",
       birth_date: "1988-03-12",
     });
-    // A vCard's EMAIL and TEL are REACH and land on the channel store; the
-    // register keeps identity keys, of which this card carries none (#883).
     const ids = db.vault
       .prepare(
         `SELECT kind, normalized_value AS value, is_preferred AS is_primary
@@ -148,7 +146,6 @@ describe("ingest", () => {
       .prepare(`SELECT count(*) AS n FROM core_party WHERE kind='person'`)
       .get() as { n: number };
     expect(people.n).toBe(3); // owner + Ravi + Meera, no fourth
-    // Backfilled onto the existing party, non-primary.
     const ravi = db.vault
       .prepare(
         `SELECT party_id FROM core_party WHERE display_name = 'Ravi Kumar'`

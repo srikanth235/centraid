@@ -10,7 +10,7 @@ export function notifyReplicaCommit(db: DatabaseSync): void {
     try {
       listener();
     } catch {
-      // A disconnected stream cannot interfere with command finalization.
+      // Intentionally empty.
     }
   }
 }

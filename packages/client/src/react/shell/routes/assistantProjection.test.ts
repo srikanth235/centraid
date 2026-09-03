@@ -5,8 +5,6 @@ import { createTranscriptProjection } from "./assistantProjection.js";
 import { hydrateMessages } from "./assistantTranscript.js";
 import type { AsstMsg } from "./assistantTranscript.js";
 
-// The rich-answer renderer pulls in the auth-aware ref resolver; stub it as
-// assistantTranscript's own test does (the projection never calls it).
 vi.mock(import("../../../gateway-client.js"), () => ({
   resolveAssistantRefs: vi.fn<typeof TypeImport_1gl5zx7.resolveAssistantRefs>(),
 }));
@@ -58,12 +56,6 @@ describe(createTranscriptProjection, () => {
     expect(rows[0]?.msgId).not.toBe(rows[1]?.msgId);
   });
 
-  // The backfill case (#659). Older turns arriving at the FRONT of the
-  // model — a "show earlier" expansion today, a server-paged fetch later —
-  // must not disturb what is already on screen. If it did, every mounted row
-  // would re-render and re-hydrate its refs and copy buttons at the exact
-  // moment the reader is scrolling, which is the loudest possible way for this
-  // to regress.
   it("keeps rendered rows identical when older messages are prepended", () => {
     const projection = createTranscriptProjection();
     const ask = user("hi");
@@ -93,19 +85,11 @@ describe(createTranscriptProjection, () => {
     const before = projection.project([reply], 0);
     expect(before[0]).toMatchObject({ canRegenerate: true });
 
-    // The same message is still the last answer — only its index moved — so it
-    // must keep both its identity and its Regenerate control.
     const after = projection.project([user("older"), reply], 1);
     expect(after[1]).toBe(before[0]);
     expect(after[1]).toMatchObject({ canRegenerate: true });
   });
 
-  // The path that will actually run (#659). The three cases above use
-  // synthetic arrays; this one drives the projection with rows shaped like the
-  // gateway's own paged response and hydrated through the real codec, because
-  // that is what `AssistantRoute.loadEarlier` prepends. The gateway's contract
-  // is that a `beforeSeq` reply carries ONLY that page — so the client
-  // concatenates page + held, and every held object survives untouched.
   describe("server-paged backfill", () => {
     const wireRows = (
       texts: string[],
@@ -131,11 +115,9 @@ describe(createTranscriptProjection, () => {
 
     it("keeps every held row identical when a fetched page is prepended", () => {
       const projection = createTranscriptProjection();
-      // The newest page, as the first load would deliver it.
       const held = hydrateMessages(wireRows(["latest"], 200));
       const before = projection.project(held, held.length - 1);
 
-      // The previous page — a SEPARATE response carrying only its own turns.
       const older = hydrateMessages(wireRows(["earlier"], 100));
       const merged = [...older, ...held];
       const after = projection.project(merged, merged.length - 1);
@@ -173,7 +155,6 @@ describe(createTranscriptProjection, () => {
         -1
       );
 
-      // Everything from the first backfill onwards is untouched by the second.
       for (const [index, dto] of afterFirst.entries())
         expect(afterSecond[pageTwo.length + index]).toBe(dto);
     });

@@ -1,7 +1,3 @@
-// Rule STORE for the policy cascade (#807). Does not resolve —
-// `decideEnrichmentGate` is the one gate on the execution path. `null`
-// fields mean inherit; a row that decides nothing is unrepresentable (DDL).
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { nowIso, uuidv7 } from "../ids.js";
@@ -17,7 +13,6 @@ export type EnrichScopeType = (typeof ENRICH_SCOPE_TYPES)[number];
 export const ENRICH_TRIGGERS = ["on-ingest", "on-view", "on-demand"] as const;
 export type EnrichTrigger = (typeof ENRICH_TRIGGERS)[number];
 
-/** `ref` is `''` at vault scope (DDL-enforced). */
 export interface EnrichScope {
   type: EnrichScopeType;
   ref: string;
@@ -58,10 +53,6 @@ const SCOPE_RANK = new Map(
   ENRICH_SCOPE_TYPES.map((type, index) => [type as string, index])
 );
 
-/**
- * Least-specific first. `ORDER BY scope_type` is alphabetical
- * ('collection' before 'vault') and is not a cascade.
- */
 function byCascade(a: EnrichPolicyRule, b: EnrichPolicyRule): number {
   return (
     (SCOPE_RANK.get(a.scope.type) ?? 0) - (SCOPE_RANK.get(b.scope.type) ?? 0) ||
@@ -80,7 +71,6 @@ function toRule(row: RuleRow): EnrichPolicyRule {
   };
 }
 
-/** Whole-decision rewrite; undefined stores as `null`. Caller owns the transaction. */
 export function putEnrichPolicyRule(
   vault: DatabaseSync,
   input: EnrichPolicyRuleInput
@@ -137,7 +127,6 @@ export function readEnrichPolicyRule(
   return row ? toRule(row) : null;
 }
 
-/** Caller supplies the chain; this module never guesses an item's scopes. */
 export function readEnrichPolicyRuleChain(
   vault: DatabaseSync,
   chain: readonly EnrichScope[],

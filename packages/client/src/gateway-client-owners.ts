@@ -1,6 +1,3 @@
-// Owner client (#726): ONE owner per vault — access IS ownership; scope is own
-// person only; create/remove is host-custody-only.
-
 import {
   auth,
   authHeaders,
@@ -17,14 +14,12 @@ export interface GatewayOwnerVault {
 
 export interface GatewayOwner {
   ownerId: string;
-  /** Rename keeps the id. */
   label: string;
   createdAt: string;
   vaults: GatewayOwnerVault[];
   deviceCount: number;
 }
 
-/** Own person alone in the array; `[]` with no device plane. */
 export async function listGatewayOwners(): Promise<GatewayOwner[]> {
   const { baseUrl, token } = await auth();
   try {

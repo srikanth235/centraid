@@ -1,4 +1,3 @@
-// Scope-set resolution for an inline app mount (#599, ownership #726).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as TypeImport_nod2nz from "../../../gateway-client-core.js";
@@ -51,14 +50,11 @@ function entry(
   return { vaultId, label, canWrite, installed: true };
 }
 
-/** The plane as the gateway answers it: the mountable rows. */
 function plane(scopes: AppScopeEntry[]): TypeImport_lhrfvk.AppScopePlane {
   return { scopes };
 }
 
 describe("resolveAppScopes", () => {
-  // Braces matter: an arrow that RETURNS the mock hands vitest a teardown
-  // callback, and vitest would then invoke the mock after each test.
   beforeEach(() => {
     readAppScopePlane.mockReset();
   });
@@ -114,8 +110,6 @@ describe("resolveAppScopes", () => {
     expect(scopes).toHaveLength(1);
     expect(scopes[0]!.identity.vaultId).toBe("vault-ambient");
     expect(scopes[0]!.scope.canWrite).toBe(true);
-    // The solo mount IS the member's own library, so nothing in it is marked
-    // as somewhere else.
     expect(scopes[0]!.scope.personal).toBe(true);
   });
 
@@ -146,8 +140,6 @@ describe("resolveAppScopes", () => {
   });
 
   it("leaves a scope UNMARKED when the gateway did not answer the marker", async () => {
-    // An older gateway omits `personal`; marking every tile would say
-    // something untrue, so unknown reads as the member's own.
     readAppScopePlane.mockResolvedValue(
       plane([entry("vault-own", "Library", true)])
     );

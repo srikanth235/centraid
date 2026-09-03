@@ -1,10 +1,5 @@
 import { icons } from "@centraid/design";
 
-// Build a design-token icon as an SVG string — for the imperative body-portal
-// overlays (toast/confirm/template-preview) that manipulate the DOM directly
-// and can't use the <Icon> component. Emits the identical shape Icon.tsx
-// produces, so a string-built glyph is pixel-equal to a component-rendered
-// one; keep the two emitters in step.
 export function iconSvg(name: string, size = 20, strokeWidth = 1.5): string {
   const paths = icons[name as keyof typeof icons];
   if (!paths) return "";

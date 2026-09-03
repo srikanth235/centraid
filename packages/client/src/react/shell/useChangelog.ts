@@ -7,14 +7,6 @@ export type ChangelogState =
   | { status: "ready"; result: CentraidChangelogResult }
   | { status: "error"; message: string };
 
-/**
- * Fetch the "What's new" changelog (GitHub release notes, fetched + cached in
- * main). Loads on mount and exposes a `reload` for the modal's retry button.
- * The bridge method is optional (test harnesses mock a partial API) — its
- * absence surfaces as an error state, not a crash.
- */
-/** One fetch attempt, resolved to the settled state it should produce (a
- *  missing bridge method resolves to the error state rather than throwing). */
 async function loadChangelog(): Promise<ChangelogState> {
   const get = window.CentraidApi.getChangelog;
   if (!get)
@@ -36,9 +28,6 @@ async function loadChangelog(): Promise<ChangelogState> {
 const LOADING: ChangelogState = { status: "loading" };
 
 export function useChangelog(): { state: ChangelogState; reload: () => void } {
-  // `attempt` is the retry counter; the settled state is stamped with the
-  // attempt that produced it, so a reload reads as `loading` during render
-  // rather than through a synchronous setState in the effect body.
   const [attempt, setAttempt] = useState(0);
   const [settled, setSettled] = useState<{
     attempt: number;

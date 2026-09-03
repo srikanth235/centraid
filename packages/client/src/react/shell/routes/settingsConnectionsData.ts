@@ -32,11 +32,6 @@ import {
 } from "./connectorPlatform.js";
 import type { ProviderCapabilitiesDTO } from "./connectorPlatform.js";
 
-// Connectors data layer (#304 renderer half): maps the gateway's OAuth /
-// BYO-client connections surface onto the screen's DTOs, and hosts
-// confirm-gating of the destructive detach (mirroring SettingsRoute's
-// vault-deletion gating).
-
 const STATUS_TO_HEALTH: Record<ConnectionEntry["status"], ConnectionHealth> = {
   active: "ok",
   failing: "failing",
@@ -59,7 +54,6 @@ function toRowDTO(c: ConnectionEntry): ConnectionRowDTO {
   };
 }
 
-/** Derive capabilities when an older gateway omits the field. */
 function fallbackCapabilities(
   connectors: ConnectionProviderPreset["connectors"]
 ): ProviderOptionDTO["capabilities"] {
@@ -141,10 +135,6 @@ export async function loadConnectionProvidersData(): Promise<
   );
 }
 
-/**
- * Tool descriptors for the assistant — healthy connections only; never secret
- * cells. Consumes the same list DTOs as the Connectors UI.
- */
 export async function loadConnectorToolDescriptors(): Promise<
   ReturnType<typeof toolDescriptorsFromHealthyConnections>
 > {
@@ -162,7 +152,6 @@ export async function loadConnectorToolDescriptors(): Promise<
   });
 }
 
-/** Sync capabilities for one connection with install status from vault automations. */
 export async function loadLinkedSyncsForConnection(
   connection: ConnectionRowDTO
 ): Promise<LinkedSyncDTO[]> {
@@ -182,7 +171,6 @@ export async function loadLinkedSyncsForConnection(
       };
       const c = m.connector;
       if (!c) {
-        // Template id often matches app id for pull blueprints.
         return a.id === s.templateId || a.ref.endsWith(`/${s.templateId}`);
       }
       if (c.connectionId && c.connectionId === connection.connectionId)
@@ -200,12 +188,6 @@ export async function loadLinkedSyncsForConnection(
   });
 }
 
-/**
- * Syncs actually ATTACHED to this page's connections, joined to the connection
- * each rides — distinct from `loadLinkedSyncsForConnection` (what a connector
- * COULD sync). Starts from the automation list; automations bound to no live
- * connection are dropped.
- */
 export async function loadAttachedSyncsData(
   connections: readonly ConnectionRowDTO[]
 ): Promise<AttachedSyncDTO[]> {
@@ -228,8 +210,6 @@ export async function loadAttachedSyncsData(
       (t): t is { kind: "cron"; expr: string; tz?: string } => t.kind === "cron"
     );
     out.push({
-      // A schedule makes a sync a sync; without a cron trigger say "On demand"
-      // rather than reading blank.
       cadence: cron
         ? describeCron(cron.expr, resolveCronTimezone(cron.tz))
         : "On demand",
@@ -243,7 +223,6 @@ export async function loadAttachedSyncsData(
   return out;
 }
 
-/** Clone a pull blueprint and bind it to the vault connection id. */
 export async function installSyncForConnection(input: {
   templateId: string;
   connection: ConnectionRowDTO;
@@ -277,9 +256,6 @@ export async function installSyncForConnection(input: {
   return { ref };
 }
 
-/** Attach a BYO credential for one connector kind — creates the `(kind,
- *  label)` connection row if absent (#304's `sync.configure_credential`).
- *  Returns `connectionId` so oauth2 can start the authorize step at once. */
 export async function submitConnectionForm(
   input: ConnectionFormInput
 ): Promise<{ connectionId: string; status: string }> {
@@ -307,15 +283,10 @@ export async function submitConnectionForm(
   return { connectionId: out.connectionId, status: out.status };
 }
 
-/**
- * The redirect URI the owner must paste into their Google / Microsoft /
- * Dropbox OAuth app. Same path the authorize ceremony uses.
- */
 export async function loadOAuthCallbackUri(): Promise<string> {
   return gwOauthCallbackUri();
 }
 
-/** Pause / resume — the owner's two levers over a connection's fire path. */
 export async function updateConnectionStatus(
   connectionId: string,
   status: "active" | "paused"
@@ -323,7 +294,6 @@ export async function updateConnectionStatus(
   await gwSetConnectionStatus({ connectionId, status });
 }
 
-/** Begins the PKCE ceremony; the screen opens the returned URL itself. */
 export async function beginConnectionAuthorize(
   connectionId: string
 ): Promise<string> {
@@ -336,22 +306,12 @@ export async function beginConnectionAuthorize(
   return authUrl;
 }
 
-/** Deliver the Worker finish page's manual custom-scheme fallback. */
 export async function completeAssistReturnLink(
   rawUrl: string
 ): Promise<{ connectionId: string }> {
   return completeAssistReturnLinkFromClient(rawUrl);
 }
 
-/**
- * Remove is a real, irreversible delete (#304's `sync.remove_connection`,
- * distinct from the credential-only detach). Named `makeDetachConnection`
- * because `SettingsRoute.tsx` imports that name.
- *
- * A server refusal (undecided outbox items, receipted sync history) arrives
- * as `GatewayClientError` whose message IS the server's reason — it reaches
- * the screen's `showToast` unchanged.
- */
 export function makeDetachConnection(
   confirm: (opts: {
     title: string;

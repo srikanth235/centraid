@@ -4,15 +4,11 @@ import type { OwnerScope } from "../ownerScope.js";
 
 import styles from "./ScopePicker.module.css";
 
-// "Which vault?" — every creation flow's explicit target (#599, D14).
-// Unwritable vaults are NEVER offerable; default is owner's own vault.
-
 export interface ScopePickerProps {
   scopes: OwnerScope[];
   value: string | undefined;
   onChange: (scopeId: string) => void;
   label: string;
-  /** Fixed statement: choice already made. */
   locked?: boolean;
 }
 

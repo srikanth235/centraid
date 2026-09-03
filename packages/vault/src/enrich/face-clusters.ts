@@ -1,14 +1,3 @@
-// Face grouping (#724). PARTY-ANCHORED: identity is a `core_party` row the
-// owner asserts via `media.answer_face_proposal`; this module only writes
-// candidate party_ids onto PROPOSED regions and groups the rest into
-// rebuildable media_face_cluster.
-//
-// PROHIBITIONS: answered (`rejected`/`dismissed`) regions are read for
-// nothing (#712); comparisons stay within ONE enrich_embedding.model;
-// thresholds are deliberately stricter than the literature (a false merge
-// destroys trust late, a false split costs one gesture); NO CHAINING —
-// centroid linkage only, never single-link union-find; ascending distance +
-// id tiebreak keeps rebuilds byte-stable.
 import type { DatabaseSync } from "node:sqlite";
 
 import { nowIso } from "../ids.js";
@@ -16,21 +5,16 @@ import { cosine, decodeVector } from "./similarity.js";
 
 export const FACE_REGION_TARGET_TYPE = "media.face_region";
 
-/** Offer-as-party ceiling; see the header before relaxing it. */
 export const FACE_PARTY_MAX_DISTANCE = 0.3;
 
-/** Stricter still: a stranger group is named in ONE gesture. */
 export const FACE_CLUSTER_MAX_DISTANCE = 0.22;
 
-/** A lone face is named from its own photograph; no singleton strangers. */
 export const FACE_MIN_CLUSTER_SIZE = 2;
 
 export interface FaceClusterResult {
   matched: number;
   clusters: number;
-  /** Excludes ungrouped singletons. */
   clustered: number;
-  /** Rows inserted, updated or deleted. */
   updated: number;
 }
 
@@ -48,7 +32,6 @@ interface Candidate {
   unit: Float32Array;
 }
 
-/** L2-normalise once; drop zero vectors, never invent a direction. */
 function unitOf(blob: Uint8Array): Float32Array | null {
   const values = decodeVector(Buffer.from(blob));
   let norm = 0;
@@ -73,19 +56,16 @@ function centroidOf(members: readonly Float32Array[]): Float32Array | null {
   return Float32Array.from(sum, (value) => value * scale);
 }
 
-/** Incomparable widths are "as far apart as possible". */
 function distance(a: Float32Array, b: Float32Array): number {
   if (a.length !== b.length) return 2;
   return 1 - cosine(a, b);
 }
 
 interface Group {
-  /** Kept sorted: the lowest id is the group's identity. */
   members: string[];
   centroid: Float32Array;
 }
 
-/** Ascending distance, id tiebreak: output is a pure function of input. */
 function agglomerate(
   candidates: readonly Candidate[],
   threshold: number
@@ -97,7 +77,6 @@ function agglomerate(
       centroid: candidate.unit,
     });
   }
-  // Quadratic pair scan is fine at thousands of faces.
   const pairs: { a: string; b: string; d: number }[] = [];
   for (let i = 0; i < candidates.length; i += 1)
     for (let j = i + 1; j < candidates.length; j += 1) {
@@ -115,7 +94,6 @@ function agglomerate(
     return x.b < y.b ? -1 : 1;
   });
 
-  // A merge rewrites the absorbed group's members — lookup stays one hop.
   const rootOf = new Map<string, string>();
   for (const candidate of candidates)
     rootOf.set(candidate.regionId, candidate.regionId);
@@ -128,7 +106,6 @@ function agglomerate(
     const ga = groups.get(ra);
     const gb = groups.get(rb);
     if (!ga || !gb) continue;
-    // NO-CHAINING RULE (header): centroids must be within threshold.
     if (distance(ga.centroid, gb.centroid) > threshold) continue;
     const members = [...ga.members, ...gb.members].sort();
     const centroid = centroidOf(
@@ -137,7 +114,6 @@ function agglomerate(
         .filter((u): u is Float32Array => u !== undefined)
     );
     if (!centroid) continue;
-    // Lowest id is the identity; unchanged groups never rename.
     const survivor = members[0] as string;
     groups.delete(ra);
     groups.delete(rb);
@@ -149,10 +125,6 @@ function agglomerate(
   );
 }
 
-/**
- * Stateless; idempotent compare-then-write: unchanged data writes nothing,
- * dirties no WAL pages, wakes no replica.
- */
 export function rebuildFaceClusters(
   vault: DatabaseSync,
   options: { now?: string } = {}
@@ -191,7 +163,6 @@ export function rebuildFaceClusters(
   }
 
   const assign = vault.prepare(
-    // `review_state` untouched — only media.answer_face_proposal leaves 'proposed'.
     "UPDATE media_face_region SET party_id = ? WHERE region_id = ? AND review_state = 'proposed'"
   );
   const clusterOf = new Map<string, string>();
@@ -199,8 +170,6 @@ export function rebuildFaceClusters(
   for (const model of [...byModel.keys()].sort()) {
     const group = byModel.get(model) as RegionRow[];
 
-    // Centroids come from owner confirmations; confirmed_by_party_id is who
-    // said so — never group on it.
     const confirmedByParty = new Map<string, Float32Array[]>();
     for (const row of group) {
       if (row.review_state !== "confirmed" || !row.party_id) continue;
@@ -218,7 +187,6 @@ export function rebuildFaceClusters(
       if (centroid) centroids.push({ partyId, centroid });
     }
 
-    // Assign only when EXACTLY one party is near; ambiguity stays unnamed.
     const leftovers: Candidate[] = [];
     for (const row of group) {
       if (row.review_state !== "proposed") continue;
@@ -244,7 +212,6 @@ export function rebuildFaceClusters(
   }
   result.clustered = clusterOf.size;
 
-  // Compare-then-write: recompute wholesale, write only moved rows.
   const existing = new Map(
     (
       vault

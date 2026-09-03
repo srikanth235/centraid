@@ -1,21 +1,3 @@
-/*
- * CONFINEMENT is the sharing plane's one security law (issues #726 / #750).
- *
- * Every other property of a closure — pooling, idempotence, the wire path —
- * is about what a share DOES carry, and those are owned elsewhere
- * (`closure-split.test.ts`, `placement.test.ts`). This file owns the opposite
- * claim, which nothing else in the suite makes: what a closure must NOT
- * carry. An owner who shares one photograph out of a library of ten thousand
- * is making a statement about the other 9,999, and a closure that quietly
- * widened — a dropped `WHERE`, a recursion that walked one edge too far, a
- * partial result returned after a bad id — would be a privacy failure that
- * every "the shared item arrived" test still passes.
- *
- * Read-only by construction (read-closure.ts writes nothing), so these run
- * against one real on-disk origin vault and assert on the `WireClosure` value
- * itself: it is exactly what would cross the wire.
- */
-
 import { afterEach, describe, expect, test } from "vitest";
 
 import { registerDocumentCommands } from "../commands/documents.js";
@@ -27,7 +9,6 @@ import type { WireClosure } from "./closure.js";
 import { closeOpenVaults, household, seedPhoto } from "./placement-fixture.js";
 import { readShareClosure } from "./read-closure.js";
 
-/** Every sha the closure would hand an audience, in one comparable set. */
 function shasOf(closure: WireClosure): string[] {
   return closure.blobs.map((blob) => blob.sha256).toSorted();
 }
@@ -58,8 +39,6 @@ describe("[law:share-closure-confinement] a closure carries the named items' rea
     expect(closure.rows.derivatives.map((row) => row.content_id)).toStrictEqual(
       [shared.contentId]
     );
-    // The bytes are the part that cannot be taken back once handed over: the
-    // manifest names this photograph's original and thumb, and no other's.
     expect(shasOf(closure)).toStrictEqual(
       [shared.sha256, shared.thumbSha].toSorted()
     );
@@ -67,7 +46,6 @@ describe("[law:share-closure-confinement] a closure carries the named items' rea
       expect(shasOf(closure)).not.toContain(other.sha256);
       expect(shasOf(closure)).not.toContain(other.thumbSha);
     }
-    // Nothing else in the vault rode along on an unrelated table either.
     expect(closure.rows.documents).toStrictEqual([]);
     expect(closure.rows.collections).toStrictEqual([]);
     expect(closure.rows.docsFolders).toStrictEqual([]);
@@ -162,12 +140,9 @@ describe("[law:share-closure-confinement] a closure carries the named items' rea
       "Trip",
       "Bookings",
     ]);
-    // The sibling folder's document is one join away and must stay behind.
     expect(closure.rows.documents.map((row) => row.title)).toStrictEqual([
       "Train tickets",
     ]);
-    // …and so must its body: one content item crossed, the salary slip's did
-    // not.
     expect(contentTitles(closure)).toStrictEqual(["Train tickets"]);
   });
 
@@ -183,8 +158,6 @@ describe("[law:share-closure-confinement] a closure carries the named items' rea
         itemIds: [known.assetId, stranger],
       })
     ).toThrow(VaultShareError);
-    // A refusal that had returned what it managed to read would be a share the
-    // owner never authorised — a smaller one, but a share.
     expect(() =>
       readShareClosure(origin.vault, {
         originVaultId: "vault-priya",
@@ -213,10 +186,6 @@ describe("[law:share-closure-confinement] a closure carries the named items' rea
        VALUES (?, ?, ?, ?, ?, ?)`
     );
     add.run(uuidv7(), collectionId, "media.asset", photo.assetId, 0, now);
-    // A REAL row of a kind that cannot cross (#916): the entry's (type, id) is
-    // a composite foreign key into `core_entity` now, so a made-up type is
-    // refused by the engine long before the closure sees it — which is a
-    // different guarantee from this one, and does not replace it.
     const eventId = uuidv7();
     origin.vault
       .prepare(

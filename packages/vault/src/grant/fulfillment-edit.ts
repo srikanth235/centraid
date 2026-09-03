@@ -1,11 +1,3 @@
-/*
- * EDIT fulfillment (#825). NOTHING HERE AUTHORIZES ANYTHING: routing only, over
- * the DECLARED table (commons-routing.ts) and never the command's name. Two v1
- * REFUSALS, never silent successes — co-contribution ships for `tally.group`
- * alone, and an edit grant with no commons rail is refused, because a write off
- * the rail is a local mutation the next compile reverts.
- */
-
 import type { DatabaseSync } from "node:sqlite";
 
 import type { ShareableItemType } from "../share/closure.js";
@@ -19,7 +11,6 @@ import type { ShareGrantRecord } from "./grant-store.js";
 import { listShareGrantsForSubject } from "./grant-store.js";
 import { SHARE_SUBJECT_REGISTRY } from "./subject-registry.js";
 
-/** Commands that INTRODUCE an item. Declared, never inferred (#750). */
 export const SHARE_GRANT_CO_CONTRIBUTION_COMMANDS: readonly string[] = [
   "core.add_document",
   "core.create_folder",
@@ -27,11 +18,6 @@ export const SHARE_GRANT_CO_CONTRIBUTION_COMMANDS: readonly string[] = [
   "tally.add_expense",
 ];
 
-/**
- * Container types whose audience may co-contribute, DERIVED from the registry
- * rather than listed again (#883): a hand-kept second list can disagree with
- * the subject registry's `edit` declaration, a derivation cannot.
- */
 export const SHARE_GRANT_CO_CONTRIBUTION_TYPES: readonly ShareableItemType[] =
   SHARE_SUBJECT_REGISTRY.filter(
     (subject) => subject.fulfillment.edit === "commons-routing"
@@ -40,17 +26,13 @@ export const SHARE_GRANT_CO_CONTRIBUTION_TYPES: readonly ShareableItemType[] =
 export interface ShareGrantEditRoute {
   command: string;
   containerType: ShareableItemType;
-  /** ORIGIN ids. */
   containerId: string;
-  /** Every live grant over it, view and edit alike. */
   grants: readonly ShareGrantRecord[];
   commonsGrantId?: string;
   actable: boolean;
-  /** Absent when the write will be accepted. */
   refusal?: string;
 }
 
-/** NEAREST FIRST: the closest folder keeps a subtree one share. */
 function candidateContainers(
   db: DatabaseSync,
   route: CommonsCommandRoute,
@@ -61,8 +43,6 @@ function candidateContainers(
     const row = db
       .prepare("SELECT group_id FROM tally_expense WHERE expense_id = ?")
       .get(value) as { group_id: string | null } | undefined;
-    // A group-less 1:1 expense names no container, so there is nothing to
-    // route it to and nothing to refuse it against.
     return row?.group_id ? [row.group_id] : [];
   }
   if (route.resolution === "folder-descendant")
@@ -118,9 +98,6 @@ function refusalFor(input: {
   return undefined;
 }
 
-/** Against only the grants reaching the WRITER: the route's `refusal` folds
- *  the whole container, so one edit grant would silence "view only" for
- *  everyone. Per audience, never per container. */
 export function shareGrantEditRefusal(
   route: ShareGrantEditRoute,
   grants: readonly ShareGrantRecord[]
@@ -137,7 +114,6 @@ export function shareGrantEditRefusal(
   });
 }
 
-/** `undefined` when nothing shared is addressed. */
 export function routeShareGrantEdit(
   db: DatabaseSync,
   input: { command: string; commandInput: Record<string, unknown> }
@@ -156,7 +132,6 @@ export function routeShareGrantEdit(
         route.containerType,
         input.command
       );
-      // The rail's own decision, never a copy of it.
       const commonsGrantId = commonsGrantForCommand(
         db,
         input.command,

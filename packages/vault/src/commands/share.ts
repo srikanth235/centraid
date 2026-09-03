@@ -1,12 +1,3 @@
-// The `share.*` command pack (#883 V-writer): the ONE writer of the share half
-// of the authority plane. The plane's other principals already had receipted
-// doors — `enrich.record_consent` is a gateway command, and a device's row is
-// written by ENROLLMENT, a host ceremony that runs before there is a gateway.
-//
-// The plane's vocabulary is `principal`/`verb`; the share wire's is
-// `audience`/`capability` (#825). They meet in `grant-store.ts` — this pack
-// speaks the plane's, and the route translates once at the edge.
-
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import {
@@ -67,8 +58,6 @@ function answeringParty(ctx: HandlerCtx): string {
   return owner.self_party_id;
 }
 
-// The registry gate (V-registry): a triple with no strategy is refused HERE,
-// never left standing in the table as a promise nothing keeps.
 function registered(input: ShareInput): {
   audience: ShareGrantAudience;
   subjectType: ShareableItemType;
@@ -86,25 +75,11 @@ function registered(input: ShareInput): {
     );
   return {
     audience: { kind: input.audience_kind, id: input.audience_id },
-    // The registry answered for this pair, so both narrowings are its answer.
     subjectType: input.subject_type as ShareableItemType,
     verb: verb as ShareGrantCapability,
   };
 }
 
-// The channel gate (#903): a person is reachable exactly when a live
-// `share_party_vault_binding` names their party, and the People link ceremony
-// is the only thing that writes one. A grant to an unlinked party is refused
-// HERE rather than parked, because share no longer mints an invitation of its
-// own — nothing downstream could open the channel, so the row would be a
-// standing promise to nobody.
-//
-// CIRCLES ARE EXEMPT, deliberately. G-membership already rules a container
-// grant covers its members now and later, so an unlinked member is
-// undeliverable until they link and delivers on the next pass with no
-// re-grant. Refusing the whole circle over one unlinked member would cost the
-// member their circle — the same reasoning V-mask uses for a refusal standing
-// inside a granted one.
 function reachable(ctx: HandlerCtx, audience: ShareGrantAudience): void {
   if (audience.kind !== "party") return;
   const channel = channelForParty(ctx.db, audience.id);
@@ -114,8 +89,6 @@ function reachable(ctx: HandlerCtx, audience: ShareGrantAudience): void {
     .get(audience.id) as { display_name: string } | undefined;
   throw new Error(
     unlinkedAudienceCopy({
-      // A grant to a party this vault does not hold is a caller error, not an
-      // unlinked person; naming the id is more use than inventing a name.
       displayName: party?.display_name ?? audience.id,
       severed: channel !== null,
     })
@@ -131,7 +104,6 @@ const GRANT: CommandDefinition = {
     additionalProperties: false,
     properties: {
       ...AUDIENCE_PROPERTIES,
-      /** Delivery-strategy config, not part of the answer (ruling V-delivery). */
       max_size_bytes: { type: "integer", minimum: 0 },
     },
   },
@@ -157,8 +129,6 @@ const GRANT: CommandDefinition = {
     },
   ],
   idempotency: "idempotent",
-  // Salience (#306 decision 2), not a gate. `confirm` parks every non-owner
-  // caller: an app may propose a share, only the member says it.
   risk: "high",
   confirm: true,
   handler: (ctx) => {
@@ -187,8 +157,6 @@ const GRANT: CommandDefinition = {
         })
       );
     ctx.wrote("share.authority", created.grantId);
-    // Only a NEW answer is a decision; receipting a repeat would inflate the
-    // stream "last used" is counted from (ruling V-receipts).
     if (created.outcome === "created") {
       ctx.receipt({
         grantId: created.grantId,
@@ -239,7 +207,6 @@ const REVOKE: CommandDefinition = {
   preconditions: [],
   postconditions: [
     {
-      // Absent revokes cleanly too: nothing may STAND under this id afterwards.
       name: "answer_no_longer_stands",
       sql: `SELECT count(*) AS n FROM share_authority
              WHERE authority_id = :grant_id AND revoked_at IS NULL`,
@@ -275,7 +242,6 @@ const REVOKE: CommandDefinition = {
                 principalId: before.audience.id,
               }
             : {}),
-          // The record that these copies were owed back when the answer ended.
           deliveredTo: revoked.fulfillment
             .filter((row) => row.deliveredAt !== null)
             .map((row) => row.peerVaultId),

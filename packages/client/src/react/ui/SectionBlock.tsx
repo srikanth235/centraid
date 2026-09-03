@@ -1,4 +1,3 @@
-// Section head (v9 §8, #765); single implementation.
 import type { JSX } from "react";
 
 import type { SectionActionData, SectionCopy } from "@centraid/design/blocks";
@@ -13,9 +12,7 @@ export interface SectionAction extends SectionActionData {
 }
 
 export interface SectionBlockProps extends SectionCopy {
-  /** Verb (#775); quiet (`commit={false}`) — app bar owns route verbs. */
   action?: SectionAction;
-  /** Controlled; true ⇒ parent skips body (hidden rows stay tabbable). */
   collapsed?: boolean;
   onToggle?: () => void;
   className?: string;

@@ -27,9 +27,6 @@ import type {
 } from "../../screen-contracts.js";
 import type { AppEnrichmentCapability } from "../../screens/AppEnrichmentSurface.js";
 
-// Gateway I/O + manifest parsing behind the app-settings popover. Injected
-// so AppSettingsController can stay declarative.
-
 export interface AppKnob {
   key: string;
   label: string;
@@ -43,7 +40,6 @@ export interface AppKnobsManifest {
   knobs: AppKnob[];
 }
 
-/** Fetch `app.json` with the renderer's credential (#799) — no per-app browser session. */
 export async function fetchAppManifestRaw(
   appId: string
 ): Promise<Record<string, unknown> | null> {
@@ -110,16 +106,12 @@ export async function writeAppKnobValue(
   await appSettingWrite({ id: appId, key, value });
 }
 
-// Settings key (camelCase) → kebab shared by data-attr and CSS-var paths.
-// Mirrors camelTailToKebab in app-engine settings-merge so a live edit lands
-// on the same target a reload will bake.
 function appKnobKebab(key: string): string {
   if (key === "appColor" || key === "appAccent") return "app-identity";
   const tail = key.startsWith("app") ? key.slice(3) : key;
   return `app-${tail.charAt(0).toLowerCase()}${tail.slice(1).replace(/[A-Z]/gu, (c) => `-${c.toLowerCase()}`)}`;
 }
 
-/** Live-push (#505). Color/Accent → CSS vars; the rest → data attributes. */
 export function pushKnobToInlineRoot(
   root: HTMLElement,
   key: string,
@@ -177,9 +169,6 @@ export function buildVaultProps(
         vaultParked(),
         vaultDemoStatus().catch(() => [] as VaultDemoApp[]),
       ]);
-      // `vaultApps()` rows key on `.name` (enrollment slug == `appId`);
-      // `.appId` is the vault's internal row id, which parked `callerId`
-      // matches on.
       const enrolledAppId = apps.find((a) => a.name === appId)?.appId;
       return {
         demo: demoApps.find((d) => d.appId === appId),
@@ -197,7 +186,6 @@ export function buildVaultProps(
   };
 }
 
-/** App → data-shape domain, not a capability list (#807). */
 const ENRICH_DOMAIN_BY_APP: Readonly<Record<string, EnrichDomain>> = {
   docs: "docs",
   photos: "photos",
@@ -230,8 +218,6 @@ export async function loadAppEnrichment(
     return {
       capability,
       effective,
-      // Built-in profile id is the same string for every capability: identity
-      // is the pair (engine-profiles.ts), never the id alone.
       profile: effective
         ? profiles.find(
             (entry) =>

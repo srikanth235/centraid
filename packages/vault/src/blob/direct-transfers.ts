@@ -32,18 +32,11 @@ export interface DirectBlobInitInput {
   deviceId: string;
 }
 
-/**
- * The authoritative settlement receipt the gateway issues when `begin` finds
- * the bytes already durable. The client persists this VERBATIM as the item's
- * receipt — it must never synthesize a `casAck`, because free-up-space deletes
- * device originals only for a `replicated` casAck it did not fabricate.
- */
 export interface DirectSettlementReceipt {
   alreadyPresent: true;
   sha256: string;
   casAck: "receipt" | "replicated";
   custody: CustodyState;
-  /** True only when the bytes are confirmed remote — the deletion gate. */
   acknowledged: boolean;
   byteSize?: number;
   mediaType?: string;
@@ -55,10 +48,8 @@ export interface DirectBlobInitResult {
   alreadyPresent: boolean;
   custody: CustodyState;
   contentKey: DeviceWrappedContentKey;
-  /** Raw per-blob key, only on this authenticated gateway response (never URL/object). */
   keyBase64: string;
   completedParts: MultipartPart[];
-  /** Present iff `alreadyPresent`: the honest, custody-derived settlement. */
   settlement?: DirectSettlementReceipt;
   upload?:
     | { kind: "single"; url: string }
@@ -69,11 +60,6 @@ export interface DirectBlobInitResult {
       };
 }
 
-/**
- * The one place casAck is derived from custody, shared by every settlement
- * door: only bytes the remote tier confirms holding are `replicated` (safe to
- * free the device original); a merely-local or in-flight copy is `receipt`.
- */
 function directCasAck(custody: CustodyState): "receipt" | "replicated" {
   return custody === "replicated" || custody === "remote-only"
     ? "replicated"
@@ -137,11 +123,6 @@ export class DirectBlobTransfers {
     if (!existing.remoteAvailable) {
       throw new VaultBlobRemoteUnavailableError();
     }
-    // D10 dedupe: the vault already holds these bytes durably, so transfer
-    // nothing. The receipt tells the client the HONEST replication state — a
-    // merely-local or in-flight copy settles with casAck `receipt`, which does
-    // NOT authorize deleting the device original; only a confirmed remote copy
-    // reports `replicated`.
     if (existing.exists) {
       const casAck = directCasAck(existing.custody);
       return {
@@ -421,11 +402,6 @@ export class DirectBlobTransfers {
       );
     }
     const byteSize = row.expected_size ?? 0;
-    // Direct-to-cold heuristic (#425): the CopyObject that mints
-    // the final CAS object carries STANDARD_IA for an eligible large original.
-    // The staging row is written after custody, so the declared media type +
-    // size are handed in directly for the resolver (a session without a declared
-    // media type falls back to the DB lookup, which is empty ⇒ class-less).
     const storageClass = remote.storageClassFor?.(
       row.expected_sha256,
       "cas",

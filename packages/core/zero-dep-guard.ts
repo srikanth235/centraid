@@ -1,10 +1,3 @@
-/**
- * Zero-runtime-dependency guard for `@centraid/core`.
- *
- * Thin clients (mobile, extension) import these contracts without dragging
- * server code; a runtime dependency would break that distribution unit.
- */
-
 export type PackageManifest = {
   name?: string;
   dependencies?: Record<string, string>;
@@ -22,7 +15,6 @@ function namedDeps(
   return Object.keys(bag).map((name) => `${label}:${name}`);
 }
 
-/** Return a fail verdict if the manifest declares any runtime dependency. */
 export function assertZeroRuntimeDeps(
   manifest: PackageManifest
 ): ZeroDepVerdict {

@@ -1,5 +1,3 @@
-// Unit tests for the SSE turn-stream parser (#420) — the ONE parser
-// every conversation surface drives its `_turn` streams through.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -12,11 +10,9 @@ import {
 } from "./turn-stream.js";
 import type { TurnStreamEvent } from "./turn-stream.js";
 
-// A gateway SSE frame carries both `event: <type>` and a JSON body with `type`.
 const frame = (evt: TurnStreamEvent): string =>
   `event: ${evt.type}\ndata: ${JSON.stringify(evt)}`;
 
-/** A ReadableStream that yields the given string chunks as UTF-8 bytes. */
 function streamOf(chunks: string[]): ReadableStream<Uint8Array> {
   const enc = new TextEncoder();
   let i = 0;
@@ -73,7 +69,6 @@ describe(consumeSse, () => {
         frame({ type: "final", text: "Hello" }),
         "event: end\ndata: {}",
       ].join("\n\n") + "\n\n";
-    // Split mid-frame to prove the internal buffer stitches partial frames.
     const mid = Math.floor(full.length / 2);
     const events: TurnStreamEvent[] = [];
     const res = await consumeSse(
@@ -86,13 +81,11 @@ describe(consumeSse, () => {
       "final",
     ]);
     expect(events[2]).toStrictEqual({ type: "final", text: "Hello" });
-    // The terminal `event: end` frame was seen → the turn finished cleanly.
     expect(res.ended).toBe(true);
   });
 
   it("reports ended:false when the body closes WITHOUT the end frame (mid-turn drop) (#420)", async () => {
     const events: TurnStreamEvent[] = [];
-    // A stream that carries a delta then just stops — no `final`, no `end`.
     const res = await consumeSse(
       streamOf([frame({ type: "assistant.delta", delta: "partial" }) + "\n\n"]),
       (e) => events.push(e)

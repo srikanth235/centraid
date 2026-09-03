@@ -1,11 +1,6 @@
 import { formatClock, formatDuration } from "../shell/routes/gatewayData.js";
 import type { BarDatum } from "../ui/BarsBlock.js";
 
-// Heartbeat strip: availability as a shape, this session only. `samples` is a
-// per-launch ring — a "30 days" axis would fabricate a window the wire does
-// not carry. Columns are probes, not minutes: the poll is suspended while
-// hidden (#659), so a time axis would draw a flat nothing while closed.
-
 export interface HeartbeatSample {
   at: number;
   ok: boolean;
@@ -18,16 +13,13 @@ export interface HeartbeatStrip {
   ariaLabel: string;
   note: string;
   legend: { ok: string; fail: string };
-  /** Pack marks against the newest end; do not stretch a short ring. */
   partial: boolean;
 }
 
-/** A chart of two probes is not a shape; hide it rather than draw nothing. */
 export const MIN_HEARTBEAT_SAMPLES = 3;
 
 export const HEARTBEAT_COLUMNS = 30;
 
-/** Always at least one probe wide — a short ring must not draw an empty column. */
 function bucketRange(
   index: number,
   columns: number,

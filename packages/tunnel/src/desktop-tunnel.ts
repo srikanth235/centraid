@@ -1,17 +1,3 @@
-/*
- * Desktop side of the phone tunnel (#263). One iroh endpoint, two ALPNs:
- *  - `centraid/tunnel/1`: remote EndpointId must be allowlisted; each
- *    bi-stream is one HTTP request forwarded to the loopback gateway with
- *    the bearer attached (gateway keeps 127.0.0.1, zero HTTP changes).
- *  - `centraid/pair/1`: any endpoint may connect but must present the
- *    one-time QR pairing code; success stores its EndpointId.
- *
- * This forwarder holds no device key: the phone authenticates at the QUIC
- * layer, then we speak to the gateway AS THE HOST — client identity headers
- * are stripped and every hop marked `TUNNEL_FORWARDED_HEADER`, so host-only
- * capabilities do not mistake 127.0.0.1 for the owner (#568).
- */
-
 import crypto from "node:crypto";
 import http from "node:http";
 
@@ -46,22 +32,18 @@ import {
 } from "./protocol.js";
 
 export interface TunnelUpstream {
-  /** Loopback gateway base (`http://127.0.0.1:18789`). */
   baseUrl: string;
   token: string;
 }
 
 export interface DesktopTunnelOptions {
-  /** 32-byte endpoint secret; omit to generate a fresh identity. */
   secretKey?: Uint8Array;
-  /** Resolved per request; follows gateway restarts/switches. */
   upstream: () =>
     | TunnelUpstream
     | undefined
     | Promise<TunnelUpstream | undefined>;
   deviceStore: DeviceStore;
   desktopName?: string;
-  /** Tests pass `disabled`. */
   relays?: "n0" | "disabled";
   onPaired?: (device: PairedDevice) => void;
 }
@@ -73,9 +55,7 @@ export interface ActivePairing {
 }
 
 export interface DesktopTunnelHandle {
-  /** Stable transport identity (base32 EndpointId). */
   endpointId: string;
-  /** Recomputed — the addr can change with the network. */
   ticket: () => string;
   beginPairing: (ttlMs?: number) => ActivePairing;
   activePairing: () => ActivePairing | undefined;
@@ -109,7 +89,6 @@ export async function startDesktopTunnel(
   return tunnel.handle();
 }
 
-/** Prefer the Rust byte pump; portable relay keeps linking alive if absent. */
 export async function startPreferredDesktopTunnel(
   options: DesktopTunnelOptions
 ): Promise<DesktopTunnelHandle> {
@@ -118,7 +97,8 @@ export async function startPreferredDesktopTunnel(
       const { startNativeDesktopTunnel } = await import("./native-relay.js");
       return await startNativeDesktopTunnel(options);
     } catch {
-      // Fall through to the portable relay.
+      // Intentionally empty.
+      // Intentionally empty.
     }
   }
   return startDesktopTunnel(options);
@@ -169,9 +149,7 @@ class DesktopTunnel {
       void incoming
         .accept()
         .then((accepting) => this.routeConnection(accepting))
-        .catch(() => {
-          // Remote handshake failure; keep accepting.
-        });
+        .catch(() => {});
       return acceptNext();
     };
     void acceptNext();
@@ -220,7 +198,7 @@ class DesktopTunnel {
       await bi.send.writeAll(encodeHeaderFrame(response));
       await bi.send.finish();
     } catch {
-      // Malformed pairing attempt; drop it.
+      // Intentionally empty.
     } finally {
       setTimeout(() => connection.close(0n, []), 1000);
     }
@@ -274,7 +252,10 @@ class DesktopTunnel {
 
   private async handleTunnelConnection(connection: Connection): Promise<void> {
     const endpointId = connection.remoteId().toString();
-    if (!this.options.deviceStore.findByEndpointId(endpointId)) {
+    if (
+      !this.options.deviceStore // Intentionally empty.
+        .findByEndpointId(endpointId)
+    ) {
       connection.close(CLOSE_UNAUTHORIZED, alpnBytes("unauthorized"));
       return;
     }
@@ -283,19 +264,16 @@ class DesktopTunnel {
     try {
       const serveNextStream = async (): Promise<void> => {
         const bi = await connection.acceptBi();
-        // Allowlist consulted per stream: revocation applies immediately.
         if (!this.options.deviceStore.findByEndpointId(endpointId)) {
           connection.close(CLOSE_UNAUTHORIZED, alpnBytes("revoked"));
           return;
         }
-        void this.serveStream(bi.send, bi.recv).catch(() => {
-          // Per-request failures already answered with a 502 frame.
-        });
+        void this.serveStream(bi.send, bi.recv).catch(() => {});
         return serveNextStream();
       };
       await serveNextStream();
     } catch {
-      // Closed: peer, revocation, or shutdown.
+      // Intentionally empty.
     } finally {
       this.liveConnections.delete(stableId);
     }
@@ -324,8 +302,6 @@ class DesktopTunnel {
     }
     const base = new URL(upstream.baseUrl);
     const headers = sanitizeHeaders(header.headers ?? {});
-    // Loopback is not an identity (#568): strip client identity headers and
-    // mark the hop forwarded so host-only capabilities refuse it.
     delete headers[DEVICE_IDENTITY_HEADER];
     delete headers[DEVICE_PROOF_HEADER];
     headers[TUNNEL_FORWARDED_HEADER] = "1";
@@ -352,7 +328,6 @@ class DesktopTunnel {
               ),
             };
             await send.writeAll(encodeHeaderFrame(responseHeader));
-            // Sequential writes keep chunk order; SSE stays live.
             for await (const chunk of response) {
               await send.writeAll(Array.from(chunk as Buffer));
             }
@@ -392,7 +367,7 @@ class DesktopTunnel {
       await send.writeAll(Array.from(body));
       await send.finish();
     } catch {
-      // Stream already gone.
+      // Intentionally empty.
     }
   }
 }

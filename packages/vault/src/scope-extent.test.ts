@@ -1,8 +1,3 @@
-// One covering rule, two stores. SQLite rows say `null` for an unset column
-// and manifests say `undefined`; both planes must read them identically, or
-// the install-grant top-up and the consent memory come to disagree about what
-// the owner said (#541 review).
-
 import { describe, expect, test } from "vitest";
 
 import { scopeCovers } from "./scope-extent.js";
@@ -17,7 +12,6 @@ describe("scope-extent", () => {
       scopeCovers({ schema: "core", table: undefined, verbs: "read" }, inner)
     ).toBe(true);
     expect(scopeCovers({ schema: "core", verbs: "read" }, inner)).toBe(true);
-    // …and the inner side reads the same both ways.
     expect(
       scopeCovers(
         { schema: "core", table: "core_task", verbs: "read" },
@@ -93,7 +87,6 @@ describe("scope-extent", () => {
         { ...table, fieldMask: ["title", "body"] }
       )
     ).toBe(false);
-    // All fields is not a subset of any mask.
     expect(scopeCovers({ ...table, fieldMask: ["title"] }, table)).toBe(false);
     expect(
       scopeCovers(

@@ -1,5 +1,3 @@
-/** Shared display formatters used by shell and native clients. */
-
 export function formatRelativeTime(
   value: string | number | undefined,
   now: number = Date.now()
@@ -30,7 +28,6 @@ export function formatBytes(value: number): string {
   return `${size.toFixed(1)} ${units[unit] ?? "KB"}`;
 }
 
-/** Minor units → localized currency; Expo-reachable (same contract as client). */
 export function fmtMoney(
   minor: number | null | undefined,
   currency?: string
@@ -50,14 +47,6 @@ export function fmtMoney(
   }
 }
 
-/**
- * The viewer's local YYYY-MM-DD for an instant — never the UTC slice.
- *
- * Lives in the token layer (Expo-reachable) rather than
- * `@centraid/design/elements`, which has no `react-native` condition and
- * resolves only through `dist/`. `timeZone` is an IANA name; omit it for the
- * host zone.
- */
 export function localDayKey(
   dateish: string | number | Date,
   timeZone?: string

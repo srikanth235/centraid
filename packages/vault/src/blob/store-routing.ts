@@ -1,6 +1,3 @@
-// Store-class routing (#425): `derived` is a BINARY display derivative that is
-// not also an original; everything else is `cas`.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import type { BackupPolicy } from "../backup-policy.js";
@@ -24,8 +21,6 @@ export function desiredStoreForSha(
        LIMIT 1`
     )
     .get(sha256, sha256) as { present: 1 } | undefined;
-  // Both an original and a derivative ⇒ cas: never strand a content item's bytes
-  // on the derivatives prefix.
   if (original) return "cas";
   const derivative = db
     .prepare(
@@ -40,8 +35,6 @@ export function desiredStoreForSha(
   return derivative ? "derived" : "cas";
 }
 
-/** The replica index MUST record the returned `storeClass` — it is where the
- *  bytes land. */
 export function resolveWriteStore(
   remote: RemoteTier,
   desired: ReplicaStore,
@@ -54,8 +47,6 @@ export function resolveWriteStore(
   const storeClass: ReplicaStore = useDerived ? "derived" : "cas";
   return { store: storeForClass(remote, storeClass), storeClass };
 }
-
-// --- Direct-to-cold heuristic for large media originals (#425) ---
 
 export const COLD_ORIGINAL_STORAGE_CLASS = "STANDARD_IA";
 export const DEFAULT_COLD_ORIGINAL_MIN_BYTES = 25 * 1024 * 1024;
@@ -95,7 +86,6 @@ export function resolveStorageClassForWrite(
   const { desiredStore, policy, supportedStorageClasses, mediaType, byteSize } =
     input;
   if (desiredStore !== "cas") return undefined;
-  // Empty/whitespace is unset, agreeing with db.ts and resolveBackupPolicy.
   if (policy.storageClass !== undefined && policy.storageClass.trim() !== "")
     return undefined;
   const knob = policy.directToColdOriginals;
@@ -111,8 +101,6 @@ export function resolveStorageClassForWrite(
   return COLD_ORIGINAL_STORAGE_CLASS;
 }
 
-/** `originalHint` stands in on the remote-primary ingress doors, where the CAS
- *  object is minted BEFORE the original row exists; the DB lookup wins. */
 export function storageClassForShaWrite(
   db: DatabaseSync,
   sha256: string,

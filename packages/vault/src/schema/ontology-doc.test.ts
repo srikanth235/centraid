@@ -1,9 +1,3 @@
-// The published ontology page describes the vault that ships, not the vault
-// that was designed. Every table §03 draws is compared with the live DDL, so
-// a column added to the model without a sentence on the page — or a table the
-// page keeps describing after a rung dropped it — fails here rather than on
-// centraid.dev.
-
 import { readFileSync } from "node:fs";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -113,8 +107,6 @@ describe("the ontology page matches the live schema", () => {
   });
 
   it("no longer describes retired tables anywhere", () => {
-    // Retired by #883 (O-contact, O-domains, O-attach, V-table). A mention in
-    // history prose is fine; a schema-qualified name in the data arrays is not.
     const arrays = html.slice(html.indexOf("const SCHEMAS"));
     for (const retired of [
       "social.contact_card",
@@ -129,9 +121,6 @@ describe("the ontology page matches the live schema", () => {
   });
 });
 
-// The page used to reach `node:vm`, so anything authored into §03 RAN with the
-// test runner's privileges. It is parsed now: the grammar it is written in is
-// accepted, and everything that could execute is a parse error (#916).
 describe("the page is parsed, never executed", () => {
   it("reads the grammar §03 is hand-authored in", () => {
     expect(

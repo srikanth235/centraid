@@ -11,19 +11,8 @@ import type {
 import DevicesCard, { useDeviceRoster } from "./DevicesCard.js";
 import type { DeviceRosterWiring, DevicesCardProps } from "./DevicesCard.js";
 
-// The roster is people-first (#726) and, since #765, block-shaped: "Yours" is
-// a section head over a row block, and everything a device answers to lives in
-// the row's own detail behind one trailing verb. Every assertion here is about
-// what the reader can DO — open a device, rename it, revoke it — never about
-// which class drew it.
-//
-// Pairing is deliberately NOT a button in here any more: "Pair a device" is
-// the page's one filled commit and it lives in the app bar, so the panel is
-// opened through the controlled `pairing` prop the screen owns.
-
 const NOW = Date.UTC(2026, 6, 13, 12, 0, 0);
 
-/** The shape `readJson` throws for the gateway's last-device refusal. */
 const LAST_DEVICE_ERROR = new Error(
   'revoke device: {"error":"last_device_confirmation_required","message":' +
     '"this is the owner\'s last device for \\"Personal\\"; type that name in confirmLastDevice."}'
@@ -35,8 +24,6 @@ let container: HTMLDivElement | null = null;
 type HarnessProps = DeviceRosterWiring &
   Pick<DevicesCardProps, "onCreateTicket">;
 
-/** Mounts the card over its own hook, the way the screen does. The extra
- *  button stands in for the app bar's commit, which is not part of this unit. */
 function Harness(props: HarnessProps): JSX.Element {
   const { onCreateTicket, ...wiring } = props;
   const roster = useDeviceRoster(wiring);
@@ -136,7 +123,6 @@ describe("DevicesCard suite", () => {
     });
   }
 
-  /** Open a device's detail — the one verb a row offers. */
   async function open(el: HTMLElement): Promise<void> {
     await click(button(el, "Manage") ?? button(el, "Rename"));
   }
@@ -152,7 +138,6 @@ describe("DevicesCard suite", () => {
       const text = el.textContent ?? "";
       expect(text).toContain("Yours");
       expect(text).toContain("This laptop");
-      // The row's own state word, not a chip and not a wire word.
       expect(text).toContain("This device");
       expect(text).not.toContain("admin");
       expect(text).not.toContain("Unassigned");
@@ -186,8 +171,6 @@ describe("DevicesCard suite", () => {
       await open(el);
       expect(button(el, "Revoke device")).toBeTruthy();
       expect(button(el, "Remove Priya")).toBeUndefined();
-      // Which vaults the hardware reaches is the row's own detail, not a
-      // second line on every row in the block.
       expect(el.textContent).toContain("Personal");
     });
 
@@ -296,8 +279,6 @@ describe("DevicesCard suite", () => {
       await open(el);
       await click(button(el, "Revoke device"));
       await click(button(el, "Revoke"));
-      // The refusal names the vault that would be stranded; the owner is told
-      // what recovery costs rather than made to retype a name.
       expect(el.textContent).toContain("last owner device for Personal");
 
       await click(button(el, "Revoke anyway"));
@@ -322,10 +303,7 @@ describe("DevicesCard suite", () => {
       const text = el.textContent ?? "";
       expect(text).toContain("Stolen phone");
       expect(text).toContain("Revoked");
-      // One LIVE device — the tombstone is present for audit and counted
-      // nowhere.
       expect(el.querySelector("h2")?.nextElementSibling?.textContent).toBe("1");
-      // A tombstone carries no action at all.
       expect(button(el, "Manage")).toBeTruthy();
       expect([...el.querySelectorAll("button")]).toHaveLength(2);
     });
@@ -347,9 +325,7 @@ describe("DevicesCard suite", () => {
       });
       await click(button(el, "Add someone"));
       expect(el.querySelector('[data-testid="pair-panel"]')).toBeTruthy();
-      // The mint form, not the self-pair hint — Add someone needs a name.
       expect(el.querySelector('[data-testid="add-someone-name"]')).toBeTruthy();
-      // Only one door at a time while a panel is open.
       expect(button(el, "Add someone")).toBeUndefined();
     });
 

@@ -1,7 +1,3 @@
-// The Data route's derivations (v9 §6, #765). One rule throughout: a clause the
-// data cannot support is OMITTED, never guessed — the pulse knows the DAY a
-// kind was written, so the slot says "Today", never "4 minutes ago".
-
 import { fmtDay } from "@centraid/blueprints/apps/_shared/format-kit";
 import type { GridColumnData, GridSortData } from "@centraid/design/blocks";
 
@@ -27,25 +23,18 @@ export interface KindRow {
   machinery: boolean;
   records: number;
   bytes: number | null;
-  /** `null` when the pulse (enhancement-only) never landed. */
   writtenToday: number | null;
-  /** `null` when unknown; "" when the window is known and silent. */
   lastWriteDay: string | null;
 }
 
-/** The census's own UTC day key, matched against `pulse.series[].days[].day`:
- *  gateway-derived UTC, not the member's wall clock. */
 function todayKey(now: number): string {
   return new Date(now).toISOString().slice(0, 10);
 }
 
-/** "Today"/"Yesterday" from the one shared helper, on the LOCAL clock every
- *  other surface answers "today" on (#883). */
 export function atlasDayLabel(day: string, now: number = Date.now()): string {
   return fmtDay(day, { absolute: {}, now: new Date(now), undated: day });
 }
 
-/** A 200 body that is not a census is a load error, not an empty vault. */
 export function isCensusPayload(value: unknown): value is AtlasCensusPayload {
   if (value === null || typeof value !== "object") return false;
   const rec = value as Record<string, unknown>;
@@ -98,7 +87,6 @@ export function kindWritten(kind: KindRow): boolean {
 
 export const NEVER_WRITTEN = "Never written";
 
-/** A never-written kind takes no slot: "Quiet" would name a lull that wasn't. */
 export function kindMeta(
   kind: KindRow,
   now: number = Date.now()
@@ -109,7 +97,6 @@ export function kindMeta(
   return atlasDayLabel(kind.lastWriteDay, now);
 }
 
-/** The census's own totals, never the filtered list. */
 export function holdsMeta(stats: AtlasCensusPayload): string {
   const totals = stats.totals;
   if (!totals) return "";
@@ -128,7 +115,6 @@ export function holdsMeta(stats: AtlasCensusPayload): string {
   return parts.join(" · ");
 }
 
-/** Share of the LARGEST kind: shares of the total round bars to one pixel. */
 export function meterShare(kind: KindRow, largest: number): number {
   if (largest <= 0 || kind.records <= 0) return 0;
   return Math.min(100, Math.round((kind.records / largest) * 100));
@@ -138,7 +124,6 @@ export function largestRecords(kinds: readonly KindRow[]): number {
   return kinds.reduce((most, kind) => Math.max(most, kind.records), 0);
 }
 
-/** Each clause only when the census/pulse carries it; "0 records" misleads. */
 export function kindCount(kind: KindRow): string {
   if (!kindWritten(kind)) return NEVER_WRITTEN;
   const parts = [`${kind.records.toLocaleString()} records`];
@@ -191,7 +176,6 @@ export interface RelationRow {
   logical: string;
 }
 
-/** Authored `core_link` rows and the FK graph are never conflated. */
 export function relationRowsFrom(graph: AtlasGraphPayload | null): {
   rows: RelationRow[];
   authored: boolean;
@@ -286,8 +270,6 @@ export function gridColumnsFrom(
   });
 }
 
-/** Values pass through UNTOUCHED; a sealed field is named "Sealed" — the
- *  masking sentinel must never reach a screen as text. */
 export function gridRowsFrom(
   cols: BrowseColumnsResult,
   rows: readonly Record<string, unknown>[]
@@ -311,13 +293,11 @@ export function sortLabel(sort: GridSortData, timeKey: string): string {
   return sort.dir === "desc" ? `${sort.key} Z–A` : `${sort.key} A–Z`;
 }
 
-/** No timestamp reads as live; omit it rather than guess. */
 export function censusStamp(readAt: string | null): string | undefined {
   if (readAt === null) return undefined;
   return `read ${relativeWhen(readAt).toLowerCase()}`;
 }
 
-/** The order is a PARAMETER: "newest first" after a sort by name lies. */
 export function tableCaption(
   shown: number,
   total: number,

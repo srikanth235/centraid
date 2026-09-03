@@ -1,7 +1,3 @@
-// One transcript message + its hover action bar (#420). Split out
-// of AssistantScreen so that screen stays under the file-size cap while gaining
-// copy / feedback / regenerate / retry / retry-pager / timestamp affordances.
-
 import { memo, useEffect, useState } from "react";
 import type { JSX } from "react";
 
@@ -14,7 +10,6 @@ import { formatUsageLabel, formatUsageTitle } from "./assistantUsage.js";
 import asstPreCss from "../styles/asstPre.module.css";
 import styles from "./AssistantScreen.module.css";
 
-// Thumbs glyphs — not in the design-tokens icon set, so small local SVGs.
 function ThumbUpGlyph(): JSX.Element {
   return (
     <svg
@@ -72,8 +67,6 @@ export interface MessageCallbacks {
   onPagerNav: (messageIndex: number, delta: number) => void;
 }
 
-/** A collapsible streaming reasoning row (#420). Open while the
- *  model reasons, auto-collapses once the answer starts, expandable after. */
 function ThinkingRow({
   text,
   streaming,
@@ -81,10 +74,6 @@ function ThinkingRow({
   text: string;
   streaming: boolean;
 }): JSX.Element {
-  // Open while the model reasons; collapses the moment the answer starts. The
-  // collapse is an adjustment during render, not an effect, so a finished row
-  // never paints expanded for a frame — and a row mounted after the fact starts
-  // collapsed for the same reason.
   const [open, setOpen] = useState(streaming);
   const [seenStreaming, setSeenStreaming] = useState(streaming);
   if (seenStreaming !== streaming) {
@@ -108,14 +97,8 @@ function ThinkingRow({
   );
 }
 
-/** Intrinsic size of the thumbnail box, so the row reserves its space before
- *  the bytes land — an unsized `<img>` reflows the transcript as it decodes. */
 const ATTACHMENT_THUMB_PX = 96;
 
-/** An inline image-attachment thumbnail (#420). Fetches the bytes
- *  auth-aware into an object URL owned by the client's shared attachment cache
- *  (#659) — scrolling a thumbnail out of view and back must not
- *  re-download it, so nothing here revokes. */
 function AttachmentImage({
   attachment,
   load,
@@ -208,7 +191,6 @@ function ToolsMsg({
   );
 }
 
-/** The row of controls beneath a finished (non-streaming) AI answer. */
 function AiActions({
   m,
   index,
@@ -406,9 +388,6 @@ function MessageRow({
     );
   }
   if (m.streaming) {
-    // Reconnect catch-up (#420): the stream dropped mid-turn; we poll the
-    // ledger and reload once the turn settles. Show a quiet "catching up" hint
-    // rather than a hard error while we wait.
     if (m.catchingUp) {
       return (
         <div className={cx(styles.msg, styles.msgAi)}>
@@ -446,17 +425,5 @@ function MessageRow({
   );
 }
 
-/**
- * Memoized (#659). A transcript is re-rendered on every streamed token
- * and every keystroke in the composer, but a row only changes when its own DTO
- * does. The projections that feed this hand back the PREVIOUS object when the
- * derived value is unchanged (assistantProjection.ts, automationLiveMessages),
- * so the default shallow prop compare is enough — and the callbacks bag must be
- * memoized by the caller for the same reason.
- *
- * Re-rendering a row is not free here: the answer body is injected via
- * `dangerouslySetInnerHTML` and re-hydrated with ref chips and copy buttons on
- * every commit.
- */
 const Message = memo(MessageRow);
 export default Message;

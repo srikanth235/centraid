@@ -1,10 +1,3 @@
-// Per-entity activity read (#352 phase 3/4): the audit band already
-// records a provenance row for every command write (writeProvenance,
-// evidence.ts) keyed by (entity_type, entity_id); this is the app-plane read
-// path over it — plain `gw.read({ entity: 'access.provenance', ... })`, held
-// to two extra rules (provenanceScopeFailure in gateway.ts) so a table-level
-// grant on `access.provenance` cannot become a browse-everything key.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
@@ -107,8 +100,6 @@ describe("activity-read", () => {
 
     test("holding the provenance grant alone cannot browse a domain the app cannot read", () => {
       const documentId = addDocument();
-      // Grants read on access.provenance but NOT on core.document — a health
-      // app fishing for another domain's activity must not see it.
       const cred = grantApp("health-app", [
         { schema: "knowledge", verbs: "read" },
         { schema: "access", table: "provenance", verbs: "read" },

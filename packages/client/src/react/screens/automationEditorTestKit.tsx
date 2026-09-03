@@ -1,13 +1,3 @@
-/**
- * Shared fixtures for the AutomationEditorScreen suites.
- *
- * `makeData` / `makeProps` and the `+ Add Trigger` driver were duplicated
- * verbatim across AutomationEditorScreen.test.tsx and
- * AutomationEditorTriggers.test.tsx. Two copies of a props factory drift as
- * the bridge contract grows, and the copy that is not updated keeps passing
- * against a shape the screen no longer receives.
- */
-
 import { act } from "react";
 import { vi } from "vitest";
 
@@ -84,7 +74,6 @@ export function makeProps(
   };
 }
 
-/** Create layout: dashed "+ Add Trigger" then a menu item. */
 export async function addTrigger(
   el: HTMLElement,
   kind: "Schedule" | "Data change" | "Connector event"

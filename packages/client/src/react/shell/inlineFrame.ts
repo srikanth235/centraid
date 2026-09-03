@@ -8,8 +8,6 @@ import type {
 
 import { clearStatus, postStatus } from "./statusChannel.js";
 
-// Store, not context: Root is under the Suspense host that renders the bar. Status stays on statusChannel.
-
 export interface InlineFrameState {
   appBar: InlineAppBarContribution | null;
   band: InlineBandClaim | null;

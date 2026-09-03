@@ -1,10 +1,3 @@
-/*
- * Devices → people (#726). Every enrollment carries an `ownerId` (schema
- * invariant): grouping is total, no "Unassigned" bucket. A device caller sees
- * only its owner's vaults, so every row is the caller; a device naming a
- * person the roster missed keeps that person (label rides the row).
- */
-
 import { isRevokedDevice } from "../../device-roster.js";
 import type {
   CentraidGatewayDevice,
@@ -13,10 +6,6 @@ import type {
   GatewayOwnerVault,
 } from "../../gateway-client.js";
 
-/**
- * One physical device with all enrollments folded in: the route returns one
- * row per (device, VAULT), which reads as two devices and revokes one vault.
- */
 export interface GroupedDevice extends CentraidGatewayDevice {
   enrollmentIds: string[];
   vaults: GatewayDeviceVault[];
@@ -27,13 +16,10 @@ export interface OwnerGroup {
   label: string;
   vaults: GatewayOwnerVault[];
   devices: GroupedDevice[];
-  /** Tombstoned bindings — past attribution still resolves. */
   revoked: GroupedDevice[];
-  /** Holds the device making this request. */
   isSelf: boolean;
 }
 
-/** Fold a person's rows into one per `endpointId`. */
 function mergeByEndpoint(
   rows: readonly CentraidGatewayDevice[]
 ): GroupedDevice[] {
@@ -56,13 +42,11 @@ function mergeByEndpoint(
     if (!seen.vaults.some((held) => held.vaultId === vault.vaultId)) {
       seen.vaults.push(vault);
     }
-    // Any row marked current makes the whole device current.
     if (row.current === true) seen.current = true;
   }
   return [...merged.values()];
 }
 
-/** Vaults off inherited bindings for an owner the roster didn't list. */
 function vaultsFromDevices(
   devices: readonly GroupedDevice[]
 ): GatewayOwnerVault[] {
@@ -76,7 +60,6 @@ function vaultsFromDevices(
   return [...byVault.values()];
 }
 
-/** One group per person: roster owners plus anyone only devices name. */
 export function groupDevicesByOwner(
   devices: readonly CentraidGatewayDevice[],
   owners: readonly GatewayOwner[]
@@ -118,7 +101,6 @@ export function groupDevicesByOwner(
     }
   }
 
-  // You first, then alphabetical; in practice one group (#726).
   return [...groups.values()].sort((a, b) =>
     a.isSelf === b.isSelf ? a.label.localeCompare(b.label) : a.isSelf ? -1 : 1
   );

@@ -11,12 +11,6 @@ import type * as TypeImport_1t4fyrr from "./HomeRoute.js";
 import type * as TypeImport_sample from "./homeSample.js";
 import type * as TypeImport_tiles from "./homeTileContent.js";
 
-// Home is the springboard and nothing else (#708): no composer hero, no
-// library shelf, and no identity bar — the app bar above the route carries the
-// title and the two actions. What the route still owns is the two reads the
-// tiles are made of, and the three treatments they resolve to (working, first
-// run, the grid).
-
 const getDailyBrief = vi.fn<typeof TypeImport_1gl5zx7.getDailyBrief>();
 vi.mock(import("../../../gateway-client.js"), () => ({
   getDailyBrief: () => getDailyBrief(),
@@ -38,8 +32,6 @@ const loadHomeTileContent =
 vi.mock(import("./homeTileContent.js"), () => ({
   loadHomeTileContent: (input: Parameters<typeof loadHomeTileContent>[0]) =>
     loadHomeTileContent(input),
-  // The tiles' content is stubbed wholesale, so the reader is never asked
-  // anything — it exists only to satisfy the seam.
   homeTileReader: () =>
     Promise.resolve({ read: () => Promise.resolve({ rows: [] }) }),
 }));
@@ -136,8 +128,6 @@ describe("HomeRoute", () => {
       currency: "USD",
     });
     loadHomeTileContent.mockReset().mockResolvedValue({});
-    // No disk budget set: `limitBytes: null` is the shape the gateway sends
-    // when the owner has never capped local storage, and Home says nothing.
     getLocalStorageUsage.mockReset().mockResolvedValue({
       scannedAt: 0,
       totalBytes: 0,
@@ -161,8 +151,6 @@ describe("HomeRoute", () => {
     syncHomeSampleReplica.mockReset().mockResolvedValue(undefined);
     navigate.mockClear();
     openCommandPalette.mockClear();
-    // The route's reads live in the shared cache; start each case from an
-    // empty one (#659).
     (await import("../queryCache.js")).resetQueryCache();
   });
 
@@ -181,8 +169,6 @@ describe("HomeRoute", () => {
     const el = await render([app("photos"), app("tasks")]);
     expect(el.querySelector('[data-testid="home-springboard"]')).toBeTruthy();
     const tiles = [...el.querySelectorAll('[data-testid="home-tile"]')];
-    // Tasks is installed but empty, so it is a first move rather than a tile —
-    // the grid holds what has something to show and nothing else.
     expect(tiles.map((t) => (t as HTMLElement).dataset.appId)).toStrictEqual([
       "photos",
     ]);
@@ -255,11 +241,6 @@ describe("HomeRoute", () => {
   });
 
   it("never builds tile content before the brief has settled", async () => {
-    // The cache keys a query by its KEY, not by the closure — so a springboard
-    // query that ran while the brief was still in flight cached a tileContent
-    // derived from `brief === undefined` and never recomputed it. Agenda, tasks
-    // and the tally figure are MADE of the brief, so they stayed missing no
-    // matter how full the vault was. Every call must therefore see a brief.
     let settle: (() => void) | undefined;
     getDailyBrief.mockImplementation(
       async () =>
@@ -289,11 +270,6 @@ describe("HomeRoute", () => {
   });
 
   it("refetches the tiles only after the replica has pulled the seeded rows", async () => {
-    // The seed lands on the GATEWAY, but the tiles read the LOCAL REPLICA —
-    // refreshing before the replica pulled rebuilt them from pre-seed rows,
-    // which is the "pressed the button and nothing filled in until a reload"
-    // bug. So the order is load-bearing: the replica sync resolves first, and
-    // only then do the brief and the springboard feed refetch, exactly once.
     loadHomeSample.mockResolvedValue({ rows: 0, seedable: ["tasks"] });
     seedHomeSample.mockResolvedValue(["tasks"]);
     let finishSync: (() => void) | undefined;
@@ -319,8 +295,6 @@ describe("HomeRoute", () => {
       ["tasks"],
       expect.any(Function)
     );
-    // The sync is still pending: refetching now would rebuild from pre-seed
-    // rows, so nothing may have refetched yet.
     expect(getDailyBrief).toHaveBeenCalledTimes(briefCalls);
     expect(loadHomeTileContent).toHaveBeenCalledTimes(tileCalls);
 
@@ -333,11 +307,6 @@ describe("HomeRoute", () => {
   });
 
   it("advances the fill's progress per app, then names the replica catch-up", async () => {
-    // The seed is about ten seconds of work, and it must not be ten seconds
-    // of one unchanging sentence. The route turns the run's position into
-    // something Home can say: each app as it starts, then the catch-up while
-    // the replica pulls — the beat where the counts are already full and the
-    // tiles are still empty.
     loadHomeSample.mockResolvedValue({
       rows: 0,
       seedable: ["agenda", "photos"],
@@ -347,9 +316,6 @@ describe("HomeRoute", () => {
     seedHomeSample.mockImplementation(async (seedable, onProgress) => {
       onProgress?.({ appId: "agenda", done: 0, total: seedable.length });
       await new Promise<void>((resolve) => {
-        // Two gates, because the two things have to be separable: the second
-        // app STARTING is a different moment from the whole run FINISHING, and
-        // the surface has to be right at both.
         advance = () =>
           onProgress?.({ appId: "photos", done: 1, total: seedable.length });
         finishSeed = () => resolve();
@@ -385,8 +351,6 @@ describe("HomeRoute", () => {
     expect(label()).toBe("Adding photographs…");
     expect(counts()).toBe("1 of 2 apps");
 
-    // Generators done, replica still pulling: the counts are full and the
-    // sentence has moved on rather than stalling on the last app.
     await act(async () => {
       finishSeed?.();
       await flush();
@@ -398,15 +362,10 @@ describe("HomeRoute", () => {
       finishSync?.();
       await flush();
     });
-    // The run is over: the offer's control is back, and nothing is still
-    // claiming to be working.
     expect(offer()?.querySelector(".working")).toBeFalsy();
   });
 
   it("leaves a mid-seed failure to the existing per-app handling", async () => {
-    // `seedHomeSample` swallows per app and reports by omission, so the route
-    // never sees a rejection — it refreshes, drops the working state, and Home
-    // shows whatever DID land. Unchanged by the progress work.
     loadHomeSample.mockResolvedValue({
       rows: 0,
       seedable: ["agenda", "photos"],

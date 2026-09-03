@@ -15,8 +15,6 @@ export function countRows(db: DatabaseSync, physical: string): number {
   }
 }
 
-// SQLite's SQLITE_MAX_COMPOUND_SELECT is 500 by default. Batch well under it so
-// a registry that keeps growing never trips the parser instead of counting.
 const COUNT_BATCH = 200;
 
 function sqlString(value: string): string {
@@ -27,15 +25,6 @@ function sqlIdent(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-/**
- * Row counts for many tables in ONE compound statement per batch.
- *
- * Identical arithmetic to calling `countRows` per table — every registered
- * table is still COUNT(*)-scanned and no table is dropped from the answer — but
- * the census stops issuing one prepared statement per registered table, so
- * registering a table no longer costs a first-paint statement (#873). Missing
- * tables answer 0, exactly as the per-table path's catch did.
- */
 export function countRowsBatched(
   db: DatabaseSync,
   physicals: readonly string[]
@@ -44,8 +33,6 @@ export function countRowsBatched(
   const wanted = [...new Set(physicals)];
   for (const name of wanted) counts.set(name, 0);
   if (wanted.length === 0) return counts;
-  // One absent name would fail the whole compound SELECT, where the per-table
-  // path answered 0 — so ask the schema which of them exist, once.
   const present = new Set(
     (
       db
@@ -71,41 +58,26 @@ export function countRowsBatched(
       }[];
       for (const row of rows) counts.set(row.t, row.n);
     } catch {
-      // A table that exists but refuses a bare COUNT(*) would take its whole
-      // batch down with it; fall back per table so the rest still report.
       for (const name of batch) counts.set(name, countRows(db, name));
     }
   }
   return counts;
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// Graph (GET /_vault/atlas/graph)
-// ───────────────────────────────────────────────────────────────────────────
-
-/** The kind at the centre of the orrery — the data says so (46/122 → core_party). */
 export const ATLAS_GRAPH_CENTER = "core_party";
 
 export interface AtlasFkEdge {
-  /** Child (referencing) table. */
   fromTable: string;
   fromLogical: string;
   fromPack: string;
-  /** The FK column on the child. */
   col: string;
-  /** Parent (referenced) table. */
   toTable: string;
   toLogical: string | null;
   toPack: string | null;
-  /** The child column is NOT NULL (⇒ fill == child rowcount, never a ghost). */
   notnull: boolean;
-  /** Child table's total rowcount. */
   childRows: number;
-  /** COUNT(*) WHERE col IS NOT NULL on the child — the edge's "fill". */
   fill: number;
-  /** fill === 0 — the honest ghost test (empty child, or an unset column). */
   ghost: boolean;
-  /** Child references itself — a hierarchy, drawn as a tree not a loop. */
   selfRef: boolean;
 }
 
@@ -117,22 +89,9 @@ export interface AtlasGraphNode {
   pack: string;
   packKind: AtlasPackKind;
   packLabel: string;
-  /**
-   * Curated human-friendly display name — always present. The client's
-   * Relations page shows this instead of the SQL name (People, not
-   * core_party). Curated ontology kinds get their `ATLAS_KIND_FRIENDLY` name;
-   * everything else falls back to the humanized `label`.
-   */
   friendly?: string;
-  /**
-   * Curated one-line plain-English description — emitted ONLY for kinds with a
-   * hand-written `ATLAS_KIND_FRIENDLY` entry (ontology). Absent otherwise; the
-   * server never fabricates a blurb.
-   */
   blurb?: string;
-  /** Undirected hop distance from `core_party`; null = unreached island. */
   hopDistance: number | null;
-  /** This table has a self-referencing FK. */
   selfRef: boolean;
 }
 
@@ -148,13 +107,9 @@ export interface AtlasGraphPayload {
   generatedAt: string;
   center: string;
   nodes: AtlasGraphNode[];
-  /** Schema-enforced FK edges — SEPARATE from authored links (FK ≠ core_link). */
   fkEdges: AtlasFkEdge[];
-  /** Authored `core_link` rows, aggregated by (relation, from_type, to_type). */
   authoredLinks: AtlasAuthoredLink[];
-  /** Physical tables unreached from core_party over the FK graph. */
   island: string[];
-  /** Derived edge tallies (NEVER hardcode 122/46 — computed here). */
   edgeCount: number;
   centerEdgeCount: number;
   selfRefCount: number;
@@ -180,13 +135,6 @@ function notNullColumns(vault: DatabaseSync, physical: string): Set<string> {
   return new Set(cols.filter((c) => c.notnull === 1).map((c) => c.name));
 }
 
-/**
- * The FK graph + authored-link overlay (#441). Walks
- * `PRAGMA foreign_key_list` for every registered vault-file table, computes
- * each edge's fill on request (an owner ops screen — no cache), runs a BFS
- * for ring placement, and aggregates `core_link` SEPARATELY. Nothing here is
- * hand-listed; the "star not mesh" caption numbers are all derived.
- */
 export function atlasGraph(vault: DatabaseSync): AtlasGraphPayload {
   const vaultEntries = atlasTables();
   const byPhysical = new Map<string, AtlasTableEntry>(
@@ -195,14 +143,6 @@ export function atlasGraph(vault: DatabaseSync): AtlasGraphPayload {
 
   const fkEdges: AtlasFkEdge[] = [];
   const selfRefTables = new Set<string>();
-  // Ring adjacency is DIRECTED parent → child (referenced → referencing): the
-  // orrery centres core_party and places its referencers on ring 1, THEIR
-  // referencers on ring 2, and so on. An FK column points child → parent, so
-  // we walk it in reverse for hop distance. This is what makes the locker +
-  // sync cluster an honest island — sync_connection references nothing
-  // reachable from core_party, so nothing reaches it, and locker_item (which
-  // references sync_connection) hangs off it. An UNDIRECTED walk would falsely
-  // bridge the island through any table that references both sides.
   const childrenOf = new Map<string, Set<string>>();
   for (const entry of vaultEntries) childrenOf.set(entry.physical, new Set());
   const addChild = (parent: string, child: string): void => {
@@ -218,11 +158,6 @@ export function atlasGraph(vault: DatabaseSync): AtlasGraphPayload {
     const notNull = notNullColumns(vault, entry.physical);
     const childRows = countRows(vault, entry.physical);
     for (const fk of fks) {
-      // The entity supertype is machinery, not a kind: every ontology table
-      // has a key into `core_entity` since #916's rung ten, and drawing 65
-      // edges into a table that is not a node would put the whole ontology on
-      // one ring around a mechanism. The Atlas maps the canonical model, so an
-      // FK whose parent is not a registered entity is not an edge of it.
       if (!byPhysical.has(fk.table)) continue;
       const isNotNull = notNull.has(fk.from);
       // fill: NOT NULL columns are fully filled by definition (== child
@@ -346,7 +281,6 @@ export interface AtlasPulseDay {
 }
 
 export interface AtlasPulseSeries {
-  /** The entity type as stored in access_provenance (logical `schema.table`). */
   entityType: string;
   /** Physical name when the entity type resolves to a registered table. */
   physical: string | null;

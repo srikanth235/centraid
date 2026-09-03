@@ -1,12 +1,3 @@
-/*
- * The grant plane's store (#825): a lens over the `person`/`circle` rows of
- * the one authority table, translating to `principal_kind`/`verb` here alone.
- * `share_authority` holds MEANING, `share_fulfillment` MECHANISM — where the
- * delivering strategy stands, one row per audience vault. Nothing here
- * delivers. Audience rows read LITERALLY: a party grant and a circle grant
- * containing that party differ.
- */
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { uuidv7 } from "../ids.js";
@@ -34,14 +25,6 @@ export * from "./grant-records.js";
 export * from "./grant-authority.js";
 export * from "./grant-fulfillment-rows.js";
 
-/**
- * What LIVE means for an answer (#916, review 6.1). `expires_at` was written
- * at every "until Friday" grant and read by nothing: the resolvers filtered
- * `revoked_at` alone, so a time-boxed share kept answering yes forever and the
- * end date was decoration. The clock is SQLite's, the same one the purge
- * triggers stamp with, so a resolver and a sweep can never disagree about
- * whether an answer has run out.
- */
 const AUTHORITY_CLOCK = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
 export const LIVE_AUTHORITY_SQL = `revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ${AUTHORITY_CLOCK})`;
 const LIVE_AUTHORITY_A_SQL = `a.revoked_at IS NULL AND (a.expires_at IS NULL OR a.expires_at > ${AUTHORITY_CLOCK})`;
@@ -66,10 +49,6 @@ export function readLiveShareGrant(
   return row ? toGrant(row) : undefined;
 }
 
-/**
- * A refusal is an answer, not an absent grant, and stays LIVE: that masks
- * fulfillment, and forces a later grant to revoke it first (#883).
- */
 export function readLiveShareRefusal(
   db: DatabaseSync,
   input: {
@@ -95,7 +74,6 @@ export function readLiveShareRefusal(
   return row?.authority_id;
 }
 
-/** Idempotent: a repeat reports the standing grant, never a rival. */
 export function createShareGrant(
   db: DatabaseSync,
   input: CreateShareGrantInput
@@ -114,7 +92,6 @@ export function createShareGrant(
       ? { outcome: "exists", grantId: standing.grantId, grant: standing }
       : { outcome: "conflict", grantId: standing.grantId, grant: standing };
   }
-  // Revoked, never deleted: "told no, then said yes" stays readable.
   revokeShareRefusal(db, {
     audience: input.audience,
     subjectType: input.subjectType,
@@ -139,7 +116,6 @@ export function createShareGrant(
     input.grantedAt,
     input.grantedBy
   );
-  // Only a real ceiling gets a row: absence IS the default.
   if (input.maxSizeBytes !== undefined && input.maxSizeBytes !== null) {
     db.prepare(
       `INSERT INTO share_delivery_config (grant_id, max_size_bytes)
@@ -161,7 +137,6 @@ export function readShareGrant(
   return row ? toGrant(row) : undefined;
 }
 
-/** The row survives revoked; fulfillment comes back untouched. */
 export function revokeShareGrant(
   db: DatabaseSync,
   input: { grantId: string; revokedAt: string }
@@ -172,7 +147,6 @@ export function revokeShareGrant(
   if (existing.revokedAt !== null) {
     return { outcome: "already-revoked", fulfillment };
   }
-  // `revoked_at` is the ONE updatable column; the rest is immutable.
   db.prepare(
     `UPDATE share_authority SET revoked_at = ?
       WHERE authority_id = ? AND revoked_at IS NULL`
@@ -193,17 +167,12 @@ export type DeclineShareResult =
   | { outcome: "declined"; authorityId: string }
   | { outcome: "exists"; authorityId: string };
 
-/**
- * The NO is a row, which makes it a REFUSAL MASK over circle membership:
- * refusing one person inside a granted circle keeps the circle (#883).
- */
 export function declineShare(
   db: DatabaseSync,
   input: DeclineShareInput
 ): DeclineShareResult {
   const standing = readLiveShareRefusal(db, input);
   if (standing) return { outcome: "exists", authorityId: standing };
-  // Saying no to what you granted ends the grant.
   const granted = readLiveShareGrant(
     db,
     input.audience,
@@ -235,7 +204,6 @@ export function declineShare(
   return { outcome: "declined", authorityId };
 }
 
-/** Revoked, never deleted: the NO stays history. */
 export function revokeShareRefusal(
   db: DatabaseSync,
   input: {
@@ -271,10 +239,6 @@ export function maskedPartiesForSubject(
   );
 }
 
-/**
- * Roster less anyone refused here. `resolveAudienceParties` stays the LITERAL
- * read, which is what the gateway's edit-refusal check asks.
- */
 export function resolveGrantAudienceParties(
   db: DatabaseSync,
   grant: Pick<ShareGrantRecord, "audience" | "subjectType" | "subjectId">
@@ -292,7 +256,6 @@ export function resolveGrantAudienceParties(
   };
 }
 
-/** EXACTLY this audience; `listLiveGrantsReachingParty` unions kinds. */
 export function listShareGrantsForAudience(
   db: DatabaseSync,
   audience: ShareGrantAudience,
@@ -330,7 +293,6 @@ export function listShareGrantsForSubject(
   ).map(toGrant);
 }
 
-/** Absent-never-empty: both cases would answer `grants: []` otherwise. */
 export function audienceExists(
   db: DatabaseSync,
   audience: ShareGrantAudience
@@ -346,7 +308,6 @@ export function audienceExists(
   );
 }
 
-/** An empty circle resolves to nobody; the grant still stands. */
 export function resolveAudienceParties(
   db: DatabaseSync,
   audience: ShareGrantAudience

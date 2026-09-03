@@ -1,12 +1,9 @@
-// SSE-drop catch-up (#420): poll settle until the turn lands; reload.
-
 export interface CatchUpStatus {
   turnCount: number;
   updatedAt: number;
 }
 
 export interface CatchUpOptions {
-  /** Turn count before the dropped send. */
   baselineTurnCount: number;
   getStatus: () => Promise<CatchUpStatus>;
   isCancelled?: () => boolean;
@@ -24,7 +21,6 @@ function defaultSleep(ms: number): Promise<void> {
   });
 }
 
-/** True = settled; false = timeout/cancel. */
 export async function catchUpAfterDrop(opts: CatchUpOptions): Promise<boolean> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const intervalMs = opts.intervalMs ?? DEFAULT_INTERVAL_MS;
@@ -37,7 +33,7 @@ export async function catchUpAfterDrop(opts: CatchUpOptions): Promise<boolean> {
       const status = await opts.getStatus();
       if (status.turnCount >= target) return true;
     } catch {
-      /* transient — keep polling */
+      // Intentionally empty.
     }
     if (Date.now() >= deadline) return false;
     await sleep(intervalMs);

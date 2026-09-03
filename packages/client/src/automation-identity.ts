@@ -1,11 +1,3 @@
-// Pure, DOM-free identity + status logic for automations.
-//
-// Per-automation identity colour + glyph are derived deterministically from
-// the automation id — there is no manifest field for them, mirroring how the
-// profile avatar defaults a colour by id. Identity is DECORATIVE ONLY: it
-// tints the glyph tile, the trigger-hero rail, and status dots. Every CTA /
-// active state keeps the single `--accent` action colour.
-
 export const AU_HUES = [
   "indigo",
   "rose",
@@ -18,9 +10,6 @@ export const AU_HUES = [
 ] as const;
 export type AuHue = (typeof AU_HUES)[number];
 
-// Glyphs that read as "an automation" — picked deterministically per id so an
-// automation keeps a stable face across every surface. Every entry is a real
-// key in the @centraid/design icon set.
 export const AU_GLYPHS = [
   "Bolt",
   "Clock",
@@ -33,8 +22,6 @@ export const AU_GLYPHS = [
 ] as const;
 export type AuGlyph = (typeof AU_GLYPHS)[number];
 
-// Stable, order-sensitive string hash (djb2-style, 32-bit). Deterministic
-// across runs and platforms so the same id always maps to the same face.
 export function hashId(id: string): number {
   let h = 0;
   for (let i = 0; i < id.length; i += 1) h = (h * 31 + id.charCodeAt(i)) | 0;
@@ -51,8 +38,6 @@ export function glyphForId(id: string): AuGlyph {
 
 export type RowStatus = "active" | "paused" | "draft";
 
-// An automation's lifecycle status: enabled = active; disabled with no runs
-// yet = draft (never switched on); disabled with runs behind it = paused.
 export function auStatusForRow(enabled: boolean, hasRun: boolean): RowStatus {
   if (enabled) return "active";
   return hasRun ? "paused" : "draft";

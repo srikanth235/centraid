@@ -24,7 +24,6 @@ function mount(node: JSX.Element): HTMLDivElement {
   return container;
 }
 
-/** The shell is offline; anything inside is rendered as it would be then. */
 function offline(node: JSX.Element): HTMLDivElement {
   return mount(
     <CommitAvailabilityProvider value={commitAvailabilityFor("down")}>
@@ -79,15 +78,11 @@ describe("shell/commitAvailability", () => {
         `#${CSS.escape(describedBy as string)}`
       );
       expect(reasonEl?.textContent).toBe(OFFLINE_COMMIT_REASON);
-      // Visible, not screen-reader-only — the brief bars a disabled commit
-      // from stating its reason only in a tooltip.
       expect(reasonEl?.tagName).toBe("SPAN");
       expect(el.querySelector('[style*="clip"]')).toBeNull();
     });
 
     it("stays FOCUSABLE so a keyboard reader can hear why", () => {
-      // `aria-disabled`, not `disabled`: a `disabled` button is skipped by the
-      // tab order and its description is never announced.
       expect(
         button(offline(<Button label="Save" variant="primary" />)).disabled
       ).toBe(false);
@@ -95,8 +90,6 @@ describe("shell/commitAvailability", () => {
 
     it("recedes with the leaf ink token, never a container opacity", () => {
       const el = offline(<Button label="Save" variant="primary" />);
-      // The rule is `.btn[aria-disabled='true'] { color: var(--text-disabled) }`
-      // in Button.module.css — nothing sets an inline opacity here.
       expect(button(el).style.opacity).toBe("");
       expect(el.querySelector('[style*="opacity"]')).toBeNull();
     });

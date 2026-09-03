@@ -1,15 +1,9 @@
-// The runs chart's arithmetic (#765). Two claims a renderer cannot make for
-// itself: segments STACK rather than overlap, so the pair never exceeds the
-// plot, and a longer series is TAILED, never sampled. Both hold on DOM and
-// React Native, so this module stops at the numbers.
-
 export interface BarSegments {
   ok: number;
   fail: number;
 }
 
 export interface BarStack extends BarSegments {
-  /** A zero-height segment and no segment differ: the first spends a colour. */
   hasFail: boolean;
 }
 
@@ -18,8 +12,6 @@ function clamp(value: number, ceiling: number): number {
   return Math.min(value, ceiling);
 }
 
-/** Clamp FAIL first, `ok` takes what is left: if both cannot fit, the truncated
- *  one must be the good news. */
 export function barStack(segments: BarSegments): BarStack {
   const fail = clamp(segments.fail, 100);
   return { fail, hasFail: fail > 0, ok: clamp(segments.ok, 100 - fail) };
@@ -32,10 +24,6 @@ export function barWindow<T>(
   return series.slice(Math.max(0, series.length - count));
 }
 
-// THE DAY FOLD. Days with no activity are ABSENT from the rollup, so fold by
-// CALENDAR OFFSET from the window's first day, never by array position: a quiet
-// week would otherwise slide busy days left and claim work on empty days.
-
 const DAY_MS = 86_400_000;
 
 export interface DaySeriesPoint {
@@ -46,11 +34,7 @@ export interface DaySeriesPoint {
 
 export interface DayFoldOptions {
   windowDays: number;
-  /** The ROLLUP's clock, never the reader's: an hour later it must still say
-   *  the same thing. */
   anchor: number;
-  /** `windowDays` is the honest value; fewer, and each bucket must state the
-   *  span it covers. */
   columns: number;
 }
 
@@ -107,8 +91,6 @@ export function dayFold(
   return buckets;
 }
 
-/** A column that measured SOMETHING is never drawn as nothing: it gets the
- *  one-percent floor. */
 export function barShares(values: readonly number[]): number[] {
   const clean = values.map((value) =>
     Number.isFinite(value) && value > 0 ? value : 0
@@ -135,8 +117,6 @@ const MONTHS = [
   "Dec",
 ] as const;
 
-/** `2026-07-15` → `15 Jul`. The month is NAMED, never numbered: `07/15` and
- *  `15/07` read two ways. Not localized — the day is a UTC key. */
 export function dayMark(date: string): string {
   const ms = Date.parse(`${date}T00:00:00Z`);
   if (Number.isNaN(ms)) return "";

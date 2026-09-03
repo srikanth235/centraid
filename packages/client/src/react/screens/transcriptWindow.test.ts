@@ -20,8 +20,6 @@ describe(windowTranscript, () => {
     const messages = transcript(4);
     const { rendered, hiddenCount } = windowTranscript(messages, 60);
     expect(hiddenCount).toBe(0);
-    // The SAME array, so a windowing pass never reads as new content to a
-    // dependency array or a memo.
     expect(rendered).toBe(messages);
   });
 
@@ -56,14 +54,11 @@ describe(windowTranscript, () => {
 
 describe(anchoredScrollTop, () => {
   it("holds the viewport still when content is prepended", () => {
-    // Reader is 400px from the bottom of a 2000px transcript; 800px of older
-    // messages arrive above them.
     const next = anchoredScrollTop(
       { scrollHeight: 2000, scrollTop: 1600 },
       { scrollHeight: 2800 }
     );
     expect(next).toBe(2400);
-    // Same distance from the bottom ⇒ the same content under the viewport.
     expect(2800 - next).toBe(2000 - 1600);
   });
 

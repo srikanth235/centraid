@@ -1,6 +1,4 @@
 import { statSync } from "node:fs";
-// Share-by-placement lifecycle: failure atomicity, unshare, and the GC
-// interplay between vaults that hardlink the same inode (#599 d11).
 
 import { describe, afterEach, expect, test } from "vitest";
 
@@ -25,10 +23,6 @@ import {
 describe("placement-lifecycle suite", () => {
   afterEach(closeOpenVaults);
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // Failure atomicity
-  // ───────────────────────────────────────────────────────────────────────────
-
   test("an injected mid-share failure leaves the origin clean and only a reclaimable orphan", () => {
     const { origin, originBoot, audience } = household();
     const photo = seedPhoto(origin, originBoot, "f");
@@ -52,7 +46,6 @@ describe("placement-lifecycle suite", () => {
     ).toThrow("injected mid-share failure");
     audience.vault.prepare = realPrepare;
 
-    // The origin is untouched — it was never written in the first place.
     expect(
       plainSqliteRow(
         origin.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
@@ -61,7 +54,6 @@ describe("placement-lifecycle suite", () => {
       n: 1,
     });
     expect(origin.blobs.getSync(photo.sha256)).toStrictEqual(photo.bytes);
-    // The audience transaction rolled back whole: no half-placed item.
     expect(
       plainSqliteRow(
         audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
@@ -88,12 +80,9 @@ describe("placement-lifecycle suite", () => {
       n: 0,
     });
 
-    // What IS left is the orphaned link, claimed by nothing in the model.
     expect(audience.blobs.hasSync(photo.sha256)).toBe(true);
     expect(liveBlobShas(audience.vault).has(photo.sha256)).toBe(false);
 
-    // The orphan-grace rule HOLDS it on first sight, then reclaims it once the
-    // recovery window has elapsed.
     const day = 24 * 60 * 60 * 1000;
     const held = sweepLocalOrphans(audience, {
       graceWindowMs: 3 * day,
@@ -112,14 +101,9 @@ describe("placement-lifecycle suite", () => {
       [photo.sha256, photo.thumbSha].sort()
     );
     expect(audience.blobs.hasSync(photo.sha256)).toBe(false);
-    // Reclaiming the audience's directory entry never touched the origin's.
     expect(origin.blobs.getSync(photo.sha256)).toStrictEqual(photo.bytes);
     expect(statSync(casPath(origin, photo.sha256)).nlink).toBe(1);
   });
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // Unshare + GC interplay
-  // ───────────────────────────────────────────────────────────────────────────
 
   test("unshare removes the projection; the origin row and bytes stay readable", () => {
     const { origin, originBoot, audience } = household();
@@ -164,8 +148,6 @@ describe("placement-lifecycle suite", () => {
     expect(
       readShareOrigin(audience.vault, "media.asset", shared.items[0]!.itemId)
     ).toBeUndefined();
-    // The bytes are still linked here until the audience's GC runs — and the
-    // origin is untouched either way.
     expect(
       plainSqliteRow(
         origin.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
@@ -175,8 +157,6 @@ describe("placement-lifecycle suite", () => {
     });
     expect(origin.blobs.getSync(photo.sha256)).toStrictEqual(photo.bytes);
 
-    // The last unlink: the audience drops its directory entry, the origin's
-    // entry survives, and the inode is the SAME one it always was.
     reclaimOrphans(audience);
     expect(audience.blobs.hasSync(photo.sha256)).toBe(false);
     const after = statSync(casPath(origin, photo.sha256));
@@ -251,8 +231,6 @@ describe("placement-lifecycle suite", () => {
       authority: placementAuthority(origin, "media.asset", [photo.assetId]),
     });
 
-    // The owner trashes the photo out of their OWN library: rows gone, so the
-    // origin's sweep now sees the bytes as orphaned and unlinks its entry.
     origin.vault
       .prepare("DELETE FROM media_asset WHERE asset_id = ?")
       .run(photo.assetId);
@@ -268,15 +246,12 @@ describe("placement-lifecycle suite", () => {
       [photo.sha256, photo.thumbSha].sort()
     );
     expect(origin.blobs.hasSync(photo.sha256)).toBe(false);
-    // The inode survived: the audience still holds its own directory entry, so
-    // the family's copy of the photo reads exactly as before.
     expect(audience.blobs.getSync(photo.sha256)).toStrictEqual(photo.bytes);
     expect(audience.blobs.getSync(photo.thumbSha)).toStrictEqual(
       photo.thumbBytes
     );
     expect(statSync(casPath(audience, photo.sha256)).nlink).toBe(1);
 
-    // And only after the LAST vault unlinks does the content actually go.
     unshareFromVault({
       audience,
       itemType: "media.asset",
@@ -286,10 +261,6 @@ describe("placement-lifecycle suite", () => {
     expect(audience.blobs.hasSync(photo.sha256)).toBe(false);
     expect(audience.blobs.localPathSync(photo.sha256)).toBeNull();
   });
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // Guards
-  // ───────────────────────────────────────────────────────────────────────────
 
   test("sharing an unknown item is refused before anything is placed", () => {
     const { origin, audience } = household();

@@ -1,6 +1,3 @@
-// Recoverable React error boundary for the shell root (#468).
-// Class component required by React's error-boundary contract.
-
 import { Component } from "react";
 import type { ErrorInfo, JSX, ReactNode } from "react";
 
@@ -8,9 +5,7 @@ import Button from "../ui/Button.js";
 
 export interface ErrorBoundaryProps {
   children: ReactNode;
-  /** Optional title shown above the message. */
   title?: string;
-  /** Called when the user hits "Try again" — lets a host remount the subtree. */
   onReset?: () => void;
 }
 
@@ -18,8 +13,6 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-// Class error boundaries need setState + field state; house style prefers
-// functional components elsewhere. (#468)
 /* oxlint-disable react/no-set-state, react/state-in-constructor -- (#468) React error boundaries require a class component */
 export default class ErrorBoundary extends Component<
   ErrorBoundaryProps,
@@ -34,7 +27,6 @@ export default class ErrorBoundary extends Component<
   }
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
-    // Surface in the host console; crash-log / SW capture live elsewhere.
     console.error("[ErrorBoundary]", error, info.componentStack);
   }
 

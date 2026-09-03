@@ -14,9 +14,6 @@ export interface RenameGatewayModalProps {
   onCommit: (label: string) => void;
 }
 
-/** The switcher overflow menu's "Rename…" action (#382) — a single-field
- *  sibling of VaultModal/ConnectFlowModal, reusing the same `.prof*` dialog
- *  chrome so every "small form in a modal" in this app looks identical. */
 export default function RenameGatewayModal({
   initialLabel,
   onCancel,

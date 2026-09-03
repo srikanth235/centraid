@@ -1,8 +1,3 @@
-// Unit laws for the shared var()-resolution reader (#686). The two consumers
-// (packages/blueprints, packages/client) walk real stylesheets; these pin the
-// parsing edges those walks depend on and would otherwise only exercise by
-// accident.
-
 import { describe, expect, test } from "vitest";
 
 import {
@@ -29,8 +24,6 @@ describe("reading declarations", () => {
   });
 
   test("finds every declaration on repeated calls", () => {
-    // Regression guard: a module-scope `/g` regex carries `lastIndex`, so a
-    // shared instance would return a different answer the second time.
     const css = ":root { --a: 1; --b: 2; }";
     expect(declaredCustomProps(css)).toStrictEqual(declaredCustomProps(css));
   });

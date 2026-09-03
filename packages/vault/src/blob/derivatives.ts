@@ -1,13 +1,3 @@
-// Derivative contribution vocabulary (#414 D9/D13).
-//
-// This is the one registry shared by ingress validation, ingest/promotion,
-// byte serving and future work-lease dispatch. Binary display rungs live in
-// the CAS; semantic contributions stay inline in the derivative row so text
-// can feed FTS in the same transaction and vectors/hashes never masquerade
-// as rentable blob bytes. Backstops are declarations, not schedulers: the
-// gateway owns when a backstop runs, while this module owns what exists and
-// what a contribution must look like.
-
 import { extractBlobMeta, sniffMediaType } from "./pipeline.js";
 
 export const DERIVATIVE_VARIANTS = [
@@ -95,9 +85,6 @@ export const DERIVATIVE_REGISTRY: Readonly<
     maxBytes: 64,
     backstop: "raster-codec",
   },
-  // ThumbHash (#419): a DCT placeholder a native client paints while a
-  // real thumb streams. Canonical value is unpadded standard base64 of the
-  // 5-49 byte hash; the cap covers base64 of 64 bytes (~88 chars) with slack.
   thumbhash: {
     variant: "thumbhash",
     storage: "inline",
@@ -112,7 +99,6 @@ export const BINARY_DERIVATIVE_VARIANTS = DERIVATIVE_VARIANTS.filter(
     DERIVATIVE_REGISTRY[variant].storage === "cas"
 );
 
-/** Trusted SQL literal generated from the registry, never hand-enumerated. */
 export const BINARY_DERIVATIVE_SQL = BINARY_DERIVATIVE_VARIANTS.map(
   (variant) => `'${variant}'`
 ).join(",");
@@ -122,7 +108,6 @@ export interface ValidatedDerivative {
   readonly storage: "cas" | "inline";
   readonly mediaType: string;
   readonly byteSize: number;
-  /** Canonical inline representation; absent for CAS-backed rungs. */
   readonly textContent?: string;
   readonly width?: number;
   readonly height?: number;
@@ -218,11 +203,6 @@ function canonicalEmbedding(bytes: Buffer): string {
   return JSON.stringify({ model: value.model, vector: value.vector });
 }
 
-/**
- * ThumbHash canonical form: unpadded standard base64 of 5..64 hash bytes.
- * Decode, bound the byte length, and re-encode to reject any non-canonical
- * spelling (padding, whitespace, base64url) so the stored value is exact.
- */
 function canonicalThumbhash(text: string): string {
   if (!/^[A-Za-z0-9+/]+$/u.test(text)) {
     throw new Error("thumbhash derivative must be unpadded standard base64");
@@ -238,11 +218,6 @@ function canonicalThumbhash(text: string): string {
   return canonical;
 }
 
-/**
- * Validate and canonicalize one contribution before it can become model.
- * The gateway route should call this before `stageBlobBytes`; staging calls
- * it for inline variants as a structural last line of defence.
- */
 export function validateDerivativeContribution(input: {
   variant: DerivativeVariant;
   bytes: Buffer;

@@ -62,12 +62,8 @@ interface Approvals {
   notifications: Awaited<ReturnType<typeof getNotifications>>;
   grants: Awaited<ReturnType<typeof listOutboxGrants>>;
   review: Awaited<ReturnType<typeof getReview>>;
-  /** WIRE shape: `groupGrantsByStore` reshapes at render, so a revoke splices
-   *  one grant rather than re-deriving the grouping. */
   apps: Awaited<ReturnType<typeof vaultApps>>;
   agents: Awaited<ReturnType<typeof listAgents>>;
-  /** Read-only here — never re-ask the question. `null` on a gateway older
-   *  than the consent ledger (#807). */
   enrichConsent: Awaited<ReturnType<typeof listEnrichEgressConsent>> | null;
 }
 
@@ -79,8 +75,6 @@ async function loadApprovals(reviewLimit: number): Promise<Approvals> {
       getReview(reviewLimit),
       vaultApps(),
       listAgents(),
-      // `null`, not `[]`: no answers on record and a gateway that cannot be
-      // asked are different facts.
       listEnrichEgressConsent().catch(() => null),
     ]);
   return { notifications, grants, review, apps, agents, enrichConsent };
@@ -88,14 +82,10 @@ async function loadApprovals(reviewLimit: number): Promise<Approvals> {
 
 const DISCARD_CONSEQUENCE = "Nothing will be sent. This can’t be undone.";
 
-// The Notifications route (#306/#308/#647): wire rows map to the screen's DTOs
-// in `approvalsData.ts`, decisions return over `gateway-client-outbox`. Every
-// irreversible verb confirms IN PLACE beside its row, never in an overlay.
 export default function ApprovalsRoute(): JSX.Element {
   const { showToast, navigate } = useShellActions();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [reviewLimit, setReviewLimit] = useState(REVIEW_LIMIT_DEFAULT);
-  // A nonce, not a callback: a repeat press is a fresh request.
   const [reviewAll, setReviewAll] = useState<{ nonce: number } | null>(null);
 
   const [focusOutbox, setFocusOutbox] = useState<{
@@ -103,7 +93,6 @@ export default function ApprovalsRoute(): JSX.Element {
     nonce: number;
   } | null>(null);
 
-  // Rides down to the screen: a refusal belongs beside its row.
   const [refusal, setRefusal] = useState<{
     itemId: string | null;
     message: string;
@@ -111,8 +100,6 @@ export default function ApprovalsRoute(): JSX.Element {
   } | null>(null);
   const refusals = useRef(0);
 
-  // Stale-while-revalidate (#659): revalidation runs BEHIND the page, so
-  // half-edited text, expansions and chips survive.
   const { state, refresh, mutate } = useCachedQuery(
     `approvals:${reviewLimit}`,
     () => loadApprovals(reviewLimit)
@@ -121,18 +108,16 @@ export default function ApprovalsRoute(): JSX.Element {
   const reload = useCallback((): void => void refresh(), [refresh]);
   useEffect(() => {
     const controller = new AbortController();
-    void subscribeNotificationsChanges(reload, controller.signal).catch(() => {
-      // The sidebar's 60s poll is the SSE fallback.
-    });
-    // Opening Notifications is the consent gesture: never prompt at launch.
-    // The wake relay stays opaque; content is composed locally.
+    void subscribeNotificationsChanges(reload, controller.signal).catch(
+      () => {}
+    );
+
     void enableWebPushWake(true)
       .then((enabled) => (enabled ? syncWebNotifications() : Promise.resolve()))
       .catch(() => undefined);
     return () => controller.abort();
   }, [reload]);
 
-  // "History" is `GatewayAlertsTab`; never copy it here.
   useEffect(() => {
     publishRouteVerbs("approvals", {
       onCommit: () =>
@@ -142,11 +127,8 @@ export default function ApprovalsRoute(): JSX.Element {
     return () => clearRouteSignals("approvals");
   }, [navigate]);
 
-  // From the query resolution, never a render: the bar and the body must not
-  // disagree about the page's state.
   const pending =
     state.status === "ready" ? state.data.notifications.decisions : null;
-  // Decisions, plus notices that demand: info severity never blocks.
   const waiting =
     pending === null || state.status !== "ready"
       ? -1
@@ -185,13 +167,10 @@ export default function ApprovalsRoute(): JSX.Element {
     });
   }, [standing, state.status, waiting]);
 
-  /** The row leaves the page the moment the owner decides (#659); `apply` is
-   *  that edit, and a rejection restores the page and says why. */
   const runDecision = async (
     id: string,
     action: () => Promise<void>,
     apply: (previous: Approvals) => Approvals = (previous) => previous,
-    /** Set when the reversal has a CARD to come back to (#815). */
     itemId: string | null = null
   ): Promise<void> => {
     setBusyId(id);
@@ -340,8 +319,6 @@ export default function ApprovalsRoute(): JSX.Element {
     );
   };
 
-  /** `ApprovalsScreen` owns the struck-through row; splice the grant out of
-   *  `apps`/`agents` so a background revalidate cannot resurrect it (#708). */
   const handleRevokeStoreGrant = (holder: StoreHolderDTO): void => {
     void runDecision(
       holder.grantId,
@@ -413,8 +390,6 @@ export default function ApprovalsRoute(): JSX.Element {
     );
   }
   if (state.status === "error") {
-    // What failed, what is still safe, one way forward — the shape every
-    // operational route takes, carrying the gateway's words as a fact.
     return (
       <PageScroll>
         <PanelBlock
@@ -456,8 +431,6 @@ export default function ApprovalsRoute(): JSX.Element {
             notice.detail.sourceType === "automation" ||
             notice.detail.sourceType === "agent" ||
             notice.detail.sourceType === "app" ||
-            // A received share is another person's decision (#883): reading it
-            // as "app" would file it under this vault's own machinery.
             notice.detail.sourceType === "share"
               ? notice.detail.sourceType
               : "app",
@@ -473,7 +446,6 @@ export default function ApprovalsRoute(): JSX.Element {
               : typeof notice.detail.actor === "string"
                 ? notice.detail.actor
                 : // Name the sharer: a card about somebody's decision that
-                  // does not name them cannot be acted on.
                   typeof notice.detail.granterName === "string"
                   ? notice.detail.granterName
                   : typeof notice.detail.gatewayLabel === "string"
@@ -501,13 +473,10 @@ export default function ApprovalsRoute(): JSX.Element {
           } else if (typeof notice.detail.enrichDomain === "string") {
             navigate({ kind: "automations" });
           } else if (notice.kind === "gateway-health") {
-            // Legacy rows only (#665): old cards survive until archived and
-            // still point at Alerts.
             navigate({ kind: "gateway", tab: "alerts" });
           } else if (typeof appId === "string") {
             navigate({ kind: "app", id: appId });
           } else if (notice.kind === "outbox") {
-            // Navigating here is a no-op: focus the staged item instead.
             const itemId = notice.detail.itemId;
             setFocusOutbox((prev) => ({
               itemId:

@@ -1,9 +1,3 @@
-// Bank-statement CSV parsing (#290). Deliberately narrow: a
-// header row naming a date, a description and an amount column (aliases
-// below), optional currency and id columns. Signed amounts: negative = debit.
-// Two-decimal minor units — the common case for consumer statements; exotic
-// scales ride a real connector later.
-
 export interface CsvTransaction {
   externalId: string | null;
   postedAt: string;
@@ -28,7 +22,6 @@ const MAX_CSV_ROWS = 100_001;
 const MAX_CSV_COLUMNS = 512;
 const MAX_CSV_FIELD_CHARS = 1024 * 1024;
 
-/** Reject cells spreadsheet programs would execute when a later export opens. */
 export function assertNonFormulaCell(
   value: string | null | undefined,
   label: string
@@ -37,7 +30,6 @@ export function assertNonFormulaCell(
     throw new Error(`CSV ${label} begins with a spreadsheet formula marker`);
 }
 
-/** RFC 4180-ish row splitter: quoted fields, escaped quotes, CRLF-tolerant. */
 export function parseCsvRows(text: string): string[][] {
   const rows: string[][] = [];
   let field = "";
@@ -93,8 +85,6 @@ function findColumn(header: string[], aliases: string[]): number {
 
 function isoDay(raw: string): string | null {
   const t = raw.trim();
-  // ISO first; then dd/mm/yyyy and mm/dd/yyyy are ambiguous — accept
-  // dd/mm/yyyy (statement convention outside the US) and yyyy-mm-dd.
   if (/^\d{4}-\d{2}-\d{2}/u.test(t)) return t.slice(0, 10);
   const dmy = t.match(
     /^(?<day>\d{1,2})[/-](?<month>\d{1,2})[/-](?<year>\d{4})$/u
@@ -109,10 +99,6 @@ function isoDay(raw: string): string | null {
     : new Date(parsed).toISOString().slice(0, 10);
 }
 
-/**
- * Parse a statement CSV. Throws when the header names no usable columns —
- * a misread statement must fail loudly, not import garbage.
- */
 export function parseTransactionsCsv(text: string): CsvTransaction[] {
   const rows = parseCsvRows(text);
   if (rows.length < 2) throw new Error("CSV has no data rows");

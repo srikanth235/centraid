@@ -121,7 +121,6 @@ describe("screens/RunViewScreen", () => {
   function mount(props: RunViewBridgeProps): HTMLDivElement {
     container = document.createElement("div");
     document.body.appendChild(container);
-    // capture the update fn the screen hands back via onReady
     const onReady = (u: (s: RunViewSnapshot | null) => void): void => {
       update = u;
     };
@@ -140,7 +139,6 @@ describe("screens/RunViewScreen", () => {
       const props = makeProps();
       const el = mount(props);
       expect(el.textContent).toContain("Loading run…");
-      // The loading state must never strand the user without a way back.
       const crumbBtn = el.querySelector(".auCrumb button") as HTMLButtonElement;
       expect(crumbBtn).toBeTruthy();
       void act(() =>
@@ -168,9 +166,7 @@ describe("screens/RunViewScreen", () => {
       );
       expect(el.textContent).toContain("This automation was deleted");
       expect(el.textContent).toContain("digest/main");
-      // The loaded run detail has no in-page breadcrumb (shell chrome owns back).
       expect(el.querySelector(".auCrumb")).toBeNull();
-      // "Run again" requires a live automation row — hidden when deleted.
       const runAgain = [...el.querySelectorAll(".auBtn")].find((b) =>
         b.textContent?.includes("Run again")
       );
@@ -183,7 +179,6 @@ describe("screens/RunViewScreen", () => {
       expect(el.querySelector(".rvHeadName")?.textContent).toContain(
         "Daily Digest"
       );
-      // Trigger + one native conversation transcript.
       expect(el.querySelectorAll(".tlItem")).toHaveLength(2);
       expect(
         el.querySelector('[data-testid="automation-turn-messages"]')
@@ -276,12 +271,10 @@ describe("screens/RunViewScreen", () => {
     it("renders no run-view controls — the detail is a single calm view", () => {
       const el = mount(makeProps());
       push(makeSnapshot());
-      // No Timeline/Log toggle, no details-collapse button, no Run again.
       expect(el.querySelector(".rvSeg")).toBeNull();
       expect(el.querySelector(".rvHeadActions")).toBeNull();
       const controls = [...el.querySelectorAll(".rvHead button")];
       expect(controls).toHaveLength(0);
-      // The side panel is always present.
       expect(el.querySelector(".rside")).toBeTruthy();
     });
 

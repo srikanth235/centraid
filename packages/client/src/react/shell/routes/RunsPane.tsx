@@ -10,18 +10,11 @@ import { postStatus } from "../statusChannel.js";
 
 import styles from "./RunsPane.module.css";
 
-// The per-order run-history list inside the app-settings popover. Newest
-// first; each row shows outcome + when + duration + summary and a pin toggle
-// (pinned runs double as replay fixtures). Rendered into the host div
-// AppSettingsPanel hands `onMountRuns`.
 export default function RunsPane({
   automationId,
 }: {
   automationId: string;
 }): JSX.Element {
-  // Keyed on the automation (docs/client-keying.md): reopening the popover for
-  // the same order paints its runs immediately from cache and revalidates
-  // behind them, and a pin no longer destroys the list to rebuild it.
   const { state, mutate } = useCachedQuery(
     `automation-runs:${automationId}`,
     () => listAutomationTurns({ automationId, limit: 25 })
@@ -31,8 +24,6 @@ export default function RunsPane({
 
   const togglePin = (run: CentraidAutomationTurnRecord): void => {
     const pinned = !run.pinned;
-    // The star fills on the click; the wire call confirms it. A rejection puts
-    // the previous list back exactly (queryCache.mutate).
     void mutate(
       (rows) =>
         rows.map((row) =>

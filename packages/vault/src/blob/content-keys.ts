@@ -1,8 +1,3 @@
-// Per-blob content-key registry for edge-sealed CAS objects (#414). A random
-// content key encrypts one CBSF object; the registry wraps it under the vault
-// DEK and grants it per device, so a revocation drops grants without rotating
-// or re-uploading every blob.
-
 import {
   createCipheriv,
   createDecipheriv,
@@ -47,9 +42,7 @@ function open(
 
 export interface DeviceWrappedContentKey {
   algorithm: "AES-256-GCM";
-  /** Per-device wrapping epoch; rotates on a device revocation. */
   keyEpoch: number;
-  /** Vault-root wrapping epoch for the per-blob content key. */
   contentKeyEpoch: number;
   wrapSaltBase64: string;
   nonceBase64: string;
@@ -69,7 +62,6 @@ export class BlobContentKeyRegistry {
     this.wrappingKey = Buffer.from(wrappingKey);
   }
 
-  /** Only a live vault-enrolled device, by row id or authenticated key. */
   resolvePairedDevice(identity: string): string {
     const row = this.db
       .prepare(
@@ -78,8 +70,6 @@ export class BlobContentKeyRegistry {
           LIMIT 1`
       )
       .get(identity, identity) as { device_id: string } | undefined;
-    // Unknown and revoked are different facts, read separately so neither is
-    // inferred from the other (#883).
     if (!row || readDeviceTrust(this.db, row.device_id) === "revoked") {
       throw new VaultBlobAuthorizationError(
         `unknown or revoked paired device ${identity}`
@@ -88,7 +78,6 @@ export class BlobContentKeyRegistry {
     return row.device_id;
   }
 
-  /** Mirror a paired transport identity into the vault key roster. */
   enrollPairedDevice(input: {
     identity: string;
     ownerPartyId: string;
@@ -340,7 +329,6 @@ export class BlobContentKeyRegistry {
       .digest();
   }
 
-  /** Re-wrap after a vault key rotation; blob bytes stay put. */
   rewrapAll(nextWrappingKey: Buffer): number {
     if (nextWrappingKey.length !== KEY_BYTES)
       throw new Error("next wrapping key must be 32 bytes");

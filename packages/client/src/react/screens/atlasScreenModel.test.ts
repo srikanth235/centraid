@@ -27,10 +27,6 @@ import {
   tableCaption,
 } from "./atlasScreenModel.js";
 
-// The Data route's sentences (#765). Every one of them is a claim about
-// the vault, so each is tested for what it says AND for what it refuses to say
-// when the payload cannot support it.
-
 const NOW = Date.parse("2026-07-17T12:00:00.000Z");
 
 const stats: AtlasCensusPayload = {
@@ -118,20 +114,14 @@ describe("screens/atlasScreenModel", () => {
         "core.place",
         "journal.segment",
       ]);
-      // Plumbing sorts below life data, and a never-written kind sorts to the
-      // foot of its own group rather than being dropped from the list.
       expect(rows[2]?.machinery).toBe(true);
       expect(rows.map(kindWritten)).toStrictEqual([true, false, true]);
     });
 
     it("says what a kind holds, and today's writes when there are some", () => {
       const [party, place, segment] = kindRowsFrom(stats, pulse, NOW);
-      // The pack has its own cell on the meter row, so it is no longer a
-      // prefix on the count: one fact, one place.
       expect(kindCount(party!)).toBe("214 records · 1.9 MB · 12 written today");
       expect(kindCount(segment!)).toBe("9,000 records · 400 B");
-      // Never written says so rather than claiming a count that has moved,
-      // in the same words the chip that isolates those rows uses.
       expect(kindCount(place!)).toBe("Never written");
       expect(party!.packLabel).toBe("Core");
       expect(segment!.packLabel).toBe("Journal");
@@ -141,7 +131,6 @@ describe("screens/atlasScreenModel", () => {
       const [party, place, segment] = kindRowsFrom(stats, pulse, NOW);
       expect(kindMeta(party!, NOW)).toBe("Today");
       expect(kindMeta(segment!, NOW)).toBe("Quiet");
-      // "Quiet" is a lull; a kind that never held anything has had none.
       expect(kindMeta(place!, NOW)).toBeUndefined();
     });
 
@@ -160,14 +149,9 @@ describe("screens/atlasScreenModel", () => {
       const largest = largestRecords(rows);
       expect(largest).toBe(9000);
       const [party, place, segment] = rows;
-      // Share of the largest: the fullest kind fills its track, and the one
-      // beside it is read against that rather than against a total that would
-      // round both to nothing.
       expect(meterShare(segment!, largest)).toBe(100);
       expect(meterShare(party!, largest)).toBe(2);
-      // A kind nothing has written draws no bar at all.
       expect(meterShare(place!, largest)).toBe(0);
-      // And a census with nothing in it never divides by zero.
       expect(meterShare(party!, 0)).toBe(0);
       expect(largestRecords([])).toBe(0);
     });
@@ -220,8 +204,6 @@ describe("screens/atlasScreenModel", () => {
 
   describe("health", () => {
     it("carries both clauses when both reads landed", () => {
-      // The backup clause is relative to the real clock (`relativeWhen`), so
-      // the stamp is built from it rather than from the census' frozen day.
       const anHourAgo = new Date(Date.now() - 3_600_000).toISOString();
       expect(healthDetail(pulse, anHourAgo, NOW)).toBe(
         "Last write today. Last backup 1h ago."

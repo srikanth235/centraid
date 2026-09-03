@@ -1,6 +1,3 @@
-// Durable time semantics and the organizational spine (#630), for Agenda,
-// Tasks, People and Tally.
-
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
 export const TIME_ORGANIZE_DDL = `

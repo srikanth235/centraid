@@ -1,10 +1,3 @@
-// Client↔gateway seam laws for the pairing-ticket mint route (#726, #726 P1)
-// — the module had no test file (#656 Layer 1B). States the wire shape of
-// the two mutually exclusive mint lanes: self-pair (unchanged from P0) and
-// "Add someone" (`forPerson`, P1), which lands the ticket on a freshly minted
-// owner+vault instead of the caller's own. Shared harness in
-// gateway-client-seam-fixtures.ts.
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -45,8 +38,6 @@ describe("pairing-ticket mint seam", () => {
       forPerson: { label: "Priya" },
       ttlMinutes: 60,
     });
-    // Mutually exclusive with the self-pair lane (#726): no vaultId/vaultIds
-    // rides alongside a forPerson mint.
     expect(sent.vaultId).toBeUndefined();
     expect(sent.vaultIds).toBeUndefined();
   });

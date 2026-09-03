@@ -1,7 +1,3 @@
-/**
- * Direct naming of conformance-observability.ts (#545).
- */
-
 import { promises as fs } from "node:fs";
 
 import { describe, expect, test } from "vitest";
@@ -29,7 +25,6 @@ describe("providerObservabilityConformanceCases (direct)", () => {
 
   test.each(cases.map((c) => [c.name, c] as const))("%s", async (_name, c) => {
     await c.run();
-    // requireAssertions: capability-gated cases may no-op without expects.
     expect(c.name.length).toBeGreaterThan(0);
   });
 });

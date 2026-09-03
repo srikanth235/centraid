@@ -11,14 +11,11 @@ import type {
 import type * as TypeImport_in5dl4 from "../shell/confirm.js";
 import SettingsHarnessesScreen from "./SettingsHarnessesScreen.js";
 
-// Ladder membership is a consent decision, so it goes through the shell's own
-// confirm dialog (not `window.confirm`) — mocked here to drive the answer.
 const dialog = vi.hoisted(() => ({
   openConfirm: vi.fn<typeof TypeImport_in5dl4.openConfirm>(),
 }));
 vi.mock(import("../shell/confirm.js"), () => dialog);
 
-/** `makeStatusBothConnected`, but Claude Code is also past its session preflight. */
 function withSessionReady(status: HarnessesStatusDTO): HarnessesStatusDTO {
   return {
     ...status,
@@ -70,7 +67,6 @@ function makeStatus(
   };
 }
 
-/** makeStatus, but with Claude Code present so it can be routed to. */
 function makeStatusBothConnected(
   over: Partial<HarnessesStatusDTO> = {}
 ): HarnessesStatusDTO {
@@ -108,8 +104,6 @@ function makeProps(
     refreshModels: vi
       .fn<SettingsHarnessesBridgeProps["refreshModels"]>()
       .mockResolvedValue(makeStatus()),
-    // Every writer resolves to the gateway's own text on refusal and `null`
-    // when it wrote — a green mock is a write that landed.
     activateHarness: vi
       .fn<SettingsHarnessesBridgeProps["activateHarness"]>()
       .mockResolvedValue(null),
@@ -162,7 +156,6 @@ describe("SettingsHarnessesScreen suite", () => {
     return container;
   }
 
-  /** Click the button whose visible word is exactly this. */
   async function press(el: HTMLElement, word: string): Promise<void> {
     const found = [...el.querySelectorAll("button")].find(
       (button) => button.textContent?.trim() === word
@@ -173,7 +166,6 @@ describe("SettingsHarnessesScreen suite", () => {
     });
   }
 
-  /** The ladder is behind the Automations lane's own verb (v11). */
   async function openFallback(el: HTMLElement): Promise<void> {
     await press(el, "Fallback");
   }
@@ -184,7 +176,6 @@ describe("SettingsHarnessesScreen suite", () => {
     return found as HTMLSelectElement;
   }
 
-  /** Drive a native <select> the way React's onChange listener expects. */
   async function pick(select: HTMLSelectElement, value: string): Promise<void> {
     const setter = Object.getOwnPropertyDescriptor(
       globalThis.HTMLSelectElement.prototype,
@@ -201,9 +192,6 @@ describe("SettingsHarnessesScreen suite", () => {
       const el = await mount(makeProps());
       expect(el.textContent).toContain("Harnesses");
       expect(el.textContent).toContain("Lanes");
-      // The default lane plus three routed lanes. Builder has no row — its
-      // entry points are hidden by default (#434), so the control configured a
-      // surface the member cannot open.
       expect(sel(el, "Default agent").getAttribute("aria-label")).toBe(
         "Default agent"
       );
@@ -213,7 +201,6 @@ describe("SettingsHarnessesScreen suite", () => {
         ).not.toBeNull();
       }
       expect(el.querySelector('[aria-label="Agent for Builder"]')).toBeNull();
-      // Every detected agent carries its own model, above the lanes.
       expect(el.querySelectorAll(".glyphTile")).toHaveLength(2);
       expect(sel(el, "Default model for Codex").value).toBe("gpt-5");
       expect(el.querySelectorAll("optgroup").length).toBeGreaterThan(0);
@@ -248,7 +235,6 @@ describe("SettingsHarnessesScreen suite", () => {
         "ask",
         "claude-code"
       );
-      // The default lane is untouched — this is the whole point of the change.
       expect(props.activateHarness).not.toHaveBeenCalled();
     });
 
@@ -293,8 +279,6 @@ describe("SettingsHarnessesScreen suite", () => {
     it("offers failover only on the unattended lane", async () => {
       const el = await mount(makeProps());
       await openFallback(el);
-      // Attended lanes recover at the next turn with the member watching, so
-      // there is nothing to pre-authorize; only Automations fires unattended.
       expect(el.textContent).not.toContain("Next-turn failover");
       expect(el.textContent).toContain("In-fire failover");
       expect(el.querySelectorAll(".ladderRow")).toHaveLength(1);
@@ -324,8 +308,6 @@ describe("SettingsHarnessesScreen suite", () => {
     });
 
     it("will not offer an agent that has not passed its session preflight as a fallback", async () => {
-      // Unattended failover has nobody to answer an auth prompt, so `connected`
-      // alone is not enough to join the ladder.
       const props = makeProps({
         loadStatus: vi
           .fn<SettingsHarnessesBridgeProps["loadStatus"]>()
@@ -386,8 +368,6 @@ describe("SettingsHarnessesScreen suite", () => {
     });
 
     it("shows the stored ladder in full, including a member that is now the lane primary", async () => {
-      // D13: membership IS the consent record — filtering the resolved primary
-      // out of the display made the UI disagree with what the gateway holds.
       const props = makeProps({
         loadStatus: vi
           .fn<SettingsHarnessesBridgeProps["loadStatus"]>()
@@ -408,7 +388,6 @@ describe("SettingsHarnessesScreen suite", () => {
           '[aria-label="Remove Codex from Automations failover"]'
         )
       ).toBeTruthy();
-      // …and an edit re-saves the same membership rather than silently pruning it.
       await act(async () => {
         el.querySelector<HTMLButtonElement>(
           '[aria-label="Move Claude Code earlier for Automations"]'
@@ -424,18 +403,11 @@ describe("SettingsHarnessesScreen suite", () => {
       const el = await mount(makeProps());
       const harness = sel(el, "Agent for Assistant");
       expect(harness.value).toBe("");
-      // A lane with no harness of its own has no model or level to set, so it
-      // renders neither — the caption carries the resolved answer instead.
       expect(el.querySelector('[aria-label="Model for Assistant"]')).toBeNull();
       expect(el.textContent).toContain("inherits Codex · GPT-5");
     });
 
     it("states the model AND the level every inheriting lane lands on", async () => {
-      // The default row is the one row that decides what every inheriting lane
-      // runs, under a head reading "harness · model · level". Naming the agent
-      // and a bare model would leave the level it thinks at as the one answer
-      // on the page nothing states. Both come from the harness's own
-      // probe when nothing is pinned, because that is what the runtime uses.
       const el = await mount(
         makeProps({
           loadStatus: vi
@@ -468,8 +440,6 @@ describe("SettingsHarnessesScreen suite", () => {
       expect(el.textContent).toContain(
         "Every lane left inheriting lands here · GPT-5 · medium"
       );
-      // …and each lane repeats the whole triple, so the row and the caption
-      // above it can never disagree about the level.
       expect(el.textContent).toContain("inherits Codex · GPT-5 · medium");
     });
 
@@ -485,7 +455,6 @@ describe("SettingsHarnessesScreen suite", () => {
       });
       const el = await mount(props);
       const model = sel(el, "Model for In-app Ask");
-      // Claude Code's model, not Codex's — the lane resolved to a new agent.
       expect(
         [...model.querySelectorAll("option")].map((o) => o.value)
       ).toContain("opus-4-8");
@@ -506,8 +475,6 @@ describe("SettingsHarnessesScreen suite", () => {
       });
       const el = await mount(props);
       await pick(sel(el, "Model for In-app Ask"), "opus-4-8");
-      // Keyed by 'claude-code' (the lane's resolved agent) — not 'codex' (the
-      // default). Writing it against the default would strand the override.
       expect(props.setSubsystemModel).toHaveBeenCalledWith(
         "claude-code",
         "ask",
@@ -529,14 +496,12 @@ describe("SettingsHarnessesScreen suite", () => {
       const [codex, claude] = [
         ...el.querySelectorAll(".usedBy"),
       ] as HTMLElement[];
-      // Codex is the default and keeps the three lanes that inherit.
       const codexChips = [
         ...(codex?.querySelectorAll(".usedByChip") ?? []),
       ].map((c) => c.textContent);
       expect(codexChips).toContain("Default");
       expect(codexChips).toContain("Assistant");
       expect(codexChips).not.toContain("Builder");
-      // Claude Code holds only the lane pointed at it.
       const claudeChips = [
         ...(claude?.querySelectorAll(".usedByChip") ?? []),
       ].map((c) => c.textContent);
@@ -589,7 +554,6 @@ describe("SettingsHarnessesScreen suite", () => {
           .fn<SettingsHarnessesBridgeProps["loadStatus"]>()
           .mockResolvedValue({
             ...withEffort,
-            // A lane earns its own model and level by having its own agent.
             subsystemHarnessByKey: { assistant: "codex" },
           }),
       });
@@ -610,9 +574,6 @@ describe("SettingsHarnessesScreen suite", () => {
     });
 
     it("states “no thinking” instead of a select for a model with no thinking budget", async () => {
-      // A pick with nothing to open is not a pick: the harness advertises no
-      // `thought_level` option, so the row states the fact rather than
-      // rendering a dead control that looks openable.
       const el = await mount(makeProps());
       expect(
         el.querySelector('[aria-label="Default effort for Codex"]')
@@ -622,9 +583,6 @@ describe("SettingsHarnessesScreen suite", () => {
     });
 
     it("clamps a stored level the newly-picked model cannot do", async () => {
-      // `xhigh` is pinned but the probe offers medium/high only, so changing
-      // the model drops the pin back to inherit rather than displaying a level
-      // the runtime would silently ignore.
       const base = makeStatus();
       const withEffort: HarnessesStatusDTO = {
         ...base,
@@ -703,9 +661,7 @@ describe("SettingsHarnessesScreen suite", () => {
       await act(async () => {
         await Promise.resolve();
       });
-      // Back where the gateway has it…
       expect(sel(el, "Default model for Codex").value).toBe("gpt-5");
-      // …and the refusal is quoted, not swallowed.
       expect(props.showToast).toHaveBeenCalledWith(
         "Model not saved: prefs.write refused: model not offered"
       );
@@ -748,18 +704,15 @@ describe("SettingsHarnessesScreen suite", () => {
     it("renders each agent card with its identity glyph tile", async () => {
       const el = await mount(makeProps());
       const tiles = el.querySelectorAll(".glyphTile");
-      // One tile per inventory entry, each holding a vendored glyph svg.
       expect(tiles).toHaveLength(2);
       for (const tile of tiles) {
         expect(tile.querySelector("svg")).toBeTruthy();
       }
-      // The unavailable agent's tile is muted rather than dropped.
       expect(el.querySelector('.glyphTile[data-unavail="true"]')).toBeTruthy();
     });
 
     it("falls back to a generic glyph for a kind this build has no artwork for", async () => {
       const base = makeStatus();
-      // A kind with no entry in HARNESS_GLYPHS must still render an svg, not throw.
       const el = await mount(
         makeProps({
           loadStatus: vi
@@ -810,13 +763,11 @@ describe("SettingsHarnessesScreen suite", () => {
             }),
         })
       );
-      // It reaches the pickers rather than being filtered out as unrecognised…
       const opts = [
         ...sel(el, "Agent for In-app Ask").querySelectorAll("option"),
       ];
       const future = opts.find((o) => o.value === "some-future-harness");
       expect(future).toBeTruthy();
-      // …and an unavailable agent is offered disabled, not silently missing.
       expect(future?.disabled).toBe(true);
       expect(future?.textContent).toContain("unavailable");
     });

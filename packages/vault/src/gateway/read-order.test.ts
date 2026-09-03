@@ -1,7 +1,3 @@
-// ReadRequest.orderBy (#262): ordering is what turns a bounded read
-// into a recent window. Column and direction are validated like filter
-// columns — caller strings never become SQL text.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
@@ -82,7 +78,6 @@ describe("read-order", () => {
       limit: 1,
       purpose: PURPOSE,
     });
-    // `middle` was created last (its timestamp was backdated after insert).
     expect(result.rows[0]?.title).toBe("middle");
   });
 

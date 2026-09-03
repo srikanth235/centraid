@@ -1,6 +1,3 @@
-// Centraid — shared design system: single source of truth for colors,
-// typography, spacing, density, tiles, icons, app metadata (DESIGN.md).
-
 export {
   APP_HUES,
   clampIdentityHue,
@@ -52,13 +49,7 @@ export {
   STAGE_LINE,
 } from "./themes";
 
-// Contrast/oklab maths lives behind `@centraid/design/oklab`, NOT this barrel:
-// client re-exports this index, and one more module trips the barrel ceiling
-// (BuilderCode.tokens.test.ts).
 export type { Theme, ThemeName, ThemePreset } from "./themes";
-
-// The product mark is INK: the shell spends no hue, so every colour
-// provably belongs to an app.
 
 export {
   DEFAULT_DENSITY_TIER,
@@ -150,8 +141,6 @@ export type {
 export { nativeButtonStyle } from "./recipes/native";
 export type { NativeButtonStyle } from "./recipes/native";
 
-// Blueprint-app ("field notebook") token layer — a separate design language;
-// see src/blueprint.ts.
 export { toBlueprintCss } from "./blueprint";
 export { toNativeTheme } from "./native";
 export type {

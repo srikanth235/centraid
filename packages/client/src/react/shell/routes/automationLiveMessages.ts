@@ -21,7 +21,6 @@ interface AutomationLiveItemState {
   kind: CentraidAutomationItem["kind"];
   name?: string;
   callId?: string;
-  /** Delegate item that was still open when this tool started. */
   parentItemId?: string;
   assistantText: string;
   reasoningText: string;
@@ -90,7 +89,6 @@ export function createAutomationLiveTrace(
   };
 }
 
-/** Seed a live trace from the durable prefix already visible to a late viewer. */
 export function createAutomationLiveTraceFromItems(
   message: string,
   sourceItems: readonly CentraidAutomationItem[]
@@ -229,7 +227,6 @@ function reduceLiveItem(
   return state;
 }
 
-/** Pure reducer for one identified native item delta. */
 export function reduceAutomationItemEvent(
   state: AutomationLiveTraceState,
   input: { itemId: string; ordinal: number; event: TurnStreamEvent }
@@ -251,7 +248,6 @@ export function reduceAutomationItemEvent(
   return { ...state, items };
 }
 
-/** Register a native item before its nested standard events arrive. */
 export function startAutomationLiveItem(
   state: AutomationLiveTraceState,
   input: {
@@ -282,7 +278,6 @@ export function startAutomationLiveItem(
   return { ...state, items };
 }
 
-/** Hydrate and settle one durable item.end replay/live event. */
 export function finishAutomationLiveItem(
   state: AutomationLiveTraceState,
   input: {
@@ -342,7 +337,6 @@ export function finishAutomationLiveItem(
   return { ...state, items };
 }
 
-/** Pure reducer for a direct, single-delegate standard turn stream. */
 export function reduceAutomationTurnEvent(
   state: AutomationLiveTraceState,
   event: TurnStreamEvent
@@ -359,7 +353,6 @@ export function reduceAutomationTurnEvent(
   });
 }
 
-/** Settle an outer native turn when its ledger reread is briefly unavailable. */
 export function finishAutomationLiveTrace(
   state: AutomationLiveTraceState,
   error?: string
@@ -444,7 +437,6 @@ function liveItemMessages(
   return messages;
 }
 
-/** Project live reducer state into the exact DTO consumed by shared Message. */
 export function automationLiveMessages(
   state: AutomationLiveTraceState
 ): AsstMsgDTO[] {

@@ -122,7 +122,6 @@ describe("screens/HomeSpringboard", () => {
       expect(mark.getAttribute("style")).toContain(
         "--app-mark-hue: var(--c-amber)"
       );
-      // The tile itself takes no hue — the shell spends none.
       expect(tile(el, "photos").getAttribute("style")).toBeNull();
     });
 
@@ -154,8 +153,6 @@ describe("screens/HomeSpringboard", () => {
       expect(tile(el, "docs").querySelector(".readingTitle")?.textContent).toBe(
         "Lease agreement"
       );
-      // Docs and Notes share the compact body preview register under their
-      // distinct content shapes.
       expect(tile(el, "docs").querySelector(".reading")?.textContent).toBe(
         "The landlord agreed to the longer notice period."
       );
@@ -211,9 +208,6 @@ describe("screens/HomeSpringboard", () => {
       const el = mount({
         tiles: buildHomeTiles({ content: {}, installedIds: ["docs"] }),
       });
-      // An app with nothing to show is not a tile at all — it becomes a first
-      // move under the grid. A dashed in-grid placeholder would be a second
-      // spelling of a state that has exactly one.
       expect(
         el.querySelector('[data-app-id="docs"][data-testid="home-tile"]')
       ).toBeNull();
@@ -246,7 +240,6 @@ describe("screens/HomeSpringboard", () => {
       expect(firstRun?.querySelector(".firstRunBody")?.textContent).toBe(
         HOME_FIRST_RUN_BODY
       );
-      // FOUR moves — a picture of what Home becomes, not an inventory.
       expect(
         el.querySelectorAll('[data-testid="home-first-move"]')
       ).toHaveLength(HOME_FIRST_RUN_PLACEHOLDERS);
@@ -269,8 +262,6 @@ describe("screens/HomeSpringboard", () => {
     });
 
     it("the connect move goes to Connectors, NOT to an app id", () => {
-      // The one move that is not an app. Routing it through `onOpen` would
-      // navigate to an app called "connectors", which does not exist.
       const onConnect = vi.fn<() => void>();
       const onOpen = vi.fn<() => void>();
       const el = mount({
@@ -290,10 +281,6 @@ describe("screens/HomeSpringboard", () => {
     });
 
     it("ONE piece of content does not resurrect seven apologies", () => {
-      // The regression this whole treatment exists to prevent: the binary it
-      // replaces flipped to "not first run" here and rendered all eight tiles,
-      // seven of them empty. Now the grid holds exactly what has content and
-      // the rest becomes a band.
       const el = mount({
         tiles: buildHomeTiles({
           content: { locker: { compromised: 0, total: 4 } },
@@ -317,9 +304,6 @@ describe("screens/HomeSpringboard", () => {
     });
 
     it("offers the sample UNDER the real moves, never above them", () => {
-      // Ordering is an argument. An offer of invented data above "connect your
-      // account" would say the demo matters more than the member's own archive,
-      // on the screen where the opposite claim is made for the first time.
       const el = mount({
         sample: {
           canSeed: true,
@@ -362,11 +346,6 @@ describe("screens/HomeSpringboard", () => {
     });
 
     it("still offers the sample once ONE tile has content — day one is not the gate", () => {
-      // A vault holds a People row for its own owner from the moment it is
-      // created, so a single live tile ends day one before the member has
-      // added anything. Hanging the offer off that branch made it unreachable
-      // in the exact state where it is most wanted — and left anyone who
-      // cleared the sample with no way back to it.
       const el = mount({
         sample: {
           canSeed: true,
@@ -399,8 +378,6 @@ describe("screens/HomeSpringboard", () => {
     });
 
     it("says the data is a sample ONCE, at vault level — never per tile", () => {
-      // Eight badges is the eight-apologies failure again, and it would make a
-      // demo read as damage.
       const el = mount({
         sample: {
           canSeed: true,
@@ -414,7 +391,6 @@ describe("screens/HomeSpringboard", () => {
       expect(
         el.querySelectorAll('[data-testid="home-sample-note"]')
       ).toHaveLength(1);
-      // And the offer is gone — it has already been taken.
       expect(el.querySelector('[data-testid="home-sample-offer"]')).toBeNull();
     });
 
@@ -436,10 +412,6 @@ describe("screens/HomeSpringboard", () => {
     });
 
     it("names the app it is waiting on, and counts the run, while it fills", () => {
-      // The fill is about ten seconds and the photo generator is most of it.
-      // A control that only goes grey for that long is indistinguishable from
-      // one that has hung, so the surface says which app and how many are
-      // left — the same working state the rest of the shell uses.
       const el = mount({
         sample: {
           canSeed: true,
@@ -457,11 +429,7 @@ describe("screens/HomeSpringboard", () => {
       expect(offer?.querySelector(".workingCounts")?.textContent).toBe(
         "4 of 7 apps"
       );
-      // The offer's control is GONE while the run owns the slot — a disabled
-      // button beside a live progress line is two answers to one question.
       expect(offer?.querySelector("button")).toBeNull();
-      // Determinate, and the announcement is the counts inside the live
-      // region — never a spinner.
       expect(offer?.querySelector(".working")?.getAttribute("aria-live")).toBe(
         "polite"
       );
@@ -472,9 +440,6 @@ describe("screens/HomeSpringboard", () => {
     });
 
     it("names the closing replica catch-up rather than sitting on a full bar", () => {
-      // Every generator has returned, so the counts are full — but the rows
-      // are on the gateway and the tiles read the local replica. Unnamed, this
-      // beat reads as "the bar filled and nothing happened".
       const el = mount({
         sample: {
           canSeed: true,
@@ -512,8 +477,6 @@ describe("screens/HomeSpringboard", () => {
     });
 
     it("staggers the grid only on the render that FOLLOWS a fill", () => {
-      // Once, as the payoff for pressing. A grid that re-animates on every
-      // return stops being a moment and becomes a tax.
       const gridOf = (el: HTMLDivElement): HTMLElement | null =>
         el.querySelector('[data-testid="home-springboard"]');
       expect(gridOf(mount({ justFilled: true }))?.dataset.filled).toBe("true");

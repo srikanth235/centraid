@@ -1,12 +1,3 @@
-// File-drop customs (#290): one door for every dropped file. The extension
-// routes to a parser and the staging spine dispositions candidates into a
-// reviewable draft batch; a Takeout zip routes recursively into ONE batch.
-// TWO ROUTES, NOT ONE (#721): media bytes never touch `decodeImportText` —
-// they go straight into the CAS, and the payload carries only the sha plus
-// what the archive says ABOUT the photo. RESUMABILITY IS STRUCTURAL: the
-// queue is the database, so a re-import dispositions published rows as `skip`
-// and failed ones as `create`; an interrupted archive finishes by re-dropping.
-
 import { sniffMediaType } from "../blob/pipeline.js";
 import { stageBlobBytes, mediaLocationPolicy } from "../blob/staging.js";
 import type { VaultDb } from "../db.js";
@@ -43,7 +34,6 @@ export interface StageFileOptions {
   data: Buffer | string;
   accountName?: string;
   currency?: string;
-  /** Only for a single dropped media file (#724 A2); a zip's own pairing wins. */
   captureGroupId?: string;
 }
 
@@ -141,8 +131,6 @@ function partyCandidates(text: string): StageCandidate[] {
   }));
 }
 
-/** Attachment bytes hash into the CAS NOW (#296); the publisher claims the
- *  shas at publish, and a batch hold pins them past the TTL. */
 function messageCandidates(
   db: VaultDb,
   text: string,
@@ -177,16 +165,12 @@ function messageCandidates(
   }));
 }
 
-/** A media EXTENSION is a claim; the bytes settle it (#721) — text in a
- *  `photo.heic` falls through and is reported unrouted. */
 function isMediaFile(filename: string, bytes: Buffer): boolean {
   if (!isMediaPath(filename)) return false;
   const type = sniffMediaType(bytes, undefined, filename);
   return type.startsWith("image/") || type.startsWith("video/");
 }
 
-/** Nothing here reads pixels: `stageBlobBytes` runs the spool pipeline, so
- *  EXIF is on the staging row before the publisher claims it (#721). */
 function mediaCandidates(
   db: VaultDb,
   entry: TakeoutMediaEntry,
@@ -200,7 +184,6 @@ function mediaCandidates(
   return [
     {
       entityType: "media.asset",
-      // The in-archive path is the stable key.
       externalId: entry.path,
       payload: {
         stagedSha: staged.sha256,
@@ -209,8 +192,6 @@ function mediaCandidates(
         byteSize: staged.byteSize,
         path: entry.path,
         capturedAt: entry.sidecar.capturedAt,
-        // Sidecar GPS passes the same `media.location` gate as EXIF: a
-        // `strip` vault must not find coordinates smuggled back in.
         latitude: keepLocation ? entry.sidecar.latitude : null,
         longitude: keepLocation ? entry.sidecar.longitude : null,
         caption: entry.sidecar.caption,
@@ -251,7 +232,6 @@ function transactionCandidates(
 function passwordCandidates(text: string): StageCandidate[] {
   return parsePasswordsCsv(text).map((item) => ({
     entityType: "locker.item",
-    // A login's identity is where + who, not its rotating password.
     externalId: `login:${item.title}:${item.username ?? ""}`,
     payload: {
       title: item.title,
@@ -331,8 +311,6 @@ function candidatesFor(
   }
 }
 
-/** Publishing is a separate explicit act (`publishBatch`) — first contact with
- *  real data is always staged (#290). */
 export function stageFile(
   db: VaultDb,
   importer: Identity,
@@ -344,7 +322,6 @@ export function stageFile(
   const unrouted: string[] = [];
   let kind: string;
   const candidates: StageCandidate[] = [];
-  // Pinned to the batch below so review never races the staging TTL (#296).
   const stagedShas: string[] = [];
 
   const keepLocation = mediaLocationPolicy(db) !== "strip";
@@ -352,8 +329,6 @@ export function stageFile(
   if (extension(options.filename) === "zip") {
     kind = "file.takeout";
     const entries = readZipEntries(input);
-    // Read the archive as a photo library FIRST; unclaimed entries walk the
-    // text route into `unrouted`, never eaten.
     const plan = planTakeout(entries);
     const mediaByPath = new Map(plan.media.map((item) => [item.path, item]));
     for (const entry of entries) {
@@ -380,8 +355,6 @@ export function stageFile(
       else candidates.push(...routed);
     }
   } else if (isMediaFile(options.filename, input)) {
-    // No archive to carry a sidecar or album, so a capture group comes from
-    // the caller.
     kind = `file.${extension(options.filename)}`;
     const path = normalizeArchivePath(options.filename);
     candidates.push(

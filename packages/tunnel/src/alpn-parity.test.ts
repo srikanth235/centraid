@@ -1,19 +1,3 @@
-/*
- * Cross-language ALPN + peer-prefix pin (#726).
- *
- * The Rust relay is the PRODUCTION listener and the TypeScript endpoint is the
- * fallback; each declares the ALPN strings independently. Nothing but this
- * test holds them together, and a drift does not fail a build, a typecheck,
- * or a unit test — it fails at ALPN negotiation, on a real network, as an
- * unexplained refusal to connect.
- *
- * There is no runtime bridge between the two languages here (the Rust side is
- * a separate cargo crate with no NAPI export for these constants), so this
- * test READS THE RUST SOURCE and pins the declarations against the TypeScript
- * values. Reading beats hand-copying: a hand-copied expectation drifts with
- * the same edit that breaks the wire.
- */
-
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -35,7 +19,6 @@ const RUST_RELAY = fileURLToPath(
   new URL("../data-plane/src/iroh_relay.rs", import.meta.url)
 );
 
-/** `pub const NAME: &[u8] = b"value";` → `value`. */
 function rustByteConst(source: string, name: string): string | undefined {
   const match = new RegExp(
     `pub const ${name}: &\\[u8\\] = b"(?<value>[^"]*)";`,
@@ -44,7 +27,6 @@ function rustByteConst(source: string, name: string): string | undefined {
   return match?.groups?.value;
 }
 
-/** `pub const NAME: &str = "value";` → `value`. */
 function rustStrConst(source: string, name: string): string | undefined {
   const match = new RegExp(
     `pub const ${name}: &str = "(?<value>[^"]*)";`,
@@ -74,8 +56,6 @@ describe("rust ↔ typescript wire constants", () => {
   });
 
   it("keeps the Rust relay's peer confinement wired to the shared prefix", () => {
-    // A guard that stopped reading PEER_PLANE_PREFIX would silently stop
-    // being the same rule as the TypeScript one.
     const relay = fs.readFileSync(RUST_RELAY, "utf8");
     expect(relay).toContain("fn peer_target_allowed(target: &str) -> bool");
     expect(relay).toContain("target.starts_with(PEER_PLANE_PREFIX)");

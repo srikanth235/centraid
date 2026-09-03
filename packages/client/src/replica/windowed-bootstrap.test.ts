@@ -1,9 +1,3 @@
-// The forward walk: every page applied, the commit pinned to the page-1 cursor
-// the convergence replay then starts from, durable intent outcomes reconciled
-// against that same cursor, the replay's pass budget, and the page shapes the
-// walk refuses outright. Interrupted walks — a mid-pagination 409, a killed
-// task resuming, a refused continuation — are `windowed-bootstrap-resume.test.ts`;
-// the doubles both suites share are in `windowed-bootstrap.test-fixtures.ts`.
 import { describe, expect, test, vi } from "vitest";
 
 import { ReplicaProtocolError } from "./errors.js";
@@ -88,9 +82,6 @@ describe(runWindowedBootstrap, () => {
         next: "token-2",
       },
       "token-2": {
-        // A later page reads a LATER snapshot: photo-2 was deleted at seq 11 and
-        // simply never appears again. Only the replay from the page-1 cursor can
-        // remove the copy page 1 already handed us.
         protocolVersion: 1,
         vaultId: "vault-a",
         schemaEpoch: "schema-1",
@@ -127,7 +118,6 @@ describe(runWindowedBootstrap, () => {
       pullChanges,
     });
 
-    // The crux: committed at page 1's cursor, and the delta pull started there.
     expect(target.committedAt).toStrictEqual({ epoch: "replica-1", seq: 10 });
     expect(pullChanges).toHaveBeenCalledWith(
       { epoch: "replica-1", seq: 10 },
@@ -137,7 +127,6 @@ describe(runWindowedBootstrap, () => {
       epoch: "replica-1",
       seq: 10,
     });
-    // The deletion that slipped between per-page snapshots is repaired.
     expect(target.rows.map((item) => item.rowId)).toStrictEqual([
       "photo-1",
       "photo-3",
@@ -261,7 +250,6 @@ describe(runWindowedBootstrap, () => {
         complete: true,
       },
     });
-    // A log that always has one more commit: without a budget this never ends.
     let passes = 0;
     const pullChanges: RunWindowedBootstrapOptions["pullChanges"] = async (
       cursor
@@ -282,7 +270,6 @@ describe(runWindowedBootstrap, () => {
     });
 
     expect(passes, "the budget, not the log, ends the replay").toBe(5);
-    // Honest: the cursor reached is reported, and the feed continues from it.
     expect(cursor).toStrictEqual({ epoch: "replica-1", seq: 15 });
   });
 

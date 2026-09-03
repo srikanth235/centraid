@@ -49,7 +49,6 @@ describe("locker", () => {
       .prepare("SELECT * FROM locker_item WHERE item_id = ?")
       .get(itemId) as Record<string, unknown> | undefined;
   }
-  /** At-rest secret value, decrypted for assertion (#293: rows hold ciphertext). */
   function unsealCell(itemId: string, column: string): string | null {
     const r = row(itemId);
     const v = r?.[column];
@@ -62,8 +61,6 @@ describe("locker", () => {
     );
   }
   function tagsOf(itemId: string): string[] {
-    // Tags are SKOS concepts in the locker-tags scheme on core_tag (issue
-    // #310 S3) — the canonical mechanism, not a per-domain tag table.
     return (
       db.vault
         .prepare(
@@ -134,7 +131,6 @@ describe("locker", () => {
     ).item_id;
     const r = row(id)!;
     expect(unsealCell(id, "content")).toBe("No. 5123");
-    // username is not a note field, so it is dropped, not smuggled in.
     expect(r.username).toBeNull();
   });
 
@@ -205,7 +201,6 @@ describe("locker", () => {
       purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("parked");
-    // Nothing executed — the row is untouched until the owner approves.
     expect(row(id)).toBeDefined();
     if (outcome.status !== "parked") return;
     const released = gw.confirm(owner, outcome.invocationId, true);
@@ -220,8 +215,6 @@ describe("locker", () => {
     out(invoke("locker.unstar_item", { item_id: id }));
     expect(starCount(id)).toBe(0);
   });
-
-  // ── The service anchor + canonical tags (issue #310 S3) ────────────────
 
   test("connection_id anchors an item to a live broker connection, and validates", () => {
     db.vault
@@ -244,7 +237,6 @@ describe("locker", () => {
       .get(id) as { connection_id: string | null };
     expect(rowLocal.connection_id).toBe("conn-gh");
 
-    // '' clears; a ghost connection refuses.
     out(invoke("locker.edit_item", { item_id: id, connection_id: "" }));
     const cleared = db.vault
       .prepare("SELECT connection_id FROM locker_item WHERE item_id = ?")
@@ -306,7 +298,6 @@ describe("locker", () => {
       .get(id) as { body_text: string } | undefined;
     expect(memo?.body_text).toBe("rotated after the breach");
 
-    // title/username/url feed the index; a trashed item leaves it.
     const hit = db.vault
       .prepare(
         `SELECT item_id FROM fts_locker_item WHERE fts_locker_item MATCH 'github'`

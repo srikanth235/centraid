@@ -5,9 +5,6 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import VaultReachSection from "./VaultReachSection.js";
 
-// "Who can reach it" (v11) — the section whose entire job is to NOT restate
-// anything. Every test here is about a copy that must not appear.
-
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 
@@ -37,8 +34,6 @@ describe(VaultReachSection, () => {
   });
 
   it("points at where consent is answered, and copies none of it", () => {
-    // The OUTCOME each row produces is a navigation, so the test records the
-    // navigations rather than asserting that a mock ran.
     const went: string[] = [];
     const el = render({
       collapsed: false,
@@ -52,15 +47,11 @@ describe(VaultReachSection, () => {
     expect(el.textContent).toContain("Standing grants");
     expect(el.textContent).toContain("What Centraid reads");
 
-    // NO COUNTS. A count is a copy — read from one place and drawn in another,
-    // and it goes stale exactly as silently as a duplicated list would.
     expect(el.textContent).not.toMatch(/\d+ (?:grants|stores|holders)/u);
 
     press(el, "Apps and agents holding a store");
     press(el, "Standing grants");
     press(el, "What Centraid reads");
-    // Two rows about consent land on Notifications; enrichment is a Settings
-    // page, and neither row invents a third place.
     expect(went).toStrictEqual([
       "notifications",
       "notifications",
@@ -89,8 +80,6 @@ describe(VaultReachSection, () => {
         toggled += 1;
       },
     });
-    // Closed means GONE from the DOM, not hidden: rows under `display: none`
-    // are still found by find-in-page and still tabbed into.
     expect(el.querySelectorAll(".row")).toHaveLength(0);
     expect(el.textContent).toContain("Who can reach it");
     const toggle = [...el.querySelectorAll("button")].find(

@@ -1,5 +1,3 @@
-// The core.document local-search spec (offline Docs search) — split from
-// store-core.test.ts to keep that conformance suite under the repo file cap.
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import type { Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { beforeAll, describe, expect, test } from "vitest";
@@ -52,7 +50,6 @@ describe("store-docs-search", () => {
             },
           ],
         });
-        // Bootstrap-installed row is searchable offline.
         const bootstrapped = store.search({
           shapeId: "shape-docs",
           entity: "core.document",
@@ -62,7 +59,6 @@ describe("store-docs-search", () => {
           bootstrapped.rows.map((row) => row.values.document_id)
         ).toStrictEqual(["doc-lease"]);
 
-        // A delta-arriving document is indexed the same way.
         store.applyChanges({
           protocolVersion: 1,
           schemaEpoch: "schema-docs",
@@ -93,7 +89,6 @@ describe("store-docs-search", () => {
             .rows.map((row) => row.values.document_id)
         ).toStrictEqual(["doc-invoice"]);
 
-        // A trashed document (deleted_at set) drops out of the offline index.
         store.applyChanges({
           protocolVersion: 1,
           schemaEpoch: "schema-docs",

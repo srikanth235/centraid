@@ -1,5 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#567) one component-level suite shares the Assistant bridge fixture across harness, capability, workspace, attachment, stop, and transcript behavior
-// (Provider-egress consent lives on the ROUTE, not this screen — see AssistantRoute.test.tsx.)
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -119,10 +118,6 @@ describe("AssistantScreen suite", () => {
     const onReady = (u: (s: AssistantSnapshot) => void): void => {
       update = u;
     };
-    // Awaited so the model-picker fetch this mount kicks off settles INSIDE
-    // act. Left dangling it lands as an un-acted update after the test body has
-    // moved on — which is what every "not wrapped in act" warning in this file
-    // was reporting.
     await act(async () => {
       root = createRoot(container as HTMLDivElement);
       root.render(<AssistantScreen {...props} onReady={onReady} />);
@@ -141,7 +136,6 @@ describe("AssistantScreen suite", () => {
     setter?.call(el, value);
     void act(() => el.dispatchEvent(new Event("input", { bubbles: true })));
   }
-  /** Flush the `loadModelPicker()` microtask the picker fetches on mount. */
   async function flush(): Promise<void> {
     await act(async () => {
       await Promise.resolve();
@@ -159,7 +153,6 @@ describe("AssistantScreen suite", () => {
       void act(() =>
         chips[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
       );
-      // suggestion loads into the composer draft
       expect(
         (el.querySelector(".input") as HTMLTextAreaElement).value
       ).toContain("spend");
@@ -216,7 +209,6 @@ describe("AssistantScreen suite", () => {
       expect(el.querySelector(".toolArtifact")?.getAttribute("title")).toBe(
         "/workspace/report.md"
       );
-      // final answer HTML is injected verbatim
       expect(el.querySelector(".msgAi strong")?.textContent).toBe("$412");
     });
 
@@ -494,9 +486,6 @@ describe("AssistantScreen suite", () => {
       });
     });
 
-    // Long-transcript windowing (#659). The control is the safety
-    // property: history is deferred, never dropped, and the reader is told how
-    // much is above them.
     describe("transcript windowing (#659)", () => {
       const longTranscript = (n: number): AssistantSnapshot =>
         emptySnap({
@@ -525,7 +514,6 @@ describe("AssistantScreen suite", () => {
         push(longTranscript(200));
         const earlier = el.querySelector<HTMLElement>(".showEarlier");
         expect(earlier?.tagName).toBe("BUTTON");
-        // Not removed from the tab order, and not a div wearing a role.
         expect(earlier?.getAttribute("tabindex")).toBeNull();
         expect(earlier?.hasAttribute("disabled")).toBe(false);
       });
@@ -564,8 +552,6 @@ describe("AssistantScreen suite", () => {
       it("keeps offering the control when the local window is exhausted but the server has more", async () => {
         const el = await mount(makeProps());
         push({ ...longTranscript(5), canLoadEarlier: true });
-        // Nothing is hidden locally, yet older turns exist server-side — the
-        // control must still be there.
         const earlier = el.querySelector<HTMLButtonElement>(".showEarlier");
         expect(earlier).not.toBeNull();
         expect(earlier?.textContent).toBe("Show earlier messages");
@@ -580,7 +566,6 @@ describe("AssistantScreen suite", () => {
             .querySelector<HTMLButtonElement>(".showEarlier")!
             .dispatchEvent(new MouseEvent("click", { bubbles: true }))
         );
-        // Rows it already holds are free; the fetch is the last resort.
         expect(onLoadEarlier).not.toHaveBeenCalled();
         expect(el.querySelectorAll(".msgUser")).toHaveLength(
           TRANSCRIPT_WINDOW * 2
@@ -686,7 +671,6 @@ describe("AssistantScreen suite", () => {
         const menu = el.querySelector(".modelMenu") as HTMLDivElement;
         expect(menu.getAttribute("role")).toBe("menu");
         const items = [...el.querySelectorAll('[role="menuitemradio"]')];
-        // "Use default" + the two catalog models
         expect(items).toHaveLength(3);
         expect(items[0]?.getAttribute("aria-checked")).toBe("true"); // no override yet
         void act(() =>
@@ -833,7 +817,6 @@ describe("AssistantScreen suite", () => {
         await Promise.resolve();
       });
       await flush();
-      // A rejected switch must not leave every picker disabled for good.
       expect(props.onSetHarness).toHaveBeenCalledWith("copilot");
       expect(
         el.querySelector<HTMLSelectElement>(
@@ -852,8 +835,6 @@ describe("AssistantScreen suite", () => {
       push(emptySnap());
       await flush();
 
-      // A failed capability read must not strand the composer in its
-      // loading-disabled state forever.
       expect((el.querySelector(".input") as HTMLTextAreaElement).disabled).toBe(
         false
       );
@@ -902,7 +883,6 @@ describe("AssistantScreen suite", () => {
 
       first.resolve(codex);
       await flush();
-      // The response for the superseded revision must not repaint Codex.
       expect(
         (
           el.querySelector(

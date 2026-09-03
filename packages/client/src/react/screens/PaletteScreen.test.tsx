@@ -89,7 +89,6 @@ describe("screens/PaletteScreen", () => {
       expect(el.querySelectorAll(".group")).toHaveLength(2);
       expect(rows(el)).toHaveLength(3);
       expect(rows(el)[0]?.dataset.active).toBe("true");
-      // app-variant rows carry the shared single-tone mark.
       expect(el.querySelector('[data-app-mark="single-tone"]')).toBeTruthy();
     });
 
@@ -174,7 +173,6 @@ describe("screens/PaletteScreen", () => {
       expect(groupIcon.style.getPropertyValue("--group-hue")).toBe(
         "var(--c-slate)"
       );
-      // Row anatomy (point 3): kind (MONO) + the NUMERIC meta both render.
       expect(el.querySelector(".rowKind")?.textContent).toBe("note");
       expect(el.querySelector(".rowMeta")?.textContent).toBe("Aug 3");
     });
@@ -202,7 +200,6 @@ describe("screens/PaletteScreen", () => {
       expect(onClose).not.toHaveBeenCalled();
       expect(buildRun).not.toHaveBeenCalled();
 
-      // Typing a query hides the chips — they're an empty-state affordance.
       expect(chip()).toHaveLength(0);
     });
 

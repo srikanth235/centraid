@@ -1,6 +1,3 @@
-// This seat's number words and row shapes over the shared rollup rules in
-// `@centraid/design/blocks` (#775, #883).
-
 import {
   insightAxisMarks,
   insightColumnCount,
@@ -29,7 +26,6 @@ export function monoFacts(facts: readonly PanelFact[]): PanelFact[] {
   return facts.map((fact) => ({ ...fact, mono: true }));
 }
 
-/** Seat-named: the phone's mapper returns a different row type. */
 export function webBars(
   summary: InsightsSummary,
   windowDays: number,
@@ -65,7 +61,6 @@ function webBar(column: InsightColumn): BarDatum {
   };
 }
 
-/** A legend only where the chart draws that colour. */
 export function barLegend(
   summary: InsightsSummary
 ): { ok: string; fail: string } | undefined {
@@ -73,7 +68,6 @@ export function barLegend(
   return anyFailed ? { fail: "failed", ok: "runs" } : undefined;
 }
 
-/** Only what the gateway reports — no disk, no shared compute. */
 export function webGatewayFacts(usage: ResourceUsageDTO): PanelFact[] {
   const facts: PanelFact[] = [
     ...processUsageRows(usage),
@@ -94,7 +88,6 @@ export function webGatewayFacts(usage: ResourceUsageDTO): PanelFact[] {
   return facts;
 }
 
-/** A CPU total means nothing without its window. */
 export function gatewaySince(usage: ResourceUsageDTO | undefined): string {
   if (!usage) return "your own machine";
   return `since ${relativeTime(new Date(usage.sinceMs).toISOString())}`;

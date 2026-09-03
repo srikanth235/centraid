@@ -4,10 +4,6 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// The renderer guarantees the preload bridge before any script runs, and the
-// gateway client registers its gateway-change listener at module load. This
-// screen reaches that client through the sharing card, so the bridge has to
-// exist before the import graph is evaluated, not in a beforeEach.
 vi.hoisted(() => {
   (window as unknown as { CentraidApi: unknown }).CentraidApi = {
     getGatewayAuth: async () => ({
@@ -27,14 +23,6 @@ import { readRouteHealth } from "../shell/statusChannel.js";
 import HouseholdScreen from "./HouseholdScreen.js";
 import type { HouseholdScreenProps } from "./HouseholdScreen.js";
 import type { SharingCardProps } from "./SharingCard.js";
-
-// Devices (#599, #726) in its v9 shape (#765). The page has no header of its
-// own: its title, count line, verbs and health sentence are the frame's, and
-// they are published from here — so the assertions below read the published
-// signals rather than looking for a heading the page no longer draws.
-//
-// Ownership (#726) means every listed vault is owned outright — there is no
-// role tier left to badge.
 
 const NOW = Date.UTC(2026, 6, 13, 12, 0, 0);
 
@@ -81,7 +69,6 @@ describe("HouseholdScreen suite", () => {
     };
   }
 
-  /** A roster with two devices — the everyday, populated state. */
   function roster(): Partial<HouseholdScreenProps> {
     return {
       loadDevices: async () => [
@@ -96,8 +83,6 @@ describe("HouseholdScreen suite", () => {
     };
   }
 
-  /** The sharing panel's props with every door answering "nothing here" —
-   *  each test overrides only the door whose behaviour it is stating. */
   function sharing(): SharingCardProps {
     return {
       now: NOW,
@@ -147,8 +132,6 @@ describe("HouseholdScreen suite", () => {
     );
   }
 
-  /** The verb on the row whose title is `title` — device rows and vault rows
-   *  both offer "Manage", so a bare text search would find the wrong one. */
   function rowAction(
     el: HTMLElement,
     title: string,
@@ -179,8 +162,6 @@ describe("HouseholdScreen suite", () => {
         records: 41_208,
       });
       expect(el.textContent).toContain("Where it lives");
-      // ONE PUBLISHER. Two channels behind one bar is two answers the bar can
-      // only draw one of; the half reports upward instead.
       expect(readVitals("household")).toBeUndefined();
       expect(readVitals("atlas")).toBeUndefined();
       const last = reports.at(-1) as { custody: string; state: string };
@@ -198,8 +179,6 @@ describe("HouseholdScreen suite", () => {
         onReport: (report) => reports.push(report),
         records: null,
       });
-      // An old gateway that cannot report a census must not cost the page the
-      // two numbers it does know, and must not make it guess the third.
       const custody = reports.at(-1)?.custody ?? "";
       expect(custody).toBe("2 machines hold a full copy · 2 devices enrolled");
       expect(custody).not.toContain("records");
@@ -225,13 +204,10 @@ describe("HouseholdScreen suite", () => {
       expect(text).toContain("Yours");
       expect(text).toContain("This laptop");
       expect(text).toContain("People");
-      // The order the question narrows: the containers, then the machines
-      // holding them, then the people those machines belong to.
       expect(text.indexOf("Vaults you own")).toBeLessThan(
         text.indexOf("Yours")
       );
       expect(text.indexOf("Yours")).toBeLessThan(text.indexOf("People"));
-      // Identity belongs to the frame now — the page draws no title of its own.
       expect(el.querySelector("h1")).toBeNull();
     });
 
@@ -276,7 +252,6 @@ describe("HouseholdScreen suite", () => {
       expect(health?.text).toContain("1 request is pending");
       expect(health?.text).toContain("Ana Pemberton asked to connect on");
       expect(health?.action?.label).toBe("Review it");
-      // Pending is neither an alarm nor nothing — it is the page's seam tone.
       expect(health?.tone).toBe("seam");
     });
 
@@ -295,7 +270,6 @@ describe("HouseholdScreen suite", () => {
         count: "This device only",
         state: "empty",
       });
-      // The empty state's own verb opens this page's pairing panel.
       await click(button(el, "Pair a device"));
       expect(el.querySelector('[data-testid="pair-panel"]')).toBeTruthy();
     });
@@ -319,7 +293,6 @@ describe("HouseholdScreen suite", () => {
     it("holds the row geometry while it reads, rather than spinning", async () => {
       container = document.createElement("div");
       document.body.appendChild(container);
-      // A loader that never settles — the first paint is the assertion.
       await act(async () => {
         root = createRoot(container as HTMLDivElement);
         root.render(
@@ -328,11 +301,7 @@ describe("HouseholdScreen suite", () => {
             vaults={[scope()]}
             defaultScopeId="v1"
             onOpenStorage={() => {}}
-            loadDevices={() =>
-              new Promise(() => {
-                /* never settles — the first paint is the assertion */
-              })
-            }
+            loadDevices={() => new Promise(() => {})}
             onRevokeDevice={async () => ({ removed: true })}
           />
         );
@@ -360,8 +329,6 @@ describe("HouseholdScreen suite", () => {
       expect(text).toContain("You own this vault.");
       expect(text).not.toMatch(/\badmin\b/u);
       expect(text).not.toMatch(/\b(?:Owner|Member|Viewer)\b/u);
-      // "Vault" is the one user-facing word for a vault; the section head
-      // says so, and no row calls one a "space".
       const vaultSection = [...el.querySelectorAll("h2")].find(
         (h) => h.textContent === "Vaults you own"
       );
@@ -379,8 +346,6 @@ describe("HouseholdScreen suite", () => {
         onOpenVaultSettings,
       });
       expect(el.textContent?.match(/Default/gu) ?? []).toHaveLength(1);
-      // Settings → Vault edits whichever vault the client resolves to, so the
-      // door must not open from a row it would silently mis-target.
       await click(rowAction(el, "Family", "Manage"));
       expect(button(el, "Vault settings")).toBeUndefined();
       await click(rowAction(el, "Family", "Close"));
@@ -396,9 +361,6 @@ describe("HouseholdScreen suite", () => {
         onOpenStorage,
         vaults: [scope(), scope({ id: "v2", label: "Family" })],
       });
-      // Capacity is one fact about the gateway. A button inside each vault's
-      // own detail would draw the same door once per vault and imply it is a
-      // per-vault fact.
       expect(el.textContent?.match(/Storage on this gateway/gu)).toHaveLength(
         1
       );
@@ -441,8 +403,6 @@ describe("HouseholdScreen suite", () => {
       expect(opened).toBe(1);
       act(() => root?.unmount());
       container?.remove();
-      // Withdrawn, not disabled: a gateway this client cannot create vaults on
-      // offers no verb rather than a failing one.
       const without = await mount(roster());
       expect(without.textContent).not.toContain("Create a vault");
     });

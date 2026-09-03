@@ -1,9 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#363) the provider-agnostic snapshot/restore/verify/recovery engine (PROTOCOL.md's data-semantics owner); splitting the pipeline stages would scatter one cohesive contract across files that all change together on a protocol revision
-/*
- * Snapshot / restore / verify / recovery. This is the data-semantics the client
- * owns (PROTOCOL.md); it reaches storage only through the `BackupProvider` +
- * `ObjectStore` seams, so it runs unchanged on local and remote providers.
- */
 
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -64,18 +59,12 @@ import { replayWalSegments } from "./wal-restore.js";
 import type { WalReplayOutcome } from "./wal-restore.js";
 
 export interface SourceEntry {
-  /** Manifest path: relative, forward-slash, no traversal. */
   path: string;
   kind: ManifestEntryKind;
-  /** Local read source, unlike `path`. */
   absolutePath: string;
-  /** `db` only: plaintext SHA-256 of the base file (G9). */
   sha256?: string;
-  /** `db` only: the WAL stream generation this base anchors. */
   walGeneration?: string;
-  /** `db` only: clone tick. MUST match the sibling's. */
   baseTickMs?: number;
-  /** `db` only: newest marker tick CONFIRMED uploaded — a floor the store owes. */
   walTipTickMs?: number;
 }
 
@@ -85,9 +74,6 @@ const noopLog: Required<EngineLogger> = {
   info: () => undefined,
   warn: () => undefined,
 };
-
-// ─── Bounded concurrency ─────
-// Uploads run 4 in flight; entries stay one-at-a-time so memory is bounded.
 
 class Semaphore {
   private available: number;
@@ -116,8 +102,6 @@ class Semaphore {
   }
 }
 
-// ─── createSnapshot ─────
-
 export interface CreateSnapshotOptions {
   provider: BackupProvider;
   targetId: string;
@@ -126,7 +110,6 @@ export interface CreateSnapshotOptions {
   entries: SourceEntry[];
   generation: number;
   appMeta: Record<string, string>;
-  /** Register even when entries match — for a fencing generation bump. */
   forceRegistration?: boolean;
   log?: EngineLogger;
 }
@@ -135,7 +118,6 @@ interface PreviousManifestInfo {
   row: SnapshotRow;
   keyEpoch: number;
   entriesByPath: Map<string, ManifestEntry>;
-  /** id -> plaintext size, from the previous public chunkIndex. */
   chunkSizes: Map<string, number>;
 }
 
@@ -195,7 +177,6 @@ async function* readFileStream(
   }
 }
 
-/** Returns `null` when nothing changed: a no-change run registers nothing. */
 export async function createSnapshot(
   opts: CreateSnapshotOptions
 ): Promise<SnapshotRow | null> {
@@ -238,11 +219,6 @@ export async function createSnapshot(
     totalBytes += stat.size;
     const prior = sameEpochPrevious?.entriesByPath.get(entry.path);
 
-    // `(size, mtimeMs)` is a HEURISTIC, not an identity: two clones of one
-    // database share a size, and on a coarse-mtime filesystem an mtime too, so
-    // the fast path would reuse the PREVIOUS generation's chunk refs under the
-    // CURRENT generation's `sha256` — a snapshot that can never be restored.
-    // Where the caller vouches for content, that hash IS the identity test.
     const contentUnchanged =
       entry.sha256 === undefined || prior?.sha256 === entry.sha256;
     if (
@@ -251,8 +227,6 @@ export async function createSnapshot(
       prior.size === stat.size &&
       prior.mtimeMs === stat.mtimeMs
     ) {
-      // WAL db fields come from the CURRENT source, not `prior`: the bytes are
-      // the ones `prior` chunked, but walGeneration is the caller's live truth.
       for (const id of prior.chunks) {
         if (!newChunkIndex.has(id)) {
           newChunkIndex.set(id, sameEpochPrevious?.chunkSizes.get(id) ?? 0);
@@ -291,12 +265,7 @@ export async function createSnapshot(
         knownChunkIds.add(id);
         const release = await uploadSem.acquire();
         const objectKey = `chunks/${id}`;
-        // Nonce derives from the chunk's keyed content hash (G7), so (key,
-        // nonce) never repeats with different content. Both id and nonce come
-        // from the RAW plaintext — compression stays invisible to identity.
         const nonce = deriveNonce(dataKey, `centraid-backup:chunk-nonce:${id}`);
-        // Compress-then-seal (#405): the sealed plaintext is the framed
-        // payload `[algo-id][body]`, keep-if-smaller.
         const encrypted = encryptWithNonce(
           dataKey,
           nonce,
@@ -340,11 +309,6 @@ export async function createSnapshot(
     previousChunkIdSet !== null &&
     previousChunkIdSet.size === newChunkIndex.size &&
     [...newChunkIndex.keys()].every((id) => previousChunkIdSet.has(id));
-  // The no-change test must cover ENTRY METADATA, not just chunks:
-  // `walTipTickMs` is the floor verification holds the provider to, and a
-  // chunk-only test freezes it at the generation's first registration, letting
-  // a provider delete every marker since, undetected. An idle vault still
-  // registers nothing — it ships no markers, so its tip does not move.
   const entriesIdentical =
     sameEpochPrevious !== null &&
     sealedEntries.length === sameEpochPrevious.entriesByPath.size &&
@@ -378,10 +342,6 @@ export async function createSnapshot(
     entries: sealedEntries,
   });
   const hash8 = manifestHash.slice(0, 8);
-  // PROTOCOL.md: manifestKey MUST carry the target's `u/{id}/backup/` prefix —
-  // a bare `manifests/…` key a conformant provider MUST 400. The same string
-  // doubles as the (already store-scoped) ObjectStore address, so the prefix
-  // repeats in the bucket rather than needing a second wire form.
   const manifestKey = `u/${opts.targetId}/backup/manifests/${Date.now()}-${hash8}.json`;
   await store.put(manifestKey, bytes);
 
@@ -401,8 +361,6 @@ export async function createSnapshot(
   return row;
 }
 
-// ─── restoreSnapshot ─────
-
 export interface RestoreCurrentVersions {
   gatewayVersion: string;
   vaultUserVersion: string;
@@ -415,20 +373,9 @@ export interface RestoreSnapshotOptions {
   keyring: Keyring;
   vaultId: string;
   seq?: number;
-  /**
-   * Newest snapshot at or before this instant, WAL replayed only up to it. Omit
-   * for restore-to-tip. With `seq` the cut still applies, but only if that base
-   * is itself at or before the instant.
-   */
   pointInTimeMs?: number;
   destDir: string;
   current: RestoreCurrentVersions;
-  /**
-   * Lazy/partial restore (#405): true SKIPS materializing that blob. Consulted
-   * for `kind: 'blob'` only — db/git-bundle/seal-key entries are load-bearing
-   * and always materialized. A blob the remote CAS does not hold must not be
-   * skipped; the snapshot is its only copy.
-   */
   skipBlob?: (blob: {
     path: string;
     sha: string;
@@ -441,11 +388,9 @@ export interface RestoreResult {
   generation: number;
   entries: string[];
   walReplay: WalReplayOutcome;
-  /** Blob shas `skipBlob` held back (#405); the custody read-through serves them. */
   skippedBlobs: string[];
 }
 
-/** `x.y` numeric compare: -1/0/1. Non-numeric parts compare as 0. */
 function compareVersion(a: string, b: string): number {
   const pa = a.split(".").map((p) => Math.trunc(Number(p)) || 0);
   const pb = b.split(".").map((p) => Math.trunc(Number(p)) || 0);
@@ -461,12 +406,6 @@ function compareVersion(a: string, b: string): number {
 const MIN_SUPPORTED_VAULT_USER_VERSION = "1";
 const MIN_SUPPORTED_ONTOLOGY_VERSION = "1.0";
 
-/**
- * Registry-row compatibility gate (#439), exported so `recover()` can refuse
- * from the row ALONE before any egress byte. `restoreSnapshot` re-runs it on
- * the authenticated envelope: this gate may only prevent a futile download,
- * never authorize a restore the sealed manifest forbids.
- */
 export function assertCompatibleAppMeta(
   appMeta: Record<string, string>,
   current: RestoreCurrentVersions
@@ -519,8 +458,6 @@ async function openSnapshotRow(
       `restoreSnapshot: unknown format "${row.format}" — update the gateway first`
     );
   }
-  // Registry metadata may only refuse; the envelope below authorizes, and must
-  // match this row exactly.
   if (current) assertCompatibleAppMeta(row.appMeta, current);
   const bytes = await store.get(row.manifestKey);
   const opened = openManifest(bytes, keyring, vaultId, row.manifestHash);
@@ -624,11 +561,9 @@ export async function restoreSnapshot(
 
   const skippedBlobs: string[] = [];
   await applyInOrder(opened.entries, async (entry) => {
-    // openManifest validated this; re-check at the point we touch disk.
     if (!isSafeEntryPath(entry.path)) {
       throw new Error(`restoreSnapshot: entry path rejected: "${entry.path}"`);
     }
-    // Only `blob` entries are eligible (#405).
     if (opts.skipBlob && entry.kind === "blob") {
       const sha = entry.path.split("/").pop() ?? "";
       if (await opts.skipBlob({ path: entry.path, sha })) {
@@ -638,15 +573,11 @@ export async function restoreSnapshot(
     }
     const dest = path.join(opts.destDir, ...entry.path.split("/"));
     await fs.mkdir(path.dirname(dest), { recursive: true });
-    // Never buffer whole files — bases can be GBs. Hash while streaming so db
-    // entries verify against capture-time sha256 before WAL replay.
     const hash = createHash("sha256");
     const handle = await fs.open(dest, "w");
     try {
       await applyInOrder(entry.chunks, async (id) => {
         const ciphertext = await store.get(`chunks/${id}`);
-        // Decompression must precede the integrity check: the keyed id is
-        // recomputed over the RAW part, not the framed payload (#405).
         const plain = unframeChunkPayload(decrypt(dataKey, ciphertext));
         const recomputed = computeChunkId(dedupKey, plain);
         if (recomputed !== id) {
@@ -676,7 +607,6 @@ export async function restoreSnapshot(
     }
   });
 
-  // SQLite itself performs and validates the replay (wal-restore.ts).
   const base = validateSnapshotBase(opened.entries);
   const walReplay = await replayWalSegments({
     store,
@@ -693,7 +623,6 @@ export async function restoreSnapshot(
     log,
   });
 
-  // The gateway acts on this marker at mount.
   const marker = {
     restoredAt: new Date().toISOString(),
     sourceSeq: row.seq,
@@ -713,8 +642,6 @@ export async function restoreSnapshot(
   };
 }
 
-// ─── verifySnapshot ─────
-
 export interface VerifySnapshotOptions {
   provider: BackupProvider;
   targetId: string;
@@ -730,7 +657,6 @@ export interface VerifySnapshotResult {
   corrupt: string[];
   sampled: number;
   walSegments: number;
-  /** Segments sample-unsealed; failures land in `corrupt`. */
   walSampled: number;
 }
 
@@ -807,8 +733,6 @@ export async function verifySnapshot(
   const corruptSamples = await mapWithConcurrency(sample, 4, async (chunk) => {
     try {
       const ciphertext = await store.get(`chunks/${chunk.id}`);
-      // Re-addressing over the raw plaintext proves the object is the content
-      // it claims to be, not merely readable (#405).
       const plain = unframeChunkPayload(decrypt(dataKey, ciphertext));
       return computeChunkId(dedupKey, plain) === chunk.id
         ? undefined
@@ -821,14 +745,6 @@ export async function verifySnapshot(
     ...corruptSamples.filter((id): id is string => id !== undefined)
   );
 
-  // Existence is NOT "the LIST returned keys": a lost mid-stream segment
-  // silently truncates every future restore, so verify PLANS the replay over
-  // the listing and counts a hole-truncated plan as missing objects.
-  //
-  // The per-chain hole check alone lets an entirely-lost stream verify GREEN: a
-  // listing with no segments has no hole, nor does one whose newest objects are
-  // gone. Only the tick marker separates "idle" from "erased", so verify must
-  // run the SAME marked planner restore does.
   let walSegments = 0;
   let walSampled = 0;
   {
@@ -922,10 +838,6 @@ export async function verifySnapshot(
             `be restored at tick ${marked.cutTickMs}; segments are missing`
         );
       }
-      // Deleting the markers themselves is invisible above: the plan falls
-      // back to the base, every named object is present, and the restore is
-      // silently hours stale. `walTipTickMs` — the newest tick the producer
-      // watched this store accept — closes that hole.
       if (walTipTickMs >= 0 && marked.cutTickMs < walTipTickMs) {
         missing.push(
           `wal/tick/${generation}: tick marker(s) this snapshot registered are GONE — the producer ` +
@@ -957,17 +869,11 @@ function sampleWithoutReplacement<T>(items: readonly T[], count: number): T[] {
   return out;
 }
 
-// ─── Recovery-kit target rows ─────
-// Kit authorship goes through `wrapRecoveryKit` only — never add a plaintext
-// kit emitter beside a reader that refuses unwrapped kits (#568).
-
 export interface RecoveryKitTarget {
   provider: string;
   targetId: string;
   vaultId: string;
   label: string;
-  /** Per-vault DEK, base64. Wrapped owner-held kits only. */
   sealKey?: string;
-  /** Ed25519 identity seed, base64 (#726). Wrapped owner-held kits only. */
   identitySeed?: string;
 }

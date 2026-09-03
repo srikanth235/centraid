@@ -6,9 +6,6 @@ import AppMarkGlyph from "../../ui/AppMark.js";
 import AppBand from "../AppBand.js";
 import { useInlineFrameChannel, useInlineFrameState } from "../inlineFrame.js";
 
-// Inline-app frame slots. A band claim is honoured only when first-party AND
-// compact — a refused app is never told, so it cannot draw its own band.
-
 const MARK_SIZE = 26;
 
 export interface InlineAppFrameOpts {

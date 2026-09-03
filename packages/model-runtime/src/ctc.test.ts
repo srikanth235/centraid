@@ -13,11 +13,9 @@ describe(argmax, () => {
 });
 
 describe(ctcGreedyDecode, () => {
-  // dictionary[0] is reserved for CTC blank, matching PP-OCR's convention.
   const dictionary = ["<blank>", "c", "a", "t"];
 
   it("collapses consecutive repeats before dropping blanks", () => {
-    // argmax sequence: c c a t t t -> collapse repeats -> c a t -> no blanks to drop
     const probs = [
       [0.1, 0.9, 0, 0],
       [0.1, 0.9, 0, 0],
@@ -31,8 +29,6 @@ describe(ctcGreedyDecode, () => {
   });
 
   it("uses blanks to separate two identical adjacent letters", () => {
-    // c c <blank> c -> collapse "c c" to one "c", blank resets repeat state,
-    // final "c" survives as a second, separate character -> "cc"
     const probs = [
       [0, 0.9, 0, 0],
       [0, 0.9, 0, 0],

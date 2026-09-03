@@ -12,24 +12,6 @@ import { forEachSequentially } from "./sequential.js";
 import { tempDir } from "./temp-dir.js";
 import { generateVolumeFixture } from "./volume-fixture.js";
 
-/**
- * `quality-result.ts` and `volume-fixture.ts` are the
- * substrate the perf and scale rigs stand on: the first decides whether a rig
- * has a budget at all, the second decides what "volume" means. A bug in either
- * does not fail a test — it produces a *false green*, which is strictly worse
- * than a red one. These tests defend the properties whose violation would be
- * invisible.
- *
- * `test-kit.test.ts` owns the shallow happy paths (a budget appears after ten
- * samples; a fixture is reproducible). This file owns the failure modes.
- */
-
-/**
- * `quality-result` resolves `artifacts/<lane>/` against the process cwd, so each
- * test runs inside its own scratch directory. `onTestFinished` restores the real
- * cwd even when the test fails, which a shared `afterEach` at file scope could
- * not do without living outside a describe block.
- */
 async function scratchCwd(prefix: string): Promise<string> {
   const original = process.cwd();
   const scratch = await tempDir(prefix);
@@ -50,9 +32,6 @@ describe(regressionBudget, () => {
   });
 
   test("uses the trailing window, not the earliest samples", () => {
-    // Ten cheap runs followed by ten expensive ones. A budget derived from the
-    // leading window would be 3x1 = 3 and would red-flag every current run;
-    // the contract is that the budget follows the recent distribution.
     const values = [
       ...Array.from({ length: 10 }, () => 1),
       ...Array.from({ length: 10 }, () => 100),
@@ -63,8 +42,6 @@ describe(regressionBudget, () => {
   test("takes the median of the window regardless of input order", () => {
     const ordered = [1, 2, 3, 4, 5, 6, 7, 8, 9, 1_000];
     const shuffled = [1_000, 3, 9, 1, 7, 5, 2, 8, 4, 6];
-    // Median of the ten is (5+6)/2 = 5.5; a mean would be 104.5 and an
-    // unsorted "middle element" would be whatever landed at index 5.
     expect(regressionBudget(ordered)).toBe(16.5);
     expect(regressionBudget(shuffled)).toBe(16.5);
   });
@@ -101,17 +78,12 @@ describe(regressionBudget, () => {
   });
 
   test("zero-valued samples are legitimate and yield a zero budget", () => {
-    // A rig whose measurement is genuinely 0 must not be treated as "no data".
     expect(regressionBudget(Array.from({ length: 10 }, () => 0))).toBe(0);
   });
 });
 
 describe(qualityRegressionBudget, () => {
   test("reads the artifact recordQualityResult writes for the same owner", async () => {
-    // The single highest-leverage property in this file: the writer and the
-    // reader derive the artifact filename independently. If those two slug
-    // rules ever disagree, every rig reads `null` forever, no budget is ever
-    // enforced, and the perf/scale lanes go permanently, silently green.
     await scratchCwd("centraid-quality-roundtrip-");
     const owner = "Gateway / Low-End Host";
     await forEachSequentially(
@@ -136,8 +108,6 @@ describe(qualityRegressionBudget, () => {
   });
 
   test("returns null rather than throwing on a corrupt artifact", async () => {
-    // A truncated artifact (interrupted runner) must degrade to "no budget",
-    // never crash the rig it is supposed to be grading.
     const scratch = await scratchCwd("centraid-quality-corrupt-");
     await mkdir(path.join(scratch, "artifacts", "perf"), { recursive: true });
     await writeFile(
@@ -162,8 +132,6 @@ describe(qualityRegressionBudget, () => {
   });
 
   test("keeps perf and scale lanes in separate artifact namespaces", async () => {
-    // Same owner name in both lanes must not share one history: a fast perf
-    // microbenchmark would otherwise set the budget for a slow scale rig.
     await scratchCwd("centraid-quality-lanes-");
     await forEachSequentially(
       Array.from({ length: 10 }, () => 2),
@@ -231,8 +199,6 @@ describe(recordQualityResult, () => {
   });
 
   test("a failed run still appends to history so the budget tracks reality", async () => {
-    // Recording only passes would let a degrading rig re-baseline itself out
-    // of its own failure the moment it passes again.
     const scratch = await scratchCwd("centraid-quality-failed-");
     await recordQualityResult({
       lane: "scale",
@@ -260,9 +226,6 @@ describe(recordQualityResult, () => {
       status: "passed",
       measurements: [{ name: "wall", value: 1, unit: "ms" }],
     });
-    // No nested directories, no leading/trailing separator: an owner that
-    // slugged into a path would silently write outside the lane directory and
-    // the report would never find it.
     await expect(
       readFile(
         path.join(
@@ -327,9 +290,6 @@ describe(recordQualityResult, () => {
 
 describe(generateVolumeFixture, () => {
   test("a different seed produces different data at the same cardinality", () => {
-    // Determinism is already owned by test-kit.test.ts. The complementary
-    // property: the seed must actually be wired in, or every "seeded" rig run
-    // in the fleet is secretly the identical corpus.
     const a = generateVolumeFixture({ seed: 1, photos: 4, parties: 2 });
     const b = generateVolumeFixture({ seed: 2, photos: 4, parties: 2 });
     expect(a.photos).toHaveLength(b.photos.length);
@@ -339,9 +299,6 @@ describe(generateVolumeFixture, () => {
   });
 
   test("content hashes are unique across the corpus", () => {
-    // Scale rigs measure dedupe and blob GC. Colliding synthetic hashes would
-    // make a 1,000-photo corpus behave like a 1-photo corpus and every
-    // volume claim in the report would be a lie.
     const fixture = generateVolumeFixture({ seed: 7, photos: 250 });
     expect(new Set(fixture.photos.map((photo) => photo.sha256)).size).toBe(250);
   });
@@ -388,8 +345,6 @@ describe(generateVolumeFixture, () => {
   });
 
   test("timestamps increase monotonically within a corpus", () => {
-    // Ledger and ontology rigs sort and window by time; a fixture whose
-    // capture times were constant would make those queries trivially fast.
     const fixture = generateVolumeFixture({ seed: 5, photos: 50 });
     const captured = fixture.photos.map((photo) => photo.capturedAt);
     expect(captured).toStrictEqual([...captured].toSorted((a, b) => a - b));
@@ -453,7 +408,6 @@ describe(generateVolumeFixture, () => {
   });
 
   test("photo sizes vary around the requested blob size", () => {
-    // Fixed-size blobs would hide chunk-boundary behaviour in CBSF framing.
     const fixture = generateVolumeFixture({
       seed: 6,
       photos: 40,

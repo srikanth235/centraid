@@ -1,10 +1,3 @@
-// S3 driver units for #405 §6 (storage class) and §4 (retry/backoff),
-// exercised against an in-process fake S3 endpoint (real HTTP, SigV4-signed
-// requests, no SDK). The fake here is a superset of blob.test.ts's private
-// `startFakeS3` — it also speaks multipart, captures the `x-amz-storage-class`
-// header + the Authorization line per request, and can be told to fail the
-// next N requests with a chosen status so the retry matrix is observable.
-
 import http from "node:http";
 import { Readable } from "node:stream";
 
@@ -16,8 +9,6 @@ import { openVaultDb } from "../db.js";
 import { updateBlobStoreSettings } from "../host.js";
 import { MULTIPART_THRESHOLD_BYTES, S3BlobStore } from "./s3.js";
 import { sha256OfBytes } from "./store.js";
-
-// ────────── the fake S3 endpoint ──────────
 
 interface FakeRequest {
   method: string;
@@ -31,13 +22,11 @@ interface FakeS3 {
   url: string;
   objects: Map<string, Buffer>;
   requests: FakeRequest[];
-  /** Answer the next `failNext` requests with `failStatus` before behaving normally. */
   failNext: number;
   failStatus: number;
   close: () => Promise<void>;
 }
 
-/** The signed-headers list embedded in an `Authorization: AWS4-HMAC-SHA256 …` line. */
 function signedHeadersOf(authorization: string): string[] {
   const m = /SignedHeaders=(?<headers>[^,]+)/u.exec(authorization);
   return m ? (m[1] ?? "").split(";") : [];
@@ -66,8 +55,6 @@ function startFakeS3(): Promise<FakeS3> {
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
     req.on("end", () => {
-      // Injected transient faults (#405) take precedence over the
-      // real behavior so the driver's retry loop is what's under test.
       if (state.failNext > 0) {
         state.failNext -= 1;
         return void res.writeHead(state.failStatus).end("injected failure");
@@ -75,21 +62,18 @@ function startFakeS3(): Promise<FakeS3> {
       const body = Buffer.concat(chunks);
       const q = url.searchParams;
       if (req.method === "POST" && q.has("uploads")) {
-        // CreateMultipartUpload — the storage class rides HERE (§6).
         res.writeHead(200, { "content-type": "application/xml" });
         return void res.end(
           "<InitiateMultipartUploadResult><UploadId>fake-upload-1</UploadId></InitiateMultipartUploadResult>"
         );
       }
       if (req.method === "POST" && q.has("uploadId")) {
-        // CompleteMultipartUpload.
         res.writeHead(200, { "content-type": "application/xml" });
         return void res.end(
           "<CompleteMultipartUploadResult></CompleteMultipartUploadResult>"
         );
       }
       if (req.method === "PUT" && q.has("uploadId")) {
-        // UploadPart — never carries the storage class.
         return void res
           .writeHead(200, { etag: `"etag-${q.get("partNumber")}"` })
           .end();
@@ -110,7 +94,6 @@ function startFakeS3(): Promise<FakeS3> {
         return void res.writeHead(204).end();
       }
       if (req.method === "GET" && key === "") {
-        // ListObjectsV2 (no pagination in the fake).
         const prefix = q.get("prefix") ?? "";
         const keys = [...objects.keys()].filter((k) => k.startsWith(prefix));
         res.writeHead(200, { "content-type": "application/xml" });
@@ -157,7 +140,6 @@ function startFakeS3(): Promise<FakeS3> {
 
 const CREDS = () =>
   Promise.resolve({ accessKeyId: "AK", secretAccessKey: "SK" });
-/** Retries with no real waiting — the schedule is jittered, tests must not sleep. */
 const NO_SLEEP = () => Promise.resolve();
 
 let fake: FakeS3;
@@ -168,8 +150,6 @@ describe("s3", () => {
   afterEach(async () => {
     await fake.close();
   });
-
-  // ────────── issue #405 §6: storage class ──────────
 
   test("storage class: PUT carries a signed x-amz-storage-class when configured", async () => {
     const store = new S3BlobStore({
@@ -183,8 +163,6 @@ describe("s3", () => {
 
     const put = fake.requests.find((r) => r.method === "PUT");
     expect(put?.storageClass).toBe("GLACIER");
-    // The header is not merely present — it is part of the SigV4 signature, so
-    // a proxy that dropped it would break the signature (#405 §6 accept).
     expect(signedHeadersOf(put!.authorization)).toContain(
       "x-amz-storage-class"
     );
@@ -213,8 +191,6 @@ describe("s3", () => {
       credentials: CREDS,
       storageClass: "STANDARD_IA",
     });
-    // Force the multipart path: bigger than the single-PUT threshold, streamed
-    // lazily so we never hold the whole (>32 MiB) blob at once.
     const partish = Buffer.alloc(12 * 1024 * 1024, 3);
     const total = MULTIPART_THRESHOLD_BYTES + partish.length; // > threshold ⇒ multipart
     const source = Readable.from([partish, partish, partish, partish]); // 48 MiB ⇒ 3 parts
@@ -230,8 +206,6 @@ describe("s3", () => {
     expect(parts.length).toBeGreaterThanOrEqual(2);
     for (const part of parts) expect(part.storageClass).toBeNull();
   });
-
-  // ────────── issue #405 §4: retry / backoff ──────────
 
   test("retry: two 503s then 200 ⇒ the PUT succeeds after exactly 3 requests", async () => {
     fake.failNext = 2;
@@ -281,8 +255,6 @@ describe("s3", () => {
     let attempts = 0;
     const flakyFetch: typeof fetch = (input, init) => {
       attempts += 1;
-      // First attempt never reaches the server (simulated socket refusal); the
-      // retry delegates to the real fetch against the fake endpoint.
       if (attempts === 1)
         return Promise.reject(new Error("ECONNREFUSED 127.0.0.1"));
       return fetch(input, init);
@@ -297,7 +269,6 @@ describe("s3", () => {
     const bytes = Buffer.from("dropped socket");
     await store.put(sha256OfBytes(bytes), bytes);
     expect(attempts).toBe(2);
-    // Only the second (successful) attempt ever reached the server.
     expect(fake.requests.filter((r) => r.method === "PUT")).toHaveLength(1);
   });
 
@@ -317,12 +288,9 @@ describe("s3", () => {
     expect(fake.requests.filter((r) => r.method === "PUT")).toHaveLength(3);
   });
 
-  // ────────── settings passthrough: blob_store.storageClass → remoteTier → driver ──────────
-
   test("settings: storageClass flows through and stale encrypt:false still writes mandatory CBSF", async () => {
     const db = openVaultDb({ s3Credentials: CREDS });
     try {
-      // A `core_vault` row must exist for the settings UPDATE to land on it.
       bootstrapVault(db, { ownerName: "Cold Storage Owner" });
       updateBlobStoreSettings(db, {
         blob_store: {

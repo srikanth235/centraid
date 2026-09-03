@@ -1,6 +1,3 @@
-// Egress consent (#807): a decline stays on record and a vault-wide answer
-// never covers a narrower scope.
-
 import { describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
@@ -119,7 +116,6 @@ describe("enrich egress consent", () => {
 
   test("an egress class outside the vocabulary can never be stored", () => {
     const db = openVaultDb();
-    // The constraint lives in the one authority plane (#883).
     expect(() =>
       db.vault
         .prepare(

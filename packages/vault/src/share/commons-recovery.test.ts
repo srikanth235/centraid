@@ -1,7 +1,3 @@
-// Replica-export recovery (#731): a member re-founds a commons whose steward
-// is gone. The claims under test are the ceremony's guarantees — no data loss,
-// no fabricated consent, idempotent retry, and two named refusals.
-
 import { afterEach, describe, expect, test } from "vitest";
 
 import { nowIso } from "../ids.js";
@@ -19,7 +15,6 @@ import type { CommonsGrantRecord } from "./commons.js";
 import { closeOpenVaults, household, seedPhoto } from "./placement-fixture.js";
 import type { Household } from "./placement-fixture.js";
 
-/** Priya stewards a shared photo; the Family vault holds a full replica. */
 function shared(): { home: Household; grant: CommonsGrantRecord; now: string } {
   const home = household();
   const now = nowIso();
@@ -92,11 +87,9 @@ describe("commons replica-export recovery", () => {
     expect(result.replayed).toBe(false);
     expect(result.grantId).not.toBe(grant.grantId);
     const successor = readCommonsGrant(home.audience.vault, result.grantId);
-    // Stewarded by the recovering vault, fresh genesis chain, sequence 0.
     expect(successor.stewardPartyId).toBe(home.audienceBoot.ownerPartyId);
     expect(successor.lastSequence).toBe(0);
     expect(successor.containerType).toBe(grant.containerType);
-    // The superseded grant keeps every row it had; only its sync stops.
     const old = readCommonsGrant(home.audience.vault, grant.grantId);
     expect(old.revokedAt).toBe(now);
     expect(
@@ -106,7 +99,6 @@ describe("commons replica-export recovery", () => {
         )
         .get(grant.grantId)
     ).toStrictEqual(opsBefore);
-    // Lineage explains where the successor came from.
     const lineage = readCommonsRecoveryLineage(
       home.audience.vault,
       grant.grantId
@@ -139,7 +131,6 @@ describe("commons replica-export recovery", () => {
     const byParty = new Map(states.map((row) => [row.party_id, row.status]));
     expect(byParty.get(home.audienceBoot.ownerPartyId)).toBe("current");
     expect(byParty.get(home.originBoot.ownerPartyId)).toBe("invited");
-    // Capabilities carry over from the superseded roster.
     const capability = home.audience.vault
       .prepare(
         `SELECT capability FROM social_circle_member
@@ -171,8 +162,6 @@ describe("commons replica-export recovery", () => {
     expect(second.grantId).toBe(first.grantId);
     expect(second.circleId).toBe(first.circleId);
     expect(second.replayed).toBe(true);
-    // The lineage keeps the FIRST attempt's timestamp — a retry re-reports it
-    // rather than rewriting history.
     expect(second.lineage.recoveredAt).toBe(now);
     expect({
       ...home.audience.vault
@@ -202,7 +191,6 @@ describe("commons replica-export recovery", () => {
       state: "refused",
       reason: "parked-on-fault",
     });
-    // Nothing was founded and nothing was superseded.
     expect({
       ...home.audience.vault
         .prepare("SELECT COUNT(*) AS n FROM share_commons_supersession")

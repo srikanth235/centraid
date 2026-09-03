@@ -5,11 +5,6 @@ import type { SQLInputValue } from "node:sqlite";
 
 export const YEAR3_FIXTURE_VERSION = 1;
 
-/**
- * Stand-in for a caller that names no schema. Distinct from any real ladder
- * length so a fixture cached without a schema can never be mistaken for one
- * cached with a matching schema.
- */
 const UNVERSIONED_SCHEMA = -1;
 export const YEAR3_DEFAULT_SEED = 679_003;
 
@@ -36,7 +31,6 @@ export interface Year3Sqlite {
 }
 
 export interface Year3VaultTarget {
-  /** The ONE file (#916): ontology, audit and ledger bands share this handle. */
   readonly vault: Year3Sqlite;
   readonly sealCell: (
     entity: string,
@@ -53,12 +47,6 @@ export interface Year3SeedCounts {
   readonly turnsPerConversation: number;
 }
 
-/**
- * One deterministic generator for the year-3 row, chronology, custody, and
- * ledger axes. Scale lanes pass the full profile; PR tests use small counts
- * through the same statements. Callers checkpoint the file before
- * caching/copying the generated fixture (docs/traps/wal-checkpoint.md).
- */
 export function seedYear3Vault(
   target: Year3VaultTarget,
   counts: Year3SeedCounts = year3VaultProfile()
@@ -81,9 +69,6 @@ export function seedYear3Vault(
   const photo = target.vault.prepare(
     "INSERT INTO media_asset (asset_id, content_id, kind, captured_at) VALUES (?, ?, 'photo', ?)"
   );
-  // The star is a flags-scheme tag on the ASSET (#916) — `media_asset.favorite`
-  // is gone. One in fifty photos carries it, so the fixture still exercises the
-  // join every Photos surface now makes.
   const flagsSchemeId = "year3-flags-scheme";
   const starredConceptId = "year3-starred-concept";
   const star = target.vault.prepare(
@@ -149,12 +134,6 @@ export function seedYear3Vault(
        VALUES (?, 'login', 'Year 3 sealed canary', ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(lockerId, ...lockerValues, at(1), at(1));
-  // Locker's sealed sidecars (#872). Each hangs off the canary item above and
-  // seals under its OWN row id — the AAD is `table.column:rowid`, so a field's
-  // ciphertext is bound to its `field_id`, a history row's to its
-  // `revision_id`, and the passkey's to the `item_id` that is its primary key.
-  // Seeding them here is what lets the T3 canary prove the three new columns
-  // reach all six enforcement points rather than merely being declared.
   const fieldId = "year3-sealed-field";
   target.vault
     .prepare(
@@ -175,9 +154,6 @@ export function seedYear3Vault(
       at(1),
       at(1)
     );
-  // ONE revision mechanism (#916, ONT-revisions): `locker_item_history` is
-  // gone. A snapshot records that a sealed column CHANGED, never its
-  // plaintext, so this row carries no sentinel.
   const revisionId = "year3-sealed-revision";
   target.vault
     .prepare(
@@ -300,11 +276,6 @@ export function seedYear3Vault(
   target.vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 }
 
-/**
- * Deterministic metadata shared by scale and quality rigs. Large byte payloads
- * remain lazily materialized by each owner; this profile is cheap to cache by
- * its stable fingerprint and prevents the row/consent/sealed axes drifting.
- */
 export function year3VaultProfile(
   seed = YEAR3_DEFAULT_SEED
 ): Year3VaultProfile {
@@ -353,18 +324,6 @@ export function year3VaultProfile(
   };
 }
 
-/**
- * Content address of a materialized fixture.
- *
- * `schemaVersion` is part of the identity, and has to be: the fixture IS a
- * vault on disk, so the schema that produced it is as much of its content as
- * the profile is. Without it a cached fixture built before a migration rung
- * lands is reused afterwards and opened by newer code — which is how the
- * nightly restore lane failed with `no such table: main.enrich_policy_rule`,
- * a table a later rung added. Callers pass `VAULT_MIGRATIONS.length`;
- * `test-kit` deliberately does not depend on `@centraid/vault`, so the number
- * arrives as an argument rather than an import.
- */
 export function year3FixtureCacheKey(
   profile: Year3VaultProfile,
   schemaVersion: number
@@ -380,11 +339,6 @@ export function year3FixtureCacheKey(
     .digest("hex");
 }
 
-/**
- * Materialize a generated fixture once under a content-addressed cache.
- * `generate` must close its handles after checkpointing; the atomic rename
- * means readers never copy a live SQLite database beside an uncheckpointed WAL.
- */
 export async function materializeYear3Fixture(
   cacheRoot: string,
   generate: (targetDir: string) => Promise<void>,
@@ -398,7 +352,7 @@ export async function materializeYear3Fixture(
     const value = JSON.parse(await readFile(ready, "utf8")) as { key?: string };
     if (value.key === key) return { dir, cacheHit: true };
   } catch {
-    // Cache miss or interrupted prior generation.
+    // Intentionally empty.
   }
   await mkdir(cacheRoot, { recursive: true });
   const temporary = `${dir}.tmp-${process.pid}-${Date.now()}`;

@@ -1,7 +1,3 @@
-// The DEVICE lane (#414 D11, narrowed by #724): what a browser may
-// lease is previews/poster/pdfText. Model-shaped work — OCR, transcription,
-// embedding — is owned by recognition automations and never appears here.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { promoteStagedBlob } from "../blob/promote.js";
@@ -23,9 +19,6 @@ let db: VaultDb;
 const T0 = "2026-07-15T00:00:00.000Z";
 
 describe("leases", () => {
-  /** A REAL content item to request enrichment OF (#916): the request's
-   *  `(entity_type, entity_id)` is a composite foreign key into the entity
-   *  supertype, so a ghost id is refused at the statement. */
   const seedContent = (contentId: string): void => {
     db.vault
       .prepare(
@@ -83,8 +76,6 @@ describe("leases", () => {
       available: 1,
       leased: 1,
     });
-    // A device asking for work this lane no longer leases gets nothing, and
-    // learns it by getting nothing — never by being handed model work.
     expect(
       leaseNextEnrichmentRequest(db.vault, {
         deviceId: "browser",
@@ -411,8 +402,6 @@ describe("leases", () => {
         limit: 1,
       })
     ).toStrictEqual(["fair-1"]);
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect(
       vault.vault
         .prepare(

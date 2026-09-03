@@ -10,8 +10,6 @@ import {
   V0_AUTOMATION_TEMPLATE_IDS,
 } from "./templatesData.js";
 
-// `vi.hoisted` lifts these mock fns above the hoisted `vi.mock` factory so it can
-// close over them without a TDZ error, keeping the real imports first.
 const { listTemplates, gwCloneTemplate } = vi.hoisted(() => ({
   listTemplates: vi.fn<typeof TypeImport_1gl5zx7.listTemplates>(),
   gwCloneTemplate: vi.fn<typeof TypeImport_1gl5zx7.cloneTemplate>(),
@@ -48,10 +46,6 @@ describe("templatesData", () => {
 
   describe("templatesData", () => {
     it("pins the exact six-template v0 automation gallery", () => {
-      // Was eight. `screenshot-extractor` and `photo-captioner` were deleted
-      // in #712 along with the other two photos-domain enrichers —
-      // that work is becoming the Photos app's own rather than a gallery
-      // automation taking a model turn over a member's photographs.
       expect(V0_AUTOMATION_TEMPLATE_IDS).toStrictEqual([
         "google-gmail-pull",
         "google-calendar-pull",

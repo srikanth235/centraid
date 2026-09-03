@@ -1,5 +1,3 @@
-// File custody (§10) for file-backed vaults. R09: vault never references ext tables. Backup path is WAL shipper; `backupVault` is the user-facing export — do not VACUUM on a cadence.
-
 import { createHash } from "node:crypto";
 import { closeSync, openSync, readSync, rmSync } from "node:fs";
 import path from "node:path";
@@ -16,12 +14,9 @@ function requireDir(db: VaultDb, action: string): string {
   return db.dir;
 }
 
-/** With a WAL shipper (#408) MUST NOT be called directly (I2). Hosts use `WalShipper.checkpointNow()`. */
 export function checkpointVault(db: VaultDb): { vault: string } {
   requireDir(db, "checkpoint");
   try {
-    // ONE FILE (#916): the audit band is in `vault.db`, so there is one WAL to
-    // truncate and no ordering between two of them to get wrong.
     db.vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
   } catch (error) {
     throw asVaultDiskFullError("vault WAL checkpoint", error);
@@ -29,7 +24,6 @@ export function checkpointVault(db: VaultDb): { vault: string } {
   return { vault: "truncated" };
 }
 
-/** Streamed SHA-256; must match `shasum -a 256` — do not hash a latin1 string. */
 export function sha256File(file: string): string {
   const hash = createHash("sha256");
   const fd = openSync(file, "r");
@@ -57,8 +51,6 @@ export function backupVault(db: VaultDb, destDir: string): BackupResult {
   requireDir(db, "backup");
   const vaultPath = path.join(destDir, "vault.backup.db");
   rmSync(vaultPath, { force: true });
-  // One file carries the life data and its evidence, so one copy is the whole
-  // backup — and the two halves can no longer be copied at different instants.
   db.vault.exec(`VACUUM INTO '${vaultPath.replaceAll("'", "''")}'`);
   const vaultSha256 = sha256File(vaultPath);
   const { copied } = db.blobs.exportTo(destDir);

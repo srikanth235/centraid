@@ -22,7 +22,6 @@ async function mount(onClose = (): void => {}): Promise<void> {
   await act(async () => {
     root!.render(<WhatsNewModal onClose={onClose} />);
   });
-  // Let the mount-effect fetch resolve.
   await act(async () => {
     await Promise.resolve();
   });
@@ -69,7 +68,6 @@ describe("screens/WhatsNewModal", () => {
       expect(text()).toContain("Sharper sync");
       expect(text()).toContain("v0.2.0");
       expect(text()).toContain("a real bug");
-      // Section label + list came from the md-lite renderer.
       expect(host?.querySelector("h4")?.textContent).toBe("Fixed");
       expect(host?.querySelector("li")?.textContent).toBe("a real bug");
     });
@@ -99,7 +97,6 @@ describe("screens/WhatsNewModal", () => {
       );
       await mount();
       expect(text()).toContain("Installed");
-      // Only the current one is tagged.
       expect(host?.querySelectorAll("*")).toBeTruthy();
       expect(text().match(/Installed/gu)?.length).toBe(1);
     });

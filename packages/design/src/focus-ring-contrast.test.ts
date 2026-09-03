@@ -1,8 +1,3 @@
-// Focus ring on a filled-ink control (#708): double box-shadow
-// `--focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--focus-ring-color)`.
-// The ring colour is never adjacent to the fill — `--bg` borders both sides.
-// Measure (1) ring vs gap (`--bg`) and (2) gap vs fill. Both ≥ WCAG 1.4.11 3:1
-// in both themes. Ring-vs-fill is the naive wrong pair.
 import { describe, expect, test } from "vitest";
 
 import { contrastRatio } from "./color.js";

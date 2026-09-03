@@ -1,10 +1,3 @@
-/*
- * The providers console maps the gateway's LIST-shaped harnesses snapshot into
- * cards. The behaviour that matters: it renders whatever the gateway lists —
- * including harness kinds this build predates — rather than intersecting it
- * with a local table of kinds it knows (docs/protocol.md C1a, parse-always).
- */
-
 import { describe, beforeEach, expect, it, vi } from "vitest";
 
 import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
@@ -23,8 +16,6 @@ type HarnessStatusEntry = Awaited<
   ReturnType<typeof TypeImport_1gl5zx7.getHarnessesStatus>
 >["harnesses"][number];
 
-// `vi.mock` is hoisted above the imports, so the gateway stub lands before
-// settingsHarnessesData.js pulls gateway-client-core's load-time side-effect.
 vi.mock(import("../../../gateway-client.js") as Promise<unknown>, () => ({
   getHarnessesStatus,
   getUserPrefs,
@@ -33,7 +24,6 @@ vi.mock(import("../../../gateway-client.js") as Promise<unknown>, () => ({
 
 type HarnessCapabilities = NonNullable<HarnessStatusEntry["capabilities"]>;
 
-/** A fully-probed capability set; overrides pick out the axis under test. */
 function caps(over: Partial<HarnessCapabilities> = {}): HarnessCapabilities {
   return {
     reachable: true,
@@ -76,10 +66,6 @@ describe("settingsHarnessesData suite", () => {
     getUserPrefs.mockResolvedValue({});
   });
 
-  // The gateway omits `capabilities` entirely until the probe succeeds — and
-  // also when it throws. Reading that silence as "not ready" made a cold
-  // gateway label every installed harness "setup or sign-in needed", including
-  // ones that were signed in and working.
   it("separates an unprobed harness from one that actually needs sign-in", async () => {
     getHarnessesStatus.mockResolvedValue({
       harnesses: [
@@ -144,8 +130,6 @@ describe("settingsHarnessesData suite", () => {
       ],
     });
     const dto = await loadHarnesses();
-    // The card is complete — the gateway supplied every string it needs — and
-    // only the accent falls back to the neutral default.
     const [card] = dto.cards;
     expect(card?.kind).toBe("some-future-agent");
     expect(card?.title).toBe("Some Future Agent");
@@ -179,7 +163,6 @@ describe("settingsHarnessesData suite", () => {
       "model.some-future-agent.builder": "future-2",
     });
     const dto = await loadHarnesses();
-    // A local kinds table would have stranded the new harness's saved picks.
     expect(dto.savedModelByKind["some-future-agent"]).toBe("future-1");
     expect(dto.subsystemModelByKind["some-future-agent"]?.builder).toBe(
       "future-2"
@@ -281,7 +264,6 @@ describe("settingsHarnessesData suite", () => {
     expect(loading.anyLoading).toBe(true);
     expect(loading.cards[0]?.modelsLoading).toBe(true);
 
-    // A refresh over an existing list keeps showing it rather than blanking.
     getHarnessesStatus.mockResolvedValue({
       harnesses: [entry({ modelsStatus: "loading" })],
     });

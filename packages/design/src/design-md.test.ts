@@ -1,9 +1,3 @@
-// DESIGN.md is a checked, normative constitution rather than a prose-only
-// document.  The official design.md linter validates the schema; these tests
-// pin the value-bearing sections to the TypeScript source of truth, so a token
-// flip that forgets the constitution fails here rather than shipping a document
-// that describes a product nobody is building any more.
-
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -105,8 +99,6 @@ describe("DESIGN.md front matter", () => {
     expect(frontMatter).toContain(`  brand: "${BRAND}"`);
     expect(frontMatter).toContain(`  accent: "${BRAND}"`);
     expect(frontMatter).toContain('  primary: "{colors.brand}"');
-    // The load-bearing claim of the whole system, stated where a reader
-    // arrives: the accent is the ink, in both themes.
     expect(frontMatterValue("accent")).toBe(themes.light.text);
     expect(frontMatterValue("accent-dark")).toBe(themes.dark.text);
     expect(frontMatter).not.toContain("#3EC8B4");
@@ -142,8 +134,6 @@ describe("DESIGN.md front matter", () => {
       "accent-deep-dark": themes.dark.accentDeep,
       "accent-hover": ACCENT_HOVER,
       "accent-hover-dark": ACCENT_HOVER_DARK,
-      // The OUTLINE's hover, which is a different role from the FILL's and
-      // steps the other way — see roles.ts and the Colors section.
       "accent-ink-hover": ACCENT_INK_HOVER,
       "accent-ink-hover-dark": ACCENT_INK_HOVER_DARK,
       "accent-text": BRAND,
@@ -156,7 +146,6 @@ describe("DESIGN.md front matter", () => {
       "net-dark": NET_DARK,
       "net-hover": NET_HOVER,
       "net-hover-dark": NET_HOVER_DARK,
-      // The one wash with a per-theme alpha, and the only tint of --net.
       "net-wash": NET_WASH,
       "net-wash-dark": NET_WASH_DARK,
       seam: SEAM,
@@ -169,8 +158,6 @@ describe("DESIGN.md front matter", () => {
       "danger-dark": DANGER_DARK,
       warning: WARNING_LIGHT,
       "warning-dark": WARNING,
-      // The stage roles are the SAME literal in both themes — the media
-      // ground does not follow the theme (Photos v4 handoff, §B).
       stage: STAGE,
       "on-stage": ON_STAGE,
       "stage-line": STAGE_LINE,
@@ -221,7 +208,6 @@ describe("DESIGN.md front matter", () => {
     })) {
       expect(frontMatterValue(key), key).toBe(value);
     }
-    // --skel flips per theme, unlike the stage roles above.
     expect(frontMatterValue("light-skel")).toBe(themes.light.skel);
     expect(frontMatterValue("dark-skel")).toBe(themes.dark.skel);
   });
@@ -245,8 +231,6 @@ describe("DESIGN.md front matter", () => {
         override ?? NATIVE_DELTA_BY_FAMILY[styleValue.family]
       );
     }
-    // Tracking on display/title, caps on micro, tabular figures on the
-    // numeric register — part of the ramp, not per-surface CSS.
     expect(frontMatter).toContain('    letterSpacing: "-0.01em"');
     expect(frontMatter).toContain('    letterSpacing: "0.06em"');
     expect(frontMatter).toContain('    textTransform: "uppercase"');
@@ -267,7 +251,6 @@ describe("DESIGN.md front matter", () => {
     expect(body).toContain("nativeDelta");
     expect(body).toContain("11px");
     expect(body).toContain("tabular");
-    // The retired roles are named as retired, not silently dropped.
     expect(body).toContain("`--t-hero`");
     expect(body).toContain("`--t-greeting`");
     expect(body).toContain("`--bg-l`");
@@ -308,21 +291,17 @@ describe("DESIGN.md body", () => {
     expect(body).toContain("packages/design/src/roles.ts");
     expect(body).toContain("packages/design/src/recipes/index.ts");
     expect(body).toContain("The five invariants");
-    // 1 — the stem.
     expect(body).toContain(`${metrics.stem}px`);
     expect(body).toContain("logical properties");
     expect(body).toContain("5 apps plus More");
-    // 2 — one ramp, one face. v8 withdraws the last app-level family axis.
     expect(body).toContain("One ramp, one face");
     expect(body).toContain("hierarchy comes from named roles");
     expect(body).not.toContain("reading or scanning");
-    // 3 — the ink-only control vocabulary.
     expect(body).toContain("the shell owns no colour");
     expect(body).toContain("one filled ink element per view");
     expect(body).toContain("outlined");
     expect(body).toContain("`--net`");
     expect(body).toContain("`--link`");
-    // 4 — spatial rhythm.
     expect(body).toContain(`\`--h-control\` ${metrics.control}px`);
     expect(body).toContain(`\`--h-row\` ${metrics.row}px`);
     expect(body).toContain(`\`--h-segmented\` ${metrics.segmented}px`);
@@ -330,7 +309,6 @@ describe("DESIGN.md body", () => {
       `\`--w-key-col\` — the fact-list key column, ${metrics.keyCol}px under a pointer and ${metrics.keyColTouch}px on touch`
     );
     expect(body).toContain("line-clamped");
-    // 5 — motion and feedback.
     expect(body).toContain("status line");
     expect(body).toContain("determinate");
   });
@@ -340,25 +318,14 @@ describe("DESIGN.md body", () => {
     for (const tier of Object.keys(DENSITY_TIERS)) expect(body).toContain(tier);
     expect(body).toContain("`data-density`");
     expect(body).toContain("Never on a control");
-    // There is no tone axis — one page, for the shell and every app in it.
-    // The freedom table offers no surface tone row, though the prose may
-    // legitimately name the axis while explaining its absence.
     expect(body).not.toContain("| Surface tone |");
-    // v4s took a second row with it. A `register` row would put the face back
-    // in the app's hands, which is the thing the ruling withdrew.
     expect(body).not.toContain("| Primary register |");
-    // And it added one — the surface axis, marked FIXED. It sits in this table
-    // rather than beside it precisely because an app author reads this table to
-    // find out what is theirs; a fixed axis has to be visible in the same place.
     expect(body).toContain("| Surface |");
     expect(body).toContain("Width is a canvas, not a surface");
   });
 
   test("records the brief-to-repo mapping and the app hue table", () => {
     expect(body).toContain("The brief-to-repo role mapping");
-    // The tables are formatted (oxfmt pads the cells), so each row is matched
-    // as cells rather than as a literal — the pinning is the pairing, not the
-    // whitespace.
     const row = (...cells: string[]): RegExp =>
       new RegExp(
         `\\|\\s*${cells.map((cell) => cell.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")).join("\\s*\\|\\s*")}\\s*\\|`,
@@ -372,9 +339,6 @@ describe("DESIGN.md body", () => {
       ["`lineS`", "`--line`"],
       ["`onAccent`", "`--text-inv`"],
       ["`ring`", "`--focus-ring-color`"],
-      // v9's additions. The two `No new role` rows are as load-bearing as the
-      // new ones: they are the record that `label` and `band-on` were checked
-      // against the ramp and found already present, rather than overlooked.
       ["`netHover`", "`--net-hover`"],
       ["`netWash`", "`--net-wash`"],
       ["`seam`", "`--seam`"],
@@ -390,8 +354,6 @@ describe("DESIGN.md body", () => {
     ] as const) {
       expect(body, brief).toMatch(row(brief, repo));
     }
-    // Every shipped app names its hue and its palette key, so a re-point is a
-    // visible edit rather than a silent swatch change.
     for (const app of apps) {
       expect(body, app.id).toMatch(
         row(app.id, String(APP_HUES[app.colorKey]), `\`${app.colorKey}\``)
@@ -420,8 +382,6 @@ describe("DESIGN.md body", () => {
   });
 
   test("documents the stage/skel roles and the numeric role's own direction", () => {
-    // Photos v4 handoff, §2.2/§B — the three new shared color roles and the
-    // one existing role (--t-mono) that gains a correction.
     expect(body).toContain("`--stage`");
     expect(body).toContain("`--on-stage`");
     expect(body).toContain("`--stage-line`");

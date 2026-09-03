@@ -1,8 +1,3 @@
-// Bidirectional provider continuation (#630): a local edit of a provider-owned
-// row becomes an already-approved outbox artifact — the edit IS the consent.
-// Credentials stay executor-only, and revoke leaves the item approved for
-// reconnect rather than losing it.
-
 import type { HandlerCtx } from "../gateway/types.js";
 import { contactReach } from "./contact-reach.js";
 
@@ -70,8 +65,6 @@ function eventArtifact(
           ...(event.start_tz ? { timeZone: event.start_tz } : {}),
         };
   };
-  // Google expects prefixed RRULE lines; canonical storage is bare `FREQ=…`
-  // and may hold legacy `RRULE:…`, so never double-prefix.
   const recurrence = event.rrule
     ? event.rrule
         .split("\n")
@@ -141,8 +134,6 @@ function contactArtifact(
     birth_date: string | null;
     updated_at: string;
   };
-  // ONE read of the reach set: the legacy identifier rows moved onto
-  // channels, so nothing reconciles here (#883).
   const reach = contactReach(ctx.db, partyId, ["email", "phone"]);
   const [familyName, givenName] = (party.sort_name ?? "")
     .split(",")
@@ -287,7 +278,6 @@ function queue(
   ctx.wrote("outbox.item", itemId);
 }
 
-/** Only when a durable external-id map proves the origin connection. */
 export function queueProviderWriteback(
   ctx: HandlerCtx,
   targetType: "core.event" | "core.party",

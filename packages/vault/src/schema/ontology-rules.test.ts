@@ -1,17 +1,3 @@
-// What a FRESH vault is, after #916 closed the v0 ontology's last
-// inconsistencies — the REVIEW'S NUMBERED RULES (brief R1–R13): the
-// constraints, keys and indexes each rule asked the schema to state.
-//
-// Every assertion here reads the composed BASELINE — the DDL modules
-// themselves — rather than a file walked forward through a ladder. v0 has no
-// files in the field, so a shape the baseline can simply state does not need a
-// rung that reconstructs it, and a test that walks a rung to find out what the
-// vault is would be testing the reconstruction instead of the decision.
-//
-// Split from `ontology-shape.test.ts` by concern, not by size: that file holds
-// the owner decisions (D1–D4) and their end-to-end effects (E1–E3); a rule
-// here is a sentence the engine itself refuses to break.
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -32,7 +18,6 @@ describe("R1 — money says which money", () => {
     const db = baselineVault();
     for (const t of ["tally_group", "tally_expense", "tally_settlement"])
       expect(columnsOf(db, t)).toContain("currency");
-    // The shares are shares OF the expense's amount and carry no currency.
     for (const t of [
       "tally_expense_split",
       "tally_expense_payer",
@@ -103,7 +88,6 @@ describe("R2 — the constraints that were missing", () => {
     };
     link("l1");
     expect(() => link("l2")).toThrow(/UNIQUE/u);
-    // History repeats: an end-dated edge leaves the constraint.
     db.prepare(`UPDATE core_link SET valid_to = ? WHERE link_id = 'l1'`).run(
       NOW
     );
@@ -183,7 +167,6 @@ describe("R4 — one name for a zone column", () => {
     expect(columnsOf(db, "tally_recurring_expense")).toContain("tz");
     expect(columnsOf(db, "tally_recurring_expense")).not.toContain("time_zone");
     expect(columnsOf(db, "core_place")).toContain("tz");
-    // core_event keeps a PAIR: two zones are a real thing an event can have.
     expect(columnsOf(db, "core_event")).toStrictEqual(
       expect.arrayContaining(["start_tz", "end_tz"])
     );
@@ -277,7 +260,6 @@ describe("R10 — one encoding of which entity", () => {
       expect(columnsOf(db, t)).not.toContain("schema_name");
       expect(columnsOf(db, t)).not.toContain("applies_schema");
     }
-    // enrich_policy_rule keeps scope_type: a CASCADE LEVEL, not an entity.
     expect(columnsOf(db, "enrich_policy_rule")).toContain("scope_type");
   });
 });
@@ -285,8 +267,6 @@ describe("R10 — one encoding of which entity", () => {
 describe("R11 — the trash reaches search", () => {
   it("gives the two trash entities that lacked one a delete trigger", () => {
     const db = baselineVault();
-    // The trash reaches the index through the generated update trigger, which
-    // is the only place a spec's `deletedColumn` can show up.
     for (const table of ["tally_expense", "people_profile"]) {
       const sql = (
         db

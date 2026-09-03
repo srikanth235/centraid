@@ -38,12 +38,6 @@ export interface NotificationRow {
   body: string;
 }
 
-/**
- * Compose private notification content after the authenticated Notifications fetch.
- * Decision keys include the canonical transition timestamp so an outbox
- * re-park or a later needs-auth episode can notify again without duplicating
- * a still-open decision.
- */
 export function composeWebNotifications(
   notifications: NotificationsPull,
   delivered: ReadonlySet<string>

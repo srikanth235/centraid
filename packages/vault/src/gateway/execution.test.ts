@@ -1,8 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit #545 cohesive security/ACID suite for one module
-// Direct unit coverage for the S3/S4/S5 invocation bracket (#545).
-// Imports `execution.ts` by name and exercises contract validation, precondition
-// recording, ACID postcondition rollback, seal sweep, and idempotent replay
-// without going through the full Gateway facade for each path.
 
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
@@ -86,11 +82,6 @@ describe("execution", () => {
     expect(pkColumn(db.vault, "core_tag")).toBe("tag_id");
   });
 
-  // THE ENGINE IS THE CHECK (#916, adversarial BUG-10). `POLY_RULES` covered
-  // five of fifteen mechanisms and validated after the fact; every (type, id)
-  // pair is a composite foreign key into `core_entity` now, so the refusal
-  // happens at the statement — for all fifteen, including the ones the
-  // hand-written list never mentioned.
   test("a tag at a row that does not exist is refused by the engine", () => {
     const conceptId = Object.values(boot.concepts)[0] as string;
     expect(() =>
@@ -116,8 +107,6 @@ describe("execution", () => {
   });
 
   test("a mechanism POLY_RULES never covered is refused as well", () => {
-    // `enrich_embedding` had `preconditions: []` and no entry in the rules, so
-    // a ghost id went in and stayed.
     expect(() =>
       db.vault
         .prepare(
@@ -136,9 +125,7 @@ describe("execution", () => {
     );
     expect(denial).toContain("core.tag tag-1");
     expect(denial).toContain("core_entity");
-    // The sentence ends where it says it does — no dangling clause.
     expect(denial).toMatch(/name a live row of a registered entity\.$/u);
-    // Not every failure is a polymorphic one.
     expect(
       polymorphicDenial([], new Error("UNIQUE constraint failed"))
     ).toBeNull();
@@ -163,8 +150,6 @@ describe("execution", () => {
       )
       .run(linkId, partyId, boot.ownerPartyId, relationConcept, now);
     db.vault.prepare("DELETE FROM core_party WHERE party_id = ?").run(partyId);
-    // End-dating kept an edge naming a row that is not there, and let an id
-    // reused later inherit a relation nobody drew. The cascade deletes it.
     expect(
       db.vault
         .prepare("SELECT count(*) AS n FROM core_link WHERE link_id = ?")
@@ -301,7 +286,6 @@ describe("execution", () => {
         `SELECT count(*) AS n FROM agent_invocation_check WHERE invocation_id = ?`
       )
       .get(invocationId) as { n: number };
-    // Version mismatch is a contract deny before preconditions are recorded.
     expect(checks.n).toBe(0);
   });
 

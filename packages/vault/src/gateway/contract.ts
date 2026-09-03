@@ -1,8 +1,3 @@
-// S3 — Contract: is this a valid typed command? Writes are never rows, only
-// commands (rule R04). Payloads validate against JSON-Schema; pre- and
-// postconditions are real queries evaluated by the gateway and recorded as
-// agent.invocation_check rows.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import type { ConditionSpec, Risk } from "./types.js";
@@ -32,7 +27,6 @@ export function lookupCommand(
 export interface ConditionResult {
   name: string;
   predicate: string;
-  /** The spec's owner-facing `message`, when it supplied one. */
   message?: string;
   passed: boolean;
   observed: Record<string, unknown>;
@@ -63,11 +57,6 @@ function compare(
   }
 }
 
-/**
- * Evaluate declarative conditions against the vault. Named params in the
- * condition SQL bind from command input; a condition that errors (bad SQL,
- * missing param) fails closed.
- */
 export function evaluateConditions(
   vault: DatabaseSync,
   specs: ConditionSpec[],
@@ -111,8 +100,3 @@ export function evaluateConditions(
     }
   });
 }
-
-// The judgment veto is gone with `agent.judgment` (#916, ruling ONT-06): the
-// learn loop had commands, a table and no caller, so no correction was ever
-// distilled into a rule and no call was ever vetoed. R08 stays a design
-// commitment; it will need a producer before it needs a consultation.

@@ -1,12 +1,3 @@
-// Per-turn usage/cost formatting for the assistant transcript (#420). Two
-// paths feed the "this turn cost X" line:
-//   • Reloaded from the ledger — the gateway froze the exact `costUsd` at write
-//     time (packages/server/src/engine/model-pricing.ts) and ships it on the turn.
-//   • Live-streamed — the `usage` event arrives already priced server-side at
-//     the SSE seam (same model-pricing.ts), flagged `estimated` until the
-//     authoritative frozen cost replaces it on reload. The client never holds
-//     a model rate table of its own.
-
 import type { AsstUsageDTO } from "../screen-contracts.js";
 
 function formatTokens(n: number): string {
@@ -20,7 +11,6 @@ function formatCost(usd: number): string {
   return `$${usd.toFixed(2)}`;
 }
 
-/** A compact "↑1.2k ↓340 · $0.004" label, or `null` when there's nothing to show. */
 export function formatUsageLabel(u: AsstUsageDTO | undefined): string | null {
   if (!u) return null;
   const parts: string[] = [];
@@ -33,7 +23,6 @@ export function formatUsageLabel(u: AsstUsageDTO | undefined): string | null {
   return label || null;
 }
 
-/** A verbose tooltip: "1,203 in · 340 out · $0.004 (estimated)". */
 export function formatUsageTitle(
   u: AsstUsageDTO | undefined
 ): string | undefined {

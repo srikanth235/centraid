@@ -1,12 +1,3 @@
-/*
- * The recovery-kit READER (#439): parses + validates the sealed document back
- * into a typed shape so `recover()` restores from nothing but this document.
- * Deliberately strict — reject wrong kind/version/keyring/addressing HERE,
- * not as an opaque provider error three phases later. By design (FORMAT.md)
- * the kit never carries the provider API key; the operator supplies it
- * out-of-band.
- */
-
 import { createHash } from "node:crypto";
 
 import { validateKeyring } from "./crypto.js";
@@ -19,15 +10,11 @@ import {
 } from "./password-wrap.js";
 import type { WrappedPasswordDocument } from "./password-wrap.js";
 
-/** A parsed + validated recovery kit (the shape `wrapRecoveryKit` seals). */
 export interface RecoveryKitDocument {
   version: 1;
   kind: "centraid-recovery-kit";
-  /** ISO-8601 stamp the kit was written at (advisory). */
   createdAt: string;
-  /** Every key epoch — the master material every snapshot was sealed under. */
   keyring: Keyring;
-  /** One row per vault this gateway backs up: how to reach + address it. */
   targets: RecoveryKitTarget[];
 }
 
@@ -48,7 +35,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function validateTarget(value: unknown, index: number): RecoveryKitTarget {
   if (!isRecord(value))
     throw new Error(`recovery kit: target ${index} is not an object`);
-  // All four fields are load-bearing addressing for a restore; all required.
   for (const field of ["provider", "targetId", "vaultId", "label"] as const) {
     if (
       typeof value[field] !== "string" ||
@@ -71,7 +57,6 @@ function validateTarget(value: unknown, index: number): RecoveryKitTarget {
   };
 }
 
-/** Parse + validate an already-JSON-parsed kit; throws descriptively. */
 function parsePlainRecoveryKit(
   value: unknown,
   allowEmptyTargets = false
@@ -105,10 +90,6 @@ function parsePlainRecoveryKit(
   return { version: 1, kind: KIT_KIND, createdAt, keyring, targets };
 }
 
-/**
- * Stable capability fingerprint. Labels and createdAt are deliberately
- * excluded: cosmetic changes do not alter recovery ability.
- */
 export function recoveryKitFingerprint(document: RecoveryKitDocument): string {
   const preimage = {
     version: document.version,
@@ -145,7 +126,6 @@ export function recoveryKitFingerprint(document: RecoveryKitDocument): string {
   return createHash("sha256").update(canonicalJson(preimage)).digest("hex");
 }
 
-/** Server-side password wrap; provider credentials never enter the document. */
 export function wrapRecoveryKit(
   document: RecoveryKitDocument,
   passphrase: string
@@ -165,13 +145,6 @@ export function wrapRecoveryKit(
   };
 }
 
-/**
- * Unwrap the owner-held password document; auth failures stay loud.
- *
- * NEVER add an unwrapped acceptance path (#568): it silently ignores the
- * password, and callers treating "parse succeeded" as "owner knows the
- * password" then get a password-free branch reachable from the kit file.
- */
 export function parseRecoveryKit(
   value: unknown,
   passphrase: string

@@ -1,10 +1,3 @@
-/*
- * Manifest build/seal/open (FORMAT.md § Manifest): a PUBLIC envelope readable
- * without a key, wrapping a SEALED entry list. `manifestHash` is SHA-256 over
- * the EXACT stored bytes, so one manifest always serializes byte-identically —
- * hence `canonicalJson`.
- */
-
 import { createHash } from "node:crypto";
 
 import {
@@ -22,22 +15,11 @@ export interface ManifestEntry {
   path: string;
   kind: ManifestEntryKind;
   size: number;
-  /** Sealed, so no provider parses it. Same path + size + mtime means chunk
-   * refs can be reused unread. */
   mtimeMs: number;
   chunks: string[];
-  /** /1, `db` only: plaintext SHA-256, re-derived after restore. */
   sha256?: string;
-  /** /1, `db` only: restore replays `wal/{db}/{walGeneration}/` on it. */
   walGeneration?: string;
-  /** /1, `db` only: the tick this base was cloned at — the instant every
-   * replayed segment layers on. */
   baseTickMs?: number;
-  /**
-   * /1, `db` only: a FLOOR on what the store owes us. A restore that cannot
-   * reach it reads a store that LOST acknowledged objects — otherwise silent.
-   * From CONFIRMED uploads only, so it never claims a marker the store lacks.
-   */
   walTipTickMs?: number;
 }
 
@@ -63,12 +45,8 @@ function manifestPublicBytes(publicEnvelope: ManifestPublic): Uint8Array {
   return new TextEncoder().encode(canonicalJson(publicEnvelope));
 }
 
-/** Base-plus-WAL (#408); its chunk objects seal RAW part bytes. */
 export const SNAPSHOT_FORMAT_V1 = "centraid-snapshot/1";
-/** `/2` (#405) frames chunk plaintext as `[algo-id][body]`, so `/1` and `/2`
- * readers misread each other. No dual-format reader: the bump IS it. */
 export const SNAPSHOT_FORMAT_V2 = "centraid-snapshot/2";
-/** v0 has ONE readable format: reject every other string. */
 export const READABLE_SNAPSHOT_FORMATS: readonly string[] = [
   SNAPSHOT_FORMAT_V2,
 ];
@@ -88,8 +66,6 @@ export interface SnapshotBase {
   walTipTickMs?: number;
 }
 
-/** Keys sorted recursively, no insignificant whitespace, array order kept;
- * `undefined` dropped, so an explicitly-undefined optional still matches. */
 export function canonicalJson(value: unknown): string {
   return stringifyCanonical(value);
 }
@@ -144,8 +120,6 @@ export function sealManifest(opts: {
     appMeta: opts.appMeta,
   };
   const aad = manifestPublicBytes(publicEnvelope);
-  // Deterministic nonce (#408) from the payload's own hash: a retry re-uploads
-  // an identical object, and (key, nonce) never repeats with new plaintext.
   const nonceIdentity = sha256Hex(
     new TextEncoder().encode(
       canonicalJson({ publicEnvelope, payloadHash: sha256Hex(payloadBytes) })
@@ -165,7 +139,6 @@ export function sealManifest(opts: {
   return { bytes, manifestHash, manifest };
 }
 
-/** Verify against the registered hash BEFORE parsing anything. */
 export function verifyManifest(
   bytes: Uint8Array,
   expectedHash: string
@@ -282,7 +255,6 @@ function validateManifestEntry(
   return value as ManifestEntry;
 }
 
-/** Registry rows are routing metadata, not authority. */
 export function assertManifestMatchesRegistry(
   publicEnvelope: ManifestPublic,
   entries: ManifestEntry[],
@@ -316,8 +288,6 @@ export function validateSnapshotBase(entries: ManifestEntry[]): SnapshotBase {
     paths.add(entry.path);
   }
   const dbEntries = entries.filter((entry) => entry.kind === "db");
-  // The vault is the ONE database a snapshot carries; a second `db` entry is a
-  // producer from another protocol, never something to restore beside it.
   if (dbEntries.length !== 1 || dbEntries[0]!.path !== "vault.db") {
     throw new Error("manifest /1: exactly one vault.db entry is required");
   }
@@ -358,7 +328,6 @@ export function isSafeEntryPath(p: string): boolean {
   return segments.every((seg) => seg !== ".." && seg !== ".");
 }
 
-/** Throws on tamper, wrong key, hash mismatch or a hostile entry path. */
 export function openManifest(
   bytes: Uint8Array,
   keyring: Keyring,
@@ -376,8 +345,6 @@ export function openManifest(
   const master = masterKeyForEpoch(keyring, parsed.keyEpoch);
   const dataKey = deriveDataKey(master, vaultId);
   const { sealedPayload: _sealedPayload, ...pub } = parsed;
-  // The public envelope is GCM AAD: a provider cannot rewrite it around an
-  // unchanged sealed payload.
   const aad = manifestPublicBytes(pub);
   const plainBytes = decrypt(
     dataKey,

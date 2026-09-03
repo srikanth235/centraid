@@ -1,12 +1,3 @@
-/*
- * Key custody and object encryption (FORMAT.md § Key custody, § Encryption).
- * HKDF info strings are format-normative: editing one silently re-keys every
- * vault. Object nonces are DETERMINISTIC (#408) — safety rests on derivation
- * inputs never repeating under different plaintext: chunk nonces from the
- * keyed content hash, WAL nonces from the full segment address including
- * BOTH offsets, so a longer crash-retry re-nonces.
- */
-
 import {
   createCipheriv,
   createDecipheriv,
@@ -25,7 +16,6 @@ export function encrypt(key: Uint8Array, plain: Uint8Array): Uint8Array {
   return encryptWithNonce(key, randomBytes(IV_BYTES), plain);
 }
 
-/** Use `deriveNonce` — never a counter, never a reused tuple. */
 export function encryptWithNonce(
   key: Uint8Array,
   nonce: Uint8Array,
@@ -58,8 +48,6 @@ export function decrypt(
   return new Uint8Array(Buffer.concat([decipher.update(ct), decipher.final()]));
 }
 
-/** `info` IS the uniqueness argument: it must be injective over everything
- *  ever sealed under `key`. FORMAT.md is normative. */
 export function deriveNonce(key: Uint8Array, info: string): Uint8Array {
   const out = hkdfSync(
     "sha256",
@@ -102,9 +90,6 @@ export function chunkId(dedupKey: Uint8Array, plain: Uint8Array): string {
     .digest("hex");
 }
 
-// Keyring I/O is unit-tested, not in the #532 mutation set.
-// Stryker disable all
-
 export interface KeyringEpoch {
   epoch: number;
   key: string;
@@ -135,7 +120,6 @@ export function masterKeyForEpoch(keyring: Keyring, epoch: number): Uint8Array {
   return new Uint8Array(Buffer.from(epochOf(keyring, epoch).key, "base64"));
 }
 
-/** Exported (#439) for the recovery-kit reader. */
 export function validateKeyring(value: unknown): Keyring {
   if (typeof value !== "object" || value === null)
     throw new Error("keyring: not an object");
@@ -211,8 +195,6 @@ export async function createKeyring(file: string): Promise<Keyring> {
   return keyring;
 }
 
-/** Old epochs are retained so old snapshots stay readable. Dedup does not
- *  span epochs — the re-upload consequence lives in `engine.ts`. */
 export async function rotateKeyring(file: string): Promise<Keyring> {
   const keyring = await loadKeyring(file);
   const nextEpoch = Math.max(...keyring.epochs.map((e) => e.epoch)) + 1;

@@ -39,7 +39,6 @@ describe(tokenize, () => {
 
   it("does not leak placeholder control characters into the output", () => {
     const out = tokenize('const s = "hi" // note', "js");
-    // The tokenizer uses U+0001–U+0006 as internal placeholders; none may survive.
     const leaked = [...out].some(
       (ch) => ch.charCodeAt(0) >= 1 && ch.charCodeAt(0) <= 6
     );
@@ -55,7 +54,6 @@ describe(tokenize, () => {
     const out = tokenize('<div class="a">', "html");
     expect(out).toContain("tok-tag");
     expect(out).toContain("tok-attr");
-    // The injected span class must not be re-tokenised as an attribute.
     expect(out).not.toContain('tok-attr">tok-');
   });
 });
@@ -187,14 +185,10 @@ describe(relativeWhen, () => {
 
   it("falls back to a locale date beyond 30 days", () => {
     useFakeClock(new Date("2026-08-01T12:00:00Z"));
-    // 30+ days out → not a relative string.
     expect(relativeWhen("2026-06-05T12:00:00Z")).not.toMatch(/ago|Just now/u);
   });
 
   it('renders an unparseable date as the platform "Invalid Date" string', () => {
-    // `new Date('not-a-date')` yields NaN rather than throwing, so the parse
-    // falls through to `toLocaleDateString()` → "Invalid Date" (the try/catch
-    // guards only a genuine throw, which strings never trigger).
     useFakeClock(new Date("2026-06-05T12:00:00Z"));
     expect(relativeWhen("not-a-date")).toBe("Invalid Date");
   });

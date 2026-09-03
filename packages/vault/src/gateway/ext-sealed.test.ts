@@ -1,9 +1,3 @@
-// Ext-band sealed columns (#298): a blueprint app that declares
-// `sealed: [...]` on its own ext.tables gets the full Locker treatment —
-// ciphertext at rest via the seal sweep, placeholder in default reads,
-// plaintext only under the reveal verb, hash tokens in the journal, and a
-// hard refusal to make a sealed column searchable.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
@@ -72,8 +66,6 @@ describe("ext-sealed", () => {
     return (out as { output: { id: string } }).output.id;
   }
 
-  // ── declaration validation ──────────────────────────────────────────────
-
   test("a sealed column that is also searchable is refused at declaration", () => {
     expect(() =>
       applyExtBand(
@@ -104,8 +96,6 @@ describe("ext-sealed", () => {
       /must be text/u
     );
   });
-
-  // ── the six enforcement points ──────────────────────────────────────────
 
   test("a declared ext secret is ciphertext at rest", () => {
     installApp();
@@ -195,10 +185,7 @@ describe("ext-sealed", () => {
     );
   });
 
-  // ── retro-seal + rotation ───────────────────────────────────────────────
-
   test("declaring sealed on an already-populated column seals the existing rows", () => {
-    // Install WITHOUT sealing, write plaintext, then declare it sealed.
     installApp({ ...CRED_TABLE, sealed: [] });
     const id = addCredential("plaintext_at_first");
     db.vault
@@ -227,8 +214,6 @@ describe("ext-sealed", () => {
       )
       .get(id) as { api_key: string };
     expect(isSealedValue(raw.api_key)).toBe(true);
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({
       ...db.vault
         .prepare(
@@ -238,7 +223,6 @@ describe("ext-sealed", () => {
         .get(`ext.${APP}.credential`),
     }).toStrictEqual({ n: 0 });
     expect(readSealKeyFingerprint(db.vault)).not.toBeNull();
-    // and it still reveals to the original plaintext
     const out = gw.reveal(owner, {
       entity: `ext.${APP}.credential`,
       entityId: id,

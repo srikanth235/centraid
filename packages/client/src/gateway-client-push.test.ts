@@ -118,13 +118,6 @@ describe(composeWebNotifications, () => {
   });
 });
 
-// --- syncWebNotifications -------------------------------------------
-//
-// The OS-banner half of the same surface. Two guards decide whether anything
-// is shown at all, and both were missing (#647): a focused page must stay
-// quiet, and the very first sync must take a silent baseline instead of
-// firing one banner per already-open decision.
-
 class FakeNotification extends EventTarget {
   static permission = "granted";
   static shown: string[] = [];
@@ -245,8 +238,6 @@ describe("syncWebNotifications", () => {
     serve(notificationsPayload([]));
     await syncWebNotifications();
 
-    // Without the sentinel the empty ledger would re-arm seeding and swallow
-    // this decision instead of notifying.
     serve(notificationsPayload(["out-1"]));
     await syncWebNotifications();
 

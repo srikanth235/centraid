@@ -1,18 +1,8 @@
-// Generic tagging (core §01, #274, #352): owner-driven free-form labels over
-// the same SKOS mechanism the enrichment pipeline uses — one well-known scheme
-// per vault (`centraid:tags:v1`), so tasks/notes/documents/media share one
-// tagging mechanism. No `favorite` column, no parallel table: "one judgment,
-// one mechanism".
-
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 
 const TAGS_SCHEME_URI = "centraid:tags:v1";
 
-/**
- * Taggable entities: logical name → primary-key column, plus `live` when the
- * table has a `deleted_at` lifecycle. Doubles as an allow-list guard on raw SQL.
- */
 const SUBJECT_PK: Record<string, { pk: string; live?: boolean }> = {
   "knowledge.note": { pk: "note_id", live: true },
   "schedule.task": { pk: "task_id" },
@@ -20,12 +10,10 @@ const SUBJECT_PK: Record<string, { pk: string; live?: boolean }> = {
   "media.asset": { pk: "asset_id", live: true },
 };
 
-/** Display label → notation: lowercased, whitespace collapsed, trimmed. */
 function notationOf(label: string): string {
   return label.trim().toLowerCase().replace(/\s+/gu, " ");
 }
 
-/** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
   if (ctx.identity.partyId) return ctx.identity.partyId;
   const owner = ctx.db
@@ -136,8 +124,6 @@ function tagItem(ctx: HandlerCtx): Record<string, unknown> {
   const schemeId = findOrCreateTagsScheme(ctx);
   const conceptId = findOrCreateConcept(ctx, schemeId, input.label);
 
-  // Idempotent: same label returns the existing edge (core_tag's
-  // UNIQUE(target_type, target_id, concept_id), as in core.attach's dedup).
   const existingTag = ctx.db
     .prepare(
       "SELECT tag_id FROM core_tag WHERE target_type = ? AND target_id = ? AND concept_id = ?"
@@ -149,8 +135,6 @@ function tagItem(ctx: HandlerCtx): Record<string, unknown> {
     return { tag_id: existingTag.tag_id, concept_id: conceptId, notation };
   }
 
-  // Owner-asserted: a party, no confidence — the exact inverse of an
-  // enrichment-derived tag (per the derived-data contract).
   const tagId = ctx.newId();
   ctx.db
     .prepare(
@@ -223,5 +207,4 @@ export function registerTagCommands(gateway: Gateway): void {
   gateway.registerCommand(UNTAG_ITEM);
 }
 
-/** The subject types a projection may tag — exported for callers/tests. */
 export const TAGGABLE_SUBJECTS = Object.keys(SUBJECT_PK);

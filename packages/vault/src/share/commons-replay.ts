@@ -1,9 +1,3 @@
-// Command-tail replay: the Commons catch-up engine (#750), O(k) operations
-// instead of an O(commons size) diff. Convergence needs DETERMINISTIC IDS —
-// one `replicaInvocationKey` seed on both sides — and CONTIGUITY, since a gap
-// applies a command to state it never saw. EVERY failure raises
-// `CommonsReplayError` and falls back to the full re-project.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { recordKnownStagedBlob } from "../blob/staging-record.js";
@@ -23,7 +17,6 @@ export interface CommonsTailOperation {
   outcome: string;
 }
 
-/** Bytes cannot be derived from the input the way ids can, so they travel. */
 export interface CommonsTailBlob {
   sha256: string;
   size: number;
@@ -31,7 +24,6 @@ export interface CommonsTailBlob {
   title?: string;
 }
 
-/** Never fatal: the full projection repairs any state. */
 export class CommonsReplayError extends Error {
   constructor(message: string) {
     super(message);
@@ -67,7 +59,6 @@ export function readCommonsTail(
     .all(grantId, afterSequence) as unknown as CommonsTailOperation[];
 }
 
-/** A replica whose window compaction reclaimed re-baselines instead. */
 export function commonsTailIsContiguous(input: {
   tail: readonly { sequence: number }[];
   fromSequence: number;
@@ -91,7 +82,6 @@ export function executableCommonsTail(
   );
 }
 
-/** Always spelled this way, keeping the manifest O(k) in the tail. */
 const STAGED_SHA_KEY = "staged_sha";
 
 function collectStagedShas(value: unknown, into: Set<string>): void {
@@ -124,7 +114,6 @@ export function commonsTailBlobs(
     const row = describe.get(sha256) as
       | { media_type: string; byte_size: number; title: string | null }
       | undefined;
-    // Omitting an undescribed sha re-baselines, beating invented metadata.
     if (!row) continue;
     blobs.push({
       sha256,
@@ -136,7 +125,6 @@ export function commonsTailBlobs(
   return blobs;
 }
 
-/** CAS bytes must already be present; an owned sha needs no staging row. */
 export function stageCommonsTailBlobs(
   seat: DatabaseSync,
   blobs: readonly CommonsTailBlob[]
@@ -155,11 +143,6 @@ export function stageCommonsTailBlobs(
   }
 }
 
-/**
- * Callers MUST hold the seat's write transaction: a partly replayed tail is no
- * state to keep. `replayed` is refused deliberately — a spent invocation id
- * means an earlier attempt rolled back, so its rows are NOT present.
- */
 export function replayCommonsTail(input: {
   grantId: string;
   tail: readonly CommonsTailOperation[];
@@ -194,7 +177,6 @@ export function replayCommonsTail(input: {
         invocationId
       );
     } catch (error) {
-      // Version skew re-baselines rather than parking the grant.
       throw new CommonsReplayError(
         `commons operation ${operation.sequence} (${operation.command}) could not be replayed: ${
           error instanceof Error ? error.message : String(error)

@@ -20,17 +20,10 @@ export interface StarredRouteProps {
   toggleStar: (id: string) => void;
 }
 
-// Starred page — the Home library filtered to starred items (replaces the
-// migration-era empty-state stub). Reuses the Home DTO builders so cards stay
-// pixel-identical; the context menu here is deliberately narrow (Open/Unstar —
-// rename/delete/share stay on Home, the library of record). Unstarring drops
-// the card immediately because star state lives in the App root.
 export default function StarredRoute(props: StarredRouteProps): JSX.Element {
   const { navigate } = useShellActions();
   const { userApps, tileVariant, isStarred, toggleStar } = props;
 
-  // One call: `collectAutomationRuns` returns the rows it already fetched, so
-  // pairing it with `listAutomations()` only bought the same list twice.
   const feed = useAsyncData(() =>
     collectAutomationRuns().catch(() => ({
       rows: [] as CentraidAutomationRow[],

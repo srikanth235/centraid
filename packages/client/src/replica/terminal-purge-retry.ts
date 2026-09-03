@@ -3,10 +3,6 @@ import type { ReplicaStoragePurgeOptions } from "./storage-manifest.js";
 
 const DEFAULT_RETRY_DELAY_MS = 5_000;
 
-/**
- * Browser-lifetime driver for the durable terminal-pending inventory. A fresh
- * instance starts with an immediate sweep, so pending cleanup survives reload.
- */
 export class TerminalReplicaPurgeRetryLoop {
   readonly #options: ReplicaStoragePurgeOptions;
   #timer: ReturnType<typeof setTimeout> | undefined;
@@ -24,7 +20,6 @@ export class TerminalReplicaPurgeRetryLoop {
     this.schedule(0);
   }
 
-  /** Re-check immediately after a lifecycle event adds terminal work. */
   wake(): void {
     if (!this.#started) return;
     if (this.#running) {

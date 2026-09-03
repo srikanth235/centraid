@@ -6,17 +6,8 @@ import type { ResourceProfileDTO } from "./resource-summary.js";
 
 import styles from "./GatewayScreen.module.css";
 
-// L2 of the Resource card (#528): the host facts + resolved knobs
-// behind "How we sized this". Read-only. Two render modes:
-//   - default: a collapsed-by-default disclosure (controlled button + region,
-//     not native <details>, so expand/collapse is deterministic under jsdom).
-//   - embedded: always-open groups with no toggle — for use inside the
-//     "How we sized this" dialog (#528 follow-up), which supplies its
-//     own heading and dismissal.
-
 export interface ResourceCardDetailsProps {
   profile: ResourceProfileDTO;
-  /** Render open with no toggle, for the details dialog. */
   embedded?: boolean;
 }
 

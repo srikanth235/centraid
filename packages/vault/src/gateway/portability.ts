@@ -1,6 +1,3 @@
-// Export & portability (§10, GDPR art.20): whole model out verifiable, back
-// lossless — §11 gates every new domain on this.
-
 import type { VaultDb } from "../db.js";
 import { nowIso, sha256Hex, uuidv7 } from "../ids.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
@@ -24,18 +21,11 @@ export interface VaultExport {
   format: "jsonld";
   ontologyVersion: string;
   exportedAt: string;
-  /** Logical entity → rows, PK-ordered; the hash covers exactly this. */
   tables: Record<string, Record<string, unknown>[]>;
-  /** sha256 over the canonical `tables`. */
   verifyHash: string;
-  /**
-   * Entities a poisoned row knocked out of this export (#374 tier 4.3);
-   * absent means all made it in. Skips never desync round-trip verification.
-   */
   skippedTables?: { entity: string; error: string }[];
 }
 
-/** Deterministic JSON: keys sorted at every level. */
 export function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value !== null && typeof value === "object") {
@@ -57,14 +47,6 @@ function primaryKeyColumn(db: VaultDb, physical: string): string {
   return rows.find((r) => r.pk === 1)?.name ?? rows[0]?.name ?? "rowid";
 }
 
-/**
- * Assemble the artifact and receipt it. `_owner` is the authenticated caller;
- * it stopped being read when the export-job table left the ontology (#916,
- * ruling ONT-06) and the receipt below became the only record of the export.
- * The parameter stays because the export is an OWNER act and the callers pass
- * the identity they authenticated — dropping it from the signature would make
- * that seam invisible.
- */
 export function exportVault(
   db: VaultDb,
   _owner: Identity
@@ -75,7 +57,6 @@ export function exportVault(
   for (const logical of listVaultEntities(db.vault)) {
     const ref = resolveEntity(logical, db.vault);
     if (!ref) continue;
-    // Per-table isolation (#374 4.3): a poisoned row skips its table; others continue.
     try {
       const pk = primaryKeyColumn(db, ref.physical);
       tables[logical] = (
@@ -83,9 +64,6 @@ export function exportVault(
           .prepare(`SELECT * FROM "${ref.physical}" ORDER BY "${pk}"`)
           .all() as Record<string, unknown>[]
       ).map((row) => {
-        // A pointer into the AUDIT band never crosses (#916): the band itself
-        // does not travel, so the id would name an invocation the target has
-        // never heard of. See `AUDIT_POINTER_COLUMNS`.
         const stripped = { ...row };
         for (const column of Object.keys(stripped))
           if (AUDIT_POINTER_COLUMNS.has(`${logical}.${column}`))
@@ -99,7 +77,6 @@ export function exportVault(
       });
     }
   }
-  // Hash over `tables` as assembled; skipped tables never counted.
   const verifyHash = sha256Hex(canonicalJson(tables));
   const artifact: VaultExport = {
     format: "jsonld",
@@ -109,10 +86,6 @@ export function exportVault(
     verifyHash,
     ...(skippedTables.length > 0 ? { skippedTables } : {}),
   };
-  // An export keeps its RECEIPT (#916, ruling ONT-06). The export-job table
-  // was a second copy of what the receipt below already records — who asked,
-  // when, over what, and the hash that proves it — so it left the ontology and
-  // the id it was keyed by is minted here for the receipt alone.
   const exportId = uuidv7();
   const vaultId = (
     db.vault.prepare("SELECT vault_id FROM core_vault LIMIT 1").get() as
@@ -123,8 +96,6 @@ export function exportVault(
     grantId: null,
     invocationId: null,
     action: "act access.export_vault",
-    // The object of an export is the VAULT itself (#916, ruling ONT-06); the
-    // export's own id is minted here and lives in the receipt detail.
     objectType: "core.vault",
     objectId: vaultId ?? exportId,
     purpose: null,
@@ -141,35 +112,12 @@ export function exportVault(
   return { artifact, exportId, receiptId };
 }
 
-/**
- * `core_vault.settings_json`'s seal-key bag, mirroring schema/sealed.ts's
- * private `SETTINGS_KEY`. Named here because the import must be able to REMOVE
- * a stamp it is deliberately not honouring.
- */
 const SEAL_KEY_SETTING = "seal_key";
 
-/**
- * Columns a portable artifact carries but a portable IMPORT must not (#916).
- *
- * `core_entity_revision.invocation_id` is a real foreign key into the AUDIT
- * band — the band a portable export deliberately leaves behind, because it is
- * this vault's evidence and not the member's data. Loading the id anyway names
- * an invocation the target has never heard of. The snapshot is the fact worth
- * carrying; which command caused it is a local audit detail.
- */
 const AUDIT_POINTER_COLUMNS: ReadonlySet<string> = new Set([
   "core.entity_revision.invocation_id",
 ]);
 
-/**
- * Drop the SOURCE vault's seal-key stamp from a freshly loaded `core_vault`.
- *
- * The bug this closes (#630): the stamp is the fingerprint of a key that lives
- * on the exporting machine, so copying it made the target report a successful
- * import and then refuse to reopen with `SealKeyError('missing')`. The stamp
- * is re-applied below from the key this vault ACTUALLY seals with, or left
- * absent when nothing sealed came in.
- */
 function clearImportedSealKeyStamp(vault: VaultDb["vault"]): void {
   const row = vault
     .prepare("SELECT settings_json FROM core_vault LIMIT 1")
@@ -190,28 +138,9 @@ function clearImportedSealKeyStamp(vault: VaultDb["vault"]): void {
 
 export interface ImportVaultExportOptions {
   replaceBootstrap?: boolean;
-  /**
-   * The SOURCE vault's data-encryption key, unwrapped from the export's
-   * password-wrapped custody kit. REQUIRED whenever the artifact carries
-   * sealed values — without it the ciphertext is unreadable forever, so the
-   * import refuses up front instead of writing rows nobody can open.
-   */
   sourceSealKey?: Buffer;
 }
 
-/**
- * Rebuild a fresh vault from an export, identities intact; FKs checked
- * wholesale after load (per-row ordering impossible in general).
- *
- * SEALED VALUES (#630, review-A 10.1 / review-B BUG-12). Three rules:
- *  1. Sealed cells arrive as ciphertext and are RE-SEALED under the target
- *     vault's own key — the source key is never installed, so the target's key
- *     file, its custody and its rotation history stay its own.
- *  2. Without the source key, an artifact carrying sealed values is REFUSED
- *     before the first row is written.
- *  3. The source's seal-key stamp is never copied; the stamp this vault ends
- *     up with names the key it actually sealed with.
- */
 export function importVaultExport(
   db: VaultDb,
   artifact: VaultExport,
@@ -223,7 +152,6 @@ export function importVaultExport(
       `export artifact hash mismatch: expected ${artifact.verifyHash}, got ${actual}`
     );
   }
-  // Everything about secrets is decided BEFORE the first write.
   const sealed = auditArtifactSealedValues(artifact);
   if (sealed.unexpected.length > 0) {
     throw new Error(
@@ -305,7 +233,6 @@ export function importVaultExport(
       }
       return n;
     };
-    // Canonical entities first: loads access_app_ext, planting ext-band tables.
 
     for (const logical of listVaultEntities()) imported += load(logical);
     recreateExtTables(db);
@@ -314,7 +241,6 @@ export function importVaultExport(
     }
     clearImportedSealKeyStamp(db.vault);
     if (sealedTotal > 0 && sourceSealKey) {
-      // Re-seal, never install: the target keeps its own key.
       const resealed =
         sealKeyFingerprint(sourceSealKey) === sealKeyFingerprint(db.sealKey)
           ? { cells: sealed.cells, staged: sealed.staged }
@@ -327,7 +253,6 @@ export function importVaultExport(
           `import refused: re-sealed ${resealed.cells}+${resealed.staged} of the artifact's ${sealed.cells}+${sealed.staged} sealed values — some cell would have been left unreadable`
         );
       }
-      // This vault now HAS secrets, sealed with THIS key. Stamp says so.
       stampSealKeyFingerprint(db.vault, db.sealKey);
     }
     const violations = db.vault.prepare("PRAGMA foreign_key_check").all();

@@ -2,9 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import { vaultForTriggers } from "./AutomationEditorRoute.js";
 
-// The route module transitively imports the whole gateway-client surface; only
-// the pure `vaultForTriggers` derivation is under test, so stub the client and
-// the import needs no live gateway. `vi.mock` is hoisted above the imports.
 vi.mock(import("../../../gateway-client.js"), () => ({}));
 vi.mock(import("../../../assist-oauth-handoff.js"), () => ({}));
 

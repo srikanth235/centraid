@@ -1,12 +1,3 @@
-// Share-by-placement (#599 decision 11). Sharing is PLACEMENT, not filtering:
-// nothing may query your vault, so an item is projected INTO the audience vault
-// and its bytes hardlinked there. No row-level ACLs — the vault boundary is the
-// isolation. The order is fixed: read the closure from the origin (no
-// transaction), hardlink blobs, then ONE transaction in the audience vault.
-// Blobs first because a link is idempotent; the origin is NEVER written, so no
-// two-database transaction exists. Lives OUTSIDE the per-vault
-// AsyncLocalStorage handler path — a share spans two vault scopes.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import type { LocalBlobStore } from "../blob/local.js";
@@ -34,33 +25,14 @@ export interface ShareVaultRef {
 }
 
 export interface ShareItemsToVaultInput {
-  /** READ-ONLY throughout this flow. */
   origin: ShareVaultRef;
   originVaultId: string;
-  /** The only vault written. */
   audience: ShareVaultRef;
   itemType: ShareableItemType;
-  /** ORIGIN row ids; one closure covers the set. */
   itemIds: readonly string[];
-  /** An attribution, never a principal this vault can look up (#726). */
   sharedBy: string;
   now?: () => number;
-  /**
-   * Gates the origin's `media.location` policy against `exif_json` (#726 P3
-   * threat 8). Defaults false — only the edge plane opts in.
-   */
   crossOwner?: boolean;
-  /**
-   * The AUTHORITY this placement runs under (#916, adversarial review WEAK).
-   * `shareItemsToVault` is a library export and was gated on NOTHING: any
-   * caller holding both vault handles could place rows in someone else's vault
-   * without an answer standing anywhere.
-   *
-   * Every item must carry a LIVE, granted `share_authority` before a byte
-   * lands. Naming the principal narrows that to "and it is THIS one's" — which
-   * a caller that resolved an audience can say and a fan-out over a circle
-   * cannot, so it is optional and never a way to widen.
-   */
   authority?: {
     principalKind: "person" | "circle" | "harness" | "device";
     principalId: string;
@@ -69,7 +41,6 @@ export interface ShareItemsToVaultInput {
 }
 
 export interface UnshareFromVaultInput {
-  /** The only vault written. */
   audience: ShareVaultRef;
   itemType: ShareableItemType;
   itemId: string;
@@ -77,7 +48,6 @@ export interface UnshareFromVaultInput {
 
 export interface UnshareFromVaultResult {
   removed: boolean;
-  /** The inode survives until the LAST vault lets go; origin bytes stay. */
   orphanedShas: string[];
 }
 
@@ -130,10 +100,6 @@ export function readShareOrigin(
   };
 }
 
-/**
- * A LIVE answer over every item, in the origin, before anything is placed
- * (#916). "The audience already has it" must never be how a share happens.
- */
 function assertPlacementAuthority(input: ShareItemsToVaultInput): void {
   const named = input.authority;
   const stands = input.origin.vault.prepare(
@@ -162,15 +128,10 @@ function assertPlacementAuthority(input: ShareItemsToVaultInput): void {
 
 export interface ShareItemsToVaultResult {
   itemType: ShareableItemType;
-  /** One entry per requested id, in order. */
   items: ProjectedItem[];
   blobs: BlobPlacement[];
 }
 
-/**
- * Idempotent: re-sharing, even by a different member, dedupes onto existing
- * rows (`core_content_item.sha256` is UNIQUE) and keeps the first placement.
- */
 export function shareItemsToVault(
   input: ShareItemsToVaultInput
 ): ShareItemsToVaultResult {
@@ -180,8 +141,6 @@ export function shareItemsToVault(
     );
   }
   assertPlacementAuthority(input);
-  // Resolve out of the origin BEFORE touching the audience, so an unknown item
-  // is refused with nothing placed anywhere.
   const closure = readShareClosure(input.origin.vault, {
     originVaultId: input.originVaultId,
     itemType: input.itemType,
@@ -209,10 +168,6 @@ export function shareItemsToVault(
   return { itemType: input.itemType, items: projection.items, blobs };
 }
 
-/**
- * Refuses to touch a row the audience AUTHORED (no `core_share_origin`
- * record): unshare removes placements, never someone's own data.
- */
 export function unshareFromVault(
   input: UnshareFromVaultInput
 ): UnshareFromVaultResult {
@@ -221,8 +176,6 @@ export function unshareFromVault(
   if (!origin) {
     return { removed: false, orphanedShas: [] };
   }
-  // Savepoint when a caller already owns the audience transaction (commons
-  // scrub+re-project): stays atomic, never double-opens BEGIN.
   const nested = audience.isTransaction;
   audience.exec(nested ? "SAVEPOINT unshare_from_vault" : "BEGIN IMMEDIATE");
   let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
@@ -240,14 +193,6 @@ export function unshareFromVault(
         "DELETE FROM core_share_origin WHERE target_type = ? AND target_id = ?"
       )
       .run(shareOriginEntityType(input.itemType), input.itemId);
-    // THE SHARE'S OWN MEMBERSHIP, NOT THE VAULT'S (#916, adversarial BUG-9).
-    // Removal walked LIVE membership — the album's collection entries — so an
-    // audience who trashed a projected photograph (which removes its entry)
-    // left removal nothing to find: the album went, and the asset and its
-    // bytes stayed behind to be restored afterwards. Every row a projection
-    // wrote carries a `core_share_origin` row now, so what the closure walk
-    // could not reach is swept here, from the SAME share, and only while it is
-    // reachable from nothing else in this vault.
     for (const row of strandedProjections(audience, origin)) {
       const itemType = shareableItemTypeOfEntity(row.target_type);
       if (!itemType) continue;
@@ -268,18 +213,10 @@ export function unshareFromVault(
     if (nested) audience.exec("RELEASE unshare_from_vault");
     throw error;
   }
-  // Liveness is read AFTER the commit, so a sha another row still holds is
-  // reported live rather than guessed at.
   const live = liveBlobShas(audience);
   return { removed: true, orphanedShas: shas.filter((sha) => !live.has(sha)) };
 }
 
-/**
- * Rows this share placed that nothing in the audience vault still reaches: not
- * filed in a live collection, not the current content of a live document, not
- * the bytes behind a live asset. A projected row the audience detached from
- * its container is exactly this, and is what the live-membership walk missed.
- */
 function strandedProjections(
   audience: DatabaseSync,
   origin: ShareOriginRecord
@@ -307,12 +244,6 @@ function strandedProjections(
   }[];
 }
 
-/**
- * Source side of a completed cross-vault MOVE. Unlike unshare this removes an
- * AUTHORED item: the caller must durably prove the target projection committed
- * first (the gateway placement ledger owns that ordering), and this stays
- * separate so no ordinary share path reaches authored deletion.
- */
 export function moveOutOfVault(
   input: MoveOutOfVaultInput
 ): UnshareFromVaultResult {

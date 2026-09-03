@@ -15,11 +15,6 @@ import type {
   ModelId,
 } from "../types.js";
 
-// CLIP ViT-B/32 (OpenAI weights, MIT — see LICENSES.md), ONNX export from
-// immich-app/ViT-B-32__openai. Both the image tower (visual.onnx) and the
-// text tower (textual.onnx) project into the SAME embedding space, so the
-// wire contract advertises one model id for both embed-image and embed-text
-// (#724 W8 requires this).
 export const EMBED_MODEL_ID: ModelId = "clip-vit-b-32@1";
 
 const CLIP_DIR = path.join(MODELS_DIR, "clip");
@@ -38,11 +33,6 @@ export function embedWeightsPresent(modelsDir: string = MODELS_DIR): boolean {
   );
 }
 
-/**
- * Parses the OpenAI CLIP BPE merges file: a `#version: ...` comment line
- * (skipped) followed by one `"symbolA symbolB"` pair per line, in learned
- * priority order.
- */
 export function parseMergesFile(contents: string): Array<[string, string]> {
   const merges: Array<[string, string]> = [];
   for (const line of contents.split("\n")) {
@@ -76,7 +66,6 @@ async function loadTokenizer(): Promise<ClipTokenizer> {
   return cachedTokenizer;
 }
 
-/** L2-normalizes a vector — CLIP embeddings are compared by cosine similarity, so callers expect unit vectors. */
 export function l2Normalize(vector: Float32Array): number[] {
   let sumSquares = 0;
   for (const value of vector) {
@@ -89,14 +78,6 @@ export function l2Normalize(vector: Float32Array): number[] {
   return Array.from(vector, (value) => value / norm);
 }
 
-/**
- * Reads the first output tensor's data regardless of its exact name — ONNX
- * exports of CLIP name their pooled embedding output differently across
- * conversion tools, so anchoring to `session.outputNames[0]` (rather than a
- * guessed literal like `"image_embeds"`) is robust to that variance. The
- * pinned export and this first-output lookup are exercised by the weekly
- * real-weight golden in `model-goldens.live.test.ts`.
- */
 function firstOutputAsFloat32(
   fetches: Record<string, { data: unknown }>,
   outputNames: readonly string[]

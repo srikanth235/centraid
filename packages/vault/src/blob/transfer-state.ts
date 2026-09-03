@@ -131,11 +131,6 @@ export class BlobTransferState {
       .run(state, nowIso(), sessionId);
   }
 
-  /**
-   * Cross the fallback commit boundary while durably retaining a hash resolved
-   * from the incremental state. Replaying an existing committing row is a
-   * no-op; a different hash or terminal state is never overwritten.
-   */
   beginFallbackCommit(sessionId: string, sha256: string): IngressSessionRow {
     const result = this.db
       .prepare(
@@ -345,7 +340,6 @@ export class BlobTransferState {
     return row.bytes;
   }
 
-  /** Future fallback bytes not yet reflected in statfs free-space accounting. */
   reservedIngressRemainingBytes(exceptSessionId?: string): number {
     const row = this.db
       .prepare(

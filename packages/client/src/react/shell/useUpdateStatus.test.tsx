@@ -9,7 +9,6 @@ import type { UpdateStatus } from "./useUpdateStatus.js";
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 
-// Captured broadcast subscriber so tests can push an UPDATE_AVAILABLE.
 let pushUpdate: ((msg: UpdateStatus) => void) | null = null;
 const unsubscribe =
   vi.fn<ReturnType<NonNullable<typeof window.CentraidApi.onUpdateAvailable>>>();

@@ -10,8 +10,6 @@ const updateVault = vi.fn<typeof TypeImport_1gl5zx7.updateVault>((_input) =>
     ownerPartyId: "party-1",
   })
 );
-// `vi.mock` is hoisted above the imports by vitest, so the gateway stub lands
-// before vaultModals.js pulls gateway-client-core's load-time side-effect.
 vi.mock(import("../../../gateway-client.js"), () => ({
   listVaults: () =>
     Promise.resolve([
@@ -87,9 +85,6 @@ describe("vaultModals", () => {
         blurb: "hq",
       });
       expect(setActiveVault).not.toHaveBeenCalled();
-      // updateVault is a direct HTTP call, not IPC, so it never broadcasts
-      // VAULT_CHANGED on its own — saveVault must notify explicitly or the
-      // sidebar head keeps showing the stale name (#382 follow-up).
       expect(notifyVaultMetadataChanged).toHaveBeenCalledOnce();
     });
 

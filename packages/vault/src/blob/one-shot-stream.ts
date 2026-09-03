@@ -109,10 +109,6 @@ export async function streamThroughOnce(
     if (actual !== sha) throw new VaultBlobHashMismatchError(sha, actual);
     const head = Buffer.concat(probeChunks, probeBytes);
     const mediaType = sniffMediaType(head, input.mediaType, input.filename);
-    // Direct-to-cold heuristic (#425): the CopyObject that mints
-    // the final CAS object carries STANDARD_IA for an eligible large original.
-    // The original's staging row is only written below, after custody, so the
-    // media type + size are handed in directly for the resolver.
     const storageClass = remote.storageClassFor?.(sha, "cas", {
       mediaType,
       byteSize: received,
@@ -147,7 +143,7 @@ export async function streamThroughOnce(
           ...(input.stagedBy ? { stagedBy: input.stagedBy } : {}),
         });
       } catch {
-        // Custody is complete; a declined/failed preview remains backfillable.
+        // Intentionally empty.
       }
     }
     deps.emit();

@@ -1,12 +1,7 @@
-// The pieces both Locker command packs need (#872): the item's logical name,
-// the SKOS tag scheme, and the three "replace this decoration" helpers (tags,
-// connector alias, service anchor). Nothing here is a command.
-
 import type { HandlerCtx } from "../gateway/types.js";
 
 export const LOCKER_ITEM_TYPE = "locker.item";
 
-/** SKOS locker-tags scheme (#310), not a second tag table. https, not urn:. */
 export const LOCKER_TAGS_SCHEME_URI =
   "https://centraid.dev/schemes/locker-tags";
 
@@ -80,7 +75,6 @@ export function setTags(
   }
 }
 
-/** Set or clear (`''`) the service anchor (#310). Validated live — no opaque pointer. */
 export function setConnection(
   ctx: HandlerCtx,
   itemId: string,
@@ -102,9 +96,6 @@ export function setConnection(
     .run(trimmed, itemId);
 }
 
-/** Set or clear (`''`) the connector alias (#298). Unique among LIVE items;
- *  a trashed holder yields it. The mapping is a REGISTERED table, so an app
- *  reads back what this writes (README-Locker §8). */
 export function setAlias(ctx: HandlerCtx, itemId: string, alias: string): void {
   const previous = ctx.db
     .prepare("SELECT alias FROM locker_item_alias WHERE item_id = ?")

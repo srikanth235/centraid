@@ -82,9 +82,6 @@ export function HarnessPicker({
   );
 }
 
-/**
- * Inline composer model picker (subsystem `assistant`, active harness).
- */
 export function ModelPicker({
   picker,
   loaded,
@@ -225,13 +222,6 @@ export function EffortPicker({
   );
 }
 
-/**
- * Assistant copilot screen (#325, extended by #420 Wave 1).
- * AssistantRoute owns the stream + message model; this screen renders the
- * transcript (with per-message copy / feedback / regenerate / retry / retry
- * pager / timestamps), a scroll-aware autoscroll with a jump-to-bottom pill,
- * and the composer with per-conversation draft persistence.
- */
 export default function AssistantScreen({
   suggestions,
   conversationId,
@@ -274,44 +264,24 @@ export default function AssistantScreen({
   const [pickerLoadedKey, setPickerLoadedKey] = useState<string | null>(null);
   const pickerLoadSeqRef = useRef(0);
   const harnessSwitchSeqRef = useRef(0);
-  // The key changes during a thread/capability revision, so the old loaded
-  // state cannot briefly enable controls while the new picker is in flight.
   const pickerLoadKey = `${conversationId ?? ""}:${snap.pickerRevision ?? 0}`;
   const pickerReady = modelPickerLoaded && pickerLoadedKey === pickerLoadKey;
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
-  // Only the newest slice of a long transcript is mounted (#659); the
-  // rest is one click above, never dropped. The window resets per conversation
-  // because "how far back have I asked to see" belongs to the thread you are
-  // reading, not to the screen.
   const [windowSize, setWindowSize] = useState(TRANSCRIPT_WINDOW);
-  // Memoized so `rendered` is referentially stable across re-renders that did
-  // not change the transcript — the scroll anchor below keys on it, and a fresh
-  // slice every render would fire (and so discard) the anchor before the page
-  // it is waiting for has landed.
   const { rendered, hiddenCount } = useMemo(
     () => windowTranscript(snap.messages, windowSize),
     [snap.messages, windowSize]
   );
-  // Two sources of older history, in order: the rows already fetched but not
-  // yet mounted, then the server's previous page. The control is offered while
-  // EITHER has more, so it never appears and then does nothing.
   const canShowEarlier = hiddenCount > 0 || Boolean(snap.canLoadEarlier);
 
-  // Prepending older rows grows the content ABOVE the viewport, and a browser
-  // keeps `scrollTop` numerically fixed — so without this the page lurches
-  // downward by exactly the height of what you just asked to see. Anchoring on
-  // distance-from-BOTTOM is exact for a pure prepend: nothing below moved.
   const anchorRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(
     null
   );
   const showEarlier = (): void => {
     const el = scrollRef.current;
-    // Captured before either path changes the content. The server path is
-    // async, so the anchor simply waits until the page lands and `rendered`
-    // changes — the layout effect is what consumes it.
     anchorRef.current = el
       ? { scrollHeight: el.scrollHeight, scrollTop: el.scrollTop }
       : null;
@@ -362,20 +332,14 @@ export default function AssistantScreen({
     };
   }, [conversationId, loadModelPicker, pickerLoadKey, snap.pickerRevision]);
 
-  // Restore the per-conversation draft when the open thread changes (§4).
-  // Done during render, so the composer never paints the previous thread's
-  // draft for a frame after the switch.
   const [seenConversationId, setSeenConversationId] = useState(conversationId);
   if (seenConversationId !== conversationId) {
     setSeenConversationId(conversationId);
-    // The outgoing thread's last keystrokes must land before we read the
-    // incoming thread's draft.
     flushDraftSave();
     setDraft(loadDraft(conversationId));
     setWindowSize(TRANSCRIPT_WINDOW);
   }
 
-  // Unmounting (navigating away) is the other moment a pending write must land.
   useEffect(() => flushDraftSave, []);
 
   const changeDraft = (v: string): void => {
@@ -383,8 +347,6 @@ export default function AssistantScreen({
     queueDraftSave(conversationId, v);
   };
 
-  // @-mentions + slash-commands (#420). Inert when the route wires no
-  // entity search / commands (older callers, tests).
   const autocomplete = useComposerAutocomplete({
     textareaRef: taRef,
     setValue: changeDraft,
@@ -415,29 +377,19 @@ export default function AssistantScreen({
   };
   const selectHarness = (harnessKind: string): void => {
     const switchSeq = ++harnessSwitchSeqRef.current;
-    // Invalidate a passive picker request that started before this explicit
-    // switch; its completion must not re-enable the old harness's controls.
     pickerLoadSeqRef.current += 1;
     setModelPickerLoaded(false);
-    // `finally` is load-bearing: without it a rejected switch leaves every
-    // picker disabled forever, plus an unhandled rejection.
     void onSetHarness(harnessKind)
       .then((picker) => {
         if (harnessSwitchSeqRef.current === switchSeq) setModelPicker(picker);
       })
-      .catch(() => {
-        // The route owns the user-facing failure (it toasts the preflight
-        // reason); the screen's only job here is not to strand its controls.
-      })
+      .catch(() => {})
       .finally(() => {
         if (harnessSwitchSeqRef.current === switchSeq)
           setModelPickerLoaded(true);
       });
   };
 
-  // Memoized because `Message` is memoized: a fresh callbacks object every
-  // render would defeat the row-level comparison and re-render the whole
-  // transcript on every keystroke and every streamed token (#659).
   const messageCallbacks = useMemo<MessageCallbacks>(
     () => ({
       hydrateRefs,
@@ -506,9 +458,6 @@ export default function AssistantScreen({
                   <Message
                     key={m.msgId ?? `${m.kind}:${i}`}
                     m={m}
-                    // The row's index must address the FULL model — the route's
-                    // retry and pager callbacks index into `m.current.msgs`, so
-                    // a window-relative index would act on the wrong message.
                     index={hiddenCount + i}
                     cb={messageCallbacks}
                   />
@@ -625,8 +574,6 @@ export default function AssistantScreen({
               onSend={send}
               onStop={onStop}
               busy={snap.busy}
-              // Do not let the first turn outrun provider/capability loading or
-              // a persisted conversation harness binding.
               disabled={!pickerReady || snap.harnessReady === false}
               canSend={
                 draft.trim().length > 0 ||
@@ -637,7 +584,6 @@ export default function AssistantScreen({
               placeholder="Ask your vault anything…"
               ariaLabel="Ask your vault"
               onKeyDown={(event) => {
-                // The autocomplete menu gets first crack at Arrow/Enter/Tab/Esc.
                 if (autocomplete.onKeyDown(event)) event.preventDefault();
               }}
               onBlur={() => autocomplete.close()}

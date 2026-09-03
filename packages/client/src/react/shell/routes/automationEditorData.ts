@@ -1,4 +1,3 @@
-// Automation editor data — LOAD half only (#387). Save lives in AutomationEditorRoute.tsx.
 import { readAutomation } from "../../../gateway-client.js";
 import type { AuEditorConnectorsDTO } from "../../screen-contracts.js";
 
@@ -7,7 +6,6 @@ export interface AutomationEditorLoadResult {
   name: string;
   instructions: string;
   triggers: CentraidAutomationRow["triggers"];
-  /** `row.id`, distinct from `row.ref`. */
   rowId: string | null;
   connectors: AuEditorConnectorsDTO | null;
   onFailure: string | null;
@@ -27,7 +25,6 @@ const DEFAULT_EDITOR_LOAD: AutomationEditorLoadResult = {
   triggers: [],
 };
 
-/** Manifest fields the renderer's ambient type doesn't declare yet — drop once it catches up. */
 interface ManifestConnectorExtra {
   requires: { secrets?: readonly string[]; harness?: string };
   connector?: {
@@ -102,15 +99,12 @@ function deriveConnectors(row: CentraidAutomationRow): AuEditorConnectorsDTO {
   };
 }
 
-/** Edit-mode fields, or defaults for create / unresolved `automationId`. */
 export async function loadAutomationEditorData(input: {
   automationId?: string;
 }): Promise<AutomationEditorLoadResult> {
   if (!input.automationId) return DEFAULT_EDITOR_LOAD;
   const row = await readAutomation({ automationId: input.automationId });
   if (!row) return DEFAULT_EDITOR_LOAD;
-  // Source of truth is `row.manifest.prompt`. Cast checks a top-level
-  // `row.prompt` first so this keeps working if it appears. Drop once ambient.
   const withPrompt = row as CentraidAutomationRow & { prompt?: string };
   return {
     connectors: deriveConnectors(row),

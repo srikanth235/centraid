@@ -1,8 +1,3 @@
-// Minimal JSON-Schema validator for command input/output contracts (S3).
-// Supports the subset the ontology's command contracts use: type, required,
-// properties, additionalProperties, enum, const, items, minimum/maximum,
-// minLength/pattern. Deliberately dependency-free like the rest of the repo.
-
 interface Schema {
   type?: string;
   required?: string[];
@@ -85,7 +80,6 @@ function check(
   }
 }
 
-/** Validate a value; returns a list of violations (empty = valid). */
 export function validateJson(
   schema: Record<string, unknown>,
   value: unknown

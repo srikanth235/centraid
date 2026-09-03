@@ -1,7 +1,3 @@
-// S1 — Identity: every caller authenticates as an enrolled row. An unknown
-// caller is dropped at transport, with no grantee to receipt against, so
-// nothing enters the model — not even a denial row.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import type { DeviceTrust } from "../grant/device-trust.js";
@@ -26,13 +22,9 @@ interface DeviceIdentityRow {
 }
 
 interface DeviceRow extends DeviceIdentityRow {
-  /** Undefined when the plane holds no answer about this device. */
   trust: DeviceTrust | undefined;
 }
 
-// Two FACTS (#883) — key match and what the member let this device do —
-// read in ONE statement: this runs per invocation against a tighten-only
-// first-paint budget. `device-trust.ts` owns the mapping.
 const DEVICE_IDENTITY_SQL = `SELECT device_id, owner_party_id, public_key,
     ${deviceTrustScalarSql("access_device.device_id")} AS trust
   FROM access_device WHERE device_id = ?`;
@@ -48,11 +40,9 @@ function deviceRow(
   if (!row || row.public_key !== deviceKey || row.trust === "revoked") {
     throw new GatewayError("identity", "unknown caller");
   }
-  // NULL is "no answer at all", never `revoked`.
   return { ...row, trust: row.trust ?? undefined };
 }
 
-/** v0 key-equality; real request signatures change only this function. */
 export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
   if (cred.kind === "app") {
     const row = vault
@@ -77,7 +67,6 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
     };
   }
   if (cred.kind === "agent") {
-    // An autonomous agent principal rides an enrolled device's key.
     const device = deviceRow(vault, cred.deviceId, cred.deviceKey);
     const row = vault
       .prepare(

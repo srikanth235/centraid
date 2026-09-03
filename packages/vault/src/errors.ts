@@ -1,13 +1,9 @@
 /* oxlint-disable max-classes-per-file -- domain error and disk-full classifier are one error surface (#408) */
-// Disk-full classification (#351): nothing upstream can tell SQLITE_FULL from
-// a schema bug without inspecting `code`/`errcode`. Every write path shares
-// this check, so ENOSPC and SQLITE_FULL fail closed the same way.
 
 export function isDiskFullError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const e = err as { code?: unknown; errcode?: unknown; errstr?: unknown };
   if (e.code === "ENOSPC") return true;
-  // node:sqlite puts the raw result code on `errcode`; SQLITE_FULL is 13.
   if (e.code === "ERR_SQLITE_ERROR" && e.errcode === 13) return true;
   if (typeof e.errstr === "string" && /disk.*full|SQLITE_FULL/iu.test(e.errstr))
     return true;
@@ -24,11 +20,6 @@ export class VaultDiskFullError extends Error {
   }
 }
 
-/**
- * Anything not disk-full passes through unchanged, so a real bug still looks
- * like one. Reports into `sharedDiskFullTracker` — the ONE funnel every write
- * path passes — so no catch site up the stack must.
- */
 export function asVaultDiskFullError(context: string, err: unknown): Error {
   if (isDiskFullError(err)) {
     const detail = err instanceof Error ? err.message : String(err);
@@ -41,11 +32,6 @@ export function asVaultDiskFullError(context: string, err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err));
 }
 
-/**
- * BACKPRESSURE, never loss (#405): the spool is at budget with nothing safely
- * evictable, so routes map it to a retryable 429, not `VaultDiskFullError`'s
- * 507. The invariant it PROTECTS: no ingest deletes an un-replicated blob.
- */
 export class VaultBlobBackpressureError extends Error {
   readonly code = "blob_capacity_exceeded";
 
@@ -110,7 +96,6 @@ export class VaultBlobRemoteUnavailableError extends Error {
   }
 }
 
-/** Raised BEFORE the audience vault is written: a refusal beats a half-placed item. */
 export class VaultShareError extends Error {
   readonly code = "share_placement_failed";
 
@@ -126,10 +111,6 @@ export interface DiskFullEvent {
   message: string;
 }
 
-/**
- * A `statfs` reading fine again does not make the last failed write safe to
- * forget: the probe stays red until `clear()` confirms recovery.
- */
 export class DiskFullTracker {
   private last: DiskFullEvent | null = null;
 
@@ -146,11 +127,9 @@ export class DiskFullTracker {
     return this.last;
   }
 
-  /** Call once free space is CONFIRMED recovered. */
   clear(): void {
     this.last = null;
   }
 }
 
-/** One process, one disk: a test needing isolation constructs its own. */
 export const sharedDiskFullTracker = new DiskFullTracker();

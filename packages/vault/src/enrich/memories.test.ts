@@ -1,6 +1,3 @@
-// Memories v0 (#724) — see memories.ts's header for the three
-// kinds and the heuristics under test here.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -14,14 +11,6 @@ import type { Credential } from "../gateway/types.js";
 import { recomputeDuplicateClusters } from "./clusters.js";
 import { rebuildMemories } from "./memories.js";
 
-/**
- * A distinct data URI per call. `media.add_asset` dedupes on the decoded
- * bytes' sha256 (#296) — reusing one image would silently adopt the
- * SAME asset instead of minting a new one, so every fixture asset gets its
- * own seed rather than cycling a small fixed pixel set (mint.ts's
- * `decodeDataUri` never validates image structure, so any distinct payload
- * is a legal, distinct "photograph" for this test's purposes).
- */
 let seedCounter = 0;
 function pixelDataUri(): string {
   seedCounter += 1;
@@ -92,7 +81,6 @@ describe("memories", () => {
   test("on-this-day groups the same month-day across distinct years", () => {
     const old1 = addAsset({ captured_at: "2024-07-16T10:00:00.000Z" });
     const old2 = addAsset({ captured_at: "2023-07-16T09:00:00.000Z" });
-    // Different month-day: must not join the group.
     addAsset({ captured_at: "2024-07-17T10:00:00.000Z" });
 
     const result = rebuildMemories(db.vault, {
@@ -107,7 +95,6 @@ describe("memories", () => {
       .get() as { memory_id: string; day_key: string };
     expect(row.day_key).toBe("07-16");
     expect(row.memory_id).toBe("otd:07-16");
-    // Oldest capture first (capture order).
     expect(memberIds(row.memory_id)).toStrictEqual([old2, old1]);
   });
 
@@ -119,9 +106,6 @@ describe("memories", () => {
   });
 
   test("an asset with no captured_at never enters on-this-day (honest absence)", () => {
-    // No captured_at at all — mint the content, then null the captured_at
-    // out explicitly (add_asset without capture fields already leaves it
-    // NULL, but assert the schema shape holds rather than assuming it).
     const undated = addAsset();
     expect(
       (
@@ -142,10 +126,6 @@ describe("memories", () => {
   });
 
   test("a date-line-crossing tz_offset_min shifts the capture-local day server-side", () => {
-    // Raw UTC slice says Dec 31 2024; tzOffsetMin +60 puts the capture-local
-    // day at Jan 1 2025 — must group with a Jan-1 asset from another year,
-    // not with Dec-31 ones (mirrors apps/mobile's timeline-model.test.ts
-    // "date-line-crossing" fixture, at the vault layer).
     const dateLine = addAsset({
       captured_at: "2024-12-31T23:00:00.000Z",
       tz_offset_min: 60,
@@ -220,12 +200,9 @@ describe("memories", () => {
     insertPlace("paris", "Paris");
     insertPlace("day-trip-town", "Nearby Town");
 
-    // Home baseline before and after the trip.
     const home1 = addAsset({ captured_at: "2026-01-01T10:00:00.000Z" });
     setPlace(home1, "home");
 
-    // A 4-day Paris trip, Jan 5 - Jan 8, with Jan 7 a photo-less gap day
-    // (within TRIP_GAP_DAYS) that should NOT split the trip.
     const paris1 = addAsset({ captured_at: "2026-01-05T09:00:00.000Z" });
     setPlace(paris1, "paris");
     const paris2 = addAsset({ captured_at: "2026-01-06T09:00:00.000Z" });
@@ -236,7 +213,6 @@ describe("memories", () => {
     const home2 = addAsset({ captured_at: "2026-01-12T10:00:00.000Z" });
     setPlace(home2, "home");
 
-    // A single day out to a nearby town — must NOT surface as a trip.
     const dayTrip = addAsset({
       captured_at: "2026-02-01T10:00:00.000Z",
     });
@@ -253,9 +229,6 @@ describe("memories", () => {
     expect(trip.memory_id).toBe("trip:2026-01-05");
     expect(trip.place_id).toBe("paris");
     expect(trip.title_hint).toBe("3-day trip");
-    // Members span the whole date range inclusive (Jan 5 - Jan 8), so all
-    // three Paris photographs belong, and neither home baseline nor the
-    // day-trip photograph do.
     expect(memberIds(trip.memory_id).sort()).toStrictEqual(
       [paris1, paris2, paris3].sort()
     );
@@ -280,12 +253,8 @@ describe("memories", () => {
       phash: "ff00ff01",
       captured_at: "2026-01-01T00:00:01.000Z",
     });
-    // Recompute clusters so media_asset_phash.cluster_id is populated —
-    // rebuildMemories reads that column, it does not compute it.
     recomputeDuplicateClusters(db.vault);
 
-    // A capture-group pair (Live Photo still + motion) unrelated to the
-    // phash cluster above.
     const still = addAsset({
       capture_group_id: "live:1",
       captured_at: "2026-02-01T00:00:00.000Z",
@@ -295,8 +264,6 @@ describe("memories", () => {
       captured_at: "2026-02-01T00:00:01.000Z",
     });
 
-    // An asset with a phash that clusters with nothing (singleton) — must
-    // not become its own "similar" memory.
     addAsset({ phash: "00000000", captured_at: "2026-03-01T00:00:00.000Z" });
     recomputeDuplicateClusters(db.vault);
 

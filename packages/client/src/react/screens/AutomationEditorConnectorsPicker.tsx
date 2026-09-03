@@ -182,10 +182,6 @@ export function AutomationEditorConnectorsPicker({
     { connectionId: string; kind: string; label: string }
   >;
   onToggleSelect: (kind: string, connectionId?: string) => void;
-  /**
-   * After a successful configure/authorize — persists durable vault
-   * connection id on the editor form so save includes the binding.
-   */
   onBoundConnection: (binding: {
     connectionId: string;
     kind: string;
@@ -205,9 +201,6 @@ export function AutomationEditorConnectorsPicker({
   const [busyKind, setBusyKind] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
 
-  // Closing discards the sheet's transient state. Done during render (the React
-  // "adjust state when a prop changes" pattern) so a reopen never flashes the
-  // previous filter.
   const [seenOpen, setSeenOpen] = useState(open);
   if (seenOpen !== open) {
     setSeenOpen(open);
@@ -258,7 +251,6 @@ export function AutomationEditorConnectorsPicker({
         showToast?.(`${item.name} connected`);
       }
       setConnectingKind(null);
-      // Durable bind first so save includes connectionId even before catalog refresh.
       if (connectionId) {
         onBoundConnection({
           connectionId,
@@ -350,11 +342,6 @@ export function AutomationEditorConnectorsPicker({
             const isSelected = selected.has(item.kind);
             const health = item.connection?.health;
             const boundConnectionId = bindings.get(item.kind)?.connectionId;
-            // The saved binding points at a connection the vault no longer
-            // lists — the owner revoked that account. Never resolved silently
-            // (that would swap the principal the automation acts as): the row
-            // says so and opens the account list so a replacement is a
-            // deliberate choice (#541).
             const bindingDangling =
               boundConnectionId !== undefined &&
               !item.connections.some(

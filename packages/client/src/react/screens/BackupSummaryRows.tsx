@@ -5,26 +5,15 @@ import RowsBlock from "../ui/RowsBlock.js";
 import type { RowDef } from "../ui/RowsBlock.js";
 import type { BackupStatusDTO } from "./BackupCard.js";
 
-/**
- * Backups as four questions (binding layer v11); rows and metrics read the
- * SAME `status` so they can never disagree. Not-configured is an answer:
- * each row states its own "never".
- */
 export interface BackupSummaryRowsProps {
   status: BackupStatusDTO;
-  /** Live clock for the humanised ages. */
   now: number;
-  /** Newest backup across mounted vaults, epoch ms; `null` if none ever. */
   lastRunAt: number | null;
-  /** Trigger a run now; absent on a read-only seat. */
   onRunNow?: () => void;
-  /** Run in flight — the verb says so and locks. */
   running?: boolean;
-  /** Open backup settings (Policy row's verb). */
   onOpenSettings?: () => void;
 }
 
-/** Cadence in the words the member set. */
 function policyPhrase(status: BackupStatusDTO): string {
   const policies = status.vaults.flatMap((vault) =>
     vault.policy ? [vault.policy] : []
@@ -40,7 +29,6 @@ function policyPhrase(status: BackupStatusDTO): string {
   }`;
 }
 
-/** Head's word for the cadence: "daily", "hourly". */
 function cadenceWord(status: BackupStatusDTO): string {
   const hours = status.vaults[0]?.policy?.snapshotIntervalHours;
   if (hours === undefined) return "default";
@@ -50,7 +38,6 @@ function cadenceWord(status: BackupStatusDTO): string {
   return `every ${Math.round(hours / 24)}d`;
 }
 
-/** Where the copies go, named; `gateway-local` does not survive this machine. */
 function holders(status: BackupStatusDTO): { meta: string; sub: string } {
   const names = new Set<string>();
   let localOnly = false;
@@ -94,7 +81,6 @@ export default function BackupSummaryRows({
   const rows: RowDef[] = [
     {
       id: "last-run",
-      // VERIFIED, not merely run — the meta says which of the two this is.
       meta:
         lastRunAt === null
           ? "never"

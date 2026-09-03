@@ -17,7 +17,6 @@ const META = "meta";
 const OUTCOMES = "outcomes";
 const INTENT_STORE_VERSION = 3;
 const STATE_CREATED_ORDER = "stateCreatedOrder";
-/** Journal cap: `listSettled` cannot read past it. */
 const SETTLED_JOURNAL_LIMIT = 5_000;
 
 interface IntentMeta {
@@ -39,9 +38,6 @@ export class IndexedDbIntentStore implements IntentRecordStore {
     const request = factory.open(name, INTENT_STORE_VERSION);
     request.addEventListener("upgradeneeded", () => {
       const db = request.result;
-      // This is a durable outbox, not a disposable cache. Upgrade additively:
-      // pending records are valuable precisely when a browser reloads during
-      // a schema rollout, so never delete an existing store here.
       const intents = db.objectStoreNames.contains(INTENTS)
         ? request.transaction!.objectStore(INTENTS)
         : db.createObjectStore(INTENTS, { keyPath: "intentId" });
@@ -198,8 +194,6 @@ export class IndexedDbIntentStore implements IntentRecordStore {
       createdOrder: existing.createdOrder,
     };
     const outcome = buildIntentOutcome(settled);
-    // One transaction: a reload sees the queued intent or its outcome, never
-    // a lost delivery.
     const outcomes = tx.objectStore(OUTCOMES);
     outcomes.put(clone(outcome));
     store.delete(intentId);

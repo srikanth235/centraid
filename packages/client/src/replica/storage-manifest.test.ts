@@ -24,7 +24,6 @@ import type {
   ReplicaWorkerResponse,
 } from "./worker-protocol.js";
 
-/** The `purgeIdentity` test seam every purge/retry option bag accepts. */
 type PurgeIdentity = NonNullable<ReplicaStoragePurgeOptions["purgeIdentity"]>;
 
 function memoryStorage() {
@@ -249,8 +248,6 @@ describe("remembered replica manifest", () => {
       },
     };
 
-    // Lifecycle dispatch deliberately does not surface async failures. The
-    // selector must remain durable for a fresh browser-lifetime retry loop.
     await purgeRememberedReplicaIdentities(
       (identity) => identity.gatewayId === inactive.gatewayId,
       options
@@ -435,8 +432,6 @@ describe("remembered replica manifest", () => {
       purgeReplicaIdentityStorage(inactive, options)
     ).rejects.toThrow("Could not purge replica");
 
-    // A new loop models a renderer reload: its startup sweep reads only the
-    // fixed-name inventory state, not an in-memory retry closure.
     const reloaded = new TerminalReplicaPurgeRetryLoop(options);
     reloaded.start();
     await clock.advance(10);

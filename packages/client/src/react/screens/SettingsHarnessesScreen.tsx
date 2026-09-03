@@ -31,17 +31,9 @@ import styles from "./SettingsHarnessesScreen.module.css";
 
 const POLL_MS = 800;
 const POLL_WINDOW_MS = 30_000;
-/** How long the "Copied" acknowledgement stays on the row's verb. */
 const COPIED_ACK_MS = 2000;
-/** The level pin, which every row sets beside its model rather than in pins. */
 const LEVEL = "thought_level";
 
-/**
- * The status poll's self-rescheduling timer. It lives at module scope, taking
- * the refs and loaders it needs as arguments, because a recursive function
- * declared inside the component body reads as a render value that depends on
- * itself — which is neither memoizable nor analysable.
- */
 function schedulePoll(
   timerRef: { current: ReturnType<typeof setTimeout> | null },
   deadlineRef: { current: number },
@@ -51,8 +43,6 @@ function schedulePoll(
   if (timerRef.current) clearTimeout(timerRef.current);
   timerRef.current = setTimeout(() => {
     void loadStatus().then((s) => {
-      // Poll only fills in loading model lists — keep the user's
-      // optimistic harness/model selection, don't reapply from the server.
       onStatus(s);
       if (s.anyLoading && Date.now() < deadlineRef.current)
         schedulePoll(timerRef, deadlineRef, loadStatus, onStatus);
@@ -68,29 +58,16 @@ function clearTimers(
   }
 }
 
-/** The semantic config categories a harness offers besides its level. */
 function pinCategories(card: HarnessCardDTO): string[] {
   return (card.configOptions ?? [])
     .filter((option) => option.category !== LEVEL && option.values.length > 0)
     .map((option) => option.category);
 }
 
-/** A category id as a member reads it: `approval_policy` → `approval policy`. */
 function categoryWords(category: string): string {
   return category.replaceAll("_", " ");
 }
 
-/**
- * Settings → Agents (binding layer v11). Two sections, and the split is the one
- * a member actually asks in: **Harnesses** is each agent's own answer — its
- * model and the level it thinks at — and **Lanes** is which agent each surface
- * reaches for, with the model and level it overrides that answer with.
- *
- * The page does NOT lead with an exclusive "which harness is active" radio.
- * Per-subsystem harnesses mean no harness is the active one: there is only a
- * DEFAULT that inheriting lanes fall back to — so it is the first row of Lanes
- * rather than a separate switch above them.
- */
 export default function SettingsHarnessesScreen({
   loadStatus,
   refreshModels,
@@ -166,13 +143,6 @@ export default function SettingsHarnessesScreen({
       .finally(() => setBusy(false));
   };
 
-  /**
-   * EVERY PICK ON THIS PAGE IS OPTIMISTIC AND EVERY PICK ROLLS BACK. A refused
-   * write must never be invisible here — fire-and-forget model and effort
-   * setters would leave a rejected pin sitting on screen as though it were
-   * saved. The gateway's own text goes on the status line and the displayed
-   * value returns to what the gateway holds.
-   */
   const settle = (
     what: string,
     write: Promise<string | null>,
@@ -194,7 +164,6 @@ export default function SettingsHarnessesScreen({
     );
   };
 
-  /** Apply (or clear) one harness-default model in local state. */
   const applyModel = (kind: HarnessKind, v: string): void =>
     setSavedByKind((m) => {
       const next = { ...m };
@@ -210,12 +179,6 @@ export default function SettingsHarnessesScreen({
     clampHarnessEffort(kind);
   };
 
-  /**
-   * Changing the model clamps the level. A level the harness no longer offers
-   * for the model now selected is one the runtime would drop on its own
-   * (`pinThoughtLevel` answers `thought_level_not_offered`), so the pin goes
-   * back to inherit rather than displaying a level nothing will honour.
-   */
   const clampHarnessEffort = (kind: HarnessKind): void => {
     const card = cardFor(kind);
     const saved = defaultConfigByKind[kind]?.[LEVEL] ?? "";
@@ -352,35 +315,22 @@ export default function SettingsHarnessesScreen({
   const cardFor = (kind: HarnessKind): HarnessCardDTO | undefined =>
     cards.find((c) => c.kind === kind);
   const defaultCard = cardFor(defaultKind);
-  /** A lane's harness: its own override, else the default lane's. */
   const resolvedKind = (s: ModelSubsystem): HarnessKind =>
     harnessBySubsystem[s] ?? defaultKind;
   const usedBy = (kind: HarnessKind): string[] =>
     ALL_SUBSYSTEM_ROWS.filter((r) => resolvedKind(r.key) === kind).map(
       (r) => r.label
     );
-  /**
-   * A harness's own level: its pin, else what its live probe currently holds.
-   * The probe's value is what the runtime will actually use when nothing is
-   * pinned, so a caption that read the pin alone would say "no thinking" about
-   * a harness that thinks.
-   */
   const harnessLevel = (kind: HarnessKind): string =>
     defaultConfigByKind[kind]?.[LEVEL] ??
     cardFor(kind)?.configOptions?.find((option) => option.category === LEVEL)
       ?.currentValue ??
     "";
-  /** The model and level every inheriting lane lands on, as prose. */
   const defaultAnswer = `${modelLabel(
     defaultCard,
     savedByKind[defaultKind] ?? ""
   )} · ${effortLabel(defaultCard, harnessLevel(defaultKind)).toLowerCase()}`;
 
-  // CONFIGURATION PINS — every semantic session option a harness offers that is
-  // not its level, which each row already sets beside its model. Cards with
-  // none contribute nothing: the row states what the probes actually reported,
-  // so a gateway whose agents offer no further options says so rather than
-  // opening an empty drawer.
   const pinnable = cards
     .map((card) => ({ card, categories: pinCategories(card) }))
     .filter((entry) => entry.categories.length > 0);
@@ -456,8 +406,6 @@ export default function SettingsHarnessesScreen({
               onClick: () => {
                 void navigator.clipboard?.writeText(status.diagnosticsJson);
                 setDiagnosticsCopied(true);
-                // The label is an acknowledgement, not a state — without this
-                // the row reads "Copied" for the rest of the session.
                 if (copiedTimerRef.current)
                   clearTimeout(copiedTimerRef.current);
                 copiedTimerRef.current = setTimeout(
@@ -510,13 +458,7 @@ export default function SettingsHarnessesScreen({
           <PickRow
             first
             label="Default"
-            /* THE ROW STATES ITS MODEL AND ITS LEVEL, like every lane under it.
-               It used to carry the agent's name and a bare model hint, so the
-               one row that decides what every inheriting lane runs was also the
-               only row on the page that never said what it would think at —
-               under a head reading "harness · model · level". Both halves are
-               the harness's own answer, set once in Harnesses above, so they
-               are stated here rather than offered a second control. */
+
             caption={`Every lane left inheriting lands here · ${defaultAnswer}`}
           >
             <Select

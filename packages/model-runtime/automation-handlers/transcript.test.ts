@@ -1,14 +1,3 @@
-/*
- * Source-level contract for the ASR recognition handler (#781).
- *
- * `packages/server/src/automation/manifest/enricher-templates.test.ts` owns the
- * bundled copy's spine: the typed `core.set_extracted_text` write against the
- * bounded original, the oversized-original permanent skip, the empty-speech
- * skip, and the throw when the original cannot be read. This file owns the
- * model-availability gate, the content-id keying of the derivation stamp,
- * cursor seeding and the model-change rewalk, the two-item batch ceiling, and
- * the ASR error path.
- */
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { bytesContent, createHarness } from "./handler-harness.js";

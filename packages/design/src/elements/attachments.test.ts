@@ -1,8 +1,3 @@
-// @vitest-environment jsdom
-// The attach flow's SHAPE — the inline/stage threshold, the batch ordering,
-// the custody notice. The transport it delegates to lives in the shell
-// (packages/client blob-staging.ts) and is exercised there; here the host is a
-// spy, which is exactly the boundary this layer is allowed to know about.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -32,14 +27,6 @@ function setFiles(input: HTMLInputElement, files: File[]): void {
   Object.defineProperty(input, "files", { configurable: true, value: files });
 }
 
-/**
- * A `refresh` handler that is a real synchronization primitive rather than a
- * spy: `wireAttachInput` calls it once, last, when the batch is done, so
- * awaiting it is the honest way to know the flow finished. A test that wants
- * to assert refresh RAN passes a mock instead — that is a contract, this is a
- * barrier, and conflating the two is how a suite starts asserting that its own
- * mocks were called.
- */
 function refreshBarrier(): { refresh: () => void; settled: Promise<void> } {
   let done!: () => void;
   const settled = new Promise<void>((resolve) => {
@@ -172,7 +159,6 @@ describe("attachments", () => {
     expect(payload.subject_id).toBe("note-2");
     expect(payload.staged_sha).toBe("big-sha");
     expect(payload.data_uri).toBeUndefined();
-    // Staged but not yet in provider custody — the owner is told so.
     expect(notice).toHaveBeenCalledWith(
       "Attached locally · waiting for offsite custody."
     );
@@ -272,3 +258,4 @@ describe("attachments", () => {
     strip.remove();
   });
 });
+// @vitest-environment jsdom

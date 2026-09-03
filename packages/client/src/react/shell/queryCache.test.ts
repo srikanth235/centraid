@@ -14,8 +14,6 @@ import {
 import type { QueryState } from "./queryCache.js";
 
 describe("queryCache", () => {
-  // The cache is module state on purpose — outliving the component is the whole
-  // point — so each test starts from a cleared one.
   afterEach(() => resetQueryCache());
 
   it("keeps a settled value for the next reader instead of refetching cold", async () => {
@@ -139,10 +137,6 @@ describe("queryCache", () => {
     expect(peekQuery<string[]>("apps")?.data).toStrictEqual(["app"]);
   });
 
-  // ── referential stability (#883) ──────────────────────────────────────────
-  //
-  // The hook's result is handed down as a prop and depended on in effects, so a
-  // fresh object per render is a re-render per frame in every consumer under it.
   describe("stable identity", () => {
     it("hands back the same object while nothing in the cache moves", async () => {
       const seen: unknown[] = [];
@@ -150,12 +144,8 @@ describe("queryCache", () => {
       const host = document.createElement("div");
       document.body.append(host);
       const root = createRoot(host);
-      // Written from an EFFECT: reassigning an outer binding during render is
-      // the side effect the compiler rule forbids.
       const control: { bump: () => void } = { bump: () => undefined };
 
-      // Memoized on the query result alone, so it re-renders exactly when that
-      // identity changes — the cost under measurement.
       const Child = memo((_: { query: unknown }): null => {
         childRenders.count += 1;
         return null;
@@ -182,7 +172,6 @@ describe("queryCache", () => {
       const settledRenders = childRenders.count;
       const settledIdentity = seen.at(-1);
 
-      // Three parent renders that change nothing this hook reads.
       await act(async () => {
         control.bump();
       });
@@ -196,7 +185,6 @@ describe("queryCache", () => {
       expect(seen.at(-1)).toBe(settledIdentity);
       expect(childRenders.count).toBe(settledRenders);
 
-      // A real change still propagates — stability is not staleness.
       await act(async () => {
         writeQuery("stable:a", ["two"]);
       });
@@ -208,22 +196,14 @@ describe("queryCache", () => {
     });
   });
 
-  // ── surviving a reload ────────────────────────────────────────────────────
-  //
-  // A reload — or the OS evicting an installed PWA — drops the JS context, so
-  // without write-through every screen returns to skeletons. Simulated the only
-  // honest way: `vi.resetModules()` and a fresh import, so the in-memory Map is
-  // genuinely new while localStorage is not.
   describe("persisted keys", () => {
     type Mod = typeof import("./queryCache.js");
 
-    /** A fresh module graph — a reload, as far as this cache is concerned. */
     async function reboot(): Promise<Mod> {
       vi.resetModules();
       return import("./queryCache.js");
     }
 
-    /** Mount a persisted reader once and let it settle. */
     async function readOnce<T>(
       mod: Mod,
       key: string,
@@ -253,11 +233,7 @@ describe("queryCache", () => {
       return settled;
     }
 
-    /** A load that never settles, so the persisted copy IS the paint. */
-    const never = <T>(): Promise<T> =>
-      new Promise<T>(() => {
-        /* deliberately never resolves */
-      });
+    const never = <T>(): Promise<T> => new Promise<T>(() => {});
 
     afterEach(() => localStorage.clear());
 
@@ -279,8 +255,6 @@ describe("queryCache", () => {
     });
 
     it("shapes the value on the way out — a handle that cannot survive is dropped", async () => {
-      // `URL.createObjectURL` handles die with their document, so persisting
-      // one paints a broken image on the very boot this speeds up.
       const first = await reboot();
       await readOnce(
         first,
@@ -308,8 +282,6 @@ describe("queryCache", () => {
     });
 
     it("survives a loader that resolves with nothing, and drops the stale copy", async () => {
-      // `JSON.stringify(undefined)` is not a string, so the byte check must
-      // stay inside the settle handler's try.
       const mod = await reboot();
       await readOnce(mod, "home:none", () => Promise.resolve({ n: 1 }));
       expect(

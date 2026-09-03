@@ -1,15 +1,3 @@
-// The search stage of the gateway: `read`'s consent pipeline over the FTS5
-// shadow tables from schema/fts.ts. A search never scans a base table and
-// never returns more than its LIMIT — matching happens inside SQLite, so
-// callers stop pulling whole entities to grep them in memory (the vault has
-// no upper bound on rows).
-//
-// Consent is strictly at-least-read: the base entity needs read consent; so
-// does every entity whose canonical text the index folds in (note/message
-// bodies live on core.content_item); and a grant field mask that hides any
-// indexed column fails the whole search closed — the index must not answer
-// questions the mask says the caller may not ask.
-
 import type { VaultDb } from "../db.js";
 import { nowIso } from "../ids.js";
 import { SEARCHABLE } from "../schema/fts.js";
@@ -21,13 +9,6 @@ import { applyFieldMask, compileFilters } from "./filters.js";
 import type { Identity, SearchRequest, SearchResult } from "./types.js";
 import { GatewayError } from "./types.js";
 
-/**
- * Compile owner-typed words to an FTS5 MATCH expression: every word becomes
- * a quoted prefix phrase (`"budg"*`), joined by implicit AND. Quoting makes
- * FTS operators (AND, NEAR, `-`…) literals; words with no letter or digit
- * are dropped because an empty quoted phrase is an FTS syntax error.
- * Returns null when nothing searchable remains.
- */
 export function ftsMatchExpression(query: string): string | null {
   const tokens = query
     .split(/\s+/u)
@@ -38,7 +19,6 @@ export function ftsMatchExpression(query: string): string | null {
   return tokens.map((t) => `"${t}"*`).join(" ");
 }
 
-/** Consent-checked FTS5 search. Throws GatewayError; denials are receipted. */
 export function searchEntity(
   db: VaultDb,
   identity: Identity,
@@ -81,8 +61,6 @@ export function searchEntity(
     request.purpose
   );
   if (access.decision === "deny") return deny(access.failing, access.grantId);
-  // Folded-in canonical text needs its own read consent — matching a note
-  // body IS reading core.content_item.
   for (const extra of spec.alsoConsent) {
     const extraRef = resolveEntity(extra, db.vault);
     if (!extraRef)

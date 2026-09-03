@@ -1,5 +1,3 @@
-// Leaf module: `inline-blob-images.ts` is eager, so a barrel import of
-// `authorizeBlobUrl` would drag the app substrate into the shell boot chunk.
 import {
   auth,
   authHeaders,

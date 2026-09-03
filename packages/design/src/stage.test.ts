@@ -1,10 +1,3 @@
-// The Photos v4 handoff's three new shared roles (CHANGELOG v4 - Photos.md
-// §B): `--stage` / `--on-stage` are the opaque media ground for a viewer, a
-// slideshow and an editor — deliberately the SAME literal in both themes,
-// because the media ground does not follow the theme. `--stage-line` is the
-// hairline ON the stage, where `--line` is invisible. `--skel` is the ground
-// a tile paints before its bytes arrive, and DOES flip with the theme like
-// every other surface role.
 import { describe, expect, test } from "vitest";
 
 import { toBlueprintCss } from "./blueprint.js";
@@ -28,7 +21,6 @@ describe("stage and skel roles", () => {
     expect(STAGE).toBe("#0B0B0B");
     expect(ON_STAGE).toBe("#EDEDEC");
     expect(STAGE_LINE).toBe("#2A2A29");
-    // The stage's own sunken rung — handoff v4 line 4479, `sunken:'#1A1A19'`.
     expect(STAGE_SUNKEN).toBe("#1A1A19");
   });
 
@@ -89,8 +81,6 @@ describe("stage and skel roles", () => {
     });
 
     test("--stage-line is a decorative hairline, distinguishable from --stage but not held to a text floor", () => {
-      // Same job as --line on the page ramp (also un-floored in the
-      // registry): a subtle rule, not a boundary a control depends on.
       const ratio = contrastRatio(
         light["--stage-line"] ?? "",
         light["--stage"] ?? ""

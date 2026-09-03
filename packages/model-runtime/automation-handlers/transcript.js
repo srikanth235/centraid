@@ -7,15 +7,11 @@ import {
 
 const BATCH = 2;
 const PURPOSE = "dpv:ServiceProvision";
-// Matches the existing ctx.vault.content original-audio/video ceiling. FFmpeg
-// separately caps decompressed duration, so both compressed and expanded work
-// remain bounded.
 const MAX_SOURCE_BYTES = 64 * 1024 * 1024;
 
 let transcribe = transcript;
 let weightsPresent = transcriptWeightsPresent;
 
-/** Test-only replacement retained in the generated bundle. */
 export function setTranscriptRuntimeForTests(runtime) {
   transcribe = runtime?.transcribe ?? transcript;
   weightsPresent = runtime?.weightsPresent ?? transcriptWeightsPresent;
@@ -100,11 +96,6 @@ export default async function handler({ ctx, log }) {
     });
     if (content?.status === "too-large") {
       // A permanent, deterministic fact about this asset — no retry ever
-      // shrinks it below MAX_SOURCE_BYTES, so treat it like an honest
-      // "nothing to transcribe" rather than an infrastructure failure:
-      // skip and let the cursor advance past it. Anything else non-ok
-      // (missing blob, transient store error) falls through to the throw
-      // below so the run fails and the cursor holds for a retry.
       skipped += 1;
       log.info(
         `asset ${asset.asset_id}: original exceeds the ${MAX_SOURCE_BYTES}-byte transcription ceiling`

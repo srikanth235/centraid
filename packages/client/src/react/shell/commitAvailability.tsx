@@ -27,7 +27,6 @@ export function CommitAvailabilityProvider({
   );
 }
 
-// Outside a provider, commits are allowed — default must never be "refuse".
 export function useCommitAvailability(): CommitAvailability {
   return useContext(CommitAvailabilityContext);
 }
@@ -35,7 +34,6 @@ export function useCommitAvailability(): CommitAvailability {
 export function commitAvailabilityFor(
   gatewayStatus: "unknown" | "up" | "down" | undefined
 ): CommitAvailability {
-  // Only a known outage refuses. "unknown" is boot — do not refuse every launch.
   return gatewayStatus === "down"
     ? { blocked: true, reason: OFFLINE_COMMIT_REASON }
     : AVAILABLE;

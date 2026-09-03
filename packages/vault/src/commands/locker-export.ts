@@ -1,10 +1,3 @@
-// Plaintext export (GAPS §3.3 #7). A COMMAND, NOT A QUERY, twice over: a query
-// handler is read-only by directive so it cannot write the receipt a mass
-// reveal owes, and a replica read returns sealed columns as placeholders.
-//
-// `confirm: true` parks it for the owner on any non-owner device; the action
-// is ONLINE-ONLY because a secret never enters the durable offline queue.
-
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { LOCKER_ITEM_TYPE } from "./locker-shared.js";
@@ -88,12 +81,6 @@ function exportItem(
         private_key: ctx.unseal(LOCKER_PASSKEY_TYPE, itemId, "private_key"),
       }
     : null;
-  // HISTORY IS REVISIONS (#916, D2). `locker_item_history` was a second
-  // revision mechanism for one retention rule; the item's pre-mutation
-  // snapshots are the same fact, and `locker.item` declares
-  // `revisions: { retain: 'forever' }` so nothing sweeps them. The snapshot's
-  // sealed cells are ciphertext under THIS row's additional data, so the
-  // previous password unseals exactly as the current one does.
   item.history = includeHistory
     ? (
         ctx.db
@@ -151,22 +138,16 @@ const EXPORT: CommandDefinition = {
       items: { type: "array" },
     },
   },
-  // The gate is the schema const plus the `confirm` flag, not a SQL
-  // precondition: a precondition binds parameters as strings, so a boolean
-  // read back through one would be theatre.
   preconditions: [],
   postconditions: [],
   idempotency: "retry-safe",
   risk: "high",
   confirm: true,
-  // `ctx.unseal` refuses anything absent from this list.
   unseals: [
     ...SEALED_ITEM_COLUMNS.map((column) => `${LOCKER_ITEM_TYPE}.${column}`),
     `${LOCKER_FIELD_TYPE}.value_sealed`,
     `${LOCKER_PASSKEY_TYPE}.private_key`,
   ],
-  // The result IS the plaintext: redacted from the journal so the trail is
-  // not a second copy of it.
   transcriptSensitive: true,
   handler: (ctx) => {
     const input = ctx.input as {

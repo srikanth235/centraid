@@ -9,10 +9,6 @@ import type { SseFrame } from "./vault-change-sse.js";
 
 const CHUNK_BYTES = 64 * 1024;
 
-/**
- * A body that produces its chunks on demand, so a suite can push more bytes
- * than the frame bound without materializing them all at once.
- */
 function chunkedBody(chunks: () => Generator<string>): {
   body: ReadableStream<Uint8Array>;
   wasCancelled: () => boolean;
@@ -40,7 +36,6 @@ function* slices(text: string): Generator<string> {
     yield text.slice(at, at + CHUNK_BYTES);
 }
 
-/** The largest frame the replica stream routes emit: one full change page. */
 function changePageFrame(): string {
   const changes = Array.from({ length: 1_000 }, (_unused, index) => ({
     seq: index + 1,
@@ -63,8 +58,6 @@ describe(consumeVaultChangeSse, () => {
     const overflowChunks =
       Math.ceil(MAX_BUFFERED_FRAME_BYTES / CHUNK_BYTES) + 1;
     const stream = chunkedBody(function* () {
-      // No `\n\n` anywhere: the parser can never drain, so the tail is all
-      // this stream ever holds.
       yield "event: change\ndata: ";
       for (let sent = 0; sent < overflowChunks; sent++) yield filler;
     });
@@ -75,7 +68,6 @@ describe(consumeVaultChangeSse, () => {
     ).rejects.toThrow(VaultChangeStreamError);
 
     expect(frames).toStrictEqual([]);
-    // Cancelled, not merely abandoned — the body must stop arriving.
     expect(stream.wasCancelled()).toBe(true);
   });
 
@@ -107,7 +99,6 @@ describe(consumeVaultChangeSse, () => {
       received++;
     });
 
-    // Well past the bound in total, every frame comfortably inside it.
     expect(frameCount * CHUNK_BYTES).toBeGreaterThan(MAX_BUFFERED_FRAME_BYTES);
     expect(received).toBe(frameCount);
     expect(stream.wasCancelled()).toBe(false);

@@ -10,18 +10,10 @@ import styles from "./AppMark.module.css";
 export interface AppMarkProps {
   iconKey: IconName;
   colorKey: ColorKey;
-  /** The chip's outer size. Artwork remains on the shared 24px grid. */
   size?: number;
   className?: string;
 }
 
-/**
- * The desktop app mark from the Binding Layer handoff.
- *
- * Identity is the outline and the chip is only a quiet hue wash. The glyph
- * never becomes a white silhouette, a gradient, or a two-tone compound mark:
- * the same solved app text rung is the one colour used by every stroke.
- */
 export default function AppMark({
   iconKey,
   colorKey,

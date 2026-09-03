@@ -1,7 +1,3 @@
-// Pure state machine for ConnectFlow (#382); `local` skips details/test. A
-// remote gateway is reached ONLY by a pairing ticket — no URL pairing, no
-// per-device bearer (#555). Impure IO is in `connectFlowIO.ts`.
-
 export type ConnectMethod = "local" | "gateway";
 export type ConnectStep =
   | "method"
@@ -27,7 +23,6 @@ export interface ConnectivityVaultPreview {
   personal?: boolean;
 }
 
-/** GATEWAY_TEST_CONNECTION never rejects — always this shape. */
 export interface ConnectivityReport {
   ok: boolean;
   stages: ConnectivityStage[];
@@ -53,12 +48,10 @@ export type VaultChoice =
 export interface ConnectFlowResult {
   gatewayId: string;
   vaultId: string;
-  /** Every vault the ticket enrolled; `vaultId` is the initial focus. */
   vaultIds?: string[];
   displayLabel: string;
 }
 
-/** A transport failure is NOT an empty registry (#603). */
 export type LocalVaultsResult =
   | { ok: true; vaults: ConnectivityVaultPreview[] }
   | { ok: false; message: string };
@@ -69,7 +62,6 @@ export interface ConnectFlowState {
 
   ticket: string;
   label: string;
-  /** Defaults ON and is never asked during pairing; Settings owns the toggle. */
   rememberDevice: boolean;
 
   testing: boolean;
@@ -78,7 +70,6 @@ export interface ConnectFlowState {
 
   vaultChoice: VaultChoice | null;
   newVaultName: string;
-  /** Never set for an empty but successfully-read registry. */
   vaultsError: string | null;
 
   committing: boolean;
@@ -86,7 +77,6 @@ export interface ConnectFlowState {
   result: ConnectFlowResult | null;
 }
 
-/** `method` pre-selects and lands on its first real step (#603). */
 export function createInitialConnectFlowState(
   method: ConnectMethod | null = null
 ): ConnectFlowState {
@@ -142,7 +132,6 @@ export function connectFlowReducer(
   switch (event.type) {
     case "selectMethod": {
       const base = { ...createInitialConnectFlowState(), method: event.method };
-      // `local` is always reachable: nothing to fill in or probe.
       return { ...base, step: event.method === "local" ? "vault" : "details" };
     }
     case "back": {
@@ -153,7 +142,6 @@ export function connectFlowReducer(
       if (idx <= 0) {
         return { ...createInitialConnectFlowState() };
       }
-      // Local skips `details`/`test` in both directions.
       const prevIdx =
         state.method === "local" && STEP_ORDER[idx] === "vault" ? 0 : idx - 1;
       const prev = STEP_ORDER[prevIdx] ?? "method";
@@ -182,7 +170,6 @@ export function connectFlowReducer(
     case "testSettled":
       return { ...state, report: event.report, testing: false };
     case "localVaultsLoaded":
-      // A failed read still settles `report`; `vaultsError` says it went badly.
       return event.result.ok
         ? {
             ...state,
@@ -252,13 +239,11 @@ export function canStartTest(state: ConnectFlowState): boolean {
   return buildTestInput(state) !== null;
 }
 
-/** Only `local`: a ticket's initial vault is fixed by its payload. */
 export function canCreateVaultFor(state: ConnectFlowState): boolean {
   return state.method === "local";
 }
 
 export interface ConnectVaultCapability {
-  /** Ticket mode only: a locked, non-selectable row. */
   locked: { vaultName: string } | null;
   options: ConnectivityVaultPreview[];
   canCreate: boolean;
@@ -293,7 +278,6 @@ export function canCommitConnectFlow(state: ConnectFlowState): boolean {
   }
   if (state.method === "gateway") {
     if (state.ticket.trim().length === 0) return false;
-    // An enrollment naming no vault must not proceed (#603).
     if (state.step === "vault" && state.report) return hasUsableVault(state);
     return true;
   }

@@ -31,9 +31,6 @@ describe("inline-body-guard", () => {
     expect(() => assertTextBodyWithinBudget(big, "text/markdown")).toThrow(
       InlineBodyTooLargeError
     );
-    // Capture the throw rather than asserting inside `catch`, so the four field
-    // assertions always run: a silent no-throw leaves `thrown` undefined and
-    // fails the instanceof check instead of skipping the block.
     let thrown: unknown;
     try {
       assertTextBodyWithinBudget(big, "text/markdown");
@@ -142,8 +139,6 @@ describe("inline-body-guard", () => {
   test("scanInlineBodyViolations finds pre-existing oversized inline bodies and attributes them by entity", () => {
     const db = openVaultDb();
     bootstrapVault(db, { ownerName: "Priya" });
-    // Write directly, bypassing the guard, to simulate rows written before it
-    // shipped — exactly what the diagnostics scan exists to surface.
     const bigText = "q".repeat(INLINE_BODY_BUDGET_BYTES + 500);
     const contentId = "content-1";
     db.vault

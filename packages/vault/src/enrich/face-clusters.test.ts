@@ -1,12 +1,3 @@
-// Face grouping (#724) — behaviour, not mechanism. Every case here
-// is an owner-visible claim: what a confirmation buys the next pass, what an
-// answered proposal is protected from, what two different people must never
-// become, and that a rebuild says the same thing twice.
-//
-// Vectors are hand-written and tiny. A face embedder's real geometry is not
-// the subject: the subject is what this module does with distances, so the
-// fixtures put the distances exactly where the assertion needs them.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -29,7 +20,6 @@ import { encodeVector } from "./similarity.js";
 
 const MODEL = "test-faces@1";
 
-/** Distinct pixel data URIs so each mints its OWN asset (sha256 differs). */
 const PIXELS = [
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
@@ -41,21 +31,14 @@ let gw: Gateway;
 let boot: BootstrapResult;
 let owner: Credential;
 
-/**
- * A unit-ish vector at `angle` radians in the first two dimensions. Cosine
- * distance between two of them is `1 - cos(Δangle)`, so a fixture states the
- * separation it wants directly rather than by hand-tuned coordinates.
- */
 function faceVector(angle: number): number[] {
   return [Math.cos(angle), Math.sin(angle), 0, 0];
 }
 
-/** The angular gap that lands two vectors just INSIDE a cosine threshold. */
 function insideGap(threshold: number): number {
   return Math.acos(1 - threshold) * 0.5;
 }
 
-/** …and just outside it. */
 function outsideGap(threshold: number): number {
   return Math.acos(1 - threshold) * 1.5;
 }
@@ -86,7 +69,6 @@ describe("face grouping", () => {
       .output.asset_id;
   }
 
-  /** A proposed face region on `assetId` whose vector points at `angle`. */
   function addFace(
     regionId: string,
     assetId: string,
@@ -187,19 +169,14 @@ describe("face grouping", () => {
 
     expect(result.matched).toBe(1);
     const after = regionRows();
-    // The candidate landed on the unnamed region — as a QUESTION. It is still
-    // 'proposed', so it enters the review queue as "is this Ana?" and nothing
-    // in the library yet claims that it is.
     expect(after.find((r) => r.region_id === nearby)).toMatchObject({
       party_id: ana,
       review_state: "proposed",
       confirmed_by_party_id: null,
     });
-    // The owner's own row is untouched, byte for byte.
     expect(after.find((r) => r.region_id === anchor)).toStrictEqual(
       confirmedBefore
     );
-    // A matched proposal is a named candidate, not a stranger group.
     expect(clusterRows().map((r) => r.region_id)).not.toContain(nearby);
   });
 
@@ -228,9 +205,6 @@ describe("face grouping", () => {
 
     expect(result.matched).toBe(0);
     const after = regionRows();
-    // Both stay answered and both stay party-less — which is also what the
-    // schema's own CHECK insists on, so a regression here would surface as a
-    // constraint failure rather than as silently re-proposed strangers.
     expect(after.find((r) => r.region_id === rejected)).toMatchObject({
       review_state: "rejected",
       party_id: null,
@@ -245,7 +219,6 @@ describe("face grouping", () => {
   test("two different people never merge into one group at the shipped threshold", () => {
     const gap = outsideGap(FACE_CLUSTER_MAX_DISTANCE);
     const assets = [addAsset(0), addAsset(1), addAsset(2)];
-    // Two faces of person A, two of person B — each pair tight, the pairs far.
     addFace("r-a1", assets[0]!, 0);
     addFace("r-a2", assets[1]!, insideGap(FACE_CLUSTER_MAX_DISTANCE) * 0.4);
     addFace("r-b1", assets[2]!, gap);
@@ -266,7 +239,6 @@ describe("face grouping", () => {
       members.push(row.region_id);
       byCluster.set(row.cluster_id, members);
     }
-    // Cluster ids are the lowest member id — deterministic, never a mint.
     expect(
       [...byCluster.entries()].sort(([left], [right]) =>
         left.localeCompare(right)
@@ -299,8 +271,6 @@ describe("face grouping", () => {
         "SELECT region_id, cluster_id, computed_at FROM media_face_cluster ORDER BY region_id"
       )
       .all();
-    // A different clock on the second pass: a stable rebuild must not restamp
-    // rows whose membership did not move, so `computed_at` stays where it was.
     const second = rebuildFaceClusters(db.vault, {
       now: "2027-01-01T00:00:00.000Z",
     });
@@ -319,8 +289,6 @@ describe("face grouping", () => {
 
   test("vectors from two different models are never compared", () => {
     const assets = [addAsset(0), addAsset(1)];
-    // Identical directions, different embedders. Grouping them would be a
-    // number with no meaning behind it.
     addFace("r-old", assets[0]!, 0, "test-faces@1");
     addFace("r-new", assets[1]!, 0, "test-faces@2");
 
@@ -349,8 +317,6 @@ describe("face grouping", () => {
     const result = rebuildFaceClusters(db.vault, {
       now: "2026-08-02T00:00:00.000Z",
     });
-    // One member left is not a group, so the projection empties rather than
-    // keeping a group of one nobody can name.
     expect(result.clusters).toBe(0);
     expect(clusterRows()).toStrictEqual([]);
   });

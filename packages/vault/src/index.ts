@@ -1,6 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#418) the package barrel is intentionally the single public API inventory; splitting exports would make consumers depend on internal paths
-// @centraid/vault — the Duaility ontology and its sole gateway; consumers
-// import it namespaced (`import * as vault from '@centraid/vault'`).
 
 export {
   openVaultDb,
@@ -9,9 +7,6 @@ export {
   type OpenVaultOptions,
   type BlobStoreSettings,
 } from "./db.js";
-// The per-vault memory budget and its division (#659). One owner for
-// the split: `openVaultDb` applies it at open, a host's registry re-applies it
-// to live planes on every mount/create/delete.
 export {
   applyVaultFootprint,
   DEFAULT_VAULT_FOOTPRINT,
@@ -59,8 +54,6 @@ export {
   type BlobLinkOutcome,
   type LocalBlobStore,
 } from "./blob/local.js";
-// Share-by-placement (#599): the cross-vault share plane calls these, and
-// they sit outside the per-vault handler path by design.
 export {
   shareItemsToVault,
   unshareFromVault,
@@ -74,9 +67,6 @@ export {
   type MoveOutOfVaultInput,
   type ShareOriginRecord,
 } from "./share/placement.js";
-// The two halves of a share (#726): `readShareClosure` is origin-side and
-// read-only, `projectShareClosure` audience-side and opens the single
-// transaction. `WireClosure` between them is plain JSON.
 export {
   isShareableItemType,
   CLOSURE_FORMAT_VERSION,
@@ -96,8 +86,6 @@ export {
   projectShareClosure,
   type ProjectShareClosureOptions,
 } from "./share/project-closure.js";
-// Projection is ingest (D11): the audience's own door, keyed by entity type so
-// vault core never learns an app name.
 export {
   type ProjectionIngestHook,
   type ProjectionIngestContext,
@@ -155,9 +143,6 @@ export {
   type ExecuteCommonsCommandInput,
   type ExecuteCommonsCommandResult,
 } from "./share/commons.js";
-// The steward's per-intent answer (#872): approve re-enters the signed rail,
-// decline settles `denied` with the steward's own words. Neither is a second
-// write path — see the module header.
 export {
   decideCommonsIntent,
   type CommonsIntentDecisionResult,
@@ -220,16 +205,12 @@ export {
   type CommonsSyncFrame,
   type CommonsInvitationRecord,
 } from "./share/commons-bootstrap.js";
-// Command-tail replay (#750 invariant 7): catch-up proportional to what
-// changed, because the steward ships the operations rather than the rows.
 export {
   isCommonsReplayError,
   replicaInvocationKey,
   type CommonsReplicaExecutor,
   type CommonsTailBlob,
 } from "./share/commons-replay.js";
-// Replica-export recovery: a member re-founds a group whose steward is gone
-// (#731). Deliberate ceremony — see the module header.
 export {
   recoverCommonsFromReplica,
   readCommonsRecoveryLineage,
@@ -238,9 +219,6 @@ export {
   type CommonsRecoveryResult,
   type RecoverCommonsFromReplicaInput,
 } from "./share/commons-recovery.js";
-// The GRANT PLANE (#825): a share is a standing grant, fulfillment is
-// per-audience-vault delivery state, and the channel is the party↔vault
-// binding read as one state. Commons stays the edit-fulfillment strategy.
 export {
   audienceExists,
   createShareGrant,
@@ -273,7 +251,6 @@ export {
   type DeclineShareInput,
   type DeclineShareResult,
 } from "./grant/grant-store.js";
-// The closed declaration of what the plane may be asked (#883).
 export {
   AUTHORITY_REGISTRY,
   authorityStrategyFor,
@@ -309,9 +286,6 @@ export {
   type ShareChannel,
   type ShareChannelState,
 } from "./grant/channel.js";
-// Fulfillment: the act of keeping a grant true. View re-projects the subject
-// over the closure transport, edit routes back through the commons rail, and
-// revoke propagates a removal instead of pretending it reached the peer.
 export {
   createGrantProjectionMemory,
   fulfillShareGrant,
@@ -331,8 +305,6 @@ export {
   SHARE_GRANT_CO_CONTRIBUTION_TYPES,
   type ShareGrantEditRoute,
 } from "./grant/fulfillment-edit.js";
-// The LOCAL orphan reclaim (#599 d11): each vault unlinks only its own CAS
-// directory entries, so hardlinked bytes survive until the last vault lets go.
 export {
   sweepLocalOrphans,
   type LocalOrphanSweepOptions,
@@ -379,9 +351,6 @@ export {
   type BlobSweepStatus,
   type RemoteTier,
 } from "./blob/custody.js";
-// The custody ROLLUP projection (#711): exported so `storage/status` answers
-// with the same buckets `blob.custody_rollup` gives an app, rather than each
-// client deriving its own idea of "freeable" (#712).
 export {
   custodyRollup,
   refreshCustodyRollup,
@@ -476,17 +445,12 @@ export {
   type EntityLifecycle,
   type VaultEntityDeclaration,
 } from "./schema/tables.js";
-// The two BANDS in `vault.db` beside the life data (#916): evidence and the
-// conversation ledger. Names only — a host excludes them by band from the
-// portable export, the replica and the support bundle, and the retention
-// windows say how long each keeps rows in the live file.
 export {
   AUDIT_BAND_TABLES,
   AUDIT_APPEND_ONLY_TABLES,
   RETENTION_WINDOWS,
 } from "./schema/audit.js";
 export { LEDGER_BAND_TABLES } from "./schema/ledger.js";
-// The Vault Atlas mapping: table → kind → pack (#441).
 export {
   ONTOLOGY_PACKS,
   MACHINERY_BANDS,
@@ -499,7 +463,6 @@ export {
   type AtlasPackKind,
   type AtlasTableEntry,
 } from "./schema/atlas.js";
-// The Atlas census/graph/pulse payload builders (#441).
 export {
   atlasCensus,
   atlasGraph,
@@ -517,8 +480,6 @@ export {
   type AtlasPulseSeries,
   type AtlasPulseDay,
 } from "./schema/atlas-census.js";
-// The Browse read side (#441): table picker, keyset row grid, column
-// metadata, FK reference search, dependent preview.
 export {
   browseTableList,
   browseColumns,
@@ -578,8 +539,6 @@ export {
   type ReplicaRebootstrapReason,
 } from "./replica/change-log.js";
 export { REPLICA_SCHEMA_EPOCH } from "./schema/replica.js";
-// The engine-computed cascade every purge runs, exported so the
-// declared-writes gate unions it rather than have a manifest restate it.
 export {
   ENTITY_POINTERS,
   ENTITY_REF_EXCLUSIONS,
@@ -834,9 +793,7 @@ export { registerTallyCommands } from "./commands/tally.js";
 export { registerSyncCommands } from "./commands/sync.js";
 export { registerEnrichCommands } from "./commands/enrich.js";
 export { registerOutboxCommands } from "./commands/outbox.js";
-// The ONE writer of the share half of the authority plane (#883).
 export { registerShareCommands, SHARE_COMMANDS } from "./commands/share.js";
-// The Browse write trio: journalled row CRUD (#441).
 export {
   registerAtlasCommands,
   ATLAS_OWNER_SCHEMA,
@@ -1023,7 +980,6 @@ export {
   type PortableManifestFile,
 } from "./gateway/portable-export.js";
 
-// The portable bundle's password-wrapped seal-key custody kit (#630).
 export {
   PORTABLE_CUSTODY_KIT_PATH,
   custodyKitSealKey,
@@ -1099,7 +1055,6 @@ export {
   type ExtApplyOutcome,
 } from "./gateway/ext.js";
 
-// Issue #367 §E: vault.db sizing, archival, FTS budget, and inline threshold.
 export {
   dbSizeBreakdown,
   type DbSizeBreakdown,
@@ -1122,10 +1077,6 @@ export {
   type ArchivedSegmentRows,
   type ArchiveVerification,
 } from "./journal-archive.js";
-// Conversation-ledger band GC roots (#438 decision 6) + the prune
-// custody latch (decision 3) — vault-side helpers the gateway composes so the
-// app-engine archival engine and every CAS GC path stay correct without the
-// vault importing app-engine.
 export { conversationArchiveShas } from "./conversation-archive-roots.js";
 export { blobCustodyProven } from "./blob/custody-proven.js";
 export {
@@ -1144,10 +1095,6 @@ export {
   type InlineBodyViolationScan,
 } from "./commands/inline-body-guard.js";
 
-// Bounded vault-side retention and its size ladder (#659 L1/L3/L4).
-// `runVaultMaintenance` is the single hookpoint a host sweep calls;
-// `decideVaultMaintenance` is the pure policy in front of it, shaped like
-// journal-limit.ts's ladder for the ledger band.
 export {
   ENTITY_REVISION_PRUNE_CAP,
   pruneExpiredEntityRevisions,
@@ -1173,7 +1120,6 @@ export {
   type VaultMaintenanceDecision,
   type VaultMaintenanceResult,
 } from "./vault-limit.js";
-// The batched, resumable data-rewrite primitive for migration rungs (#659).
 export {
   DEFAULT_MIGRATION_BATCH_SIZE,
   runBatchedMigration,

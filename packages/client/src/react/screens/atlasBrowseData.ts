@@ -1,8 +1,5 @@
-// Pure helpers for the Data records section (#441); no React.
-
 import type { BrowseColumn, BrowseDependent } from "../../gateway-client.js";
 
-/** Sealed-column read-back value (#293/#298). */
 export const SEALED_SENTINEL = "«sealed»";
 
 export function isSealedValue(value: unknown): boolean {
@@ -15,12 +12,10 @@ export function cellText(value: unknown): string {
   return String(value);
 }
 
-/** PK columns in composite-key order. */
 export function pkColumns(columns: BrowseColumn[]): BrowseColumn[] {
   return columns.filter((c) => c.pk > 0).sort((a, b) => a.pk - b.pk);
 }
 
-/** Bare pk value, or JSON array for composite keys. */
 export function rowIdOf(
   row: Record<string, unknown>,
   columns: BrowseColumn[]
@@ -37,7 +32,6 @@ export function insertableColumns(columns: BrowseColumn[]): BrowseColumn[] {
   return columns.filter((c) => c.pk === 0);
 }
 
-/** SQLite affinity match → number input. */
 export function isNumericColumn(col: BrowseColumn): boolean {
   return /INT|REAL|NUM|DEC|FLOA|DOUB/iu.test(col.type);
 }

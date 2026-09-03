@@ -21,18 +21,13 @@ describe("db", () => {
     const vaultSync = db.vault.prepare("PRAGMA synchronous").get() as {
       synchronous: number;
     };
-    // SQLite's synchronous enum: OFF=0, NORMAL=1, FULL=2, EXTRA=3.
     expect(vaultSync.synchronous).toBe(2);
-    // ONE file (#916): the audit band is the same handle, so the durability
-    // of the evidence and of the life data can never diverge.
     expect(db.audit).toBe(db.vault);
   });
 
   test("openVaultDb: NORMAL is the whole vault's choice, evidence included", () => {
     const db = openVaultDb({ dir: tempDirSync(), synchronous: "NORMAL" });
     cleanups.push(() => db.close());
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({ ...db.vault.prepare("PRAGMA synchronous").get() }).toStrictEqual({
       synchronous: 1,
     });
@@ -77,7 +72,6 @@ describe("db", () => {
       });
     expect(() => db.close()).not.toThrow();
     vaultExec.mockRestore();
-    // A closed handle throws on any further statement — proves close() ran.
     expect(() => db.vault.prepare("SELECT 1")).toThrow("database is not open");
   });
 
@@ -92,8 +86,6 @@ describe("db", () => {
     const dir = tempDirSync();
     const db = openVaultDb({ dir });
     cleanups.push(() => db.close());
-    // SQLite auto_vacuum enum: NONE=0, FULL=1, INCREMENTAL=2. The file must be
-    // incremental so the #438 archival prune can reclaim freed pages to the OS.
     const vaultAv = db.vault.prepare("PRAGMA auto_vacuum").get() as {
       auto_vacuum: number;
     };
@@ -112,7 +104,6 @@ describe("db", () => {
 
   test("openVaultDb: a vault.db created WITHOUT auto_vacuum converts to INCREMENTAL on next open (issue #438)", () => {
     const dir = tempDirSync();
-    // Pre-#438 file: WAL, freelist mode (auto_vacuum=0), non-empty.
     const seed = new DatabaseSync(path.join(dir, "vault.db"));
     seed.exec("PRAGMA journal_mode=WAL");
     seed.exec("CREATE TABLE legacy(a TEXT)");
@@ -127,8 +118,6 @@ describe("db", () => {
 
     const db = openVaultDb({ dir });
     cleanups.push(() => db.close());
-    // The one-time conversion VACUUM in openFile rewrites the file into
-    // incremental mode; the file stays in WAL.
     expect(
       (
         db.audit.prepare("PRAGMA auto_vacuum").get() as {
@@ -145,8 +134,6 @@ describe("db", () => {
     ).toBe("wal");
   });
 
-  // ── issue #659 L8: the per-vault footprint is a divisible budget ──────
-
   function footprintOf(db: {
     vault: DatabaseSync;
   }): { mmapBytes: number; cacheKib: number }[] {
@@ -155,7 +142,6 @@ describe("db", () => {
         (handle.prepare("PRAGMA mmap_size").get() as { mmap_size: number })
           .mmap_size
       ),
-      // A negative cache_size is kibibytes; SQLite reports back what was set.
       cacheKib: -Number(
         (handle.prepare("PRAGMA cache_size").get() as { cache_size: number })
           .cache_size
@@ -173,7 +159,6 @@ describe("db", () => {
   });
 
   test("a footprint budget is the per-vault TOTAL, applied whole to its one file", () => {
-    // What a host mounting 5 planes under a 320 MiB ceiling would pass.
     const db = openVaultDb({
       dir: tempDirSync(),
       footprint: {
@@ -187,8 +172,6 @@ describe("db", () => {
       expect(file.mmapBytes).toBe(64 * 1024 * 1024);
       expect(file.cacheKib).toBe(8 * 1024);
     }
-    // The load-bearing property: the vault's handles together stay inside the
-    // budget the caller named, rather than each taking it.
     expect(files.reduce((n, f) => n + f.mmapBytes, 0)).toBeLessThanOrEqual(
       64 * 1024 * 1024
     );
@@ -204,11 +187,7 @@ describe("db", () => {
     });
     cleanups.push(() => db.close());
     for (const file of footprintOf(db)) {
-      // mmap can go to zero — it is address space, and SQLite falls back to
-      // ordinary reads.
       expect(file.mmapBytes).toBe(0);
-      // The cache cannot: a plane starved into thrashing is worse for the
-      // owner than one that overshoots by a few hundred kibibytes.
       expect(file.cacheKib).toBe(512);
     }
   });
@@ -227,9 +206,6 @@ describe("db", () => {
       expect(file.cacheKib).toBe(16_000);
     }
 
-    // What a host's rebalance does when a second vault is mounted: re-divide
-    // the SAME total across the now-larger set, on connections that are
-    // already open and serving.
     const applied = [db.vault].map((handle) =>
       applyVaultFootprint(handle, {
         mmapBytes: 16 * 1024 * 1024,
@@ -240,12 +216,10 @@ describe("db", () => {
       expect(file.mmapBytes).toBe(16 * 1024 * 1024);
       expect(file.cacheBytes).toBe(2 * 1024 * 1024);
     }
-    // The live handles report the new numbers, not the ones they opened with.
     for (const file of footprintOf(db)) {
       expect(file.mmapBytes).toBe(16 * 1024 * 1024);
       expect(file.cacheKib).toBe(2 * 1024);
     }
-    // Still usable afterwards — a rebalance is a tuning change, not a reopen.
     expect(
       (
         db.vault.prepare("SELECT count(*) AS n FROM core_vault").get() as {
@@ -257,7 +231,6 @@ describe("db", () => {
 
   test("rebalancing keeps a household's total flat where opening alone does not", () => {
     const HOUSEHOLD = 5;
-    /** ONE file per vault since #916 — what a vault's budget applies to. */
     const VAULT_DB_FILES_IN_A_VAULT = 1;
     const CEILING_MMAP = 128 * 1024 * 1024;
     const CEILING_CACHE = 32 * 1024 * 1024;
@@ -280,9 +253,6 @@ describe("db", () => {
         0
       );
 
-    // THE CONTROL. Without a budget, five vaults cost exactly five times one
-    // vault — so the budgeted case below is proven to have a different SHAPE,
-    // not to have passed by coincidence.
     const one = footprintOf(vaults[0]!).reduce(
       (n, file) => n + file.mmapBytes,
       0
@@ -290,9 +260,6 @@ describe("db", () => {
     expect(totalMmap()).toBe(HOUSEHOLD * one);
     expect(totalMmap()).toBeGreaterThan(CEILING_MMAP);
 
-    // The rebalance: re-divide one ceiling across every open plane. This is
-    // the call a host makes on each mount/create/delete — dividing only at
-    // open time leaves vault 1 holding the whole budget forever.
     for (const db of vaults)
       for (const handle of [db.vault])
         applyVaultFootprint(handle, {
@@ -302,10 +269,6 @@ describe("db", () => {
 
     expect(totalMmap()).toBeLessThanOrEqual(CEILING_MMAP);
     expect(totalCache()).toBeLessThanOrEqual(CEILING_CACHE);
-    // Flat, not merely smaller: the household consumes essentially the whole
-    // ceiling and no more, rather than a fifth of it or five times it. The
-    // few bytes of slack are the floor division (ceiling → per vault), which
-    // rounds DOWN so the ceiling can never be exceeded.
     expect(CEILING_MMAP - totalMmap()).toBeLessThan(
       HOUSEHOLD * 2 * VAULT_DB_FILES_IN_A_VAULT
     );

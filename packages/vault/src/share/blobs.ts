@@ -1,7 +1,3 @@
-// Share-by-placement (#599 decision 11): hardlink origin CAS into the
-// audience vault so each vault stays self-contained. Link count is the
-// cross-vault refcount — no shared pin table.
-
 import type { LocalBlobStore } from "../blob/local.js";
 import { VaultShareError } from "../errors.js";
 
@@ -12,7 +8,6 @@ export interface BlobPlacement {
   mode: BlobPlacementMode;
 }
 
-/** Place before the audience transaction: a failed link is an orphan, not a committed row with no bytes. */
 export function placeBlob(
   origin: LocalBlobStore,
   audience: LocalBlobStore,
@@ -24,7 +19,6 @@ export function placeBlob(
     const outcome = audience.linkFromSync(sha, source);
     if (outcome === "linked") return "linked";
     if (outcome === "exists") return "present";
-    // 'unsupported' — fall through to copy rather than failing the share.
   }
   const bytes = origin.getSync(sha);
   if (bytes === null) {

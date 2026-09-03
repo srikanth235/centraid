@@ -1,14 +1,7 @@
-// Egress consent for enrichment (#807). Orthogonal to policy: selecting an
-// engine cannot write a consent row. A decline is a record, not an absence.
-// Storage, not the gate. The record is a row of the ONE authority table: the
-// egress class is the `harness` principal, the scope the subject, the
-// capability the verb (#883).
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { nowIso, uuidv7 } from "../ids.js";
 
-/** A fact about the ENGINE, same axis as `decideEnrichmentGate`. */
 export const ENRICH_EGRESS_CLASSES = [
   "on-device",
   "gateway",
@@ -39,7 +32,6 @@ export interface EnrichConsentInput extends EnrichConsentKey {
   now?: string;
 }
 
-/** `''` is this whole vault. */
 const ENRICH_SUBJECT_TYPE = "enrich.scope";
 
 interface ConsentRow {
@@ -72,12 +64,6 @@ const CONSENT_SELECT = `SELECT verb AS capability, principal_id AS egress,
     -- 6.1): \`expires_at\` used to be written and never read.
     AND (expires_at IS NULL OR expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
 
-/**
- * Replace any previous answer for the same key; the caller owns the
- * transaction. An authority row is immutable except `revoked_at`, so a CHANGED
- * answer revokes and re-writes rather than editing in place, which could not
- * be audited; an IDENTICAL one only refreshes the receipt pointer (#883).
- */
 export function recordEnrichConsent(
   vault: DatabaseSync,
   input: EnrichConsentInput
@@ -131,7 +117,6 @@ export function recordEnrichConsent(
     );
 }
 
-/** Not a cascade: a vault-wide answer never covers a narrower scope. */
 export function readEnrichConsent(
   vault: DatabaseSync,
   key: EnrichConsentKey
@@ -157,7 +142,6 @@ export function listEnrichConsent(vault: DatabaseSync): EnrichConsentRecord[] {
   ).map(toRecord);
 }
 
-/** The row id a receipt and the command's provenance stamp cite. */
 export function readEnrichConsentId(
   vault: DatabaseSync,
   key: EnrichConsentKey

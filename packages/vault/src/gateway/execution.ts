@@ -1,7 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit S3+S4+S5 of one invocation — contract, precondition, ACID boundary and evidence are one transaction bracket
-// S3 + S4 + S5 for one already-consented invocation: contract, preconditions
-// recorded before anything mutates, the ACID boundary with postcondition
-// rollback, then evidence.
 
 import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
@@ -64,13 +61,11 @@ import type {
 } from "./types.js";
 import { DEFAULT_PURPOSE, GatewayError } from "./types.js";
 
-/** `sealedInput` drives journal redaction, `unseals` gates `ctx.unseal` (#293). */
 export interface RegisteredCommand {
   handler: CommandDefinition["handler"];
   sealedInput: readonly string[];
   unseals: readonly string[];
   transcriptSensitive: boolean;
-  /** No pre-mutation snapshot: the point of the command is that it is gone. */
   erasure: boolean;
 }
 
@@ -112,30 +107,12 @@ function rollbackInvocationTransaction(
   transaction.open = false;
 }
 
-/**
- * THE ENGINE IS THE CHECK NOW (#916, adversarial BUG-10).
- *
- * `POLY_RULES` listed five of the fifteen polymorphic mechanisms and validated
- * their targets here, after the fact, by hand — so `enrich.upsert_embedding`
- * accepted a ghost id and `atlas.insert` could write a `core.share_origin` row
- * at a row that did not exist. Every `(type, id)` pair is a composite FOREIGN
- * KEY into `core_entity` since rung ten, so the engine refuses the write at
- * the statement, for all fifteen, and `polymorphicDenial` below turns its
- * one-line complaint back into something a member can act on.
- *
- * The denial names the PAIR that failed, not the registry: an earlier draft
- * also walked `ENTITY_POINTERS` to list the fourteen pointer tables, on every
- * foreign-key failure, and appended nothing. Naming them would not diagnose
- * this failure either — the member supplied a `(type, id)`, and which tables
- * happen to carry pointers is not what is wrong with it.
- */
 export function polymorphicDenial(
   writes: { entityType: string; entityId: string }[],
   error: unknown
 ): string | null {
   const message = error instanceof Error ? error.message : String(error);
   if (!/FOREIGN KEY constraint failed/iu.test(message)) return null;
-  // Name the pair the caller most likely got wrong: the last entity written.
   const write = writes.at(-1);
   const named = write ? `${write.entityType} ${write.entityId}: ` : "";
   return (
@@ -155,7 +132,6 @@ export function pkColumn(vault: DatabaseSync, physical: string): string {
   return rows.find((r) => r.pk === 1)?.name ?? "rowid";
 }
 
-/** Every write passes here: sealed columns are ciphertext BEFORE commit (#293). */
 export function sealWrites(
   db: VaultDb,
   writes: { entityType: string; entityId: string }[]
@@ -193,8 +169,6 @@ export function sealWrites(
       sealedAny = true;
     }
   }
-  // Stamped inside this transaction (#298), so "has secrets" and the secrets
-  // commit together; opening without the key then fails loudly.
   if (sealedAny) stampSealKeyFingerprint(db.vault, db.sealKey);
 }
 
@@ -219,8 +193,6 @@ export function insertInvocation(
       command.command_id,
       identity.callerId,
       grantId,
-      // The journal is append-only (#293): declared secrets land as keyed
-      // tokens, never values — a leak here is permanent. Command-aware (#298).
       JSON.stringify(
         redactCommandInput(
           db.sealKey,
@@ -236,10 +208,6 @@ export function insertInvocation(
   return invocationId;
 }
 
-/**
- * BEFORE any handler. Commit repair repeats it only as a corruption guard: a
- * conflict found there already left an unaudited write.
- */
 export function assertInvocationIdentity(
   db: VaultDb,
   invocationId: string,
@@ -314,7 +282,6 @@ function receiptOutput(
   );
 }
 
-/** A re-sent invocation id never double-writes. */
 export function replayInvocation(
   db: VaultDb,
   invocationId: string,
@@ -322,8 +289,6 @@ export function replayInvocation(
 ): InvokeOutcome | null {
   const denied = readDurableParkedDenial(db, invocationId);
   if (denied) return { status: "denied", ...denied };
-  // Commit proof outranks journal status: it carries the S5 material that
-  // repairs a crash-left audit prefix before replay returns.
   const committed = readReplicaInvocationCommit(db.vault, invocationId);
   if (committed) {
     const finalized = committed.intentId
@@ -408,10 +373,6 @@ export function runContractAndExecute(
   options: {
     deferCommitSettlement?: boolean;
     deferReplicaNotify?: boolean;
-    /**
-     * Ids from a seed, not the clock, so a Commons replica derives identical
-     * row ids (#750). NOTHING else may set it: a shared seed collides.
-     */
     deterministicIdSeed?: string;
   } = {}
 ): InvokeOutcome {
@@ -445,8 +406,6 @@ export function runContractAndExecute(
     };
   };
 
-  // Compatibility is EQUALITY on purpose (#310): one served ontology version,
-  // so a mismatch is a stale registration, not an old client.
   if (command.ontology_version !== ONTOLOGY_VERSION) {
     return denyContract(
       `contract version ${command.ontology_version} not served`,
@@ -458,8 +417,6 @@ export function runContractAndExecute(
     );
   }
   const sealedInput = commands.get(command.name)?.sealedInput ?? [];
-  // Error surfaces get input_json's discipline (#298): runtime-derived text
-  // passes the scrub before the journal, receipt or response.
   const secretValues = sealedValuesForCommand(
     command.name,
     request.input,
@@ -492,8 +449,6 @@ export function runContractAndExecute(
   }
   const failedPre = preResults.find((r) => !r.passed);
   if (failedPre) {
-    // App-facing, so prefer the author's sentence; the raw predicate still
-    // reaches the receipt and audit trail.
     return denyContract(failedPre.message ?? failedPre.predicate, {
       stage: "contract",
       predicate: failedPre.predicate,
@@ -503,16 +458,12 @@ export function runContractAndExecute(
 
   const writes: { entityType: string; entityId: string }[] = [];
   const citations: Citation[] = [];
-  // Queued, flushed after the canonical COMMIT.
   const handlerReceipts: HandlerReceipt[] = [];
   const registered = commands.get(command.name);
   if (!registered)
     return denyContract("handler missing", { stage: "execution" });
   const handler = registered.handler;
-  // Receipted as column names, never values.
   const unsealed = new Set<string>();
-  // Handlers mint ids in a fixed order, so indexing the seed reproduces the
-  // sequence. The shape stays UUIDv7-compatible; only ordering is traded away.
   let deterministicIdIndex = 0;
   const newId = options.deterministicIdSeed
     ? (): string => {
@@ -541,10 +492,6 @@ export function runContractAndExecute(
       }
       const ref = resolveEntity(entityType, db.vault);
       if (!ref) throw new Error(`unknown entity ${entityType}`);
-      // A stored ciphertext may be handed in (#916, D2): a pre-mutation
-      // SNAPSHOT of this same row holds the previous value under the same
-      // additional data, which is what lets Locker history be revisions
-      // rather than a second history table.
       let stored: unknown = ciphertext;
       if (stored === undefined) {
         const pk = pkColumn(db.vault, ref.physical);
@@ -567,8 +514,6 @@ export function runContractAndExecute(
           )
         : value;
     },
-    // Claims and spills are row work (#296): bytes already sit in the local
-    // CAS, so a rollback at worst orphans a file the sweep reclaims.
     blobs: {
       staged: (sha256) => {
         const row = stagedInfoTx(db.vault, sha256);
@@ -601,19 +546,12 @@ export function runContractAndExecute(
   let output!: Record<string, unknown>;
   let audit!: ReplicaInvocationAudit;
   let postResults: ReturnType<typeof evaluateConditions> = [];
-  // OUTSIDE the transaction (#916): the capture triggers are TEMP objects, and
-  // creating them inside a transaction that later rolls back would take them
-  // with it.
   openRevisionCapture(db.vault);
   const vaultTransaction = beginInvocationTransaction(db.vault);
   let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   try {
     replicaCommit = beginReplicaCommit(db.vault);
     output = handler(ctx);
-    // BEFORE `sealWrites`, and then the gate closes (#916): sealing REWRITES
-    // the cells the handler just wrote, so a capture still open would take the
-    // pre-seal row — the plaintext — as its snapshot. What a revision holds is
-    // the row as the command FOUND it, which was already ciphertext at rest.
     if (!registered.erasure)
       drainRevisionCapture(db.vault, {
         invocationId,
@@ -621,7 +559,6 @@ export function runContractAndExecute(
         now: ctx.now,
       });
     closeRevisionCapture(db.vault);
-    // Same transaction, so no committed row ever holds a clear secret (#293).
     sealWrites(db, writes);
     const postSpecs = JSON.parse(
       command.postconditions_json
@@ -644,8 +581,6 @@ export function runContractAndExecute(
           r.observed
         );
       setInvocationStatus(db, invocationId, "rolled_back");
-      // Same split as the precondition path: friendly for the app, raw in the
-      // receipt detail.
       const friendly = failedPost.message ?? failedPost.predicate;
       const receiptId = writeReceipt(db.audit, {
         grantId: access.grantId,
@@ -674,8 +609,6 @@ export function runContractAndExecute(
         predicate: friendly,
       };
     }
-    // INSIDE the transaction: a demo row that escaped the registry would be
-    // unpurgeable and visible to triggers (#290).
     if (request.demo) {
       const seedStmt = db.vault.prepare(
         `INSERT INTO access_seed_row (seed_id, app_id, target_type, target_id, seeded_at)
@@ -703,8 +636,6 @@ export function runContractAndExecute(
           }
         : { invocation: invocationId },
     };
-    // Replay reads output back from the receipt; replica intents omit the
-    // field deliberately, and their replay returns null.
     const durableOutput = registered.transcriptSensitive
       ? { redacted: "transcript-sensitive derivative (issue #298 item 6)" }
       : output;
@@ -730,15 +661,12 @@ export function runContractAndExecute(
         ...(request.intentId ? {} : { output: durableOutput }),
         ...actingOwnerDetail(identity, request),
         writes: writes.map((write) => ({ ...write })),
-        // The salience marker (#306): risk no longer gates execution.
         risk: command.risk,
         ...(unsealed.size > 0 ? { unsealed: [...unsealed] } : {}),
         ...(confirmation ? { confirmation } : {}),
       },
     };
 
-    // Every canonical transaction carries the marker; ordinary invocations
-    // reclaim it after journal proof below.
     recordReplicaInvocationCommitInTransaction(db.vault, {
       invocationId,
       commandId: command.command_id,
@@ -754,7 +682,6 @@ export function runContractAndExecute(
     rollbackInvocationTransaction(db.vault, vaultTransaction);
     closeRevisionCapture(db.vault);
     setInvocationStatus(db, invocationId, "failed");
-    // A message echoing its input would put a secret in the journal (#298).
     const reason = scrub(
       error instanceof Error ? error.message : String(error)
     );
@@ -776,8 +703,6 @@ export function runContractAndExecute(
     return { status: "failed", invocationId, receiptId, reason };
   }
 
-  // One idempotent journal transaction after the canonical COMMIT: if it
-  // aborts, the marker survives and replay repairs it without re-entry.
   const finalized = request.intentId
     ? finalizeReplicaInvocationCommit(db, invocationId, {
         deferSettlement: options.deferCommitSettlement,
@@ -785,8 +710,6 @@ export function runContractAndExecute(
     : finalizeOrdinaryInvocationCommit(db, invocationId, {
         deferSettlement: options.deferCommitSettlement,
       });
-  // After the write they describe is durable and after the invocation's, so
-  // the stream reads in the order facts became true.
   for (const receipt of handlerReceipts)
     writeReceipt(db.audit, {
       grantId: receipt.grantId,
@@ -798,14 +721,12 @@ export function runContractAndExecute(
       decision: receipt.decision,
       ...(receipt.detail ? { detail: receipt.detail } : {}),
     });
-  // Strictly post-journal-commit, so every provenance row is readable first.
-  // Best-effort: a thrown host callback must not fail a committed write.
   try {
     onProvenanceCommitted?.([
       ...new Set(writes.map((write) => write.entityType)),
     ]);
   } catch {
-    // Hint only; the persisted cursor and poll own correctness.
+    // Intentionally empty.
   }
   return {
     status: "executed",

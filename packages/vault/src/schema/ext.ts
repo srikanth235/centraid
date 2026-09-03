@@ -1,41 +1,11 @@
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
-// The ext band (#286): app-declared extension tables that live
-// INSIDE vault.db — physical `ext_<app>_<table>` — for shapes the canonical
-// ontology genuinely doesn't cover (Lane 2 of the two-lane rule; Lane 1 is
-// mapping onto the ontology). The gateway applies the DDL from the app's
-// manifest declaration; apps never run DDL themselves. Because the tables sit
-// in the one file behind the one door, consent scopes, core_link refs,
-// receipts, export and the owner's vault_sql all work over them unchanged.
-//
-// R09 still holds, band-shaped: an ext table may hold FKs INTO the vault
-// (and into the same app's other ext tables); no canonical table ever
-// references an ext table.
-//
-// This module is the declarative half: the spec shape, its validation, and
-// deterministic DDL generation (specs are diffed by canonical JSON, so
-// generation must be a pure function of the spec). The applying/diffing
-// half lives in gateway/ext.ts — DDL is a gateway duty.
-
-/** One declared column. `references` names a logical vault entity. */
 export interface ExtColumnSpec {
   name: string;
-  /**
-   * Prefer `text` for opaque external identifiers (platform snowflake IDs —
-   * Discord/Twitter/Slack — routinely exceed 2^53-1). node:sqlite's default
-   * connection reads a too-large INTEGER as a JS `number` and throws "Value
-   * is too large to be represented as a JavaScript number"; the write
-   * succeeds, the read crashes, and the row is poisoned. Canonical tables
-   * follow the same rule (`core.ts`'s `external_id`/`external_ref` columns
-   * are TEXT) — mirror it here.
-   */
   type: "text" | "integer" | "real" | "blob";
-  /** Exactly one column per table, and it must be `text` (UUIDv7 ids). */
   primaryKey?: boolean;
   notNull?: boolean;
   default?: string | number;
-  /** FK into the vault: a logical entity (`core.party`) or a same-app ext
-   * table (`ext.<appId>.<table>`). The vault never references back. */
   references?: string;
 }
 
@@ -44,37 +14,23 @@ export interface ExtIndexSpec {
   unique?: boolean;
 }
 
-/** One declared extension table, as the app manifest carries it. */
 export interface ExtTableSpec {
   name: string;
   columns: ExtColumnSpec[];
   indexes?: ExtIndexSpec[];
-  /** Text columns to FTS5-index (opt-in search). */
   searchable?: string[];
-  /**
-   * Text columns holding secret material (#298): declared here,
-   * enforced by the SAME chokepoints as canonical sealed columns — ciphertext
-   * at rest via the seal sweep, placeholder in every default read, plaintext
-   * only under the `reveal` verb, hash tokens in the journal, and never FTS
-   * (sealed ∩ searchable is a validation error). One declaration, the whole
-   * pipeline — a third-party app's API-key column gets the Locker treatment.
-   */
   sealed?: string[];
 }
 
-/** Which copy of the band: `live` is the app's data; `draft` is the builder
- * session's scratch copy (seeded from live, dropped or promoted on publish). */
 export type ExtBand = "live" | "draft";
 
 const NAME_RE = /^[a-z][a-z0-9_]{0,47}$/u;
 const APP_ID_RE = /^[a-z][a-z0-9-]{0,63}$/u;
 
-/** appIds allow hyphens; SQLite identifiers shouldn't. `my-app` → `my_app`. */
 export function normalizeAppId(appId: string): string {
   return appId.replaceAll("-", "_");
 }
 
-/** Physical table name for one band: `ext_gym_workout` / `extdraft_gym_workout`. */
 export function extPhysical(
   appId: string,
   table: string,
@@ -83,9 +39,6 @@ export function extPhysical(
   return `${band === "live" ? "ext" : "extdraft"}_${normalizeAppId(appId)}_${table}`;
 }
 
-/** Logical entity name for one band: `ext.gym.workout` / `extdraft.gym.workout`.
- * Both bands share the consent schema `ext.<appId>` — the draft copy is the
- * same data class under the same grant, just a different physical home. */
 export function extLogical(
   appId: string,
   table: string,
@@ -94,7 +47,6 @@ export function extLogical(
   return `${band === "live" ? "ext" : "extdraft"}.${appId}.${table}`;
 }
 
-/** Parse a (possibly ext) logical name. Returns undefined for non-ext names. */
 export function parseExtLogical(
   logical: string
 ): { appId: string; table: string; band: ExtBand } | undefined {
@@ -113,18 +65,12 @@ export class ExtSpecError extends Error {
   }
 }
 
-/** The primary-key column of a validated spec. */
 export function extPk(spec: ExtTableSpec): string {
   const pk = spec.columns.find((c) => c.primaryKey);
   if (!pk) throw new ExtSpecError(`table ${spec.name} has no primary key`);
   return pk.name;
 }
 
-/**
- * Validate a whole declared band. Throws ExtSpecError with a message the
- * builder can act on. `canReference` decides whether a `references` target
- * is acceptable (the caller checks the entity registry + same-app tables).
- */
 export function validateExtSpecs(
   appId: string,
   specs: ExtTableSpec[],
@@ -253,7 +199,6 @@ export function validateExtSpecs(
   }
 }
 
-/** Canonical form for diffing: stable key order, defaults dropped. */
 export function canonicalSpecJson(spec: ExtTableSpec): string {
   const col = (c: ExtColumnSpec) => ({
     name: c.name,
@@ -281,26 +226,8 @@ function sqlLiteral(value: string | number): string {
     : `'${value.replaceAll("'", "''")}'`;
 }
 
-/**
- * JS `Number.MAX_SAFE_INTEGER` — the CHECK bound every generated `integer`
- * column carries (see `columnDdl`). Exported so the ALTER TABLE ADD COLUMN
- * path (gateway/ext.ts's `columnAddDdl`) applies the identical bound.
- */
 export const JS_SAFE_INTEGER_BOUND = 9007199254740991;
 
-/**
- * One column's DDL fragment. `fkPhysical` resolves a `references` target to
- * (physical table, pk column) — band-aware, supplied by the applier.
- *
- * Every `integer` column carries a generated CHECK clamping it to
- * `Number.MAX_SAFE_INTEGER` (2^53-1): node:sqlite's default connection reads
- * an INTEGER past that bound as a JS `number` and throws, so an out-of-range
- * value would write fine and then poison every future read of the row. This
- * DDL is gateway-generated (apps never run DDL), so applying the bound
- * everywhere is safe and closes the exposure at write time instead of read
- * time. `canonicalSpecJson` doesn't encode this — it's a pure function of
- * `col.type`, not part of the diffed spec shape.
- */
 export function columnDdl(
   col: ExtColumnSpec,
   fkPhysical: (logical: string) => { physical: string; pk: string }
@@ -322,12 +249,10 @@ export function columnDdl(
   return parts.join(" ");
 }
 
-/** Deterministic index name: diffable by name set. */
 export function extIndexName(physical: string, idx: ExtIndexSpec): string {
   return `idx_${physical}_${idx.columns.join("_")}${idx.unique ? "_uq" : ""}`;
 }
 
-/** CREATE TABLE + indexes for one spec in one band. */
 export function extTableDdl(
   physical: string,
   spec: ExtTableSpec,
@@ -344,11 +269,6 @@ export function extTableDdl(
   ].join("\n");
 }
 
-/**
- * FTS5 artifacts for a searchable ext table (live band only): shadow table,
- * sync triggers, backfill — the same shape schema/fts.ts gives canonical
- * entities, minus content-uri indirection (ext columns are plain text).
- */
 export function extFtsDdl(
   physical: string,
   pk: string,
@@ -393,12 +313,6 @@ export function dropExtFtsDdl(physical: string): string {
   ].join("\n");
 }
 
-/**
- * The band registry. One row per (app, band, table) — `spec_json` is the
- * canonical declared spec (the diff base for the next apply), `status`
- * survives uninstall (`retained`: data kept, app access gone) until the owner
- * purges.
- */
 export const APP_EXT_DDL = `
 CREATE TABLE access_app_ext (
   app_id      TEXT NOT NULL,

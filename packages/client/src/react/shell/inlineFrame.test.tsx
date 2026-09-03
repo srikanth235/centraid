@@ -17,14 +17,6 @@ import { resetStatus } from "./statusChannel.js";
 import StatusLine from "./StatusLine.js";
 import Stem from "./Stem.js";
 
-// Frame integration for an inline app (Photos v4, §3 + CHANGELOG F/G).
-//
-// The app supplies what the FRAME renders — bar content, the one status line,
-// and (on compact, first-party only) the bottom band. What is asserted here is
-// the frame's half of that bargain: the contribution reaches the bar, the
-// status line's single inline action fires, and there is EXACTLY ONE band with
-// a home capsule that is never smaller than the 44px floor.
-
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 
@@ -56,8 +48,6 @@ const claim: InlineBandClaim = {
 
 const NO_HOME = (): void => undefined;
 
-/** The route host, reduced to the two things this suite is about: what the app
- *  contributes, and what the frame does with it. */
 function Host({
   compact,
   firstParty = true,
@@ -108,8 +98,6 @@ function Host({
   );
 }
 
-// An app writes its contribution from its own render/effects; the test stands
-// in for that with a once-per-mount call, which is what a real app does.
 const contributed = new WeakSet<object>();
 function contributeOnce(frame: object, run: (frame: never) => void): void {
   if (contributed.has(frame)) return;
@@ -153,14 +141,9 @@ describe("shell/inlineFrame", () => {
       );
       const bar = el.querySelector<HTMLElement>(".appBar")!;
       expect(bar.querySelector(".appTitle")?.textContent).toBe("Photos");
-      // A count is a numeric, and the FRAME owns that register — the app
-      // passes the number, not the styling.
       expect(bar.querySelector(".appCount")?.textContent).toBe("1,904");
       expect(bar.textContent).toContain("Import");
-      // The app supplies content; it does not restyle the bar. The lockup hook
-      // is the frame's, and the app has no way to set it.
       expect(bar.dataset.lockup).toBe("app");
-      // The frame's own affordances survive the contribution.
       expect(bar.querySelector('[aria-label="Back"]')).not.toBeNull();
       expect(bar.querySelector('[aria-label="App settings"]')).not.toBeNull();
     });
@@ -184,7 +167,6 @@ describe("shell/inlineFrame", () => {
           }
         />
       );
-      // One line, one action — no toast, no badge, no spinner, no red dot.
       expect(el.querySelectorAll(".statusLine")).toHaveLength(1);
       const action = el.querySelector<HTMLButtonElement>(".statusAction")!;
       expect(action.textContent).toBe("Undo");
@@ -212,14 +194,10 @@ describe("shell/inlineFrame", () => {
       expect(found).toHaveLength(1);
       expect(found[0]!.dataset.band).toBe("app");
       expect(found[0]!.getAttribute("aria-label")).toBe("Photos");
-      // The app's destinations sit in their own group — the boundary is what
-      // says the capsule is not a sixth tab.
       const group = found[0]!.querySelector<HTMLElement>("fieldset")!;
       expect(group.querySelectorAll("button")).toHaveLength(4);
       expect(group.querySelectorAll(".launchChip svg")).toHaveLength(4);
       expect(group.querySelector('[aria-label="Home"]')).toBeNull();
-      // The claimed band is stable on compact surfaces; there is no grid
-      // hand-back control that can swap it for the host launcher.
       expect(found[0]!.querySelector('button[aria-label^="Use "]')).toBeNull();
     });
 
@@ -233,12 +211,10 @@ describe("shell/inlineFrame", () => {
         />
       );
       const capsule = el.querySelector<HTMLElement>('[aria-label="Home"]')!;
-      // Present, labelled (it is icon-only), and a frame control.
       expect(capsule).not.toBeNull();
       expect(capsule.closest("fieldset")).toBeNull();
       expect(capsule.style.getPropertyValue("--band-capsule")).toBe("52px");
       expect(BAND_CAPSULE_SIZE).toBeGreaterThanOrEqual(44);
-      // Home in ONE tap.
       act(() => capsule.click());
       expect(home).toHaveBeenCalledOnce();
     });
@@ -264,10 +240,6 @@ describe("shell/inlineFrame", () => {
     });
 
     it("floats on OPAQUE paper — no blur, no translucency, no shadow", () => {
-      // The bar sits over unpredictable photographs, so label contrast, the
-      // active bar and the focus ring must not depend on what the member
-      // photographed. Asserted against the stylesheet, because a jsdom layout
-      // cannot answer it.
       const css = readFileSync(
         path.join(import.meta.dirname, "chrome.module.css"),
         "utf8"
@@ -280,10 +252,6 @@ describe("shell/inlineFrame", () => {
       expect(rule!).toMatch(/border-radius:\s*var\(--r-lg\)/u);
       expect(rule!).toMatch(/border:\s*1px solid var\(--line-strong\)/u);
       expect(rule!).toMatch(/margin-inline:\s*12px/u);
-      // RAISED PAPER, not the page colour. A band that floats over content and
-      // is painted in the page's own tone has only its border to prove it is a
-      // surface at all; `--bg-elev` is the system's raised sheet, and it is
-      // still fully opaque, which is the part this test exists to defend.
       expect(rule!).toMatch(/background:\s*var\(--bg-elev\)/u);
       expect(rule!).not.toMatch(/backdrop-filter|opacity|box-shadow/u);
 
@@ -304,8 +272,6 @@ describe("shell/inlineFrame", () => {
       channel.frame.claimBand(claim);
       expect(channel.read().appBar?.title).toBe("Photos");
       channel.frame.setAppBar(null);
-      // Withdrawing the bar leaves the band claim alone — one channel, two
-      // independent contributions.
       expect(channel.read().appBar).toBeNull();
       expect(channel.read().band).not.toBeNull();
     });

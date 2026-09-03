@@ -1,9 +1,3 @@
-// Orphan-grace GC invariant (#439). Two halves: the OrphanTombstoneIndex
-// (first-observed-orphaned bookkeeping) and reconcileCustody's grace gate — a
-// genuine orphan is HELD for the recovery window N before the client-owned CAS
-// delete may evict it, so a PITR that lands between two snapshots can still reach
-// a blob referenced by no retained manifest.
-
 import { DatabaseSync } from "node:sqlite";
 
 import { describe, expect, test } from "vitest";
@@ -24,15 +18,12 @@ function memDb(): DatabaseSync {
   return db;
 }
 
-// ────────── OrphanTombstoneIndex ──────────
-
 describe("orphan-grace", () => {
   test("markFirstSeen stamps once and is idempotent — the grace clock never resets", () => {
     const orphans = new OrphanTombstoneIndex(memDb());
     const sha = SHA("a");
     expect(orphans.read(sha)).toBeUndefined();
     expect(orphans.markFirstSeen(sha, 1000)).toBe(1000);
-    // A later observation keeps the ORIGINAL stamp (INSERT OR IGNORE).
     expect(orphans.markFirstSeen(sha, 9999)).toBe(1000);
     expect(orphans.read(sha)).toBe(1000);
   });
@@ -45,8 +36,6 @@ describe("orphan-grace", () => {
     expect(orphans.read(sha)).toBeUndefined();
     expect(orphans.markFirstSeen(sha, 5000)).toBe(5000);
   });
-
-  // ────────── reconcileCustody grace gate ──────────
 
   interface Harness {
     ctx: ReconcileContext;
@@ -159,7 +148,6 @@ describe("orphan-grace", () => {
     const ctx: ReconcileContext = {
       remote: { store: remote },
       local: new MemoryBlobStore(),
-      // orphans deliberately absent
       desiredStore: () => "cas",
       open: () => Promise.resolve(),
       replicate: (shas) => Promise.resolve(shas),

@@ -12,10 +12,6 @@ import {
 } from "./automationsData.js";
 import type { AutomationFeedEntry } from "./automationsData.js";
 
-// buildOverviewData is pure; stub the gateway barrel so importing it
-// doesn't run gateway-client-core's load-time window.CentraidApi side-effect.
-// `vi.mock` is hoisted above these imports by vitest, so the stub is in
-// place first.
 vi.mock(import("../../../gateway-client.js"), () => ({
   listAutomations: vi.fn<typeof listAutomations>(),
   listAutomationTurnsByLane: vi.fn<typeof listAutomationTurnsByLane>(),
@@ -381,7 +377,6 @@ describe(deriveAutomationHero, () => {
   });
 });
 
-/** Route `listAutomationTurnsByLane` by its `systemLane` arg, like the real per-lane route does. */
 function stubLanes(
   byLane: Partial<
     Record<"member" | "recognition", CentraidAutomationTurnRecord[]>
@@ -442,11 +437,6 @@ describe(collectAutomationRuns, () => {
     expect(entries[0]?.automationName).toBe("gone-app/gone-auto");
   });
 
-  // The two calls fail differently, and the difference is load-bearing.
-  // This function once swallowed both, which was invisible while the overview
-  // fetched the list itself — and became a silent regression the moment the
-  // overview started sourcing rows from here: a 500 painted the empty state
-  // over a broken gateway, with no error card and no Retry (desktop e2e 8.2).
   it("propagates a list failure — an empty list must not stand in for a broken gateway", async () => {
     vi.mocked(listAutomations).mockRejectedValue(new Error("500"));
     stubLanes({});
@@ -463,12 +453,6 @@ describe(collectAutomationRuns, () => {
     expect(entries).toStrictEqual([]);
   });
 
-  // Issue #731 M2: a bulk photo import fires the recognition automations
-  // once per photo. Before the lane split, one combined
-  // `listAutomationTurns({ limit: 100 })` call meant a flood of recognition
-  // runs could fill the entire 100-row window and leave the member's own
-  // "Recent activity" empty. Each lane is now its own independently-bounded
-  // fetch, so a recognition flood must never crowd the member lane out.
   it("keeps the member lane populated when the recognition lane is flooded", async () => {
     vi.mocked(listAutomations).mockResolvedValue([
       row(),

@@ -109,7 +109,6 @@ describe("derivatives", () => {
           bytes: Buffer.from("ABCDEF"),
         })
       ).toThrow(/lowercase hexadecimal/u);
-      // ThumbHash: canonical unpadded base64 of 5..64 bytes round-trips exactly.
       expect(
         validateDerivativeContribution({
           variant: "thumbhash",
@@ -165,8 +164,6 @@ describe("derivatives", () => {
         WHERE content_id = ? AND variant = 'text'`
       )
       .get(doc.content_id) as { sha256: string | null; text_content: string };
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({ ...text }).toStrictEqual({
       sha256: null,
       text_content: "pdf.js found the decisive narwhal clause",

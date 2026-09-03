@@ -45,8 +45,6 @@ describe("shell/ShellFrame", () => {
     });
 
     it("seams the bar off from the content on every route", () => {
-      // Including the routes that name nothing. A boundary that showed up only
-      // where there is a title would read as a rendering difference.
       const css = readFileSync(
         path.join(import.meta.dirname, "chrome.module.css"),
         "utf8"
@@ -71,9 +69,6 @@ describe("shell/ShellFrame", () => {
     });
 
     it("offers the stem toggle only to a host that owns the state", () => {
-      // A frame with no `stemOpen` is a host that cannot answer the question —
-      // the compact band and the full-bleed windows. Drawing a dead toggle
-      // there would be worse than drawing none.
       const el = render(<ShellFrame {...base} />);
       expect(el.querySelector('[aria-label="Hide sidebar"]')).toBeNull();
       expect(el.querySelector('[aria-label="Show sidebar"]')).toBeNull();
@@ -84,13 +79,10 @@ describe("shell/ShellFrame", () => {
       const el = render(
         <ShellFrame {...base} stemOpen={false} onToggleStem={onToggleStem} />
       );
-      // Hidden, not unmounted: the launcher keeps its scroll position and the
-      // vault switcher keeps a box to anchor to.
       expect(el.querySelector('[data-testid="stem"]')).not.toBeNull();
       expect(el.querySelector<HTMLElement>(".window")?.dataset.stem).toBe(
         "hidden"
       );
-      // Never a drawer: no scrim over the content, in either state.
       expect(el.querySelector(".scrim")).toBeNull();
       const toggle = el.querySelector<HTMLButtonElement>(
         '[aria-label="Show sidebar"]'
@@ -122,14 +114,10 @@ describe("shell/ShellFrame", () => {
       );
       expect(el.querySelector(".appTitle")?.textContent).toBe("Photos");
       expect(el.querySelector(".appMeta")?.textContent).toBe("1,904 photos");
-      // The title is the app's heading, not a decorative string.
       expect(el.querySelector("h1")).not.toBeNull();
     });
 
     it("grows the bar into a header only for the full identity lockup", () => {
-      // The trigger is the META line, not the title. A title with nothing
-      // under it names the screen and stays at the title rung; only the full
-      // identity lockup takes the display face.
       const bare = render(<ShellFrame {...base} />);
       expect(
         bare.querySelector<HTMLElement>(".appBar")?.dataset.identity
@@ -165,18 +153,14 @@ describe("shell/ShellFrame", () => {
         />
       );
       const title = el.querySelector<HTMLButtonElement>("button.appTitle")!;
-      // Still the title: same class, same title role, same string.
       expect(title.textContent).toContain("Srikanth's vault");
       expect(title.getAttribute("aria-expanded")).toBe("true");
       expect(title.getAttribute("aria-label")).toBe(
         "Srikanth's vault on This Mac. Switch vault."
       );
-      // A route that names no action gets a heading, never a dead button.
       expect(el.querySelector("h1")).toBeNull();
       act(() => title.click());
       expect(onActivate).toHaveBeenCalledOnce();
-      // Anchored to the title's own box, so the popover opens under the name
-      // it is switching (jsdom hands back a plain rect, not a DOMRect).
       expect(onActivate.mock.calls[0]![0]).toMatchObject({
         bottom: expect.any(Number),
         left: expect.any(Number),
@@ -207,8 +191,6 @@ describe("shell/ShellFrame", () => {
       act(() =>
         (el.querySelector('[aria-label="Back"]') as HTMLButtonElement).click()
       );
-      // This fires straight off a native button `onClick`, so the callback
-      // receives the click SyntheticEvent, not a bare invocation.
       expect(onBack).toHaveBeenCalledWith(
         expect.objectContaining({ type: "click" })
       );

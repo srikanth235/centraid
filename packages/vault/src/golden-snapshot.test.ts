@@ -10,12 +10,6 @@ import {
   snapshotVault,
 } from "./golden-snapshot.js";
 
-// #892 — THE DEMONSTRATED RED. A golden-vault gate that only ever ran against a
-// healthy corpus would pass identically against a `compareSnapshot` that
-// returned `{ ok: true }` unconditionally, and nobody would find out until a
-// migration ate somebody's notes. Each case below breaks a vault the way a bad
-// migration breaks one and requires the comparison to say so, in words.
-
 function seeded(): DatabaseSync {
   const db = new DatabaseSync(":memory:");
   db.exec(`
@@ -49,8 +43,6 @@ describe("golden-vault snapshot", () => {
   });
 
   test("a REWRITTEN value is caught even though the row count is unchanged", () => {
-    // The failure a row-count check cannot see: a migration that rewrote every
-    // member's note body would leave the count identical.
     const db = seeded();
     const frozen = snapshotVault(db);
     db.exec("UPDATE note SET body = 'rewritten' WHERE note_id = 'a'");
@@ -61,8 +53,6 @@ describe("golden-vault snapshot", () => {
   });
 
   test("a change of TYPE in place is a change of data", () => {
-    // SQLite will hold `1` where `'1'` was. A digest over string values alone
-    // would call that identical; the affinity a migration changed is real.
     const db = new DatabaseSync(":memory:");
     db.exec(
       `CREATE TABLE t (id TEXT PRIMARY KEY, n ANY) STRICT; INSERT INTO t VALUES ('a', '1');`
@@ -138,8 +128,6 @@ describe("golden-vault snapshot", () => {
   });
 
   test("the exclusion list stays short and every entry states a reason", () => {
-    // Excluding a table is how this gate would be quietly disarmed one table at a
-    // time. The cap is arbitrary; needing to raise it is the signal.
     expect(SNAPSHOT_EXCLUSIONS.size).toBeLessThanOrEqual(3);
     for (const [table, reason] of SNAPSHOT_EXCLUSIONS) {
       expect(

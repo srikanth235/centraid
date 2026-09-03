@@ -1,6 +1,3 @@
-// Vault-resident Commons grant and membership lifecycle. Every control-plane
-// mutation is sequenced atomically in the same per-grant log as commands.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import type { InvokeOutcome } from "../gateway/types.js";
@@ -282,9 +279,6 @@ export function upsertCommonsMember(input: {
   });
 }
 
-/** Record receiver consent refusal at the steward. The member remains in the
- * named audience so a later deliberate re-invite can reopen consent without
- * inferring identity from a display name. */
 export function refuseCommonsMember(input: {
   steward: DatabaseSync;
   grantId: string;
@@ -411,8 +405,6 @@ export function commonsSeats(input: {
   grantId: string;
   stewardVaultId: string;
   vaultFor: (vaultId: string) => ShareVaultRef | undefined;
-  /** Replica executor for command-tail replay (#750). A host that
-   * cannot invoke into a mounted seat omits it and that seat re-projects. */
   invokeFor?: (
     vaultId: string,
     command: string,
@@ -475,14 +467,10 @@ export function commonsSeats(input: {
   });
 }
 
-/** Restore/mount reconciliation: vault truth recreates every joined seat's
- * mechanics and advances its logical grant-member cursor. */
 export function recompileCommonsGrants(input: {
   steward: ShareVaultRef;
   stewardVaultId: string;
-  /** Owner party of this local vault; member replicas never fan out. */
   stewardPartyId: string;
-  /** Post-command fast path; omitted on mount/restore to reconcile all grants. */
   grantId?: string;
   vaultFor: (vaultId: string) => ShareVaultRef | undefined;
   invokeFor?: (

@@ -29,7 +29,6 @@ function positiveNumber(value: unknown, field: string): number {
   return value;
 }
 
-/** Runtime validation shared by reference and fake providers. */
 export function validateProviderPolicy(
   input: unknown
 ): ProviderPolicyDeclaration {

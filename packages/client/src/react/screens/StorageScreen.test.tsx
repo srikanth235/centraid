@@ -67,15 +67,9 @@ describe(StorageScreen, () => {
 
   it("renders only local footprint and limits, with independent partial state", async () => {
     const el = await mount();
-    // Two section heads, each ABOVE its own container (binding layer v11).
-    // There is no "On this machine" in-panel head on the footprint card: the
-    // Capacity head states that figure itself.
     const headings = [...el.querySelectorAll("h2")].map(
       (heading) => heading.textContent
     );
-    // ONE section head. Limits is a named row list, not a section of its own:
-    // its rows say what each limit is and carry the verb that changes it, so a
-    // head above them would only repeat the fieldset's own name.
     expect(headings).toStrictEqual(["Capacity"]);
     expect(
       el.querySelector('[aria-label="Limits"]'),
@@ -93,10 +87,6 @@ describe(StorageScreen, () => {
     expect(el.textContent).not.toContain("Listening for the gateway heartbeat");
   });
 
-  // TWO vaults, not one: a single row here is the headline figure said again
-  // under a bar that is necessarily full, so the block draws nothing below two
-  // (VaultFootprintRows). The breakdown exists for exactly this case - several
-  // vaults, one of them somebody else's.
   it("adds the owner label beside each vault line when a roster is available (#726 P1)", async () => {
     const withVaults: LocalUsageReportDTO = {
       ...report(),
@@ -131,7 +121,6 @@ describe(StorageScreen, () => {
         .mockResolvedValue(owners),
     });
     const byVault = el.querySelector('[data-testid="footprint-by-vault"]');
-    // Whose it is, said ON the row rather than in a parenthesis after the name.
     expect(byVault?.textContent).toContain("Priya's vault");
     expect(byVault?.textContent).toContain("Priya");
   });
@@ -159,8 +148,6 @@ describe(StorageScreen, () => {
     });
     const byVault = el.querySelector('[data-testid="footprint-by-vault"]');
     expect(byVault?.textContent).toContain("Priya's vault");
-    // No roster to join, so the row falls back to "yours" rather than
-    // inventing a name for a person it cannot identify.
     expect(byVault?.textContent).toContain("yours");
   });
 
@@ -169,9 +156,6 @@ describe(StorageScreen, () => {
       .fn<StorageScreenProps["saveStorageLimits"]>()
       .mockResolvedValue(report().limits);
     const el = await mount({ saveStorageLimits });
-    // The LEDGER limit, because the disk budget is no longer offered: it was a
-    // warning figure Centraid never stopped at, so the panel only surfaces one
-    // if a stored value is stranded there, and then only to turn it off.
     const change = [...el.querySelectorAll("button")].find(
       (button) => button.title === "Change the ledger limit"
     ) as HTMLButtonElement;
@@ -193,8 +177,6 @@ describe(StorageScreen, () => {
     expect(
       el.querySelector('[data-testid="storage-limits-panel"]')
     ).not.toBeNull();
-    // Read-only is the ABSENCE of the verb, not a second panel: one panel,
-    // one testid, and the viewer's rows simply carry no action.
     expect(el.textContent).not.toContain("Change");
     expect(el.textContent).not.toContain("Rescan");
     expect(el.textContent).not.toContain("Set");

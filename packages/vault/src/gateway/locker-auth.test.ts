@@ -166,7 +166,6 @@ describe("Locker user-presence authentication", () => {
   test("authorizeReveal gates UI permits and fill sessions only after configure", async () => {
     expect(auth.isConfigured()).toBe(false);
     expect(auth.isUnlocked()).toBe(false);
-    // Unconfigured: both arms are open (opt-in presence).
     expect(() => auth.authorizeReveal(undefined, "item-a", "ui")).not.toThrow();
     expect(() =>
       auth.authorizeReveal(undefined, "item-a", "fill")
@@ -183,7 +182,6 @@ describe("Locker user-presence authentication", () => {
     expect(() => auth.authorizeReveal(undefined, "item-a", "ui")).toThrow(
       /locked/u
     );
-    // Fill only needs any live unlock session, not an item permit.
     expect(() =>
       auth.authorizeReveal(undefined, "item-a", "fill")
     ).not.toThrow();
@@ -275,8 +273,6 @@ describe("Locker user-presence authentication", () => {
       })
     ).resolves.toMatchObject({ ok: true, authenticated: true });
 
-    // Device credential unlock path after enroll (before revoke above we
-    // already revoked — re-enroll and unlock with device secret).
     const again = await auth.handle({
       operation: "enroll-device",
       sessionToken,
@@ -291,17 +287,12 @@ describe("Locker user-presence authentication", () => {
     expect(unlocked).toMatchObject({ ok: true, authenticated: true });
   });
 
-  // ── issue #659 G11: the KDF runs off the event loop ───────────────────
-
   test("an unlock leaves the event loop free while its scrypt runs", async () => {
     await auth.handle({
       operation: "configure",
       secret: "correct horse battery staple",
     });
 
-    // A timer chain that can only advance if the loop is being serviced. With
-    // the old `scryptSync` the whole ~100 ms derivation ran inside one tick,
-    // so this counter could not move at all while the unlock was in flight.
     let ticks = 0;
     let ticking = true;
     const tick = (): void => {
@@ -322,10 +313,6 @@ describe("Locker user-presence authentication", () => {
     ticking = false;
 
     expect(unlocked).toMatchObject({ ok: true, authenticated: true });
-    // The derivation is deliberately expensive, so a serviced loop turns over
-    // many times inside it. `scryptSync` yielded only at the handful of await
-    // boundaries around it, which is why the floor is well above 1 — a
-    // regression to the sync KDF cannot satisfy this.
     expect(elapsedMs).toBeGreaterThan(20);
     expect(during).toBeGreaterThan(10);
   });
@@ -335,9 +322,6 @@ describe("Locker user-presence authentication", () => {
       operation: "configure",
       secret: "correct horse battery staple",
     });
-    // The enumeration guard is only a guard if the fake derivation is
-    // AWAITED: an unknown credential id and a known one must both cost a real
-    // scrypt, so the refusal timing tells an attacker nothing.
     const startUnknown = performance.now();
     const unknown = await auth.handle({
       operation: "unlock",
@@ -356,7 +340,6 @@ describe("Locker user-presence authentication", () => {
 
     expect(unknown).toMatchObject({ ok: false, code: "INVALID_CREDENTIAL" });
     expect(known).toMatchObject({ ok: false, code: "INVALID_CREDENTIAL" });
-    // Both paths did real KDF work — neither returned on a fast path.
     expect(unknownMs).toBeGreaterThan(1);
     expect(knownMs).toBeGreaterThan(1);
   });

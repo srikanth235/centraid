@@ -30,7 +30,6 @@ function Note({ children }: { children: React.ReactNode }): JSX.Element {
   return <div className={appSettingsCss.appSettingsNote}>{children}</div>;
 }
 
-// WHAT the app asked for — why line + requested scopes as chips.
 function RequestSection({
   block,
 }: {
@@ -69,14 +68,6 @@ function GrantSection({
   onRevoke: (grantId: string) => void;
 }): JSX.Element {
   const [busy, setBusy] = useState(false);
-  // `grants` is a fresh array from every reload — including the one that
-  // follows a grant/revoke action completing — so resetting on change
-  // un-disables the button that action just flipped. Without this, the
-  // "Grant access" button that appears after a Revoke inherits the `busy`
-  // this same component instance set for the Revoke click, since the
-  // grants.length===0 → >0 branch swap doesn't remount GrantSection.
-  // Done during render so the button is live on the same paint the new grants
-  // arrive, not one render later.
   const [seenGrants, setSeenGrants] = useState(grants);
   if (seenGrants !== grants) {
     setSeenGrants(grants);
@@ -242,13 +233,6 @@ type State =
   | { phase: "error" }
   | { phase: "ready"; data: VaultData };
 
-/**
- * Vault — the per-app owner consent pane. Unlike the read-only screens this
- * one is stateful: it fetches the consent surface through the route-supplied
- * `loadData`, and every owner act (grant / revoke / confirm / demo) runs the
- * matching gateway call, then reloads. Emits the `cd-vault-*` /
- * `cd-app-settings-*` classes global styles.css targets.
- */
 export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
   const { block, loadData, showToast, onAccessChanged, onParkedCount } = props;
   const [state, setState] = useState<State>({ phase: "loading" });
@@ -272,7 +256,6 @@ export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
     void reload();
   }, [reload]);
 
-  // Run an owner action, then surface a toast, notify the shell, and reload.
   const act = useCallback(
     (run: () => Promise<void>, okMsg: string, failMsg: string) => {
       run()

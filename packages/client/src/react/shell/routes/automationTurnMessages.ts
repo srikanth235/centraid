@@ -105,21 +105,9 @@ export function usageForItem(
   };
 }
 
-/**
- * What a compile turn's inbound message reads as in the thread.
- *
- * A compile turn's `message_in` item holds the headless compiler's own work
- * order (`HEADLESS_COMPILE_WORK_ORDER` — the multi-paragraph "compile this
- * automation headlessly…" prompt plus resolved anchors). That is machinery
- * talking to itself, not something the owner typed, so rendering it verbatim
- * as the owner's chat bubble is a lie. Both the cold projection
- * (`automationTurnMessages`) and the live seed (`AutomationViewRoute`) show
- * the owner's actual action instead — they must agree on the same turn.
- */
 export const COMPILE_TURN_INBOUND_TEXT =
   "Apply the revised standing instructions.";
 
-/** The inbound bubble text for a turn — see `COMPILE_TURN_INBOUND_TEXT`. */
 export function automationTurnInboundText(
   turn: { triggerKind?: CentraidAutomationTurnRecord["triggerKind"] } | null,
   items: readonly CentraidAutomationItem[]
@@ -136,15 +124,6 @@ export function toolLabel(calls: readonly AsstToolCallDTO[]): string {
     : `${calls.length} ${calls.length === 1 ? "tool" : "tools"}${failed ? ` · ${failed} failed` : ""}`;
 }
 
-/**
- * Convert a native automation turn directly to the shared conversation
- * message DTO. Calls coalesce by callId, so overlapping same-named ACP calls
- * remain distinct while start/result updates for one call stay one row.
- *
- * Ledger order is authoritative. Only consecutive tool items coalesce; an
- * delegate/step item flushes the current tool row so a later call group cannot
- * be pulled ahead of an earlier answer.
- */
 export function automationTurnMessages(
   turn: CentraidAutomationTurnRecord,
   items: readonly CentraidAutomationItem[],
@@ -153,8 +132,6 @@ export function automationTurnMessages(
   const messages: AsstMsgDTO[] = [];
   let calls: AsstToolCallDTO[] = [];
   let callIndex = new Map<string, number>();
-  // Identity of the first tool item in the current coalescing group — the
-  // group's stable list key, since the row itself is a synthesised summary.
   let callsAnchor: string | undefined;
   const flushTools = (): void => {
     if (calls.length > 0) {
@@ -224,8 +201,6 @@ export function automationTurnMessages(
       flushToolsThenDelegate();
       messages.push({
         kind: "user",
-        // A compile turn's inbound item is the compiler's own work order, not
-        // the owner's words — see `COMPILE_TURN_INBOUND_TEXT`.
         text:
           turn.triggerKind === "compile"
             ? COMPILE_TURN_INBOUND_TEXT
@@ -237,9 +212,6 @@ export function automationTurnMessages(
     }
     if (item.kind === "delegate") {
       flushToolsThenDelegate();
-      // Production opens the parent delegate item before allocating later
-      // ordinals to its nested ACP tool items. Hold the parent until those
-      // children have been projected, then emit tools → final answer.
       pendingDelegate = item;
       continue;
     }
@@ -248,8 +220,6 @@ export function automationTurnMessages(
         pendingDelegate?.endedAt !== undefined &&
         item.startedAt > pendingDelegate.endedAt
       ) {
-        // This tool began after the delegate closed, so it is the handler's next
-        // standalone action rather than a nested ACP child.
         flushToolsThenDelegate();
       }
       const key = item.callId ?? item.itemId;

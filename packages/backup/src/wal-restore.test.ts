@@ -1,13 +1,5 @@
 import fss, { promises as fs } from "node:fs";
 // governance: allow-repo-hygiene file-size-limit (#408) the replay e2e suite drives one real mini-shipper fixture through every damage/PITR/marker case; sharding would duplicate the shipper per file
-/*
- * End-to-end WAL replay (FORMAT.md § WAL segments — /1, #408) over the REAL
- * pipeline. Row sets are compared against capture-time snapshots: the restore
- * must equal what the live database ACTUALLY held, not merely pass an integrity
- * check. The damage cases are the point — a corrupt, missing or forged object
- * degrades to an EARLIER CONSISTENT state (G6) the tick markers can still
- * PROVE, never a corrupt or half-applied one.
- */
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -41,7 +33,6 @@ const VAULT_ID = "vault-restore-test";
 
 /* oxlint-disable max-classes-per-file -- (#354) TickClock is a tiny clock stub
    colocated with the MiniShipper test rig it drives. */
-/** Segments of one round share a tick. */
 class TickClock {
   private t = 0;
   next(): number {
@@ -55,14 +46,10 @@ interface CapturedSegment {
   bytes: Uint8Array;
 }
 
-/** A REAL mini shipper under the production invariants, capturing committed
- * `-wal` ranges. */
 class MiniShipper {
   readonly captured: CapturedSegment[] = [];
   readonly closers: WalGroupCloser[] = [];
-  /** One per tick that moved the stream — what the real shipper writes. */
   readonly markers: WalTickMarker[] = [];
-  /** PITR ground truth. */
   readonly rowsAtTick = new Map<number, string[]>();
   private readonly conn: DatabaseSync;
   private readonly dbPath: string;
@@ -99,7 +86,6 @@ class MiniShipper {
     for (const val of vals) stmt.run(val);
   }
 
-  /** Arbitrary SQL — the FK-violation fixture needs its own tables. */
   exec(sql: string): void {
     this.conn.exec(sql);
   }
@@ -112,7 +98,6 @@ class MiniShipper {
     ).map((r) => r.val);
   }
 
-  /** Must precede all captures. */
   base(): Uint8Array {
     if (this.captured.length > 0)
       throw new Error("base() must precede captures");
@@ -123,8 +108,6 @@ class MiniShipper {
     return new Uint8Array(fss.readFileSync(this.dbPath));
   }
 
-  /** Already-captured segments keep the OLD generation in their address, so
-   * both eras live in one store — what a real break leaves behind. */
   rebase(generation: string): Uint8Array {
     this.checkpointTruncate();
     this.generation = generation;
@@ -134,23 +117,16 @@ class MiniShipper {
     return new Uint8Array(fss.readFileSync(this.dbPath));
   }
 
-  /** What a tick marker records; after `rollover()`, `(g+1, 0)` — where a
-   * replay chain normalizes at group g's authentic closer. */
   position(): { group: number; endOffset: number } {
     return { group: this.group, endOffset: this.offset };
   }
 
-  /** `[offset, lastCommitBoundary)` of the live WAL as one segment, then the
-   * end-of-tick marker: the shipper writes both or the tick is not selectable. */
   tick(tickMs: number = this.clock.next()): number {
     this.capture(tickMs);
     this.mark(tickMs);
     return tickMs;
   }
 
-  /** Capture the tail, then TRUNCATE-checkpoint: the WAL must actually reach
-   * 0 bytes, which is the closer's invariant. The marker lands AFTER the group
-   * advance, so it records `(g+1, 0)`. */
   rollover(tickMs: number = this.clock.next()): number {
     this.capture(tickMs);
     this.checkpointTruncate();
@@ -188,8 +164,6 @@ class MiniShipper {
     this.rowsAtTick.set(tickMs, this.rows());
   }
 
-  /** A tick that moved no bytes still records where the stream stands — that
-   * repeat is what keeps an idle vault from reading as a truncated one. */
   markIdle(tickMs: number): void {
     this.mark(tickMs);
   }
@@ -267,19 +241,14 @@ async function forgeChecksumInvalidSegment(
   const addr = parseWalSegmentKey(key);
   if (!addr) throw new Error(`bad test segment key: ${key}`);
   const plain = openWalSegment(DATA_KEY, VAULT_ID, addr, await store.get(key));
-  // Re-encrypted under the legitimate key: GCM authenticates it, so only
-  // SQLite's rolling WAL checksum rejects it.
   plain[plain.length - 1]! ^= 0x01;
   await store.put(key, sealWalSegment(DATA_KEY, VAULT_ID, addr, plain));
 }
-
-// ─── single database: 2 groups, 5 segments, 5 ticks ───────
 
 interface VaultScenario {
   store: FsObjectStore;
   gen: string;
   base: Uint8Array;
-  /** Capture order: [t1, t2, t3(=group-0 tail), t4, t5]. */
   segKeys: string[];
   closerKeys: string[];
   ticks: number[];
@@ -387,7 +356,6 @@ describe("replayWalSegments — tip and point-in-time restore", () => {
     expect(atT4.outcome.segmentsApplied).toBe(4);
     expect(atT4.outcome.groupsApplied).toBe(2);
 
-    // Before the first tick: the base alone.
     const atBase = await restoreVault(sc, t1 - 500);
     expect(atBase.rows).toStrictEqual(sc.baseRows);
     expect(atBase.outcome.segmentsApplied).toBe(0);
@@ -446,8 +414,6 @@ describe("replayWalSegments — a logically inconsistent restore is a FAILED res
     `);
     const base = ship.base();
 
-    // FKs are enforced on every real writer, so a restored dangling child is
-    // logically fictional — a FAILED restore, never a note in the outcome.
     ship.exec("PRAGMA foreign_keys = OFF");
     ship.exec("INSERT INTO child (id, parent_id) VALUES (2, 404)");
     ship.tick();
@@ -538,8 +504,6 @@ describe("replayWalSegments — damage degrades to an earlier consistent state (
     expect(outcome.segmentsApplied).toBe(1);
     expect(outcome.lastTickMs).toBe(t1);
     expect(outcome.integrityCheck).toBe("ok");
-    // A deleted object never appears in the LIST, so the planner sees the hole
-    // up front and `damaged` stays empty.
     expect(outcome.damaged).toStrictEqual([]);
   });
 
@@ -564,7 +528,6 @@ describe("replayWalSegments — damage degrades to an earlier consistent state (
     await flipByteInStore(sc.store, tailKey);
 
     const { outcome, rows } = await restoreVault(sc);
-    // Group 0 incomplete → group 1's pages must NOT be applied.
     expect(rows).toStrictEqual(sc.rowsAt.get(t2));
     const vault = outcome;
     expect(vault.segmentsApplied).toBe(2);
@@ -581,17 +544,12 @@ describe("replayWalSegments — damage degrades to an earlier consistent state (
     await flipByteInStore(sc.store, sc.closerKeys[0]!);
 
     const { outcome, rows } = await restoreVault(sc);
-    // Group 0's segments all authenticate, but with no AUTHENTIC closer the
-    // group is unclosed: group 1 is never applied, intact or not. The t3 marker
-    // records the post-rollover (1, 0), which an unclosed chain cannot reach —
-    // so the restore lands on t2, the newest tick it can still PROVE.
     expect(rows).toStrictEqual(sc.rowsAt.get(t2));
     expect(outcome.segmentsApplied).toBe(2);
     expect(outcome.groupsApplied).toBe(1);
     expect(outcome.lastTickMs).toBe(t2);
     expect(outcome.truncated).toBe(true);
     expect(outcome.integrityCheck).toBe("ok");
-    // A rejected closer is an unclosed group, not segment damage.
     expect(outcome.damaged).toStrictEqual([]);
   });
 
@@ -609,14 +567,6 @@ describe("replayWalSegments — damage degrades to an earlier consistent state (
   });
 });
 
-// ─── tick markers: what a LISTING cannot tell you (#408) ───────
-
-/**
- * A listing that simply ends is indistinguishable from an idle vault, so the
- * marker — sealed by the producer, per tick — is the only thing that can say
- * which. These are the cases where every named object is present and the
- * restore is still wrong without it.
- */
 describe("replayWalSegments — the marker decides the cut, not the listing", () => {
   const GEN = "10".repeat(16);
 
@@ -674,7 +624,6 @@ describe("replayWalSegments — the marker decides the cut, not the listing", ()
       ticks.push(stream.ship.tick());
     }
     await shipToStore(stream.store, stream.ship);
-    // Drop the two newest segments — the listing simply ends.
     await Promise.all(
       stream.ship.captured
         .slice(-2)
@@ -685,7 +634,6 @@ describe("replayWalSegments — the marker decides the cut, not the listing", ()
     const { rows, outcome } = await restore(stream);
     expect(outcome.cutTickMs).toBe(ticks[2]);
     expect(outcome.lastTickMs).toBe(ticks[2]);
-    // …and says so — the signal restore-verify escalates on.
     expect(outcome.newestMarkerTickMs).toBe(ticks[4]);
     expect(outcome.truncated).toBe(true);
     expect(rows).toStrictEqual(["v1", "v2", "v3"]);
@@ -698,8 +646,6 @@ describe("replayWalSegments — the marker decides the cut, not the listing", ()
     stream.ship.insert("v2");
     const busyTick = stream.ship.tick();
     const liveRows = stream.ship.rows();
-    // Quiet afternoon: ticks with no new bytes ship no segment, only a marker
-    // repeating the position the stream already reached.
     let idleTick = busyTick;
     for (let round = 0; round < 5; round++) {
       idleTick = busyTick + 1000 * (round + 1);
@@ -717,8 +663,6 @@ describe("replayWalSegments — the marker decides the cut, not the listing", ()
   });
 
   test("DELETED markers: the restore still succeeds, and reports itself TRUNCATED", async () => {
-    // The QUIETEST failure: no hole, no damage, and a silently hours-old vault.
-    // `walTipTickMs` closes it — the restore degrades (G6) but must say so.
     const stream = await newStream();
     const ticks: number[] = [];
     for (let round = 1; round <= 3; round++) {
@@ -726,7 +670,6 @@ describe("replayWalSegments — the marker decides the cut, not the listing", ()
       ticks.push(stream.ship.tick());
     }
     await shipToStore(stream.store, stream.ship);
-    // ONLY the markers; every segment and closer survives.
     await Promise.all(
       stream.ship.markers.map((marker) =>
         stream.store.delete(walTickMarkerKey(marker))
@@ -740,7 +683,6 @@ describe("replayWalSegments — the marker decides the cut, not the listing", ()
     });
     expect(outcome.cutTickMs).toBe(-1);
     expect(rows).toStrictEqual([]); // the base, empty
-    // LOUD: the store acknowledged the tip and cannot honour it.
     expect(outcome.newestMarkerTickMs).toBe(-1); // nothing left to even ask
     expect(outcome.expectedCutMs).toBe(registeredTip);
     expect(outcome.truncated).toBe(true);
@@ -763,8 +705,6 @@ describe("replayWalSegments — the marker decides the cut, not the listing", ()
   });
 
   test("a tip NEWER than the requested point-in-time is not a truncation", async () => {
-    // A PITR cuts early on purpose: held to a tip outside its own window, every
-    // historical restore would report itself damaged.
     const stream = await newStream();
     const ticks: number[] = [];
     for (let round = 1; round <= 3; round++) {
@@ -784,8 +724,6 @@ describe("replayWalSegments — the marker decides the cut, not the listing", ()
   });
 
   test("a lost TAIL group closer makes its marker unsatisfiable and walks the cut back", async () => {
-    // Invisible to everything else: the marker says `(N+1, 0)` where the chain
-    // can only claim `(N, end)`.
     const stream = await newStream();
     stream.ship.insert("v1");
     const t1 = stream.ship.tick();

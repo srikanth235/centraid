@@ -1,12 +1,3 @@
-// Multi-scope replica sessions (#599).
-//
-// The regression these lock down is the one that made multi-scope unsafe:
-// `doFetch` stamps `x-centraid-vault` from the shell's AMBIENT focused vault
-// whenever the caller left it unset, so before this change EVERY replica
-// session — whatever scope it was keyed by — bootstrapped against whichever
-// vault happened to be focused, and wrote those rows into its own store. With
-// one scope mounted that was invisible; with two it is silent cross-vault data
-// corruption. Each session must stamp its OWN scope on every request.
 import {
   describe,
   afterEach,
@@ -127,8 +118,6 @@ describe("shell-session-scopes suite", () => {
   beforeAll(async () => {
     Object.assign(window, {
       CentraidApi: {
-        // The AMBIENT answer. Nothing below is mounted on this vault — anything
-        // addressing it is the bug this suite exists for.
         getGatewayAuth: () =>
           Promise.resolve({
             baseUrl: BASE_URL,
@@ -147,8 +136,6 @@ describe("shell-session-scopes suite", () => {
 
   beforeEach(() => {
     priorFetch = globalThis.fetch;
-    // A fresh Response per call: a body may only be read once, and both sessions
-    // bootstrap through this same mock.
     fetchMock = vi
       .fn<typeof globalThis.fetch>()
       .mockImplementation(async () => bootstrapResponse());
@@ -159,7 +146,6 @@ describe("shell-session-scopes suite", () => {
     globalThis.fetch = priorFetch;
   });
 
-  /** Every `x-centraid-vault` the transport actually put on the wire. */
   function stampedVaults(): string[] {
     return fetchMock.mock.calls.map(([, init]) => {
       const headers = new Headers((init as RequestInit).headers as HeadersInit);
@@ -229,7 +215,6 @@ describe("shell-session-scopes suite", () => {
     const stamped = stampedVaults();
     expect(stamped).toContain("vault-own");
     expect(stamped).toContain("vault-family");
-    // The point of the suite: neither session ever spoke for the focused vault.
     expect(stamped).not.toContain(FOCUSED_VAULT);
     expect(stamped).not.toContain("<unstamped>");
     await own.close();

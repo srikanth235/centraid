@@ -1,10 +1,3 @@
-// core.merge_party (#290): without a merge every added source DEGRADES the
-// vault. Folds B into A — engine FKs re-point (PRAGMA foreign_key_list, no
-// hand-kept list), polymorphic refs follow, the FK-less party pointers follow
-// from their own registry, identifiers demote rather than vanish, B's row
-// deletes, history is not rewritten. Uniqueness collisions dedupe onto the
-// survivor's copy; a handle is never lost.
-
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import {
@@ -65,7 +58,6 @@ const MERGE_PARTY: CommandDefinition = {
     },
   ],
   idempotency: "once",
-  // Tier 4 (#306): an irreversible merge stays loud on purpose.
   risk: "high",
   confirm: true,
   handler: mergeParty,
@@ -91,11 +83,6 @@ function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
   };
 }
 
-/**
- * The same fold for every other entity that gets minted per observation
- * (#916, review 2.2). One command rather than five near-identical ones: the
- * walks are the registry's, so the only per-entity knowledge is the row above.
- */
 const MERGE_ENTITY: CommandDefinition = {
   name: "core.merge_entity",
   ownerSchema: "core",
@@ -169,14 +156,6 @@ const MERGE_ENTITY: CommandDefinition = {
   },
 };
 
-// Convergence sweep (#310): handle→party resolution runs at import time only,
-// so per-source duplicates accumulate unsurfaced. Deterministic candidates
-// only; the assistant proposes and merge stays owner-confirmed.
-/**
- * The claims that let a member tell two same-named rows apart. BOTH stores
- * (#883): reach on `social_contact_channel`, identity keys in the register —
- * reading only one leaves a duplicate card showing two identical names.
- */
 function IDENTIFIER_CONTEXT_SQL(alias: string): string {
   return `SELECT group_concat(claim, ', ') FROM (
             SELECT scheme || ':' || value AS claim

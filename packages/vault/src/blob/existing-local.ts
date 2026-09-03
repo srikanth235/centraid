@@ -3,7 +3,6 @@ import type { DatabaseSync } from "node:sqlite";
 import type { LocalBlobStore } from "./local.js";
 import type { BlobTransferState } from "./transfer-state.js";
 
-/** Atomically seed remote-primary obligations from every live local claim. */
 export function enqueueExistingLocalBlobs(
   vault: DatabaseSync,
   localStore: LocalBlobStore,

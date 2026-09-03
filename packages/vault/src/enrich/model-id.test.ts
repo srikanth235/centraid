@@ -1,6 +1,3 @@
-// Model identity (#721) — see model-id.ts for why the version rides
-// inside the `enrich_embedding.model` key instead of a column.
-
 import { describe, expect, test } from "vitest";
 
 import {
@@ -53,8 +50,6 @@ describe("model-id", () => {
     expect(isSupersededBy("clip@1", "clip@2")).toBe(true);
     expect(isSupersededBy("clip@2", "clip@2")).toBe(false);
     expect(isSupersededBy("clip@3", "clip@2")).toBe(false);
-    // Another family's index belongs to someone else — a backfill that
-    // overwrote it would destroy recall this model never produced.
     expect(isSupersededBy("siglip@1", "clip@9")).toBe(false);
     expect(isSupersededBy("legacy-hand-written-key", "clip@9")).toBe(false);
   });

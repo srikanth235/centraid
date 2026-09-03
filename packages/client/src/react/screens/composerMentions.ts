@@ -1,5 +1,3 @@
-// Composer @-mentions + slash-commands (#420). Ref matches assistant-rich.
-
 export interface CaretToken {
   start: number;
   query: string;
@@ -28,7 +26,6 @@ export function slashCommandAt(text: string, caret: number): CaretToken | null {
 }
 
 export function refString(label: string, type: string, id: string): string {
-  // Labels can't contain `]`; strip it so the `@[label](...)` bracket stays valid.
   const safeLabel = label.replace(/[\]]/gu, "").trim() || `${type} ${id}`;
   return `@[${safeLabel}](ref:${type}/${id})`;
 }

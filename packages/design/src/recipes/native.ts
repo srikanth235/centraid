@@ -16,13 +16,6 @@ type NativeThemeParts = Pick<NativeTheme, "radii" | "targetMin"> & {
   colors: NativeColors;
 };
 
-/**
- * Concrete RN button geometry and published foreground for a recipe variant.
- *
- * `disabled` overrides every variant to the same recipe (D19): a filled
- * control that cannot be pressed stops being filled, so a disabled primary
- * must not stay filled any more than a disabled secondary would.
- */
 export function nativeButtonStyle(
   variant: ButtonVariant,
   theme: NativeThemeParts,

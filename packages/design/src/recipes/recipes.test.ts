@@ -75,8 +75,6 @@ describe("revision 3 recipe registry", () => {
       theme.spacing[4]
     );
 
-    // D19: disabled overrides every variant to the same transparent recipe —
-    // a filled control that cannot be pressed stops being filled.
     for (const variant of BUTTON_VARIANTS) {
       const disabledStyle = nativeButtonStyle(variant, theme, true);
       expect(disabledStyle.backgroundColor).toBe("transparent");

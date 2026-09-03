@@ -1,16 +1,3 @@
-/*
- * Golden-frame conformance for the tunnel wire protocol (#263 / #419): u32 BE
- * length prefix + UTF-8 JSON header frame, implemented five times (Node,
- * Swift, Kotlin, Rust/WASM, desktop/gateway twins). They must not drift; this
- * test is the SOURCE OF TRUTH for `fixtures/wire-golden.json`, read
- * identically by the Swift XCTest and Kotlin JUnit conformance tests.
- *
- * Byte-exact across ALL languages: framing of a fixed JSON byte string, ALPN
- * bytes, caps. JSON object encoding is round-trip-checked only (key order
- * differs across serializers). Regenerate after an intentional vector change:
- * `UPDATE_GOLDEN=1 vitest run wire-conformance`.
- */
-
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,7 +22,6 @@ const FIXTURE_PATH = fileURLToPath(
   new URL("../fixtures/wire-golden.json", import.meta.url)
 );
 
-/** The hop-by-hop set every implementation strips (RFC 9110 §7.6.1). */
 const HOP_BY_HOP = [
   "connection",
   "keep-alive",
@@ -48,10 +34,6 @@ const HOP_BY_HOP = [
   "upgrade",
 ];
 
-/**
- * Named logical vectors. The Node encoder (JSON.stringify, insertion order)
- * defines the canonical on-wire form.
- */
 const VECTORS: Array<{ name: string; note: string; value: unknown }> = [
   {
     name: "tunnelRequestHeader",
@@ -142,9 +124,6 @@ const VECTORS: Array<{ name: string; note: string; value: unknown }> = [
       vaultName: "personal",
       vaultIds: ["vlt_42", "vlt_family"],
       version: "0.1.0",
-      // Shared constant, not a literal (#726 Finding 8): a stale literal here
-      // would sign off on a floor no build serves. UPDATE_GOLDEN=1 only for
-      // an intentional vector change.
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
     },
   },
@@ -167,7 +146,6 @@ interface GoldenFixture {
   vectors: GoldenVector[];
 }
 
-/** u32 BE length prefix + UTF-8 JSON bytes, as a Buffer. */
 function frame(jsonBytes: Buffer): Buffer {
   const out = Buffer.alloc(4 + jsonBytes.length);
   out.writeUInt32BE(jsonBytes.length, 0);
@@ -225,7 +203,6 @@ function loadFixture(): GoldenFixture {
   return JSON.parse(fs.readFileSync(FIXTURE_PATH, "utf8")) as GoldenFixture;
 }
 
-// Regenerate on demand. Kept deterministic so a no-op regen is a no-op diff.
 if (process.env.UPDATE_GOLDEN) {
   fs.mkdirSync(path.dirname(FIXTURE_PATH), { recursive: true });
   fs.writeFileSync(
@@ -235,7 +212,6 @@ if (process.env.UPDATE_GOLDEN) {
   );
 }
 
-/** A recv half over a fixed byte buffer — feeds readHeaderFrame in-process. */
 function bufferRecv(bytes: Buffer): {
   readExact: (size: number) => Promise<Array<number>>;
 } {
@@ -299,7 +275,6 @@ describe.each(VECTORS)("wire vector $name", ({ name, value }) => {
   });
 
   it("encodeHeaderFrame reproduces the golden bytes", () => {
-    // Node is the canonical generator: its object encoding is byte-exact.
     expect(Buffer.from(encodeHeaderFrame(value)).toString("base64")).toBe(
       vector.frameBase64
     );
@@ -313,8 +288,6 @@ describe.each(VECTORS)("wire vector $name", ({ name, value }) => {
 });
 
 describe("framing bounds", () => {
-  // The cap is enforced uniformly on the READ path in every implementation;
-  // a crafted 4-byte over-cap prefix exercises it without allocating 256 KiB.
   it("rejects a header frame whose length prefix exceeds the cap", async () => {
     const prefix = Buffer.alloc(4);
     prefix.writeUInt32BE(MAX_HEADER_FRAME_BYTES + 1, 0);

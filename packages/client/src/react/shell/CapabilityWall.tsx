@@ -1,5 +1,3 @@
-// Capability wall (C1, docs/platform-gating.md): a directly-arrived gated
-// route gets a wall — NEVER a silent no-op or an enable control.
 import type { JSX } from "react";
 
 import EmptyBlock from "../ui/EmptyBlock.js";

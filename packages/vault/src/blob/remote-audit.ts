@@ -6,7 +6,6 @@ import type { LocalBlobStore } from "./local.js";
 import { verifyRemoteSealedObject } from "./remote-verify.js";
 import { assertSha, sha256OfBytes } from "./store.js";
 
-/** Authenticated/range-bounded for sealed CAS; full-SHA fallback for plaintext tiers. */
 export async function auditRemoteBlob(input: {
   vault: DatabaseSync;
   local: LocalBlobStore;

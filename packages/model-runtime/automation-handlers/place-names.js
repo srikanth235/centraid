@@ -31,15 +31,6 @@ import {
   nearestSettlement,
 } from "../src/gazetteer.js";
 
-/**
- * Places per fire.
- *
- * Larger than the recognition recipes' 16 because a lookup is a binary search
- * and a few dozen haversines — microseconds, against the tens of milliseconds a
- * model forward pass costs — so the bound that matters here is the number of
- * typed writes, not the arithmetic. Sixty-four keeps a first-run backfill of a
- * library's places down to a handful of fires while leaving each one short.
- */
 const BATCH = 64;
 const PURPOSE = "dpv:ServiceProvision";
 
@@ -50,8 +41,6 @@ function alreadyChecked(addressJson) {
   try {
     parsed = JSON.parse(addressJson);
   } catch {
-    // An unparseable blob is not a verdict. Treat it as unchecked: the command
-    // rebuilds the key with `json_set`, which is also how such a row heals.
     return false;
   }
   if (parsed === null || typeof parsed !== "object") return false;
@@ -63,9 +52,6 @@ function alreadyChecked(addressJson) {
 }
 
 export default async function handler({ ctx, log }) {
-  // The dataset is compiled in, so its snapshot is the selection key: a
-  // regenerated table is a new answer for every row, and resetting the cursor
-  // is how those rows get re-examined. Nothing else re-arms them.
   const priorSnapshot = await ctx.state.get("snapshot");
   if (priorSnapshot !== GAZETTEER_SNAPSHOT) {
     await ctx.state.set("cursor", "");
@@ -84,13 +70,9 @@ export default async function handler({ ctx, log }) {
   let none = 0;
   let skipped = 0;
   for (const place of rows) {
-    // `Number(null)` is 0, and 0°,0° is a real coordinate in the Gulf of
-    // Guinea — so a place with no geography must be rejected BEFORE the
-    // coercion, not after it.
     const lat = place.geo_lat == null ? Number.NaN : Number(place.geo_lat);
     const lng = place.geo_lng == null ? Number.NaN : Number(place.geo_lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      // A room, a venue somebody typed: no geography, so nothing to look up.
       skipped += 1;
       continue;
     }
@@ -100,8 +82,6 @@ export default async function handler({ ctx, log }) {
     }
     const hit = nearestSettlement(lat, lng, GAZETTEER_MAX_KM);
     if (hit === null) {
-      // Recorded, not silently left alone: the marker is what stops the next
-      // fire re-measuring a coordinate in the middle of an ocean.
       await ctx.vault.invoke({
         command: "media.set_place_gazetteer",
         input: {

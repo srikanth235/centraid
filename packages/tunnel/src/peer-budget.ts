@@ -1,8 +1,3 @@
-/*
- * Hygiene, not authorization (#726 P3): meters how fast a LINKED peer may
- * ask. One bucket per proved EndpointId; elapsed-time refill.
- */
-
 export interface TokenBucketOptions {
   capacity: number;
   refillPerSecond: number;
@@ -10,7 +5,6 @@ export interface TokenBucketOptions {
 }
 
 export interface TokenBucket {
-  /** false ⇒ refuse as typed state; never queue or serve late. */
   take: (key: string, cost?: number) => boolean;
   retryAfterMs: (key: string, cost?: number) => number;
   forget: (key: string) => void;
@@ -64,7 +58,6 @@ export function createTokenBucket(options: TokenBucketOptions): TokenBucket {
   };
 }
 
-/** Generous burst; sustained rate bounds a runaway peer. */
 export const PEER_PLANE_BUDGET: TokenBucketOptions = {
   capacity: 120,
   refillPerSecond: 8,

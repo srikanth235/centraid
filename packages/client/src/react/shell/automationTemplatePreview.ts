@@ -6,11 +6,6 @@ import { iconSvg } from "./iconSvg.js";
 import au from "../styles/automation.module.css";
 import styles from "./automationTemplatePreview.module.css";
 
-// Automation-template preview — the richer drawer for an automation template
-// (emoji, trigger, what-it-does steps, integration chips, "Use template").
-// Ported from app-automations-templates.ts openAutomationTemplatePreview; a
-// body-portal overlay (scoped module classes). The adopt/build action is
-// the caller's (onUse), keeping this pure presentation.
 export function openAutomationTemplatePreview(
   template: TemplateEntry,
   onUse: (t: TemplateEntry) => void
@@ -81,7 +76,6 @@ export function openAutomationTemplatePreview(
   closeBtn.addEventListener("click", close);
   head.append(closeBtn);
 
-  // Body
   const stepsList = html("ul", styles.auDrawerSteps);
   for (const line of [
     `Fires ${template.triggerLabel ?? "on a trigger"}.`,
@@ -108,7 +102,6 @@ export function openAutomationTemplatePreview(
     body.append(chips);
   }
 
-  // Foot
   const useBtn = html(
     "button",
     cx(au.auBtn, au.auBtnPrimary, styles.auDrawerUse),

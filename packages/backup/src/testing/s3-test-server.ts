@@ -1,9 +1,3 @@
-/*
- * Crude path-style S3-compatible test server: PUT/GET/HEAD/DELETE object,
- * GET bucket = ListObjectsV2. Test-only — not re-exported from `index.ts`.
- * SigV4 is NOT verified; presence is observable via `requests`.
- */
-
 import { createHash } from "node:crypto";
 import http from "node:http";
 
@@ -14,10 +8,8 @@ export interface S3TestServerRequest {
 }
 
 export interface S3TestServerOptions {
-  /** Bind port. 0 (default) = OS-assigned ephemeral port. */
   port?: number;
   host?: string;
-  /** ListObjectsV2 page size. Small values exercise pagination; default 1000. */
   listPageSize?: number;
 }
 
@@ -28,10 +20,6 @@ interface StoredObject {
   storageClass: string;
 }
 
-/**
- * Object keys are the full `{bucket}/{key...}` path (matching `S3ObjectStore`).
- * In-memory `Map` — process lifetime only.
- */
 export class S3TestServer {
   readonly url: string;
   readonly port: number;
@@ -56,8 +44,6 @@ export class S3TestServer {
   static async start(options: S3TestServerOptions = {}): Promise<S3TestServer> {
     const listPageSize = options.listPageSize ?? 1000;
     const host = options.host ?? "127.0.0.1";
-    // The request handler needs `self` before the constructor has the bound
-    // port — pre-declare a binding the closure captures by reference.
     let getSelf = (): S3TestServer => {
       throw new Error("S3TestServer request arrived before initialization");
     };
@@ -95,7 +81,6 @@ export class S3TestServer {
     });
   }
 
-  /** Clears captured requests without touching stored objects. */
   clearRequests(): void {
     this.requests.length = 0;
   }
@@ -177,8 +162,6 @@ export class S3TestServer {
       return;
     }
 
-    // Multipart (#367 §C8). `uploads` = initiate; `uploadId` on POST = complete;
-    // `uploadId`+`partNumber` on PUT = part; `uploadId` on DELETE = abort.
     if (req.method === "POST" && url.searchParams.has("uploads")) {
       const uploadId = String(this.nextUploadId++);
       this.multipart.set(uploadId, { key, parts: new Map() });

@@ -1,15 +1,3 @@
-// Steward-absence detection, local sync instrumentation, and replica-export
-// recovery lineage for the Commons plane (#731).
-//
-// The structural weakness these tables answer: a grant has exactly ONE steward
-// vault, and its loss is silent and terminal for every member. Members already
-// hold the whole state, so the missing pieces are (a) noticing, and (b) a
-// ceremony that re-founds the group from a member's replica.
-//
-// Everything here is LOCAL to the device. Nothing in these tables is exported
-// over the wire, projected into a member seat, or included in a bootstrap
-// frame — they are this device's own observations about its own syncing.
-
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
 export const COMMONS_RESILIENCE_DDL = `

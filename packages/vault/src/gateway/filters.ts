@@ -1,8 +1,3 @@
-// Row filters and field masks (S2). Row filters are the ODRL-constraint rows
-// stored in access.grant_scope.row_filter_json; the gateway compiles them to
-// parameterized SQL against columns validated via PRAGMA table_info — no
-// caller-supplied string ever becomes SQL text.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import type { FilterClause } from "./types.js";
@@ -22,12 +17,6 @@ interface ColumnInfo {
   pk: number;
 }
 
-// ONE `PRAGMA table_info` per table per process. The column set and the
-// scalar primary key are two readings of the SAME pragma row set, and they
-// used to hold separate caches that each paid their own statement — so the
-// first touch of a table on a screen's first paint cost two pragmas where the
-// second answered a question the first had already asked. They share the row
-// set now, and the derived answers stay memoised beside it (#916).
 const tableInfoCache = new Map<string, readonly ColumnInfo[]>();
 const columnCache = new Map<string, Set<string>>();
 const scalarPrimaryKeyCache = new Map<string, string | null>();

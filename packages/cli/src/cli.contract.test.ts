@@ -1,18 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-/**
- * Product-CLI contract laws (#656 Layer 3 mutation seed).
- *
- * `cli.branches.test.ts` covers the failure exits. What nothing covered was
- * the half an operator actually uses: the success paths, `--json`, flag
- * consumption, and whether the usage banner still tells the truth. Those are
- * the CLI's public contract — a help text that lists a verb `main` rejects, or
- * a `--json` mode that emits something `jq` cannot read, is a bug no exit-code
- * test can see.
- *
- * Laws, not literals: each test derives its expectation from the banner or
- * from the stubbed gateway response rather than restating the implementation.
- */
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
@@ -72,9 +59,6 @@ async function runCli(
   return { stdout: out.join(""), stderr: err.join(""), code };
 }
 
-// The protocol pair is stated against the constants for the same reason the
-// rest of this file derives from the banner: a literal floor here stops
-// describing a healthy gateway the moment the floor moves.
 const INFO = {
   version: "0.1.0",
   protocolVersion: GATEWAY_PROTOCOL_VERSION,
@@ -102,7 +86,6 @@ function jsonResponse(status: number, body: unknown): Response {
   } as Response;
 }
 
-/** Stub every gateway route; `overrides` keys are matched as URL substrings. */
 function stubGateway(
   overrides: Array<[match: string, status: number, body: unknown]> = []
 ): ReturnType<typeof vi.fn> {
@@ -123,16 +106,10 @@ function stubGateway(
   return impl as ReturnType<typeof vi.fn>;
 }
 
-/** The usage banner, captured from the CLI itself. */
 async function usageText(): Promise<string> {
   return (await runCli(["--help"])).stderr;
 }
 
-/**
- * Run several CLI invocations IN ORDER. `runCli` installs process-level spies
- * on stdout/stderr/exit, so these cannot overlap; the reduce chain is the
- * named sequential primitive (`no-await-in-loop` is on for a reason).
- */
 async function runCliSequence(cases: string[][]): Promise<CliRun[]> {
   return cases.reduce<Promise<CliRun[]>>(
     async (acc, argv) => [...(await acc), await runCli(argv)],
@@ -163,7 +140,6 @@ describe("cli usage banner", () => {
 
   test("every verb main accepts is advertised by the banner", async () => {
     const banner = await usageText();
-    // Discovered by probing: a verb that does not error as unknown is real.
     const verbs = ["status", "health", "info", "list"];
     stubGateway();
     const runs = await runCliSequence(
@@ -188,7 +164,6 @@ describe("cli usage banner", () => {
       "CENTRAID_TOKEN",
       "CENTRAID_GATEWAY_TOKEN",
     ]);
-    // …and the resolver honours exactly that order.
     const env = { CENTRAID_TOKEN: "b", CENTRAID_GATEWAY_TOKEN: "c" };
     expect(resolveToken({ token: "a", env })).toBe("a");
     expect(resolveToken({ env })).toBe("b");
@@ -201,7 +176,6 @@ describe("cli usage banner", () => {
     expect(banner).toContain("--url");
     expect(banner).toContain("--help");
     expect(banner).toContain("--version");
-    // A blank line separates the verb table from the auth note.
     expect(banner).toContain("\n\n");
   });
 });
@@ -236,7 +210,6 @@ describe("cli output shape", () => {
     expect(pretty.stdout.trimEnd().split("\n").length).toBeGreaterThan(1);
     expect(pretty.stdout).toContain("\n  ");
 
-    // Same data either way — `--json` changes the formatting, not the payload.
     expect(JSON.parse(compact.stdout)).toStrictEqual(JSON.parse(pretty.stdout));
   });
 
@@ -262,7 +235,6 @@ describe("cli output shape", () => {
       minSupportedProtocol: INFO.minSupportedProtocol,
       instanceId: INFO.instanceId,
     });
-    // Every advertised field is present — a dropped key is not "extra".
     expect(Object.keys(printed).sort()).toStrictEqual([
       "capabilities",
       "instanceId",
@@ -311,7 +283,6 @@ describe("cli output shape", () => {
       uptime: 5,
     });
 
-    // An empty 200 body must still print a truthful ok object, not "null".
     stubGateway([["/health", 200, undefined]]);
     const empty = await runCli([
       "health",
@@ -400,7 +371,6 @@ describe("cli argument parsing", () => {
       .seen;
     expect(seen.length).toBeGreaterThan(0);
     expect(seen[0]?.url.startsWith("http://example.test")).toBe(true);
-    // The value must not have been treated as the command.
     expect(seen[0]?.url).not.toContain("--token");
   });
 

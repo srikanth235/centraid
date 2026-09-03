@@ -1,7 +1,3 @@
-// Assistant transcript model + codecs (#420). The mutable message model
-// AssistantRoute keeps in a ref, plus the pure hydrate (ledger rows → model)
-// and toDTO (model → screen snapshot) codecs.
-
 import type { AsstMsgDTO, AsstUsageDTO } from "../../screen-contracts.js";
 import { richAnswerHtml } from "./assistantRich.js";
 
@@ -43,7 +39,6 @@ export interface AsstAttachment {
   filename?: string;
   sizeBytes: number;
 }
-/** One prior attempt of a regenerated answer — a sibling in the "<2/2>" pager. */
 export interface Attempt {
   turnId: string;
   text: string;
@@ -58,41 +53,28 @@ export type AsstMsg =
       attachments?: AsstAttachment[];
       createdAt?: number;
     }
-  /** Live-only streaming reasoning row (#420). */
   | { kind: "thinking"; text: string; streaming?: boolean }
-  /** Durable harness notice (#420) — e.g. dropped-PDF warning. */
   | { kind: "notice"; level: "warn" | "info"; text: string }
   | {
       kind: "ai";
       text: string;
       error?: boolean;
       streaming?: boolean;
-      /** Reconnect catch-up in progress after a mid-turn drop (#420). */
       catchingUp?: boolean;
       createdAt?: number;
-      /** Turn id of the shown answer — feedback/regenerate target. */
       turnId?: string;
       feedback?: "up" | "down" | null;
-      /** Token/cost usage for the shown answer's turn (#420). */
       usage?: AsstUsageDTO;
-      /** Retry siblings (oldest→newest); when set, `activeAttempt` selects one. */
       attempts?: Attempt[];
       activeAttempt?: number;
-      /** Error bubble: the failed user text to resend + the retry-of turn id. */
       failedText?: string;
       retryOf?: string;
-      /** Idempotency key of the failed send — REUSED on one-tap resend so the
-       *  retry replays a completed turn instead of double-running it (#420). */
       idempotencyKey?: string;
-      /** The failed send happened while the browser was offline (#420). */
       offline?: boolean;
-      /** Rehydrated from a pruned archive segment (#438): read-only,
-       *  so its feedback/regenerate controls are suppressed. */
       fromArchive?: boolean;
     }
   | { kind: "tools"; calls: AsstToolCall[] };
 
-/** A file the composer has uploaded (or is uploading) ahead of the next send. */
 export interface PendingAttachment {
   localId: string;
   filename: string;
@@ -101,11 +83,9 @@ export interface PendingAttachment {
   state: "uploading" | "ready" | "error";
   errorText?: string;
   ref?: AsstAttachment;
-  /** Local object-URL preview for an image attachment (#420). */
   previewUrl?: string;
 }
 
-/** The active attempt of an AI message with a retry pager, or null when plain. */
 export function activeAttemptOf(
   msg: Extract<AsstMsg, { kind: "ai" }>
 ): Attempt | null {
@@ -118,12 +98,6 @@ export function activeAttemptOf(
   return attempts[i] ?? null;
 }
 
-/**
- * Rebuild the message model from the ledger transcript rows (GET session).
- * `opts` carries the archive markers (#438): when history was
- * rehydrated read-only from the archive, a subtle notice is prepended above the
- * thread, and a warn notice replaces it when a segment blob couldn't be fetched.
- */
 export function hydrateMessages(
   rows: Array<{
     payload: CentraidConversationHistoryMessage;
@@ -232,7 +206,6 @@ export function hydrateMessages(
   return out;
 }
 
-/** Derive the screen DTO for one model message. `isLastAnswer` gates regenerate. */
 export function msgToDTO(msg: AsstMsg, isLastAnswer: boolean): AsstMsgDTO {
   if (msg.kind === "user") {
     return {
@@ -292,13 +265,9 @@ export function msgToDTO(msg: AsstMsg, isLastAnswer: boolean): AsstMsgDTO {
       text: msg.text,
       ...(msg.catchingUp ? { catchingUp: true } : {}),
     };
-  // Final AI answer — resolve the shown attempt for the retry pager.
   const active = activeAttemptOf(msg);
   const text = active ? active.text : msg.text;
   const error = active ? Boolean(active.error) : Boolean(msg.error);
-  // Archived (read-only) history (#438): drop the feedback/
-  // regenerate target so the surface renders no control the server would reject
-  // — a mutation on a pruned turn no-ops (its raw row is gone).
   const turnId = msg.fromArchive
     ? undefined
     : active

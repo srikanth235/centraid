@@ -1,17 +1,3 @@
-/*
- * Conversation export (#420). Serializes an already-loaded
- * transcript (the shape `loadConversation` returns) to Markdown or JSON, then
- * triggers a browser download. Client-side by design: the transcript
- * reconstruction already exists on `GET .../sessions/<id>`, so export is a pure
- * serializer over data the shell has in hand — no new route, no attachment
- * bytes to stream (attachments are referenced by hash + URL, which the JSON
- * form preserves and the Markdown form notes inline).
- *
- * The two `*To*` functions are pure and unit-tested; `downloadConversation`
- * is the thin DOM side-effect that wraps them.
- */
-
-/** The transcript shape handed to the serializers (what `loadConversation` returns). */
 export interface ExportableConversation {
   id: string;
   title: string;
@@ -35,7 +21,6 @@ function isoDate(ms: number): string {
   }
 }
 
-/** A filesystem-safe slug for the download filename, derived from the title. */
 export function exportFilename(
   conv: ExportableConversation,
   format: ExportFormat
@@ -50,12 +35,10 @@ export function exportFilename(
 }
 
 function fence(lang: string, body: string): string {
-  // Escape a would-be closing fence in the body so the code block stays intact.
   const safe = body.replace(/```/gu, "​```");
   return `\`\`\`${lang}\n${safe}\n\`\`\``;
 }
 
-/** Human-readable Markdown: role headings, timestamps, code fences for tools. */
 export function conversationToMarkdown(conv: ExportableConversation): string {
   const lines: string[] = [
     `# ${conv.title || "Untitled conversation"}`,
@@ -114,7 +97,6 @@ export function conversationToMarkdown(conv: ExportableConversation): string {
     .trimEnd()}\n`;
 }
 
-/** Structured JSON: the transcript DTO, wrapped with a small export envelope. */
 export function conversationToJson(conv: ExportableConversation): string {
   return `${JSON.stringify(
     {
@@ -142,11 +124,6 @@ export function serializeConversation(
     : conversationToJson(conv);
 }
 
-/**
- * Serialize + trigger a browser download. Kept thin over the pure serializers
- * so the DOM dependency stays isolated. The object URL is revoked on the next
- * tick, after the click has been dispatched.
- */
 export function downloadConversation(
   conv: ExportableConversation,
   format: ExportFormat

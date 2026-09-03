@@ -41,11 +41,8 @@ import type {
 } from "./types.js";
 
 export interface ReplicaChangeFeedAdapter {
-  /** Pass `subscribeVaultChanges` from the shell-owned singleton feed. */
   subscribe: (listener: (message: VaultChangeMessage) => void) => () => void;
-  /** Attest the locally stored catalog before opening/resuming a feed. */
   setShapeIds: (shapeIds: readonly string[]) => Promise<void>;
-  /** Pass `resumeVaultChanges`; called only after an atomic bootstrap commits. */
   resume: (cursor: ReplicaCursor) => Promise<void>;
 }
 
@@ -57,22 +54,13 @@ export type ReplicaChangePuller = (
 export interface ReplicaCoordinatorOptions extends IntentQueueOptions {
   changeFeed?: ReplicaChangeFeedAdapter;
   pullChanges?: ReplicaChangePuller;
-  /** Bounded retry for a failed pull even when the SSE cursor already advanced. */
   feedRetryDelayMs?: number;
   onRebootstrapRequired?: (detail: unknown) => void;
   onCursorAdvanced?: (cursor: ReplicaCursor, schemaEpoch: string) => void;
-  /**
-   * Classify a store failure as "the device is out of room". Defaults to the
-   * normalized error the native driver already raises for every SQLITE_FULL /
-   * ENOSPC variant (`apps/mobile/src/lib/replica/replica-storage-error.ts`),
-   * matched by name so this package keeps no second copy of that taxonomy.
-   */
   isStorageFull?: (error: unknown) => boolean;
-  /** Fires once when the feed pauses out of room, and never while paused. */
   onStorageFull?: (error: unknown) => void;
 }
 
-/** The name `asReplicaStorageError` stamps on every normalized disk-full error. */
 const STORAGE_FULL_ERROR_NAME = "ReplicaStorageFullError";
 
 function isNormalizedStorageFullError(error: unknown): boolean {
@@ -84,7 +72,6 @@ export interface ReplicaCoordinatorCreated {
   status: ReplicaStatus;
 }
 
-/** Owns one gateway/vault database, its intent overlay and local live queries. */
 export class ReplicaCoordinator {
   readonly #live = new LiveQueryRegistry();
   readonly #invalidationListeners = new Set<
@@ -99,7 +86,6 @@ export class ReplicaCoordinator {
     | undefined;
   readonly #isStorageFull: (error: unknown) => boolean;
   readonly #onStorageFull: ((error: unknown) => void) | undefined;
-  /** The out-of-room pause; see {@link storageFull}. */
   #storageFullError: unknown | undefined;
   #unsubscribeFeed: (() => void) | undefined;
   #feedTarget: ReplicaCursor | undefined;
@@ -107,12 +93,7 @@ export class ReplicaCoordinator {
   #feedAbort: AbortController | undefined;
   #feedRetryTimer: ReturnType<typeof setTimeout> | undefined;
   #feedGeneration = 0;
-  /**
-   * True between `bootstrapBegin` and `bootstrapCommit`; the only proof a walk
-   * is open, so clearing it mid-walk fails the next page or the commit.
-   */
   #bootstrapOpen = false;
-  /** A rebootstrap demanded mid-walk, re-raised once the walk seals. */
   #deferredRebootstrap: { detail: unknown } | undefined;
   #feedFailureSignature: string | undefined;
   #feedFailureCount = 0;
@@ -150,7 +131,6 @@ export class ReplicaCoordinator {
 
   async bootstrap(snapshot: ReplicaSnapshot): Promise<ReplicaCursor> {
     this.resetFeedGeneration();
-    // Reconcile durable IDB before advancing SQLite, matching incremental apply.
     const resolved = await this.intents.applyOutcomes(snapshot.outcomes ?? []);
     const cursor = await this.worker.bootstrap(snapshot);
     await this.#feed?.setShapeIds(
@@ -165,20 +145,11 @@ export class ReplicaCoordinator {
     return cursor;
   }
 
-  /**
-   * Windowed bootstrap, page-wise. No cursor is published until
-   * {@link bootstrapCommit}, so an interrupted walk reports "not
-   * bootstrapped" rather than a partial catalog. The resume state the store
-   * returns is what lets the driver pick a killed walk back up (#880); a store
-   * that does not persist one answers undefined and the walk starts over.
-   */
   async bootstrapBegin(
     header: ReplicaBootstrapHeader,
     options?: { restart?: boolean }
   ): Promise<ReplicaBootstrapResume | undefined> {
     this.resetFeedGeneration();
-    // Claim BEFORE the call posts: worker RPC calls order by issue time, so
-    // every later wipe must be held off instead.
     this.#bootstrapOpen = true;
     const resume = await this.walkStep(() =>
       this.worker.bootstrapBegin(header, options)
@@ -204,11 +175,6 @@ export class ReplicaCoordinator {
     ]);
   }
 
-  /**
-   * A rejected step ends the walk — the driver will not reach
-   * {@link bootstrapCommit} — so release the store claim; the error is
-   * rethrown untouched (bookkeeping, not rescue).
-   */
   private async walkStep<T>(step: () => Promise<T>): Promise<T> {
     try {
       return await step();
@@ -219,11 +185,6 @@ export class ReplicaCoordinator {
     }
   }
 
-  /**
-   * Seal at the page-1 cursor and attach the feed there. The caller must
-   * still replay changes from this cursor — only the replay repairs what
-   * slipped between snapshots (notably deletions).
-   */
   async bootstrapCommit(
     cursor: ReplicaCursor,
     header: ReplicaBootstrapHeader,
@@ -251,7 +212,6 @@ export class ReplicaCoordinator {
 
   async applyChanges(batch: ReplicaChangeBatch): Promise<ReplicaCursor> {
     try {
-      // IDB first: never advance the SQLite cursor while retaining a stale overlay.
       const resolved = await this.intents.applyOutcomes(batch.outcomes ?? []);
       const applied = await this.worker.applyChanges(batch);
       this.#onCursorAdvanced?.(applied.cursor, batch.schemaEpoch);
@@ -264,8 +224,6 @@ export class ReplicaCoordinator {
       if (error instanceof ReplicaRebootstrapRequiredError) {
         await this.requireRebootstrap(error);
       }
-      // A disk that filled mid-delta is not a protocol failure and must not be
-      // retried at the feed's fixed cadence; it pauses the feed instead.
       this.noteStorageFull(error);
       throw error;
     }
@@ -282,7 +240,6 @@ export class ReplicaCoordinator {
     return this.worker.read(request, optimistic, guard);
   }
 
-  /** Clone-safe read used by the shell's MessagePort transport. */
   async readWire(request: ReplicaReadRequest): Promise<ReplicaReadWireResult> {
     const optimistic = await this.intents.overlayMutations(
       request.shapeId,
@@ -291,7 +248,6 @@ export class ReplicaCoordinator {
     return this.worker.readWire(request, optimistic);
   }
 
-  /** Clone-safe local search used by the shell's MessagePort transport. */
   async searchWire(
     request: ReplicaSearchRequest
   ): Promise<ReplicaSearchWireResult> {
@@ -322,9 +278,6 @@ export class ReplicaCoordinator {
     return intent;
   }
 
-  /** Capture concurrency preconditions from canonical rows only — overlays
-   *  deliberately bypassed: a queued edit must not become its own base
-   *  version, and a retry must observe the row that rejected it. */
   async captureBaseVersions(
     mutations: readonly OptimisticMutation[]
   ): Promise<ReplicaBaseVersion[]> {

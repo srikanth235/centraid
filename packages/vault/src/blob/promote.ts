@@ -1,9 +1,3 @@
-// Staged-sha promotion (#296): the moment bytes become model. Runs
-// INSIDE a command's transaction — pure row work, no I/O (the bytes are
-// already in the local CAS) — so the receipt the command mints is the
-// receipt for custody. Shared by every claiming command (core.attach,
-// core.add_document, media.add_asset) and by the import spine's publishers.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { queueMissingDeviceEnrichmentRequests } from "../enrich/leases.js";
@@ -20,7 +14,6 @@ export interface PromoteDeps {
   vault: DatabaseSync;
   now: string;
   newId: () => string;
-  /** Provenance hook — ctx.wrote inside commands, a collector in publishers. */
   wrote: (entityType: string, entityId: string) => void;
   creatorPartyId: string | null;
 }
@@ -30,18 +23,9 @@ export interface PromotedContent {
   mediaType: string;
   byteSize: number;
   meta: BlobMeta;
-  /** 1 when the sha already had a live content item (restore/dedup). */
   deduped: 0 | 1;
 }
 
-/**
- * Claim one staged sha into a canonical content item. Idempotent over dedup:
- * when a content item already owns the sha, the claim restores it from trash
- * (re-upload = restore, the rule media.add_asset established) and just
- * consumes the staging rows. Staged derivatives riding beside the parent
- * (`variant_of = sha`) promote into `core_content_derivative`, and extracted
- * text becomes the `text` variant feeding the parent's FTS row.
- */
 export function promoteStagedBlob(
   deps: PromoteDeps,
   sha256: string,
@@ -143,7 +127,6 @@ export function promoteStagedBlob(
   return { contentId, mediaType, byteSize, meta, deduped };
 }
 
-/** Staged derivatives + extracted text → core_content_derivative rows. */
 function promoteVariants(
   deps: PromoteDeps,
   parentSha: string,
@@ -160,8 +143,6 @@ function promoteVariants(
        byte_size = excluded.byte_size, text_content = excluded.text_content,
        created_at = excluded.created_at`
   );
-  // The cheap ingest extractor is the backstop. Stage it FIRST so any
-  // device-contributed pdf.js/OCR text below wins deterministically.
   if (typeof meta.text === "string" && meta.text.length > 0) {
     const contribution = validateDerivativeContribution({
       variant: "text",

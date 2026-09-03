@@ -1,6 +1,3 @@
-// The policy cascade's rule store (#807) — what a scope may state, what
-// the store refuses, and the order a resolver reads rules in.
-
 import { describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
@@ -111,7 +108,6 @@ describe("enrich policy rules", () => {
         now: T0,
       });
     }
-    // An unset scope is simply absent — inheritance IS the absence.
     const chain = readEnrichPolicyRuleChain(
       db.vault,
       [ALBUM, { type: "item", ref: "asset-1" }, PHOTOS, VAULT_SCOPE],

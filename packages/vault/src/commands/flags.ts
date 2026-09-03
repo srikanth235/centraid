@@ -1,21 +1,11 @@
-// Owner flags (#274): an owner judgment about an entity is entity-scoped
-// meaning → one flags-scheme tag on the CANONICAL entity in the universal
-// classification join, never a per-domain boolean column (a column discards
-// who flagged, when, UNIQUE integrity). Shared mechanism, not a command pack;
-// bootstraps like folders; "Favorite" rides along as a SKOS altLabel.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import type { HandlerCtx } from "../gateway/types.js";
 
-// An https URI, not a urn: flag SQL fragments interpolate into condition SQL,
-// where `:flags` reads as a named parameter (#258 colon-literal trap); no
-// parameter name can start with a slash.
 export const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
 
 export const STARRED_NOTATION = "starred";
 
-/** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
   if (ctx.identity.partyId) return ctx.identity.partyId;
   const owner = ctx.db
@@ -25,9 +15,6 @@ function actorPartyId(ctx: HandlerCtx): string {
   return owner.self_party_id;
 }
 
-/** What flagging needs OUTSIDE the command pipeline (#721): publishers hold a
- *  raw DatabaseSync, not a HandlerCtx. actorPartyId is a thunk so an ownerless
- *  vault can still CLEAR a flag (party resolved only where written). */
 export interface FlagWriteDeps {
   vault: DatabaseSync;
   now: string;
@@ -36,7 +23,6 @@ export interface FlagWriteDeps {
   actorPartyId: () => string;
 }
 
-/** The flags scheme, created on first use. */
 function flagsSchemeIdTx(deps: FlagWriteDeps): string {
   const existing = deps.vault
     .prepare("SELECT scheme_id FROM core_concept_scheme WHERE uri = ?")
@@ -52,7 +38,6 @@ function flagsSchemeIdTx(deps: FlagWriteDeps): string {
   return schemeId;
 }
 
-/** The `starred` concept, created on first use. */
 function starredConceptIdTx(deps: FlagWriteDeps): string {
   const schemeId = flagsSchemeIdTx(deps);
   const existing = deps.vault
@@ -71,8 +56,6 @@ function starredConceptIdTx(deps: FlagWriteDeps): string {
   return conceptId;
 }
 
-/** Set/clear `starred`; delete-then-insert keeps it idempotent and refreshes
- *  who-starred-when on re-star. */
 export function setStarredTx(
   deps: FlagWriteDeps,
   targetType: string,
@@ -108,7 +91,6 @@ function flagDepsOf(ctx: HandlerCtx): FlagWriteDeps {
   };
 }
 
-/** `setStarredTx` for a command handler. */
 export function setStarred(
   ctx: HandlerCtx,
   targetType: string,
@@ -118,11 +100,6 @@ export function setStarred(
   setStarredTx(flagDepsOf(ctx), targetType, targetId, starred);
 }
 
-/**
- * Condition fragment: a live starred tag exists on (targetType, targetIdSql).
- * targetIdSql is a SQL expression (named parameter or subquery), never caller
- * data.
- */
 export function starredExistsSql(
   targetType: string,
   targetIdSql: string

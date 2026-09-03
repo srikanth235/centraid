@@ -1,7 +1,3 @@
-// Card resolver (#272): turns (type, id) refs into minimal renderable cards so apps DISPLAY
-// foreign entities without read scope on them; resolvable-if-linked — a LIVE link touching the
-// ref authorizes rendering the far end, else per-ref denied; the batch is receipted either way.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { resolveEntity } from "../schema/tables.js";
@@ -11,18 +7,15 @@ import type { Identity } from "./types.js";
 
 export interface RefRequest {
   refs: { type: string; id: string }[];
-  /** Declared DPV purpose, e.g. `dpv:ServiceProvision`. */
   purpose: string;
 }
 
 export interface RefCard {
   type: string;
   id: string;
-  /** `missing` is a tombstone, `denied` a consent gap, `unknown` a bad type. */
   status: "live" | "trashed" | "missing" | "denied" | "unknown";
   title: string | null;
   subtitle: string | null;
-  /** A core.content_item id renderable as a thumbnail, if any. */
   thumbnail_content_id: string | null;
 }
 
@@ -31,10 +24,8 @@ export interface ResolveResult {
   receiptId: string;
 }
 
-/** Refs render in lists, not bulk exports. */
 const MAX_REFS = 100;
 
-/** One SELECT per carded entity; uncurated resolve existence + status only. */
 const CARD_SQL: Record<string, string> = {
   "core.party": `SELECT display_name AS title, kind AS subtitle, avatar_content_id AS thumb, 0 AS trashed
                    FROM core_party WHERE party_id = ?`,
@@ -72,10 +63,8 @@ const CARD_SQL: Record<string, string> = {
                          WHERE a.asset_id = ?`,
 };
 
-/** Entity types with a curated card: the picker's default kinds. */
 export const CARDED_ENTITIES: readonly string[] = Object.keys(CARD_SQL);
 
-/** PKs are UUIDv7, so `ORDER BY pk DESC` IS recent-first (#262). */
 export const CARD_PK: Readonly<Record<string, string>> = {
   "core.party": "party_id",
   "core.place": "place_id",
@@ -100,8 +89,6 @@ function pkColumn(vault: DatabaseSync, physical: string): string {
   return rows.find((r) => r.pk === 1)?.name ?? "rowid";
 }
 
-/** A LIVE link touches this ref AND the caller reads the far endpoint.
- * Entity-level: the far-row filter is not re-evaluated per row. */
 function linkedAndVisible(
   vault: DatabaseSync,
   identity: Identity,
@@ -175,7 +162,6 @@ function cardFor(vault: DatabaseSync, type: string, id: string): RefCard {
       thumbnail_content_id: row.thumb ?? null,
     };
   }
-  // Uncurated entity: existence + status only.
   const pk = pkColumn(vault, ref.physical);
   const live = vault
     .prepare(`SELECT 1 AS x FROM "${ref.physical}" WHERE "${pk}" = ?`)
@@ -190,7 +176,6 @@ function cardFor(vault: DatabaseSync, type: string, id: string): RefCard {
   };
 }
 
-/** One receipt per batch; a bad ref is denied, never thrown. */
 export function resolveRefCards(
   vault: DatabaseSync,
   journal: DatabaseSync,

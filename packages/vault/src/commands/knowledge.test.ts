@@ -183,10 +183,7 @@ describe("knowledge", () => {
         WHERE c.notation = 'revises'`
       )
       .get() as { from_id: string; to_id: string };
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({ ...link }).toStrictEqual({ from_id: v2, to_id: v1 });
-    // A no-op edit (same words, dedup lands back on v2) records no new link.
     invoke("knowledge.edit_note", { note_id, body_text: "v2" });
     expect(revisesLinkCount()).toBe(1);
   });
@@ -347,7 +344,6 @@ describe("knowledge", () => {
     expect(
       (outcome as { output: { purge_at: string } }).output.purge_at
     ).toBeTruthy();
-    // The row survives, trashed — deletion is undoable, not a hard delete.
     const note = db.vault
       .prepare(
         "SELECT deleted_at, purge_at FROM knowledge_note WHERE note_id = ?"
@@ -355,7 +351,6 @@ describe("knowledge", () => {
       .get(note_id) as { deleted_at: string | null; purge_at: string | null };
     expect(note.deleted_at).not.toBeNull();
     expect(note.purge_at).not.toBeNull();
-    // Placement is kept for a faithful restore.
     const placements = db.vault
       .prepare(
         `SELECT count(*) AS n FROM core_collection_entry
@@ -363,12 +358,10 @@ describe("knowledge", () => {
       )
       .get(note_id) as { n: number };
     expect(placements.n).toBe(1);
-    // The body was rented by this note alone, so its bytes soft-delete.
     const body = db.vault
       .prepare("SELECT deleted_at FROM core_content_item WHERE content_id = ?")
       .get(body_content_id) as { deleted_at: string | null };
     expect(body.deleted_at).not.toBeNull();
-    // A trashed note is frozen: no re-delete, no edit, no move.
     expect(invoke("knowledge.delete_note", { note_id }).status).toBe("failed");
     expect(
       invoke("knowledge.edit_note", { note_id, title: "Nope" }).status
@@ -393,7 +386,6 @@ describe("knowledge", () => {
       .get(note_id) as { deleted_at: string | null; purge_at: string | null };
     expect(note.deleted_at).toBeNull();
     expect(note.purge_at).toBeNull();
-    // The body bytes are rented again.
     const body = db.vault
       .prepare(
         "SELECT deleted_at, purge_at FROM core_content_item WHERE content_id = ?"
@@ -403,7 +395,6 @@ describe("knowledge", () => {
       purge_at: string | null;
     };
     expect(body.deleted_at).toBeNull();
-    // Placement survived the round trip; the note is editable again.
     const placements = db.vault
       .prepare(
         `SELECT count(*) AS n FROM core_collection_entry
@@ -414,7 +405,6 @@ describe("knowledge", () => {
     expect(
       invoke("knowledge.edit_note", { note_id, title: "Edited" }).status
     ).toBe("executed");
-    // Restoring a live note is a receipted refusal.
     expect(invoke("knowledge.restore_note", { note_id }).status).toBe("failed");
   });
 
@@ -444,12 +434,10 @@ describe("knowledge", () => {
       .prepare("SELECT name FROM core_collection WHERE collection_id = ?")
       .get(a) as { name: string };
     expect(row.name).toBe("Cooking");
-    // Renaming onto another notebook's name is a receipted refusal.
     expect(
       invoke("knowledge.rename_notebook", { notebook_id: a, name: "Travel" })
         .status
     ).toBe("failed");
-    // Renaming to its own current name is an idempotent no-op.
     expect(
       invoke("knowledge.rename_notebook", { notebook_id: a, name: "Cooking" })
         .status
@@ -465,7 +453,6 @@ describe("knowledge", () => {
       notebook_id: child,
     });
 
-    // A notebook with children is refused until they go first.
     expect(
       invoke("knowledge.delete_notebook", { notebook_id: parent }).status
     ).toBe("failed");
@@ -475,7 +462,6 @@ describe("knowledge", () => {
     expect(
       (outcome as { output: { notes_unfiled: number } }).output.notes_unfiled
     ).toBe(1);
-    // The note survives, unfiled; the notebook and its placements are gone.
     const note = db.vault
       .prepare("SELECT count(*) AS n FROM knowledge_note WHERE note_id = ?")
       .get(note_id) as { n: number };
@@ -487,7 +473,6 @@ describe("knowledge", () => {
       )
       .get(note_id) as { n: number };
     expect(placements.n).toBe(0);
-    // Now childless, the parent deletes cleanly; a re-delete is refused.
     expect(
       invoke("knowledge.delete_notebook", { notebook_id: parent }).status
     ).toBe("executed");
@@ -500,7 +485,6 @@ describe("knowledge", () => {
     registerMediaCommands(gw);
     const PIXEL =
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-    // Created through the album surface…
     const album = invoke("media.create_album", { title: "Paris trip" });
     expect(album.status).toBe("executed");
     const collectionId = (album as { output: { album_id: string } }).output
@@ -514,7 +498,6 @@ describe("knowledge", () => {
         asset_id: assetId,
       }).status
     ).toBe("executed");
-    // …and filed into from the notebook surface: same collection, mixed types.
     const note = createNote({
       title: "Packing list",
       body_text: "adapters, coats",
@@ -534,7 +517,6 @@ describe("knowledge", () => {
       "media.asset",
       "knowledge.note",
     ]);
-    // One ordered list across types.
     expect(members[1]!.position).toBeGreaterThan(members[0]!.position);
   });
 });

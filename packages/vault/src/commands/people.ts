@@ -1,21 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); People owns the whole keep-in-touch loop, so it is large by design.
-// People commands (schema `people`): the personal-CRM write surface. A person
-// is a canonical core.party (kind='person') plus a 1:1 people_profile holding
-// the keep-in-touch facts — role, avatar hue, cadence, last-contacted, how you
-// met. add_person mints the party and profile in one stroke; everything else
-// hangs off the party id.
-//
-// The gestures the ontology already models are reused, not re-invented (issue
-// #274): notes are knowledge.annotation on the party (annotate), favorites are
-// the flags-scheme star on the party (setStarred), and the owner files people
-// into `lists` — SKOS concepts in the owner's `lists` scheme with membership
-// one core.tag per person, the same mechanism Docs folders use. Do not name
-// this classification "circles" (#441): that name collides with
-// social_circle (the AUDIENCE mechanism shares and Tally groups target); the
-// classification is "lists" end-to-end, social_circle keeps its
-// "circle" name. Logging an interaction is what clears "overdue": it stamps
-// profile.last_contacted_at = now. Every write is a typed command —
-// consent-checked, receipted, all risk low.
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -31,20 +14,15 @@ import { RELATIONS_SCHEME_URI, RELATIONS_SCHEME_URI_SQL } from "./links.js";
 import { registerPeopleOrganizeCommands } from "./people-organize.js";
 import { queueProviderWriteback } from "./provider-writeback.js";
 
-// An https URI, not a urn: one — this literal interpolates into condition SQL,
-// where `:lists` would read as a named parameter (the issue-258 colon-literal
-// trap); `https://` survives because no parameter name starts with a slash.
 export const LIST_SCHEME_URI = "https://centraid.dev/schemes/lists";
 const ACTIVITY_KIND_SCHEME_URI = "urn:duaility:activity-kinds";
 const JOURNAL_SCHEME_URI = "https://centraid.dev/schemes/people-journal";
 
-/** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
   if (ctx.identity.partyId) return ctx.identity.partyId;
   return ownerPartyId(ctx);
 }
 
-/** The vault owner's party id. */
 function ownerPartyId(ctx: HandlerCtx): string {
   const owner = ctx.db
     .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
@@ -53,7 +31,6 @@ function ownerPartyId(ctx: HandlerCtx): string {
   return owner.self_party_id;
 }
 
-/** The vault's base currency, for debts stored as minor units. */
 function baseCurrency(ctx: HandlerCtx): string {
   const row = ctx.db
     .prepare("SELECT base_currency FROM core_vault LIMIT 1")
@@ -61,7 +38,6 @@ function baseCurrency(ctx: HandlerCtx): string {
   return row?.base_currency ?? "USD";
 }
 
-/** The lists scheme, created on first use (mirrors the folders scheme). */
 function listSchemeId(ctx: HandlerCtx): string {
   const existing = ctx.db
     .prepare("SELECT scheme_id FROM core_concept_scheme WHERE uri = ?")
@@ -77,7 +53,6 @@ function listSchemeId(ctx: HandlerCtx): string {
   return schemeId;
 }
 
-/** File a person into exactly one list (or none): one lists-scheme tag. */
 function fileIntoList(
   ctx: HandlerCtx,
   partyId: string,
@@ -103,7 +78,6 @@ function fileIntoList(
   ctx.wrote("core.tag", tagId);
 }
 
-/** Resolve or mint one controlled-vocabulary concept used by a People gesture. */
 function conceptId(
   ctx: HandlerCtx,
   schemeUri: string,
@@ -149,7 +123,6 @@ function assertedBy(ctx: HandlerCtx): "owner" | "app" | "agent" {
       : "owner";
 }
 
-/** Assert one temporal core.link and return its id. */
 function linkToParty(
   ctx: HandlerCtx,
   fromType: string,
@@ -188,7 +161,6 @@ function slug(text: string): string {
   );
 }
 
-// Condition fragment: the id is a CRM person (a person party with a profile).
 const PERSON_EXISTS_SQL = `
   SELECT count(*) AS n FROM people_profile pr
     JOIN core_party p ON p.party_id = pr.party_id
@@ -288,13 +260,10 @@ function restorePersonSnapshot(
   ctx.wrote("people.profile", snapshot.profile_id);
 }
 
-// Condition fragment: :list_id is a live concept in the lists scheme.
 const LIST_EXISTS_SQL = `
   EXISTS(SELECT 1 FROM core_concept c
            JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
           WHERE c.concept_id = :list_id AND s.uri = '${LIST_SCHEME_URI}')`;
-
-// ────────── Person ──────────
 
 const ADD_PERSON: CommandDefinition = {
   name: "people.add_person",
@@ -306,8 +275,6 @@ const ADD_PERSON: CommandDefinition = {
     properties: {
       display_name: { type: "string", minLength: 1 },
       role: { type: "string" },
-      // A name the member uses for this person, not the one on their
-      // passport (#883).
       nickname: { type: "string" },
       avatar_color: { type: "string" },
       cadence_days: { type: "integer", minimum: 0 },
@@ -733,8 +700,6 @@ const LOG_INTERACTION: CommandDefinition = {
   ],
   postconditions: [
     {
-      // Logged and last-contacted stamped in one stroke — this is what clears
-      // "overdue".
       name: "interaction_logged",
       sql: `SELECT (
               EXISTS(SELECT 1 FROM core_activity WHERE activity_id = :interaction_id)
@@ -794,8 +759,6 @@ function logInteraction(ctx: HandlerCtx): Record<string, unknown> {
   });
   return { interaction_id: interactionId };
 }
-
-// ────────── Favorite (the canonical flags-scheme star, on the party) ──────────
 
 const STAR_PERSON: CommandDefinition = {
   name: "people.star_person",
@@ -890,7 +853,6 @@ const MOVE_PERSON: CommandDefinition = {
     additionalProperties: false,
     properties: {
       party_id: { type: "string", minLength: 1 },
-      // Omitted list_id un-lists the person (back to no list).
       list_id: { type: "string", minLength: 1 },
     },
   },
@@ -917,8 +879,6 @@ const MOVE_PERSON: CommandDefinition = {
   ],
   postconditions: [
     {
-      // Filed exactly where asked (=1 when correct): unfiled ⇒ no
-      // lists-scheme tag; filed ⇒ the given list, and only it.
       name: "list_applied",
       sql: `SELECT CASE WHEN :list_id IS NULL
                THEN (SELECT count(*) FROM core_tag t
@@ -949,8 +909,6 @@ const MOVE_PERSON: CommandDefinition = {
     return { party_id: input.party_id };
   },
 };
-
-// ────────── Notes (knowledge.annotation on the party) ──────────
 
 const ADD_NOTE: CommandDefinition = {
   name: "people.add_note",
@@ -987,8 +945,6 @@ const ADD_NOTE: CommandDefinition = {
     return { party_id: input.party_id };
   },
 };
-
-// ────────── Tasks ──────────
 
 const ADD_TASK: CommandDefinition = {
   name: "people.add_task",
@@ -1099,8 +1055,6 @@ const TOGGLE_TASK: CommandDefinition = {
   },
 };
 
-// ────────── Important dates (birthdays auto-remind) ──────────
-
 const ADD_IMPORTANT_DATE: CommandDefinition = {
   name: "people.add_important_date",
   ownerSchema: "people",
@@ -1111,7 +1065,6 @@ const ADD_IMPORTANT_DATE: CommandDefinition = {
     properties: {
       party_id: { type: "string", minLength: 1 },
       label: { type: "string", minLength: 1 },
-      // MM-DD; February 29 is real, April 31 is not.
       month_day: {
         type: "string",
         pattern:
@@ -1143,8 +1096,6 @@ const ADD_IMPORTANT_DATE: CommandDefinition = {
       value: 1,
     },
     {
-      // A birthday label must leave core_party.birth_date's MM-DD agreeing with
-      // this row (#441); a no-op for non-birthday dates.
       name: "birthday_reconciled",
       sql: `SELECT (CASE WHEN :label NOT LIKE '%birthday%' THEN 1
                     ELSE EXISTS(SELECT 1 FROM core_party
@@ -1164,7 +1115,6 @@ const ADD_IMPORTANT_DATE: CommandDefinition = {
       month_day: string;
       reminder_on?: boolean;
     };
-    // Monica behavior: a birthday auto-creates its reminder.
     const isBirthday = /birthday/iu.test(input.label);
     const reminder = isBirthday ? 1 : input.reminder_on ? 1 : 0;
     const dateId = ctx.newId();
@@ -1182,11 +1132,6 @@ const ADD_IMPORTANT_DATE: CommandDefinition = {
         ctx.now
       );
     ctx.wrote("people.important_date", dateId);
-    // A birthday is one logical fact (#441): write it through to the
-    // canonical party spine so core_party.birth_date and this row cannot
-    // disagree. Preserve a known birth year if one is already recorded;
-    // otherwise store the year-less ISO 8601 form (--MM-DD), since a birthday's
-    // year is genuinely unknown here. (update_party reconciles the reverse.)
     if (isBirthday) {
       const party = ctx.db
         .prepare("SELECT birth_date FROM core_party WHERE party_id = ?")
@@ -1208,8 +1153,6 @@ const ADD_IMPORTANT_DATE: CommandDefinition = {
           "birthdays",
         ]);
       }
-      // Birthday is single-valued: keep any other "Birthday" rows for this
-      // party in step so no two surfaces ever disagree on the MM-DD.
       const others = ctx.db
         .prepare(
           `SELECT date_id FROM people_important_date
@@ -1267,8 +1210,6 @@ const TOGGLE_REMINDER: CommandDefinition = {
     return { date_id: input.date_id };
   },
 };
-
-// ────────── Relationships ──────────
 
 const ADD_RELATIONSHIP: CommandDefinition = {
   name: "people.add_relationship",
@@ -1367,8 +1308,6 @@ const ADD_RELATIONSHIP: CommandDefinition = {
     return { relationship_id: relationshipId };
   },
 };
-
-// ────────── Gifts (canonical schedule tasks linked to their recipient) ──────────
 
 const ADD_GIFT: CommandDefinition = {
   name: "people.add_gift",
@@ -1479,8 +1418,6 @@ const TOGGLE_GIFT: CommandDefinition = {
     return { gift_id: input.gift_id };
   },
 };
-
-// ────────── Debts ──────────
 
 const ADD_DEBT: CommandDefinition = {
   name: "people.add_debt",
@@ -1612,8 +1549,6 @@ const SETTLE_DEBT: CommandDefinition = {
   },
 };
 
-// ────────── Lists (SKOS concepts, like Docs folders) ──────────
-
 const CREATE_LIST: CommandDefinition = {
   name: "people.create_list",
   ownerSchema: "people",
@@ -1630,7 +1565,6 @@ const CREATE_LIST: CommandDefinition = {
   },
   preconditions: [
     {
-      // Lists keep distinct names — a receipted refusal beats two "Work"s.
       name: "name_unused",
       sql: `SELECT count(*) AS n FROM core_concept c
               JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
@@ -1740,7 +1674,6 @@ const DELETE_LIST: CommandDefinition = {
       value: 1,
     },
     {
-      // Only empty lists delete — move the people out first.
       name: "list_is_empty",
       sql: `SELECT EXISTS(SELECT 1 FROM core_tag
                            WHERE target_type = 'core.party' AND concept_id = :list_id) AS n`,
@@ -1770,8 +1703,6 @@ const DELETE_LIST: CommandDefinition = {
     return { list_id: input.list_id };
   },
 };
-
-// ────────── Journal (owner-level, not per-person) ──────────
 
 const ADD_JOURNAL_ENTRY: CommandDefinition = {
   name: "people.add_journal_entry",

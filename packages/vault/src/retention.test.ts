@@ -1,7 +1,3 @@
-// Bounded retention for the vault's silent growers (#659). The
-// laws under test are the two the module header states: only TERMINAL rows
-// are eligible, and one pass never writes more than its cap.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "./bootstrap.js";
@@ -92,8 +88,6 @@ describe("bounded retention", () => {
 
     const result = sweepBoundedRetention(db.vault, { now: NOW });
 
-    // sync runs: both old finished runs are eligible, but the newest run per
-    // connection is pinned and the in-flight one is not terminal at all.
     expect(result.sync_connection_run.deleted).toBe(2);
     const runs = db.vault
       .prepare("SELECT run_id FROM sync_connection_run ORDER BY run_id")
@@ -106,7 +100,6 @@ describe("bounded retention", () => {
     expect(result.enrich_request.deleted).toBe(1);
     expect(countOf("enrich_request")).toBe(1);
 
-    // sent/discarded go; failed and pending are live obligations.
     expect(result.outbox_item.deleted).toBe(2);
     const items = db.vault
       .prepare("SELECT item_id FROM outbox_item ORDER BY item_id")

@@ -27,11 +27,6 @@ import EnrichmentRules from "./SettingsEnrichmentRules.js";
 
 import controlsCss from "../styles/controls.module.css";
 
-// Settings → Enrichment (#807). Projection of two stores, not a third.
-// Organised by the member's question, not the four store objects. No
-// per-domain ceiling control: enrichment always runs on the gateway; the
-// stored ceiling still gates runtime — a stopped row still says so.
-
 export interface EnrichmentSettingsData {
   rules: EnrichPolicyRule[];
   profiles: EnrichEngineProfile[];
@@ -83,7 +78,6 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** Receipted fact, never a control. `off`: present and inert. Declined is `net`. */
 function consentRow(row: EnrichConsentRecord): RowDef {
   const declined = row.decision === "declined";
   return {

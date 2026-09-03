@@ -39,7 +39,6 @@ describe("stream-ingress", () => {
 
   test("stream-ingress module exports the 16 MiB default chunk size", () => {
     expect(STREAM_INGRESS_CHUNK_BYTES).toBe(16 * 1024 * 1024);
-    // Keep the named export constructible; coordinator suites exercise it below.
     expect(RemoteStreamIngress.name).toBe("RemoteStreamIngress");
   });
 
@@ -495,8 +494,5 @@ describe("stream-ingress", () => {
     expect(
       unsealBlob(h.keys.getOrCreate(sha), sha, h.fake.objects.get(sha)!)
     ).toStrictEqual(plain);
-    // This is a deliberate integration budget: real two-part
-    // sealing/hashing/writes take ~4.6s alone, but the sanctioned six-package
-    // affected sweep can exceed 60s while other SQLite suites contend for disk.
   }, 120_000);
 });

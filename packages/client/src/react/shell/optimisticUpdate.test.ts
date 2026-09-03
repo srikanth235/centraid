@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import { optimisticUpdate } from "./optimisticUpdate.js";
 
-/** A tiny value cell standing in for whatever store a caller writes through. */
 function cell<T>(initial: T): { read: () => T; write: (next: T) => void } {
   let value = initial;
   return {

@@ -1,16 +1,11 @@
 // governance: allow-repo-hygiene file-size-limit — one flat glyph registry, on the same ground roles.ts is waived: it is a normative TABLE, and every consumer (desktop renderer, mobile <Path>, the icon resolver) reads the whole map. A split would put half the product's marks in a second file with no rule for which half, and a mark landing in the wrong half is a lookup that silently returns nothing.
-// Lucide-style icons as raw SVG path data, viewBox 24x24. One ordered list of
-// `<path>` definitions per entry, read by the desktop renderer and mobile alike.
 
 export interface IconPath {
   d: string;
   fill?: "currentColor";
-  /** The knockout rule the silhouette contract specifies. No shipped icon sets
-   *  it; `pathMarkup` renders it the moment one does. */
   fillRule?: "evenodd";
 }
 
-// `as const` narrows the keys to IconName; the re-type keeps `fill` visible.
 const ICON_DATA = {
   AddressBook: [
     {
@@ -37,7 +32,6 @@ const ICON_DATA = {
   Pause: [{ d: "M6 5h4v14H6zM14 5h4v14h-4z", fill: "currentColor" }],
   Skip: [{ d: "M6 4l10 8-10 8zM18 5v14" }],
   Reset: [{ d: "M3 12a9 9 0 1 0 3-6.7L3 8" }, { d: "M3 3v5h5" }],
-  // Not a plain right-arrow: that is the forward-nav icon (Refined Screens §B2).
   Send: [{ d: "M22 2L11 13" }, { d: "M22 2l-7 20-4-9-9-4z" }],
   Refresh: [{ d: "M21 12a9 9 0 1 1-3-6.7M21 3v5h-5" }],
   Copy: [
@@ -92,7 +86,6 @@ const ICON_DATA = {
     { d: "M11 18h2" },
   ],
   Monitor: [{ d: "M3 4h18v12H3z" }, { d: "M9 20h6M12 16v4" }],
-  // A DESK MACHINE AND A HANDSET: Devices lists a set of screens, not one.
   Devices: [
     { d: "M9 17H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h13a1 1 0 0 1 1 1v3" },
     {
@@ -126,7 +119,6 @@ const ICON_DATA = {
       d: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
     },
   ],
-  // STORED RECORDS, not stored files: `Folder` is spent on filed documents.
   Database: [
     { d: "M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3z" },
     { d: "M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6" },
@@ -284,8 +276,6 @@ const ICON_DATA = {
     { d: "M8 8h8M8 12h8M8 16h5" },
   ],
 
-  // Automation glyphs: <path> arcs/lines only, so the renderer's path-only
-  // wrapper paints them at the set's stroke weight.
   Clock: [{ d: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" }, { d: "M12 7v5l3 2" }],
   Webhook: [
     {
@@ -315,7 +305,6 @@ const ICON_DATA = {
     { d: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" },
     { d: "M8.5 12.5l2.5 2.5 4.5-5" },
   ],
-  // Three-quarter arc so a CSS rotate animation reads as a spinner.
   Loader: [{ d: "M21 12a9 9 0 1 1-6.219-8.56" }],
   Filter: [{ d: "M22 3H2l8 9.46V19l4 2v-8.54z" }],
   Braces: [
@@ -364,8 +353,6 @@ const ICON_DATA = {
       d: "M20 11.5a7.5 7.5 0 0 1-8 7.5 8.5 8.5 0 0 1-4-.9L4 20l1.1-3.5A7.5 7.5 0 1 1 20 11.5z",
     },
   ],
-  // Symmetric about x=12, where the bottom point sits: lobes centred anywhere
-  // else lean the glyph and collapse the right lobe into a notch.
   Heart: [
     {
       d: "M12 20s-7-4.4-7-9.4A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.6c0 5-7 9.4-7 9.4z",
@@ -378,7 +365,6 @@ const ICON_DATA = {
     { d: "M8 9h.01" },
   ],
   Grid: [{ d: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" }],
-  // Three subpaths and no fill, so it reads the same on paper and near-black.
   Print: [
     { d: "M7 8V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v4" },
     {
@@ -386,8 +372,6 @@ const ICON_DATA = {
     },
     { d: "M7 14h10v6a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1z" },
   ],
-  // Own entries, not a reuse: neither `Archive` nor `Grid` reads as a document
-  // or a sheet at 18px.
   FileText: [
     { d: "M6 3h7l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" },
     { d: "M13 3v5h5" },
@@ -414,9 +398,6 @@ const ICON_DATA = {
     { d: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9H3z" },
     { d: "M12 11v5M9.5 13.5h5" },
   ],
-  // Own entry, not `Archive`: an inbox holds work that ARRIVED and is
-  // undecided, an archive holds work put away. Tasks' band names both, so
-  // one glyph would blur the two.
   Inbox: [
     { d: "M22 12h-6l-2 3h-4l-2-3H2" },
     {
@@ -458,11 +439,6 @@ const ICON_DATA = {
     { d: "m9 9 6 6M15 9l-6 6" },
   ],
 
-  // Photos v4 handoff keys (#711/#707): the lowercase NAMES are binding, the
-  // path data deviates on purpose. `trash`/`share`/`person` reuse this file's
-  // artwork; `restore` avoids the circular arrow `Reset` already owns; `place`
-  // and `removeFrom` stay self-contained, since the handoff's zero-length pin
-  // dot survives only on round line-caps react-native-svg does not guarantee.
   heart: [
     {
       d: "M12 20s-7-4.4-7-9.4A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.6c0 5-7 9.4-7 9.4z",
@@ -476,7 +452,6 @@ const ICON_DATA = {
     { d: "M12 21s7-7.58 7-12a7 7 0 0 0-14 0c0 4.42 7 12 7 12z" },
     { d: "M12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" },
   ],
-  // Same pin as `place`, not Lucide's zero-length-dot MapPin.
   MapPin: [
     { d: "M12 21s7-7.58 7-12a7 7 0 0 0-14 0c0 4.42 7 12 7 12z" },
     { d: "M12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" },
@@ -551,8 +526,6 @@ export function iconForConcept(concept: IconConcept): IconName {
   return ICON_CONCEPTS[concept];
 }
 
-/** Exported so the contract test can exercise `fillRule` before an icon has
- *  one. */
 export function pathMarkup(iconPath: IconPath): string {
   const fill =
     iconPath.fill === "currentColor"

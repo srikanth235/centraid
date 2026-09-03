@@ -1,11 +1,3 @@
-// Domain DDL — schema `schedule` from duaility-ontology.html §03. Domains
-// extend core rows (UNIQUE NOT NULL FK to the row they specialize — rule R02
-// "extend, don't fork") or reference them; they never re-declare identity.
-//
-// `health.*` and `finance.*` left the ontology under #916 (ruling ONT-06), and
-// `schedule.availability_rule` with them: no surface produced a row, and the
-// measurement spine only health reached (`core.observation`) went too.
-
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
 export const SCHEDULE_DDL = `

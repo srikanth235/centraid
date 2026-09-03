@@ -1,4 +1,3 @@
-// Records grid (#775): columns as the store holds them; sort is the store's, over the whole kind.
 import { useCallback, useState } from "react";
 import type { JSX, MouseEvent } from "react";
 

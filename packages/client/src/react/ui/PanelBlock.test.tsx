@@ -95,7 +95,6 @@ describe("ui/PanelBlock", () => {
     const notes = [...el.querySelectorAll(".factNote")];
     expect(notes).toHaveLength(1);
     expect(notes[0]?.textContent).toBe("Measured, not limited by Conserve.");
-    // It lives inside the value it qualifies, not at the foot of the panel.
     expect(el.querySelectorAll("dd")[0]?.contains(notes[0] ?? null)).toBe(true);
   });
 

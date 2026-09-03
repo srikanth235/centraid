@@ -1,7 +1,3 @@
-// WCAG contrast math over token values: rungs are translucent, so a ratio only
-// means something composited over the surface it lands on. Solved rungs stay in
-// this file — a second module in the package index trips `no-barrel-file`.
-
 export type Rgb = readonly [number, number, number];
 
 export interface ParsedColor {
@@ -103,7 +99,6 @@ export function parseColor(value: string): ParsedColor {
   throw new Error(`unparseable colour: ${value}`);
 }
 
-/** Leading zero stripped: the Binding Layer spelling sheets are compared to. */
 export function rgbaHex(hex: string, alpha: number): string {
   const { rgb } = parseColor(hex);
   return `rgba(${rgb.join(",")},${alpha.toString().replace(/^0(?=\.)/u, "")})`;
@@ -129,7 +124,6 @@ export function relativeLuminance(rgb: Rgb): number {
   );
 }
 
-/** `background` must be opaque. */
 export function contrastRatio(foreground: string, background: string): number {
   const bg = parseColor(background);
   const fg = composite(parseColor(foreground), bg.rgb);
@@ -138,10 +132,6 @@ export function contrastRatio(foreground: string, background: string): number {
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 
-// Rungs below are walked, never hand-picked: a hand-picked rung lands under its
-// floor silently (`--danger` at 3.74:1).
-
-/** Hue and saturation never move; only lightness walks. */
 export function walkUntil(
   base: string,
   score: (candidate: string) => number,
@@ -161,7 +151,6 @@ export function walkUntil(
   return toHex(hslToRgb(h, s, limit));
 }
 
-/** The hardest surface each theme paints ink on, so every other one gains. */
 export const SOLVE_SURFACE = {
   dark: "#171716",
   light: "#F0EFED",
@@ -169,14 +158,10 @@ export const SOLVE_SURFACE = {
 
 export type SemanticRamp = keyof typeof SOLVE_SURFACE;
 
-/** The tint idiom's strength: worst case in both themes, not an average. */
 export const SELF_TINT = 0.12;
 
-/** 0.3 above the 4.5 body floor: rounding margin for the 1-point walk. */
 export const AA_SOLVED_TEXT = 4.8;
 
-/** States are `color:` on small prose, so they owe the BODY floor. The wash is
- *  of the CANDIDATE, not the base: a chip tints with the shipped token. */
 export function semanticShade(base: string, ramp: SemanticRamp): string {
   const bg = parseColor(SOLVE_SURFACE[ramp]).rgb;
   return walkUntil(

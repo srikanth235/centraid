@@ -1,8 +1,3 @@
-// Per-document FTS index budget + rebuild path (#367): a body
-// over FTS_BODY_INDEX_BUDGET_CHARS still gets a live note/document row with
-// its FULL canonical body — only the SEARCH INDEX is capped. Real vaults,
-// real triggers, no mocks.
-
 import { describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -67,9 +62,6 @@ describe("fts-index-budget", () => {
   });
 
   test("a note body over budget is fully preserved in the canonical row but truncated in the index", () => {
-    // Below the inline-body-guard threshold (64KB) but ABOVE a small FTS
-    // budget we install for this test, so the two limits stay independently
-    // testable — the guard bounds the ROW, this bounds the INDEX.
     const { db, gw, owner } = setup();
     const bodyText = "lorem ".repeat(2000); // well under 64KB, over a tiny FTS budget
     const outcome = gw.invoke(owner, {
@@ -82,7 +74,6 @@ describe("fts-index-budget", () => {
       outcome as { output: { note_id: string; body_content_id: string } }
     ).output;
 
-    // The canonical body is untouched.
     const content = db.vault
       .prepare("SELECT content_uri FROM core_content_item WHERE content_id = ?")
       .get(body_content_id) as { content_uri: string };
@@ -90,8 +81,6 @@ describe("fts-index-budget", () => {
       bodyText
     );
 
-    // The FTS row, at the real (generous) budget, also holds it whole since
-    // this body is far under FTS_BODY_INDEX_BUDGET_CHARS.
     const indexed = db.vault
       .prepare("SELECT body FROM fts_knowledge_note WHERE note_id = ?")
       .get(note_id) as {
@@ -110,7 +99,6 @@ describe("fts-index-budget", () => {
     });
     const { note_id } = (outcome as { output: { note_id: string } }).output;
 
-    // Corrupt the index row directly (simulating drift) — a rebuild must fix it.
     db.vault.exec(
       `UPDATE fts_knowledge_note SET body = 'stale' WHERE note_id = '${note_id}'`
     );
@@ -162,7 +150,6 @@ describe("fts-index-budget", () => {
       }
     ).output;
 
-    // Attach an extracted-text derivative directly (the enricher's path).
     db.vault
       .prepare(
         `INSERT INTO core_content_derivative (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)

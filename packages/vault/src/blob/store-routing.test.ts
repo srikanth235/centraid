@@ -1,11 +1,3 @@
-// Blob replication store-class routing (#425). Against a
-// `derived`-capable target every replicated thumb/preview/poster must land under
-// the derived prefix and NO derivative object under the cas prefix; the original
-// lands under cas. Against a non-capable target (no derivedPrefix) behavior is
-// unchanged — everything under cas. Also covers the read path (an evicted
-// derivative reads through from the derived prefix) and the ReplicaIndex store
-// column. Exercised against an in-process fake S3 endpoint (real HTTP, SigV4).
-
 import http from "node:http";
 import { DatabaseSync } from "node:sqlite";
 
@@ -111,7 +103,6 @@ describe("store-routing", () => {
     await fake.close();
   });
 
-  /** Stage an original plus its three binary derivatives (distinct byte identities). */
   function stageOriginalWithDerivatives(db: VaultDb): {
     original: string;
     thumb: string;
@@ -165,7 +156,6 @@ describe("store-routing", () => {
         [shas.original, shas.thumb, shas.preview, shas.poster].sort()
       );
 
-      // Original under cas; every derivative under derived and NOT under cas.
       expect(fake.objects.has(casKey(shas.original))).toBe(true);
       expect(fake.objects.has(derivedKey(shas.original))).toBe(false);
       for (const sha of [shas.thumb, shas.preview, shas.poster]) {
@@ -173,7 +163,6 @@ describe("store-routing", () => {
         expect(fake.objects.has(casKey(sha))).toBe(false);
       }
 
-      // No object under the cas prefix is a derivative; none under derived is the original.
       const casShas = [...fake.objects.keys()]
         .filter((k) => k.startsWith(`${CAS_PREFIX}/`))
         .map((k) => k.slice(casKey("").length));
@@ -185,7 +174,6 @@ describe("store-routing", () => {
         [shas.thumb, shas.preview, shas.poster].sort()
       );
 
-      // The replica index records WHERE each sha actually landed.
       const stores = new Map(
         (
           db.vault.prepare("SELECT sha256, store FROM blob_replica").all() as {
@@ -219,7 +207,6 @@ describe("store-routing", () => {
       const shas = stageOriginalWithDerivatives(db);
       await db.blobs.replicate();
 
-      // Drop the local preview copy; the derived remote copy holds.
       db.blobs.deleteLocalSync(shas.preview);
       expect(db.blobs.hasSync(shas.preview)).toBe(false);
       const before = fake.requests.filter(
@@ -228,7 +215,6 @@ describe("store-routing", () => {
 
       const bytes = await db.blobs.open(shas.preview);
       expect(bytes?.toString()).toBe("preview-bytes-bbb");
-      // The read-through fetched from the DERIVED prefix, never cas.
       const after = fake.requests.filter(
         (r) => r.method === "GET" && r.key === derivedKey(shas.preview)
       ).length;
@@ -278,8 +264,6 @@ describe("store-routing", () => {
     }
   });
 
-  // ────────── ReplicaIndex store-column unit coverage ──────────
-
   function memIndex(): ReplicaIndex {
     const db = new DatabaseSync(":memory:");
     db.exec(BLOB_CACHE_DDL);
@@ -307,12 +291,9 @@ describe("store-routing", () => {
     const index = memIndex();
     index.mark(SHA(1), 10, "cas");
     index.mark(SHA(2), 20, "derived");
-    // The derived store lost SHA(2); its listing is empty.
     index.heal("derived", new Set(), () => 0);
     expect(index.storeOf(SHA(2))).toBeUndefined();
-    // cas evidence is untouched by the derived heal.
     expect(index.storeOf(SHA(1))).toBe("cas");
-    // A cas listing adds a new cas row without disturbing derived rows.
     index.mark(SHA(2), 20, "derived");
     index.heal("cas", new Set([SHA(1), SHA(3)]), () => 5);
     expect(index.storeOf(SHA(3))).toBe("cas");

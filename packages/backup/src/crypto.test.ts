@@ -111,7 +111,6 @@ describe("deriveNonce / encryptWithNonce (deterministic sealing — /1, issue #4
     const aad = new TextEncoder().encode("bound address");
     const a = encryptWithNonce(key, nonce, plain, aad);
     const b = encryptWithNonce(key, nonce, plain, aad);
-    // G7: a retried upload is byte-identical (idempotent PUTs).
     expect([...a]).toStrictEqual([...b]);
     expect([...a.subarray(0, 12)]).toStrictEqual([...nonce]);
     expect(a).toHaveLength(12 + plain.length + 16);
@@ -140,11 +139,9 @@ describe("deriveNonce / encryptWithNonce (deterministic sealing — /1, issue #4
     expect(() => decrypt(key, blob, otherAad)).toThrow(
       /unsupported state or unable to authenticate data/iu
     );
-    // Dropping the AAD entirely must fail too.
     expect(() => decrypt(key, blob)).toThrow(
       /unsupported state or unable to authenticate data/iu
     );
-    // And supplying an AAD for a blob sealed without one.
     const noAadBlob = encryptWithNonce(key, nonce, plain);
     expect(() => decrypt(key, noAadBlob, aad)).toThrow(
       /unsupported state or unable to authenticate data/iu
@@ -184,8 +181,6 @@ describe("HKDF derivation", () => {
     const master = new Uint8Array(32).fill(0x42);
     const dataKey = deriveDataKey(master, "vault-frozen");
     const dedupKey = deriveDedupKey(master, "vault-frozen");
-    // Recorded once from this implementation's own output — any future
-    // change to the info-string format or the HKDF call shape breaks this.
     expect(Buffer.from(dataKey).toString("hex")).toBe(
       "2c4b05ea97c0bc7191ad311e32c9902f17e8b1615ee69f7cc59acb997640e442"
     );
@@ -263,7 +258,6 @@ describe("keyring", () => {
     expect(rotated.epochs[0]).toStrictEqual(original.epochs[0]);
     expect(rotated.epochs[1]!.epoch).toBe(2);
 
-    // Old epoch's key is unchanged and still resolvable.
     const oldKey = masterKeyForEpoch(rotated, 1);
     expect(Buffer.from(oldKey).toString("base64")).toBe(
       original.epochs[0]!.key

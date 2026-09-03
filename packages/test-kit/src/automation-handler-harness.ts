@@ -1,12 +1,3 @@
-/*
- * Recording rails for source-level automation handler tests.
- *
- * The vault fake is a small query engine rather than a canned-rows stub:
- * cursor, batch-capacity, and stamp-matching behavior would be impossible to
- * falsify if `ctx.vault.read` ignored its where/order/limit request. Provider
- * and model edges stay injected while the real handler module runs unchanged.
- */
-
 export type VaultRow = Record<string, unknown>;
 
 export interface ContentReply {
@@ -65,19 +56,12 @@ export interface FetchReply {
 }
 
 export interface AutomationHandlerHarnessOptions {
-  /** Rows per entity name, e.g. `{ "media.asset": [...] }`. */
   entities?: Record<string, VaultRow[]>;
-  /** Content replies keyed `${contentId}:${variant}`. */
   content?: Record<string, ContentReply>;
-  /** Seeded handler state (`ctx.state`). */
   state?: Record<string, unknown>;
-  /** `ctx.input` for the fire. */
   input?: unknown;
-  /** Answer for `ctx.delegate`. */
   delegate?: (call: DelegateCall) => unknown;
-  /** Answer for `ctx.fetch`; a handler without one gets an explicit throw. */
   fetch?: (call: FetchCall) => FetchReply | Promise<FetchReply>;
-  /** Answer for `ctx.vault.invoke`; the second argument is the 1-based call. */
   invoke?: (record: InvokeRecord, invocation: number) => InvokeOutcome;
 }
 
@@ -128,7 +112,6 @@ function matches(row: VaultRow, clause: WhereClause): boolean {
   }
 }
 
-/** Apply the filter/order/limit semantics exposed by `ctx.vault.read`. */
 export function selectRows(rows: VaultRow[], request: ReadRequest): VaultRow[] {
   const filtered = rows.filter((row) =>
     (request.where ?? []).every((clause) => matches(row, clause))
@@ -235,7 +218,6 @@ export function createAutomationHandlerHarness(
   };
 }
 
-/** Base64 for a byte-bearing preview/original reply. */
 export const FIXTURE_BYTES = "Zml4dHVyZQ==";
 
 export function bytesContent(mediaType = "image/jpeg"): ContentReply {
@@ -258,7 +240,6 @@ export function textContent(text: string): ContentReply {
   };
 }
 
-/** JSON-bodied 200, the standard provider-API happy reply. */
 export function json(
   value: unknown,
   headers: Record<string, string> = {}

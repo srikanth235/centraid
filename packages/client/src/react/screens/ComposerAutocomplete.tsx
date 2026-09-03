@@ -10,7 +10,6 @@ import {
 
 import styles from "./AssistantScreen.module.css";
 
-/** An entity the @-mention picker can offer (a trimmed vault search hit). */
 export interface ComposerEntity {
   type: string;
   id: string;
@@ -18,20 +17,16 @@ export interface ComposerEntity {
   subtitle?: string;
 }
 
-/** A slash command surfaced by the leading `/` menu. */
 export interface SlashCommand {
   id: string;
   label: string;
   hint?: string;
-  /** When false, the command is shown greyed and not runnable. */
   enabled?: boolean;
 }
 
 export interface ComposerAutocompleteOptions {
   textareaRef: RefObject<HTMLTextAreaElement | null>;
-  /** Persist composer text (the parent's `changeDraft`). */
   setValue: (v: string) => void;
-  /** Server entity search for @-mentions (auth-aware `searchVaultEntities`). */
   searchEntities: (term: string) => Promise<ComposerEntity[]>;
   slashCommands: SlashCommand[];
   onRunSlash: (id: string) => void;
@@ -48,13 +43,6 @@ type Suggest =
   | { kind: "slash"; caret: number; items: SlashCommand[] }
   | null;
 
-/**
- * Composer autocomplete (#420): @-mentions (entity picker → inserts a
- * `@[label](ref:type/id)` chip) and slash-commands (leading `/` → runs an
- * existing shell action). Returns an augmented `onChange`, a keydown handler
- * that reports whether it consumed the event (so the composer skips Enter=send
- * while a menu is open), and the popover element to render inside the composer.
- */
 export function useComposerAutocomplete(opts: ComposerAutocompleteOptions): {
   onChange: (e: ChangeEvent<HTMLTextAreaElement>) => void;
   onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => boolean;
@@ -191,7 +179,6 @@ export function useComposerAutocomplete(opts: ComposerAutocompleteOptions): {
         return true;
       }
       if (e.key === "Enter" || e.key === "Tab") {
-        // Nothing to pick — let the composer handle Enter (send) normally.
         if (len === 0) return false;
         e.preventDefault();
         pick(active);
@@ -210,11 +197,6 @@ export function useComposerAutocomplete(opts: ComposerAutocompleteOptions): {
   let popover: JSX.Element | null = null;
   if (suggest) {
     const clampedActive = active >= suggest.items.length ? 0 : active;
-    // A popover of buttons, not a listbox: focus stays in the composer, the
-    // items are never focused and nothing points at them with
-    // `aria-activedescendant`, so the listbox/option roles claimed a widget
-    // this never was. The buttons are the real control; `data-active` marks the
-    // keyboard highlight, as it always did.
     popover = (
       <div className={styles.acPopover}>
         {suggest.kind === "mention" &&

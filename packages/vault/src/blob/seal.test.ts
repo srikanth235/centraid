@@ -1,8 +1,3 @@
-// Framed seal format (#405): whole-object round-trips across the
-// frame-boundary sizes, entropy-gated compression mixing compressible and
-// incompressible frames in one blob, and tamper-evidence — a flipped byte, a
-// swapped frame, or a truncated directory must all fail closed.
-
 import { randomBytes } from "node:crypto";
 import { Readable } from "node:stream";
 
@@ -20,7 +15,6 @@ import { sealBlob, sealBlobStream, unsealBlob } from "./seal.js";
 import { sha256OfBytes } from "./store.js";
 
 const KEY = Buffer.alloc(32, 0x5a);
-/** node's AES-GCM `decipher.final()` message when the auth tag fails to verify. */
 const AEAD_TAG_MISMATCH = "Unsupported state or unable to authenticate data";
 const FRAME = 32; // tiny frames so tests never allocate multi-MiB buffers
 
@@ -46,18 +40,12 @@ describe("seal", () => {
   });
 
   test("entropy gate: compressible and incompressible frames coexist in one blob", () => {
-    // Frame 0 all-zeros (compresses hard), frame 1 random (stored verbatim).
     const zeros = Buffer.alloc(FRAME, 0);
     const noise = randomBytes(FRAME);
     const plain = Buffer.concat([zeros, noise]);
     const sha = sha256OfBytes(plain);
     const sealed = sealBlob(KEY, sha, plain, FRAME);
-    // Round-trips byte-exact regardless of which frame compressed.
     expect(unsealBlob(KEY, sha, sealed).equals(plain)).toBe(true);
-    // At a realistic frame size (per-frame GCM overhead no longer dominates) an
-    // all-zeros blob seals to far less than its plaintext (compression fired);
-    // a random blob seals to MORE than its plaintext (stored verbatim + framing
-    // overhead — the keep-if-smaller gate declined to grow the payload).
     const big = 4096;
     const zerosSha = sha256OfBytes(Buffer.alloc(big * 4));
     const zerosSealed = sealBlob(KEY, zerosSha, Buffer.alloc(big * 4), big);
@@ -82,8 +70,6 @@ describe("seal", () => {
     const plain = randomBytes(FRAME * 2);
     const sha = sha256OfBytes(plain);
     const sealed = sealBlob(KEY, sha, plain, FRAME);
-    // Drop one byte out of the directory region (just before the trailer): the
-    // trailer's dirLen no longer lines up, so the directory GCM open fails.
     const cut = Buffer.concat([
       sealed.subarray(0, sealed.length - TRAILER_BYTES - 1),
       sealed.subarray(sealed.length - TRAILER_BYTES),
@@ -101,7 +87,6 @@ describe("seal", () => {
       3,
       Buffer.from("frame-zero-plaintext")
     );
-    // Correct (sha, index, count) unseals; any drift in the AAD triple throws.
     expect(unsealFrame(KEY, sha, 0, 3, frame).toString()).toBe(
       "frame-zero-plaintext"
     );
@@ -135,7 +120,6 @@ describe("seal", () => {
   test("streaming seal matches the buffered seal end-to-end", async () => {
     const plain = randomBytes(FRAME * 4 + 11);
     const sha = sha256OfBytes(plain);
-    // Feed the plaintext in awkward chunk sizes to exercise the frame carver.
     const chunks = [
       plain.subarray(0, 5),
       plain.subarray(5, FRAME * 2 + 3),

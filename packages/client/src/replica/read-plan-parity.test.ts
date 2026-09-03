@@ -1,12 +1,3 @@
-/**
- * GOLDEN PARITY: the compiled SQL plan against the evaluator it replaced
- * (#883 C3) — same corpus, same request, same rows in the same order, and the
- * same refusal on the same input.
- *
- * The corpus is the scale rig's own, dialled down: parity is not a property of
- * volume, and the nightly rig keeps the volume. Ruled divergences are asserted
- * in the terms `REPLICA_PUSHDOWN_DIVERGENCES` states them.
- */
 import { describe, expect, test } from "vitest";
 
 import {
@@ -51,7 +42,6 @@ describe("replica read pushdown parity", () => {
       expect(oracle.kind).toBe("rows");
       expect(pushed).toStrictEqual(oracle);
     }
-    // Anti-vacuity: identical EMPTY answers would satisfy the loop above.
     expect(fixture.both(READ_REQUESTS.fullEntity!).pushed).toMatchObject({
       kind: "rows",
     });
@@ -61,19 +51,11 @@ describe("replica read pushdown parity", () => {
     fixture.store.close();
   });
 
-  /**
-   * THE ORACLE HAS TEETH. Two hand-edits, each removing one mechanism the
-   * pushdown depends on and each still valid SQL, caught by the same
-   * comparison the passing assertions use.
-   */
   test("a deliberately broken plan fails this same comparison", () => {
     const snapshot = adversarialSnapshot();
     const fixture = openFixture(snapshot);
     const shapeId = snapshot.shapes[0]!.shapeId;
 
-    // (1) ESCALATION-FIRST ORDERING. `mixed` straddles the classes, so this
-    // read must refuse — but the row that proves it sorts second under the
-    // caller's ORDER BY, so a page of one would miss it.
     const escalating: ReplicaReadRequest = {
       shapeId,
       entity: "core.item",
@@ -92,10 +74,8 @@ describe("replica read pushdown parity", () => {
       escalationPlan.binds
     );
     expect(answered).toHaveLength(1);
-    // Verdict zero: no evidence on the page, so `assertReplicaPage` lets it by.
     expect(answered[0]!.verdict).toBe(0);
 
-    // (2) ORDER DIRECTION — the cheapest plan bug, caught on rows alone.
     const ordered: ReplicaReadRequest = {
       shapeId,
       entity: "core.item",

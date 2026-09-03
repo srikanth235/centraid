@@ -348,10 +348,6 @@ export class RemoteStreamIngress {
       row.media_type ?? undefined,
       row.original_name ?? undefined
     );
-    // Direct-to-cold heuristic (#425): the CopyObject that mints
-    // the final CAS object carries STANDARD_IA for an eligible large original.
-    // The original's staging row is only written below, after custody, so the
-    // media type + size are handed in directly for the resolver.
     const storageClass = remote.storageClassFor?.(sha, "cas", {
       mediaType,
       byteSize: expectedSize,
@@ -500,7 +496,7 @@ export class RemoteStreamIngress {
         ...(row.staged_by ? { stagedBy: row.staged_by } : {}),
       });
     } catch {
-      // Preview generation is a bounded best-effort contribution, not custody.
+      // Intentionally empty.
     } finally {
       rmSync(row.temp_path, { force: true });
       this.deps.state.setSessionTempPath(row.session_id, null);

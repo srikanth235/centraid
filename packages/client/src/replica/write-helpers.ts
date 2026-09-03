@@ -21,7 +21,6 @@ export interface PreparedReplicaWrite {
   dependencies: ReplicaDependency[];
 }
 
-/** Normalize and validate one app write for either the web or native shell. */
 export function prepareReplicaWrite(
   appId: string,
   optimistic: readonly ReplicaWriteMutationInput[] | undefined,

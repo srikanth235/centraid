@@ -1,5 +1,3 @@
-// `blob_replica`/`blob_access` helpers (#405): no raw SQL for either elsewhere.
-
 /* oxlint-disable max-classes-per-file -- (#405) ReplicaIndex + AccessIndex are the two durable-table helpers of one cache-index module (blob_replica + blob_access), paired by design */
 
 import type { DatabaseSync } from "node:sqlite";
@@ -10,7 +8,6 @@ export type ReplicaStore = "cas" | "derived";
 
 const IN_CHUNK = 500;
 
-/** Durable EVIDENCE of an acknowledged push; the remote listing is truth. */
 export class ReplicaIndex {
   constructor(private readonly db: DatabaseSync) {}
 
@@ -73,7 +70,6 @@ export class ReplicaIndex {
     this.db.exec("DELETE FROM blob_replica");
   }
 
-  /** ONE store class: scoping stops a `derived` listing healing `cas` (#425). */
   heal(
     store: ReplicaStore,
     remoteShas: Set<string>,
@@ -101,7 +97,6 @@ export class ReplicaIndex {
   }
 }
 
-/** WRITE-BEHIND: callers `flush()` before an eviction pass reads ordering. */
 export class AccessIndex {
   private readonly pending = new Map<
     string,
@@ -137,7 +132,6 @@ export class AccessIndex {
     this.db.prepare("DELETE FROM blob_access WHERE sha256 = ?").run(sha);
   }
 
-  /** A sha with no access row sorts OLDEST. */
   orderOldestFirst(candidates: readonly string[]): string[] {
     if (candidates.length === 0) return [];
     const seen = new Map<string, string>(); // sha -> last_access_at

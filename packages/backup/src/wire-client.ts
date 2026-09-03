@@ -1,6 +1,3 @@
-// Shared HTTP + JSON-envelope handling for `centraid-storage-provider/1`
-// clients (PROTOCOL.md § Error envelope), mapped to `BackupProviderError`.
-
 import { BackupProviderError } from "./provider.js";
 import type { BackupProviderErrorCode } from "./provider.js";
 
@@ -8,8 +5,6 @@ export interface WireClientOptions {
   baseUrl: string;
   apiKey: string;
   fetchImpl?: typeof fetch;
-  /** Backpressure (#412): 429 waits out a rate window; 5xx/non-JSON gets a
-   *  short jittered budget. 4xx are client faults — never retried. */
   retry?: {
     rateLimit?: RetryBudget;
     serverError?: RetryBudget;
@@ -19,7 +14,6 @@ export interface WireClientOptions {
 }
 
 interface RetryBudget {
-  /** Incl. the first. */
   maxAttempts?: number;
   baseDelayMs?: number;
   maxDelayMs?: number;
@@ -27,7 +21,6 @@ interface RetryBudget {
 }
 
 const RATE_LIMIT_DEFAULTS: Required<RetryBudget> = {
-  // A limiter counting rejects too drains only when the client goes quiet.
   maxAttempts: 12,
   baseDelayMs: 2_000,
   maxDelayMs: 30_000,
@@ -102,7 +95,6 @@ export async function callProviderRoute<T>(
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const text = await res.text();
-    // A bare overload page is not JSON; a SyntaxError would defeat the retry.
     let parsed: { data?: unknown } | ErrorEnvelope = {};
     let parseFailed = false;
     if (text.length > 0) {
@@ -126,8 +118,6 @@ export async function callProviderRoute<T>(
         active.baseDelayMs * 2 ** attempts,
         active.maxDelayMs
       );
-      // EQUAL jitter for rate limits: the auth limiter sends no Retry-After,
-      // and a near-zero sleep burns an attempt. 5xx: full jitter, to spread.
       const jittered = isRateLimit
         ? Math.round(ceiling / 2 + random() * (ceiling / 2))
         : Math.round(random() * ceiling);

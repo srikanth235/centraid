@@ -73,7 +73,6 @@ export interface BeginBlobIngressInput {
   mediaType?: string;
   filename?: string;
   stagedBy?: string;
-  /** The init/PATCH door may allocate a durable provider multipart session. */
   resumable?: boolean;
 }
 
@@ -186,7 +185,6 @@ export class BlobTransferCoordinator {
     return this.state.pendingShas();
   }
 
-  /** Seed durable obligations before an fs-only vault enables remote-primary. */
   enqueueExistingLocal(): number {
     const count = enqueueExistingLocalBlobs(
       this.options.vault,
@@ -197,12 +195,10 @@ export class BlobTransferCoordinator {
     return count;
   }
 
-  /** Remote identity changed; old target-scoped evidence is no longer valid. */
   resetRemoteEvidence(): void {
     this.options.cache.replica.clear();
   }
 
-  /** Start/resume continuous drain after a settings transition. */
   kickOutbox(): void {
     this.outbox.kick();
   }
@@ -242,7 +238,6 @@ export class BlobTransferCoordinator {
     );
   }
 
-  /** Authenticated, range-bounded CAS audit: header, directory, first frame. */
   async auditRemoteReplica(
     sha256: string,
     knownSealedSize?: number
@@ -516,15 +511,11 @@ export class BlobTransferCoordinator {
         row.received_bytes
       );
     }
-    // A crash can leave non-fsynced tail bytes in the temp file beyond the
-    // durable offset recorded in SQLite. Never hash a prefix and then adopt
-    // the larger physical file under that prefix's content address.
     if (row.temp_path) {
       try {
         truncateSync(row.temp_path, row.received_bytes);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        // Idempotent replay after adoption: the temp path is expected gone.
       }
     }
     let hash = pendingHash;
@@ -586,7 +577,6 @@ export class BlobTransferCoordinator {
     }
   }
 
-  /** All synchronous legacy ingress paths join the same eager outbox. */
   recordLocalReceipt(sha256: string, byteSize: number): void {
     if (!this.options.remoteConfigured()) return;
     this.state.enqueue(assertSha(sha256), byteSize);
@@ -696,7 +686,6 @@ export class BlobTransferCoordinator {
     await this.outbox.close();
   }
 
-  /** Fence asynchronous transfer completion before a synchronous SQLite close. */
   abandon(): void {
     this.closeFallbackWrites(false);
     this.outbox.abandon();

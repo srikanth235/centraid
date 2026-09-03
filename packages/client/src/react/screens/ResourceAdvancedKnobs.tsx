@@ -18,15 +18,7 @@ import type {
 import buttonCss from "../ui/Button.module.css";
 import styles from "./GatewayScreen.module.css";
 
-// L3 "Tune" rung of the Resource card (#528): advanced knobs the
-// owner can override. Collapsed by default (an aria-expanded button + region,
-// not native <details>, so it stays deterministic under jsdom — mirrors
-// ResourceCardDetails). Each knob is Linked to the derived budget by default,
-// Custom once overridden, or locked when an operator env var set it. Overrides
-// are plain prefs writes; they apply on the next gateway restart, like the mode.
-
 export interface ResourceAdvancedKnobsProps {
-  /** Must carry `sources` + `bounds`; the caller gates on that, we re-check. */
   profile: ResourceProfileDTO;
   loadKnobPrefs: () => Promise<ResourceKnobPrefs>;
   saveKnobPrefs: (
@@ -54,7 +46,6 @@ export default function ResourceAdvancedKnobs({
   const [busyKey, setBusyKey] = useState<TunableKnobKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState(false);
-  // A save in flight must not be clobbered by a late load resolve.
   const busyRef = useRef(false);
 
   const load = useCallback((): void => {

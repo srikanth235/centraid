@@ -6,12 +6,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import AppEnrichmentSurface from "./AppEnrichmentSurface.js";
 import type { AppEnrichmentSurfaceProps } from "./AppEnrichmentSurface.js";
 
-/*
- * The app popover's Enrichment surface (#807). It is a projection: every
- * line is the gateway's effective answer, the deep link is the only route to a
- * change, and the one-shot states plainly when nothing can enqueue it.
- */
-
 function makeProps(
   over: Partial<AppEnrichmentSurfaceProps> = {}
 ): AppEnrichmentSurfaceProps {
@@ -87,7 +81,6 @@ describe(AppEnrichmentSurface, () => {
     const el = await mount(makeProps());
     expect(el.textContent).toContain("Sharp OCR · sent to a provider");
     expect(el.textContent).toContain("when you open an item");
-    // Fail-closed is reported as such, never as "off by default".
     expect(el.textContent).toContain("No policy your gateway can honour");
   });
 
@@ -133,8 +126,6 @@ describe(AppEnrichmentSurface, () => {
   });
 
   it("deep-links to the page where the policy is authored", async () => {
-    // A counter rather than a spy: the outcome under test is that the deep
-    // link fires exactly once, not that a mock was called.
     let opened = 0;
     const el = await mount(
       makeProps({

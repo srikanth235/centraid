@@ -1,18 +1,8 @@
-// Version lineage (#352): a `revises` core.link between content items
-// (NEW content item -> OLD content item), asserted wherever a wrapper
-// repoints its canonical body — core.edit_document,
-// core.replace_document_content, core.restore_document_version, and
-// knowledge.edit_note (heals the notes/docs divergence: both wrappers now
-// keep the same provenance trail). History is never rewritten (rule R3):
-// restoring an old version asserts a NEW link forward, it never touches the
-// old ones — the chain only ever grows.
-
 import type { HandlerCtx } from "../gateway/types.js";
 import { RELATIONS_SCHEME_URI } from "./links.js";
 
 export const REVISES_RELATION = "revises";
 
-/** The relations scheme, created on first use (mirrors links.ts's seed). */
 function relationsSchemeId(ctx: HandlerCtx): string {
   const existing = ctx.db
     .prepare("SELECT scheme_id FROM core_concept_scheme WHERE uri = ?")
@@ -28,7 +18,6 @@ function relationsSchemeId(ctx: HandlerCtx): string {
   return schemeId;
 }
 
-/** The `revises` relation concept, created on first use. */
 export function revisesConceptId(ctx: HandlerCtx): string {
   const schemeId = relationsSchemeId(ctx);
   const existing = ctx.db
@@ -47,12 +36,6 @@ export function revisesConceptId(ctx: HandlerCtx): string {
   return conceptId;
 }
 
-/**
- * Record NEW content item -> OLD content item as a live `revises` link.
- * Callers repoint the wrapper's *_content_id column themselves — this only
- * asserts the history edge, so a no-op edit (dedup lands back on the same
- * content id) can skip the call entirely rather than link an id to itself.
- */
 export function recordRevision(
   ctx: HandlerCtx,
   newContentId: string,

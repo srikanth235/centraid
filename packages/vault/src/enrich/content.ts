@@ -1,17 +1,6 @@
-// Agent content access (#299 §2, resolving the #296 §7 seam): the
-// size-bounded byte primitive enrichers and the assistant read through.
-// Visual inputs remain derivative-only: a vision enricher reads `preview` or
-// `thumb`, never the GPS-bearing source. Audio/video has no meaningful preview
-// rung for ASR, so `original` is accepted only when the claimed media type is
-// audio/* or video/* and remains consent-checked, receipted, and byte-capped.
-//
-// Consent is the caller's problem (the gateway method evaluates the read and
-// receipts it); this module only resolves and bounds.
-
 import { resolveServableBlob } from "../blob/read.js";
 import type { VaultDb } from "../db.js";
 
-/** Variants an agent may read. `original` is AV-only in the resolver below. */
 export const AGENT_CONTENT_VARIANTS = [
   "original",
   "thumb",
@@ -22,10 +11,8 @@ export const AGENT_CONTENT_VARIANTS = [
 ] as const;
 export type AgentContentVariant = (typeof AGENT_CONTENT_VARIANTS)[number];
 
-/** Default / hard ceilings for one fetch (decoded bytes, text chars). */
 export const AGENT_CONTENT_DEFAULT_MAX_BYTES = 1024 * 1024;
 export const AGENT_CONTENT_HARD_MAX_BYTES = 4 * 1024 * 1024;
-/** AV inference needs the encoded source but is still bounded per ctx call. */
 export const AGENT_CONTENT_ORIGINAL_HARD_MAX_BYTES = 64 * 1024 * 1024;
 export const AGENT_CONTENT_MAX_TEXT_CHARS = 262_144;
 
@@ -48,12 +35,6 @@ export type AgentContentOutcome =
   | { status: "no-variant" }
   | { status: "too-large"; byteSize: number; maxBytes: number };
 
-/**
- * Resolve one content id's agent-readable variant. Binary variants ride the
- * same reachability derivation the blob routes use (`resolveServableBlob` —
- * content serves only when a model edge claims it); the text variant reads
- * the inline derivative row directly, same-transaction cheap.
- */
 export async function resolveAgentContent(
   db: VaultDb,
   contentId: string,

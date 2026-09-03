@@ -1,9 +1,3 @@
-// Enrichment spine publishers (#299). Invents no tables. Contract:
-// ATTRIBUTED (author via `sync.stage_rows`; machine tags have confidence,
-// no party — owner tags are the inverse); NEVER OVERWRITES THE OWNER
-// (terminal: owner tag, answered face, owner annotation — no-op);
-// RE-DERIVABLE (replace own prior output; wipe-and-rerun is always safe).
-
 import type { DatabaseSync } from "node:sqlite";
 
 import {
@@ -62,23 +56,18 @@ export function tagNotation(label: string): string {
   );
 }
 
-// ── knowledge.annotation (captions, summaries) ──────────────────────────
-
 export interface AnnotationPayload {
   target_type: string;
   target_id: string;
   body: string;
-  /** Injected by `sync.stage_rows`, never trusted from source. */
   author_party_id: string;
 }
 
 const annotationPublisher: Publisher = {
   entityType: "knowledge.annotation",
   probe(vault, payload) {
-    // Read-only lookup — schema gate covers writes (#374); probe is a key lookup.
     const p = payload as unknown as AnnotationPayload;
     if (!p.author_party_id) return null;
-    // One caption per (author, target) — replaceMemo.
     const existing = vault
       .prepare(
         `SELECT annotation_id FROM knowledge_annotation
@@ -123,7 +112,6 @@ const annotationPublisher: Publisher = {
   },
   update(vault, entityId, payload) {
     const p = assertPayload<AnnotationPayload>("AnnotationPayload", payload);
-    // Replaces only its own prior output; anyone else's annotation is terminal.
     vault
       .prepare(
         "UPDATE knowledge_annotation SET body_text = ? WHERE annotation_id = ? AND author_party_id = ?"
@@ -132,8 +120,6 @@ const annotationPublisher: Publisher = {
     return { wrote: [] };
   },
 };
-
-// ── core.tag (machine scene/doctype tags) ───────────────────────────────
 
 export interface TagPayload {
   target_type: string;
@@ -146,7 +132,6 @@ export interface TagPayload {
 const tagPublisher: Publisher = {
   entityType: "core.tag",
   probe(vault, payload) {
-    // Read-only lookup.
     const p = payload as unknown as TagPayload;
     const row = vault
       .prepare(
@@ -162,7 +147,6 @@ const tagPublisher: Publisher = {
         tagNotation(p.label)
       ) as { tag_id: string; tagged_by_party_id: string | null } | undefined;
     if (!row) return null;
-    // Owner-asserted tag (has a party) is terminal; machine tag refreshes confidence.
     return row.tagged_by_party_id
       ? {
           entityId: row.tag_id,
@@ -206,8 +190,6 @@ const tagPublisher: Publisher = {
   },
 };
 
-// ── media.face_region (face proposals) ──────────────────────────────────
-
 export interface FaceRegionPayload {
   asset_id: string;
   bbox: Record<string, number>;
@@ -217,7 +199,6 @@ export interface FaceRegionPayload {
 
 const faceRegionPublisher: Publisher = {
   entityType: "media.face_region",
-  // No domain-native key: idempotency is `<asset_id>:face:<n>` on the external-id map.
   probe() {
     return null;
   },
@@ -245,9 +226,6 @@ const faceRegionPublisher: Publisher = {
   },
   update(vault, entityId, payload) {
     const p = assertPayload<FaceRegionPayload>("FaceRegionPayload", payload);
-    // Answered region is terminal (#712). Guard `review_state = 'proposed'`,
-    // not `confirmed_by_party_id IS NULL`: a reject-as-DELETE would let the
-    // next run re-propose forever. Every answer leaves a non-`proposed` row.
     vault
       .prepare(
         `UPDATE media_face_region SET bbox_json = ?, party_id = ?, confidence = ?
@@ -258,8 +236,6 @@ const faceRegionPublisher: Publisher = {
   },
 };
 
-// ── core.collection (trip/event album proposals) ────────────────────────
-
 export interface CollectionPayload {
   name: string;
   members: { target_type: string; target_id: string }[];
@@ -268,7 +244,6 @@ export interface CollectionPayload {
 const collectionPublisher: Publisher = {
   entityType: "core.collection",
   probe(vault, payload) {
-    // Read-only lookup.
     const p = payload as unknown as CollectionPayload;
     const existing = vault
       .prepare("SELECT collection_id FROM core_collection WHERE name = ?")
@@ -295,7 +270,6 @@ const collectionPublisher: Publisher = {
   },
   update(vault, entityId, payload, now) {
     const p = assertPayload<CollectionPayload>("CollectionPayload", payload);
-    // Top-up only — never remove; the owner may have curated since.
     return { wrote: addEntries(vault, entityId, p.members, now) };
   },
 };
@@ -341,8 +315,6 @@ function addEntries(
   return wrote;
 }
 
-// ── core.content_item (filing / rename proposals) ───────────────────────
-
 export interface FilingPayload {
   content_id: string;
   title?: string;
@@ -366,7 +338,6 @@ function isFilingPayload(
 }
 
 function remoteContentSha(sourceId: string): string {
-  // Remote connectors do not download bytes; source id is the identity.
   return sha256Hex(`remote-content\n${sourceId}`);
 }
 
@@ -406,7 +377,6 @@ const contentItemPublisher: Publisher = {
   },
   create(vault, _owner, payload, now) {
     if (isFilingPayload(payload)) {
-      // Filing never mints documents — missing content item fails per-row.
       throw new Error(
         "a filing proposal for a missing core.content_item cannot create it"
       );
@@ -450,8 +420,6 @@ const contentItemPublisher: Publisher = {
     }
     const p = assertPayload<FilingPayload>("FilingPayload", payload);
     const wrote: PublishedWrite[] = [];
-    // Title/folder live on core_document (#352); content item is HEAD, not
-    // identity. Only the current head resolves; else tag/rename the item.
     const doc = vault
       .prepare(
         "SELECT document_id FROM core_document WHERE current_content_id = ?"

@@ -1,9 +1,3 @@
-// ONE PARTY PER PERSON, AND THEREFORE ONE HUE (#883 O-identity). The three ways
-// into `tally.add_friend` each fail differently, so each is asserted: a
-// `party_id` mints nothing; `email`/`phone` resolve through the ONE dedupe
-// module (`contact-reach.ts`), and a miss mints AND BINDS so the next caller
-// gets the hit; a name alone mints, because A NAME IS NEVER A KEY — two people
-// are called Ann, and folding them on a string is worse than a duplicate.
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -91,7 +85,6 @@ describe("tally.add_friend enrolls an existing party rather than minting a secon
     );
     const before = partyCount();
 
-    // A different spelling of the same address: the dedupe key normalizes it.
     const added = out<AddFriendOut>(
       invoke("tally.add_friend", { email: "sam@example.com", name: "Sam" })
     );

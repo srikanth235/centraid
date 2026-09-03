@@ -1,17 +1,3 @@
-// P5 durable lifecycle ledger (#630). Domain tables remain canonical;
-// this append-only sidecar records the exact pre-mutation state needed for
-// history and deterministic undo. It deliberately has no polymorphic foreign
-// key: an entity's history must survive its soft-delete grace window and, for
-// audit/export, may outlive the row it described.
-//
-// THE ONE REVISION MECHANISM (#916, owner decision D2). `locker_item_history`
-// was a second one — same question, different table, different retention, its
-// own undo path — and it is gone; a Locker revision is a row here with
-// `entity_type = 'locker.item'`, its old values in `snapshot_json` and its
-// sealed columns still ciphertext. How LONG revisions are kept per entity is
-// declared in the registry (`revisions: { retain }` in `entity-catalog.ts`),
-// not decided by whichever sweep happens to run.
-
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
 export const ENTITY_REVISIONS_DDL = `

@@ -1,6 +1,5 @@
 import { defineConfig } from "vitest/config";
 
-/** Standalone Stryker test root for protocol handshake laws. */
 export default defineConfig({
   test: {
     name: "@centraid/core/protocol-mutation",

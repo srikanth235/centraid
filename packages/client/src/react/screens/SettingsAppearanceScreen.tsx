@@ -22,23 +22,6 @@ const THEME_MODE_LABELS: Record<SettingsThemeMode, string> = {
   system: "Match system",
 };
 
-/**
- * Settings → You, theme group — the shell's visual treatment (#608).
- *
- * Theme is a three-position segment, not a preview grid: the registry offers
- * exactly Centraid Light and Centraid Dark, and at that size a grid of
- * live-preview cards is the wrong control (#608 group O). `Match system` is one
- * of the three positions rather than a button that fires a one-shot snap — it
- * is a standing mode the shell keeps tracking.
- *
- * Theme is this screen's only control, and the screen is a group under
- * Settings → You rather than a page: one segment does not earn a rail entry.
- * The product deliberately offers the owner NO other appearance choice — no
- * accent swatches, app-tile treatment, dark-ramp temperature, density, or
- * sidebar switch. Card surface keeps its pref and its painting
- * (`html.dataset.cards`, default `outlined`) with no control, as the tile
- * treatment does; do not add controls back for either.
- */
 export default function SettingsAppearanceScreen({
   themeMode,
   onSetThemeMode,
@@ -46,7 +29,6 @@ export default function SettingsAppearanceScreen({
 }: SettingsAppearanceBridgeProps): JSX.Element {
   const [curMode, setCurMode] = useState(themeMode);
   const [cronTz, setCronTz] = useState("");
-  /** The zone the gateway holds — what a refused edit returns the field to. */
   const [lastGood, setLastGood] = useState("");
   const [cronTzError, setCronTzError] = useState<string | null>(null);
   const [cronTzLoaded, setCronTzLoaded] = useState(false);
@@ -122,8 +104,6 @@ export default function SettingsAppearanceScreen({
                   setCronTzError(null);
                 }}
                 onBlur={() => {
-                  // A refused zone leaves the field where the gateway has it,
-                  // and the error names that value rather than the typo.
                   void saveDefaultCronTimeZone(cronTz, lastGood).then((err) => {
                     setCronTzError(err);
                     if (err) setCronTz(lastGood);

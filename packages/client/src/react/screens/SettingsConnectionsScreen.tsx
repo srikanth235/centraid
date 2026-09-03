@@ -33,18 +33,6 @@ import { ConnectorBrandGlyph } from "./connectorBrandMarks.js";
 
 import styles from "./SettingsConnectionsScreen.module.css";
 
-// Connectors (#304 renderer half; primary sidebar page), rebuilt on the
-// v9 block vocabulary (#765): the page is a list of what is connected and what
-// each connection feeds, and nothing else. Its identity, its count line, its
-// health sentence and its two verbs live in the frame — the screen reports what
-// it read and draws blocks.
-//
-// The gateway I/O surface is unchanged: configure / pause / authorize / remove,
-// plus the same Connect sheet the catalog has always opened. What moved is
-// where you reach them from — the row's ONE trailing action is the thing that
-// connection needs next (re-authorize, resume, configure), and pause/remove sit
-// in the connection's own sheet where the sentence explaining them fits.
-
 export type ConnectionHealth = "ok" | "needs-auth" | "paused" | "failing";
 
 export interface ConnectionRowDTO {
@@ -53,8 +41,6 @@ export interface ConnectionRowDTO {
   label: string;
   principal: string | null;
   health: ConnectionHealth;
-  /** `null` = no credential attached — the connection rides the
-   *  harness-ambient lane rather than a BYO one. */
   credKind: "oauth2" | "api_key" | null;
   oauthMode?: "byo" | "assist" | null;
   provider: string | null;
@@ -117,32 +103,19 @@ export interface LinkedSyncDTO {
   title: string;
   templateId: string;
   kind: string;
-  /** Installed automation ref when a matching pull is already present. */
   installedRef: string | null;
   installedEnabled: boolean;
 }
 
-/**
- * One installed sync — an automation that copies a narrow thing out of a
- * connection on a schedule. The page's second section; distinct from
- * `LinkedSyncDTO`, which is what a connector COULD sync (installed or not).
- */
 export interface AttachedSyncDTO {
-  /** The automation's `<app>/<id>` ref. */
   id: string;
-  /** The connection it rides — the row it belongs under. */
   connectionId: string;
   connectionLabel: string;
   name: string;
-  /** Plain-English schedule ("Every 15 minutes"), or "On demand". */
   cadence: string;
   enabled: boolean;
 }
 
-/** The wizard's submitted form, already resolved to one connector — carries
- *  the chosen preset's auth/token URLs + host pin along so the data layer
- *  doesn't have to re-fetch the provider catalog to build the configure
- *  body. */
 export interface ConnectionFormInput {
   providerId: string;
   connectorKind: string;
@@ -151,8 +124,6 @@ export interface ConnectionFormInput {
   oauthMode?: "byo" | "assist";
   authUrl?: string;
   tokenUrl?: string;
-  /** The connector's specific scope when the preset names one per
-   *  connector; falls back to the provider's full scope string. */
   scopes?: string;
   allowedHosts: string[];
   clientId?: string;
@@ -163,7 +134,6 @@ export interface ConnectionFormInput {
 export interface SettingsConnectionsBridgeProps {
   loadConnections: () => Promise<ConnectionRowDTO[]>;
   loadProviders: () => Promise<ProviderOptionDTO[]>;
-  /** Returns connectionId so oauth2 can open the authorize URL immediately. */
   configureConnection: (
     input: ConnectionFormInput
   ) => Promise<{ connectionId: string; status?: string } | void>;
@@ -171,40 +141,26 @@ export interface SettingsConnectionsBridgeProps {
     connectionId: string,
     status: "active" | "paused"
   ) => Promise<void>;
-  /** Named `detachConnection` for historical reasons but performs the real
-   *  removal (`sync.remove_connection`) — see `settingsConnectionsData.ts`. */
   detachConnection: (
     connectionId: string,
     kind: string,
     label: string
   ) => Promise<void>;
-  /** Begins the PKCE ceremony, returning the URL the owner's browser must
-   *  visit. This screen opens it (`window.open`) — never navigates the app. */
   beginAuthorize: (connectionId: string) => Promise<string>;
-  /** Manual desktop fallback when the custom-scheme launch is blocked. */
   completeAssistReturnLink?: (
     rawUrl: string
   ) => Promise<{ connectionId: string }>;
   showToast: (message: string) => void;
-  /** Linked pull automations for a connection (detail sheet). Optional. */
   loadLinkedSyncs?: (connection: ConnectionRowDTO) => Promise<LinkedSyncDTO[]>;
-  /** Install a pull template for a declared sync capability. Optional. */
   installSync?: (input: {
     templateId: string;
     connection: ConnectionRowDTO;
   }) => Promise<{ ref: string } | void>;
-  /** Gateway OAuth callback URL for the BYO client setup form. Optional. */
   loadOAuthCallbackUri?: () => Promise<string>;
-  /** The installed syncs across the connections just read. Optional. */
   loadAttachedSyncs?: (
     connections: readonly ConnectionRowDTO[]
   ) => Promise<AttachedSyncDTO[]>;
-  /** Report what the page just read: the count line, the state the five-state
-   *  model is in, and (ready/full only) the one health sentence. The ROUTE
-   *  publishes it to the frame. */
   onSignals?: (input: RouteVitalsInput & { health?: RouteHealth }) => void;
-  /** Claim the app bar's two verbs. Both need state only this screen has — the
-   *  Connect sheet, and whether the catalog is showing. */
   onVerbs?: (verbs: RouteVerbs) => void;
 }
 
@@ -215,7 +171,6 @@ const HEALTH_LABEL: Record<ConnectionHealth, string> = {
   paused: "Paused",
 };
 
-/** The row's one mono slot: the state word, in the frame's own vocabulary. */
 const HEALTH_META: Record<ConnectionHealth, string> = {
   failing: "Failing",
   "needs-auth": "Needs re-auth",
@@ -223,7 +178,6 @@ const HEALTH_META: Record<ConnectionHealth, string> = {
   paused: "Paused",
 };
 
-/** What each state needs NEXT — the row's single trailing action. */
 const HEALTH_ACTION: Record<ConnectionHealth, string> = {
   failing: "Re-authorize",
   "needs-auth": "Re-authorize",
@@ -236,7 +190,6 @@ const CRED_LABEL: Record<"oauth2" | "api_key", string> = {
   oauth2: "OAuth",
 };
 
-/** The row filters the `full` state offers, first one on. */
 const FILTERS = [
   { health: null, id: "all", label: "All" },
   { health: "failing", id: "failing", label: "Failing" },
@@ -246,18 +199,8 @@ const FILTERS = [
 
 type ConnFilter = (typeof FILTERS)[number]["id"];
 
-/**
- * Where `ready` becomes `full`. The spec's everyday page is five rows; a sixth
- * is the point at which scanning the list stops being free and a filter row
- * starts earning the space it takes.
- */
 const FULL_AT = 6;
 
-/**
- * Which of the five states the page is in, derived from what actually happened
- * to the query — never a switch. `full` is a row count, because the filter row
- * is a response to a list that is too long to scan, not a mode.
- */
 function pageState(
   rows: readonly ConnectionRowDTO[] | null,
   readError: string | null
@@ -268,17 +211,14 @@ function pageState(
   return rows.length >= FULL_AT ? "full" : "ready";
 }
 
-/** A connection that cannot currently reach its service. */
 function isLapsed(row: ConnectionRowDTO): boolean {
   return row.health === "needs-auth" || row.health === "failing";
 }
 
-/** Copy joins two sentences; a gateway note may or may not end in a stop. */
 function sentence(text: string): string {
   return /[.!?]$/u.test(text.trim()) ? text.trim() : `${text.trim()}.`;
 }
 
-/** The row's explanatory second line: who, how, and when it last worked. */
 function connectionSub(row: ConnectionRowDTO): string {
   const credential = row.credKind ? CRED_LABEL[row.credKind] : "no credential";
   const when =
@@ -289,13 +229,6 @@ function connectionSub(row: ConnectionRowDTO): string {
   return [row.principal ?? "no account", credential, when].join(" · ");
 }
 
-/**
- * The app bar's count line, from the rows themselves.
- *
- * Only the clauses that are TRUE appear: a page with nothing to re-authorize
- * says "5 connections" and stops, rather than reading "· 0 needs
- * re-authorization" and making the reader check a zero.
- */
 function countLine(rows: readonly ConnectionRowDTO[]): string {
   if (rows.length === 0) return "No connections";
   const lapsed = rows.filter(isLapsed).length;
@@ -310,13 +243,6 @@ const POLL_MS = 2000;
 const POLL_WINDOW_MS = 45_000;
 const ASSIST_PWA_ORIGIN = "https://app.centraid.dev";
 
-/**
- * Poll a connection until it stops reporting `needs-auth` (or the window
- * closes). Module scope, taking its refs/loaders as arguments: a
- * self-rescheduling function declared inside the component body reads as a
- * render value that depends on itself, and its `Date.now()` reads as an impure
- * call during render.
- */
 function pollUntilAuthorized(
   connectionId: string,
   io: {
@@ -339,15 +265,10 @@ function pollUntilAuthorized(
           onSettled(connectionId);
           return;
         }
-        // Keep the explicit "Still waiting…" state after the polling
-        // window. The ceremony itself remains gateway-TTL-bound, and the
-        // owner can retry or use the manual return-link fallback.
         if (Date.now() >= pollDeadline.current) return;
         pollTimer.current = setTimeout(tick, POLL_MS);
       })
       .catch(() => {
-        // A transient gateway read must neither erase the visible list nor
-        // masquerade as a deleted/healthy connection and stop polling.
         if (Date.now() < pollDeadline.current) {
           pollTimer.current = setTimeout(tick, POLL_MS);
         }
@@ -370,7 +291,6 @@ function assertAssistWebOrigin(): void {
   }
 }
 
-/** Display metadata for a connector kind (gallery tile + detail sheet). */
 interface FeaturedMeta {
   name: string;
   short: string;
@@ -553,7 +473,6 @@ function metaFor(kind: string): FeaturedMeta {
   );
 }
 
-/** One featured tile in the catalog (unique connector kind per provider). */
 export interface FeaturedConnector {
   key: string;
   providerId: string;
@@ -564,16 +483,13 @@ export interface FeaturedConnector {
   meta: FeaturedMeta;
 }
 
-/** Flatten provider presets into unique connector kinds (pull preferred over send). */
 function buildFeatured(providers: ProviderOptionDTO[]): FeaturedConnector[] {
   const out: FeaturedConnector[] = [];
   const seen = new Set<string>();
   for (const p of providers) {
     for (const c of p.connectors) {
-      // Prefer pull templates over send variants that share a kind.
       const key = `${p.id}:${c.kind}`;
       if (seen.has(key)) continue;
-      // Skip send-only template ids when a pull of the same kind already exists.
       if (
         c.templateId.endsWith("-send") &&
         p.connectors.some(
@@ -620,12 +536,6 @@ function SetupGuide({ steps }: { steps: string[] }): JSX.Element {
   );
 }
 
-/**
- * A connection's identity is `(kind, label)` — so a second account for the same
- * connector must carry a distinct label or it silently reuses/overwrites the
- * first. When a label is already taken we suffix ` 2`, ` 3`, … so the default
- * never collides; the owner is still nudged to rename it to something meaningful.
- */
 function withUniqueLabel(base: string, taken: readonly string[]): string {
   const used = new Set(taken.map((l) => l.trim().toLowerCase()));
   if (!used.has(base.trim().toLowerCase())) return base;
@@ -635,7 +545,6 @@ function withUniqueLabel(base: string, taken: readonly string[]): string {
   }
 }
 
-/** Labels of existing connections for a connector kind — powers multi-account uniqueness. */
 function labelsForKind(
   rows: ConnectionRowDTO[] | null,
   kind: string
@@ -653,9 +562,7 @@ function ConnectForm({
 }: {
   featured: FeaturedConnector;
   busy: boolean;
-  /** Shown for oauth2 so the owner can paste it into Google Cloud Console etc. */
   oauthCallbackUri: string | null;
-  /** Labels already in use for this connector kind — for multi-account uniqueness. */
   existingLabels: readonly string[];
   onCancel: () => void;
   onSubmit: (input: ConnectionFormInput) => void;
@@ -820,7 +727,6 @@ function AssistConnectForm({
 }: {
   featured: FeaturedConnector;
   busy: boolean;
-  /** Labels already in use for this connector kind — for multi-account uniqueness. */
   existingLabels: readonly string[];
   onCancel: () => void;
   onSubmit: (input: ConnectionFormInput) => void;
@@ -1016,7 +922,6 @@ function BrandMark({
   meta: FeaturedMeta;
   size?: number;
 }): JSX.Element {
-  // ~70% of the soft tile so multicolor marks stay legible on dark chrome.
   const glyph = Math.round(size * 0.7);
   return (
     <span
@@ -1062,9 +967,6 @@ export default function SettingsConnectionsScreen({
   onVerbs,
 }: SettingsConnectionsBridgeProps): JSX.Element {
   const [rows, setRows] = useState<ConnectionRowDTO[] | null>(null);
-  // The last connections read that FAILED. It is its own state rather than an
-  // absence of rows: a page that has read once and then lost the gateway is not
-  // a page that is still loading, and the five-state model says so out loud.
   const [readError, setReadError] = useState<string | null>(null);
   const [lastReadAt, setLastReadAt] = useState<number | null>(null);
   const [attachedSyncs, setAttachedSyncs] = useState<AttachedSyncDTO[]>([]);
@@ -1089,8 +991,6 @@ export default function SettingsConnectionsScreen({
         setRows(fresh);
         setReadError(null);
         setLastReadAt(Date.now());
-        // A sync list that cannot be read does not fail the page: the page is
-        // about connections, and the syncs section simply does not appear.
         if (loadAttachedSyncs) {
           void loadAttachedSyncs(fresh)
             .then(setAttachedSyncs)
@@ -1158,9 +1058,6 @@ export default function SettingsConnectionsScreen({
 
   const state = pageState(rows, readError);
 
-  // The chips only exist in `full`, so a filter set there cannot survive the
-  // list shrinking back — otherwise rows would stay hidden with no visible
-  // control left to unhide them.
   const activeFilter =
     state === "full"
       ? (FILTERS.find((f) => f.id === filter) ?? FILTERS[0])
@@ -1172,9 +1069,6 @@ export default function SettingsConnectionsScreen({
   }, [rows, activeFilter]);
 
   const countText = countLine(rows ?? []);
-  // The health sentence is about ONE connection: the first that cannot reach
-  // its service. A page that listed every lapse in the status line would be a
-  // second copy of the list it is standing over.
   const lapsed = (rows ?? []).find(isLapsed) ?? null;
   const dependentSyncs = lapsed
     ? attachedSyncs.filter((s) => s.connectionId === lapsed.connectionId).length
@@ -1271,7 +1165,6 @@ export default function SettingsConnectionsScreen({
       onAuthorize(row);
       return;
     }
-    // api_key: re-open credential form without delete/recreate.
     const featuredLocal = featuredForRow(row);
     if (!featuredLocal) {
       showToast(
@@ -1316,8 +1209,6 @@ export default function SettingsConnectionsScreen({
             ? result.connectionId
             : undefined;
         refresh();
-        // oauth2: credentials alone are not enough — open the provider consent
-        // screen so Gmail/Calendar/Drive actually authorize (needs-auth → ok).
         if (input.credKind === "oauth2" && connectionId) {
           setSheet({ kind: "closed" });
           setAuthorizingIds((s) => new Set(s).add(connectionId));
@@ -1378,10 +1269,6 @@ export default function SettingsConnectionsScreen({
       .finally(() => setInstallingSync(null));
   };
 
-  // The health action re-authorizes the lapsed connection, and it is published
-  // to a channel that outlives this render — so it reaches the CURRENT handler
-  // through a ref rather than closing over the one that existed when the query
-  // resolved.
   const reconnectRef = useRef(onReconnect);
   useEffect(() => {
     reconnectRef.current = onReconnect;
@@ -1435,8 +1322,6 @@ export default function SettingsConnectionsScreen({
     });
   }, [countText, dependentSyncs, lapsed, lastReadAt, onSignals, state]);
 
-  // The bar's two verbs both need state only this screen has: the Connect sheet
-  // it opens, and whether the catalog section is showing.
   useEffect(() => {
     onVerbs?.({
       onCommit: () => setSheet({ kind: "picker" }),
@@ -1467,10 +1352,6 @@ export default function SettingsConnectionsScreen({
       sub: connectionSub(row),
       title: row.label,
       ...(isLapsed(row) ? { net: true } : {}),
-      // A row carries ONE action, and for a lapsed or paused connection that
-      // action is what it needs next — so the door to everything else it can be
-      // told (pause, resume, remove, its syncs) opens from the row's own detail
-      // slot rather than becoming unreachable until it is healthy again.
       ...(row.health === "ok"
         ? {}
         : {
@@ -1767,8 +1648,7 @@ export default function SettingsConnectionsScreen({
                       featured={sheet.featured}
                       busy={saving}
                       oauthCallbackUri={oauthCallbackUri}
-                      /* Reconnect re-authorizes THIS connection: keep its label
-                         stable (no uniqueness suffix) so it updates in place. */
+
                       existingLabels={[]}
                       onCancel={() =>
                         setSheet({

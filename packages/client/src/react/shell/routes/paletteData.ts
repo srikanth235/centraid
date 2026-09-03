@@ -23,10 +23,6 @@ import type {
 } from "./paletteEntitySearch.js";
 import type { PaletteRecents } from "./paletteRecents.js";
 
-// The ⌘K palette's data driver. Keep it pure and deps-injected so it is
-// testable without a live shell. Destinations ARE the launcher's, read from the
-// one model and never restated here (#707); gated ones leave the index with it
-// (C1), or Enter lands on a page that cannot load.
 function navActions(
   capabilities: ShellCapabilities
 ): { label: string; icon: string; route: ShellRoute }[] {
@@ -43,8 +39,6 @@ export interface PaletteDeps {
   tileVariant: AppearancePrefs["tileVariant"];
   navigate: (route: ShellRoute) => void;
   onClose: () => void;
-  /** Read synchronously; landing results call `refresh()` to re-run the
-   *  builder. */
   conversationSearch?: PaletteConversationSearch;
   entitySearch?: PaletteEntitySearch;
   recents?: PaletteRecents;
@@ -59,15 +53,9 @@ function appGroupIcon(appId: string): PaletteGroupIconDTO | undefined {
 function assistantGroupIcon(): PaletteGroupIconDTO | undefined {
   const assistant = LAUNCHER_DESTINATIONS.find((d) => d.id === "assistant");
   if (!assistant) return undefined;
-  /* No `hue`: the frame spends no colour (invariant 3). */
   return { html: iconSvg(assistant.icon) };
 }
 
-/**
- * KNOWN SEAM: `run` opens the owning app, not the object. Nothing hands a
- * record id into a running blueprint app yet, and faking a deeper deep-link
- * would misrepresent what the click does.
- */
 function entityRow(hit: PaletteEntityHit, deps: PaletteDeps): PaletteRowDTO {
   return {
     variant: "action",
@@ -155,7 +143,6 @@ export function buildPaletteGroups(
     }
   }
 
-  // Vault OBJECTS, never "open app X": one group per app id.
   if (q && deps.entitySearch) {
     deps.entitySearch.ensure(query);
     const hits = deps.entitySearch.results(query);

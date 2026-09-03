@@ -1,12 +1,3 @@
-// Minimal, self-contained 5-field cron evaluator for automations. No cron
-// library ships to the renderer, so this covers exactly what the trigger
-// editors need: `*`, `?`, `*/n` steps, comma lists, `a-b` ranges, and the
-// named day/month tokens a manifest may carry. Pure: value→value.
-//
-// Zone model (#570): optional IANA `timeZone` matches the engine's
-// resolved zone (trigger `tz` → gateway default → host-local). Absent zone
-// keeps host-local Date getters so preview stays aligned with #569.
-
 const CRON_DOW: Record<string, number> = {
   SUN: 0,
   MON: 1,
@@ -42,7 +33,6 @@ const WEEKDAY_SHORT: Record<string, number> = {
   Sat: 6,
 };
 
-/** True when `name` is a non-empty IANA zone known to this runtime's `Intl`. */
 export function isValidIanaTimeZone(name: string): boolean {
   if (typeof name !== "string") return false;
   const trimmed = name.trim();
@@ -55,10 +45,6 @@ export function isValidIanaTimeZone(name: string): boolean {
   }
 }
 
-/**
- * Resolve the zone a cron schedule should match in.
- * Per-trigger → gateway default → host-local (`undefined`).
- */
 export function resolveCronTimezone(
   triggerTz?: string | null,
   gatewayDefaultTz?: string | null
@@ -116,7 +102,6 @@ function wallClockFields(date: Date, timeZone?: string): WallClock {
   };
 }
 
-/** Does one cron field (with lists/ranges/steps/names) match a given value? */
 export function cronFieldMatch(
   field: string,
   value: number,
@@ -186,14 +171,6 @@ function fieldsMatch(
   );
 }
 
-/**
- * Next `count` fire times for a 5-field cron, or `[]` if unparseable.
- *
- * When `timeZone` is set, fields match that zone's wall clock and stepping is
- * absolute-minute (correct across DST for a stored IANA zone). When omitted,
- * fields match the **local** calendar via Date getters and wall-clock
- * `setMinutes` stepping — the same basis as the scheduler without a zone.
- */
 export function cronNextRuns(
   expr: string,
   count: number,
@@ -246,20 +223,11 @@ export function cronNextRuns(
     ) {
       out.push(new Date(d));
     }
-    // Wall-clock stepping, like the scheduler's own poll: across a DST shift
-    // the local hour is what moves, and that is the field cron matches on.
     d.setMinutes(d.getMinutes() + 1);
   }
   return out;
 }
 
-/**
- * Best-effort plain-English gloss of a 5-field cron expression.
- *
- * Times are wall clock in the resolved schedule zone when `timeZone` is set;
- * otherwise the gateway host's wall clock. An explicit zone is named in the
- * gloss when provided so the preview does not look local when it is not.
- */
 export function describeCron(expr: string, timeZone?: string): string {
   const t = expr.trim().replace(/\s+/gu, " ");
   const zoneSuffix = timeZone ? ` (${shortTimeZoneName(timeZone)})` : "";
@@ -297,7 +265,6 @@ export function describeCron(expr: string, timeZone?: string): string {
   return `Cron: ${t}${zoneSuffix}`;
 }
 
-/** Short zone label (`IST`, `EDT`, `America/New_York` fallback). */
 export function shortTimeZoneName(
   timeZone: string,
   at: Date = new Date()
@@ -310,18 +277,12 @@ export function shortTimeZoneName(
     const name = parts.find((p) => p.type === "timeZoneName")?.value;
     if (name && name !== timeZone) return name;
   } catch {
-    // fall through
+    // Intentionally empty.
   }
-  // Prefer the city tail of an IANA name over the full path.
   const slash = timeZone.lastIndexOf("/");
   return slash >= 0 ? timeZone.slice(slash + 1).replace(/_/gu, " ") : timeZone;
 }
 
-/**
- * Next-run pill label in the schedule's zone. When the schedule zone differs
- * from the viewer's zone, appends a short zone name so "7:00 PM" is not
- * misread as local.
- */
 export function cronRunLabel(
   d: Date,
   opts?: {
@@ -345,7 +306,6 @@ export function cronRunLabel(
       return new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
     }
     const w = wallClockFields(x, tz);
-    // Approximate day identity in zone via UTC components of a synthetic date.
     return Date.UTC(w.year, w.month - 1, w.day);
   };
   const dayDiff = Math.round(

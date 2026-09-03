@@ -6,10 +6,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OwnerScope } from "../ownerScope.js";
 import ScopePicker from "./ScopePicker.js";
 
-// The picker is what let the vault switcher go (#599, Decision 14): the target
-// is named at the point of creation instead of being inherited from an ambient
-// "you are in this vault" mode.
-
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 describe("ScopePicker suite", () => {

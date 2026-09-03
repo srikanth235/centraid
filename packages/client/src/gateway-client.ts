@@ -1,10 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit renderer HTTP-client hub pending split per-surface (apps, templates, vault, automations) once the thin-client surface stabilizes
-/*
- * Renderer-side HTTP client for the gateway's runtime/data plane. Electron main
- * still owns the credential and hands it over once via `getGatewayAuth()`,
- * cached here and refreshed on gateway switch; local and remote gateways share
- * one wire protocol. This file is the barrel — hence the re-exports at the foot.
- */
 
 import { isGatewayCapabilities, ROUTES } from "@centraid/core/protocol";
 import type { GatewayCapabilities, GatewayInfo } from "@centraid/core/protocol";
@@ -80,8 +74,6 @@ export async function appSettings(input: {
   return out.settings ?? {};
 }
 
-/** `value: null` deletes. Keys go verbatim — the runtime kebab-cases at bake
- *  time — and `__`-prefixed keys are refused gateway-side. */
 export async function appSettingWrite(input: {
   id: string;
   key: string;
@@ -120,7 +112,6 @@ export interface AppMetaEntry {
   name?: string;
   description?: string;
   kind?: "app" | "automation";
-  /** Raw strings; validate against the design-token sets before rendering. */
   iconKey?: string;
   colorKey?: string;
 }
@@ -143,8 +134,6 @@ export interface TemplateVaultScope {
   fieldMask?: string[];
 }
 
-/** No install/consent sheet renders this (#708): the standing surface for the
- *  same question is the Privacy grants ledger, which can also revoke. */
 export interface TemplateVaultDTO {
   purpose?: string;
   why?: string;
@@ -165,7 +154,6 @@ export interface TemplateMetaEntry {
   vault?: TemplateVaultDTO;
 }
 
-/** Only display metadata crosses the wire: `files`/`source` stay gateway-side. */
 export async function listTemplates(): Promise<TemplateMetaEntry[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_templates`, {
@@ -208,8 +196,6 @@ export async function getDailyBrief(now = new Date()): Promise<DailyBrief> {
   return readJson<DailyBrief>(res, "fetch daily brief");
 }
 
-// ─── Versions (git-store tag history) ─────
-
 interface GitVersion {
   tag: string;
   version: number;
@@ -218,7 +204,6 @@ interface GitVersion {
   active: boolean;
 }
 
-/** The ACTIVE tag is not necessarily the newest one — a rollback moves it. */
 export async function listVersions(input: {
   id: string;
 }): Promise<{ activeVersion?: string; versions: CentraidVersionRecord[] }> {
@@ -231,7 +216,6 @@ export async function listVersions(input: {
       headers: authHeaders(token),
     }
   );
-  // The gateway 404s until the first publish lands a tag; that is an empty list.
   if (res.status === 404) {
     await res.body?.cancel().catch(() => {});
     return { versions: [] };
@@ -273,8 +257,6 @@ export async function activateVersion(input: {
   return { activeVersion: input.versionId };
 }
 
-// ─── User identity + global prefs (`/_centraid-user`) ─────
-
 export async function getUserId(): Promise<string> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/_centraid-user/id`, {
@@ -314,9 +296,6 @@ export async function saveUserPrefs(
   return out.prefs ?? {};
 }
 
-// ─── Automations + insights (`/centraid/_automations`, `/centraid/_insights`) ─────
-// A turn-now fires on the GATEWAY host, with its harness and provider key.
-
 export async function listAutomations(): Promise<CentraidAutomationRow[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_automations`, {
@@ -333,7 +312,6 @@ export async function listAutomations(): Promise<CentraidAutomationRow[]> {
 export async function readAutomation(input: {
   automationId: string;
 }): Promise<CentraidAutomationRow | null> {
-  // A valid ref is `<appId>/<id>`, so anything without a slash cannot resolve.
   if (!input.automationId.includes("/")) return null;
   const { baseUrl, token } = await auth();
   const res = await doFetch(
@@ -363,7 +341,6 @@ export async function runAutomationNow(input: {
   return readJson<CentraidAutomationTurnResult>(res, "run automation");
 }
 
-/** The synchronous seam; `runAutomationNow` stays the background/SSE one. */
 export async function invokeAutomationAndAwait(input: {
   automationId: string;
   payload?: unknown;
@@ -489,7 +466,6 @@ export async function listAutomationItems(input: {
   return out.items ?? [];
 }
 
-/** `item.delta` nests the same `TurnStreamEvent` grammar as conversations. */
 export type AutomationTurnStreamEvent =
   | { type: "turn.start"; turnId: string }
   | {
@@ -523,7 +499,6 @@ export type AutomationTurnStreamEvent =
     }
   | { type: "turn.end"; turnId: string; ok: boolean; error?: string };
 
-/** An abort resolves quietly; other failures reject so a caller can fall back. */
 export async function streamAutomationTurn(
   turnId: string,
   onEvent: (ev: AutomationTurnStreamEvent) => void,
@@ -553,25 +528,22 @@ export async function streamAutomationTurn(
           if (evt && typeof evt.type === "string")
             onEvent(evt as AutomationTurnStreamEvent);
         } catch {
-          /* skip a malformed frame rather than abort the stream */
+          // Intentionally empty.
         }
       },
       { signal }
     );
   } catch (error) {
-    // A caller-initiated abort is a normal teardown, not a failure.
     if (signal.aborted) return;
     throw error;
   }
 }
 
-/** The new turn id arrives in a response header, for one expanded re-read. */
 export async function streamAutomationConversationTurn(
   automationId: string,
   message: string,
   onEvent: (event: TurnStreamEvent) => void,
   signal: AbortSignal,
-  /** One approved provider, or every provider approved so far this attempt (#567). */
   providerConsent?: string | string[],
   turn?: {
     attachments?: Array<{
@@ -656,7 +628,6 @@ export async function getGatewayHealth(): Promise<CentraidGatewayHealth> {
   return readJson<CentraidGatewayHealth>(res, "gateway health");
 }
 
-/** Absent `durationMs` ⇒ indefinite (`until: null`); the gateway clamps to 24h. */
 export async function pauseBackgroundWork(
   durationMs?: number
 ): Promise<{ paused: boolean; until: string | null }> {
@@ -681,15 +652,12 @@ export async function resumeBackgroundWork(): Promise<{ paused: boolean }> {
   return readJson<{ paused: boolean }>(res, "resume background work");
 }
 
-// ───────────────────────── editing + lifecycle ─────────────────────
-// Split for the file-size limit; re-exported so this stays the one barrel.
 export * from "./gateway-client-editing.js";
 export * from "./gateway-client-automation-editing.js";
 
 export * from "./gateway-client-conversation.js";
 
 export * from "./gateway-client-vault.js";
-// The staged-import half: one lifecycle, not one act per call.
 export * from "./gateway-client-vault-imports.js";
 export * from "./gateway-client-atlas.js";
 
@@ -703,7 +671,6 @@ export * from "./gateway-client-backup.js";
 
 export * from "./gateway-client-storage.js";
 
-// The LOCAL disk surface: same route prefix as storage, different question.
 export * from "./gateway-client-local-storage.js";
 
 export {
@@ -728,7 +695,6 @@ export {
   type GatewayDeviceTicketInput,
 } from "./gateway-client-devices.js";
 
-// On its own leaf: a screen asks this without importing the HTTP client.
 export { isRevokedDevice } from "./device-roster.js";
 
 export {
@@ -738,8 +704,6 @@ export {
   type GatewayOwnerVault,
 } from "./gateway-client-owners.js";
 
-// D9's per-link receive setting is deliberately NOT here: it would govern gives
-// arriving from another person's vault, and there is no copy-as-share (#825).
 export {
   listGatewayLinks,
   proposeGatewayLink,

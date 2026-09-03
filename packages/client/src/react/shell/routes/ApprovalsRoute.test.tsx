@@ -41,8 +41,6 @@ vi.mock(import("../../../gateway-client-vault.js"), () => ({
   confirmVaultParked: vi.fn<VaultModule["confirmVaultParked"]>(),
   vaultApps: () => vaultApps(),
   listAgents: () => listAgents(),
-  // The egress-consent ledger (#807) — reference material this
-  // route reads alongside the queue.
   listEnrichEgressConsent: () => listEnrichEgressConsent(),
   revokeVaultGrant: vi.fn<VaultModule["revokeVaultGrant"]>(),
 }));
@@ -74,9 +72,6 @@ function makeActions(): ShellActions {
 describe("ApprovalsRoute", () => {
   beforeEach(async () => {
     ({ default: ApprovalsRoute } = await import("./ApprovalsRoute.js"));
-    // The route's data lives in the shell's shared stale-while-revalidate
-    // cache (#659), which deliberately outlives a mount — so each case
-    // starts from the same empty cache a fresh vault would give it.
     (await import("../queryCache.js")).resetQueryCache();
     ({ ShellActionsProvider } = await import("../actions.js"));
     getNotifications.mockReset().mockResolvedValue({
@@ -132,9 +127,6 @@ describe("ApprovalsRoute", () => {
     it("surfaces a fetch error", async () => {
       getNotifications.mockRejectedValue(new Error("offline"));
       const el = await render();
-      // The error state is the net-bordered panel every one of the six routes
-      // takes: what failed, what is still safe, one way forward — with the
-      // gateway's own words carried as a fact rather than swallowed.
       const panel = el.querySelector('[data-tone="net"]');
       expect(panel?.textContent).toContain("Could not reach the consent store");
       expect(panel?.textContent).toContain(
@@ -230,8 +222,6 @@ describe("ApprovalsRoute", () => {
         output: { item_id: "item1", status: "approved" },
       });
       const el = await render();
-      // The staged write is a card: closed it states the decision, open it
-      // quotes the draft and offers the three verbs.
       const findButton = (text: string): HTMLButtonElement =>
         [...el.querySelectorAll("button")].find(
           (b) => b.textContent === text
@@ -350,8 +340,6 @@ describe("ApprovalsRoute", () => {
       const at = "2026-07-30T10:00:00.000Z";
       getNotifications.mockResolvedValue({
         decisions: {
-          // The outbox notice below points at this still-open item, so its
-          // deep link has somewhere real to land (#647).
           outbox: [
             {
               itemId: "item-1",
@@ -461,8 +449,6 @@ describe("ApprovalsRoute", () => {
         unreadNoticeCount: 5,
       });
       const el = await render();
-      // Every notice is a card now — no chip gates any of them — so opening
-      // one means pressing the Open verb on the card carrying its headline.
       const openNotice = (headline: string): void => {
         const title = [...el.querySelectorAll(".title")].find((node) =>
           node.textContent?.includes(headline)
@@ -485,14 +471,10 @@ describe("ApprovalsRoute", () => {
         kind: "gateway",
         tab: "alerts",
       });
-      // Steward absence is only actionable where the ceremony lives: the
-      // People & circles panel on Household (#750).
       openNotice("A shared space's owner device");
       expect(navigate).toHaveBeenLastCalledWith({ kind: "household" });
       openNotice("Tasks imported");
       expect(navigate).toHaveBeenLastCalledWith({ kind: "app", id: "tasks" });
-      // An outbox notice must NOT self-navigate to the page we are already
-      // on — it puts the staged decision it names in front of the owner.
       const navigationsBefore = navigate.mock.calls.length;
       openNotice("Message needs approval again");
       expect(navigate).toHaveBeenCalledTimes(navigationsBefore);

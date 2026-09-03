@@ -1,58 +1,14 @@
-// Rung ten (#916): which tables POINT at an entity, and which look like they
-// do and do not.
-//
-// Until this rung the vault carried thirteen `(type, id)` pairs the engine
-// knew nothing about, swept by hand on purge through `POLY_REF_REGISTRY` and
-// `cleanupPolyRefs`. The owner's ruling for v0 is that a pointer is a
-// REFERENCE or it is not a pointer: every pair below is now a composite
-// FOREIGN KEY into `core_entity(entity_type, entity_id)` with `ON DELETE
-// CASCADE`, so the engine both CHECKS the target on write and REMOVES the
-// pointer when the target is purged. The type column stays — queries and
-// indexes read it, and it is now engine-checked rather than trusted.
-//
-// This module is therefore no longer a cleanup registry. It is METADATA: the
-// list of pointers, which Browse still needs (a composite FK reports
-// `core_entity` as its parent, so `PRAGMA foreign_key_list` cannot answer
-// "what points at THIS event") and which `entity-refs.test.ts` scans the live
-// DDL against, so a fourteenth mechanism cannot arrive unaccounted for.
-//
-// ONE POLICY, replacing two. `POLY_REF_POLICY` had `end-date` for `core_link`
-// (a relation onto a purged row ends rather than dangles, #272) and `delete`
-// for everything else (#274). A cascade cannot end-date, and the choice is
-// settled the other way: THIS RUNG SUPERSEDES #272 for `core_link`. A link
-// must not outlive an endpoint that no longer exists — an end-dated edge onto
-// a purged row still names it, still shows in history, and still lets an id
-// reused later inherit a relation nobody drew. The relation is deleted with
-// its endpoint. (docs/decisions.md records the supersession.)
-
-/** Column pair holding a logical entity name and that entity's row id. */
 export interface EntityRefPair {
-  /** Column holding the logical entity name, e.g. `target_type`. */
   typeCol: string;
-  /** Column holding the target row's id, e.g. `target_id`. */
   idCol: string;
 }
 
 export interface EntityPointer {
-  /** Physical vault.db table name. */
   table: string;
-  /**
-   * The `(type, id)` pair(s) carrying the composite foreign key. `core_link`
-   * is the only table with two — its from- and to- endpoints; every other
-   * mechanism carries exactly one.
-   */
   pairs: readonly EntityRefPair[];
   note: string;
 }
 
-/**
- * Every composite foreign key into the entity supertype, one entry per table.
- * The rung builds the FKs from this list, `entity-refs.test.ts` asserts the
- * live DDL matches it exactly, and Browse walks it to count the dependents an
- * engine FK cannot name.
- *
- * Ordered core → domain → machinery for reading.
- */
 export const ENTITY_POINTERS: readonly EntityPointer[] = [
   {
     table: "core_link",
@@ -129,25 +85,6 @@ export const ENTITY_POINTERS: readonly EntityPointer[] = [
   },
 ];
 
-/**
- * Tables carrying a `(type, id)`-shaped pair that is NOT a reference, each
- * with the reason (#916). Membership here accounts for the pair in
- * `entity-refs.test.ts`, so an exclusion is a documented decision rather than
- * an oversight. Keyed by physical table name.
- *
- * THE TEST APPLIED: if the pointed-at row may legitimately be gone while this
- * row stays meaningful, the pair is an AUDIT VALUE — a record of what was
- * named at the time — and a foreign key would delete the very evidence the
- * row exists to keep. Everything else is a reference and is in
- * `ENTITY_POINTERS` above.
- *
- * `sync_import_row`, `replica_change` and `enrich_policy_rule` are listed for
- * completeness even though the DDL scan does not match them — `sync_import_row`
- * carries `entity_type` with no `entity_id` sibling, `replica_change` uses
- * `entity`/`row_id`, `enrich_policy_rule` uses `scope_type`/`scope_ref` — so a
- * future rename into the canonical shape lands in the scan and is forced to a
- * decision rather than inheriting silence.
- */
 export const ENTITY_REF_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
   [
     "core_entity",

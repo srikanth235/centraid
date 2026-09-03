@@ -19,10 +19,6 @@ import type {
 } from "../../screens/SettingsEnrichmentScreen.js";
 import { loadHarnesses } from "./settingsHarnessesData.js";
 
-// Settings → Enrichment data layer (#807). Rules and egress live in the vault,
-// engine profiles in gateway prefs; keep no second copy. Fold no cascade here
-// — ask the gateway's resolver per capability, never compute from `rules`.
-
 function profilePrefsKey(id: string): string {
   return `enrich.profile.${id}`;
 }
@@ -68,7 +64,6 @@ async function readEffective(
   );
 }
 
-/** `egress` is absent by refusal — the gateway computes it. */
 export async function saveEngineProfile(
   input: EngineProfileInput
 ): Promise<void> {
@@ -82,8 +77,6 @@ export async function saveEngineProfile(
     }),
   });
 }
-
-/* No profile delete: it could strand a deeper-scope rule pinning it. */
 
 export async function writeEnrichRule(rule: EnrichRuleInput): Promise<void> {
   await setEnrichRule({

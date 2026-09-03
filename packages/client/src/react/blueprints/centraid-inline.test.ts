@@ -21,8 +21,6 @@ const { doFetch, readJson } = vi.hoisted(() => ({
   readJson:
     vi.fn<(response: Response, operation: string) => Promise<unknown>>(),
 }));
-// vitest hoists vi.mock above imports at run time, so declaration order here is
-// only for the linter's import-first rule.
 vi.mock(import("../../gateway-client-core.js") as Promise<unknown>, () => ({
   auth: vi.fn<typeof TypeImport_oycips.auth>(async () => ({
     baseUrl: "https://gw.test",
@@ -759,9 +757,6 @@ describe(installInlineCentraid, () => {
         }),
       })
     );
-    // The signature and result shape every caller (photos' copyToVault,
-    // AudiencePlacement, the mobile outbox) reads are unchanged: one item in,
-    // one item out, and the edge's terminal 'completed' reads as 'executed'.
     expect(result).toStrictEqual({
       linkToken: "link-1",
       kind: "add",
@@ -880,9 +875,6 @@ describe(installInlineCentraid, () => {
   });
 
   it("clears window.centraid when only the live mount tears down", () => {
-    // Discarded useState initializers publish a client whose teardown never
-    // arms. Restoring that predecessor is the goHome hang: Home paints,
-    // `window.centraid` stays set.
     const session = fakeSession();
     const target: { centraid?: unknown } = {};
     installInlineCentraid({

@@ -26,17 +26,12 @@ import type {
   ModelId,
 } from "../types.js";
 
-// YuNet detection + SFace recognition (OpenCV Zoo, MIT + Apache-2.0
-// respectively — see LICENSES.md), both natively ONNX.
 export const FACES_MODEL_ID: ModelId = "yunet-sface@1";
 
 const FACES_DIR = path.join(MODELS_DIR, "faces");
 const YUNET_MODEL_PATH = path.join(FACES_DIR, "yunet.onnx");
 const SFACE_MODEL_PATH = path.join(FACES_DIR, "sface.onnx");
 
-// The pinned OpenCV Zoo 2023mar export declares a fixed 640×640 input.
-// Keep this beside the session feed: changing it without changing weights is
-// an immediate ONNX dimension error, which the weekly real-weight lane pins.
 const YUNET_INPUT_SIZE = 640;
 const YUNET_STRIDES = [8, 16, 32] as const;
 const YUNET_SCORE_THRESHOLD = 0.6;
@@ -50,13 +45,6 @@ export function facesWeightsPresent(modelsDir: string = MODELS_DIR): boolean {
   );
 }
 
-/**
- * Runs the YuNet detector over a fixed YUNET_INPUT_SIZE square input and
- * decodes its three stride levels (8/16/32) via decodeYuNetLevel, then
- * applies NMS across the concatenated detections. Output lookup is by the
- * pinned export's semantic names (`cls_8`, `obj_8`, `bbox_8`, `kps_8`, …),
- * never by array position.
- */
 async function detectFaces(
   pixelData: Float32Array,
   imageSize: number
@@ -150,9 +138,6 @@ export async function faces(item: FacesItem): Promise<ItemResult<FacesResult>> {
         ? { width: item.originalWidth, height: item.originalHeight }
         : { width: native.width, height: native.height };
 
-    // Promise.all rather than a for-await loop: each detection's alignment
-    // + SFace embedding is independent of every other, so there is no
-    // reason to serialize them.
     const perDetection = await Promise.all(
       detections
         .filter((detection) => detection.landmarks)
@@ -183,9 +168,6 @@ export async function faces(item: FacesItem): Promise<ItemResult<FacesResult>> {
             width: detection.box.width * scaleX,
             height: detection.box.height * scaleY,
           };
-          // roundAndClampBox (not plain rounding) guarantees this box can
-          // never overshoot the item's declared dimensions — the gateway
-          // client rejects a box that does (see its own doc comment).
           const finalBox = roundAndClampBox(
             scaleBoxToOriginal(boxInNative, native, declaredDims),
             declaredDims.width,

@@ -6,14 +6,6 @@ import { ORRERY } from "./atlasOrreryGeometry.js";
 
 import styles from "./AtlasRelationsTab.module.css";
 
-// The orrery's brass centre plate (#519) — a presentational leaf split out
-// of AtlasOrreryChart to keep that file focused on the layered graph body. It
-// draws the glow, the static tick bezel, the plate, the human name (People, not
-// core_party), the demoted physical/SQL name line, and the measured-fact
-// caption. Every value is handed down; this holds no state.
-
-/** The fine tick ring around the centre plate — a static 60-tick bezel, every
- *  fifth tick longer. Pure decoration; computed once at module scope. */
 const CORE_TICKS = Array.from({ length: 60 }, (_, i) => {
   const major = i % 5 === 0;
   const a = (i * 6 * Math.PI) / 180;
@@ -50,11 +42,7 @@ export default function AtlasOrreryCore({
   centerEdgeCount,
   edgeCount,
 }: AtlasOrreryCoreProps): JSX.Element {
-  // Human name on the plate — People, not core_party (the SQL name is demoted to
-  // the mono `coreK` line just below, kept honest).
   const name = centerNode?.friendly ?? centerNode?.table ?? center;
-  // Fit long names inside the plate: ~0.62em per display glyph; compress via
-  // textLength once the estimate outgrows the plate.
   const est = name.length * 13 * 0.62;
   const max = ORRERY.coreR * 2 - 8;
 

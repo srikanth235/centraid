@@ -41,7 +41,6 @@ describe("multi-writer", () => {
       expect(fromB).toStrictEqual(fromA);
       await expect(tabA.list()).resolves.toStrictEqual([fromA]);
 
-      // Concurrent send loops cannot both claim the one canonical write.
       const claims = await Promise.all([tabA.claimNext(), tabB.claimNext()]);
       expect(claims.filter(Boolean)).toStrictEqual([
         expect.objectContaining({
@@ -51,9 +50,6 @@ describe("multi-writer", () => {
         }),
       ]);
 
-      // A fresh tab after both original connections close observes the claimed
-      // row, then atomically settles it. This is persistence and cross-connection
-      // serialization at the same IndexedDB boundary the PWA uses.
       tabA.close();
       tabB.close();
       const reopenedStore = await IndexedDbIntentStore.open(name, factory);
@@ -199,8 +195,6 @@ describe("multi-writer", () => {
       await expect(upgraded.listSettled()).resolves.toStrictEqual([]);
     });
 
-    // #496 P3 / web.concurrency double-write: concurrent optimistic enqueue of
-    // *distinct* intent ids must both survive, and only one claimer may own each.
     test("two tabs double-write distinct intents: both durable, claims exclusive per intent", async () => {
       const { factory, name, stores, tabA, tabB } = await openTabs();
       cleanupDatabase(factory, name, stores);
@@ -241,7 +235,6 @@ describe("multi-writer", () => {
       await expect(tabA.list()).resolves.toHaveLength(2);
       await expect(tabB.list()).resolves.toHaveLength(2);
 
-      // Race both claim loops: each intent is claimed exactly once across tabs.
       const firstClaims = await Promise.all([
         tabA.claimNext(),
         tabB.claimNext(),
@@ -252,7 +245,6 @@ describe("multi-writer", () => {
         .sort();
       expect(claimedIds).toStrictEqual(["tab-a-intent", "tab-b-intent"]);
 
-      // No third claim while both are in-flight.
       await expect(tabA.claimNext()).resolves.toBeFalsy();
       await expect(tabB.claimNext()).resolves.toBeFalsy();
     });

@@ -1,9 +1,3 @@
-/*
- * The ⌘K palette's empty-state source (#708 §A): RECENTS before any query.
- * Reuses `paletteEntitySearch.ts`'s session + EntityTarget catalog so the two
- * sources never disagree; `schedule.task` (no recentField) is excluded.
- */
-
 import {
   first,
   formatMetaValue,
@@ -14,11 +8,8 @@ import type { EntityTarget, PaletteEntityHit } from "./paletteEntitySearch.js";
 export type PaletteRecentHit = PaletteEntityHit;
 
 export interface PaletteRecents {
-  /** Cached recents, most-recent first (`[]` until a fetch settles). */
   items: () => PaletteRecentHit[];
-  /** One example query per app, drawn from the same cache. */
   suggestions: () => string[];
-  /** Fetch once; idempotent past the first call. */
   ensure: () => void;
   reset: () => void;
   setOnResults: (fn: (() => void) | null) => void;
@@ -88,7 +79,6 @@ export async function fetchPaletteRecents(): Promise<PaletteRecentHit[]> {
     .map(({ recentAt: _recentAt, ...hit }) => hit);
 }
 
-/** One label per app (recency order), capped — examples from vault vocabulary. */
 export function suggestionsFromRecents(
   hits: readonly PaletteRecentHit[]
 ): string[] {

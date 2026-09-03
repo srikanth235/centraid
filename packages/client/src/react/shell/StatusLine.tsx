@@ -11,20 +11,8 @@ import { useGatewayCheck } from "./useGatewayRuntime.js";
 
 import chrome from "./chrome.module.css";
 
-// Frame's one persistent status line (#707, invariant 5). Always mounted,
-// never covers anything. Priority: offline `--net` rule (never a fill, reason
-// inline — no tooltip); `postStatus` note; route health UNDER a transient
-// note; ambient. `role="status"` / `aria-live="polite"`.
-
-/** Counts are mono and tabular — grouped, because "1904" and "1,904" are not
- *  equally readable at 11.5px. */
 const count = (n: number): string => n.toLocaleString();
 
-/**
- * Heartbeat age on the STANDING sentence only. Own leaf + ticker so the
- * shell root still does not re-render (#659). Nothing unless the gateway
- * is answering — unreachable is already the offline banner.
- */
 function SyncedStamp(): JSX.Element | null {
   const { status, lastCheckAt } = useGatewayCheck();
   const [now, setNow] = useState(() => Date.now());
@@ -41,7 +29,6 @@ function SyncedStamp(): JSX.Element | null {
 export interface StatusLineProps {
   ambient: string;
   offline?: boolean;
-  /** Required reading when `offline` — never a tooltip. */
   offlineReason?: string;
   offlineAction?: { label: string; run: () => void };
 }
@@ -64,8 +51,6 @@ export default function StatusLine({
     ? (offlineReason ?? ambient)
     : (standing?.text ?? ambient);
   const action = offline ? offlineAction : standing?.action;
-  // Only the ROUTE's own verb takes the page tone and the inline rule; an undo
-  // or an offline check is a shell control and keeps the bounded shape.
   const inline = !offline && !note && Boolean(health?.action);
 
   return (
@@ -86,7 +71,6 @@ export default function StatusLine({
             className={chrome.statusBar}
             style={
               {
-                // A ratio, not a width: the track owns its length.
                 "--status-progress":
                   progress.total > 0 ? progress.done / progress.total : 0,
               } as CSSProperties

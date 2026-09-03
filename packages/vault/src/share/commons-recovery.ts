@@ -1,9 +1,3 @@
-// Replica-export recovery for the Commons plane (#731). A ceremony, never
-// automatic: the old grant is SUPERSEDED not deleted; the successor starts a
-// fresh genesis at sequence 0 (the old steward's key is unavailable); every
-// other member is INVITED — consent is never fabricated; refuse when this seat
-// is parked on a named divergence fault or is already the steward.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { uuidv7 } from "../ids.js";
@@ -25,12 +19,9 @@ import type { CommonsCapability, CommonsMemberInput } from "./commons.js";
 import type { ShareVaultRef } from "./placement.js";
 
 export interface RecoverCommonsFromReplicaInput {
-  /** Local member vault holding the replica; becomes the new steward. */
   seat: ShareVaultRef;
-  /** Gateway id of `seat` — the successor grant's steward vault. */
   localVaultId: string;
   grantId: string;
-  /** Free text stored as lineage; defaults to a steward-absence note. */
   reason?: string;
   now: string;
 }
@@ -78,7 +69,6 @@ function localOwnerPartyId(db: DatabaseSync): string {
   return row.self_party_id;
 }
 
-/** Named divergence fault, if any. Read from the contact table, not the sync module. */
 function parkedFault(
   db: DatabaseSync,
   grantId: string,
@@ -93,10 +83,6 @@ function parkedFault(
   return row?.fault ?? undefined;
 }
 
-/**
- * Replica-local container id. Projection assigns audience-local ids, so the
- * grant's `container_id` (the ORIGIN's id) is not necessarily addressable here.
- */
 function localContainerId(
   db: DatabaseSync,
   grantId: string,
@@ -140,13 +126,12 @@ function roster(
         status: "current" | "invited" | "refused";
       }[]
     )
-      // A seat that already refused the old grant is not carried forward.
+      // Refused seats do not carry into the successor roster.
       .filter((seat) => seat.status !== "refused")
       .map((seat) => ({ partyId: seat.party_id, capability: seat.capability }))
   );
 }
 
-/** Successor circle owned by THIS vault's owner — do not borrow the projected circle. */
 function foundCircle(input: {
   db: DatabaseSync;
   ownerPartyId: string;
@@ -168,7 +153,6 @@ function foundCircle(input: {
          (member_id, circle_id, party_id, added_at, capability)
        VALUES (?, ?, ?, ?, ?)`
     );
-    // Founder always writes; every other seat keeps the superseded grant's capability.
     member.run(uuidv7(), circleId, input.ownerPartyId, input.now, "read+write");
     for (const seat of input.seats) {
       if (seat.partyId === input.ownerPartyId) continue;
@@ -182,7 +166,6 @@ function foundCircle(input: {
   return circleId;
 }
 
-/** Successor already created — supersession table, or a live grant after a mid-ceremony crash. */
 function existingSuccessor(input: {
   db: DatabaseSync;
   oldGrantId: string;
@@ -258,7 +241,6 @@ function writeLineage(input: {
       input.lineage.reason,
       input.lineage.recoveredAt
     );
-  // Superseded, not deleted. `revoked_at` is what stops the sweep pulling a dead steward.
   input.db
     .prepare(
       `UPDATE share_circle_grant SET revoked_at = ?
@@ -267,7 +249,6 @@ function writeLineage(input: {
     .run(input.lineage.recoveredAt, input.oldGrantId);
 }
 
-/** Re-found from this replica. Idempotent: a retry returns the first successor. */
 export function recoverCommonsFromReplica(
   input: RecoverCommonsFromReplicaInput
 ): CommonsRecoveryResult {

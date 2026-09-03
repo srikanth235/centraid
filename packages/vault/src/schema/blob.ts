@@ -1,41 +1,8 @@
-// Blob custody schema (#296, v9): the staging band bytes wait in
-// before a command claims them, and the derivative registry (thumbs,
-// previews, extracted text) hanging off canonical content items.
-//
-// `blob_staging` is deliberately NOT a registered logical entity — it is
-// transient plumbing like the FTS shadow tables: raw bytes arriving is not a
-// vault write; the command that claims them is. Unclaimed rows sweep after a
-// TTL. `held_by_batch` pins a row past the TTL while an import draft batch
-// references its bytes (the review pause must not race the sweep).
-//
-// `core_content_derivative` IS registered (core.content_derivative): what
-// variants exist is model. Binary variants (thumb/preview/poster) live in
-// the CAS under their own sha; semantic variants live INLINE in
-// `text_content` so text/transcripts can feed FTS in-transaction and
-// embeddings/perceptual hashes never masquerade as rentable blob bytes
-// in-transaction — the same no-I/O constraint that keeps text/* bodies
-// inline (#296) applies to the index feed.
-//
-// A match inside a PDF must surface the DOCUMENT (#352: core_document,
-// not the raw content item), so extracted text feeds the OWNING document's
-// FTS row rather than a shadow row. The v2 triggers rebuilt the row from
-// `vault_content_text` alone — any title rename would clobber derivative
-// text — so this recreates them with the derivative-aware body expression,
-// and mirrors it from the derivative side. A content item can be the
-// current body of more than one document (sha256 dedup, or two documents
-// deliberately sharing bytes) — the refresh fans out to every one of them.
-//
-// Extracted text (`core_content_derivative.text_content`, async OCR/text
-// layer) is the one FTS feed with no upstream size gate of its own — the
-// per-document index budget (#367 §E3, `truncateForIndex`) applies
-// here too, same as every other body-shaped column.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { truncateForIndex } from "./fts.js";
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
-/** Body of a document's FTS row: extracted text, transcript, inline text. */
 const DOCUMENT_BODY = (ref: string) =>
   truncateForIndex(`COALESCE(
     (SELECT dv.text_content FROM core_content_derivative dv
@@ -45,14 +12,6 @@ const DOCUMENT_BODY = (ref: string) =>
     (SELECT vault_content_text(ci."media_type", ci."content_uri") FROM core_content_item ci
       WHERE ci.content_id = ${ref}."current_content_id"))`);
 
-/**
- * Core content search text: the owner's title plus whichever spoken/visible
- * text a content item carries. `text` AND `transcript` are concatenated,
- * not COALESCEd to one winner — a recorded talk can legitimately carry BOTH
- * (a slide deck's extracted text layer alongside the speaker's transcript;
- * `derivatives.test.ts` covers exactly this), so folding in only the first
- * present would silently drop the other's words from the index (#724).
- */
 const CONTENT_ITEM_SEARCH_TEXT = (ref: string) =>
   truncateForIndex(`trim(COALESCE(${ref}."title", '') || ' ' || COALESCE(
     (SELECT dv.text_content FROM core_content_derivative dv
@@ -76,53 +35,6 @@ const REFRESH_CONTENT_ITEM_FTS = (contentIdRef: string) => `
     FROM core_content_item i
    WHERE i.content_id = ${contentIdRef} AND i.deleted_at IS NULL;`;
 
-// Bounded-storage-tier cache tables (#405 §3/§4). Deliberately
-// SELF-CONTAINED — no FKs into the core spine, no triggers — so a test can
-// create them on a bare `:memory:` handle without the whole migration ladder,
-// and so they are pure plumbing (like `blob_staging`, NOT registered logical
-// entities the app plane can read).
-//
-//   blob_replica — the DURABLE replication index (§4): one row per sha we have
-//     pushed to the remote tier and got a 2xx back for. This is the local
-//     EVIDENCE that a copy exists off-disk; `statusFor()`/`replicate()` read it
-//     instead of a live `remote.list()` (which is O(all-objects) — 100+ round
-//     trips per sweep at 500 GB). It is a CACHE of evidence, not truth: the
-//     remote listing is truth, and `reconcile()`'s deep pass heals this table
-//     from it. Evict-only-if-replicated (§3) consults THIS table — durable
-//     proof we replicated — never a live listing.
-//
-//   blob_access — LRU access tracking (§3): last-access time per sha, so the
-//     eviction pass can evict least-recently-used mediums/originals first. The
-//     hot sync read path (`getSync`/`open`) must NEVER pay a synchronous SQLite
-//     write per read, so touches accumulate in an in-memory write-behind Map
-//     (blob/replica-index.ts `AccessIndex`) and flush at sweep time. The
-//     staleness trade-off: a blob read since the last flush may sort older than
-//     it truly is until the next flush — acceptable, because eviction only runs
-//     at sweep boundaries (which flush first) and cache pressure, not per read.
-//     A sha with no row sorts OLDEST (never touched since it landed).
-//   The `store` column (#425) records WHICH remote store class
-//   actually holds a sha's replica — `cas` for originals/snapshot chunks (the
-//   default, so a provider without a `derived` grant is byte-for-byte
-//   unchanged) or `derived` for binary display derivatives (thumb/preview/
-//   poster) when the target grants that store. Evict-only-if-replicated,
-//   restore, and the reconciliation sweep read this to address the right
-//   prefix: a derived replica missing from the derived listing is missing even
-//   if the same sha happens to sit under `cas`.
-//
-//   blob_orphan — the orphan-grace tombstone (#439): one row per
-//     remote sha the reconciliation sweep has FOUND orphaned (claimed by
-//     neither the live vault model nor any retained snapshot manifest), stamped
-//     with the epoch-ms instant it was FIRST observed orphaned. The client-owned
-//     CAS orphan delete (blob/custody-reconcile.ts) may drop the object only once
-//     `now - first_orphaned_at` exceeds the recovery window N — because PITR
-//     makes every instant inside the window restorable, and a blob referenced
-//     only BETWEEN two snapshots is exactly the byte such a restore needs, yet is
-//     named by no retained manifest. First-observed-orphaned is always ≥ the true
-//     dereference instant, so the grace is conservative in the safe direction. A
-//     sha that becomes live/pinned again before the grace elapses has its
-//     tombstone CLEARED; delete clears it too. `first_orphaned_at` is INTEGER ms
-//     (unlike the ISO-text stamps above) because the only reader does age
-//     arithmetic against `Date.now()`.
 export const BLOB_CACHE_DDL = `
 CREATE TABLE IF NOT EXISTS blob_replica (
   sha256        TEXT PRIMARY KEY CHECK (length(sha256) = 64),
@@ -144,21 +56,6 @@ CREATE TABLE IF NOT EXISTS blob_orphan (
 ) STRICT;
 `;
 
-/**
- * The content item's FTS sync, derivative-aware, as a re-runnable block.
- *
- * A video's/audio file's transcript is searched through the same canonical
- * content item the Photos projection already joins. The existing FTS table
- * has one indexed title column, so its value is the visible title plus the
- * bounded transcript; no second shadow/search path is introduced.
- *
- * Exported because TRIGGER FIRING ORDER is load-bearing here (#916): SQLite
- * fires the most recently created trigger FIRST, and `core_content_item`'s
- * `updated_at` stamp trigger (rung eight) does an UPDATE inside an INSERT. If
- * the stamp fired before this `_ai`, the `_au` it provokes would insert the
- * shadow row and `_ai` would then insert the same rowid a second time. So
- * rung eight re-runs this block after creating the stamp trigger.
- */
 export const BLOB_CONTENT_ITEM_FTS_DDL = `
 DROP TRIGGER IF EXISTS fts_core_content_item_ai;
 DROP TRIGGER IF EXISTS fts_core_content_item_au;
@@ -175,19 +72,6 @@ CREATE TRIGGER IF NOT EXISTS fts_core_content_item_au AFTER UPDATE ON core_conte
 END;
 `;
 
-/**
- * The FTS overrides `BLOB_DDL` composes last: the document index rebuilt
- * derivative-aware, the content item's own override, and the six triggers on
- * `core_content_derivative` that refresh both when extracted text lands after
- * the row it belongs to.
- *
- * Exported because rung nine rebuilds `core_document`, `core_content_item`
- * and `core_content_derivative` (#916, ruling ONT-08): the generated triggers
- * die with their base tables, `fts.ts` re-creates the GENERIC ones, and this
- * block is what puts the derivative-aware bodies back on top of them. Kept as
- * one const rather than three so the composition order — generic first,
- * override second — cannot drift between the baseline and the rung.
- */
 export const BLOB_FTS_OVERRIDE_DDL = `
 -- Rebuild the document's FTS sync derivative-aware (see header).
 DROP TRIGGER IF EXISTS fts_core_document_ai;
@@ -337,14 +221,6 @@ CREATE TABLE IF NOT EXISTS blob_custody_rollup (
 ${BLOB_FTS_OVERRIDE_DDL}
 ${BLOB_CACHE_DDL}`;
 
-/**
- * Rebuild path for `fts_core_document` (#367) — the
- * `core.document` counterpart to `rebuildFtsIndex` (schema/fts.ts), which
- * explicitly refuses this entity because the generic backfill doesn't know
- * about the derivative-aware body expression above. Re-derives every live
- * document's row from scratch (extracted text still wins over the raw
- * decode), so a `FTS_BODY_INDEX_BUDGET_CHARS` change reflows documents too.
- */
 export function rebuildDocumentFtsIndex(vault: DatabaseSync): void {
   vault.exec("DELETE FROM fts_core_document;");
   vault.exec(`

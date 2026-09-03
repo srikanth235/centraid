@@ -17,10 +17,8 @@ export interface AppearanceController {
   setPrefs: (patch: Partial<AppearancePrefs>) => void;
 }
 
-// Key bumped #608 group P: old inline overrides read as deliberate picks.
 const CACHE_KEY = "appearance.v2";
 
-// Store = fast-paint cache; setPrefs writes through to state, Store, <html>, gateway.
 export function useAppearance(): AppearanceController {
   const [prefs, setPrefs] = useState<AppearancePrefs>(() => {
     const cached = {
@@ -34,7 +32,6 @@ export function useAppearance(): AppearanceController {
     applyPrefsToDocument(prefs);
   }, [prefs]);
 
-  // `system` follows the OS; re-subscribing on mode change drops the listener for explicit picks.
   const mode = prefs.themeMode;
   useEffect(() => {
     if (mode !== "system" || typeof matchMedia !== "function") return;
@@ -51,7 +48,6 @@ export function useAppearance(): AppearanceController {
     return () => mq.removeEventListener("change", sync);
   }, [mode]);
 
-  // Gateway reconcile, once after first paint.
   const reconciled = useRef(false);
   useEffect(() => {
     if (reconciled.current) return;
@@ -68,9 +64,7 @@ export function useAppearance(): AppearanceController {
           });
         }
       })
-      .catch(() => {
-        /* gateway unreachable — local cache stands in */
-      });
+      .catch(() => {});
     return () => {
       alive = false;
     };

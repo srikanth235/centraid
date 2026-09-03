@@ -27,8 +27,6 @@ const actions = vi.hoisted(() => ({
   confirm: vi.fn<ShellActions["confirm"]>(),
   navigate: vi.fn<ShellActions["navigate"]>(),
   showToast: vi.fn<ShellActions["showToast"]>(),
-  // Unused by this suite, but required by the real `ShellActions` shape that
-  // the typed `vi.mock(import(...))` factory below now checks against.
   openCommandPalette: vi.fn<ShellActions["openCommandPalette"]>(),
   openContextMenu: vi.fn<ShellActions["openContextMenu"]>(),
 }));
@@ -75,14 +73,11 @@ const helpers = vi.hoisted(() => ({
 vi.mock(import("../../../gateway-client.js"), () => api);
 vi.mock(import("../actions.js"), () => ({ useShellActions: () => actions }));
 vi.mock(import("../PageScroll.js"), () => ({
-  // Wrapped in a fragment (not returned bare) so this matches the real
-  // `PageScroll`'s `JSX.Element` return type instead of `ReactNode`.
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock(import("../../screens/AutomationEditorScreen.js"), () => ({
   default: (props: AutomationEditorBridgeProps) => {
     captured.props = props;
-    // Empty fragment: renders nothing, still a `JSX.Element`.
     return <></>;
   },
 }));
@@ -441,10 +436,7 @@ describe("AutomationEditorRoute", () => {
         handler: "export default {}",
       });
 
-      // A test run returns its turn id and stays put — no navigation.
       await expect(bridge.onTestRun()).resolves.toBe("turn-1");
-      // No `onAssist`: the compile screen exposes exactly one editable surface
-      // (the instructions field), so there is no conversational edit path here.
       expect("onAssist" in bridge).toBe(false);
       await expect(bridge.onToggleEnabled(false)).resolves.toBe(true);
       await expect(

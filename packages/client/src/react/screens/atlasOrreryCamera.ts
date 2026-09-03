@@ -12,17 +12,12 @@ import {
 } from "./atlasOrreryGeometry.js";
 import type { ViewTransform } from "./atlasOrreryGeometry.js";
 
-// Pan/zoom camera (#519); `view` is a lens over fixed geometry, never layout.
-// A live drag records `draggedRef`, which consumeDrag() clears to swallow the
-// drag's trailing click.
-
 const DRAG_THRESHOLD = 3; // px — under this a press stays a click
 
 export interface OrreryCamera {
   view: ViewTransform;
   resetView: () => void;
   consumeDrag: () => boolean;
-  /** Zoom about the viewBox centre (+/− controls). */
   zoomBy: (factor: number) => void;
   handlers: {
     onWheel: (ev: WheelEvent) => void;
@@ -55,8 +50,6 @@ export function useOrreryCamera(): OrreryCamera {
     return false;
   }, []);
 
-  // Zoom about cursor; native passive:false binding so preventDefault bites;
-  // jsdom rect falls back to centre.
   const onWheel = useCallback((ev: WheelEvent) => {
     ev.preventDefault();
     const factor = Math.exp(-ev.deltaY * 0.0016);
@@ -117,7 +110,6 @@ export function useOrreryCamera(): OrreryCamera {
     if (!d || ev.pointerId !== d.id) return;
     ev.currentTarget.releasePointerCapture?.(ev.pointerId);
     dragRef.current = null;
-    // draggedRef left set — the tab's guard consumes it; next pointerdown clears.
   }, []);
 
   const zoomBy = useCallback((factor: number) => {

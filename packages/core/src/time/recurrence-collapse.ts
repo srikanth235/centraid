@@ -1,5 +1,3 @@
-// A repeating task never stacks: unactioned periods collapse into a count.
-
 import { expandRecurrence, nextOccurrence } from "./recurrence.js";
 
 const MAX_MISSED = 1000;
@@ -9,13 +7,11 @@ export interface CollapseMissedInput {
   scheduledStart: string;
   timeZone?: string;
   anchor?: "scheduled" | "completion";
-  /** The evaluation clock — never `Date.now()`. */
   now: string;
   lastCompletedAt?: string;
 }
 
 export interface CollapsedOccurrence {
-  /** Capped at MAX_MISSED for "scheduled"; ≤1 for "completion". */
   missed: number;
   nextDue: string | null;
 }
@@ -55,7 +51,6 @@ export function collapseMissedOccurrences(
     };
   }
 
-  // Occurrences in [start, now); anything completed is not missed.
   const from = laterOf(input.scheduledStart, input.lastCompletedAt);
   const elapsed =
     Date.parse(from) < nowMs
@@ -82,8 +77,6 @@ export function collapseMissedOccurrences(
     nextDue: nextOccurrence({
       rrule: input.rrule,
       scheduledStart: input.scheduledStart,
-      // Strictly-after bound + half-open window: an occurrence exactly on
-      // `now` is live — ask from one ms earlier.
       after: new Date(nowMs - 1).toISOString(),
       timeZone,
       anchor: "scheduled",

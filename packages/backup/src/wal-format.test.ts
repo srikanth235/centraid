@@ -1,14 +1,5 @@
 import fss from "node:fs";
 // governance: allow-repo-hygiene file-size-limit (#408) the wal-format behavior suite — key codecs, sealing, frame math against real WALs, and the replay planner share one fixture vocabulary; sharding would duplicate it per file
-/*
- * WAL segment format tests (FORMAT.md § WAL segments, § Encryption — /1,
- * #408). Everything here is restore-correctness-critical: key codec
- * (restore planning reads ONLY keys), deterministic sealing (crash-retry
- * nonce safety), commit-boundary math against a REAL SQLite WAL (no
- * synthetic frames — the shipper reads real files), and replay planning
- * (the page-mixing defenses). The FORMAT.md info/AAD strings are pinned
- * verbatim: silent drift there would strand every already-shipped stream.
- */
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -90,10 +81,6 @@ describe("wal-format", () => {
     return { segments, closers };
   }
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // Key codec
-  // ───────────────────────────────────────────────────────────────────────────
-
   describe("walSegmentKey / parseWalSegmentKey", () => {
     test("emits the exact FORMAT.md key shape and roundtrips", () => {
       const addr = seg({
@@ -121,29 +108,23 @@ describe("wal-format", () => {
     test("parse rejects non-segment and malformed keys", () => {
       const good = walSegmentKey(seg());
       expect(parseWalSegmentKey(good)).not.toBeNull();
-      // bad db name
       expect(
         parseWalSegmentKey(good.replace("wal/vault/", "wal/other/"))
       ).toBeNull();
-      // generation one hex char short
       expect(
         parseWalSegmentKey(
           `wal/vault/${GEN.slice(0, 31)}/00000000/000000000000-000000000100-0000000001000`
         )
       ).toBeNull();
-      // uppercase hex generation is not a generation
       expect(
         parseWalSegmentKey(
           `wal/vault/${GEN.toUpperCase()}/00000000/000000000000-000000000100-0000000001000`
         )
       ).toBeNull();
-      // junk / other object classes
       expect(parseWalSegmentKey("chunks/abcdef")).toBeNull();
       expect(parseWalSegmentKey("manifests/123-abcd.json")).toBeNull();
       expect(parseWalSegmentKey("")).toBeNull();
-      // a closer key is NOT a segment
       expect(parseWalSegmentKey(walGroupCloserKey(closer()))).toBeNull();
-      // prefixes/suffixes must not match (anchored regex)
       expect(parseWalSegmentKey(`x${good}`)).toBeNull();
       expect(parseWalSegmentKey(`${good}x`)).toBeNull();
       expect(parseWalSegmentKey(`${good}-f`)).toBeNull(); // the retired draft final marker
@@ -227,16 +208,10 @@ describe("wal-format", () => {
     });
 
     test("a closer key sorts after every segment key of its group (suffix listing order)", () => {
-      // 'closed-…' > any 12-digit start offset lexicographically, so a plain
-      // LIST returns a group's segments first, closer last — pleasant, and a
-      // property the shipper may rely on for debugging listings.
       const segKey = walSegmentKey(
         seg({ startOffset: 999999999998, endOffset: 999999999999 })
       );
       const closerKey = walGroupCloserKey(closer({ endOffset: 999999999999 }));
-      // Both are strings — lexicographic order, not numeric, is the contract
-      // being tested. `toBeGreaterThan` takes only number/bigint, so the order
-      // is asserted through the default (lexicographic) sort instead.
       expect([closerKey, segKey].toSorted()).toStrictEqual([segKey, closerKey]);
     });
   });
@@ -279,10 +254,6 @@ describe("wal-format", () => {
     });
   });
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // Sealing — deterministic nonces, AAD address binding
-  // ───────────────────────────────────────────────────────────────────────────
-
   describe("sealWalSegment / openWalSegment", () => {
     const plain100 = new Uint8Array(100).map((_, i) => i % 251);
 
@@ -295,9 +266,6 @@ describe("wal-format", () => {
     });
 
     test("is deterministic: same (address, bytes) seals to byte-identical output (G7)", () => {
-      // The idempotent-PUT property: a retried upload re-seals the SAME local
-      // segment file, whose name encodes the full address (tick included), so
-      // it must reproduce the object byte for byte.
       const addr = seg({
         group: 2,
         startOffset: 100,
@@ -314,11 +282,6 @@ describe("wal-format", () => {
     });
 
     test("a forged tick does not authenticate — PITR cuts cannot be lied about", () => {
-      // tickMs is in the object key and it ALONE decides the point-in-time cut
-      // (planWalReplay stops at the first tick > cut) and which marker proves
-      // that cut. If the seal did not cover it, a hostile provider could
-      // copy this object to a key bearing an earlier tick and a "restore to T"
-      // would apply bytes captured well after T.
       const real = seg({
         group: 1,
         startOffset: 0,
@@ -330,7 +293,6 @@ describe("wal-format", () => {
       expect(() => openWalSegment(DATA_KEY, VAULT_ID, forged, sealed)).toThrow(
         /unsupported state or unable to authenticate data/iu
       );
-      // ...and forward, too (relabelling an early segment as late).
       expect(() =>
         openWalSegment(
           DATA_KEY,
@@ -339,16 +301,12 @@ describe("wal-format", () => {
           sealed
         )
       ).toThrow(/unsupported state or unable to authenticate data/iu);
-      // The genuine address still opens.
       expect([
         ...openWalSegment(DATA_KEY, VAULT_ID, real, sealed),
       ]).toStrictEqual([...plain100]);
     });
 
     test("the same range at a different tick gets a DIFFERENT nonce", () => {
-      // Two objects, same [start,end), different ticks (a crash-retry can leave
-      // exactly this pair). Both are legitimate keys, so both must carry their
-      // own nonce — sealing them under one nonce would be reuse.
       const early = seg({ startOffset: 0, endOffset: 100, tickMs: 1000 });
       const late = seg({ startOffset: 0, endOffset: 100, tickMs: 2000 });
       const a = sealWalSegment(DATA_KEY, VAULT_ID, early, plain100);
@@ -358,10 +316,6 @@ describe("wal-format", () => {
     });
 
     test("a longer crash-retry range from the same start gets a DIFFERENT nonce", () => {
-      // The G7 crash-retry defense: a retry that re-reads a LONGER range from
-      // the same startOffset must not reuse the shorter seal's nonce on
-      // different plaintext. endOffset is in the derivation, so the first 12
-      // sealed bytes (the nonce) must differ.
       const shorter = seg({ startOffset: 0, endOffset: 100 });
       const longer = seg({ startOffset: 0, endOffset: 150 });
       const plain150 = new Uint8Array(150).map((_, i) => i % 251); // first 100 bytes identical
@@ -378,9 +332,6 @@ describe("wal-format", () => {
     });
 
     test("pins the FORMAT.md nonce info and AAD strings verbatim", () => {
-      // FORMAT.md § Encryption is normative; if this test breaks, already-
-      // shipped segments become unreadable — that is a format break, not a
-      // refactor.
       const addr = seg({
         group: 2,
         startOffset: 0,
@@ -407,9 +358,6 @@ describe("wal-format", () => {
     });
 
     test("open rejects a valid seal whose plaintext length contradicts the address", () => {
-      // Craft a blob that AUTHENTICATES under the address (correct nonce + AAD)
-      // but carries the wrong number of bytes — the post-decrypt length check
-      // is the last line of defense against a shipper-side accounting bug.
       const addr = seg({ startOffset: 0, endOffset: 100, tickMs: 1000 });
       const nonce = deriveNonce(
         DATA_KEY,
@@ -431,15 +379,12 @@ describe("wal-format", () => {
       expect(() => openWalSegment(DATA_KEY, VAULT_ID, addrB, sealed)).toThrow(
         /unsupported state or unable to authenticate data/iu
       );
-      // generation swap
       expect(() =>
         openWalSegment(DATA_KEY, VAULT_ID, seg({ generation: GEN2 }), sealed)
       ).toThrow(/unsupported state or unable to authenticate data/iu);
-      // vault swap
       expect(() => openWalSegment(DATA_KEY, "vault-2", addrA, sealed)).toThrow(
         /unsupported state or unable to authenticate data/iu
       );
-      // offset swap (same length, shifted range)
       const addrShifted = seg({ startOffset: 100, endOffset: 200 });
       expect(() =>
         openWalSegment(DATA_KEY, VAULT_ID, addrShifted, sealed)
@@ -536,8 +481,6 @@ describe("wal-format", () => {
         VAULT_ID,
         closer({ group: 0, endOffset: 200 })
       );
-      // The dangerous forgery: same sealed object presented as closing the
-      // group EARLIER than it really ended — would legitimize a truncated group.
       expect(() =>
         openWalCloser(
           DATA_KEY,
@@ -591,10 +534,6 @@ describe("wal-format", () => {
     });
   });
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // Frame-boundary math against a REAL SQLite WAL
-  // ───────────────────────────────────────────────────────────────────────────
-
   interface WalRig {
     conn: DatabaseSync;
     walPath: string;
@@ -610,14 +549,12 @@ describe("wal-format", () => {
       try {
         conn.close();
       } catch {
-        /* already closed */
+        // Intentionally empty.
       }
     });
     conn.exec("PRAGMA journal_mode=WAL");
     conn.exec("PRAGMA synchronous=FULL");
     conn.exec("PRAGMA wal_autocheckpoint=0");
-    // Tiny page cache so an open transaction SPILLS uncommitted frames into
-    // the WAL file — the exact hazard lastCommitBoundary exists to fence off.
     conn.exec("PRAGMA cache_size=2");
     conn.exec("CREATE TABLE rows (id INTEGER PRIMARY KEY, val TEXT NOT NULL)");
     const { page_size: pageSize } = conn.prepare("PRAGMA page_size").get() as {
@@ -673,9 +610,7 @@ describe("wal-format", () => {
       const big = "x".repeat(2000);
       for (let i = 0; i < 30; i++) rig.insert(`${big}-${i}`);
       const mid = walBytes(rig);
-      // The tiny cache spilled uncommitted frames into the file…
       expect(mid.length).toBeGreaterThan(preBegin);
-      // …and the boundary must sit exactly at the last COMMIT, i.e. pre-BEGIN.
       expect(lastCommitBoundary(mid, 0, rig.pageSize)).toBe(preBegin);
 
       rig.conn.exec("ROLLBACK");
@@ -695,8 +630,6 @@ describe("wal-format", () => {
       for (let i = 0; i < 3; i++) rig.insert(`after-${i}`);
       const full = walBytes(rig);
       const boundary = lastCommitBoundary(full, 0, rig.pageSize);
-      // New commits land right after preBegin — INSIDE the rolled-back extent.
-      // Anything shipped past a commit boundary would have forked from this.
       expect(boundary).toBeGreaterThan(preBegin);
       expect(boundary).toBeLessThan(rolledBackSize);
       expect(full).toHaveLength(rolledBackSize);
@@ -718,13 +651,10 @@ describe("wal-format", () => {
       rig.insert("row");
       const full = walBytes(rig);
       const b = lastCommitBoundary(full, 0, rig.pageSize);
-      // From the boundary on there is nothing new: ship-nothing, not garbage.
       expect(lastCommitBoundary(full.subarray(b), b, rig.pageSize)).toBe(b);
-      // Header-only prefix: no frame completes in range.
       expect(
         lastCommitBoundary(full.subarray(0, WAL_HEADER_BYTES), 0, rig.pageSize)
       ).toBe(0);
-      // Empty WAL (post-checkpoint state): nothing to ship.
       expect(lastCommitBoundary(new Uint8Array(0), 0, rig.pageSize)).toBe(0);
     });
 
@@ -747,7 +677,6 @@ describe("wal-format", () => {
       expect(walPageSize(header1)).toBe(rig.pageSize);
       const salts1 = walSalts(header1);
 
-      // Shipper-style TRUNCATE checkpoint, then new writes → fresh WAL header.
       const cp = rig.conn.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as {
         busy: number;
       };
@@ -756,7 +685,6 @@ describe("wal-format", () => {
       rig.insert("row-b");
       const header2 = walBytes(rig).subarray(0, WAL_HEADER_BYTES);
       const salts2 = walSalts(header2);
-      // This is the G5 foreign-checkpoint detector's signal.
       expect(salts2).not.toStrictEqual(salts1);
     });
 
@@ -765,17 +693,12 @@ describe("wal-format", () => {
       expect(() => walSalts(new Uint8Array(31))).toThrow(/truncated/u);
       const garbage = new Uint8Array(32).fill(0x41);
       expect(() => walPageSize(garbage)).toThrow(/not a wal header/u);
-      // Right magic, implausible page size.
       const badPage = new Uint8Array(32);
       new DataView(badPage.buffer).setUint32(0, 0x377f0682);
       new DataView(badPage.buffer).setUint32(8, 17);
       expect(() => walPageSize(badPage)).toThrow(/implausible/u);
     });
   });
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // Replay planning
-  // ───────────────────────────────────────────────────────────────────────────
 
   describe(planWalReplay, () => {
     test("PITR keeps an earlier shorter same-start segment when the longer retry is after the cut", () => {
@@ -854,9 +777,6 @@ describe("wal-format", () => {
     });
 
     test("a closer whose end is PAST the chained offset does not permit advance (missing tail)", () => {
-      // Group 0 really ended at 200 (says the authenticated closer) but only
-      // [0,100) survived — advancing would layer group 1's page images over a
-      // half-applied group 0.
       const s1 = seg({
         group: 0,
         startOffset: 0,
@@ -1060,10 +980,6 @@ describe("wal-format", () => {
     });
   });
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // Tick markers (FORMAT.md § WAL segments — the idle-vs-missing discriminator)
-  // ───────────────────────────────────────────────────────────────────────────
-
   function marker(over: Partial<WalTickMarker> = {}): WalTickMarker {
     return {
       generation: GEN,
@@ -1091,8 +1007,6 @@ describe("wal-format", () => {
     });
 
     test("a marker key never collides with the stream it describes", () => {
-      // `wal/tick/` and `wal/vault/` are disjoint prefixes, so a marker LIST
-      // never sweeps up segments and a segment LIST never sweeps up markers.
       expect(walTickMarkerKey(marker())).not.toContain(
         `/${WAL_DB_FILES.vault.replace(".db", "")}/`
       );
@@ -1118,9 +1032,6 @@ describe("wal-format", () => {
     });
 
     test("re-sealing the same marker is BYTE-IDENTICAL (idempotent PUT, and no nonce reuse)", () => {
-      // The nonce derives from (generation, tick) alone, so one address MUST
-      // have exactly one payload encoding — two different ciphertexts under one
-      // address would be a (key, nonce) reuse.
       const m = marker();
       const a = sealWalTickMarker(DATA_KEY, VAULT_ID, m);
       const b = sealWalTickMarker(DATA_KEY, VAULT_ID, { ...m });
@@ -1130,9 +1041,6 @@ describe("wal-format", () => {
     test("RELABELLING the tick in the key fails the tag", () => {
       const m = marker({ tickMs: 5000 });
       const sealed = sealWalTickMarker(DATA_KEY, VAULT_ID, m);
-      // A provider copies the object to an earlier tick's key: a restore "at
-      // 3000" would then trust a position the stream only reached at 5000 and
-      // cut past segments the vault never actually shipped.
       expect(() =>
         openWalTickMarker(
           DATA_KEY,
@@ -1182,10 +1090,6 @@ describe("wal-format", () => {
     });
   });
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // reachedPosition — the normalization that makes a lost tail closer visible
-  // ───────────────────────────────────────────────────────────────────────────
-
   describe(reachedPosition, () => {
     const opts = { generation: GEN };
 
@@ -1220,10 +1124,6 @@ describe("wal-format", () => {
     });
 
     test("the SAME chain WITHOUT the closer stays at (group, end) — the tail-closer tell", () => {
-      // Nothing else in the format can see a lost tail closer: the chain reaches
-      // the group's last byte either way, and a closed FINAL group has no
-      // successor segments to prove it was finished. Only the marker's
-      // (group + 1, 0) disagrees with this (group, end).
       const l = listing([
         seg({ group: 0, startOffset: 0, endOffset: 220, tickMs: 1000 }),
       ]);
@@ -1234,12 +1134,7 @@ describe("wal-format", () => {
     });
   });
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // planMarkedReplay — the marker-driven cut (a listing cannot tell idle from lost)
-  // ───────────────────────────────────────────────────────────────────────────
-
   describe(planMarkedReplay, () => {
-    /** Three chained segments, group 0, ending at 100/200/300. */
     function streamListing(): WalStreamListing {
       return listing([
         seg({ group: 0, startOffset: 0, endOffset: 100, tickMs: 1000 }),
@@ -1248,7 +1143,6 @@ describe("wal-format", () => {
       ]);
     }
 
-    /** The markers a healthy shipper would have written for that stream. */
     function markers(): WalTickMarker[] {
       return [
         marker({ tickMs: 1000, position: { group: 0, endOffset: 100 } }),
@@ -1269,8 +1163,6 @@ describe("wal-format", () => {
     });
 
     test("a LOST TAIL (listing simply ends — no hole) walks back to the last provable marker", () => {
-      // The listing alone is indistinguishable from an idle vault; only the
-      // 3000 marker, which says the stream reached 300, proves objects are gone.
       const l = streamListing();
       l.segments = l.segments.slice(0, 2);
       const r = planMarkedReplay({
@@ -1284,9 +1176,6 @@ describe("wal-format", () => {
     });
 
     test("an IDLE stream (no new segments, unchanged position) is NOT a truncation", () => {
-      // The vault stopped writing after tick 1000; every later marker carries
-      // that SAME position, so the newest one is still satisfiable and the cut
-      // advances to the producer's newest tick.
       const l = listing([
         seg({ group: 0, startOffset: 0, endOffset: 100, tickMs: 1000 }),
       ]);
@@ -1305,8 +1194,6 @@ describe("wal-format", () => {
     });
 
     test("a marker whose GROUP CLOSER is missing is unsatisfiable", () => {
-      // The shipper rolled the group at tick 3000, so its marker says (1, 0).
-      // Without the closer the chain can only claim (0, 300).
       const rolled = markers();
       rolled[2] = marker({
         tickMs: 3000,
@@ -1319,7 +1206,6 @@ describe("wal-format", () => {
       });
       expect(r.cutTickMs).toBe(2000);
 
-      // Put the closer back and the very same listing satisfies it.
       const closed = streamListing();
       closed.closers = [closer({ group: 0, endOffset: 300 })];
       const ok = planMarkedReplay({
@@ -1349,8 +1235,6 @@ describe("wal-format", () => {
         generation: GEN,
         markers: foreign,
       });
-      // (The restore LISTs a generation-scoped prefix, so this cannot happen in
-      // practice; the planner refuses to trust them regardless.)
       expect(r.cutTickMs).toBe(-1);
     });
 
@@ -1373,8 +1257,6 @@ describe("wal-format", () => {
         cutTickMs: 2500,
       });
       expect(r.cutTickMs).toBe(2000);
-      // A cut that lands where the producer proved it got to is NOT a truncation:
-      // the newest CANDIDATE marker is 2000, and we reached it.
       expect(r.newestMarkerTickMs).toBe(2000);
       expect(r.plan.lastTickMs).toBe(2000);
     });

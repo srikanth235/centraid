@@ -24,7 +24,6 @@ describe("incremental-sha256", () => {
     await resumeWithWidth(0);
     if (offset < bytes.length) hash.update(bytes.subarray(offset));
     await expect(hash.digestHex()).resolves.toBe(expected);
-    // digest is non-destructive: a resumed caller can still append.
     hash.update(Buffer.from("tail"));
     await expect(hash.digestHex()).resolves.toBe(
       createHash("sha256").update(bytes).update("tail").digest("hex")

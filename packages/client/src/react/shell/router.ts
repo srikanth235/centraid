@@ -1,9 +1,3 @@
-// The shell's navigation history, as a pure reducer.
-//
-// The action variants keep recording and replay apart: `navigate` records,
-// `back`/`forward` only move the cursor. Do not collapse them into one
-// "apply route" action — a single render-and-record path replays history into
-// itself and needs a re-entrancy guard to stay correct.
 import type { ShellRoute } from "../../app-shell-context.js";
 
 export interface RouterState {
@@ -13,17 +7,12 @@ export interface RouterState {
 
 export type RouterAction =
   | { type: "navigate"; route: ShellRoute }
-  // Swaps the current history entry in place (no new stack entry) — used
-  // when a route's identity is resolved lazily after first paint, e.g. the
-  // assistant route creating its conversation id on first send.
   | { type: "replace"; route: ShellRoute }
   | { type: "back" }
   | { type: "forward" };
 
 export const INITIAL_ROUTER: RouterState = { stack: [], index: -1 };
 
-/** Stable identity for a route — dedupes consecutive navigations to the same
- *  place. Two routes with the same key are the same history entry. */
 export function routeKey(route: ShellRoute): string {
   switch (route.kind) {
     case "settings":
@@ -79,7 +68,6 @@ export function routerReducer(
   switch (action.type) {
     case "navigate": {
       const cur = currentRoute(state);
-      // No-op a repeat of the entry we're already on.
       if (cur && routeKey(cur) === routeKey(action.route)) return state;
       const stack = state.stack.slice(0, state.index + 1);
       stack.push(action.route);

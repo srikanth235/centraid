@@ -1,13 +1,3 @@
-/*
- * Phone side of the tunnel, in TypeScript (#263).
- *
- * On a real phone this logic lives in the Expo native module
- * (apps/mobile/modules/centraid-tunnel — Swift + Kotlin); this Node
- * implementation is the executable reference for that protocol and powers
- * the integration tests and the Phase 0 spike CLI. Behavior here and in the
- * native module must stay in lockstep with protocol.ts.
- */
-
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
@@ -41,7 +31,6 @@ export interface EndpointTicketHint {
   relayHint?: string;
 }
 
-/** Derive the stable public EndpointId without binding or joining the network. */
 export function endpointIdForSecret(secret: Uint8Array): string {
   if (secret.byteLength !== 32) {
     throw new Error(
@@ -51,11 +40,6 @@ export function endpointIdForSecret(secret: Uint8Array): string {
   return iroh.SecretKey.fromBytes(Array.from(secret)).public().toString();
 }
 
-/**
- * Split the stable identity from a dial ticket's refreshable address data.
- * Connection registries persist the EndpointId as identity and may cache the
- * relay URL independently without treating the whole ticket as durable.
- */
 export function inspectEndpointTicket(ticket: string): EndpointTicketHint {
   const addr = iroh.EndpointTicket.fromString(ticket).endpointAddr();
   const relayHint = addr.relayUrl();
@@ -65,7 +49,6 @@ export function inspectEndpointTicket(ticket: string): EndpointTicketHint {
   };
 }
 
-/** Build a fresh dial ticket from stable identity plus current cached hint. */
 export function endpointTicketFor(
   endpointId: string,
   relayHint?: string
@@ -76,30 +59,19 @@ export function endpointTicketFor(
 }
 
 export interface TunnelClientOptions {
-  /** 32-byte device secret; omit to generate a fresh device identity. */
   secretKey?: Uint8Array;
-  /** `disabled` keeps tests offline; production uses the n0 relays + discovery. */
   relays?: "n0" | "disabled";
 }
 
 export interface TunnelClient {
-  /** This device's transport identity (base32 EndpointId). */
   endpointId: string;
   secretKeyBytes: () => Uint8Array;
-  /** Pair with a desktop using the QR payload's ticket + one-time code. */
   pair: (ticket: string, request: PairRequest) => Promise<PairResponse>;
-  /** Redeem a gateway pairing ticket over `centraid/gw-pair/1` (#289). */
   pairGateway: (
     ticket: string,
     request: GatewayPairRequest
   ) => Promise<GatewayPairResponse>;
-  /** Dial the desktop's/gateway's tunnel ALPN. */
   connect: (ticket: string) => Promise<Connection>;
-  /**
-   * Dial another GATEWAY's peer plane (`centraid/gw-link/1`, #726 P3).
-   * Requests over this connection reach `/centraid/_peer/*` and nothing else,
-   * and are answered as typed states — the caller is protocol code, not a UI.
-   */
   connectPeer: (ticket: string) => Promise<Connection>;
   close: () => Promise<void>;
 }
@@ -159,7 +131,6 @@ export interface TunnelResponse {
   body: Buffer;
 }
 
-/** One HTTP request over one bi-stream, response buffered (test helper). */
 export async function tunnelRequest(
   connection: Connection,
   request: {
@@ -194,12 +165,6 @@ export interface LocalProxyHandle {
   close: () => Promise<void>;
 }
 
-/**
- * Localhost HTTP proxy: the WebView points at `http://127.0.0.1:<port>` and
- * every request — documents, module imports, EventSource — is forwarded
- * through the tunnel connection. Responses stream chunk-by-chunk, so SSE
- * events arrive live.
- */
 export async function startLocalProxy(
   getConnection: () => Promise<Connection>,
   options: { port?: number } = {}

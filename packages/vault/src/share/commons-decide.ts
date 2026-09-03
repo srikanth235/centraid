@@ -1,20 +1,3 @@
-// PER-INTENT STEWARD DECISION (#872) — the steward's answer to ONE durable
-// member request, beside the member's own `cancelCommonsIntent`.
-//
-// APPROVING IS NOT A SECOND WRITE PATH. It re-enters `executeCommonsCommand`,
-// exactly as the peer sweep does, so the signature, the stale-context
-// judgement, the ordered op and the fan-out are the SAME machinery a live
-// member command goes through. There is no "approved, therefore skip
-// authorization" door.
-//
-// A durable intent lives in the ACTOR's own seat, never mirrored to the
-// steward, so deciding one means reaching that seat through the host's
-// mounted-vault resolver.
-//
-// DECLINE APPENDS NO OPERATION: a refusal is a policy answer, never a rail
-// refusal, so advancing the grant's sequence for it would put a command in the
-// ordered log that nothing executed. #750 carries it as `denied` with a reason.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import type { VaultDb } from "../db.js";
@@ -32,13 +15,6 @@ import type { CommonsIntentStatus } from "./commons.js";
 
 const DECIDE_PURPOSE = "dpv:ServiceProvision";
 
-/**
- * `cancelled` is deliberately inside the window: `cancelCommonsIntent`'s status
- * guard is the MEMBER's, and the steward's settle is unconditional — the owner
- * of the commons gets the last word. `executed` and `denied` are already
- * answered and `expired` timed out, so re-answering would narrate something
- * that did not happen.
- */
 const DECIDABLE: ReadonlySet<CommonsIntentStatus> = new Set([
   "queued",
   "parked",
@@ -79,7 +55,6 @@ function readIntentRow(
     .get(intentId) as IntentRow | undefined;
 }
 
-/** A malformed historical payload is not an input a command may run on. */
 function commandInputOf(
   row: IntentRow,
   intentId: string
@@ -90,8 +65,6 @@ function commandInputOf(
   return parsed as Record<string, unknown>;
 }
 
-/** Candidates come off the steward's OWN control rows, so a vault this commons
- *  never admitted is never opened. */
 export function commonsIntentSeatCandidates(input: {
   steward: DatabaseSync;
   stewardVaultId: string;
@@ -149,9 +122,6 @@ export function findCommonsIntentSeat(input: {
   return undefined;
 }
 
-/** The SAME resolution `Gateway.invoke` performs before it calls a write
- *  steward-side: live binding, party on the grant's circle, member state
- *  `current`. Falls back to the vault's own owner party. */
 export function commonsPartyForVault(input: {
   steward: DatabaseSync;
   grantId: string;
@@ -178,7 +148,6 @@ export function commonsPartyForVault(input: {
 }
 
 export interface DecideCommonsIntentInput {
-  /** The DECIDING seat. Must hold the grant as its steward — checked, never assumed. */
   steward: VaultDb;
   stewardVaultId: string;
   gateway: Gateway;
@@ -200,7 +169,6 @@ export interface CommonsIntentDecisionResult {
   intentId: string;
   grantId: string;
   decision: "approve" | "decline";
-  /** Read back off the seat AFTER the decision — never the status we assumed. */
   status: CommonsIntentStatus;
   decided: boolean;
   reason?: string;
@@ -211,18 +179,9 @@ export interface CommonsIntentDecisionResult {
 const DEFAULT_DECLINE_REASON =
   "the steward declined this request; nothing was applied";
 
-/** One sentence for both ways a caller can fail to be the steward. */
 const NOT_THE_STEWARD =
   "only the commons steward can approve or decline a member request";
 
-/**
- * Throws — the route answers `400` — for the three things that are not
- * decisions: an intent no mounted seat holds, a caller who is not this grant's
- * steward, and a member deciding their own request (that verb is
- * `cancelCommonsIntent`; calling it "decline" would let a member refuse
- * themselves in the steward's name). A late decision is not an error — it
- * answers `decided: false` with the status that stands.
- */
 export function decideCommonsIntent(
   input: DecideCommonsIntentInput
 ): CommonsIntentDecisionResult {
@@ -234,9 +193,6 @@ export function decideCommonsIntent(
   });
   if (!found)
     throw new Error(`commons intent ${input.intentId} is not available`);
-  // A seat that does not hold the grant cannot be its steward, and
-  // `readCommonsGrant` would fail with a row-level "not available" that reads
-  // like a missing intent.
   const held = input.steward.vault
     .prepare(
       `SELECT 1 AS n FROM share_circle_grant
@@ -265,8 +221,6 @@ export function decideCommonsIntent(
       readIntentRow(found.seat.vault, input.intentId)?.status ?? found.status;
     const receiptId = writeReceipt(input.steward.audit, {
       grantId: grant.grantId,
-      // NOT the intent id: `invocation_id` is a foreign key into
-      // `agent_command_invocation`, and a decision is not an invocation.
       invocationId: null,
       action: `decide ${found.command}`,
       objectType: "share.commons",
@@ -323,10 +277,6 @@ export function decideCommonsIntent(
     vaultFor: input.vaultFor,
     ...(input.invokeFor ? { invokeFor: input.invokeFor } : {}),
   });
-  // The member's OWN vault signs, exactly as on the live rail: the steward
-  // approving does not make the steward the author, and `commandRefuses`
-  // verifies against the pinned binding either way. A steward-authored intent
-  // needs none.
   const memberSignature =
     found.actorPartyId === grant.stewardPartyId
       ? undefined
@@ -354,8 +304,6 @@ export function decideCommonsIntent(
     invocationId: input.intentId,
     now: input.now,
   });
-  // A rail refusal is the steward's answer too: settle it here, because
-  // `executeCommonsCommand` only fans `executed` out to seats.
   if (!result.decision.accepted)
     settleCommonsIntent({
       seat: found.seat.vault,

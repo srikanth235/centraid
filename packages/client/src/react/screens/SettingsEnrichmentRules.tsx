@@ -7,8 +7,6 @@ import RowsBlock from "../ui/RowsBlock.js";
 import type { RowDef } from "../ui/RowsBlock.js";
 import SectionBlock from "../ui/SectionBlock.js";
 
-// EXCEPTIONS (#807): rules deeper than the vault default, listed not folded.
-// Vault-scope rules ARE the switches above, never repeated here. No authoring form.
 // TODO(#814): offer the exception at the collection itself, then link to it here.
 
 function ruleSummary(rule: EnrichPolicyRule): string {
@@ -40,7 +38,6 @@ export default function EnrichmentRules({
   const exceptions = rules.filter((rule) => rule.scope.type !== "vault");
   if (exceptions.length === 0) return null;
 
-  // Scope is the row's subject; capability + decision are the second line.
   const rows: RowDef[] = exceptions.map((rule) => ({
     id: `${rule.scope.type}:${rule.scope.ref}/${rule.capability}`,
     title: rule.scope.ref

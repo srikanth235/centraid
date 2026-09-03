@@ -1,25 +1,3 @@
-/*
- * THE PRE-MUTATION SNAPSHOT, MADE UNFORGETTABLE (#916, review 5.1/5.2).
- *
- * `core_entity_revision` is the vault's "what did this say before" — undo, and
- * the answer to a member asking what changed. It was written by SEVEN of a
- * hundred and eighty-three commands, each remembering to call
- * `recordEntityRevision` by hand, and the snapshot carried no link to the
- * invocation that caused it, so a revision could not be joined to the receipt,
- * the check trail, or the replica change it belongs to.
- *
- * A duty every call site has to remember is a duty that is already broken. So
- * the CAPTURE moved into the engine: temporary `BEFORE UPDATE` / `BEFORE
- * DELETE` triggers, generated from the entity registry, copy the OLD row into
- * a staging table. They fire only while an invocation is open — the same gate
- * idiom the archive pass uses — so a sweep or a migration does not fill it.
- *
- * The engine captures; the PIPELINE decides. Draining keeps the FIRST snapshot
- * per (entity, id) — the row as the command found it, not as its last of
- * several statements left it — stamps the invocation and the actor onto it,
- * and enforces the entity's declared retention.
- */
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { uuidv7 } from "../ids.js";
@@ -27,14 +5,8 @@ import { VAULT_ENTITIES } from "../schema/entity-catalog.js";
 import { revisionPolicyOf } from "../schema/entity-declaration.js";
 import { entitySupertypeMembers } from "../schema/entity.js";
 
-/** Undo window for a snapshot the pipeline took on the command's behalf. */
 const DEFAULT_UNDO_WINDOW_MS = 10_000;
 
-/**
- * Is the machinery on THIS connection? Asked of the connection rather than
- * remembered in a set: temp objects created inside a transaction go away with
- * its rollback, and a remembered "already installed" would then be a lie.
- */
 function installed(vault: DatabaseSync): boolean {
   return (
     vault
@@ -61,10 +33,6 @@ function columnsOf(vault: DatabaseSync, physical: string): string[] {
   ).map((column) => column.name);
 }
 
-/**
- * Create the staging tables and the capture triggers on this connection.
- * Idempotent, and lazy: a vault nobody invokes a command on pays nothing.
- */
 export function ensureRevisionCapture(vault: DatabaseSync): void {
   if (installed(vault)) return;
   vault.exec(`
@@ -80,7 +48,6 @@ export function ensureRevisionCapture(vault: DatabaseSync): void {
     );
   `);
   for (const [logical, physical] of entitySupertypeMembers()) {
-    // A revision OF a revision is noise: the snapshot table is machinery.
     if (logical === "core.entity_revision") continue;
     const pk = primaryKeyOf(vault, physical);
     if (!pk) continue;
@@ -106,7 +73,6 @@ export function ensureRevisionCapture(vault: DatabaseSync): void {
   }
 }
 
-/** Open the gate for one invocation, discarding anything left behind. */
 export function openRevisionCapture(vault: DatabaseSync): void {
   ensureRevisionCapture(vault);
   vault.exec("DELETE FROM temp._revision_pending");
@@ -121,13 +87,6 @@ export function closeRevisionCapture(vault: DatabaseSync): void {
   vault.exec("DELETE FROM temp._revision_pending");
 }
 
-/**
- * Move what the triggers captured into `core_entity_revision`, one row per
- * (entity, id), and hold each entity to its declared retention.
- *
- * Runs INSIDE the invocation's transaction: a rolled-back command leaves no
- * claim that it changed anything.
- */
 export function drainRevisionCapture(
   vault: DatabaseSync,
   input: {
@@ -138,9 +97,6 @@ export function drainRevisionCapture(
   }
 ): number {
   if (!installed(vault)) return 0;
-  // A command that recorded its own COMPOSITE snapshot for this row wins: an
-  // expense's undo needs its splits, and the row alone would restore the
-  // header and lose the money.
   const pending = vault
     .prepare(
       `SELECT entity_type, entity_id, operation, snapshot_json
@@ -187,11 +143,6 @@ export function drainRevisionCapture(
   return pending.length;
 }
 
-/**
- * Keep the last N snapshots of a row, per the entity's declaration (#916, D2).
- * `'forever'` is the Locker's: a swept-away previous password is a credential
- * the member can no longer recover, which is not a cache miss.
- */
 export function enforceRevisionRetention(
   vault: DatabaseSync,
   entityType: string,

@@ -1,6 +1,3 @@
-// Shared by the store conformance suites: a node:sqlite adapter — the same
-// synchronous seam op-sqlite fills on device (which cannot load under vitest
-// on macOS/node).
 import { DatabaseSync } from "node:sqlite";
 
 import type { ReplicaBindValue, ReplicaSqliteDriver } from "./store-core.js";

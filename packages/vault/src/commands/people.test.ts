@@ -62,7 +62,6 @@ describe("people", () => {
       .list_id;
   }
 
-  /** The lists-scheme concept this person is currently filed under, if any. */
   function listOf(partyId: string): string | undefined {
     return taggedConceptId(db, "core.party", partyId, LIST_SCHEME_URI);
   }
@@ -179,17 +178,14 @@ describe("people", () => {
           .prepare("SELECT cadence_days FROM people_profile WHERE party_id = ?")
           .get(partyId) as { cadence_days: number }
       ).cadence_days;
-    // Minted at zero: a person the owner keeps but never wants nagged about.
     const never = addPerson({ display_name: "Uncle Ray", cadence_days: 0 });
     expect(cadenceOf(never)).toBe(0);
-    // And an existing cadence can be turned off after the fact.
     const someone = addPerson();
     expect(
       invoke("people.set_cadence", { party_id: someone, cadence_days: 0 })
         .status
     ).toBe("executed");
     expect(cadenceOf(someone)).toBe(0);
-    // Zero is the floor, not an opening: negatives are still contract failures.
     const negative = invoke("people.set_cadence", {
       party_id: someone,
       cadence_days: -1,
@@ -291,7 +287,6 @@ describe("people", () => {
       "executed"
     );
     expect(starCount(partyId)).toBe(1);
-    // One vocabulary across the vault: the concept carries the Favorite altLabel.
     const concept = db.vault
       .prepare(
         `SELECT c.alt_labels_json FROM core_concept c
@@ -319,7 +314,6 @@ describe("people", () => {
         .status
     ).toBe("executed");
     expect(listOf(partyId)).toBe(family);
-    // Exactly one list tag survives a re-file.
     const tags = db.vault
       .prepare(
         `SELECT count(*) AS n FROM core_tag t JOIN core_concept c ON c.concept_id = t.concept_id
@@ -399,7 +393,6 @@ describe("people", () => {
       "executed"
     );
     expect(reminderOf()).toBe(0);
-    // A non-birthday date defaults to no reminder unless asked.
     const anniv = out<{ date_id: string }>(
       invoke("people.add_important_date", {
         party_id: partyId,
@@ -437,8 +430,6 @@ describe("people", () => {
           .get(partyId) as { month_day: string } | undefined
       )?.month_day;
 
-    // Direction 1 — add_important_date writes through to the party spine. No year
-    // is known, so birth_date is stored year-less (ISO 8601 --MM-DD).
     const dateId = out<{ date_id: string }>(
       invoke("people.add_important_date", {
         party_id: partyId,
@@ -450,8 +441,6 @@ describe("people", () => {
     expect(rowMonthDay()).toBe("08-12");
     expect(birthDateOf()?.slice(-5)).toBe(rowMonthDay());
 
-    // Direction 2 — update_party's birth_date refreshes the People row's MM-DD,
-    // and a known full date is preserved with its year on the party side.
     expect(
       invoke("core.update_party", {
         party_id: partyId,
@@ -462,8 +451,6 @@ describe("people", () => {
     expect(rowMonthDay()).toBe("03-04");
     expect(birthDateOf()?.slice(-5)).toBe(rowMonthDay());
 
-    // Direction 1 again — re-adding/adjusting the birthday preserves the known
-    // year already on the party and only moves MM-DD.
     out<{ date_id: string }>(
       invoke("people.add_important_date", {
         party_id: partyId,
@@ -474,7 +461,6 @@ describe("people", () => {
     expect(birthDateOf()).toBe("1990-12-25");
     expect(birthDateOf()?.slice(-5)).toBe("12-25");
 
-    // The original People row moved too — never two disagreeing MM-DDs.
     expect(
       (
         db.vault

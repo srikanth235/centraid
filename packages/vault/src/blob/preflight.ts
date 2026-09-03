@@ -14,7 +14,6 @@ export interface BlobPreflightResult {
   mediaType?: string;
   contentId?: string;
   staged: boolean;
-  /** False only when a configured provider HEAD failed, not when absent. */
   remoteAvailable: boolean;
   remoteError?: string;
 }
@@ -35,7 +34,6 @@ export interface BlobPreflightDeps {
   verifyRemote?: (sha256: string, sealedSize: number) => Promise<boolean>;
 }
 
-/** HEAD-style existence + custody check, with a claimable staging receipt. */
 export async function preflightBlob(
   deps: BlobPreflightDeps,
   sha256: string,

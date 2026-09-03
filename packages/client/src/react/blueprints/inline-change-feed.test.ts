@@ -6,14 +6,6 @@ import type * as TypeImport_oycips from "../../gateway-client-core.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
 import { installInlineCentraid } from "./centraid-inline.js";
 
-// The seam between the element layer's refresh discipline and the shell: apps
-// call `onDataChange`, which reads `window.centraid.onChange` — installed HERE.
-// Neither side can prove the contract alone, so this suite drives the real
-// pair: a replica invalidation in, a debounced app callback out.
-//
-// gateway-client-core touches window.CentraidApi at module load; stub the whole
-// module (this suite exercises no gateway I/O). Vitest hoists the mock above
-// the imports at run time.
 const readJson = vi.fn<(res: Response, op: string) => Promise<unknown>>();
 type InlineSession = NonNullable<
   Parameters<typeof installInlineCentraid>[0]["session"]
@@ -72,8 +64,6 @@ describe("inline change feed", () => {
           source: "canonical",
         } as ReplicaInvalidation,
       ]);
-      // `onDataChange` debounces on a timer even at 0ms, so the callback lands
-      // a macrotask later — poll the outcome rather than sleeping past it.
       await vi.waitFor(() => expect(seen).toHaveLength(1));
       expect(seen[0]?.tables).toStrictEqual(["schedule.task"]);
       stop();

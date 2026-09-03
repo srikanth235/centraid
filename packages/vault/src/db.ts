@@ -1,11 +1,3 @@
-// One vault owns vault.db and blobs/; only the gateway holds these.
-//
-// ONE FILE (#916). The sibling `journal.db` is gone: the audit band and the
-// conversation-ledger band are bands of vault.db like every other, so a write
-// and its receipt share one transaction and a pointer between them is a real
-// foreign key. Size is answered by RETENTION (schema/audit.ts,
-// `RETENTION_WINDOWS`), not by a second file.
-
 import { mkdirSync, statfsSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -52,24 +44,15 @@ import type { VaultFootprintBudget } from "./vault-footprint.js";
 
 export interface VaultDb {
   vault: DatabaseSync;
-  /**
-   * The AUDIT BAND's connection — the same handle as `vault`, named for what
-   * an audit writer is doing (#916). A writer that means "this is evidence,
-   * not model state" says so at the call site; there is no second file to get
-   * wrong any more.
-   */
   audit: DatabaseSync;
   dir: string;
-  /** DEK for sealed columns (#293); outside export/backup/copy. */
   sealKey: Buffer;
   identitySeed: Buffer;
   keyStore?: KeyStore;
   blobs: BlobCustody;
-  /** null = full restore required. */
   remote: () => RemoteTier | null;
   blobTransfers: BlobTransferCoordinator;
   previewCodec?: PreviewCodec;
-  /** ANALYZE must not sit in the WAL at close (#408). */
   close: (opts?: { skipOptimize?: boolean }) => void;
 }
 
@@ -79,7 +62,6 @@ export interface BlobStoreSettings {
   bucket?: string;
   region?: string;
   prefix?: string;
-  /** MUST stay disjoint from `prefix` and the backup prefix (#425). */
   derivedPrefix?: string;
   encrypt?: boolean;
   connectionId?: string;
@@ -95,17 +77,14 @@ export interface OpenVaultOptions {
   sealKey?: Buffer;
   identitySeed?: Buffer;
   blobStore?: LocalBlobStore;
-  /** Never in settings (#296). */
   s3Credentials?: (
     settings: BlobStoreSettings,
     store?: "cas" | "derived"
   ) => Promise<S3Credentials>;
   previewCodec?: PreviewCodec;
-  /** Canonical vault only (#721); MUST NOT throw. */
   loadExtensions?: (db: DatabaseSync) => void;
   shouldDeferBackgroundWork?: () => boolean;
   replicationConcurrency?: number;
-  /** FULL unless a measured low-end profile chooses NORMAL. */
   synchronous?: "FULL" | "NORMAL";
   footprint?: Partial<VaultFootprintBudget>;
 }
@@ -117,28 +96,21 @@ function openFile(
   loadExtensions?: (db: DatabaseSync) => void
 ): DatabaseSync {
   try {
-    // `allowExtension` works only at construction.
     const db = new DatabaseSync(
       location,
       loadExtensions ? { allowExtension: true } : {}
     );
-    // Before migrations: they may issue vec queries.
     loadExtensions?.(db);
     db.exec("PRAGMA foreign_keys = ON");
     if (location !== ":memory:") {
-      // INCREMENTAL must precede WAL (#438).
       db.exec("PRAGMA page_size = 8192");
       db.exec("PRAGMA auto_vacuum = INCREMENTAL");
       db.exec("PRAGMA journal_mode = WAL");
-      // NORMAL can drop last commits on power loss.
       db.exec(`PRAGMA synchronous = ${synchronous}`);
       applyVaultFootprint(db, footprint);
       db.exec("PRAGMA temp_store = MEMORY");
-      // Workers open the vault by path — wait for locks.
       db.exec("PRAGMA busy_timeout = 30000");
-      // WAL-shipper exclusive (#408): foreign checkpoint = whole-DB re-upload.
       db.exec("PRAGMA wal_autocheckpoint = 0");
-      // Pre-#438 files read auto_vacuum 0; VACUUM safe only here.
       const autoVacuum = (
         db.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number }
       ).auto_vacuum;
@@ -193,21 +165,17 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     );
     local = options.blobStore ?? new FsBlobStore(path.join(dir, "blobs"));
   }
-  // Must exist before migrations (FTS triggers).
   registerContentTextFn(vault);
   registerHammingFn(vault);
   registerCosineFn(vault);
   migrateVault(vault);
-  // Durable write choke (#406), after every fresh-schema open.
   initializeReplicaProtocol(vault);
-  // Unprovable marker fails CLOSED.
   try {
     repairReplicaInvocationCommits({ vault, audit: vault });
   } catch (error) {
     vault.close();
     throw error;
   }
-  // After migration (#298): sealed vault refuses a regenerated key.
   const sealKey =
     options.sealKey ??
     (dir === undefined
@@ -237,7 +205,6 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     });
     if (cachedRemote?.key === key) return cachedRemote.tier;
     const resolver = options.s3Credentials;
-    // Ignore stale `false`: a settings write must not create plaintext.
     const throttle = policy.throttleBytesPerSec
       ? { throttleBytesPerSec: policy.throttleBytesPerSec }
       : {};
@@ -266,7 +233,6 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
           readBackupPolicy(vault),
           originalHint
         ),
-      // Derivatives never take the multipart path (#425).
       ...(settings.derivedPrefix
         ? {
             derivedStore: new S3BlobStore({
@@ -295,7 +261,6 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
               const s = statfsSync(blobsDir);
               return { bavail: s.bavail, bsize: s.bsize };
             } catch {
-              // Unreadable volume = no measurement, not a failed budget.
               return null;
             }
           },
@@ -336,14 +301,12 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     blobTransfers,
     ...(options.previewCodec ? { previewCodec: options.previewCodec } : {}),
     close(opts) {
-      // Fence the runner: no in-flight request may settle against SQLite.
       blobTransfers.abandon();
-      // PRAGMA optimize (#374); never blocks close.
       if (!opts?.skipOptimize) {
         try {
           vault.exec("PRAGMA optimize");
         } catch {
-          // best-effort maintenance.
+          // Intentionally empty.
         }
       }
       vault.close();

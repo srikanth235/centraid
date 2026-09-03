@@ -1,7 +1,3 @@
-// A commons cursor is a logical offset within one grant/member stream. It
-// sits above the vault replica's one ordinary physical change cursor; it is
-// not another replication engine or another vault-wide cursor.
-
 import type { DatabaseSync } from "node:sqlite";
 
 export interface CommonsCursor {

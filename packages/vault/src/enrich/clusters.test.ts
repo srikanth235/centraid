@@ -1,7 +1,3 @@
-// Near-duplicate clustering (#352 phase 3/4) — see clusters.ts header
-// for the app-plane gap this closes (media_asset_phash was unreachable from
-// consent.app_view: no SQL functions, no registered logical entity).
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { seededRandom } from "@centraid/test-kit/random";
@@ -44,7 +40,6 @@ describe("clusters", () => {
     };
   });
 
-  /** Distinct pixel data URIs so each mints its OWN asset (sha256 differs). */
   const PIXELS = [
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
@@ -78,7 +73,6 @@ describe("clusters", () => {
     expect(byId.get(a)).not.toBeNull();
     expect(byId.get(a)).toBe(byId.get(b));
     expect(byId.get(c)).toBeNull();
-    // Deterministic: the cluster id is the lowest asset_id in the group.
     expect(byId.get(a)).toBe([a, b].sort()[0]);
   });
 
@@ -125,9 +119,6 @@ describe("clusters", () => {
     );
   });
 
-  // ── issue #659 G1/G2: the banded index and the write budget ───────────
-
-  /** Seed phash rows directly — the bulk shape the sweep actually meets. */
   function seedPhashes(phashes: readonly string[]): string[] {
     const content = db.vault.prepare(
       `INSERT INTO core_content_item
@@ -156,7 +147,6 @@ describe("clusters", () => {
     return ids;
   }
 
-  /** The pre-#659 pairwise clustering, kept as the equivalence oracle. */
   function bruteForceClusterIds(
     rows: readonly { assetId: string; phash: string }[],
     threshold: number
@@ -205,9 +195,6 @@ describe("clusters", () => {
 
   test("the banded index reproduces the pairwise clustering exactly", () => {
     const random = seededRandom(659_001);
-    // Mixed corpus: tight families around random seeds (the near-duplicate
-    // case the threshold exists for) plus loners, so both branches of the
-    // pigeonhole filter are exercised.
     const hex = (): string =>
       Array.from(
         { length: 16 },
@@ -236,7 +223,6 @@ describe("clusters", () => {
     const actual = storedClusterIds();
     for (const [assetId, clusterId] of expected)
       expect(actual.get(assetId)).toBe(clusterId);
-    // The corpus is not trivially all-singleton or all-one-cluster.
     const clustered = [...expected.values()].filter((v) => v !== null).length;
     expect(clustered).toBeGreaterThan(40);
     expect(clustered).toBeLessThan(expected.size);
@@ -266,10 +252,6 @@ describe("clusters", () => {
       "12345678",
     ]);
     recomputeDuplicateClusters(db.vault);
-    // A newcomer next to the existing pair: it joins their cluster, and no
-    // other row's cluster_id may be rewritten. Its id sorts AFTER the
-    // incumbents' so the group's lowest-id cluster key is unchanged — the
-    // stability property the projection promises apps.
     db.vault
       .prepare(
         `INSERT INTO core_content_item
@@ -292,15 +274,7 @@ describe("clusters", () => {
 
     const before = totalChanges();
     const result = recomputeDuplicateClusters(db.vault);
-    // Exactly one row moved (the newcomer); the incumbent pair keeps the
-    // cluster id it already displayed.
     expect(result.updated).toBe(1);
-    // The engine's counter ticks twice per written row (measured), and twice
-    // again since `media.asset_phash` became a declared-mutable table with a
-    // touch trigger (#916, ruling ONT-08) — the trigger's own UPDATE is a
-    // second write of the same row. The load-bearing assertion is unchanged:
-    // writes scale with rows that MOVED, not with the size of the table, and a
-    // wholesale reset would tick 24 here.
     const delta = totalChanges() - before;
     expect(delta).toBeGreaterThan(0);
     expect(delta).toBeLessThanOrEqual(4 * result.updated);

@@ -1,6 +1,3 @@
-// Peer-plane loop (#726): admission asks `authorizePeer` ONLY — never the
-// device-enrollment predicate (that reuse is privilege escalation).
-
 import type { Connection, RecvStream, SendStream } from "./iroh.js";
 import type { TokenBucket } from "./peer-budget.js";
 import { alpnBytes, CLOSE_UNAUTHORIZED } from "./protocol.js";
@@ -36,9 +33,7 @@ export async function servePeerConnection(
         return;
       }
       if (deps.budget.take(endpointId)) {
-        void deps.serve(endpointId, bi.send, bi.recv).catch(() => {
-          // Refusal frame sent.
-        });
+        void deps.serve(endpointId, bi.send, bi.recv).catch(() => {});
       } else {
         void deps.refuse(bi.send, 429, "rate_limited").catch(() => undefined);
       }
@@ -46,7 +41,7 @@ export async function servePeerConnection(
     };
     await serveNextStream();
   } catch {
-    // Peer closed / unlinked / shutdown.
+    // Intentionally empty.
   } finally {
     deps.untrack?.(endpointId, connection);
   }

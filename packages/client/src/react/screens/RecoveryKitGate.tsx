@@ -31,8 +31,6 @@ export default function RecoveryKitGate({
   const [lossConsent, setLossConsent] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // A fresh confirmation timestamp from the gateway replaces the local one.
-  // Adjusted during render, so the gate never paints the stale value once.
   const [seenConfirmedAt, setSeenConfirmedAt] = useState(
     recoveryKit.confirmedAt
   );

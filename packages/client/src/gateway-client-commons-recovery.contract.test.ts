@@ -1,9 +1,3 @@
-// Client↔gateway seam laws for the Commons steward-absence recovery door
-// (#750). The presence read and the ceremony were server-only until a member
-// surface could call them, so these state what that surface puts on the wire:
-// the actor vault rides the query/body, the read narrows the gateway's wide
-// observability record, and a NAMED refusal reaches the member as words.
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -54,8 +48,6 @@ describe("commons recovery seam", () => {
       grantId: "grant-1",
     });
     expect(outcome.state).toBe("recovered");
-    // The member whose only link was to the vault that disappeared cannot be
-    // invited over the wire — the surface has to be able to say so.
     expect(outcome.invitations).toStrictEqual([
       { partyId: "party-b", memberVaultId: "vault-b", state: "delivered" },
       { partyId: "party-c", state: "claim" },

@@ -1,9 +1,3 @@
-// The app, automation, turn, health, compile, and lifecycle wire surfaces of
-// the renderer gateway client — including the `run.*` → `turn.*` rename pinned
-// method-and-query deep (#541). Owner vault / import / outbox / log transports
-// live in gateway-client-vault.contract.test.ts; the mock gateway itself in
-// gateway-client-contract-fixtures.ts.
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -22,10 +16,6 @@ interface SentRequest {
   query: URLSearchParams;
 }
 
-/**
- * The wire transcript the client produced since the harness' `beforeEach`
- * reset. Each test drives its own surface and reads back only its own calls.
- */
 function transcript(): SentRequest[] {
   return fetchMock.mock.calls.map(([url, init]) => {
     const parsed = new URL(String(url));
@@ -37,11 +27,6 @@ function transcript(): SentRequest[] {
   });
 }
 
-/**
- * The `run.*` → `turn.*` wire surface, pinned method + query and all: a path
- * assertion alone cannot catch a GET that should be a POST or a dropped query
- * parameter (#541).
- */
 function sentBy(
   requests: SentRequest[],
   path: string,
@@ -57,9 +42,6 @@ function sentBy(
 }
 
 describe("renderer gateway automation contracts", () => {
-  // Split from the automation drive below along the surface seam (#573): both
-  // halves are independent drives against a fresh fetch mock, so neither
-  // depends on the other having run.
   it("covers the app, version, prefs, and health surfaces", async () => {
     await expect(client.readGatewayCapabilities()).resolves.toMatchObject({
       automationTurns: true,
@@ -142,7 +124,6 @@ describe("renderer gateway automation contracts", () => {
       method?: string
     ): boolean => sentBy(requests, path, predicate, method);
 
-    // A manual fire mints a turn — a write, never a GET.
     expect(
       sent(
         "/centraid/_automations/turn-now",
@@ -157,21 +138,18 @@ describe("renderer gateway automation contracts", () => {
         "POST"
       )
     ).toBe(true);
-    // The turn feed carries both its filter and its bound.
     expect(
       sent(
         "/centraid/_automations/turns",
         (q) => q.get("ref") === "daily/daily" && q.get("limit") === "3"
       )
     ).toBe(true);
-    // …and defaults the bound when the caller omits it.
     expect(
       sent(
         "/centraid/_automations/turns",
         (q) => !q.has("ref") && q.get("limit") === "50"
       )
     ).toBe(true);
-    // The expanded read must ask for items, or the thread renders a bare turn.
     expect(
       sent(
         "/centraid/_automations/turn",
@@ -184,7 +162,6 @@ describe("renderer gateway automation contracts", () => {
         (q) => q.get("ref") === "daily/daily" && q.get("expand") === "items"
       )
     ).toBe(true);
-    // A plain turn read must NOT expand — that is the cheap header path.
     expect(
       sent(
         "/centraid/_automations/turn",
@@ -203,7 +180,6 @@ describe("renderer gateway automation contracts", () => {
         (q) => q.get("turnId") === "turn-1"
       )
     ).toBe(true);
-    // An interactive turn posts to the automation ref, not a turn id.
     expect(
       sent(
         "/centraid/_automations/turn",
@@ -270,15 +246,10 @@ describe("renderer gateway automation contracts", () => {
     expect(paths).toContain("/centraid/_automations/compile");
     expect(paths).toContain("/centraid/_automations/revise");
     expect(paths).toContain("/centraid/_automations/set-enabled");
-    // Deleting the automation also drops its editing session — a leaked
-    // worktree is the regression this pins.
     expect(paths).toContain("/centraid/_apps/_sessions/desktop-daily");
   });
 
   it("fails a client that calls a path the gateway does not serve", () => {
-    // A path the gateway does not serve is the concrete regression this
-    // guards: a renamed or misspelled path must break the suite, not fall
-    // through to a permissive `{ ok: true }`.
     expect(() =>
       fetch("https://gateway.test/centraid/_automations/runs?ref=daily/daily")
     ).toThrow(/unrouted gateway path: GET \/centraid\/_automations\/runs/u);

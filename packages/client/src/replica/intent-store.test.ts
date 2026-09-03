@@ -15,9 +15,6 @@ describe(IndexedDbIntentStore, () => {
       factory
     );
     try {
-      // Seed the existing journal in one fixture transaction, then exercise
-      // the public settle path at the retention boundary. Replaying 10k
-      // transactions here only measures fake-IndexedDB setup cost.
       await seedOutcomeJournal(store, 5_000);
       await settled(store, 5_000);
       const journal = await store.listSettled(5_000);
@@ -43,7 +40,6 @@ describe(MemoryIntentStore, () => {
     }
     const journal = await store.listSettled(5_000);
     expect(journal).toHaveLength(5_000);
-    // The cap drops the oldest, never the settlement that just landed.
     expect(journal.some((outcome) => outcome.intentId === "intent-5000")).toBe(
       true
     );

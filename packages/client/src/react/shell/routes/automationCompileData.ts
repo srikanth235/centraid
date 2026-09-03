@@ -1,8 +1,3 @@
-/*
- * Compile-workbench data layer: a compile is an ordinary automation turn read
- * as STEPS, not chat messages. The run screen never calls this file — that
- * keeps compile turns out of run history.
- */
 import { relativeTime } from "../../../app-format.js";
 import {
   listAutomationTurns,
@@ -16,7 +11,6 @@ import type {
   TurnWatchOutcome,
 } from "../../screen-contracts.js";
 
-/** Step-row detail length: recognisable, still a list; full text one click away. */
 const DETAIL_CHARS = 160;
 
 function clip(text: string): string {
@@ -26,7 +20,6 @@ function clip(text: string): string {
     : flat;
 }
 
-/** First readable line of a tool payload — not the raw JSON envelope noise. */
 function payloadDetail(raw: string | undefined): string | null {
   if (!raw) return null;
   try {
@@ -53,8 +46,6 @@ function stepLabel(item: CentraidAutomationItem): string {
   return "Step";
 }
 
-/** One ledger item → one step row; `message_in` items are dropped (already
- *  the left-hand pane of this screen). */
 export function compileStepOf(
   item: CentraidAutomationItem
 ): CompileStepDTO | null {
@@ -100,7 +91,6 @@ export function compileAttemptOf(
   };
 }
 
-/** This automation's compile attempts, newest first. */
 export async function loadCompileAttempts(
   automationId: string
 ): Promise<CompileAttemptDTO[]> {
@@ -111,18 +101,11 @@ export async function loadCompileAttempts(
     .map(compileAttemptOf);
 }
 
-/** Cold read of one turn's steps: finished-attempt scrollback, and first
- *  paint before a live stream takes over. */
 export async function loadTurnSteps(turnId: string): Promise<CompileStepDTO[]> {
   const expanded = await readAutomationTurnExpanded({ turnId });
   return compileSteps(expanded.items);
 }
 
-/**
- * Watch a compile (or test-run) turn as STEPS. Mirrors `automationTurnWatch.ts`'s
- * contract exactly (same settled/ok semantics, same single authoritative
- * post-stream ledger re-read) but folds events into ledger-shaped items.
- */
 export async function watchTurnSteps(
   turnId: string,
   onSteps: (steps: CompileStepDTO[]) => void,

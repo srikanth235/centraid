@@ -1,11 +1,3 @@
-// Bounded, parse-only media metadata (#414).
-//
-// The gateway never decodes/transcodes media. These small container walks
-// read duration, display dimensions, codec and creation time from ISO-BMFF
-// (MP4/MOV) and WebM/EBML, plus owner-facing title/artist from ID3 and
-// Vorbis comments. Every cursor is bounds-checked and both recursion and
-// element counts are capped: malformed bytes degrade to partial/no metadata.
-
 export interface MediaMetadata {
   duration_s?: number;
   width?: number;
@@ -92,7 +84,6 @@ const KNOWN_CODECS = new Set([
   "Opus",
 ]);
 
-/** Parse ISO-BMFF box metadata without reading sample payloads. */
 export function parseIsoBmffMetadata(bytes: Buffer): MediaMetadata {
   const out: MediaMetadata = {};
   let visited = 0;
@@ -146,10 +137,9 @@ export function parseIsoBmffMetadata(bytes: Buffer): MediaMetadata {
           }
         }
       } catch {
-        // One malformed box does not discard metadata parsed from siblings.
+        // Intentionally empty.
       }
       if (ISO_CONTAINERS.has(box.type)) walk(box.payload, box.end, depth + 1);
-      // `meta` is a FullBox: four version/flags bytes precede its children.
       if (box.type === "meta" && box.payload + 4 <= box.end) {
         walk(box.payload + 4, box.end, depth + 1);
       }
@@ -229,7 +219,6 @@ interface EbmlTrack {
   height?: number;
 }
 
-/** Parse bounded WebM/Matroska Info + Tracks elements. */
 export function parseWebmMetadata(bytes: Buffer): MediaMetadata {
   const out: MediaMetadata = {};
   const tracks: EbmlTrack[] = [];
@@ -288,7 +277,7 @@ export function parseWebmMetadata(bytes: Buffer): MediaMetadata {
           childTrack.height = unsignedBe(bytes, payload, elementEnd);
         }
       } catch {
-        // Partial metadata is still useful.
+        // Intentionally empty.
       }
       if (EBML_MASTER.has(id.value))
         walk(payload, elementEnd, depth + 1, childTrack);
@@ -445,7 +434,6 @@ function parseWavMetadata(bytes: Buffer): MediaMetadata {
   return out;
 }
 
-/** Dispatch by sniffed media type/signature; never throws on malformed bytes. */
 export function parseMediaMetadata(
   bytes: Buffer,
   mediaType: string
@@ -462,7 +450,7 @@ export function parseMediaMetadata(
       return parseVorbisMetadata(bytes);
     if (mediaType === "audio/wav") return parseWavMetadata(bytes);
   } catch {
-    // Ingress is never refused because metadata is malformed.
+    // Intentionally empty.
   }
   return {};
 }

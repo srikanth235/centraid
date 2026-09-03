@@ -23,9 +23,6 @@ describe("screens/ResourceAdvancedKnobs", () => {
     vi.clearAllMocks();
   });
 
-  // A profile carrying the Phase F `sources` + `bounds`. host.cores = 4 so a
-  // concurrency of 8 trips the soft "more workers than cores" warning; memory is
-  // generous so the product warning stays quiet unless a test forces it.
   const tunedProfile: ResourceProfileDTO = {
     class: "standard",
     mode: "balanced",
@@ -175,14 +172,12 @@ describe("screens/ResourceAdvancedKnobs", () => {
       });
       await expand(el);
 
-      // preset + no override → Linked, editable.
       const linkedRow = el.querySelector(
         '[data-testid="knob-workerMaxConcurrent"]'
       ) as HTMLElement;
       expect(linkedRow.textContent).toContain("Linked");
       expect(inputFor(el, "workerMaxConcurrent").disabled).toBe(false);
 
-      // saved override → Custom, with a Reset-to-Linked affordance.
       const customRow = el.querySelector(
         '[data-testid="knob-replicationConcurrency"]'
       ) as HTMLElement;
@@ -194,7 +189,6 @@ describe("screens/ResourceAdvancedKnobs", () => {
         )
       ).toBe(true);
 
-      // env → locked: input disabled, env var named, no Save button.
       const lockedRow = el.querySelector(
         '[data-testid="knob-workerPoolSize"]'
       ) as HTMLElement;
@@ -248,7 +242,6 @@ describe("screens/ResourceAdvancedKnobs", () => {
         saveKnobPrefs,
       });
       await expand(el);
-      // 8 workers on a 4-core host: within bounds (max 32) but over cores.
       await act(async () => setInput(inputFor(el, "workerMaxConcurrent"), "8"));
 
       expect(
@@ -284,7 +277,6 @@ describe("screens/ResourceAdvancedKnobs", () => {
       expect(
         el.querySelector('[data-testid="resource-advanced-saved"]')?.textContent
       ).toContain("Applies on the next gateway restart");
-      // The row now reads Custom.
       expect(
         el.querySelector('[data-testid="knob-workerMaxConcurrent"]')
           ?.textContent

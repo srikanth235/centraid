@@ -1,12 +1,4 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
-/*
- * Settings → Enrichment data layer (#807).
- *
- * The law under test is ONE WRITER PER PATH: tiers and rules go to the vault's
- * own routes, and an engine profile goes to the prefs key `enrich.profile.<id>`
- * as the stored shape the gateway validates — with no `egress`, which is
- * computed there and is a refusal rather than a preference.
- */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -40,8 +32,6 @@ const {
   setEnrichRule: vi.fn<typeof TypeImport_1e7rich.setEnrichRule>(),
 }));
 
-// Hoisted above the imports so the gateway stub lands before the data module
-// pulls gateway-client-core's load-time side-effect.
 vi.mock(import("../../../gateway-client.js") as Promise<unknown>, () => ({
   deleteEnrichRule,
   getEffectiveEnrichPolicy,
@@ -101,9 +91,6 @@ describe("settingsEnrichmentData", () => {
   });
 
   it("never reads the per-domain ceiling — it is no longer a control here", async () => {
-    // v11 removed the ceiling control (enrichment runs on the gateway), so the
-    // page stops reading the tier store and reads the gateway's own resolver,
-    // which is what still reports a ceiling that refuses a row.
     listEnrichProfiles.mockResolvedValue([
       {
         id: "built-in",
@@ -197,8 +184,6 @@ describe("settingsEnrichmentData", () => {
       },
     ]);
     const data = await loadEnrichmentSettings();
-    // Once, for the BUILT-IN of each capability — a member profile is another
-    // engine for the same capability, not a second thing to resolve.
     expect(getEffectiveEnrichPolicy.mock.calls).toStrictEqual([
       [{ capability: "ocr", domain: "photos" }],
     ]);

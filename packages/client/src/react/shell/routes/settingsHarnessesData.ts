@@ -10,14 +10,8 @@ import type {
   ModelSubsystem,
 } from "../../screen-contracts.js";
 
-// Harness console: map the gateway's `{ harnesses: [...] }` list into
-// HarnessesStatusDTO. Never enumerate kinds locally — a new gateway harness
-// must still render. Prefs: `model.<kind>.<slot>`, `harness.<subsystem>`,
-// `harness.kind` default. Empty pins fall through server-side.
-
 type Snap = Awaited<ReturnType<typeof getHarnessesStatus>>;
 
-/** Map a stored pin onto a kind this gateway actually reported. */
 export function resolveReportedHarnessKind(
   status: HarnessesStatusDTO,
   requested: HarnessKind | null | undefined,
@@ -41,7 +35,6 @@ export function resolveReportedHarnessKind(
   );
 }
 
-/** Cosmetic only — never gate which harnesses render. Unknown kinds get the default. */
 const ACCENT_BY_KIND: Record<string, string> = {
   codex: "var(--c-teal)",
   "claude-code": "var(--c-violet)",
@@ -101,7 +94,6 @@ function readHarnessPrefs(
   const byKey: Partial<Record<ModelSubsystem, HarnessKind>> = {};
   for (const s of SUBSYSTEMS) {
     const v = prefs[harnessPrefKey(s)];
-    // Any non-empty string is a pin. A closed set would drop future kinds.
     if (typeof v === "string" && v) byKey[s] = v;
   }
   return byKey;
@@ -133,7 +125,6 @@ function readHarnessLadderPrefs(
   return byKey;
 }
 
-/** Driven by the gateway's list — a new harness's saved models must still read. */
 function readModelPrefs(
   prefs: Record<string, unknown>,
   kinds: readonly HarnessKind[]
@@ -240,7 +231,6 @@ function toCard(
     connected: entry.available,
     sessionReady:
       entry.available && caps?.reachable === true && caps.authRequired !== true,
-    // Silence, not refusal — capabilities not reported yet.
     ...(entry.available && caps === undefined
       ? { sessionProbePending: true }
       : {}),
@@ -332,7 +322,6 @@ export async function loadHarnesses(opts?: {
     getUserPrefs().catch(() => ({}) as Record<string, unknown>),
   ]);
   const kindRaw = prefs["harness.kind"];
-  // Trust the persisted kind; only absent/blank falls back.
   const selectedKind =
     typeof kindRaw === "string" && kindRaw
       ? (kindRaw as HarnessKind)
@@ -354,10 +343,6 @@ export async function loadHarnesses(opts?: {
   );
 }
 
-/**
- * One writer. Refusal returns the gateway's own text; success is `null`.
- * Never `void saveUserPrefs` — a refused pick must not sit as if kept.
- */
 export type PrefWriteResult = string | null;
 
 async function writePrefs(
@@ -377,7 +362,6 @@ export async function activateHarness(
   return writePrefs({ "harness.kind": kind });
 }
 
-/** `''` clears the pin (`'' → null`) so the subsystem inherits the default. */
 export async function setSubsystemHarness(
   subsystem: ModelSubsystem,
   kind: HarnessKind | ""

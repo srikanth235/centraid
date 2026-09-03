@@ -1,10 +1,3 @@
-/*
- * Renderer client for snapshot edges and circle-backed commons (#731).
- * SAME-OWNER ONLY since #825 (ruling G-copy): edges copy between two vaults
- * ONE PERSON owns — cross-owner give retired (`cross_owner_give_retired`);
- * other-people sharing is a standing GRANT on `/centraid/_vault/grants`.
- */
-
 import {
   auth,
   authHeaders,
@@ -75,7 +68,6 @@ export async function createCommons(input: {
   return readJson<Record<string, unknown>>(res, "share commons");
 }
 
-/** Commons offer awaiting receiver consent; rows project only after acceptance. */
 export interface CommonsInvitation {
   invitationId: string;
   grantId: string;
@@ -104,7 +96,6 @@ export async function listCommonsInvitations(
   return out.invitations ?? [];
 }
 
-/** Redeems a one-time claim; raw token sent once, never retained client-side. */
 export async function claimCommonsInvitation(
   actorVaultId: string,
   stewardVaultId: string,
@@ -141,7 +132,6 @@ export async function answerCommonsInvitation(
   return out.invitation;
 }
 
-/** One commons grant this vault holds (`commons-recovery-routes.ts` shape); actorVaultId added client-side so rows stay attributable. */
 export interface CommonsRecoveryGrant {
   actorVaultId: string;
   grantId: string;
@@ -175,8 +165,6 @@ export interface CommonsRecoveryOutcome {
   replayed: boolean;
 }
 
-/** Plain words for NAMED refusals: recovery refuses on purpose far more often
- * than it fails — the member reads a reason, not a code. */
 const RECOVERY_REFUSALS: Record<string, string> = {
   "already-steward": "You already run this shared space.",
   "parked-on-fault":
@@ -202,7 +190,6 @@ export async function listCommonsRecovery(
   return (out.grants ?? []).map((grant) => ({ ...grant, actorVaultId }));
 }
 
-/** Re-found after steward loss — deliberate, never automatic; refusal arrives as Error with the ceremony's reason. */
 export async function recoverCommons(
   actorVaultId: string,
   grantId: string

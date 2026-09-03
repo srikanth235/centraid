@@ -18,9 +18,6 @@ import HouseholdRoute from "./HouseholdRoute.js";
 
 import styles from "./VaultRoute.module.css";
 
-// Vault custody surface (v11). One page, one publish to the app bar.
-// `atlas` and `household` both resolve here so old pins land.
-
 export interface VaultRouteProps {
   page?: OpsPage;
 }
@@ -56,7 +53,6 @@ export default function VaultRoute({
 
   const count = [census?.count, roster?.custody].filter(Boolean).join(" · ");
 
-  // A pending pairing is the only thing here a member has to act on.
   const health = useMemo(
     () =>
       roster && roster.pendingCount > 0

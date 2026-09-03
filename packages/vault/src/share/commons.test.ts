@@ -162,8 +162,6 @@ describe("circle-backed commons", () => {
       stewardLabel: "Priya's device",
       now,
     });
-    // The one write rail. A structural/capability refusal is decided and
-    // sequenced before any command runs, so nothing is invoked here.
     const gateway = createGateway(origin);
     const credential: Credential = {
       kind: "device",

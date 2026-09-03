@@ -22,15 +22,11 @@ export interface ReplicaStoragePurgeOptions {
   storage?: ManifestStorage;
   workerFactory?: ReplicaWorkerFactory;
   indexedDbFactory?: IDBFactory;
-  /** Test seam for the authoritative global durable-scope inventory. */
   inventory?: ReplicaIdentityInventory;
-  /** Test seam; production always uses the OPFS + IDB purge below. */
   purgeIdentity?: (identity: ReplicaIdentity) => Promise<void>;
-  /** Test seam for durable retry deadlines. */
   now?: () => number;
   retryBaseDelayMs?: number;
   retryMaxDelayMs?: number;
-  /** Durable lifecycle selector retried if authoritative identity discovery fails. */
   purgeSelector?: ReplicaPurgeSelector;
 }
 
@@ -53,7 +49,6 @@ export interface ReplicaIdentityInventory {
   list: () => Promise<ReplicaIdentityInventoryEntry[]>;
 }
 
-/** Durable, non-secret inventory used to wipe replica scopes that are not open. */
 export function listRememberedReplicaIdentities(
   storage: ManifestStorage | undefined = durableStorage()
 ): ReplicaIdentity[] {
@@ -96,11 +91,6 @@ export function forgetReplicaIdentity(
   );
 }
 
-/**
- * Register a durable scope before OPFS or its per-scope IDB is opened. If the
- * authoritative global IDB cannot persist and read back the row, callers must
- * use memory-only storage for the whole scope.
- */
 export async function prepareRememberedReplicaIdentity(
   identity: ReplicaIdentity,
   options: Pick<
@@ -132,7 +122,6 @@ export async function prepareRememberedReplicaIdentity(
   }
 }
 
-/** Remove the authoritative row only after all per-scope storage is gone. */
 export async function unregisterRememberedReplicaIdentity(
   identity: ReplicaIdentity,
   options: Pick<
@@ -151,7 +140,6 @@ export async function unregisterRememberedReplicaIdentity(
   forgetReplicaIdentity(identity, storage);
 }
 
-/** Persist terminal intent before any destructive storage operation starts. */
 export async function markReplicaIdentityTerminal(
   identity: ReplicaIdentity,
   options: Pick<
@@ -174,7 +162,6 @@ export async function markReplicaIdentityTerminal(
   }
 }
 
-/** Move a failed terminal purge onto a durable, capped exponential deadline. */
 export async function deferTerminalReplicaPurge(
   identity: ReplicaIdentity,
   options: Pick<
@@ -196,11 +183,6 @@ export async function deferTerminalReplicaPurge(
   );
 }
 
-/**
- * Remove OPFS + IndexedDB for an identity without relying on an open shell
- * session. This is what lets inactive gateway removal and consent downgrade
- * clean scopes left dormant by a renderer restart.
- */
 export async function purgeReplicaIdentityStorage(
   identity: ReplicaIdentity,
   options: ReplicaStoragePurgeOptions = {}
@@ -276,11 +258,6 @@ export async function purgeReplicaIdentityStorage(
   }
 }
 
-/**
- * Retry only inventory rows already marked terminal. Remembered rows are never
- * inferred to be stale, so warm inactive scopes remain available by default.
- * Returns the next absolute retry deadline, if any terminal rows remain.
- */
 export async function retryTerminalReplicaPurges(
   options: ReplicaStoragePurgeOptions = {}
 ): Promise<number | undefined> {
@@ -349,7 +326,6 @@ export async function retryTerminalReplicaPurges(
   return Math.min(...remaining.map((entry) => entry.retryAt));
 }
 
-/** Purge every remembered identity selected from the durable manifest. */
 export async function purgeRememberedReplicaIdentities(
   matches: (identity: ReplicaIdentity) => boolean,
   options: ReplicaStoragePurgeOptions = {}
@@ -445,7 +421,7 @@ function writeManifest(
     if (identities.length === 0) storage.removeItem(MANIFEST_KEY);
     else storage.setItem(MANIFEST_KEY, JSON.stringify(identities));
   } catch {
-    /* Storage denial means no durable replica can be inventoried here. */
+    // Intentionally empty.
   }
 }
 

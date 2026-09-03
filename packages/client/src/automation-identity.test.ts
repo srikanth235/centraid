@@ -47,8 +47,6 @@ describe(glyphForId, () => {
   });
 
   it("is decoupled from hue (uses a salted hash)", () => {
-    // The glyph derivation salts the id, so it is not just a function of the
-    // hue index — collisions between the two derivations should not be total.
     const sameHueDifferentGlyph = Array.from(
       { length: 50 },
       (_, i) => `auto-${i}`

@@ -1,35 +1,21 @@
-// The Vault Atlas mapping (#441): table → kind → pack. DERIVED from
-// `VAULT_TABLES`, never hand-listed; all this module adds is ONTOLOGY packs
-// (life data) versus MACHINERY bands (plumbing).
-
 import { VAULT_ENTITIES, VAULT_TABLES, entityDeclaration } from "./tables.js";
 
 export type AtlasPackKind = "ontology" | "machinery";
 
-/** Explicit, so a NEW schema fails loud rather than mis-shelving (#441). */
 export const ONTOLOGY_PACKS: readonly string[] = [
   "core",
   "schedule",
   "social",
   "knowledge",
   "media",
-  // `home`/`business` (#883, #885) and `health`/`finance` (#916, ruling
-  // ONT-06) are deliberately out of the ontology — dropped for having no
-  // consumer, not shelved as machinery.
   "people",
   "locker",
   "tally",
 ];
 
-/** Every band that is plumbing rather than life data. `audit` and `ledger` are
- * BAND-DECLARED rather than registry-declared: their physical names do not
- * follow `<band>_<table>`, so their table lists live in their band modules. */
 export const MACHINERY_BANDS: readonly string[] = [
   "access",
   "agent",
-  // The two append-heavy bands that joined the one file under #916. Both are
-  // NAMED on the ontology page and excluded from the export and the replica by
-  // band (schema/local-tables.ts).
   "audit",
   "ledger",
   "sync",
@@ -61,11 +47,6 @@ export const ATLAS_PACK_LABELS: Readonly<Record<string, string>> = {
   share: "Sharing",
 };
 
-/**
- * Name + blurb per ONTOLOGY kind, so Relations says "People — everyone you
- * know", not "core_party". The blurb-carrying subset of the registry IS the
- * ontology: machinery is named, never given a fabricated description (#883).
- */
 export const ATLAS_KIND_FRIENDLY: Readonly<
   Record<string, { name: string; blurb: string }>
 > = Object.fromEntries(
@@ -86,14 +67,12 @@ export const ATLAS_KIND_FRIENDLY: Readonly<
 const ONTOLOGY_SET = new Set(ONTOLOGY_PACKS);
 const MACHINERY_SET = new Set(MACHINERY_BANDS);
 
-/** Undefined for a schema this module has not classified. */
 export function packKindOf(schema: string): AtlasPackKind | undefined {
   if (ONTOLOGY_SET.has(schema)) return "ontology";
   if (MACHINERY_SET.has(schema)) return "machinery";
   return undefined;
 }
 
-/** Humanized out of the physical table's local name. */
 export function humanizeKind(table: string): string {
   return table
     .split("_")
@@ -102,7 +81,6 @@ export function humanizeKind(table: string): string {
 }
 
 export interface AtlasTableEntry {
-  /** The name grants, links and provenance store. */
   logical: string;
   schema: string;
   table: string;
@@ -110,18 +88,14 @@ export interface AtlasTableEntry {
   pack: string;
   packKind: AtlasPackKind;
   packLabel: string;
-  /** MECHANICAL, for a Browse tab over physical tables. */
   label: string;
-  /** The registry's declared name, never invented here. */
   friendly: string;
-  /** Declared only for the ontology; machinery is named, never described. */
   blurb?: string;
 }
 
 function entryFor(schema: string, table: string): AtlasTableEntry {
   const packKind = packKindOf(schema);
   if (packKind === undefined) {
-    // Fail loud rather than mis-shelve: a new pack is added by hand.
     throw new Error(
       `atlas: unclassified schema "${schema}" — add it to ONTOLOGY_PACKS or MACHINERY_BANDS`
     );
@@ -129,8 +103,6 @@ function entryFor(schema: string, table: string): AtlasTableEntry {
   const label = humanizeKind(table);
   const declaration = entityDeclaration(`${schema}.${table}`);
   if (!declaration) {
-    // Unreachable via `atlasTables`; loud anyway, because the alternative is
-    // a node drawn under an invented name.
     throw new Error(
       `atlas: ${schema}.${table} is not a registered entity — the registry names every kind (issue #883, ruling O-label)`
     );
@@ -149,10 +121,6 @@ function entryFor(schema: string, table: string): AtlasTableEntry {
   };
 }
 
-/**
- * Every registered table mapped to its pack. Ext-band (app-declared) tables
- * are excluded: the Atlas maps the canonical ontology, not per-app scratch.
- */
 export function atlasTables(): AtlasTableEntry[] {
   const out: AtlasTableEntry[] = [];
   for (const [schema, tables] of Object.entries(VAULT_TABLES)) {

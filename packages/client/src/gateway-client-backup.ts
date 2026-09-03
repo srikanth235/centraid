@@ -1,8 +1,3 @@
-/*
- * Renderer-side client for the offsite backup HTTP surface
- * (`packages/server/src/routes/backup-routes.ts`, #351).
- */
-
 import { auth, authHeaders, doFetch, readJson } from "./gateway-client-core.js";
 
 export interface GatewayBackupPolicyDTO {
@@ -19,11 +14,6 @@ export interface GatewayBackupPolicyDTO {
   walBaseRollHours: number;
 }
 
-/**
- * Owner-editable keys (#436). `casAck` and `storageClass` are not:
- * `casAck` survives on the read DTO as a wire declaration (always
- * 'receipt'); store-class vocabulary is gateway-internal.
- */
 export type GatewayBackupPolicyPatchDTO = {
   [K in keyof Omit<GatewayBackupPolicyDTO, "casAck" | "storageClass">]?:
     | GatewayBackupPolicyDTO[K]
@@ -120,9 +110,7 @@ export interface GatewayBackupVaultDTO {
   reconciliation?: GatewayBackupReconciliationDTO;
 }
 
-/** Recovery-kit gate (#351 / #367) — same `{confirmedAt}` shape gates S3 enable. */
 export interface GatewayRecoveryKitStatusDTO {
-  /** Epoch seconds, or `null` if never. */
   confirmedAt: number | null;
 }
 
@@ -145,7 +133,6 @@ export interface GatewayBackupStatusDTO {
   provider?: string;
   vaults: GatewayBackupVaultDTO[];
   recoveryKit: GatewayRecoveryKitStatusDTO;
-  /** Absent when backup isn't configured or discovery couldn't be read. */
   home?: GatewayHomeDiscoveryDTO;
 }
 
@@ -183,7 +170,6 @@ export interface GatewayBackupRunResultDTO {
   alreadyRunning?: boolean;
 }
 
-/** Resolves on HTTP 202; poll `getGatewayBackupStatus` for landing. */
 export async function runGatewayBackupNow(): Promise<GatewayBackupRunResultDTO> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_gateway/backup/run", {
@@ -218,7 +204,6 @@ export async function verifyGatewayBackupBucket(vaultId: string): Promise<{
   }>(res, "verify backup inventory against bucket");
 }
 
-/** Always stamps the current clock. Rejects `'conflict'` if backup isn't configured. */
 export async function confirmGatewayRecoveryKit(input: {
   kit: unknown;
   password: string;

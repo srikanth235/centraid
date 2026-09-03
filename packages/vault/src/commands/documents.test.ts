@@ -62,7 +62,6 @@ describe("documents", () => {
     return (outcome as { output: { folder_id: string } }).output.folder_id;
   }
 
-  /** The folders-scheme concept a document is currently filed under. */
   function filedUnder(
     documentId: string
   ): { concept_id: string; notation: string } | undefined {
@@ -78,14 +77,6 @@ describe("documents", () => {
       | undefined;
   }
 
-  /**
-   * Walk a document's version chain oldest-first via the `revises` links.
-   * Guards against revisiting a content id: restoring an old version gives it
-   * a NEW outgoing edge (rule R3), which can cycle the graph back through
-   * content already walked (documents.ts's target_in_chain precondition
-   * carries the same note) — a plain linked-list walk without this guard
-   * hangs forever the moment a document is restored more than once removed.
-   */
   function versionChain(documentId: string): string[] {
     const head = db.vault
       .prepare(
@@ -188,7 +179,6 @@ describe("documents", () => {
     expect(twin.status).toBe("failed");
     assert(twin.status === "failed");
     expect(twin.predicate).toContain("name_unused_among_siblings");
-    // Same name under a different parent is fine.
     expect(
       invoke("core.create_folder", { name: "Taxes", parent_folder_id: y2026 })
         .status
@@ -236,7 +226,6 @@ describe("documents", () => {
       .prepare("SELECT title FROM core_document WHERE document_id = ?")
       .get(documentId) as { title: string };
     expect(doc.title).toBe("Lease 2026.pdf");
-    // The underlying content item never carried the document's title.
     const content = db.vault
       .prepare("SELECT title FROM core_content_item WHERE content_id = ?")
       .get(contentId) as { title: string | null };
@@ -260,12 +249,10 @@ describe("documents", () => {
     };
     expect(doc.deleted_at).not.toBeNull();
     expect(doc.purge_at).not.toBeNull();
-    // Retention stance (#352): the wrapper trashes, the bytes stay live.
     const content = db.vault
       .prepare("SELECT deleted_at FROM core_content_item WHERE content_id = ?")
       .get(contentId) as { deleted_at: string | null };
     expect(content.deleted_at).toBeNull();
-    // A trashed document no longer renames or moves.
     expect(
       invoke("core.rename_document", { document_id: documentId, title: "x" })
         .status
@@ -324,7 +311,6 @@ describe("documents", () => {
     ).toBe("failed");
   });
 
-  /** Count of starred flags-scheme tags on a document (#274/#352). */
   function starCount(documentId: string): number {
     const row = db.vault
       .prepare(
@@ -503,10 +489,6 @@ describe("documents", () => {
       )
       .get(documentId) as { current_content_id: string };
     expect(doc.current_content_id).toBe(v1);
-    // History never rewrites: the ORIGINAL v2->v1 and v3->v2 links are still
-    // live, untouched, exactly as the edits wrote them — the restore only
-    // APPENDS a new v1->v3 link (rule R3). This is the strongest proof: raw
-    // link rows, not a convenience walk.
     const liveRevisesEdges = db.vault
       .prepare(
         `SELECT l.from_id, l.to_id FROM core_link l
@@ -515,19 +497,11 @@ describe("documents", () => {
         ORDER BY l.valid_from ASC`
       )
       .all() as { from_id: string; to_id: string }[];
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect(liveRevisesEdges.map((row) => ({ ...row }))).toStrictEqual([
       { from_id: v2, to_id: v1 },
       { from_id: v3, to_id: v2 },
       { from_id: v1, to_id: v3 },
     ]);
-    // The restore reuses v1's own identity (content is deduped bytes) as the
-    // new HEAD, which cycles the graph back through v3 and v2 — v1 now
-    // legitimately appears at two points in true history (root, then
-    // restored-to). A content-id walk can only show one node once, so the
-    // convenience chain below collapses to v1's LATEST position; the raw
-    // edges above are the ground truth for "never rewrites".
     expect(versionChain(documentId)).toStrictEqual([v2, v3, v1]);
   });
 

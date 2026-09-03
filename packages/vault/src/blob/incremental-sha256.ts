@@ -1,12 +1,3 @@
-// Serializable incremental SHA-256 for restart-resumable ingress (#456).
-//
-// `node:crypto` is the ordinary native streaming path, but Node deliberately
-// does not expose Hash state. The stream-through uploader must checkpoint its
-// chaining state after each durable multipart part, so this narrow seam uses
-// hash-wasm: hashing executes in WebAssembly and `save()` snapshots the
-// hasher's linear-memory state. This retires the previous handwritten
-// JavaScript compressor while keeping the durable resume contract.
-
 import { createSHA256 } from "hash-wasm";
 import type { IHasher } from "hash-wasm";
 
@@ -47,7 +38,6 @@ export class IncrementalSha256 {
     };
   }
 
-  /** Digest a state clone so callers may continue appending after verification. */
   async digestHex(): Promise<string> {
     const clone = await createSHA256();
     clone.load(this.hasher.save());

@@ -10,9 +10,6 @@ import {
 import type { ReplicaFetcher } from "./shell-transport.js";
 
 vi.mock(import("../gateway-client-core.js"), () => ({
-  // Explicit `Record<string, string>` return type (matching the real
-  // `authHeaders`) so the empty-object branch isn't narrowed to
-  // `{ Authorization?: undefined }`, which isn't assignable to it.
   authHeaders: (token?: string): Record<string, string> =>
     token ? { Authorization: `Bearer ${token}` } : {},
   doFetch: vi.fn<typeof TypeImport_1n561g5.doFetch>(),

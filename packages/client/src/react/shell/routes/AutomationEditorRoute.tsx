@@ -55,14 +55,6 @@ import { loadHarnesses } from "./settingsHarnessesData.js";
 
 export { vaultForTriggers } from "./automationEditorTriggers.js";
 
-// The automation editor route — the instructions-first create/edit form
-// (#387). It wires `AutomationEditorScreen`'s bridge-prop surface against
-// `loadAutomationEditorData` + the create/update/enable/run/delete/webhook
-// client fns, reusing `deriveAutomationHero`/`filterConsentForAutomation` so
-// the webhook URL and standing-consent list are derived exactly once, the same
-// way the thread does — do not re-derive either here.
-// Canonical entity-type list is small and static per gateway — fetch once and
-// reuse across every @-search keystroke.
 let entityTypeCache: string[] | null = null;
 
 export function matchEditorConnection(
@@ -89,9 +81,6 @@ async function loadEditorConnectorCatalog(): Promise<
   ]);
   const featured = buildFeatured(providers);
   return featured.map((f) => {
-    // Provider is part of connection identity. Kind-only matching can lend
-    // trusted catalog branding to a free-form credential; choosing the first
-    // of multiple same-kind accounts silently binds the wrong principal.
     const { match, matches } = matchEditorConnection(
       connections,
       f.providerId,
@@ -140,13 +129,7 @@ export default function AutomationEditorRoute({
   watchEntity?: string;
 }): JSX.Element {
   const { navigate, showToast, confirm } = useShellActions();
-  // The editor lives behind the automations gate, but connectors is its OWN
-  // gate: a gateway may run automations with no connector plane at all, and
-  // the editor degrades to "no provider accounts" rather than erroring.
   const { connectors } = useShellCapabilities();
-  // `refIdRef` is the automation's `ref` once it exists on the gateway —
-  // `undefined` at mount for a brand-new create flow, set by `loadData` (edit
-  // mode) or by `onSave`'s create-mode branch (first save mints the row).
   const refIdRef = useRef<string | null>(automationId ?? null);
   const rowRef = useRef<CentraidAutomationRow | null>(null);
 
@@ -154,10 +137,6 @@ export default function AutomationEditorRoute({
     <PageScroll>
       <AutomationEditorScreen
         loadData={async (): Promise<AutomationEditorData> => {
-          // `refIdRef` first: after a create-mode save the automation exists
-          // but the route prop is still undefined, and reloading against the
-          // prop alone would bounce the form back to create mode instead of
-          // handing the owner a live compile rail.
           const loaded = await loadAutomationEditorData({
             automationId: refIdRef.current ?? automationId,
           });
@@ -247,9 +226,6 @@ export default function AutomationEditorRoute({
                 ...(fields.model === undefined ? {} : { model: fields.model }),
               });
               if (row) rowRef.current = row;
-              // A `{kind:'webhook'}` trigger that didn't exist before mints a
-              // fresh secret server-side, returned once — same one-time
-              // reveal `onRotateWebhook` uses below (webhookReveal.ts).
               if (webhook) {
                 await openWebhookReveal(webhook, {
                   note: "Shown once — copy it now.",
@@ -296,9 +272,6 @@ export default function AutomationEditorRoute({
           const ref = refIdRef.current;
           if (!ref) return null;
           try {
-            // Returns the turn id and STAYS. The old version navigated to the
-            // run screen, which is why a compile failure was only ever visible
-            // as a red card in a list of runs it did not belong in.
             const { compileTurnId } = await compileAutomation({
               automationId: ref,
               enableOnSuccess,
@@ -318,10 +291,6 @@ export default function AutomationEditorRoute({
         loadTurnSteps={loadTurnSteps}
         watchTurnSteps={watchTurnSteps}
         onSearchEntities={async (term) => {
-          // Anchor-grade references come first: the opaque token resolves
-          // through core_link_anchor and compiles to a row + field mask.
-          // Legacy type/instance tags remain available for deliberately
-          // broad queries and non-anchored rows.
           if (entityTypeCache === null) {
             entityTypeCache = await listVaultEntityTypes().catch(() => []);
           }
@@ -342,8 +311,6 @@ export default function AutomationEditorRoute({
           return [...anchorHits, ...typeHits, ...instanceHits];
         }}
         loadEntityTypes={async () => {
-          // Same cached gateway read the @-mention type search uses — the
-          // data/condition trigger editors' `<datalist>` autocomplete.
           if (entityTypeCache === null) {
             entityTypeCache = await listVaultEntityTypes().catch(() => []);
           }
@@ -352,11 +319,6 @@ export default function AutomationEditorRoute({
         connectorsEnabled={connectors}
         {...(connectors
           ? {
-              // Withdrawn, not merely hidden (C1): with the connectors
-              // experiment off the vault connections + OAuth callback routes
-              // are unmounted, so handing the screen loaders that can only
-              // 404 would leave the failure to be discovered by request
-              // instead of stated once by the capability.
               beginAuthorize: beginConnectionAuthorize,
               configureConnection: async (input) => {
                 const result = await configureConnection({
@@ -387,10 +349,6 @@ export default function AutomationEditorRoute({
           const ref = refIdRef.current;
           if (!ref) return null;
           try {
-            // A test run stays on the compile screen so its steps land in the
-            // same rail as the compile that produced the plan. Navigating to
-            // the run viewer is an explicit "Full trace" click, not a side
-            // effect of pressing Test.
             const { turnId } = await invokeAutomationAndAwait({
               automationId: ref,
             });

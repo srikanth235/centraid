@@ -8,16 +8,8 @@ import Logo from "../ui/Logo.js";
 
 import chrome from "./chrome.module.css";
 
-// Claimed compact band (Photos v4, §3.1): renders INSTEAD of the stem band, the
-// frame staying as a capsule OUTSIDE the app's tab group — the boundary that
-// makes it not a sixth tab, for eyes and screen readers. ≥44px, opaque paper
-// so label contrast never varies.
-
-/** 44 is the product-wide floor; a token because the phone draws the same
- *  plate (#883). */
 export const BAND_CAPSULE_SIZE = metrics.bandCapsule;
 
-/** A sixth tab would put every target under 44px. */
 export const BAND_MAX_DESTINATIONS = 5;
 
 export interface AppBandProps {
@@ -31,7 +23,6 @@ export default function AppBand({
   appName,
   onHome,
 }: AppBandProps): JSX.Element {
-  // Capped by the FRAME: overflow belongs in the app's More.
   const destinations = claim.destinations.slice(0, BAND_MAX_DESTINATIONS);
 
   return (

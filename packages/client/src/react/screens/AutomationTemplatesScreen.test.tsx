@@ -112,9 +112,7 @@ describe("screens/AutomationTemplatesScreen", () => {
       expect(html).toContain(">Inbox<");
       expect(html).toContain(">Ops<");
       expect(html).toContain(">Enrichment<");
-      // all/cron/webhook/data/condition
       expect(count(html, "segB")).toBe(5);
-      // integration filter chips derived from the catalog
       expect(html).toContain("Gmail");
       expect(html).toContain("GitHub");
     });
@@ -180,9 +178,6 @@ describe("screens/AutomationTemplatesScreen", () => {
       const props = makeProps();
       const el = mount(props);
       const input = el.querySelector(".searchIn") as HTMLInputElement;
-      // React tracks the controlled value via a property descriptor, so a plain
-      // `input.value = …` is reverted; set it through the native setter so the
-      // synthetic onChange sees the new value.
       const nativeSetter = Object.getOwnPropertyDescriptor(
         globalThis.HTMLInputElement.prototype,
         "value"

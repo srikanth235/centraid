@@ -1,5 +1,3 @@
-// Direct unit coverage for standing-duty helpers (#545).
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
@@ -87,8 +85,6 @@ describe("duties-helpers", () => {
   test("resolveHandle reads reach from channels and identity keys from the register", () => {
     const now = new Date().toISOString();
     const past = "2020-01-01T00:00:00.000Z";
-    // A channel has no validity window: a member DELETES an address they no
-    // longer answer at (#883).
     db.vault
       .prepare(
         `INSERT INTO social_contact_channel
@@ -109,7 +105,6 @@ describe("duties-helpers", () => {
        VALUES (?, 'person', 'Expired', ?, ?)`
       )
       .run(other, now, now);
-    // An EXPIRED identity key still reads as expired.
     db.vault
       .prepare(
         `INSERT INTO core_party_identifier

@@ -1,6 +1,3 @@
-// "Never lose anything" (P5, #630): snapshots in the write's transaction;
-// this module owns the durable envelope and the undo window.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { enforceRevisionRetention } from "../gateway/revision-capture.js";
@@ -8,7 +5,6 @@ import type { HandlerCtx } from "../gateway/types.js";
 
 const DEFAULT_UNDO_WINDOW_MS = 10_000;
 
-/** Per-pass cap (#659); bounded so a first sweep can't stall. */
 export const ENTITY_REVISION_PRUNE_CAP = 5_000;
 
 export interface EntityRevision<T = unknown> {
@@ -30,18 +26,6 @@ function actorPartyId(ctx: HandlerCtx): string | null {
   return owner?.self_party_id ?? null;
 }
 
-/**
- * Append a pre-mutation snapshot of a COMPOSITE entity; returns its stable id.
- *
- * The pipeline captures every row a command touches on its own (#916, review
- * 5.1 — `gateway/revision-capture.ts`), which is what the hundred and
- * seventy-odd commands that used to snapshot nothing now get for free. This
- * stays for the handful of entities whose undo needs MORE than the row: an
- * expense is its splits, its payers and its line items, and a person is their
- * channels, so a row snapshot would restore the header and lose the money. A
- * command that records one here wins — the generic drain leaves that
- * (entity, id) alone for this invocation.
- */
 export function recordEntityRevision(
   ctx: HandlerCtx,
   input: {
@@ -130,7 +114,6 @@ export function loadEntityRevision<T>(
   };
 }
 
-/** Mark one-shot applied in the apply transaction. */
 export function markEntityRevisionUndone(
   ctx: HandlerCtx,
   revisionId: string
@@ -149,14 +132,9 @@ export function markEntityRevisionUndone(
 
 export interface EntityRevisionPruneResult {
   deleted: number;
-  /** `true` when the cap stopped the pass — run again to keep draining. */
   capped: boolean;
 }
 
-/**
- * Drop revisions whose undo window closed (#659); the only reader refuses
- * expired rows — a GC, not a retention policy. `capped` means more to drain.
- */
 export function pruneExpiredEntityRevisions(
   vault: DatabaseSync,
   now: string,

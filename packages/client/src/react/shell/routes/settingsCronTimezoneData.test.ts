@@ -56,8 +56,6 @@ describe("settingsCronTimezoneData", () => {
     });
 
     it("refuses an unknown IANA name without writing, naming the last good zone", async () => {
-      // The typo is on screen already; what a member cannot see is which zone
-      // their schedules are still firing in, so the error states that.
       const err = await saveDefaultCronTimeZone("Not/A_Zone", "Europe/London");
       expect(err).toBe(
         "Not a zone the gateway knows. Still using Europe/London."

@@ -13,12 +13,6 @@ import type {
   RegistryVault,
 } from "./gatewayRegistry.js";
 
-// Gateway → Components → Connections is the one surface that still shows hosts
-// as hosts (#665); the sidebar switcher shows the vaults they serve, flattened,
-// and the vault's own Settings page owns Disconnect. These are the pure halves:
-// what a probe does to the cache, what the host rows say once it has, how those
-// rows flatten into one vault list, and how Disconnect words its consequence.
-
 const gateways: RegistryGateway[] = [
   { gatewayId: "local", gatewayKind: "local", gatewayLabel: "This Mac" },
   { gatewayId: "office", gatewayKind: "remote", gatewayLabel: "Office" },
@@ -173,9 +167,6 @@ describe(buildVaultRows, () => {
       scopes,
       "local"
     );
-    // With ownership (#726) there is no per-vault role lead left to say, so a
-    // peer'd gateway's own vaults name just the gateway — the same bare
-    // context every non-active gateway's rows already carried.
     expect(withPeer[0]!.subtitle).toBe("This Mac");
   });
 
@@ -210,9 +201,6 @@ describe(buildVaultRows, () => {
   });
 
   it("treats a lone gateway as the active one even when the ids disagree (web host)", () => {
-    // The web host reports `activeGatewayId: 'web'` but lists its single
-    // connection under its EndpointId — the check mark must survive that
-    // mismatch.
     const cache = applyProbeOutcome({}, "endpoint-1", {
       status: "ready",
       vaults: [{ name: "Shared", vaultId: "shared" }],
@@ -294,8 +282,6 @@ describe(buildVaultRows, () => {
     expect(rows[0]).toMatchObject({ subtitle: "No vaults", status: "ready" });
   });
 
-  // Disconnect drops the whole CONNECTION, so every vault it serves goes too.
-  // The copy has to say that by naming them — and it must never say "gateway".
   describe(disconnectConfirmCopy, () => {
     it("stays vault-first when the connection serves only this vault", () => {
       const copy = disconnectConfirmCopy("Work", []);

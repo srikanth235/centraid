@@ -1,7 +1,3 @@
-// Consent memory (#308): what an owner approval does — and does NOT
-// do — to a standing revocation. The direction of `scopeCovers` is the whole
-// invariant: a "no" only dies to a "yes" that covers it.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault, enrollApp } from "./bootstrap.js";
@@ -27,11 +23,8 @@ describe("install-memory", () => {
   const tombstones = (): ScopeTriple[] => listScopeTombstones(db, grantee);
 
   test("a narrow approval leaves the broader revocation standing (issue #541)", () => {
-    // The owner refuses the whole `core` schema for reads.
     writeScopeTombstones(db, grantee, [{ schema: "core", verbs: "read" }]);
 
-    // Later they approve ONE anchored table read. That is a yes to core_task —
-    // not a retraction of the schema-wide no.
     clearScopeTombstones(db, grantee, [
       { schema: "core", table: "core_task", verbs: "read" },
     ]);
@@ -51,21 +44,18 @@ describe("install-memory", () => {
     ]);
 
     clearScopeTombstones(db, grantee, [
-      // A field-masked yes never covers a whole-row no…
       {
         schema: "core",
         table: "core_task",
         verbs: "read",
         fieldMask: ["title"],
       },
-      // …and a mask only covers a mask it is a superset of.
       {
         schema: "core",
         table: "core_note",
         verbs: "read",
         fieldMask: ["title"],
       },
-      // A row-filtered yes never covers an unfiltered no.
       {
         schema: "core",
         table: "core_task",
@@ -87,13 +77,11 @@ describe("install-memory", () => {
         rowFilter: [{ column: "note_id", op: "eq", value: "n1" }],
         fieldMask: ["title"],
       },
-      // Same schema, different verb — verbs match exactly, never by grading.
       { schema: "core", table: "core_task", verbs: "act" },
       { schema: "knowledge", verbs: "read" },
     ]);
     expect(tombstones()).toHaveLength(4);
 
-    // Schema-wide, unfiltered, unmasked read: covers both `core` read "no"s.
     clearScopeTombstones(db, grantee, [{ schema: "core", verbs: "read" }]);
 
     expect(tombstones()).toStrictEqual([

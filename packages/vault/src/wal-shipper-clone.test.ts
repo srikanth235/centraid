@@ -1,8 +1,4 @@
 import { randomBytes } from "node:crypto";
-/*
- * Clone must be a REFLINK (#408): COPYFILE_FICLONE is SILENTLY a byte copy
- * on macOS; this asserts against the FILESYSTEM.
- */
 import {
   readFileSync,
   rmSync,
@@ -37,12 +33,10 @@ describe("wal-shipper-clone", () => {
     return Number(fs.bsize) * Number(fs.bavail);
   }
 
-  // ext4 cannot reflink.
   test.skipIf(process.platform !== "darwin")(
     "the base clone is a reflink: cloning a 128 MiB database consumes no new disk",
     () => {
       const src = path.join(root, "vault.db");
-      // Incompressible: a byte copy cannot hide behind fs compression.
       writeFileSync(src, randomBytes(SIZE));
 
       const before = freeBytes(root);
@@ -50,7 +44,6 @@ describe("wal-shipper-clone", () => {
       expect(cloneDbFile(src, dst)).toBe(true);
       const consumed = before - freeBytes(root);
 
-      // Shares blocks; margin for metadata + racing writes.
       expect(statSync(dst).size).toBe(SIZE);
       expect(consumed).toBeLessThan(SIZE / 4);
     }

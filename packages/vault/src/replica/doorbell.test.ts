@@ -36,7 +36,6 @@ describe("doorbell", () => {
     notifyReplicaCommit(vault);
     expect(hits).toStrictEqual([1, 2]);
 
-    // Idempotent unsubscribe.
     unsub();
     notifyReplicaCommit(vault);
     expect(hits).toStrictEqual([1, 2]);

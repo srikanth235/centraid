@@ -1,9 +1,3 @@
-// The automation thread screen: header + collapsed overflow menu, trigger
-// chips, consent cards, the run-as-turn timeline, the steering composer, and
-// the empty / not-found states. Live-stream rejoin and cold-trace retry live in
-// AutomationThreadScreenTurnWatch.test.tsx; shared fixtures in
-// AutomationThreadScreen.test-fixtures.tsx.
-
 import { act } from "react";
 import { describe, expect, it } from "vitest";
 
@@ -22,13 +16,9 @@ describe("AutomationThreadScreen", () => {
   it("renders the header — name, status, primary Run now, collapsed overflow menu", async () => {
     const el = await mount(makeProps());
     expect(el.querySelector("h1")?.textContent).toBe("Daily Digest");
-    // The header stays quiet in the happy path — no "Active"/"Plan ready"
-    // status badge. Compile state shows as a turn in the thread instead.
     expect(el.querySelector("[data-au-status]")).toBeNull();
     expect(el.querySelector('[data-hue="indigo"]')).not.toBeNull();
     expect(byText(el, "button", "Run now")).not.toBeNull();
-    // The enable switch, Edit, and Delete moved into a single overflow menu —
-    // nothing but the trigger is in the DOM until it's opened.
     const trigger = el.querySelector<HTMLButtonElement>(
       '[data-testid="automation-menu-trigger"]'
     ) as HTMLButtonElement;
@@ -129,7 +119,6 @@ describe("AutomationThreadScreen", () => {
     const menu = el.querySelector('[role="menu"]') as HTMLElement;
     expect(menu).not.toBeNull();
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
-    // Pause (enabled), Edit & compile, and Delete all live in the menu.
     expect(menu.textContent).toContain("Edit & compile");
     expect(menu.textContent).toContain("Pause");
     expect(menu.textContent).toContain("Delete");
@@ -140,7 +129,6 @@ describe("AutomationThreadScreen", () => {
       edit.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     );
     expect(props.onOpenCompiler).toHaveBeenCalledWith();
-    // Choosing an item closes the menu.
     expect(el.querySelector('[role="menu"]')).toBeNull();
   });
 
@@ -284,10 +272,8 @@ describe("AutomationThreadScreen", () => {
       "fail",
       "running",
     ]);
-    // ok run speaks its summary as a message; failed run speaks its error.
     expect(turns[0]!.textContent).toContain("ok run");
     expect(turns[1]!.textContent).toContain("failed run");
-    // telemetry footer carries the derived duration / token count.
     expect(turns[0]!.textContent).toContain("3.2s");
     expect(turns[0]!.textContent).toContain("1.2k tok");
   });
@@ -295,7 +281,6 @@ describe("AutomationThreadScreen", () => {
   it("opens the full run detail from a turn", async () => {
     const props = makeProps();
     const el = await mount(props);
-    // Details affordances appear in DOM order (r1 ok, then r2 fail's "View details").
     const details = [...el.querySelectorAll('[data-testid="run-details"]')];
     await act(async () =>
       details[1]!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
@@ -314,7 +299,6 @@ describe("AutomationThreadScreen", () => {
     );
     expect(input).not.toBeNull();
     expect(send).not.toBeNull();
-    // Drive the controlled input through React's value tracker (native setter).
     const nativeSet = Object.getOwnPropertyDescriptor(
       HTMLTextAreaElement.prototype,
       "value"
@@ -344,9 +328,6 @@ describe("AutomationThreadScreen", () => {
   });
 
   it("offers no way to change the automation from the composer", async () => {
-    // The run screen READS. The old "Apply to future runs" switch rewrote the
-    // standing instructions and kicked a compile from here; its replacement is
-    // a link to the compiler, which is the only surface that may do that.
     const props = makeProps();
     const el = await mount(props);
     expect(el.querySelector("button[aria-pressed]")).toBeNull();
@@ -363,7 +344,6 @@ describe("AutomationThreadScreen", () => {
   });
 
   it("marks each turn with a trigger-origin node across origins", async () => {
-    // One ok run per origin exercises the origin-aware spine node.
     const base = {
       costUsd: null,
       dateGroup: "Today",
@@ -423,7 +403,6 @@ describe("AutomationThreadScreen", () => {
     expect(el.textContent).toContain("Run now, or wait for the trigger.");
   });
 
-  // ── The run screen reports on the plan; it never acts on it ──────────────
   it("stays silent about a healthy plan", async () => {
     const el = await mount(makeProps());
     expect(el.querySelector('[data-testid="plan-banner"]')).toBeNull();
@@ -444,7 +423,6 @@ describe("AutomationThreadScreen", () => {
     const banner = el.querySelector('[data-testid="plan-banner"]');
     expect(banner?.textContent).toContain("Compile failed");
     expect(banner?.textContent).toContain("handler.js: unexpected token");
-    // No "Retry compile" anywhere — compiling belongs to the compiler.
     expect(
       [...el.querySelectorAll("button")].map((b) => b.textContent)
     ).not.toContain("Retry compile");

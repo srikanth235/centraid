@@ -17,12 +17,10 @@ export function clearDraft(conversationId: string | undefined): void {
   try {
     localStorage.removeItem(keyFor(conversationId));
   } catch {
-    /* ignore */
+    // Intentionally empty.
   }
 }
 
-// Coalesced because localStorage writes block the main thread (#659);
-// explicit flushes (send/thread switch/unmount) guard the last character.
 const DRAFT_WRITE_DELAY_MS = 400;
 let queuedKey: string | null = null;
 let queuedText = "";
@@ -37,7 +35,7 @@ function writeQueued(): void {
     if (text) localStorage.setItem(key, text);
     else localStorage.removeItem(key);
   } catch {
-    /* lost draft is non-fatal */
+    // Intentionally empty.
   }
 }
 
@@ -55,7 +53,6 @@ export function queueDraftSave(
   text: string
 ): void {
   const key = keyFor(conversationId);
-  // A different conversation's pending write lands first.
   if (queuedKey !== null && queuedKey !== key) writeQueued();
   queuedKey = key;
   queuedText = text;

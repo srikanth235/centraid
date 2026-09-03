@@ -1,25 +1,3 @@
-/* Brand SVGs from Iconify (https://icon-sets.iconify.design/), offline-embedded.
- * Prefer regenerating with: node scripts/fetch-connector-brand-icons.mjs
- *
- * Sources:
- *   gmail: logos:google-gmail
- *   gcal: logos:google-calendar
- *   gcontacts: selfhst:google-contacts
- *   gdrive: logos:google-drive
- *   github: logos:github-icon
- *   outlook: vscode-icons:file-type-outlook
- *   outlookcal: fluent-color:calendar-16
- *   outlookcontacts: fluent-color:contact-card-16
- *   onedrive: logos:microsoft-onedrive
- *   gitlab: logos:gitlab-icon
- *   linear: logos:linear-icon
- *   notion: logos:notion-icon
- *   todoist: logos:todoist-icon
- *   slack: logos:slack-icon
- *   dropbox: logos:dropbox
- *   default: local:default
- */
-
 import { useId } from "react";
 import type { JSX } from "react";
 
@@ -41,7 +19,6 @@ export type ConnectorTone =
   | "dropbox"
   | "default";
 
-/** Raw SVG markup keyed by Featured tone (Iconify, offline-embedded). */
 export const CONNECTOR_BRAND_SVG: Record<string, string> = {
   gmail:
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 193" width="100%" height="100%" aria-hidden="true" focusable="false"><path fill="#4285f4" d="M58.182 192.05V93.14L27.507 65.077L0 49.504v125.091c0 9.658 7.825 17.455 17.455 17.455z"/><path fill="#34a853" d="M197.818 192.05h40.727c9.659 0 17.455-7.826 17.455-17.455V49.505l-31.156 17.837l-27.026 25.798z"/><path fill="#ea4335" d="m58.182 93.14l-4.174-38.647l4.174-36.989L128 69.868l69.818-52.364l4.669 34.992l-4.669 40.644L128 145.504z"/><path fill="#fbbc04" d="M197.818 17.504V93.14L256 49.504V26.231c0-21.585-24.64-33.89-41.89-20.945z"/><path fill="#c5221f" d="m0 49.504l26.759 20.07L58.182 93.14V17.504L41.89 5.286C24.61-7.66 0 4.646 0 26.23z"/></svg>',
@@ -76,10 +53,6 @@ export const CONNECTOR_BRAND_SVG: Record<string, string> = {
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="5" fill="var(--accent, #6366f1)" opacity="0.15"/><path d="M8 12h8M12 8v8" stroke="var(--accent, #6366f1)" stroke-width="2" stroke-linecap="round"/></svg>',
 };
 
-/**
- * Brand mark glyph for the Featured connectors gallery.
- * SVGs are embedded at build time — no runtime network calls.
- */
 export function ConnectorBrandGlyph({
   tone,
   size = 22,
@@ -89,7 +62,6 @@ export function ConnectorBrandGlyph({
 }): JSX.Element {
   const reactId = useId().replace(/:/gu, "");
   const svg = CONNECTOR_BRAND_SVG[tone] ?? CONNECTOR_BRAND_SVG.default!;
-  // Prefix gradient/filter IDs so multiple marks on one page don't collide.
   const uid = `cb-${tone.replace(/[^a-z0-9]+/giu, "")}-${reactId}`;
   const unique = svg
     .replace(/id="(?<id>[^"]+)"/gu, (_m, id) => `id="${uid}-${id}"`)
@@ -106,7 +78,6 @@ export function ConnectorBrandGlyph({
         lineHeight: 0,
         color: "currentColor",
       }}
-      // Embedded Iconify SVG — static markup, no user content.
       // oxlint-disable-next-line react/no-danger -- #639 reviewed local Iconify constants are the complete HTML source.
       dangerouslySetInnerHTML={{ __html: unique }}
     />

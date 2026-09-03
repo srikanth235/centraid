@@ -1,7 +1,3 @@
-// Palette hues as TEXT on the SHELL's surfaces (#686). `contrast.test.ts`
-// pins `--c-*-text` off `toBlueprintCss()` (`--bg-l: 10%`); the shell
-// emitter ramps at `--bg-l: 5%` with two more surfaces.
-
 import { describe, expect, test } from "vitest";
 
 import { contrastRatio, parseColor, rgbToHsl } from "./color.js";
@@ -19,10 +15,8 @@ const AA_BODY = 4.5;
 
 const SURFACE_NAMES = ["--bg", "--bg-app", "--bg-elev", "--bg-sunken"] as const;
 
-/** Past 16% spends contrast the solve did not buy. */
 const WASHES = [0.06, 0.07, 0.08, 0.1, 0.12, 0.14, 0.16] as const;
 
-/** Past this a rung has become near-black/near-white — "darken until it passes". */
 const RECOGNISABLE = 12;
 
 describe("palette-hue-as-text on the shell surfaces", () => {
@@ -73,7 +67,6 @@ describe("palette-hue-as-text on the shell surfaces", () => {
     );
 
     test(`${theme}: the rung is its fill's hue, moved only in lightness`, () => {
-      // Desaturating to pass would converge eight hues on one grey.
       for (const [name, fillHex] of Object.entries(ring)) {
         const ink = evalColorMix(
           resolveVars(tokens[`--c-${name}-text`] ?? "", scope)

@@ -1,11 +1,3 @@
-/*
- * The gateway registry behind the sidebar's identity row (#599, #665).
- *
- * Vault-first: the switcher lists VAULTS ONLY (`buildVaultRows`), and
- * Connections is the only surface allowed to show a host as a host. Keep both
- * builders pure — no `window` — so the folding stays testable.
- */
-
 export interface RegistryGateway {
   gatewayId: string;
   gatewayLabel: string;
@@ -28,8 +20,6 @@ export type GatewayProbeOutcome =
   | { status: "ready"; vaults: readonly RegistryVault[] }
   | { status: "error"; error: Exclude<GatewayProbeStatus, "loading"> };
 
-/** `vaults` survives a later `loading`/`error`: a refresh failure must never
- *  blank rows the owner already saw. */
 export interface GatewayProbeEntry {
   vaults: readonly RegistryVault[] | undefined;
   status: "loading" | "ready" | "error";
@@ -74,7 +64,6 @@ export function applyProbeOutcome(
 }
 
 function transportBadgeFor(gw: RegistryGateway): GatewayTransportBadge {
-  // iroh is the only remote transport (#603).
   return gw.gatewayKind === "local" ? "This Mac" : "iroh";
 }
 
@@ -122,7 +111,6 @@ export interface SwitcherVaultRow {
   label: string;
   subtitle: string;
   status: "ready" | "loading" | "error";
-  /** False behind an unreachable gateway: render inert, never fake a click. */
   selectable: boolean;
   isActive: boolean;
 }
@@ -142,8 +130,6 @@ export function gatewayStatusCopy(row: GatewayRow): string {
   }
 }
 
-/** The primitive drops the whole connection, so every vault that host serves
- *  goes too: NAME the siblings. "Gateway" must never appear. */
 export function disconnectConfirmCopy(
   vaultName: string,
   siblingNames: readonly string[]
@@ -169,15 +155,11 @@ export function railStatus(row: GatewayRow): "ready" | "loading" | "error" {
   return "error";
 }
 
-/** Active gateway's vaults come from the owner's scope registry, others from
- *  their last probe. Subtitle the gateway only when several. */
 export function buildVaultRows(
   rows: readonly GatewayRow[],
   scopes: readonly OwnerVaultScope[],
   activeGatewayId: string
 ): SwitcherVaultRow[] {
-  // A host with no gateway list still knows its vaults: never empty the
-  // switcher over a missing inventory.
   if (rows.length === 0)
     return scopes.map((scope) => ({
       gatewayId: activeGatewayId,
@@ -191,8 +173,6 @@ export function buildVaultRows(
       vaultId: scope.id,
     }));
   const multi = rows.length > 1;
-  // The web host reports `activeGatewayId: 'web'` but lists its connection
-  // under an EndpointId; without this fallback the active mark disappears.
   const activeRow =
     rows.find((row) => row.isActive) ??
     (rows.length === 1 ? rows[0] : undefined);
@@ -293,7 +273,6 @@ async function probeOneGateway(gatewayId: string): Promise<void> {
   }
 }
 
-/** Calls `onUpdate` as each probe settles: the popover must not block. */
 export async function openGatewayRegistry(
   activeGatewayId: string,
   onUpdate: (rows: GatewayRow[]) => void

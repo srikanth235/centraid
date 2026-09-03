@@ -8,9 +8,6 @@ interface InlineLinkDestination {
   vaultId: string;
   partyId: string;
   approved: boolean;
-  /** The linked vault's OWN name, from the vault directory (#750) — `null`
-   *  only when the directory genuinely holds none. Never a truncated id
-   *  dressed up as a name. */
   label: string | null;
 }
 

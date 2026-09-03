@@ -1,7 +1,3 @@
-// Custody rollup projection (#711): rebuilt each sweep, never a source of truth.
-// SAFETY RULE: `freeable` licenses deletion; it stays STRICTER than
-// `BlobCache.runEviction`.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { readBlobStoreSettings } from "../db.js";
@@ -10,7 +6,6 @@ import { nowIso } from "../ids.js";
 import type { CustodyState } from "./custody-types.js";
 import { pendingOutboxShas, pinnedThumbShas, stagingShas } from "./evict.js";
 
-/** State buckets count ITEMS, local buckets SHAS; never sum. */
 export type CustodyRollupBucket = CustodyState | "freeable" | "local-unproven";
 
 const CUSTODY_STATES: readonly CustodyState[] = [
@@ -44,8 +39,6 @@ function zeroBuckets(): Record<CustodyRollupBucket, CustodyRollupBucketTotals> {
 }
 
 interface FreeableGuards {
-  /** No remote tier ⇒ nothing freeable. Do NOT reuse `blobCustodyProven`: it
-   *  says yes on local presence alone. */
   remoteConfigured: boolean;
   replicatedCas: Set<string>;
   pendingOutbox: Set<string>;
@@ -66,8 +59,6 @@ function readFreeableGuards(vault: DatabaseSync): FreeableGuards {
   };
 }
 
-/** Every clause is a VETO. Replica evidence narrows to `cas`: a `derived` row
- *  proves a thumbnail, not the original. */
 function freeableSha(sha: string, guards: FreeableGuards): boolean {
   if (!guards.remoteConfigured) return false;
   if (!guards.replicatedCas.has(sha)) return false;
@@ -83,7 +74,6 @@ interface CustodyProjectionRow {
   byte_size: number;
 }
 
-/** Call after `refreshCustodyState`: replica evidence must be healed. */
 export function refreshCustodyRollup(db: VaultDb): CustodyRollup {
   const rows = db.vault
     .prepare(
@@ -137,7 +127,6 @@ interface RollupRow {
   computed_at: string;
 }
 
-/** Null `computedAt` is "nobody looked yet", not "nothing free". */
 export function custodyRollup(vault: DatabaseSync): CustodyRollup {
   const rows = vault
     .prepare(

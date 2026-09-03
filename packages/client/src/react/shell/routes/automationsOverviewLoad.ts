@@ -1,6 +1,3 @@
-// Fleet overview load + suggestion adopt — extracted from AutomationsRoute so
-// the route's useCallback wrappers stay identity-stable (desktop e2e 8.2) and
-// the fetch/derive path is unit-testable for diff-coverage.
 import type { TemplateEntry } from "../../../app-shell-context.js";
 import {
   getBlocking,
@@ -18,10 +15,7 @@ import {
   surfaceMintedWebhook,
 } from "./templatesData.js";
 
-/** Fetch rows, run feed, consent lists → overview DTO with attention badges. */
 export async function loadAutomationsOverviewData(): Promise<AuOverviewData> {
-  // One wave, five requests. `collectAutomationRuns` hands back the automation
-  // rows it already had to fetch, so the list is not pulled twice per visit.
   const [{ rows, entries }, blocking, grants, agents] = await Promise.all([
     collectAutomationRuns(),
     getBlocking(),
@@ -52,7 +46,6 @@ async function revealWebhooksInOrder(
   return revealWebhooksInOrder(webhooks, index + 1);
 }
 
-/** Adopt an empty-state suggestion template into a new automation. */
 export async function adoptOverviewSuggestion(
   templateId: string,
   actions: Pick<ShellActions, "navigate" | "showToast">
@@ -66,8 +59,6 @@ export async function adoptOverviewSuggestion(
       return;
     }
     const { ref, webhooks } = await cloneAutomationTemplate(tmpl);
-    // Reveals are intentionally serialized: each may claim the shared
-    // clipboard/toast surface, so concurrent presentation can lose a secret.
     await revealWebhooksInOrder(webhooks);
     if (ref) navigate({ kind: "automation-view", automationId: ref });
     else navigate({ kind: "automations" });

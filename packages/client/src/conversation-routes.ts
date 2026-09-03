@@ -1,6 +1,3 @@
-// `_centraid-conversations/apps/<id>/…` route builders (#420); transport stays
-// with the caller.
-
 const enc = encodeURIComponent;
 
 export function conversationsPath(appId: string): string {

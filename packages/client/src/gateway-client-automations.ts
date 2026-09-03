@@ -1,10 +1,8 @@
 import { auth, authHeaders, doFetch, readJson } from "./gateway-client-core.js";
 
-/** Lane-split turns (#731); omit `automationId` for the global feed. */
 export async function listAutomationTurnsByLane(input: {
   automationId?: string;
   limit?: number;
-  /** "member"/"recognition"; omit = combined feed. */
   systemLane?: "member" | "recognition";
 }): Promise<CentraidAutomationTurnRecord[]> {
   const { baseUrl, token } = await auth();

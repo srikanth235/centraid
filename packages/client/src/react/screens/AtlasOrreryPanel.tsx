@@ -11,20 +11,8 @@ import type { SampleResult } from "./atlasSampleRows.js";
 
 import styles from "./AtlasRelationsTab.module.css";
 
-// The orrery's fixed side panel (#441) — a presentational leaf of
-// AtlasRelationsTab. It holds the centred-on breadcrumb, the hover/focus readout
-// (a fixed panel, never a floating tooltip), a few real sample rows of the
-// current centre, the relation-vocabulary chips (the SEPARATE authored-link
-// mechanism), and the static legend. The page speaks human first — friendly
-// names ("People") lead, the SQL name is demoted to a mono subtitle — so every
-// readout resolves its display name through `nodeByPhysical`. Stateless: all
-// interaction is prop-drilled up to the parent.
-
 const fmt = (n: number): string => n.toLocaleString("en-US");
 
-/** The human display name for a physical table — its curated `friendly` name,
- *  falling back to the humanized `label`, then the physical name itself. Never
- *  fabricated: the friendly name is server-emitted, the label is derived. */
 function friendlyOf(
   nodeByPhysical: ReadonlyMap<string, AtlasGraphNode>,
   physical: string
@@ -41,16 +29,9 @@ export interface AtlasOrreryPanelProps {
   readout: Readout;
   edges: readonly AtlasFkEdge[];
   rows: Map<string, number>;
-  /** Canonical sorted pack list — the hue-assignment order shared with the
-   *  chart, so the node readout's pack dot matches its compass sector. */
   packs: readonly string[];
-  /** physical → node, so breadcrumb/back/readout can show the friendly name
-   *  ("People") over the SQL name the trail state actually holds. */
   nodeByPhysical: ReadonlyMap<string, AtlasGraphNode>;
-  /** The current centre's sample rows, or `undefined` while in flight. Fetched
-   *  by the parent for the centre only (never per-hover). */
   sample: SampleResult | undefined;
-  /** The centre's total row count (from `rowsByTable`), for "+ N more". */
   centerRows: number | undefined;
   relChips: readonly RelationChip[];
   activeRels: Set<string>;
@@ -238,9 +219,6 @@ function EdgeReadout({
   const pct =
     edge.childRows > 0 ? Math.round((edge.fill / edge.childRows) * 100) : 0;
 
-  // The plain-language headline — real numbers, friendly names, leading the
-  // readout. A ghost leads with what's missing; a live edge states how many rows
-  // carry the reference. The SQL detail is demoted to the mono subtitle below.
   const headline = edge.ghost ? (
     edge.childRows === 0 ? (
       <>
@@ -378,8 +356,6 @@ function SampleSection({
   rows: Record<string, unknown>[];
   centerRows: number | undefined;
 }): JSX.Element {
-  // Reduce each real row to one display string, then note how many rows the
-  // centre holds beyond the handful shown (only when that total is known).
   const shown = rows.map(pickSampleDisplay);
   const more =
     centerRows === undefined ? 0 : Math.max(0, centerRows - shown.length);

@@ -1,6 +1,5 @@
 import { defineConfig } from "vitest/config";
 
-/** Fast, fixture-free mutation root for tokenizer, CTC decoding, and NMS laws. */
 export default defineConfig({
   test: {
     name: "@centraid/model-runtime-mutation",

@@ -1,8 +1,3 @@
-// Real audit-band rows, seeded with old timestamps, archived, verified.
-// No mocks: `openVaultDb({})` (in-memory) gives a real DatabaseSync pair and
-// a real BlobCustody backed by MemoryBlobStore, so `ingestSync`/`getSync`
-// exercise the exact CAS path a real vault uses.
-
 import { describe, expect, test } from "vitest";
 
 import { openVaultDb } from "./db.js";
@@ -49,11 +44,6 @@ function seedInvocationCluster(
 } {
   const invocationId = uuidv7();
   const receiptId = uuidv7();
-  // Insert order respects the mutual FK at CREATE time (no defer here, only
-  // the archival transaction turns that on): invocation first with
-  // receipt_id NULL, then the receipt (which can reference the now-live
-  // invocation), then back-fill the invocation's receipt_id — exactly the
-  // real write path in gateway/execution.ts (requested → receipted).
   db.audit
     .prepare(
       `INSERT INTO agent_command_invocation
@@ -147,8 +137,6 @@ describe("journal-archive", () => {
       entityId: "note-1",
       occurredAt: daysAgoIso(120),
     });
-    // A fresh row points BACK at the old one — deleting the old row would
-    // dangle this FK, so the old row must stay this run.
     seedProvenance(db, {
       entityId: "note-1",
       occurredAt: daysAgoIso(1),
@@ -210,8 +198,6 @@ describe("journal-archive", () => {
 
   test("an invocation cluster stays live when its receipt is younger than the window", () => {
     const db = openVaultDb({});
-    // Invocation is old, but its receipt landed recently (edge case) —
-    // archiving the invocation would dangle the receipt's FK, so both stay.
     seedInvocationCluster(db, {
       requestedAt: daysAgoIso(120),
       receiptAt: daysAgoIso(1),
@@ -271,7 +257,6 @@ describe("journal-archive", () => {
     const result = runJournalArchival(db, { windowDays: 90 });
     const manifest = result.manifests[0]!;
 
-    // Simulate tampering: flip the stored row_count after the fact.
     db.audit
       .prepare(
         "UPDATE audit_archive_manifest SET row_count = row_count + 1 WHERE manifest_id = ?"
@@ -290,8 +275,6 @@ describe("journal-archive", () => {
       /positive/u
     );
   });
-
-  // ── issue #659 L2: bounded runs ────────────────────────────────────────
 
   test("a run seals at most maxRowsPerRun and says there is more", () => {
     const db = openVaultDb({});
@@ -326,8 +309,6 @@ describe("journal-archive", () => {
           .get() as { n: number }
       ).n
     ).toBe(0);
-    // Every run's segment is still verifiable — a bounded run is a normal
-    // run, not a partial one.
     for (const manifest of listArchiveManifests(db.audit, "provenance"))
       expect(verifyArchivedSegment(db, manifest).ok).toBe(true);
   });
@@ -342,8 +323,6 @@ describe("journal-archive", () => {
       requestedAt: daysAgoIso(200),
       receiptAt: daysAgoIso(1),
     });
-    // The old invocation now ALSO points at the young invocation's receipt:
-    // archiving it would delete a receipt a live invocation still references.
     db.audit
       .prepare(
         "UPDATE agent_command_invocation SET receipt_id = ? WHERE invocation_id = ?"
@@ -362,13 +341,6 @@ describe("journal-archive", () => {
     ).toBe(2);
   });
 
-  // ── #916 C1: the file does not grow forever ────────────────────────────
-  //
-  // With one file, "the journal is separate so its size is its own problem"
-  // stopped being an answer: an evidence row past its window has to LEAVE the
-  // live vault, or every member's vault grows without bound. These prove the
-  // rows are gone from the live tables — not merely copied somewhere.
-
   test("C1: audit rows past the window leave the LIVE file, and stay readable from CAS", () => {
     const db = openVaultDb({});
     for (let i = 0; i < 5; i += 1)
@@ -384,7 +356,6 @@ describe("journal-archive", () => {
     ).n;
     expect(before).toBe(6);
 
-    // No windowDays: the default is the band's own declared retention.
     const result = runJournalArchival(db);
     expect(result.rowsArchived).toBe(5);
 
@@ -393,7 +364,6 @@ describe("journal-archive", () => {
       .all() as { entity_id: string }[];
     expect(live.map((row) => row.entity_id)).toStrictEqual(["recent"]);
 
-    // Sealed, not lost: the segment reads back with every archived row.
     const manifest = result.manifests.find((m) => m.stream === "provenance");
     expect(manifest).toBeDefined();
     const segment = readArchivedSegment(db, manifest!);
@@ -458,10 +428,8 @@ describe("journal-archive", () => {
           at
         );
     };
-    // Turns 1–2: the segment is really in this vault's store.
     const durable = db.blobs.ingestSync(Buffer.from("segment-bytes"));
     archiveRow({ seqFrom: 1, seqTo: 2, sha: durable.sha256 });
-    // Turns 3–4: an archive row naming bytes nobody has.
     archiveRow({ seqFrom: 3, seqTo: 4, sha: sha256Hex("not-here") });
 
     const result = runJournalArchival(db);
@@ -473,7 +441,6 @@ describe("journal-archive", () => {
         seq: number;
       }[]
     ).map((row) => row.seq);
-    // The only copy of a conversation is never deleted on a promise.
     expect(seqs).toStrictEqual([3, 4]);
   });
 

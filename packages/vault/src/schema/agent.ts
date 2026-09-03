@@ -1,13 +1,3 @@
-// Agent plane DDL — schema `agent` from duaility-ontology.html §03.
-// Model half: the command register and the capability register. Enrolled
-// autonomous principals live beside the other callers in `access_agent`.
-// The audit half — command_invocation, invocation_check, evidence,
-// explanation — is the append-only audit band; see `audit.ts`.
-//
-// No `agent_correction`/`agent_judgment` (#916, ruling ONT-06): the learn loop
-// they were the store for was never built, and a store with no producer is a
-// promise, not a model.
-
 export const AGENT_DDL = `
 CREATE TABLE agent_command (
   command_id          TEXT PRIMARY KEY,

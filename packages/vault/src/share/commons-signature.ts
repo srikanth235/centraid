@@ -1,7 +1,3 @@
-// Member-authored commons commands are signed by the member vault before
-// they cross to the steward. The domain separator prevents a signature from
-// being replayed as any other vault-identity assertion.
-
 import {
   signWithVaultIdentity,
   verifyVaultIdentitySignature,
@@ -25,7 +21,6 @@ function canonical(value: unknown): unknown {
   );
 }
 
-/** Exact bytes the member vault signs and the steward verifies. */
 export function commonsIntentBytes(input: {
   grantId: string;
   actorPartyId: string;

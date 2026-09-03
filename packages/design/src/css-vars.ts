@@ -1,10 +1,3 @@
-/**
- * Custom-property reading (#686). A fallback-less `var(--x)` that names
- * nothing declared is dropped silently. Import `@centraid/design/css-vars`
- * — not the package barrel.
- */
-
-/** Fresh `/g` regex per call — a shared instance's `lastIndex` skips matches. */
 const declarationPattern = (): RegExp =>
   /(?:^|[;{])\s*(?<name>--[A-Za-z0-9_-]+)\s*:/gmu;
 

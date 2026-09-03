@@ -30,7 +30,6 @@ import type { ObjectStore } from "./object-store.js";
 import { partBuffer } from "./parts.js";
 import type { BackupProvider, StoreClass } from "./provider.js";
 
-/** Incremental put ceiling: new manifest + re-chunked 3 MiB vault.db. All else zero. */
 const MAX_INCREMENTAL_PUTS = 3;
 const CURRENT = {
   gatewayVersion: "0.1.0",
@@ -134,7 +133,6 @@ interface Fixture {
 
 async function buildSourceTree(sourceDir: string): Promise<SourceEntry[]> {
   await fs.mkdir(path.join(sourceDir, "blobs", "ab"), { recursive: true });
-  // /1 requires a complete, verifiable vault.db base.
   const vaultPath = path.join(sourceDir, "vault.db");
   const vault = new DatabaseSync(vaultPath);
   vault.exec(
@@ -225,7 +223,6 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
     expect(row?.seq).toBe(1);
 
     const destDir = await tempDir("backup-engine-restore-");
-    // restoreSnapshot requires a truly fresh dir.
     await fs.rm(destDir, { recursive: true, force: true });
 
     const result = await restoreSnapshot({
@@ -281,7 +278,6 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
     const firstPutCount = provider.lastStore!.putCount;
     expect(firstPutCount).toBeGreaterThan(0);
 
-    // Change one row; bump mtime so the fast path cannot reuse it.
     const dbPath = path.join(sourceDir, "vault.db");
     const db = new DatabaseSync(dbPath);
     db.prepare("UPDATE payload SET bytes = ?").run(
@@ -311,7 +307,6 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
     expect(row2).not.toBeNull();
     const secondPutCount = provider.lastStore!.putCount;
     expect(secondPutCount).toBeLessThan(firstPutCount);
-    // `toBeLessThan` alone would still pass a full re-ship; ceiling is the law.
     expect(secondPutCount).toBeLessThanOrEqual(MAX_INCREMENTAL_PUTS);
     expect(
       provider.lastStore!.putKeys.filter((k) => k.startsWith("chunks/")).length
@@ -382,8 +377,6 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
       generation: 1,
       appMeta: APP_META,
     });
-    // Manifest key that does not exist: a download would be a read error, not
-    // the version-gate message. Format is current so only the version gate fires.
     await provider.registerSnapshot(targetId, {
       idempotencyKey: "doctored-newer-version",
       manifestKey: "manifests/does-not-exist-on-disk.json",
@@ -408,7 +401,6 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
         current: CURRENT,
       })
     ).rejects.toThrow(/newer/u);
-    // Gate ran before any directory creation.
     expect(existsSync(destDir)).toBe(false);
   });
 
@@ -423,7 +415,6 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
       generation: 1,
       appMeta: APP_META,
     });
-    // Future/unknown format via a second registration.
     await provider.registerSnapshot(targetId, {
       idempotencyKey: "bogus-format",
       manifestKey: "manifests/bogus.json",
@@ -459,7 +450,6 @@ describe("createSnapshot / restoreSnapshot roundtrip", () => {
       generation: 1,
       appMeta: APP_META,
     });
-    // Corrupt the stored manifest on disk.
     const store = await provider.openDataPlane(
       targetId,
       "backup",
@@ -543,7 +533,6 @@ describe(verifySnapshot, () => {
     tampered[tampered.length - 1]! ^= 0xff; // flip a tag byte
     await store.put(target, tampered);
 
-    // sampleCount = all chunks so the corrupted one is sampled.
     const result = await verifySnapshot({
       provider,
       targetId,
@@ -578,9 +567,6 @@ describe(verifySnapshot, () => {
   });
 });
 
-// /1 WAL (#408): anchored db entries, format gating, PITR, determinism.
-
-/** A real, cleanly-closed SQLite database file (close checkpoints + deletes the WAL). */
 function makeSqliteDbFile(filePath: string, vals: string[]): void {
   const conn = new DatabaseSync(filePath);
   conn.exec("PRAGMA journal_mode=WAL");
@@ -626,7 +612,6 @@ describe("/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs", (
     const sourceDir = await tempDir("backup-engine-source-");
 
     makeSqliteDbFile(path.join(sourceDir, "vault.db"), ["v1", "v2", "v3"]);
-    // Last close checkpoints and deletes the WAL — the state the shipper snapshots.
     await expect(
       fs.access(path.join(sourceDir, "vault.db-wal"))
     ).rejects.toThrow(/ENOENT/u);
@@ -681,7 +666,6 @@ describe("/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs", (
       current: CURRENT,
     });
 
-    // Empty stream (no segments shipped); the generation still flows through integrity.
     expect(result.walReplay).not.toBeNull();
     expect(result.walReplay!.generation).toBe(GEN_VAULT);
     expect(result.walReplay!.integrityCheck).toBe("ok");
@@ -724,9 +708,6 @@ describe("/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs", (
   });
 
   test("a snapshot carrying a SECOND db entry is refused", async () => {
-    // The snapshot names one database. A second `db` entry comes from another
-    // protocol, and restoring it beside the vault would replay a stream the
-    // manifest cannot vouch for.
     const { provider, targetId, keyring, entries, sourceDir } =
       await buildSqliteFixture();
     const extra: SourceEntry[] = [
@@ -792,19 +773,12 @@ describe("/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs", (
         current: CURRENT,
       })
     ).rejects.toThrow(/"vault\.db" hash mismatch/u);
-    // Restore aborted: no quarantine marker.
     await expect(
       fs.access(path.join(destDir, "RESTORE_QUARANTINE.json"))
     ).rejects.toThrow(/ENOENT/u);
   });
 
-  // No-change is over ENTRY METADATA, not just chunk bytes.
-
   test("a generation-only change (identical bytes, size and mtime) still REGISTERS a snapshot", async () => {
-    // Fast path keys on `(size, mtimeMs)`. An idle clone can share both, so
-    // a chunk-index-only no-change test would register nothing, never name
-    // the live generation, and prune would delete its segments. The ENTRY
-    // changed; that is what restore reads.
     const { provider, targetId, keyring, entries } = await buildSqliteFixture();
     const row1 = await createSnapshot({
       provider,
@@ -817,7 +791,6 @@ describe("/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs", (
     });
     expect(row1).not.toBeNull();
 
-    // Freeze `(size, mtimeMs)` to the previous manifest. ONLY `walGeneration` differs.
     const pinned = new Date(BASE_TICK);
     await Promise.all(
       entries.map((entry) => fs.utimes(entry.absolutePath, pinned, pinned))
@@ -858,13 +831,9 @@ describe("/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs", (
   });
 
   test("a same-stat base with DIFFERENT bytes is re-chunked, not reused (coarse mtime is not identity)", async () => {
-    // Coarse mtime + same page count: `(size, mtimeMs)` alone would hand the
-    // new generation the previous chunk refs. Identity is `sha256`, not stat.
     const { provider, targetId, keyring, sourceDir, entries } =
       await buildSqliteFixture();
 
-    // Pin mtime BEFORE the first snapshot: the fast path compares against
-    // that. Pinning only the second base never reaches the fast path.
     const pinned = new Date(BASE_TICK);
     await Promise.all(
       entries.map((entry) => fs.utimes(entry.absolutePath, pinned, pinned))
@@ -880,7 +849,6 @@ describe("/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs", (
       appMeta: APP_META,
     });
 
-    // Next generation: different rows, same file length (fixed pages).
     const vaultDb = path.join(sourceDir, "vault.db");
     const sizeBefore = (await fs.stat(vaultDb)).size;
     const staleSha = await fileSha256(vaultDb);
@@ -888,7 +856,6 @@ describe("/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs", (
     makeSqliteDbFile(vaultDb, ["w1", "w2", "w3"]);
     expect((await fs.stat(vaultDb)).size).toBe(sizeBefore); // same size, new bytes
     await expect(fileSha256(vaultDb)).resolves.not.toBe(staleSha);
-    // Re-pin after rewrite so both bases share (size, mtime).
     await Promise.all(
       entries.map((entry) => fs.utimes(entry.absolutePath, pinned, pinned))
     );
@@ -919,7 +886,6 @@ describe("/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs", (
     });
     expect(row).not.toBeNull();
 
-    // Stale chunk refs throw `"vault.db" hash mismatch`.
     const destDir = await tempDir("backup-engine-v2-samestat-");
     await fs.rm(destDir, { recursive: true, force: true });
     await restoreSnapshot({
@@ -987,11 +953,6 @@ describe("point-in-time snapshot row selection", () => {
     contentV2: Buffer;
   }
 
-  /**
-   * Seq 1 at 1000s, seq 2 at 2000s. LocalBackupProvider stamps createdAt from
-   * the wall clock (epoch seconds), so rewrite registry.json after register —
-   * it re-reads from disk; this is the real cross-process contract.
-   */
   async function pitrFixture(): Promise<PitrFixture> {
     const rootDir = await tempDir("backup-engine-pitr-");
     const provider = new LocalBackupProvider({ rootDir });
@@ -1079,11 +1040,9 @@ describe("point-in-time snapshot row selection", () => {
       restoreWith(f, { pointInTimeMs });
 
     expect((await restoreAt(1_500_000)).equals(f.contentV1)).toBe(true);
-    // createdAt is inclusive (<=, not <).
     expect((await restoreAt(1_000_000)).equals(f.contentV1)).toBe(true);
 
     expect((await restoreAt(2_500_000)).equals(f.contentV2)).toBe(true);
-    // Before every snapshot → refuse, never restore something newer.
     await expect(restoreAt(500_000)).rejects.toThrow(
       /no snapshot exists at or before/u
     );
@@ -1092,20 +1051,17 @@ describe("point-in-time snapshot row selection", () => {
   test("seq + pointInTimeMs: a base NEWER than the requested instant is refused, not served", async () => {
     const f = await pitrFixture();
 
-    // seq 2's base is after T. A base cannot be rewound — refuse.
     await expect(
       restoreWith(f, { seq: 2, pointInTimeMs: 1_500_000 })
     ).rejects.toThrow(
       /seq 2 has a base at .* NEWER than the requested point in time/u
     );
 
-    // Named base at or before T, replayed up to T, is legal.
     expect(
       (await restoreWith(f, { seq: 1, pointInTimeMs: 1_500_000 })).equals(
         f.contentV1
       )
     ).toBe(true);
-    // createdAt is inclusive.
     expect(
       (await restoreWith(f, { seq: 2, pointInTimeMs: 2_000_000 })).equals(
         f.contentV2
@@ -1150,15 +1106,11 @@ describe("deterministic objects (G7 — idempotent uploads)", () => {
     expect(first.size).toBeGreaterThan(0);
     expect([...second.keys()].sort()).toStrictEqual([...first.keys()].sort());
     for (const [key, bytes] of first) {
-      // Encrypted bytes identical: nonce derives from the keyed content hash.
       expect(second.get(key)!.equals(bytes)).toBe(true);
     }
   });
 });
 
-// Entropy-gated compression (/2, #405 §1) on the real seal path, not just compress.test.ts.
-
-/** Compressible SQLite (DELETE journal) — repeated text, page slack. */
 function makeCompressibleDb(file: string, rows: number): void {
   const db = new DatabaseSync(file);
   db.exec(
@@ -1214,7 +1166,6 @@ describe("entropy-gated compression (/2, #405 §1)", () => {
 
     const store = await provider.openDataPlane(targetId, "backup", "read");
     const storedBytes = await sumStoredChunkBytes(store);
-    // SQLite fixture ≥3×; encryption is ~28 bytes/object, so zstd dominates.
     expect(rawBytes / storedBytes).toBeGreaterThanOrEqual(3);
   });
 
@@ -1228,7 +1179,6 @@ describe("entropy-gated compression (/2, #405 §1)", () => {
 
     const vaultPath = path.join(sourceDir, "vault.db");
     makeCompressibleDb(vaultPath, 8_000); // compressible → stored as zstd
-    // Incompressible blob → stored raw. One snapshot, both algos.
     const blobPath = path.join(sourceDir, "random.bin");
     await fs.writeFile(blobPath, pseudoRandomBuffer(300_000, 99));
 
@@ -1254,7 +1204,6 @@ describe("entropy-gated compression (/2, #405 §1)", () => {
       appMeta: APP_META,
     });
 
-    // Unseal: both zstd (0x01) and stored (0x00) frames.
     const { key: master } = activeMasterKey(keyring);
     const dataKey = deriveDataKey(master, "vault-1");
     const store = await provider.openDataPlane(targetId, "backup", "read");
@@ -1308,7 +1257,6 @@ describe("entropy-gated compression (/2, #405 §1)", () => {
     const keyring = await createKeyring(path.join(keyringDir, "keyring.json"));
     const sourceDir = await tempDir("backup-id-source-");
 
-    // Recompute id HMAC-over-raw and demand it matches the compressed snapshot.
     const raw = new Uint8Array(2 * 1024 * 1024);
     raw.fill(0x41);
     const vaultPath = path.join(sourceDir, "vault.db");
@@ -1353,10 +1301,8 @@ describe("entropy-gated compression (/2, #405 §1)", () => {
       row!.manifestHash
     );
     const blobEntry = opened.entries.find((e) => e.path === "flat.bin")!;
-    // Compression changed stored bytes, never the id.
     expect(blobEntry.chunks).toStrictEqual(expectedIds);
 
-    // Confirm zstd frame byte so this is not "compression didn't run".
     const sealedChunks = await Promise.all(
       blobEntry.chunks.map(async (id) => ({
         id,

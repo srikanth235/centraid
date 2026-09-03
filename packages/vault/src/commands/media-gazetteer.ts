@@ -1,15 +1,8 @@
-// The machine half of naming a place (#816). `core_place.name` is the MEMBER's:
-// this command never writes it or `kind`, owning only `$.gazetteer` inside
-// `address_json`, and every other key there survives. A MISS IS A RESULT — with
-// no `name` it writes a none-marker, or the automation's "no gazetteer key"
-// selection re-examines every mid-ocean coordinate forever.
-
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 
 const GAZETTEER_SOURCES = ["geonames-cities15000"];
 
-/** Refuses what cannot be a neighbourhood claim; the recipe's radius is tighter. */
 const MAX_DISTANCE_KM = 200;
 
 const SET_PLACE_GAZETTEER: CommandDefinition = {
@@ -21,8 +14,6 @@ const SET_PLACE_GAZETTEER: CommandDefinition = {
     additionalProperties: false,
     properties: {
       place_id: { type: "string", minLength: 1 },
-      // PHRASE-READY — "Truckee, CA", not "Truckee": the read side prints it
-      // as it stands, so the qualifier is the writer's job.
       name: { type: "string", minLength: 1, maxLength: 120 },
       admin: { type: "string", maxLength: 16 },
       country: { type: "string", maxLength: 2 },
@@ -51,8 +42,6 @@ const SET_PLACE_GAZETTEER: CommandDefinition = {
   ],
   postconditions: [
     {
-      // `checked_at` is what the re-scan keys off. `core_place.name` surviving
-      // is pinned by test: no postcondition sees a pre-value.
       name: "gazetteer_recorded",
       sql: `SELECT count(*) AS n FROM core_place
              WHERE place_id = :place_id
@@ -84,7 +73,6 @@ function setPlaceGazetteer(ctx: HandlerCtx): Record<string, unknown> {
   const record: Record<string, unknown> = matched
     ? {
         name,
-        // A stored `""` reads as "checked, none", not "not a fact here".
         ...(input.admin === undefined || input.admin.trim() === ""
           ? {}
           : { admin: input.admin.trim() }),
@@ -127,7 +115,6 @@ function setPlaceGazetteer(ctx: HandlerCtx): Record<string, unknown> {
   };
 }
 
-/** Its own pack: the split makes "the machine never touches `name`" readable. */
 export function registerMediaGazetteerCommands(gateway: Gateway): void {
   gateway.registerCommand(SET_PLACE_GAZETTEER);
 }

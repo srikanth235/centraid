@@ -1,5 +1,3 @@
-// Row list (v9 §9, #765). Trailing action is always outlined — the filled
-// control is the view's single commit and lives in the app bar.
 import type { JSX, ReactNode } from "react";
 
 import type { ActionData, RowData } from "@centraid/design/blocks";

@@ -35,7 +35,6 @@ describe("cache-headroom", () => {
         cacheBudgetBytes: 1_000,
         reservedHeadroomBytes: 100,
       }),
-      // Capacity is 160 bytes: initially only 60 are free, below headroom.
       statfs: () => ({ bavail: 160 - used(), bsize: 1 }),
     });
     cache.replica.mark(firstSha, first.length);

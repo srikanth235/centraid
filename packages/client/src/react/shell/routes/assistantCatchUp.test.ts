@@ -11,7 +11,6 @@ describe("catchUpAfterDrop (#420)", () => {
       baselineTurnCount: 3,
       getStatus: () => {
         calls += 1;
-        // Turn lands on the 3rd poll.
         return Promise.resolve({ turnCount: calls >= 3 ? 4 : 3, updatedAt: 0 });
       },
       sleep: instantSleep,

@@ -4,8 +4,6 @@ import Button from "../ui/Button.js";
 
 import styles from "./SettingsPickRow.module.css";
 
-// One subject, N picks, maybe a verb — a ROW WITH A HAIRLINE, not a card. `first` drops the leading hairline (a rule under a head is a second head). `detail` expands inside the row so disclosure and disclosed share one hairline; a peer block below would read as the next subject.
-
 export interface PickRowAction {
   label: string;
   onClick: () => void;
@@ -16,10 +14,8 @@ export interface PickRowAction {
 export interface PickRowProps {
   label: string;
   lead?: ReactNode;
-  /** Facts the row states, not sets — a control belongs in `picks`. */
   chips?: ReactNode;
   caption?: string;
-  /** `--net` tints the caption (unreachable), never the name. */
   captionNet?: boolean;
   first?: boolean;
   children?: ReactNode;

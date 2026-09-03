@@ -1,10 +1,3 @@
-/*
- * Platform-neutral vault-change wire types and the pure SSE frame grammar.
- * Split out of `vault-change-feed.ts` (which owns the browser-only fetch feed,
- * sessionStorage cursor and window rescoping) so the React Native change-feed
- * adapter and the coordinator can share the exact same parsing.
- */
-
 export interface VaultChangeCursor {
   epoch: string;
   seq: number;
@@ -31,32 +24,8 @@ export interface SseFrame {
 
 export const INITIAL_VAULT_CURSOR: VaultChangeCursor = { epoch: "0", seq: 0 };
 
-/**
- * Ceiling on the incomplete tail held between frame boundaries. A stream that
- * stops delivering `\n\n` — a truncating proxy, a corrupted or hostile feed —
- * would otherwise grow this string until the tab or the RN process dies.
- *
- * The largest legitimate frame is one replica change page: both stream routes
- * emit `limit ?? 1_000` doorbell entries per frame and no first-party client
- * sends `limit` (`packages/server/src/routes/replica-routes.ts`,
- * `multiplex-replica-routes.ts`). A doorbell entry is seq/commitId/entity/
- * rowId/op/changedAt plus the authorized `shapeIds` it wakes, so on the order
- * of 1 KiB serialized even where one row fans out across many shapes — under
- * 1 MiB for a full page, which is also where the gateway's own `SseStream`
- * begins dropping the connection for backpressure. 8 MiB is roughly 8x that
- * worst case: far above anything the protocol can emit, far below the memory a
- * runaway buffer reaches.
- *
- * Measured in UTF-16 code units, which never exceed a string's UTF-8 byte
- * count, so the guard trips no earlier than a byte-exact one would.
- */
 export const MAX_BUFFERED_FRAME_BYTES = 8 * 1024 * 1024;
 
-/**
- * An SSE stream that cannot be parsed within {@link MAX_BUFFERED_FRAME_BYTES}.
- * Every consumer treats a rejected consume as a disconnect and reconnects from
- * its durable cursor, so abandoning the stream loses no changes.
- */
 export class VaultChangeStreamError extends Error {
   readonly code = "VAULT_CHANGE_STREAM_ERROR";
 
@@ -144,11 +113,6 @@ export function parseChange(
   };
 }
 
-/**
- * Parse a fetch-backed SSE response, including split CRLF and multi-line data
- * frames. Rejects with {@link VaultChangeStreamError} when the stream buffers
- * more than {@link MAX_BUFFERED_FRAME_BYTES} without a frame boundary.
- */
 export async function consumeVaultChangeSse(
   body: ReadableStream<Uint8Array>,
   onFrame: (frame: SseFrame) => void,
@@ -181,10 +145,7 @@ export async function consumeVaultChangeSse(
       const frame = decodeFrame(raw);
       if (frame) onFrame(frame);
     }
-    // Bounds the incomplete tail, not the traffic: every complete frame was
-    // just drained, so whatever is left is one partial frame still arriving.
     if (buffer.length > MAX_BUFFERED_FRAME_BYTES) {
-      // Cancel rather than leave the body draining into a buffer we refuse.
       abort();
       throw new VaultChangeStreamError(
         `vault change stream frame exceeds ${MAX_BUFFERED_FRAME_BYTES} buffered bytes`

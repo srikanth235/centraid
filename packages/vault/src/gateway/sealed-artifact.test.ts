@@ -25,10 +25,6 @@ describe("sealed-artifact suite", () => {
   const key = randomBytes(32);
   const secret = sealValue(key, sealAad("ext_app_secrets", "token", "r1"), "s");
 
-  // The ext band's declaration travels under its ONTOLOGY name. When the
-  // access plane was renamed (#916, D4) this reader still asked for
-  // `consent.app_ext`, so every ext-declared sealed column read as
-  // `unexpected` and a legitimate export refused its own import.
   test("an ext app's sealed columns are read from the access.app_ext rows", () => {
     const audit = auditArtifactSealedValues(
       artifactOf({
@@ -82,13 +78,6 @@ describe("sealed-artifact suite", () => {
     expect(audit.unexpected).toStrictEqual(["ext.notes.secrets.token"]);
   });
 
-  // A STAGED PAYLOAD IS UNTRUSTED JSON, NOT AN OBJECT (#916). The audit read
-  // `JSON.parse(payload_json)` through an `as Record<string, unknown>` cast
-  // that the runtime does not honour: `JSON.parse("null")` is `null`, and
-  // `Object.entries(null)` throws — so a bundle carrying the four bytes `null`
-  // in `sync.import_row.payload_json` crashed the pre-import seal audit
-  // instead of refusing or ignoring the row. An ARRAY passed `typeof
-  // "object"` and was audited with numeric "field" names.
   test("a staged payload that is not a JSON object is audited, not a crash", () => {
     for (const payload of ["null", "[]", `["${secret}"]`, "42", '"text"']) {
       const audit = auditArtifactSealedValues(

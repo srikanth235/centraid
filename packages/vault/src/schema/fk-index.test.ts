@@ -1,13 +1,3 @@
-// Regression guard for #374 (SQLite hardening, Tier 2): SQLite never
-// auto-indexes the child side of a foreign key. With `PRAGMA foreign_keys =
-// ON` (always on — see ../db.ts) every DELETE/UPDATE on a parent row full-
-// scans any child table whose FK columns aren't covered by an index, and
-// commands/merge.ts re-points FKs via UPDATE...WHERE fk=old across every
-// child table. This walks the live schema
-// and asserts every FK child column-set is covered as the LEFTMOST prefix
-// of some index — an explicit one, or the implicit index SQLite gives a
-// rowid table's TEXT PRIMARY KEY / UNIQUE constraint, or a WITHOUT ROWID
-// table's own PRIMARY KEY.
 import type { DatabaseSync } from "node:sqlite";
 
 import { describe, expect, test } from "vitest";
@@ -25,9 +15,6 @@ interface IndexColumns {
   columns: string[];
 }
 
-/** Every user table's FK child column-sets not covered as a leftmost index
- * prefix. Excludes sqlite_% internal tables (fts5 shadow tables are never
- * declared in these schema modules — see the header note in fts.ts). */
 function findUncoveredForeignKeys(db: DatabaseSync): UncoveredFk[] {
   const tables = (
     db
@@ -65,9 +52,6 @@ function findUncoveredForeignKeys(db: DatabaseSync): UncoveredFk[] {
           .filter((n): n is string => n !== null),
       };
     });
-    // A rowid-alias INTEGER PRIMARY KEY, or a WITHOUT ROWID table's PK,
-    // covers its column sequence as an index even though it may not
-    // (always, for the rowid-alias case) surface in PRAGMA index_list.
     if (pkColumns.length > 0) {
       indexColumnSets.push({ name: "(primary key)", columns: pkColumns });
     }

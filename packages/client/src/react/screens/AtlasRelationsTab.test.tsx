@@ -18,10 +18,6 @@ import {
   viewportTransform,
 } from "./atlasRelationsTestKit.js";
 
-// Component behaviour for the Relations "Map" tab (#519). Pure geometry
-// and the detail-dial predicates live in atlasOrreryGeometry.test; the shared
-// fixture, mount harness, and DOM helpers live in atlasRelationsTestKit.
-
 describe("AtlasRelationsTab", () => {
   afterEach(cleanupTab);
 
@@ -36,21 +32,14 @@ describe("AtlasRelationsTab", () => {
 
     it("renders nodes and FK edges from the payload", async () => {
       const el = await mountTab(makeGraph());
-      // standard-visibility facts: reachable shows, ghost edges draw, the
-      // hidden-endpoint edge is dropped
       await setLevel(el, "standard");
       const nodes = el.querySelectorAll('[data-testid="atlas-node"]');
       expect(nodes.length).toBeGreaterThan(0);
-      // core_party is the centre — drawn as the plate, not a node
       expect(nodeEl(el, "core_party")).toBeNull();
-      // ontology kinds render, including unreached island members
       expect(nodeEl(el, "knowledge_note")).not.toBeNull();
       expect(nodeEl(el, "locker_item")).not.toBeNull();
-      // reachable machinery renders; unreachable machinery is hidden
       expect(nodeEl(el, "access_device")).not.toBeNull();
       expect(nodeEl(el, "sync_connection")).toBeNull();
-      // FK edges present; self-reference and hidden-kind edges excluded —
-      // 9 − 1 self-ref − 1 hidden endpoint = 7
       const edges = el.querySelectorAll('[data-testid="atlas-edge"]');
       expect(edges).toHaveLength(7);
       expect(
@@ -63,14 +52,12 @@ describe("AtlasRelationsTab", () => {
     it("states the measured centre fact from centerEdgeCount / edgeCount", async () => {
       const el = await mountTab(makeGraph());
       const cap = el.querySelector('[data-testid="atlas-center-caption"]');
-      // 3 of 9 edges point at core_party
       expect(cap?.textContent).toContain("3 of 9");
       expect(cap?.textContent).toContain("structural references point here");
     });
 
     it("draws the ghost edge with the dotted ghost class", async () => {
       const el = await mountTab(makeGraph());
-      // ghost edges are a standard-lens fact — simple hides them by design
       await setLevel(el, "standard");
       const ghost = el.querySelector<HTMLElement>(
         '[data-testid="atlas-edge"][data-ghost="true"]'
@@ -105,7 +92,6 @@ describe("AtlasRelationsTab", () => {
       const el = await mountTab(makeGraph());
       const locker = nodeEl(el, "locker_item");
       expect(locker?.dataset.hop).toBe("unreached");
-      // every rendered unreached node is an island member
       const unreachedRendered = [
         ...el.querySelectorAll<HTMLElement>('[data-testid="atlas-node"]'),
       ]
@@ -124,9 +110,7 @@ describe("AtlasRelationsTab", () => {
       await fire(nodeEl(el, "core_content_item"), "click");
 
       expect(orreryCenter(el)).toBe("core_content_item");
-      // media_asset is now one hop from the new centre
       expect(nodeEl(el, "media_asset")?.dataset.hop).toBe("1");
-      // …but knowledge_note's bearing is unchanged — the compass never spins
       expect(nodeEl(el, "knowledge_note")?.dataset.bearing).toBe(noteBearing);
     });
 
@@ -170,10 +154,8 @@ describe("AtlasRelationsTab", () => {
       expect(readout?.textContent).toContain("41,230");
     });
 
-    // ── Human-language layer ───────────────────────────────────────────────────
     it("node readout leads with the friendly name + blurb, keeping the SQL name", async () => {
       const el = await mountTab(makeGraph());
-      // core_content_item carries a curated friendly name + blurb in the fixture
       await fire(nodeEl(el, "core_content_item"), "mouseover");
       const readout = el.querySelector('[data-testid="atlas-readout"]');
       expect(readout?.textContent).toContain("Content items");
@@ -185,7 +167,6 @@ describe("AtlasRelationsTab", () => {
 
     it("a machinery kind with no blurb omits the blurb line cleanly", async () => {
       const el = await mountTab(makeGraph());
-      // access_device is machinery (standard-only; no blurb in the fixture)
       await setLevel(el, "standard");
       await fire(nodeEl(el, "access_device"), "mouseover");
       expect(el.querySelector('[data-testid="atlas-node-blurb"]')).toBeNull();
@@ -216,13 +197,11 @@ describe("AtlasRelationsTab", () => {
         el.querySelector<HTMLElement>(`button[data-physical="${physical}"]`);
       expect(crumb("core_party")?.textContent).toBe("People");
       expect(crumb("core_content_item")?.textContent).toBe("Content items");
-      // the "Back to …" button also reads the friendly root name
       expect(
         el.querySelector('[data-testid="atlas-recenter"]')?.textContent
       ).toContain("People");
     });
 
-    // ── Sample rows ("A few of yours") ─────────────────────────────────────────
     it("renders up to three sample rows from an injected fetcher, honestly reduced", async () => {
       const rows = [
         { party_id: "p1", display_name: "Ada Lovelace" }, // preferred-named content
@@ -270,11 +249,8 @@ describe("AtlasRelationsTab", () => {
       ).toBeNull();
     });
 
-    // ── Question chips ─────────────────────────────────────────────────────────
     it("question chips light a lens on the chart and clear on a second click", async () => {
       const el = await mountTab(makeGraph());
-      // the "unused" lens lights access_device (target-only machinery);
-      // machinery only shows at standard
       await setLevel(el, "standard");
       const cls = (p: string): string =>
         nodeEl(el, p)?.getAttribute("class") ?? "";
@@ -283,32 +259,26 @@ describe("AtlasRelationsTab", () => {
           `[data-testid="atlas-question-chip"][data-q="${q}"]`
         );
 
-      // connected — the centre's hop-1 neighbours lit, farther kinds dimmed
       await fire(chip("connected"), "click");
       expect(chip("connected")?.getAttribute("aria-pressed")).toBe("true");
       expect(cls("core_content_item")).toContain("nodeHot"); // 1 hop from core_party
       expect(cls("media_asset")).toContain("nodeDim"); // 2 hops
-      // second click clears the lens
       await fire(chip("connected"), "click");
       expect(chip("connected")?.getAttribute("aria-pressed")).toBe("false");
       expect(cls("media_asset")).not.toContain("nodeDim");
 
-      // heaviest — the busiest kinds lit, a small one dimmed
       await fire(chip("heaviest"), "click");
       expect(cls("core_content_item")).toContain("nodeHot");
       expect(cls("knowledge_note")).toContain("nodeDim");
       await fire(chip("heaviest"), "click"); // clear
 
-      // unused — a target-only kind (unknown row count) lit, a populated kind dimmed
       await fire(chip("unused"), "click");
       expect(cls("access_device")).toContain("nodeHot");
       expect(cls("media_asset")).toContain("nodeDim");
     });
 
-    // ── Pan/zoom camera ───────────────────────────────────────────────────────
     it("wraps every layer in one viewport group at identity by default", async () => {
       const el = await mountTab(makeGraph());
-      // identity camera
       expect(viewportTransform(el)).toBe(
         "translate(0.000 0.000) scale(1.0000)"
       );
@@ -357,9 +327,7 @@ describe("AtlasRelationsTab", () => {
       );
     });
 
-    // ── Detail dial ─────────────────────────────────────────────────────────
     it("defaults to Simple, showing only kinds that provably carry data", async () => {
-      // a bespoke slice: two populated ontology kinds, one empty, one plumbing
       const g = makeGraph({
         nodes: [
           node("core_party", "core", "ontology", { friendly: "People" }),
@@ -387,26 +355,21 @@ describe("AtlasRelationsTab", () => {
         selfRefCount: 0,
       });
       const el = await mountTab(g);
-      // the dial lands on simple by default
       expect(dialLevel(el)).toBe("simple");
-      // kinds carrying data show…
       expect(nodeEl(el, "core_content_item")).not.toBeNull();
       expect(nodeEl(el, "knowledge_note")).not.toBeNull();
-      // …the provably-empty ontology kind and the machinery kind are hidden
       expect(nodeEl(el, "knowledge_tag")).toBeNull();
       expect(nodeEl(el, "access_device")).toBeNull();
     });
 
     it("Everything reveals unreachable machinery and surfaces the physical SQL sublabels", async () => {
       const el = await mountTab(makeGraph());
-      // at simple the island's plumbing is hidden, no SQL sublabels show
       expect(nodeEl(el, "sync_connection")).toBeNull();
       expect(
         el.querySelector('[data-testid="atlas-node-physical"]')
       ).toBeNull();
 
       await setLevel(el, "everything");
-      // the unreachable machinery now renders…
       expect(nodeEl(el, "sync_connection")).not.toBeNull();
       const sub = nodeEl(el, "knowledge_note")?.querySelector(
         '[data-testid="atlas-node-physical"]'
@@ -433,7 +396,6 @@ describe("AtlasRelationsTab", () => {
         [...el.querySelectorAll('[data-testid="atlas-caption-lens"]')]
           .map((n) => n.textContent ?? "")
           .join(" | ");
-      // simple hides the two plumbing kinds + their touching/ghost connections
       expect(lens()).toContain("2");
       expect(lens()).toContain("kinds hidden");
       expect(lens()).toContain("3");

@@ -1,7 +1,3 @@
-/**
- * Pure backup metric aggregation (#545).
- */
-
 import { describe, expect, it } from "vitest";
 
 import type { StorageConnectionUsageDTO } from "../../gateway-client.js";
@@ -57,7 +53,6 @@ describe(computeStorageMetrics, () => {
     const oldestSnapshot = Date.parse("2026-07-24T10:00:00.000Z");
     const oldestVerify = Date.parse("2026-07-20T00:00:00.000Z");
     const oldestWal = Date.parse("2026-07-25T11:00:00.000Z");
-    // Slowest policy: verifyEveryDays=14 → 14d beats snapshot 48h and RPO 120s.
     const slowestCadenceMs = 14 * 24 * 60 * 60 * 1000;
     const status = {
       configured: true,
@@ -98,11 +93,9 @@ describe(computeStorageMetrics, () => {
       lastAckedWalSegmentAt: oldestWal,
       outboxDrainedWatermarkAt: oldestWal,
     });
-    // T = min of four clocks = oldest verify.
     expect(metrics.freshness.tMs).toBe(oldestVerify);
     expect(metrics.freshness.ageMs).toBe(now - oldestVerify);
 
-    // Any vault missing a clock forces that edge to null — inject one miss.
     const missing = computeStorageMetrics(
       {
         ...status,

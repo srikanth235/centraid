@@ -1,6 +1,3 @@
-// The conversation ledger's behaviours (#707). The ledger is
-// app content owned by the assistant route, so its coverage lives here beside
-// the component rather than with the shell's navigation column.
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -23,7 +20,6 @@ function render(el: React.ReactElement): HTMLElement {
   return host;
 }
 
-/** `n` plain conversations, newest first, titled "Thread 1"… */
 function threads(n: number): AssistantConversationEntry[] {
   return Array.from({ length: n }, (_unused, index) => ({
     id: `c${index + 1}`,
@@ -32,7 +28,6 @@ function threads(n: number): AssistantConversationEntry[] {
   }));
 }
 
-/** Every row's visible title, in DOM order. */
 function titles(el: HTMLElement): string[] {
   return [...el.querySelectorAll(".rowTitle")].map(
     (node) => node.textContent ?? ""
@@ -70,7 +65,6 @@ describe("AssistantConversations suite", () => {
       );
       act(() => control(el, "New chat").click());
       expect(onNewChat).toHaveBeenCalledWith();
-      // Commit is fill-versus-outline, so there is exactly one of them.
       expect(el.querySelectorAll(".newChat")).toHaveLength(1);
     });
 
@@ -144,7 +138,6 @@ describe("AssistantConversations suite", () => {
       expect(titles(el)).toHaveLength(15);
 
       const seeAll = control(el, "See all");
-      // The count is the whole ACTIVE list, not the hidden remainder.
       expect(seeAll.textContent).toBe("See all · 18");
       act(() => seeAll.click());
       expect(titles(el)).toHaveLength(18);

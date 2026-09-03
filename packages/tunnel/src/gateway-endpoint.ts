@@ -1,13 +1,3 @@
-/*
- * Gateway side of the iroh transport (#289): one endpoint whose EndpointId is
- * the gateway's PERMANENT identity — no domain, no TLS cert, no HTTP port.
- * Devices speak `centraid/tunnel/1` and pair over `centraid/gw-pair/1`; a
- * GATEWAY speaks `centraid/gw-link/1` and reaches `/centraid/_peer/*` alone.
- * That plane's admission and identity headers stay DISJOINT from the device
- * lane's, or a link is indistinguishable from an owner device (#726). Policy
- * stays with the caller: framing, ALPNs and forwarding only.
- */
-
 import { once } from "node:events";
 import http from "node:http";
 
@@ -51,9 +41,6 @@ import {
 export const GW_PAIR_ALPN = "centraid/gw-pair/1";
 const DATA_PLANE_RELAY_HEADER = "x-centraid-data-plane-relay";
 
-/** Both planes: a client copy of ANY of these is dropped first. Mirrors the
- * Rust relay's FORWARDER_OWNED_HEADERS one-for-one — including the peer-vault
- * name this JS endpoint never stamps itself (#865). */
 const IDENTITY_HEADER_NAMES: readonly string[] = [
   DEVICE_IDENTITY_HEADER,
   DEVICE_PROOF_HEADER,
@@ -68,7 +55,6 @@ export interface GatewayPairRequest {
   deviceName: string;
   platform: string;
   rememberDevice?: boolean;
-  /* No owner or vault field: a joining device never names its own reach. */
   grantProfile?: string[];
 }
 
@@ -101,16 +87,13 @@ export interface GatewayEndpointOptions {
     | TunnelUpstream
     | undefined
     | Promise<TunnelUpstream | undefined>;
-  /** Per connection AND per stream, so revocation lands on live ones. */
   authorize: (endpointId: string) => boolean;
   pair: (
     request: GatewayPairRequest,
     endpointId: string
   ) => GatewayPairResponse | Promise<GatewayPairResponse>;
   requestHeaders?: (endpointId: string) => Record<string, string>;
-  /** Never `authorize` (#726). Omitted ⇒ the peer ALPN is unadvertised. */
   authorizePeer?: (endpointId: string) => boolean;
-  /** DISJOINT from the device names, or a peer resolves as a device. */
   peerRequestHeaders?: (endpointId: string) => Record<string, string>;
   relays?: "n0" | "disabled";
   nativeControl?: { secret: string };
@@ -138,8 +121,8 @@ export async function startGatewayEndpoint(
         ...(options.relays ? { relays: options.relays } : {}),
       });
     } catch {
-      // An optimization, not an availability boundary: the JS relay path
-      // serves when the artifact will not load.
+      // Intentionally empty.
+      // Intentionally empty.
     }
   }
   const builder = iroh.Endpoint.builder();
@@ -150,7 +133,6 @@ export async function startGatewayEndpoint(
   builder.alpns([
     alpnBytes(TUNNEL_ALPN),
     alpnBytes(GW_PAIR_ALPN),
-    // No link policy ⇒ never negotiate the plane.
     ...(options.authorizePeer ? [alpnBytes(PEER_LINK_ALPN)] : []),
   ]);
   const endpoint = await builder.bind();
@@ -202,9 +184,7 @@ class GatewayEndpoint {
       void incoming
         .accept()
         .then((accepting) => this.routeConnection(accepting))
-        .catch(() => {
-          // Handshake failures are the remote's problem.
-        });
+        .catch(() => {});
       return acceptNext();
     };
     void acceptNext();
@@ -227,7 +207,6 @@ class GatewayEndpoint {
   private async handlePeerConnection(connection: Connection): Promise<void> {
     const authorize = this.options.authorizePeer;
     if (!authorize) {
-      // Fail closed: here a bug reads as "no link exists".
       connection.close(CLOSE_UNAUTHORIZED, alpnBytes("not_found"));
       return;
     }
@@ -268,7 +247,7 @@ class GatewayEndpoint {
       await bi.send.writeAll(encodeHeaderFrame(response));
       await bi.send.finish();
     } catch {
-      // Malformed pairing attempt.
+      // Intentionally empty.
     } finally {
       setTimeout(() => connection.close(0n, []), 1000);
     }
@@ -276,7 +255,10 @@ class GatewayEndpoint {
 
   private async handleTunnelConnection(connection: Connection): Promise<void> {
     const endpointId = connection.remoteId().toString();
-    if (!this.options.authorize(endpointId)) {
+    if (
+      !this.options // Intentionally empty.
+        .authorize(endpointId)
+    ) {
       connection.close(CLOSE_UNAUTHORIZED, alpnBytes("unauthorized"));
       return;
     }
@@ -284,19 +266,16 @@ class GatewayEndpoint {
     try {
       const serveNextStream = async (): Promise<void> => {
         const bi = await connection.acceptBi();
-        // Per stream: a revoked device loses a connection that predates it.
         if (!this.options.authorize(endpointId)) {
           connection.close(CLOSE_UNAUTHORIZED, alpnBytes("revoked"));
           return;
         }
-        void this.serveStream(endpointId, bi.send, bi.recv).catch(() => {
-          // Already answered with an error frame.
-        });
+        void this.serveStream(endpointId, bi.send, bi.recv).catch(() => {});
         return serveNextStream();
       };
       await serveNextStream();
     } catch {
-      // Closed by peer, revocation, or shutdown.
+      // Intentionally empty.
     } finally {
       this.untrackConnection(endpointId, connection);
     }
@@ -315,9 +294,6 @@ class GatewayEndpoint {
       await respondError(send, 400, "bad_request");
       return;
     }
-    // Peer-supplied `target` is pasted onto the loopback base URL: confine it
-    // BEFORE the upstream lookup, so the refusal cannot vary with gateway
-    // state (#726). The Rust relay enforces this too.
     if (plane === "peer" && !isPeerPlaneTarget(header.target)) {
       await respondPeerState(send, 404, "not_found");
       return;
@@ -337,8 +313,6 @@ class GatewayEndpoint {
     const headers = sanitizeHeaders(header.headers ?? {});
     const authMode = headers[TUNNEL_AUTH_MODE_HEADER];
     delete headers[TUNNEL_AUTH_MODE_HEADER];
-    // Strip any client copy FIRST, then stamp what QUIC proved. BOTH planes'
-    // names go, so neither smuggles the other's identity.
     const injected =
       plane === "peer"
         ? (this.options.peerRequestHeaders?.(endpointId) ?? {})
@@ -352,7 +326,6 @@ class GatewayEndpoint {
       headers[DATA_PLANE_RELAY_HEADER] = this.options.nativeControl.secret;
     }
     headers.host = base.host;
-    // The broad device bearer would override a `web-session` cookie's scope.
     if (authMode === TUNNEL_AUTH_WEB_SESSION) delete headers.authorization;
     else headers.authorization = `Bearer ${upstream.token}`;
     await new Promise<void>((resolve) => {

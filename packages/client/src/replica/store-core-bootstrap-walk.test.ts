@@ -1,9 +1,3 @@
-// The windowed bootstrap walk and page reclamation, held to the same
-// driver-neutrality bar as the rest of the core: every case runs against the
-// sqlite-wasm adapter (the web engine) and a node:sqlite adapter (the CI
-// stand-in for op-sqlite, which cannot load under vitest on macOS/node). The
-// row, change-batch and search spec is `store-core.test.ts`; the node-driver
-// maintenance suite is `store-core-storage-lifecycle.test.ts`.
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import type { Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { beforeAll, describe, expect, test } from "vitest";
@@ -42,7 +36,6 @@ describe("store-core", () => {
           shapes: full.shapes,
         };
         store.bootstrapBegin(header);
-        // One row per page, as the windowed protocol would deliver them.
         store.bootstrapPage([full.rows[0]!]);
         store.bootstrapPage([full.rows[1]!]);
         expect(store.bootstrapCommit(full.cursor)).toStrictEqual({
@@ -78,9 +71,6 @@ describe("store-core", () => {
           shapes: full.shapes,
         });
         store.bootstrapPage([full.rows[0]!]);
-        // Simulates a crash before the final page: rows exist, but no cursor does,
-        // so the replica is indistinguishable from one that never bootstrapped and
-        // reads fail closed rather than returning a partial library.
         expect(store.status()).toStrictEqual({
           cursor: null,
           schemaEpoch: null,
@@ -137,8 +127,6 @@ describe("store-core", () => {
           pages: 1,
         });
 
-        // The process died here. Re-opening the SAME walk hands back where it
-        // was, and the page-one rows are still in place.
         expect(store.bootstrapBegin(header)).toStrictEqual({
           after: "token-2",
           commitCursor: { epoch: "replica-1", seq: 2 },
@@ -146,8 +134,6 @@ describe("store-core", () => {
         });
         store.bootstrapPage([full.rows[1]!], {
           after: null,
-          // A resumed walk offers a NEWER page-one cursor; the store keeps the
-          // original, which is the floor the convergence replay needs.
           commitCursor: { epoch: "replica-1", seq: 9 },
           pages: 2,
         });
@@ -161,7 +147,6 @@ describe("store-core", () => {
             .rows.map((row) => row.rowId)
             .sort()
         ).toStrictEqual(["event-1", "event-2"]);
-        // Committed walks resume nothing.
         expect(store.bootstrapBegin(header)).toBeUndefined();
       } finally {
         store.close();
@@ -227,8 +212,6 @@ describe("store-core", () => {
           pages: 1,
         });
 
-        // Same schema epoch, a grant that added a shape: resuming would keep a
-        // catalog the incoming rows are not shaped by.
         const widened = {
           ...header,
           shapes: [
@@ -269,15 +252,11 @@ describe("store-core", () => {
         });
         store.bootstrapPage([full.rows[0]!]);
         store.bootstrapPreview({ epoch: "replica-1", seq: 40 });
-        // A resumed walk's page one carries an older cursor than the deltas the
-        // preview already applied; the gap it would open is not worth the
-        // freshness it does not add.
         store.bootstrapPreview({ epoch: "replica-1", seq: 12 });
         expect(store.status().cursor).toStrictEqual({
           epoch: "replica-1",
           seq: 40,
         });
-        // A new epoch is a new lineage and does replace it.
         store.bootstrapPreview({ epoch: "replica-2", seq: 1 });
         expect(store.status().cursor).toStrictEqual({
           epoch: "replica-2",
@@ -291,9 +270,6 @@ describe("store-core", () => {
     test("reclaims pages after a purge-sized batch of deletions", () => {
       const store = makeStore();
       try {
-        // The agenda shape, whose indexed columns it does not carry: the point
-        // here is freed PAGES, and an FTS-indexed fixture would spend the whole
-        // test rewriting the search index instead.
         const full = bulkEventSnapshot(1_200);
         store.bootstrap(full);
         const filled = store.storageBytes();
@@ -329,7 +305,6 @@ describe("store-core", () => {
 
         const purged = store.storageBytes();
         expect(purged.pageCount).toBeLessThan(filled.pageCount / 2);
-        // Nothing is left parked on the freelist for the next low-disk moment.
         expect(purged.freePages).toBe(0);
         expect(purged.freeBytes).toBe(0);
       } finally {
@@ -346,7 +321,6 @@ describe("store-core", () => {
         expect(() =>
           store.bootstrapCommit({ epoch: "replica-1", seq: 2 })
         ).toThrow(ReplicaProtocolError);
-        // A committed bootstrap closes its progress; a stray page must not reopen it.
         store.bootstrap(snapshot());
         expect(() => store.bootstrapPage([snapshot().rows[0]!])).toThrow(
           ReplicaProtocolError

@@ -1,9 +1,3 @@
-// The Atlas census/graph/pulse builders (#441). The load-bearing
-// test is the ghost invariant the issue demands: a NOT NULL FK column on a
-// non-empty child table is NEVER reported as a ghost. Expected edge counts
-// are derived from the PRAGMA walk itself — never asserted as literals (no
-// 122/46).
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -31,10 +25,6 @@ describe("atlas-census", () => {
     return db;
   }
 
-  /** Independently walk PRAGMA foreign_key_list — the derived expectation.
-   * Keys into unregistered machinery (`core_entity`, since #916's rung ten)
-   * are not edges of the canonical model and are not counted, exactly as
-   * `atlasGraph` does not draw them. */
   function walkFkCount(vault: DatabaseSync): {
     total: number;
     toCenter: number;
@@ -69,7 +59,6 @@ describe("atlas-census", () => {
     const expected = walkFkCount(db.vault);
     expect(graph.edgeCount).toBe(expected.total);
     expect(graph.centerEdgeCount).toBe(expected.toCenter);
-    // The data-driven "star" claim: core_party takes the largest share of edges.
     expect(graph.centerEdgeCount).toBeGreaterThan(0);
     expect(graph.center).toBe(ATLAS_GRAPH_CENTER);
   });
@@ -77,7 +66,6 @@ describe("atlas-census", () => {
   test("a NOT NULL FK on a non-empty child table is NEVER a ghost", () => {
     const db = freshVault();
     const now = new Date().toISOString();
-    // Parent spine row, then a child with a NOT NULL FK to it.
     db.vault
       .prepare(
         `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
@@ -94,7 +82,6 @@ describe("atlas-census", () => {
 
     const graph = atlasGraph(db.vault);
 
-    // The specific edge we populated: a NOT NULL FK on a non-empty child.
     const populated = graph.fkEdges.find(
       (e) => e.fromTable === "core_party_identifier" && e.col === "party_id"
     );
@@ -104,10 +91,6 @@ describe("atlas-census", () => {
     expect(populated!.fill).toBe(populated!.childRows);
     expect(populated!.ghost).toBe(false);
 
-    // The class-closing invariant: across EVERY edge, a NOT NULL column on a
-    // non-empty child can never be a ghost (ghost is fill-based, not "no link").
-    // Narrow the population first so both assertions run on every edge the loop
-    // visits, instead of hiding behind a branch that may never be taken.
     for (const edge of graph.fkEdges.filter(
       (e) => e.notnull && e.childRows > 0
     )) {
@@ -119,7 +102,6 @@ describe("atlas-census", () => {
   test("a nullable FK nobody sets is a ghost; an empty child is a ghost", () => {
     const db = freshVault();
     const graph = atlasGraph(db.vault);
-    // A fresh vault: every child table is empty, so every edge is a ghost.
     for (const edge of graph.fkEdges) {
       expect(edge.childRows).toBe(0);
       expect(edge.fill).toBe(0);
@@ -156,7 +138,6 @@ describe("atlas-census", () => {
       .run(now);
 
     const graph = atlasGraph(db.vault);
-    // The authored link shows up ONLY in authoredLinks, with its concept label.
     expect(graph.authoredLinks).toHaveLength(1);
     const link = graph.authoredLinks[0]!;
     expect(link.relationConceptId).toBe("c1");
@@ -165,11 +146,6 @@ describe("atlas-census", () => {
     expect(link.toType).toBe("core.party");
     expect(link.count).toBe(1);
 
-    // The authored link did NOT invent a party→party FK edge, and did not
-    // change any FK fill (fkEdges are schema-derived, not link-derived).
-    // `from_id` DOES carry an engine key since #916's rung ten — into the
-    // entity supertype, which is machinery and therefore not an Atlas edge at
-    // all (see atlasGraph). What must never appear is an edge to core_party.
     expect(
       graph.fkEdges.some(
         (e) => e.fromTable === "core_link" && e.toTable === "core_party"
@@ -182,10 +158,8 @@ describe("atlas-census", () => {
     const graph = atlasGraph(db.vault);
     const center = graph.nodes.find((n) => n.physical === ATLAS_GRAPH_CENTER);
     expect(center?.hopDistance).toBe(0);
-    // The audit calls out locker + sync_connection as unreachable from core_party.
     expect(graph.island).toContain("locker_item");
     expect(graph.island).toContain("sync_connection");
-    // Island nodes carry a null hop distance.
     for (const physical of graph.island) {
       const node = graph.nodes.find((n) => n.physical === physical);
       expect(node?.hopDistance).toBeNull();
@@ -200,12 +174,10 @@ describe("atlas-census", () => {
     expect(party?.friendly).toBe("People");
     expect(party?.blurb).toBe("Everyone you know — people and organisations.");
 
-    // A machinery kind is NAMED by the registry too and emits no blurb (#883).
     const machinery = graph.nodes.find((n) => n.blurb === undefined);
     expect(machinery).toBeDefined();
     expect(machinery!.friendly).not.toBe("");
 
-    // friendly is ALWAYS present; blurb NEVER without a friendly name.
     for (const node of graph.nodes) {
       expect(node.friendly).toBeTypeOf("string");
     }
@@ -217,11 +189,9 @@ describe("atlas-census", () => {
   test("self-referencing tables are flagged", () => {
     const db = freshVault();
     const graph = atlasGraph(db.vault);
-    // core_place.parent_place_id, core_concept.broader_concept_id etc.
     const place = graph.nodes.find((n) => n.physical === "core_place");
     expect(place?.selfRef).toBe(true);
     expect(graph.selfRefCount).toBeGreaterThan(0);
-    // A self-ref edge is marked and excluded from BFS adjacency (no self-loop).
     const selfEdge = graph.fkEdges.find(
       (e) => e.fromTable === "core_place" && e.selfRef
     );
@@ -240,7 +210,6 @@ describe("atlas-census", () => {
       .run(now, now);
 
     const census = atlasCensus(db.vault);
-    // Ontology packs sort before machinery.
     const firstMachinery = census.packs.findIndex(
       (p) => p.packKind === "machinery"
     );
@@ -254,7 +223,6 @@ describe("atlas-census", () => {
     const partyTable = core!.tables.find((t) => t.physical === "core_party");
     expect(partyTable?.rows).toBe(1);
     expect(census.totals.rows).toBeGreaterThanOrEqual(1);
-    // One party inserted ⇒ core.party is a populated kind.
     expect(census.totals.populatedKinds).toBeGreaterThanOrEqual(1);
     expect(census.totals.kinds).toBeGreaterThan(census.totals.populatedKinds);
   });
@@ -290,8 +258,6 @@ describe("atlas-census", () => {
         counted += 1;
       }
     }
-    // EVERY registered table is counted: the batch is an arithmetic identity,
-    // not a narrower census (#883).
     expect(counted).toBe(Object.values(VAULT_TABLES).flat().length);
     const walkedTotal = census.packs.reduce((sum, p) => sum + p.rows, 0);
     expect(census.totals.rows).toBe(walkedTotal);
@@ -303,8 +269,6 @@ describe("atlas-census", () => {
     const physicals = census.packs.flatMap((pack) =>
       pack.tables.map((table) => table.physical)
     );
-    // Atlas states ROW COUNTS, the grant surfaces LIVE grants: both true, and
-    // different on purpose.
     expect(physicals).toContain("share_authority");
     expect(physicals).toContain("share_delivery_config");
     expect(physicals).toContain("share_fulfillment");
@@ -321,7 +285,6 @@ describe("atlas-census", () => {
     insert.run("pv1", "core.party", "p1", "2026-07-17T09:00:00.000Z");
     insert.run("pv2", "core.party", "p2", "2026-07-16T09:00:00.000Z");
     insert.run("pv3", "schedule.task", "task-1", "2026-07-17T10:00:00.000Z");
-    // Outside the 30-day window — must be excluded.
     insert.run("pv-old", "core.party", "p-old", "2026-01-01T09:00:00.000Z");
 
     const pulse = atlasPulse(db.vault, { now: today });
@@ -340,7 +303,6 @@ describe("atlas-census", () => {
 
     const task = pulse.series.find((s) => s.entityType === "schedule.task");
     expect(task?.physical).toBe("schedule_task");
-    // Series are sorted by total descending — party (2) before task (1).
     expect(pulse.series[0]!.entityType).toBe("core.party");
   });
 });

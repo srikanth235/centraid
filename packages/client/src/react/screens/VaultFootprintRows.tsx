@@ -5,7 +5,6 @@ import MeterRows from "../ui/MeterRows.js";
 import type { MeterRowDef } from "../ui/MeterRows.js";
 import { formatBytes } from "./localUsageView.js";
 
-/** Not a collapsed "By vault" details (#814). Bar = share of the largest vault. */
 export default function VaultFootprintRows({
   report,
   ownerLabels,
@@ -13,7 +12,6 @@ export default function VaultFootprintRows({
   report: LocalUsageReportDTO;
   ownerLabels: ReadonlyMap<string, string>;
 }): JSX.Element | null {
-  // One vault needs no breakdown — the rail already answered.
   if (report.vaults.length < 2) return null;
   const largest = report.vaults.reduce(
     (best, vault) => Math.max(best, vault.bytes),
@@ -23,7 +21,6 @@ export default function VaultFootprintRows({
     .toSorted((a, b) => b.bytes - a.bytes)
     .map((vault) => {
       const owner = ownerLabels.get(vault.vaultId);
-      // Never a raw id as the label; id moves to the second line.
       const named =
         vault.name === undefined || vault.name === "" ? null : vault.name;
       const shareOfMachine =

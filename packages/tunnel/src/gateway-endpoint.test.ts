@@ -1,18 +1,3 @@
-/*
- * Gateway iroh endpoint (#289).
- *
- * Boots a real gateway endpoint on loopback (relays disabled — offline),
- * fronted by a fake HTTP gateway that records the headers it receives,
- * and proves the trust story end-to-end:
- *
- *   - unenrolled device keys are refused at the QUIC layer;
- *   - ticket redemption over `centraid/gw-pair/1` enrolls the caller and
- *     answers the version-handshake material;
- *   - forwarded requests carry the injected device-identity headers, and
- *     a client-supplied copy of those headers is stripped (no spoofing);
- *   - revocation lands on live connections (per-stream authorize).
- */
-
 import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
@@ -216,8 +201,6 @@ describe("gateway endpoint", () => {
     });
     expect(enrolled.has(device.endpointId)).toBe(true);
 
-    // Burned: the same ticket never redeems twice (Mallory used it up? No —
-    // success consumed it).
     const replay = await device.pairGateway(endpoint.ticket(), {
       ticketId: "t1",
       secret: "s3cret",
@@ -233,9 +216,6 @@ describe("gateway endpoint", () => {
     const res = await tunnelRequest(connection, {
       method: "GET",
       target: "/centraid/_apps",
-      // A malicious client claims to be another device — must be stripped.
-      // The peer-vault name is in the strip set even though this forwarder
-      // never stamps it, matching the Rust relay's owned-header list (#865).
       headers: {
         "x-centraid-device": "someone-else",
         "x-centraid-device-proof": "forged",
@@ -298,13 +278,6 @@ describe("gateway endpoint", () => {
   });
 });
 
-/*
- * Strip-parity pin (#865 F9). The Rust relay strips five forwarder-owned
- * headers; this JS forwarder used to strip four, so a client-supplied
- * peer-vault claim survived forwarding. Nothing ties the two lists together
- * at build time, so — same posture as alpn-parity.test.ts — this test reads
- * the Rust source and pins the TS strip set against it.
- */
 describe("forwarder owned-header parity", () => {
   const rust = fs.readFileSync(
     fileURLToPath(new URL("../data-plane/src/iroh_wire.rs", import.meta.url)),

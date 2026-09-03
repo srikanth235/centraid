@@ -184,10 +184,6 @@ describe("gateway-client-device-work-source", () => {
         }
         if (url === "https://provider.test/object") {
           const value = requestedRange(init);
-          // A provider fetch with no Range header is a protocol violation, not
-          // an assertion: a real object store would serve the whole object and
-          // the unseal would silently read the wrong bytes. Fail the stub loudly
-          // here; the `bytes=` shape is asserted unconditionally after the read.
           if (value === null)
             throw new Error(`provider fetch without a Range header: ${url}`);
           let start: number;
@@ -236,8 +232,6 @@ describe("gateway-client-device-work-source", () => {
       (call) => call.url === "https://provider.test/object"
     );
     expect(providerCalls.length).toBeGreaterThan(3);
-    // Every provider read is a byte range — never a whole-object GET. Runs
-    // unconditionally, and the `> 3` assertion above keeps it non-vacuous.
     expect(
       providerCalls.every((call) =>
         (requestedRange(call.init) ?? "").startsWith("bytes=")

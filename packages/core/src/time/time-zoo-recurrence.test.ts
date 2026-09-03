@@ -1,13 +1,3 @@
-/*
- * Recurrence time zoo (#839 G12): DST, leap day, ISO week-53 — adversarial
- * zones. Doctrine (docs/cron-timezone.md): nonexistent wall SKIP; overlap
- * ONCE at the earlier instant.
- *
- * Zone table is a deliberate duplicate of time-zoo-cron.test.ts: core must
- * not import a server helper, and a shared fixture would let one edit weaken
- * both. Tests check tzdata, so drift fails rather than silently disagrees.
- */
-
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
@@ -22,7 +12,6 @@ type Band = {
   readonly year: number;
   readonly month: number;
   readonly day: number;
-  /** Half-open [from, to) minute-of-day of the affected wall clock. */
   readonly fromMinute: number;
   readonly toMinute: number;
 };
@@ -97,7 +86,6 @@ const ZOO: readonly ZooZone[] = [
   },
 ];
 
-/** Fixed-offset control: must never produce a gap or an overlap. */
 const FIXED_ZONE = "Asia/Kolkata";
 
 const ZOO_SEED = 839_012;
@@ -136,11 +124,6 @@ function wallStartOn(
   return `${civilDay(band, dayOffset)}T${hour}:${minute}:00`;
 }
 
-/**
- * Instants within ±20h of naive UTC whose wall clock is that civil minute.
- * Built from `zonedParts` (Intl), never `resolveWallTime` — don't feed the
- * resolver its own output.
- */
 function instantsWithWall(
   zone: string,
   isoDay: string,
@@ -194,7 +177,6 @@ function dailyAcrossBand(
 ): { starts: string[]; walls: string[]; overlaps: string[] } {
   const anchor = instantsWithWall(zone, civilDay(band, -2), minuteOfDay)[0];
   if (!anchor) throw new Error(`no anchor instant for ${zone} ${minuteOfDay}`);
-  // Bound is the INSTANT of the civil day after the window — not `anchor + 5d`.
   const bound = instantsWithWall(zone, civilDay(band, 3), minuteOfDay)[0];
   if (!bound) throw new Error(`no bounding instant for ${zone} ${minuteOfDay}`);
   const instances = expandRecurrence({
@@ -219,7 +201,6 @@ const ZOO_ROWS = ZOO.map((entry) => [entry.zone, entry] as const);
 
 describe("recurrence DST zoo", () => {
   beforeEach(() => {
-    // Pinned clock: a `Date.now()` in the expansion path fails every run.
     useFakeClock("2026-06-15T12:00:00.000Z");
   });
 
@@ -227,7 +208,6 @@ describe("recurrence DST zoo", () => {
     it.each(ZOO_ROWS)(
       "%s resolves every sampled minute of its spring-forward band to null",
       (zone, entry) => {
-        // docs/cron-timezone.md: nonexistent wall is skipped = `null`.
         const minutes = sampleMinutes(entry.gap);
         const resolved = minutes.map((minute) =>
           resolveWallTime(wallOf(civilDay(entry.gap, 0), minute), zone)
@@ -253,7 +233,6 @@ describe("recurrence DST zoo", () => {
           wallStartOn(entry.gap, 2, minute),
         ]);
         expect(series.overlaps).toStrictEqual([]);
-        // Step across the skipped day is NOT 48h — offset moved.
         const beforeGap = series.starts[1] as string;
         const afterGap = series.starts[2] as string;
         expect(Date.parse(afterGap) - Date.parse(beforeGap)).not.toBe(
@@ -267,7 +246,6 @@ describe("recurrence DST zoo", () => {
     it.each(ZOO_ROWS)(
       "%s resolves every sampled minute of its fall-back band to the EARLIER of its two instants",
       (zone, entry) => {
-        // docs/cron-timezone.md: overlap occurs once, at the EARLIER instant.
         const minutes = sampleMinutes(entry.overlap);
         const witnessed = minutes.map((minute) =>
           instantsWithWall(zone, civilDay(entry.overlap, 0), minute)
@@ -340,7 +318,6 @@ describe("recurrence across the leap day", () => {
   });
 
   it("keeps a February 29 yearly series anchored on the 29th, clamping only in common years", () => {
-    // Never re-base the anchor on the clamp — else the series silently leaves the 29th.
     const instances = expandRecurrence({
       rrule: "FREQ=YEARLY",
       start: "2028-02-29T12:00:00.000Z",
@@ -399,7 +376,6 @@ describe("recurrence across the leap day", () => {
   });
 
   it("honours the Gregorian century rule when clamping February", () => {
-    // 2100 is divisible by 4 and is NOT a leap year. `% 4` would emit 2100-02-29.
     const instances = expandRecurrence({
       rrule: "FREQ=YEARLY;INTERVAL=100",
       start: "2000-02-29T12:00:00.000Z",
@@ -423,7 +399,6 @@ describe("recurrence across an ISO week-53 year", () => {
   });
 
   it("expands 53 Mondays over ISO year 2026", () => {
-    // 2026-01-01 is a Thursday → 53-week ISO year. Assuming 52 drops a week.
     const instances = expandRecurrence({
       rrule: "FREQ=WEEKLY;BYDAY=MO",
       start: "2025-12-29T09:00:00.000Z",
@@ -448,7 +423,6 @@ describe("recurrence across an ISO week-53 year", () => {
   });
 
   it("carries the 53rd week across the ISO year boundary without a re-anchor", () => {
-    // Re-deriving the anchor from the calendar year would emit a 6- or 8-day step.
     const instances = expandRecurrence({
       rrule: "FREQ=WEEKLY;BYDAY=MO",
       start: "2026-12-14T09:00:00.000Z",

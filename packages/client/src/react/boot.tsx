@@ -1,5 +1,3 @@
-// Loaded as a plain module script — no dev server, so `script-src 'self'` holds.
-
 import "../theme-vars.js";
 import "../icons.js";
 import type { ReactNode } from "react";
@@ -22,9 +20,6 @@ void import("../replica/shell-session.js")
   .then((module) => module.installReplicaStorageLifecycle())
   .catch(() => undefined);
 
-// THE FETCH WAITS, not just the work (#838): a bare `void import(…)` at module
-// scope still requests during boot, putting PDF.js on every cold-load
-// waterfall. A background contributor touches no network in the first minute.
 const DEVICE_WORK_LOAD_DELAY_MS = 60_000;
 window.setTimeout(() => {
   void import("../device-enrichment-worker.js")
@@ -80,8 +75,6 @@ function sync(): void {
 window.addEventListener("hashchange", sync);
 sync();
 
-// A settings READ that fails is not a fresh install: swallowing it would offer
-// "start fresh" over a populated vault. The read stays three-valued.
 type SettingsRead =
   | {
       ok: true;
@@ -140,8 +133,6 @@ void (async (): Promise<void> => {
     );
   };
 
-  // "Try again" must retry what failed: the host's supervisor gives up after a
-  // few, so the retry clears that state and restarts the gateway first.
   const start = async (): Promise<void> => {
     const read = await readSettings();
     if (!read.ok) {
@@ -172,7 +163,6 @@ void (async (): Promise<void> => {
     renderFirstRun();
   };
   await start();
-  // After first paint only: a modal over an unpainted window strands them.
   void assistHandoffPromise.then((assistHandoff) => {
     if (assistHandoff.status === "error") window.alert(assistHandoff.message);
   });

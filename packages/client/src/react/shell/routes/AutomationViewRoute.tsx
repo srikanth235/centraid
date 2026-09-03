@@ -123,11 +123,6 @@ export function automationPicker(
   };
 }
 
-/**
- * The harness the automation's MOST RECENT run actually used. `listAutomationTurns`
- * documents newest-first, but "first entry that happens to carry a harnessKind"
- * silently inherits that ordering — so pick the latest run explicitly (#567).
- */
 export function latestHarnessKind(
   runs: readonly CentraidAutomationTurnRecord[]
 ): string | undefined {
@@ -164,16 +159,9 @@ async function askAutomationWithConsent(input: {
   }) => Promise<boolean>;
 }): Promise<string | null> {
   let live = createAutomationLiveTrace(input.text);
-  // Reference-stable rows for the memoized transcript (#659): a streamed
-  // event rebuilds the whole projection, but only the rows that actually moved
-  // should reach React.
   const projectLive = createKeyedMessageProjection();
   input.onMessages(projectLive(automationLiveMessages(live)));
-  // Approvals accumulate across this ask: consent for provider A then a
-  // failover to B must resend BOTH, or the server re-asks for A forever (#567).
   let approvedProviders: string[] = [];
-  // A consent request changes the credentials for the next transport attempt,
-  // so this is a serial retry state machine rather than parallel asks.
   const requestTurn = async (): Promise<string | null> => {
     let requiredProvider: string | undefined;
     const result = await streamAutomationConversationTurn(
@@ -230,14 +218,6 @@ async function askAutomationWithConsent(input: {
   return requestTurn();
 }
 
-// The RUN SCREEN's route wrapper. It wires exactly the reading surface:
-// history, consent decisions, run-now, pause, delete, and a read-only ask.
-// Notably ABSENT is compile — `compileAutomation` is imported only by the
-// editor route now, which is the mechanical half of the "compiling is the
-// compiler's job" split. `loadData`
-// composes `loadAutomationThreadData` (row + executions + plan status +
-// consent, with compile turns already filtered out) with two small additive
-// fetches that plug documented DTO gaps — see `AutomationThreadDataEx`.
 export default function AutomationViewRoute({
   automationId,
 }: {
@@ -461,11 +441,6 @@ export default function AutomationViewRoute({
           const row = rowRef.current;
           if (!row) return null;
           try {
-            // One conversational turn against the automation's own thread, and
-            // nothing else — this never rewrites the standing instructions or
-            // kicks a compile from the run screen. Changing what an automation
-            // does happens in exactly one place: the instructions field on the
-            // compile screen.
             return await askAutomationWithConsent({
               automationRef: row.ref,
               text,

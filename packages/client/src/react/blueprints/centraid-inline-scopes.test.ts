@@ -1,5 +1,3 @@
-// The multi-scope inline facade (#599): one app mounted over the
-// member's own scope plus every audience they belong to.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {

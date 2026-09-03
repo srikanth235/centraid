@@ -13,10 +13,6 @@ import {
   noticeSpanPhrase,
   outboundLabel,
 } from "../shell/routes/approvalsPhrasing.js";
-// Presentation rules live outside the component — phrasings in
-// `approvalsPhrasing`, the store ledger's revoked-row bookkeeping in
-// `privacyStores` (#815) — and this suite exercises them beside the screen
-// they are the contract for.
 import ApprovalsScreen from "./ApprovalsScreen.js";
 import type {
   ApprovalsActivityRowDTO,
@@ -203,8 +199,6 @@ describe("screens/ApprovalsScreen", () => {
       root?.render(<ApprovalsScreen {...props} />);
     });
   }
-  /** Buttons carry their whole label as text, so an EXACT match is the honest
-   *  selector: "Deny" and "Deny this write" are two different controls. */
   function findButton(el: HTMLElement, text: string): HTMLButtonElement {
     const btn = [...el.querySelectorAll("button")].find(
       (b) => b.textContent?.trim() === text
@@ -215,8 +209,6 @@ describe("screens/ApprovalsScreen", () => {
   function click(el: HTMLElement, text: string): void {
     act(() => findButton(el, text).click());
   }
-  /** Press one section head's own Show/Hide, rather than the first button in
-   *  the page that happens to carry the same word. */
   function toggleSection(el: HTMLElement, label: string): void {
     const head = [...el.querySelectorAll("h2")].find(
       (h) => h.textContent === label
@@ -239,9 +231,6 @@ describe("screens/ApprovalsScreen", () => {
       expect(el.textContent).toContain(
         "Staged writes, lapsed connections and access requests land here."
       );
-      // The empty state's one verb has somewhere real to land: the grants
-      // section renders in every state, because a consent surface that hides
-      // what it already consented to is not a record.
       expect(() => findButton(el, "Review standing grants")).not.toThrow();
       expect(el.textContent).toContain("Standing grants");
       expect(el.textContent).toContain("No standing grants yet");
@@ -258,7 +247,6 @@ describe("screens/ApprovalsScreen", () => {
       );
       const card = el.querySelector('[data-testid="staged-write"]');
       expect(card).not.toBeNull();
-      // Closed: the kind, the title and the sub, and one outlined Review.
       expect(card?.textContent).toContain("Staged write · personal");
       expect(card?.textContent).toContain("Hi");
       expect(card?.textContent).not.toContain("nothing has been sent");
@@ -268,7 +256,6 @@ describe("screens/ApprovalsScreen", () => {
       expect(el.textContent).toContain("work gmail");
       expect(el.textContent).toContain("social.send_message");
       expect(el.textContent).toContain("invoicer asks for wider access");
-      // The whole title block is the disclosure — one target for one act.
       expect(card?.querySelector("button[aria-expanded]")).not.toBeNull();
     });
 
@@ -276,8 +263,6 @@ describe("screens/ApprovalsScreen", () => {
       const el = mount(makeProps({ outbox: [outboxRow] }));
       click(el, "Review");
       const card = el.querySelector('[data-testid="staged-write"]');
-      // The draft is quoted in full, and every fact about where it goes is
-      // stated before the commit — including the one that cannot be undone.
       expect(card?.textContent).toContain("See you at 6.");
       expect(card?.textContent).toContain("what it would do");
       expect(card?.textContent).toContain("ravi@example.com");
@@ -306,15 +291,11 @@ describe("screens/ApprovalsScreen", () => {
       expect(el.textContent).toContain(
         "Irreversible — nothing is written and the draft is destroyed."
       );
-      // The commit is withdrawn while the question is open: a confirm that
-      // still offers Approve is not a confirm.
       expect(() => findButton(el, "Approve")).toThrow(Error);
       click(el, "Keep it");
       expect(discarded).toStrictEqual([]);
       click(el, "Discard");
       click(el, "Do it");
-      // Exactly one discard, of exactly this item — a Keep it followed by a
-      // Do it must not send two.
       expect(discarded).toStrictEqual(["item1"]);
     });
 
@@ -335,7 +316,6 @@ describe("screens/ApprovalsScreen", () => {
       expect(el.textContent).toContain(
         "Outbound email · staged by the automation gmail-send"
       );
-      // The age is its own slot on the eyebrow row, in the numeric register.
       expect(el.textContent).toContain("5m ago");
 
       const assistant = mount(
@@ -369,8 +349,6 @@ describe("screens/ApprovalsScreen", () => {
       click(el, "Approve");
       expect(onApproveOutbox).toHaveBeenCalledWith("item1", false);
 
-      // The offer is made where the decision is made, and says what it costs
-      // the next time.
       const checkbox = el.querySelector(
         'input[type="checkbox"]'
       ) as HTMLInputElement;
@@ -386,8 +364,6 @@ describe("screens/ApprovalsScreen", () => {
     it("refuses Edit and approve honestly when the gateway cannot rebuild it", () => {
       const notEditable = mount(makeProps({ outbox: [outboxRow] }));
       click(notEditable, "Review");
-      // The verb is present and inert, with the reason stated as a fact — not
-      // silently absent, which reads as a build that forgot it.
       expect(findButton(notEditable, "Edit and approve").disabled).toBe(true);
       expect(notEditable.textContent).toContain("cannot be edited");
       expect(notEditable.textContent).toContain(
@@ -459,8 +435,6 @@ describe("screens/ApprovalsScreen", () => {
         );
       });
       click(el, "Approve with edits");
-      // One approval, carrying the whole artifact: the edited fields AND the
-      // untouched ones, which ride through unchanged.
       expect(approvals).toStrictEqual([
         [
           "item1",
@@ -527,7 +501,6 @@ describe("screens/ApprovalsScreen", () => {
       rerender({ ...props, busyId: "item1" });
       expect(() => findButton(el, "Approve")).toThrow(Error);
       expect(() => findButton(el, "Discard")).toThrow(Error);
-      // The write itself is still stated — only the verbs are gone.
       expect(el.textContent).toContain("nothing has been sent");
     });
 
@@ -576,8 +549,6 @@ describe("screens/ApprovalsScreen", () => {
       const props = makeProps({ outbox: [outboxRow] });
       const el = mount(props);
       rerender({ ...props, focusOutbox: { itemId: "decided", nonce: 1 } });
-      // The queue is left exactly as it is, rather than pointing at a card
-      // that isn't there.
       expect(
         el.querySelector('[data-testid="staged-write"][data-open="true"]')
       ).toBeNull();
@@ -668,7 +639,6 @@ describe("screens/ApprovalsScreen", () => {
       expect(el.textContent).toContain(
         "A denied command cannot be replayed — Briefing must ask again."
       );
-      // Opening the confirm rules nothing; only [Do it] does, and only once.
       expect(rulings).toStrictEqual([]);
       click(el, "Do it");
       expect(rulings).toStrictEqual([["inv1", false]]);
@@ -774,7 +744,6 @@ describe("screens/ApprovalsScreen", () => {
       expect(el.textContent).toContain("Failed · brief/digest");
       expect(el.textContent).toContain("Notices");
       expect(el.textContent).toContain("Local recovered");
-      // The collapsed multiplicity rides the sub line as a duration phrase.
       expect(el.textContent).toContain("failing for 1 day");
       expect(el.textContent).toContain("brief/digest");
       click(el, "Mark read");
@@ -840,14 +809,10 @@ describe("screens/ApprovalsScreen", () => {
       expect(el.textContent).toContain(
         "Everything an app can reach — revoking takes effect at once."
       );
-      // The footer names every real call the product makes off this device.
       expect(el.textContent).toContain("Your configured AI provider");
       expect(el.textContent).toContain("The pairing relay");
     });
 
-    // The enrichment egress ledger (#807). Reference material,
-    // read back: every answer is shown, the refusals included, and none of
-    // them is a control.
     it("lists the enrichment egress answers, declines and all, with no verb", () => {
       const el = mount(
         makeProps({
@@ -874,8 +839,6 @@ describe("screens/ApprovalsScreen", () => {
       expect(section?.textContent).toContain("Declined");
       expect(section?.textContent).toContain("Granted");
       expect(section?.textContent).toContain("Asked once, answered once");
-      // Nothing here decides anything — the answer is given where it is asked.
-      // The only control in the section is the head's own Show/Hide.
       expect(
         [...section!.querySelectorAll("button")].map((b) => b.textContent)
       ).toStrictEqual(["Hide"]);
@@ -924,8 +887,6 @@ describe("screens/ApprovalsScreen", () => {
         })
       );
       click(el, "Revoke");
-      // The consequence is stated before the row is struck, in the holder's
-      // own name.
       expect(el.textContent).toContain("Photos loses that store");
       expect(el.textContent).toContain(
         "It cannot read again, and the row stays, struck through."
@@ -935,8 +896,6 @@ describe("screens/ApprovalsScreen", () => {
       expect(onRevokeStoreGrant).toHaveBeenCalledWith(
         expect.objectContaining({ grantId: "g-photos", holderLabel: "Photos" })
       );
-      // The row survives, struck through and switched off — the history of
-      // who once held access stays legible.
       expect(el.textContent).toContain("Photos");
       expect(el.textContent).toContain("write access");
       expect(el.querySelector('[data-off="true"]')).not.toBeNull();
@@ -998,8 +957,6 @@ describe("screens/ApprovalsScreen", () => {
       expect(detail?.textContent).toContain("cmd-abc123def456");
       expect(detail?.textContent).toContain("agent.command");
       expect(detail?.textContent).toMatch(/2026|Mar|03/u);
-      // The rule that decided this opens where rules are revoked — one
-      // revoke, in one place, rather than a second one down here.
       toggleSection(el, "Standing grants");
       expect(el.textContent).not.toContain("gmail-send may always gmail.send");
       click(el, "Open the grant");
@@ -1056,7 +1013,6 @@ describe("screens/ApprovalsScreen", () => {
         subject: "Arrived while editing",
       };
       rerender({ ...props, outbox: [editableOutboxRow, second] });
-      // The list the member is working in does not move under them.
       expect(el.textContent).not.toContain("Arrived while editing");
       expect(el.querySelector('[data-testid="held-tray"]')).not.toBeNull();
       expect(el.textContent).toContain("1 more arrived");
@@ -1078,8 +1034,6 @@ describe("screens/ApprovalsScreen", () => {
         subject: "Arrived while reading",
       };
       rerender({ ...props, outbox: [outboxRow, second] });
-      // Reading is not work in progress: an expanded card survives the list
-      // growing under it, and nothing is held.
       expect(el.textContent).toContain("Arrived while reading");
       expect(el.querySelector('[data-testid="held-tray"]')).toBeNull();
     });
@@ -1180,7 +1134,6 @@ describe("notification presentation helpers", () => {
         severity: "high",
       })
     ).toBe("×6 over 3 hours");
-    // Informational notices never claim to be "failing", however long the run.
     expect(
       noticeSpanPhrase({
         count: 6,
@@ -1189,7 +1142,6 @@ describe("notification presentation helpers", () => {
         severity: "info",
       })
     ).toBe("×6 over 6 days");
-    // Unparseable / non-advancing timestamps state multiplicity only.
     expect(
       noticeSpanPhrase({
         count: 3,
@@ -1220,12 +1172,10 @@ describe("notification presentation helpers", () => {
     };
     expect(isAuthorableKey(artifact, "path")).toBe(true);
     expect(isAuthorableKey(artifact, "body")).toBe(true);
-    // Computed by the actor: a size, a count, a retention window, a file list.
     expect(isAuthorableKey(artifact, "size")).toBe(false);
     expect(isAuthorableKey(artifact, "undo")).toBe(false);
     expect(isAuthorableKey(artifact, "files")).toBe(false);
     expect(isAuthorableKey(artifact, "fileCount")).toBe(false);
-    // Not a shape the gateway's drift guard accepts at all.
     expect(isAuthorableKey(artifact, "window")).toBe(false);
   });
 
@@ -1244,7 +1194,6 @@ describe("notification presentation helpers", () => {
     };
     expect([...blockingIds(shown)]).toStrictEqual(["item1"]);
     expect(arrivalCount(shown, next)).toBe(2);
-    // A decided item leaving is not an arrival.
     expect(arrivalCount(next, shown)).toBe(0);
   });
 
@@ -1263,14 +1212,12 @@ describe("notification presentation helpers", () => {
         revoked
       ).holders
     ).toHaveLength(1);
-    // Still live server-side: no duplicate row.
     expect(
       mergeRevokedHolders(
         { storeId: "photos", label: "Photos", holders: [holder] },
         revoked
       ).holders
     ).toHaveLength(1);
-    // A different store's key never reattaches here.
     expect(
       mergeRevokedHolders(
         { storeId: "locker", label: "Locker", holders: [] },

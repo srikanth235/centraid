@@ -50,9 +50,6 @@ function driveRecenter(
   return () => cancelAnimationFrame(raf);
 }
 
-// Radius-only re-centre (#519). Bearings never animate (anti-hairball) —
-// only each kind's radial distance eases so pack identity stays a compass.
-
 export function usePrefersReducedMotion(): boolean {
   return useSyncExternalStore(
     subscribeReducedMotion,
@@ -69,7 +66,6 @@ export function useRecenterAnimation(
   const startRadiusRef = useRef<Map<string, number>>(new Map());
   const [progress, setProgress] = useState(1);
 
-  // Centre change during render so the ease starts on the first new-centre frame.
   const [animCenter, setAnimCenter] = useState(center);
   if (animCenter !== center) {
     setAnimCenter(center);
@@ -84,7 +80,6 @@ export function useRecenterAnimation(
     return driveRecenter(setProgress, () => {
       startRadiusRef.current = new Map(targetRadius);
     });
-    // Only a centre change re-runs the ease; `targetRadius` is a value, not a trigger.
   }, [animCenter, targetRadius, reduced]);
 
   return useCallback(

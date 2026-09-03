@@ -25,14 +25,11 @@ export interface BlobOutboxRunnerOptions {
   remote: () => RemoteTier | null;
   remoteConfigured: () => boolean;
   onStatus: () => void;
-  /** Host-wide event-loop pressure gate. Explicit `drainSha` calls stay foreground. */
   shouldDeferBackgroundWork?: () => boolean;
-  /** Close coordinator-owned resources before an expired row/file is removed. */
   onExpireSession?: (sessionId: string) => void;
   intervalMs?: number;
 }
 
-/** Continuous single-flight custody drain with bounded per-blob workers (#414). */
 export class BlobOutboxRunner {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private flight: Promise<void> | null = null;
@@ -50,9 +47,6 @@ export class BlobOutboxRunner {
       clearTimeout(this.timer);
       this.timer = undefined;
     }
-    // No remote tier means there is nowhere to drain, but local upload spools
-    // still expire and must be reaped. Run that cheap lifecycle pass on the
-    // one-minute configuration backstop (#456).
     if (!this.options.remoteConfigured()) {
       this.flight = this.cleanupExpiredSessions()
         .catch(() => undefined)
@@ -96,8 +90,6 @@ export class BlobOutboxRunner {
       remote: this.options.remote,
       onReplicated: () => this.options.onStatus(),
       settlementAllowed: () => !this.closed,
-      // Route derivatives to the derived store class at drain time (#425);
-      // the enqueue side stays sha+size only.
       desiredStore: (sha: string) =>
         desiredStoreForSha(this.options.vault, sha),
     };
@@ -207,7 +199,6 @@ export class BlobOutboxRunner {
     this.closed = true;
   }
 
-  /** Synchronous DB-close fence: leave durable rows pending and forbid late settlement. */
   abandon(): void {
     this.closing = true;
     this.closed = true;

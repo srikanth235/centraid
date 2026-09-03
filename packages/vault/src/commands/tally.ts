@@ -1,18 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); Tally's write surface is one file by design.
-// Tally commands (schema `tally`): the expense-splitting write surface. A
-// friend is a canonical core.party plus a tally_friend row; the owner is the
-// implicit `me` and never a friend. A group is an AUDIENCE (#310) — a
-// social.circle carrying name and membership, decorated by tally_group. An
-// expense stores its RESOLVED splits, re-validated server-side so a projection
-// cannot smuggle an unbalanced or out-of-group split past the vault. Balances
-// are never stored; a settlement is a real cash payment that pays them down.
-//
-// The finance bridge (#310): Tally is a lens over shared money, not a second
-// ledger. A settlement the owner is party to IS the owner's money moving, so
-// settle_up emits a core_transaction on the "Tally settlements" account
-// (external_id `tally:settlement:<id>` keeps replays idempotent). Third-party
-// settlements touch no owner account. When the bank already imported the
-// movement, tally.bind_txn adopts that row — bind, don't duplicate.
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -52,7 +38,6 @@ import {
   writeSplits,
 } from "./tally-splits.js";
 
-/** The circle a group decorates. */
 function circleOf(ctx: HandlerCtx, groupId: string): string {
   const row = ctx.db
     .prepare("SELECT circle_id FROM tally_group WHERE group_id = ?")
@@ -61,7 +46,6 @@ function circleOf(ctx: HandlerCtx, groupId: string): string {
   return row.circle_id;
 }
 
-/** Idempotent. Membership is a WRITE: provenance-stamped like any row. */
 function addCircleMember(
   ctx: HandlerCtx,
   circleId: string,
@@ -86,19 +70,12 @@ function addCircleMember(
 
 const GROUP_EXISTS_SQL =
   "SELECT count(*) AS n FROM tally_group WHERE group_id = :group_id";
-// An omitted optional input binds as NULL, so a group-less 1:1 expense passes
-// this precondition with no group to check, not by dropping it.
 const GROUP_EXISTS_IF_NAMED_SQL = `SELECT CASE WHEN :group_id IS NULL THEN 1 ELSE
     (SELECT count(*) FROM tally_group WHERE group_id = :group_id) END AS n`;
 const EXPENSE_EXISTS_SQL =
   "SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id";
-// A live expense is one not in the trash — the guard for edit/memo/trash so you
-// cannot mutate or re-trash a row already on its way out (#441).
 const EXPENSE_LIVE_SQL =
   "SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id AND deleted_at IS NULL";
-// RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5): the trash window is a
-// promise that the row goes, and a restore past it resurrects what the member
-// was told had been deleted.
 const EXPENSE_TRASHED_SQL = `SELECT count(*) AS n FROM tally_expense
    WHERE expense_id = :expense_id AND deleted_at IS NOT NULL
      AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
@@ -125,9 +102,7 @@ interface ExpenseSnapshot {
     purge_at: string | null;
   };
   splits: Array<{ party_id: string; share_minor: number }>;
-  /** Absent on snapshots recorded before multi-payer expenses existed. */
   payers?: Array<{ party_id: string; paid_minor: number }>;
-  /** Present only when the operation rewrote the expense's typed lines. */
   lines?: SnapshotLine[];
 }
 
@@ -233,8 +208,6 @@ function restoreExpenseSnapshot(
   );
   for (const split of snapshot.splits)
     insert.run(expenseId, split.party_id, split.share_minor);
-  // A snapshot with no payer set is restated from the restored `paid_by`, so
-  // the fold never sees an expense nobody paid for.
   ctx.db
     .prepare("DELETE FROM tally_expense_payer WHERE expense_id = ?")
     .run(expenseId);
@@ -250,7 +223,6 @@ function restoreExpenseSnapshot(
   ctx.wrote("tally.expense", expenseId);
 }
 
-/** Put back exactly the lines and allocations a re-allocation replaced. */
 function restoreExpenseLines(
   ctx: HandlerCtx,
   expenseId: string,
@@ -289,15 +261,10 @@ function restoreExpenseLines(
         allocation.share_minor,
         ctx.now
       );
-      // Not `ctx.wrote()`, as in `writePayers`: consumers resolve a write
-      // through `pkColumn`, which here is `line_item_id` alone, so a composite
-      // `<line>:<party>` key would be unaddressable (#883). The line item's
-      // own id is the marker, stamped above.
     }
   }
 }
 
-/** ~30-day trash grace window before the sweep purges — mirrors Docs/Locker. */
 const PURGE_WINDOW_DAYS = 30;
 function plusDays(iso: string, days: number): string {
   const d = new Date(iso);
@@ -305,7 +272,6 @@ function plusDays(iso: string, days: number): string {
   return d.toISOString();
 }
 
-/** The vault's base currency — settlements are recorded in it. */
 function baseCurrency(ctx: HandlerCtx): string {
   const row = ctx.db
     .prepare("SELECT base_currency FROM core_vault LIMIT 1")
@@ -313,10 +279,6 @@ function baseCurrency(ctx: HandlerCtx): string {
   return row?.base_currency ?? "USD";
 }
 
-/**
- * The canonical pool settle_up's transactions post against: one per vault,
- * minted lazily on the first owner-party settlement.
- */
 function settlementAccountId(ctx: HandlerCtx, ownerId: string): string {
   const existing = ctx.db
     .prepare(
@@ -335,7 +297,6 @@ function settlementAccountId(ctx: HandlerCtx, ownerId: string): string {
   return accountId;
 }
 
-/** The fixed-point FX provenance every new expense carries (#630). */
 interface FxInput {
   amount_minor: number;
   spent_on?: string;
@@ -358,20 +319,12 @@ interface ResolvedFx {
   rateDate: string;
 }
 
-/**
- * There is no rate provider and the vault works with none: a cross-currency
- * expense arrives with its rate, source and effective date, and the settlement
- * amount must reproduce from them exactly.
- */
 function resolveNewExpenseFx(
   ctx: HandlerCtx,
   input: FxInput,
   amountMinor: number,
   groupId?: string | null
 ): ResolvedFx {
-  // A GROUPED expense is in its group's currency (#916, R1) — the vault's base
-  // currency is the answer only for a group-less 1:1, where there is no
-  // shared ledger to agree with.
   const base = groupCurrency(ctx, groupId) ?? baseCurrency(ctx);
   const originalCurrency = (input.original_currency ?? base).toUpperCase();
   const settlementCurrency = (input.settlement_currency ?? base).toUpperCase();
@@ -403,7 +356,6 @@ function resolveNewExpenseFx(
   };
 }
 
-/** The currency a group's ledger is kept in, or `null` for a group-less row. */
 function groupCurrency(
   ctx: HandlerCtx,
   groupId: string | null | undefined
@@ -415,7 +367,6 @@ function groupCurrency(
   return row?.currency ?? null;
 }
 
-/** Insert one expense row with its FX provenance and split provenance. */
 function insertExpenseRow(
   ctx: HandlerCtx,
   expenseId: string,
@@ -445,8 +396,6 @@ function insertExpenseRow(
       row.groupId,
       row.description,
       row.amountMinor,
-      // `amount_minor` IS the settlement currency (#916, R1): shares of it
-      // inherit that by construction, so no split or payer carries a column.
       row.fx.settlementCurrency,
       row.paidBy,
       row.spentOn,
@@ -465,7 +414,6 @@ function insertExpenseRow(
   ctx.wrote("tally.expense", expenseId);
 }
 
-/** Absent method, typed lines present, reads as the "By line" division. */
 function splitMethodOf(
   method: string | undefined,
   lines: readonly LineInput[] | undefined
@@ -473,7 +421,6 @@ function splitMethodOf(
   return method ?? (lines && lines.length > 0 ? "by_line" : "exact");
 }
 
-/** The shared expense payload: every add/edit command reads this shape. */
 interface AddExpenseInput extends FxInput {
   group_id?: string;
   description: string;
@@ -486,7 +433,6 @@ interface AddExpenseInput extends FxInput {
   line_items?: LineInput[];
 }
 
-/** The FX keys every expense command declares; an undeclared key is stripped. */
 const FX_PROPERTIES = {
   original_amount_minor: { type: "integer", minimum: 1 },
   original_currency: { type: "string", pattern: "^[A-Za-z]{3}$" },
@@ -518,9 +464,7 @@ const ADD_FRIEND: CommandDefinition = {
     additionalProperties: false,
     properties: {
       name: { type: "string", minLength: 1 },
-      /** An existing person the member picked. Enrolled, never re-minted. */
       party_id: { type: "string", minLength: 1 },
-      /** An address the vault may already know this person by. */
       email: { type: "string", minLength: 3 },
       phone: { type: "string", minLength: 3 },
     },
@@ -530,7 +474,6 @@ const ADD_FRIEND: CommandDefinition = {
     required: ["party_id", "reused_party"],
     properties: {
       party_id: { type: "string" },
-      /** True when an existing `core_party` was enrolled rather than minted. */
       reused_party: { type: "boolean" },
     },
   },
@@ -557,15 +500,6 @@ const ADD_FRIEND: CommandDefinition = {
   idempotency: "once",
   risk: "low",
   handler: (ctx) => {
-    // THE EXISTING-PARTY BRANCH (#883). Minting unconditionally would give
-    // one human two parties, and the avatar hue derives from the party id, so
-    // "one hue per party" depends on enrolling rather than minting.
-    //
-    // Three ways in, none of them guessing. A NAME IS NEVER A KEY: two people
-    // are called Ann, and folding them on a string is worse than a duplicate.
-    // `party_id` enrolls as picked; `email`/`phone` resolve through the ONE
-    // dedupe module (`contact-reach.ts`), a miss minting and BINDING the
-    // address so the next caller gets the hit this one did not; neither mints.
     const input = ctx.input as {
       name: string;
       party_id?: string;
@@ -603,7 +537,6 @@ const ADD_FRIEND: CommandDefinition = {
         if (bound) ctx.wrote("social.contact_channel", bound);
       }
     }
-    // Already a friend: the enrollment stands and nothing is written twice.
     const enrolled = ctx.db
       .prepare("SELECT friend_id FROM tally_friend WHERE party_id = ?")
       .get(partyId) as { friend_id: string } | undefined;
@@ -638,10 +571,6 @@ const CREATE_GROUP: CommandDefinition = {
       name: { type: "string", minLength: 1 },
       icon: { type: "string", minLength: 1 },
       color: { type: "string" },
-      // THE GROUP'S CURRENCY (#916, R1): the ledger everyone in the group
-      // reads is denominated in one currency, and every expense in it agrees.
-      // Defaults to the vault's base currency, which is what a member who
-      // never thinks about currency means.
       currency: { type: "string", minLength: 3, maxLength: 3 },
       member_ids: { type: "array", items: { type: "string", minLength: 1 } },
     },
@@ -672,7 +601,6 @@ const CREATE_GROUP: CommandDefinition = {
       member_ids: string[];
     };
     const owner = ownerPartyId(ctx);
-    // Circles are UNIQUE(owner, name), so a clash is a real clash.
     const clash = ctx.db
       .prepare(
         "SELECT 1 AS x FROM social_circle WHERE owner_party_id = ? AND name = ?"
@@ -700,7 +628,6 @@ const CREATE_GROUP: CommandDefinition = {
         ctx.now
       );
     ctx.wrote("tally.group", groupId);
-    // The owner is always a member; friends are added by party id.
     const members = new Set<string>([owner, ...input.member_ids.map(String)]);
     for (const pid of members) addCircleMember(ctx, circleId, pid);
     ctx.cite({
@@ -823,7 +750,6 @@ const REMOVE_GROUP_MEMBER: CommandDefinition = {
       value: 1,
     },
     {
-      // Refuse while the party is still on the ledger (paid or owes) in-group.
       name: "member_off_ledger",
       sql: `SELECT (
               (SELECT count(*) FROM tally_expense e WHERE e.group_id = :group_id AND e.paid_by = :party_id)
@@ -898,8 +824,6 @@ const DELETE_GROUP: CommandDefinition = {
     ctx.db
       .prepare("DELETE FROM tally_settlement WHERE group_id = ?")
       .run(groupId);
-    // Decoration first (it FKs the circle), then the circle and membership:
-    // the group owned its audience, so it leaves with it.
     ctx.db.prepare("DELETE FROM tally_group WHERE group_id = ?").run(groupId);
     ctx.db
       .prepare("DELETE FROM social_circle_member WHERE circle_id = ?")
@@ -921,8 +845,6 @@ const ADD_EXPENSE: CommandDefinition = {
     required: ["description", "amount_minor", "paid_by", "category", "splits"],
     additionalProperties: false,
     properties: {
-      // Optional since GAPS #4: no group is a group-less 1:1 expense, and its
-      // participants are checked against the friend roster instead.
       group_id: { type: "string", minLength: 1 },
       description: { type: "string", minLength: 1 },
       amount_minor: { type: "integer", minimum: 1 },
@@ -1098,7 +1020,6 @@ const ADD_RECEIPT_EXPENSE: CommandDefinition = {
       paidBy: principal,
       spentOn: input.spent_on ?? ctx.now.slice(0, 10),
       category: input.category,
-      // A receipt IS the by-line division, arrived at from a photo.
       splitMethod: "by_line",
       splitParamsJson: splitParamsJson(input.split_params),
       fx,
@@ -1106,9 +1027,6 @@ const ADD_RECEIPT_EXPENSE: CommandDefinition = {
     writePayers(ctx, expenseId, groupId, payers, allowed);
     writeSplits(ctx, expenseId, groupId, amountMinor, input.splits, allowed);
 
-    // ONE row for the receipt (#883): the attachment on the expense IS the
-    // receipt, and the returned `receipt_id` is the attachment's. An app-local
-    // receipt table would be a second answer to a core question.
     ctx.wrote("core.content_item", minted.contentId);
     const receiptId = ctx.newId();
     ctx.db
@@ -1219,9 +1137,6 @@ const EDIT_EXPENSE: CommandDefinition = {
         }
       | undefined;
     if (!existing) throw new Error("expense not found");
-    // Preserve live FX provenance unless the caller supplies a rate set. FX
-    // keys must stay DECLARED on the input schema: an undeclared key is
-    // stripped, collapsing cross-currency rows to the base currency.
     const base = baseCurrency(ctx);
     const hasFxInput =
       input.original_amount_minor !== undefined ||
@@ -1281,7 +1196,6 @@ const EDIT_EXPENSE: CommandDefinition = {
         convertCurrencyMinor(existingOriginal, existingScaled, rateScale) ===
           input.amount_minor
       ) {
-        // Settlement amount still matches stored FX — keep provenance.
         originalAmount = existingOriginal;
         rateScaled = existingScaled;
         rateSource =
@@ -1289,7 +1203,6 @@ const EDIT_EXPENSE: CommandDefinition = {
           (originalCurrency === settlementCurrency ? "identity" : undefined);
         rateDate = existing.rate_date ?? input.spent_on ?? ctx.now.slice(0, 10);
       } else if (originalCurrency === settlementCurrency) {
-        // Same-currency amount change — retarget the identity rate.
         originalAmount = input.amount_minor;
         rateScaled = 10 ** rateScale;
         rateSource = "identity";
@@ -1364,8 +1277,6 @@ const EDIT_EXPENSE: CommandDefinition = {
       input.splits,
       allowed
     );
-    // Re-typed lines keep the expense's photo, so an edit by line does not
-    // orphan its receipt.
     if (input.line_items)
       writeLineItems(
         ctx,
@@ -1423,9 +1334,6 @@ const DELETE_EXPENSE: CommandDefinition = {
   idempotency: "once",
   risk: "low",
   handler: (ctx) => {
-    // Reversible grace-window trash (#441), not a hard delete. Splits stay
-    // put: the balance engine ignores them once the expense leaves the
-    // `deleted_at IS NULL` window, and the sweep cascades them at purge.
     const expenseId = String((ctx.input as { expense_id: string }).expense_id);
     const revision = recordExpenseRevision(ctx, expenseId, "trash");
     ctx.db
@@ -1480,7 +1388,6 @@ const RESTORE_EXPENSE: CommandDefinition = {
   idempotency: "idempotent",
   risk: "low",
   handler: (ctx) => {
-    // Lossless restore within the grace window — splits were never dropped.
     const expenseId = String((ctx.input as { expense_id: string }).expense_id);
     recordExpenseRevision(ctx, expenseId, "restore");
     ctx.db
@@ -1552,11 +1459,6 @@ const SETTLE_UP: CommandDefinition = {
       from_party: { type: "string", minLength: 1 },
       to_party: { type: "string", minLength: 1 },
       amount_minor: { type: "integer", minimum: 1 },
-      // WHAT WAS PAID, IN WHAT (#916, R1 / adversarial BUG-5). A settlement
-      // carried no currency at all and the transaction it emitted was
-      // hard-coded to the vault's base currency, so paying off a EUR group in
-      // EUR posted as USD. Defaults to the group's currency where there is a
-      // group, the vault's base where there is not.
       currency: { type: "string", minLength: 3, maxLength: 3 },
       group_id: { type: "string", minLength: 1 },
       paid_on: { type: "string" },
@@ -1596,10 +1498,6 @@ const SETTLE_UP: CommandDefinition = {
         .get(input.group_id) as { n: number };
       if (g.n !== 1) throw new Error("group not found");
     }
-    // MEMBERSHIP (#916, adversarial BUG-4). `add_expense` has always refused a
-    // payer or participant outside the group; `settle_up` checked nothing, so
-    // a payment could be recorded between two people who are not on the
-    // ledger it lands in — and then counted in its balances.
     const allowed = participantScope(ctx, input.group_id ?? null);
     for (const partyId of [input.from_party, input.to_party])
       if (!allowed.has(partyId))
@@ -1622,8 +1520,6 @@ const SETTLE_UP: CommandDefinition = {
         `this group's ledger is in ${groupIn}: a settlement in ${currency} cannot be counted in it`
       );
 
-    // The owner's money actually moved: emit the canonical transaction and
-    // bind it. Friend-to-friend settlements touch no owner pool.
     const meId = ownerPartyId(ctx);
     let txnId: string | null = null;
     if (input.from_party === meId || input.to_party === meId) {
@@ -1670,9 +1566,6 @@ const SETTLE_UP: CommandDefinition = {
         ctx.now
       );
     ctx.wrote("tally.settlement", settlementId);
-    // AN OVERPAYMENT IS SAID OUT LOUD (#916, adversarial review). Paying more
-    // than the open position is legitimate — people round up, or pay ahead —
-    // but it silently flips the debt, so the receipt records that it did.
     const open = openPositionMinor(ctx, input);
     ctx.cite({
       claim:
@@ -1692,11 +1585,6 @@ const SETTLE_UP: CommandDefinition = {
   },
 };
 
-/**
- * What `from_party` owed `to_party` before this payment, in minor units, or
- * `null` when the ledger cannot be read as one position (mixed currencies).
- * Used only to MARK an overpayment in the receipt — never to refuse one.
- */
 function openPositionMinor(
   ctx: HandlerCtx,
   input: { from_party: string; to_party: string; group_id?: string }
@@ -1799,7 +1687,6 @@ const SET_EXPENSE_MEMO: CommandDefinition = {
     additionalProperties: false,
     properties: {
       expense_id: { type: "string", minLength: 1 },
-      // '' clears the memo (the one-running-memo-per-entity semantic).
       note: { type: "string" },
     },
   },
@@ -1820,8 +1707,6 @@ const SET_EXPENSE_MEMO: CommandDefinition = {
   idempotency: "idempotent",
   risk: "low",
   handler: (ctx) => {
-    // The owner's remark is entity-scoped meaning (#310): a
-    // knowledge.annotation, never a prose column.
     const input = ctx.input as { expense_id: string; note: string };
     replaceMemo(ctx, "tally.expense", input.expense_id, input.note);
     ctx.wrote("tally.expense", input.expense_id);

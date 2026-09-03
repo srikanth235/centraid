@@ -1,11 +1,3 @@
-// L4 attribution + the on-behalf-of cap (#599 decisions 7–8; #726).
-//
-// Two claims, both about the journal being able to answer "who did this?":
-//   * every write records the acting OWNER, by id, so a rename cannot fork
-//     or strand anyone's history;
-//   * an agent turn is hard-capped at the authority of the owner it works
-//     for — Sid's assistant fails exactly where Sid would, and the refusal
-//     names both of them.
 import { describe, beforeEach, expect, test } from "vitest";
 
 import { plainSqliteRow } from "@centraid/test-kit/sqlite";
@@ -59,7 +51,6 @@ describe("acting-owner suite", () => {
     };
   }
 
-  /** An enrolled automation agent granted `read+act` over the schedule. */
   function assistant(onBehalfOfOwner?: {
     ownerId: string;
     mayAct: boolean;
@@ -109,8 +100,6 @@ describe("acting-owner suite", () => {
     expect(receiptDetail("act schedule.propose_event")).toMatchObject({
       actingOwner: SID,
     });
-    // The journal holds an OPAQUE id — no label anywhere in the row — which is
-    // exactly why renaming the person on the gateway cannot touch it.
     expect(
       JSON.stringify(receiptDetail("act schedule.propose_event"))
     ).not.toContain("Sid");
@@ -147,7 +136,6 @@ describe("acting-owner suite", () => {
     expect(outcome.status).toBe("denied");
     if (outcome.status !== "denied") throw new Error("expected denial");
     expect(outcome.reason).toContain(SID);
-    // Nothing was written, and the refusal names agent AND owner.
     expect(
       plainSqliteRow(
         db.vault.prepare("SELECT count(*) AS n FROM core_event").get()

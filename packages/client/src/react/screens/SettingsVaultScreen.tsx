@@ -11,7 +11,6 @@ import RowsBlock from "../ui/RowsBlock.js";
 import type { RowDef } from "../ui/RowsBlock.js";
 import SectionBlock from "../ui/SectionBlock.js";
 
-// VaultModal `.prof*` field vocabulary — same chrome as the gateway dialogs (#382).
 import vaultModalStyles from "../shell/routes/VaultModal.module.css";
 import controlsCss from "../styles/controls.module.css";
 import drawerGroupCss from "../styles/drawerGroup.module.css";
@@ -26,11 +25,8 @@ export interface SettingsVaultScreenProps {
     blurb: string;
   }) => Promise<void> | void;
   onDelete?: () => void;
-  /** Drop this vault's connection from this device (#665). Remote only. */
   onDisconnect?: () => void;
-  /** Encrypted offline copy on this browser. */
   offlineCopy?: boolean;
-  /** Resolves with the value that took effect — a refused write is UNCHANGED. */
   onOfflineCopy?: (next: boolean) => Promise<boolean>;
 }
 
@@ -73,11 +69,6 @@ function Avatar({
   );
 }
 
-/**
- * Settings → Vault (#382) — active vault presentation only. No Save button:
- * icon/colour write on pick, name/blurb on blur or Enter. Empty name is put
- * back, not saved. Destructive acts stay behind their own confirms.
- */
 export default function SettingsVaultScreen({
   vault,
   onSave,
@@ -90,7 +81,6 @@ export default function SettingsVaultScreen({
   const [icon, setIcon] = useState<IconName>(vault.icon);
   const [color, setColor] = useState(vault.color);
   const [blurb, setBlurb] = useState(vault.blurb);
-  // After a flip, THEIR answer is truth: `offlineCopy` is a one-shot mount read.
   const [offlineOverride, setOfflineOverride] = useState<boolean | null>(null);
   const [offlineBusy, setOfflineBusy] = useState(false);
   const [erasing, setErasing] = useState(false);
@@ -103,9 +93,7 @@ export default function SettingsVaultScreen({
       .finally(() => setOfflineBusy(false));
   };
 
-  // Re-seed during render when the active vault changes — never paint old values.
   const [seeded, setSeeded] = useState(vault);
-  // Last committed values. Diff against this, not `vault` (that lags the refetch).
   const [sent, setSent] = useState({
     blurb: vault.blurb,
     color: vault.color,
@@ -126,7 +114,6 @@ export default function SettingsVaultScreen({
     });
   }
 
-  // One write for all four fields — a pick must send the last saved text, not a half-edit.
   const commit = (next: {
     name: string;
     icon: IconName;
@@ -157,7 +144,6 @@ export default function SettingsVaultScreen({
     name: name.trim() || sent.name,
   });
 
-  // Disconnect / erase. Confirms stay on the route. Erase absent for a last vault.
   const leaving: RowDef[] = [
     ...(onDisconnect
       ? [
@@ -348,7 +334,6 @@ export default function SettingsVaultScreen({
         </>
       ) : null}
       {onDelete ? null : (
-        // Last vault: say why erase is missing, rather than silently omit it.
         <div className={controlsCss.note}>
           This is your only vault here, so it cannot be erased from this page.
         </div>

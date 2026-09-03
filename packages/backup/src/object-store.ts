@@ -1,11 +1,3 @@
-/*
- * The data-plane seam: a flat, S3-shaped key/value object namespace. Every
- * engine write goes through this interface — `FsObjectStore` backs the
- * local provider directly; `s3-store.ts` implements the same interface over
- * a real S3-compatible grant so the engine (`engine.ts`) never branches on
- * "am I local or remote".
- */
-
 import { createWriteStream, promises as fs } from "node:fs";
 import type * as TypeImport_g9tn66 from "node:fs";
 import path from "node:path";
@@ -13,9 +5,7 @@ import path from "node:path";
 export interface ObjectListEntry {
   key: string;
   size: number;
-  /** Present when the underlying LIST surface reports it. */
   etagOrHash?: string;
-  /** Unix epoch seconds; present when the underlying LIST reports it. */
   storedAt?: number;
   storageClass?: string;
 }
@@ -32,11 +22,6 @@ export interface ObjectStore {
   delete: (key: string) => Promise<void>;
 }
 
-/**
- * Reject anything that could escape the store root: absolute paths, `..`
- * segments, and empty keys. Object keys are always POSIX-style (`chunks/ab`,
- * `manifests/123-abcd.json`) regardless of host OS.
- */
 export function assertSafeKey(key: string): void {
   if (key.length === 0) throw new Error("object key must not be empty");
   if (key.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(key)) {
@@ -52,12 +37,6 @@ export function assertSafeKey(key: string): void {
   }
 }
 
-/**
- * `ObjectStore` backed by files under `root`. Keys map 1:1 to relative
- * paths; writes are atomic (temp file + rename, mirroring the registry/
- * keyring atomic-write convention elsewhere in the monorepo) so a crash
- * mid-write never leaves a half-written chunk or manifest object visible.
- */
 export class FsObjectStore implements ObjectStore {
   constructor(private readonly root: string) {}
 
@@ -125,7 +104,6 @@ export class FsObjectStore implements ObjectStore {
 
   getStream(key: string): AsyncIterable<Uint8Array> {
     const full = this.resolve(key);
-    /** @yields {Uint8Array} Successive byte ranges of the file, in order. */
     async function* gen(): AsyncGenerator<Uint8Array> {
       const handle = await fs.open(full, "r");
       try {
@@ -158,11 +136,6 @@ export class FsObjectStore implements ObjectStore {
 
   list(prefix: string): AsyncIterable<{ key: string; size: number }> {
     const root = this.root;
-    // An empty prefix lists everything; a non-empty prefix must still resolve
-    // safely (reuse assertSafeKey semantics) even though it may not exist as
-    // a literal path segment boundary (e.g. prefix "chunks/ab" over key
-    // "chunks/abcd..."), so we walk the nearest existing ancestor directory
-    // and filter by string prefix on the POSIX-joined relative key.
     async function* walk(
       dir: string
     ): AsyncGenerator<{ key: string; size: number }> {

@@ -3,10 +3,6 @@ import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import type * as TypeImport_1nb0oqa from "../gateway-client-vault.js";
 import type * as TypeImport_1vwuba6 from "./shell-session.js";
 
-// The client may leave the vault unaddressed ("let the gateway pick", #289).
-// HTTP tolerates that; the replica cannot — it keys its local store by
-// (gatewayId, vaultId). These cover the resolve that fills the gap.
-
 const vaultStatus = vi.fn<typeof TypeImport_1nb0oqa.vaultStatus>();
 vi.mock(import("../gateway-client-vault.js"), () => ({
   vaultStatus: () => vaultStatus(),
@@ -36,9 +32,6 @@ describe("shell-session-addressing", () => {
       await import("./shell-session.js"));
   });
 
-  // The resolve is cached per gateway for the life of the module, so each test
-  // gets its own gateway id rather than a shared one that leaks the previous
-  // test's answer.
   let gatewayCounter = 0;
   let gatewayId: string;
 
@@ -47,7 +40,6 @@ describe("shell-session-addressing", () => {
     gatewayCounter += 1;
     gatewayId = `profile-${gatewayCounter}`;
     gatewayAuth = { baseUrl: "https://gateway.example", gatewayId };
-    // `auth()` memoizes per gateway; drop it so each test re-reads the stub.
     const core = await import("../gateway-client-core.js");
     core.resetGatewayAuthCache();
   });
@@ -63,9 +55,6 @@ describe("shell-session-addressing", () => {
   test("an unaddressed vault resolves to the plane the gateway itself picked", async () => {
     vaultStatus.mockResolvedValue(status("vault-from-gateway"));
     const resolved = await addressedGatewayAuth();
-    // Not `listVaults()[0]`: the device-token transport addresses the oldest
-    // ENROLLMENT, so only the gateway can answer this without split-braining
-    // the replica against every HTTP call.
     expect(resolved.vaultId).toBe("vault-from-gateway");
     expect(replicaIdentityForGatewayAuth(resolved)).toStrictEqual({
       gatewayId,
@@ -87,8 +76,6 @@ describe("shell-session-addressing", () => {
     expect(() => replicaIdentityForGatewayAuth(resolved)).toThrow(
       "An addressed vault is required"
     );
-    // Nothing worth caching — the next attempt re-asks rather than pinning
-    // "unknown" for the life of the renderer.
     vaultStatus.mockResolvedValue(status("vault-mounted-later"));
     await expect(addressedGatewayAuth()).resolves.toMatchObject({
       vaultId: "vault-mounted-later",

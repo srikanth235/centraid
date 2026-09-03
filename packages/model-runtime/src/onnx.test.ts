@@ -17,7 +17,6 @@ const absentRuntime = path.join(
   "absent-runtime"
 );
 
-/** Write a package directory under a fake `runtime/node_modules`. */
 function installPackage(
   runtimeDir: string,
   specifier: string,
@@ -74,16 +73,6 @@ describe(resolveRuntimeModule, () => {
   });
 });
 
-/*
- * This entry resolution is hand-rolled rather than
- * `createRequire(...).resolve(...)` (#846), because `node:module` is refused by
- * every sandbox lane — a `createRequire` in
- * the graph resolves through Node's own loader and skips the lane's hooks, so
- * one builtin re-opens everything the lane closed. Hand-rolling the narrow
- * part of the algorithm these packages need is what lets a recognition bundle
- * run under a lane at all; hand-rolled resolution is only trustworthy if it is
- * pinned, so each real manifest shape gets a case.
- */
 describe(resolveRuntimeEntry, () => {
   it("prefers exports['.'] over main", () => {
     const runtimeDir = tempDirSync("model-runtime-entry-");
@@ -118,7 +107,6 @@ describe(resolveRuntimeEntry, () => {
   });
 
   it("reads a bare condition map as the '.' target", () => {
-    // `{ "exports": { "require": …, "default": … } }` — no subpath keys.
     const runtimeDir = tempDirSync("model-runtime-entry-");
     const dir = installPackage(
       runtimeDir,
@@ -130,7 +118,6 @@ describe(resolveRuntimeEntry, () => {
   });
 
   it("skips an exports target the install did not produce and falls back", () => {
-    // A miss here must not become a module-not-found deeper in.
     const runtimeDir = tempDirSync("model-runtime-entry-");
     const dir = installPackage(
       runtimeDir,
@@ -165,11 +152,6 @@ describe(resolveRuntimeEntry, () => {
   });
 
   it("falls back past a main naming a directory that holds no entry", () => {
-    // The bug an independent audit of #846 P9 caught: a content heuristic
-    // ("does it contain package.json or index.js?") stood in for a stat, so a
-    // `main` pointing at an empty directory was returned AS the entry file —
-    // a directory handed to `import()`, and the valid index.js fallback beside
-    // it skipped. `statSync().isDirectory()` is the answer to that question.
     const runtimeDir = tempDirSync("model-runtime-entry-");
     const dir = installPackage(runtimeDir, "emptydir", { main: "./lib" }, [
       "lib/.keep",
@@ -202,8 +184,6 @@ describe(resolveRuntimeEntry, () => {
   });
 
   it("resolves the shape onnxruntime-node actually publishes", () => {
-    // A CommonJS native package: `main` into dist, with the .node binding
-    // loaded by that file at runtime rather than named in the manifest.
     const runtimeDir = tempDirSync("model-runtime-entry-");
     const dir = installPackage(
       runtimeDir,

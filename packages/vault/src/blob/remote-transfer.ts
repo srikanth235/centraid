@@ -5,25 +5,13 @@ export interface MultipartPart {
   etag: string;
 }
 
-/** Provider-side multipart state, including uploads not yet durable locally. */
 export interface TemporaryMultipartUpload {
   tempId: string;
   uploadId: string;
   initiatedAt: string;
 }
 
-/**
- * Remote operations that intentionally do not fit the tiny content-addressed
- * BlobStore seam: restartable temporary multipart uploads, atomic-ish
- * temp-to-final promotion, and short-lived direct-upload URLs (#414).
- */
 export interface RemoteBlobTransfer {
-  /**
-   * Restartable multipart upload whose destination is the final CAS SHA key.
-   * `storageClass` (#425) rides the CreateMultipartUpload — the
-   * object-creating call — when an eligible large original takes this path;
-   * absent ⇒ the instance default.
-   */
   beginShaUpload?: (sha256: string, storageClass?: string) => Promise<string>;
   uploadShaPart?: (
     sha256: string,
@@ -50,7 +38,6 @@ export interface RemoteBlobTransfer {
     parts: readonly MultipartPart[]
   ) => Promise<void>;
   abortTemporaryUpload: (tempId: string, uploadId: string) => Promise<void>;
-  /** Enumerate every in-progress upload under this vault's temp prefix. */
   listTemporaryUploads?: () => Promise<TemporaryMultipartUpload[]>;
   putTemporary: (tempId: string, bytes: Buffer) => Promise<void>;
   putTemporaryStream: (
@@ -59,15 +46,7 @@ export interface RemoteBlobTransfer {
     approxSize: number
   ) => Promise<void>;
   statTemporary: (tempId: string) => Promise<BlobStat | null>;
-  /** Bounded read used only to re-key a hash-unknown encrypted temp object. */
   getTemporary?: (tempId: string, range?: BlobRange) => Promise<Buffer | null>;
-  /**
-   * Promote a temp object to its final CAS key via CopyObject — the
-   * object-creating call for the presigned direct-to-CAS door (#414).
-   * `storageClass` (#425) rides the CopyObject for an eligible
-   * large original; the presigned temp PUT itself stays class-less (presign
-   * signs only `host`). Absent ⇒ the instance default.
-   */
   copyTemporaryToSha: (
     tempId: string,
     sha256: string,

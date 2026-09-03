@@ -59,8 +59,6 @@ describe("parties", () => {
       display_name: "Ravi Kumar",
       sort_name: "Kumar, Ravi",
     });
-    // Email and phone are REACH and land on `social_contact_channel` (#883);
-    // the first of a kind claims the preferred slot.
     const channels = db.vault
       .prepare(
         `SELECT kind, value, normalized_value, is_preferred
@@ -93,7 +91,6 @@ describe("parties", () => {
         is_preferred: 1,
       },
     ]);
-    // Nothing landed in the register: none of these is a key.
     expect(
       db.vault
         .prepare(
@@ -125,7 +122,6 @@ describe("parties", () => {
     expect(outcome.status).toBe("failed");
     assert(outcome.status === "failed");
     expect(outcome.reason).toContain("already identifies");
-    // The refusal left no half-created party behind.
     const count = db.vault
       .prepare(
         `SELECT count(*) AS n FROM core_party WHERE display_name = 'A Second Ravi'`
@@ -156,8 +152,6 @@ describe("parties", () => {
     };
     expect(party.display_name).toBe("Ravi Kumar");
     expect(party.birth_date).toBe("1988-04-12");
-    // `toBeGreaterThanOrEqual` throws on strings, so the ISO-8601 comparison
-    // is made here and the boolean asserted.
     const stampNotRewound = party.updated_at >= before.updated_at;
     expect(stampNotRewound, `${party.updated_at} >= ${before.updated_at}`).toBe(
       true

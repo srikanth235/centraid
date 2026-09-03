@@ -1,4 +1,3 @@
-// Re-export path for `status-channel.ts`, the one feedback channel (#883).
 export {
   clearStatus,
   postStatus,

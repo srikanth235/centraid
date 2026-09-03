@@ -1,5 +1,3 @@
-// Enrichment publisher unit tests (#545) — tagNotation + ATTRIBUTED contract.
-
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";

@@ -1,57 +1,5 @@
 #!/usr/bin/env node
 // governance: allow-repo-hygiene file-size-limit (#408) the benchmark is one reproducible 1 GiB/10 GiB capture-and-restore experiment; splitting it would duplicate the measurement harness and risk incomparable scenarios
-/*
- * WAL-shipping measurements (issue #408 acceptance: "Measured: bytes/day on
- * the wire, local bytes written/day, restore wall-clock for a 1 GB and a
- * 10 GB vault").
- *
- *   node packages/backup/scripts/bench-wal.mjs --size-mb 1024  [--work-dir <dir>]
- *   node packages/backup/scripts/bench-wal.mjs --size-mb 10240 [--work-dir <dir>]
- *
- * Both sizes are MEASURED, not extrapolated. Nothing here scales a small run
- * up: run it at 10240 and every number below comes off a real 10 GiB file.
- *
- * THE BASE CLONE IS THE PRODUCTION ONE. This bench imports `cloneDbFile` from
- * `packages/vault/dist/wal-shipper.js` — the exact function `WalShipper.mintBase`
- * calls — so the clone measured here is the clone that runs. (It is imported by
- * path, not as `@centraid/vault`: the vault package's index re-exports only
- * `WalShipper`, and `@centraid/vault` depends on `@centraid/backup`, so a
- * package-level dependency the other way would be a cycle. The module is the
- * same one either way.) There is deliberately NO hypothetical "if we used a
- * reflink" branch left in here: on Darwin `cloneDbFile` asks for clonefile(2)
- * directly, precisely because Node's `COPYFILE_FICLONE` is silently a full byte
- * copy on macOS. Whatever the clone costs below is what production pays.
- *
- * WHAT A DAY ACTUALLY COSTS. The shipper's day is not only WAL segments. The
- * live shipper re-bases on a 24h cadence (`DEFAULT_BASE_INTERVAL_MS`), and a
- * pending base makes the gateway register a fresh snapshot, which re-reads the
- * whole database through the backup engine's 16 MiB `partStream` and uploads
- * the parts whose content changed. Measuring only the segments would flatter
- * the design and would not answer the O(change) question at all, so this bench
- * walks the whole daily cycle:
- *
- *   1. build a synthetic ~size-mb vault
- *   2. base A: TRUNCATE, cloneDbFile, fsync, sha256        (generation start)
- *   3. full backup of base A: 16 MiB parts, sealed         (ONE-TIME, O(database))
- *   4. a busy day of writes, captured shipper-style        (segments, O(change)?)
- *   5. restore: materialize base A from the sealed chunks, replay the day's
- *      segments with the production `replayWalSegments` (integrity_check AND
- *      foreign_key_check), timed
- *   6. base B: the 24h base-cadence break — TRUNCATE, cloneDbFile, sha256,
- *      re-part, dedup against base A's chunk ids           (STEADY-STATE daily)
- *
- * Steady-state day = (4) + (6). Step (3) is what you pay once when a vault is
- * first backed up (or after a key-epoch rotation forces a full re-upload).
- *
- * FILESYSTEM DEPENDENCE, stated up front: a reflink costs ~0 blocks on APFS and
- * on reflink-capable Linux filesystems (btrfs, xfs with reflink=1). On ext4
- * there is no reflink and `cloneDbFile` degrades to a byte copy — the daily base
- * would then cost a full second copy of the vault, and local bytes/day would be
- * O(database) on that filesystem no matter what this bench measures on APFS.
- * The `clone physical` line below is the number that flips.
- *
- * Requires `bun run build` in packages/backup AND packages/vault first.
- */
 
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
@@ -86,7 +34,6 @@ const { PART_BYTES, partStream } = await import(path.join(dist, "parts.js"));
 const { chunkId, deriveNonce, encryptWithNonce, decrypt } = await import(
   path.join(dist, "crypto.js")
 );
-// THE production clone. Not a model of it.
 const { cloneDbFile } = await import(path.join(vaultDist, "wal-shipper.js"));
 
 const args = process.argv.slice(2);
@@ -99,7 +46,6 @@ const WORK =
   flag("--work-dir", null) ?? mkdtempSync(path.join(tmpdir(), "bench-wal-"));
 mkdirSync(WORK, { recursive: true });
 
-// ---- the "busy day" workload, stated exactly -------------------------------
 const DAY_TICKS = 1440; // one shipper tick (and one transaction) per minute
 const ROWS_PER_TICK = 5; // 7,200 rows/day
 const ROW_BYTES = 200; // 200 B of hex text per row => 1.44 MB/day of row payload
@@ -109,9 +55,6 @@ const MiB = 1024 * 1024;
 const fmtMB = (b) => `${(b / MiB).toFixed(1)} MiB`;
 const secs = (t0) => (performance.now() - t0) / 1000;
 
-// ---- disk accounting -------------------------------------------------------
-// Physical blocks, from the container's free-space delta. On APFS a reflinked
-// base consumes no new blocks, so file sizes lie and `df` does not.
 const dfBytes = () => {
   const out = execFileSync("df", ["-k", WORK], { encoding: "utf8" })
     .trim()
@@ -147,9 +90,6 @@ const dbPath = path.join(dir, "vault.db");
 for (const f of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`])
   rmSync(f, { force: true });
 
-// ---------------------------------------------------------------------------
-// 1. Build a synthetic vault of ~SIZE_MB.
-// ---------------------------------------------------------------------------
 console.log(`\n== bench-wal: building a ~${SIZE_MB} MiB vault at ${dir}`);
 const db = new DatabaseSync(dbPath);
 db.exec("PRAGMA journal_mode = WAL");
@@ -157,9 +97,6 @@ db.exec("PRAGMA wal_autocheckpoint = 0");
 db.exec("CREATE TABLE bulk (id INTEGER PRIMARY KEY, v BLOB)");
 db.exec("CREATE TABLE day (id INTEGER PRIMARY KEY, v TEXT)");
 {
-  // Fixture fabrication only — synchronous=OFF here is about not spending an
-  // hour writing 10 GiB. Every MEASURED write below runs at synchronous=FULL,
-  // exactly as the gateway configures the vault.
   db.exec("PRAGMA synchronous = OFF");
   const stmt = db.prepare("INSERT INTO bulk (v) VALUES (?)");
   const chunk = randomBytes(64 * 1024); // incompressible, so no free lunch anywhere
@@ -188,10 +125,6 @@ db.exec("CREATE TABLE day (id INTEGER PRIMARY KEY, v TEXT)");
 const buildSecs = secs(runT0);
 mark("after build");
 
-// ---------------------------------------------------------------------------
-// 2. Base A — the generation start: TRUNCATE, then cloneDbFile + sha256,
-//    exactly what WalShipper.mintBase does (same imported function).
-// ---------------------------------------------------------------------------
 db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 const generation = newWalGeneration((n) => randomBytes(n));
 const dbSize = statSync(dbPath).size;
@@ -218,10 +151,6 @@ console.log(
   `   sha256 of the base (full read):  ${hashASecs.toFixed(1)}s  [${baseASha.slice(0, 12)}]`
 );
 
-// ---------------------------------------------------------------------------
-// 3. Full backup of base A: 16 MiB parts, sealed, uploaded. ONE-TIME cost.
-//    Parted straight off base-A.db — the file production actually uploads.
-// ---------------------------------------------------------------------------
 const dataKey = randomBytes(32);
 const dedupKey = randomBytes(32);
 const vaultId = "bench-vault";
@@ -263,13 +192,6 @@ let baseAWire = 0;
 }
 mark("after full base-A upload");
 
-// ---------------------------------------------------------------------------
-// 4. One busy day of writes, captured exactly the way the shipper captures.
-//    base-A.db stays on disk for the whole day, as it does in production. On a
-//    reflink filesystem that means the day's writes to vault.db diverge blocks
-//    copy-on-write from the base — a real, O(change) local cost, and one that
-//    only `df` can see. `dayPhysical` below captures it.
-// ---------------------------------------------------------------------------
 const walPath = `${dbPath}-wal`;
 const freeBeforeDay = dfBytes();
 let group = 0;
@@ -337,9 +259,6 @@ const captureNextTick = async (tick) => {
 await captureNextTick(0);
 const captureSecs = secs(tDay);
 const dayEndSize = statSync(dbPath).size;
-// Everything the day added to the volume: sealed segment objects in the store,
-// vault.db growth, the live WAL tail, AND the copy-on-write divergence of the
-// retained base. Minus the parts we can name, what is left is the COW term.
 const dayPhysical = Math.max(freeBeforeDay - dfBytes(), 0);
 const dayWalResidual = statSync(walPath).size;
 const dayDbGrowth = Math.max(dayEndSize - dbSize, 0);
@@ -372,15 +291,6 @@ console.log(
   `   capture overhead: ${captureSecs.toFixed(1)}s for the whole day`
 );
 
-// ---------------------------------------------------------------------------
-// 5. Restore: materialize base A from the SEALED CHUNKS (decrypt + write —
-//    the real cost), then replay the day's segments with the production restore.
-//
-//    The chunk objects are unlinked as they are consumed. In production the
-//    store is REMOTE, so a restore's local disk footprint is the DESTINATION,
-//    not destination + a second local copy of every chunk. Freeing as we go
-//    models that (and keeps a 10 GiB run inside the disk budget).
-// ---------------------------------------------------------------------------
 const restoreDir = path.join(WORK, `restore-${SIZE_MB}mb`);
 rmSync(restoreDir, { recursive: true, force: true });
 mkdirSync(restoreDir, { recursive: true });
@@ -434,7 +344,6 @@ console.log(
     `${outcome.perDb.vault.groupsApplied} group(s), integrity=${outcome.perDb.vault.integrityCheck}`
 );
 {
-  // Prove the restore actually contains the day.
   const r = new DatabaseSync(destDb, { readOnly: true });
   const n = r.prepare("SELECT count(*) AS n FROM day").get().n;
   const b = r.prepare("SELECT count(*) AS n FROM bulk").get().n;
@@ -445,10 +354,6 @@ console.log(
 }
 rmSync(restoreDir, { recursive: true, force: true });
 
-// ---------------------------------------------------------------------------
-// 6. The 24h base-cadence break — the OTHER half of a steady-state day.
-//    TRUNCATE, cloneDbFile, sha256, re-part, dedup against base A.
-// ---------------------------------------------------------------------------
 db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 db.close();
 const basePathB = path.join(dir, "base-B.db");
@@ -474,8 +379,6 @@ for await (const plain of partStream(readFileStreamOf(basePathB), PART_BYTES)) {
   knownChunks.add(id);
   baseBNewParts++;
   baseBWire += sealed.length;
-  // (not actually stored — the restore above is already done, and a 10 GiB
-  //  run has no disk to spare. The BYTES are what this step is measuring.)
 }
 const partBSecs = secs(tPartB);
 const rebaseSecs = cloneBSecs + hashBSecs + partBSecs;
@@ -495,15 +398,10 @@ console.log(
   `   total re-base cost: ${rebaseSecs.toFixed(1)}s ` +
     `(of which ${(hashBSecs + partBSecs).toFixed(1)}s is reading the whole DB twice)`
 );
-// Generation B is now the base; the retired base-A is dropped, exactly as
-// mintBase retires `retiredBaseName` once the new base is registered.
 rmSync(basePath, { force: true });
 mark("after retiring base-A");
 rmSync(basePathB, { force: true });
 
-// ---------------------------------------------------------------------------
-// Verdict
-// ---------------------------------------------------------------------------
 const steadyLocal = localBytes + cloneBPhysical;
 const steadyWire = wireBytes + baseBWire;
 const totalSecs = secs(runT0);

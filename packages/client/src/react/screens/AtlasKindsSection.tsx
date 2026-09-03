@@ -16,35 +16,21 @@ import {
 } from "./atlasScreenModel.js";
 import type { KindRow } from "./atlasScreenModel.js";
 
-// A kind nothing has ever written stays in the list: dropping it left the
-// head's "N of M kinds written" naming an absence the page then refused to
-// explain. Census verbs are ROWS here, not app-bar verbs.
-
 export interface AtlasKindsSectionProps {
   kinds: readonly KindRow[];
-  /**
-   * Caption "of M" is THIS LIST before chips, never a census total from
-   * elsewhere. NOT `totals.kinds` (blueprint-only) while the list carries
-   * blueprint AND machinery packs — that prints "131 of 79 kinds".
-   */
   totalKinds: number;
   meta: string;
   onBrowse: (logical: string) => void;
   onRelations: () => void;
-  /** Verb reads its own state rather than always saying "Open". */
   relationsOpen: boolean;
   relations?: ReactNode;
   onExport: () => void;
-  /** Omitted while nothing has been read. */
   stamp?: string | undefined;
   onRefresh: () => void;
   chips?: ReactNode;
-  /** Absent `onToggle`, the head draws no toggle. */
   collapsed: boolean;
   onToggle?: () => void;
 }
-
-// Census note lives in `../../data-copy.js` (#805) — one sentence, one home.
 
 export default function AtlasKindsSection({
   kinds,
@@ -69,11 +55,9 @@ export default function AtlasKindsSection({
     pack: kind.packLabel,
     share: meterShare(kind, largest),
     when: kindMeta(kind),
-    // Absent, not disabled: the row states "Nothing to browse" instead.
     ...(kindWritten(kind) ? { onOpen: () => onBrowse(kind.logical) } : {}),
   }));
 
-  // A snapshot with no timestamp reads as live.
   const shown = `${kinds.length.toLocaleString()} of ${totalKinds.toLocaleString()} kinds · the bar is a share of the largest`;
   const caption = stamp ? `${shown} · ${stamp}` : shown;
 

@@ -14,7 +14,6 @@ import {
 describe("handshake scenarios", () => {
   test("version constants: product string + protocol ints", () => {
     expect(GATEWAY_VERSION).toBe("0.1.0");
-    // v3 (#726): ownership replaces roles — hard floor, no COMPAT shims.
     expect(GATEWAY_PROTOCOL_VERSION).toBe(3);
     expect(GATEWAY_MIN_PROTOCOL_VERSION).toBe(3);
   });
@@ -28,7 +27,6 @@ describe("handshake scenarios", () => {
         peerMin: 2,
       })
     ).toBe(true);
-    // peer too old for local min
     expect(
       protocolsCompatible({
         localProtocol: 3,
@@ -37,7 +35,6 @@ describe("handshake scenarios", () => {
         peerMin: 2,
       })
     ).toBe(false);
-    // local too old for peer min
     expect(
       protocolsCompatible({
         localProtocol: 2,
@@ -46,7 +43,6 @@ describe("handshake scenarios", () => {
         peerMin: 3,
       })
     ).toBe(false);
-    // peer newer but still supports our protocol
     expect(
       protocolsCompatible({
         localProtocol: 2,

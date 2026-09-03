@@ -1,16 +1,4 @@
 #!/usr/bin/env bun
-// `bun run --cwd packages/model-runtime setup` — the ONLY place that
-// touches the network or writes into runtime/ (#724). It:
-//   1. runs `bun install` inside runtime/ (never at the repo root), which
-//      is the one place native/optional recognition dependencies get installed;
-//   2. downloads each capability's model weights + auxiliary files
-//      (tokenizer vocab/merges, character dictionary) into
-//      runtime/models/<capability>/;
-//   3. prints exactly what it fetched and each file's upstream licence.
-//
-// Every model here is permissively licensed (Apache-2.0/MIT) — see
-// LICENSES.md for the full table and source citations. Re-run any time to
-// pick up new capabilities; existing files are skipped (idempotent).
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -89,8 +77,6 @@ async function downloadFile(
     Readable.fromWeb(response.body as WebReadableStream<Uint8Array>),
     createWriteStream(tempPath)
   );
-  // Rename only after the full stream lands, so a killed download never
-  // leaves a truncated file mistaken for a complete one on the next run.
   renameSync(tempPath, spec.destination);
   const actual = await fileSha256(spec.destination);
   if (actual !== spec.sha256) {
@@ -124,10 +110,6 @@ async function main(): Promise<void> {
   console.log("\nFetching model weights + auxiliary files...");
   const fetched: string[] = [];
   for (const spec of DOWNLOADS) {
-    // Sequential on purpose — these are large (hundreds of MB in total) and
-    // this is a one-time setup step, not request-serving hot path; there is
-    // no latency budget to protect here, only a wish to keep console
-    // output in a legible, one-line-per-file order.
     // oxlint-disable-next-line no-await-in-loop -- see comment above
     const outcome = await downloadFile(spec);
     console.log(

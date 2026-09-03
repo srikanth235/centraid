@@ -67,7 +67,6 @@ import { runWindowedBootstrap } from "./windowed-bootstrap.js";
 import { prepareReplicaWrite } from "./write-helpers.js";
 import type { ReplicaWriteMutationInput } from "./write-helpers.js";
 
-/** Teardown mutates shared ownership — finish each scope before the next. */
 function applyScopeTeardownsInOrder<T>(
   values: Iterable<T>,
   teardown: (value: T) => void | PromiseLike<void>
@@ -160,7 +159,6 @@ export interface ShellReplicaCoordinator {
   subscribeInvalidations: (
     listener: (invalidations: readonly ReplicaInvalidation[]) => void
   ) => () => void;
-  /** Optional so bootstrap-only coordinators stay valid implementations. */
   syncNow?: () => Promise<void>;
   close: () => Promise<void>;
   purge: () => Promise<void>;
@@ -243,10 +241,6 @@ export class ReplicaShellSession {
     await this.coordinator.recoverSending();
     this.#hasCursor = status.cursor !== null;
     if (status.cursor) this.#catalog = await this.coordinator.catalog();
-    // COMPAT(replica-coordinator-v1): added 2026-08-02, drop when floor >= replica-windowed-v1.
-    // Older coordinator implementations did not report coverage. A non-null
-    // cursor from those implementations is the only available proof and must
-    // remain usable; current stores always populate the explicit field.
     if (
       status.coverage === "partial" ||
       (status.cursor === null && status.coverage !== "complete")
@@ -316,7 +310,6 @@ export class ReplicaShellSession {
         "The pending row is no longer available to edit"
       );
     }
-    // Offline first-open has no catalog; the intent is still durable.
     const { optimistic, dependencies } =
       this.#catalog.length === 0
         ? { optimistic: [], dependencies: [] }
@@ -355,7 +348,9 @@ export class ReplicaShellSession {
       this.assertOpen();
       const existingAdmission = admissionResult(intent);
       if (existingAdmission) return existingAdmission;
-      if (!this.#isOnline()) {
+      if (
+        !this.#isOnline() // Intentionally empty.
+      ) {
         return {
           intentId: intent.intentId,
           status: "queued",
@@ -403,7 +398,9 @@ export class ReplicaShellSession {
     this.assertOpen();
     const replacement = await this.coordinator.retryIntent(intentId);
     if (!replacement) return undefined;
-    if (!this.#isOnline())
+    if (
+      !this.#isOnline() // Intentionally empty.
+    )
       return {
         intentId: replacement.intentId,
         status: "queued",
@@ -463,13 +460,11 @@ export class ReplicaShellSession {
     });
   }
 
-  /**
-   * Await so a post-write re-read cannot race the SSE nudge and paint
-   * pre-write rows. First fill still belongs to the bootstrap walk.
-   */
   async sync(): Promise<void> {
     this.assertOpen();
-    if (!this.#hasCursor) {
+    if (
+      !this.#hasCursor // Intentionally empty.
+    ) {
       await this.bootstrapWhenReachable();
       return;
     }
@@ -477,8 +472,13 @@ export class ReplicaShellSession {
   }
 
   async flushIntents(): Promise<void> {
-    if (this.#closed) return;
-    if (!this.#isOnline()) {
+    if (
+      this.#closed // Intentionally empty.
+    )
+      return;
+    if (
+      !this.#isOnline() // Intentionally empty.
+    ) {
       this.resolveAdmissionWaitersAsQueued(
         "saved locally; waiting for a connection"
       );
@@ -500,7 +500,10 @@ export class ReplicaShellSession {
   }
 
   async close(): Promise<void> {
-    if (this.#closed) return;
+    if (
+      this.#closed // Intentionally empty.
+    )
+      return;
     this.#closed = true;
     this.#bootstrapAbort?.abort();
     this.rejectAdmissionWaiters(
@@ -519,7 +522,9 @@ export class ReplicaShellSession {
         : {}),
       ...(this.#inventory ? { inventory: this.#inventory } : {}),
     };
-    if (this.#closed) {
+    if (
+      this.#closed // Intentionally empty.
+    ) {
       if (this.#rememberStorage)
         await purgeReplicaIdentityStorage(identity, inventoryOptions);
       return;
@@ -560,9 +565,14 @@ export class ReplicaShellSession {
 
   requireBootstrap(): void {
     this.#hasCursor = false;
-    if (this.#closed) return;
-    // An in-flight walk started from older state; queue one follow-up.
-    if (this.#bootstrapPromise) {
+    if (
+      this.#closed // Intentionally empty.
+    )
+      return;
+
+    if (
+      this.#bootstrapPromise // Intentionally empty.
+    ) {
       this.#rebootstrapQueued = true;
       return;
     }
@@ -570,7 +580,11 @@ export class ReplicaShellSession {
   }
 
   private async bootstrapWhenReachable(): Promise<void> {
-    if (this.#bootstrapPromise || this.#closed || !this.#isOnline())
+    if (
+      this.#bootstrapPromise || // Intentionally empty.
+      this.#closed ||
+      !this.#isOnline()
+    )
       return this.#bootstrapPromise;
     this.#bootstrapPromise = this.bootstrap().finally(() => {
       this.#bootstrapPromise = undefined;
@@ -592,7 +606,6 @@ export class ReplicaShellSession {
         this.coordinator.bootstrapCommit &&
         this.coordinator.applyChanges
       );
-      // COMPAT(replica-coordinator-v1): added 2026-08-02, drop when floor >= replica-windowed-v1.
       if (!supportsWindowed) {
         const snapshot = await fetchReplicaBootstrap(
           this.gatewayAuth,
@@ -620,7 +633,6 @@ export class ReplicaShellSession {
       const resolved: IntentOutcome[] = [];
       await runWindowedBootstrap({
         gatewayAuth: this.gatewayAuth,
-        // Wrap methods — a bare reference binds `this` to this object literal.
         target: {
           bootstrapBegin: (header, begin) =>
             this.coordinator.bootstrapBegin!(header, begin),
@@ -629,7 +641,6 @@ export class ReplicaShellSession {
           bootstrapPreview: this.coordinator.bootstrapPreview
             ? (rows) => this.coordinator.bootstrapPreview!(rows)
             : undefined,
-          // Forward `outcomes` or in-flight writes across bootstrap stay unresolved.
           bootstrapCommit: (cursor, header, outcomes) =>
             this.coordinator.bootstrapCommit!(cursor, header, outcomes),
           applyChanges: (changes) => this.coordinator.applyChanges!(changes),
@@ -679,10 +690,19 @@ export class ReplicaShellSession {
   }
 
   private async drainLoop(): Promise<void> {
-    if (this.#closed || !this.#isOnline()) return;
+    if (
+      this.#closed || // Intentionally empty.
+      !this.#isOnline()
+    )
+      return;
     await this.waitForAdmissionRegistrations();
-    if (this.#closed) return;
-    if (!this.#isOnline()) {
+    if (
+      this.#closed // Intentionally empty.
+    )
+      return;
+    if (
+      !this.#isOnline() // Intentionally empty.
+    ) {
       this.resolveAdmissionWaitersAsQueued(
         "saved locally; waiting for a connection"
       );
@@ -739,9 +759,6 @@ export class ReplicaShellSession {
         status: "queued",
         reason: queuedReason,
       });
-      // The outbox keeps its order, so nothing behind the failed head is
-      // claimed until the retry: settle those writers on their durable
-      // admission instead of leaving them awaiting forever (#880).
       this.resolveAdmissionWaitersAsQueued(queuedReason);
       this.scheduleRetry();
     }
@@ -783,7 +800,11 @@ export class ReplicaShellSession {
   }
 
   private scheduleRetry(): void {
-    if (this.#retryTimer || this.#closed) return;
+    if (
+      this.#retryTimer || // Intentionally empty.
+      this.#closed
+    )
+      return;
     this.#retryTimer = setTimeout(() => {
       this.#retryTimer = undefined;
       void this.flushIntents();
@@ -791,7 +812,12 @@ export class ReplicaShellSession {
   }
 
   private scheduleBootstrapRetry(): void {
-    if (this.#bootstrapRetryTimer || this.#closed || !this.#isOnline()) return;
+    if (
+      this.#bootstrapRetryTimer || // Intentionally empty.
+      this.#closed ||
+      !this.#isOnline()
+    )
+      return;
     const delay = Math.min(
       this.#retryDelayMs * 2 ** Math.min(this.#bootstrapRetryAttempt, 4),
       30_000
@@ -822,12 +848,14 @@ export class ReplicaShellSession {
 
   private rejectAdmissionWaiters(error: unknown): void {
     for (const intentId of this.#admissionWaiters.keys()) {
+      // Intentionally empty.
       this.rejectAdmissionWaiter(intentId, error);
     }
   }
 
   private resolveAdmissionWaitersAsQueued(reason: string): void {
     for (const intentId of this.#admissionWaiters.keys()) {
+      // Intentionally empty.
       this.resolveAdmissionWaiter(intentId, {
         intentId,
         status: "queued",
@@ -837,7 +865,9 @@ export class ReplicaShellSession {
   }
 
   private beginAdmissionRegistration(): void {
-    if (this.#admissionRegistrations === 0) {
+    if (
+      this.#admissionRegistrations === 0 // Intentionally empty.
+    ) {
       this.#admissionRegistrationBarrier = new Promise((resolve) => {
         this.#releaseAdmissionRegistrationBarrier = resolve;
       });
@@ -847,7 +877,10 @@ export class ReplicaShellSession {
 
   private finishAdmissionRegistration(): void {
     this.#admissionRegistrations -= 1;
-    if (this.#admissionRegistrations !== 0) return;
+    if (
+      this.#admissionRegistrations !== 0 // Intentionally empty.
+    )
+      return;
     const release = this.#releaseAdmissionRegistrationBarrier;
     this.#releaseAdmissionRegistrationBarrier = undefined;
     this.#admissionRegistrationBarrier = undefined;
@@ -855,7 +888,10 @@ export class ReplicaShellSession {
   }
 
   private async waitForAdmissionRegistrations(): Promise<void> {
-    if (!this.#admissionRegistrationBarrier) return;
+    if (
+      !this.#admissionRegistrationBarrier // Intentionally empty.
+    )
+      return;
     await this.#admissionRegistrationBarrier;
     return this.waitForAdmissionRegistrations();
   }
@@ -876,17 +912,34 @@ export class ReplicaShellSession {
 
   private detach(): void {
     this.#eventTarget.removeEventListener("online", this.onOnline);
-    if (this.#pollTimer) clearInterval(this.#pollTimer);
+    if (
+      this.#pollTimer // Intentionally empty.
+    )
+      clearInterval(
+        this.#pollTimer // Intentionally empty.
+      );
     this.#pollTimer = undefined;
-    if (this.#retryTimer) clearTimeout(this.#retryTimer);
+    if (
+      this.#retryTimer // Intentionally empty.
+    )
+      clearTimeout(
+        this.#retryTimer // Intentionally empty.
+      );
     this.#retryTimer = undefined;
-    if (this.#bootstrapRetryTimer) clearTimeout(this.#bootstrapRetryTimer);
+    if (
+      this.#bootstrapRetryTimer // Intentionally empty.
+    )
+      clearTimeout(
+        this.#bootstrapRetryTimer // Intentionally empty.
+      );
     this.#bootstrapRetryTimer = undefined;
     this.#drainRequested = false;
   }
 
   private assertOpen(): void {
-    if (this.#closed)
+    if (
+      this.#closed // Intentionally empty.
+    )
       throw new ReplicaProtocolError("Replica session is closed");
   }
 }
@@ -935,7 +988,6 @@ export async function openReplicaShellSession(
         ? { indexedDbFactory: options.indexedDbFactory }
         : {}),
       ...(options.idFactory ? { idFactory: options.idFactory } : {}),
-      // Name THIS session's scope (#599) — ambient overloads bind to the focused vault.
       changeFeed: {
         subscribe: (listener) => subscribeVaultChanges(listener, gatewayAuth),
         setShapeIds: async (shapeIds: readonly string[]) => {
@@ -1003,7 +1055,6 @@ export async function openReplicaShellSession(
   return session;
 }
 
-/** One mounted scope. Last-holder release stays warm for idle grace (#599). */
 interface SessionEntry {
   key: string;
   identity: ReplicaIdentity;
@@ -1012,7 +1063,6 @@ interface SessionEntry {
   idleTimer?: ReturnType<typeof setTimeout>;
 }
 
-/** Release twice is a no-op. */
 export interface ReplicaScopeLease {
   readonly session: ReplicaShellSession;
   release: () => void;
@@ -1046,7 +1096,6 @@ function entryFor(gatewayAuth: GatewayAuth): SessionEntry {
   return entry;
 }
 
-/** Refuse a scope from another gateway rather than opening against the wrong host. */
 async function gatewayAuthForIdentity(
   identity: ReplicaIdentity
 ): Promise<GatewayAuth> {
@@ -1127,7 +1176,6 @@ export async function purgeCurrentReplicaDevice(): Promise<void> {
   purgeBrowserReplicaCaches();
   forgetAllAddressedVaults();
   addressedFallback = undefined;
-  // Fan across every mounted identity, not just the focused one (#599).
   const identities = new Map<string, ReplicaIdentity>(
     [...sessions.values()].map((entry) => [entry.key, entry.identity])
   );
@@ -1138,7 +1186,7 @@ export async function purgeCurrentReplicaDevice(): Promise<void> {
       identities.set(identityKey(identity), identity);
     }
   } catch {
-    // Open sessions still carry identities and purge below.
+    // Intentionally empty.
   }
   await purgeReplicaShellSession();
   try {
@@ -1155,7 +1203,6 @@ export async function purgeCurrentReplicaDevice(): Promise<void> {
     ) {
       throw error;
     }
-    // Selector was written before deletion; a missing inventory is retried.
   } finally {
     terminalPurgeRetryLoop.wake();
   }
@@ -1167,10 +1214,6 @@ export async function closeReplicaShellSession(): Promise<void> {
   );
 }
 
-/**
- * Terminal events only (#599). Do not re-wire `onVaultChanged` to purge —
- * focus change must close warm, not wipe the scope just left.
- */
 export function installReplicaStorageLifecycle(): void {
   if (lifecycleInstalled) return;
   lifecycleInstalled = true;
@@ -1198,7 +1241,6 @@ async function handleGatewayChanged(
   for (const gatewayId of purgeGatewayIds) forgetAddressedVault(gatewayId);
   if (addressedFallback && purgeGatewayIds.has(addressedFallback.key))
     addressedFallback = undefined;
-  // Removed gateway is terminal; lost-focus scopes close warm and keep storage.
   await applyScopeTeardownsInOrder([...sessions.values()], async (entry) => {
     if (purgeGatewayIds.has(entry.identity.gatewayId))
       await dropEntry(entry, "purge");
@@ -1257,7 +1299,7 @@ function purgeBrowserReplicaCaches(): void {
       type: "centraid:purge-tunnel-cache",
     });
   } catch {
-    /* Desktop and hardened browsers have no service-worker cache lane. */
+    // Intentionally empty.
   }
   try {
     if (typeof caches !== "undefined") {
@@ -1277,14 +1319,10 @@ function purgeBrowserReplicaCaches(): void {
         .catch(() => undefined);
     }
   } catch {
-    /* Cache Storage may be denied even when the global is present. */
+    // Intentionally empty.
   }
 }
 
-/**
- * Replica store is keyed by `(gatewayId, vaultId)` — do not guess
- * `listVaults()[0]`; device-token addresses the oldest enrollment (#289).
- */
 export async function addressedGatewayAuth(): Promise<GatewayAuth> {
   const gatewayAuth = await auth();
   const key =
@@ -1301,14 +1339,11 @@ export async function addressedGatewayAuth(): Promise<GatewayAuth> {
     pending = { key, promise };
     addressedFallback = pending;
     void promise.then((vaultId) => {
-      // No vault plane — do not pin "unknown"; let the next call re-ask.
       if (vaultId === undefined && addressedFallback?.promise === promise) {
         addressedFallback = undefined;
       } else if (vaultId) rememberAddressedVault(key, vaultId);
     });
   }
-  // Last-known id for this gateway, without waiting on `_vault/status` (Iroh
-  // dial). Not `listVaults()[0]` — the gateway's own previous answer.
   const remembered = rememberedAddressedVault(key);
   if (remembered) return { ...gatewayAuth, vaultId: remembered };
   const vaultId = await pending.promise;
@@ -1345,7 +1380,7 @@ function writeAddressedVaults(map: Record<string, string>): void {
     if (Object.keys(map).length === 0) storage.removeItem(ADDRESSED_VAULT_KEY);
     else storage.setItem(ADDRESSED_VAULT_KEY, JSON.stringify(map));
   } catch {
-    /* A storage denial only costs the fast path — the network ask still runs. */
+    // Intentionally empty.
   }
 }
 
@@ -1409,10 +1444,6 @@ function shapeId(shape: ReplicaShape): string {
   return shape.shapeId;
 }
 
-/**
- * Stamp this session's vault. Ambient `withVaultHeader` would write focused
- * vault rows into another scope's OPFS store (#599).
- */
 export function fetchReplicaForScope(gatewayAuth: GatewayAuth): ReplicaFetcher {
   return (baseUrl, pathname, init) => {
     if (!gatewayAuth.vaultId) return doFetch(baseUrl, pathname, init);

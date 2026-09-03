@@ -1,38 +1,10 @@
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
-// The one authority plane (#883 V-table): every standing answer about who may
-// do what — person, circle, harness, or the member's own device — is a row in
-// `share_authority`. App-strategy machinery, gateway-side enrollment
-// attenuation and runtime provider consent stay out of it (V-split).
-
-// Polymorphic BOTH ways, so neither pair can carry a SQL foreign key. The
-// trigger on `core_entity` that revokes a purged subject's answers writes to
-// this table, so it is composed before that trigger (#916, E2).
-/**
- * PRINCIPAL KINDS THAT ARE ROWS, and the entity kind each one's id lives in
- * (#916, audit F3).
- *
- * `principal_id` carries no foreign key — it cannot, it is polymorphic on
- * `principal_kind` — so `core_entity_revoke_on_purge` is what ends an answer
- * whose PRINCIPAL is purged, and it generates its clause from this map. The
- * clause was written for `person` alone, which left a circle-principal answer
- * standing after `tally.delete_group` or `share/removal.ts` deleted the circle:
- * a live answer whose audience no longer exists, which is exactly what the
- * trigger says must not happen.
- *
- * The two kinds NOT here are not rows: a `harness` principal is an engine
- * class (its ids are a closed vocabulary, see the CHECK below), and a `device`
- * lives in the access plane, which is machinery rather than an ontology pack
- * and so has no `core_entity` row to purge. `authority-principals.test.ts`
- * holds the CHECK's vocabulary to being exactly this map plus those two, so a
- * fifth principal kind cannot be added without answering the question.
- */
 export const PRINCIPAL_ENTITY_KINDS: ReadonlyMap<string, string> = new Map([
   ["person", "core.party"],
   ["circle", "social.circle"],
 ]);
 
-/** Principal kinds whose id is not an entity id — see the map above. */
 export const NON_ENTITY_PRINCIPAL_KINDS: ReadonlySet<string> = new Set([
   "harness",
   "device",

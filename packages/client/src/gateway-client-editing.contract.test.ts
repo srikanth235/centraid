@@ -1,12 +1,3 @@
-// Client↔gateway seam laws for app sessions + lifecycle (#141 Phase 2/4, #434,
-// #599) — the module had no test file (#656 Layer 1B). Three laws carry the
-// design: exactly ONE `desktop-<appId>` draft session per app, shared by every
-// concurrent caller (the automation-authoring harness edits the same worktree,
-// so a re-open 409 is success); a BUNDLED app installs rather than copies, so
-// renaming it must never open a draft worktree; and a rejected delete must
-// leave the draft session intact. Shared harness in
-// gateway-client-seam-fixtures.ts.
-
 import { describe, expect, it } from "vitest";
 
 import {

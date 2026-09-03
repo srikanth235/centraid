@@ -16,10 +16,8 @@ import type {
   ReplicaSnapshotRow,
 } from "./types.js";
 
-/** Matches the gateway's own default; kept explicit so the request is self-describing. */
 export const DEFAULT_REPLICA_BOOTSTRAP_WINDOW = 5_000;
 
-/** Request init widened with `cache`, which React Native's `RequestInit` type omits. */
 export type ReplicaRequestInit = RequestInit & { cache?: string };
 
 export type ReplicaFetcher = (
@@ -28,12 +26,6 @@ export type ReplicaFetcher = (
   init: ReplicaRequestInit
 ) => Promise<Response>;
 
-/**
- * Fallback transport for platforms/tests that don't inject one. The web shell
- * always passes its own `doFetch` wrapper (Iroh/webControl/vault-header aware);
- * this plain `fetch` keeps the module free of the browser gateway core so React
- * Native can reuse it with an injected fetcher.
- */
 const defaultReplicaFetcher: ReplicaFetcher = (baseUrl, pathname, init) =>
   fetch(href(baseUrl, pathname), init as RequestInit);
 
@@ -98,10 +90,6 @@ export async function fetchReplicaBootstrap(
   return snapshot;
 }
 
-/**
- * One page of a windowed bootstrap. Every page carries its OWN snapshot cursor —
- * pages are not globally consistent — and `complete`/`next` drive the walk.
- */
 export interface ReplicaBootstrapPage {
   protocolVersion: typeof REPLICA_PROTOCOL_VERSION;
   vaultId: string;
@@ -109,11 +97,9 @@ export interface ReplicaBootstrapPage {
   cursor: ReplicaCursor;
   rows: ReplicaSnapshotRow[];
   complete: boolean;
-  /** Opaque continuation token; absent exactly when `complete` is true. */
   next?: string;
 }
 
-/** Page 1 additionally carries the catalog and trust envelope; later pages do not. */
 export interface ReplicaBootstrapFirstPage extends ReplicaBootstrapPage {
   shapes: ReplicaShape[];
   shapeIds?: string[];
@@ -122,21 +108,13 @@ export interface ReplicaBootstrapFirstPage extends ReplicaBootstrapPage {
 }
 
 export interface FetchReplicaBootstrapPageOptions {
-  /** Rows per page (server bounds: 1..20000, default 5000). */
   window?: number;
-  /** Page-1 `next` token. Omit for page 1. */
   after?: string;
   fetcher?: ReplicaFetcher;
   signal?: AbortSignal;
-  /** Page 1 may prioritize the newest visible Photos/Docs era. */
   priority?: "newest";
 }
 
-/**
- * Fetch one windowed bootstrap page. Opting in (`window` and/or `after`) is what
- * selects the paging protocol server-side; {@link fetchReplicaBootstrap} keeps
- * the single-shot behavior for callers that pass neither.
- */
 export async function fetchReplicaBootstrapPage(
   gatewayAuth: GatewayAuth,
   options: FetchReplicaBootstrapPageOptions = {}
@@ -147,7 +125,6 @@ export async function fetchReplicaBootstrapPage(
     params.set("window", String(options.window));
   if (options.after !== undefined) params.set("after", options.after);
   if (options.priority !== undefined) params.set("priority", options.priority);
-  // Neither param present would silently fall back to the single-shot envelope.
   if ([...params].length === 0)
     params.set("window", String(DEFAULT_REPLICA_BOOTSTRAP_WINDOW));
   const response = await fetcher(
@@ -206,7 +183,6 @@ export async function fetchReplicaChanges(
   const params = new URLSearchParams({
     since: `${cursor.epoch}:${cursor.seq}`,
   });
-  // Presence is significant: `shapeIds=` attests a persisted empty catalog.
   if (shapeIds) params.set("shapeIds", shapeIds.join(","));
   const response = await fetcher(
     gatewayAuth.baseUrl,
@@ -229,11 +205,6 @@ export async function fetchReplicaChanges(
   return batch;
 }
 
-/**
- * Reconcile only the durable outbox entries the client still overlays. The
- * snapshot cursor fences each batch so a newer canonical transition remains
- * in the incremental log instead of clearing its overlay too early.
- */
 export async function fetchReplicaIntentOutcomes(
   gatewayAuth: GatewayAuth,
   intentIds: readonly string[],

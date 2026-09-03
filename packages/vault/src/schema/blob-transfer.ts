@@ -1,10 +1,3 @@
-// Durable blob ingress + offsite transit state (#414).
-//
-// These are plumbing tables, deliberately separate from the ontology and
-// from `blob_staging`: an upload session is not yet a content claim, and an
-// outbox row is only a custody obligation. Both survive process restarts so
-// resumability never depends on an in-memory hash/multipart object.
-
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
 export const BLOB_TRANSFER_DDL = `

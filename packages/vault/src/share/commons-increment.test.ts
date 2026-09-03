@@ -1,8 +1,3 @@
-// Wire-rail command-tail replay (#750 invariant 7): a peer-plane-only member
-// replays the exported executable tail in one transaction with its cursor
-// advance; an unreplayable tail is unusable — never a park — and the full
-// frame converges.
-
 import { afterEach, describe, expect, test } from "vitest";
 
 import { nowIso } from "../ids.js";
@@ -35,18 +30,13 @@ import { closeOpenVaults } from "./placement-fixture.js";
 
 interface WireFixture {
   fixture: FolderCommons;
-  /** One steward write nobody local sees; the member is wire-only. */
   write: (title: string, options?: { compile?: boolean }) => void;
-  /** One member pull with its own cursor, applied the way a peer applies it. */
   sync: () => "increment" | "bootstrap";
   rebaseline: () => void;
-  /** The sequence at which this seat last proved its whole state. */
   provenSequence: () => number;
   title: () => string | undefined;
 }
 
-/** A commons whose member is caught up only via exported frames applied like
- *  a peer's — no local steward seat exists. */
 function wireCommons(documentCount: number): WireFixture {
   const fixture = folderCommons(documentCount);
   const detached: CommonsMemberInput[] = [];
@@ -120,7 +110,6 @@ function wireCommons(documentCount: number): WireFixture {
   };
 }
 
-/** The head this seat has proved the STEWARD's history up to. */
 function verifiedSequence(wire: WireFixture): number | undefined {
   return readCommonsVerified(
     wire.fixture.home.audience.vault,
@@ -173,7 +162,6 @@ describe("Commons command-tail replay, wire rail (issue #750 invariant 7)", () =
           ORDER BY document_id`
       )
       .all();
-    // The seat's cursor is the idempotency boundary.
     apply();
     expect(
       wire.fixture.home.audience.vault
@@ -257,12 +245,6 @@ describe("Commons command-tail replay, wire rail (issue #750 invariant 7)", () =
   });
 });
 
-/**
- * State-proof bound (#750 invariant 7): the one attested digest covers the
- * STEWARD's closure bytes, which a member cannot recompute from its own rows,
- * so a seat stands at most one checkpoint interval of increments atop its last
- * proof point; past that it refuses and re-baselines through the full frame.
- */
 describe("Commons increment state-proof bound (issue #750 invariant 7)", () => {
   afterEach(closeOpenVaults);
 
@@ -283,7 +265,6 @@ describe("Commons increment state-proof bound (issue #750 invariant 7)", () => {
       )?.sequence
     ).toBe(head);
     expect(wire.title()).toBe(`Revision ${head}`);
-    // Proved the history, not the state: the proof point stays put.
     expect(wire.provenSequence()).toBe(0);
   });
 
@@ -292,9 +273,7 @@ describe("Commons increment state-proof bound (issue #750 invariant 7)", () => {
     const audience = wire.fixture.home.audience;
     const head = COMMONS_CHECKPOINT_INTERVAL;
     for (let sequence = 1; sequence <= head; sequence += 1)
-      // Last write skips compile so no checkpoint cuts the window short.
       wire.write(`Revision ${sequence}`, { compile: sequence !== head });
-    // Drift under a row no operation names: the tail would apply cleanly.
     audience.vault
       .prepare(
         "UPDATE core_document SET title = 'drifted' WHERE document_id = ?"
@@ -307,9 +286,7 @@ describe("Commons increment state-proof bound (issue #750 invariant 7)", () => {
     } catch (error) {
       refusal = error;
     }
-    // Re-baseline-triggering kind, not a park.
     expect(isCommonsIncrementUnusable(refusal)).toBe(true);
-    // Rolled back whole: cursor, verified head, proof point and domain rows.
     expect(
       readCommonsCursor(audience.vault, wire.fixture.grantId, MEMBER_VAULT)
         ?.sequence
@@ -318,7 +295,6 @@ describe("Commons increment state-proof bound (issue #750 invariant 7)", () => {
     expect(wire.provenSequence()).toBe(0);
     expect(wire.title()).toBe("Booking 0");
 
-    // The full frame asserts its digest inside apply: drift gone, proof at head.
     wire.rebaseline();
     expect(
       (

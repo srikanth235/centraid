@@ -16,9 +16,7 @@ export interface MemoryProjectionResult {
   onThisDay: number;
   trips: number;
   similar: number;
-  /** Total `media_memory_member` rows in the resulting projection. */
   members: number;
-  /** Whether the persisted projection matched and no rows were written. */
   reused: boolean;
 }
 

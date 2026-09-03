@@ -14,7 +14,6 @@ import type { IngressSessionRow } from "./transfer-state.js";
 const HEAD_BYTES = 1024 * 1024;
 const TAIL_BYTES = 8 * 1024 * 1024;
 
-/** Finalize a local spool without ever reading a large original as one buffer. */
 export function stageFallbackIngress(input: {
   vault: DatabaseSync;
   local: LocalBlobStore;
@@ -60,14 +59,13 @@ export function stageFallbackIngress(input: {
           ...(row.staged_by ? { stagedBy: row.staged_by } : {}),
         });
       } catch {
-        // Custody/staging succeed even when the optional raster codec declines.
+        // Intentionally empty.
       }
     }
   }
   return staged;
 }
 
-/** Adopt a committing fallback temp exactly once, then idempotently stage it. */
 export function adoptAndStageFallbackIngress(input: {
   vault: DatabaseSync;
   local: LocalBlobStore;
@@ -79,8 +77,6 @@ export function adoptAndStageFallbackIngress(input: {
   const { local, cache, row, sha256 } = input;
   let adopted = false;
   if (local.hasSync(sha256)) {
-    // Adoption may have completed before the process died; the old source is
-    // intentionally allowed to be absent in this replay branch.
     if (row.temp_path) rmSync(row.temp_path, { force: true });
   } else {
     if (!row.temp_path || !local.adoptTempSync) {
@@ -98,7 +94,6 @@ export function adoptAndStageFallbackIngress(input: {
   return stageFallbackIngress(input);
 }
 
-/** Recreate an idempotent commit response from its durable completed row. */
 export function stageCompletedIngress(
   vault: DatabaseSync,
   row: IngressSessionRow,

@@ -48,14 +48,6 @@ function StatusPill({
   );
 }
 
-/**
- * One log row. Note that `label`, `sub` and `response` are deliberately
- * unstyled: they referenced `.logLabel`/`.logSub`/`.logResponse`, none of which
- * were ever written, so they have always rendered as plain inherited text —
- * `sub` reads identically to `label`. The dead references are gone rather than
- * invented into rules, since writing them would change the render. If these are
- * meant to be visually distinct, that is a design change, not a cleanup.
- */
 function LogRow({ row }: { row: RunLogRowDTO }): JSX.Element {
   const [openIn, setOpenIn] = useState(false);
   const [openOut, setOpenOut] = useState(false);
@@ -146,13 +138,6 @@ function TriggerInstructions({ text }: { text: string }): JSX.Element {
   );
 }
 
-/**
- * Automation run-viewer. The route owns the SSE stream + node model and
- * pushes a fully-derived snapshot on each event via the `update` fn handed to
- * `onReady`; this screen renders the timeline (rail + node cards + final
- * outcome + KPI rail) or log (KPI strip + transcript rows) mode. Emits the
- * `cd-au-*` classes global styles.css targets.
- */
 export default function RunViewScreen({
   initialMode,
   onReady,
@@ -160,11 +145,6 @@ export default function RunViewScreen({
   onOpenAutomation,
 }: RunViewBridgeProps): JSX.Element {
   const [snap, setSnap] = useState<RunViewSnapshot | null>(null);
-  // The run detail is a single, calm view. The in-view controls — the
-  // Timeline/Log toggle, the details-collapse button and Run again — were
-  // removed as noise (re-running lives on the automation thread's Run now).
-  // The view still honours `initialMode`, so a deep link can open the raw
-  // log; there just isn't a control to flip it here.
   const mode = initialMode;
   const messageCallbacks: MessageCallbacks = {
     hydrateRefs: () => undefined,
@@ -182,10 +162,6 @@ export default function RunViewScreen({
     onReady((s) => setSnap(s));
   }, [onReady]);
 
-  // Even before the first snapshot arrives, keep a breadcrumb/back affordance
-  // on screen — a run that never resolves (e.g. its automation was deleted
-  // and the route bails before the first update) must never strand the user
-  // on a bare, dead-end div.
   if (!snap) {
     return (
       <div className={au.auLoading}>

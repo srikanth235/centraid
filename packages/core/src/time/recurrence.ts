@@ -153,14 +153,6 @@ function withinUntil(
   return instantForComparison(instance.start, semantics) <= untilMs;
 }
 
-/**
- * Expand a recurrence using civil-time arithmetic. Zoned rules preserve their
- * wall clock through offset changes, skip DST gaps, and emit overlaps once at
- * the earlier instant.
- *
- * A rule this engine refuses (`inspectRrule`) expands to NO occurrences — never
- * to a plausible series meaning something else.
- */
 export function expandRecurrence(
   input: ExpandRecurrenceInput
 ): RecurrenceInstance[] {
@@ -181,12 +173,6 @@ export function expandRecurrence(
 
   const limit = Math.max(1, Math.min(input.maxInstances ?? 366, 10_000));
   const results: RecurrenceInstance[] = [];
-  // Fast-forward analytically to the first period that can intersect
-  // rangeFrom — but only for unbounded rules. A COUNT series must walk from
-  // the anchor so exhaustion is observed after a few periods (COUNT=1 on a
-  // 2000 anchor must not convert twenty-six years of civil time). Unbounded
-  // monthly/daily templates still need the jump so maxInstances:2 can land
-  // a 2026 occurrence of a 2022 series.
   let period =
     rule.count === undefined
       ? firstPeriodAtOrAfter(initial, rule, from, semantics)
@@ -216,11 +202,6 @@ export function expandRecurrence(
   return results;
 }
 
-/**
- * Smallest period index whose candidates can land on or after `fromMs`.
- * Overshoots by at most one interval so the subsequent walk still applies
- * BYDAY / UNTIL / COUNT filters exactly.
- */
 function firstPeriodAtOrAfter(
   initial: WallTime,
   rule: ParsedRrule,
@@ -242,7 +223,6 @@ function firstPeriodAtOrAfter(
         Math.floor(deltaMs / (7 * 86_400_000 * rule.interval)) - 1
       );
     case "MONTHLY": {
-      // Approximate months from civil fields, then back up one interval.
       const fromWall = wallFromComparisonMs(fromMs, semantics);
       if (!fromWall) return 0;
       const months =
@@ -263,8 +243,6 @@ function wallFromComparisonMs(
   semantics: RecurrenceSemantics
 ): WallTime | null {
   if (Number.isNaN(ms)) return null;
-  // instantForComparison for floating/all-day uses wallEpoch, so the reverse
-  // is UTC-parts of that epoch — not a timezone conversion.
   if (semantics !== "zoned") {
     const date = new Date(ms);
     return {
@@ -277,8 +255,6 @@ function wallFromComparisonMs(
       millisecond: date.getUTCMilliseconds(),
     };
   }
-  // Zoned fromMs is a real UTC instant; month/year distance only needs the
-  // UTC calendar of that instant for a conservative lower bound.
   const date = new Date(ms);
   return {
     year: date.getUTCFullYear(),
@@ -326,10 +302,6 @@ export function applyRecurrenceExceptions(
   });
 }
 
-/**
- * Shift a wall-clock or zoned instant by `deltaMs` without converting floating
- * / all-day strings through the host's local timezone.
- */
 export function shiftTemporal(value: string, deltaMs: number): string {
   if (isZonedInstant(value)) {
     const ms = Date.parse(value);
@@ -385,8 +357,3 @@ export function nextOccurrence(input: NextOccurrenceInput): string | null {
       ?.start ?? null
   );
 }
-
-// The single member-facing summariser lives in ./recurrence-summary.ts (this
-// file stays at the engine layer, under the 500-line cap); the missed-period
-// collapse lives in ./recurrence-collapse.ts. Both reach the engine from here,
-// never the other way round.

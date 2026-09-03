@@ -6,8 +6,6 @@ import { cx } from "../ui/cx.js";
 import selectCss from "../styles/select.module.css";
 import styles from "./SettingsHarnessesScreen.module.css";
 
-// Shared select primitive for Settings → Agents (routing picks + defaults).
-
 const TIER_ORDER = ["smart", "balanced", "fast"] as const;
 const TIER_LABEL: Record<(typeof TIER_ORDER)[number], string> = {
   smart: "Most capable",
@@ -26,7 +24,6 @@ export function Select({
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
-  /** Muted: this lane reads its value from the default lane. */
   inherited?: boolean;
   ariaLabel: string;
   children: ReactNode;
@@ -80,11 +77,6 @@ function modelOptions(card: HarnessCardDTO): JSX.Element[] {
   return out;
 }
 
-/**
- * Human label for a model id, inside an inherited-option label. WITH NO PIN
- * IT NAMES THE MODEL THAT WILL RUN (the probe-marked default): "agent
- * default" names the rule, not the answer.
- */
 export function modelLabel(
   card: HarnessCardDTO | undefined,
   id: string
@@ -95,7 +87,6 @@ export function modelLabel(
   return fallback.name ?? fallback.id;
 }
 
-/** A harness offering no `thought_level` has no level to state. */
 export function effortLabel(
   card: HarnessCardDTO | undefined,
   value: string
@@ -142,10 +133,6 @@ export function ModelSelect({
   );
 }
 
-/** The reasoning levels this harness's live probe offers. REASONING LEVEL IS
- *  A PROPERTY OF THE MODEL, but ACP reports one `thought_level` per SESSION
- *  and `HarnessModelDTO` carries no per-model levels — the set is read from
- *  the probe; a level outside it is one the model cannot do. */
 export function effortValues(card: HarnessCardDTO): string[] {
   const option = card.configOptions?.find(
     (entry) => entry.category === "thought_level"
@@ -153,13 +140,11 @@ export function effortValues(card: HarnessCardDTO): string[] {
   return (option?.values ?? []).map((entry) => entry.value);
 }
 
-/** A stored level the new model cannot do drops back to inherit. */
 export function clampEffort(card: HarnessCardDTO, saved: string): string {
   if (!saved) return "";
   return effortValues(card).includes(saved) ? saved : "";
 }
 
-/** Stated pick for models with no thinking budget. */
 export function NoThinkingPick(): JSX.Element {
   return <span className={styles.inertPick}>no thinking</span>;
 }

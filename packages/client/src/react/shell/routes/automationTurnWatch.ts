@@ -1,12 +1,3 @@
-/*
- * Shared native-turn watching for the two automation surfaces.
- *
- * Both the run screen (a live execution) and the compiler workbench (a live
- * compile or test run) need the same thing: join a turn's SSE stream, fold
- * events into a live view, and re-read the ledger ONCE when it settles. It
- * lives here rather than inline in either surface, so neither surface carries
- * a second, subtly-different implementation of the same watch.
- */
 import {
   readAutomationTurnExpanded,
   streamAutomationTurn,
@@ -27,7 +18,6 @@ import {
   automationTurnMessages,
 } from "./automationTurnMessages.js";
 
-/** Cold read of one turn as the shared Message DTO. */
 export async function loadTurnTrace(turnId: string): Promise<AsstMsgDTO[]> {
   const expanded = await readAutomationTurnExpanded({ turnId });
   return expanded.turn
@@ -35,14 +25,6 @@ export async function loadTurnTrace(turnId: string): Promise<AsstMsgDTO[]> {
     : [];
 }
 
-/**
- * Watch one turn to settlement, pushing message snapshots as it goes.
- *
- * `settled: false` means the stream closed (or the join was refused) while the
- * ledger still shows the turn open — the caller must rejoin rather than leave
- * a turn spinning forever. The post-stream ledger re-read here is the ONLY
- * authoritative one, so callers must not issue a second.
- */
 export async function watchTurnMessages(
   turnId: string,
   onMessages: (messages: AsstMsgDTO[]) => void,

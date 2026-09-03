@@ -1,4 +1,3 @@
-/** A consent mask made a complete search answer impossible. */
 export class ReplicaSearchRefusedError extends Error {
   readonly code = "REPLICA_SEARCH_REFUSED";
 

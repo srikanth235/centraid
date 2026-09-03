@@ -1,7 +1,3 @@
-// A device's standing authority, as `share_authority` rows over `core.vault`
-// (#883 V-split). Absence means "not enrolled"; `revoked` is a LIVE declined
-// row, so a device cut off never reads back as one never heard of.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { uuidv7 } from "../ids.js";
@@ -21,7 +17,6 @@ function trustOf(row: AnswerRow): DeviceTrust {
   return row.verb === "edit" ? "full" : "readonly";
 }
 
-// `%DEVICE%` takes a COLUMN REFERENCE only — it is concatenated into SQL.
 export const DEVICE_TRUST_SCALAR_SQL = `(
   SELECT CASE
            WHEN a.decision = 'declined' THEN 'revoked'
@@ -59,7 +54,6 @@ export function readDeviceTrust(
   return row ? trustOf(row) : undefined;
 }
 
-// Rows are immutable but for `revoked_at` (#883 V-table); a repeat is a no-op.
 export function setDeviceTrust(
   db: DatabaseSync,
   input: {

@@ -285,8 +285,6 @@ describe("shell-session", () => {
           vaultId: "vault",
         },
         coordinator,
-        // Offline, so the deferred bootstrap parks instead of fetching — the
-        // point here is only that a cursor-less replica never pulls changes.
         { eventTarget: new EventTarget(), isOnline: () => false }
       );
       await session.start(await coordinator.status());
@@ -1113,7 +1111,6 @@ describe("shell-session", () => {
           })
           .mockResolvedValue({ epoch: "epoch", seq: 8 }),
       });
-      // A fresh Response per call: both bootstraps read the body.
       const fetcher = vi.fn<ReplicaFetcher>().mockImplementation(
         async () =>
           new Response(
@@ -1142,7 +1139,6 @@ describe("shell-session", () => {
       await vi.waitFor(() =>
         expect(coordinator.bootstrap).toHaveBeenCalledOnce()
       );
-      // The gateway rejects the state this walk began from, while it walks.
       session.requireBootstrap();
       releaseBootstrap?.();
       await started;
@@ -1153,18 +1149,6 @@ describe("shell-session", () => {
       await session.close();
     });
   });
-  // The windowed-bootstrap `target` hands the coordinator's own methods to
-  // `runWindowedBootstrap`, which invokes them as `target.bootstrapBegin(...)`.
-  // A bare method reference therefore arrives with `this` bound to the object
-  // literal, and `bootstrapBegin` calls a private method on itself as its very
-  // first act — so detaching them threw `this.resetFeedGeneration is not a
-  // function` on any vault large enough to take the windowed path. Unit tests
-  // stayed green because nothing here drives a real windowed bootstrap; it
-  // surfaced only when the desktop Home springboard began reading the replica.
-  //
-  // This is a STRUCTURAL guard, not a behavioural one: a windowed-bootstrap
-  // fixture does not exist yet, so this pins the shape of the call site until
-  // one does.
   describe("windowed bootstrap target", () => {
     test("passes coordinator methods wrapped, never as detached references", () => {
       const source = readFileSync(
@@ -1176,20 +1160,10 @@ describe("shell-session", () => {
       expect(target, "windowed-bootstrap target literal not found").toBeTypeOf(
         "string"
       );
-      // A bare `this.coordinator.foo!,` or `this.coordinator.foo,` entry is the
-      // regression; every method must be reached through an arrow that keeps
-      // the coordinator as the receiver.
       expect(target).not.toMatch(/:\s*this\.coordinator\.\w+!?,/u);
       expect(target).toMatch(/[=]>\s*this\.coordinator\.bootstrapBegin!\(/u);
     });
 
-    // The second way this literal goes wrong, and the one the compiler cannot
-    // see: a function that accepts FEWER parameters than its target type is
-    // assignable in TypeScript, so a wrapper that quietly drops an argument
-    // typechecks. `bootstrapCommit(cursor, header, outcomes)` wrapped as
-    // `(cursor, header) => ...` compiled clean while discarding the intent
-    // outcomes reconciled against the page-1 cursor — every write in flight
-    // across a bootstrap was left unresolved with nothing to report it.
     test("forwards every parameter each wrapper declares", () => {
       const source = readFileSync(
         path.join(import.meta.dirname, "shell-session.ts"),

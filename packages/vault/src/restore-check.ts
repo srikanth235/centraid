@@ -1,9 +1,3 @@
-/*
- * Restored-pair verification (#408, G8/G9) over a RESTORED directory — never
- * a live vault. Dangling receipts are REPORTED, not thrown: rows may
- * legitimately be hard-deleted after a receipt referenced them.
- */
-
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -14,15 +8,10 @@ import {
 } from "./schema/sealed.js";
 import { resolveEntity } from "./schema/tables.js";
 
-/**
- * Seal-key custody verdict (#439): `not-sealed` | `ok` | `missing` |
- * `mismatch` (foreign/corrupt key).
- */
 export type SealKeyVerdict = "not-sealed" | "ok" | "missing" | "mismatch";
 
 export interface RestoredPairReport {
   vault: { integrity: string; foreignKeyViolations: number };
-  /** Receipts naming a vault table row absent from the restore. */
   receiptsChecked: number;
   danglingReceipts: {
     receiptId: string;
@@ -30,11 +19,9 @@ export interface RestoredPairReport {
     objectType: string;
     objectId: string;
   }[];
-  /** Restored seal key present and unsealing (#439). */
   sealKey: { verdict: SealKeyVerdict; expected?: string };
 }
 
-/** DEK must match the restored vault fingerprint. */
 function checkSealKey(
   destDir: string,
   vault: DatabaseSync,
@@ -44,7 +31,6 @@ function checkSealKey(
   if (expected === null) return { verdict: "not-sealed" };
   let key: Buffer | null;
   if (recoveryKey === undefined) {
-    // Pre-DEK snapshots carried a loose seal.key entry.
     try {
       key = loadSealKey(path.join(destDir, "seal.key"));
     } catch {
@@ -85,13 +71,10 @@ function pkOf(db: DatabaseSync, physical: string): string | undefined {
   return cols.find((c) => c.pk === 1)?.name;
 }
 
-/** Verify a restored vault directory. */
 export function verifyRestoredPair(
   destDir: string,
   recoveryKey?: Buffer | null
 ): RestoredPairReport {
-  // ONE file (#916): the audit band lives in `vault.db` beside the life data,
-  // so there is no second handle to integrity-check.
   const vault = checkFile(path.join(destDir, "vault.db"));
   const sealKey = checkSealKey(destDir, vault.db, recoveryKey);
   const danglingReceipts: RestoredPairReport["danglingReceipts"] = [];

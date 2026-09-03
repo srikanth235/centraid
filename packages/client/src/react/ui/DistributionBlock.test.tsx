@@ -8,11 +8,6 @@ import { DISTRIBUTION_FIXTURE } from "@centraid/design/blocks";
 
 import DistributionBlock from "./DistributionBlock.js";
 
-// What this kit must DRAW (#775). The ordering and the share arithmetic are
-// asserted once in `packages/design`; these are the marks — the fixed key
-// column, the numeric register, and a bar whose width is a ratio the row
-// scales rather than a pixel width this renderer computed.
-
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 
@@ -77,8 +72,6 @@ describe("ui/DistributionBlock", () => {
       tracks.map((n) => n.style.getPropertyValue("--dist-share"))
     ).toStrictEqual(["73", "26", "1"]);
     expect(tracks[0]?.style.width).toBe("");
-    // The bar is decoration of the percentage beside it — never a second thing
-    // to read, and never announced as work in flight.
     expect(tracks[0]?.getAttribute("aria-hidden")).toBe("true");
     expect(el.querySelector("[role='progressbar']")).toBeNull();
   });

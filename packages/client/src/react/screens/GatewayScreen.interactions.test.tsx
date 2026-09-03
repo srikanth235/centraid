@@ -31,8 +31,6 @@ describe("GatewayScreen interactions", () => {
     host.remove();
   });
 
-  // "Look closer" rows carry the page name in the ROW and "Open" on the verb,
-  // so the row's hint is what tells the three apart.
   const openDetail = async (label: string): Promise<void> => {
     const btn = [...host.querySelectorAll("button")].find(
       (b) => b.title === `Open ${label}` || b.textContent?.startsWith(label)
@@ -49,9 +47,6 @@ describe("GatewayScreen interactions", () => {
     );
     await openDetail("Components");
     expect(host.querySelector("h1")?.textContent).toBe("Components");
-    // No in-page back row: the drill-ins are routes, and the frame's own back
-    // arrow already points at the overview. A second control three inches
-    // below it pointed at the same place.
     expect(host.textContent).not.toContain("‹ System");
   });
 
@@ -64,9 +59,6 @@ describe("GatewayScreen interactions", () => {
         initialTab="components"
         readOnly
         connections={{
-          // One REAL row, not an empty registry: an empty list draws an empty
-          // state, and "a viewer sees no mutation verbs" over a list with
-          // nothing in it is a claim about nothing.
           loadConnections: async () => [
             {
               canRemove: true,
@@ -88,7 +80,6 @@ describe("GatewayScreen interactions", () => {
     );
     await act(() => Promise.resolve());
     expect(host.querySelector("h1")?.textContent).toBe("Components");
-    // The head answers the page's question before a row is read.
     expect(host.textContent).toContain("none reporting");
     expect(
       host.querySelector('[data-testid="diag-connections"]')
@@ -125,8 +116,6 @@ describe("GatewayScreen interactions", () => {
     expect(host.querySelector("h1")?.textContent).toBe("Alert history");
     expect(host.textContent).toContain("When to tell you");
     expect(host.textContent).toContain("after 2m unreachable");
-    // A viewer gets the STATE without the verb that changes it: the switch is
-    // a row action now, so its absence is the absence of that button.
     expect(host.textContent).not.toContain("Turn off");
     expect(host.textContent).not.toContain("Start Centraid at login");
   });
@@ -195,8 +184,6 @@ describe("GatewayScreen interactions", () => {
         onExportDiagnostics={noExportDiagnostics}
       />
     );
-    // The trouble is stated where it happened — a row naming the subsystem —
-    // and the drill-in row carries the count rather than a badge on a tab.
     expect(host.textContent).toContain("What’s wrong now");
     expect(host.textContent).toContain("Connections");
     expect(host.textContent).toContain("1 in trouble");
@@ -227,8 +214,6 @@ describe("GatewayScreen interactions", () => {
     await act(async () => fiveMin?.click());
     expect(onSeconds).toHaveBeenCalledWith(300);
 
-    // "Alert when unreachable · on · [Turn off]" reads as a sentence, so the
-    // control is the row's own verb rather than a bespoke switch widget.
     const toggle = [...host.querySelectorAll("button")].find(
       (b) => b.textContent === "Turn off"
     );
@@ -236,7 +221,6 @@ describe("GatewayScreen interactions", () => {
     await act(async () => toggle?.click());
     expect(onEnabled).toHaveBeenCalledWith(false);
 
-    // Panel rendering itself is covered by AlertHistoryPanel.test.tsx.
     expect(
       host.querySelector('[data-testid="alert-history-panel"]')
     ).not.toBeNull();
@@ -305,7 +289,6 @@ describe("GatewayScreen interactions", () => {
     expect(jumpBtn).toBeDefined();
     await act(async () => jumpBtn.click());
 
-    // Landed on the Logs tab, search box seeded with the component id.
     const search = host.querySelector<HTMLInputElement>('input[type="search"]');
     expect(search?.value).toBe("connections");
   });
@@ -339,11 +322,6 @@ describe("GatewayScreen interactions", () => {
         onExportDiagnostics={noExportDiagnostics}
       />
     );
-    // Two presses, and the first one commits nothing: "Restart" on the
-    // Identity row opens the page that says what a restart costs, and
-    // "Restart it" on that page is the commit.
-    // The Identity row's verb is "Restart" under the hint that names the page,
-    // so it is not one of the "Look closer" Open rows `openDetail` walks.
     const openRestart = [...host.querySelectorAll("button")].find(
       (b) => b.title === "Read what a restart does, then decide"
     ) as HTMLButtonElement;
@@ -382,8 +360,6 @@ describe("GatewayScreen interactions", () => {
         onExportDiagnostics={noExportDiagnostics}
       />
     );
-    // The Identity row's verb is "Restart" under the hint that names the page,
-    // so it is not one of the "Look closer" Open rows `openDetail` walks.
     const openRestart = [...host.querySelectorAll("button")].find(
       (b) => b.title === "Read what a restart does, then decide"
     ) as HTMLButtonElement;
@@ -397,8 +373,6 @@ describe("GatewayScreen interactions", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    // The refusal is the panel's own fact, beside the verb that earned it -
-    // never thrown out of the click handler.
     expect(host.textContent).toContain(
       "restart is only available for a local gateway"
     );

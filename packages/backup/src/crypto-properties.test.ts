@@ -20,12 +20,6 @@ const plainBytes: fc.Arbitrary<Uint8Array> = fc
   .uint8Array({ minLength: 0, maxLength: 256 })
   .map((a) => new Uint8Array(a));
 
-/**
- * Backup crypto properties (#532 core expansion).
- *
- * Model: AES-256-GCM round-trips; any bit flip or wrong key fails closed;
- * deterministic nonces and HKDF keys are pure functions of their inputs.
- */
 describe("backup crypto property", () => {
   test("encrypt/decrypt round-trips every plaintext under every key", () => {
     fc.assert(
@@ -72,7 +66,6 @@ describe("backup crypto property", () => {
           const idx = salt % blob.length;
           const tampered = new Uint8Array(blob);
           tampered[idx] = (tampered[idx]! ^ 0xff) & 0xff;
-          // If flip produced identical byte (impossible with XOR 0xff on byte), skip.
           if (tampered[idx] === blob[idx]) return;
           expect(() => decrypt(key, tampered)).toThrow(
             /unsupported state or unable to authenticate data/iu
@@ -163,20 +156,8 @@ describe("backup crypto property", () => {
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
-// Mutation-kill campaign (#656 Layer 1C).
-//
-// Laws the seal/derive surface owes FORMAT.md, stated over the whole input
-// domain rather than over one hand-picked vector.
-// ───────────────────────────────────────────────────────────────────────────
-
 describe("backup crypto domain law", () => {
   test("a nonce that is not the format's 12 bytes is refused, not silently used", () => {
-    // `decrypt` recovers the IV by slicing the FIRST 12 bytes back off the
-    // blob. GCM itself accepts other IV lengths, so an encoder that passed one
-    // through would emit a blob whose own reader mis-frames it — the
-    // ciphertext would be unrecoverable rather than merely unreadable. The
-    // length check is the only thing keeping the wire shape self-describing.
     fc.assert(
       fc.property(
         keyBytes,
@@ -200,7 +181,6 @@ describe("backup crypto domain law", () => {
         (key, nonceArr, plain) => {
           const nonce = new Uint8Array(nonceArr);
           const blob = encryptWithNonce(key, nonce, plain);
-          // The wire shape IS `nonce || ct || tag` — the reader depends on it.
           expect([...blob.subarray(0, 12)]).toStrictEqual([...nonce]);
           expect([...decrypt(key, blob)]).toStrictEqual([...plain]);
         }
@@ -210,9 +190,6 @@ describe("backup crypto domain law", () => {
   });
 
   test("every vault gets its own data key and its own dedup key", () => {
-    // Per-vault separation is the whole point of the HKDF info string: two
-    // vaults under one master must not share a key, or a dedup index built for
-    // one would confirm the other's contents.
     fc.assert(
       fc.property(
         keyBytes,
@@ -226,7 +203,6 @@ describe("backup crypto domain law", () => {
           expect([...deriveDedupKey(master, vaultA)]).not.toStrictEqual([
             ...deriveDedupKey(master, vaultB),
           ]);
-          // …and the two key DOMAINS never cross, for any pair of vaults.
           expect([...deriveDataKey(master, vaultA)]).not.toStrictEqual([
             ...deriveDedupKey(master, vaultB),
           ]);
@@ -260,8 +236,6 @@ describe("backup crypto domain law", () => {
     fc.assert(
       fc.property(keyBytes, plainBytes, (dedupKey, plain) => {
         const id = chunkId(dedupKey, plain);
-        // Chunk ids are used as object-store key components, so the value has
-        // to be a printable hex string — not a Buffer, not raw bytes.
         expect(id).toBeTypeOf("string");
         expect(id).toMatch(/^[0-9a-f]{64}$/u);
         expect(chunkId(dedupKey, plain)).toBe(id);
@@ -281,9 +255,6 @@ describe("backup crypto domain law", () => {
   });
 
   test("chunkId is KEYED — the same bytes address differently per vault", () => {
-    // Dedup must not span vaults or epochs, and a provider holding the ids
-    // must not be able to confirm a guessed plaintext without the dedup key.
-    // Both properties follow from the id depending on the key.
     fc.assert(
       fc.property(keyBytes, keyBytes, plainBytes, (keyA, keyB, plain) => {
         fc.pre([...keyA].some((b, i) => b !== keyB[i]));

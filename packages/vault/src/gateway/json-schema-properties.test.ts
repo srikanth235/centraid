@@ -4,12 +4,6 @@ import { fc } from "@centraid/test-kit/fast-check";
 
 import { validateJson } from "./json-schema.js";
 
-/**
- * Vault command JSON-schema properties (#532 core expansion).
- *
- * Model: validateJson is fail-closed for type/required/enum/const/bounds and
- * never invents errors for values that satisfy the declared subset schema.
- */
 describe("vault json-schema property", () => {
   test("integer schema accepts every integer and rejects non-integers", () => {
     const schema = { type: "integer" };
@@ -99,8 +93,6 @@ describe("vault json-schema property", () => {
   });
 
   test("minimum/maximum bounds hold for numbers", () => {
-    // Accept and reject are separate properties so each assertion runs on every
-    // sample the property keeps, rather than one branch of an `if`.
     fc.assert(
       fc.property(
         fc.integer({ min: -100, max: 100 }),

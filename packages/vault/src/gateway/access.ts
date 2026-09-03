@@ -1,9 +1,3 @@
-// S2 — Access: any check may deny; a deny is an outcome, not an exception.
-//
-// The plane is `access` — grants, scopes and policy answering "may this actor
-// reach this data". The member's own act of consenting (provider egress, an
-// automation's approval) is a different thing and keeps the word `consent`.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { nowIso } from "../ids.js";
@@ -19,12 +13,6 @@ export interface GrantRow {
 export interface ScopeRow {
   scope_id: string;
   grant_id: string;
-  /**
-   * ONE DOTTED ENCODING (#916, R10): a bare pack name (`core`) for a
-   * whole-pack scope, `core.event` for one entity — where a nullable
-   * `schema_name`/`table_name` pair said the same thing in two columns and
-   * four different ways across the plane.
-   */
   entity: string;
   verbs: "read" | "read+act" | "act" | "reveal";
   row_filter_json: string | null;
@@ -65,10 +53,8 @@ function intersectFieldMasks(
   return granted.filter((field) => clamp.has(field));
 }
 
-/** `eq`/`in` pins; two scopes pinning one column differently are a forbidden union. */
 const PINNING_OPS = new Set<FilterClause["op"]>(["eq", "in"]);
 
-/** Clamp has no OR — a bounded union is one `in` filter, not two pin scopes. */
 function conflictingPin(
   candidates: readonly ExecutionScopeSpec[]
 ): string | undefined {
@@ -85,10 +71,6 @@ function conflictingPin(
   return undefined;
 }
 
-/**
- * Intersect every covering manifest scope: filters AND, masks intersect, order
- * independent. No covering scope is deny; empty clamp leaves the grant untouched.
- */
 function executionClamp(
   identity: Identity,
   schema: string,
@@ -137,7 +119,6 @@ function activeGrants(
       ? { column: "g.app_id", value: identity.callerId }
       : { column: "g.grantee_party_id", value: identity.partyId };
   if (selector.value === null) return [];
-  // First-match: earliest still-active grant; rowid breaks same-tick ties.
   const rows = vault
     .prepare(
       `SELECT g.grant_id, c.notation AS purpose_notation, g.expires_at
@@ -168,7 +149,6 @@ function scopesFor(
     .all(grantId, schema, `${schema}.${table}`) as unknown as ScopeRow[];
 }
 
-/** Minimization policy: only an explicit table scope covers the table (§03/§07). */
 function requiresExplicitScope(
   vault: DatabaseSync,
   schema: string,
@@ -185,11 +165,6 @@ function requiresExplicitScope(
   return row.n > 0;
 }
 
-/**
- * `entity` is ONE dotted column since #916 (R10): a policy either names a
- * whole schema (`core`) or one entity in it (`core.event`), where the pair of
- * nullable columns before it left "which entity" said four different ways.
- */
 function purposePermitted(
   vault: DatabaseSync,
   schema: string,
@@ -218,7 +193,6 @@ function purposePermitted(
   return true;
 }
 
-/** Owner-direct bypasses grants but still passes policy. */
 export function evaluateAccess(
   vault: DatabaseSync,
   identity: Identity,
@@ -228,13 +202,10 @@ export function evaluateAccess(
   declaredPurpose?: string,
   evaluatedAt = nowIso()
 ): AccessDecision {
-  // Undeclared purpose evaluates as default; policy still applies (#306.4).
   const purpose = declaredPurpose ?? DEFAULT_PURPOSE;
-  // Reveal is read-shaped, act-graded; readonly devices cannot dump secrets (#293).
   if ((verb === "act" || verb === "reveal") && !identity.mayAct) {
     return { decision: "deny", failing: "device is readonly", grantId: null };
   }
-  // On-behalf-of cap: agent cannot exceed the acting owner (#599.7, #726). Before grants.
   if (
     (verb === "act" || verb === "reveal") &&
     identity.onBehalfOfOwner?.mayAct === false
@@ -274,9 +245,7 @@ export function evaluateAccess(
   const explicitOnly = requiresExplicitScope(vault, schema, table, evaluatedAt);
   for (const grant of grants) {
     for (const scope of scopesFor(vault, grant.grant_id, schema, table)) {
-      // Reveal never rides read or act (#293).
       if (!verbAllowed(scope.verbs, verb)) continue;
-      // High-sensitivity tables never ride a whole-schema scope.
       if (explicitOnly && !scope.entity.includes(".")) continue;
       return {
         decision: "allow",

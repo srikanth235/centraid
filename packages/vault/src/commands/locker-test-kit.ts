@@ -1,11 +1,3 @@
-/**
- * The fixture the Locker #872 suites share. A module rather than a copy for
- * the AAD-aware unseal helper: every seal-boundary assertion decrypts a cell
- * with the AAD that cell must have been sealed under, which proves a copy or a
- * history append RESEALED rather than moved a ciphertext to a cell it no
- * longer belongs to.
- */
-
 import { expect } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -76,7 +68,6 @@ export function lockerFixture(): LockerFixture {
       db.vault
         .prepare("SELECT * FROM locker_item WHERE item_id = ?")
         .get(itemId) as Record<string, unknown>,
-    // SQLite rows are null-prototype, so counts are compared as numbers.
     count: (sql: string, ...params: string[]) =>
       Number((db.vault.prepare(sql).get(...params) as { n: number }).n),
     unsealCell: (

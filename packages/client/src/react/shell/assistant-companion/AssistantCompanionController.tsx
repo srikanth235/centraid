@@ -232,9 +232,6 @@ export default function AssistantCompanionController({
 
   useEffect(() => {
     let current = true;
-    // Start in a microtask so test seams (and a partially loaded host bridge)
-    // that throw synchronously are handled by the same fail-quiet path as a
-    // rejected network request.
     void Promise.resolve()
       .then(() => loadHarnesses())
       .then((status) => {

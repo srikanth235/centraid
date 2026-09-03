@@ -170,9 +170,6 @@ describe("test-kit", () => {
     }
   });
 
-  // #656 Layer 1F: these normalizers stand between driver rows and every
-  // `toStrictEqual` in the repo. A normalizer that dropped or renamed a column
-  // would make thousands of assertions quietly weaker, not red.
   test("plainSqliteRow keeps every column and drops only the driver prototype", () => {
     const driverRow = Object.assign(Object.create(null), {
       id: "row-1",

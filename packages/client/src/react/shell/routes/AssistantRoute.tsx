@@ -81,12 +81,8 @@ import scopeBarCss from "./ScopePicker.module.css";
 
 type ReadyAttachment = PendingAttachment & { ref: ConversationAttachmentRef };
 
-/** Wall clock for live transcript rows, at module scope (render-purity rule). */
 const nowMs = (): number => Date.now();
 
-/** Keeps bridge callbacks stable without capturing an old render: a fresh
- *  closure per streamed frame turns state updates into a full picker/transcript
- *  refresh, because AssistantScreen uses the loader as an effect dependency. */
 function useStableEvent<T extends (...args: never[]) => unknown>(
   handler: T
 ): T {
@@ -100,16 +96,11 @@ function useStableEvent<T extends (...args: never[]) => unknown>(
   ) as T;
 }
 
-/** Turns per request (#659): never materialize a whole thread to render the
- *  last screenful. "Show earlier messages" walks back from `oldestSeq`. */
 const TRANSCRIPT_PAGE_TURNS = 40;
 
 interface AssistantRouteProps {
-  /** `undefined` is a fresh, not-yet-created conversation. */
   conversationId?: string;
-  /** Newest first; omitted entirely draws no column. */
   conversations?: readonly AssistantConversationEntry[];
-  /** Differs from `conversationId` only before a fresh thread is created. */
   activeConversationId?: string;
   onSelectConversation?: (id: string) => void;
   onNewChat?: () => void;
@@ -117,10 +108,6 @@ interface AssistantRouteProps {
   onConversationMenu?: (id: string, anchor: ShellMenuAnchor) => void;
 }
 
-// The Assistant copilot: SSE stream, message model and rich-answer renderer,
-// pushed into AssistantScreen as a derived snapshot. The mutable model lives in
-// a ref — the SNAPSHOT, not React state, is the screen's source of truth. The
-// conversation ledger is this route's too (#707).
 export default function AssistantRoute({
   conversationId,
   conversations,
@@ -141,39 +128,30 @@ export default function AssistantRoute({
     disposed: false,
     context: null as { used: number; size: number } | null,
     harnessKind: null as HarnessKind | null,
-    /** Unresolved while a persisted conversation's transcript loads. */
     harnessReady: conversationId === undefined,
     pickerRevision: 0,
     selectedModel: "",
     selectedEffort: "",
     workspaceKind: "vault-data" as "vault-data" | "app" | "draft",
     additionalDirectories: [] as string[],
-    /** The reconnect catch-up baseline. */
     turnCount: 0,
     hasMore: false,
     oldestSeq: undefined as number | undefined,
     loadingEarlier: false,
     loadedTurns: TRANSCRIPT_PAGE_TURNS,
   });
-  // Chosen once, before the first message; from then on the RECORDED scope is
-  // authoritative and every request repeats it, so a conversation reads exactly
-  // one vault for its life. `undefined` falls back to the default scope (#599).
   const ownerScopes = useOwnerScopes();
   const [pickedScope, setPickedScope] = useState<string | undefined>(undefined);
   const activeScopeId = conversationId
     ? conversationScope(conversationId)
     : (pickedScope ?? ownerScopes.primary?.id);
-  // Render-visible mirror of `m.current.currentId !== null`: render may not
-  // read the model ref.
   const [hasThread, setHasThread] = useState(Boolean(conversationId));
-  // Presentation only (docs/platform-gating.md): never branch capability here.
   const compact = useCompactLayout();
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const updateRef = useRef<((s: AssistantSnapshot) => void) | null>(null);
   const suppressSelectRef = useRef<string | null>(null);
   const modelPickerHarnessRef = useRef<HarnessKind>("codex");
   const harnessRequestRef = useRef(0);
-  /** Invalidates stale transcript loads, StrictMode replays included. */
   const threadRequestRef = useRef(0);
   const projectionRef = useRef(createTranscriptProjection());
 
@@ -224,9 +202,6 @@ export default function AssistantRoute({
     }
     m.current.pendingAttachments = [];
   };
-  // One projection per FRAME, not per token: re-projecting the transcript per
-  // event re-renders far more often than the display can paint (#659). The
-  // batched callback reads the live model when it runs, so nothing is dropped.
   const pushNow = (): void => updateRef.current?.(buildSnapshot());
   const pushBatchRef = useRef<FrameBatch | null>(null);
   pushBatchRef.current ??= createFrameBatch(() => pushNow());
@@ -237,19 +212,14 @@ export default function AssistantRoute({
   };
   const setBusy = (b: boolean): void => {
     m.current.busy = b;
-    // Busy gates the composer and Stop, so it must never wait a frame behind
-    // the model — this is the flush seam, not an exception.
     pushSync();
   };
 
-  /** Re-fetch so answers carry turn ids + retry pagers (#420). */
   const reloadTranscript = async (
     id: string,
     request = threadRequestRef.current
   ): Promise<void> => {
     try {
-      // Re-request the reader's CURRENT coverage, not just the newest page:
-      // otherwise finishing a turn discards history they asked for.
       const loaded = await loadConversation(
         ASSISTANT_APP_ID,
         id,
@@ -277,7 +247,7 @@ export default function AssistantRoute({
       }
       pushSync();
     } catch {
-      /* keep the live model if the reload fails */
+      // Intentionally empty.
     }
   };
 
@@ -301,12 +271,9 @@ export default function AssistantRoute({
     m.current.pickerRevision += 1;
     m.current.workspaceKind = "vault-data";
     m.current.additionalDirectories = [];
-    // Clear in THIS frame: a stale answer under a new header is worse than a
-    // frame of blank.
     pushSync();
     if (!id) return;
     try {
-      // Newest page only: a reader opens to the END of a thread (#659).
       const loaded = await loadConversation(
         ASSISTANT_APP_ID,
         id,
@@ -324,8 +291,6 @@ export default function AssistantRoute({
       m.current.harnessKind = loaded.harnessKind ?? null;
       m.current.harnessReady = true;
       m.current.pickerRevision += 1;
-      // A picker request started while unresolved must not overwrite this
-      // persisted binding with the default harness.
       harnessRequestRef.current += 1;
       if (loaded.workspace) {
         m.current.workspaceKind = loaded.workspace.primaryKind;
@@ -344,11 +309,6 @@ export default function AssistantRoute({
     if (isCurrent(id, request)) pushSync();
   };
 
-  /**
-   * PREPEND the page, never rebuild the array: the projection keys each row on
-   * its message OBJECT (a WeakMap), so a rebuild re-keys the whole transcript
-   * mid-scroll. Safe because a `beforeSeq` response carries only that page.
-   */
   const loadEarlier = (): void => {
     const id = m.current.currentId;
     const request = threadRequestRef.current;
@@ -368,8 +328,6 @@ export default function AssistantRoute({
         const older = hydrateMessages(page.messages);
         m.current.msgs = [...older, ...m.current.msgs];
         m.current.hasMore = page.hasMore ?? false;
-        // An empty page cannot advance the cursor: `undefined` would silently
-        // retire the control.
         if (page.oldestSeq !== undefined) m.current.oldestSeq = page.oldestSeq;
         m.current.loadedTurns += TRANSCRIPT_PAGE_TURNS;
       } catch (error) {
@@ -394,7 +352,6 @@ export default function AssistantRoute({
       }
       const localId = crypto.randomUUID();
       const mime = file.type || "application/octet-stream";
-      // A local object-URL thumbnail, so staging needs no round-trip (#420).
       const previewUrl = mime.startsWith("image/")
         ? URL.createObjectURL(file)
         : undefined;
@@ -489,8 +446,6 @@ export default function AssistantRoute({
         connected: harness.connected,
         sessionReady: harness.sessionReady,
         ...(harness.sessionProbePending ? { sessionProbePending: true } : {}),
-        // Breaker health belongs in every picker's hint: a tripped breaker is
-        // what explains a harness that looks connected but refuses the turn.
         hint: [
           harness.subtitle,
           ...(harness.breakerStates ?? []).map(
@@ -560,8 +515,6 @@ export default function AssistantRoute({
     const threadRequest = threadRequestRef.current;
     const conversationAtStart = m.current.currentId;
     const previous = m.current.harnessKind;
-    // Take the cached status fast path; only an unknown/not-ready target earns
-    // the expensive all-harnesses refresh.
     let status = await loadHarnesses();
     const target = status.cards.find((card) => card.kind === harnessKind);
     if (!target?.sessionReady) {
@@ -586,7 +539,6 @@ export default function AssistantRoute({
       );
       return pickerFromStatus(status, previous);
     }
-    // Invalidate passive picker requests before committing an explicit choice.
     harnessRequestRef.current += 1;
     m.current.context = null;
     if (!resolvedTarget.supportsAttachments) {
@@ -616,12 +568,9 @@ export default function AssistantRoute({
     text: string;
     attachments: ReadyAttachment[];
     retryOf?: string;
-    /** Fresh per user send; REUSED on a resend so a retry-after-drop replays
-     *  instead of double-running (#420). */
     idempotencyKey: string;
     appendUser: boolean;
     removeFromIndex?: number;
-    /** Every provider approved so far during THIS send attempt (#567). */
     providerConsent?: string[];
   }): Promise<void> => {
     const conversationIdLocal = m.current.currentId;
@@ -634,7 +583,6 @@ export default function AssistantRoute({
       m.current.msgs.push({
         kind: "user",
         text: opts.text,
-        // Live sends carry a timestamp so the hover clock works before reload.
         createdAt: nowMs(),
         ...(opts.attachments.length
           ? {
@@ -661,8 +609,6 @@ export default function AssistantRoute({
       }
       return ai;
     };
-    // Streams `reasoning.delta`, collapses once the answer begins, and vanishes
-    // on reload because reasoning is not persisted (#420).
     let thinking: {
       kind: "thinking";
       text: string;
@@ -677,8 +623,6 @@ export default function AssistantRoute({
     const byCall = new Map<string, AsstToolCall>();
     let errored = false;
     let requiredProvider: string | undefined;
-    // Distinguishes a mid-turn connection loss (catch up from the ledger) from
-    // a request that never started (plain failure → resend) (#420).
     let sawActivity = false;
 
     const onEvent = (event: TurnStreamEvent): void => {
@@ -690,7 +634,6 @@ export default function AssistantRoute({
           requiredProvider = event.provider;
           return;
         case "notice": {
-          // Non-fatal: the ledger copy restores it after reload.
           m.current.msgs.push({
             kind: "notice",
             level: event.level,
@@ -717,7 +660,6 @@ export default function AssistantRoute({
           const msg = ensureAi();
           const inputTokens = event.inputTokens;
           const outputTokens = event.outputTokens;
-          // Priced server-side; the frozen ledger rollup replaces it on reload.
           const costUsd = event.costUsd;
           msg.usage = {
             ...(inputTokens === undefined ? {} : { inputTokens }),
@@ -773,7 +715,6 @@ export default function AssistantRoute({
               label: location.path.split(/[\\/]/u).at(-1) ?? location.path,
               workspacePath: location.path,
             })),
-            // Keep the live chip identical to the reload path (#567).
             ...(event.artifacts ?? []).map((artifact) => ({
               label: artifact.filename ?? "Harness artifact",
               ...(artifact.hash ? { hash: artifact.hash } : {}),
@@ -804,7 +745,6 @@ export default function AssistantRoute({
           push();
           break;
         }
-        // These event types deliberately have no transcript surface yet.
         case "assistant.start":
         case "phase":
         case "aborted":
@@ -840,7 +780,6 @@ export default function AssistantRoute({
             : {}),
           workspaceKind: m.current.workspaceKind,
           additionalDirectories: m.current.additionalDirectories,
-          // Explicit, never ambient: the turn lands in the thread's vault (#599).
           ...(conversationScope(conversationIdLocal)
             ? { scopeId: conversationScope(conversationIdLocal) }
             : {}),
@@ -864,8 +803,6 @@ export default function AssistantRoute({
       });
       if (!isCurrent(conversationIdLocal, threadRequest)) return;
       if (approved) {
-        // Carry EVERY provider approved this attempt: dropping the first makes
-        // a consent-gated failover loop forever (#567).
         await runTurn({
           ...opts,
           appendUser: false,
@@ -890,13 +827,10 @@ export default function AssistantRoute({
         : msg
     );
     const aborted = m.current.abort?.signal.aborted ?? false;
-    // A mid-turn drop: activity, then no terminal `event: end`. The backend
-    // finished and folded the turn into the ledger, so catch up, never fail.
     const droppedMidTurn =
       !errored && !aborted && sawActivity && (threw !== null || !streamEnded);
 
     if (droppedMidTurn) {
-      // Poll the ledger until the turn settles, then reload it.
       const live = m.current.msgs.find(
         (msg): msg is Extract<AsstMsg, { kind: "ai" }> =>
           msg.kind === "ai" && msg.streaming === true
@@ -925,7 +859,6 @@ export default function AssistantRoute({
       if (settled) {
         await reloadTranscript(conversationIdLocal, threadRequest);
       } else {
-        // Give up: drop the catch-up row and offer a one-tap resend (same key).
         m.current.msgs = m.current.msgs.filter(
           (msg) => !(msg.kind === "ai" && msg.catchingUp)
         );
@@ -950,11 +883,8 @@ export default function AssistantRoute({
         msg.kind === "ai" && msg.streaming === true
     );
     if (live) live.streaming = false;
-    // Threw before any activity → resend bubble.
     if (threw !== null && !errored && !aborted) {
       const message = threw instanceof Error ? threw.message : String(threw);
-      // A rejected shared folder rejects the SELECTION, not the turn: say so
-      // out of band, or resend keeps failing until the chip goes (#567).
       if (/additional director/iu.test(message)) {
         showToast(
           `The gateway rejected a shared folder — remove it and try again. ${message}`
@@ -1019,7 +949,6 @@ export default function AssistantRoute({
     m.current.pendingAttachments = m.current.pendingAttachments.filter(
       (a) => a.state !== "ready"
     );
-    // Fresh key per user send; reused only on resend (#420).
     await runTurn({
       text,
       attachments: ready,
@@ -1028,8 +957,6 @@ export default function AssistantRoute({
     });
   };
 
-  // Re-runs the last user message as a retry; reload restores it as a "<2/2>"
-  // sibling pager.
   const regenerate = (): void => {
     if (m.current.busy) return;
     let answerIdx = -1;
@@ -1057,8 +984,6 @@ export default function AssistantRoute({
       }
     }
     if (!userText) return;
-    // Trim from the first row after the user message so the retry replaces just
-    // this turn. A deliberate NEW attempt, so a fresh idempotency key (#420).
     void runTurn({
       text: userText,
       attachments: [],
@@ -1074,8 +999,6 @@ export default function AssistantRoute({
     const msg = m.current.msgs[messageIndex];
     if (!msg || msg.kind !== "ai" || !msg.error || msg.failedText === undefined)
       return;
-    // Resend REUSES the failed send's idempotency key so a turn that completed
-    // server-side replays instead of double-running (#420).
     void runTurn({
       text: msg.failedText,
       attachments: [],
@@ -1157,7 +1080,6 @@ export default function AssistantRoute({
         if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
       }
       model.pendingAttachments = [];
-      // A queued frame would land after the screen is gone.
       batch?.cancel();
     };
   }, []);
@@ -1170,7 +1092,6 @@ export default function AssistantRoute({
     void selectThread(conversationId ?? null);
   }, [conversationId]);
 
-  // From prefs `assistant.starters`; defaults until they load.
   const [starters, setStarters] = useState<string[]>([...DEFAULT_STARTERS]);
   useEffect(() => {
     let cancelled = false;
@@ -1200,7 +1121,6 @@ export default function AssistantRoute({
       )
       .catch(() => []);
 
-  // Export/Rename need an open (created) conversation.
   const slashCommands: AsstSlashCommand[] = [
     {
       id: "export",
@@ -1254,8 +1174,6 @@ export default function AssistantRoute({
     }
   };
 
-  // Keep the bridge IDENTITY stable — `useStableEvent` still refreshes the
-  // implementations — so memoized rows survive token frames.
   const screenOnReady = useStableEvent(
     (update: (s: AssistantSnapshot) => void): void => {
       updateRef.current = update;
@@ -1282,8 +1200,6 @@ export default function AssistantRoute({
     }).then((directory) => {
       const trimmed = directory?.trim() ?? "";
       if (!trimmed) return;
-      // A bad root is a 400 on the NEXT turn, read as a failed answer: catch
-      // what can be named here (#567).
       const rejection = rejectScopedDirectory(
         trimmed,
         m.current.additionalDirectories

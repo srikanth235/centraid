@@ -67,8 +67,6 @@ describe("grant/fulfillment — roster and ceiling", () => {
         vaultId === AUDIENCE_VAULT ? home.audience : undefined,
       now,
     });
-    // The granter is in the roster and gets no step: a circle containing the
-    // owner never projects their own subject back into their own vault.
     expect(first.steps).toHaveLength(1);
     expect(first.steps[0]).toMatchObject({
       partyId: ravi,
@@ -77,8 +75,6 @@ describe("grant/fulfillment — roster and ceiling", () => {
     });
     expect(audienceTitles(home.audience.vault)).toStrictEqual(["Photo a"]);
 
-    // A party added to the circle later is visited on the next pass with no
-    // re-grant — the roster is recompiled per pass, not snapshotted.
     const later = "2026-08-19T16:00:00.000Z";
     const nila = addParty(home.origin.vault, "Nila", later);
     linkVault(home.origin.vault, nila, AUDIENCE_VAULT, later);
@@ -114,8 +110,6 @@ describe("grant/fulfillment — roster and ceiling", () => {
       grantedBy: home.originBoot.ownerPartyId,
       maxSizeBytes: 16,
     });
-    // The unreachable-seat branch must not write `syncing` before the
-    // ceiling is read: the size check precedes every state move.
     expect(() =>
       fulfillShareGrant({
         origin: home.origin,
@@ -163,7 +157,6 @@ describe("grant/fulfillment — roster and ceiling", () => {
   });
 
   test("a refusal inside a granted circle costs the member the person, not the circle", () => {
-    // A `declined` row MASKS that party's roster membership (#883).
     const home = household();
     const now = nowIso();
     const db = home.origin.vault;
@@ -218,7 +211,6 @@ describe("grant/fulfillment — roster and ceiling", () => {
       now,
     });
     expect(masked.steps.map((step) => step.partyId)).toStrictEqual([ravi]);
-    // Named, not merely absent: the receipt stream records the roster change.
     expect(masked.drift.masked).toStrictEqual([meera]);
     expect(
       listShareGrantsForSubject(db, "core.collection", albumId)
@@ -226,8 +218,6 @@ describe("grant/fulfillment — roster and ceiling", () => {
   });
 
   test("an unchanged projection writes nothing and wakes no device", () => {
-    // Delivery is diff-based: re-projection is a scrub and re-insert the
-    // audience's change stream sees, waking every device it owns.
     const home = household();
     const now = nowIso();
     const ravi = addParty(home.origin.vault, "Ravi", now);
@@ -275,7 +265,6 @@ describe("grant/fulfillment — roster and ceiling", () => {
       state: "delivered",
       unchanged: true,
     });
-    // Nothing moved: row identity, change stream, timestamp.
     expect(
       home.audience.vault
         .prepare("SELECT target_id FROM core_share_origin LIMIT 1")
@@ -288,16 +277,12 @@ describe("grant/fulfillment — roster and ceiling", () => {
     ).toMatchObject({ n: changesAfterFirst });
     expect(
       readFulfillment(home.origin.vault, grant.grantId, AUDIENCE_VAULT)
-      // `updated_at` is the TOUCH TRIGGER's since #916 — every table stamps
-      // it on write — so the delivery instant is what this asserts.
     ).toMatchObject({ deliveredAt: now });
-    // The diff is a skip, never a stop.
     home.origin.vault
       .prepare("UPDATE core_collection SET name = ? WHERE collection_id = ?")
       .run("Trip (final)", albumId);
     const third = pass("2032-01-01T00:00:00.000Z");
     expect(third.steps[0]?.unchanged).toBeUndefined();
-    // Delivered once: the memory is what the notice hangs on.
     expect(third.steps[0]?.firstDelivery).toBeUndefined();
   });
 });

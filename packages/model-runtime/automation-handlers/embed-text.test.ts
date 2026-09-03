@@ -1,13 +1,3 @@
-/*
- * Source-level contract for the text-embedding recognition handler (#781).
- *
- * `packages/server/src/automation/manifest/enricher-templates.test.ts` owns the
- * bundled copy's spine (typed `enrich.upsert_embedding` command, honest
- * failure on an unreadable derivative, and the `payload_json` form of the
- * source-version stamp). This file owns what that suite does not: the
- * model-availability gate, the one-shot query input, cursor seeding and the
- * model-change rewalk, and the column-form stamp.
- */
 import { beforeEach, describe, expect, it } from "vitest";
 
 import handler, { setEmbedTextRuntimeForTests } from "./embed-text.js";

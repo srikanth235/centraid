@@ -56,13 +56,6 @@ function DeviceRow({
 
 type Pairing = { info: PhonePairingDTO; cancel: () => void } | null;
 
-/**
- * Phone settings pane — the "Connect phone" iroh-tunnel pairing surface.
- * Stateful: fetches the tunnel status via the route-supplied `loadStatus`,
- * drives the one-time QR pairing through `beginPairing` (which wires the
- * native `onPhonePaired` subscription), and revokes devices. Reloads after
- * every act. Emits the `cd-phone-*` classes global styles.css targets.
- */
 export default function PhoneScreen({
   loadStatus,
   beginPairing,

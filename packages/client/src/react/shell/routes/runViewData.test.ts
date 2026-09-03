@@ -7,8 +7,6 @@ import {
 } from "./automationLiveMessages.js";
 import { automationTurnMessages, buildRunSnapshot } from "./runViewData.js";
 
-// `vi.mock` is hoisted above the import by vitest, so the gateway stub lands
-// before runViewData.js pulls gateway-client-core's load-time side-effect.
 vi.mock(import("../../../gateway-client.js"), () => ({}));
 
 const row = (): CentraidAutomationRow =>
@@ -80,7 +78,6 @@ describe(buildRunSnapshot, () => {
       nodes,
       new Map()
     );
-    // trigger + node + completion row
     expect(snap.logRows).toHaveLength(3);
     expect(snap.logRows[1]?.label).toBe("fetch");
     expect(snap.logRows[1]?.sub).toBe("tool");
@@ -266,8 +263,6 @@ describe(buildRunSnapshot, () => {
       nodes,
       new Map([[2, "partial…"]])
     );
-    // The live harness text reaches the reader through the projected transcript
-    // and the log rows — the dead `nodes` payload is gone (#541).
     expect(snap.logRows[1]?.response).toBe("partial…");
     expect(snap.messages).toContainEqual(
       expect.objectContaining({ kind: "ai", streaming: true, text: "partial…" })

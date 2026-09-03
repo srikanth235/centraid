@@ -1,12 +1,9 @@
-// The Home springboard's tile model (#708): an INVARIANT header over a body
-// whose structure differs per app. Pure, so selection is testable without a DOM.
 import { apps, formatRelativeTime, identityInitials } from "@centraid/design";
 import type { AppMetaResolved } from "@centraid/design";
 
 import { formatCurrencyMinor } from "../../../capture.js";
 import { HOME_FIRST_MOVE_COPY } from "../../../home-copy.js";
 
-/** Fixed order: freshness decides what is IN a tile, never where it sits. */
 export const HOME_TILE_ORDER = [
   "photos",
   "docs",
@@ -20,7 +17,6 @@ export const HOME_TILE_ORDER = [
 
 export type HomeTileAppId = (typeof HOME_TILE_ORDER)[number];
 
-/** Size follows the app's BODY, never its importance. */
 export type HomeTileSize = "small" | "medium" | "large";
 
 const TILE_SIZE: Record<HomeTileAppId, HomeTileSize> = {
@@ -52,16 +48,11 @@ export interface HomeTileTaskRow {
   done: boolean;
 }
 
-/** NOT A BADGE AND NOT AN ALARM (#834). Both halves are absent rather than
- *  zero — "0 today" is a score. */
 export interface HomeTileTaskGlance {
-  /** `3 today`, or "" when nothing lands today. */
   today: string;
-  /** `next · Sign the transfer, Friday`, or "" when nothing is dated. */
   next: string;
 }
 
-/** `empty` never renders: it is how a tile says it has not earned the grid. */
 export type HomeTileBody =
   | { kind: "photos"; thumbs: readonly string[]; more: number }
   | { kind: "docs"; title: string; excerpt: string }
@@ -75,7 +66,6 @@ export type HomeTileBody =
   | { kind: "tally"; figure: string; caption: string }
   | { kind: "locker"; chip: string; tone: "ok" | "warn" }
   | { kind: "notes"; line: string; at: string }
-  /** A MARKER, not a rendering; the invitation lives in `homeFirstMoves`. */
   | { kind: "empty" };
 
 export interface HomeTileModel {
@@ -242,7 +232,6 @@ function countFor(id: HomeTileAppId, content: HomeTileContent): number | null {
   return totals[id] ?? null;
 }
 
-/** One tile per INSTALLED app: a vault mid-mount must render a shorter grid. */
 export function buildHomeTiles(input: {
   installedIds: readonly string[];
   content: HomeTileContent;
@@ -268,9 +257,6 @@ export function buildHomeTiles(input: {
   });
 }
 
-/** Graded, never binary: a tile is live when it has something to show, and
- *  everything else becomes an INVITATION. ASK ONLY ONCE THE READS HAVE SETTLED
- *  — an unanswered read is "still looking", not "nothing". */
 export function partitionHomeTiles(tiles: readonly HomeTileModel[]): {
   live: readonly HomeTileModel[];
   idle: readonly HomeTileModel[];
@@ -290,7 +276,6 @@ export interface HomeFirstMove {
   kind: "app" | "connectors";
 }
 
-/** Leverage order: `connectors` leads — one decision fills three tiles. */
 const FIRST_MOVE_ORDER = [
   "connectors",
   "photos",
@@ -308,7 +293,6 @@ const CONNECTORS_MOVE = {
   iconKey: "Plug",
 } as const satisfies Pick<HomeFirstMove, "colorKey" | "iconKey">;
 
-/** Every move must land somewhere that can TAKE content. */
 export function homeFirstMoves(
   idle: readonly HomeTileModel[],
   limit = 4
@@ -318,7 +302,6 @@ export function homeFirstMoves(
     const copy = HOME_FIRST_MOVE_COPY[id];
     if (!copy) return [];
     if (id === "connectors") {
-      // Offered while ANY app is empty: its accounts fill several of them.
       return idle.length === 0
         ? []
         : [{ ...CONNECTORS_MOVE, ...copy, id, kind: "connectors" }];

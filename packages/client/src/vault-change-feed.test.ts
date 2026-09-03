@@ -14,11 +14,8 @@ const core = vi.hoisted(() => ({
 vi.mock(import("./gateway-client-core.js"), () => ({
   auth: core.auth,
   doFetch: core.doFetch,
-  // Explicit `Record<string, string>` so the empty branch isn't narrowed to
-  // `{ Authorization?: undefined }`.
   authHeaders: (token: string | undefined): Record<string, string> =>
     token ? { Authorization: `Bearer ${token}` } : {},
-  // Stubbed: `core.auth` is faked here, so there is no cache to invalidate.
   ensureGatewayAuthInvalidation: () => undefined,
 }));
 

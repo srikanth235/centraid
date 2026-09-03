@@ -1,8 +1,3 @@
-// The two honest agent commands of the recommended first boundary (§11):
-// schedule.propose_event and schedule.reschedule_event — each consent-checked
-// and receipted end to end. Command implementations are domain-owned; the
-// gateway hosts and checks them (§10 negative space).
-
 import { canonicalizeRrule } from "@centraid/core/time";
 
 import type { Gateway } from "../gateway/gateway.js";
@@ -31,9 +26,6 @@ const PROPOSE_EVENT: CommandDefinition = {
       calendar_id: { type: "string", minLength: 1 },
       location_place_id: { type: "string" },
       attendee_party_ids: { type: "array", items: { type: "string" } },
-      // RFC 5545 §3.3.10 subset (DAILY/WEEKLY/MONTHLY/YEARLY — see
-      // recurrence/rrule.ts); the series repeats from this event's own
-      // dtstart, so no separate anchor field.
       rrule: { type: "string", minLength: 1 },
       conferencing_uri: { type: "string", minLength: 1 },
       reminders: {
@@ -84,14 +76,7 @@ const PROPOSE_EVENT: CommandDefinition = {
       value: 1,
     },
     {
-      // Full RFC 5545 parsing happens read-side (recurrence/rrule.ts); this
-      // is only a fast, cheap reject of obvious garbage before it's stored.
       name: "rrule_looks_valid",
-      // Accept bare FREQ=… and a legacy/Google RRULE:FREQ=… prefix.
-      // Build the RRULE: prefix with concat so the condition param binder
-      // (which scans for :name tokens case-insensitively) does not treat
-      // the "FREQ" inside the string literal as a named parameter — that
-      // mis-bind made every propose_event fail closed with this message.
       sql: "SELECT (:rrule IS NULL OR :rrule LIKE 'FREQ=%' OR :rrule LIKE ('RRULE:' || 'FREQ=%')) AS n",
       column: "n",
       op: "eq",
@@ -120,14 +105,6 @@ const PROPOSE_EVENT: CommandDefinition = {
   handler: proposeEvent,
 };
 
-/**
- * WHAT `dtstart` MEANS (#916, R2 / review 3.3). 'zoned' says it is a real
- * instant expanded in `start_tz`, so both halves have to be there; an event
- * arriving with no zone is FLOATING — a wall clock — and saying 'zoned'
- * anyway is what the schema's CHECK now refuses. The default follows the
- * input rather than a constant, because the caller who omits a zone is
- * telling us which of the two this is.
- */
 export function eventSemantics(input: {
   recurrence_semantics?: string;
   start_tz?: string;
@@ -183,10 +160,6 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
     input.reminders && input.reminders.length > 0
       ? JSON.stringify(input.reminders)
       : null;
-  // The write is recorded under the ext row's OWN primary key, not the event
-  // id: every downstream sweep (demo purge above all) deletes by the physical
-  // pk, so an event-keyed registration deleted nothing and left the ext row
-  // holding an FK on the event that would not die (#708).
   const eventExtId = ctx.newId();
   ctx.db
     .prepare(
@@ -258,8 +231,6 @@ const RESCHEDULE_EVENT: CommandDefinition = {
     },
   ],
   postconditions: [
-    // :sequence binds from the handler output — reschedules increment
-    // RFC 5545 SEQUENCE on the same identity, never a new row.
     {
       name: "sequence_incremented_and_moved",
       sql: `SELECT count(*) AS n FROM core_event
@@ -271,10 +242,6 @@ const RESCHEDULE_EVENT: CommandDefinition = {
   ],
   idempotency: "retry-safe",
   risk: "medium",
-  // Restates a commitment others may hold (#306 decision 1) — parks
-  // for owner confirmation on every non-owner invocation. Without this the
-  // manifest's and Agenda's "parks for the owner" claim was cosmetic: any
-  // caller with the install-time grant moved the event immediately.
   confirm: true,
   handler: rescheduleEvent,
 };
@@ -318,8 +285,6 @@ const RESPOND_RSVP: CommandDefinition = {
     properties: {
       event_id: { type: "string", minLength: 1 },
       party_id: { type: "string", minLength: 1 },
-      // The one real state machine of the first boundary (§11): RFC 5545
-      // PARTSTAT — needs-action → accepted | declined | tentative.
       partstat: { type: "string", enum: ["accepted", "declined", "tentative"] },
     },
   },
@@ -420,8 +385,6 @@ const CANCEL_EVENT: CommandDefinition = {
   ],
   postconditions: [
     {
-      // RFC 5545: cancellation is a revision of the same identity, so
-      // attendees' clients see a SEQUENCE bump, never a silent vanish.
       name: "cancelled_at_new_sequence",
       sql: `SELECT count(*) AS n FROM core_event
              WHERE event_id = :event_id AND status = 'cancelled' AND sequence = :sequence`,
@@ -431,12 +394,7 @@ const CANCEL_EVENT: CommandDefinition = {
     },
   ],
   idempotency: "retry-safe",
-  // Like reschedule_event: restates a commitment others may hold — above
-  // routine upkeep, so apps (ceiling low) park it for the owner.
   risk: "medium",
-  // Parking rides `confirm` alone (see CommandDefinition.risk) — the
-  // comment above always intended this command to park; without the flag
-  // the cancellation executed immediately under the install-time grant.
   confirm: true,
   handler: cancelEvent,
 };
@@ -466,8 +424,6 @@ function cancelEvent(ctx: HandlerCtx): Record<string, unknown> {
   return { event_id: input.event_id, sequence };
 }
 
-/** ~30-day grace before the lifecycle sweep purges — the window every other
- *  app already carries (#883, ruling O-trash). */
 const EVENT_PURGE_DAYS = 30;
 
 export function eventPurgeAt(now: string): string {
@@ -476,13 +432,6 @@ export function eventPurgeAt(now: string): string {
   return date.toISOString();
 }
 
-/**
- * Agenda's delete, which until #883 did not exist: cancelling an event is an
- * iCalendar STATUS revision that attendees see, not a removal, so a member who
- * wanted a mistaken entry GONE had nothing to reach for. Ruling O-trash gives
- * Agenda the same reversible delete its neighbours carry rather than a second
- * law for one gesture; `cancel_event` keeps its own, different meaning.
- */
 const DELETE_EVENT: CommandDefinition = {
   name: "schedule.delete_event",
   ownerSchema: "schedule",
@@ -556,7 +505,6 @@ const RESTORE_EVENT: CommandDefinition = {
   preconditions: [
     {
       name: "event_trashed",
-      // RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5).
       sql: `SELECT count(*) AS n FROM core_event
              WHERE event_id = :event_id AND deleted_at IS NOT NULL
                AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,

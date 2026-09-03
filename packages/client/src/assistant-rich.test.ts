@@ -1,6 +1,3 @@
-// Unit tests for the assistant rich-answer renderer (#420) against its default
-// class names; assistantRich.test.ts covers the same surface through the
-// shell's scoped CSS-module class map.
 import { describe, expect, it, vi } from "vitest";
 
 import { hydrateRefs, richAnswerHtml, wireCodeCopy } from "./assistant-rich.js";
@@ -148,7 +145,6 @@ describe(wireCodeCopy, () => {
     const writeText = vi
       .fn<ClipboardWriteTestSeam>()
       .mockResolvedValue(undefined);
-    // jsdom has no clipboard by default — inject a minimal stub.
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText },
       configurable: true,

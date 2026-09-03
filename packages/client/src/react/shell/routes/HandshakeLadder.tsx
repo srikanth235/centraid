@@ -8,21 +8,8 @@ import type {
 
 import styles from "./HandshakeLadder.module.css";
 
-// The connectivity-test "handshake ladder" (#382 design doc) — the
-// signature moment of ConnectFlow's test step, also reused standalone by the
-// switcher's "Test connection…" action on an already-registered gateway.
-// A vertical staged checklist; each stage's row is CSS-`animation-delay`
-// staggered (~80ms apart) so they read as arriving one at a time, and the
-// connecting rail's `::before` line draws in with `clip-path` alongside.
-// Every animation is guarded by `prefers-reduced-motion` in the module CSS
-// (`@media (prefers-reduced-motion: reduce)` collapses delays/transforms to
-// an instant, static list) — never gated in JS, so it degrades even if this
-// component re-renders mid-animation.
-
 export interface HandshakeLadderProps {
   stages: readonly ConnectivityStage[];
-  /** Still probing — renders the known stages plus a trailing pulse, no
-   *  fail/retry chrome yet. */
   pending?: boolean;
 }
 

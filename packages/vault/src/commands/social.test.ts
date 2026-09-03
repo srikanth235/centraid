@@ -221,7 +221,6 @@ describe("social", () => {
         "SELECT sender_party_id, sender_handle FROM social_message WHERE thread_id = ?"
       )
       .get(threadId);
-    // The raw handle stays for audit.
     expect(message).toMatchObject({
       sender_party_id: raviId,
       sender_handle: "ravi@example.com",
@@ -252,7 +251,6 @@ describe("social", () => {
     expect(outcome.predicate).toContain("handle_not_claimed_elsewhere");
   });
 
-  /** Starred flags-scheme tag rows on a target (#274). */
   function starredTags(targetType: string, targetId: string) {
     return db.vault
       .prepare(
@@ -286,13 +284,11 @@ describe("social", () => {
         purpose: "dpv:ServiceProvision",
       }).status
     ).toBe("executed");
-    // The nickname is a `people_profile` column.
     expect(
       db.vault
         .prepare("SELECT nickname FROM people_profile WHERE party_id = ?")
         .get(raviId)
     ).toMatchObject({ nickname: "Rav" });
-    // The note is a memo annotation on the canonical party…
     const memo = db.vault
       .prepare(
         `SELECT body_text, author_party_id FROM knowledge_annotation
@@ -303,7 +299,6 @@ describe("social", () => {
       body_text: "met at the wedding",
       author_party_id: boot.ownerPartyId,
     });
-    // …and the favourite a starred tag.
     expect(starredTags("core.party", raviId)).toHaveLength(1);
     expect(
       db.vault
@@ -323,7 +318,6 @@ describe("social", () => {
     expect(setFavorite(1).status).toBe("executed");
     const tags = starredTags("core.party", raviId);
     expect(tags).toHaveLength(1);
-    // Provenance a boolean column never carried.
     expect(tags[0]?.tagged_by_party_id).toBe(boot.ownerPartyId);
     expect(setFavorite(0).status).toBe("executed");
     expect(starredTags("core.party", raviId)).toHaveLength(0);
@@ -343,7 +337,6 @@ describe("social", () => {
     const output = (
       outcome as { output: { message_id: string; thread_id: string } }
     ).output;
-    // The owner appears once, not a UNIQUE collision.
     const participants = db.vault
       .prepare(
         "SELECT party_id FROM social_thread_participant WHERE thread_id = ?"
@@ -409,7 +402,6 @@ describe("social", () => {
       )
       .run(orgId, now, now);
     registerLinkCommands(gw);
-    // The display label rides the People profile's role line (#883)…
     const card = gw.invoke(owner, {
       command: "people.edit_person",
       input: { party_id: raviId, role: "Design lead, Acme Studio" },
@@ -420,7 +412,6 @@ describe("social", () => {
       .prepare("SELECT role FROM people_profile WHERE party_id = ?")
       .get(raviId) as { role: string };
     expect(row.role).toBe("Design lead, Acme Studio");
-    // …while the claim itself is a typed, temporal core.link.
     const link = gw.invoke(owner, {
       command: "core.link_entities",
       input: {
@@ -442,6 +433,4 @@ describe("social", () => {
       .get(raviId, orgId) as { asserted_by: string; valid_to: string | null };
     expect(stored).toMatchObject({ asserted_by: "owner", valid_to: null });
   });
-
-  // `people.add_note` keeps a LIST of notes, not one running memo.
 });

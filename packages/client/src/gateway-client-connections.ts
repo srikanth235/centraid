@@ -1,9 +1,3 @@
-/*
- * Renderer-side client for the broker-owned connections surface (#304).
- * Never call the OAuth callback from here — the gateway serves it. The
- * list/configure routes answer raw snake_case columns, mapped below.
- */
-
 import {
   ROUTES,
   vaultConnectionAuthorizePath,
@@ -21,9 +15,6 @@ import {
   withClientSession,
 } from "./gateway-client-core.js";
 
-// ─── health list ─────
-
-/** Verbatim SQL column names. */
 interface ConnectionWireRow {
   connection_id: string;
   kind: string;
@@ -52,7 +43,6 @@ export interface ConnectionEntry {
   trust: "staged" | "auto-publish";
   createdAt: string;
   lastRunAt: string | null;
-  /** `null` rides the harness-ambient lane instead of a BYO credential. */
   credKind: "oauth2" | "api_key" | null;
   oauthMode: "byo" | "assist" | null;
   provider: string | null;
@@ -97,14 +87,10 @@ export async function listConnections(): Promise<ConnectionEntry[]> {
   return (out.connections ?? []).map(fromWireRow);
 }
 
-/** Pasted into the owner's OAuth developer app; must match the gateway's
- *  callback path. */
 export async function oauthCallbackUri(): Promise<string> {
   const { baseUrl } = await auth();
   return `${baseUrl.replace(/\/$/u, "")}${ROUTES.vaultOAuthCallback}`;
 }
-
-// ─── wizard presets ─────
 
 export interface ConnectionProviderConnector {
   templateId: string;
@@ -136,7 +122,6 @@ export interface ConnectionProviderCapabilities {
   actions: ConnectionProviderActionCapability[];
 }
 
-/** Mirrors `ProviderPreset` in `connection-providers.ts`. */
 export interface ConnectionProviderPreset {
   id: string;
   name: string;
@@ -147,7 +132,6 @@ export interface ConnectionProviderPreset {
   allowedHosts: string[];
   setup: string[];
   connectors: ConnectionProviderConnector[];
-  /** No secrets. Optional for older gateways. */
   capabilities?: ConnectionProviderCapabilities;
 }
 
@@ -191,10 +175,6 @@ export async function listConnectionProviders(): Promise<
   return (await loadConnectionProviderCatalog()).providers;
 }
 
-// ─── configure / detach ─────
-
-/** A credential attaches to the connection row, not the manifest (#304).
- *  `(kind, label)` identifies it; an unknown pair is created. */
 export interface ConfigureConnectionInput {
   kind: string;
   label: string;
@@ -206,8 +186,6 @@ export interface ConfigureConnectionInput {
   clientId?: string;
   clientSecret?: string;
   apiKey?: string;
-  /** The anti-exfiltration host pin the injected fetch enforces; required
-   *  non-empty for every `credKind` but `'none'`. */
   allowedHosts?: string[];
 }
 
@@ -274,8 +252,6 @@ export async function configureConnection(
   };
 }
 
-// ─── pause / resume ─────
-
 export async function setConnectionStatus(input: {
   connectionId: string;
   status: "active" | "paused" | "needs-auth";
@@ -302,10 +278,6 @@ export async function setConnectionStatus(input: {
   return { connectionId: out.connection_id, status: out.status };
 }
 
-// ─── remove ─────
-
-/** Read the `{ok:false, error}` body whatever the HTTP status, so the caller
- *  gets the server's reason and not "HTTP 409". */
 async function readRemoveOutcome(
   res: Response,
   op: string
@@ -332,13 +304,11 @@ async function readRemoveOutcome(
     const body = JSON.parse(text) as { error?: string };
     if (typeof body.error === "string") reason = body.error;
   } catch {
-    // Non-JSON body — keep the raw text above.
+    // Intentionally empty.
   }
   throw new GatewayClientError("conflict", reason);
 }
 
-/** Refused (409) while undecided outbox items or receipted sync history
- *  remain. */
 export async function removeConnection(
   connectionId: string
 ): Promise<{ connectionId: string }> {
@@ -351,16 +321,12 @@ export async function removeConnection(
   return { connectionId: out.connection_id };
 }
 
-// ─── PKCE consent ceremony ─────
-
 export interface BeginConnectionAuthorization {
   authUrl: string;
   state: string;
   redirectUri: string;
 }
 
-/** The caller navigates the owner's browser to `auth_url` — this module opens
- *  no windows. The ceremony finishes server-side; no code reaches here. */
 export async function beginConnectionAuthorization(input: {
   connectionId: string;
   redirectUri?: string;
@@ -398,7 +364,6 @@ export interface AssistOAuthHandoff {
   error?: string;
 }
 
-/** Deliver fragment material to its originating gateway ceremony. */
 export async function completeAssistAuthorization(
   handoff: AssistOAuthHandoff
 ): Promise<{ connectionId: string }> {

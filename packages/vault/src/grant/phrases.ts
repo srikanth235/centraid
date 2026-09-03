@@ -1,8 +1,3 @@
-// The member-facing vocabulary of a grant's life (#883 V-phrases); the
-// gateway's reason prints verbatim, never paraphrased. `withdrawn` is a
-// pair, not a word: the copy may not claim a peer dropped what it holds until
-// the peer says so, so `remove_sent` is never promoted on a timer.
-
 import type { EnforcementLocus } from "./authority-registry.js";
 import { NOTHING_DELIVERED_DETAIL } from "./fulfillment.js";
 import type { ShareFulfillmentRecord } from "./grant-store.js";
@@ -24,7 +19,6 @@ function firstDetail(
   return undefined;
 }
 
-// An empty `fulfillment` is "no vault addressed yet", not "delivered to none".
 export function grantPhrase(input: {
   revokedAt: string | null;
   fulfillment: readonly ShareFulfillmentRecord[];
@@ -32,7 +26,6 @@ export function grantPhrase(input: {
 }): GrantPhrase {
   const rows = input.fulfillment;
   if (input.revokedAt !== null) {
-    // `delivered_at`, never `state`, is what says a copy is out there (#846).
     const owed = rows.filter(
       (row) => row.state !== "removed" && row.deliveredAt !== null
     );
@@ -84,8 +77,6 @@ function withdrawalConfirmedCopy(
 ): string {
   if (locus !== "remote") return revokePromiseCopy(locus);
   const removed = fulfillment.filter((row) => row.state === "removed");
-  // A settled removal clears `delivered_at`, so the detail is the only thing
-  // separating "never a copy" from "gone"; `every` on an empty list agrees.
   if (removed.every((row) => row.detail === NOTHING_DELIVERED_DETAIL))
     return "no copy had been delivered — there was nothing to remove";
   return "every copy it delivered has been removed";
@@ -101,12 +92,6 @@ export function unregisteredVerbCopy(input: {
   return `${input.subjectType} can be shared for ${input.offered.join(" or ")}, not for ${input.verb}; nothing here could keep that promise true`;
 }
 
-/**
- * The one way to reach a person is a linked account (#903). Two ways to lack
- * one, and they are different facts to a member: never linked, or linked and
- * severed. Both refuse the grant, because a standing answer nothing can carry
- * is not an answer — but only one of them is news.
- */
 export function unlinkedAudienceCopy(input: {
   displayName: string;
   severed: boolean;

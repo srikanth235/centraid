@@ -1,9 +1,3 @@
-// Interrupted walks: a mid-pagination 409 that must surface as a rebootstrap, a
-// task the OS kills mid-page resuming at its persisted position without
-// re-walking or moving its commit floor, a committed walk starting over from
-// page one, and a resumed continuation the gateway refuses. The uninterrupted
-// forward walk is `windowed-bootstrap.test.ts`; the doubles both suites share
-// are in `windowed-bootstrap.test-fixtures.ts`.
 import { describe, expect, test, vi } from "vitest";
 
 import { ReplicaRebootstrapRequiredError } from "./errors.js";
@@ -51,7 +45,6 @@ describe(runWindowedBootstrap, () => {
         pullChanges: async (cursor) => emptyBatch(cursor),
       })
     ).rejects.toThrow(ReplicaRebootstrapRequiredError);
-    // Never committed: the partial walk cannot become a readable replica.
     expect(target.committedAt).toBeUndefined();
   });
 
@@ -88,7 +81,6 @@ describe(runWindowedBootstrap, () => {
     };
     const { fetcher, requests } = createFetcher(pages);
     let killAfter: string | undefined = "token-3";
-    // The OS kills the task while page 3 is in flight.
     const killed: ReplicaFetcher = (baseUrl, pathname, init) =>
       killAfter && pathname.includes(`after=${killAfter}`)
         ? Promise.reject(new Error("background task expired"))
@@ -103,7 +95,6 @@ describe(runWindowedBootstrap, () => {
         pullChanges: async (cursor) => emptyBatch(cursor),
       })
     ).rejects.toThrow("background task expired");
-    // Nothing committed, but the position is durable.
     expect(target.committedAt).toBeUndefined();
     expect(target.progress).toStrictEqual({
       schemaEpoch: "schema-1",
@@ -112,8 +103,6 @@ describe(runWindowedBootstrap, () => {
       pages: 2,
     });
 
-    // Reopen. Page one now reads a NEWER snapshot; the walk must still commit
-    // at the ORIGINAL page-one cursor, and must not re-walk pages 1-2.
     pages[""] = {
       protocolVersion: 1,
       vaultId: "vault-a",
@@ -143,7 +132,6 @@ describe(runWindowedBootstrap, () => {
     ).toStrictEqual([]);
     expect(requests.some((path) => path.includes("after=token-3"))).toBe(true);
     expect(target.committedAt).toStrictEqual({ epoch: "replica-1", seq: 10 });
-    // The convergence replay starts at the same original floor.
     expect(pullChanges.mock.calls[0]?.[0]).toStrictEqual({
       epoch: "replica-1",
       seq: 10,
@@ -155,7 +143,6 @@ describe(runWindowedBootstrap, () => {
       "photo-3",
       "photo-4",
     ]);
-    // The commit closed the walk: nothing is left to resume.
     expect(target.progress).toBeUndefined();
   });
 
@@ -195,7 +182,6 @@ describe(runWindowedBootstrap, () => {
 
     await runWindowedBootstrap(options);
 
-    // A full walk again — a completed bootstrap resumes nothing.
     expect(
       requests.filter((path) => path.includes("after=token-2"))
     ).toHaveLength(1);
@@ -204,7 +190,6 @@ describe(runWindowedBootstrap, () => {
 
   test("restarts once when the resumed continuation is refused", async () => {
     const target = createTarget();
-    // A walk that was killed after page one, whose token the gateway now 409s.
     target.progress = {
       schemaEpoch: "schema-1",
       after: "token-stale",
@@ -250,7 +235,6 @@ describe(runWindowedBootstrap, () => {
     expect(
       requests.filter((path) => path.includes("after=token-stale"))
     ).toHaveLength(1);
-    // The restart cleared the stale walk and committed at the FRESH page one.
     expect(target.committedAt).toStrictEqual({ epoch: "replica-1", seq: 10 });
     expect(cursor).toStrictEqual({ epoch: "replica-1", seq: 10 });
     expect(target.rows.map((item) => item.rowId)).toStrictEqual([

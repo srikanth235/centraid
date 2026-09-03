@@ -5,11 +5,7 @@ import Button from "../ui/Button.js";
 
 import styles from "./StartupErrorScreen.module.css";
 
-/**
- * Rendered when the settings READ fails at startup — never the chooser.
- */
 export interface StartupErrorScreenProps {
-  /** Host's message, verbatim; omitted if there wasn't one. */
   detail?: string;
   onRetry: () => Promise<void> | void;
 }
@@ -22,7 +18,6 @@ export default function StartupErrorScreen({
 
   const handleRetry = (): void => {
     setRetrying(true);
-    // Reset only lands when the read failed again — button must work twice.
     void Promise.resolve(onRetry()).finally(() => setRetrying(false));
   };
 

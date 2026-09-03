@@ -1,6 +1,3 @@
-// Audience half of a share (#726): one audience transaction. Origin is
-// unreachable (`WireClosure` is JSON). Projected rows reuse the origin uuidv7.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { VaultShareError } from "../errors.js";
@@ -29,11 +26,6 @@ import { freeId, insert, nullableString } from "./sql.js";
 
 type Projected = Map<string, ProjectedItem>;
 
-// NUL as the separator, written as the `\0` ESCAPE and not as a raw byte: a
-// raw NUL makes git treat this file as binary, so every diff of it reads
-// "Binary files differ" and no reviewer can see the projection change (#916,
-// audit F1). It stays NUL because no item type or id can contain one, so the
-// composite key cannot be forged by a peer-supplied id.
 function keyOf(itemType: ShareableItemType, itemId: string): string {
   return `${itemType}\0${itemId}`;
 }
@@ -142,7 +134,6 @@ function projectMediaAssets(
   assets: readonly MediaAssetRow[],
   into: Projected
 ): void {
-  // Do not project `source_asset_id` (#711): it names an origin asset.
   const byContent = audience.prepare(
     "SELECT asset_id FROM media_asset WHERE content_id = ?"
   );
@@ -270,7 +261,6 @@ function projectCollections(
       "collection_id",
       originId
     );
-    // Cover id is the audience-side content id (sha256 dedupe may remap it).
     const originCover = nullableString(collection.row.cover_content_id);
     const cover = originCover
       ? (into.get(keyOf("core.content_item", originCover))?.contentId ?? null)
@@ -430,18 +420,6 @@ function resolve(into: Projected, item: WireItem): ProjectedItem {
   return projection;
 }
 
-/**
- * A SHARE-ORIGIN ROW FOR EVERY PROJECTED ROW (#916, adversarial BUG-9).
- *
- * This used to stamp provenance on the top-level ITEMS only — the album, the
- * folder — and leave the rows inside them unattributed. That is the revoke
- * evasion: an audience trashed a projected photograph, which removed its
- * collection entry, so removal's closure walk over LIVE membership found
- * nothing to sweep; it deleted the album and its one origin row, and the
- * asset and its content survived for the audience to restore afterwards.
- * Removal sweeps by share_origin now, so every row the projection wrote must
- * carry one.
- */
 function recordLineage(
   audience: DatabaseSync,
   closure: WireClosure,
@@ -472,8 +450,6 @@ function recordLineage(
   };
   for (const row of projected.values())
     stamp(row.itemType, row.itemId, row.originItemId);
-  // The named items last, so a top-level id wins the ON CONFLICT if the two
-  // walks ever disagree about which origin id a row came from.
   for (const item of items)
     stamp(item.itemType, item.itemId, item.originItemId);
 }
@@ -489,13 +465,11 @@ export function projectShareClosure(
   closure: WireClosure,
   options: ProjectShareClosureOptions
 ): ProjectResult {
-  // Fail closed on unknown format. There is no COMPAT rung (pre-1.0).
   if (closure.formatVersion !== CLOSURE_FORMAT_VERSION)
     throw new VaultShareError(
       `unsupported share closure format ${String(closure.formatVersion)}`
     );
   const sharedAt = (options.now ?? Date.now)();
-  // Savepoint when a caller already owns the audience transaction.
   const nested = audience.isTransaction;
   audience.exec(nested ? "SAVEPOINT project_share_closure" : "BEGIN IMMEDIATE");
   let replicaCommit!: ReturnType<typeof beginReplicaCommit>;

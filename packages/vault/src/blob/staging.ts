@@ -1,9 +1,3 @@
-// Blob staging (#296): raw bytes arriving is NOT a vault write — the claiming
-// command is. Both ingress doors land here: hash into local CAS, run the spool
-// pipeline, record a blob_staging row (no receipt, invisible to the ontology).
-// A command promotes the sha in-transaction and mints the receipt; unclaimed
-// rows sweep after a TTL.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import type { VaultDb } from "../db.js";
@@ -20,10 +14,8 @@ import { extractBlobMeta, sniffMediaType } from "./pipeline.js";
 import { upsertContentEmbedding } from "./semantic-contributions.js";
 import { sha256OfBytes } from "./store.js";
 
-/** Staged bytes linger this long before the sweep reclaims them. */
 export const STAGING_TTL_HOURS = 24;
 
-/** The `media.location` vault setting: `keep` (default) or `strip`. */
 export function mediaLocationPolicyForVault(
   vault: DatabaseSync
 ): "keep" | "strip" {
@@ -47,18 +39,12 @@ export function mediaLocationPolicy(db: VaultDb): "keep" | "strip" {
 
 export interface StageBlobOptions {
   bytes: Buffer;
-  /** Caller-declared hint; content sniffing wins. */
   mediaType?: string;
-  /** Original filename, kept for the claim's default title. */
   filename?: string;
-  /** Who staged (device/app/agent) — audit color, not consent. */
   stagedBy?: string;
-  /** Pin past the TTL while an import draft batch references these bytes. */
   heldByBatch?: string;
-  /** Stage as a derivative of `variantOf` — claimed alongside its parent. */
   variant?: DerivativeVariant;
   variantOf?: string;
-  /** Route-layer validation hook; inline variants are always validated. */
   validateDerivative?: boolean;
 }
 
@@ -66,14 +52,10 @@ export interface StagedBlob {
   sha256: string;
   mediaType: string;
   byteSize: number;
-  /** Extracted spool metadata (dimensions, captured_at, text presence…). */
   meta: Record<string, unknown>;
-  /** A live content item already owns these bytes — attach by content_id. */
   existingContentId: string | null;
 }
 
-/** Sole ingress: hash→CAS, sniff, spool metadata, upsert staging row.
- *  Synchronous — the local tier IS the spool — so import calls it mid-parse. */
 export function stageBlobBytes(
   db: VaultDb,
   options: StageBlobOptions
@@ -120,7 +102,6 @@ export function stageBlobBytes(
   const mediaType =
     contribution?.mediaType ??
     sniffMediaType(options.bytes, options.mediaType, options.filename);
-  // GPS gates HERE (#296): 'strip' means coordinates never written downstream.
   const meta = binary
     ? extractBlobMeta(options.bytes, mediaType, {
         keepLocation: mediaLocationPolicy(db) !== "strip",
@@ -131,8 +112,6 @@ export function stageBlobBytes(
     : (db.vault
         .prepare("SELECT content_id FROM core_content_item WHERE sha256 = ?")
         .get(sha256) as { content_id: string } | undefined);
-  // Typed slot + claimed-content association stay ONE mutation: a device
-  // completing its lease must never see slot gone without the derivative row.
   db.vault.exec("SAVEPOINT stage_blob_bytes");
   try {
     db.vault
@@ -164,7 +143,6 @@ export function stageBlobBytes(
         contribution?.textContent ?? null,
         nowIso()
       );
-    // Derivative after parent claimed registers immediately, else TTL reaps it.
     if (options.variant && options.variantOf) {
       const parent = db.vault
         .prepare("SELECT content_id FROM core_content_item WHERE sha256 = ?")
@@ -229,10 +207,6 @@ export function stageBlobBytes(
     throw error;
   }
 
-  // Remote-primary custody starts at this durable local receipt for every
-  // caller; the coordinator coalesces/drains continuously, off the command
-  // transaction, minting nothing itself. Inline contributions have NO CAS
-  // object: a receipt would replicate nonexistent bytes, failing forever.
   if (binary) db.blobTransfers.recordLocalReceipt(sha256, byteSize);
 
   return {
@@ -252,7 +226,6 @@ export interface StagedRow {
   meta_json: string;
 }
 
-/** The staging row a command is about to claim, or null. */
 export function stagedInfoTx(
   vault: DatabaseSync,
   sha256: string
@@ -266,12 +239,9 @@ export function stagedInfoTx(
 }
 
 export interface StagingSweepResult {
-  /** Staging rows past the TTL; unrented bytes reclaimed. */
   expired: string[];
 }
 
-/** TTL sweep: unclaimed/unheld rows drop; bytes leave CAS unless another item
- *  owns the sha (dedup must survive a stale stage). */
 export function sweepBlobStaging(
   db: VaultDb,
   options: { ttlHours?: number; now?: string } = {}
@@ -312,7 +282,6 @@ export function sweepBlobStaging(
   return { expired };
 }
 
-/** Release an import batch's hold (publish or discard) — TTL resumes. */
 export function releaseBatchHold(vault: DatabaseSync, batchId: string): void {
   vault
     .prepare(

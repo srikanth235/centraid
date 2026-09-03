@@ -11,16 +11,12 @@ describe("shell/ambientStatus", () => {
   });
 
   it("says the offline sentence when the gateway is known to be down", () => {
-    // The bug this replaces: "down" and "unknown" both mapped to "Ready", so
-    // the line made an affirmative claim while the gateway was stopped.
     expect(ambientStatusFor({ ...quiet, gatewayStatus: "down" })).toBe(
       OFFLINE_COMMIT_REASON
     );
   });
 
   it("says it is still checking while the verdict is unknown", () => {
-    // On the web host that window is ~31s (three Iroh dials at a 15s timeout
-    // with backoff) — far too long to be calling it "Ready".
     expect(ambientStatusFor({ ...quiet, gatewayStatus: "unknown" })).toBe(
       "Checking…"
     );

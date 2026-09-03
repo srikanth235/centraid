@@ -1,9 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single source of truth for every renderer screen's prop-type contract (issue #325); splitting would scatter one cohesive DTO surface across files that all need to change together
-// Screen prop-type contracts (#325). Each DTO below is the typed props one
-// React screen renders against, kept explicit so a route's derivation and its
-// screen agree field for field. This module must stay self-contained: importing
-// `app-shell-context.ts` or anything reaching ambient globals breaks the React
-// island's tsconfig. `*BridgeProps` is a naming convention; no bridge exists.
 
 import type { ColorKey } from "@centraid/design";
 
@@ -38,7 +33,6 @@ export interface InsightsKpis {
   appsTouched: number;
   unpricedRuns: number;
   unreportedRuns: number;
-  /** p50 run wall clock (ms). ABSENT when no run finished in the window. */
   medianRunMs?: number;
 }
 export interface InsightsDailyPoint {
@@ -47,7 +41,6 @@ export interface InsightsDailyPoint {
   costUsd: number;
   runs: number;
   failedRuns: number;
-  /** Floor: archived days carry a failure count but no failure-cost split. */
   failedCostUsd: number;
 }
 export interface InsightsSourceRow {
@@ -191,7 +184,6 @@ export interface AutomationTemplatesBridgeProps {
   onStartFromScratch: () => void;
 }
 
-// ── Command palette (⌘K) ────────────────────────────────────────────────────
 export interface PaletteTileDTO {
   background: string;
   glyphColor: string;
@@ -254,7 +246,6 @@ export interface PhoneBridgeProps {
   showToast?: (message: string) => void;
 }
 
-// ── Automations overview ────────────────────────────────────────────────────
 export type AuStatusKind =
   | "active"
   | "paused"
@@ -275,10 +266,6 @@ export interface AuOverviewRowDTO {
   lastRunSummary: string | null;
   statusKind: AuStatusKind;
   statusLabel: string;
-  /**
-   * Whether the automation's most recent run succeeded — `null` when it has
-   * never run (the "fleet" row's last-run status dot).
-   */
   lastRunOk: boolean | null;
   nextRunLabel: string | null;
   attentionCount: number;
@@ -313,7 +300,6 @@ export interface AutomationsOverviewBridgeProps {
   loadData: () => Promise<AuOverviewData>;
   onOpenAutomation: (ref: string) => void;
   onOpenRun: (automationId: string, runId: string) => void;
-  /** "New automation" is the app bar's filled commit, not a screen's (#765). */
   onBrowseTemplates: () => void;
   loadSuggestions?: () => Promise<AuOverviewSuggestionDTO[]>;
   onUseSuggestion?: (templateId: string) => void;
@@ -361,7 +347,6 @@ export interface AuConsentDTO {
   grants: GrantDTO[];
 }
 
-// ── Automation editor (instructions-first create/edit form) ────────────────
 export type AuEditorTriggerDTO =
   | { kind: "cron"; expr: string; tz?: string }
   | { kind: "webhook"; id: string | null; pending: boolean }
@@ -469,12 +454,7 @@ export interface AuEditorConnectFormInput {
   clientSecret?: string;
   apiKey?: string;
 }
-// ── The compiler workbench (compile screen) ────────────────────────────────
 
-/**
- * `detail` carries the error when the step failed, otherwise a short one-line
- * preview (assistant text / tool target) — never the whole payload.
- */
 export interface CompileStepDTO {
   itemId: string;
   ordinal: number;
@@ -503,10 +483,6 @@ export interface TurnWatchOutcome {
 export interface AutomationEditorBridgeProps {
   loadData: () => Promise<AutomationEditorData>;
   onSave: (fields: AutomationEditorSaveFields) => Promise<boolean>;
-  /**
-   * It deliberately does NOT navigate: compiling is the editor's own loop, and
-   * being thrown to the run screen leaves a failed compile nowhere to be fixed.
-   */
   onCompile: (enableOnSuccess?: boolean) => Promise<string | null>;
   loadCompileAttempts: () => Promise<CompileAttemptDTO[]>;
   loadTurnSteps: (turnId: string) => Promise<CompileStepDTO[]>;
@@ -551,7 +527,6 @@ export interface AutomationEditorBridgeProps {
   onCancel: () => void;
 }
 
-// ── Automation thread (one long-lived conversation per automation) ─────────
 export interface AutomationThreadHeaderDTO {
   id: string;
   ref: string;
@@ -570,7 +545,6 @@ export interface AutomationThreadHeaderDTO {
   entityTags: Array<{ type: string; id: string }>;
 }
 export type ThreadRunStatus = "ok" | "fail" | "running" | "pending";
-/** Compile turns are NOT thread entries. */
 export type ThreadEntryKind = "run" | "ask";
 export interface ThreadRunDTO {
   runId: string;
@@ -592,7 +566,6 @@ export interface AuPlanStatusDTO {
 export interface AutomationThreadData {
   header: AutomationThreadHeaderDTO;
   consent: AuConsentDTO;
-  /** Executions + asks, never compiles. */
   runs: ThreadRunDTO[];
   plan: AuPlanStatusDTO;
   automationTurns?: boolean;
@@ -601,7 +574,6 @@ export interface AutomationThreadData {
     selected: "deterministic" | "delegate";
     deterministicLabel: string;
     delegate: {
-      /** Null means the delegate step is deliberately unreachable until pinned. */
       model: string | null;
       latency: string;
       consequence: string;
@@ -611,10 +583,6 @@ export interface AutomationThreadData {
 export interface AutomationThreadBridgeProps {
   loadData: () => Promise<AutomationThreadData | null>;
   onBack: () => void;
-  /**
-   * Every "change this automation" affordance resolves to this one call: the run
-   * screen never edits, compiles or revises anything itself.
-   */
   onOpenCompiler: () => void;
   onOpenRun: (runId: string) => void;
   loadTurnTrace: (turnId: string) => Promise<AsstMsgDTO[]>;
@@ -655,21 +623,12 @@ export interface AutomationThreadBridgeProps {
 }
 
 export type SettingsThemeMode = "light" | "dark" | "system";
-/**
- * Dark has exactly one ramp, in parity with light: the card surface is not a
- * choice the owner is asked to make.
- */
 export interface SettingsAppearanceBridgeProps {
   themeMode: SettingsThemeMode;
   onSetThemeMode: (mode: SettingsThemeMode) => void;
-  /**
-   * Decides whether the default cron timezone is offered at all: a schedule
-   * default on a gateway that schedules nothing is an empty promise.
-   */
   automations?: boolean;
 }
 
-// ── Settings: harnesses (Agents console) ────────────────────────────────────
 export type HarnessKind = string;
 export interface HarnessModelDTO {
   id: string;
@@ -723,10 +682,6 @@ export interface HarnessesStatusDTO {
   subsystemHarnessByKey: Partial<Record<ModelSubsystem, HarnessKind>>;
   subsystemHarnessLadders: Partial<Record<ModelSubsystem, HarnessKind[]>>;
 }
-/**
- * Every writer here resolves to the GATEWAY'S OWN TEXT when the write was
- * refused, and `null` when it landed — a refusal is never invisible.
- */
 export type HarnessPrefWrite = Promise<string | null>;
 export interface SettingsHarnessesBridgeProps {
   loadStatus: () => Promise<HarnessesStatusDTO>;
@@ -805,7 +760,6 @@ export interface HomeAutoItemDTO {
   starred: boolean;
 }
 
-// ── Automation run-viewer (SSE, live) ───────────────────────────────────────
 export interface RunLogRowDTO {
   time: string;
   tone: string;
@@ -870,7 +824,6 @@ export interface RunViewBridgeProps {
   onSetMode: (m: "timeline" | "log") => void;
 }
 
-// ── Assistant (streaming copilot) ───────────────────────────────────────────
 export interface AsstToolCallDTO {
   tool: string;
   sql?: string;
@@ -906,10 +859,6 @@ export type AsstMsgDTO =
       msgId?: string;
     }
   | { kind: "tools"; label: string; calls: AsstToolCallDTO[]; msgId?: string }
-  /**
-   * Live-only — reasoning is not persisted in the ledger, so it never comes back
-   * on reload.
-   */
   | { kind: "thinking"; text: string; streaming: boolean; msgId?: string }
   | { kind: "notice"; level: "warn" | "info"; text: string; msgId?: string }
   | {
@@ -952,10 +901,6 @@ export interface AssistantSnapshot {
   context?: { used: number; size: number };
   additionalDirectories?: string[];
   workspaceKind?: "vault-data" | "app" | "draft";
-  /**
-   * The screen exhausts its local render window before asking for the previous
-   * page, so "Show earlier messages" is offered whenever either could yield.
-   */
   canLoadEarlier?: boolean;
   loadingEarlier?: boolean;
   harnessReady?: boolean;
@@ -972,7 +917,6 @@ export interface AsstModelPickerDTO {
     title: string;
     connected: boolean;
     sessionReady: boolean;
-    /** Installed, probe not reported yet — say "checking", never "sign in". */
     sessionProbePending?: boolean;
     hint?: string;
   }>;
@@ -1075,10 +1019,6 @@ export interface AppSettingsSnapshot {
 }
 export interface AppSettingsBridgeProps {
   initialTab?: "appearance" | "vault";
-  /**
-   * False withdraws the Automations tab: on a gateway that mounts no automations
-   * route it would be an empty list that never fills.
-   */
   automationsVisible?: boolean;
   onReady: (update: (s: AppSettingsSnapshot) => void) => void;
   onClose: () => void;

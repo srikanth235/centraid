@@ -2,7 +2,6 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { SEALED_PLACEHOLDER, sealedColumnsOf } from "./sealed.js";
 
-/** Mask sealed cells in-place — the same placeholder the read path shows. */
 export function maskSealed(
   vault: DatabaseSync,
   logical: string,

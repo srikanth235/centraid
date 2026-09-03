@@ -1,6 +1,5 @@
 import { OnlineOnlyError } from "./online-only-error.js";
 
-/** Sticky even when query handler code catches the capability failure. */
 export class OnlineOnlyGuard {
   #error: OnlineOnlyError | undefined;
 

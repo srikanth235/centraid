@@ -6,11 +6,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import AutomationCompileArtifacts from "./AutomationCompileArtifacts.js";
 import type { AutomationCompileArtifactsProps } from "./AutomationCompileArtifacts.js";
 
-// The compiled-plan viewer — band 3 of the compiler rail. It is a pure
-// read surface: two tabs, a gutter-numbered listing, and a copy button. Like
-// the rail that hosts it, it offers no way to edit what it shows, because the
-// compiled plan is an OUTPUT — the instructions field is the only writer.
-
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 
@@ -62,8 +57,6 @@ describe("screens/AutomationCompileArtifacts", () => {
       const code = el.querySelector('[data-testid="compile-artifact"]');
       expect(code?.textContent).toContain("const a = 1;");
       expect(code?.textContent).toContain("export default a;");
-      // Gutter numbers are 1-based, not 0-based — an off-by-one here misreports
-      // every line number in a compiler error the owner is trying to locate.
       expect(code?.textContent).toContain("1");
       expect(code?.textContent).toContain("2");
     });
@@ -97,8 +90,6 @@ describe("screens/AutomationCompileArtifacts", () => {
           new MouseEvent("click", { bubbles: true })
         );
       });
-      // The selection is the rail's state, not this component's — it reports the
-      // intent and re-renders from the prop it is given back.
       expect(onFile).toHaveBeenCalledWith("manifest");
     });
 
@@ -134,7 +125,6 @@ describe("screens/AutomationCompileArtifacts", () => {
       await act(async () => {
         copy?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       });
-      // The file on screen, not whichever one happens to be first.
       expect(writeText).toHaveBeenCalledWith("const a = 1;");
     });
 

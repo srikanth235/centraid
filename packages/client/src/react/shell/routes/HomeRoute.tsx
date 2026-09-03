@@ -35,7 +35,6 @@ export interface HomeRouteProps {
   onAutoSeedStarted?: () => void;
 }
 
-// Home is the springboard and nothing else (#708): a brief read and a tile read.
 export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   const { navigate } = useShellActions();
   const {
@@ -69,18 +68,14 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
     };
   });
 
-  // `persist` deliberately writes vault CONTENT to browser storage (#708).
   const briefQuery = useCachedQuery(
     "home:brief",
     async () => getDailyBrief().catch(() => undefined),
     { persist: true }
   );
 
-  // Imports stay lazy: the gateway client touches `window.CentraidApi` at load.
   const brief =
     briefQuery.state.status === "ready" ? briefQuery.state.data : undefined;
-  // NULL until the brief settles: `useCachedQuery` keys on the KEY, not the
-  // closure, so running early caches a `brief === undefined` tile set (#708).
   const springboardFeed = useCachedQuery(
     briefQuery.state.status === "loading" ? null : "home:springboard",
     async () => {
@@ -93,7 +88,6 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
             })
           )
           .catch((): HomeTileContent => ({})),
-        // Never a refresh: that walks the whole blob CAS, an owner action.
         import("../../../gateway-client-local-storage.js")
           .then((mod) => mod.getLocalStorageUsage())
           .catch((): LocalUsageReportDTO | undefined => undefined),
@@ -102,8 +96,6 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
     },
     {
       persist: true,
-      // Thumbs are `URL.createObjectURL` handles bound to the minting document:
-      // persisted they come back broken, so the stored copy keeps the count.
       toPersisted: (data) => ({
         ...data,
         tileContent: data.tileContent.photos
@@ -127,8 +119,6 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   const autoSeedPending = autoSeedSample;
 
   const refreshAfterSample = useCallback(async () => {
-    // Replica FIRST, refresh SECOND: the seed's rows reach the local replica
-    // only when the change feed's nudge lands, which races the refresh below.
     await syncHomeSampleReplica();
     await Promise.all([
       briefQuery.refresh(),
@@ -147,8 +137,6 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
       .finally(() => setFilling(null));
   }, [sample.seedable, refreshAfterSample]);
 
-  // Seed only after the first Home reads settle, or bootstrap and the demo
-  // writes contend. The ref keeps it one-shot.
   useEffect(() => {
     if (
       !autoSeedSample ||
@@ -214,13 +202,11 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   });
 
   return (
-    // NOT `flush` (#708): the springboard is an ordinary page body.
     <>
       <HomeHealthRibbon signal={ambientSignal} onOpen={navigate} />
       <PageScroll>
         <HomeSpringboard
           conflicts={HOME_CONFLICTS}
-          // Only a SETTLED read may say a tile is empty.
           loading={appsLoading || !settled}
           justFilled={justFilled}
           onConnect={() => navigate({ kind: "connectors" })}

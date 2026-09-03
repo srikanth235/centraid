@@ -21,17 +21,11 @@ import type {
   ApprovalsActivityRowDTO,
 } from "../../screens/ApprovalsScreen.js";
 
-// ── What the frame says about this page (issue #765): count line, bar-deciding state, one status sentence. ──
-// Kept beside the DTO builders: all three derive from the same fetch, so a
-// screen computing them separately could disagree with its own bar.
-
 export interface ApprovalsTally {
-  /** Decisions plus demand-not-news notices. */
   waiting: number;
   grants: number;
 }
 
-/** Above this many waiting items the queue earns its filter chips (`full`). */
 export const APPROVALS_FULL_AT = 4;
 
 export function approvalsState(
@@ -41,14 +35,12 @@ export function approvalsState(
   return tally.waiting > APPROVALS_FULL_AT ? "full" : "ready";
 }
 
-/** The app bar's count line; empty says "nothing waiting", never a zero. */
 export function approvalsCountLine(tally: ApprovalsTally): string {
   const standing = plural(tally.grants, "standing grant", "standing grants");
   if (tally.waiting === 0) return `Nothing waiting · ${standing}`;
   return `${plural(tally.waiting, "decision waiting", "decisions waiting")} · ${standing}`;
 }
 
-/** Status line in ready/full — no inline action: every verb attaches to what it acts on. */
 export function approvalsHealth(tally: ApprovalsTally): {
   label: string;
   detail: string;
@@ -70,7 +62,6 @@ function fieldValue(value: unknown): string {
   return String(value);
 }
 
-/** `artifact.to` may be a bare address or a list — join defensively. */
 function recipientFrom(
   artifact: Record<string, unknown>,
   fallbackTarget: string
@@ -174,7 +165,6 @@ export function buildGrantRow(row: OutboxGrant): ApprovalsGrantRowDTO {
   };
 }
 
-/** Humanize a review-feed verb (#552): locker reveal/fill special-cased; others strip `act ` and sentence-case. */
 export function humanizeActivityLabel(
   action: string,
   decision: string,
@@ -205,7 +195,6 @@ export function truncateObjectId(id: string, max = 12): string {
   return `${id.slice(0, Math.max(4, max - 1))}…`;
 }
 
-/** Activity-row detail: fill origin, or `objectType · truncatedObjectId`, else objectType. */
 export function formatActivityDetail(
   objectType: string,
   objectId: string | null,
@@ -219,7 +208,6 @@ export function formatActivityDetail(
   return objectType;
 }
 
-/** Map one wire `ReviewEntry` to the screen's activity row DTO (#552). */
 export function buildActivityRow(row: ReviewEntry): ApprovalsActivityRowDTO {
   const label = humanizeActivityLabel(
     row.action,
@@ -258,7 +246,6 @@ export function buildActivityRow(row: ReviewEntry): ApprovalsActivityRowDTO {
   };
 }
 
-/** Collapse ADJACENT activity rows sharing verb + object + decision (#552); pure adjacency, no time window. */
 export function collapseAdjacentActivity(
   rows: readonly ApprovalsActivityRowDTO[]
 ): ApprovalsActivityRowDTO[] {
@@ -281,20 +268,12 @@ export function collapseAdjacentActivity(
   return out;
 }
 
-/*
- * Egress-consent ledger rows (#807). The Privacy page reads stored answers,
- * never re-asks: map an answer to words, nothing else — no revoke verb, no
- * inferred state, declines rendered as plainly as grants (a consent surface
- * that hid refusals records only yeses).
- */
-
 const EGRESS_PHRASE: Record<EnrichConsentRecord["egress"], string> = {
   "on-device": "on this device",
   gateway: "on your gateway",
   provider: "at a third-party provider",
 };
 
-/** Capability id as a sentence-cased label, so unknown capabilities still read as English. */
 export function enrichCapabilityLabel(capability: string): string {
   const spaced = capability.replace(/[._-]+/gu, " ").trim();
   if (spaced.length === 0) return capability;

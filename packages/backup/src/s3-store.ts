@@ -1,13 +1,3 @@
-/*
- * `ObjectStore` over a real S3-compatible endpoint via a short-lived `S3Grant`
- * (PROTOCOL.md § Credential grant). A minimal SigV4 signer using only
- * `fetch` + `node:crypto` — no AWS SDK, per the zero-new-dependencies rule.
- *
- * Region: `S3Grant.region` (PROTOCOL.md) is REQUIRED — the provider states
- * its own SigV4 region, and this client never hardcodes one. Cloudflare R2's
- * profile is `"auto"`, itself a valid value.
- */
-
 import { createHash, createHmac } from "node:crypto";
 
 import type { ObjectListEntry, ObjectStore } from "./object-store.js";
@@ -25,7 +15,6 @@ function hmac(key: Buffer, data: string): Buffer {
   return createHmac("sha256", key).update(data, "utf8").digest();
 }
 
-/** AWS SigV4 URI-encoding: unreserved chars pass through, everything else is %XX. */
 function awsUriEncode(input: string, encodeSlashChar: boolean): string {
   let out = encodeURIComponent(input).replace(
     /[!'()*]/gu,
@@ -182,16 +171,9 @@ async function* streamResponseBody(res: Response): AsyncGenerator<Uint8Array> {
 }
 
 export interface S3ObjectStoreOptions {
-  /** Re-issue a fresh grant (new credentials/expiry) for the same target+mode. */
   refreshGrant?: () => Promise<S3Grant>;
 }
 
-/**
- * `ObjectStore` over an S3-compatible bucket, path-style
- * (`{endpoint}/{bucket}/{prefix}{key}`). Chunk/manifest objects are small
- * (<= 4 MiB) per FORMAT.md, so `put` buffers the whole body before signing
- * — SigV4 needs the payload hash up front regardless.
- */
 export class S3ObjectStore implements ObjectStore {
   private grant: S3Grant;
   private readonly refreshGrant: (() => Promise<S3Grant>) | undefined;
@@ -218,9 +200,6 @@ export class S3ObjectStore implements ObjectStore {
     await this.refreshing;
   }
 
-  // Raw (unencoded) path — `signRequest` is the single place that percent-encodes
-  // it, both for the canonical request (signature) and the actual request URL,
-  // so the two can never drift out of sync (a double-encoding bug otherwise).
   private objectPath(key: string): string {
     assertSafeKey(key);
     return `/${this.grant.bucket}/${this.grant.prefix}${key}`;
@@ -276,7 +255,6 @@ export class S3ObjectStore implements ObjectStore {
   }
 
   getStream(key: string): AsyncIterable<Uint8Array> {
-    /** @yields {Uint8Array} Successive byte ranges of the response body, in order. */
     const gen = async function* (
       this: S3ObjectStore
     ): AsyncGenerator<Uint8Array> {

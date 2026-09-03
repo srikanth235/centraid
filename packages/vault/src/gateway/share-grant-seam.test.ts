@@ -1,9 +1,3 @@
-// Grant-plane seam into invoke (#825, G-edit). `routeShareGrantEdit` answers
-// about a container, not a writer; the seam is actor-aware so the owner's own
-// grant never refuses the owner's write. Grants never project — own-seat
-// writes ride the commons rail. `tally.group` is v1's ONE edit subject, so
-// every EDIT claim below stands on a group; the VIEW claims stay on a folder,
-// which the registry still answers for view.
 import { afterEach, describe, expect, test } from "vitest";
 
 import { createGrant, enrollAgent, enrollDevice } from "../bootstrap.js";
@@ -70,8 +64,6 @@ function docsSeat() {
   return { ...seat, folderId, documentId };
 }
 
-/** v1's one EDIT subject. A commons over a group must name that circle's
- *  EXACT roster, so the audience joins the group first. */
 function tallySeat() {
   const seat = ownerSeat(registerTallyCommands);
   return {
@@ -97,7 +89,6 @@ function tallySeat() {
   };
 }
 
-/** One live grant over a subject, always issued by the seat's own owner. */
 function grantTo(
   seat: { origin: VaultDb; originBoot: BootstrapResult },
   audience: { partyId: string },
@@ -115,7 +106,6 @@ function grantTo(
   });
 }
 
-/** Party credential that is not the vault owner (enrolled agent). */
 function audienceAgent(
   seat: { origin: VaultDb; originBoot: BootstrapResult },
   name = "ravi-seat",
@@ -142,8 +132,6 @@ function audienceAgent(
   return { partyId: agent.partyId, credential };
 }
 
-/** A Tally group commons across two real vaults, so a member's own-seat
- *  write has a real rail to ride. */
 function tallyCommonsHome() {
   const home = household();
   const now = nowIso();
@@ -162,7 +150,6 @@ function tallyCommonsHome() {
     deviceKey: home.audienceBoot.deviceKey,
   };
   const memberPartyId = home.audienceBoot.ownerPartyId;
-  // The member is a party at the ORIGIN before the group can name them.
   home.origin.vault
     .prepare(
       `INSERT INTO core_party
@@ -223,7 +210,6 @@ function tallyCommonsHome() {
     memberPartyId,
     memberGateway,
     member,
-    /** One steward write through the real rail: execute, sequence, fan out. */
     write: (command: string, input: Record<string, unknown>) => {
       const answer = executeCommonsCommand({
         steward: home.origin,
@@ -242,7 +228,6 @@ function tallyCommonsHome() {
           `commons write ${command} refused: ${String(answer.decision.reason)}`
         );
     },
-    /** The group's name as the MEMBER's own seat sees it. */
     memberGroupName: () =>
       (
         home.audience.vault
@@ -270,8 +255,6 @@ describe("where an audience's edit is actually enforced", () => {
       grantedBy: fixture.home.originBoot.ownerPartyId,
     });
 
-    // Counted over the SHARE lens: the audience seat has device-kind rows of
-    // its own that are not shares (#883).
     expect(
       fixture.home.audience.vault
         .prepare(
@@ -317,7 +300,6 @@ describe("where an audience's edit is actually enforced", () => {
     const groupId = seat.createGroup([audience.partyId]);
     grantTo(seat, audience, { type: "tally.group", id: groupId }, "edit");
 
-    // Nowhere to land is refused, not applied privately (#750).
     expect(
       seat.gateway.invoke(audience.credential, {
         command: "tally.rename_group",
@@ -338,7 +320,6 @@ describe("the grant plane's seam into invoke", () => {
     const audience = audienceAgent(seat);
     grantTo(seat, audience, { type: "docs.folder", id: seat.folderId }, "view");
 
-    // Router refuses the container; the seam asks who is writing first.
     const outcome = seat.gateway.invoke(seat.owner, {
       command: "core.edit_document",
       input: { document_id: seat.documentId, body_text: "Amended" },
@@ -357,7 +338,6 @@ describe("the grant plane's seam into invoke", () => {
     });
     expect(outcome).toMatchObject({
       status: "denied",
-      // Engine sentence, not a seam paraphrase.
       reason: `core.edit_document writes into docs.folder ${seat.folderId}, which is shared for view only`,
     });
   });
@@ -384,17 +364,12 @@ describe("the grant plane's seam into invoke", () => {
       },
     });
 
-    // The seam sees an introducing command, not only a write inside.
     expect(
       seat.gateway.invoke(viewer.credential, expense("Cab"))
     ).toMatchObject({
       status: "denied",
       reason: `tally.add_expense writes into tally.group ${groupId}, which is shared for view only`,
     });
-    // tally.group is the ONE container whose audience may co-contribute in v1
-    // (G-edit), so an edit-bearing audience is refused nothing and the add
-    // lands on the rail. The refusal every OTHER container still answers is
-    // unit-pinned on `shareGrantEditRefusal` (grant/fulfillment-edit.test.ts).
     expect(
       seat.gateway.invoke(editor.credential, expense("Hotel")).status
     ).toBe("executed");
@@ -443,12 +418,10 @@ describe("the grant plane's seam into invoke", () => {
     const opCount = () =>
       seat.commonsOps(commons.grantId, "tally.rename_group");
 
-    // Container-level edit grant is Ravi's; Asha is still view-only.
     expect(seat.gateway.invoke(viewer.credential, rename)).toMatchObject({
       status: "denied",
       reason: `tally.rename_group writes into tally.group ${groupId}, which is shared for view only`,
     });
-    // Seam refusal is before the rail; owner-fallback never sequences.
     expect(opCount()).toBe(0);
 
     expect(seat.gateway.invoke(editor.credential, rename).status).toBe(

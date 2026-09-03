@@ -40,7 +40,6 @@ describe("rrule", () => {
   });
 
   test("expandRrule WEEKLY+BYDAY lands only on named weekdays", () => {
-    // 2026-01-05 is a Monday.
     const hits = expandRrule(
       "FREQ=WEEKLY;BYDAY=MO,WE,FR",
       "2026-01-05T09:00:00.000Z",
@@ -91,9 +90,6 @@ describe("rrule", () => {
   });
 
   test("expandRrule parses UNTIL in RFC basic form (ICS verbatim)", () => {
-    // ICS ingest stores UNTIL as `20260703T000000Z`, which Date.parse rejects
-    // — a bound read through it degrades silently to unbounded. Basic and
-    // extended must clip the series identically.
     const basic = expandRrule(
       "FREQ=DAILY;UNTIL=20260703T000000Z",
       "2026-07-01T00:00:00.000Z",
@@ -115,9 +111,6 @@ describe("rrule", () => {
     ).toStrictEqual(basic);
   });
 
-  // Shared parity fixtures — the SAME rules + windows are asserted against the
-  // native expansion in apps/mobile agenda/recurrence.test.ts. These expected
-  // occurrence sets are the single ground truth both projections must produce.
   const PARITY: readonly {
     name: string;
     rrule: string;
@@ -251,8 +244,6 @@ describe("rrule", () => {
   test.each(PARITY)(
     "server projection matches the native expansion: $name",
     (fixture) => {
-      // maxInstances pinned to the native 200 so both projections share the walk
-      // guard; every fixture fits well inside it.
       expect(
         expandRrule(fixture.rrule, fixture.start, fixture.from, fixture.to, 200)
       ).toStrictEqual(fixture.expected);

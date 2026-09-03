@@ -1,10 +1,3 @@
-/*
- * Settings → Access, the one dashboard's data (#883, ruling V-dashboard).
- *
- * The claims are the two the ruling turns on: every principal kind is one lens
- * over ONE table, and an unreadable plane is never drawn as an empty one.
- */
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -88,7 +81,6 @@ describe("the Access lens", () => {
       ["harnesses", 1],
       ["devices", 1],
     ]);
-    // The promise each group can keep is the vault's sentence, verbatim.
     expect(lens.loci.boundary).toBe(
       "this device is refused at the door from now on; anything already on it stays on it"
     );
@@ -113,7 +105,6 @@ describe("the Access lens", () => {
     expect(lens.status).toBe("ready");
     if (lens.status !== "ready") return;
     expect(lens.groups[0]!.answers).toHaveLength(1);
-    // No sentence is invented in the vault's place.
     expect(lens.loci).toStrictEqual({});
   });
 
@@ -135,7 +126,6 @@ describe("the Access lens", () => {
     if (lens.status !== "ready") return;
     const audiences = lens.groups[0]!.answers;
     expect(audiences).toHaveLength(1);
-    // A refusal is an ANSWER, not an absent grant (ruling V-table).
     expect(audiences[0]!.decision).toBe("declined");
   });
 

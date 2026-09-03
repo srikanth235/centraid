@@ -1,14 +1,3 @@
-/*
- * Sealed values as seen from OUTSIDE a vault (#630): an export artifact is
- * rows, not a database, so the seal audit that decides whether an import can
- * proceed has to read the artifact itself — before a single row is written.
- *
- * The registry is rebuilt from the artifact, never from the target: an
- * incoming bundle's ext-band apps declare their own sealed columns in the
- * `access.app_ext` rows it carries, and a fresh target knows nothing about
- * them yet.
- */
-
 import {
   SEALED_COLUMNS,
   isSealedValue,
@@ -17,11 +6,8 @@ import {
 import type { VaultExport } from "./portability.js";
 
 export interface SealedArtifactAudit {
-  /** Sealed values sitting in a DECLARED sealed column. */
   cells: number;
-  /** Sealed values inside a staged import row's declared payload field. */
   staged: number;
-  /** `entity.column` of sealed values nothing in the registry accounts for. */
   unexpected: string[];
 }
 
@@ -29,7 +15,6 @@ export function sealedArtifactTotal(audit: SealedArtifactAudit): number {
   return audit.cells + audit.staged;
 }
 
-/** Sealed columns per logical entity, canonical plus the artifact's ext band. */
 function sealedColumnsFromArtifact(
   artifact: VaultExport
 ): Map<string, readonly string[]> {
@@ -37,8 +22,6 @@ function sealedColumnsFromArtifact(
     Object.entries(SEALED_COLUMNS)
   );
   for (const row of artifact.tables["access.app_ext"] ?? []) {
-    // Only the live band is exported and re-sealed; a draft ext row carrying a
-    // sealed value would land in `unexpected`, which is the honest answer.
     if (row["band"] !== "live") continue;
     const appId = row["app_id"];
     const table = row["table_name"];
@@ -51,17 +34,12 @@ function sealedColumnsFromArtifact(
       const columns = sealed.filter((c): c is string => typeof c === "string");
       if (columns.length > 0) map.set(`ext.${appId}.${table}`, columns);
     } catch {
-      // A malformed spec declares nothing; its cells surface as `unexpected`.
+      // Intentionally empty.
     }
   }
   return map;
 }
 
-/**
- * Every sealed value the artifact carries, classified. `unexpected` is the
- * load-bearing half: a sealed value the re-seal sweep would not reach must
- * refuse the import rather than ride in as permanent GCM garbage.
- */
 export function auditArtifactSealedValues(
   artifact: VaultExport
 ): SealedArtifactAudit {
@@ -91,11 +69,6 @@ function auditStagedPayload(
   value: unknown
 ): void {
   if (typeof value !== "string") return;
-  // The guard is LOAD-BEARING, and the type has to admit it: `JSON.parse` of a
-  // bundle's `payload_json` returns `unknown`, and a portable import can carry
-  // the four bytes `null` (or an array — `typeof [] === "object"`, whose keys
-  // would be audited as numeric "field" names). Both are staged rows this
-  // audit has nothing to say about, not crashes on `Object.entries`.
   let parsed: unknown;
   try {
     parsed = JSON.parse(value);

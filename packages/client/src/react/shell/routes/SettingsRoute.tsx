@@ -52,10 +52,6 @@ import { removeVault, saveVault } from "./vaultModals.js";
 
 import styles from "./SettingsRoute.module.css";
 
-// Settings — a category rail beside one page at a time. Pairing a phone lives
-// in the account menu; component health and logs belong to `GatewayScreen`, so
-// two "Gateway" surfaces never share a name.
-
 export type SettingsPageId =
   | "appearance"
   | "vault"
@@ -67,16 +63,9 @@ interface PageDef {
   id: SettingsPageId;
   label: string;
   icon: IconName;
-  /** Three words, on the NAV ROW: a rail that names only its pages makes the
-   *  member open each one to find where a setting lives. */
   subtitle: string;
 }
 
-/*
- * Mark rules: no two rows share a glyph; a row wears the glyph its subject wears
- * elsewhere; neighbours stay distinguishable at 15px; and a glyph the shell
- * spends as a VERB (`Eye`) is never available for a category.
- */
 const PAGES: readonly PageDef[] = [
   {
     id: "appearance",
@@ -91,7 +80,6 @@ const PAGES: readonly PageDef[] = [
     subtitle: "Name, colour, copies",
   },
   {
-    // ACCESS, not "Sharing": harnesses and own devices are not shares (#883).
     id: "access",
     label: "Access",
     icon: "Key",
@@ -110,12 +98,7 @@ const PAGES: readonly PageDef[] = [
     subtitle: "What is read, and where",
   },
 ];
-// Five pages: a page nothing routes to is not a page. Profile and Appearance
-// are ONE page, keeping the `appearance` id so old deep links land;
-// `resolveSettingsPage` collapses unknown ids onto the first page.
 
-// EVERY PAGE AUTO-SAVES, so the note is the modal's, never a per-page badge.
-// Destructive acts are not edits: they keep their verbs.
 const AUTO_SAVED_NOTE = "Auto-saved";
 
 function isSettingsPageId(id: string | undefined): id is SettingsPageId {
@@ -131,12 +114,8 @@ export function resolveSettingsPage(
 export interface SettingsRouteProps {
   prefs: AppearancePrefs;
   setPrefs: (patch: Partial<AppearancePrefs>) => void;
-  // Loosely typed so a deep link needs no import of the page union; validated
-  // against `PAGES`.
   initialPage?: string;
   onClose?: () => void;
-  /** The UNGUARDED act (#665): the primitive is connection-wide, so the confirm
-   *  lives here, where the siblings are known by name. */
   onDisconnectVault: (gatewayId: string) => Promise<boolean>;
 }
 
@@ -175,9 +154,6 @@ export default function SettingsRoute({
   }, [onClose]);
   const def = PAGES.find((p) => p.id === page);
   const { showToast, navigate, confirm } = useShellActions();
-  // Scoped to the ACTIVE vault (#382). `vaultNonce` re-fetches after a save and
-  // on any vault/gateway broadcast: switching vaults with this page open
-  // re-seeds the form rather than editing the wrong vault.
   const [vaultNonce, setVaultNonce] = useState(0);
   const activeVault = useAsyncData(loadActiveVaultData, [vaultNonce]);
   const refreshVault = (): void => setVaultNonce((n) => n + 1);
@@ -223,8 +199,6 @@ export default function SettingsRoute({
     });
   };
 
-  /* Rows come from the replica through People's scope; the per-locus revoke
-     sentences come from the grant registry, in the vault's own words (#883). */
   const loadAccess = useCallback(
     async () =>
       loadAccessLens(await accessReader(), await accessRegistryReader()),
@@ -244,8 +218,6 @@ export default function SettingsRoute({
       return !next;
     }
   };
-  // REMOTE connections only: nothing to disconnect from the local gateway.
-  // `disconnectConfirmCopy` owns the sibling wording (#665).
   const disconnectActiveVault = (): void => {
     if (activeVault.status !== "ready" || !activeVault.data) return;
     const { connection, name: vaultName } = activeVault.data;

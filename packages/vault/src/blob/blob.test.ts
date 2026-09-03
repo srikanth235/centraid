@@ -1,8 +1,5 @@
 import { rmSync } from "node:fs";
 // governance: allow-repo-hygiene file-size-limit pre-existing cohesive blob regression suite; decomposition is outside issue #417
-// Blob custody units (#296): the stores, the spool pipeline, and the
-// two-tier custody facade — including the S3 driver against an in-process
-// fake S3 endpoint (SigV4-signed requests over real HTTP, no SDK).
 import http from "node:http";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
@@ -22,8 +19,6 @@ const PNG_BYTES = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
   "base64"
 );
-
-// ────────── local stores ──────────
 
 let tmp: string;
 describe("blob", () => {
@@ -69,8 +64,6 @@ describe("blob", () => {
       /not a sha256/u
     );
   });
-
-  // ────────── spool pipeline ──────────
 
   test("sniffing: magic bytes beat the declared type, declared beats extension", () => {
     expect(sniffMediaType(PNG_BYTES, "application/octet-stream", "x.bin")).toBe(
@@ -160,15 +153,8 @@ describe("blob", () => {
     ).toBeUndefined();
   });
 
-  /**
-   * Build a minimal JPEG whose APP1/EXIF block carries DateTimeOriginal
-   * 2024:06:01 10:30:00 and GPS 37°30'N 122°15'W — offsets computed, not
-   * hand-counted, so the fixture stays honest.
-   */
   function exifJpeg(): Buffer {
     const entrySize = 12;
-    // TIFF layout: header(8) → IFD0(2 entries) → ExifIFD(1 entry) → GPSIFD(4
-    // entries) → data area (ascii + rationals).
     const ifd0At = 8;
     const exifIfdAt = ifd0At + 2 + 2 * entrySize + 4;
     const gpsIfdAt = exifIfdAt + 2 + 1 * entrySize + 4;
@@ -198,15 +184,12 @@ describe("blob", () => {
         tiff.write(inlineAscii, at + 8, "latin1");
       }
     };
-    // IFD0: pointers to the Exif and GPS IFDs.
     tiff.writeUInt16LE(2, ifd0At);
     entry(ifd0At + 2, 0x8769, 4, 1, exifIfdAt);
     entry(ifd0At + 2 + entrySize, 0x8825, 4, 1, gpsIfdAt);
-    // Exif IFD: DateTimeOriginal (ascii lives in the data area).
     tiff.writeUInt16LE(1, exifIfdAt);
     entry(exifIfdAt + 2, 0x9003, 2, dto.length, dtoAt);
     tiff.write(dto, dtoAt, "latin1");
-    // GPS IFD: refs inline, coordinates as 3 rationals each.
     tiff.writeUInt16LE(4, gpsIfdAt);
     entry(gpsIfdAt + 2, 0x0001, 2, 2, 0, "N\0");
     entry(gpsIfdAt + 2 + entrySize, 0x0002, 5, 3, latAt);
@@ -240,8 +223,6 @@ describe("blob", () => {
     ]);
   }
 
-  // ────────── custody: two tiers, encryption, reconcile ──────────
-
   test("sealBlob/unsealBlob round-trip and refuse a swapped address", () => {
     const key = Buffer.alloc(32, 7);
     const bytes = Buffer.from("secret media");
@@ -268,8 +249,6 @@ describe("blob", () => {
     const a = custody.ingestSync(Buffer.from("replicate me")).sha256;
     await expect(custody.replicate()).resolves.toStrictEqual([a]);
     expect(remoteStore.hasSync(a)).toBe(true);
-    // An orphan object nothing claims deletes on reconcile; a missing live
-    // sha is reported, never invented.
     const orphan = sha256OfBytes(Buffer.from("orphan"));
     remoteStore.putSync(orphan, Buffer.from("orphan"));
     const ghost = sha256OfBytes(Buffer.from("ghost"));
@@ -282,9 +261,6 @@ describe("blob", () => {
   test("a retained-snapshot GC root is pinned, never deleted as an orphan (issue #436 §6)", async () => {
     const remoteStore = new MemoryBlobStore();
     const { custody } = makeCustody({ store: remoteStore });
-    // `pinned` lives only in the remote CAS — the live vault model no longer
-    // claims it, but a retained snapshot still references it. `stray` is a true
-    // orphan nothing references at all.
     const pinned = sha256OfBytes(Buffer.from("recovery-window byte"));
     const stray = sha256OfBytes(Buffer.from("genuine orphan"));
     remoteStore.putSync(pinned, Buffer.from("recovery-window byte"));
@@ -362,7 +338,6 @@ describe("blob", () => {
     await custody.replicate();
     const remoteRaw = remoteStore.getSync(sha)!;
     expect(remoteRaw.equals(bytes)).toBe(false); // ciphertext at rest remotely
-    // Simulate a fresh device: local tier lost the bytes.
     local.deleteSync(sha);
     const opened = await custody.open(sha);
     expect(opened?.equals(bytes)).toBe(true);
@@ -378,19 +353,10 @@ describe("blob", () => {
     expect(reread.getSync(sha)?.toString()).toBe("take me home");
   });
 
-  // ────────── the S3 driver against a fake S3-compatible endpoint ──────────
-
   interface FakeS3 {
     url: string;
     objects: Map<string, Buffer>;
     authHeaders: string[];
-    /**
-     * Every request recorded for the ranged-read / single-flight acceptance
-     * tests (#405 §1/§4): method, object key, and the raw Range header
-     * (empty string = a whole-object fetch). A framed ranged read must show up
-     * here as (trailer + directory + covering-frame) ranges and NEVER a
-     * rangeless GET of the object.
-     */
     requests: { method: string; key: string; range: string }[];
     close: () => Promise<void>;
   }
@@ -423,7 +389,6 @@ describe("blob", () => {
           if (!found) return void res.writeHead(404).end();
           res.writeHead(200, { "content-length": String(found.length) }).end();
         } else if (req.method === "GET" && key === "") {
-          // ListObjectsV2 (no pagination in the fake).
           const prefix = url.searchParams.get("prefix") ?? "";
           const keys = [...objects.keys()].filter((k) => k.startsWith(prefix));
           res.writeHead(200, { "content-type": "application/xml" });
@@ -490,7 +455,6 @@ describe("blob", () => {
       await store.delete(sha);
       await expect(store.has(sha)).resolves.toBe(false);
       await expect(store.get(sha)).resolves.toBeNull();
-      // Every request carried a SigV4 Authorization header.
       expect(fake.authHeaders.length).toBeGreaterThan(0);
       for (const h of fake.authHeaders) {
         expect(h).toMatch(/^AWS4-HMAC-SHA256 Credential=AK\//u);
@@ -503,9 +467,6 @@ describe("blob", () => {
   test("s3 driver: throttleBytesPerSec paces sustained PUT throughput (issue #367 §C7)", async () => {
     const fake = await startFakeS3();
     try {
-      // A tight budget relative to the payload: each put is ~1/4 of the whole
-      // per-second budget, so 8 sequential puts (2 seconds of bytes) must take
-      // meaningfully longer than an unthrottled run of the same puts.
       const bytes = Buffer.alloc(4096, 7);
       const rate = bytes.length * 4; // 4 puts/sec worth of budget
 
@@ -550,17 +511,11 @@ describe("blob", () => {
       await putThrottled(0);
       const throttledMs = Date.now() - startThrottled;
 
-      // 8 puts at 4 puts/sec worth of budget should take roughly ~1.75s of
-      // waiting (the bucket starts full, so the first ~4 are free) — assert
-      // it's clearly slower than the unthrottled run, generously bounded to
-      // avoid flaking on a loaded CI box.
       expect(throttledMs).toBeGreaterThan(unthrottledMs + 500);
     } finally {
       await fake.close();
     }
   });
-
-  // ────────── issue #405: framed rangeable seal + single-flight ──────────
 
   function s3RemoteTier(
     fake: FakeS3,
@@ -590,31 +545,21 @@ describe("blob", () => {
       const local = new MemoryBlobStore();
       const custody = new BlobCustody(local, () => remote);
 
-      // 200 bytes over 32-byte frames = 7 frames; random so nothing compresses
-      // the frame lengths into a surprise.
       const plain = randomBytesOf(200);
       const sha = custody.ingestSync(plain).sha256;
       await custody.replicate();
 
-      // A fresh device: local lost the bytes. Range spans a single interior
-      // frame (bytes 40..60 → frame index 1 only).
       local.deleteSync(sha);
       fake.requests.length = 0;
       const slice = await custody.open(sha, { start: 40, end: 60 });
       expect(slice?.equals(plain.subarray(40, 61))).toBe(true);
 
-      // Prove it: every GET carried a Range header and NO GET fetched the whole
-      // object. For a single-frame range that's exactly three GETs — the trailer
-      // suffix, the directory, and the one covering frame — never the 200-byte
-      // object whole (which would be a rangeless GET).
       const gets = fake.requests.filter(
         (r) => r.method === "GET" && r.key.endsWith(sha)
       );
       for (const g of gets) expect(g.range).toMatch(/^bytes=\d+-/u);
       expect(gets.some((g) => g.range === "")).toBe(false);
       expect(gets).toHaveLength(3); // trailer + directory + 1 covering frame
-      // The blob was NOT promoted whole into local (a partial read can't verify
-      // the whole-blob sha — #405 §1).
       expect(local.hasSync(sha)).toBe(false);
     } finally {
       await fake.close();
@@ -641,8 +586,6 @@ describe("blob", () => {
       const [a, b] = await Promise.all([custody.open(sha), custody.open(sha)]);
       expect(a?.equals(plain)).toBe(true);
       expect(b?.equals(plain)).toBe(true);
-      // Coalesced: exactly ONE whole-object GET reached the provider, and the
-      // read-through promoted the verified bytes back into local.
       const gets = fake.requests.filter(
         (r) => r.method === "GET" && r.key.endsWith(sha)
       );
@@ -658,8 +601,6 @@ describe("blob", () => {
     const fake = await startFakeS3();
     try {
       const key = Buffer.alloc(32, 0x55);
-      // threshold 0 forces the streaming seal path; FsBlobStore local supplies
-      // openReadStreamSync, S3BlobStore remote supplies putStream.
       const remote = s3RemoteTier(fake, "streamed", {
         encryptKey: key,
         frameSize: 16,
@@ -673,12 +614,10 @@ describe("blob", () => {
       await expect(custody.replicate()).resolves.toStrictEqual([sha]);
       local.deleteSync(sha);
 
-      // Whole read-through reconstructs the full blob and verifies its sha.
       const whole = await custody.open(sha);
       expect(whole?.equals(plain)).toBe(true);
       local.deleteSync(sha); // drop the promoted copy, force remote again
 
-      // Ranged read straddling a frame boundary (bytes 30..48 → frames 1..3).
       const slice = await custody.open(sha, { start: 30, end: 48 });
       expect(slice?.equals(plain.subarray(30, 49))).toBe(true);
     } finally {
@@ -687,7 +626,6 @@ describe("blob", () => {
   });
 });
 
-/** Deterministic-enough incompressible payload for range-offset assertions. */
 function randomBytesOf(n: number): Buffer {
   const b = Buffer.allocUnsafe(n);
   for (let i = 0; i < n; i++) b[i] = (i * 37 + 11) & 0xff;

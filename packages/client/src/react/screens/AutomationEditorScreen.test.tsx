@@ -34,17 +34,11 @@ describe("screens/AutomationEditorScreen", () => {
     return container;
   }
 
-  /** Set a controlled input/textarea's value through the native setter (so
-   *  React's onChange listener fires), then dispatch `input` — the pattern
-   *  PaletteScreen.test.tsx uses for the same reason. */
   describe("AutomationEditorScreen — create mode", () => {
     it("uses the full editor layout, keeps Create disabled until named, and saves cron", async () => {
       const props = makeProps();
       const el = await mount(props);
 
-      // Same workbench layout as edit: head, Name, Instructions, Triggers,
-      // Notifications — plus the compile rail, which explains itself in create
-      // mode rather than offering buttons for an automation that doesn't exist.
       expect(el.querySelector('[data-mode="create"]')).toBeTruthy();
       expect(el.textContent).toContain("New Automation");
       expect(el.textContent).toContain("Draft");
@@ -52,7 +46,6 @@ describe("screens/AutomationEditorScreen", () => {
       expect(el.textContent).toContain(
         "without one, this runs only when you fire it by hand"
       );
-      // Connectors live on the Instructions toolbar, not as a bottom tab.
       expect(
         [...el.querySelectorAll("button")].some((b) =>
           b.textContent?.includes("Connectors")
@@ -62,8 +55,6 @@ describe("screens/AutomationEditorScreen", () => {
       expect(el.textContent).not.toContain("Model · Auto");
       expect(el.textContent).toContain("Notifications");
       expect(el.textContent).not.toContain("Skills");
-      // Create mode: the rail states the plan's absence and offers no compile or
-      // test button, because there is nothing on the gateway to compile yet.
       expect(
         el.querySelector('[data-testid="compile-verdict"]')?.textContent
       ).toBe("Not compiled");
@@ -97,7 +88,6 @@ describe("screens/AutomationEditorScreen", () => {
       ) as HTMLInputElement;
       setValue(cronInput, "0 8 * * MON");
 
-      // Notifications is a plain section now (select, not a separate card).
       const notifySelect = el.querySelector(
         'select[aria-label="Notification preference"]'
       ) as HTMLSelectElement;
@@ -119,8 +109,6 @@ describe("screens/AutomationEditorScreen", () => {
         triggers: [{ expr: "0 8 * * MON", kind: "cron" }],
       });
       expect(props.onCompile).toHaveBeenCalledWith(true);
-      // Save compiles WITHOUT leaving: the compile rail is still on screen, so a
-      // failure has somewhere to be read.
       expect(
         el.querySelector('[data-testid="automation-compile-pane"]')
       ).not.toBeNull();
@@ -211,8 +199,6 @@ describe("screens/AutomationEditorScreen", () => {
 
       expect(el.textContent).toContain("Daily issues");
       expect(el.textContent).toContain("Active");
-      // Firing the plan lives in the compile rail as "Test run", next to the
-      // compile that produced it — not as a third "Run now" in the header.
       expect(button(el, "Run now")).toBeUndefined();
       expect(el.querySelector('[data-testid="compile-test-run"]')).toBeTruthy();
 
@@ -273,12 +259,9 @@ describe("screens/AutomationEditorScreen", () => {
       });
       const el = await mount(props);
 
-      // Enable toggle moved out of the removed Behavior tab into the head.
       expect(el.querySelector('[role="switch"]')).toBeTruthy();
       expect(el.textContent).not.toContain("Writes park for your review");
 
-      // Notifications is a plain section — the plan lives in the compile rail,
-      // so there is nothing to tab between.
       expect(el.textContent).toContain("automation-a/notify-owner");
       expect(
         el.querySelector('select[aria-label="Notification preference"]')

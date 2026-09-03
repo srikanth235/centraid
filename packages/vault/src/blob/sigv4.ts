@@ -1,11 +1,3 @@
-// AWS Signature v4 request signing for the S3-compatible blob driver
-// (kept out of s3.ts, which sits at the 500-line governance cap under issue
-// #405 §4/§6 — see s3.ts's header for the driver's trust
-// posture). Pure functions over crypto primitives, no I/O: given a request's
-// shape and credentials, produce the final signed URL + header set for
-// `fetch`. Kept sibling to s3.ts so the signer and the driver evolve
-// together, and unit-testable without a live endpoint.
-
 import { createHash, createHmac } from "node:crypto";
 
 import type { S3Credentials } from "./s3.js";
@@ -47,12 +39,10 @@ function signatureOf(key: Buffer, stringToSign: string): string {
   return createHmac("sha256", key).update(stringToSign, "utf8").digest("hex");
 }
 
-/** Lowercase-hex SHA-256, used for both the payload hash and the string-to-sign. */
 export function sha256HexOf(data: Buffer | string): string {
   return createHash("sha256").update(data).digest("hex");
 }
 
-/** RFC 3986 encode one S3 key segment (SigV4 canonical form). */
 export function encodeKeyPath(key: string): string {
   return key
     .split("/")
@@ -67,19 +57,11 @@ export function encodeKeyPath(key: string): string {
 
 export interface SignS3RequestParams {
   method: string;
-  /** Origin of the endpoint (`new URL(endpoint)`), for host + URL assembly. */
   base: URL;
-  /** Path-style object path, e.g. `bucket/prefix/blobs/sha256/<sha>` ('' = bucket root). */
   path: string;
   region: string;
   credentials: S3Credentials;
   body?: Buffer;
-  /**
-   * Caller headers (e.g. content-type, range, `x-amz-storage-class` for
-   * #405 §6) — EVERY entry here is folded into SignedHeaders, so a
-   * storage-class header is signed exactly like host/date with no special
-   * casing. Names are lowercased before signing.
-   */
   headers?: Record<string, string>;
   query?: Record<string, string>;
 }
@@ -89,11 +71,6 @@ export interface SignedS3Request {
   headers: Record<string, string>;
 }
 
-/**
- * Sign one S3 request (SigV4, path-style). Returns the target URL and the
- * complete header set — the amz date/content-sha256/security-token, the
- * caller's headers, and the `Authorization` line — ready to hand to `fetch`.
- */
 export function signS3Request(params: SignS3RequestParams): SignedS3Request {
   const { method, base, path, region, credentials: creds, body } = params;
   const now = new Date();
@@ -164,18 +141,11 @@ export interface PresignS3RequestParams {
   path: string;
   region: string;
   credentials: S3Credentials;
-  /** S3 caps SigV4 query credentials at seven days. */
   expiresSeconds?: number;
   query?: Record<string, string>;
   now?: Date;
 }
 
-/**
- * Mint a query-signed S3 URL suitable for an untrusted byte carrier. Only
- * `host` is signed so a phone/browser can stream its body without first
- * buffering a payload hash; the CBSF envelope + completion HEAD are the
- * content integrity/custody checks.
- */
 export function presignS3Request(params: PresignS3RequestParams): URL {
   const creds = params.credentials;
   const now = params.now ?? new Date();

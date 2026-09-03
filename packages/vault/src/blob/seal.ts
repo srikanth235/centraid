@@ -1,7 +1,3 @@
-// PUBLIC sealers/unsealers (#296, #367 §C8, #405 §1) over the seal-frames.ts
-// wire format; ranged reads use those primitives directly.
-// Pre-#405 envelopes are NOT readable — stale remotes re-seal next sweep.
-
 import { Transform } from "node:stream";
 
 import {
@@ -57,7 +53,6 @@ export function sealBlob(
   return Buffer.concat(parts);
 }
 
-/** Streaming `sealBlob` (#367 §C8, #405 §1): buffers ≤ one frame; totalSize up front fixes the AAD-bound frame count. */
 export function sealBlobStream(
   key: Buffer,
   sha: string,
@@ -120,7 +115,6 @@ export function sealBlobStream(
   });
 }
 
-/** Whole-object unseal (#405); ranged reads never come through here. */
 export function unsealBlob(key: Buffer, sha: string, sealed: Buffer): Buffer {
   if (sealed.length < HEADER_BYTES + TRAILER_BYTES)
     throw new Error("sealed blob truncated");
@@ -144,5 +138,3 @@ export function unsealBlob(key: Buffer, sha: string, sealed: Buffer): Buffer {
   }
   return Buffer.concat(frames);
 }
-
-// Re-exported for the custody-read.ts ranged read-through and tests.

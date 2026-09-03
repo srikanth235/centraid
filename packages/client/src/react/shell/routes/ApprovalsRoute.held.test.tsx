@@ -123,7 +123,6 @@ describe("ApprovalsRoute held tray and write-back", () => {
     expect(el.textContent).toContain(
       "This gateway is older than the consent ledger"
     );
-    // One unreadable ledger never fails the page.
     expect(el.textContent).toContain("Nothing is waiting on you");
   });
 

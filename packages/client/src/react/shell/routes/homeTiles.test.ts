@@ -26,8 +26,6 @@ function bodyOf(content: HomeTileContent, id: string) {
 describe("shell/routes/homeTiles", () => {
   describe(buildHomeTiles, () => {
     it("shows one tile per installed first-party app, in springboard order", () => {
-      // Photos leads the grid: the mosaic is the body that needs area, so it
-      // takes the corner (see HOME_TILE_ORDER).
       const tiles = tilesOf({}, ["locker", "agenda", "photos"]);
       expect(tiles.map((tile) => tile.id)).toStrictEqual([
         "photos",
@@ -37,8 +35,6 @@ describe("shell/routes/homeTiles", () => {
     });
 
     it("leads with the imagery and prose bodies, not the chips", () => {
-      // The regression this guards: two 1×1 checkbox/figure tiles in the
-      // top-left with the mosaic pushed right, which reads as a launcher.
       expect([...HOME_TILE_ORDER].slice(0, 3)).toStrictEqual([
         "photos",
         "docs",
@@ -77,15 +73,12 @@ describe("shell/routes/homeTiles", () => {
     });
 
     it("marks an app with no read result empty, and carries no copy for it", () => {
-      // A bare marker. The invitation to fill this app lives once, in
-      // `homeFirstMoves` — a `hint` here would be its second spelling.
       expect(bodyOf({}, "docs")).toStrictEqual({ kind: "empty" });
     });
   });
 
   describe("bodies are structurally distinct per app", () => {
     it("photos is a bounded mosaic with the remainder as +N", () => {
-      // Eight cells — the 4×2 grid the handoff draws on the large tile.
       const thumbs = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];
       expect(bodyOf({ photos: { thumbs, total: 30 } }, "photos")).toStrictEqual(
         {
@@ -154,8 +147,6 @@ describe("shell/routes/homeTiles", () => {
           "people"
         )
       ).toStrictEqual({
-        // The party id rides along: it is what the renderer derives each
-        // circle's hue from, so it has to survive the model.
         faces: [
           { id: "party-ada", initials: "AL", name: "Ada Lovelace" },
           { id: "party-grace", initials: "GH", name: "Grace Hopper" },
@@ -251,11 +242,6 @@ describe("shell/routes/homeTiles", () => {
       expect(idle.length).toBeGreaterThan(0);
     });
 
-    // The binary this replaces got BOTH ends wrong. With nothing anywhere it
-    // showed four dashed rectangles that opened empty apps; with one note
-    // anywhere it flipped and showed all eight tiles, seven of them
-    // apologising — which is the "eight apologies" the day-one treatment was
-    // written to prevent, arriving one note later.
     it("puts everything on the idle side when the vault is empty", () => {
       const { live, idle } = partitionHomeTiles(tilesOf({}));
       expect(live).toStrictEqual([]);
@@ -272,7 +258,6 @@ describe("shell/routes/homeTiles", () => {
       const moves = homeFirstMoves(tilesOf({}));
       expect(moves[0]?.id).toBe("connectors");
       expect(moves[0]?.kind).toBe("connectors");
-      // Then what the day-one copy actually promises, in that order.
       expect(moves.map((m) => m.id)).toStrictEqual([
         "connectors",
         "photos",

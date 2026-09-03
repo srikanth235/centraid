@@ -1,9 +1,3 @@
-// The receipt chain has to cover the WHOLE receipt, or it proves the wrong
-// thing (#916, review 5.3). It used to hash seven columns — action, object,
-// decision, time — and leave `detail_json`, `grant_id`, `invocation_id` and
-// the purpose outside, so the WHY of a decision could be rewritten and the
-// chain that exists to detect exactly that would still verify.
-
 import { describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
@@ -90,8 +84,6 @@ describe(writeReceipt, () => {
         detail: { revokedBy: "party-owner", reason: "asked" },
       });
       expect(verify(chain(db))).toBe(true);
-      // The audit band refuses UPDATE, so a tamper has to go around the
-      // triggers — which is what a tamper IS. The chain is the last line.
       db.audit.exec("PRAGMA writable_schema = ON");
       db.audit.exec("DROP TRIGGER access_receipt_append_only_u");
       db.audit.exec("PRAGMA writable_schema = OFF");

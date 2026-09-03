@@ -1,9 +1,3 @@
-// Scroll-aware autoscroll for the assistant transcript (#420). The
-// old behavior forced `scrollTop = scrollHeight` on every message change, which
-// fought a user scrolling up mid-stream. Here we only stick to the bottom when
-// the reader is already there, surface a "jump to bottom" pill otherwise, and
-// restore each conversation's scroll position when switching threads.
-
 import {
   useCallback,
   useEffect,
@@ -13,14 +7,11 @@ import {
 } from "react";
 import type { RefObject } from "react";
 
-// Survives route remounts (navigating away and back) — in-memory is enough.
 const scrollPositions = new Map<string, number>();
 const NEAR_BOTTOM_PX = 60;
 
 export function useAssistantScroll(
   scrollRef: RefObject<HTMLDivElement | null>,
-  // Read only as a change signal — the hook never indexes it, so a windowed
-  // (readonly) slice of the transcript is as valid here as the full array.
   messages: readonly unknown[],
   conversationId: string | undefined
 ): { showJump: boolean; jumpToBottom: () => void } {
@@ -39,8 +30,6 @@ export function useAssistantScroll(
     setShowJump(false);
   }, [scrollRef]);
 
-  // Track the reader's position so auto-stick only fires when already at the
-  // bottom, and remember it per conversation for restore-on-switch.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -55,7 +44,6 @@ export function useAssistantScroll(
     return () => el.removeEventListener("scroll", onScroll);
   }, [scrollRef]);
 
-  // Restore the saved position (or the bottom) when the thread changes.
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el || prevConvRef.current === conversationId) return;
@@ -73,7 +61,6 @@ export function useAssistantScroll(
     setShowJump(!isAtBottom(el));
   }, [conversationId, scrollRef]);
 
-  // On new content, stick to the bottom only when the reader already was.
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;

@@ -11,9 +11,6 @@ import controlsCss from "../../styles/controls.module.css";
 import buttonCss from "../../ui/Button.module.css";
 import styles from "./ConnectFlow.module.css";
 
-// The 'vault' step — split out of ConnectFlow.tsx (#382) purely to
-// keep that file under the repo's file-size cap.
-
 export function VaultStep({
   state,
   dispatch,
@@ -35,9 +32,6 @@ export function VaultStep({
           Loading vaults…
         </div>
       ) : state.vaultsError ? (
-        // Honest unreachable (#603). A failed read is NOT an empty
-        // registry: offering "create a vault" here would commit against a
-        // gateway we could not even talk to.
         <div className={styles.errorBanner} role="alert">
           {state.vaultsError}
         </div>
@@ -138,10 +132,6 @@ export function VaultStep({
               Creating a new vault here needs the gateway host's CLI.
             </p>
           ) : (
-            // Nothing to pick, nothing to create (#603) — an
-            // enrollment that grants no vault must not render as a blank list
-            // with "Continue" still live. `canCommitConnectFlow` says no;
-            // this says why.
             <p className={styles.hint}>
               This gateway shared no vault with this device — ask its host for a
               new pairing ticket.

@@ -15,10 +15,6 @@ import { readRouteHealth, resetStatus } from "../shell/statusChannel.js";
 import AtlasScreen from "./AtlasScreen.js";
 import type { AtlasScreenProps } from "./AtlasScreen.js";
 
-// The records section under the block list self-fetches through the vault
-// client; stub those helpers so the page can be exercised without a gateway
-// (the section's own behaviour is covered in AtlasRecordsSection.test.tsx).
-// vitest hoists this mock above the imports above.
 vi.mock(import("../../gateway-client.js"), () => ({
   browseColumns: () =>
     Promise.resolve({
@@ -27,9 +23,6 @@ vi.mock(import("../../gateway-client.js"), () => ({
       keysetKey: "party_id",
       displayField: "display_name",
       machinery: false,
-      // Both columns are DECLARED, because the grid draws the columns the
-      // store declares and nothing else — a value in a row the columns never
-      // mentioned is a value the store did not offer.
       columns: [
         {
           name: "party_id",
@@ -134,7 +127,6 @@ function makeStats(over: Partial<AtlasCensusPayload> = {}): AtlasCensusPayload {
   };
 }
 
-/** A census with enough written kinds to tip the page into `full`. */
 function makeFullStats(): AtlasCensusPayload {
   const tables = Array.from({ length: 10 }, (_u, i) =>
     table(`core.k${i}`, `Kind ${i}`, 100 - i, 1000 * (i + 1))
@@ -280,7 +272,6 @@ describe("screens/AtlasScreen", () => {
   ];
   const rowsUnder = (el: HTMLElement, label: string) =>
     $$(el, `fieldset[aria-label="${label}"] .row`);
-  /** Open the relations drill-in, which is a row of "What it holds" now. */
   const openRelations = async (el: HTMLElement): Promise<void> => {
     const row = $$(el, ".row").find((r) =>
       r.textContent?.includes("How the kinds relate")
@@ -298,14 +289,12 @@ describe("screens/AtlasScreen", () => {
     it("lists every kind the schema defines, with whose it is and what it holds", async () => {
       const el = await mount(makeProps());
       const rows = rowsUnder(el, "Kinds");
-      // Every kind, never-written ones included — the count and the list agree.
       expect(rows).toHaveLength(3);
       expect(rows[0]?.textContent).toContain("Party");
       expect(rows[0]?.textContent).toContain("Core"); // the pack, in its cell
       expect(rows[0]?.textContent).toContain("214 records");
       expect(rows[0]?.textContent).toContain("1.9 MB");
       expect(el.textContent).toContain("3 of 3 kinds");
-      // The bar is a share of the LARGEST kind, so the fullest one fills it.
       const fills = $$(el, ".fill");
       expect(fills[0]?.style.getPropertyValue("--meter-share")).toBe("100");
     });
@@ -316,8 +305,6 @@ describe("screens/AtlasScreen", () => {
         r.textContent?.includes("Place")
       );
       expect(ghost?.textContent).toContain("Never written");
-      // NO VERB THAT DOES NOTHING (v11). The trailing cell is a stated fact,
-      // never a button a member can press to be refused by.
       expect(ghost?.querySelector("button")).toBeNull();
       expect(ghost?.textContent).toContain("Nothing to browse");
     });
@@ -345,15 +332,12 @@ describe("screens/AtlasScreen", () => {
 
     it("names the relations a person authored and keeps the map reachable", async () => {
       const el = await mount(makeProps());
-      // The relations are a drill-in from a row of "What it holds" now, so
-      // the census is not two sections deep before it is read.
       expect(el.textContent).toContain("How the kinds relate");
       await openRelations(el);
       const rows = rowsUnder(el, "How they relate");
       expect(rows[0]?.textContent).toContain("People → Notes");
       expect(rows[0]?.textContent).toContain("“wrote”");
       expect(rows[0]?.textContent).toContain("41 links");
-      // The orrery is not a block shape, so it keeps a door rather than dying.
       expect(rows.at(-1)?.textContent).toContain("The whole map");
       expect(rows.at(-1)?.textContent).toContain("Open the map");
     });
@@ -369,7 +353,6 @@ describe("screens/AtlasScreen", () => {
           b.textContent?.includes("Browse")
         )
       );
-      // The section head follows the kind that was asked for.
       expect(el.textContent).toContain("Device");
     });
   });
@@ -385,11 +368,8 @@ describe("screens/AtlasScreen", () => {
       );
       expect(el.textContent).toContain("What it holds");
       expect(el.textContent).toContain("2 of 3 kinds written · 226 records");
-      // ONE PUBLISHER. Two channels behind one bar is two answers the bar can
-      // only draw one of; the half reports upward instead.
       expect(readVitals("atlas")).toBeUndefined();
       expect(reports.at(-1)?.count).toBe("2 kinds · 226 records · 2.9 MB");
-      // The custody line's first clause is this half's to supply.
       expect(reports.at(-1)?.records).toBe(226);
     });
 
@@ -404,8 +384,6 @@ describe("screens/AtlasScreen", () => {
           onReport: (report) => reports.push(report),
         })
       );
-      // The other two questions still have to be readable beneath: one section
-      // failing is not the surface failing.
       expect(el.textContent).toContain("Cannot open the store");
       expect(reports.at(-1)?.state).toBe("error");
       expect(reports.at(-1)?.records).toBeNull();
@@ -429,7 +407,6 @@ describe("screens/AtlasScreen", () => {
       });
       const health = readRouteHealth();
       expect(health?.text).toContain("Everything is readable");
-      // No backup reader was given, so no backup clause is invented.
       expect(health?.text).not.toContain("backup");
     });
 
@@ -477,7 +454,6 @@ describe("screens/AtlasScreen", () => {
       expect(el.textContent).toContain(
         "Kinds appear here as apps write records."
       );
-      // Nothing to commit on an empty read surface.
       expect(el.querySelectorAll("button")).toHaveLength(0);
       expect(readVitals("atlas")?.state).toBe("empty");
     });
@@ -521,21 +497,15 @@ describe("screens/AtlasScreen", () => {
       ]);
       expect(rowsUnder(el, "Kinds")).toHaveLength(10);
 
-      // Nothing was written today in this census, so the chip empties the list
-      // rather than pretending otherwise.
       await click(chips.find((c) => c.textContent === "Written today"));
       expect(rowsUnder(el, "Kinds")).toHaveLength(0);
       expect(el.textContent).toContain("0 of 12 kinds");
-      // The head keeps counting the CENSUS, not the filtered list: a head that
-      // followed the chips would tell a member the vault had shrunk.
       expect(el.textContent).toContain("10 of 12 kinds written");
     });
 
     it("isolates the never-written kinds the count line names", async () => {
       const el = await mount(makeProps());
       const chips = $$(el, 'fieldset[aria-label="Filter kinds"] button');
-      // Three kinds is under the threshold, so this census draws no chip row —
-      // the filter is exercised on the long one, which is where it matters.
       expect(chips).toHaveLength(0);
 
       const full = await mount(
@@ -550,8 +520,6 @@ describe("screens/AtlasScreen", () => {
           (c) => c.textContent === "Never written"
         )
       );
-      // This census has written every kind it declares, so the answer is
-      // honestly empty rather than a list of the ones that DO hold something.
       expect(rowsUnder(full, "Kinds")).toHaveLength(0);
     });
   });

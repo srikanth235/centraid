@@ -1,9 +1,5 @@
-// Renderer client for the gateway's LOCAL disk surface (#544) — sibling of
-// gateway-client-storage.ts, the PROVIDER side. Kept separate: no shared types.
-
 import { auth, authHeaders, doFetch, readJson } from "./gateway-client-core.js";
 
-/** Mirrors serve/local-usage.ts LocalComponentId; renaming is a wire change. */
 export type LocalComponentId =
   | "ledger"
   | "vault-db"
@@ -33,7 +29,6 @@ export interface LocalVaultUsageDTO {
 export interface StorageLimitsDTO {
   totalLimitBytes: number | null;
   warnAtPercent: number;
-  /** vault.db size triggering early ledger/audit archival; null = off. */
   journalLimitBytes: number | null;
 }
 
@@ -55,7 +50,6 @@ export interface LocalUsageReportDTO {
   error?: string;
 }
 
-/** TTL-cached; `refresh` re-walks the whole blob CAS — owner action, never a poll. */
 export async function getLocalStorageUsage(
   opts: { refresh?: boolean } = {}
 ): Promise<LocalUsageReportDTO> {
@@ -83,7 +77,6 @@ export async function getStorageLimits(): Promise<StorageLimitsDTO> {
   return out.limits;
 }
 
-/** Explicit null clears a limit; omitted fields untouched. */
 export interface StorageLimitsPatchDTO {
   totalLimitBytes?: number | null;
   warnAtPercent?: number;

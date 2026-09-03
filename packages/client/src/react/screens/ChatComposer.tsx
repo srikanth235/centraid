@@ -36,11 +36,6 @@ export interface ChatComposerProps {
   embedded?: boolean;
 }
 
-/**
- * Shared conversation composer for Assistant, Builder, and automation Q&A.
- * Surface-specific attachments/autocomplete live in slots; the input,
- * send/stop control, and session telemetry stay one implementation.
- */
 export default function ChatComposer({
   value,
   onChange,

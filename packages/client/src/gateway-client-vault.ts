@@ -1,11 +1,3 @@
-/*
- * Renderer-side client for the gateway's owner consent surface
- * (`/centraid/_vault/*`). Every call is an OWNER act on the owner-device
- * credential; apps never see these routes — their door is `ctx.vault`.
- * A gateway that mounts no vault plane 404s, which reads as `undefined`
- * here: render the "no vault" state, never an error.
- */
-
 import {
   auth,
   authHeaders,
@@ -21,29 +13,22 @@ export interface VaultStatus {
   fresh: boolean;
 }
 
-/** The client owns the vault pointer; there is no server-side active flag (#289). */
 export interface VaultListEntry {
   vaultId: string;
   name: string;
   ownerPartyId: string;
-  /** Marked at founding — how a client finds its own vault, never `name`. */
   personal?: boolean;
   color?: string;
   icon?: string;
   blurb?: string;
 }
 
-/** A scope is a vault the calling OWNER owns (#726) — the ownership-aware
- *  successor to `listVaults`. Order is the gateway's, oldest vault first. */
 export interface AppScopeEntry {
   vaultId: string;
   label: string;
-  /** The founding marker (#711): "not mine" is `personal === false`, never a
-   *  label match. Absent on an older gateway, and absent must read as own. */
   personal?: boolean;
   color?: string;
   icon?: string;
-  /** Supplied by the gateway (#726), never derived client-side from a role. */
   canWrite: boolean;
   installed?: boolean;
 }
@@ -193,8 +178,6 @@ export async function searchVaultAnchors(
   return body.anchors;
 }
 
-/** `callerKind` refines `'agent'` to `'assistant'` for the vault assistant's
- *  own identity; `callerId` stays stable when the display name changes. */
 export interface VaultParkedEntry {
   invocationId: string;
   command: string;
@@ -232,8 +215,6 @@ export async function listVaults(): Promise<VaultListEntry[] | undefined> {
   return body.vaults;
 }
 
-/** Rename and presentation only. Activation is a client pointer flip
- *  (`setActiveVault`), and create/delete are CLI admin acts: POST/DELETE 405. */
 export async function updateVault(input: {
   vaultId: string;
   name?: string;
@@ -272,7 +253,6 @@ export async function vaultApps(): Promise<VaultAppEntry[]> {
   return body.apps;
 }
 
-/** The manifest's `vault` block verbatim — the UI invents no scopes. */
 export async function approveVaultGrant(input: {
   appId: string;
   purpose: string;

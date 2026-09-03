@@ -11,7 +11,6 @@ export type ChipDef = ChipData;
 export interface ChipsBlockProps {
   chips: readonly ChipDef[];
   onPick: (id: string) => void;
-  /** Tabular, isolated, ltr; never reorders under RTL. */
   mono?: boolean;
   ariaLabel: string;
   className?: string;
@@ -25,7 +24,6 @@ export default function ChipsBlock({
   className,
 }: ChipsBlockProps): JSX.Element {
   return (
-    // a11y profile prefers element over role; UA box reset in CSS.
     <fieldset
       aria-label={ariaLabel}
       className={cx(styles.chips, className)}

@@ -141,8 +141,6 @@ describe("transfers", () => {
       begin.sessionId
     )?.temp_path;
     if (!tempPath) throw new Error("expected fallback temp path");
-    // Model the crash boundary directly: SQLite contains only the last fsynced
-    // offset while the filesystem still exposes later, non-durable bytes.
     writeFileSync(tempPath, Buffer.concat([durable, nonDurableTail]));
     first.coordinator.state.recordAppend(begin.sessionId, durable.length);
     expect(
@@ -276,8 +274,6 @@ describe("transfers", () => {
     if (begin.mode !== "spool") throw new Error("expected spool ingress");
     await first.coordinator.appendIngress(begin.sessionId, 0, plain);
 
-    // Crash boundary: the irreversible phase is durable, but the temp file has
-    // not moved under its content address yet.
     first.coordinator.state.setSessionState(begin.sessionId, "committing");
 
     const second = await h.restart();
@@ -304,16 +300,12 @@ describe("transfers", () => {
     expect(second.coordinator.state.outbox(sha)).not.toBeNull();
     expect(stagingCount(second.db, sha)).toBe(1);
 
-    // A lost response is another replay, not another claim or custody row. The
-    // sniffed type must also survive the completed-response reconstruction.
     const replay = await second.coordinator.commitIngress(begin.sessionId);
     expect(replay).toMatchObject({
       sha256: sha,
       mediaType: committed.mediaType,
     });
     expect(stagingCount(second.db, sha)).toBe(1);
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({
       ...second.db.vault
         .prepare("SELECT COUNT(*) AS count FROM blob_outbox WHERE sha256 = ?")
@@ -401,8 +393,6 @@ describe("transfers", () => {
       "complete"
     );
     expect(stagingCount(second.db, sha)).toBe(1);
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({
       ...second.db.vault
         .prepare("SELECT COUNT(*) AS count FROM blob_outbox WHERE sha256 = ?")
@@ -437,8 +427,6 @@ describe("transfers", () => {
       row,
       sha256: sha,
     });
-    // This is the exact ordering used before the fix: complete was durable, but
-    // the process died before recordLocalReceipt could create the outbox row.
     firstRun.coordinator.state.completeSession(begin.sessionId, sha);
     expect(firstRun.coordinator.state.outbox(sha)).toBeNull();
 

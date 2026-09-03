@@ -2,12 +2,6 @@ import { cx } from "../ui/cx.js";
 
 import modalCss from "../styles/modal.module.css";
 import buttonCss from "../ui/Button.module.css";
-// Text-prompt dialog — a promise-based modal (backdrop + card + a single text
-// field + Cancel/Save, Esc = cancel, Enter = save). Sibling of confirm.ts's
-// `openConfirm`; it portals to document.body and resolves the trimmed string, or
-// null when cancelled/emptied/unchanged, so it's imperatively awaitable from any
-// route. Kept as a plain function (no React) for the same await ergonomics as
-// openConfirm.
 
 const X_SVG =
   '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
@@ -30,7 +24,6 @@ export function openPrompt(opts: PromptOpts): Promise<string | null> {
       card.remove();
       resolve(result);
     };
-    // The trimmed field value, or null when empty or unchanged from the initial.
     const commit = (): void => {
       const next = input.value.trim();
       finish(next && next !== (opts.initial ?? "").trim() ? next : null);
@@ -71,8 +64,6 @@ export function openPrompt(opts: PromptOpts): Promise<string | null> {
     saveBtn.addEventListener("click", commit);
 
     const actions = document.createElement("div");
-    // There is no `sheet-actions` rule to reach for; the modal module's
-    // actions row is the styled equivalent `confirm.ts` uses.
     actions.className = modalCss.actions ?? "";
     actions.append(cancelBtn, saveBtn);
     card.append(closeBtn, heading, input, actions);

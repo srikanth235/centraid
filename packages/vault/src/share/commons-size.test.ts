@@ -71,13 +71,6 @@ describe("Commons full-copy size", () => {
         "UPDATE share_circle_grant SET max_size_bytes = ? WHERE grant_id = ?"
       )
       .run(size - 1, grant.grantId);
-    // Two enforcement points, one message. A compile that materializes the
-    // closure — here, projecting a seat that holds nothing yet — refuses at
-    // the exact byte. Since catch-up replays commands instead of projecting
-    // rows (#750 invariant 7), a compile where every seat replays never
-    // builds the closure and so never re-measures it; the WRITE path below is
-    // what keeps the ceiling live, and it is the only path that can grow a
-    // commons past it in the first place.
     expect(() =>
       compileCommons({
         steward: origin,
@@ -105,8 +98,6 @@ describe("Commons full-copy size", () => {
         grantId: grant.grantId,
         actorPartyId: originBoot.ownerPartyId,
         command: "tally.rename_group",
-        // Same length as the current name, so the refusal names the same
-        // byte count the ceiling was pinned to.
         commandInput: { group_id: groupId, name: "Row ONLY" },
         seats: [],
         now: nowIso(),

@@ -11,9 +11,7 @@ export const DEFAULT_REPLICA_MAX_VALUE_BYTES = 64 * 1_024;
 export interface ReplicaRow {
   rowId: string;
   values: Record<string, unknown>;
-  /** Last change-log sequence for this row in the current replica epoch. */
   rowVersion?: number;
-  /** Oversized and binary values omitted from `values`; fetch them on demand. */
   deferredColumns: string[];
 }
 
@@ -111,9 +109,6 @@ function publicRow(
   const deferredColumns: string[] = [];
   for (const column of shape.columns) {
     const value = raw[column];
-    // Binary data is never eager on the JSON replica lane. Canonical
-    // photo/document rows carry blob URIs, so their metadata still arrives;
-    // byte bodies take the dedicated lazy blob/cache path.
     if (value instanceof Uint8Array || valueBytes(value) > maxValueBytes) {
       deferredColumns.push(column);
     } else {
@@ -172,10 +167,6 @@ function validateOptions(options: ReadReplicaRowsOptions): {
   return { limit, maxValueBytes };
 }
 
-/**
- * Shape-neutral row page. Sealed columns are absent structurally (never
- * placeholder/ciphertext), and oversized/binary values are marked deferred.
- */
 export function readReplicaRows(
   vault: DatabaseSync,
   entity: string,
@@ -239,7 +230,6 @@ export function readReplicaRows(
   };
 }
 
-/** Fetch a changed row by its log row id; delete entries naturally return undefined. */
 export function readReplicaRow(
   vault: DatabaseSync,
   entity: string,
@@ -294,11 +284,6 @@ export interface ReplicaSnapshotResult<T> {
   value: T;
 }
 
-/**
- * Pin a SQLite read snapshot at watermark N while a synchronous caller streams
- * or materializes its consent-filtered shape. The transaction is read-only by
- * convention and always rolled back to release it without a write commit.
- */
 export function withReplicaSnapshot<T>(
   vault: DatabaseSync,
   read: (reader: ReplicaSnapshotReader) => T

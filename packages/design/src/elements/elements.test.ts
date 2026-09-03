@@ -1,10 +1,3 @@
-// @vitest-environment jsdom
-// Runtime suite over the element layer: the DOM builders, the popover, the
-// refresh discipline, and the attachment flow. It imports the real barrel (not
-// a path-loaded copy) so it exercises exactly the module graph an app gets.
-//
-// There are no custom elements to register here (#799); `kit-css.test.ts`
-// pins that the stylesheet carries no host rules for any.
 import { describe, expect, it, vi } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
@@ -102,8 +95,6 @@ describe("element layer", () => {
         ],
         null
       );
-      // The download link is exactly the surface the shell's generic
-      // MutationObserver does NOT watch, so the strip must authorize it here.
       await vi.waitFor(() =>
         expect(strip.querySelector("a")?.getAttribute("href")).toBe(
           "blob:/centraid/_vault/blobs/c2"
@@ -271,3 +262,4 @@ describe("element layer", () => {
     expect(updates).toStrictEqual([]);
   });
 });
+// @vitest-environment jsdom

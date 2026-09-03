@@ -23,7 +23,6 @@ function catalogDefaultModel(
   );
 }
 
-/** Dynamic gateway harness/model catalog plus the effective automations pins. */
 export function buildAutomationHarnessEditorData(
   status: HarnessesStatusDTO
 ): AutomationHarnessEditorData {

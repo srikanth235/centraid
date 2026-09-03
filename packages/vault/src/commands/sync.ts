@@ -1,6 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit the staging commands and the broker-credential lifecycle commands (#304) are one sync vocabulary — begin/finish/cursor/status and configure/store share the connection state machine, so splitting scatters the invariants
-// Agent staging (#290): `sync.stage_rows` is low-risk; `sync.publish_batch` is
-// high and parks. Credentials stay harness-ambient.
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -13,7 +11,6 @@ import {
 import type { StageCandidate } from "../ingest/staging.js";
 import { sealedColumnsOf } from "../schema/sealed.js";
 
-/** Derived-data class per stageable entity (#310) — the unit auto-publish trust narrows. */
 const ENRICH_CLASS_OF: Readonly<Record<string, string>> = {
   "knowledge.annotation": "caption",
   "core.tag": "tag",
@@ -22,7 +19,6 @@ const ENRICH_CLASS_OF: Readonly<Record<string, string>> = {
   "core.content_item": "filing",
 };
 
-/** Bound one call's staging payload — bulk arrives as several batches. */
 const MAX_ROWS_PER_STAGE = 500;
 
 const STAGE_ROWS: CommandDefinition = {
@@ -34,7 +30,6 @@ const STAGE_ROWS: CommandDefinition = {
     anyOf: [{ required: ["connection_id"] }, { required: ["kind", "label"] }],
     additionalProperties: false,
     properties: {
-      // e.g. `pull.gmail` — names the SOURCE the agent read.
       kind: { type: "string", minLength: 1 },
       label: { type: "string", minLength: 1 },
       connection_id: { type: "string", minLength: 1 },
@@ -91,14 +86,12 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
       payload: Record<string, unknown>;
     }[];
   };
-  // Refuse at STAGING, not at the publish click.
   for (const row of input.rows) {
     if (!PUBLISHERS.has(row.entity_type)) {
       throw new Error(
         `no publisher for "${row.entity_type}" — stageable: ${[...PUBLISHERS.keys()].join(", ")}`
       );
     }
-    // Sealed types stage only through the owner's file-drop surface (#293).
     if (sealedColumnsOf(row.entity_type).length > 0) {
       throw new Error(
         `"${row.entity_type}" carries sealed columns — secret material stages only through the owner's import surface (issue #293)`
@@ -107,7 +100,6 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
   }
   const connection = resolveConnectionIdentity(ctx, input);
   const connectionId = connection.connectionId;
-  // Attribution injected server-side, never trusted from source (#299).
   const authorPartyId = ctx.identity.partyId ?? ownerPartyIdOf(ctx);
   const candidates: StageCandidate[] = input.rows.map((r) => ({
     entityType: r.entity_type,
@@ -117,9 +109,6 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
         ? { ...r.payload, author_party_id: authorPartyId }
         : r.payload,
   }));
-  // Standing consent (#299): `auto-publish` applies in-command, receipted.
-  // Per-class narrowing (#310): outside classes stage as a separate draft,
-  // never silently dropped or landed.
   const conn = ctx.db
     .prepare(
       "SELECT trust, enrich_classes_json FROM sync_connection WHERE connection_id = ?"
@@ -253,7 +242,6 @@ const PUBLISH_BATCH: CommandDefinition = {
     },
   ],
   idempotency: "once",
-  // Agent-proposed publish PARKS for the owner (#306 Tier 4).
   risk: "high",
   confirm: true,
   handler: publishStagedBatch,
@@ -272,7 +260,6 @@ function publishStagedBatch(ctx: HandlerCtx): Record<string, unknown> {
     owner.self_party_id,
     ctx.now
   );
-  // Published rows ride the pipeline's evidence; data triggers may react.
   for (const write of applied.provenanced) ctx.wrote(write.type, write.id);
   ctx.wrote("sync.import_batch", input.batch_id);
   ctx.cite({
@@ -289,11 +276,6 @@ function publishStagedBatch(ctx: HandlerCtx): Record<string, unknown> {
   };
 }
 
-// ── Connection lifecycle (#290 phase 4) ─────────────────────────────────
-// `begin_run` is the principal-pinning hard gate; `finish_run` closes the run
-// log and flips health; `set_cursor` persists position as receipted rows.
-// Health is READABLE state — sync never dies silently.
-
 const BEGIN_RUN: CommandDefinition = {
   name: "sync.begin_run",
   ownerSchema: "sync",
@@ -305,7 +287,6 @@ const BEGIN_RUN: CommandDefinition = {
       kind: { type: "string", minLength: 1 },
       label: { type: "string", minLength: 1 },
       connection_id: { type: "string", minLength: 1 },
-      /** The OBSERVED authenticated account (the connector's whoami probe). */
       principal: { type: "string", minLength: 1 },
     },
   },
@@ -316,7 +297,6 @@ const BEGIN_RUN: CommandDefinition = {
       connection_id: { type: "string" },
       run_id: { type: "string" },
       cursors: { type: "object" },
-      // A refusal is an OUTPUT — the needs-auth flip must survive it.
       refused: {
         type: "string",
         enum: ["paused", "principal-required", "principal-mismatch"],
@@ -380,7 +360,6 @@ function beginRun(ctx: HandlerCtx): Record<string, unknown> {
     )
     .get(connectionId) as { principal: string | null; status: string };
 
-  // Paused means paused — absolute until the owner resumes.
   if (connection.status === "paused") {
     return {
       connection_id: connectionId,
@@ -388,8 +367,6 @@ function beginRun(ctx: HandlerCtx): Record<string, unknown> {
       reason: `connection "${identity.label}" is paused by the owner`,
     };
   }
-  // Principal pinning: first principal pins; mismatches flip needs-auth. The
-  // refusal is an output — the health flip must COMMIT.
   if (connection.principal === null && input.principal) {
     ctx.db
       .prepare(
@@ -436,7 +413,6 @@ function beginRun(ctx: HandlerCtx): Record<string, unknown> {
       };
     }
   }
-  // A matching (or first) principal proves reach — back to active.
   ctx.db
     .prepare(
       `UPDATE sync_connection SET status = 'active' WHERE connection_id = ?`
@@ -536,7 +512,6 @@ function finishRun(ctx: HandlerCtx): Record<string, unknown> {
       input.error ?? null,
       input.run_id
     );
-  // Failed run → failing (visible, never silent); needs-auth stays sticky.
   const status = input.ok ? "active" : "failing";
   ctx.db
     .prepare(
@@ -635,9 +610,7 @@ const SET_CONNECTION_STATUS: CommandDefinition = {
     additionalProperties: false,
     properties: {
       connection_id: { type: "string", minLength: 1 },
-      // Owner's two levers; `needs-auth` is also the fire path's flip (#293).
       status: { type: "string", enum: ["paused", "active", "needs-auth"] },
-      // WHY the connection left active (#304) — shown to the owner.
       note: { type: "string", minLength: 1 },
     },
   },
@@ -668,8 +641,6 @@ const SET_CONNECTION_STATUS: CommandDefinition = {
     },
   ],
   idempotency: "idempotent",
-  // NOT confirm-gated (#308 A2): the fire path's needs-auth flip must land
-  // unparked; no status value moves credentials or hosts.
   risk: "medium",
   handler: setConnectionStatus,
 };
@@ -686,7 +657,6 @@ function setConnectionStatus(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare("UPDATE sync_connection SET status = ? WHERE connection_id = ?")
     .run(input.status, input.connection_id);
-  // `active` clears any stale complaint; flips record why via note.
   if (input.status === "active") {
     setAuthNote(ctx, input.connection_id, null);
   } else if (input.note !== undefined) {
@@ -699,13 +669,6 @@ function setConnectionStatus(ctx: HandlerCtx): Record<string, unknown> {
   return { connection_id: input.connection_id, status: input.status };
 }
 
-// ── Broker-owned credentials (#304) ─────────────────────────────────────
-// A connection may carry `oauth2` (BYO) or `api_key` instead of harness-
-// ambient auth. Secret cells are sealed columns whose ONLY consumer is the
-// broker, injected into `ctx.fetch` toward `allowed_hosts`, never handed to
-// connector code. Both commands CONFIRM-GATED (#308 A1/A2): they touch what
-// must never move on a model's say-so. Owner-plane paths never park.
-
 const CONFIGURE_CREDENTIAL: CommandDefinition = {
   name: "sync.configure_credential",
   ownerSchema: "sync",
@@ -716,12 +679,8 @@ const CONFIGURE_CREDENTIAL: CommandDefinition = {
     properties: {
       kind: { type: "string", minLength: 1 },
       label: { type: "string", minLength: 1 },
-      // `none` DETACHES: cells null out, back to harness-ambient.
       cred_kind: { type: "string", enum: ["oauth2", "api_key", "none"] },
-      // `assist` uses Centraid's confidential Worker client; no client secret
-      // accepted or stored.
       oauth_mode: { type: "string", enum: ["byo", "assist"] },
-      // Which BYO-client walkthrough applies. Free-form.
       provider: { type: "string", minLength: 1 },
       auth_url: { type: "string", minLength: 1 },
       token_url: { type: "string", minLength: 1 },
@@ -749,8 +708,6 @@ const CONFIGURE_CREDENTIAL: CommandDefinition = {
   postconditions: [],
   sealedInput: ["client_secret", "api_key"],
   idempotency: "idempotent",
-  // `allowed_hosts` IS the #304 anti-exfiltration pin; non-owner proposals
-  // park (#308 A1 — `confirm`, not risk, parks post-#306).
   risk: "medium",
   confirm: true,
   handler: configureCredential,
@@ -776,7 +733,6 @@ function configureCredential(ctx: HandlerCtx): Record<string, unknown> {
     label: input.label,
   });
   if (input.cred_kind === "none") {
-    // Detach = DELETE the sidecar row; no half-shredded credentials.
     ctx.db
       .prepare("DELETE FROM sync_connection_credential WHERE connection_id = ?")
       .run(connectionId);
@@ -791,8 +747,6 @@ function configureCredential(ctx: HandlerCtx): Record<string, unknown> {
     });
     return { connection_id: connectionId, cred_kind: "none", status: "active" };
   }
-  // The host pin is the anti-exfiltration invariant (#304 decision 2): both
-  // kinds refuse to configure without one.
   if (!input.allowed_hosts || input.allowed_hosts.length === 0) {
     throw new Error(
       `cred_kind "${input.cred_kind}" requires allowed_hosts — the hosts this credential may be injected toward (issue #304)`
@@ -814,9 +768,6 @@ function configureCredential(ctx: HandlerCtx): Record<string, unknown> {
   } else if (!input.api_key) {
     throw new Error('cred_kind "api_key" requires api_key');
   }
-  // Switching kinds must never leak the previous credential's cells: replace
-  // the whole row, unset optionals NULL. oauth2 starts needs-auth; api_key is
-  // complete.
   const status = input.cred_kind === "oauth2" ? "needs-auth" : "active";
   ctx.db
     .prepare(
@@ -858,7 +809,6 @@ function configureCredential(ctx: HandlerCtx): Record<string, unknown> {
   return { connection_id: connectionId, cred_kind: input.cred_kind, status };
 }
 
-/** Upsert (or clear) the connection's owner-readable health note. */
 function setAuthNote(
   ctx: HandlerCtx,
   connectionId: string,
@@ -897,12 +847,7 @@ const STORE_TOKENS: CommandDefinition = {
     properties: {
       connection_id: { type: "string", minLength: 1 },
       access_token: { type: "string", minLength: 1 },
-      // Absent when refresh does not rotate; rotating providers MUST land
-      // the new one in the same act.
       refresh_token: { type: "string", minLength: 1 },
-      // Issue #865: the Worker-minted HMAC capability authenticating the
-      // refresh token at /refresh. Absent when no (new) refresh token is
-      // present; MUST land in the same act as a new refresh token.
       refresh_capability: { type: "string", minLength: 1 },
       expires_at: { type: "string", minLength: 1 },
     },
@@ -927,7 +872,6 @@ const STORE_TOKENS: CommandDefinition = {
   postconditions: [],
   sealedInput: ["access_token", "refresh_token", "refresh_capability"],
   idempotency: "idempotent",
-  // Confirm-gated (#308): swapping the token pair re-principals every drain.
   risk: "low",
   confirm: true,
   handler: storeTokens,
@@ -973,31 +917,12 @@ function storeTokens(ctx: HandlerCtx): Record<string, unknown> {
   return { connection_id: input.connection_id, status: "active" };
 }
 
-// ── Removal (#304) ──────────────────────────────────────────────────────
-// `sync.remove_connection` is the owner's actual DELETE, vs
-// `configure_credential({cred_kind:'none'})`'s detach. Irreversible:
-// Tier 4 (risk high, confirm-gated), like `core.merge_party`.
-//
-// What may be deleted and what BLOCKS is discovered LIVE off the schema
-// (`PRAGMA foreign_key_list`), so no hand-kept table list can rot:
-//   - #304 sidecars: ON DELETE CASCADE; deleted explicitly anyway so the
-//     receipt's write list stays complete.
-//   - `sync_connection_cursor`: pure position, no audit value — deleted.
-//   - nullable service anchors (#310): cleared, never a block.
-//   - receipted history (`outbox_item`, `sync_import_batch`,
-//     `sync_external_entity`, `sync_connection_run`): ANY row BLOCKS —
-//     cleanup must never shred the audit trail.
-
 interface ConnectionFkRef {
   table: string;
   column: string;
   notNull: boolean;
 }
 
-/**
- * Every live FK column referencing `sync_connection(connection_id)`, minus
- * SQLite-cascaded sidecars.
- */
 function connectionFkRefs(ctx: HandlerCtx): ConnectionFkRef[] {
   const tables = ctx.db
     .prepare(
@@ -1062,7 +987,6 @@ const REMOVE_CONNECTION: CommandDefinition = {
     },
   ],
   idempotency: "once",
-  // Tier 4 (#306): irreversible, so it stays loud — the core.merge_party stance.
   risk: "high",
   confirm: true,
   handler: removeConnection,
@@ -1076,7 +1000,6 @@ function removeConnection(ctx: HandlerCtx): Record<string, unknown> {
     .get(connectionId) as { kind: string; label: string };
   const name = `${connection.kind} "${connection.label}"`;
 
-  // Undecided outbox items get first say: name the lever that clears it.
   const undecided = ctx.db
     .prepare(
       `SELECT count(*) AS n FROM outbox_item WHERE connection_id = ? AND status IN ('pending','approved')`
@@ -1107,7 +1030,6 @@ function removeConnection(ctx: HandlerCtx): Record<string, unknown> {
     );
   }
 
-  // Nullable service anchors are metadata, not audit — cleared, never a block.
   for (const ref of refs) {
     if (ref.notNull) continue;
     ctx.db
@@ -1120,7 +1042,6 @@ function removeConnection(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare("DELETE FROM sync_connection_cursor WHERE connection_id = ?")
     .run(connectionId);
-  // Deleted explicitly though cascaded, so the write list stays honest.
   ctx.db
     .prepare("DELETE FROM sync_connection_credential WHERE connection_id = ?")
     .run(connectionId);

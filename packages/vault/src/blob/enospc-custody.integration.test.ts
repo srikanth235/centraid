@@ -3,14 +3,6 @@ import path from "node:path";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-/**
- * Always-on fault-injected ENOSPC custody proof (#496 P4 / B1).
- *
- * Owns `blob-custody.durability`. Injects an ENOSPC-shaped `writeSync` failure
- * at the FsBlobStore boundary so default CI proves: fail closed, no partial
- * blob claim, typed VaultDiskFullError. The real hdiutil disk image path stays
- * in `disk-full.integration.test.ts` behind CENTRAID_DISKFULL_E2E=1 (darwin).
- */
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { VaultDiskFullError } from "../errors.js";
@@ -18,16 +10,9 @@ import { FsBlobStore } from "./local.js";
 
 let writeSyncShouldFail = false;
 vi.mock(import("node:fs"), async (importOriginal) => {
-  // No type argument on importOriginal: passing the module as `import(...)`
-  // already types it, and restating `typeof import('node:fs')` here conflicts
-  // with the inferred namespace (which carries a synthetic `default`).
   const actual = await importOriginal();
   return {
     ...actual,
-    // `Parameters<typeof actual.writeSync>` only captures the last overload
-    // of node:fs's heavily-overloaded `writeSync`, so this replacement isn't
-    // structurally assignable to the real (overloaded) type — assert it on
-    // this one property rather than widen the whole module.
     writeSync: ((...args: Parameters<typeof actual.writeSync>) => {
       if (writeSyncShouldFail) {
         throw Object.assign(new Error("no space left on device"), {
@@ -52,11 +37,9 @@ describe("enospc-custody", () => {
     expect(() => store.putSync(sha, Buffer.from("payload-bytes"))).toThrow(
       VaultDiskFullError
     );
-    // No partial blob under the fanout path.
     const fanoutDir = path.join(dir, "sha256", sha.slice(0, 2));
     const leftover = existsSync(fanoutDir) ? readdirSync(fanoutDir) : [];
     expect(leftover).toStrictEqual([]);
-    // has() must not claim custody of a failed write.
     await expect(store.has(sha)).resolves.toBe(false);
   });
 

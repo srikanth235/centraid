@@ -149,7 +149,6 @@ describe(IntentQueue, () => {
       enqueuedAt: "2026-08-27T09:00:00.000Z",
     });
 
-    // A replayed id is the same durable admission, so its age keeps running.
     clock.set("2026-08-27T09:30:00.000Z");
     await expect(queue.enqueue(write)).resolves.toMatchObject({
       enqueuedAt: "2026-08-27T09:00:00.000Z",

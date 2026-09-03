@@ -1,7 +1,3 @@
-// Verifiable commons history (#731): the op hash chain, the signed
-// checkpoint digest, and the member-side parks that keep a diverged steward
-// from ever scrubbing a replica.
-
 import { afterEach, describe, expect, test } from "vitest";
 
 import { nowIso, uuidv7 } from "../ids.js";
@@ -42,9 +38,6 @@ function addParty(
   return partyId;
 }
 
-/** One steward + one member seat, compiled: the shape every peer sync starts
- * from. The steward's own vault id is bound, so the member can resolve the
- * signing key for checkpoint attestations. */
 function commons(label: string): {
   house: Household;
   grantId: string;
@@ -129,7 +122,6 @@ function exported(house: Household, grantId: string): CommonsBootstrap {
   });
 }
 
-/** The named fault an apply parked with — `undefined` when it did not park. */
 function parked(apply: () => void): string | undefined {
   try {
     apply();
@@ -164,7 +156,6 @@ describe("commons verifiable history", () => {
       op_hash: string;
     }[];
     expect(ops.map((op) => op.sequence)).toStrictEqual([first, second]);
-    // Sequence 1 links to the grant's genesis; nothing else is unlinked.
     expect(ops[0]!.prev_hash).toBe(commonsGenesisHash(grantId));
     expect(ops[1]!.prev_hash).toBe(ops[0]!.op_hash);
     expect(readCommonsChainHead(house.origin.vault, grantId)).toStrictEqual({
@@ -200,7 +191,6 @@ describe("commons verifiable history", () => {
         applyCommonsBootstrap({ seat: house.audience, wire: tampered, now })
       )
     ).toBe("history-diverged");
-    // Parked, never scrubbed: the replica this member already held survives.
     expect(assets(house)).toBe(1);
     expect(readCommonsVerified(house.audience.vault, grantId)).toBeUndefined();
   });
@@ -208,7 +198,6 @@ describe("commons verifiable history", () => {
   test("a snapshot whose bytes disagree with its signed digest parks without scrubbing", () => {
     const { house, grantId, now } = commons("digest");
     const wire = exported(house, grantId);
-    // The signature still checks out; the closure under it does not.
     const swapped: CommonsBootstrap = {
       ...wire,
       closure: { ...wire.closure, blobs: [] },
@@ -233,8 +222,6 @@ describe("commons verifiable history", () => {
     const verified = readCommonsVerified(house.audience.vault, grantId);
     expect(verified?.sequence).toBe(second);
 
-    // Restore-from-backup at the steward: sequence 2 is dropped, the chain head
-    // moves back to sequence 1, and a DIFFERENT op takes the vacated slot.
     const head = house.origin.vault
       .prepare(
         "SELECT op_hash FROM share_commons_op WHERE grant_id = ? AND sequence = 1"
@@ -272,7 +259,6 @@ describe("commons verifiable history", () => {
       )
     ).toBe("history-diverged");
     expect(assets(house)).toBe(1);
-    // The verified point never moved backward to accommodate the fork.
     expect(readCommonsVerified(house.audience.vault, grantId)).toStrictEqual(
       verified
     );

@@ -1,16 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#436) the reference conformance kit is one cohesive grading suite — every case shares `withProvider`/`manifestKeyFor`/`expectError` fixtures and is the executable definition of the protocol; the profile-membership assertion (#436 § Profiles) belongs in the capabilities-sanity case beside the other Layer-1 discovery checks, not in a fragmented sibling
-/*
- * The conformance kit (PROTOCOL.md § Conformance): "the reference
- * conformance kit lives in Centraid's packages/backup (conformance.ts) and
- * runs the same assertions against any BackupProvider implementation ...
- * The kit is the definition of this protocol; where prose and kit disagree,
- * fix whichever is wrong loudly."
- *
- * Framework-agnostic on purpose (`node:assert/strict`, not vitest) — this
- * package's own tests consume it under vitest, but a third-party provider's
- * CI can run these cases under anything that can call an async function and
- * catch a thrown error.
- */
 
 import assert from "node:assert/strict";
 
@@ -48,14 +36,6 @@ async function withProvider(
   }
 }
 
-/**
- * `manifestKey` MUST fall under the target's `backup` store prefix
- * (PROTOCOL.md "Snapshot registration" — the same `u/{id}/backup/` the grant's
- * `prefix` uses; see `engine.ts`'s `createSnapshot`). A bare `manifests/…` key
- * is protocol-invalid — a conformant provider MUST 400 it with
- * `invalid_manifest_key` — so every case below builds a prefixed key to stay a
- * valid grading input for ANY conformant provider, not just this package's two.
- */
 function manifestKeyFor(targetId: string, name: string): string {
   return `u/${targetId}/backup/manifests/${name}`;
 }
@@ -75,10 +55,6 @@ async function expectError(
   throw new Error("expected a BackupProviderError to be thrown, nothing was");
 }
 
-/**
- * The grading suite. Each case is self-contained (calls `makeProvider()`
- * itself) so cases can run in any order/isolation without sharing state.
- */
 export function providerConformanceCases(
   makeProvider: () => Promise<ConformanceHarness>
 ): ConformanceCase[] {
@@ -132,9 +108,6 @@ export function providerConformanceCases(
                 `unknown profile name "${profile}"`
               );
             }
-            // A `home` provider MUST carry every member capability — `policy`
-            // included — so the client's freshness watchdog has a declared
-            // cadence to anchor staleness against (PROTOCOL.md § Profiles).
             if (caps.profiles.includes("home")) {
               for (const member of HOME_PROFILE_CAPABILITIES) {
                 assert.ok(
@@ -213,11 +186,6 @@ export function providerConformanceCases(
     },
 
     {
-      // The snapshot format (#408, carried unchanged into /2) stores WAL
-      // segments as plain data-plane objects under `wal/…` — providers never
-      // parse them (and /2's chunk compression does not reach them), but
-      // MUST round-trip the deeper key shape and serve ordered prefix LISTs
-      // (restore planning is a LIST, no per-object reads).
       name: "data-plane wal-segment namespace: deep keys round-trip + prefix list",
       run: () =>
         withProvider(makeProvider, async (provider) => {
@@ -233,8 +201,6 @@ export function providerConformanceCases(
             `wal/vault/${gen}/00000000/000000004128-000000008256-1752480060000`,
             `wal/vault/${gen}/00000000/closed-000000008256`,
             `wal/vault/${gen}/00000001/000000000000-000000004128-1752480120000`,
-            // The tick marker lives OUTSIDE the stream prefix, so a generation
-            // sweep never takes the proof of its own tip with it.
             `wal/tick/${gen}/1752480060000`,
           ];
           await Promise.all(keys.map((key) => rw.put(key, TEXT.encode(key))));
@@ -277,7 +243,6 @@ export function providerConformanceCases(
             appMeta: { gatewayVersion: "0.1.0" },
           };
           const first = await provider.registerSnapshot(targetId, reg);
-          // Wire timestamps are unix epoch seconds (integers) — PROTOCOL.md.
           assert.ok(
             Number.isInteger(first.createdAt),
             "createdAt must be an epoch-second integer"
@@ -462,8 +427,6 @@ export function providerConformanceCases(
           assert.ok(["ok", "payment_due", "suspended"].includes(accountStatus));
           assert.equal(typeof usage.storedBytes, "number");
           assert.equal(typeof usage.objectCount, "number");
-          // quotaBytes / meteredAt are OPTIONAL (a provider may not meter or
-          // cap); when present, meteredAt is an epoch-second integer.
           if (usage.quotaBytes !== undefined) {
             assert.equal(typeof usage.quotaBytes, "number");
           }
@@ -475,10 +438,6 @@ export function providerConformanceCases(
           }
         }),
     },
-
-    // -- Layer 1: grant-layer cases -----------------------------------------
-    // `requestGrant` is OPTIONAL (PROTOCOL.md § Layer 1) — a provider whose data
-    // plane IS the caller's own custody has nothing to grant. Skip cleanly.
 
     {
       name: "grant layer: per-store region + store echoed + disjoint prefixes",
@@ -517,11 +476,6 @@ export function providerConformanceCases(
           );
         }),
     },
-
-    // -- Layer 2: cas store cases --------------------------------------------
-    // Generic through `openDataPlane` (like the backup roundtrip above) so this
-    // runs offline against ANY provider; a remote-backed harness transitively
-    // exercises real S3-compatible HTTP via the shared S3 test server.
 
     {
       name: "cas: put/list/get/delete round-trip",
@@ -585,7 +539,6 @@ export function providerConformanceCases(
         }),
     },
 
-    // -- Layer 1: usage cases -------------------------------------------------
     {
       name: "usage report: skip cleanly when capability absent, shape + monotonic bytes when present",
       run: () =>

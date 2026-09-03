@@ -6,12 +6,6 @@ import type {
 } from "../../gateway-client.js";
 import { groupDevicesByOwner } from "./device-groups.js";
 
-// `owner_id` is NOT NULL on every binding (#726), so grouping is total: the
-// interesting cases are what happens when the ROSTER is missing, not what
-// happens when a device has no person — that state cannot exist. A vault has
-// exactly one owner and a device caller sees only its own owner's vaults, so
-// every device this grouping ever sees belongs to the SAME person.
-
 function device(
   over: Partial<CentraidGatewayDevice> = {}
 ): CentraidGatewayDevice {
@@ -89,9 +83,6 @@ describe(groupDevicesByOwner, () => {
   });
 
   it("folds a device's per-vault enrollments into one hardware row", () => {
-    // The devices route returns a row per (device, vault). Two rows for one
-    // browser must not render as two devices — a card counting "4 devices"
-    // for two, each with a "Revoke device" button that drops one vault.
     const groups = groupDevicesByOwner(
       [
         device({ deviceId: "enr_shared", vaultId: "v1", vaultName: "Shared" }),

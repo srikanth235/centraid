@@ -1,5 +1,3 @@
-// Transcript projector (#659): WeakMap ids + reference-stable DTOs. Compare, do not sign.
-
 import type { AsstMsgDTO } from "../../screen-contracts.js";
 import { structuralEqual } from "../structuralEqual.js";
 import { msgToDTO } from "./assistantTranscript.js";

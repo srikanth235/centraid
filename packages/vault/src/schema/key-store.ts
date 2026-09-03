@@ -1,14 +1,3 @@
-/*
- * Named gateway/vault key custody (#555).
- *
- * A KeyStore file is never a bare secret. Every backend writes the same
- * self-describing envelope so custody can move between host and OS wrappers
- * without changing callers or filenames. The unprotected file scheme remains
- * only for legacy adoption and low-level compatibility; production gateway
- * hosts supply a protector (OS/service custody or an external 0600 host
- * credential).
- */
-
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import {
   chmodSync,
@@ -43,11 +32,9 @@ export interface KeyProtector {
 export interface KeyStoreOptions {
   protector?: KeyProtector;
   warn?: (message: string) => void;
-  /** Fault-injection seam used to prove first-mint atomicity. */
   beforeCommit?: (file: string, tempFile: string) => void;
 }
 
-/** AES-256-GCM envelope protector backed by a device-custodied wrapping key. */
 export function aesGcmKeyProtector(masterKey: Buffer): KeyProtector {
   if (masterKey.length !== KEY_STORE_SECRET_BYTES) {
     throw new KeyStoreError(
@@ -97,11 +84,6 @@ export class KeyStoreError extends Error {
   }
 }
 
-/**
- * Persistent named-secret store. Construction is side-effect free: a
- * vaultless gateway creates `keys/` only when the endpoint identity is
- * actually requested.
- */
 /* oxlint-disable max-classes-per-file -- the typed custody error is colocated with the KeyStore boundary that throws it (#555) */
 export class KeyStore {
   readonly dir: string;
@@ -140,8 +122,6 @@ export class KeyStore {
     }
     this.repairMode(file);
 
-    // One-time adoption of the pre-#555 raw 32-byte files. Rewrite before
-    // returning so a successful open never leaves live raw material behind.
     if (
       raw.length === KEY_STORE_SECRET_BYTES &&
       !raw.toString().startsWith(KEY_STORE_ENVELOPE_MAGIC)
@@ -154,8 +134,6 @@ export class KeyStore {
     let secret: Buffer;
     if (envelope.scheme === FILE_SCHEME) {
       secret = decodePayload(file, envelope.payload);
-      // Desktop adoption: once an OS-custodied protector is available, a
-      // successfully-read headless/legacy envelope is immediately rewrapped.
       if (this.protector) this.write(name, secret);
     } else if (this.protector?.scheme === envelope.scheme) {
       secret = this.protector.unprotect(decodePayload(file, envelope.payload));

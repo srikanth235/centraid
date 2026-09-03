@@ -1,11 +1,3 @@
-/*
- * ZONE-CROSSING recurrence collapse (#839, docs/cron-timezone.md). A schedule
- * is DEFINED in one zone and READ from another; the failure is an occurrence
- * delivered twice or dropped on a seam. THE COLLAPSE LAW: however the range is
- * cut, the occurrences are the same multiset, same order, once each — proven
- * over seeded arbitrary seams, not only the midnights anyone wrote down.
- */
-
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
@@ -32,7 +24,6 @@ const CROSSINGS: readonly Crossing[] = [
   {
     label: "New York daily 02:30 across the 2026 spring-forward",
     definitionZone: "America/New_York",
-    // 02:30 New York; 02:30 does not exist on 03-08.
     start: "2026-03-06T07:30:00.000Z",
     wallTime: "02:30:00",
     rangeFrom: "2026-03-05T00:00:00.000Z",
@@ -42,7 +33,6 @@ const CROSSINGS: readonly Crossing[] = [
   {
     label: "New York daily 01:30 across the 2026 fall-back",
     definitionZone: "America/New_York",
-    // 01:30 New York; 01:30 happens twice on 11-01.
     start: "2026-10-30T05:30:00.000Z",
     wallTime: "01:30:00",
     rangeFrom: "2026-10-29T00:00:00.000Z",
@@ -52,7 +42,6 @@ const CROSSINGS: readonly Crossing[] = [
   {
     label: "Lord Howe daily 01:45 across the 2026 half-hour fall-back",
     definitionZone: "Australia/Lord_Howe",
-    // 01:45 Lord Howe; 01:45 happens twice on 04-05.
     start: "2026-04-02T14:45:00.000Z",
     wallTime: "01:45:00",
     rangeFrom: "2026-04-01T00:00:00.000Z",
@@ -191,12 +180,10 @@ describe("zone-crossing recurrence collapse", () => {
           crossing.rangeFrom,
           crossing.rangeTo
         );
-        // Assert the seams exist: no cut would make this test vacuous.
         expect(cuts.length).toBeGreaterThan(2);
 
         const piecewise = expandPiecewise(crossing, cuts);
 
-        // Order AND multiplicity: catches the double-counted and dropped seams.
         expect(piecewise).toStrictEqual(whole);
         expect(new Set(piecewise).size).toBe(whole.length);
       }
@@ -205,8 +192,6 @@ describe("zone-crossing recurrence collapse", () => {
     it.each(CROSSING_ROWS)(
       "%s survives arbitrary seeded cut points, not just day boundaries",
       (_label, crossing) => {
-        // Arbitrary seams prove the law is about the half-open window, not
-        // midnight. Seeded from a literal so a failure replays.
         const whole = expandBetween(
           crossing,
           Date.parse(crossing.rangeFrom),
@@ -227,7 +212,6 @@ describe("zone-crossing recurrence collapse", () => {
           Date.parse(crossing.rangeFrom),
           Date.parse(crossing.rangeTo)
         );
-        // Skipped for a gap, once for an overlap: one row per civil day.
         const civilDays = whole.map((instant) => {
           const parts = zonedParts(instant, crossing.definitionZone);
           return Date.UTC(parts.year, parts.month - 1, parts.day);
@@ -252,8 +236,6 @@ describe("zone-crossing recurrence collapse", () => {
     it.each(MATRIX)(
       "%s keeps the definition zone's wall clock, not the reader's",
       (_label, crossing, viewerZone) => {
-        // A viewer never re-interprets the schedule in its device zone: same
-        // wall clock there, AND a different series under the reader's zone.
         const authoritative = expandInstances(
           crossing,
           Date.parse(crossing.rangeFrom),
@@ -289,7 +271,6 @@ describe("zone-crossing recurrence collapse", () => {
         timeZone: "America/New_York",
         now: "2026-03-11T12:00:00.000Z",
       });
-      // 03-06, 03-07, (03-08 skipped), 03-09, 03-10, 03-11 → five elapsed.
       expect(collapsed).toStrictEqual({
         missed: 5,
         nextDue: "2026-03-12T06:30:00.000Z",
@@ -303,7 +284,6 @@ describe("zone-crossing recurrence collapse", () => {
         timeZone: "America/New_York",
         now: "2026-11-03T12:00:00.000Z",
       });
-      // 10-30, 10-31, 11-01 (once, not twice), 11-02, 11-03 → five elapsed.
       expect(collapsed).toStrictEqual({
         missed: 5,
         nextDue: "2026-11-04T06:30:00.000Z",
@@ -313,11 +293,9 @@ describe("zone-crossing recurrence collapse", () => {
     it.each(VIEWERS.map((viewer) => [viewer.zone] as const))(
       "is identical whichever zone (%s) the reader is in",
       (viewerZone) => {
-        // `now` is an instant: the reader's zone must not enter the answer.
         const now = "2026-11-03T12:00:00.000Z";
         const definitionNow = zonedParts(now, "America/New_York");
         const viewerNow = zonedParts(now, viewerZone);
-        // The reader really is on another civil clock, or this proves nothing.
         expect([viewerNow.day, viewerNow.hour]).not.toStrictEqual([
           definitionNow.day,
           definitionNow.hour,
@@ -337,7 +315,6 @@ describe("zone-crossing recurrence collapse", () => {
     );
 
     it("never returns the second copy of a repeated wall minute as the next due", () => {
-      // Inside the repeated hour the next occurrence is TOMORROW's 01:30.
       const insideRepeatedHour = "2026-11-01T05:45:00.000Z";
       const next = nextOccurrence({
         rrule: RRULE,

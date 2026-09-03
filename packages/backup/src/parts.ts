@@ -1,8 +1,5 @@
-// Fixed-size parts per FORMAT.md § Parts; size MUST NOT change in-format.
-
 export const PART_BYTES = 16 * 1024 * 1024;
 
-/** @yields {Uint8Array} Owned exact-`partBytes` slices, in order. */
 export async function* partStream(
   source: AsyncIterable<Uint8Array>,
   partBytes: number = PART_BYTES
@@ -17,7 +14,6 @@ export async function* partStream(
     while (pendingBytes + rest.length >= partBytes) {
       const take = partBytes - pendingBytes;
       const slice = rest.subarray(0, take);
-      // Copy when pending is empty, else this aliases the caller's buffer.
       pending.push(pending.length === 0 ? Uint8Array.from(slice) : slice);
       yield concat(pending, partBytes);
       pending = [];
@@ -25,7 +21,6 @@ export async function* partStream(
       rest = rest.subarray(take);
     }
     if (rest.length > 0) {
-      // Copy the tail: callers reuse their read buffer.
       pending.push(Uint8Array.from(rest));
       pendingBytes += rest.length;
     }

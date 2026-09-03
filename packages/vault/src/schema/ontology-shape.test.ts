@@ -1,18 +1,3 @@
-// What a FRESH vault is, after #916 closed the v0 ontology's last
-// inconsistencies — the OWNER DECISIONS (brief D1–D4) and the end-to-end
-// effects that fall out of them (E1–E3).
-//
-// Every assertion here reads the composed BASELINE — the DDL modules
-// themselves — rather than a file walked forward through a ladder. v0 has no
-// files in the field, so a shape the baseline can simply state does not need a
-// rung that reconstructs it, and a test that walks a rung to find out what the
-// vault is would be testing the reconstruction instead of the decision.
-//
-// The suite is organised by what it protects, not by which module changed:
-// each block names the review finding or owner decision it holds, so a shape
-// that quietly reverts fails under the reason it was chosen. Its sibling,
-// `ontology-rules.test.ts`, holds the review's numbered rules (R1–R13).
-
 import { describe, expect, it } from "vitest";
 
 import { ONTOLOGY_PACKS } from "./atlas.js";
@@ -69,8 +54,6 @@ describe("D1 — a party is trashed and then purged", () => {
       `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_by_party_id, tagged_at)
        VALUES ('t1', 'core.place', 'pl1', 'c1', 'p1', ?)`
     ).run(NOW);
-    // The tag survives the tagger; it just stops naming one. (A tag ON the
-    // person would go with them — that is the supertype cascade, not this.)
     db.prepare(`DELETE FROM core_party WHERE party_id = 'p1'`).run();
     const tag = db
       .prepare(
@@ -104,14 +87,12 @@ describe("D1 — a party is trashed and then purged", () => {
     );
     expect(onDeleteOf(db, "core_event", "organizer_party_id")).toBe("SET NULL");
     expect(onDeleteOf(db, "media_face_region", "party_id")).toBe("SET NULL");
-    // Held back by a CHECK that a SET NULL would break mid-delete.
     expect(onDeleteOf(db, "media_face_region", "confirmed_by_party_id")).toBe(
       "NO ACTION"
     );
     expect(onDeleteOf(db, "social_message", "sender_party_id")).toBe(
       "NO ACTION"
     );
-    // Money and authority hold the line.
     expect(onDeleteOf(db, "tally_expense", "paid_by")).toBe("NO ACTION");
     expect(onDeleteOf(db, "access_grant", "granted_by_party_id")).toBe(
       "NO ACTION"
@@ -143,7 +124,6 @@ describe("D2 — one revision mechanism", () => {
     ).toStrictEqual({
       retain: "forever",
     });
-    // Everything else takes the declared default rather than a per-caller guess.
     expect(revisionPolicyOf(VAULT_ENTITIES.core!.event!).retain).toBeTypeOf(
       "number"
     );
@@ -166,7 +146,6 @@ describe("D3 — recurring splits are rows", () => {
     expect(onDeleteOf(db, "tally_recurring_expense_split", "template_id")).toBe(
       "CASCADE"
     );
-    // A share is money: it refuses the purge of the person who owes it.
     expect(onDeleteOf(db, "tally_recurring_expense_split", "party_id")).toBe(
       "NO ACTION"
     );
@@ -238,19 +217,13 @@ describe("E2 — a purge revokes, it does not erase", () => {
            FROM share_authority ORDER BY authority_id`
       )
       .all() as { id: string; at: string | null; why: string | null }[];
-    // Both survive as history; both are revoked, each for its own reason.
     expect(rows).toHaveLength(2);
     expect(rows[0]?.why).toBe("principal-purged");
     expect(rows[1]?.why).toBe("subject-purged");
-    // An ISO stamp, not just non-empty: `revoked_at` is the live-grant filter.
     for (const row of rows)
       expect(row.at).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/u);
   });
 
-  // #916, audit F3: the principal clause was written for `person` alone, so a
-  // circle deleted by `tally.delete_group` or share/removal.ts left the answers
-  // its members hold THROUGH it standing — a live answer whose audience is
-  // gone, which is the exact failure the clause exists to prevent.
   it("stamps every live answer a purged CIRCLE principal holds", () => {
     const db = baselineVault();
     party(db, "owner");
@@ -272,8 +245,6 @@ describe("E2 — a purge revokes, it does not erase", () => {
     expect(answer.at).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/u);
   });
 
-  // The clause is generated from one map, so the vocabulary the table admits
-  // and the vocabulary the trigger answers for cannot drift apart.
   it("accounts for every principal kind the table admits", () => {
     const db = baselineVault();
     const check =
@@ -287,7 +258,6 @@ describe("E2 — a purge revokes, it does not erase", () => {
     expect(admitted).toStrictEqual(
       [...PRINCIPAL_ENTITY_KINDS.keys(), ...NON_ENTITY_PRINCIPAL_KINDS].sort()
     );
-    // The mapped kinds name REAL entity kinds, or the CASE would never match.
     const kinds = (
       db.prepare(`SELECT kind FROM core_entity_kind`).all() as {
         kind: string;
@@ -302,11 +272,6 @@ describe("audit F1 — the entity id namespace is ENFORCED, not assumed", () => 
   it("refuses an id another entity kind already holds", () => {
     const db = baselineVault();
     party(db, "x1");
-    // Before this guard the membership trigger's `INSERT OR IGNORE` swallowed
-    // the collision: no supertype row was minted for the place, its own
-    // `FOREIGN KEY (place_id) REFERENCES core_entity(entity_id)` was satisfied
-    // by the PARTY's row, and purging the party cascaded the unrelated place
-    // away with it.
     expect(() =>
       db
         .prepare(
@@ -329,9 +294,6 @@ describe("audit F1 — the entity id namespace is ENFORCED, not assumed", () => 
   it("still absorbs the same kind re-deriving its own supertype row", () => {
     const db = baselineVault();
     party(db, "p1");
-    // SQLite fires BEFORE INSERT triggers AHEAD of conflict resolution, so
-    // every upsert on an entity table re-runs the membership write against a
-    // row that is already there. `OR IGNORE` is load-bearing for exactly this.
     db.prepare(
       `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at)
        VALUES ('p1', 'person', 'renamed', ?, ?)
@@ -349,7 +311,6 @@ describe("audit F1 — the entity id namespace is ENFORCED, not assumed", () => 
 });
 
 describe("E3 — the projection rule, mechanically", () => {
-  /** Ontology-pack entities, as [logical, physical, declaration]. */
   const ontologyEntities = Object.entries(VAULT_ENTITIES)
     .filter(([schema]) => ONTOLOGY_PACKS.includes(schema))
     .flatMap(([schema, entities]) =>
@@ -387,9 +348,6 @@ describe("E3 — the projection rule, mechanically", () => {
 
   it("keys every PROJECTION by the row it belongs to", () => {
     const db = baselineVault();
-    // The one exception, and its reason: an alias's key is a WORD the member
-    // chose, and entity ids are one opaque namespace — an alias called
-    // "github" must not occupy one (schema/entity.ts).
     const NAMED_EXCEPTION = "locker.item_alias";
     for (const [logical, physical, declaration] of ontologyEntities) {
       const parent = declaration.projectionOf;
@@ -408,8 +366,6 @@ describe("E3 — the projection rule, mechanically", () => {
         .all() as { from: string; table: string }[];
       const parentPhysical =
         parent === "core.entity" ? "core_entity" : parent.replace(".", "_");
-      // A projection whose parent is `core.entity` is keyed BY ITS POINTER:
-      // the composite `(type, id)`, so it cannot outlive whatever it names.
       const parentKeys =
         parent === "core.entity"
           ? ["target_type", "target_id"]

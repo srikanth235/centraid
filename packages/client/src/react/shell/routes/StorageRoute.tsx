@@ -4,11 +4,6 @@ import EmptyBlock from "../../ui/EmptyBlock.js";
 import { useShellActions } from "../actions.js";
 import PageScroll from "../PageScroll.js";
 
-/**
- * Stable interstitial for old Storage links. Storage no longer owns a
- * launcher destination, but a persisted route must explain the move and give
- * the member one explicit way forward instead of silently changing pages.
- */
 export default function StorageRoute(): JSX.Element {
   const { navigate } = useShellActions();
   return (

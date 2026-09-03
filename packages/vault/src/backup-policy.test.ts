@@ -82,15 +82,12 @@ describe("BackupPolicy", () => {
   });
 
   it("treats an empty/whitespace storageClass as unset, not an explicit class", () => {
-    // db.ts reads storageClass as a falsy header, so an empty/whitespace value
-    // must normalize to undefined rather than throw or pass through as "".
     expect(
       resolveBackupPolicy({ storageClass: "" }).storageClass
     ).toBeUndefined();
     expect(
       resolveBackupPolicy({ storageClass: "   " }).storageClass
     ).toBeUndefined();
-    // A real (trimmed) class is still honored, and a non-string is still rejected.
     expect(
       resolveBackupPolicy({ storageClass: " GLACIER " }).storageClass
     ).toBe("GLACIER");
@@ -100,7 +97,6 @@ describe("BackupPolicy", () => {
   });
 
   it("resolves and round-trips the directToColdOriginals knob (issue #425 Wave 3)", () => {
-    // Absent by default — the resolver applies its own default-ON config.
     expect(readBackupPolicy(db.vault).directToColdOriginals).toBeUndefined();
     const policy = updateBackupPolicy(db.vault, {
       directToColdOriginals: {
@@ -117,7 +113,6 @@ describe("BackupPolicy", () => {
     expect(readBackupPolicy(db.vault).directToColdOriginals).toStrictEqual(
       policy.directToColdOriginals
     );
-    // null clears it back to the default-ON (absent) state.
     expect(
       updateBackupPolicy(db.vault, { directToColdOriginals: null })
         .directToColdOriginals
@@ -145,7 +140,6 @@ describe("BackupPolicy", () => {
     expect(() =>
       resolveBackupPolicy({ directToColdOriginals: { mimePrefixes: "video/" } })
     ).toThrow(/mimePrefixes/u);
-    // A partial object is accepted; unspecified sub-fields fall back at read.
     expect(
       resolveBackupPolicy({ directToColdOriginals: { minBytes: 42 } })
         .directToColdOriginals

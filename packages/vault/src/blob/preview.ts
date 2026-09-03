@@ -1,9 +1,3 @@
-// The preview ladder (#405): two sealed derivative rungs beside every image
-// original. A capable client makes both at capture time; this is the GATEWAY
-// BACKSTOP for what a client cannot reach. The vault carries NO raster codec,
-// so it is INJECTED via `VaultDb.previewCodec`; results stage through the
-// existing ingest/promote path, so dedup and replication need no new plumbing.
-
 import { BLOB_MEDIUM_EDGE, BLOB_TINY_EDGE } from "@centraid/core/blob";
 
 import type { VaultDb } from "../db.js";
@@ -14,7 +8,6 @@ import { shaOfBlobUri } from "./store.js";
 export const TINY_EDGE = BLOB_TINY_EDGE;
 export const MEDIUM_EDGE = BLOB_MEDIUM_EDGE;
 
-/** Cheap CPU QoS, never foreground: one batch per sweep (#405). */
 export const PREVIEW_BACKFILL_BATCH = 24;
 export const INGRESS_PREVIEW_MAX_BYTES = 32 * 1024 * 1024;
 
@@ -33,10 +26,6 @@ export interface PreviewOutput {
   height: number;
 }
 
-/**
- * Fit one image within `maxEdge` on its long side, never UPSCALING. `null` is a
- * refusal, not an error: the item renders its placeholder (#404).
- */
 export interface PreviewCodec {
   downscale: (
     source: Buffer,
@@ -58,9 +47,7 @@ export interface PreviewBackfillResult {
   generated: number;
   phashesGenerated: number;
   thumbhashesGenerated: number;
-  /** The codec declined the item. */
   skippedUnsupported: number;
-  /** Absent from BOTH tiers — an integrity gap. */
   missingBytes: number;
 }
 
@@ -142,7 +129,6 @@ export async function contributeIngressPreviews(
     generated += 1;
     return stageNextRung(index + 1);
   }
-  // A quality ladder: a declined rung stops the costlier ones after it.
   await stageNextRung(0);
   if (!hasStagedOrClaimedVariant(db, input.sha256, "phash")) {
     try {
@@ -159,7 +145,7 @@ export async function contributeIngressPreviews(
         generated += 1;
       }
     } catch {
-      // A hash miss only removes a duplicate hint.
+      // Intentionally empty.
     }
   }
   if (!hasStagedOrClaimedVariant(db, input.sha256, "thumbhash")) {
@@ -177,7 +163,7 @@ export async function contributeIngressPreviews(
         generated += 1;
       }
     } catch {
-      // A missing placeholder means a blank tile until the thumb lands.
+      // Intentionally empty.
     }
   }
   return generated;
@@ -189,12 +175,6 @@ function yieldTick(): Promise<void> {
   });
 }
 
-/**
- * Bounded and idempotent: an existing contribution is never regenerated, so a
- * client-supplied thumb that beat the sweep wins. Per-item failures are
- * counted, never fatal — a codec crash must not fail the custody sweep this
- * rides along with (#405, #414).
- */
 export async function backfillPreviews(
   db: VaultDb,
   codec: PreviewCodec,
@@ -212,8 +192,6 @@ export async function backfillPreviews(
   if (limit <= 0) return result;
   const now = options.now ?? nowIso();
 
-  // `deleted_at IS NULL` keeps the backstop off trashed items; the raster
-  // filter keeps video out — a video backstop is a non-goal (#405).
   const items = db.vault
     .prepare(
       `SELECT i.content_id, i.content_uri, i.media_type
@@ -261,7 +239,6 @@ export async function backfillPreviews(
     const parentSha = shaOfBlobUri(item.content_uri);
     if (!parentSha) return processNextItem(index + 1);
     try {
-      // Recomputed per item: an existing rung is never overwritten.
       const missing = PREVIEW_LADDER.filter(
         (rung) =>
           !hasVariant(db, item.content_id, rung.variant) &&
@@ -272,14 +249,12 @@ export async function backfillPreviews(
       if (missing.length === 0 && !missingPhash && !missingThumbhash) {
         return processNextItem(index + 1);
       }
-      // A remote-only original reads through custody.open at backfill pace.
       const bytes =
         db.blobs.getSync(parentSha) ?? (await db.blobs.open(parentSha));
       if (!bytes) {
         result.missingBytes += 1;
         return processNextItem(index + 1);
       }
-      // Declining the tiny rung declines the medium: same decode.
       let unsupported = await stageMissingPreviewRungs(
         db,
         codec,
@@ -321,7 +296,7 @@ export async function backfillPreviews(
       }
       if (unsupported) result.skippedUnsupported += 1;
     } catch {
-      // One unreadable image never sinks the batch or the custody sweep.
+      // Intentionally empty.
     }
     await yieldTick();
     return processNextItem(index + 1);

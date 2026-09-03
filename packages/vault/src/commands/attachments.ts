@@ -1,9 +1,3 @@
-// Attachments (core §01): pin a file to a canonical row via a polymorphic
-// edge (core_attachment.target_type/target_id) onto core_content_item.
-// Exactly one source per call: staged_sha (#296), data_uri, or content_id
-// (#272). The edge counts as a GC reference: `core_attachment.content_id` is
-// the first entry of the ONE content-reference list (#883).
-
 import {
   MAX_INLINE_DATA_URI_CHARS,
   mintContentFromDataUri,
@@ -13,10 +7,6 @@ import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { assertInlineDataUriWithinBudget } from "./inline-body-guard.js";
 import { releaseContentIfUnreferenced } from "./media.js";
 
-/**
- * Logical name → PK column; the physical table underscores the dot. Also an
- * allow-list: an unknown subject_type is refused, never turned into SQL.
- */
 const SUBJECT_PK: Record<string, string> = {
   "core.event": "event_id",
   "core.party": "party_id",
@@ -26,10 +16,6 @@ const SUBJECT_PK: Record<string, string> = {
   "social.thread": "thread_id",
   "social.message": "message_id",
   "media.asset": "asset_id",
-  // Locker is byte-bearing (#872): one allow-list entry, not a second attach
-  // command. HONEST BOUNDARY — the bytes ride the content spine and are NOT
-  // sealed. Sealing is a COLUMN class, so a locker attachment is protected by
-  // the vault file, not the reveal gate, and Locker's copy must say so.
   "locker.item": "item_id",
 };
 
@@ -85,7 +71,6 @@ const ATTACH: CommandDefinition = {
       value: 1,
     },
     {
-      // The inline door is for SMALL payloads: the journal records every input.
       name: "within_size_cap",
       sql: `SELECT CASE WHEN :data_uri IS NULL THEN 1 ELSE (length(:data_uri) <= ${MAX_INLINE_DATA_URI_CHARS}) END AS n`,
       column: "n",
@@ -139,7 +124,6 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
   };
   const pk = SUBJECT_PK[input.subject_type];
   if (!pk) throw new Error(`cannot attach to ${input.subject_type}`);
-  // Table and pk come from the trusted map, never from caller text.
   const table = input.subject_type.replace(".", "_");
   const subject = ctx.db
     .prepare(`SELECT count(*) AS n FROM ${table} WHERE ${pk} = ?`)
@@ -158,8 +142,6 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
     mediaType = claimed.mediaType;
     byteSize = claimed.byteSize;
   } else if (input.data_uri !== undefined) {
-    // Binary spills to the CAS in mintContentFromDataUri; text/* cannot
-    // redirect (FTS reads content_uri in-transaction) (#367).
     assertInlineDataUriWithinBudget(input.data_uri);
     const minted = mintContentFromDataUri(ctx, input.data_uri, {
       title: input.title,
@@ -258,16 +240,6 @@ const DETACH: CommandDefinition = {
   handler: detach,
 };
 
-/**
- * THE LAST REFERENCE RELEASES THE BYTES (#916, adversarial BUG-6).
- *
- * "The content item is canonical and deduped; detach never touches it" was
- * true of the DEDUPE and wrong about the LIFECYCLE: an attachment that minted
- * its own content item — a receipt photographed into Tally, a file dropped on
- * a note — was the only thing referencing it, so detaching left a content row
- * with no referrer, no trash pair, and bytes no sweep would ever reclaim. The
- * count is the same one `media.delete_asset` already takes.
- */
 function detach(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { attachment_id: string };
   const attachment = ctx.db

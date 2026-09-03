@@ -17,8 +17,6 @@ describe("auth", () => {
   });
 
   test("resolveToken falls back to CENTRAID_GATEWAY_TOKEN (the daemon loopback secret)", () => {
-    // Issue #505 phase 7: there is no on-disk token.bin to auto-read; an operator
-    // reuses the loopback secret the daemon was started with.
     const token = resolveToken({
       env: { CENTRAID_GATEWAY_TOKEN: "gw-secret" },
     });

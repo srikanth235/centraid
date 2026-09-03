@@ -25,32 +25,11 @@ import controlsCss from "../../styles/controls.module.css";
 import buttonCss from "../../ui/Button.module.css";
 import styles from "./ConnectFlow.module.css";
 
-// The shared connect wizard (#382) — two top-level methods (This Mac /
-// Existing vault), a connectivity-test "handshake ladder"
-// (HandshakeLadder.tsx), then a vault pick/create step, then commit. Both
-// hosts reach it through `ConnectTicketPanel`: onboarding's ticket path and
-// the switcher's "Add vault" modal (see ConnectFlowModal.tsx). All the state
-// transitions live in the pure `connectFlow-core.ts`; this component only
-// dispatches events and runs the IO (`connectFlowIO.ts`) the transitions ask
-// for.
-
 export interface ConnectFlowProps {
-  /** Only the commit button's copy ("Enter Centraid" vs "Connect") — the
-   *  steps themselves are identical. First run no longer auto-commits a local
-   *  connect (#603): a fresh gateway founds two vaults, so "which one"
-   *  is a real question and the desktop chooser answers it before we get
-   *  here. */
   context: "onboarding" | "switcher";
-  /** Method cards to offer. Defaults to both; the switcher's "Add vault"
-   *  passes `['gateway']` — 'local' is always already registered there, so
-   *  re-offering it wouldn't add a connection. */
   methods?: readonly ConnectMethod[];
-  /** Skip the method grid and open straight into this method's first step —
-   *  for hosts that already made the choice (#603 first run). */
   initialMethod?: ConnectMethod;
   onDone: (result: ConnectFlowResult) => void;
-  /** Omit to hide the "Start over" affordance (the onboarding host returns
-   *  to its own chooser instead). */
   onCancel?: () => void;
 }
 
@@ -67,9 +46,6 @@ const METHOD_CARDS: ReadonlyArray<{
     title: "This Mac",
   },
   {
-    // Vault-first copy: a ticket pairs this device to one or more VAULTS, and
-    // the gateway that hosts them is an implementation detail the owner never
-    // has to name. The method id stays `gateway` — internal, not shown.
     desc: "Paste or scan a pairing ticket.",
     icon: "Wifi",
     method: "gateway",
@@ -93,7 +69,6 @@ export default function ConnectFlow({
   );
   const ticketRef = useRef<HTMLTextAreaElement>(null);
 
-  // Run the connectivity test whenever `startTest` puts us in `testing`.
   useEffect(() => {
     if (state.step !== "test" || !state.testing) return;
     let alive = true;
@@ -113,9 +88,6 @@ export default function ConnectFlow({
     };
   }, [state, state.step, state.testing]);
 
-  // "This Mac" has no test step — load its existing vaults straight into
-  // the same `report.vaults` shape the vault step already knows how to
-  // render (method-agnostic rendering, one code path).
   useEffect(() => {
     if (state.method !== "local" || state.step !== "vault" || state.report)
       return;
@@ -128,7 +100,6 @@ export default function ConnectFlow({
     };
   }, [state, state.method, state.step, state.report]);
 
-  // Run the commit whenever a `commit` dispatch lands us in `committing`.
   useEffect(() => {
     if (state.step !== "committing") return;
     let alive = true;

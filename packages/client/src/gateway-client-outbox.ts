@@ -1,7 +1,3 @@
-// Renderer-side client for the vault's outbox / blocking-notifications surface
-// (#306, #308). An agent stages an external write as an inert artifact; the
-// owner decides before anything leaves the vault.
-
 import {
   auth,
   authHeaders,
@@ -26,7 +22,6 @@ export interface OutboxItem {
   verb: string;
   target: string;
   artifact: Record<string, unknown>;
-  /** `'pending' | 'approved' | 'sent' | 'discarded' | 'failed'`, kept loose. */
   status: string;
   grantId: string | null;
   stagedAt: string;
@@ -34,8 +29,6 @@ export interface OutboxItem {
   drainedAt: string | null;
   result: Record<string, unknown> | null;
   note: string | null;
-  /** Offer "edit before approve" only when true — otherwise approving sends
-   *  exactly what is staged (#308). */
   canEdit: boolean;
 }
 
@@ -101,8 +94,6 @@ export interface NotificationsSummary {
   unreadNoticeCount: number;
 }
 
-/** The gateway's `InvokeOutcome`, verbatim: only `executed` answers 200, and
- *  every other variant is a real 409 body — read `.status`, do not catch. */
 export type OutboxOutcome =
   | {
       status: "executed";
@@ -132,7 +123,6 @@ export interface OutboxDecideOutput {
   grant_id?: string;
 }
 
-/** Body regardless of status: the deliberate 409s carry a typed outcome. */
 async function readOutcome(res: Response, op: string): Promise<OutboxOutcome> {
   const text = await res.text();
   try {
@@ -185,7 +175,6 @@ export async function updateNotice(
   return body.notice;
 }
 
-/** A content-free doorbell; callers keep the 60s polling fallback. */
 export async function subscribeNotificationsChanges(
   onChange: () => void,
   signal?: AbortSignal
@@ -234,10 +223,8 @@ export interface ReviewEntry {
   risk: string | null;
   invocationId: string | null;
   actorId: string | null;
-  /** Null when no actor is on the receipt (#552). */
   actorKind: string | null;
   actor: string | null;
-  /** Set when a standing grant auto-allowed this receipt (#552). */
   grantId: string | null;
   context: { kind: "fill"; origin: string } | null;
 }
@@ -276,13 +263,9 @@ export async function listOutboxItems(
   return body.items ?? [];
 }
 
-/** An edit passes only the revised `artifact`; the gateway rebuilds the wire
- *  request server-side. There is no client path to submit a raw `request` —
- *  the route refuses one outright (#308). */
 export async function decideOutboxItem(input: {
   itemId: string;
   decision: "approve" | "discard";
-  /** Only valid with `decision: 'approve'`. */
   artifact?: Record<string, unknown>;
   alwaysAllow?: boolean;
   note?: string;
@@ -320,7 +303,6 @@ export async function listOutboxGrants(): Promise<OutboxGrant[]> {
   return body.grants ?? [];
 }
 
-/** Revoke a standing grant — any undrained rider it approved reparks (#308). */
 export async function revokeOutboxGrant(
   grantId: string
 ): Promise<OutboxOutcome> {
@@ -349,7 +331,6 @@ export async function listScopeRequests(): Promise<OutboxScopeRequest[]> {
   return body.requests ?? [];
 }
 
-/** Approve mints exactly the asked scopes; deny tombstones them (no re-nag). */
 export async function decideScopeRequest(input: {
   requestId: string;
   approve: boolean;

@@ -1,8 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit the second half of Tally's write surface, registered as one unit with tally.ts and read wholesale beside it.
-// Tally's group-life and re-allocation commands. No balance is stored or
-// transmitted — `simplify_opt_in` is a FLAG and the minimal-transfer set is
-// derived at read time. Nothing is ever sent: `tally.nudge` records a PREPARED
-// reminder under `confirm: true`, and Tally has no delivery path at all.
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition } from "../gateway/types.js";
@@ -25,9 +21,6 @@ const GROUP_EXISTS_SQL =
 const EXPENSE_LIVE_SQL =
   "SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id AND deleted_at IS NULL";
 
-/** Lines AND derived splits in ONE invocation: apart, a receipt whose lines
- *  were re-cut but whose splits were not no longer reconciles. Both totals are
- *  re-validated; the amount never changes here. */
 const REALLOCATE_RECEIPT: CommandDefinition = {
   name: "tally.reallocate_receipt",
   ownerSchema: "tally",
@@ -80,7 +73,6 @@ const REALLOCATE_RECEIPT: CommandDefinition = {
     if (!row) throw new Error("expense not found");
     const groupId = expenseGroupId(ctx, input.expense_id);
     const allowed = participantScope(ctx, groupId);
-    // The pre-image carries the lines, so one undo puts back both halves.
     const revision = recordEntityRevision(ctx, {
       entityType: "tally.expense",
       entityId: input.expense_id,
@@ -142,8 +134,6 @@ const REALLOCATE_RECEIPT: CommandDefinition = {
   },
 };
 
-/** Off by default, PER GROUP: simplification rewires who owes whom. The flag
- *  is the only thing written. */
 const SET_GROUP_SIMPLIFICATION: CommandDefinition = {
   name: "tally.set_group_simplification",
   ownerSchema: "tally",
@@ -194,9 +184,6 @@ const SET_GROUP_SIMPLIFICATION: CommandDefinition = {
   },
 };
 
-/** Leaving is the case where `remove_group_member`'s refusal is wrong: rows
- *  stay put, the leaver stops being a current member, and "departed" is
- *  DERIVED, not a column. `party_id` defaults to the owner. */
 const LEAVE_GROUP: CommandDefinition = {
   name: "tally.leave_group",
   ownerSchema: "tally",
@@ -275,8 +262,6 @@ const LEAVE_GROUP: CommandDefinition = {
   },
 };
 
-/** Archive is not delete, and deliberately does NOT require a settled balance
- *  — that is exactly the state you most want out of the way without losing. */
 const ARCHIVE_GROUP: CommandDefinition = {
   name: "tally.archive_group",
   ownerSchema: "tally",
@@ -286,7 +271,6 @@ const ARCHIVE_GROUP: CommandDefinition = {
     additionalProperties: false,
     properties: {
       group_id: { type: "string", minLength: 1 },
-      // Absent means archive; `false` un-archives, so one command owns both.
       archived: { type: "boolean" },
     },
   },
@@ -328,9 +312,6 @@ const ARCHIVE_GROUP: CommandDefinition = {
   },
 };
 
-/** THE APP NEVER FIRES ONE. `confirm: true` parks every non-owner caller and
- *  an app handler is by definition one, so a nudge lands in Waiting; executing
- *  it writes ONE row saying a reminder was prepared. No delivery path exists. */
 const NUDGE: CommandDefinition = {
   name: "tally.nudge",
   ownerSchema: "tally",
@@ -404,7 +385,6 @@ const NUDGE: CommandDefinition = {
       entityType: "tally.nudge",
       entityId: nudgeId,
     });
-    // `sent` is stated, and always false, so no reader has to infer it.
     return { nudge_id: nudgeId, prepared_at: ctx.now, sent: false };
   },
 };

@@ -3,8 +3,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as TypeImport_oycips from "../../gateway-client-core.js";
 import { stageBlob, stageDerivative } from "./blob-staging.js";
 
-// gateway-client-core touches window.CentraidApi at module load and is the one
-// choke point both doors route through; stub it and capture the calls.
 const { doFetch, readJson } = vi.hoisted(() => ({
   doFetch: vi.fn<typeof TypeImport_oycips.doFetch>(),
   readJson: vi.fn<(res: Response, op: string) => Promise<unknown>>(),

@@ -62,11 +62,6 @@ describe("the 30-day phone", () => {
     expect(notice.detail).not.toMatch(/\d/u);
   });
 
-  // The queued-writes promise is the part a member actually needs: a full
-  // re-sync must never read as "your unsent changes are gone". It lives in the
-  // headline now (#883 W-F1), so it is asserted where the test's name always
-  // said it was — checking only "whole library" left the promise itself
-  // unpinned, and a rewrite could have dropped it silently.
   test("a full re-sync says the queued changes survive", () => {
     for (const verdict of VERDICTS) {
       const notice = rebootstrapNoticeFor(verdict);
@@ -76,8 +71,6 @@ describe("the 30-day phone", () => {
     }
   });
 
-  // One sentence per field, so neither half can quietly grow back into the
-  // paragraph the U4 copy gate found here.
   test("every sentence stays short and single-thought", () => {
     for (const verdict of VERDICTS) {
       const notice = rebootstrapNoticeFor(verdict, {

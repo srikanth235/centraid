@@ -1,14 +1,3 @@
-/*
- * The password wrap (#439, generalised for #630's portable export): a
- * scrypt-derived key over AES-256-GCM around one canonical-JSON document.
- *
- * ONE implementation on purpose. A second copy is a second place to get the
- * KDF cost wrong, to forget the AAD, or to grow the unwrapped acceptance path
- * #568 removed. Both callers — the backup recovery kit (`recovery-kit.ts`) and
- * the vault's portable-export custody kit — ride this and differ only in their
- * `kind`, their AAD and the document they seal.
- */
-
 import {
   createCipheriv,
   createDecipheriv,
@@ -18,13 +7,10 @@ import {
 
 import { canonicalJson } from "./manifest.js";
 
-/** The wrapped envelope: a header anyone can read, a body only the password opens. */
 export interface WrappedPasswordDocument {
   version: 1;
-  /** The `-wrapped` document kind — the "is this the right file?" predicate. */
   kind: string;
   createdAt: string;
-  /** Capability fingerprint of the sealed document; re-checked after unwrap. */
   fingerprint: string;
   kdf: "scrypt";
   N: number;
@@ -36,7 +22,6 @@ export interface WrappedPasswordDocument {
   ciphertext: string;
 }
 
-/** Deliberately expensive: this is the only thing between a file and a key. */
 export const PASSWORD_WRAP_SCRYPT = {
   kdf: "scrypt" as const,
   N: 2 ** 17,
@@ -64,7 +49,6 @@ function deriveWrapKey(
   });
 }
 
-/** Seal `plain` under `passphrase`; the plaintext never leaves this call. */
 export function wrapPasswordDocument(opts: {
   label: string;
   kind: string;
@@ -101,21 +85,13 @@ export function wrapPasswordDocument(opts: {
   };
 }
 
-/**
- * Open a wrapped document. Auth failures stay loud, and there is NO unwrapped
- * acceptance path (#568): a caller treating "parse succeeded" as "the owner
- * knows the password" would otherwise get a password-free branch reachable
- * from the file itself.
- */
 export function unwrapPasswordDocument<T>(opts: {
   label: string;
   kind: string;
   aad: Buffer;
   value: unknown;
   passphrase: string;
-  /** Validate the decrypted JSON into the typed document; throws descriptively. */
   parse: (plain: unknown) => T;
-  /** Recompute the capability fingerprint the header claims. */
   fingerprintOf: (parsed: T) => string;
 }): T {
   const value = opts.value;

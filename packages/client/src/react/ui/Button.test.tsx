@@ -6,9 +6,6 @@ import { describe, expect, it } from "vitest";
 
 import Button, { IconButton } from "./Button.js";
 
-// Vitest's `classNameStrategy: 'non-scoped'` returns the module-local names
-// (`styles.btn` → 'btn'), so these assertions match the authored classes.
-
 describe(Button, () => {
   it("emits the module classes for the variant", () => {
     const html = renderToStaticMarkup(
@@ -39,19 +36,12 @@ describe(Button, () => {
     expect(renderToStaticMarkup(<Button label="x" size="sm" />)).toContain(
       "btn sm"
     );
-    // `.btn` is the base at every size — chrome is a size modifier on top of
-    // it, not a replacement, so the shared hover/press/focus rules apply.
     expect(renderToStaticMarkup(<Button label="x" size="chrome" />)).toContain(
       "btn chrome secondary"
     );
   });
 
   it("keeps the filled ink on a commit control at titlebar scale", () => {
-    // The bug this pins: `size` and `variant` are independent props, so the
-    // type system cannot catch a size class that paints. A chrome-size
-    // primary that renders unfilled is a commit control the eye cannot find
-    // (#708, invariant 3 — the shell owns no colour, commit is filled
-    // ink), and it fails silently in exactly the place it matters most.
     expect(
       renderToStaticMarkup(
         <Button label="Save" size="chrome" variant="primary" />
@@ -62,8 +52,6 @@ describe(Button, () => {
       path.join(import.meta.dirname, "Button.module.css"),
       "utf8"
     );
-    // Sizes carry geometry only. A `background` in one of them wins over the
-    // variant declared after it, whatever the markup says.
     for (const size of ["chrome", "sm"]) {
       const rule = new RegExp(
         `\\n\\.${size}\\s*\\{(?<body>[^}]*)\\}`,
@@ -74,7 +62,6 @@ describe(Button, () => {
       );
       expect(rule!.groups!.body).not.toMatch(/(?:^|\s)background\s*:/u);
     }
-    // …and the colour they must not fight is declared after them.
     expect(css.indexOf("\n.chrome {")).toBeLessThan(
       css.indexOf("\n.primary {")
     );

@@ -1,7 +1,3 @@
-// core.merge_party (#290): folding a duplicate re-points every reference —
-// engine FKs, polymorphic pairs, identifiers with primary demotion, the
-// external-id map — and deletes the duplicate.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -82,14 +78,11 @@ describe("merge", () => {
     const output = (outcome as { output: { repointed: number } }).output;
     expect(output.repointed).toBeGreaterThanOrEqual(3); // identifier + task + map
 
-    // Duplicate gone; references live on the survivor.
     expect(
       db.vault
         .prepare("SELECT 1 AS x FROM core_party WHERE party_id = ?")
         .get(dupe)
     ).toBeUndefined();
-    // A channel merges by the register's rule: the survivor keeps its
-    // preferred slot and the incoming address is demoted, never dropped.
     const ids = db.vault
       .prepare(
         `SELECT normalized_value AS value, is_preferred AS is_primary
@@ -139,9 +132,6 @@ describe("merge", () => {
       .get(authorityId) as { principal_id: string; revoked_at: string | null };
   }
 
-  // The plane carries no FK on `principal_id` and says 'person', not
-  // 'core.party', so neither the FK walk nor the poly registry reaches it. Left
-  // behind, the grant names a deleted row and the share stops being delivered.
   test("a standing grant to the duplicate follows the survivor", () => {
     const asha = addParty("Asha Rao");
     const dupe = addParty("Asha R.");
@@ -154,9 +144,6 @@ describe("merge", () => {
     expect(grant.revoked_at).toBeNull();
   });
 
-  // `share_authority_live_answer` covers LIVE rows only, so the loser is
-  // revoked before it re-points: the answer survives as history rather than
-  // being deleted, and the survivor's own answer stays the live one.
   test("a colliding answer is revoked, not dropped, and still stops naming the deleted party", () => {
     const asha = addParty("Asha Rao");
     const dupe = addParty("Asha R.");
@@ -190,9 +177,6 @@ describe("merge", () => {
       .run(invitationId, grantId, partyId);
   }
 
-  // Same shape as the authority principal, different answer on collision: an
-  // invitation is machinery, not a standing answer, so the duplicate ask is
-  // dropped rather than kept as history.
   test("a pending invitation follows the merge, and a duplicate ask is dropped", () => {
     const asha = addParty("Asha Rao");
     const dupe = addParty("Asha R.");
@@ -287,8 +271,6 @@ describe("merge", () => {
         .get(dupe)
     ).toBeUndefined();
   });
-
-  // ── The convergence sweep (issue #310 C4) ──────────────────────────────
 
   test("find_duplicate_parties reports name collisions with identifier context", () => {
     const now = new Date().toISOString();

@@ -38,8 +38,6 @@ describe("ui/ChipsBlock", () => {
     const el = mount(
       <ChipsBlock ariaLabel="Window" chips={WINDOW} onPick={() => {}} />
     );
-    // `<fieldset>` IS the group — the a11y profile prefers the element to
-    // the role.
     const group = el.querySelector(".chips") as HTMLElement;
     expect(group.tagName).toBe("FIELDSET");
     expect(group.getAttribute("aria-label")).toBe("Window");

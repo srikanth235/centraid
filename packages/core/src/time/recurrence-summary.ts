@@ -1,9 +1,3 @@
-// THE recurrence summariser. Every member-facing surface (Agenda, Tasks, and
-// any app reaching the engine through the host `TimeApi`) renders a rule with
-// this function — a second summariser anywhere is the defect this file exists
-// to prevent. A raw RRULE string is never shown to a member: an unparseable
-// rule returns null and the caller falls back to showing no cadence at all.
-
 import { parseRrule } from "./rrule-support.js";
 import type { ParsedRrule } from "./rrule-support.js";
 
@@ -39,14 +33,12 @@ const MONTH_NAMES = [
   "Dec",
 ] as const;
 
-/** "Monday", "Monday and Tuesday", "Monday, Tuesday and Friday". */
 function joinDays(days: readonly (keyof typeof DAY_NAMES)[]): string {
   const names = days.map((day) => DAY_NAMES[day]);
   if (names.length <= 1) return names[0] ?? "";
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
-/** The parser refuses BYDAY outside WEEKLY, so days imply a weekly rule. */
 function weekdays(rule: ParsedRrule): readonly (keyof typeof DAY_NAMES)[] {
   return rule.byDay ?? [];
 }
@@ -65,14 +57,11 @@ function cadence(rule: ParsedRrule): string {
       ? `Every other ${unit}`
       : `Every ${rule.interval} ${unit}s`;
   if (days.length === 0) return every;
-  // "Every other Friday" reads better than "Every other week on Friday", but
-  // only a single day can collapse that way.
   if (rule.interval === 2 && days.length === 1)
     return `Every other ${joinDays(days)}`;
   return `${every} on ${joinDays(days)}`;
 }
 
-/** UNTIL is a UTC instant in the rule itself; it carries no zone of its own. */
 function untilLabel(until: string): string | null {
   const match =
     /^(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})/u.exec(until) ??
@@ -83,7 +72,6 @@ function untilLabel(until: string): string | null {
   return `${MONTH_NAMES[month - 1]} ${Number(match.groups.day)}, ${Number(match.groups.year)}`;
 }
 
-/** COUNT wins over UNTIL, matching the expansion's own precedence. */
 function ending(rule: ParsedRrule): string {
   if (rule.count !== undefined)
     return rule.count === 1 ? " · once" : ` · ${rule.count} times`;
@@ -92,7 +80,6 @@ function ending(rule: ParsedRrule): string {
   return label ? ` · until ${label}` : "";
 }
 
-/** Human-readable cadence for a supported rule, or null if it does not parse. */
 export function describeRecurrence(value: string): string | null {
   const rule = parseRrule(value);
   if (!rule) return null;

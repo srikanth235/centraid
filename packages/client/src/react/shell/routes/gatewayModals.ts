@@ -1,7 +1,5 @@
 import type { CentraidRedeemGatewayPairingResult } from "../../../centraid-api.js";
 
-// Gateway I/O for "Add gateway" (#376); a redeemed iroh ticket is the only shape.
-
 export interface GatewayConnectSuccess {
   ok: true;
   label: string;
@@ -11,7 +9,6 @@ export interface GatewayConnectSuccess {
 }
 export interface GatewayConnectFailure {
   ok: false;
-  /** Safe to show as-is. */
   message: string;
 }
 export type GatewayConnectResult =
@@ -47,14 +44,12 @@ function foldRedeemResult(
       label: res.vaultName || "your vault",
       ok: true,
       vaultId: res.vaultId,
-      // COMPAT(pair-ticket-multi-vault): added 2026-08-02, drop when floor >= pair-ticket-multi-vault-v1
       vaultIds: res.vaultIds ?? (res.vaultId ? [res.vaultId] : []),
     };
   }
   return { message: friendlyGatewayError(res.error, res.message), ok: false };
 }
 
-/** The only add-gateway path (#505) — redeem a pairing ticket. Never throws. */
 export async function connectGateway(
   input: GatewayPairingInput
 ): Promise<GatewayConnectResult> {

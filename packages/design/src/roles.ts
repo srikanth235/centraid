@@ -1,21 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit — the normative role table and its profile totality checks are intentionally co-located so every role name, meaning, contrast obligation, and lowering remains reviewable as one contract.
-// Product-grammar role registry — the Binding Layer.
-//
-// A token is a role only when its name, meaning, contrast obligation, and
-// lowering are known together.  Emitters consume this registry; they do not
-// create semantic names while rendering CSS or native objects.  `by` is
-// intentionally total so an unsupported profile is an explicit decision with
-// a reason instead of an accidental missing key.
-//
-// Two things changed in the Binding Layer flip and neither is cosmetic:
-//
-//   • The `--accent*` family survives as NAMES and resolves to INK. There is
-//     no product hue. Nothing in the shell spends colour, which is what makes
-//     an app's identity hue mean "this belongs to that app".
-//   • Three hues are reserved and named: `--link` (prose links + selection),
-//     `--focus-ring-color` (the ring), and `--net` ("this leaves the device").
-//     `--net` is a BORDER and a 2px rule; it is never a fill, and its role
-//     `meaning` says so because that is the only place the rule can live.
 
 import { DENSITY_TIERS, metrics, pageMargin, spacing } from "./density";
 import { radii } from "./radii";
@@ -31,13 +14,6 @@ import {
 import { fontStacks, type, typeKeyToKebab } from "./typography";
 
 export type Profile = "blueprint" | "native" | "shell";
-/**
- * The contracted lowering surfaces. Four, not five: there is no served
- * blueprint plane (#799), so `BS` (`kit-served` into an `iframe-webview`) has
- * no renderer, no capture lane, and no row in
- * `tests/design-grammar-matrix.json`. A blueprint app paints one way — inline,
- * in the shell's own document.
- */
 export type Surface = "BI" | "MO" | "SH" | "SH-c";
 export type RoleCategory =
   | "color"
@@ -104,8 +80,6 @@ function role(
   return { by: values, category, contrast, css, floor, meaning, surfaces };
 }
 
-/** Every surface shares one value, in every profile. The Binding Layer's ink
- *  ramp and hairlines are literal hexes now, so this is the common case. */
 const everywhere = (value: string | number): Record<Profile, ProfileValue> => ({
   blueprint: literal(value),
   native: literal(value),
@@ -212,11 +186,6 @@ const roleTable: RoleDef[] = [
     "the ink ramp and --net itself clear their floors ON this wash",
     allSurfaces,
     {
-      // The one wash whose ALPHA differs per theme, so it cannot be a static
-      // `color-mix(… N%, transparent)` shared by both ramps the way
-      // `--accent-soft` and `--bg-sel` are. It lowers as a concrete `rgba()`
-      // in all three syntaxes instead — built from `NET` by `rgbaHex`, so
-      // there is still exactly one place the colour lives.
       blueprint: wash(lightTheme.netWash),
       native: wash(lightTheme.netWash),
       shell: wash(lightTheme.netWash),
@@ -626,9 +595,6 @@ const roleTable: RoleDef[] = [
     "geometry only",
     allSurfaces,
     {
-      // Native reads the mobile rung directly off `pageMargin` rather than
-      // this variable — RN has no cascade to inherit a compact override
-      // through, and every phone screen is compact by definition.
       blueprint: scalar(`${pageMargin.desktop}px`),
       native: scalar(pageMargin.mobile),
       shell: scalar(`${pageMargin.desktop}px`),
@@ -683,10 +649,6 @@ const roleTable: RoleDef[] = [
     "geometry only",
     blueprintSurfaces,
     {
-      // The ROOT value is the touch rung, and `(pointer: fine)` steps it down
-      // to 30 — the same touch-first shape `--target-min` and `--w-key-col`
-      // take, and for the same reason: a surface that has not proved it has a
-      // pointer keeps the floor.
       blueprint: scalar(`${metrics.row}px`),
       native: unsupported(
         "Touch draws the app band or the shelf strip, never a rail."
@@ -942,8 +904,6 @@ export function assertTotalProfileValues(): void {
   }
 }
 
-/** The dark cell of every role whose value flips per theme. Kept beside the
- *  registry so a reviewer can see both halves of a pairing at once. */
 export const DARK_THEME_ROLE_VALUES: Readonly<Record<string, string>> = {
   "--accent": darkTheme.accent,
   "--accent-deep": darkTheme.accentDeep,
@@ -971,7 +931,6 @@ export const DARK_THEME_ROLE_VALUES: Readonly<Record<string, string>> = {
   "--warning": darkTheme.warning,
 };
 
-/** Native field names are mapped back to the semantic registry once. */
 export const NATIVE_COLOR_ROLE_MAP = {
   accent: "--accent",
   accentDeep: "--accent-deep",

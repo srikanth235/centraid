@@ -1,7 +1,3 @@
-// The assistant route's provider-egress consent loop (#567). Consent is the one
-// place where a turn is deliberately re-sent, so the resend's shape is the whole
-// contract: same idempotency key, no second user bubble, and EVERY provider
-// approved so far — a consent-gated failover asks twice.
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -135,7 +131,6 @@ function deferred<T>(): {
   return { promise, resolve };
 }
 
-/** Each entry is one turn attempt: the providers it must ask consent for. */
 function streamAskingFor(...consentPerAttempt: Array<string | null>): Stream {
   let attempt = 0;
   return async (_input, onEvent) => {
@@ -193,7 +188,6 @@ async function mount(conversationId?: string): Promise<AssistantBridgeProps> {
   return captured.props;
 }
 
-/** Every `providerConsent` the route put on the wire, attempt by attempt. */
 function consentPerCall(): Array<string | string[] | undefined> {
   return api.streamAssistantTurn.mock.calls.map(
     (call) =>
@@ -267,9 +261,6 @@ describe("AssistantRoute suite", () => {
       expect(second!.idempotencyKey).toBe(first!.idempotencyKey);
       expect(second!.message).toBe("what changed?");
       expect(consentPerCall()).toStrictEqual([undefined, "claude-code"]);
-      // appendUser:false on the resend — the transcript never held two copies of
-      // the message (checked across every snapshot, since the post-turn reload
-      // replaces the live rows with the ledger's).
       const userBubbles = captured.snapshots.map(
         (snapshot) =>
           snapshot.messages.filter((message) => message.kind === "user").length
@@ -390,8 +381,6 @@ describe("AssistantRoute suite", () => {
         .mockResolvedValue({ ...conversation(), messages: [] });
       const bridge = await mount("conversation-1");
 
-      // The status/default picker may resolve before the transcript's durable
-      // adapter binding. It must remain observational until that binding wins.
       await bridge.loadModelPicker();
       transcript.resolve({
         ...conversation({ harnessKind: "claude-code" }),

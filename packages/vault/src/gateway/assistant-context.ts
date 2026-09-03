@@ -1,10 +1,3 @@
-// The assistant's map of the vault: live DDL + the ontology conventions a
-// model needs to write CORRECT SQL over the canonical schema. Column names
-// alone don't say that `works-for` is a link relation, that starred is a
-// flags-scheme tag, or that note bodies live in core_content_item — this
-// doc does. Built per turn from the live file so it never drifts from the
-// schema, and kept prose-light: it is model context, not documentation.
-
 import { FOLDER_SCHEME_URI } from "../commands/documents.js";
 import { FLAGS_SCHEME_URI, STARRED_NOTATION } from "../commands/flags.js";
 import { RELATIONS_SCHEME_URI } from "../commands/links.js";
@@ -35,7 +28,6 @@ Each fts_* table indexes its base table (join on the shared id column) and suppo
    WHERE fts_knowledge_note MATCH 'budget*' ORDER BY f.rank
 Words in MATCH are FTS5 syntax — quote user text, use word* for prefix.`;
 
-/** One relation/flag/etc. vocabulary line: notation — label. */
 function schemeLines(db: VaultDb, uri: string): string[] {
   try {
     const rows = db.vault
@@ -56,7 +48,6 @@ function schemeLines(db: VaultDb, uri: string): string[] {
   }
 }
 
-/** Live CREATE TABLE statements: every canonical table + the live ext band. */
 function ddl(db: VaultDb): string {
   const physical = new Set(
     Object.entries(VAULT_TABLES).flatMap(([schema, tables]) =>
@@ -76,12 +67,6 @@ function ddl(db: VaultDb): string {
     .join("\n");
 }
 
-/**
- * Build the schema + ontology context spliced into the vault assistant's
- * system prompt. Everything the model needs to answer with one good
- * SELECT: conventions, live DDL, the FTS surfaces, and the concept
- * vocabularies that make links/tags legible.
- */
 export function buildAssistantContext(db: VaultDb): string {
   const sections: string[] = [CONVENTIONS];
 
@@ -131,7 +116,6 @@ export function buildAssistantContext(db: VaultDb): string {
   return sections.join("\n\n");
 }
 
-/** One line per registered command: name — risk (+ parks note). */
 function registeredCommands(db: VaultDb): string[] {
   try {
     const rows = db.vault
@@ -141,9 +125,6 @@ function registeredCommands(db: VaultDb): string[] {
           ORDER BY c.name`
       )
       .all() as { name: string; risk: string; requires_confirmation: number }[];
-    // Only the capability's confirm flag parks (#306; #308 fixed the
-    // annotation) — advertising risk-high as parking would teach the model
-    // a gate that no longer exists.
     return rows.map(
       (r) =>
         `${r.name} — risk ${r.risk}${r.requires_confirmation === 1 ? " (parks for owner approval)" : ""}`

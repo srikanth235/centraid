@@ -1,7 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit one Tally fixed-point + recurring-materialization contract whose idempotency must stay reviewable together
-// Tally time/currency contract (#630). Rates are fixed-point integers and
-// recurring materialization is deterministic and idempotent, so two offline
-// devices may enqueue one occurrence without duplicates.
 
 import { describeRecurrence, expandRecurrence } from "@centraid/core/time";
 
@@ -173,7 +170,6 @@ const SAVE_RECURRING: CommandDefinition = {
       splits: SPLITS,
       rrule: STRING,
       anchor_start: STRING,
-      // ONE NAME FOR A ZONE (#916, R4): the column and the input agree.
       tz: STRING,
       rate_scaled: { type: "integer", minimum: 1 },
       rate_scale: { type: "integer", minimum: 0, maximum: 12 },
@@ -257,13 +253,6 @@ const SAVE_RECURRING: CommandDefinition = {
         ctx.now,
         ctx.now
       );
-    // THE SPLIT IS ROWS (#916, D3 / review 10.4). It was a JSON array of
-    // {party_id, weight}, which put party ids where identity merge could not
-    // see them, the purge cascade could not reach them, and no constraint
-    // could hold their shares to the amount. Weights are resolved to minor
-    // units against the template's own settlement amount, exactly as an
-    // expense's splits are — a materialized occurrence re-allocates them
-    // proportionally when its amount differs.
     const templateAmount = convertCurrencyMinor(
       input.original_amount_minor,
       input.rate_scaled ?? 10 ** RATE_SCALE,
@@ -301,12 +290,6 @@ function allocatedSplits(total: number, splits: WeightedSplit[]) {
   });
 }
 
-/**
- * THE KEY IS THE SERIES-LOCAL WALL CLOCK (#916, R5 / review 3.1). Keying on
- * the resolved UTC instant made an exception a function of the series' anchor
- * and zone rather than of the occurrence, so moving the series orphaned every
- * skip on it and the skipped occurrences came back.
- */
 function exceptionFor(
   ctx: HandlerCtx,
   templateId: string,
@@ -442,7 +425,6 @@ const MATERIALIZE: CommandDefinition = {
         String(override.rate_date ?? template.rate_date ?? spentOn),
         template.template_id
       );
-    // A template names ONE payer: the single-payer row (#883).
     ctx.db
       .prepare(
         `INSERT INTO tally_expense_payer
@@ -551,12 +533,6 @@ const EDIT_OCCURRENCE: CommandDefinition = {
               ctx.now,
               input.template_id
             );
-        // A SERIES EDIT MAY NOT STRAND ITS EXCEPTIONS (#916, review 3.1 /
-        // adversarial BUG-3). Changing the rule re-expands the series, and any
-        // exception whose wall clock is no longer an occurrence stops matching
-        // — the skip disappears and the occurrence the member removed comes
-        // back. The edit is refused, with the count, rather than doing that
-        // quietly.
         const stranded = strandedExceptions(ctx, input.template_id);
         if (stranded > 0)
           throw new Error(
@@ -564,9 +540,6 @@ const EDIT_OCCURRENCE: CommandDefinition = {
           );
       }
     } else {
-      // THE OCCURRENCE HAS TO EXIST (#916, adversarial BUG-3): an exception
-      // for a date the series never lands on was accepted and simply never
-      // matched anything.
       const wallStart = occurrenceWallStart(template, input.original_start);
       if (wallStart === null)
         throw new Error("start is not an occurrence in this series");
@@ -602,10 +575,6 @@ const EDIT_OCCURRENCE: CommandDefinition = {
   },
 };
 
-/**
- * The series-local wall clock of the occurrence starting at `instant`, or
- * `null` when the series has no occurrence there.
- */
 function occurrenceWallStart(
   template: TemplateRow,
   instant: string
@@ -625,8 +594,6 @@ function occurrenceWallStart(
   );
 }
 
-/** Exceptions on this template whose wall clock no longer lands on an
- *  occurrence of the series as it now stands. */
 function strandedExceptions(ctx: HandlerCtx, templateId: string): number {
   const template = templateById(ctx, templateId);
   const rows = ctx.db

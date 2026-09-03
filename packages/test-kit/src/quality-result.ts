@@ -16,7 +16,6 @@ export interface QualityResult {
   measurements: QualityMeasurement[];
 }
 
-/** Three-times-median budget, enabled only after ten durable observations. */
 export function regressionBudget(
   values: readonly number[],
   { minimumSamples = 10, multiplier = 3 } = {}
@@ -34,7 +33,6 @@ export function regressionBudget(
   return median * multiplier;
 }
 
-/** Read prior durable samples for one owner and derive its active budget. */
 export async function qualityRegressionBudget(
   lane: "perf" | "scale",
   owner: string
@@ -52,7 +50,6 @@ export async function qualityRegressionBudget(
   }
 }
 
-/** Emit one stable, report-consumable result while retaining a short local trend. */
 export async function recordQualityResult(
   result: QualityResult
 ): Promise<void> {

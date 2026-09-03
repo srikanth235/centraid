@@ -20,8 +20,6 @@ import type { InlineReplicaSession } from "./inlineQueryCtx.js";
 const cursor = { epoch: "e1", seq: 7 };
 const dependency = { shapeId: "tasks/board", entity: "schedule.task" };
 
-// Only a stand-in row id for fixtures that omit `task_id`; seeded so the same
-// fixture gets the same synthetic id on every run.
 const rowIds = seededRandom(20_260_731);
 
 function envelope(
@@ -54,7 +52,6 @@ const OPEN_TASKS = [
   },
 ];
 
-/** A replica-session double: seeded open tasks; everything else empty. */
 function seededSession(
   overrides?: Partial<InlineReplicaSession>
 ): InlineReplicaSession {
@@ -101,7 +98,6 @@ describe("inlineQueryCtx", () => {
 
     expect(result.vaultDenied).toBeUndefined();
     expect(result.open).toHaveLength(2);
-    // due-first sort: the dated task leads the undated one.
     expect(result.open.map((t) => t.title)).toStrictEqual(["First", "Second"]);
   });
 
@@ -130,8 +126,6 @@ describe("inlineQueryCtx", () => {
         };
       },
     });
-    // board reads `.title`/`.due_at` which are undisclosed here → guard fires →
-    // runInlineQuery rejects with the fallback code.
     await expect(
       runInlineQuery(
         { default: boardQuery },

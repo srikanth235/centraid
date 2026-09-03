@@ -1,7 +1,3 @@
-// The prune custody latch (#438 decision 3). A local-only vault proves
-// custody by local CAS presence; an s3-configured vault requires durable
-// replica evidence AND no pending outbox obligation. Fail closed on every gap.
-
 import { describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -11,7 +7,6 @@ import { updateBlobStoreSettings } from "../host.js";
 import { blobCustodyProven } from "./custody-proven.js";
 import { sha256OfBytes } from "./store.js";
 
-/** A bootstrapped vault (has the core_vault row settings writes target). */
 function newVault(): VaultDb {
   const db = openVaultDb({});
   bootstrapVault(db, { ownerName: "Owner" });

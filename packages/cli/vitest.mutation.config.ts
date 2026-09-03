@@ -1,6 +1,5 @@
 import { defineConfig } from "vitest/config";
 
-/** Standalone Stryker test root for the product CLI (defineConfig, not defineProject). */
 export default defineConfig({
   test: {
     name: "@centraid/cli-mutation",

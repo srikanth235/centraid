@@ -104,7 +104,6 @@ describe("cards", () => {
       appId: app.appId,
       signingKey: app.signingKey,
     };
-    // The app reads knowledge (its own domain) — media is deliberately absent.
     createGrant(db, {
       appId: app.appId,
       purposeConceptId: boot.concepts["dpv:ServiceProvision"] ?? "",
@@ -115,15 +114,12 @@ describe("cards", () => {
       ],
     });
 
-    // Before any link exists, the foreign asset is a denied card.
     const before = gw.resolveRefs(appCred, {
       refs: [{ type: "media.asset", id: assetId }],
       purpose: PURPOSE,
     });
     expect(before.cards[0]?.status).toBe("denied");
 
-    // The owner links note → asset (the shell-picker flow); now the same
-    // ref resolves for the app, because the link's other end is readable.
     const linked = invoke(owner, "core.link_entities", {
       from_type: "knowledge.note",
       from_id: noteId,
@@ -141,7 +137,6 @@ describe("cards", () => {
       title: "Linked photo",
     });
 
-    // Unlink ends the authorization along with the relationship.
     const linkId = (linked as { output: { link_id: string } }).output.link_id;
     expect(
       invoke(owner, "core.unlink_entities", { link_id: linkId }).status
@@ -163,8 +158,6 @@ describe("cards", () => {
       to_id: assetId,
       relation: "references",
     });
-    // Delete is trash now (#308) — the row survives its grace
-    // window, so the card still resolves…
     expect(
       invoke(owner, "knowledge.delete_note", { note_id: noteId }).status
     ).toBe("executed");
@@ -173,7 +166,6 @@ describe("cards", () => {
       purpose: PURPOSE,
     });
     expect(trashed.cards[0]?.status).toBe("live");
-    // …until the lifecycle sweep performs the real deletion past the window.
     db.vault
       .prepare(
         `UPDATE knowledge_note SET purge_at = '2020-01-01T00:00:00Z' WHERE note_id = ?`

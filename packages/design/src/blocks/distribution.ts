@@ -1,6 +1,3 @@
-// Measure against the SUM, never the biggest row (max-scaling lies).
-// Positive rows keep the 1% floor; biggest share leads.
-
 import type { DistributionDatum } from "./contracts";
 
 export interface DistributionRow extends DistributionDatum {

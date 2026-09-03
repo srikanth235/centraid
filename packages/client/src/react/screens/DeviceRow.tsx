@@ -10,18 +10,9 @@ import { replicaClause, seenAge } from "./vault-custody.js";
 
 import styles from "./HouseholdScreen.module.css";
 
-/*
- * One hardware binding, as a row in the Devices page's row block (#726,
- * #765): title, sub line, state word, ONE trailing action opening the row's
- * detail — never second/third buttons. Removing the PERSON is host-custody,
- * never a verb this page offers.
- */
-
-/** A device unseen for this long reads as `Dormant` rather than `Fine`. */
 const DORMANT_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface DeviceRowActions {
-  /** Absent when the host cannot revoke devices at all. */
   onRevoke?: (
     device: GroupedDevice,
     confirmLastDevice?: string
@@ -32,20 +23,16 @@ export interface DeviceRowActions {
 
 export interface DeviceRowOptions extends DeviceRowActions {
   device: GroupedDevice;
-  /** Live clock (the route ticks it) — drives the humanized ages. */
   now: number;
-  /** Name the person this device acts as; set for everyone but yourself. */
   showOwner?: boolean;
   open: boolean;
   onToggle: () => void;
 }
 
-/** A bare live-ticked age — shared by row, tombstone and custody line. */
 export function ageLabel(iso: string | undefined, now: number): string {
   return seenAge(iso, now);
 }
 
-/** The day something happened, in the reader's own locale ("3 March"). */
 export function dateLabel(iso: string | undefined): string {
   if (!iso) return "";
   const at = Date.parse(iso);
@@ -56,7 +43,6 @@ export function dateLabel(iso: string | undefined): string {
   });
 }
 
-/** The row's one mono word: what this device IS to you right now. */
 function stateWord(device: GroupedDevice, now: number, other: boolean): string {
   if (device.current) return "This device";
   if (other) return "Other person";
@@ -65,7 +51,6 @@ function stateWord(device: GroupedDevice, now: number, other: boolean): string {
   return "Fine";
 }
 
-/** The row's sub line — what this device is doing, and since when. */
 function subLine(
   device: GroupedDevice,
   now: number,
@@ -76,7 +61,6 @@ function subLine(
       ? "contributing compute"
       : "not contributing compute"
     : undefined;
-  // Assembled, not concatenated: no self-seen clause; never-used says so.
   const seen = device.current
     ? ""
     : device.lastUsedAt
@@ -87,7 +71,6 @@ function subLine(
     showOwner ? device.ownerLabel : "",
     device.current ? "This device" : "",
     compute ?? "",
-    // The same string the custody line counts.
     replicaClause(device),
     device.platform ?? "",
     paired,
@@ -97,14 +80,12 @@ function subLine(
     .join(" · ");
 }
 
-/** Which verb the trailing control offers, given what this host can do. */
 function actionLabel(actions: DeviceRowActions): string | undefined {
   if (actions.onRevoke || actions.onUpdateCompute) return "Manage";
   if (actions.onRename) return "Rename";
   return undefined;
 }
 
-/** One live device, as a row definition for `RowsBlock`. */
 export function deviceRowDef(options: DeviceRowOptions): RowDef {
   const { device, now, showOwner = false, open, onToggle } = options;
   const label = actionLabel(options);
@@ -134,9 +115,6 @@ export function deviceRowDef(options: DeviceRowOptions): RowDef {
   };
 }
 
-/**
- * One tombstone, an OFF row: present for audit, inert, out of every count.
- */
 export function tombstoneRowDef(device: GroupedDevice, now: number): RowDef {
   const sub = [
     device.vaultName ?? device.vaultId,
@@ -154,7 +132,6 @@ export function tombstoneRowDef(device: GroupedDevice, now: number): RowDef {
   };
 }
 
-/** The row's own detail: every verb this device answers to, opened in place. */
 export function DeviceRowDetail({
   device,
   now,
@@ -165,7 +142,6 @@ export function DeviceRowDetail({
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Set once the gateway refused: last owner device — confirm escalates.
   const [strandedVault, setStrandedVault] = useState<string | null>(null);
   const [computeBusy, setComputeBusy] = useState(false);
   const [name, setName] = useState(device.label);

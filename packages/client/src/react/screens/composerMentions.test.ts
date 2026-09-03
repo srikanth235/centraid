@@ -49,9 +49,7 @@ describe("refString + insertRef", () => {
     expect(refString("Ann Lee", "core.party", "p1")).toBe(
       "@[Ann Lee](ref:core.party/p1)"
     );
-    // A stray ] in the label is stripped so the bracket stays valid.
     expect(refString("a]b", "x.y", "i")).toBe("@[ab](ref:x.y/i)");
-    // Empty label falls back to type + id.
     expect(refString("  ", "x.y", "i")).toBe("@[x.y i](ref:x.y/i)");
   });
   it("splices the ref over the @token and returns the trailing caret", () => {

@@ -13,10 +13,6 @@ export type {
   ShareFulfillmentState,
 } from "./grant-records.js";
 
-/**
- * `delivered_at` is maintained HERE, never by callers (#846): `delivered`
- * stamps the FIRST instant, `removed` clears it, everything else leaves it be.
- */
 export function setFulfillmentState(
   db: DatabaseSync,
   input: {

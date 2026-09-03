@@ -1,7 +1,3 @@
-// Google Takeout's metadata layer, on its own (#721). Every rule in
-// takeout-sidecar.ts is a heuristic about undocumented behaviour, so each one
-// is pinned here against the archive shapes Google has actually shipped.
-
 import { describe, expect, test } from "vitest";
 
 import {
@@ -49,7 +45,6 @@ describe("takeout sidecar parsing", () => {
       JSON.stringify({ geoData: { latitude: 48.8584, longitude: 2.2945 } })
     );
     expect([real.latitude, real.longitude]).toStrictEqual([48.8584, 2.2945]);
-    // A zero on ONE axis is a real coordinate (the equator, the meridian).
     const equator = parseTakeoutSidecar(
       JSON.stringify({ geoData: { latitude: 0, longitude: 2.2945 } })
     );
@@ -148,7 +143,6 @@ describe("takeout sidecar pairing", () => {
     ]);
     expect(plan.media[0]!.sidecarPath).toBeNull();
     expect(plan.media[0]!.sidecar.caption).toBeNull();
-    // An unclaimed .json is NOT consumed — the spine reports it unrouted.
     expect(plan.metadata.has("Google Photos/Trip/IMG.json")).toBe(false);
   });
 });
@@ -212,7 +206,6 @@ describe("takeout live-photo pairing", () => {
     const groups = plan.media.map((m) => m.captureGroupId);
     expect(groups[0]).toBe(groups[1]);
     expect(groups[0]).toMatch(/^takeout:[0-9a-f]{32}$/u);
-    // A photo with no motion half is not half a Live Photo.
     expect(groups[2]).toBeNull();
   });
 

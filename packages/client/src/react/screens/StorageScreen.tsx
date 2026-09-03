@@ -20,18 +20,14 @@ export interface StorageScreenProps {
   loadLocalUsage: (opts?: {
     refresh?: boolean;
   }) => Promise<LocalUsageReportDTO>;
-  /** `PUT _gateway/storage/limits`. */
   saveStorageLimits: (
     patch: StorageLimitsPatchDTO
   ) => Promise<StorageLimitsDTO>;
-  /** `GET _gateway/owners` (#726); optional. */
   loadOwners?: () => Promise<GatewayOwner[]>;
-  /** Serving machine, named when a read-only seat's rows withhold verbs. */
   gatewayLabel?: string;
   readOnly?: boolean;
 }
 
-/** Slower than backup's 10s poll: figures come from a directory walk. */
 const FOOTPRINT_POLL_MS = 60_000;
 
 export default function StorageScreen(props: StorageScreenProps): JSX.Element {
@@ -45,7 +41,6 @@ export default function StorageScreen(props: StorageScreenProps): JSX.Element {
   );
   const mountedRef = useRef(true);
 
-  // The report carries the limits: ONE fetch keeps card and panel in agreement.
   const refresh = useCallback(
     async (opts: { refresh?: boolean } = {}): Promise<void> => {
       try {
@@ -60,7 +55,6 @@ export default function StorageScreen(props: StorageScreenProps): JSX.Element {
           error instanceof Error ? error.message : String(error)
         );
       }
-      // Roster failure isn't fatal: rows render without "(owner)" suffixes.
       void loadOwners?.()
         .then((owners) => {
           if (!mountedRef.current) return;
@@ -82,7 +76,6 @@ export default function StorageScreen(props: StorageScreenProps): JSX.Element {
   useEffect(() => {
     mountedRef.current = true;
     const initialRefresh = setTimeout(() => void refresh(), 0);
-    // Suspended while hidden (#659).
     const stop = startVisibilityTicker(() => void refresh(), FOOTPRINT_POLL_MS);
     return () => {
       mountedRef.current = false;
@@ -101,7 +94,6 @@ export default function StorageScreen(props: StorageScreenProps): JSX.Element {
   const onSaveLimits = async (patch: StorageLimitsPatchDTO): Promise<void> => {
     const next = await saveStorageLimits(patch);
     if (mountedRef.current) setLimits(next);
-    // Re-read rather than patching: limit EVALUATION is the gateway's call.
     await refresh();
   };
 

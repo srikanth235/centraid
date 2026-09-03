@@ -80,7 +80,6 @@ function makeData(over: Partial<AuOverviewData> = {}): AuOverviewData {
   };
 }
 
-/** A fleet big enough to put the page in the `full` state (chips appear). */
 function bigData(): AuOverviewData {
   const base = makeData();
   const extra = Array.from({ length: 8 }, (_unused, i) => ({
@@ -117,8 +116,6 @@ function buttons(el: HTMLElement): HTMLButtonElement[] {
   return [...el.querySelectorAll("button")];
 }
 
-/** The row's trailing control, found by the title that distinguishes it from
- *  every other "Open" on the page — the same hook the desktop e2e uses. */
 function rowAction(el: HTMLElement, title: string): HTMLButtonElement {
   const found = buttons(el).find((b) => b.title === title);
   expect(found, `no control titled “${title}”`).toBeTruthy();
@@ -162,14 +159,10 @@ describe("AutomationsOverviewScreen suite", () => {
       const el = await mount(makeProps());
       expect(el.textContent).toContain("Automations");
       expect(el.textContent).toContain("Recent runs across everything");
-      // A row states what fires it and how it last went — no tile, no pill.
       expect(el.textContent).toContain("Every day at 8am");
       expect(el.textContent).toContain("Last run 2h ago");
-      // Pending consent survives the tile's amber badge as a sentence.
       expect(el.textContent).toContain("2 items waiting on you");
-      // Fallback provenance is stated, not badged.
       expect(el.textContent).toContain("ran on a fallback harness");
-      // Failing first: Invoice Sync above Daily Digest.
       const titles = [...el.querySelectorAll("fieldset")][0]
         ?.textContent as string;
       expect(titles.indexOf("Invoice Sync")).toBeLessThan(
@@ -180,11 +173,9 @@ describe("AutomationsOverviewScreen suite", () => {
     it("tones the failing automation's row net and words its meta 'Failing'", async () => {
       const el = await mount(makeProps());
       const netRows = [...el.querySelectorAll('[data-net="true"]')];
-      // One failing automation + one failed run.
       expect(netRows).toHaveLength(2);
       expect(netRows[0]?.textContent).toContain("Invoice Sync");
       expect(netRows[0]?.textContent).toContain("Failing");
-      // The healthy row keeps its own status word.
       expect(el.textContent).toContain("Active");
     });
 
@@ -219,7 +210,6 @@ describe("AutomationsOverviewScreen suite", () => {
             }),
         })
       );
-      // Three in a row, stopped at the older success — not four.
       expect(el.textContent).toContain("failed 3 runs in a row, since");
       const health = readRouteHealth();
       expect(health?.text).toContain("1 automation failing");
@@ -320,8 +310,6 @@ describe("AutomationsOverviewScreen suite", () => {
         "An automation is a trigger and a thing to do."
       );
       expect(readVitals("automations")?.state).toBe("empty");
-      // "New automation" is the app bar's commit — the page must not draw a
-      // second copy of the view's one filled control.
       expect(buttons(el).some((b) => b.textContent === "New automation")).toBe(
         false
       );
@@ -351,7 +339,6 @@ describe("AutomationsOverviewScreen suite", () => {
           onUseSuggestion,
         })
       );
-      // suggestions load in a second effect — flush microtasks
       await act(async () => {
         await Promise.resolve();
         await Promise.resolve();
@@ -398,7 +385,6 @@ describe("AutomationsOverviewScreen suite", () => {
       );
       expect(el.textContent).toContain("Recognition");
       expect(el.textContent).toContain("Recognition history");
-      // The member count line never counts a built-in recipe.
       expect(readVitals("automations")?.count).toBe(
         "2 automations · 1 failing · 1 paused"
       );
@@ -408,9 +394,6 @@ describe("AutomationsOverviewScreen suite", () => {
       expect(recipes.textContent).toContain("Photo OCR");
     });
 
-    // Issue #731 M2: the flood-safety fix lives one layer down, in
-    // automationsData.ts's per-lane fetch. This guards the OTHER half: a
-    // recognition flood in the data must not bury the member lane's runs.
     it("keeps the member run list populated when the recognition lane floods it", async () => {
       const data = makeData();
       const flood = Array.from({ length: 100 }, (_unused, i) => ({
@@ -472,14 +455,10 @@ describe("AutomationsOverviewScreen suite", () => {
         '[data-testid="automations-error"]'
       ) as HTMLElement;
       expect(panel.textContent).toContain("The scheduler is not answering");
-      // One way forward, with no clock invented for it.
       expect(panel.textContent).toContain(
         "Runs queue until the scheduler is back."
       );
-      // No successful read yet: the "nothing has run since <time>" clause is
-      // dropped rather than invented.
       expect(panel.textContent).not.toContain("Nothing has run since");
-      // The technical reason stays reachable as a fact, not as the headline.
       expect(panel.textContent).toContain("boom");
       expect(readVitals("automations")?.state).toBe("error");
       await click(buttons(el).find((b) => b.textContent === "Reconnect"));
@@ -488,10 +467,6 @@ describe("AutomationsOverviewScreen suite", () => {
     });
 
     it("does not re-fetch when the parent swaps loadData identity (stable Reconnect)", async () => {
-      // Routes historically pass an inline async loadData each render.
-      // Remounting the load effect on every identity change thrash-detached the
-      // retry button under Playwright (desktop e2e 8.2). loadData is read via a
-      // ref so only mount + an explicit Reconnect re-call it.
       const first = vi
         .fn<AutomationsOverviewBridgeProps["loadData"]>()
         .mockRejectedValue(new Error("gateway 500"));

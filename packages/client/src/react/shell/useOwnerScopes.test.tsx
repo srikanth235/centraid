@@ -46,8 +46,6 @@ describe("useOwnerScopes suite", () => {
   let ctl: ReturnType<typeof useOwnerScopes>;
   function Harness(): null {
     const value = useOwnerScopes();
-    // Published from a commit-time effect, not the render body — assigning to an
-    // outer binding during render is a side effect.
     useEffect(() => {
       ctl = value;
     });
@@ -94,8 +92,6 @@ describe("useOwnerScopes suite", () => {
       ]);
       await mount();
       expect(ctl.scopes).toHaveLength(1);
-      // A gateway without the scopes plane is a single-owner world: the one
-      // person there owns what they can see.
       expect(ctl.scopes[0]).toMatchObject({
         id: "only",
         label: "Solo",

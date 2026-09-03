@@ -27,10 +27,6 @@ const OVERLAY_STATES = new Set<IntentState>([
   "denied",
   "failed",
 ]);
-/**
- * Intent transitions share one durable queue; preserve outcome order instead
- * of racing state reads and writes for the same optimistic overlay.
- */
 function applyInIntentOrder<T>(
   values: Iterable<T>,
   apply: (value: T) => void | PromiseLike<void>
@@ -43,9 +39,7 @@ function applyInIntentOrder<T>(
 
 export interface IntentQueueOptions {
   idFactory?: ReplicaIdFactory;
-  /** RN Hermes has no `crypto.subtle`; native hosts inject an expo-crypto digest. */
   digest?: ReplicaDigest;
-  /** Retract a store's alert (native writes one) for a predecessor startup retires. */
   onSupersededRetired?: (intentId: string) => void;
 }
 

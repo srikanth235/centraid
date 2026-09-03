@@ -1,13 +1,3 @@
-// The two empty states (v9 §8, #765), behind one flag.
-//
-// FIRST-RUN (`routine` unset) is the whole screen: display rung, reading body,
-// a filled commit, 44ch. ROUTINE (`routine`) is one state of a normally
-// populated screen: title rung, body copy, a QUIET outlined verb, 52ch,
-// start-aligned — no filled duplicate, because the view's one filled control
-// already lives in the app bar.
-//
-// They are one component and not two because the difference is a rung and a
-// measure, and two components is how they drift.
 import type { JSX } from "react";
 
 import type { ActionData, EmptyCopy } from "@centraid/design/blocks";
@@ -27,7 +17,6 @@ export interface EmptyBlockProps extends EmptyCopy {
   className?: string;
 }
 
-/** Empty state — first-run by default, routine behind the flag. */
 export default function EmptyBlock({
   title,
   body,

@@ -1,16 +1,9 @@
-// Blob staging for inline apps (#505): the shell document's origin is not
-// the gateway's, so calls ride the authed client centraid-inline.ts installs
-// on window.centraid.
 import type { StagedBlob } from "@centraid/design/elements";
 import { sha256File } from "@centraid/design/elements";
 
 import { auth, authHeaders, doFetch } from "../../gateway-client-core.js";
 import { blobAuthHeaders, BLOB_PREFIX } from "./blob-auth.js";
 
-/**
- * Sha-preflight dedupe; the gateway still verifies every POST — a declared
- * sha is an optimization, NEVER a gate.
- */
 export async function stageBlob(
   file: File,
   extra = "",
@@ -57,7 +50,7 @@ export async function stageBlob(
         };
       }
     } catch {
-      // Fall through to the POST.
+      // Intentionally empty.
     }
   }
   const res = await doFetch(baseUrl, `${BLOB_PREFIX}?${q}${extra}`, {
@@ -73,7 +66,6 @@ export async function stageBlob(
   return (await res.json()) as StagedBlob;
 }
 
-/** Derivative contribution (#299), addressed to the parent sha. */
 export async function stageDerivative(
   parentSha: string,
   variant: string,

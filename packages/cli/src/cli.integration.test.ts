@@ -1,9 +1,5 @@
 import http from "node:http";
 
-/**
- * Product CLI entry against a real HTTP gateway surface (#504).
- * Drives `main()` — the shipped bin path — not a reimplementation of client helpers.
- */
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {

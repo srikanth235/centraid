@@ -97,7 +97,6 @@ describe("screens/PhoneScreen", () => {
       );
       expect(el.querySelector(".qr")).toBeTruthy();
       expect(el.textContent).toContain("Cancel pairing");
-      // Complete the pairing via the wired callback.
       await act(async () => firePaired?.("Pixel 9"));
       expect(props.showToast).toHaveBeenCalledWith("Paired Pixel 9.");
       expect(el.querySelector(".qr")).toBeNull();

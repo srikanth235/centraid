@@ -1,7 +1,3 @@
-// Circle-backed commons sharing (#731). Consent and the roster live in
-// vault.db so backup/restore retains the relationship; the gateway compiles
-// these rows into transport and projection mechanics after every mount.
-
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
 export const SHARE_COMMONS_DDL = `

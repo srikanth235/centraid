@@ -1,9 +1,3 @@
-// Register an already-hashed ingress result in the transient staging band.
-// The buffered path (`staging.ts`) can inspect the complete body; resumable
-// and direct-to-CAS paths intentionally cannot, so they provide metadata they
-// learned while plaintext was flowing and converge here without re-reading a
-// multi-hundred-megabyte object into RAM.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { nowIso, uuidv7 } from "../ids.js";

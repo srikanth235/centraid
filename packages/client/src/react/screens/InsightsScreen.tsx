@@ -42,10 +42,6 @@ import {
 
 import styles from "./InsightsScreen.module.css";
 
-// Analytics (#765, #775) — one column of blocks over the run rollup. ONE
-// parameter (the window), no commit: it counts what already happened. Every
-// word it says lives in `insights-model.ts`.
-
 function recentRow(
   run: InsightsActivityRow,
   onOpenRun: InsightsBridgeProps["onOpenRun"]
@@ -77,7 +73,6 @@ function recentRow(
   };
 }
 
-/** Nothing at all where there are no rows: a bare head reads as a failure. */
 function Distribution({
   label,
   breakdown,
@@ -113,7 +108,6 @@ export default function InsightsScreen({
   const peak = insightPeakNote(summary, WEB_INSIGHT_WORDS);
   const breakdowns = insightBreakdowns(summary, WEB_INSIGHT_WORDS);
   const sourceFacts = monoFacts(insightSourceFacts(summary, WEB_INSIGHT_WORDS));
-  /** A colour key only where a column carries that colour. */
   const legend = barLegend(summary);
 
   const chips = (

@@ -11,21 +11,11 @@ import controlsCss from "../styles/controls.module.css";
 import buttonCss from "../ui/Button.module.css";
 import styles from "./BackupCard.module.css";
 
-// The five-metric health surface (#436) — the ONE story the Backups
-// page tells about your data's safety, in exactly five readouts and nothing
-// else. Every metric here maps 1:1 to `deriveStorageMetrics`'s output; the raw
-// custody clocks that feed Freshness live behind the card's Diagnostics
-// disclosure, never on this primary surface. Store-class vocabulary (CAS,
-// backup vs. derived tiers, storage classes) is deliberately absent — a home
-// bundle is one thing to the person who owns it.
-
 export interface BackupHealthMetricsProps {
   metrics: StorageMetrics;
   now: number;
 }
 
-/** Freshness status → the status color token (there is no `red` token —
- *  `--danger` is the repo's danger hue; amber + success round out the set). */
 const STATUS_TONE: Record<StorageMetrics["freshness"]["status"], string> = {
   green: "ok",
   yellow: "warn",
@@ -192,9 +182,6 @@ function ExitMetric({ metrics }: { metrics: StorageMetrics }): JSX.Element {
   );
 }
 
-/** One row of the Diagnostics disclosure's clock grid — a freshness input
- *  clock, labelled, relative to now. Lives here (not BackupCard) because the
- *  four clocks are the diagnostics face of the Freshness metric. */
 export function ClockLine({
   label,
   at,

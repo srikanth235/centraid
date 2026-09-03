@@ -1,9 +1,6 @@
 import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
 
 import type { ShellRoute } from "../../app-shell-context.js";
-// The shell's standing status sentence (#707, invariant 5). "unknown" never
-// resolves to "Ready": that is what the line shows when all is fine but idle,
-// and a dial attempt runs ~30s with retries.
 import { OFFLINE_COMMIT_REASON } from "./commitAvailability.js";
 
 export type SignalTone = "quiet" | "attention" | "urgent";
@@ -37,8 +34,6 @@ function ageLabel(at: number | undefined, now: number): string | undefined {
   return `${days} ${days === 1 ? "day" : "days"} ago`;
 }
 
-/** Seat-first fold over pre-read facts; missing facts shorten, never make
- *  more certain. */
 export function ambientSignalFor(input: AmbientSignalInput): AmbientSignal {
   const { gatewayStatus, now, seat } = input;
   if (gatewayStatus === "unknown" || gatewayStatus === undefined)
@@ -127,11 +122,6 @@ export function ambientSignalFor(input: AmbientSignalInput): AmbientSignal {
   };
 }
 
-/**
- * Reachable sentence + freshness stamp; `StatusLine` renders the stamp since
- * the age changes every second and the shell root skips heartbeat re-renders
- * (#659).
- */
 export const SYNCED = "Synced";
 
 export function syncedStamp(
@@ -151,22 +141,17 @@ export function syncedStamp(
 }
 
 export interface AmbientStatusInput {
-  /** The heartbeat monitor's verdict; `undefined` before the first read. */
   gatewayStatus: "unknown" | "up" | "down" | undefined;
-  /** Approvals waiting on a human decision. */
   blockingCount: number;
   hasUnreadNotices: boolean;
 }
 
-/** The resting line: work waiting on the member outranks reachability — it is
- *  the one of the three they can act on. */
 export function ambientStatusFor(input: AmbientStatusInput): string {
   const { blockingCount, gatewayStatus, hasUnreadNotices } = input;
   if (blockingCount > 0)
     return `${blockingCount} ${blockingCount === 1 ? "decision" : "decisions"} waiting on you`;
   if (hasUnreadNotices) return "New notices to read";
   if (gatewayStatus === "up") return SYNCED;
-  // Same sentence the offline banner and a refused commit carry.
   if (gatewayStatus === "down") return OFFLINE_COMMIT_REASON;
   return "Checking…";
 }

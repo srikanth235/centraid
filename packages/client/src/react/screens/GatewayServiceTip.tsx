@@ -3,8 +3,6 @@ import type { JSX } from "react";
 
 import styles from "./GatewayServiceTip.module.css";
 
-// Dismiss demotes the promotion; the standing control remains the feature's home. Await saveSettings; clear busy.
-
 type Decision = "loading" | "unset" | "dismissed" | "installed";
 
 export interface GatewayServiceTipProps {

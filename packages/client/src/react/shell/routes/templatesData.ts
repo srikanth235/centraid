@@ -85,6 +85,5 @@ export async function cloneAutomationTemplate(tmpl: TemplateEntry): Promise<{
 }
 
 export function surfaceMintedWebhook(w: { url: string; secret: string }): void {
-  // Do not log: desktop persists stdout.
   void w;
 }

@@ -1,12 +1,3 @@
-/*
- * Standalone Layer-1 grant issuance (PROTOCOL.md § Credential grant) for a
- * `cas`-store consumer — Centraid's vault `S3BlobStore` wants
- * `{endpoint, region, bucket, prefix, credentials, expiry}` and nothing
- * else; it has no business pulling in `BackupProvider`, the snapshot
- * registry, or generation fencing just to get an S3 grant. `RemoteBackupProvider`
- * uses the same route internally (with `store: "backup"`) via this module.
- */
-
 import type { S3Grant, StoreClass } from "./provider.js";
 import { callProviderRoute } from "./wire-client.js";
 import type { WireClientOptions } from "./wire-client.js";
@@ -20,8 +11,6 @@ export interface RequestStorageGrantOptions extends WireClientOptions {
   ttlSeconds?: number;
 }
 
-/** Generic grant path — any store class, against `POST
- *  /v1/storage/vaults/:id/credentials` (PROTOCOL.md § Layer 1). */
 export async function requestStorageGrant(
   opts: RequestStorageGrantOptions
 ): Promise<S3Grant> {
@@ -50,8 +39,6 @@ export type RequestDerivedGrantOptions = Omit<
   "store"
 >;
 
-/** Convenience wrapper — fixes `store: "derived"` (binary display
- *  derivatives: thumb/preview/poster; PROTOCOL.md § derived store). */
 export async function requestDerivedGrant(
   opts: RequestDerivedGrantOptions
 ): Promise<S3Grant> {

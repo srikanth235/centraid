@@ -1,9 +1,3 @@
-// Blob custody facade (#296, #405): a local spool+cache tier and an optional
-// remote BlobStore that REPLICATES it. Eviction never removes the last
-// local-only copy. Remote deletes are reconciliation's job, so a crash costs an
-// orphan, never a dangling row. Remote objects seal under the vault DEK (#293),
-// AAD `blob:<sha>`, keyed off the PLAINTEXT sha.
-
 import { nowIso } from "../ids.js";
 import {
   DEFAULT_REPLICATION_CONCURRENCY,
@@ -62,8 +56,6 @@ export class BlobCustody {
   private lastSweepError: string | null = null;
   private sweepConsecutiveFailures = 0;
 
-  /** Single-flight (#405): concurrent `open()`s for one cold sha must produce
-   *  ONE provider GET. Both maps clear on settle — never a cache. */
   private readonly wholeInflight = new Map<string, Promise<Buffer | null>>();
   private readonly dirInflight = new Map<
     string,
@@ -72,11 +64,8 @@ export class BlobCustody {
 
   constructor(
     readonly local: LocalBlobStore,
-    /** Lazy: switching `blob_store` needs no reopen; null when local-only. */
     private readonly remoteTier: () => RemoteTier | null,
-    /** Absent ⇒ no eviction; `statusFor`/`replicate` list the remote. */
     private readonly cache?: BlobCache,
-    /** Absent ⇒ everything routes to `cas` (#425). */
     private readonly desiredStore?: (sha: string) => ReplicaStore
   ) {}
 
@@ -96,7 +85,6 @@ export class BlobCustody {
   ingestSync(bytes: Buffer): { sha256: string; byteSize: number } {
     const sha = sha256OfBytes(bytes);
     const existed = this.local.hasSync(sha);
-    // A NEW blob passes the budget precheck (may evict, may throw).
     if (this.cache && !existed) this.cache.admit(bytes.length);
     this.local.putSync(sha, bytes);
     if (this.cache && !existed) this.cache.onPut(bytes.length);

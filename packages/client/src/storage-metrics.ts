@@ -1,11 +1,3 @@
-/*
- * The five storage metrics (#436), derived ONCE here so every surface reads the
- * SAME numbers. Keep it framework-free, every time value an input; epoch ms
- * throughout. Thresholds mirror `backup-health.ts`'s 2× cadence edge, so a
- * green metric here cannot disagree with a healthy backup component.
- */
-
-/** Epoch ms each, or `null` when that protection event has never happened. */
 export interface FreshnessClocks {
   lastAckedWalSegmentAt: number | null;
   outboxDrainedWatermarkAt: number | null;
@@ -21,7 +13,6 @@ export interface FreshnessInput {
 export type FreshnessStatus = "green" | "yellow" | "red" | "unknown";
 
 export interface FreshnessMetric {
-  /** green ≤ 1× cadence, yellow past 1×, red past 2×. */
   status: FreshnessStatus;
   tMs: number | null;
   ageMs: number | null;
@@ -37,7 +28,6 @@ function deriveFreshness(input: FreshnessInput, now: number): FreshnessMetric {
     clocks.lastRegisteredSnapshotAt,
     clocks.lastSuccessfulVerificationAt,
   ];
-  // A missing clock is an unproven edge, and "never" is the worst clock.
   const anyMissing = values.some((v) => v === null);
   if (anyMissing) {
     return {
@@ -120,7 +110,6 @@ function deriveCost(usage: UsageInput | null): CostMetric {
     const report = usage[store];
     if (!report) continue;
     bytesStored += report.bytesStored;
-    // One account, so a per-store quota is that cap echoed: take the largest.
     if (report.quotaBytes !== null) {
       quotaBytes =
         quotaBytes === null

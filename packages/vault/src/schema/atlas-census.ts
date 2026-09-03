@@ -1,19 +1,3 @@
-// The Vault Atlas census/graph/pulse computations (#441 Part B, B4
-// items 2-4). These are the read-only payload builders the gateway's
-// `/_vault/atlas/*` routes wrap. Kept in the vault package (not the gateway)
-// so the ghost-semantics invariant can be tested directly against a migrated
-// `:memory:` vault, and so the pack mapping and `table-stats.ts` sit next to
-// their single caller.
-//
-// FK ≠ core_link is the load-bearing distinction (#441 "the trap this
-// design must not fall into"). Two DIFFERENT relation mechanisms travel as
-// SEPARATE collections in the graph payload and must never be conflated:
-//   - fkEdges     — schema-enforced FK columns; an edge "carries" when child
-//                   rows populate the column (fill = COUNT WHERE col NOT NULL).
-//                   A ghost is fill === 0, NEVER "no core_link on this pair".
-//   - authoredLinks — user/agent-authored `core_link` rows, typed by a SKOS
-//                   concept, free to join any two kinds.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { countRowsBatched } from "./atlas-graph.js";
@@ -36,20 +20,13 @@ export {
   type AtlasPulseSeries,
 } from "./atlas-graph.js";
 
-// ───────────────────────────────────────────────────────────────────────────
-// Census (GET /_vault/atlas/stats)
-// ───────────────────────────────────────────────────────────────────────────
-
 export interface AtlasCensusTable {
   logical: string;
   physical: string;
   table: string;
   label: string;
-  /** Live row count (COUNT(*) — an owner ops screen, computed on request). */
   rows: number;
-  /** Bytes attributable to this table + its indexes; null under `estimate`. */
   bytes: number | null;
-  /** Pages attributable to this table + its indexes; null under `estimate`. */
   pages: number | null;
 }
 
@@ -58,34 +35,23 @@ export interface AtlasCensusPack {
   packLabel: string;
   packKind: AtlasPackKind;
   tables: AtlasCensusTable[];
-  /** Pack totals — rows always; bytes null when any member is byte-less. */
   rows: number;
   bytes: number | null;
 }
 
 export interface AtlasCensusPayload {
   generatedAt: string;
-  /** `dbstat` (byte breakdown) or `estimate` (row counts only) — honest. */
   method: TableStatsMethod;
-  /** Whole-file size. */
   fileBytesTotal: number;
   packs: AtlasCensusPack[];
   totals: {
     rows: number;
     bytes: number | null;
-    /** Every kind the ontology defines (ontology packs only). */
     kinds: number;
-    /** How many of those kinds have at least one row. */
     populatedKinds: number;
   };
 }
 
-/**
- * Grouped census of the vault (#441): per-table rows/bytes wrapped
- * with the pack mapping. Bytes come from `table-stats.ts` (dbstat, with its
- * documented `estimate` fallback); rows are a COUNT(*) per table (the dbstat
- * method omits rows by design, and the census header wants "214 people").
- */
 export function atlasCensus(vault: DatabaseSync): AtlasCensusPayload {
   const vaultBreak = dbSizeBreakdown(vault);
   const bytesOf = new Map<string, { bytes?: number; pages?: number }>();
@@ -99,11 +65,7 @@ export function atlasCensus(vault: DatabaseSync): AtlasCensusPayload {
   let kinds = 0;
   let populatedKinds = 0;
 
-  // Atlas states ROW COUNTS, the grant surfaces LIVE grants: a revoked answer
-  // is history the plane keeps, so the two differ by design (#883).
   const entries = atlasTables();
-  // One compound statement for the whole file, so registering a table costs
-  // the census a COUNT(*) scan but never a new statement (#873).
   const counts = countRowsBatched(
     vault,
     entries.map((e) => e.physical)
@@ -152,7 +114,6 @@ export function atlasCensus(vault: DatabaseSync): AtlasCensusPayload {
   if (method === "estimate") totalBytes = null;
 
   const packs = [...byPack.values()].sort((a, b) => {
-    // Ontology packs first (life data before plumbing), then by row count.
     if (a.packKind !== b.packKind) return a.packKind === "ontology" ? -1 : 1;
     return b.rows - a.rows;
   });

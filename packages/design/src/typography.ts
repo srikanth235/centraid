@@ -1,8 +1,3 @@
-// The one semantic type scale (Binding Layer invariant 2). ONE RAMP, ONE FACE;
-// the `mono` ROLE means NUMERIC ANNOTATION, never fixed advance. Touch resolves
-// once, and a HELD PAIR must resolve identically on BOTH surfaces or its row
-// re-flows. Nothing falls below 11px.
-
 export const fonts = {
   sans: "Instrument Sans",
 } as const;
@@ -11,8 +6,6 @@ export type BundledFace = keyof typeof fonts;
 
 export type FontFamily = BundledFace | "code";
 
-// CJK fallbacks are MANDATORY: Instrument Sans has no CJK coverage, and the
-// browser substitutes a UA default silently.
 export const fontStacks = {
   code: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
   sans: "'Instrument Sans', 'Helvetica Neue', 'Hiragino Sans', 'Noto Sans JP', 'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif",
@@ -32,7 +25,6 @@ export interface TypeStyle {
   letterSpacing?: string;
   textTransform?: "uppercase";
   variantNumeric?: "tabular-nums";
-  /** Only the NUMERIC role pins one: RTL bidi reorders a mixed run otherwise. */
   direction?: "ltr";
   unicodeBidi?: "isolate";
 }
@@ -42,8 +34,6 @@ export const NATIVE_DELTA_BY_FAMILY = {
   sans: { lineHeight: 3, size: 2 },
 } as const satisfies Record<FontFamily, NativeDelta>;
 
-/** `band`'s hold is ARITHMETIC: six labels are 338px inside a 358px band at
- *  11/15, and 386px one rung up — which fits at no padding. */
 export const NATIVE_DELTA_OVERRIDES = {
   band: { lineHeight: 0, size: 0 },
   bodyStrong: { lineHeight: 0, size: 0 },
@@ -99,10 +89,6 @@ export const type = {
     size: 13,
     weight: "600",
   }),
-  // ── The held pairs ──────────────────────────────────────────────────────
-  //
-  // `bodyStrong` cannot be a held half: it holds at 13/19 on touch while `body`
-  // steps to 15/22. `label` IS `body`, `band-on` IS `control`.
   labelOn: style("labelOn", {
     family: "sans",
     lineHeight: 19,
@@ -243,8 +229,6 @@ export function typeForSurface(touch: boolean): Record<TypeKey, TypeStyle> {
   ) as Record<TypeKey, TypeStyle>;
 }
 
-// `rem`, not `px`: only `rem` tracks the OS's 200% text-size preference, which
-// moves the ROOT font-size and never individual `px` rules.
 export const REM_BASE_PX = 16;
 
 export function typeShorthand(styleValue: TypeStyle): string {
@@ -311,9 +295,6 @@ export function typeKeyToKebab(key: string): string {
     .toLowerCase();
 }
 
-/** Published beside the shorthand, which cannot carry them, so a surface takes
- *  none without the rest. `--t-mono-direction`/`-bidi` belong on TEXT elements
- *  only: a container carrying them flips its own inline axis. */
 export function typeModifiers(
   scale: Readonly<Record<string, TypeStyle>>
 ): Record<string, string> {

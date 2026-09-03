@@ -237,8 +237,6 @@ describe("automation turn live projection", () => {
       }),
       item(3, "delegate", { startedAt: 11, endedAt: undefined }),
     ]);
-    // Durable replay repeats the already-seeded start/end pair. Both are
-    // idempotent; the completed answer and tool remain visible.
     state = startAutomationLiveItem(state, {
       itemId: "item-1",
       ordinal: 1,
@@ -350,8 +348,6 @@ describe("compile-turn inbound bubble (#541)", () => {
 
   it("agrees with the live seed on the same turn", () => {
     const items = [item(0, "message_in", { text: WORK_ORDER })];
-    // The cold projection and the live seed read the same turn — they must
-    // put the same words in the owner's bubble.
     expect(
       automationTurnInboundText(turn({ triggerKind: "compile" }), items)
     ).toBe(COMPILE_TURN_INBOUND_TEXT);
@@ -380,8 +376,6 @@ describe("compile-turn inbound bubble (#541)", () => {
         endedAt: undefined,
       }),
     ]);
-    // The tools row is inserted AHEAD of the agent bubble on flush, so index 1
-    // changes identity — the ids must not.
     expect(before.map((message) => message.msgId)).toStrictEqual([
       "item-0:in",
       "item-1:ai",

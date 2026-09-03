@@ -1,6 +1,3 @@
-// Version handshake (#289 / #468 K10 / #504 / #512): protocol-only judging;
-// product skew is never a refuse reason.
-
 import {
   DEFAULT_GATEWAY_CAPABILITIES,
   isGatewayCapabilities,
@@ -15,23 +12,14 @@ import {
 
 export interface GatewayInfo {
   version: string;
-  /** Wire protocol version. */
   protocolVersion: number;
-  /** Oldest protocol this peer supports. */
   minSupportedProtocol: number;
   instanceId?: string;
-  /** Feature capability map (C1). */
   capabilities: GatewayCapabilities;
   startedAt?: number;
   uptimeMs?: number;
-  /**
-   * Credential accepted for THIS request (#603)? Auth-gated fields are
-   * silently absent otherwise; a bearer mismatch would read like "not ready".
-   */
   authenticated?: boolean;
-  /** COMPAT(#555): stable gateway transport identity, independent of its address. */
   endpointId?: string;
-  /** COMPAT(#555): dial address, valid-credential callers only (#568 C); never persist as identity. */
   endpointTicket?: string;
 }
 
@@ -149,12 +137,6 @@ export function judgeGatewayInfo(raw: unknown): HandshakeResult {
   };
 }
 
-/**
- * Fetch + judge a gateway's `/centraid/_gateway/info`; network failures and
- * non-200s become `unreachable`; `fetchImpl` injectable (#532 owns the pure
- * judges).
- */
-// Stryker disable all
 export async function handshakeGateway(
   baseUrl: string,
   token: string | undefined,
@@ -191,7 +173,6 @@ export async function handshakeGateway(
   return judgeGatewayInfo(body);
 }
 
-/** Build the info payload the gateway route should emit. */
 export function buildGatewayInfoPayload(input: {
   instanceId: string;
   startedAt: number;

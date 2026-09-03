@@ -1,21 +1,14 @@
 /* oxlint-disable no-script-url -- the whole point of these tests is to feed the
    renderer dangerous `javascript:` URLs and prove they are rejected. */
-// Adversarial sanitization tests for the rich-answer renderer (#420). Model
-// output is UNTRUSTED and injected via dangerouslySetInnerHTML, so these prove
-// the SECURITY CONTRACT in assistant-rich.ts holds across the link / image /
-// table / ref-chip / code paths: no live script or dangerous scheme survives.
 import { describe, expect, it } from "vitest";
 
 import { richAnswerHtml } from "./assistant-rich.js";
 import { sanitizeUrl } from "./gfm.js";
 
-/** Render, then assert the DOM carries no executable script / dangerous href. */
 function assertInert(html: string): HTMLElement {
   const host = document.createElement("div");
   host.innerHTML = html;
-  // No script elements, ever.
   expect(host.querySelector("script")).toBeNull();
-  // No anchor/image points at a javascript:/data:/vbscript: destination.
   for (const a of host.querySelectorAll("a")) {
     expect(a.getAttribute("href") ?? "").not.toMatch(
       /^\s*(?:javascript|data|vbscript):/iu
@@ -75,8 +68,6 @@ describe("renderer sanitization — images", () => {
   it("cannot break out of the src attribute via a crafted URL", () => {
     const html = richAnswerHtml('![x]("onerror="alert(1) https://ok/a.png)');
     const host = assertInert(html);
-    // No img carries an event handler — the crafted quotes are entity-encoded
-    // inside the src value, so attribute break-out is impossible.
     expect(host.querySelector("img[onerror]")).toBeNull();
     expect(html).not.toContain('" onerror=');
   });
@@ -129,11 +120,9 @@ describe("sanitizeUrl unit", () => {
     expect(sanitizeUrl("data:text/html,x", false)).toBeNull();
     expect(sanitizeUrl("vbscript:x", false)).toBeNull();
     expect(sanitizeUrl("//host", false)).toBeNull();
-    // Control-char obfuscation is stripped before scheme detection.
     expect(
       sanitizeUrl("java" + String.fromCharCode(1) + "script:x", false)
     ).toBeNull();
-    // Images: mailto is not a valid image source.
     expect(sanitizeUrl("mailto:a@b.co", true)).toBeNull();
   });
 });

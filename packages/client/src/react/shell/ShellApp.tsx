@@ -23,7 +23,6 @@ import { useCompactLayout } from "./useCompactLayout.js";
 
 import styles from "./ShellApp.module.css";
 
-// Callers dispatch navigations through this surface, never the reducer.
 export interface ShellNav {
   route: ShellRoute;
   stemOpen: boolean;
@@ -38,11 +37,6 @@ export interface ShellNav {
   toggleAssistant?: () => void;
 }
 
-/**
- * App-bar content (#708, invariant 3): at most two actions, at most one filled.
- * Keep it DATA, never a context a screen writes into — the bar renders above
- * the outlet, so an effect-set title paints one frame stale.
- */
 export interface ShellAppBar {
   title?: string;
   meta?: ReactNode;
@@ -55,14 +49,11 @@ export interface ShellAppBar {
 export interface ShellAppProps {
   initialRoute: ShellRoute;
   renderStem: (nav: ShellNav) => ReactNode;
-  /** Returning nothing gets the bare frame bar. */
   renderAppBar?: (nav: ShellNav) => ShellAppBar | undefined;
   renderScreen: (nav: ShellNav) => ReactNode;
   isFullBleed?: (route: ShellRoute) => boolean;
-  /** Lets the root wire shortcuts against live nav without owning the router. */
   onNavReady?: (nav: ShellNav) => void;
   statusLine?: ReactNode;
-  /** The Assistant is frame state, not a route — one shared open state. */
   renderAssistantCompanion?: (
     nav: ShellNav,
     state: {
@@ -76,10 +67,6 @@ export interface ShellAppProps {
 const DEFAULT_FULL_BLEED = (r: ShellRoute): boolean =>
   r.kind === "app" || r.kind === "automation-builder";
 
-/**
- * A component boundary the render-prop call lacks (#659). Keep `nav` and the
- * render functions stable or this memo buys nothing.
- */
 const Outlet = memo(
   ({
     nav,
@@ -106,7 +93,6 @@ export default function ShellApp({
   const [state, dispatch] = useReducer(routerReducer, INITIAL_ROUTER, (init) =>
     routerReducer(init, { type: "navigate", route: initialRoute })
   );
-  // The stem is never a DRAWER: no auto-dismiss, no float, no scrim (#707).
   const compact = useCompactLayout();
   const [assistantOpen, setAssistantOpen] = useState(false);
   const toggleAssistant = useCallback(
@@ -173,7 +159,6 @@ export default function ShellApp({
     surface: compact ? "touch" : "pointer",
   });
 
-  // Full-bleed routes own their frame; the Assistant stays frame state here.
   if (isFullBleed(route))
     return (
       <div

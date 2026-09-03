@@ -3,9 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadHomeTileContent } from "./homeTileContent.js";
 import type { HomeTileReader } from "./homeTileContent.js";
 
-// The blob authorizer reaches the authed gateway client, which touches
-// `window.CentraidApi` at module load. Stub it at the leaf so the read layer is
-// testable without a transport.
 vi.mock(import("../../blueprints/blob-auth.js"), () => ({
   BLOB_PREFIX: "/centraid/_vault/blobs" as const,
   authorizeBlobUrl: vi.fn<(pathname: string) => Promise<string>>(
@@ -22,8 +19,6 @@ function readerOf(rows: Rows): HomeTileReader {
     read: vi.fn<HomeTileReader["read"]>(async (_appId, request) => {
       const found = rows[request.entity];
       if (!found) throw new Error(`no shape for ${request.entity}`);
-      // The excerpt reads address ONE content item by id; the stub applies the
-      // eq clauses the way the coordinator would.
       const matched = found.filter((values) =>
         (request.where ?? []).every(
           (clause) => values[clause.column] === clause.value
@@ -59,12 +54,6 @@ describe("shell/routes/homeTileContent", () => {
   });
 
   it("has no tally at all when the ledger is empty, whatever the balance says", async () => {
-    // A balance of zero is indistinguishable from a ledger nobody has used, and
-    // the brief carries no count. Treating it as content gave an untouched
-    // vault a live "0.00 · All settled" tile — which claims a settlement that
-    // never happened AND, because one live tile means Home is no longer day
-    // one, deleted the entire what-to-do treatment the moment the brief
-    // settled.
     const content = await loadHomeTileContent({
       brief: { ...BRIEF, balanceMinor: 0 },
       reader: readerOf({ "tally.expense": [] }),
@@ -146,8 +135,6 @@ describe("shell/routes/homeTileContent", () => {
       }),
     });
     expect(content.tasks).toStrictEqual({
-      // UNDATED TASKS NEVER TOUCH TODAY (#834): none of these rows carries a
-      // due date, so the glance says nothing rather than "0 today".
       glance: { next: "", today: "" },
       rows: [
         { done: false, title: "Renew passport" },
@@ -241,10 +228,6 @@ describe("shell/routes/homeTileContent", () => {
   });
 
   it("never sends a purpose on a replica read — it selects the SHAPE, not the reason", async () => {
-    // `ReplicaShellSession.resolveShapeId` filters the catalog by
-    // `shape.purpose === purpose`, so a descriptive value ("home-springboard")
-    // matches no shape and every read throws. Each read here is `.catch()`-ed,
-    // so the failure was silent and Home simply stayed empty over a full vault.
     const reader = readerOf({ "knowledge.note": [{ title: "n" }] });
     await loadHomeTileContent({ reader });
     expect(vi.mocked(reader.read).mock.calls.length).toBeGreaterThan(0);
@@ -253,10 +236,6 @@ describe("shell/routes/homeTileContent", () => {
   });
 
   it("paints the ORIGINAL when a photo has no thumb derivative yet", async () => {
-    // Every freshly imported photo is in this state until the gateway's preview
-    // backstop runs: `resolveServableBlob` answers `no-variant` → 404, which the
-    // authorizer reports as null. Without the fallback the mosaic renders blank
-    // on a library that plainly has pictures in it.
     const { authorizeBlobUrl } = await import("../../blueprints/blob-auth.js");
     vi.mocked(authorizeBlobUrl).mockImplementation(async (pathname: string) =>
       pathname.includes("variant=thumb") ? null : `blob:${pathname}`
@@ -276,11 +255,6 @@ describe("shell/routes/homeTileContent", () => {
   });
 
   it("decodes the doc's inline markdown body into a stripped, word-cut excerpt", async () => {
-    // `mintContentFromDataUri` keeps text/* bytes INLINE in `content_uri` (the
-    // FTS feed), so a seeded markdown document decodes without a blob fetch.
-    // The heading is dropped (the tile already shows the title, and the seeded
-    // bodies open with `# <title>`), list/emphasis/link markers are stripped,
-    // and the cut lands on a word with an ellipsis.
     const body =
       "# New lease\n\nThe **landlord** agreed to the [terms](https://example.test) " +
       "we sent over, including the longer notice period and the repainting of " +
@@ -315,10 +289,6 @@ describe("shell/routes/homeTileContent", () => {
   });
 
   it("fetches a CAS-held text body through the authorized blob route", async () => {
-    // The staged-upload path spills even text bytes to the CAS, so the excerpt
-    // has to travel the same authorize-then-fetch road as the photo mosaic.
-    // jsdom leaves `URL.revokeObjectURL` unimplemented, so it is installed
-    // rather than spied on, and removed again in the finally.
     const revoke = vi.fn<(url: string) => void>();
     const hadRevoke = Object.getOwnPropertyDescriptor(URL, "revokeObjectURL");
     Object.defineProperty(URL, "revokeObjectURL", {
@@ -357,7 +327,6 @@ describe("shell/routes/homeTileContent", () => {
         title: "Upload",
         total: 1,
       });
-      // The object URL's lifecycle is the caller's; the tile must not leak it.
       expect(revoke).toHaveBeenCalledWith("blob:/centraid/_vault/blobs/c-doc");
     } finally {
       vi.unstubAllGlobals();
@@ -386,12 +355,10 @@ describe("shell/routes/homeTileContent", () => {
         },
       ],
     });
-    // A PDF's bytes are not prose: no fetch is even attempted.
     const binary = await loadHomeTileContent({
       reader: readerOf(rowsFor("application/pdf")),
     });
     expect(binary.docs).toStrictEqual({ title: "Scan of the deed", total: 1 });
-    // A text body whose blob read is refused degrades the same way.
     const refused = await loadHomeTileContent({
       reader: readerOf(rowsFor("text/plain")),
     });
@@ -399,9 +366,6 @@ describe("shell/routes/homeTileContent", () => {
   });
 
   it("reads the note's true first line, keeping a heading's text", async () => {
-    // A note that opens `# Groceries` opens with the word "Groceries" — the
-    // heading is not repeated anywhere on the tile the way the doc title is,
-    // so its text IS the first line.
     const content = await loadHomeTileContent({
       reader: readerOf({
         "core.content_item": [

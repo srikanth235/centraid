@@ -1,10 +1,3 @@
-// The self-contained export/backup gesture (#296 §6: the exit ramp from
-// S3 is a plain directory). Kept out of custody.ts so the facade stays under
-// the governance line-cap (#405 §3 note). The local tier is the spool AND
-// cache — under the bounded storage tier (#405) it is not guaranteed
-// complete, so this copies whatever bytes ARE resident; a caller wanting a full
-// export first runs a sweep with a budget high enough to hold the whole vault.
-
 import {
   existsSync,
   mkdirSync,
@@ -17,7 +10,6 @@ import path from "node:path";
 import { asVaultDiskFullError } from "../errors.js";
 import type { LocalBlobStore } from "./local.js";
 
-/** Copy every resident local blob into `destDir/blobs`. Returns how many. */
 export function exportLocalTier(
   local: LocalBlobStore,
   destDir: string
@@ -36,7 +28,6 @@ export function exportLocalTier(
   return { copied };
 }
 
-/** Write-then-rename so a crashed export never leaves a half blob. */
 function writeBlobFile(file: string, bytes: Buffer): void {
   const tmp = `${file}.tmp`;
   mkdirSync(path.dirname(file), { recursive: true });
@@ -44,8 +35,6 @@ function writeBlobFile(file: string, bytes: Buffer): void {
     writeFileSync(tmp, bytes, { mode: 0o600 });
     renameSync(tmp, file);
   } catch (error) {
-    // Same rule as the CAS write path (blob/local.ts): a disk-full export
-    // never leaves a partial `.tmp` file next to the real blob path.
     rmSync(tmp, { force: true });
     throw asVaultDiskFullError("blob export write", error);
   }

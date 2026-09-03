@@ -42,9 +42,6 @@ describe("shell/Stem", () => {
 
   describe(Stem, () => {
     it("holds the mark, Search, and the pinned launcher — and nothing else", () => {
-      // #707 invariant 1. The three-zone sidebar's recents ledger, gateway
-      // alarm and update pill all left for good; if any of them come back the
-      // stem has stopped being the stem.
       const el = render(<Stem {...stemProps} />);
       expect(el.querySelector(".stemMark")).not.toBeNull();
       expect(el.querySelector(".stemSearch")).not.toBeNull();
@@ -58,10 +55,6 @@ describe("shell/Stem", () => {
     });
 
     it("leads with New chat, above Search, and only on the desktop stem", () => {
-      // The assistant has no launcher row (#707 settled it as a pinned app),
-      // so the one thing it still needs from the band is the ACT of starting a
-      // turn. It sits above Search because it is the only action in a column
-      // of places — and the compact band has no room for either.
       const onNewConversation = vi.fn<() => void>();
       const el = render(
         <Stem {...stemProps} onNewConversation={onNewConversation} />
@@ -69,8 +62,6 @@ describe("shell/Stem", () => {
       const button = el.querySelector<HTMLButtonElement>(".stemNew");
       expect(button).not.toBeNull();
       expect(button?.textContent).toContain("New chat");
-      // Order is the point: DOCUMENT_POSITION_FOLLOWING means Search comes
-      // after it.
       const search = el.querySelector(".stemSearch")!;
       expect(
         button!.compareDocumentPosition(search) &
@@ -78,7 +69,6 @@ describe("shell/Stem", () => {
       ).toBeTruthy();
       act(() => button?.click());
       expect(onNewConversation).toHaveBeenCalledOnce();
-      // Omitted renders nothing at all rather than a dead control.
       expect(
         render(<Stem {...stemProps} />).querySelector(".stemNew")
       ).toBeNull();
@@ -92,8 +82,6 @@ describe("shell/Stem", () => {
     it("names itself for assistive tech without labelling every chip twice", () => {
       const el = render(<Stem {...stemProps} />);
       expect(el.querySelector("nav")?.getAttribute("aria-label")).toBe("Apps");
-      // The chips are decoration beside a visible label, so they are hidden
-      // rather than given a second name.
       for (const chip of el.querySelectorAll(".launchChip"))
         expect(chip.getAttribute("aria-hidden")).toBe("true");
       expect(el.querySelector(".launchItem")?.hasAttribute("aria-label")).toBe(
@@ -106,7 +94,6 @@ describe("shell/Stem", () => {
       const active = el.querySelector('.launchItem[data-active="true"]')!;
       expect(active.getAttribute("aria-current")).toBe("page");
       expect(active.textContent).toContain("Assistant");
-      // Selection is the label + the bar, never a count or a dot.
       expect(el.textContent).not.toMatch(/\d/u);
     });
 
@@ -125,8 +112,6 @@ describe("shell/Stem", () => {
     });
 
     it("keeps the Search control on every host and drops only the hint", () => {
-      // The installed PWA cannot claim ⌘K — the browser has it — so the
-      // control is the guarantee and the shortcut is the extra.
       const withKey = render(<Stem {...stemProps} />);
       expect(withKey.querySelector(".stemSearchKbd")?.textContent).toBe("⌘K");
       act(() => root?.unmount());
@@ -165,7 +150,6 @@ describe("shell/Stem", () => {
         expect(head.querySelector(".stemGateway")?.textContent).toBe(
           "This Mac"
         );
-        // A menu control, so it says so — the chevron alone is decoration.
         expect(head.getAttribute("aria-haspopup")).toBe("menu");
         expect(head.getAttribute("aria-expanded")).toBe("false");
         act(() => head.click());
@@ -185,8 +169,6 @@ describe("shell/Stem", () => {
       });
 
       it("derives a hue and falls back to a mark a vault has not chosen", () => {
-        // A stored icon key the registry does not have renders NOTHING, so it
-        // is narrowed rather than cast — an empty chip reads as a broken vault.
         const el = render(
           <Stem {...stemProps} identity={{ ...identity, icon: "NotAnIcon" }} />
         );
@@ -196,8 +178,6 @@ describe("shell/Stem", () => {
       });
 
       it("falls back to the bare mark before the scopes resolve", () => {
-        // The stem paints on the first frame; a head that waits for a read
-        // would make the whole band pop in after it.
         const el = render(<Stem {...stemProps} />);
         expect(el.querySelector(".stemIdentity")).toBeNull();
         expect(el.querySelector(".stemMark")).not.toBeNull();
@@ -208,9 +188,6 @@ describe("shell/Stem", () => {
       const account = { name: "Ada Lovelace", onMenu: () => {} };
 
       it("stands the member's own name there, as the menu trigger", () => {
-        // Settings, Pair device, What's new and Log out live in ITS menu, the
-        // way they did before #707 — each is something you do a handful of
-        // times, and your own name is what is worth the standing row.
         const onMenu = vi.fn<(anchor: DOMRect) => void>();
         const el = render(
           <Stem {...stemProps} account={{ ...account, onMenu }} />
@@ -226,7 +203,6 @@ describe("shell/Stem", () => {
       });
 
       it("keeps All apps and the account row on separate selectors", () => {
-        // They share one rule and one shape; one click must never be both.
         const onAllApps = vi.fn<() => void>();
         const onMenu = vi.fn<(anchor: DOMRect) => void>();
         const el = render(
@@ -250,8 +226,6 @@ describe("shell/Stem", () => {
 
     describe("the ledger", () => {
       it("carries a route's own list under the launcher, desktop only", () => {
-        // #707 gave the assistant its ledger, which put a SECOND sidebar next
-        // to this one. One band holds the places you can go.
         const ledger = <div data-testid="ledger">threads</div>;
         const el = render(<Stem {...stemProps} ledger={ledger} />);
         expect(
@@ -259,7 +233,6 @@ describe("shell/Stem", () => {
         ).not.toBeNull();
         act(() => root?.unmount());
         host?.remove();
-        // The compact band is a row of tabs with nowhere to put a list.
         const band = render(<Stem {...stemProps} ledger={ledger} compact />);
         expect(band.querySelector(".stemLedger")).toBeNull();
       });
@@ -336,10 +309,6 @@ describe("shell/Stem", () => {
       expect(names).toContain("Connectors");
       expect(names).toContain("System");
       expect(names).toContain("Vault");
-      // Every destination this gateway can OFFER — the sheet is the complete
-      // index. It lost a row with v11: Copies merged into Vault, and a second
-      // row opening the same surface under a second name would make the index
-      // a list of two places that are one.
       expect(names.filter((name) => name === "Vault")).toHaveLength(1);
       expect(names.length).toBeGreaterThan(9);
     });
@@ -387,9 +356,6 @@ describe("shell/Stem", () => {
     });
 
     it("marks an unpinned row with a lighter NAME, never a dimmed row", () => {
-      // Container opacity composites every descendant and invalidates the
-      // contrast each token was solved for, so the recessive state has to be
-      // an attribute the leaf styles off — not a faded parent.
       const el = render(<AllAppsSheet {...sheetProps} />);
       const rows = [...el.querySelectorAll<HTMLElement>(".sheetRowOpen")];
       const assistant = rows.find((r) => r.textContent?.includes("Assistant"))!;

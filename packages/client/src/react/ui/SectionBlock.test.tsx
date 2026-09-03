@@ -63,8 +63,6 @@ describe("ui/SectionBlock", () => {
     );
     const verb = el.querySelector(".toggle") as HTMLButtonElement;
     expect(verb.textContent).toBe("Hide");
-    // The state is on the control a member presses: the body is unrendered
-    // while closed, so there is nothing else for a reader to hear it from.
     expect(verb.getAttribute("aria-expanded")).toBe("true");
     expect(
       (el.querySelector(".section") as HTMLElement).dataset.collapsed

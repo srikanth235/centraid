@@ -1,35 +1,3 @@
-// The outbox (#306 decision 3): every external write is an ARTIFACT,
-// not an approval. An automation or connector STAGES the rendered thing
-// itself — recipient/subject/body, an event payload, an API call — as an
-// inert row; the owner decides on the thing, not on "automation X requests
-// permission to invoke command Y"; the broker-side executor performs the
-// drain toward pinned hosts with injected credentials (the `allowWrites`
-// lane that connector fires never get).
-//
-// One primitive, three jobs: the external-write consent surface, the
-// standing-grant mint point (#294 decision 4's concrete answer), and the
-// offline-outbox seam the single-gateway star topology needs anyway.
-//
-// `outbox_grant` is the standing "always allow" rule — scoped
-// `(actor, verb, target)`, minted lazily from a concrete item instead of
-// configured abstractly up front. A grant-matched item skips the pending
-// pause but still drains through the same executor and lands in the review
-// feed, receipted like everything else.
-//
-// `request_json` carries `{{connection:…}}` placeholders, never tokens —
-// injection happens executor-side toward the connection's `allowed_hosts`
-// pin (#304 invariants, unchanged).
-//
-// The graph joins (#310): `target` stays the wire-level address the
-// standing-grant key needs, but it is not an entity — so an item also
-// carries typed refs the graph can walk. `(target_type, target_id)` is
-// the canonical row the write is ABOUT (the invoice being sent, the event
-// being created); `recipient_party_id` is the resolved destination person.
-// And a drain is not the end of the story: a sent message-shaped artifact
-// PUBLISHES into the social spine (thread + message + body content item) —
-// `published_message_id` binds the item to the canonical fact it became, so
-// the owner's own outbound acts are first-class rows, not JSON stranded in
-// result_json until a provider sync re-imports them.
 export const OUTBOX_DDL = `
 CREATE TABLE IF NOT EXISTS outbox_grant (
   grant_id   TEXT PRIMARY KEY,

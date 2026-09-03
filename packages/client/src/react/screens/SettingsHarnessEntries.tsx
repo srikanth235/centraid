@@ -7,27 +7,6 @@ import PickRow from "./SettingsPickRow.js";
 
 import styles from "./SettingsHarnessesScreen.module.css";
 
-// Settings → Agents, ONE HARNESS (binding layer v11).
-//
-// Name, what its probe reported, then its model and its reasoning level. The
-// harness section is where a harness's OWN answer is set; a lane below either
-// inherits that answer or states its own.
-//
-// A DISCONNECTED HARNESS IS STATED, NOT OFFERED A VERB. The prototype's row
-// carries a `Connect` button, and this build has nothing behind it: connecting
-// a harness happens in that harness's own CLI, which asks for its own
-// credential. A button that could only explain itself is a verb that does
-// nothing, so the caption carries the fact in `--net` and the picks go quiet.
-//
-// No entry carries an expandable "N tools" drawer listing the builtins and MCP
-// tools a harness exposes: Connectors is where the member reasons about what a
-// harness can reach.
-
-/**
- * One harness. The "used by" chips report which lanes land here — they answer
- * what breaks if this harness goes away, which is what the old "Active" pill
- * meant back when exactly one harness could be active.
- */
 export default function HarnessEntry({
   card,
   usedBy,

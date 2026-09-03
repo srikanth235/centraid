@@ -1,6 +1,3 @@
-// At most one run per animation frame (#659); `flush` covers terminal events
-// and tests.
-
 export interface FrameBatch {
   schedule: () => void;
   flush: () => void;

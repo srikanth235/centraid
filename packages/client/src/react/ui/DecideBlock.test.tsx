@@ -47,7 +47,6 @@ describe("ui/DecideBlock", () => {
     expect(el.textContent).toContain("5m ago");
     expect(el.textContent).toContain("gmail.send → ravi@example.com");
     expect(el.textContent).toContain("Staged by Briefing");
-    // Nothing is disclosed until a caller says so: no facts, no preview.
     expect(el.querySelector("dl")).toBeNull();
   });
 
@@ -65,7 +64,6 @@ describe("ui/DecideBlock", () => {
     ) as HTMLButtonElement;
     expect(disclosure.getAttribute("aria-expanded")).toBe("false");
     expect(disclosure.textContent).toContain("gmail.send → ravi@example.com");
-    // One target for one act — there is no chevron beside the sentence.
     expect(el.querySelectorAll("button[aria-expanded]")).toHaveLength(1);
     act(() => disclosure.click());
     expect(toggles).toBe(1);
@@ -89,8 +87,6 @@ describe("ui/DecideBlock", () => {
         },
       ],
     });
-    // The computed half is text. A count offered as an input is a card that
-    // can misdescribe the write it approved.
     expect(el.querySelector('input[aria-label="size"]')).toBeNull();
     expect(el.textContent).toContain("4.2 KB across 3 files");
     const input = el.querySelector(
@@ -166,8 +162,6 @@ describe("ui/DecideBlock", () => {
       "Briefing sends to that address without asking."
     );
     act(() => box.click());
-    // The tick REPORTS itself; the block is controlled, so it does not also
-    // move on its own.
     expect(ticks).toStrictEqual([true]);
     expect(box.checked).toBe(false);
   });
@@ -195,8 +189,6 @@ describe("ui/DecideBlock", () => {
       "The gateway cannot rebuild a request for this verb"
     );
     const discard = button(el, "Discard");
-    // Invariant 3: destructive is OUTLINED in --net, never a fill — including
-    // inside a confirm, where the prototype filled it.
     expect(discard.className).toContain("destructive");
     expect(discard.className).not.toContain("primary");
   });

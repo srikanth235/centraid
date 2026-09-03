@@ -11,8 +11,6 @@ vi.mock(import("../../gateway-client.js"), () => ({
   listApps: () => listApps(),
   listVaults: () => Promise.resolve([]),
 }));
-// tileVisualFromListing/colorForIcon are pure — use the real ones.
-// The client-local store is a plain module now; back it with an in-memory Map.
 const store = vi.hoisted(() => new Map<string, unknown>());
 vi.mock(import("./store.js"), () => ({
   Store: {
@@ -36,8 +34,6 @@ let host: HTMLElement | null = null;
 describe("useShellApps", () => {
   beforeEach(async () => {
     store.clear();
-    // tileVisualFromListing (real, pure) probes the ambient Icon registry to
-    // validate an icon key — stub it with the keys the fixtures use.
     (globalThis as unknown as { Icon: unknown }).Icon = {
       Todo: () => "",
       Habit: () => "",
@@ -79,7 +75,6 @@ describe("useShellApps", () => {
       await Promise.resolve();
     });
   }
-  /** Tear the shell down so the next `mount()` is a genuine cold launch. */
   async function unmount(): Promise<void> {
     await act(async () => root?.unmount());
     host?.remove();
@@ -102,10 +97,6 @@ describe("useShellApps", () => {
     });
 
     it("treats a first-party listing row as INSTALLED", async () => {
-      // The #708 law. With no pin store at all — which is every vault, since
-      // nothing writes pins — the eight bundled apps still have to arrive as
-      // installed apps, or Home is empty on a vault that owns all eight. Any
-      // other row is not this shell's to open.
       listApps.mockResolvedValue([
         { id: "photos", name: "Photos", kind: "app" },
         { id: "tasks", name: "Tasks", kind: "app" },
@@ -116,8 +107,6 @@ describe("useShellApps", () => {
     });
 
     it("does not persist first-party rows into the pin store", async () => {
-      // They are DERIVED from the gateway on every pass. Writing them back
-      // would make them outlive the vault that has them.
       listApps.mockResolvedValue([
         { id: "photos", name: "Photos", kind: "app" },
       ]);
@@ -166,10 +155,6 @@ describe("useShellApps", () => {
     });
 
     it("overlays a renamed app.json name/description onto the cached pin", async () => {
-      // Reproduces the Home-tile-never-updates-after-rename bug: updateAppMeta
-      // only writes the new name to the gateway's app.json — the Home pin
-      // cached in the Store must pick it up via this reconciliation, since
-      // nothing else calls setUserApps() after a rename.
       store.set("home.userApps", [
         {
           id: "agenda",
@@ -193,9 +178,6 @@ describe("useShellApps", () => {
     });
 
     it("a vault switch parks the outgoing vault’s pins instead of pruning them", async () => {
-      // Reproduces the pin-loss bug: pins live in a non-vault-scoped
-      // store, so a switch to an empty vault made every pin look orphaned,
-      // and the prune destroyed them permanently.
       const api = (vaultId: string) => ({
         getGatewayAuth: async () => ({ baseUrl: "", vaultId }),
       });
@@ -207,13 +189,11 @@ describe("useShellApps", () => {
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["notes"]);
 
-      // Switch to empty vault B: Home empties, but A's pins are parked.
       (window as unknown as { CentraidApi: unknown }).CentraidApi = api("B");
       listApps.mockResolvedValue([]);
       await act(async () => ctl.refresh());
       expect(ctl.userApps).toStrictEqual([]);
 
-      // Back to A: the pin is restored, not pruned.
       (window as unknown as { CentraidApi: unknown }).CentraidApi = api("A");
       listApps.mockResolvedValue([{ id: "notes", name: "Notes", kind: "app" }]);
       await act(async () => ctl.refresh());
@@ -221,10 +201,6 @@ describe("useShellApps", () => {
     });
 
     it("paints the last known installed set when the listing cannot be reached", async () => {
-      // The offline-launch bug: `listApps()` is the only source for what a
-      // vault HAS since #708, so a stopped gateway left Home with zero tiles
-      // and the day-one empty state — on a vault whose replica was fully
-      // synced, which is the one moment the offline copy exists for.
       const api = (vaultId: string) => ({
         getGatewayAuth: async () => ({ baseUrl: "", vaultId }),
       });
@@ -236,13 +212,10 @@ describe("useShellApps", () => {
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos", "tasks"]);
 
-      // A LAUNCH with the gateway down — not a refresh, which would still have
-      // the previous pass's lists in memory. Only the Store survives.
       await unmount();
       listApps.mockRejectedValue(new Error("offline"));
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos", "tasks"]);
-      // Still a cache, never a pin: a real uninstall must not be undone by it.
       expect(store.get("home.userApps")).toBeUndefined();
     });
 
@@ -257,7 +230,6 @@ describe("useShellApps", () => {
       await mount();
       expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["photos"]);
 
-      // Vault B has never been listed, and offline it stays that way.
       (window as unknown as { CentraidApi: unknown }).CentraidApi = api("B");
       listApps.mockRejectedValue(new Error("offline"));
       await act(async () => ctl.refresh());
@@ -265,10 +237,6 @@ describe("useShellApps", () => {
     });
 
     it("an unknown vault key changes nothing — it is not a vault", async () => {
-      // Offline both reads fail, so the key is UNKNOWN, not "". An empty
-      // string compares unequal to every real vault id: the switch branch
-      // would park the member's pins and install byVault[""] — an empty pin
-      // list, written back, on a launch that never reached the gateway.
       (window as unknown as { CentraidApi: unknown }).CentraidApi = {
         getGatewayAuth: async () => ({ baseUrl: "", vaultId: "A" }),
       };
@@ -279,7 +247,6 @@ describe("useShellApps", () => {
       await mount();
       expect(store.get("home.userApps.vault")).toBe("A");
 
-      // The host bridge itself is unreachable now.
       (window as unknown as { CentraidApi: unknown }).CentraidApi = {
         getGatewayAuth: async () => {
           throw new Error("offline");

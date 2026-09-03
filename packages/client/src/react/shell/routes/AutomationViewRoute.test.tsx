@@ -86,9 +86,6 @@ vi.mock(import("./automationThreadData.js") as Promise<unknown>, () => ({
 vi.mock(import("./automationsData.js") as Promise<unknown>, () => ({
   deriveAutomationHero: helpers.deriveHero,
 }));
-// Partial: only the projection is stubbed. `automationTurnInboundText` is the
-// shared cold/live agreement on a compile turn's inbound bubble (#541) — the
-// route must exercise the real one.
 vi.mock(
   import("./automationTurnMessages.js") as Promise<unknown>,
   async (importOriginal) => ({
@@ -580,8 +577,6 @@ describe("AutomationViewRoute suite", () => {
       );
       expect(conversationalMessages.length).toBeGreaterThan(1);
 
-      // The run screen cannot revise or compile: those endpoints are not reachable
-      // from this route at all any more (they live on the editor route).
       expect(api.compileAutomation).not.toHaveBeenCalled();
 
       await expect(bridge.onRotateWebhook()).resolves.toBe(true);
@@ -658,7 +653,6 @@ describe("AutomationViewRoute suite", () => {
         { ...turn, turnId: "no-harness", seq: 4, startedAt: 400 },
       ];
       expect(latestHarnessKind(runs)).toBe("copilot");
-      // Same answer whichever order the feed arrives in.
       expect(latestHarnessKind(runs.toReversed())).toBe("copilot");
       expect(latestHarnessKind([{ ...turn }])).toBeUndefined();
     });
@@ -701,7 +695,6 @@ describe("AutomationViewRoute suite", () => {
         )
       ).toStrictEqual([undefined, "claude-code", ["claude-code", "copilot"]]);
 
-      // A decline sends nothing further and yields no turn.
       api.streamAutomationConversationTurn.mockClear();
       attempt = 0;
       actions.confirm.mockResolvedValue(false);

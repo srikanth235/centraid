@@ -1,15 +1,8 @@
-// Consent memory for the install-grant top-up (#308 A3/A4): tombstone rows
-// survive revocation (only an explicit owner approval clears one), and a
-// manifest widened beyond what was ever consented gets a blocking
-// `access_scope_request`, not an auto-grant — the top-up cannot be steered
-// by the actor it contains.
-
 import type { VaultDb } from "./db.js";
 import type { FilterClause } from "./gateway/types.js";
 import { nowIso, uuidv7 } from "./ids.js";
 import { scopeCovers } from "./scope-extent.js";
 
-/** One scope extent as the consent-memory tables store it. */
 export interface ScopeTriple {
   schema: string;
   table?: string | undefined;
@@ -19,16 +12,13 @@ export interface ScopeTriple {
 }
 
 export interface GranteeKey {
-  /** access_app.app_id (row uuid). */
   appId?: string;
-  /** core_party.party_id. */
   granteePartyId?: string;
 }
 
 export interface ScopeRequestSummary {
   requestId: string;
   plane: "app" | "agent";
-  /** The Centraid app id (enrollment name), not the row uuid. */
   appId: string;
   purpose: string;
   scopes: ScopeTriple[];
@@ -54,7 +44,6 @@ function granteeClause(grantee: GranteeKey): { where: string; param: string } {
   throw new Error("a scope tombstone needs an app or a grantee party");
 }
 
-/** Record the owner's revocation per scope triple. */
 export function writeScopeTombstones(
   db: VaultDb,
   grantee: GranteeKey,
@@ -89,18 +78,13 @@ export function writeScopeTombstones(
 
 interface TombstoneRow {
   tombstone_id: string;
-  /** The dotted encoding `access_grant_scope.entity` carries (#916, R10). */
   entity: string;
   verbs: string;
   row_filter_json: string | null;
   field_mask_json: string | null;
 }
 
-/** `{schema, table}` → the one dotted name the access plane stores. */
 function dottedEntity(scope: Pick<ScopeTriple, "schema" | "table">): string {
-  // `== null` on purpose: the type says `string | undefined`, but a scope
-  // triple can arrive from app-manifest JSON where `table: null` is
-  // expressible, so the null arm is a runtime case the type does not see.
   return scope.table == null ? scope.schema : `${scope.schema}.${scope.table}`;
 }
 
@@ -137,12 +121,6 @@ export function listScopeTombstones(
   return tombstoneRows(db, grantee).map(tombstoneExtent);
 }
 
-/**
- * Approval clears only the tombstones it COVERS (#541 review): an anchored
- * approval must not erase a schema-wide refusal — the owner would be asked
- * again on the next mount. The surviving broad tombstone costs nothing; the
- * minted grant covers it.
- */
 export function clearScopeTombstones(
   db: VaultDb,
   grantee: GranteeKey,
@@ -158,7 +136,6 @@ export function clearScopeTombstones(
   }
 }
 
-/** Uninstall wipes the memory: a reinstall is a fresh consent. */
 export function clearAllScopeTombstones(
   db: VaultDb,
   grantee: GranteeKey
@@ -169,7 +146,6 @@ export function clearAllScopeTombstones(
     .run(param);
 }
 
-/** Has the owner EVER consented to this grantee (any grant)? */
 export function hasGrantHistory(db: VaultDb, grantee: GranteeKey): boolean {
   const column = grantee.appId ? "app_id" : "grantee_party_id";
   const param = grantee.appId ?? grantee.granteePartyId;
@@ -180,8 +156,6 @@ export function hasGrantHistory(db: VaultDb, grantee: GranteeKey): boolean {
   return row !== undefined;
 }
 
-/** Park a widened manifest as the app's ONE open request; a re-publish
- *  replaces it; deciding closes it. */
 export function openScopeRequest(
   db: VaultDb,
   input: {
@@ -229,7 +203,6 @@ export function openScopeRequest(
   return requestId;
 }
 
-/** Drop the open request when the manifest no longer widens anything. */
 export function closeObsoleteScopeRequest(
   db: VaultDb,
   plane: "app" | "agent",

@@ -22,9 +22,6 @@ vi.setConfig({ testTimeout: 30_000 });
 
 const TOKEN = crypto.randomBytes(16).toString("hex");
 
-// A stand-in for the loopback gateway: bearer-gated HTML + module
-// subresource + JSON echo + SSE — the exact request shapes that were broken
-// on mobile (#263 P0s #2 and #3).
 function startFakeGateway(): Promise<{ server: http.Server; baseUrl: string }> {
   const server = http.createServer((req, res) => {
     if ((req.headers.authorization ?? "") !== `Bearer ${TOKEN}`) {
@@ -84,7 +81,6 @@ describe("device store", () => {
     store.add({ name: "iPhone", platform: "ios", endpointId: "ep-b" });
     expect(DeviceStore.open(file).list()).toHaveLength(2);
 
-    // Re-pairing the same endpoint replaces, never duplicates.
     const a2 = store.add({
       name: "Pixel 9",
       platform: "android",
@@ -136,7 +132,6 @@ describe("tunnel end to end", () => {
     const stranger = await createTunnelClient({ relays: "disabled" });
     try {
       const connection = await stranger.connect(desktop.ticket());
-      // The desktop closes with CLOSE_UNAUTHORIZED; the first stream use fails.
       await expect(async () => {
         await tunnelRequest(connection, {
           method: "GET",
@@ -175,7 +170,6 @@ describe("tunnel end to end", () => {
     expect(ok.desktopName).toBe("Test Desktop");
     expect(store.findByEndpointId(phone.endpointId)?.name).toBe("Test iPhone");
 
-    // One-time: the code is consumed.
     const replay = await phone.pair(payload!.ticket, {
       code: payload!.code,
       deviceName: "Replay",
@@ -194,7 +188,6 @@ describe("tunnel end to end", () => {
       expect(html.status).toBe(200);
       await expect(html.text()).resolves.toContain("app.js");
 
-      // The ES-module subresource case that defeated the asset-inliner.
       const moduleResponse = await fetch(`${base}/centraid/demo/app.js`);
       expect(moduleResponse.status).toBe(200);
       await expect(moduleResponse.text()).resolves.toContain("kit.js");
@@ -207,7 +200,6 @@ describe("tunnel end to end", () => {
         echoed: "hello-through-the-pipe",
       });
 
-      // Concurrent requests multiplex over one QUIC connection.
       const results = await Promise.all([
         fetch(`${base}/centraid/demo/`),
         fetch(`${base}/centraid/demo/app.js`),
@@ -242,7 +234,6 @@ describe("tunnel end to end", () => {
       };
       await readNext();
       expect(arrivals.length).toBeGreaterThanOrEqual(2);
-      // The second event must arrive ~120ms after the first — streamed, not buffered.
       expect(arrivals.at(-1)!.at - arrivals[0]!.at).toBeGreaterThanOrEqual(80);
     } finally {
       await proxy.close();
@@ -286,7 +277,6 @@ describe("tunnel end to end", () => {
         deviceStore: store,
         relays: "disabled",
       });
-      // Re-pair against the second tunnel so its allowlist admits the device.
       const p2 = brokenUpstream.beginPairing();
       const payload2 = parsePairQrPayload(p2.qrPayload)!;
       await device.pair(payload2.ticket, {

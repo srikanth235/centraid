@@ -54,8 +54,6 @@ describe(connectFlowReducer, () => {
     });
   });
 
-  // The pairing UI stopped asking, so the initial state IS the product
-  // default — including through a method switch, which rebuilds the state.
   it("rememberDevice starts ON and survives selecting a method", () => {
     expect(createInitialConnectFlowState().rememberDevice).toBe(true);
     expect(createInitialConnectFlowState("gateway").rememberDevice).toBe(true);
@@ -158,7 +156,6 @@ describe(connectFlowReducer, () => {
       result: { ok: false, message: "gateway is down" },
       type: "localVaultsLoaded",
     });
-    // Settled (so the step leaves "Loading vaults…") but unhappy.
     expect(s.report).not.toBeNull();
     expect(s.vaultsError).toBe("gateway is down");
     expect(
@@ -359,8 +356,6 @@ describe(canCommitConnectFlow, () => {
     );
   });
 
-  // Issue #603 D10: a redeemed enrollment that names no vault left the vault
-  // step rendering an empty list with "Continue" still live.
   it("gateway/ticket blocks commit when the redeemed report grants no vault", () => {
     const report = { ok: true, stages: [] };
     expect(

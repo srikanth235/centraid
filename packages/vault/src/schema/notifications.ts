@@ -1,8 +1,3 @@
-// Notices are durable, vault-owned projections behind the Notifications
-// surface. Decisions deliberately remain in their canonical
-// outbox/consent/agent tables; this table contains only informational notices
-// that do not ask the owner for a decision (#647).
-
 export const NOTIFICATIONS_NOTICE_DDL = `
 CREATE TABLE IF NOT EXISTS notifications_notice (
   notice_id TEXT PRIMARY KEY,
@@ -25,12 +20,6 @@ CREATE INDEX IF NOT EXISTS notifications_notice_retention_idx
   ON notifications_notice(last_at);
 `;
 
-/**
- * The surface formerly called "Inbox" is **Notifications** (#665), and the
- * table came with it: `inbox_notice` → `notifications_notice`. The rename is
- * part of the pre-release composed base. A fresh file never has `inbox_notice`,
- * while a recreated dev vault starts with the new rebuildable projection.
- */
 export const RENAME_INBOX_NOTICE_DDL = `
 DROP INDEX IF EXISTS inbox_notice_active_idx;
 DROP INDEX IF EXISTS inbox_notice_retention_idx;

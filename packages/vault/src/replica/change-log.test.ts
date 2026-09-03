@@ -414,7 +414,6 @@ describe("change-log", () => {
       overflow: 0,
       retained: 1,
     });
-    // Churn on one row must not push the floor.
     expect(result.floor).toStrictEqual({ epoch, seq: 0 });
     expect(
       readReplicaChanges(vault, { since: result.floor }).changes
@@ -429,7 +428,6 @@ describe("change-log", () => {
     ).toStrictEqual([
       expect.objectContaining({ seq: 1_001, rowId: "hot-row" }),
     ]);
-    // A survivor's prior never reaches back to the INSERT.
     expect(
       readReplicaChanges(vault, { since: result.floor }).changes[0]
     ).toMatchObject({ op: "update", priorOp: "update" });
@@ -465,7 +463,6 @@ describe("change-log", () => {
       maxEntries: 3,
     });
 
-    // No page may ever carry half of one transaction.
     expect(
       readReplicaChanges(vault, { since: { epoch, seq: 0 } }).changes.map(
         (change) => change.seq

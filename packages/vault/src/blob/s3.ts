@@ -1,8 +1,3 @@
-// The S3-compatible remote driver (#296): SigV4 over plain fetch, no SDK.
-// Credentials never live in settings — an async provider wired to the
-// sealed-secret path supplies them (#290). Hashes come from the local spool,
-// so ETags here are never believed.
-
 import { S3RequestPipeline } from "./s3-pipeline.js";
 import { assertSha } from "./store.js";
 import type { BlobRange, BlobStat, BlobStore } from "./store.js";
@@ -20,18 +15,13 @@ export interface S3BlobStoreOptions {
   prefix?: string;
   credentials: () => Promise<S3Credentials>;
   fetchImpl?: typeof fetch;
-  /** Writes only: downloads are NEVER throttled (#367). */
   throttleBytesPerSec?: number;
-  /** Object-CREATING requests only: S3 fixes a class at creation, and the value
-   *  is un-validated because every S3-compatible names its own (#405). */
   storageClass?: string;
   retryAttempts?: number;
   sleepImpl?: (ms: number) => Promise<void>;
 }
 
-/** Over this, uploads go multipart (#367). */
 export const MULTIPART_THRESHOLD_BYTES = 32 * 1024 * 1024;
-/** S3's minimum is 5 MiB; this bounds streaming memory to one part. */
 const MULTIPART_PART_SIZE_BYTES = 16 * 1024 * 1024;
 
 async function streamToBuffer(source: NodeJS.ReadableStream): Promise<Buffer> {
@@ -94,13 +84,6 @@ export class S3BlobStore implements BlobStore {
     return this.pipeline.request(method, key, opts);
   }
 
-  /**
-   * Bounded retry (#405): only network faults, 429 and 5xx retry; every other
-   * status, 404 included, is definitive. Every op here is idempotent EXCEPT
-   * `createMultipartUpload`, whose lost response orphans an uploadId (bounded:
-   * putStream aborts, a lifecycle rule reaps). Callers pace BEFORE this
-   * wrapper, so retried bytes are never re-charged.
-   */
   private async send(
     method: string,
     key: string,
@@ -113,7 +96,6 @@ export class S3BlobStore implements BlobStore {
     return this.pipeline.send(method, key, opts);
   }
 
-  /** Per-call override beats the instance default (#425). */
   private classOf(override?: string): string | undefined {
     return override ?? this.options.storageClass;
   }
@@ -132,7 +114,6 @@ export class S3BlobStore implements BlobStore {
       throw new Error(`s3 put ${sha}: ${res.status} ${await res.text()}`);
   }
 
-  /** Any failure aborts the multipart upload: a partial never bills (#367). */
   async putStream(
     sha: string,
     source: NodeJS.ReadableStream,
@@ -156,7 +137,6 @@ export class S3BlobStore implements BlobStore {
         partNumber += 1;
       }
       if (parts.length === 0) {
-        // S3 refuses a zero-part complete; a 0-byte blob is degenerate.
         await this.abortMultipartUpload(key, uploadId);
         await this.put(sha, Buffer.alloc(0));
         return;
@@ -220,7 +200,6 @@ export class S3BlobStore implements BlobStore {
 
   async delete(sha: string): Promise<void> {
     const res = await this.send("DELETE", this.keyFor(sha));
-    // 404 is success for an idempotent delete.
     if (!res.ok && res.status !== 404) {
       throw new Error(`s3 delete ${sha}: ${res.status} ${await res.text()}`);
     }

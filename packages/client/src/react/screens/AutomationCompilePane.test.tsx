@@ -9,11 +9,6 @@ import type { CompileAttemptDTO, CompileStepDTO } from "../screen-contracts.js";
 import AutomationCompilePane from "./AutomationCompilePane.js";
 import type { AutomationCompilePaneProps } from "./AutomationCompilePane.js";
 
-// The compile loop, which is the half of the automations UX the run screen is
-// no longer allowed to touch: compile in place, watch the steps, read the
-// failure, test the plan. The rail READS — it offers no way to type, because
-// the instructions field in the left column is the only editable surface.
-
 const failedAttempt: CompileAttemptDTO = {
   turnId: "c-1",
   startedAt: 1000,
@@ -188,8 +183,6 @@ describe("screens/AutomationCompilePane", () => {
             .fn<AutomationCompilePaneProps["loadAttempts"]>()
             .mockResolvedValue([]),
           loadTurnSteps,
-          // settled:false — the stream closed with the turn still open. Leaving
-          // the rail spinning would be the dishonest option.
           watchTurnSteps: vi
             .fn<AutomationCompilePaneProps["watchTurnSteps"]>()
             .mockResolvedValue({ settled: false, ok: false }),
@@ -213,11 +206,9 @@ describe("screens/AutomationCompilePane", () => {
             .mockResolvedValue([failedAttempt]),
         })
       );
-      // The raw compiler text survives verbatim...
       expect(
         el.querySelector('[data-testid="compile-failure"]')?.textContent
       ).toContain("handler.js: unexpected token");
-      // ...and the only cure on offer points back at the one authored field.
       await click(el, "compile-edit-instructions");
       expect(onEditInstructions).toHaveBeenCalledWith(
         expect.objectContaining({ type: "click" })
@@ -284,8 +275,6 @@ describe("screens/AutomationCompilePane", () => {
     });
 
     it("counts up while a compile is open, and shows no clock once it settles", async () => {
-      // A compile is a harness run and can take minutes; without a clock,
-      // "Compiling…" is indistinguishable from a hang.
       const clock = useFakeClock(60_000);
       const running: CompileAttemptDTO = {
         turnId: "c-9",
@@ -307,8 +296,6 @@ describe("screens/AutomationCompilePane", () => {
       expect(
         el.querySelector('[data-testid="compile-elapsed"]')?.textContent
       ).toBe("1:35");
-      // A compile this mount did not start still counts as busy — otherwise
-      // reloading mid-compile offers a button that starts a second one.
       const compileBtn = el.querySelector<HTMLButtonElement>(
         '[data-testid="compile-now"]'
       );

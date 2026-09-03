@@ -1,10 +1,3 @@
-// The MERGE ENGINE (#916, review 2.1/2.2): the two walks that re-point every
-// reference to a folded-in row — the engine's foreign keys, and the composite
-// keys into the entity supertype — and the per-table policy for what a
-// collision means. Split from `merge.ts`, which is the command surface over
-// it: the walks are shared by every mergeable entity and are the part with the
-// interesting failure modes.
-
 import type { HandlerCtx } from "../gateway/types.js";
 import { ENTITY_POINTERS } from "../schema/entity-refs.js";
 import { PARTY_POINTER_REGISTRY } from "../schema/party-pointers.js";
@@ -12,21 +5,9 @@ import { PARTY_POINTER_REGISTRY } from "../schema/party-pointers.js";
 export interface FkRef {
   table: string;
   column: string;
-  /** EVERY primary key column, in key order — see `primaryKeyOf`. */
   pk: readonly string[];
 }
 
-/**
- * THE PRIMARY KEY, WHOLE (#916, review 2.1).
- *
- * This used to be `cols.find((c) => c.pk === 1)?.name`, read as "the primary
- * key column". `PRAGMA table_info.pk` is not a boolean: it is the column's
- * POSITION in the key, 1-based. On `tally_expense_split (expense_id,
- * party_id)` that returned `expense_id` alone, so a merge's "re-point this one
- * row" ran `UPDATE ... WHERE expense_id = ?` and rewrote — or, on the
- * collision path, DELETED — every split of the expense. A shared 900 became an
- * expense with no splits and no payers, silently.
- */
 function primaryKeyOf(ctx: HandlerCtx, table: string): string[] {
   const cols = ctx.db
     .prepare(`PRAGMA table_info(${JSON.stringify(table)})`)
@@ -55,13 +36,6 @@ function selectKey(pk: readonly string[]): string {
   return pk.map((column) => `"${column}" AS "pk_${column}"`).join(", ");
 }
 
-/**
- * WHICH constraint refused, so the fold can answer it rather than reach for
- * the delete (#916, review 2.1). The old code caught every failure and deleted
- * the row: a UNIQUE collision (the survivor already has this) and a CHECK
- * violation (the merge just made this row nonsense) and a foreign-key refusal
- * (a bug) were all "duplicate relation removed" in the citation.
- */
 type ConstraintClass = "unique" | "check" | "foreign-key" | "other";
 
 function constraintClassOf(error: unknown): ConstraintClass {
@@ -72,7 +46,6 @@ function constraintClassOf(error: unknown): ConstraintClass {
   return "other";
 }
 
-/** Every engine FK column referencing a table, discovered live. */
 function fkColumnsOnto(ctx: HandlerCtx, parent: string): FkRef[] {
   const tables = ctx.db
     .prepare(
@@ -103,10 +76,6 @@ function laterIso(left: string | null, right: string | null): string | null {
   return left >= right ? left : right;
 }
 
-/**
- * `people_profile.party_id` is UNIQUE, so the generic re-point would delete the
- * duplicate's cadence, last-contacted and colour: fold them first (#864).
- */
 function foldPeopleProfile(
   ctx: HandlerCtx,
   survivor: string,
@@ -153,19 +122,6 @@ function foldPeopleProfile(
   ctx.db.prepare("DELETE FROM people_profile WHERE party_id = ?").run(merged);
 }
 
-/**
- * The FK-less party pointers, from the one registry that enumerates them
- * (`schema/poly-refs.ts`). Neither walk in `mergeParty` can reach these — there
- * is no foreign key for `PRAGMA foreign_key_list` to find, and no `core.party`
- * type column for the polymorphic sweep to match — so a merge that skipped them
- * would delete the folded-in party out from under a live pointer and break the
- * feature holding it, silently.
- *
- * A collision means the survivor already satisfies the constraint. What happens
- * to the loser is the registry's call, not this walk's: an ANSWER is dated shut
- * and kept, duplicate machinery is dropped. Revoking BEFORE re-pointing is also
- * the only order that works where the constraint covers live rows only.
- */
 function foldPartyPointers(
   ctx: HandlerCtx,
   survivor: string,
@@ -220,22 +176,9 @@ function foldPartyPointers(
   return { repointed, revoked, deduped };
 }
 
-/**
- * WHAT A COLLISION MEANS, per table (#916, review 2.1/2.2).
- *
- * The old fold had one answer for every refusal — delete the row — with two
- * hand-written exceptions. That is how a merge could destroy money: the splits
- * and payers of a shared expense are keyed `(expense_id, party_id)`, so
- * folding two people who both appear on one bill collides, and "delete" threw
- * away a share the total still counted. A share is a NUMBER: the right answer
- * is to add it to the survivor's.
- */
 type MergeCollision =
-  /** Both rows are real and their amounts add: fold onto the survivor's row. */
   | { kind: "sum"; column: string }
-  /** A second row of a kind only one may be primary: keep it, demote it. */
   | { kind: "demote"; column: string }
-  /** Duplicate machinery saying nothing the survivor's copy does not. */
   | { kind: "drop-duplicate" };
 
 const MERGE_COLLISIONS: Readonly<Record<string, MergeCollision>> = {
@@ -254,17 +197,6 @@ export interface FoldTally {
   degenerate: number;
 }
 
-/**
- * Re-point ONE row from `merged` to `survivor`, answering whichever constraint
- * refuses.
- *
- * A CHECK failure is the merge's own doing and has exactly one honest reading:
- * the two sides of a two-party row just became the same party. A payment from
- * someone to themselves is not a payment, and a debt to oneself is not a debt,
- * so the row is folded away and COUNTED as such. A FOREIGN KEY failure is a
- * bug in this code or a corrupt vault and is re-thrown — the old blanket catch
- * turned it into a silent delete.
- */
 function repointRow(
   ctx: HandlerCtx,
   ref: FkRef,
@@ -284,7 +216,6 @@ function repointRow(
   } catch (error) {
     const failure = constraintClassOf(error);
     if (failure === "check") {
-      // Both ends are the survivor now: the row says nothing.
       ctx.db
         .prepare(`DELETE FROM "${ref.table}" WHERE ${where}`)
         .run(...values);
@@ -295,7 +226,6 @@ function repointRow(
   }
   const policy = MERGE_COLLISIONS[ref.table] ?? { kind: "drop-duplicate" };
   if (policy.kind === "sum" && ref.pk.includes(ref.column)) {
-    // The survivor's row carries the same key with this column swapped.
     const survivorValues: KeyValue[] = ref.pk.map((column) =>
       column === ref.column ? survivor : (key[`pk_${column}`] as KeyValue)
     );
@@ -325,7 +255,6 @@ function repointRow(
       tally.repointed += 1;
       return;
     } catch (error) {
-      // A collision on the VALUE, not on primacy: a genuine duplicate.
       if (constraintClassOf(error) !== "unique") throw error;
     }
   }
@@ -333,7 +262,6 @@ function repointRow(
   tally.deduped += 1;
 }
 
-/** The engine FK walk: every column REFERENCING the merged row's table. */
 function foldForeignKeys(
   ctx: HandlerCtx,
   physical: string,
@@ -351,11 +279,6 @@ function foldForeignKeys(
   }
 }
 
-/**
- * The polymorphic pointers, from the registry the entity supertype is built
- * from — the same list the engine's composite foreign keys are generated from,
- * so the two cannot drift (#916).
- */
 function foldEntityPointers(
   ctx: HandlerCtx,
   entity: string,
@@ -379,23 +302,11 @@ function foldEntityPointers(
   }
 }
 
-/**
- * What can be merged, and what each one needs done that the two generic walks
- * cannot see (#916, review 2.2).
- *
- * Only parties had a merge, and every other minted-per-observation entity
- * accumulated duplicates with no way back: `findOrCreatePlaceTx` mints a place
- * per four-decimal coordinate, so one café becomes a dozen; concepts arrive
- * per import; assets, documents and content items arrive per copy of the same
- * bytes.
- */
 export interface MergeableEntity {
   entity: string;
   physical: string;
   idColumn: string;
-  /** Fold-first work for a UNIQUE sidecar the generic walk would delete. */
   before?: (ctx: HandlerCtx, survivor: string, merged: string) => void;
-  /** Pointers with no foreign key for `PRAGMA foreign_key_list` to find. */
   partyPointers?: boolean;
 }
 

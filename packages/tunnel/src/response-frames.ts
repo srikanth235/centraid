@@ -2,14 +2,12 @@ import type { SendStream } from "./iroh.js";
 import type { TunnelResponseHeader } from "./protocol.js";
 import { encodeHeaderFrame } from "./protocol.js";
 
-/** Copy unavoidable: iroh rejects Buffer at runtime. */
 export function bytesToArray(buf: Buffer, out: number[] = []): Array<number> {
   out.length = buf.length;
   for (let i = 0; i < buf.length; i++) out[i] = buf[i]!;
   return out;
 }
 
-/** Header frame + JSON body + FIN. */
 export async function respondFrame(
   send: SendStream,
   status: number,
@@ -29,7 +27,7 @@ export async function respondFrame(
     await send.writeAll(bytesToArray(body));
     await send.finish();
   } catch {
-    // Stream already gone.
+    // Intentionally empty.
   }
 }
 
@@ -41,7 +39,6 @@ export function respondError(
   return respondFrame(send, status, { error });
 }
 
-/** Peer-lane refusal: typed STATE (#726), never an error body. */
 export function respondPeerState(
   send: SendStream,
   status: number,

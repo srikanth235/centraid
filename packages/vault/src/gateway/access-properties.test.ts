@@ -1,18 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit #864 cohesive security property suite for one module
-// Consent-chain property suite (#864 M4). These laws are the invariants
-// `evaluateAccess`'s own doc comments claim, driven over generated grants,
-// grant_scopes, execution clamps, and access_policy rows rather than
-// hand-picked fixtures. The per-decision behaviours are pinned by name in the
-// sibling suites — `gateway.contract.test.ts` (the pipeline), `execution-
-// clamp.test.ts` (one clamp intersection at a time), `consent-gate.test.ts`
-// (the blueprint enrich union), and `manifest-scope-denial.closed-grammar.test.ts`
-// (the six-class refusal grammar, which owns that law tag). This file owns the
-// ALGEBRA those examples imply: monotonicity, order-independence, and the
-// narrowing/riding/precedence rules, checked across the input space.
-//
-// Each fc run seeds inside a BEGIN/ROLLBACK envelope so a generated grant or
-// policy never leaks into the next: `evaluateAccess` only ever SELECTs, so a
-// rollback restores the bootstrapped baseline exactly.
 
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
@@ -47,8 +33,6 @@ let agent: { agentId: string; partyId: string };
 let app: { appId: string };
 let purposeId: string;
 
-// --- shared arbitraries ------------------------------------------------------
-
 const arbTable = fc.constantFrom(...TABLES);
 const arbColumn = fc.constantFrom(...COLUMNS);
 const arbRequestVerb: fc.Arbitrary<RequestVerb> = fc.constantFrom(
@@ -63,21 +47,17 @@ const arbScopeVerb: fc.Arbitrary<ScopeVerb> = fc.constantFrom(
   "reveal"
 );
 
-/** Scope verbs that cover a requested verb (mirrors `verbAllowed`). */
 function coveringVerbFor(verb: RequestVerb): fc.Arbitrary<ScopeVerb> {
   if (verb === "reveal") return fc.constant("reveal");
   if (verb === "read") return fc.constantFrom("read", "read+act");
   return fc.constantFrom("act", "read+act");
 }
 
-/** Non-pinning clause: `is-null`/`not-null` never trip `conflictingPin`, so a
- *  generated clamp can carry filters without a spurious GatewayError. */
 const arbNullClause: fc.Arbitrary<FilterClause> = fc.record({
   column: arbColumn,
   op: fc.constantFrom<"is-null" | "not-null">("is-null", "not-null"),
 });
 
-/** Grant scopes are not passed through the clamp's union check, so they may pin. */
 const arbGrantClause: fc.Arbitrary<FilterClause> = fc.oneof(
   fc.record({
     column: arbColumn,
@@ -104,7 +84,6 @@ function toScope(raw: RawScope): ExecutionScopeSpec {
   return scope;
 }
 
-/** A clamp scope with non-pinning filters (safe to permute and union). */
 const arbClampRaw: fc.Arbitrary<RawScope> = fc.record(
   {
     verbs: arbScopeVerb,
@@ -124,8 +103,6 @@ const arbGrantRaw: fc.Arbitrary<RawScope> = fc.record(
   },
   { requiredKeys: ["verbs"] }
 );
-
-// --- shared helpers ----------------------------------------------------------
 
 type IdentityKind = "owner-device" | "agent" | "app";
 
@@ -165,7 +142,6 @@ function identityFor(opts: {
   };
 }
 
-/** Seed a grant for the agent (default) or the app, returning its id. */
 function seedGrant(
   scopes: ScopeSpec[],
   principal: "agent" | "app" = "agent"
@@ -187,7 +163,6 @@ function seedPolicy(
 ): void {
   db.vault
     .prepare(
-      // ONE DOTTED ENCODING (#916, R10).
       `INSERT INTO access_policy
          (policy_id, kind, entity, rule_json,
           retention_days, effective_from, priority)
@@ -204,7 +179,6 @@ function decide(
   return evaluateAccess(db.vault, identity, SCHEMA, table, verb, PURPOSE);
 }
 
-/** Run `fn` against a savepoint that is always rolled back. */
 function inTxn<T>(fn: () => T): T {
   db.vault.exec("BEGIN");
   try {
@@ -219,12 +193,6 @@ const clauseKey = (clause: FilterClause): string => JSON.stringify(clause);
 const sortedMask = (mask: readonly string[] | null): string[] | null =>
   mask === null ? null : [...mask].sort();
 
-/**
- * A decision reduced to an order-independent, comparable shape: the rowFilter
- * clause SET and the fieldMask SET, with array order dropped (array order
- * follows clamp order by design — pinned in execution-clamp.test.ts). Lets the
- * order-independence law assert one unconditional equality over both branches.
- */
 function normDecision(decision: AccessDecision): Record<string, unknown> {
   if (decision.decision === "deny")
     return {
@@ -240,7 +208,6 @@ function normDecision(decision: AccessDecision): Record<string, unknown> {
   };
 }
 
-/** The field-mask intersection `evaluateAccess`/`executionClamp` compute. */
 function intersectMasks(
   a: readonly string[] | null,
   b: readonly string[] | null
@@ -265,9 +232,6 @@ describe("consent chain property", () => {
     purposeId = boot.concepts[PURPOSE] as string;
   });
 
-  // [law:consent-denial-monotone] Deleting a grant, removing a grant_scope,
-  // narrowing a clamp verb, or adding a access_policy row can only turn
-  // allow→deny, never deny→allow.
   test("[law:consent-denial-monotone] a restriction never converts a deny into an allow", () => {
     const seen = { allowBefore: 0, denyBefore: 0, flips: 0 };
     fc.assert(
@@ -290,8 +254,6 @@ describe("consent chain property", () => {
         (sc, mutation) => {
           inTxn(() => {
             const principal = sc.kind === "app" ? "app" : "agent";
-            // A guaranteed schema-wide read+act scope keeps allows frequent, so
-            // the monotone implication is exercised, not vacuously satisfied.
             const grantScopes: ScopeSpec[] = [
               { schema: SCHEMA, verbs: "read+act" },
               ...sc.extraGrantScopes.map(toScope),
@@ -326,7 +288,6 @@ describe("consent chain property", () => {
                   .run(grantId);
                 break;
               case "narrow-clamp-verb":
-                // read+act → read drops `act` coverage: a strict narrowing.
                 idB = identityFor({
                   kind: sc.kind,
                   mayAct: sc.mayAct,
@@ -355,7 +316,6 @@ describe("consent chain property", () => {
             if (before.decision === "allow" && after.decision === "deny")
               seen.flips++;
 
-            // The whole law: a restriction cannot manufacture an allow.
             expect(after.decision === "allow" ? before.decision : "allow").toBe(
               "allow"
             );
@@ -364,16 +324,10 @@ describe("consent chain property", () => {
       ),
       { numRuns: 250, seed: 8641 }
     );
-    // Non-vacuity: the run actually saw allows and at least one allow→deny flip.
     expect(seen.allowBefore).toBeGreaterThan(0);
     expect(seen.flips).toBeGreaterThan(0);
   });
 
-  // [law:consent-clamp-order-independent] The decision, the SET of returned
-  // rowFilter clauses, and the fieldMask are invariant under permutation of
-  // identity.scopeClamp. (Clause/field ARRAY order follows clamp order by
-  // design — that ordering is pinned in execution-clamp.test.ts — so only the
-  // set is asserted here.)
   test("[law:consent-clamp-order-independent] permuting the clamp preserves the decision and clause set", () => {
     let allows = 0;
     fc.assert(
@@ -413,8 +367,6 @@ describe("consent chain property", () => {
               sc.verb
             );
             if (base.decision === "allow") allows++;
-            // One unconditional equality over the order-independent projection:
-            // decision, grantId, the rowFilter clause set, and the fieldMask set.
             expect(normDecision(perm)).toStrictEqual(normDecision(base));
           });
         }
@@ -424,13 +376,8 @@ describe("consent chain property", () => {
     expect(allows).toBeGreaterThan(0);
   });
 
-  // [law:consent-clamp-only-narrows] For every allow the returned rowFilter is a
-  // superset of the winning grant scope's clauses AND the clamp's clauses, and
-  // the fieldMask is exactly grantMask ∩ clampMask (null only when both null).
   test("[law:consent-clamp-only-narrows] an allow's rowFilter is a superset and its fieldMask the exact intersection", () => {
     let allows = 0;
-    // `coveringVerbFor` depends on the generated request verb, so the scenario
-    // is built with `arbRequestVerb.chain(...)` rather than a flat record.
     fc.assert(
       fc.property(
         arbRequestVerb.chain((verb) =>
@@ -483,12 +430,9 @@ describe("consent chain property", () => {
               sc.table,
               sc.verb
             );
-            // The construction covers the verb on both layers, so it allows.
             assert(decision.decision === "allow");
             allows++;
 
-            // The returned rowFilter is a superset of the grant's clauses AND
-            // the clamp's clauses (narrowing only ever adds constraints).
             const returned = new Set(decision.rowFilter.map(clauseKey));
             expect(
               [...sc.grantRowFilter, ...sc.clampRowFilter].every((clause) =>
@@ -496,8 +440,6 @@ describe("consent chain property", () => {
               )
             ).toBe(true);
 
-            // The fieldMask is exactly grantMask ∩ clampMask (null iff both
-            // null); order-normalized so only the set is asserted.
             const expectedMask = intersectMasks(
               sc.grantFieldMask,
               sc.clampFieldMask
@@ -513,12 +455,7 @@ describe("consent chain property", () => {
     expect(allows).toBeGreaterThan(0);
   });
 
-  // [law:consent-reveal-never-rides] Reveal is allowed only when some grant_scope
-  // AND some clamp scope carry verb "reveal"; a "reveal" scope never satisfies a
-  // read or act request.
   test("[law:consent-reveal-never-rides] reveal requires reveal on both layers and a reveal scope rides nothing else", () => {
-    // (a) A reveal allow ⟺ a reveal-covering clamp scope AND a reveal-covering
-    //     grant scope for the requested (schema, table).
     let revealAllows = 0;
     fc.assert(
       fc.property(
@@ -557,8 +494,6 @@ describe("consent chain property", () => {
     );
     expect(revealAllows).toBeGreaterThan(0);
 
-    // (b) A layer that carries ONLY "reveal" denies every read/act request —
-    //     the clamp refuses before any grant is consulted.
     fc.assert(
       fc.property(
         fc.constantFrom<RequestVerb>("read", "act"),
@@ -583,9 +518,6 @@ describe("consent chain property", () => {
     );
   });
 
-  // [law:consent-explicit-scope-unbypassable] A table under a kind:'minimization'
-  // policy row is never allowed by a whole-schema (table_name IS NULL) grant
-  // scope — only a scope naming the table explicitly covers it.
   test("[law:consent-explicit-scope-unbypassable] a minimization table denies a whole-schema grant scope but allows an explicit one", () => {
     let denies = 0;
     let controlAllows = 0;
@@ -611,7 +543,6 @@ describe("consent chain property", () => {
               scopeClamp: clamp,
             });
 
-            // A whole-schema grant scope is skipped for the minimized table.
             const wholeGrant = seedGrant([
               { schema: SCHEMA, verbs: sc.grantVerb },
             ]);
@@ -620,8 +551,6 @@ describe("consent chain property", () => {
             expect(denied.failing).toContain("no grant_scope covers");
             denies++;
 
-            // Swap in an explicit table scope: now the same request is allowed,
-            // proving it was the whole-schema-ness that was refused.
             db.vault
               .prepare(`DELETE FROM access_grant_scope WHERE grant_id = ?`)
               .run(wholeGrant);
@@ -643,9 +572,6 @@ describe("consent chain property", () => {
     expect(controlAllows).toBeGreaterThan(0);
   });
 
-  // [law:consent-onbehalf-cap-precedes-grants] When onBehalfOfOwner.mayAct is
-  // false, no grant set produces an allow for act/reveal, and the deny names the
-  // owner id — checked before any grant is consulted (grantId is null).
   test("[law:consent-onbehalf-cap-precedes-grants] a non-owning acting owner caps act/reveal before grants, naming the owner", () => {
     fc.assert(
       fc.property(
@@ -658,7 +584,6 @@ describe("consent chain property", () => {
         }),
         (sc) => {
           inTxn(() => {
-            // A maximal grant + covering clamp: the cap must bite regardless.
             seedGrant([
               { schema: SCHEMA, verbs: "read+act" },
               { schema: SCHEMA, verbs: "reveal" },

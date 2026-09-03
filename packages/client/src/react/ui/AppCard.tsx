@@ -13,24 +13,13 @@ export type AppCardTone = "new" | "draft" | null;
 
 export interface AppCardProps {
   app: AppMetaResolved;
-  /** Tile finish — follows the user's `tileVariant` preference. */
   variant?: TileVariant;
-  /** Corner state: a freshly-created app ("new") or an unpublished draft. */
   tone?: AppCardTone;
-  /** Footer timestamp text, e.g. "2h ago" or "saved". */
   stamp?: string;
   small?: boolean;
   onOpen?: () => void;
 }
 
-/**
- * Home-grid app tile — icon plate + name/blurb + footer, styled by the
- * co-located `AppCard.module.css` (shared with the Home shelf and Starred
- * grid, which compose richer tiles from the same module). Desktop-specific
- * (there is no mobile twin for this exact composite; mobile's simpler
- * launcher `<Tile>` is the closest cousin). App identity is rendered through
- * the shared `AppMark` primitive so desktop surfaces keep one stroke contract.
- */
 export default function AppCard({
   app,
   variant = "solid",
@@ -39,8 +28,6 @@ export default function AppCard({
   small = false,
   onOpen,
 }: AppCardProps): JSX.Element {
-  // Keep the preference in the public API for existing callers; identity
-  // artwork itself now follows the handoff's single-tone mark contract.
   void variant;
   return (
     <button

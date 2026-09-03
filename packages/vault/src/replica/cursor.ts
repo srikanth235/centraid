@@ -1,4 +1,3 @@
-/** An epoch-qualified position in one vault's durable change log. */
 export interface ReplicaCursor {
   epoch: string;
   seq: number;
@@ -17,7 +16,6 @@ function validSeq(seq: number): boolean {
   return Number.isSafeInteger(seq) && seq >= 0;
 }
 
-/** Stable URL-safe wire form used by checkpoints and `?since=`. */
 export function formatReplicaCursor(cursor: ReplicaCursor): string {
   if (!cursor.epoch || cursor.epoch.includes(":")) {
     throw new InvalidReplicaCursorError(
@@ -32,10 +30,8 @@ export function formatReplicaCursor(cursor: ReplicaCursor): string {
   return `${cursor.epoch}:${cursor.seq}`;
 }
 
-/** Parse and validate either the wire form or an already-structured cursor. */
 export function parseReplicaCursor(input: ReplicaCursorInput): ReplicaCursor {
   if (typeof input !== "string") {
-    // Return a copy so callers cannot mutate an object retained by an API.
     formatReplicaCursor(input);
     return { epoch: input.epoch, seq: input.seq };
   }

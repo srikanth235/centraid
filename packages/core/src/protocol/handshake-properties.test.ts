@@ -11,13 +11,6 @@ import {
   protocolsCompatible,
 } from "./index.ts";
 
-/**
- * Protocol handshake properties (#532 core expansion).
- *
- * Model: CapVer mutual support window is symmetric in the sense that each side
- * requires peer.protocol >= local.min; judgeGatewayInfo fails closed on
- * malformed payloads and never refuses solely for product version skew.
- */
 describe("protocol handshake property", () => {
   test("protocolsCompatible matches the CapVer mutual window", () => {
     fc.assert(
@@ -109,7 +102,6 @@ describe("protocol handshake property", () => {
   });
 
   test("judge reports protocol_mismatch when peer is outside mutual window", () => {
-    // Peer only speaks protocol 1; local requires min 2.
     const result = judgeGatewayInfo({
       version: "9.9.9",
       protocolVersion: 1,
@@ -206,9 +198,6 @@ describe("protocol handshake property", () => {
         minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
         capabilities,
       });
-      // Experimental gates are additive: a gateway that predates them still
-      // handshakes clean, and the absent flag reads as off. Every other
-      // capability is load-bearing — omitting it is malformed.
       expect(result.ok, capability).toBe(optional.has(capability));
       if (result.ok) continue;
       expect(result.reason, capability).toBe("malformed");

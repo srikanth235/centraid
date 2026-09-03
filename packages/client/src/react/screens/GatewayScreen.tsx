@@ -1,6 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit one instrument-panel screen
-// (runtime, backup, storage, components, logs, alerts) threading bridge props
-// to each drill-in's own screen component.
 import { useRef, useState } from "react";
 import type { JSX } from "react";
 
@@ -49,16 +47,6 @@ import type { StorageScreenProps } from "./StorageScreen.js";
 
 import styles from "./GatewayScreen.module.css";
 
-/*
- * System — gateway runtime, backup custody, capacity, resource mode, and three
- * drill-ins (#341/#344/#347/#608).
- *
- * ONE SCROLLING OVERVIEW, NO TAB STRIP: the page reads in question order (is
- * it answering, what is wrong, are there copies, is there room, how hard is it
- * working, what is it); diagnostics are links under "Look closer". Green
- * sections are absent, not empty. People & devices live on Household (#599).
- */
-
 export interface GatewayScreenProps {
   snapshot: GatewayRuntimeSnapshot;
   now: number;
@@ -68,36 +56,26 @@ export interface GatewayScreenProps {
   launchAtLogin?: boolean;
   onLaunchAtLoginChange?: (enabled: boolean) => void;
   savingLaunchAtLogin?: boolean;
-  /** `null` before the first poll. */
   health: GatewayHealthDTO | null;
   loadHealth: SettingsDiagnosticsBridgeProps["loadHealth"];
   connections?: DiagnosticsConnectionsProps;
   streamLogs: LogsBridgeProps["streamLogs"];
-  /** Remote gateway: `{ok: false}` renders inline, never throws. */
   onRestartGateway?: () => Promise<{ ok: boolean; error?: string }>;
   onExportDiagnostics: LogsBridgeProps["onExportDiagnostics"];
   loadResourceMode?: () => Promise<ResourceMode>;
   saveResourceMode?: (mode: ResourceMode) => Promise<void>;
-  /** Also gates on `metrics.backgroundPause` in the health snapshot (#528). */
   onPauseBackgroundWork?: (
     durationMs?: number
   ) => Promise<{ paused: boolean; until: string | null }>;
   onResumeBackgroundWork?: () => Promise<{ paused: boolean }>;
-  /** Advanced also gates on the health profile's `sources` + `bounds` (#528). */
   loadKnobPrefs?: ResourceModeCardProps["loadKnobPrefs"];
   saveKnobPrefs?: ResourceModeCardProps["saveKnobPrefs"];
   backup?: Omit<BackupCardProps, "now">;
   initialTab?: TabId;
-  /**
-   * Opens a drill-in AS A ROUTE, so the frame's back arrow returns to the
-   * overview; absent, the page falls back to local state. Either way the page
-   * must never draw its own back control.
-   */
   onOpenTab?: (tab: TabId) => void;
   loadLocalUsage?: StorageScreenProps["loadLocalUsage"];
   saveStorageLimits?: StorageScreenProps["saveStorageLimits"];
   loadOwners?: StorageScreenProps["loadOwners"];
-  /** Viewer seats can inspect this gateway but cannot operate its host. */
   readOnly?: boolean;
   focus?: "backups" | "capacity";
   cause?: "backup-alert";
@@ -119,7 +97,6 @@ const STATUS_WORD: Record<ReconciledStatus, string> = {
   unknown: "Checking…",
 };
 
-/** App-bar title; the way back is the frame's, not the page's. */
 const DRILL: Record<DrillId, string> = {
   alerts: "Alert history",
   components: "Components",
@@ -139,7 +116,6 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
   const [localTab, setLocalTab] = useState<TabId>(
     props.initialTab ?? "overview"
   );
-  // Routed: the route is the sole source of truth for the shown page.
   const routed = props.onOpenTab !== undefined;
   const tab = routed ? (props.initialTab ?? "overview") : localTab;
   const setTab = (next: TabId): void => {
@@ -157,8 +133,6 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
   };
   const drill: DrillId | null = tab === "overview" ? null : tab;
 
-  // Server-reported and advanced from the last heartbeat, so clock skew cannot
-  // distort it. Keyed off the RAW heartbeat: degraded must not blank uptime.
   const uptimeMs =
     heartbeat === "up" &&
     snapshot.gatewayUptimeMs !== undefined &&
@@ -166,19 +140,12 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
       ? snapshot.gatewayUptimeMs + Math.max(0, now - snapshot.lastCheckAt)
       : undefined;
   const availability = availabilityPct(snapshot);
-  // SEAM: `samples` is a per-launch ring, so the strip says THIS SESSION in
-  // axis, note and aria; a month needs a durable daily series first.
   const strip = buildHeartbeatStrip(snapshot.samples, now);
 
-  // THE HERO DRAWS ONLY WHEN NOT ANSWERING; elsewhere it restates the strip,
-  // stamp and Identity rows. Degraded stays absent: "What's wrong now" already
-  // names the component and the page that can act.
   const heroTitle =
     snapshot.statusSince === undefined
       ? STATUS_WORD.down
       : `Not answering since ${formatClock(snapshot.statusSince)}`;
-  // A local gateway is a child of this app: "down" means every other device
-  // just lost the vault, so say that consequence out loud.
   const heroBody = props.readOnly
     ? `Runs on ${snapshot.gatewayLabel}, and this browser cannot reach it. What the rest of this page shows is the last replica that machine sent.`
     : snapshot.gatewayKind === "local"
@@ -255,7 +222,6 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
     });
   }
 
-  // Architecture nouns are allowed here and nowhere else.
   const identity: RowDef[] = [
     {
       id: "machine",
@@ -301,8 +267,6 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
       title: `Runs on ${snapshot.gatewayLabel}`,
     });
   } else if (props.onRestartGateway) {
-    // A PAGE, not a button: twenty seconds of vault outage must be read before
-    // the act, not explained in a tooltip after it.
     identity.push({
       action: {
         hint: "Read what a restart does, then decide",
@@ -315,8 +279,6 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
     });
   }
 
-  // Pages, not tabs. Storage is absent on purpose: capacity is on this page;
-  // its route id survives only for old deep links.
   const lookCloser: RowDef[] = [
     {
       action: {

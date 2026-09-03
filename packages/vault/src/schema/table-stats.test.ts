@@ -7,8 +7,6 @@ import { dbSizeBreakdown } from "./table-stats.js";
 describe("table-stats", () => {
   test("dbstat is available in this repo's node:sqlite build (issue #367 probe)", () => {
     const db = new DatabaseSync(":memory:");
-    // Throws if ENABLE_DBSTAT_VTAB is not compiled in — this asserts the
-    // probe finding stays true rather than silently bit-rotting.
     expect(() =>
       db.prepare("SELECT * FROM dbstat LIMIT 1").all()
     ).not.toThrow();
@@ -36,11 +34,8 @@ describe("table-stats", () => {
     const tiny = breakdown.tables.find((t) => t.table === "tiny");
     expect(big).toBeDefined();
     expect(tiny).toBeDefined();
-    // `big` (300 wide rows + its own index) must dominate `tiny` (one row).
     expect(big!.bytes!).toBeGreaterThan(tiny!.bytes!);
-    // Sorted biggest-first.
     expect(breakdown.tables[0]!.table).toBe("big");
-    // The index's bytes are folded into `big`, not listed as its own "table".
     expect(breakdown.tables.some((t) => t.table === "idx_big_b")).toBe(false);
   });
 
@@ -49,8 +44,6 @@ describe("table-stats", () => {
     real.exec("CREATE TABLE widgets(id INTEGER PRIMARY KEY, name TEXT)");
     real.exec("INSERT INTO widgets(name) VALUES ('a'), ('b'), ('c')");
 
-    // Duck-typed stub: same `.prepare(sql).all()/.get()` surface, but the
-    // dbstat query throws — simulates a build without ENABLE_DBSTAT_VTAB.
     const stub = {
       prepare(sql: string) {
         if (sql.includes("FROM dbstat")) {
@@ -68,7 +61,6 @@ describe("table-stats", () => {
 
     expect(breakdown.method).toBe("estimate");
     expect(breakdown.tables).toStrictEqual([{ table: "widgets", rows: 3 }]);
-    // No byte figures fabricated for the estimate path.
     expect(breakdown.tables[0]!.bytes).toBeUndefined();
   });
 });

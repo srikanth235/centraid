@@ -1,6 +1,3 @@
-// Row helpers for Locker's sidecar tables (#872): custom fields and sections,
-// extra addresses, the passkey slot, and the durable item/password history.
-
 import type { HandlerCtx } from "../gateway/types.js";
 import { SEALED_PLACEHOLDER } from "../schema/sealed.js";
 import { templateFor } from "./locker-types.js";
@@ -41,15 +38,6 @@ export interface FieldInput {
   position?: number;
 }
 
-/**
- * Insert or rewrite ONE custom field. One field per call on purpose: a sealed
- * value has to be a TOP-LEVEL command input for `sealedInput` to hash it out
- * of the journal (schema/sealed.ts redacts top-level paths only).
- *
- * A rewrite keeps its `field_id`, which is what lets the round-tripped
- * `«sealed»` placeholder mean "unchanged": the ciphertext's AAD is bound to
- * that id.
- */
 export function writeField(
   ctx: HandlerCtx,
   itemId: string,
@@ -110,8 +98,6 @@ export function writeField(
       existing?.created_at ?? ctx.now,
       ctx.now
     );
-  // The seal sweep runs off this write marker: `value_sealed` is ciphertext
-  // before the transaction commits.
   ctx.wrote(LOCKER_FIELD_TYPE, fieldId);
   return fieldId;
 }
@@ -138,9 +124,6 @@ export interface AddressInput {
   matchPolicy?: string;
 }
 
-/** `locker_item.url` stays the primary, so Companion candidates, the connector
- *  binding and Review's unsecured-address check keep working. No secret is
- *  involved, which is why this one takes the whole list. */
 export function setAddresses(
   ctx: HandlerCtx,
   itemId: string,
@@ -203,7 +186,6 @@ export interface PasskeyInput {
   privateKey?: string | null;
 }
 
-/** Storage only — no WebAuthn ceremony. */
 export function writePasskey(
   ctx: HandlerCtx,
   itemId: string,

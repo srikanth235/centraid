@@ -1,15 +1,3 @@
-// Incremental SHA-256 over a browser File, with bounded memory.
-//
-// SubtleCrypto has no streaming digest API, so a `crypto.subtle.digest` of a
-// large upload would materialize the whole file in one buffer. This pure-JS
-// compressor consumes the File's stream a chunk at a time, which is what makes
-// the upload path's sha-preflight (declare the hash, skip the bytes when the
-// CAS already has them) affordable on a phone-sized photo library.
-//
-// The native mobile shell reimplements the same contract over Expo's file
-// primitives in `apps/mobile/src/lib/upload/crypto.ts` — neither runtime can
-// import the other's, so the two are kept behaviourally identical instead.
-
 const SHA_INITIAL = [
   0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c,
   0x1f83d9ab, 0x5be0cd19,
@@ -32,7 +20,6 @@ function rotateRight(value: number, bits: number): number {
   return (value >>> bits) | (value << (32 - bits));
 }
 
-/** A resumable SHA-256 state: `update()` any number of times, then digest. */
 export class StreamingSha256 {
   private words: number[];
   private bytes: number;
@@ -59,8 +46,6 @@ export class StreamingSha256 {
   }
 
   digestHex(): string {
-    // Padding mutates the state, so digest a clone: the caller may keep
-    // updating the original after reading an intermediate digest.
     const clone = new StreamingSha256(this);
     const paddingLength =
       clone.pending.byteLength < 56
@@ -136,7 +121,6 @@ export class StreamingSha256 {
   }
 }
 
-/** Hash a File with bounded memory; SubtleCrypto has no streaming digest API. */
 export async function sha256FileStream(file: File): Promise<string> {
   const hash = new StreamingSha256();
   if (typeof file?.stream === "function") {
@@ -154,11 +138,6 @@ export async function sha256FileStream(file: File): Promise<string> {
   return hash.digestHex();
 }
 
-/**
- * Incremental SHA-256 over a File, or `null` when the value cannot be read as
- * one. Callers opt in because hashing is a full read pass; memory stays
- * bounded and the upload body itself still streams from the File afterwards.
- */
 export async function sha256File(file: File): Promise<string | null> {
   if (typeof file?.arrayBuffer !== "function") return null;
   return sha256FileStream(file);

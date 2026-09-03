@@ -1,8 +1,3 @@
-// The ONE SSE frame parser every `_turn` surface drives through, so a
-// wire-protocol change lands once. Read the type off the parsed JSON, not the
-// `event:` line: the closing `end` frame's `{}` has none. `TurnStreamEvent`
-// MIRRORS the server's union, declared not imported.
-
 export type TurnStreamEvent =
   | { type: "assistant.start" }
   | { type: "assistant.delta"; delta: string }
@@ -63,7 +58,6 @@ export type TurnStreamEvent =
       reason: "direct" | "ladder";
       message: string;
     }
-  /** Rendered live AND persisted, so reload replays it. */
   | { type: "notice"; level: "warn" | "info"; code?: string; message: string }
   | {
       type: "usage";
@@ -77,7 +71,6 @@ export type TurnStreamEvent =
       costUsd?: number;
       costSource?: "harness" | "estimated";
     }
-  /** COMPAT additive (#567): live usage may move non-monotonically. */
   | { type: "context"; used?: number; size?: number }
   | {
       type: "webhooks";
@@ -106,7 +99,7 @@ export function parseFrame(rawFrame: string): TurnStreamEvent | null {
     if (evt && typeof (evt as { type?: unknown }).type === "string")
       return evt as TurnStreamEvent;
   } catch {
-    /* skip a malformed frame, never abort the stream */
+    // Intentionally empty.
   }
   return null;
 }
@@ -157,14 +150,10 @@ export async function consumeSseFrames(
   try {
     await consumeNext();
   } finally {
-    void reader.cancel().catch(() => {
-      /* reader already released */
-    });
+    void reader.cancel().catch(() => {});
   }
 }
 
-/** `ended` is `true` only when the terminal `end` frame was seen; `false` and a
- *  thrown network error both mean a drop. */
 export async function consumeSse(
   body: ReadableStream<Uint8Array>,
   onEvent: (event: TurnStreamEvent) => void,
@@ -183,7 +172,6 @@ export async function consumeSse(
       opts
     );
   } catch (error) {
-    // AbortError on the pending read is Stop. Re-throw anything else.
     if (!signal?.aborted && (error as Error | null)?.name !== "AbortError")
       throw error;
   }

@@ -1,12 +1,3 @@
-// The #872 Locker surface, part two: duplicate, item and password history,
-// counts, the plaintext export, and what purge takes with it. Part one — the
-// alias, archive, custom fields, item types, addresses and the passkey slot —
-// is in `locker-extras.test.ts`; both ride `locker-test-kit.ts`.
-//
-// The seal-boundary rule these assert: a previous password and a duplicate's
-// secrets are RESEALED against their own row, never copied as ciphertext, and
-// the export's plaintext result is redacted everywhere durable.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { VAULT_ENTITIES } from "../schema/entity-catalog.js";
@@ -32,11 +23,6 @@ describe("locker #872 surface: history, duplicate and export", () => {
           password: "a new one",
         })
       );
-      // HISTORY IS REVISIONS (#916, D2). `locker_item_history` was a second
-      // revision mechanism answering the same question as
-      // `core_entity_revision`, with its own retention, undo path and export
-      // shape. The snapshot IS the previous row, sealed cells and all, so the
-      // old password decrypts under the item's own additional data.
       const revision = fx.db.vault
         .prepare(
           `SELECT * FROM core_entity_revision
@@ -57,8 +43,6 @@ describe("locker #872 surface: history, duplicate and export", () => {
     test("an edit that does not touch the password does not re-stamp its age", () => {
       const itemId = fx.addLogin();
       const setAt = fx.itemRow(itemId).password_set_at;
-      // The real path: the form round-trips the vault's placeholder for every
-      // sealed field it did not reveal, which `edit_item` reads as UNCHANGED.
       fx.out(
         fx.invoke("locker.edit_item", {
           item_id: itemId,
@@ -70,10 +54,6 @@ describe("locker #872 surface: history, duplicate and export", () => {
     });
 
     test("history survives the undo window — the Locker retains FOREVER", () => {
-      // The revision ledger is a 10-second undo window a sweep prunes for
-      // every other entity; a password rotated last March has to still be
-      // here. That is a DECLARATION now (#916, D2) — `locker.item` says
-      // `revisions: { retain: 'forever' }` — rather than a second table.
       const itemId = fx.addLogin();
       for (const password of ["second", "third"])
         fx.out(fx.invoke("locker.edit_item", { item_id: itemId, password }));
@@ -99,14 +79,12 @@ describe("locker #872 surface: history, duplicate and export", () => {
       expect(copyId).not.toBe(sourceId);
       const copy = fx.itemRow(copyId);
       expect(copy.title).toBe("Email copy");
-      // Re-sealed, not moved: it decrypts under the COPY's own AAD.
       expect(
         fx.unsealCell("locker_item", "password", copyId, copy.password)
       ).toBe("correct horse battery");
       expect(
         fx.unsealCell("locker_item", "otp_seed", copyId, copy.otp_seed)
       ).toBe("JBSWY3DPEB");
-      // Not starred, and the alias stays with the item it belongs to.
       expect(
         fx.count(
           "SELECT count(*) AS n FROM locker_item_alias WHERE item_id = ?",
@@ -200,7 +178,6 @@ describe("locker #872 surface: history, duplicate and export", () => {
           value: "swordfish",
         },
       ]);
-      // One receipt, naming the export and every sealed cell it opened.
       const receipt = fx.db.audit
         .prepare(
           `SELECT detail_json FROM access_receipt
@@ -219,9 +196,6 @@ describe("locker #872 surface: history, duplicate and export", () => {
     test("the plaintext result is redacted from the journal", () => {
       fx.addLogin({ password: "do-not-journal-this" });
       fx.out(fx.invoke("locker.export", { confirm: true }));
-      // `transcriptSensitive` swaps the durable output for a marker, so the
-      // audit trail records THAT an export happened without becoming a second
-      // copy of every secret in the locker.
       const journalled = [
         ...(fx.db.audit
           .prepare("SELECT detail_json AS text FROM access_receipt")

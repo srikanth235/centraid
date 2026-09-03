@@ -140,7 +140,6 @@ describe("InsightsRoute suite", () => {
         })
       );
       const el = await render();
-      // A skeleton, never a spinner, and never a bare "Loading…" line.
       expect(el.querySelector("output")).not.toBeNull();
       expect(readVitals("insights")?.state).toBe("loading");
       await act(async () => {
@@ -159,7 +158,6 @@ describe("InsightsRoute suite", () => {
       expect(el.textContent).toContain(
         "The rollup rebuilds every ten minutes; this rebuild has not finished."
       );
-      // No rebuild trigger exists to offer, so the verb is the honest one.
       expect(el.textContent).toContain("Retry");
       expect(el.textContent).not.toContain("Rebuild now");
       expect(readVitals("insights")?.state).toBe("error");

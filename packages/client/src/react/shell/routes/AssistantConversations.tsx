@@ -6,31 +6,12 @@ import type { ShellMenuAnchor } from "../contextMenu.js";
 
 import css from "./AssistantConversations.module.css";
 
-// The conversation ledger — "Recents" — as APP CONTENT owned by the assistant
-// route (#707).
-//
-// The Binding Layer's stem holds the product mark, Search and the launcher and
-// nothing else, so the ledger lives here, beside the transcript it addresses.
-// A shell navigation column has no business owning one app's data model:
-// pinning, archiving, per-row rename/delete menus.
-//
-// Presentational on purpose: it owns grouping, the cap, and the two disclosure
-// states, and NOTHING about fetching, sorting, or mutating conversations. The
-// route above it (ultimately App.tsx) supplies the list and the handlers.
-
-/** One row of the ledger — a persisted vault-assistant conversation, trimmed
- *  to what the row draws. */
 export interface AssistantConversationEntry {
   id: string;
   title: string;
   timeLabel: string;
-  /** Pinned threads render in a group above the rest (#420). */
   pinned?: boolean;
-  /** Archived threads render behind a collapsed group at the bottom. */
   archived?: boolean;
-  /** The vault this conversation reads, when it is NOT the member's own
-   *  (#599). A conversation is pinned to one vault for life, so the row
-   *  says which — but only when that is news. */
   scopeLabel?: string;
 }
 
@@ -40,16 +21,9 @@ export interface AssistantConversationsProps {
   onSelect?: (id: string) => void;
   onNewChat?: () => void;
   onDelete?: (id: string) => void;
-  /** Row ••• / right-click menu (Rename + Delete). When present it supersedes
-   *  the bare delete control. */
   onMenu?: (id: string, anchor: ShellMenuAnchor) => void;
 }
 
-/**
- * Rows shown before the ledger collapses to a "See all" control. The threshold
- * answers "when does this stop being a list and start being an archive", not a
- * height budget — the ledger column scrolls.
- */
 const LEDGER_CAP = 15;
 
 function ConversationRow({
@@ -65,13 +39,10 @@ function ConversationRow({
   onMenu?: (anchor: ShellMenuAnchor) => void;
   onDelete?: () => void;
 }): JSX.Element {
-  // The vault only when it is news; otherwise the row is title + time.
   const meta = conversation.scopeLabel
     ? `${conversation.scopeLabel} · ${conversation.timeLabel}`
     : conversation.timeLabel;
 
-  // Prefer the ••• menu (Rename + Delete); fall back to the bare delete control
-  // when only a delete handler is wired.
   let action: JSX.Element | null = null;
   if (onMenu) {
     action = (

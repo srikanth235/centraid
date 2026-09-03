@@ -113,9 +113,6 @@ export default function BackupPolicyPanel({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  // A fresh policy from the server replaces the locally saved one. Adjusted
-  // during render (the React "state derived from a prop" pattern), so the new
-  // payload paints immediately instead of one cascading render later.
   const [seenPolicy, setSeenPolicy] = useState(policy);
   if (seenPolicy !== policy) {
     setSeenPolicy(policy);

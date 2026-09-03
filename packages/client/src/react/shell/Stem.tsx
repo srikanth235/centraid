@@ -23,11 +23,6 @@ import type {
 
 import chrome from "./chrome.module.css";
 
-// The navigation stem (#707, invariant 1): a reserved band, never themed by an
-// app and never changing width. The invariant is the RESERVATION; the number
-// lives once, in `metrics.stem`. Positioning is in logical properties, so the
-// band mirrors under RTL.
-
 const MARK_SIZE_STEM = 26;
 const MARK_SIZE_BAND = 30;
 const AVATAR_SIZE = 30;
@@ -43,9 +38,6 @@ export interface StemIdentity {
   color?: string;
   onActivate: (anchor: DOMRect) => void;
   open?: boolean;
-  /** A ref CALLBACK, never a `RefObject`: a ref object on a props object makes
-   *  react-compiler treat every read of it as a during-render ref access and
-   *  bail `StemHead` out of compilation. */
   anchorRef?: (el: HTMLButtonElement | null) => void;
 }
 
@@ -60,23 +52,17 @@ export interface StemProps {
   identity?: StemIdentity;
   activePage?: ShellPage;
   onSelect: (destination: LauncherDestination) => void;
-  /** ALWAYS rendered: a PWA cannot rely on ⌘K. */
   onSearch: () => void;
   onNewConversation?: () => void;
   hasCommandKey?: boolean;
   onAllApps: () => void;
-  /** The menu is built by the caller: the stem is layout, not policy. */
   account?: StemAccount;
-  /** A node, so the stem never imports a route's stylesheet. */
   ledger?: ReactNode;
   compact?: boolean;
   scheme?: "light" | "dark";
-  /** C1: a gated-off destination is not dimmed, it is not a place. */
   capabilities?: ShellCapabilities;
 }
 
-/** Selection is the label weight plus the 2px bar, nothing else. No hue here:
- *  invariant 3 reserves the identity hues for APPS. */
 function LauncherItem({
   destination,
   active,
@@ -134,9 +120,6 @@ function StemHead({
     </span>
   );
   if (!identity) return mark;
-  // Destructured, never read as `identity.x` below: a member expression handed
-  // to `ref=` marks its owning object as a ref for react-compiler and bails
-  // this component out of compilation.
   const { anchorRef, color, gateway, icon, onActivate, open, vault } = identity;
   const hue = color ?? identityColor(vault);
   return (
@@ -204,8 +187,6 @@ export default function Stem({
     <nav
       className={chrome.stem}
       data-compact={compact ? "true" : undefined}
-      // A route claiming the band replaces this element, so `[data-band]`
-      // never matches twice.
       data-band={compact ? "host" : undefined}
       aria-label="Apps"
     >

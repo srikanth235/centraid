@@ -1,8 +1,3 @@
-// Runtime schema gate for ingest publishers (#374 Tier 3): they were the write
-// path skipping validateJson — a cast is compile-time only, so a decimal-STRING
-// amount would land in a STRICT column with no backstop; assertPayload runs the
-// SAME validator every command uses. Schemas stay permissive, primitive shapes.
-
 import { validateJson } from "../gateway/json-schema.js";
 
 type JsonSchema = Record<string, unknown>;
@@ -89,7 +84,6 @@ const SCHEMAS: Record<string, JsonSchema> = {
     properties: {
       externalId: { type: "string", minLength: 1 },
       postedAt: { type: "string", minLength: 1 },
-      // The seam: a decimal string fails HERE, not in a STRICT column.
       amountMinor: { type: "number" },
       currency: { type: "string", minLength: 1 },
       direction: { type: "string", enum: ["debit", "credit"] },
@@ -112,8 +106,6 @@ const SCHEMAS: Record<string, JsonSchema> = {
       path: { type: "string", minLength: 1 },
     },
   },
-  // Photo import (#721): only never-null fields carry `type`; an archive
-  // silent about a photo must publish it, not fail it.
   MediaAssetPayload: {
     type: "object",
     required: [
@@ -216,11 +208,6 @@ const SCHEMAS: Record<string, JsonSchema> = {
   },
 };
 
-/**
- * Validate `payload` against the named schema, returned as `T`; else throw
- * with every violation — the shape `applyBatchTx` catches per-row (#290):
- * row lands in `failed`, batch still publishes.
- */
 export function assertPayload<T>(
   schemaName: keyof typeof SCHEMAS,
   payload: unknown

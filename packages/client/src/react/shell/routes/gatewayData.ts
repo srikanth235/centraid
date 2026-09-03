@@ -1,6 +1,3 @@
-// Pure data helpers for the Gateway runtime page.
-
-/** Wire snapshot pushed by gateway-monitor.ts. */
 export type GatewayRuntimeSnapshot = Awaited<
   ReturnType<typeof window.CentraidApi.getGatewayRuntime>
 >;
@@ -13,7 +10,6 @@ export interface OutageRowDTO {
   alerted: boolean;
 }
 
-/** `47s` · `3m 20s` · `2h 05m` · `1d 4h`. */
 export function formatDuration(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
   if (s < 60) return `${s}s`;
@@ -24,7 +20,6 @@ export function formatDuration(ms: number): string {
   return `${Math.floor(h / 24)}d ${h % 24}h`;
 }
 
-/** Ticking uptime; keeps seconds below a day so the counter runs. */
 export function formatUptime(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
   const d = Math.floor(s / 86_400);
@@ -37,7 +32,6 @@ export function formatUptime(ms: number): string {
   return `${m}m ${String(s % 60).padStart(2, "0")}s`;
 }
 
-/** Wall-clock label — `Jul 11, 14:32:05`. */
 export function formatClock(at: number): string {
   const d = new Date(at);
   const mon = d.toLocaleString("en-US", { month: "short" });
@@ -45,7 +39,6 @@ export function formatClock(at: number): string {
   return `${mon} ${d.getDate()}, ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-/** `just now` · `3s ago` · `2m ago`. */
 export function formatAgo(at: number, now: number): string {
   const s = Math.max(0, Math.round((now - at) / 1000));
   if (s < 2) return "just now";
@@ -55,7 +48,6 @@ export function formatAgo(at: number, now: number): string {
   return `${Math.floor(m / 60)}h ago`;
 }
 
-/** Heartbeats answered, as a percentage. */
 export function availabilityPct(snapshot: {
   checksTotal: number;
   checksFailed: number;
@@ -85,7 +77,6 @@ export function buildOutageRows(
   });
 }
 
-/** Durable alert-history row (Alerts tab), spanning restarts (#351). */
 export interface AlertHistoryRowDTO {
   id: string;
   kind: GatewayRuntimeSnapshot["alertHistory"][number]["kind"];
@@ -113,7 +104,6 @@ export function alertKindLabel(
   return ALERT_KIND_LABEL[kind];
 }
 
-/** Newest first; main sends oldest-last (mirrors `outages`); [] if omitted. */
 export function buildAlertHistoryRows(
   snapshot: GatewayRuntimeSnapshot
 ): AlertHistoryRowDTO[] {
@@ -132,7 +122,6 @@ export function buildAlertHistoryRows(
   );
 }
 
-/** The threshold ladder; 120s is the shipped default. */
 export const ALERT_PRESETS: readonly { seconds: number; label: string }[] = [
   { seconds: 30, label: "30s" },
   { seconds: 60, label: "1m" },
@@ -142,15 +131,12 @@ export const ALERT_PRESETS: readonly { seconds: number; label: string }[] = [
   { seconds: 1800, label: "30m" },
 ];
 
-/** Chip label for an off-ladder threshold. */
 export function thresholdLabel(seconds: number): string {
   const preset = ALERT_PRESETS.find((p) => p.seconds === seconds);
   if (preset) return preset.label;
   return seconds < 60 ? `${seconds}s` : `${Math.round(seconds / 60)}m`;
 }
 
-/** Overview orb status: heartbeat wins while down/unreachable; else non-ok
- *  health degrades the result. */
 export type ReconciledStatus = "up" | "degraded" | "down" | "unknown";
 
 export function reconcileStatus(

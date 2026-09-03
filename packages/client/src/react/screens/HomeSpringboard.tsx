@@ -1,6 +1,3 @@
-// The Home springboard (#708). Tier-1 CONTENT tiles, not an icon launcher: the
-// header is invariant (mark, name, count), the body per-app. Vault-level
-// conditions belong above the tiles, not in Settings.
 import type { JSX } from "react";
 
 import { identityHueKey } from "@centraid/design";
@@ -52,8 +49,7 @@ function Mark({
   iconKey: IconName;
   colorKey: ColorKey;
   size: number;
-  /* `string | undefined`: a CSS-module lookup is an index read under the
-     desktop's React program (docs/traps/worktrees.md). */
+
   className: string | undefined;
 }): JSX.Element {
   return (
@@ -174,8 +170,6 @@ function TileBody({ body }: { body: HomeTileBody }): JSX.Element {
         </div>
       );
     case "empty":
-      // `partitionHomeTiles` routes `empty` to first-moves; this arm keeps the
-      // switch exhaustive.
       return <div className={styles.body} />;
   }
 }
@@ -218,8 +212,6 @@ function Tile({
   );
 }
 
-/** Shares the tile's geometry, mark and type, so becoming a tile is a FILL
- *  rather than a re-layout. */
 function FirstMove({
   move,
   onPick,
@@ -256,9 +248,6 @@ function FirstMove({
   );
 }
 
-/** Day one — no content ANYWHERE. Copy stays in the shared constants because
- *  mobile draws the same state; beneath it go moves that put content here,
- *  never doors into the empty apps. */
 function DayOne({
   moves,
   onPick,
@@ -280,7 +269,6 @@ function DayOne({
   );
 }
 
-/** Three, not all: a nudge as tall as the grid stops being a nudge. */
 function StartBand({
   moves,
   onPick,
@@ -300,9 +288,6 @@ function StartBand({
   );
 }
 
-/** The hint is the disclosure, so it goes BEFORE the control. Pressing
- *  REPLACES the control with `WorkingState`; never disable it in place — a
- *  stuck button reads as a hung surface. A block, not an overlay. */
 function SampleOffer({
   seed,
   filling,
@@ -343,15 +328,11 @@ function SampleOffer({
   );
 }
 
-/** No app named means the generators are done and the run is on its closing
- *  replica catch-up — otherwise a finished bar over an empty Home. */
 function fillLabel(progress: HomeSampleProgress): string {
   if (progress.appId === undefined) return HOME_SAMPLE_FILLING_CATCH_UP;
   return HOME_SAMPLE_FILLING_APP[progress.appId] ?? HOME_SAMPLE_FILLING;
 }
 
-/** ONE vault-level line, banded with "out of room". Never a badge per tile:
- *  eight badges make the sample read as damage. */
 function SampleLoaded({
   clear,
   clearing,
@@ -383,7 +364,6 @@ const BAND_MOVES = 3;
 
 export interface HomeSpringboardProps {
   tiles: readonly HomeTileModel[];
-  /** Reads in flight: static skeletons, never a spinner. */
   loading: boolean;
   onOpen: (id: string) => void;
   onConnect: () => void;
@@ -393,13 +373,11 @@ export interface HomeSpringboardProps {
     canSeed: boolean;
     loaded: boolean;
     autoSeedPending?: boolean;
-    /** Null when no fill is running; not a boolean — the step is the message. */
     filling: HomeSampleProgress | null;
     clearing: boolean;
     onSeed: () => void;
     onClear: () => void;
   };
-  /** True for the one render after a seed lands: the grid staggers once. */
   justFilled?: boolean;
 }
 
@@ -413,8 +391,6 @@ export default function HomeSpringboard({
   sample,
   justFilled = false,
 }: HomeSpringboardProps): JSX.Element {
-  // Graded, not binary (#708): a tile earns the grid by having something to
-  // show, everything else becomes an invitation, and Home fills in.
   const { live, idle } = partitionHomeTiles(tiles);
   const dayOne = live.length === 0;
   const moves = homeFirstMoves(idle, dayOne ? undefined : BAND_MOVES);

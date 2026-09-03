@@ -17,14 +17,6 @@ import styles from "./AutomationTemplatesScreen.module.css";
 
 type Trig = "all" | "cron" | "webhook" | "data" | "condition";
 
-// Trigger-kind → icon/label/hue, matching the labels automationsData.ts'
-// deriveAutomationHero (kindEyebrow/run trig) uses for the same four kinds —
-// data and condition triggers reuse the Clock glyph there too (only webhook
-// gets its own icon), so the card badge and the segmented filter stay honest
-// without inventing a new mark. `hue` borrows the identity-hue palette from
-// `styles/automation.module.css`'s `[data-hue]` map — templates aren't
-// automation instances yet (no `hueForId`), so the accent is keyed off
-// trigger kind instead, kept fixed and decorative only (never gates state).
 const TRIGGER_KIND_META: Record<
   "cron" | "webhook" | "data" | "condition",
   { icon: IconName; label: string; hue: string }
@@ -70,8 +62,6 @@ function TemplateCard({
     <button
       type="button"
       className={cx(appCard.card, appCard.small, styles.templateVariant)}
-      // Two rungs: `--tk-hue` is the FILL (the 2px edge, the hover wash),
-      // `--tk-ink` the solved TEXT rung for the trigger glyph beside the label.
       style={
         {
           "--tk-hue": `var(--c-${meta.hue})`,
@@ -102,13 +92,6 @@ function TemplateCard({
   );
 }
 
-/**
- * Automation templates gallery. Live search + trigger segmented filter +
- * integration filter chips over the category-grouped card grid. Cards open the
- * route-owned preview drawer via `onPreview`; the empty-state "Start from
- * scratch" routes through `onStartFromScratch`. Emits the `cd-au-tpl-*`
- * classes global styles.css targets.
- */
 export default function AutomationTemplatesScreen({
   templates,
   subtitle,

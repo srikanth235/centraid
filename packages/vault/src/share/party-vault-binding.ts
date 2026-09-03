@@ -1,30 +1,10 @@
-/*
- * `share_party_vault_binding` — vault-resident "is this person linked to a
- * vault of their own, and which one?" (#821). Gateway calls this from
- * `serve/link-party-bindings.ts`.
- *
- * Two rules at the table they constrain:
- *
- *   - UNIQUE (party_id, vault_id) is TOTAL — it does not exempt revoked rows.
- *     Re-linking after revocation must RE-LIGHT the existing row (clear
- *     `revoked_at`), never insert a second one.
- *   - Partial unique `…_live_party` allows a party at most ONE live vault.
- *     A second live vault is genuine ambiguity; keep the standing binding
- *     and report conflict rather than throw or silently re-point.
- */
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { uuidv7 } from "../ids.js";
 import { ensureCommonsParty } from "./commons.js";
 import { isSelfBinding } from "./self-binding.js";
 
-export type PartyVaultBindOutcome =
-  | "bound"
-  /** Party already holds a LIVE binding to a DIFFERENT vault; left alone. */
-  | "conflict"
-  /** This vault or its own party: a member is not their own peer (#916, R9). */
-  | "self";
+export type PartyVaultBindOutcome = "bound" | "conflict" | "self";
 
 export type PartyVaultRevokeOutcome = "revoked" | "absent";
 
@@ -49,11 +29,6 @@ function livePartyVaultBinding(
     .get(partyId) as PartyVaultBindingRow | undefined;
 }
 
-/**
- * Idempotent. Party ids are shared across linked vaults, so the counterpart
- * is mirrored first — same as `createCommonsGrant` — because the FK names
- * `core_party`.
- */
 export function bindPartyToVault(
   db: DatabaseSync,
   input: {
@@ -66,9 +41,6 @@ export function bindPartyToVault(
 ): PartyVaultBindOutcome {
   if (isSelfBinding(db, input.partyId, input.vaultId)) return "self";
   const live = livePartyVaultBinding(db, input.partyId);
-  // One live vault per person: keep the standing binding, report the clash.
-  // Re-pointing silently rewrites who this person "is"; inserting hits the
-  // partial unique index.
   if (live && live.vault_id !== input.vaultId) return "conflict";
   ensureCommonsParty(
     db,
@@ -102,17 +74,6 @@ export function bindPartyToVault(
   return "bound";
 }
 
-/**
- * A linked peer is a PERSON, not just a foreign key. The People roster is
- * driven by `people_profile` (one per canonical party), so a party with only
- * the `core_party` row `ensureCommonsParty` writes is invisible there while
- * the share sheet — which reads `core.party` directly — still lists it. That
- * asymmetry is what put two same-named rows in one share sheet and left the
- * roster's `Linked` filter empty beside a live binding.
- *
- * Cadence 0 is "never": a person the vault learned about by linking has not
- * asked to be nagged, and the member can set a cadence like any other.
- */
 function ensurePeopleProfile(
   db: DatabaseSync,
   partyId: string,
@@ -127,8 +88,6 @@ function ensurePeopleProfile(
   ).run(uuidv7(), partyId, now);
 }
 
-/** Tombstone the pair. The row stays: memory that these two were linked, and
- *  the row a later re-link re-lights (UNIQUE is total). */
 export function revokePartyVaultBinding(
   db: DatabaseSync,
   input: { partyId: string; vaultId: string; revokedAt: string }

@@ -16,10 +16,6 @@ describe("resolveSettingsPage", () => {
     ({ resolveSettingsPage } = await import("./SettingsRoute.js"));
   });
 
-  // `workspace`, `storage`, `import` and `device` are not Settings pages (#807,
-  // #814); every unknown id must still land somewhere real, never on an empty
-  // pane. `profile` is MERGED rather than gone, so its deep link must land on
-  // the page holding the profile group, not on a same-named fallback.
   it.each([
     "workspace",
     "storage",
@@ -39,7 +35,6 @@ describe("resolveSettingsPage", () => {
     expect(resolveSettingsPage("enrichment")).toBe("enrichment");
   });
 
-  // Every surface that offers a revoke points here by this id (#883).
   it("opens Access — the one dashboard over standing answers", () => {
     expect(resolveSettingsPage("access")).toBe("access");
   });

@@ -14,12 +14,6 @@ import {
 
 import chrome from "./chrome.module.css";
 
-// The window frame (#707, invariant 1): a stem beside a column of app bar,
-// content and status line. The stem is a fixed `--w-stem` band on the LEADING
-// edge, the bottom band when compact; it never scrolls and never changes width,
-// so it needs no collapse toggle, drawer or scrim. chrome.module.css is
-// logical-property only, so the frame mirrors under RTL.
-
 export function TbBtn(props: {
   icon: ReactNode;
   title?: string;
@@ -73,9 +67,6 @@ export interface ShellFrameProps {
     onActivate: (anchor: DOMRect) => void;
     label: string;
     open?: boolean;
-    /** A ref CALLBACK, never a `RefObject`: a ref object reachable through a
-     *  props object makes react-compiler read every access of that object as a
-     *  during-render ref access, bailing the component out. */
     anchorRef?: (el: HTMLButtonElement | null) => void;
   };
   canGoBack?: boolean;
@@ -159,8 +150,6 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
     ) : null,
   ].filter(Boolean);
 
-  // Destructured, never read as `action.x` below: a member expression in `ref=`
-  // marks its owning object as a ref, bailing this component out.
   const { anchorRef, label, onActivate, open } = props.appTitleAction ?? {};
   const title =
     props.appTitle === undefined ? null : props.appTitleAction ? (
@@ -233,8 +222,6 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
     <div
       className={chrome.window}
       data-compact={props.compact ? "true" : undefined}
-      // `titleBarStyle: "hiddenInset"` puts macOS's window buttons in the
-      // stem's corner, so the stem reserves that strip; a browser host has none.
       data-window-controls={isWebHost() ? undefined : "inset"}
       data-stem={props.stemOpen === false ? "hidden" : undefined}
     >
@@ -252,7 +239,6 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
           data-assistant-chrome="true"
           data-layout={props.titlebarCenter ? "grid" : "flat"}
           data-lockup={props.appMark === undefined ? undefined : "app"}
-          // The META line is the trigger, not the title.
           data-identity={props.appMeta === undefined ? undefined : "true"}
         >
           {barContent}

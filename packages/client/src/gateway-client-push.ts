@@ -6,11 +6,8 @@ import type { NotificationsPull } from "./notifications-model.js";
 const NOTIFICATION_CACHE = "centraid-private-notification-delivery-v1";
 const NOTIFICATIONS_DELIVERY_KEY = "/__centraid_notifications__/delivered";
 const REMINDER_DELIVERY_KEY = "/__centraid_notifications__/reminders";
-/** Delivery-baseline-taken marker for this (gateway, vault); not a notification
- * key — never composed or matched by the service worker. */
 const DELIVERY_SEEDED = "__seeded__";
 
-/** Register the PWA only after the user has created reminder value. */
 export async function enableWebPushWake(
   requestPermission: boolean
 ): Promise<boolean> {
@@ -58,7 +55,6 @@ export async function enableWebPushWake(
   return true;
 }
 
-/** Remove both browser and gateway registrations during an explicit unlink. */
 export async function disableWebPushWake(): Promise<void> {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
   const registration = await navigator.serviceWorker.ready;
@@ -82,8 +78,6 @@ interface WebDueReminder {
   minutesBefore: number;
 }
 
-/** Turn an opaque Web Push wake into local content; the push provider sees no
- * title/vault/item/balance — only the paired browser makes this fetch. */
 export async function syncWebDueNotifications(): Promise<void> {
   if (
     typeof window === "undefined" ||
@@ -113,7 +107,7 @@ export async function syncWebDueNotifications(): Promise<void> {
           (value): value is string => typeof value === "string"
         );
     } catch {
-      // Corrupt cache is disposable; gateway state re-emits the bounded window.
+      // Intentionally empty.
     }
   }
   const delivered = new Set([
@@ -149,12 +143,6 @@ export async function syncWebDueNotifications(): Promise<void> {
   await writeNotificationCache(REMINDER_DELIVERY_KEY, delivered);
 }
 
-/**
- * Fetch private Notifications locally after an opaque wake/SSE doorbell;
- * callers ring it constantly, so a FOCUSED page composes nothing
- * (backgrounded delivery is the service worker's job) and a page with NO
- * delivery ledger seeds it silently from the current payload.
- */
 export async function syncWebNotifications(): Promise<void> {
   if (
     typeof window === "undefined" ||
@@ -185,13 +173,10 @@ export async function syncWebNotifications(): Promise<void> {
         (value): value is string => typeof value === "string"
       );
   } catch {
-    // Disposable delivery cache; the gateway Notifications projection is canonical.
+    // Intentionally empty.
   }
   const cached = await readNotificationCache(NOTIFICATIONS_DELIVERY_KEY);
   const delivered = new Set([...prior, ...cached]);
-  // Deliver-silently baseline: no ledger means "never notified for this
-  // (gateway, vault)", not "everything open is brand new" — the sentinel
-  // makes it one-time and cannot collide with a composed key (`prefix:…`).
   const seeding = !delivered.has(DELIVERY_SEEDED);
   const rows = composeWebNotifications(notifications, delivered);
   if (seeding) {
@@ -229,7 +214,6 @@ export async function syncWebNotifications(): Promise<void> {
     })
   );
   for (const row of rows) delivered.add(row.key);
-  // Sentinel stays at the tail: the bounded slice cannot evict it and re-arm seeding.
   delivered.delete(DELIVERY_SEEDED);
   delivered.add(DELIVERY_SEEDED);
   window.localStorage.setItem(
@@ -267,7 +251,7 @@ async function writeNotificationCache(
       })
     );
   } catch {
-    // A delivery cache is disposable; authenticated gateway state is canonical.
+    // Intentionally empty.
   }
 }
 

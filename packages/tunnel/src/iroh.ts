@@ -1,14 +1,3 @@
-/*
- * Typed loader for the `@number0/iroh` NAPI binding.
- *
- * iroh-js 1.0.0 ships with a broken `main`/`types` field (`iroh-js/index.js`
- * does not exist in the published tarball — Node falls back to `./index.js`
- * with a deprecation warning; TypeScript resolution does not). We load the
- * real entry by deep path via createRequire and declare the subset of the
- * surface we use ourselves, so both runtime and typecheck are deterministic.
- * Drop this shim once upstream fixes the package fields.
- */
-
 import { createRequire } from "node:module";
 
 export interface EndpointId {
@@ -53,12 +42,6 @@ export interface BiStream {
   readonly recv: RecvStream;
 }
 
-/**
- * A flat snapshot of one of a connection's candidate paths (direct IP vs
- * relay). Exposed for observability only (cross-network-relay.mjs uses it
- * to confirm a connection actually took the relay path instead of a lucky
- * direct route) — nothing in the pairing/tunnel protocol depends on it.
- */
 export interface PathSnapshot {
   id: string;
   isSelected: boolean;
@@ -77,7 +60,6 @@ export interface Connection {
   close: (errorCode: bigint, reason: Array<number>) => void;
   stableId: () => number;
   rtt: () => number | null;
-  /** Candidate paths this connection has tried; `isSelected` marks the active one. */
   paths: () => Array<PathSnapshot>;
 }
 

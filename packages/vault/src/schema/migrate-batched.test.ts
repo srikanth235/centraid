@@ -1,7 +1,3 @@
-// The batched, resumable data-rewrite primitive (#659). The laws:
-// a call never rewrites more than the batches it was given, a later call
-// resumes from the last committed cursor, and no row is rewritten twice.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
@@ -58,7 +54,6 @@ describe(runBatchedMigration, () => {
     const rest = runBatchedMigration(db.vault, REWRITE, { batchSize: 10 });
     expect(rest.processed).toBe(5);
     expect(rest.done).toBe(true);
-    // Every row rewritten exactly once across both calls.
     expect(rewriteCounts()).toStrictEqual(Array.from({ length: 25 }, () => 1));
   });
 
@@ -73,7 +68,6 @@ describe(runBatchedMigration, () => {
       calls += 1;
     }
     expect(done).toBe(true);
-    // 7 batches of 4 (25 rows) plus the empty probe that latches completion.
     expect(calls).toBe(8);
     expect(rewriteCounts()).toStrictEqual(Array.from({ length: 25 }, () => 1));
   });

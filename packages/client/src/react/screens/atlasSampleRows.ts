@@ -2,24 +2,16 @@ import { useEffect, useRef, useState } from "react";
 
 import { SEALED_SENTINEL, isSealedValue } from "./atlasBrowseData.js";
 
-// Sample rows for the Relations orrery (#441). Reuse the Browse endpoint
-// verbatim and invent no values.
-
-/** Optional, so a host that omits it renders the "no samples" path. */
 export type SampleRowsFetcher = (
   logical: string
 ) => Promise<Record<string, unknown>[]>;
 
-/** `ready` may carry zero rows — an empty table is a truth, not an error.
- *  No entry means still in flight. */
 export type SampleResult =
   | { status: "ready"; rows: Record<string, unknown>[] }
   | { status: "error" };
 
 const SAMPLE_LIMIT = 3;
 
-/** Hover must never trigger a fetch — it is transient and would storm the
- *  endpoint. A cache hit never refetches; an unsettled fetch shows nothing. */
 export function useSampleRows(
   logical: string | undefined,
   fetcher: SampleRowsFetcher | undefined
@@ -51,7 +43,6 @@ export function useSampleRows(
       })
       .catch(() => {
         if (cancelled || !mountedRef.current) return;
-        // Pretending the table is empty would read as "Nothing here yet".
         setCache((current) =>
           new Map(current).set(logical, { status: "error" })
         );
@@ -64,7 +55,6 @@ export function useSampleRows(
   return logical === undefined ? undefined : cache.get(logical);
 }
 
-/** Pass 1 of the row→string heuristic reads only these. */
 const PREFERRED_NAME_PARTS = [
   "title",
   "name",
@@ -75,15 +65,11 @@ const PREFERRED_NAME_PARTS = [
   "display_name",
 ] as const;
 
-/** Skipped by both content passes, so no FK reads as a display string. */
 const looksLikeId = (key: string): boolean => /(?:^|_)id$/iu.test(key);
 
-/** Numbers pass only as the primary-key fallback. */
 const stringish = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
 
-/** Sealed columns are skipped, an entirely sealed row shows the sentinel, and
- *  nothing usable is an em dash — never a fabricated label. */
 export function pickSampleDisplay(row: Record<string, unknown>): string {
   const entries = Object.entries(row);
 
@@ -107,7 +93,6 @@ export function pickSampleDisplay(row: Record<string, unknown>): string {
     if (value !== null && value !== undefined) return String(value);
   }
 
-  // Everything usable was sealed.
   if (entries.some(([, value]) => isSealedValue(value))) return SEALED_SENTINEL;
   return "—";
 }

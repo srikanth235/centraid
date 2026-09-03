@@ -1,9 +1,3 @@
-/**
- * Names sqlite-worker.ts (#545). The module is a web-worker entry
- * that binds message handlers on load; we assert it registers a listener
- * without opening a database, and that unopened ops fail closed.
- */
-
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 const listeners: Array<(ev: MessageEvent) => void> = [];
@@ -11,7 +5,6 @@ const posts: unknown[] = [];
 
 describe("sqlite-worker", () => {
   beforeAll(async () => {
-    // Install a worker-like global before the module evaluates.
     const g = globalThis as unknown as {
       addEventListener: (type: string, fn: (ev: MessageEvent) => void) => void;
       postMessage: (msg: unknown) => void;
@@ -67,5 +60,4 @@ describe("sqlite-worker", () => {
   });
 });
 
-// silence unused in case import path changes
 void vi;

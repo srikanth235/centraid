@@ -1,13 +1,3 @@
-/*
- * WHAT A MEMBER IS TOLD WHEN THEIR REPLICA STARTS OVER (#883 C6).
- *
- * This module mitigates nothing, so no sentence here may imply a partial
- * replay the change log cannot serve.
- *
- * The verdict vocabulary is closed at the gateway; `rebootstrapNoticeFor` is
- * total over it, so a new verdict fails as a missing case, not a blank screen.
- */
-
 export type ReplicaRebootstrapVerdict =
   | "epoch-mismatch"
   | "retention"
@@ -52,13 +42,9 @@ export function isRebootstrapVerdict(
   );
 }
 
-// True on every verdict: `requireRebootstrap` clears only `replica_*`, never
-// the pending-intent store.
 const FULL =
   "This device is downloading its whole library again — your unsent changes stay queued.";
 
-/** `retention` names the number the gateway reported, never a client constant
- *  — one configured to keep less would be described wrongly. */
 export function rebootstrapNoticeFor(
   verdict: ReplicaRebootstrapVerdict,
   retention?: ReplicaRetentionFacts
@@ -139,7 +125,6 @@ interface RebootstrapDetailShape {
   retention?: { days?: unknown; maxEntries?: unknown };
 }
 
-/** `undefined` rather than an invented reason. */
 export function rebootstrapNoticeFrom(
   detail: unknown
 ): ReplicaRebootstrapNotice | undefined {

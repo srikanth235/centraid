@@ -9,11 +9,6 @@ import type { OpsPage, OpsState } from "./opsBar.js";
 import { setRouteHealth } from "./statusChannel.js";
 import type { RouteHealthNote } from "./statusChannel.js";
 
-// The app bar's DYNAMIC half for the six operational routes (#765). A pub/sub
-// store, not a context: callers are query resolutions and `.catch()` handlers,
-// and the frame renders ABOVE the outlet. The count line is the page's own only
-// in ready/full/empty.
-
 export const LOADING_COUNT_LINE = READING_HEALTH;
 
 export const LOADING_HEALTH = READING_HEALTH;
@@ -52,14 +47,11 @@ export interface RouteVerbs {
 type VitalsMap = Readonly<Partial<Record<OpsPage, RouteVitals>>>;
 type VerbsMap = Readonly<Partial<Record<OpsPage, RouteVerbs>>>;
 
-// Replace wholesale, never mutate: `useSyncExternalStore` compares snapshots
-// by identity, so a mutated map never re-renders the bar.
 let vitals: VitalsMap = {};
 let verbs: VerbsMap = {};
 const subscribers = new Set<() => void>();
 
 function emit(): void {
-  // A snapshot: unsubscribing mid-react would mutate the set.
   for (const fn of Array.from(subscribers)) fn();
 }
 
@@ -97,8 +89,6 @@ export function publishVitals(page: OpsPage, input: RouteVitalsInput): void {
   emit();
 }
 
-/** An unclaimed verb falls through to `App.tsx`; unclaimed by both, it is not
- *  drawn. */
 export function publishRouteVerbs(page: OpsPage, next: RouteVerbs): void {
   verbs = { ...verbs, [page]: next };
   emit();
@@ -134,8 +124,6 @@ function healthFor(
   };
 }
 
-/** ONE call: set separately, the bar can read a count over a status line that
- *  is still reading. */
 export function publishRouteSignals(
   page: OpsPage,
   input: RouteVitalsInput & {

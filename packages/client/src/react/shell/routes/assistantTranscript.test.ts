@@ -8,8 +8,6 @@ import {
 } from "./assistantTranscript.js";
 import type { AsstMsg } from "./assistantTranscript.js";
 
-// The renderer pulls in the auth-aware resolver; stub it as assistantRich's own
-// test does (the codec under test never calls it).
 vi.mock(import("../../../gateway-client.js"), () => ({
   resolveAssistantRefs: vi.fn<typeof TypeImport_1gl5zx7.resolveAssistantRefs>(),
 }));
@@ -123,7 +121,6 @@ describe(msgToDTO, () => {
     if (dto.kind !== "ai" || dto.streaming) {
       throw new Error("expected a settled assistant transcript DTO");
     }
-    // activeAttempt 0 → attempt A shown, pager reads 1/2, feedback from A.
     expect(dto.copyText).toBe("A");
     expect(dto.turnId).toBe("t1");
     expect(dto.feedback).toBe("down");
@@ -178,8 +175,6 @@ describe(msgToDTO, () => {
     if (dto.kind !== "ai" || dto.streaming) {
       throw new Error("expected a settled assistant transcript DTO");
     }
-    // No turnId ⇒ the surface renders no feedback/regenerate control the
-    // server would reject on a pruned (gone) turn.
     expect(dto.turnId).toBeUndefined();
     expect(dto.canRegenerate).toBeFalsy();
     expect(dto.copyText).toBe("sealed");

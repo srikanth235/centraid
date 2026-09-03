@@ -1,27 +1,3 @@
-/*
- * `RemoteBackupProvider` — the client side of `centraid-storage-provider/1`
- * (PROTOCOL.md § Routes) over `fetch`. Every route, verbatim:
- *
- *   GET    /v1/storage/provider                       discovery/capabilities
- *   POST   /v1/storage/vaults                          create target
- *   GET    /v1/storage/vaults                          list + usage + accountStatus
- *   POST   /v1/storage/vaults/:id/credentials          issue grant (any store class)
- *   GET    /v1/storage/vaults/:id/usage                per-store-class usage (optional `usage` capability)
- *   PUT/GET /v1/storage/vaults/:id/policy               client-declared policy (optional `policy` capability)
- *   GET    /v1/storage/vaults/:id/inventory            object inventory (optional `inventory` capability)
- *   GET    /v1/storage/vaults/:id/events               audit events (optional `audit` capability)
- *   POST   /v1/storage/vaults/:id/snapshots            register (backup store)
- *   GET    /v1/storage/vaults/:id/snapshots            list (backup store)
- *   GET    /v1/storage/vaults/:id/snapshots/:seq       one row (backup store)
- *   DELETE /v1/storage/vaults/:id                      soft delete
- *   POST   /v1/storage/vaults/:id/undelete             cancel soft delete
- *   POST   /v1/storage/vaults/:id/purge                interactive-tier purge
- *
- * There is no single-target GET route in PROTOCOL.md — `getTarget`/`usage`
- * resolve from the list route and filter by id, throwing `not_found` when
- * absent (a deliberate, spec-faithful choice, not a gap).
- */
-
 import { requestStorageGrant } from "./cas-grant.js";
 import type { ObjectStore } from "./object-store.js";
 import { BackupProviderError } from "./provider.js";
@@ -61,12 +37,9 @@ function appendQuery(
 }
 
 export interface RemoteBackupProviderOptions {
-  /** e.g. "https://api.clawgnition.com" — no trailing slash required. */
   baseUrl: string;
   apiKey: string;
-  /** Injectable for tests (the fake gateway server). Defaults to global `fetch`. */
   fetchImpl?: typeof fetch;
-  /** Credential grant TTL requested on `openDataPlane`. */
   grantTtlSeconds?: number;
 }
 
@@ -122,10 +95,6 @@ export class RemoteBackupProvider implements BackupProvider {
   }
 
   async purgeTarget(targetId: string): Promise<void> {
-    // The api-key tier this provider authenticates with MUST get a 403 here
-    // (PROTOCOL.md § Auth) — `call` surfaces that as a normal thrown
-    // BackupProviderError('interactive_auth_required'); there is no
-    // client-side special case, the server enforces the tier.
     await this.call<unknown>(
       "POST",
       `/v1/storage/vaults/${encodeURIComponent(targetId)}/purge`

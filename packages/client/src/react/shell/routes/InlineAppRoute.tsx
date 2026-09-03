@@ -9,8 +9,6 @@ import {
 } from "react";
 import type { JSX, ReactNode } from "react";
 
-// The :global(.kit-*) classes are global strings, so exactly one loader may
-// own them: the route host.
 import "@centraid/design/kit.css";
 import type {
   InlineAppModule,
@@ -78,8 +76,6 @@ function syncInlineProductAccent(root: HTMLElement): void {
   }
 }
 
-// The blueprint token layer, rescoped from `:root` to the inline subtree so it
-// never restyles shell chrome. Keep it synchronous.
 let inlineTokensInjected = false;
 function ensureInlineScopeTokens(): void {
   if (inlineTokensInjected || typeof document === "undefined") return;
@@ -103,8 +99,6 @@ function ensureInlineScopeTokens(): void {
   document.head.appendChild(style);
 }
 
-// One promise per (appId, attempt) so React `use()` sees a stable one. Cache
-// REJECTIONS too, or a Suspense remount re-runs the loader forever.
 const descriptorCache = new Map<
   string,
   Promise<{ default: InlineAppModule }>
@@ -182,7 +176,6 @@ function InlineAppMount({
     };
   }, [installation, lease]);
 
-  // Independent sessions: a failing audience must not hold up the others.
   useEffect(() => {
     if (!descriptor.multiScope) return undefined;
     let alive = true;
@@ -200,9 +193,7 @@ function InlineAppMount({
             session: secondary.session,
           });
         })
-        .catch(() => {
-          // An audience that cannot open is simply not offered.
-        });
+        .catch(() => {});
     }
     return () => {
       alive = false;
@@ -210,9 +201,6 @@ function InlineAppMount({
     };
   }, [descriptor.multiScope, installed, scopes]);
   const Root = descriptor.Root;
-  // The ref MUST be stable: React answers an identity change by detaching and
-  // reattaching the SAME element, which revokes live blob: URLs under
-  // still-mounted <img>s.
   const rootRef = useCallback(
     (el: HTMLElement | null) => onRootReady(el, descriptor),
     [descriptor, onRootReady]
@@ -230,8 +218,6 @@ export default function InlineAppRoute({
   prefs,
   compact,
 }: InlineAppRouteProps): JSX.Element {
-  // The seat wall (docs/blueprint-seats.md S5): a MANIFEST-declared refusal,
-  // never a hard-coded app id, and never a security boundary.
   const refused = isDisabledOnSeat(appId, seat());
   const [attempt, setAttempt] = useState(0);
   const appRootRef = useRef<HTMLElement | null>(null);
@@ -239,8 +225,6 @@ export default function InlineAppRoute({
   const blobTeardown = useRef<(() => void) | null>(null);
   const knobValues = useRef<Record<string, string>>({});
 
-  // Blueprints may not import the client package, so `data-gateway-status` on
-  // the inline root IS the reachability contract.
   const gatewayStatus = useGatewayStatus();
   const gatewayStatusRef = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -273,9 +257,6 @@ export default function InlineAppRoute({
 
   const onRootReady = useCallback(
     (el: HTMLElement | null, descriptor: InlineAppModule) => {
-      // Keyed to the ELEMENT, not this callback: most `null` detaches are not
-      // unmounts. Only a DIFFERENT element replaces the install; the unmount
-      // effect below revokes exactly once.
       if (el === null || el === appRootRef.current) return;
       if (askTeardown.current) {
         askTeardown.current();
@@ -301,7 +282,7 @@ export default function InlineAppRoute({
             config: descriptor.kitAsk,
           });
         } catch {
-          /* ask is non-essential — never block the app on it */
+          // Intentionally empty.
         }
       }
     },
@@ -323,18 +304,11 @@ export default function InlineAppRoute({
     []
   );
 
-  // THE FRAME CONTRIBUTES NOTHING TO THE BAR. `AppSettingsController.tsx` and
-  // `inlineAppFlows.ts` stay unmounted until a door is designed.
-
   const cacheKey = `${appId}:${attempt}`;
-  // Start the chunk import NOW so it runs beside the scopes fetch. A refused
-  // seat never calls `loader()`.
   const descriptorPromise = useMemo(
     () => (refused ? undefined : loadDescriptor(cacheKey, loader)),
     [cacheKey, loader, refused]
   );
-  // The mount key carries a SCOPE-SET axis (docs/client-keying.md):
-  // `window.centraid` and its replica leases are per scope set.
   const scopesState = useAppScopes(appId);
   const mounted = scopesState.status === "ready" ? scopesState.data : null;
   const scopes = mounted?.scopes ?? null;
@@ -372,11 +346,6 @@ export default function InlineAppRoute({
       <div className={styles.view} data-testid="inline-app-view">
         <div className={styles.body}>
           {refused ? (
-            // The seat wall (docs/blueprint-seats.md S5). Stated plainly,
-            // per the repo's refusal grammar (docs/decisions.md S5, §14's
-            // offline banner is the sibling case): a title, the reason in
-            // the app's own words where it has them, the way in — and no
-            // control, because the seat itself is what refuses.
             <output
               className={styles.refusal}
               data-testid="inline-app-seat-refusal"

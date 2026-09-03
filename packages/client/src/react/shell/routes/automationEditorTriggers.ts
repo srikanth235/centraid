@@ -3,7 +3,6 @@ import type {
   AuEditorTriggerInput,
 } from "../../screen-contracts.js";
 
-/** Convert persisted automation triggers into the editor's display shape. */
 export function triggerToDto(
   trigger: CentraidAutomationRow["triggers"][number]
 ): AuEditorTriggerDTO {

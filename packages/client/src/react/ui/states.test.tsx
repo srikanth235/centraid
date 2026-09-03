@@ -39,7 +39,6 @@ describe("ui/states", () => {
       expect(el.querySelector(".workingCounts")?.textContent).toBe(
         `${(2_340).toLocaleString()} of ${(11_205).toLocaleString()} photos`
       );
-      // The counts are inside the announced region; the bar is decoration.
       expect(el.querySelector("section")?.getAttribute("aria-live")).toBe(
         "polite"
       );
@@ -126,8 +125,6 @@ describe("ui/states", () => {
       );
       const buttons = [...el.querySelectorAll(".choices button")];
       expect(buttons).toHaveLength(3);
-      // Same recipe for all three: no filled primary, no destructive outline,
-      // and nothing marked as the default action.
       for (const button of buttons) {
         expect(button.className).toContain("secondary");
         expect(button.className).not.toContain("primary");
@@ -175,7 +172,6 @@ describe("ui/states", () => {
       expect(el.querySelector(".outOfRoomConsequence")?.textContent).toBe(
         props.consequence
       );
-      // The consequence is what the block is NAMED by, for a screen reader too.
       expect(el.querySelector("section")?.getAttribute("aria-labelledby")).toBe(
         "out-of-room-consequence"
       );

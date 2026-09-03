@@ -105,7 +105,6 @@ describe("screens/VaultScreen", () => {
         btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       });
       expect(props.grant).toHaveBeenCalledOnce();
-      // one initial load + one after the action
       expect(props.loadData).toHaveBeenCalledTimes(2);
     });
 

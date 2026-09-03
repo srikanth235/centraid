@@ -12,7 +12,6 @@ import styles from "./Button.module.css";
 
 export type { ButtonVariant } from "@centraid/design";
 
-/** Shell-only: mobile's 44px touch floor is its one size. */
 export type ButtonSize = "md" | "sm" | "chrome";
 
 export interface ButtonProps extends ButtonData {
@@ -24,8 +23,6 @@ export interface ButtonProps extends ButtonData {
   title?: string;
   ariaLabel?: string;
   ariaExpanded?: boolean;
-  /** Writes data (#708, C7). Defaults to primary; set `false` on a primary
-   *  that only navigates. Disables itself while the shell cannot commit. */
   commit?: boolean;
 }
 
@@ -58,7 +55,6 @@ export default function Button({
     <>
       <button
         type="button"
-        // `.chrome`/`.sm` add to `.btn`, never replace it.
         className={cx(
           styles.btn,
           size === "chrome" && styles.chrome,
@@ -66,10 +62,8 @@ export default function Button({
           VARIANT_CLASS[variant],
           className
         )}
-        // The design-gallery gate reads this attribute (#799).
         data-variant={variant}
         disabled={disabled}
-        // Refused commit stays focusable; its reason renders inline.
         aria-disabled={refused ? true : undefined}
         aria-describedby={refused ? reasonId : undefined}
         title={title}

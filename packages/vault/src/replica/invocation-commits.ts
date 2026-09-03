@@ -14,7 +14,6 @@ import { nowIso } from "../ids.js";
 
 type InvocationDatabases = Pick<VaultDb, "vault" | "audit">;
 
-/** Keep each startup read/repair page small while still draining every page. */
 export const DEFAULT_REPLICA_INVOCATION_REPAIR_BATCH_SIZE = 128;
 const MAX_REPLICA_INVOCATION_REPAIR_BATCH_SIZE = 5_000;
 
@@ -36,14 +35,6 @@ export interface ReplicaInvocationAuditCitation {
   weight?: number;
 }
 
-/**
- * S5 material captured in vault.db beside the canonical mutation. Raw command
- * input is always absent. Replica callers also omit all handler output so the
- * marker cannot become a second device data plane; ordinary online callers
- * retain their established receipt replay value (with transcript-sensitive
- * output redacted). This is enough to finish the audit trail without
- * re-running the handler after a crash between the two database commits.
- */
 export interface ReplicaInvocationAudit {
   commandName: string;
   agentId: string;
@@ -81,16 +72,12 @@ export interface ReplicaInvocationRepairResult {
   failures: ReplicaInvocationRepairFailure[];
 }
 
-/** Opening fails closed if canonical commits still lack journal proof. */
 export class ReplicaInvocationRepairError extends Error {
   readonly result: ReplicaInvocationRepairResult;
 
   constructor(result: ReplicaInvocationRepairResult) {
     super(
       `replica invocation startup repair retained ${result.remaining} unfinished marker(s)` +
-        // NAME the failures: a vault that refuses to open is the loudest
-        // failure this codebase has, and a bare count sends whoever reads it
-        // to a debugger to learn what a `reason` we already hold would say.
         (result.failures.length > 0
           ? `; ${result.failures.length} repair attempt(s) failed: ` +
             result.failures
@@ -172,7 +159,6 @@ function commitOf(row: InvocationCommitRow): ReplicaInvocationCommit {
   };
 }
 
-/** Read the vault-side proof that an invocation's canonical transaction committed. */
 export function readReplicaInvocationCommit(
   vault: DatabaseSync,
   invocationId: string
@@ -188,11 +174,6 @@ export function readReplicaInvocationCommit(
   return row ? commitOf(row) : undefined;
 }
 
-/**
- * Record a successful canonical invocation inside the caller's open vault.db
- * transaction. Never wrap this in its own transaction: atomicity with the
- * command's ontology writes is the entire contract of this marker.
- */
 export function recordReplicaInvocationCommitInTransaction(
   vault: DatabaseSync,
   input: RecordReplicaInvocationCommitInput
@@ -235,13 +216,6 @@ export interface FinalizedInvocationJournal {
   changed: boolean;
 }
 
-/**
- * Finish (or verify) every mandatory post-commit audit row in one vault.db
- * transaction. Existing prefix rows from an older partial attempt are reused;
- * conflicting rows fail closed. Invocation status changes to `executed` only
- * in the same commit that makes checks/provenance/receipt/evidence/explanation
- * complete.
- */
 export function finalizeInvocationJournal(
   db: InvocationDatabases,
   invocationId: string,
@@ -309,7 +283,6 @@ export function finalizeInvocationJournal(
   }
 }
 
-/** Repair one canonical marker and stamp proof only after journal verification. */
 export function finalizeReplicaInvocationCommit(
   db: InvocationDatabases,
   invocationId: string,
@@ -326,9 +299,6 @@ export function finalizeReplicaInvocationCommit(
     commit.committedAt
   );
 
-  // This second database write is intentionally after the atomic journal
-  // commit. A crash before it merely causes the next replay to verify again;
-  // it can never falsely claim the audit was repaired.
   if (!options.deferSettlement)
     settleFinalizedInvocationCommit(db, invocationId);
   return {
@@ -337,15 +307,6 @@ export function finalizeReplicaInvocationCommit(
   };
 }
 
-/**
- * Ordinary online commands do not need a durable replica outcome to retain
- * their canonical marker. Once the journal transaction is proven, delete the
- * marker directly in one vault transaction instead of stamping
- * `journal_finalized_at` and deleting it in a second transaction (#456).
- * A crash between the journal commit and this delete leaves the NULL marker;
- * replay/startup repair re-verifies the idempotent journal rows before trying
- * the delete again.
- */
 export function finalizeOrdinaryInvocationCommit(
   db: InvocationDatabases,
   invocationId: string,
@@ -371,11 +332,6 @@ export function finalizeOrdinaryInvocationCommit(
   return finalized;
 }
 
-/**
- * Publish the vault-side proof that the already-committed journal evidence is
- * final. A group commit calls this for every member inside one cleanup
- * transaction after the shared vault then journal commits succeed.
- */
 export function settleFinalizedInvocationCommit(
   db: InvocationDatabases,
   invocationId: string
@@ -407,13 +363,6 @@ export function settleFinalizedInvocationCommit(
   }
 }
 
-/**
- * Stamp a batch member inside the canonical vault transaction. The stamp is
- * provisional until the already-open journal transaction commits: startup
- * repair always re-verifies it, and the next batch reclaims it only after
- * observing the matching executed journal row. This lets a whole arrival
- * window cross exactly one vault + one journal commit boundary (#456).
- */
 export function stampFinalizedInvocationCommitInTransaction(
   vault: DatabaseSync,
   invocationId: string
@@ -437,12 +386,6 @@ interface ProvenOrdinaryCommitRow {
   command_id: string;
 }
 
-/**
- * Piggyback cleanup of a previous batch on the next shared commit pair. A
- * provisional stamp is never trusted by itself: the matching journal row
- * must be executed and name the same command. Failed or crash-interrupted
- * members remain durable for retry/startup repair.
- */
 export function reclaimProvenOrdinaryInvocationCommitsInTransaction(
   db: InvocationDatabases,
   limit = DEFAULT_REPLICA_INVOCATION_REPAIR_BATCH_SIZE
@@ -501,16 +444,6 @@ interface RepairCursor {
   invocationId: string;
 }
 
-/**
- * Repair every crash-left canonical marker before a vault is served.
- *
- * Reads are keyset-paged in canonical `(committed_at, invocation_id)` order,
- * so memory and each SQLite result are bounded without allowing an early bad
- * marker to starve later provable ones. Each journal repair remains its own
- * atomic transaction. A failed marker is retained, the sweep continues, and
- * the caller ultimately receives a fail-closed error while any candidate is
- * still unfinished.
- */
 export function repairReplicaInvocationCommits(
   db: InvocationDatabases,
   options: { batchSize?: number } = {}
@@ -546,9 +479,6 @@ export function repairReplicaInvocationCommits(
       try {
         const before = readReplicaInvocationCommit(db.vault, row.invocation_id);
         if (!before) continue;
-        // A group-commit stamp is deliberately provisional until the audit
-        // band commits. Always re-verify that proof, even when the stamp is
-        // present, before reclaiming the marker after a crash.
         finalizeReplicaInvocationCommit(db, row.invocation_id);
         result.finalized += 1;
         const reclaimed = reclaimFinalizedReplicaInvocationCommit(
@@ -574,9 +504,6 @@ export function repairReplicaInvocationCommits(
     if (rows.length < batchSize) break;
   }
 
-  // A second process should not write during vault open, but this final
-  // invariant also catches a marker inserted behind the keyset cursor. Never
-  // serve while such a journal gap remains.
   result.remaining = countRepairCandidates(db.vault);
   if (result.remaining > 0) throw new ReplicaInvocationRepairError(result);
   return result;
@@ -635,7 +562,6 @@ function countRepairCandidates(vault: DatabaseSync): number {
   return row.n;
 }
 
-/** Reclaim only proof-stamped ordinary or terminal-intent markers. */
 function reclaimFinalizedReplicaInvocationCommit(
   vault: DatabaseSync,
   invocationId: string
@@ -800,10 +726,6 @@ function ensureReceipt(
   commandId: string,
   audit: ReplicaInvocationAudit
 ): { receiptId: string; changed: boolean } {
-  // Scoped to the INVOCATION'S receipt, not every receipt on the invocation:
-  // `HandlerCtx.receipt` lets a handler write one of its own beside this one
-  // (#883), and `share.grant` does. Counting those as corruption made a shared
-  // document's marker unrepairable, so the vault refused to open after it.
   const rows = journal
     .prepare(
       `SELECT receipt_id, grant_id, action, object_type, object_id,

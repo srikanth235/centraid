@@ -7,11 +7,6 @@ import type { GroupedDevice } from "./device-groups.js";
 import { deviceRowDef, tombstoneRowDef } from "./DeviceRow.js";
 import type { DeviceRowActions } from "./DeviceRow.js";
 
-/*
- * Devices grouped by whose they are (#726, #765); the other-owner block is
- * omitted when empty (topology hiding); PERSON removal is host-custody.
- */
-
 export interface DeviceOwnerGroupProps extends DeviceRowActions {
   label: string;
   devices: readonly GroupedDevice[];
@@ -47,7 +42,6 @@ export default function DeviceOwnerGroup({
         ...(onUpdateCompute ? { onUpdateCompute } : {}),
       })
     ),
-    // Tombstones act on nothing.
     ...revoked.map((device) => tombstoneRowDef(device, now)),
   ];
   return (

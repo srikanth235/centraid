@@ -2,24 +2,9 @@ import { iconSvg } from "./iconSvg.js";
 
 import styles from "./contextMenu.module.css";
 
-/**
- * Where an anchored menu hangs from — a pointer position (right-click) or a
- * rect (a ••• button, a row).
- *
- * It belongs here: the menu mechanics are what the type describes, and every
- * caller already reaches for `openMenu` beside it. Mirrors the ambient
- * `MenuAnchor` in the renderer's
- * types.d.ts, redeclared because the React tsconfig does not pull that ambient
- * file in.
- */
 export type ShellMenuAnchor =
   | { kind: "point"; x: number; y: number }
   | { kind: "rect"; rect: DOMRect };
-
-// Context menu — the generic anchored popup menu. A body-portal overlay with
-// edge-flip positioning, callable from any surface. The item lists + the
-// picked-action dispatch (app menu, template menu) are the caller's — this
-// owns only the popup mechanics.
 
 export interface CtxItem {
   id: string;
@@ -43,12 +28,6 @@ export function isContextMenuOpen(): boolean {
 }
 
 export interface MenuOptions {
-  /**
-   * Stretch the menu to the anchor rect's width instead of sizing to its
-   * longest label. For a menu anchored to a full-width row, a content-width
-   * popup reads as a stray tooltip; matching the row makes it read as that
-   * row opening.
-   */
   matchAnchorWidth?: boolean;
 }
 

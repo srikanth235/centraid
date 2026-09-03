@@ -1,9 +1,3 @@
-/**
- * Pure connectors-platform helpers — capability mapping, attention sort,
- * tool-descriptor gating, and automation connection binding payloads.
- * Kept free of React/gateway so unit tests assert the real shipped logic.
- */
-
 export type ConnectionHealth = "ok" | "needs-auth" | "paused" | "failing";
 
 export interface ConnectionHealthRow {
@@ -41,7 +35,6 @@ export interface ProviderCapabilitiesDTO {
   actions: ProviderActionCap[];
 }
 
-/** Attention rank — lower sorts first (needs-auth / failing before healthy). */
 export function connectionAttentionRank(health: ConnectionHealth): number {
   switch (health) {
     case "failing":
@@ -57,7 +50,6 @@ export function connectionAttentionRank(health: ConnectionHealth): number {
   }
 }
 
-/** Sort connections so unhealthy ones surface first (attention queue). */
 export function sortConnectionsByAttention<
   T extends { health: ConnectionHealth },
 >(rows: readonly T[]): T[] {
@@ -67,15 +59,10 @@ export function sortConnectionsByAttention<
   );
 }
 
-/** Whether the UI should show a primary Reconnect path (refresh credentials). */
 export function connectionNeedsReconnect(health: ConnectionHealth): boolean {
   return health === "needs-auth" || health === "failing";
 }
 
-/**
- * One assistant tool descriptor — never includes secret cells. Only healthy
- * (`ok`) connections advertise tools.
- */
 export interface ConnectorToolDescriptor {
   toolName: string;
   title: string;
@@ -90,7 +77,6 @@ export interface ConnectorToolDescriptor {
 export function toolDescriptorsFromHealthyConnections(input: {
   connections: readonly ConnectionHealthRow[];
   capabilitiesByProvider: ReadonlyMap<string, ProviderCapabilitiesDTO>;
-  /** kind → capabilities when provider is missing (fallback via connector kind). */
   capabilitiesByKind?: ReadonlyMap<string, ProviderCapabilitiesDTO>;
 }): ConnectorToolDescriptor[] {
   const out: ConnectorToolDescriptor[] = [];
@@ -118,7 +104,6 @@ export function toolDescriptorsFromHealthyConnections(input: {
   return out;
 }
 
-/** Secret-bearing keys that must never appear on list/tool DTOs. */
 const FORBIDDEN_SECRET_KEYS = [
   "clientSecret",
   "client_secret",
@@ -132,7 +117,6 @@ const FORBIDDEN_SECRET_KEYS = [
   "secret",
 ] as const;
 
-/** Structural check: tool descriptors expose no secret cells. */
 export function toolDescriptorHasNoSecrets(
   d: ConnectorToolDescriptor
 ): boolean {
@@ -143,11 +127,6 @@ export function toolDescriptorHasNoSecrets(
   return true;
 }
 
-/**
- * Wire shape for automation create/update when the editor binds selected
- * catalog connections. Soft bindings only (harness-backed automations) — not a
- * published `connector` block (which forbids ctx.delegate).
- */
 export interface AutomationConnectionBindingPayload {
   connectionId: string;
   kind: string;
@@ -175,10 +154,6 @@ export function buildAutomationConnectionsPayload(
   return out;
 }
 
-/**
- * Published-connector binding (kind + label + durable connectionId) for
- * pull automations that already declare `manifest.connector`.
- */
 export function buildConnectorSpecPayload(input: {
   kind: string;
   label: string;
@@ -193,7 +168,6 @@ export function buildConnectorSpecPayload(input: {
   };
 }
 
-/** Match automations whose connector kind or connections[] include this kind. */
 export function automationLinksToConnection(
   automation: {
     manifest?: {

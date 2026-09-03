@@ -1,5 +1,3 @@
-// Pure SigV4 unit tests (#545) — no live S3 endpoint.
-
 import { createHash, createHmac } from "node:crypto";
 
 import { describe, expect, test } from "vitest";
@@ -67,7 +65,6 @@ describe("sigv4", () => {
       /^AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE\/\d{8}\/us-east-1\/s3\/aws4_request, SignedHeaders=/u
     );
     expect(signed.headers.Authorization).toContain("Signature=");
-    // Every caller header is folded into SignedHeaders (no special casing).
     expect(signed.headers.Authorization).toContain("content-type");
     expect(signed.headers.Authorization).toContain("x-amz-storage-class");
   });
@@ -85,9 +82,6 @@ describe("sigv4", () => {
   });
 
   test("signS3Request signature is deterministic for a fixed clock via recomputation", () => {
-    // The signer uses `new Date()` internally; recompute with the same amz date
-    // from the first response and assert the Authorization signature matches
-    // the independent HMAC chain AWS documents.
     const base = new URL("https://s3.example.test");
     const path = "bucket/obj";
     const region = "eu-west-1";

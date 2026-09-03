@@ -1,8 +1,5 @@
 import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
 
-// Automation thread data (#387): one conversation per automation, every fire a
-// run in it. Consent endpoints are GLOBAL, so this filters them to the
-// automation's actor; hero/trigger/status come from automationsData.ts.
 import {
   auStatusForRow,
   glyphForId,
@@ -36,16 +33,11 @@ import {
   triggerOriginLabel,
 } from "./automationsData.js";
 
-/** `row` rides ALONGSIDE `data`: screen-contracts.ts stays free of ambient
- *  globals. */
 export interface AutomationThreadLoadResult {
   row: CentraidAutomationRow;
   data: AutomationThreadData;
 }
 
-// One enrolled agent identity per fire, keyed by the owning APP FOLDER
-// (`row.ownerApp` → `access_agent.enrollment_key`), never the row id. Also
-// require `actorKind`/`callerKind === 'agent'`, or a same-named app leaks in.
 export function filterConsentForAutomation(
   agentId: string | undefined,
   blocking: BlockingSummary,
@@ -116,7 +108,6 @@ function buildThreadRun(run: CentraidAutomationTurnRecord): ThreadRunDTO {
   };
 }
 
-/** Inert by design: every remedy links to the compiler screen. */
 function buildPlanStatus(
   compiles: readonly CentraidAutomationTurnRecord[],
   hasRun: boolean
@@ -164,7 +155,6 @@ function relativeCompileTime(startedAt: number): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-/** `null` when the automation does not exist (deleted, stale deep link). */
 export async function loadAutomationThreadData(input: {
   automationId: string;
   gatewayOrigin: string;
@@ -179,8 +169,6 @@ export async function loadAutomationThreadData(input: {
   if (!row) return null;
 
   const hero = deriveAutomationHero(row, input.gatewayOrigin);
-  // A compile turn is the COMPILER working, not the automation running: never
-  // run history — distilled into `plan`, otherwise the compiler screen's.
   const compiles = runs
     .filter((run) => run.triggerKind === "compile")
     .sort((a, b) => b.startedAt - a.startedAt);
@@ -188,7 +176,6 @@ export async function loadAutomationThreadData(input: {
   const executions = threadTurns.filter(
     (run) => run.triggerKind !== "interactive"
   );
-  // Header status reports the AUTOMATION, never its last compile.
   const statusKind = auStatusForRow(
     row.enabled,
     executions.length > 0
@@ -253,8 +240,6 @@ export async function loadAutomationThreadData(input: {
   };
 }
 
-/** Resolves `true` when settled; THROWS on transport failure, which the route
- *  wrapper catches and reports. */
 export async function decideConsentItem(input: {
   kind: ConsentKind;
   id: string;

@@ -15,10 +15,8 @@ vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
   saveUserPrefs,
 }));
 
-// Mirrors the CACHE_KEY in useAppearance.ts — bumped for #608 group P.
 const CACHE_KEY = "appearance.v2";
 
-/** A controllable `prefers-color-scheme` for the `system` mode. */
 function stubScheme(light: boolean): { set: (next: boolean) => void } {
   const listeners = new Set<() => void>();
   let isLight = light;
@@ -40,7 +38,6 @@ function stubScheme(light: boolean): { set: (next: boolean) => void } {
 let useAppearance: typeof TypeImport_t83a9s.useAppearance;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
-// The client-local store is a plain module now; back it with an in-memory Map.
 const store = vi.hoisted(() => new Map<string, unknown>());
 vi.mock(import("./store.js"), () => ({
   Store: {
@@ -101,11 +98,6 @@ describe("useAppearance", () => {
     });
 
     it("ignores a cache written in the pre-#608 shape", async () => {
-      // The old shape persisted `bgL` and an accent on every save —
-      // indistinguishable from an owner who chose them, and written inline
-      // where they outranked the theme's own declarations. The bumped key
-      // starts the new shape clean instead of inheriting that. #707 retired
-      // both keys outright, so neither may reach <html> by any route.
       store.set("appearance", { bgL: 5, accent: "rose", coolBlueCast: false });
       await mount();
       const style = document.documentElement.style;

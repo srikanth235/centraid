@@ -12,12 +12,6 @@ import ResourceCardDetails from "./ResourceCardDetails.js";
 
 import styles from "./ResourceDialogs.module.css";
 
-// "How we sized this" dialog (#528 follow-up): the L2 host facts +
-// resolved knobs (ResourceCardDetails, embedded) and the L3 owner-tunable knobs
-// (ResourceAdvancedKnobs), lifted out of the card body into a focused sheet so
-// the card itself stays a compact choose-and-glance surface. Esc / backdrop /
-// close dismiss.
-
 const X_ICON = (
   <svg
     width="15"
@@ -42,8 +36,7 @@ const MODE_LABEL: Record<ResourceProfileDTO["mode"], string> = {
 
 export interface ResourceDetailsDialogProps {
   profile: ResourceProfileDTO;
-  /** L3 knob overrides — when both are present (and the profile carries
-      `sources`+`bounds`) the Advanced section renders inside the dialog. */
+
   loadKnobPrefs?: () => Promise<ResourceKnobPrefs>;
   saveKnobPrefs?: (
     patch: Partial<Record<TunableKnobKey, number | null>>

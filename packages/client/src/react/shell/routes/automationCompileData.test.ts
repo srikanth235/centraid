@@ -15,9 +15,6 @@ import {
   watchTurnSteps,
 } from "./automationCompileData.js";
 
-// `automationCompileData.ts` imports the gateway-client barrel; stub it so
-// pulling the module in doesn't run gateway-client-core's load-time
-// `window.CentraidApi` side effect (same guard automationsData.test.ts uses).
 vi.mock(import("../../../gateway-client.js"), () => ({
   listAutomationTurns: vi.fn<typeof TypeImport_1gl5zx7.listAutomationTurns>(),
   readAutomationTurnExpanded:
@@ -76,7 +73,6 @@ describe(compileStepOf, () => {
       compileStepOf(item({ outputJson: '{"path":"handler.js","bytes":9182}' }))
         ?.detail
     ).toBe("handler.js");
-    // No readable field and no text ⇒ no detail, rather than a JSON blob.
     expect(
       compileStepOf(item({ outputJson: '{"bytes":9182}' }))?.detail
     ).toBeNull();
@@ -181,9 +177,6 @@ describe(loadTurnSteps, () => {
 
 describe(watchTurnSteps, () => {
   it("paints the ledger first, folds live events, then trusts the final read", async () => {
-    // A turn that is already underway when the rail attaches: the cold read
-    // seeds the list so the owner never sees an empty rail for a compile that
-    // has been running for minutes.
     vi.mocked(readAutomationTurnExpanded)
       .mockResolvedValueOnce({
         turn: turn(),
@@ -243,8 +236,6 @@ describe(watchTurnSteps, () => {
       () => undefined,
       controller.signal
     );
-    // An aborted watch must never be read as a settled turn — the rail would
-    // stop following a compile that is still running.
     expect(outcome).toStrictEqual({ settled: false, ok: false });
   });
 

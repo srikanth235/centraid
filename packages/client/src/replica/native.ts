@@ -1,12 +1,3 @@
-/*
- * Platform-neutral replica surface for non-DOM hosts (React Native).
- *
- * The main `./replica` barrel re-exports the browser engine — OPFS worker
- * client, IndexedDB outbox, `window`-driven change feed and shell session — so
- * importing it drags DOM globals into a React Native typecheck and bundle.
- * Every re-export below must have a DOM-free transitive graph. Native code
- * composes them over an op-sqlite driver and an `expo/fetch` change feed.
- */
 /* oxlint-disable oxc/no-barrel-file -- (#419) intentional @centraid/client/replica/native public subpath; governance: allow-no-unjustified-suppressions stable cross-platform API boundary */
 export * from "./coordinator.js";
 export * from "./digest.js";
@@ -20,8 +11,6 @@ export * from "./live-query-registry.js";
 export * from "./memory-intent-store.js";
 export * from "./payload-hash.js";
 export * from "./query.js";
-// The read grammar's compiler: public here because the native seat composes it
-// over its mounted vault databases (#883).
 export * from "./read-plan.js";
 export * from "./rebootstrap-copy.js";
 export * from "./search.js";

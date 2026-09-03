@@ -27,18 +27,10 @@ import {
 
 import styles from "./SettingsEnrichmentScreen.module.css";
 
-// Settings → Enrichment, THE CAPABILITY LIST (#807): one row per capability
-// over the ceilings, profiles, scoped rules and consent records. WHERE THE WORK
-// RUNS IS NOT A CHOICE — the only fact stated is EGRESS, computed from the
-// engine and never settable here. THE ENGINE hides behind a pill writing the
-// SAME gateway prefs Settings → Agents writes (one pin per harness+slot).
-
-/** Derived, never typed: slug-safe for `PROFILE_ID_PATTERN`. */
 function rowProfileId(capability: string, harness: string): string {
   return `${capability}-${harness}`;
 }
 
-/** Only a provider is worth a member's eye. */
 const PROVIDER_EGRESS_WORD = "at a provider";
 
 export interface CapabilityRowsProps {
@@ -47,7 +39,6 @@ export interface CapabilityRowsProps {
   rules: EnrichPolicyRule[];
   effective: Record<string, ResolvedEnrichPolicy | null>;
   cards: HarnessCardDTO[];
-  /** The Agents page's pins — shared, never copied. */
   modelByHarness: Record<string, string>;
   effortByHarness: Record<string, string>;
   setRule: (rule: EnrichRuleInput) => Promise<void>;
@@ -62,10 +53,6 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** THE CEILING IS NO LONGER A CONTROL BUT IS STILL A GATE: the runtime refuses
- *  under it (`automation/fire/enrich-gate.ts`), so without this note a stopped
- *  row says nothing. Measure the BUILT-IN's lane — a delegate's `provider`
- *  egress is gated by consent (#567). */
 function refusalNote(
   builtIn: EnrichEngineProfile,
   resolved: ResolvedEnrichPolicy
@@ -101,13 +88,11 @@ export default function CapabilityRows({
 }: CapabilityRowsProps): JSX.Element {
   const [openEngine, setOpenEngine] = useState<string | null>(null);
 
-  /** What the vault layer already decides. */
   const vaultRule = (capability: string): EnrichPolicyRule | undefined =>
     rules.find(
       (rule) => rule.scope.type === "vault" && rule.capability === capability
     );
 
-  /** The row renders the RESOLVER's answer, never an optimistic copy. */
   const write = (
     capability: string,
     patch: Partial<Pick<EnrichRuleInput, "enabled" | "profile">>
@@ -128,7 +113,6 @@ export default function CapabilityRows({
       );
   };
 
-  /** The derived id means re-picking an agent rewrites one key, never two. */
   const pickEngine = (capability: string, harness: string): void => {
     if (harness === "") {
       write(capability, { profile: null });
@@ -148,7 +132,6 @@ export default function CapabilityRows({
       );
   };
 
-  /** The Agents page's pin, written from here — same key, one answer. */
   const writeEnginePin = (
     what: string,
     result: Promise<string | null>
@@ -229,7 +212,6 @@ export default function CapabilityRows({
                   <span className={styles.capSwitchTrack} aria-hidden="true" />
                 </label>
               ) : (
-                // No words for it in this build: state it, never guess a switch.
                 <span className={styles.capLock}>no vocabulary</span>
               )}
             </div>

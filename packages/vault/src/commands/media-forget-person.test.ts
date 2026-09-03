@@ -1,13 +1,3 @@
-// `media.forget_person` (#724) — THE FACE-DELETE GATE that
-// SECURITY.md's "Derived data and sensitive enrichments" section made a
-// precondition for shipping face detection at all.
-//
-// The three obligations that section names get one describe block each:
-// the cascade itself, the recovery scenario (an export taken after the forget
-// must carry no trace), and the offline phone (a replica must be TOLD, which
-// means the deletions have to reach the change log every replica catches up
-// through).
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -88,7 +78,6 @@ describe("media.forget_person", () => {
     ).asset_id;
   }
 
-  /** One face region plus the whole derived tail a real sweep leaves behind. */
   function addFace(
     regionId: string,
     assetId: string,
@@ -139,10 +128,6 @@ describe("media.forget_person", () => {
     return regionId;
   }
 
-  /**
-   * Ana on two photographs — one region she confirmed, one still proposed —
-   * and Sam on a third, so every assertion can also say what was NOT touched.
-   */
   function seed(): Seeded {
     const ana = addParty("Ana");
     const sam = addParty("Sam");
@@ -158,7 +143,6 @@ describe("media.forget_person", () => {
     };
   }
 
-  /** Every row in the vault that still names `partyId` through a face. */
   function traces(
     vault: VaultDb["vault"],
     regionIds: readonly string[]
@@ -213,8 +197,6 @@ describe("media.forget_person", () => {
       stamps: 0,
       clusters: 0,
     });
-    // The postcondition's own predicate, restated as the member's question:
-    // does ANY face row still name Ana, through either column?
     const naming = db.vault
       .prepare(
         `SELECT count(*) AS n FROM media_face_region
@@ -222,7 +204,6 @@ describe("media.forget_person", () => {
       )
       .get(seeded.ana, seeded.ana) as { n: number };
     expect(Number(naming.n)).toBe(0);
-    // …and Sam is entirely untouched. Forgetting one person is not a purge.
     expect(traces(db.vault, [seeded.samRegion])).toStrictEqual({
       regions: 1,
       vectors: 1,
@@ -272,15 +253,11 @@ describe("media.forget_person", () => {
     expect(outcome.status).toBe("failed");
   });
 
-  // ── the recovery scenario (docs/recovery/backup-restore.md's checklist) ──
   test("an export taken after the forget carries no trace, so a restore cannot bring the faces back", () => {
     const seeded = seed();
     invoke("media.forget_person", { party_id: seeded.ana });
 
     const { artifact } = gw.exportVault(owner);
-    // The blunt version of the claim first: the artifact is JSON, and none of
-    // the forgotten region ids appear anywhere in it — not in a table, not in
-    // a stamp, not in a skipped-table error string.
     const serialized = JSON.stringify(artifact.tables);
     for (const regionId of seeded.anaRegions)
       expect(serialized).not.toContain(regionId);
@@ -293,7 +270,6 @@ describe("media.forget_person", () => {
       stamps: 0,
       clusters: 0,
     });
-    // The restore is otherwise whole — Sam came back with everything.
     expect(traces(restored.vault, [seeded.samRegion])).toStrictEqual({
       regions: 1,
       vectors: 1,
@@ -303,7 +279,6 @@ describe("media.forget_person", () => {
     restored.close();
   });
 
-  // ── the offline phone (SECURITY.md: "every replica holding copies") ──
   test("every forgotten row is announced to replicas as a delete, so an offline phone loses them on reconnect", () => {
     const seeded = seed();
     const since = currentReplicaLogState(db.vault).watermark;
@@ -318,10 +293,6 @@ describe("media.forget_person", () => {
         .map((change) => change.rowId)
         .sort();
 
-    // A replica catches up by applying this log, so "the phone forgets" is
-    // exactly "these rows are in the log as deletes" — for the boxes, the
-    // vectors, the stamps AND the grouping, since a replica that kept any one
-    // of the four would still be holding face data for a forgotten person.
     expect(deletedOf("media.face_region")).toStrictEqual(
       [...seeded.anaRegions].sort()
     );
@@ -330,8 +301,6 @@ describe("media.forget_person", () => {
     );
     expect(deletedOf("enrich.embedding")).toHaveLength(2);
     expect(deletedOf("enrich.derivation")).toHaveLength(2);
-    // Nothing of Sam's is announced — a replica is told about the forget, not
-    // handed a reason to refetch a person who was never involved.
     expect(deletes.map((change) => change.rowId)).not.toContain(
       seeded.samRegion
     );

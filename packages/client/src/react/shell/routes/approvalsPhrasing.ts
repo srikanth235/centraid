@@ -8,11 +8,6 @@ import type {
   ApprovalsScopeRequestRowDTO,
 } from "../../screens/ApprovalsScreen.js";
 
-/*
- * How Notifications SAYS things (#815) — pure, and out of the component.
- * Nothing here may reach back into the screen; hence the type-only import.
- */
-
 function isEditableKey(
   artifact: Record<string, unknown>,
   key: string
@@ -24,7 +19,6 @@ function isEditableKey(
   );
 }
 
-/** Facts the ACTOR computed: as text, a card could misdescribe its own write. */
 const COMPUTED_KEYS = new Set([
   "bytes",
   "checksum",
@@ -52,7 +46,6 @@ export function wantsTextarea(key: string, value: string): boolean {
   );
 }
 
-/** Words, not a chip — the one chromatic ink means "leaves the device". */
 export function callerPhrase(kind: string, caller: string): string {
   switch (kind) {
     case "app":
@@ -66,7 +59,6 @@ export function callerPhrase(kind: string, caller: string): string {
   }
 }
 
-/** Never guesses past the verb and connection kind. */
 export function outboundLabel(row: {
   verb: string;
   connectionKind: string;
@@ -112,14 +104,12 @@ function spanWords(ms: number): string {
   return `${m} minute${m === 1 ? "" : "s"}`;
 }
 
-/** A day-plus run of failures reads as "failing for 6 days" (#647). */
 export function noticeSpanPhrase(
   row: Pick<NoticeRowDTO, "count" | "firstAt" | "lastAt" | "severity">
 ): string | null {
   if (row.count <= 1) return null;
   const first = Date.parse(row.firstAt);
   const last = Date.parse(row.lastAt);
-  // Never invent a duration.
   if (Number.isNaN(first) || Number.isNaN(last) || last <= first) {
     return `×${row.count}`;
   }
@@ -192,7 +182,6 @@ export const WAITING_CHIPS = [
 
 export type WaitingFilter = (typeof WAITING_CHIPS)[number]["id"];
 
-/** One kind, one chip — two matches make "showing 3 of 12" a lie. */
 type WaitingKind = "staged" | "auth" | "risk";
 
 export function matchesFilter(
@@ -204,7 +193,6 @@ export function matchesFilter(
 
 export type RecordSection = "grants" | "ledger" | "egress" | "activity";
 
-/** One at a time: two open confirms ask two questions at once. */
 export interface Confirming {
   id: string;
   verb:
@@ -215,8 +203,6 @@ export interface Confirming {
     | "revoke-holder";
 }
 
-/** Open under a pointer, closed on touch. Resolved ONCE at mount:
- *  re-resolving would close a section a member had just opened. */
 export function pointerDefaultOpen(): boolean {
   if (typeof matchMedia !== "function") return true;
   return matchMedia("(pointer: fine)").matches;

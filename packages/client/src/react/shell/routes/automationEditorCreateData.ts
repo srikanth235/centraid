@@ -4,7 +4,6 @@ import type {
 } from "../../screen-contracts.js";
 import type { AutomationHarnessEditorData } from "./automationEditorHarnessData.js";
 
-/** Pure create-mode DTO builder for template/watch-entity prefills. */
 export function buildCreateAutomationEditorData(opts: {
   template?: {
     name: string;

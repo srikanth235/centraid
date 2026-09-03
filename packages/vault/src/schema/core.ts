@@ -1,27 +1,5 @@
-// Canonical core spine DDL — schema `core` from duaility-ontology.html §03.
-// SQLite has no namespaces, so logical `core.party` is physical `core_party`;
-// the gateway translates logical names (used in grants, receipts, links) to
-// physical ones. All tables STRICT; PKs are TEXT UUIDv7; money is fixed-scale
-// INTEGER minor units; timestamps are TEXT ISO-8601 UTC.
-//
-// References into the AUDIT BAND (e.g. link.provenance_id → access.provenance)
-// carry no REFERENCES clause — the gateway enforces them (§10 S4). The audit
-// band is append-only and outlives its subjects, so a pointer into it is a
-// VALUE, not a key (#916; see `audit.ts`).
-
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
-// THE SELF PARTY, AND WHERE AUTHORITY IS NOT (#916, ruling ONT-05).
-// `core_vault`'s party column is the vault's OWN party: the person as DATA,
-// the row every "who is this vault about" question resolves to. It confers
-// nothing. Authority is gateway-side (`vault_owners(vault_id, owner_id)`,
-// #726) and, for everything the member has answered about, in
-// `share_authority`. NO PARTY COLUMN ANYWHERE IN THIS FILE CONFERS
-// PERMISSION: `access_device.owner_party_id`,
-// `access_grant.granted_by_party_id`, `core_collection.
-// owner_party_id` and their kin are ATTRIBUTION — who this is about, who did
-// it — which is why only the one column that read as a permission claim was
-// renamed: `owner_party_id` -> `self_party_id`.
 export const CORE_DDL = `
 CREATE TABLE core_vault (
   vault_id        TEXT PRIMARY KEY,
@@ -399,14 +377,6 @@ ${touchUpdatedAt("core_tag", "tag_id")}
 ${touchUpdatedAt("core_collection", "collection_id")}
 `;
 
-// Standoff anchor for inline references (#282). An anchor is a LOCATOR
-// for an existing core.link judgment, not a second judgment (rule 10): it
-// points into the from-endpoint's plain body text with a W3C-style selector
-// {exact, prefix, suffix, start} so the read view can render the edge as an
-// inline chip. Bodies stay canonical deduped bytes — the anchor lives outside
-// them. One anchor per link (an inline mention IS one edge); no independent
-// lifecycle: resolution only considers live links, so anchors of ended links
-// are simply never resolved, and the dangling-link sweep needs no extension.
 export const LINK_ANCHOR_DDL = `
 CREATE TABLE core_link_anchor (
   anchor_id     TEXT PRIMARY KEY,
@@ -419,31 +389,6 @@ CREATE TABLE core_link_anchor (
 ${touchUpdatedAt("core_link_anchor", "anchor_id")}
 `;
 
-// Share-by-placement provenance (#599 decision 11). Sharing is
-// PLACEMENT, not filtering: an item is projected into the audience vault and
-// its bytes are hardlinked into that vault's CAS, so what another member sees
-// is only what was placed where they are. This sidecar is the AUDIENCE vault's
-// record of where a projected row came from.
-//
-// Deliberately NOT a `core_link` change: `core_link.from_id`/`to_id` are
-// vault-local with no vault dimension, and giving them one would bend
-// intra-vault semantics everywhere. Sharing is a vault-BOUNDARY concept and
-// gets its own record.
-//
-// `(target_type, target_id)` is the projected row in THIS vault, a real
-// composite foreign key into the entity supertype, so a purge of the projected
-// row takes the provenance with it by cascade. `origin_item_id` is the same
-// uuidv7 whenever the audience did not already hold the bytes — projected rows
-// reuse the origin id (ids are globally unique), and the two columns diverge
-// only when an idempotent re-share dedupes onto a row the audience already had
-// under a different id.
-//
-// `shared_at` is epoch ms (INTEGER), not the ontology's ISO-8601 TEXT: this is
-// gateway-plane boundary machinery on the same clock as `blob_orphan.
-// first_orphaned_at`, not owner-facing life data. One share record per
-// projected row — a re-share by a second member keeps the FIRST placement.
-// `shared_by` is an attribution (an owner id or `peer:<vaultId>`), never a
-// foreign-keyed principal.
 export const SHARE_ORIGIN_DDL = `
 CREATE TABLE core_share_origin (
   -- \`target_*\`, the one name a polymorphic pair has in this vault (#916).

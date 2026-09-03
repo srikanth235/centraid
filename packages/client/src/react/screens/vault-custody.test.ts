@@ -9,10 +9,6 @@ import {
   seenAge,
 } from "./vault-custody.js";
 
-// Custody arithmetic (v11). Every function here is a CLAIM about where a
-// member's data physically is, so each is tested for what it says and for what
-// it refuses to say when the payload cannot support it.
-
 const NOW = Date.parse("2026-08-17T12:00:00.000Z");
 
 function device(over: Partial<GroupedDevice> = {}): GroupedDevice {
@@ -52,8 +48,6 @@ describe("vault custody", () => {
 
     it("omits the record clause rather than guessing when the census cannot say", () => {
       const line = custodyLine({ devices: 1, replicas: 1 }, null);
-      // An old gateway that cannot report a census must not cost the page the
-      // two numbers it does know.
       expect(line).toBe("1 machine holds a full copy · 1 device enrolled");
       expect(line).not.toContain("records");
     });

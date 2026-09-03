@@ -1,8 +1,3 @@
-// @vitest-environment jsdom
-// Refresh discipline: the two wrappers that keep an app from re-reading the
-// vault on every doorbell and every alt-tab, plus the width observer. Each one
-// exists because the naive version is a performance bug, so the assertions are
-// mostly about the reads that must NOT happen.
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
@@ -35,7 +30,6 @@ function installFeed(): { emit: Listener; stopped: () => boolean } {
   };
 }
 
-/** Every suite here installs its own host; none may leak into the next. */
 function forgetHost(): void {
   delete (globalThis as { centraid?: CentraidHost }).centraid;
 }
@@ -81,7 +75,6 @@ describe(onDataChange, () => {
     feed.emit({ tables: [] });
     feed.emit({});
     vi.advanceTimersByTime(10);
-    // Both collapse onto the "latest" key — one re-derive, not two.
     expect(seen).toHaveLength(1);
     stop();
   });
@@ -163,8 +156,6 @@ describe(observeWidth, () => {
 
   it("polls on a visibility gate where ResizeObserver is unavailable", () => {
     useFakeClock();
-    // The absence of the global IS the condition under test, so it is removed
-    // through a widened view of `globalThis` rather than suppressed.
     const host = globalThis as { ResizeObserver?: typeof ResizeObserver };
     const realRO = host.ResizeObserver;
     delete host.ResizeObserver;
@@ -196,3 +187,4 @@ describe(observeWidth, () => {
     expect(() => stop()).not.toThrow();
   });
 });
+// @vitest-environment jsdom

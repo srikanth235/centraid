@@ -1,16 +1,3 @@
-/*
- * Sealed values across the portable export/import boundary (#630, closing
- * review-A 10.1 and review-B BUG-12).
- *
- * The old bundle shipped `custody/seal-key.bin` — the vault's DEK in the clear,
- * inside the same unencrypted zip as the ciphertext it opens — so every locker
- * secret was one `unzip` away, and an artifact-level import copied the SOURCE
- * vault's key fingerprint into the target, which then reported success and
- * refused to reopen. These pin the replacement end to end: ciphertext only, a
- * password-wrapped custody kit, re-sealing under the target's own key, and a
- * refusal that writes nothing.
- */
-
 import { rmSync } from "node:fs";
 import path from "node:path";
 
@@ -66,7 +53,6 @@ describe("portable export sealed custody", () => {
     root = tempDirSync("portable-sealed-");
     sourceDir = path.join(root, "source");
     targetDir = path.join(root, "target");
-    // autoClose:false — these tests close and REOPEN both vaults on purpose.
     ({ db: source, boot: sourceBoot } = bootstrappedVault(
       { openVaultDb, bootstrapVault },
       { dir: sourceDir, ownerName: "Priya", autoClose: false }
@@ -85,7 +71,7 @@ describe("portable export sealed custody", () => {
       try {
         db.close();
       } catch {
-        // already closed by a reopen inside the test
+        // Intentionally empty.
       }
     }
     rmSync(root, { recursive: true, force: true });
@@ -128,8 +114,6 @@ describe("portable export sealed custody", () => {
       passphrase: PASSPHRASE,
     });
 
-    // The stamp names the key this vault actually seals with — never the
-    // source's, which is the whole of BUG-12.
     expect(readSealKeyFingerprint(target.vault)).toBe(targetFingerprint);
     expect(readSealKeyFingerprint(target.vault)).not.toBe(sourceFingerprint);
 
@@ -153,9 +137,7 @@ describe("portable export sealed custody", () => {
     const exported = await sourceGateway.exportPortableVault(owner, {
       passphrase: PASSPHRASE,
     });
-    // The whole zip, bytes and all: the adapters, the manifest, the kit.
     expect(exported.bytes.indexOf(Buffer.from(SECRET, "utf8"))).toBe(-1);
-    // …and the seal key itself never appears in the clear either.
     expect(exported.bytes.indexOf(source.sealKey)).toBe(-1);
     const entries = readZipEntries(exported.bytes);
     expect(entries.some((entry) => entry.name === "custody/seal-key.bin")).toBe(
@@ -195,7 +177,6 @@ describe("portable export sealed custody", () => {
     expect(countOf(target, "core_party")).toBe(before.parties);
     expect(countOf(target, "locker_item")).toBe(before.items);
     expect(readSealKeyFingerprint(target.vault)).toBeNull();
-    // The target's own owner is still the owner — no half-applied restore.
     expect(
       (
         target.vault
@@ -247,7 +228,6 @@ describe("portable export sealed custody", () => {
       importVaultExport(target, artifact, { replaceBootstrap: true })
     ).toThrow(/sealed value/u);
     expect(countOf(target, "locker_item")).toBe(0);
-    // With the source key it lands, re-sealed, and the stamp is the target's.
     importVaultExport(target, artifact, {
       replaceBootstrap: true,
       sourceSealKey: source.sealKey,

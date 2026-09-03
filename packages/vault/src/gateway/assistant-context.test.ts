@@ -1,7 +1,3 @@
-// The assistant's schema map: live DDL + the ontology conventions.
-// Coverage is shape-level — the doc must carry the pieces the model needs
-// (conventions, relations vocabulary, FTS surfaces, DDL) off a live file.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
@@ -32,7 +28,6 @@ describe("assistant-context", () => {
       expect(doc).toContain("fts_knowledge_note");
       expect(doc).toContain("CREATE TABLE core_party");
       expect(doc).toContain("CREATE TABLE core_link");
-      // FTS shadow internals stay out — they are noise for query authoring.
       expect(doc).not.toContain("fts_core_party_idx");
     });
   });

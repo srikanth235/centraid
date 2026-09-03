@@ -1,6 +1,3 @@
-// The search stage: FTS5 shadow tables under read's consent posture, plus the
-// two clamps search adds (folded-in content consent, field masks).
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { seededRandom } from "@centraid/test-kit/random";
@@ -129,7 +126,6 @@ describe("search", () => {
          (content_id, media_type, content_uri, sha256, byte_size, title, created_at)
        VALUES (?, 'image/jpeg', ?, ?, 4, 'Same caption', ?)`
       );
-      // Reverse insertion order catches an implicit-order plan at LIMIT 1.
       insert.run(
         "photo-b",
         "data:image/jpeg;base64,Yg==",
@@ -155,7 +151,6 @@ describe("search", () => {
     });
 
     test("a People interaction annotation is searchable through the canonical command layer (issue #450)", () => {
-      // The interaction body must reach search.
       const { party_id } = execOut<{ party_id: string }>("people.add_person", {
         display_name: "Ravi",
         cadence_days: 30,
@@ -394,12 +389,8 @@ describe("search", () => {
     });
   });
 
-  // A two-column direct surface keeping disposed rows in the index is covered
-  // by `core.party` and `locker.item` above (#883).
-
   describe("pre-index vaults", () => {
     test("v1→v2 migration backfills existing rows into the index", () => {
-      // Simulates a vault whose base rows predate the shadow tables.
       createNote("Old note", "archaeology of budgets");
       db.vault.exec(`DELETE FROM fts_knowledge_note`);
       expect(

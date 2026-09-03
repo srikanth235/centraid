@@ -1,14 +1,3 @@
-// The #872 Locker surface, part one: the alias read-back, archive, custom
-// fields and sections, the nine template-backed item types, extra addresses,
-// and the passkey slot. Duplicate, history, counts, export and purge are in
-// `locker-export.test.ts`; both ride the same fixture (`locker-test-kit.ts`).
-//
-// The assertions that matter most are the SEAL-BOUNDARY ones. Every new table
-// that can hold a secret is checked twice: that the value is ciphertext in the
-// row (`isSealedValue`), and that it decrypts under THAT row's AAD — which is
-// what proves a copy or a history append re-sealed rather than moving a
-// ciphertext to a cell it no longer belongs to.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { resolveEntity } from "../schema/tables.js";
@@ -25,8 +14,6 @@ describe("locker #872 surface", () => {
 
   describe("the alias mapping is a registered table now (README-Locker §8)", () => {
     test("locker.item_alias resolves through the entity registry", () => {
-      // Unregistered, it was outside the canonical walk: no export, no replica
-      // trigger, and no read a UI could pre-fill the field from.
       expect(resolveEntity("locker.item_alias")).toMatchObject({
         schema: "locker",
         table: "item_alias",
@@ -57,7 +44,6 @@ describe("locker #872 surface", () => {
       const archived = fx.itemRow(itemId);
       expect(archived.archived_at).not.toBeNull();
       expect(archived.deleted_at).toBeNull();
-      // The whole distinction: nothing expires.
       expect(archived.purge_at).toBeNull();
       fx.out(fx.invoke("locker.unarchive_item", { item_id: itemId }));
       expect(fx.itemRow(itemId).archived_at).toBeNull();

@@ -1,14 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit one file per life domain (§08) — the knowledge commands share the note-over-content-item mechanism and its dedup invariants
-// Knowledge domain commands (§08): notes are references over canonical
-// content — a knowledge_note row points at a core_content_item body, it
-// never stores prose itself. Bodies follow the social.draft_message
-// mechanism exactly: sha256-deduped, inlined as data: URIs (rent the bytes,
-// own the reference). A notebook is a surface view over core_collection,
-// the one owner-curation mechanism (#274) — these commands keep their
-// contracts while storage unifies, so a collection may also hold photos and
-// documents. Notebooks stay one-per-note in v1: the entry table allows
-// many-to-many, but move_note keeps a single placement until a real
-// multi-notebook surface asks for more.
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -18,7 +8,6 @@ import { RELATIONS_SCHEME_URI_SQL } from "./links.js";
 import { releaseContentIfUnreferenced } from "./media.js";
 import { recordRevision } from "./revisions.js";
 
-/** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
   if (ctx.identity.partyId) return ctx.identity.partyId;
   const owner = ctx.db
@@ -34,16 +23,12 @@ const MEDIA_TYPE: Record<string, string> = {
   plain: "text/plain",
 };
 
-/** Dedupe-or-insert a text body as a canonical content item (P2). */
 export function contentItemFor(
   ctx: HandlerCtx,
   bodyText: string,
   format: string
 ): string {
   const mediaType = MEDIA_TYPE[format] ?? "text/plain";
-  // Text bodies stay inline forever (the FTS trigger reads content_uri
-  // in-transaction, no CAS redirect possible) — refuse rather than let an
-  // unbounded note body bloat vault.db (#367).
   assertTextBodyWithinBudget(bodyText, mediaType);
   const sha = sha256Hex(bodyText);
   const existing = ctx.db
@@ -94,8 +79,6 @@ const CREATE_NOTE: CommandDefinition = {
   },
   preconditions: [
     {
-      // Filing is optional; a named notebook must exist. Optional inputs
-      // bind as NULL, so an unfiled create passes trivially.
       name: "notebook_exists_if_given",
       sql: `SELECT CASE WHEN :notebook_id IS NULL THEN 1
                  ELSE (SELECT count(*) FROM core_collection WHERE collection_id = :notebook_id)
@@ -107,7 +90,6 @@ const CREATE_NOTE: CommandDefinition = {
   ],
   postconditions: [
     {
-      // The note exists, unpinned, and is placed iff a notebook was named.
       name: "note_created_and_placed",
       sql: `SELECT (
               (SELECT count(*) FROM knowledge_note WHERE note_id = :note_id AND pinned = 0)
@@ -159,7 +141,6 @@ function createNote(ctx: HandlerCtx): Record<string, unknown> {
   return { note_id: noteId, body_content_id: contentId };
 }
 
-/** File a note at the end of a collection (one ordered list, all types). */
 function placeNote(ctx: HandlerCtx, noteId: string, notebookId: string): void {
   const entryId = ctx.newId();
   ctx.db
@@ -183,8 +164,6 @@ const EDIT_NOTE: CommandDefinition = {
       title: { type: "string", minLength: 1 },
       body_text: { type: "string", minLength: 1 },
       format: { type: "string", enum: ["markdown", "html", "plain"] },
-      // Pinning folds into edit rather than a command of its own: it is a
-      // flag with no lifecycle, unlike task status.
       pinned: { type: "integer", minimum: 0, maximum: 1 },
     },
   },
@@ -198,7 +177,6 @@ const EDIT_NOTE: CommandDefinition = {
   },
   preconditions: [
     {
-      // A trashed note is frozen: restore first, then edit.
       name: "note_is_live",
       sql: "SELECT count(*) AS n FROM knowledge_note WHERE note_id = :note_id AND deleted_at IS NULL",
       column: "n",
@@ -208,8 +186,6 @@ const EDIT_NOTE: CommandDefinition = {
   ],
   postconditions: [
     {
-      // Each field either wasn't asked for, or now reads back exactly as
-      // sent. Optional inputs bind as NULL so untouched fields pass.
       name: "edits_applied",
       sql: `SELECT (
               (SELECT CASE WHEN :title IS NULL THEN 1
@@ -249,11 +225,6 @@ function editNote(ctx: HandlerCtx): Record<string, unknown> {
   const values: (string | number)[] = [ctx.now];
   let contentId: string | undefined;
   if (input.body_text !== undefined) {
-    // A body edit re-resolves the reference: new (or deduped) content item,
-    // decoded with the format the note will have after this edit. Heals the
-    // notes/docs divergence (#352): a genuine bump gets the same
-    // `revises` link core.edit_document records, so a note's edit history is
-    // walkable through core_link exactly like a document's.
     contentId = contentItemFor(
       ctx,
       input.body_text,
@@ -296,8 +267,6 @@ const MOVE_NOTE: CommandDefinition = {
     additionalProperties: false,
     properties: {
       note_id: { type: "string", minLength: 1 },
-      // Omitting notebook_id unfiles the note — moving out is as explicit
-      // an intent as moving in.
       notebook_id: { type: "string", minLength: 1 },
     },
   },
@@ -308,7 +277,6 @@ const MOVE_NOTE: CommandDefinition = {
   },
   preconditions: [
     {
-      // A trashed note is frozen: restore first, then move.
       name: "note_is_live",
       sql: "SELECT count(*) AS n FROM knowledge_note WHERE note_id = :note_id AND deleted_at IS NULL",
       column: "n",
@@ -327,7 +295,6 @@ const MOVE_NOTE: CommandDefinition = {
   ],
   postconditions: [
     {
-      // One placement in the target notebook, or none at all if unfiled.
       name: "note_singly_placed",
       sql: `SELECT CASE WHEN :notebook_id IS NULL
                  THEN NOT EXISTS(SELECT 1 FROM core_collection_entry
@@ -390,10 +357,6 @@ const CREATE_NOTEBOOK: CommandDefinition = {
       value: 1,
     },
     {
-      // Same collision rule rename_notebook already enforces: two notebooks
-      // with the same name are indistinguishable in every filing UI, so
-      // refuse at create too — otherwise the duplicate can only be untangled
-      // by renaming one away, and rename itself refuses the colliding name.
       name: "name_unused",
       sql: "SELECT count(*) AS n FROM core_collection WHERE name = :name",
       column: "n",
@@ -420,7 +383,6 @@ function createNotebook(ctx: HandlerCtx): Record<string, unknown> {
   const notebookId = ctx.newId();
   ctx.db
     .prepare(
-      // sort_order is sibling-scoped; IS (not =) so NULL parents group too.
       `INSERT INTO core_collection (collection_id, owner_party_id, name, cover_content_id, parent_collection_id, sort_order, created_at)
        VALUES (?, ?, ?, NULL, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM core_collection
                              WHERE parent_collection_id IS ?), ?)`
@@ -463,10 +425,6 @@ const RENAME_NOTEBOOK: CommandDefinition = {
       value: 1,
     },
     {
-      // The schema has no UNIQUE on name, but two notebooks with the same
-      // name are indistinguishable in every filing UI — refuse the collision
-      // here. Scoped to the same owner, and excluding the notebook itself so
-      // a rename to its current name is an idempotent no-op.
       name: "name_unused_by_owner",
       sql: `SELECT count(*) AS n FROM core_collection
              WHERE name = :name AND collection_id <> :notebook_id
@@ -527,9 +485,6 @@ const DELETE_NOTEBOOK: CommandDefinition = {
       value: 1,
     },
     {
-      // Hierarchy never dangles: children must be deleted (or re-parented
-      // by hand) first, mirroring how create_notebook refuses a missing
-      // parent on the way in.
       name: "notebook_has_no_children",
       sql: `SELECT count(*) AS n FROM core_collection
              WHERE parent_collection_id = :notebook_id`,
@@ -540,8 +495,6 @@ const DELETE_NOTEBOOK: CommandDefinition = {
   ],
   postconditions: [
     {
-      // The collection and every entry onto it are gone together; members
-      // survive as unfiled rows (entries are the only edge).
       name: "notebook_and_placements_removed",
       sql: `SELECT (
               (SELECT count(*) FROM core_collection WHERE collection_id = :notebook_id)
@@ -553,9 +506,6 @@ const DELETE_NOTEBOOK: CommandDefinition = {
     },
   ],
   idempotency: "idempotent",
-  // Unfile, don't destroy: the notebook is pure structure — deleting it
-  // orphans no content and every member note survives, so this sits at
-  // low alongside delete_note (which destroys strictly more).
   risk: "low",
   handler: deleteNotebook,
 };
@@ -583,12 +533,6 @@ function deleteNotebook(ctx: HandlerCtx): Record<string, unknown> {
   return { notebook_id: input.notebook_id, notes_unfiled: filed.n };
 }
 
-// Delete is TRASH (#308): Tier 1's consent story is
-// review-after-the-fact WITH undo, so the destructive verb must be
-// reversible from the review feed. The row soft-deletes with the same
-// 30-day grace window documents and assets carry; edges (placement,
-// annotations, attachments) stay for a faithful restore; the lifecycle
-// sweep performs the real deletion once the window lapses.
 const DELETE_NOTE: CommandDefinition = {
   name: "knowledge.delete_note",
   ownerSchema: "knowledge",
@@ -652,9 +596,6 @@ function deleteNote(ctx: HandlerCtx): Record<string, unknown> {
     )
     .run(ctx.now, until, ctx.now, input.note_id);
   ctx.wrote("knowledge.note", input.note_id);
-  // Bodies are sha256-deduped and canonical — another live note or message
-  // may still rent the same bytes, so only an unreferenced body soft-deletes
-  // (a trashed note is not a rental; restore un-trashes the body with it).
   const released = releaseContentIfUnreferenced(ctx, note.body_content_id);
   ctx.cite({
     claim: `note ${input.note_id} moved to trash (restore with knowledge.restore_note); purges after ${until.slice(0, 10)}; body ${released ? "soft-deleted" : "still rented elsewhere"}`,
@@ -668,8 +609,6 @@ function deleteNote(ctx: HandlerCtx): Record<string, unknown> {
   };
 }
 
-// The undo half (#308): a trashed note comes back whole — row,
-// placement, annotations, attachments (never removed) and its body bytes.
 const RESTORE_NOTE: CommandDefinition = {
   name: "knowledge.restore_note",
   ownerSchema: "knowledge",
@@ -687,7 +626,6 @@ const RESTORE_NOTE: CommandDefinition = {
   preconditions: [
     {
       name: "note_in_trash",
-      // RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5).
       sql: `SELECT count(*) AS n FROM knowledge_note
              WHERE note_id = :note_id AND deleted_at IS NOT NULL
                AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
@@ -723,7 +661,6 @@ function restoreNote(ctx: HandlerCtx): Record<string, unknown> {
     )
     .run(ctx.now, input.note_id);
   ctx.wrote("knowledge.note", input.note_id);
-  // If trashing released the body bytes, restoring rents them again.
   const body = ctx.db
     .prepare(
       "UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL WHERE content_id = ? AND deleted_at IS NOT NULL"
@@ -775,9 +712,6 @@ const RESTORE_NOTE_VERSION: CommandDefinition = {
       value: 0,
     },
     {
-      // Only a content item reached through this note's append-only
-      // NEW->OLD `revises` chain is restorable. UNION terminates cycles made
-      // by restore-of-a-restore while preserving history.
       name: "target_in_chain",
       sql: `WITH RECURSIVE chain(content_id) AS (
               SELECT body_content_id FROM knowledge_note WHERE note_id = :note_id

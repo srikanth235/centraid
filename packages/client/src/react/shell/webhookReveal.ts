@@ -5,16 +5,6 @@ import modalCss from "../styles/modal.module.css";
 import buttonCss from "../ui/Button.module.css";
 import styles from "./webhookReveal.module.css";
 
-// One-time webhook-secret reveal — a body-portal overlay (same imperative-DOM
-// shape as `confirm.ts` / `automationTemplatePreview.ts`) shown right after a
-// webhook secret is minted (template adopt / scaffold) or rotated
-// (regenerate). Only the SHA-256 hash is ever persisted server-side, so this
-// modal is the one and only in-app chance to read the plaintext secret —
-// replaces the old DevTools-only `console.info` reveal (kept as a dev
-// fallback by the caller). Pure presentation: copy-to-clipboard is the only
-// side effect: the caller is done once the mint/rotate call already
-// succeeded.
-
 export interface MintedWebhook {
   url: string;
   secret: string;
@@ -40,19 +30,11 @@ function copyButton(getValue: () => string, label: string): HTMLButtonElement {
           btn.innerHTML = iconSvg("Copy", 14);
         }, 1200);
       })
-      .catch(() => {
-        // Clipboard access can be denied (permissions/headless); the field
-        // itself is selectable text, so the user still has a fallback.
-      });
+      .catch(() => {});
   });
   return btn;
 }
 
-/**
- * Show a freshly-minted or rotated webhook secret exactly once. Resolves
- * when the user closes the modal (Done / X / Esc / backdrop click) — there
- * is nothing to confirm, so it always resolves, never rejects.
- */
 export function openWebhookReveal(
   webhook: MintedWebhook,
   opts: WebhookRevealOpts = {}

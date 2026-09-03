@@ -1,12 +1,9 @@
-// Minimal ZIP reader unit tests (#545).
-
 import { deflateRawSync } from "node:zlib";
 
 import { describe, expect, test } from "vitest";
 
 import { MAX_ZIP_ENTRY_BYTES, readZipEntries, writeZipEntries } from "./zip.js";
 
-/** Build a tiny non-zip64 archive with one stored and one deflated file. */
 function buildZip(): Buffer {
   const storedName = Buffer.from("hello.txt");
   const storedData = Buffer.from("hello world");
@@ -27,7 +24,6 @@ function buildZip(): Buffer {
     header.writeUInt32LE(method === 0 ? data.length : deflatedPlain.length, 22);
     header.writeUInt16LE(name.length, 26);
     header.writeUInt16LE(0, 28); // extra
-    // For method 8 the uncompressed size is the plain length; for store equal.
     if (method === 8) {
       header.writeUInt32LE(data.length, 18);
       header.writeUInt32LE(deflatedPlain.length, 22);

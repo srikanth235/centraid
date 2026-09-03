@@ -1,5 +1,3 @@
-// Twin of `apps/_shared/KitModal.tsx`: one `modal-kit.ts` law, one wrapper per
-// TypeScript program (`KIT_MODAL_OWNERS`).
 import { useEffect, useRef } from "react";
 import type { CSSProperties, JSX, ReactNode, RefObject } from "react";
 
@@ -40,7 +38,6 @@ export default function ShellModal({
   children,
 }: ShellModalProps): JSX.Element {
   const ref = useRef<HTMLDialogElement | null>(null);
-  // Through a ref: an inline arrow would reopen the dialog every render.
   const dismissRef = useRef(onDismiss);
   useEffect(() => {
     dismissRef.current = onDismiss;
@@ -63,7 +60,6 @@ export default function ShellModal({
         ref.current = node;
         if (dialogRef) dialogRef.current = node;
       }}
-      // `top` must NOT carry `open`, or it never reaches the platform layer.
       {...(layer === "inline" ? { open: true } : {})}
       {...(id === undefined ? {} : { id })}
       {...(className === undefined ? {} : { className })}

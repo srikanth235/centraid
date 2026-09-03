@@ -9,10 +9,6 @@ vi.mock(import("../../../gateway-client.js"), () => ({
   listVaults: async () => [],
 }));
 
-// Adding a vault must BE the onboarding ticket step, not a lookalike: the
-// modal must not open on a one-card "Existing gateway" chooser while
-// onboarding opens straight on the ticket field.
-
 let host: HTMLDivElement;
 let root: Root;
 

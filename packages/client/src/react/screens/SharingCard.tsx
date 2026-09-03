@@ -1,10 +1,3 @@
-// THE PEOPLE PANEL — who this household is linked to, and the ceremony that
-// adds one more.
-//
-// Reaching another person is ONE mechanism: an approved vault link. What a
-// link produces is what every share sheet offers as an audience, so this panel
-// has exactly two parts.
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
@@ -62,8 +55,6 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
   } = props;
   const [links, setLinks] = useState<GatewayLink[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  // A CHOICE, not a mirror: `ownVaultIds` arrives async, so seeded state keeps
-  // `""` while the select paints its first option and the propose posts empty.
   const [pickedVault, setPickedVault] = useState("");
   const [proposeTarget, setProposeTarget] = useState("");
   const [busyRow, setBusyRow] = useState<string | null>(null);

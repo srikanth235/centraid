@@ -6,17 +6,12 @@ import drawerGroupCss from "../styles/drawerGroup.module.css";
 import segCss from "../styles/seg.module.css";
 import styles from "./settings-controls.module.css";
 
-// Shared Settings control primitives. They emit the class names global
-// styles.css targets — renaming a class here silently unstyles every Settings
-// pane.
-
 export function DrawerGroup({
   label,
   meta,
   children,
 }: {
   label: string;
-  /** A count the head states about its own rows (`3 of 4 on`). */
   meta?: string;
   children: ReactNode;
 }): JSX.Element {
@@ -69,9 +64,6 @@ export function Segmented<T extends string>({
   selected: T;
   onSelect: (v: T) => void;
   ariaLabel?: string;
-  /** Display content per option. Defaults to the option value itself, which
-   *  the seg styles capitalize — supply this when the stored value is not the
-   *  words to show (`system` → `Match system`). */
   labels?: Partial<Record<T, ReactNode>>;
   className?: string;
 }): JSX.Element {

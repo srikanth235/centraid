@@ -70,9 +70,6 @@ const removeConnection = vi.fn<typeof GatewayClient.removeConnection>(() =>
   Promise.resolve({ connectionId: "c1" })
 );
 
-// `vi.mock` is hoisted above the imports by vitest, so the gateway stub lands
-// before settingsConnectionsData.js pulls gateway-client-core's load-time
-// side-effect (mirrors vaultModals.test.ts's approach).
 vi.mock(import("../../../gateway-client.js"), () => ({
   beginConnectionAuthorization: (a) => beginConnectionAuthorization(a),
   cloneTemplate: (a) => cloneTemplate(a),
@@ -156,7 +153,6 @@ describe("settingsConnectionsData", () => {
       ]);
       const rows = await loadConnectionsData();
       expect(rows).toHaveLength(2);
-      // Attention sort: needs-auth before healthy.
       expect(rows[0]).toMatchObject({
         authNote: "authorization pending — run Connect",
         connectionId: "c2",

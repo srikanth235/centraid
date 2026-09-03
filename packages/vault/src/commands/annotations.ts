@@ -1,5 +1,3 @@
-// Owner memos (#274); txn_split.memo stays a column, not an annotation.
-
 import type { HandlerCtx } from "../gateway/types.js";
 
 function actorPartyId(ctx: HandlerCtx): string {
@@ -27,7 +25,6 @@ export function annotate(
   ctx.wrote("knowledge.annotation", annotationId);
 }
 
-/** One memo per actor per entity: set replaces, empty clears; others untouched. */
 export function replaceMemo(
   ctx: HandlerCtx,
   targetType: string,

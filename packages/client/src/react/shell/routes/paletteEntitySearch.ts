@@ -2,16 +2,10 @@ export interface PaletteEntityHit {
   appId: string;
   appLabel: string;
   entity: string;
-  /** MONO row-kind register (Binding Layer row anatomy, #708 §A) — a
-   *  short lowercase noun for what the row IS: `doc`, `person`, `event`. Never
-   *  the app name (the group header already carries that). */
   kind: string;
   id: string;
   label: string;
   snippet: string;
-  /** NUMERIC register (date/size/count) when the entity records one worth
-   *  surfacing — tabular mono, distinct from `snippet`'s free text. Empty
-   *  string when the entity has nothing to show here. */
   meta: string;
 }
 
@@ -29,20 +23,9 @@ export interface EntityTarget {
   kind: string;
   id: string;
   labels: string[];
-  /** Free-text preview fields (UI-register `sub`), first non-empty wins. */
   snippetFields: string[];
-  /** NUMERIC-register fields (a date, a type) — first non-empty wins. */
   metaFields: string[];
-  /**
-   * Column to sort "recently opened/edited" by (the palette's empty-state
-   * Recents, #708 §A) and to order-filter live reads. Omitted when the
-   * entity's canonical schema carries no edit-time column at all —
-   * `schedule.task` (packages/vault/src/schema/domains-health-finance-schedule.ts)
-   * has only `due_at`/`completed_at`, no `created_at`/`updated_at`, so tasks
-   * are excluded from Recents rather than faked with a borrowed field.
-   */
   recentField?: string;
-  /** Soft-delete guard column, when the table has one. */
   deletedColumn?: string;
 }
 
@@ -67,8 +50,6 @@ export const PALETTE_ENTITY_TARGETS: readonly EntityTarget[] = [
     labels: ["title"],
     snippetFields: ["description"],
     metaFields: ["due_at"],
-    // No recentField: schedule_task has no created_at/updated_at column —
-    // a genuine schema gap, not an oversight (see EntityTarget doc above).
   },
   {
     appId: "people",
@@ -114,8 +95,6 @@ export const PALETTE_ENTITY_TARGETS: readonly EntityTarget[] = [
     labels: ["title"],
     snippetFields: ["_snippet"],
     metaFields: ["media_type"],
-    // core_content_item is create-once (no updated_at column); created_at is
-    // the only edit-time signal it has.
     recentField: "created_at",
     deletedColumn: "deleted_at",
   },
@@ -165,9 +144,6 @@ export function first(
   return "";
 }
 
-/** Render a raw meta field as the NUMERIC register: dates compact to
- *  "Aug 3" (UTC, fixed locale — deterministic across machines/tests); any
- *  other value (e.g. a media type) passes through as-is. */
 export function formatMetaValue(raw: string): string {
   if (!raw) return "";
   const parsed = Date.parse(raw);
@@ -203,9 +179,6 @@ export async function searchPaletteEntities(
 ): Promise<PaletteEntityHit[]> {
   const { term, targets } = requestOf(query);
   if (!term) return [];
-  // Load the replica owner only when a real search executes. Besides keeping
-  // the palette source independently testable, this avoids eagerly booting the
-  // renderer bridge just because the command palette module was imported.
   const { getReplicaShellSession } =
     await import("../../../replica/shell-session.js");
   const session = await getReplicaShellSession();

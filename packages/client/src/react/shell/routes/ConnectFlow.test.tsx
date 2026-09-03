@@ -103,8 +103,6 @@ describe("ConnectFlow scenarios", () => {
     });
   }
 
-  // Every radio in the flow is a native <input type="radio"> wrapped in the
-  // styled <label> that carries the visible text (#573).
   function radios(el: HTMLElement, name: string): HTMLInputElement[] {
     return [...el.querySelectorAll("label")]
       .filter((l) => l.textContent?.includes(name))
@@ -142,9 +140,6 @@ describe("ConnectFlow scenarios", () => {
       expect(el.textContent).not.toContain("Existing vault");
     });
 
-    // The offline copy is ON by default and Settings owns it now, so the
-    // pairing step must not ask — a checkbox here would be a second, older
-    // answer to the same question.
     it("the ticket step asks nothing about an offline copy", () => {
       const el = mount({
         context: "switcher",
@@ -156,8 +151,6 @@ describe("ConnectFlow scenarios", () => {
       expect(el.textContent).not.toContain("Keep an offline copy");
     });
 
-    // #603: a fresh gateway auto-founds TWO vaults, so onboarding no longer
-    // auto-commits a local connect — the pick is always an explicit act.
     it('onboarding + "This Mac" shows the picker rather than auto-committing', async () => {
       const el = mount({ context: "onboarding", onDone: onDoneMock() });
       click(radios(el, "This Mac")[0]);
@@ -304,7 +297,6 @@ describe("ConnectFlow scenarios", () => {
       await flush(3);
       expect(redeemGatewayPairing).toHaveBeenCalledWith({
         label: undefined,
-        // ON by default now — the pairing step no longer asks.
         rememberDevice: true,
         ticket: "a-ticket",
       });
@@ -316,8 +308,6 @@ describe("ConnectFlow scenarios", () => {
       });
     });
 
-    // Issue #603 D10: a ticket that decodes but names no vault must not land
-    // on an empty, actionless list with "Enter Centraid" still enabled.
     it("a ticket that grants no vault explains itself and blocks the CTA", async () => {
       testGatewayConnection.mockResolvedValue({
         ok: true,

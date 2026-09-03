@@ -1,6 +1,3 @@
-// The propose/reschedule/RSVP loop is exercised in gateway.test.ts; this
-// file covers the pack's own additions, starting with cancel_event.
-
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -75,8 +72,6 @@ describe("schedule", () => {
     const event = db.vault
       .prepare("SELECT start_tz, rrule FROM core_event WHERE event_id = ?")
       .get(eventId) as { start_tz: string; rrule: string };
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({ ...event }).toStrictEqual({
       start_tz: "Asia/Kolkata",
       rrule: "FREQ=WEEKLY;BYDAY=MO",
@@ -107,8 +102,6 @@ describe("schedule", () => {
   });
 
   test("propose_event accepts a legacy RRULE: prefix without false-param binding", () => {
-    // Regression: a LIKE 'RRULE:FREQ=%' literal made the condition binder
-    // extract :FREQ as a named param and fail every propose_event closed.
     const outcome = invoke("schedule.propose_event", {
       summary: "Legacy prefix standup",
       dtstart: "2026-07-06T09:00:00Z",

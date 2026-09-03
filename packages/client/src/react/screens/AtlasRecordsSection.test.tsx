@@ -7,9 +7,6 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 
 import AtlasRecordsSection from "./AtlasRecordsSection.js";
 
-// The records section self-fetches through the vault client (its props are the
-// kind, not its rows), so the client module is mocked wholesale and each helper
-// resolves from a per-test vi.fn. vitest hoists this above the import above.
 vi.mock(import("../../gateway-client.js"), () => ({
   browseColumns: (...a: Parameters<typeof browseColumnsMock>) =>
     browseColumnsMock(...a),
@@ -27,7 +24,6 @@ vi.mock(import("../../gateway-client.js"), () => ({
     browseDeleteRowMock(...a),
 }));
 
-/** The mocked module, so each stub carries the helper's real signature. */
 type GatewayClient = typeof import("../../gateway-client.js");
 
 const browseColumnsMock = vi.fn<GatewayClient["browseColumns"]>();
@@ -150,7 +146,6 @@ describe("screens/AtlasRecordsSection", () => {
     root = null;
     container?.remove();
     container = null;
-    // The row menu portals to <body>; a leftover would answer the next test.
     for (const stray of document.querySelectorAll('[role="menu"]'))
       stray.remove();
   });
@@ -199,7 +194,6 @@ describe("screens/AtlasRecordsSection", () => {
   const buttonSaying = (el: ParentNode, text: string) =>
     $$(el, "button").find((b) => b.textContent?.includes(text));
 
-  /** Open a record's overflow menu and pick an item by its words. */
   const pickFromRowMenu = async (
     el: HTMLElement,
     rowTitle: string,
@@ -234,7 +228,6 @@ describe("screens/AtlasRecordsSection", () => {
         "home_place_id",
         "secret",
       ]);
-      // The declarations a member cannot read off a value.
       expect($(el, 'th[data-col="party_id"]')?.textContent).toContain("pk");
       expect($(el, 'th[data-col="home_place_id"]')?.textContent).toContain(
         "fk"
@@ -266,8 +259,6 @@ describe("screens/AtlasRecordsSection", () => {
         orderBy: "display_name",
         table: "core.party",
       });
-      // The cursor is NOT carried across a re-sort: a keyset cursor only means
-      // anything inside the order it was minted in.
       expect(browseRowsMock.mock.calls.at(-1)?.[0].after).toBeUndefined();
     });
 
@@ -294,7 +285,6 @@ describe("screens/AtlasRecordsSection", () => {
 
       await click(buttonSaying(el, "Show more records"));
 
-      // Keyset, never OFFSET: the second read carried the prior cursor.
       expect(browseRowsMock.mock.calls.at(-1)?.[0].after).toBe("cursor-1");
       expect(el.textContent).toContain("Alice");
       expect(el.textContent).toContain("Bob");

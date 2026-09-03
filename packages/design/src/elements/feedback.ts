@@ -1,5 +1,3 @@
-// The one feedback channel, and the stand-ins for content.
-
 import { applyInOrder } from "./dom.js";
 import { haptic } from "./host.js";
 
@@ -25,23 +23,13 @@ export interface VaultOutcome {
 export interface StatusLineOptions {
   undoLabel?: string;
   onUndo?: () => void;
-  /** 0 is sticky; ignored while `progress` runs. */
   duration?: number;
-  /** Selects the haptic only: the dot stays neutral. */
   tone?: "affirm" | "change" | "destructive" | "none";
-  /** A determinate bar, never a spinner. */
   progress?: { done: number; total: number };
 }
 
-// ────────── Status line ──────────
-//
-// NO TOAST STACK (#707): ONE `.kit-status-line`, mounted once and updated in
-// place. It is the live region (#799) — replacing it breaks announcement.
-
 let statusLineHost: HTMLElement | null = null;
-// Module-level: a per-call timer lets an old call wipe a new one.
 let statusLineTimer = 0;
-// Read at CLICK time, never at render.
 let statusLineUndo: (() => void) | undefined;
 
 function ensureStatusLineHost(): HTMLElement {
@@ -103,7 +91,6 @@ function renderStatusLine(
   host.replaceChildren(...children);
 }
 
-/** See `StatusLineOptions`. */
 export function statusLine(
   text: string,
   {
@@ -128,7 +115,6 @@ export function statusLine(
     });
   };
   const label = undoLabel && onUndo ? undoLabel : "";
-  // Assigned BEFORE the render: the button must read its own handler.
   statusLineUndo =
     label && onUndo
       ? () => {
@@ -143,7 +129,6 @@ export function statusLine(
     total: progress ? progress.total : null,
   });
   clearTimeout(statusLineTimer);
-  // A determinate operation clears itself; sticky waits.
   if (!progress && duration > 0) {
     statusLineTimer = setTimeout(clear, duration) as unknown as number;
   }
@@ -165,7 +150,6 @@ export function outcomeMessage(
   if (outcome?.status === "failed") {
     const detail =
       outcome.predicate ?? outcome.reason ?? "a precondition failed";
-    // A `ConditionSpec.message` is punctuated; the fallback is not.
     return `The vault refused: ${detail}${/[.!?]$/u.test(detail) ? "" : "."}`;
   }
   if (outcome?.status === "denied") {
@@ -173,8 +157,6 @@ export function outcomeMessage(
   }
   return null;
 }
-
-// ────────── Loading / read errors ──────────
 
 export function showSkeleton(container: Element, rows = 3): void {
   container.replaceChildren(
@@ -186,7 +168,6 @@ export function showSkeleton(container: Element, rows = 3): void {
   );
 }
 
-/** A broken vault must not look like an empty one. */
 export function readFailed(bannerEl: HTMLElement | null | undefined): void {
   if (!bannerEl) return;
   bannerEl.textContent =
@@ -194,9 +175,6 @@ export function readFailed(bannerEl: HTMLElement | null | undefined): void {
   bannerEl.hidden = false;
 }
 
-// ────────── Confirm-to-act ──────────
-
-/** True when the click should proceed: first arms, second confirms. */
 export function armConfirm(
   btn: HTMLElement,
   {
@@ -222,8 +200,6 @@ export function armConfirm(
   );
   return false;
 }
-
-// ────────── Bulk runner ──────────
 
 export async function runBulk(
   ids: string[],

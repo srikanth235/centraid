@@ -45,11 +45,9 @@ describe("confirm", () => {
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
       await expect(p1).resolves.toBe(true);
 
-      // Document-level Enter must not auto-confirm danger (a11y contract).
       const p2 = openConfirm({ title: "T", message: "M", danger: true });
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
       expect(document.querySelector(".card")).not.toBeNull();
-      // Focused Confirm + native activation path used by e2e Enter.
       (document.querySelector(".danger") as HTMLButtonElement).click();
       await expect(p2).resolves.toBe(true);
 

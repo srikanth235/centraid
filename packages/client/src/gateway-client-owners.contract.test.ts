@@ -1,10 +1,3 @@
-// Client↔gateway seam laws for the owner surface (#726) — the module had no
-// test file (#656 Layer 1B). Two laws carry the design: a gateway with no
-// device plane (the desktop embed) has no roster and must read as EMPTY
-// rather than as a failure, and the roster a device caller sees is exactly
-// its own person — topology hiding, re-aimed. Shared harness in
-// gateway-client-seam-fixtures.ts.
-
 import { describe, expect, it } from "vitest";
 
 import {

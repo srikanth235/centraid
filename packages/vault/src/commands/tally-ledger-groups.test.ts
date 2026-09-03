@@ -1,9 +1,3 @@
-// The #872 additions that act on a GROUP, not one expense: leaving, archiving,
-// the simplification opt-in, and the prepared reminder that never fires. Entry
-// coverage is in `tally-ledger.test.ts`; both ride `tally-ledger-test-kit.ts`.
-// These exist because the ordinary commands refuse: `remove_group_member` will
-// not drop an on-ledger member, and archiving is not settlement.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { tallyLedgerFixture } from "./tally-ledger-test-kit.js";
@@ -52,7 +46,6 @@ describe("tally — #872 group commands", () => {
           ],
         })
       );
-      // remove_group_member refuses this exact case, which is why leave exists.
       expect(
         fx.invoke("tally.remove_group_member", {
           group_id: groupId,
@@ -72,7 +65,6 @@ describe("tally — #872 group commands", () => {
         )
         .all(groupId) as { id: string }[];
       expect(members.map((m) => m.id)).toStrictEqual([fx.me]);
-      // The rows are exactly where they were.
       const splits = fx.db.vault
         .prepare(
           "SELECT count(*) AS n FROM tally_expense_split WHERE party_id = ?"
@@ -120,7 +112,6 @@ describe("tally — #872 group commands", () => {
         .prepare("SELECT count(*) AS n FROM tally_expense WHERE group_id = ?")
         .get(groupId) as { n: number };
       expect(expenses.n).toBe(1);
-      // And it comes back whole.
       const restored = fx.out<{ archived_at: string | null }>(
         fx.invoke("tally.archive_group", { group_id: groupId, archived: false })
       );
@@ -156,10 +147,6 @@ describe("tally — #872 group commands", () => {
     });
 
     test("the command requires owner confirmation, so an app-issued nudge parks", () => {
-      // The registry is what the gateway routes on: `confirm: true` is what
-      // makes every non-owner caller — an app handler included — park instead
-      // of firing. Asserted on the registry rather than by minting an app
-      // credential, because the routing rule lives there.
       const capability = fx.db.vault
         .prepare(
           `SELECT cap.requires_confirmation AS n

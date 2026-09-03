@@ -76,9 +76,6 @@ describe("People and Tally organization contracts", () => {
       output: { duplicate_party_ids: [a] },
     });
 
-    // People surface maps source→merged / target→survivor onto the single
-    // ontology primitive. Channels re-point (or dedupe on collision); the
-    // merged party row is deleted — no soft-tombstone / undo fork.
     const merged = invoke("core.merge_party", {
       survivor_party_id: a,
       merged_party_id: b,
@@ -142,11 +139,6 @@ describe("People and Tally organization contracts", () => {
       rate_source: "manual",
       rate_date: "2026-01-15",
     }) as { output: { template_id: string; preview: string } };
-    // ` · `, not `, `: #834/#840 humanised the shared summariser
-    // (`packages/core/src/time/recurrence-summary.ts#ending`) onto the copy
-    // rulebook's separator and left this expectation behind. It stayed green on
-    // main only because nothing there made @centraid/vault an affected package;
-    // this branch touches vault, so the latent staleness surfaced here.
     expect(template.output.preview).toBe("Every month · 3 times");
 
     const input = {

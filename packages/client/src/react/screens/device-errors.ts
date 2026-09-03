@@ -1,5 +1,3 @@
-// Device-screen refusals in plain words (#726), decoded from thrown messages.
-
 const PAIR_ERRORS: readonly (readonly [string, string])[] = [
   [
     "owner_vaults_only",
@@ -31,11 +29,9 @@ export function pairErrorMessage(err: unknown): string {
   return raw;
 }
 
-// Last-device revoke 409s until caller echoes vault name via confirmLastDevice.
 const LAST_DEVICE_CODE = "last_device_confirmation_required";
 const LAST_DEVICE_VAULT = /for\s+\\?"(?<vault>[^"\\]+)\\?";\s+type/u;
 
-/** Vault losing its last live device, else `undefined`. */
 export function lastDeviceVault(err: unknown): string | undefined {
   const raw = err instanceof Error ? err.message : String(err);
   if (!raw.includes(LAST_DEVICE_CODE)) return undefined;

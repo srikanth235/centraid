@@ -217,7 +217,6 @@ describe("storage-metrics", () => {
       const m = deriveStorageMetrics(
         input({ usage: { backup: { bytesStored: 100, quotaBytes: 0 } } })
       );
-      // quota 0 is metered-but-degenerate; never divide by zero.
       expect(m.cost.fractionUsed).toBeNull();
     });
   });

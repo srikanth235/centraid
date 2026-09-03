@@ -1,12 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit the staging spine is one pipeline — source→candidates→band→review→publish share the disposition + provenance invariants (#290)
-// The staging spine (#290): source → candidates → band → review → publish.
-// Candidates land as sync_import_row rows with a computed disposition; publish
-// applies them in one transaction, with provenance and one batch receipt.
-//
-// Dispositions come from two layers: the external-id map, where an unchanged
-// content hash skips and a changed one stages an UPDATE for review (vault-wins
-// — upstream never applies silently); and a per-entity probe on domain-native
-// keys, which is how a pre-map vault adopts rows instead of duplicating them.
 
 import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
@@ -35,7 +27,6 @@ export function payloadAad(rowId: string, field: string): string {
 
 export interface StageCandidate {
   entityType: string;
-  /** `(connection, external_id)` is the sync key. */
   externalId: string;
   payload: Record<string, unknown>;
 }
@@ -45,7 +36,6 @@ export interface PublishedWrite {
   id: string;
 }
 
-/** `create`/`update` must report every row they touched, for provenance. */
 export interface Publisher {
   entityType: string;
   probe: (
@@ -93,7 +83,6 @@ export interface PublishResult {
   receiptId: string;
 }
 
-/** Sorted keys, so the hash is stable across key order. */
 export function payloadHash(payload: Record<string, unknown>): string {
   const canonical = JSON.stringify(
     Object.keys(payload)
@@ -103,7 +92,6 @@ export function payloadHash(payload: Record<string, unknown>): string {
   return createHash("sha256").update(canonical).digest("hex").slice(0, 32);
 }
 
-/** Find-or-create; file drops key on (kind, label). */
 export function ensureConnectionTx(
   vault: DatabaseSync,
   options: { kind: string; label: string; principal?: string }
@@ -137,8 +125,6 @@ export function ensureConnection(
   return ensureConnectionTx(db.vault, options);
 }
 
-/** Transaction-less staging core: callers own the transaction boundary.
- *  Nothing here touches a domain table — staging is reviewable state (#290). */
 export function stageBatchTx(
   vault: DatabaseSync,
   connectionId: string,
@@ -149,7 +135,6 @@ export function stageBatchTx(
 ): { batchId: string; counts: StageResult["staged"] } {
   const batchId = uuidv7();
   const counts = { create: 0, update: 0, skip: 0, "merge-candidate": 0 };
-  // Batch row first — import rows FK onto it.
   vault
     .prepare(
       `INSERT INTO sync_import_batch (batch_id, connection_id, status, created_at, resolved_at, summary_json)
@@ -167,7 +152,6 @@ export function stageBatchTx(
   );
   let seq = 0;
   for (const candidate of candidates) {
-    // Hash the PLAINTEXT: sealing is nonce-randomized, dedup is about content.
     const hash = payloadHash(candidate.payload);
     let disposition: "create" | "update" | "skip" | "merge-candidate" =
       "create";
@@ -213,8 +197,6 @@ export function stageBatchTx(
     }
     counts[disposition] += 1;
     const rowId = uuidv7();
-    // Secret payload fields seal BEFORE the row is written; staging without a
-    // key refuses outright, never plaintext-by-accident (#293).
     const secretFields = sealedPayloadFieldsOf(candidate.entityType);
     let payload = candidate.payload;
     if (secretFields.length > 0) {
@@ -232,7 +214,6 @@ export function stageBatchTx(
           sealedAny = true;
         }
       }
-      // This vault now holds secrets — stamp the fingerprint in-transaction (#298).
       if (sealedAny) stampSealKeyFingerprint(vault, sealKey);
     }
     insertRow.run(
@@ -306,8 +287,6 @@ export function stageCandidates(
   };
 }
 
-/** The caller decides the evidence shape. A row whose publisher throws is
- *  recorded failed and the REST of the batch still lands. */
 export interface AppliedBatch {
   connectionId: string;
   kind: string;
@@ -315,12 +294,9 @@ export interface AppliedBatch {
   updated: number;
   skipped: number;
   failed: { externalId: string; error: string }[];
-  /** Every vault row written — the caller stamps provenance for each. */
   provenanced: PublishedWrite[];
 }
 
-/** Drops only the sealed keys (#298); the rest stays for provenance. A
- *  published secret already reached its live home. */
 export function shredPublishedSecretPayloads(
   vault: DatabaseSync,
   batchId: string
@@ -409,7 +385,6 @@ export function applyBatchTx(
     `UPDATE sync_import_row SET published_entity_id = ?, note = ? WHERE row_id = ?`
   );
 
-  // Publish runs OUTSIDE the command pipeline, so the spine seals in place (#293).
   const sealPublishedRow = (entityType: string, entityId: string): void => {
     if (!sealKey) return;
     const cols = sealedColumnsOf(entityType);
@@ -435,7 +410,6 @@ export function applyBatchTx(
         );
       sealedAny = true;
     }
-    // Live sealed cells now exist (#298).
     if (sealedAny) stampSealKeyFingerprint(vault, sealKey);
   };
 
@@ -443,7 +417,6 @@ export function applyBatchTx(
     let payload = JSON.parse(row.payload_json) as Record<string, unknown>;
     const publisher = publishers.get(row.entity_type);
     try {
-      // Unseal just-in-time; a key-less publish fails per-row, never silently.
       const secretFields = sealedPayloadFieldsOf(row.entity_type);
       if (secretFields.length > 0) {
         if (!sealKey) {
@@ -511,8 +484,6 @@ export function applyBatchTx(
         );
         markRow.run(row.target_entity_id, "updated", row.row_id);
       } else {
-        // A plain skip advances the source map; a merge candidate deliberately
-        // does not, so the conflict stays visible on the next pull.
         skipped += 1;
         if (row.target_entity_id && row.disposition === "skip") {
           upsertMap.run(
@@ -554,7 +525,6 @@ export function applyBatchTx(
       }),
       batchId
     );
-  // A failed row's attachment resumes its TTL (#296).
   releaseBatchHold(vault, batchId);
   shredPublishedSecretPayloads(vault, batchId);
   vault
@@ -601,7 +571,6 @@ export function publishBatch(
     throw error;
   }
   const { created, updated, skipped, failed } = applied;
-  // The provenance activity names the SOURCE format, not the transport.
   const activity = `import.${applied.kind.replace(/^file\./u, "")}`;
   for (const write of applied.provenanced) {
     writeProvenance(
@@ -629,12 +598,11 @@ export function publishBatch(
       ...new Set(applied.provenanced.map((write) => write.type)),
     ]);
   } catch {
-    // Hint only; the change-feed cursor and cron poll remain authoritative.
+    // Intentionally empty.
   }
   return { batchId, created, updated, skipped, failed, receiptId };
 }
 
-/** Discard a draft batch — rows dropped, one receipt, nothing published. */
 export function discardBatch(
   db: VaultDb,
   owner: Identity,
@@ -658,7 +626,6 @@ export function discardBatch(
         `UPDATE sync_import_batch SET status = 'discarded', resolved_at = ? WHERE batch_id = ?`
       )
       .run(nowIso(), batchId);
-    // Nothing claimed the staged bytes, so the TTL sweep reclaims them (#296).
     releaseBatchHold(db.vault, batchId);
     endReplicaCommit(db.vault, replicaCommit);
     db.vault.exec("COMMIT");

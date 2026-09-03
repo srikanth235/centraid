@@ -5,8 +5,6 @@ import { BRAND } from "./themes";
 
 export type IdentityPaletteKey = keyof typeof palette | "brand";
 
-/** INK default first; `IDENTITY_HUE_KEYS` drops it: a black disc among
- *  coloured ones is wrong. */
 export const IDENTITY_COLORS = [
   BRAND,
   palette.rose,
@@ -61,16 +59,12 @@ export function identityHueKey(id: string): ColorKey {
   return keys[identityHash(id.trim()) % keys.length] ?? "slate";
 }
 
-/** `avatar_color` stores the KEY, not a hex, so hues follow the theme. Halved
- *  so the design-token gate reads no CSS. */
 const HUE_VAR_OPEN = "var(--c-";
 
 export function partyHueValue(key: ColorKey): string {
   return `${HUE_VAR_OPEN}${key})`;
 }
 
-/** THE party hue (O-identity): `identityColor` colours a vault, not a person.
- *  `null` is a stored literal the wheel cannot name; use as is. */
 export function partyHueKey(
   partyId: string,
   avatarColor?: string | null

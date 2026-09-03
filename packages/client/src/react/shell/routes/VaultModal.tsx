@@ -11,11 +11,6 @@ import { iconSvg } from "../iconSvg.js";
 import controlsCss from "../../styles/controls.module.css";
 import styles from "./VaultModal.module.css";
 
-// The Vaults add/rename modal. A vault IS a vault (#280); this is a name +
-// icon + color + blurb form with a live switcher preview. Renders the global
-// `.cd-prof-*` chrome styles.css targets. Gateway I/O + the delete flow live
-// in the caller (SettingsRoute); this is pure presentation.
-
 export const PROFILE_COLORS: readonly string[] = IDENTITY_COLORS;
 export const PROFILE_ICONS: readonly IconName[] = [
   "Home",
@@ -55,7 +50,6 @@ export interface VaultModalProps {
   initial: VaultModalInitial;
   onCancel: () => void;
   onCommit: (data: VaultModalCommit) => void;
-  /** Shown as a "Delete" chip in the footer for non-primordial edit. */
   onDelete?: () => void;
 }
 

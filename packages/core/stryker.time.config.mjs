@@ -1,4 +1,3 @@
-/** Package-local Stryker options (types from root @stryker-mutator/core). */
 export default {
   packageManager: "npm",
   testRunner: "vitest",

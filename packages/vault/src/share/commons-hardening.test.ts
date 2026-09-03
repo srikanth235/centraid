@@ -1,7 +1,3 @@
-// Regression cover for the #731 commons hardening pass (PR #735): fork guard,
-// version-skew parking, no-backward-regression, the undeclared-command hole,
-// nonce-collision refusal, the default size ceiling, and the compaction stall.
-
 import { afterEach, describe, expect, test } from "vitest";
 
 import { registerTallyCommands } from "../commands/tally.js";
@@ -48,9 +44,6 @@ function addParty(
   return partyId;
 }
 
-/** The one write rail, driven at the steward. Every case below refuses
- * structurally or replays a stored decision, so nothing is ever invoked and
- * no member vault has to be reconciled into. */
 function stewardWrite(fixture: {
   origin: ReturnType<typeof household>["origin"];
   originBoot: ReturnType<typeof household>["originBoot"];
@@ -107,7 +100,6 @@ describe("commons hardening", () => {
       ],
       now,
     });
-    // Hand stewardship to Bob. Priya's vault is now an ordinary member seat.
     const successor = transferCommonsSteward({
       steward: origin.vault,
       grantId: grant.grantId,
@@ -149,7 +141,6 @@ describe("commons hardening", () => {
       accepted: false,
       reason: "this vault is not the current steward for the commons",
     });
-    // The abandoned log never grew: no op was appended past the transfer.
     expect(
       origin.vault
         .prepare(
@@ -176,8 +167,6 @@ describe("commons hardening", () => {
       ],
       now,
     });
-    // media.asset has no actable-registry entry, so the resolver must
-    // still route the command to the commons rail.
     expect(
       commonsGrantForCommand(origin.vault, "media.update_asset", {
         asset_id: photo.assetId,
@@ -230,8 +219,6 @@ describe("commons hardening", () => {
       .get(bob, "vault-family") as { key: string };
     expect(pinned.key).toBeTruthy();
     const write = stewardWrite({ origin, originBoot, grantId: grant.grantId });
-    // The member vault lost its seed and was re-created: it links, it signs,
-    // and its key is simply not the one this commons pinned.
     const decision = write({
       actorPartyId: bob,
       command: "media.update_asset",
@@ -247,8 +234,6 @@ describe("commons hardening", () => {
     expect(decision.accepted).toBe(false);
     expect(decision.reason).toContain(COMMONS_MEMBER_IDENTITY_CHANGED);
     expect(decision.reason).not.toContain("invalid vault signature");
-    // The named fault is durable on the refusal receipt, so logs and the
-    // observability read-back name the condition instead of the symptom.
     const receipt = origin.vault
       .prepare(
         `SELECT reason FROM share_commons_op
@@ -256,8 +241,6 @@ describe("commons hardening", () => {
       )
       .get(grant.grantId) as { reason: string };
     expect(receipt.reason).toContain(COMMONS_MEMBER_IDENTITY_CHANGED);
-    // The named fault is a REAL distinction: with no presented key the same
-    // seat falls through to the ordinary structural refusal instead.
     const unnamed = write({
       actorPartyId: bob,
       command: "media.update_asset",
@@ -299,7 +282,6 @@ describe("commons hardening", () => {
       memberSignature: signature,
       now,
     });
-    // The exact same command + input replays idempotently (the stored outcome).
     const replay = write({
       actorPartyId: originBoot.ownerPartyId,
       command: "media.first",
@@ -308,7 +290,6 @@ describe("commons hardening", () => {
       now,
     });
     expect(replay).toStrictEqual(first);
-    // A DIFFERENT command under the same nonce is a collision, not a retry.
     const collision = write({
       actorPartyId: originBoot.ownerPartyId,
       command: "media.second",
@@ -338,8 +319,6 @@ describe("commons hardening", () => {
     expect(grant.maxSizeBytes).toBeUndefined();
     expect(COMMONS_DEFAULT_MAX_SIZE_BYTES).toBeGreaterThan(0);
     expect(Number.isFinite(COMMONS_DEFAULT_MAX_SIZE_BYTES)).toBe(true);
-    // A small closure stays under the default; the ceiling is applied, not
-    // skipped, so an unbounded grow is no longer possible.
     const size = assertCommonsWithinMax(
       origin.vault,
       "vault-priya",
@@ -407,7 +386,6 @@ describe("commons hardening", () => {
         now,
       })
     ).toThrow(/unsupported share closure format/u);
-    // The prior projection survives the skew — no empty-and-re-fail loop.
     expect(
       audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 1 });
@@ -449,7 +427,6 @@ describe("commons hardening", () => {
       seats,
       now,
     });
-    // The seat has already advanced well past this frame's head.
     acknowledgeCommonsSeatCursor({
       steward: audience.vault,
       grantId: grant.grantId,
@@ -466,7 +443,6 @@ describe("commons hardening", () => {
     });
     expect(wire.currentSequence).toBeLessThan(999);
     applyCommonsBootstrap({ seat: audience, wire, now });
-    // Neither the projection nor the cursor moved backward.
     expect(
       audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
     ).toMatchObject({ n: 1 });
@@ -487,8 +463,6 @@ describe("commons hardening", () => {
     const grant = createCommonsGrant({
       origin: origin.vault,
       ownerPartyId: originBoot.ownerPartyId,
-      // Bob is a current member with a vault binding but has never bootstrapped,
-      // so he owns no cursor row at all.
       containerType: "media.asset",
       containerId: photo.assetId,
       members: [
@@ -507,8 +481,6 @@ describe("commons hardening", () => {
         outcome: "executed",
         now,
       });
-    // Advance the log, then move the checkpoint up to that point, then keep
-    // appending so the verbose tail clears the compaction trigger.
     let checkpoint = 0;
     for (let i = 0; i < 5; i += 1) checkpoint = append();
     origin.vault
@@ -527,8 +499,6 @@ describe("commons hardening", () => {
     ).toMatchObject({ n: 0 });
     const pruned = compactCommonsOperations(origin.vault, grant.grantId);
     expect(pruned).toBeGreaterThan(0);
-    // The pruned convenience ops are covered by the checkpoint; a too-far-behind
-    // member re-bootstraps rather than pinning the tail.
     expect(
       origin.vault
         .prepare(

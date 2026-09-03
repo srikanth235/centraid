@@ -18,12 +18,6 @@ import DevicePairPanel from "./DevicePairPanel.js";
 
 import styles from "./HouseholdScreen.module.css";
 
-// Devices roster (#392, #726; v9 #765). People-first: a device is always
-// somebody's. "Revoke device" is the only removal verb — removing the PERSON
-// is host-custody (`owners-routes.ts`), never a device-token client. "Add
-// someone" (#726) mints a NEW person then the SAME `DevicePairPanel` as "Pair
-// a device". Data lives in `useDeviceRoster`.
-
 const POLL_MS = 15_000;
 
 export interface DeviceRosterWiring {
@@ -52,8 +46,6 @@ export interface DeviceRoster {
   others: OwnerGroup[];
   deviceCount: number;
   personCount: number;
-  /** `hasWork` is false on a host with no work plane at all, which is not
-   *  the same as a plane with nothing in it. */
   hasWork: boolean;
   queued: number;
   leased: number;
@@ -96,21 +88,17 @@ export function useDeviceRoster(wiring: DeviceRosterWiring): DeviceRoster {
       .then((list) => {
         if (mountedRef.current) setOwners(list);
       })
-      // A roster the gateway won't serve is not fatal: the page degrades to
-      // device-derived groups.
       .catch(() => undefined);
     void loadWorkStatus?.()
       .then((depth) => {
         if (mountedRef.current) setWorkDepth(depth);
       })
-      // Poll failures are transient; keep the last good work figure.
       .catch(() => undefined);
   }, [loadDevices, loadOwners, loadWorkStatus]);
 
   useEffect(() => {
     mountedRef.current = true;
     refresh();
-    // Suspended while the tab is hidden, caught up on return (#659).
     const stop = startVisibilityTicker(refresh, POLL_MS);
     return () => {
       mountedRef.current = false;
@@ -123,9 +111,6 @@ export function useDeviceRoster(wiring: DeviceRosterWiring): DeviceRoster {
       device: GroupedDevice,
       confirmLastDevice?: string
     ): Promise<void> => {
-      // Hardware revoke: every enrollment it holds goes. Chained, not
-      // `Promise.all`: the gateway refuses the enrollment that would strand the
-      // owner's last device for a vault, and that refusal must surface first.
       await device.enrollmentIds.reduce(
         (chain, enrollmentId) =>
           chain.then(async () => {
@@ -186,8 +171,6 @@ export function useDeviceRoster(wiring: DeviceRosterWiring): DeviceRoster {
     [devices, owners]
   );
 
-  // `isSelf` is set by the requesting device; an admin caller sees no such row,
-  // so the first group (already sorted self-first) stands in.
   const self = groups.find((group) => group.isSelf) ?? groups[0];
   const others = groups.filter((group) => group !== self);
   return {
@@ -212,8 +195,6 @@ export function useDeviceRoster(wiring: DeviceRosterWiring): DeviceRoster {
 export interface DevicesCardProps {
   roster: DeviceRoster;
   now: number;
-  /** What revoking a device can promise, in the VAULT'S words (#883). Absent
-   *  when the wire did not say — never written by this surface. */
   boundaryPromise?: string;
   onCreateTicket?: (
     input?: GatewayDeviceTicketInput

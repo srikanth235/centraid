@@ -60,7 +60,6 @@ describe("ui/RowsBlock", () => {
         ]}
       />
     );
-    // The tone is a data hook on the ROW; the title rule never reads it.
     expect((el.querySelector(".row") as HTMLElement).dataset.net).toBe("true");
     expect(
       (el.querySelector(".title") as HTMLElement).dataset.net
@@ -151,8 +150,6 @@ describe("ui/RowsBlock", () => {
     );
     const row = el.querySelector(".row") as HTMLElement;
     expect(row.dataset.struck).toBe("true");
-    // The record survives the revoke: the row is still in the list, with its
-    // sub still saying who held what.
     expect(el.querySelector(".title")?.textContent).toBe("Photos · full store");
     expect(el.querySelector(".sub")?.textContent).toBe("read · since June");
   });

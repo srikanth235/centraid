@@ -62,7 +62,6 @@ class TokenBucket {
   }
 }
 
-/** Shared signed request, retry, pacing, and multipart pipeline for every S3 surface. */
 export class S3RequestPipeline {
   private readonly base: URL;
   private readonly throttle: TokenBucket | undefined;

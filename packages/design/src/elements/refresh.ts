@@ -1,6 +1,3 @@
-// Refresh discipline: skip doorbells for tables this app does not read, and
-// skip focus refreshes inside the min interval (alt-tab thrash).
-
 import type { CentraidChangeDetail } from "./host.js";
 import { host } from "./host.js";
 
@@ -20,7 +17,6 @@ export function debounce<Args extends unknown[]>(
   };
 }
 
-// Replica subscribe emits the current value; callers also await it — skip that first.
 export function subscribeReadUpdates<T = unknown>(
   read: unknown,
   onUpdate: (value: T) => void
@@ -64,7 +60,6 @@ export function onDataChange(
   let timer = 0;
   const pending = new Map<string, CentraidChangeDetail>();
   const unsub = host()?.onChange?.((detail) => {
-    // Empty `tables` means "this app acted" (#286) — always fire.
     const named = detail && Array.isArray(detail.tables) ? detail.tables : null;
     if (named && named.length && want.size && !named.some((t) => want.has(t)))
       return;
@@ -94,7 +89,6 @@ export function onFocusRefresh(
   let last = 0;
   const onFocus = (): void => {
     const banner = document.querySelector("#consentBanner");
-    // Bypass the interval while a consent banner is up — focus is recovery.
     const recovering = banner && !(banner as HTMLElement).hidden;
     const now = Date.now();
     if (!recovering && now - last < minIntervalMs) return;
@@ -120,7 +114,6 @@ export function observeWidth(
   if (typeof ResizeObserver === "function" && target) {
     const ro = new ResizeObserver(measure);
     ro.observe(target);
-    // The forced-narrow knob flips an attribute, not a size — catch it too.
     window.addEventListener("resize", measure);
     return () => {
       ro.disconnect();

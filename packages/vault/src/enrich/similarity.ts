@@ -1,7 +1,3 @@
-// Similarity primitives (#299): mismatched widths and NULLs are "not
-// comparable", never errors. Ranking is SQL-side and BOUNDED (#883) — a JS
-// path that materialises the library is the defect.
-
 import type { DatabaseSync } from "node:sqlite";
 
 const POPCOUNT_NIBBLE = [
@@ -53,7 +49,6 @@ export function cosine(query: Float32Array, stored: Float32Array): number {
   return dot / (Math.sqrt(nq) * Math.sqrt(ns));
 }
 
-/** A view, not a copy; unaligned buffers cost one. */
 function float32Of(view: ArrayBufferView): Float32Array {
   if (view.byteOffset % Float32Array.BYTES_PER_ELEMENT === 0) {
     return new Float32Array(
@@ -86,12 +81,9 @@ export interface SemanticHit {
 
 export interface ScanEmbeddingsOptions {
   entityTypes?: readonly string[];
-  /** REQUIRED: no default, so omission cannot request the library. */
   limit: number;
 }
 
-/** CALLERS OWN CONSENT: filter hits to readable rows first. An ANN index is
- * earned by tests/scale/photo-similarity.scale.test.ts. */
 export function scanEmbeddings(
   vault: DatabaseSync,
   model: string,
@@ -122,31 +114,11 @@ export function scanEmbeddings(
 export interface RankEmbeddingsOptions {
   model: string;
   vector: readonly number[];
-  /** Restrict to these logical entity types; omitted means every type. */
   entityTypes?: readonly string[];
-  /** REQUIRED: no default, so omission cannot request the library. */
   limit: number;
-  /**
-   * Best-scoring embeddings carried past the caller's own liveness filter. A
-   * stated bound, not an assumption that trash is rare.
-   */
   candidates?: number;
 }
 
-/**
- * The `sqlite-vec` ranker, SQL-side and BOUNDED — the same shape
- * `scanEmbeddings` answers, so the two engines give ONE answer (#883 C2).
- *
- * It lives here rather than in the server because raw SQL over a vault table
- * belongs to the vault: `lint:vault-sql` is the rule, and the ranking clause
- * has to move with the column it reads. `vec_distance_cosine` is a distance,
- * so the score it returns is `1 - distance` — the same number
- * `scanEmbeddings` produces with `vault_cosine`.
- *
- * `dim = ?` is load-bearing: `vec_distance_cosine` RAISES on a mismatched
- * width, turning a search into an error, where the scan ranker scores it 0.
- * The caller is responsible for having the extension loaded.
- */
 export function rankEmbeddingsWithVec(
   vault: DatabaseSync,
   options: RankEmbeddingsOptions

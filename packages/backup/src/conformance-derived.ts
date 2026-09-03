@@ -1,15 +1,3 @@
-/*
- * Layer 2 — `derived` store conformance cases (PROTOCOL.md § derived store
- * semantics). Held outside `conformance.ts` to keep that file under the
- * repo-hygiene 500-line cap; spread back in there next to the observability
- * cases. Same framework-agnostic discipline (`node:assert/strict`).
- *
- * The `derived` store is Layer-2 workload semantics in the exact mold of
- * `cas`: a grant plus plain S3 operations against an isolated prefix, no new
- * control-plane routes. These cases run offline against ANY provider through
- * `openDataPlane`, and skip cleanly when the `derived` capability is absent.
- */
-
 import assert from "node:assert/strict";
 
 import type { ConformanceCase, ConformanceHarness } from "./conformance.js";
@@ -28,7 +16,6 @@ async function withHarness(
   }
 }
 
-/** Capability-gated `derived` store grading cases. */
 export function providerDerivedConformanceCases(
   makeProvider: () => Promise<ConformanceHarness>
 ): ConformanceCase[] {
@@ -47,8 +34,6 @@ export function providerDerivedConformanceCases(
             "derived",
             "read-write"
           );
-          // Display derivative key layout is the client's own; the provider
-          // round-trips opaque bytes (thumb/preview/poster and future rungs).
           const key = `thumb/${"ab".repeat(32)}`;
           const payload = TEXT.encode("opaque sealed derivative bytes");
           await rw.put(key, payload);
@@ -83,8 +68,6 @@ export function providerDerivedConformanceCases(
             "derived",
             "read-write"
           );
-          // Write the SAME key to every granted store, then assert isolation:
-          // no store can observe another's object under that shared key.
           await derivedStore.put("probe", TEXT.encode("derived-side"));
           const backupStore = await provider.openDataPlane(
             targetId,

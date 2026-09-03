@@ -1,13 +1,3 @@
-// Issue #872: the two door sets the inline host grew — the steward's per-intent
-// decide, and the staged-import bridge.
-//
-// Both are OPTIONAL doors (C1): an older host parses this client shape
-// unchanged and a surface feature-detects with `typeof client.door ===
-// "function"`. What is asserted here is the transport contract each door
-// promises the Tally and Locker surfaces: which path it posts, what body it
-// carries, and — for imports — that the payload never once reaches the replica
-// session, because an import body is the file itself.
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { InlineAppModule } from "@centraid/blueprints/apps/inline-types";
@@ -86,7 +76,6 @@ function fakeSession(): Session & { writes: unknown[] } {
 
 const noQueries: InlineAppModule["queries"] = {};
 
-/** One mounted, named scope — the shape both door sets are addressed under. */
 function mount(scopeId: string): {
   client: InlineCentraidClient;
   session: Session & { writes: unknown[] };
@@ -140,9 +129,6 @@ describe("decideCommonsIntent — the steward's per-intent answer", () => {
       reason: "not a group expense",
     });
 
-    // The request IS the outcome of a transport door, so it is pinned whole:
-    // one call, and every argument of it — a door that posted twice, dropped
-    // the bearer header or added a field would all read as this one assertion.
     expect(doFetch.mock.calls).toStrictEqual([
       [
         "https://gw.test",
@@ -161,7 +147,6 @@ describe("decideCommonsIntent — the steward's per-intent answer", () => {
         },
       ],
     ]);
-    // The route's answer rides through unchanged — no coercion in the door.
     expect(answer).toMatchObject({ decided: true, status: "denied" });
   });
 
@@ -185,7 +170,6 @@ describe("decideCommonsIntent — the steward's per-intent answer", () => {
             Authorization: "Bearer tok",
             "Content-Type": "application/json",
           },
-          // Two keys and no third: `reason` is ABSENT, not sent empty.
           body: JSON.stringify({
             actorVaultId: "steward-vault",
             decision: "approve",
@@ -304,14 +288,10 @@ describe("the staged-import bridge", () => {
       receiptId: "rcpt-9",
     });
 
-    // One call each, carrying the batch and nothing else — a door that
-    // re-listed, dropped the id or smuggled a second argument all fail here.
     expect(imports.vaultImportsList.mock.calls).toStrictEqual([[]]);
     expect(imports.vaultImportRows.mock.calls).toStrictEqual([["batch-1"]]);
     expect(imports.vaultImportPublish.mock.calls).toStrictEqual([["batch-1"]]);
     expect(imports.vaultImportDiscard.mock.calls).toStrictEqual([["batch-1"]]);
-    // Reads never post through the shell's own fetch — they ride the owner
-    // transport, which is the only place the import plane's grammar lives.
     expect(doFetch).not.toHaveBeenCalled();
   });
 });

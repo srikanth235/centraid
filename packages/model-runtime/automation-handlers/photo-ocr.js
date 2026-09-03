@@ -28,7 +28,6 @@ const loadRuntimePdfJs = async () => {
 };
 let loadPdfJs = loadRuntimePdfJs;
 
-/** Test-only replacement retained in the generated bundle. */
 export function setPhotoOcrRuntimeForTests(runtime) {
   recognize = runtime?.recognize ?? ocr;
   weightsPresent = runtime?.weightsPresent ?? ocrWeightsPresent;
@@ -109,18 +108,11 @@ async function recognizeOne(item) {
 }
 
 async function recognizePdf(capture) {
-  // pdf.js constructs one identity matrix while evaluating its display layer,
-  // even when we only ask for a born-digital text layer. The automation worker
-  // deliberately has no browser DOM, so give that parse-only path the tiny
-  // 2D shape it needs without making text PDFs depend on native canvas.
   globalThis.DOMMatrix ??= class ParseOnlyDOMMatrix {
     constructor(values = [1, 0, 0, 1, 0, 0]) {
       [this.a, this.b, this.c, this.d, this.e, this.f] = values;
     }
   };
-  // Load PDF.js from the shared recognition runtime rather than embedding its
-  // ~2.6 MB worker/runtime in every published handler. Because pdf.mjs keeps
-  // its real package URL, its sibling pdf.worker.mjs resolves normally.
   const pdfjs = await loadPdfJs();
   const bytes = Buffer.from(capture.bytes, "base64");
   const document = await pdfjs.getDocument({
@@ -283,18 +275,13 @@ export default async function handler({ ctx, log }) {
   }
   // The prompt text is this handler's, so a profile may only pin a revision
   // this handler actually ships. Refusing is the honest answer: stamping a
-  // revision we did not send would make the derivation ledger lie.
   const pinnedPromptRev = ctx.input?.promptRev;
   if (delegateStep && pinnedPromptRev && pinnedPromptRev !== PROMPT_REV)
     throw new Error(
       `delegate OCR: the engine profile pins prompt revision "${pinnedPromptRev}", but this handler ships "${PROMPT_REV}"`
     );
   // Which engine profile this run belongs to. A stamp names its profile, so
-  // two profiles' answers for one photograph are two rows, not a race.
   const profileId = ctx.input?.profileId ?? BUILT_IN_PROFILE;
-  // The selection key re-arms the cursor whenever the ENGINE changes. The
-  // built-in profile's key is byte-identical to the pre-profile one, so no
-  // existing vault re-walks its library for a choice its owner never made.
   const profileSuffix = profileId === BUILT_IN_PROFILE ? "" : `:${profileId}`;
   const selection = `${delegateStep ? "delegate" : "deterministic"}:${pinnedModel}:${delegateStep ? PROMPT_REV : "local"}${profileSuffix}`;
   const priorSelection = await ctx.state.get("selection");
@@ -329,9 +316,7 @@ export default async function handler({ ctx, log }) {
       where: [
         { column: "target_id", op: "eq", value: asset.content_id },
         { column: "variant", op: "eq", value: "text" },
-        // Per PROFILE: another profile's stamp is another row, and reading it
         // as this profile's would make two engines re-derive each other's
-        // photographs forever — a billed loop on the delegate rail.
         { column: "profile", op: "eq", value: profileId },
       ],
       limit: 1,
@@ -402,8 +387,6 @@ export default async function handler({ ctx, log }) {
         capability: "ocr",
         model: confirmedModel,
         regions: normalizedRegions,
-        // Named only when it is NOT the built-in engine: the command defaults
-        // to `built-in`, so a legacy write stays byte-identical.
         ...(profileId === BUILT_IN_PROFILE ? {} : { profile: profileId }),
         ...(delegateStep ? { prompt_rev: PROMPT_REV } : {}),
         ...(confidence === undefined ? {} : { confidence }),

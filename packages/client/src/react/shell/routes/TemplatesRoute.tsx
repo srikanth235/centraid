@@ -15,10 +15,6 @@ import {
   surfaceMintedWebhook,
 } from "./templatesData.js";
 
-// The automation templates gallery. Loads the automation template slice,
-// wires the preview drawer + adopt (clone → webhook secrets → the automation's
-// thread), and "Start from scratch" (straight to the instructions-first editor
-// — no draft scaffold, no builder detour).
 export default function TemplatesRoute(): JSX.Element {
   const { navigate, showToast } = useShellActions();
   const state = useAsyncData(() => loadAutomationTemplates());
@@ -26,8 +22,6 @@ export default function TemplatesRoute(): JSX.Element {
   const useAutoTemplate = (t: TemplateEntry): void => {
     void cloneAutomationTemplate(t)
       .then(async ({ ref, webhooks }) => {
-        // Show each minted secret once, in-app, before handing off to the
-        // thread — the console line stays as a dev-only fallback.
         const revealNext = async (index: number): Promise<void> => {
           const webhook = webhooks[index];
           if (!webhook) return;
@@ -36,8 +30,6 @@ export default function TemplatesRoute(): JSX.Element {
           return revealNext(index + 1);
         };
         await revealNext(0);
-        // The thread route keys on the row's `ref`; if the fresh clone can't
-        // be resolved, land on the fleet instead of a not-found thread.
         if (ref) navigate({ kind: "automation-view", automationId: ref });
         else navigate({ kind: "automations" });
       })

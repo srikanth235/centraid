@@ -1,7 +1,5 @@
 import { Store } from "../store.js";
 
-// Conversation→vault mapping is fixed at creation for life (#599); never remap.
-
 const KEY = "assistant.conversationScopes.v1";
 
 type ScopeMap = Record<string, string>;

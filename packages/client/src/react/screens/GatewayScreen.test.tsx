@@ -12,12 +12,6 @@ import {
 import GatewayScreen from "./GatewayScreen.js";
 
 describe("GatewayScreen — Overview tab (default)", () => {
-  // THERE IS NO HERO WHILE THE GATEWAY IS ANSWERING (binding layer v11). A
-  // panel opening the page in every state restates what the rest of it already
-  // says — availability over a strip whose whole subject is availability,
-  // uptime over an Identity row naming when the gateway started. The page
-  // carries its status attribute, the head's cadence line, and the Identity
-  // rows, and those are what this pins.
   it("states the gateway's condition without a hero while it is answering", () => {
     const html = render(base);
     expect(html).toContain("<h1>System</h1>");
@@ -26,10 +20,7 @@ describe("GatewayScreen — Overview tab (default)", () => {
     expect(html).toContain("local gateway · started");
     expect(html).toContain("3 ms last round trip");
     expect(html).toContain("99.2% this session"); // (720-6)/720
-    // Server uptime figure ticks forward from the last heartbeat.
     expect(html).toContain("up 1h 01m 00s");
-    // The word belongs to the down state alone; saying "Answering" over a page
-    // that is visibly answering is the furniture v11 removed.
     expect(html).not.toContain("Answering");
   });
 
@@ -38,7 +29,6 @@ describe("GatewayScreen — Overview tab (default)", () => {
     expect(html).toContain('data-testid="heartbeat-strip"');
     expect(html).toContain("did not answer");
     expect(html).toContain("1 of 3 heartbeats went unanswered");
-    // The window is the ring we measured, never the handoff's thirty days.
     expect(html).toContain("This session only");
     expect(html).not.toContain("30 days");
   });
@@ -49,9 +39,6 @@ describe("GatewayScreen — Overview tab (default)", () => {
       samples: [{ at: NOW - 5000, ok: true, latencyMs: 3 }],
     });
     expect(html).not.toContain('data-testid="heartbeat-strip"');
-    // The Identity row still answers what one probe can answer — the strip is
-    // a shape, the row is the number, and losing the shape does not lose the
-    // fact.
     expect(html).toContain("720 run · 6 failed");
     expect(html).toContain("99.2% this session");
   });
@@ -90,8 +77,6 @@ describe("GatewayScreen — Overview tab (default)", () => {
       />
     );
     expect(html).toContain("You arrived from the backup alert");
-    // The hero states what the gateway is doing and always leads; the arrival
-    // row names the cause, and Backups is the next section — ahead of capacity.
     expect(html.indexOf("You arrived")).toBeLessThan(html.indexOf("Backups"));
     expect(html.indexOf("Backups")).toBeLessThan(html.indexOf("Capacity"));
   });
@@ -100,8 +85,6 @@ describe("GatewayScreen — Overview tab (default)", () => {
     const html = renderToStaticMarkup(
       <GatewayScreen snapshot={base} now={NOW} {...stubProps} readOnly />
     );
-    // Freshness is the app bar's and the status line's stamp now, not a panel
-    // of its own: the head carries "checked Ns ago" on every seat.
     expect(html).toContain("heartbeat · every 5s · checked");
     expect(html).toContain("Runs on Local");
     expect(html).toContain("restarting the gateway is done on that machine");
@@ -126,9 +109,6 @@ describe("GatewayScreen — Overview tab (default)", () => {
     );
     expect(html).toContain("Backups");
     expect(html).toContain("Capacity");
-    // Not "Limits": the limits panel draws only once a usage read lands, and
-    // this render hands it a promise that never settles. Its read-only shape is
-    // asserted where the data exists — StorageScreen.test.tsx.
     expect(html).not.toContain("Back up now");
     expect(html).not.toContain("Rescan");
     expect(html).not.toContain(">Set<");
@@ -158,12 +138,8 @@ describe("GatewayScreen — Overview tab (default)", () => {
 
   it('reconciles a healthy heartbeat with a failing component into "Degraded"', () => {
     const html = render(base, makeHealth({ status: "error" }));
-    // Degraded is carried by the page's status attribute and by the section
-    // that can act on it — never by a badge repeating the word. A component in
-    // trouble is named where it broke.
     expect(html).toContain('data-status="degraded"');
     expect(html).not.toContain("Answering");
-    // Heartbeat itself is still up — the uptime figure keeps ticking.
     expect(html).toContain("1h 01m 00s");
   });
 

@@ -1,6 +1,3 @@
-// The "corrupt EXIF" trap (#721): holds `extractBlobMeta` to its promise —
-// degrade to "a blob with no metadata", never throw.
-
 import { describe, expect, test } from "vitest";
 
 import {
@@ -34,8 +31,6 @@ describe("adversarial EXIF parsing", () => {
   });
 
   test("an entry-count overflow never throws, and does not cost the real entry its data", () => {
-    // The real first IFD0 entry survives the inflated count; only the
-    // fictitious extras past it are attempted, bounds-checked.
     let meta: ReturnType<typeof extractBlobMeta> | undefined;
     expect(() => {
       meta = extractBlobMeta(entryCountOverflowJpeg(), "image/jpeg");
@@ -45,12 +40,10 @@ describe("adversarial EXIF parsing", () => {
 
   test("an epoch-zero DateTimeOriginal is reported honestly, not swallowed as absence", () => {
     const meta = extractBlobMeta(epochZeroDateTimeJpeg(), "image/jpeg");
-    // A dead camera clock really writes this — never special-cased into absence.
     expect(meta.captured_at).toBe("1970-01-01T00:00:00");
   });
 
   test("every corrupt variant stays throw-free with GPS retained AND stripped", () => {
-    // keepLocation walks a second code path inside the same try/catch.
     for (const bytes of [
       validExifJpeg(),
       truncatedApp1Jpeg(),

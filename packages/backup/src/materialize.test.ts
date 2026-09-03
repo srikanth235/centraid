@@ -1,11 +1,4 @@
 import { createHash, randomBytes } from "node:crypto";
-/*
- * `materializeSnapshotBlobs` (#439) — the targeted blob re-pin the
- * adopt-time reconcile leans on. It must pull ONLY the requested shas out of a
- * real snapshot, land them byte-exact under the `FsBlobStore` layout, verify
- * each against the manifest sha, and report a requested sha the snapshot does
- * not carry as `absent` (which the reconcile records lost) — never write it.
- */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -23,8 +16,6 @@ import { materializeSnapshotBlobs } from "./materialize.js";
 const sha256 = (bytes: Buffer): string =>
   createHash("sha256").update(bytes).digest("hex");
 
-/** A minimal but VALID snapshot source: a real base plus content-addressed
- *  blobs at `blobs/sha256/<fan>/<sha>` (the layout the reconcile re-pins into). */
 async function buildSource(
   sourceDir: string,
   blobs: Buffer[]
@@ -102,12 +93,10 @@ describe("materialize", () => {
     expect(result.materialized).toStrictEqual([wantSha]);
     expect(result.absent).toStrictEqual([absentSha]);
 
-    // The wanted blob landed byte-exact at the FsBlobStore path.
     const landed = await fs.readFile(
       path.join(destDir, "blobs", "sha256", wantSha.slice(0, 2), wantSha)
     );
     expect(landed.equals(wantBytes)).toBe(true);
-    // Selective: neither the un-requested carried blob nor the absent one was written.
     await expect(
       fs
         .readdir(path.join(destDir, "blobs", "sha256", otherSha.slice(0, 2)))

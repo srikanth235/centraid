@@ -1,10 +1,3 @@
-// The schedule domain's task commands — the pack that turns task
-// projections from a window into a pen. Same posture as events (§11):
-// consent-checked, contract-checked, receipted end to end. Tasks follow
-// iCalendar VTODO vocabulary: status is the CHECK-constrained lifecycle
-// (needs-action → in-process → completed | cancelled), priority 0 means
-// unset and 1 is highest (RFC 5545 §3.8.1.9).
-
 import { nextOccurrence } from "@centraid/core/time";
 
 import type { Gateway } from "../gateway/gateway.js";
@@ -25,7 +18,6 @@ const ADD_TASK: CommandDefinition = {
       effort_min: { type: "integer", minimum: 1 },
       parent_task_id: { type: "string", minLength: 1 },
       rrule: { type: "string", minLength: 1 },
-      // Meaningless without a due_at, same posture as rrule.
       remind_before_min: { type: "integer", minimum: 0 },
     },
   },
@@ -36,8 +28,6 @@ const ADD_TASK: CommandDefinition = {
   },
   preconditions: [
     {
-      // One level of nesting: a subtask's parent must exist, be open, and be
-      // top-level. Optional inputs bind as NULL, so a top-level add passes.
       name: "parent_open_and_top_level",
       sql: `SELECT CASE WHEN :parent_task_id IS NULL THEN 1
                    ELSE (SELECT count(*) FROM schedule_task
@@ -51,8 +41,6 @@ const ADD_TASK: CommandDefinition = {
       value: 1,
     },
     {
-      // rrule advances due_at on completion, so a rule with nothing to
-      // advance is refused rather than silently never recurring.
       name: "rrule_requires_due_at",
       sql: "SELECT (:rrule IS NULL OR :due_at IS NOT NULL) AS n",
       column: "n",
@@ -131,7 +119,6 @@ const SET_TASK_STATUS: CommandDefinition = {
     additionalProperties: false,
     properties: {
       task_id: { type: "string", minLength: 1 },
-      // Reopening is a status move like any other; history is provenance.
       status: {
         type: "string",
         enum: ["needs-action", "in-process", "completed", "cancelled"],
@@ -144,14 +131,12 @@ const SET_TASK_STATUS: CommandDefinition = {
     properties: {
       task_id: { type: "string" },
       status: { type: "string" },
-      // Only when completing a task whose rrule has a next hit.
       next_task_id: { type: "string" },
       next_due_at: { type: "string" },
     },
   },
   preconditions: [
     {
-      // A trashed task is refused until restored, or purged (#883).
       name: "task_exists",
       sql: `SELECT count(*) AS n FROM schedule_task
              WHERE task_id = :task_id AND deleted_at IS NULL`,
@@ -162,7 +147,6 @@ const SET_TASK_STATUS: CommandDefinition = {
   ],
   postconditions: [
     {
-      // `completed_at` exists iff the status says completed.
       name: "status_and_completion_stamp_agree",
       sql: `SELECT count(*) AS n FROM schedule_task
              WHERE task_id = :task_id AND status = :status
@@ -172,8 +156,6 @@ const SET_TASK_STATUS: CommandDefinition = {
       value: 1,
     },
     {
-      // Not asked for passes trivially; asked for means the sibling exists,
-      // open, due exactly where the rule put it.
       name: "next_occurrence_spawned_open",
       sql: `SELECT CASE WHEN :next_task_id IS NULL THEN 1
                    ELSE (SELECT count(*) FROM schedule_task
@@ -238,10 +220,6 @@ function setTaskStatus(ctx: HandlerCtx): Record<string, unknown> {
     task_id: input.task_id,
     status: input.status,
   };
-  // Completing a repeating task spawns its next occurrence in the same
-  // motion — Things/Todoist behavior: the series never needs a second
-  // "add" from the owner. A non-completion move (reopen, cancel) never
-  // spawns; only the completed→next edge does.
   if (input.status === "completed" && previous.rrule && previous.due_at) {
     const nextDue = nextOccurrence({
       rrule: previous.rrule,
@@ -304,17 +282,14 @@ const EDIT_TASK: CommandDefinition = {
       task_id: { type: "string", minLength: 1 },
       title: { type: "string", minLength: 1 },
       description: { type: "string", minLength: 1 },
-      // Explicit intent, not a magic empty string: both together is refused.
       clear_description: { type: "boolean", const: true },
       due_at: { type: "string", minLength: 1 },
-      // due_at sets, clear_due removes; both together is refused.
       clear_due: { type: "boolean", const: true },
       priority: { type: "integer", minimum: 0, maximum: 9 },
       effort_min: { type: "integer", minimum: 1 },
       remind_before_min: { type: "integer", minimum: 0 },
       clear_remind: { type: "boolean", const: true },
       rrule: { type: "string", minLength: 1 },
-      // rrule sets, clear_rrule stops the series.
       clear_rrule: { type: "boolean", const: true },
     },
   },
@@ -325,7 +300,6 @@ const EDIT_TASK: CommandDefinition = {
   },
   preconditions: [
     {
-      // A trashed task is refused until restored, or purged (#883).
       name: "task_exists",
       sql: `SELECT count(*) AS n FROM schedule_task
              WHERE task_id = :task_id AND deleted_at IS NULL`,
@@ -362,8 +336,6 @@ const EDIT_TASK: CommandDefinition = {
       value: 1,
     },
     {
-      // A repeating task still needs a due_at once the edit lands: either it
-      // had one, or this call sets one.
       name: "rrule_edit_keeps_a_due_at",
       sql: `SELECT CASE WHEN :rrule IS NULL THEN 1
                    ELSE (SELECT CASE WHEN :due_at IS NOT NULL THEN 1
@@ -378,7 +350,6 @@ const EDIT_TASK: CommandDefinition = {
   ],
   postconditions: [
     {
-      // Optional inputs bind as NULL, so untouched fields pass.
       name: "edits_applied",
       sql: `SELECT (
               (SELECT CASE WHEN :title IS NULL THEN 1
@@ -489,7 +460,6 @@ const DELETE_TASK: CommandDefinition = {
   },
   preconditions: [
     {
-      // A trashed task is refused until restored, or purged (#883).
       name: "task_exists",
       sql: `SELECT count(*) AS n FROM schedule_task
              WHERE task_id = :task_id AND deleted_at IS NULL`,
@@ -514,7 +484,6 @@ const DELETE_TASK: CommandDefinition = {
   handler: deleteTask,
 };
 
-/** The grace window Docs, Photos, Locker, People and Tally carry (#883). */
 const TASK_PURGE_DAYS = 30;
 
 export function taskPurgeAt(now: string): string {
@@ -523,12 +492,6 @@ export function taskPurgeAt(now: string): string {
   return date.toISOString();
 }
 
-/**
- * Reversible for the grace window, then the sweep deletes the row and cleans
- * its poly-refs — the two-step every other app's delete is (#883). The
- * poly-ref cleanup deliberately does NOT run here: an annotation on a trashed
- * task must come back with it, or restore means nothing.
- */
 function trashTask(ctx: HandlerCtx, taskId: string): void {
   ctx.db
     .prepare(
@@ -576,7 +539,6 @@ const RESTORE_TASK: CommandDefinition = {
   preconditions: [
     {
       name: "task_trashed",
-      // RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5).
       sql: `SELECT count(*) AS n FROM schedule_task
              WHERE task_id = :task_id AND deleted_at IS NOT NULL
                AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
@@ -599,8 +561,6 @@ const RESTORE_TASK: CommandDefinition = {
   risk: "low",
   handler: (ctx) => {
     const input = ctx.input as { task_id: string };
-    // Subtasks trashed WITH the parent come back with it; one trashed on its
-    // own does not — restore undoes the gesture that was made.
     const restored = ctx.db
       .prepare(
         `UPDATE schedule_task SET deleted_at = NULL, purge_at = NULL

@@ -1,9 +1,3 @@
-// Storage maintenance the store performs on its own file: the auto-vacuum mode
-// a rebuilt database lands in, when the FTS index is merged, that index deletes
-// are addressed by rowid rather than scanned, and the destructive migration of a
-// replica whose rows predate that rowid. Driver-neutral behaviour lives in
-// `store-core.test.ts` and `store-core-bootstrap-walk.test.ts`; these cases need
-// a driver that records its statements, so they run on node:sqlite only.
 import { describe, expect, test } from "vitest";
 
 import { NodeSqliteDriver } from "./node-sqlite-test-driver.js";
@@ -17,7 +11,6 @@ import {
 
 describe("store-core", () => {
   describe("storage lifecycle", () => {
-    /** Delegating driver that keeps every statement, so PRAGMA/FTS maintenance is assertable. */
     class RecordingDriver extends NodeSqliteDriver {
       readonly statements: string[] = [];
 
@@ -44,7 +37,6 @@ describe("store-core", () => {
             sql.includes("auto_vacuum=INCREMENTAL")
           )
         ).toHaveLength(1);
-        // 2 = INCREMENTAL.
         expect(
           driver.all<{ auto_vacuum: number }>("PRAGMA auto_vacuum")[0]
             ?.auto_vacuum
@@ -71,12 +63,10 @@ describe("store-core", () => {
           commitCursor: full.cursor,
           pages: 1,
         });
-        // 50 rows is far below the merge interval: a page does not pay for it.
         expect(optimizeCount(driver)).toBe(0);
 
         store.bootstrapCommit(full.cursor);
 
-        // The cold start wrote the whole index one window at a time.
         expect(optimizeCount(driver)).toBe(1);
         expect(
           store.search({
@@ -94,15 +84,10 @@ describe("store-core", () => {
       const driver = new RecordingDriver();
       const store = new ReplicaSqliteStore(driver, "vault-a");
       try {
-        // `snapshot()`'s agenda shape deliberately: its indexed columns are
-        // not in the shape, so every row still rewrites its index entries
-        // (which is what the interval counts) without the fixture paying for
-        // 21,000 FTS inserts.
         const full = snapshot();
         store.bootstrap({ ...full, rows: [] });
         const before = optimizeCount(driver);
         let cursor = full.cursor;
-        // Cross the merge interval on the second batch.
         for (const [batch, count] of [10_000, 10_001].entries()) {
           const to = { epoch: cursor.epoch, seq: cursor.seq + 1 };
           store.applyChanges({
@@ -132,11 +117,6 @@ describe("store-core", () => {
     }, 20_000);
 
     test("addresses every search-index delete by rowid rather than scanning", () => {
-      // The regression this locks is quadratic, so a wall-clock assertion would
-      // be both slow and flaky. Assert the SHAPE instead: what SQL the store
-      // issues, and that SQLite resolves it to a lookup. FTS5 leaves
-      // `shape_id`/`entity`/`row_id` UNINDEXED, so a delete keyed on that triple
-      // rescans the whole index once per row — 125s for a 21,000-row walk.
       const driver = new RecordingDriver();
       const store = new ReplicaSqliteStore(driver, "vault-a");
       try {
@@ -160,24 +140,16 @@ describe("store-core", () => {
         const searchDeletes = driver.statements.filter((sql) =>
           sql.trim().startsWith("DELETE FROM replica_search WHERE")
         );
-        // One per bootstrapped row plus the delete, and every one of them keyed
-        // on the index's own rowid.
         expect(searchDeletes.length).toBeGreaterThan(20);
         expect(
           searchDeletes.filter((sql) => !sql.includes("WHERE rowid = "))
         ).toStrictEqual([]);
-        // The store no longer has a statement that can scan the index at all.
         expect(
           searchDeletes.filter((sql) =>
             sql.trim().startsWith("DELETE FROM replica_search WHERE shape_id")
           )
         ).toStrictEqual([]);
 
-        // And SQLite agrees it is a lookup on both sides: FTS5 reports the `=`
-        // constraint it accepted in its virtual-table index string, and the
-        // rowid the store hands it comes from a covering index on `replica_row`.
-        // The old triple-keyed form has no indexed column to key on and leaves
-        // the constraint string empty — a full scan of the FTS table per row.
         const plan = (sql: string, bind: ReplicaBindValue[]): string =>
           driver
             .all<{ detail: string }>(`EXPLAIN QUERY PLAN ${sql}`, bind)
@@ -204,8 +176,6 @@ describe("store-core", () => {
 
     test("rebuilds a replica whose rows predate the search rowid onto version 8", () => {
       const driver = new NodeSqliteDriver();
-      // A v7 replica: `replica_row` keyed by the triple, with no `row_key` to
-      // address its index entries by.
       driver.exec(`
         CREATE TABLE replica_row (
           shape_id TEXT NOT NULL,
@@ -231,7 +201,6 @@ describe("store-core", () => {
             .all<{ name: string }>("PRAGMA table_info(replica_row)")
             .map((column) => column.name)
         ).toContain("row_key");
-        // The stale rows went with the old schema, and the rebuilt one indexes.
         const full = searchableSnapshot();
         store.bootstrap(full);
         expect(

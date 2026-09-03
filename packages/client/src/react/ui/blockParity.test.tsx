@@ -3,17 +3,6 @@ import type { JSX } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
-// Does this kit actually DRAW every flag the shared contracts let a caller set?
-//
-// The contracts (`@centraid/design/blocks`) stop the two kits describing a
-// block differently. They cannot stop a kit accepting `dangerous` and then
-// rendering the ordinary control. This file renders the SHARED fixtures — the
-// same objects the mobile kit renders in its own parity test — and asserts the
-// DOM's marks appear. The phone asserts its own, because only it knows what a
-// native destructive border looks like.
-//
-// A failure here means one seat quietly lost a distinction the other still
-// makes (#765).
 import {
   BUTTON_FIXTURE,
   CHIPS_FIXTURE,
@@ -82,12 +71,9 @@ describe("block parity — the shell draws every shared flag", () => {
     const row = el.querySelector("[data-net]");
     expect((row as HTMLElement | null)?.dataset.net).toBe("true");
     expect((row as HTMLElement | null)?.dataset.off).toBe("true");
-    // `dangerous` reaches the control as the destructive recipe, and `off`
-    // disables it — on the leaf, never as a container opacity.
     const verb = el.querySelector("button") as HTMLButtonElement;
     expect(verb.className).toContain("destructive");
     expect(verb.disabled).toBe(true);
-    // The hint is what tells ten identical verbs apart.
     expect(verb.title).toBe(ROW_ACTION_FIXTURE.hint);
   });
 
@@ -104,7 +90,6 @@ describe("block parity — the shell draws every shared flag", () => {
     );
     const row = el.querySelector("[data-struck]") as HTMLElement;
     expect(row.dataset.struck).toBe("true");
-    // The record survives the revoke: sub and meta still say who held what.
     expect(el.querySelector(".sub")?.textContent).toBe(ROW_STRUCK_FIXTURE.sub);
     expect(el.querySelector(".meta")?.textContent).toBe(
       ROW_STRUCK_FIXTURE.meta
@@ -117,7 +102,6 @@ describe("block parity — the shell draws every shared flag", () => {
     expect(values[0]?.dataset.net).toBeUndefined();
     expect(values[1]?.dataset.net).toBe("true");
     expect(values[1]?.dataset.mono).toBe("true");
-    // The key column carries the DISPLAYED word, not an identity.
     expect(
       [...el.querySelectorAll("dt")].map((n) => n.textContent)
     ).toStrictEqual(PANEL_FACTS_FIXTURE.map((f) => f.key));
@@ -224,8 +208,6 @@ describe("block parity — the shell draws every shared flag", () => {
         rows={[{ id: "p-1", name: "Thomasina", values: GRID_ROW_FIXTURE }]}
       />
     );
-    // The declarations: badges on the header, and no sort control on the one
-    // column the store cannot order by.
     expect(el.querySelector('th[data-col="party_id"]')?.textContent).toContain(
       "pk"
     );
@@ -234,8 +216,6 @@ describe("block parity — the shell draws every shared flag", () => {
     ).toContain("fk");
     expect(el.querySelector('th[data-col="extra"] button')).toBeNull();
 
-    // The four cell kinds. A value, a value cut reversibly, an absence, an
-    // empty string, and a value the store will not print.
     expect(el.querySelector('td[data-col="party_id"]')?.textContent).toBe(
       "p-1"
     );
@@ -256,7 +236,6 @@ describe("block parity — the shell draws every shared flag", () => {
       "sealed"
     );
 
-    // The register is per COLUMN, so one grid holds prose and figures at once.
     expect(
       el.querySelector<HTMLElement>('td[data-col="party_id"]')?.dataset.register
     ).toBe("mono");

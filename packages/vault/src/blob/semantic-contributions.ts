@@ -1,7 +1,3 @@
-// Materialize inline contribution payloads into the established query
-// sidecars. The derivative row is the typed/provenance-bearing source; these
-// rows are the indexes existing search code already consumes.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { encodeVector } from "../enrich/similarity.js";
@@ -21,9 +17,6 @@ export function upsertContentEmbedding(
   }
 ): void {
   const payload = JSON.parse(input.canonicalPayload) as EmbeddingPayload;
-  // One typed `embedding` slot represents the current configured model. If
-  // that model changes, leaving the previous vector searchable would make a
-  // single contribution claim two incompatible vector spaces.
   vault
     .prepare(
       `DELETE FROM enrich_embedding

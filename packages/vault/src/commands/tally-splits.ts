@@ -1,11 +1,3 @@
-// The server-side re-validation every Tally expense write goes through. Four
-// commands apply the SAME arithmetic guards, so no projection can smuggle an
-// unbalanced split, an out-of-scope party, or lines that do not add up.
-//
-// It does NOT resolve a split: the client sends shares resolved, the vault
-// re-checks totals. `split_method` / `split_params_json` are provenance, never
-// a second arithmetic path.
-
 import type { HandlerCtx } from "../gateway/types.js";
 
 export interface SplitInput {
@@ -68,7 +60,6 @@ export const SPLIT_METHOD_SCHEMA = {
   enum: [...SPLIT_METHODS],
 };
 
-/** Stored verbatim under a `json_valid` CHECK, never read as arithmetic. */
 export const SPLIT_PARAMS_SCHEMA = { type: "object" };
 
 export const LINE_ITEM_SCHEMA = {
@@ -96,8 +87,6 @@ export function tallyOwnerPartyId(ctx: HandlerCtx): string {
   return owner.self_party_id;
 }
 
-/** In a group, the group's circle (#310); group-less, the friend roster, so a
- *  1:1 cannot mint a participant nobody added. */
 export function participantScope(
   ctx: HandlerCtx,
   groupId: string | null
@@ -155,8 +144,6 @@ function totalOf<T>(entries: readonly T[], key: string): number {
   return sum;
 }
 
-/** `payers` absent is the degenerate single-payer case; `tally_expense_payer`
- *  is written for EVERY expense so both folds read one shape. */
 export function resolvePayers(
   paidBy: string | undefined,
   amountMinor: number,
@@ -178,8 +165,6 @@ export function resolvePayers(
     throw new Error(
       `payers must sum to the amount (got ${total}, need ${amountMinor})`
     );
-  // `paid_by` must be one of them. With none, the largest contributor stands
-  // in (ties keep the first supplied, so a re-send is stable).
   if (paidBy && !resolved.some((payer) => payer.party_id === paidBy))
     throw new Error("the named payer is not in the payer list");
   let largest = resolved[0]!;
@@ -188,10 +173,6 @@ export function resolvePayers(
   return { payers: resolved, principal: paidBy ?? largest.party_id };
 }
 
-/**
- * The expense's receipt: the `role='receipt'` attachment (#883). Deterministic
- * on the id, because nothing stops a member attaching two receipt photos.
- */
 export const RECEIPT_ATTACHMENT_SQL = `SELECT a.attachment_id
        FROM core_attachment a
       WHERE a.target_type = 'tally.expense' AND a.target_id = e.expense_id
@@ -212,9 +193,6 @@ export function writePayers(
   const insert = ctx.db.prepare(
     "INSERT INTO tally_expense_payer (expense_id, party_id, paid_minor) VALUES (?, ?, ?)"
   );
-  // Not `ctx.wrote()` — payer rows cascade with the expense; a composite
-  // `<expense>:<party>` key stamped as an entity id is a row the seed registry
-  // can never address again.
   for (const payer of payers)
     insert.run(expenseId, payer.party_id, payer.paid_minor);
 }
@@ -249,8 +227,6 @@ export function writeSplits(
     );
 }
 
-/** Replaces the whole line set. Both totals are re-checked — lines sum to the
- *  expense, allocations sum to their line — or the reconciliation is a lie. */
 export function writeLineItems(
   ctx: HandlerCtx,
   expenseId: string,
@@ -273,7 +249,6 @@ export function writeLineItems(
       );
     assertRoster(line.allocations, allowed, groupId, "line allocation");
   }
-  // Allocations cascade with their line, so deleting the lines clears both.
   ctx.db
     .prepare("DELETE FROM tally_expense_line_item WHERE expense_id = ?")
     .run(expenseId);

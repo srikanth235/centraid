@@ -55,8 +55,6 @@ describe("orphan-multipart", () => {
       },
     };
 
-    // Simulate CreateMultipartUpload returning, followed by a process crash:
-    // deliberately never write the returned id to BlobTransferState.
     await provider.beginTemporaryUpload("direct-crash-gap");
     expect(transfers.activeMultipartUploads()).toStrictEqual([]);
     await expect(

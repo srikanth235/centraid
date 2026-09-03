@@ -27,8 +27,6 @@ describe("the status channel", () => {
   });
 
   it("updates IN PLACE — a second message supersedes the first", () => {
-    // The whole point of one line is that messages never stack. A toast queue
-    // is what this replaces.
     postStatus("Renamed · Groceries");
     postStatus("Deleted · Groceries");
     expect(readStatus()?.text).toBe("Deleted · Groceries");
@@ -80,7 +78,6 @@ describe("the status channel", () => {
       expect(readRouteHealth()?.text).toBe(
         "Everything is readable · last write 4 min ago."
       );
-      // …and the condition is still there when the news passes.
       clock.advanceSync(6000);
       expect(readStatus()).toBeNull();
       expect(readRouteHealth()).not.toBeNull();
@@ -93,7 +90,6 @@ describe("the status channel", () => {
       );
       setRouteHealth({ text: "Gmail needs re-authorization · expired." });
       setRouteHealth(null);
-      // Already clear: nothing changed, so nothing is announced again.
       setRouteHealth(null);
       off();
       expect(seen).toStrictEqual([
@@ -135,8 +131,6 @@ describe("the status channel", () => {
     });
 
     it("commits the previous window when a second one opens", () => {
-      // A rapid second delete must not strand the first in limbo — there is
-      // only one line, so there can only be one pending act on it.
       const firstExpire = vi.fn<() => void>();
       showUndoStatus("Deleted “A”", vi.fn<() => void>(), {
         onExpire: firstExpire,

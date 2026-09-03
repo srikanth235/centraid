@@ -6,7 +6,6 @@ import type {
 import { buildIntentOutcome } from "./intent-record-store.js";
 import type { IntentOutcome, IntentState, ReplicaIntent } from "./types.js";
 
-/** Journal cap: `listSettled` cannot read past it. Same bound as the durable stores this one stands in for. */
 const SETTLED_JOURNAL_LIMIT = 5_000;
 
 export class MemoryIntentStore implements IntentRecordStore {
@@ -128,7 +127,6 @@ export class MemoryIntentStore implements IntentRecordStore {
     await this.clear();
   }
 
-  /** Insertion order is settlement order, so the oldest go first even inside one millisecond. */
   private pruneOutcomeJournal(): void {
     while (this.#outcomes.size > SETTLED_JOURNAL_LIMIT) {
       const oldest = this.#outcomes.keys().next();

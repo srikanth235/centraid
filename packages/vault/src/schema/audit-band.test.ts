@@ -1,9 +1,3 @@
-// The audit and ledger bands, in the ONE file (#916).
-//
-// What is proved here is what the two bands promise the member: an audit row
-// is never rewritten, a write and its receipt succeed or fail together, and
-// neither band leaves the device through the export or the replica.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { describe, expect, it } from "vitest";
@@ -55,8 +49,6 @@ describe("the audit band is append-only in the engine, not by convention", () =>
     expect(() =>
       db.prepare(`DELETE FROM access_receipt WHERE receipt_id = 'rcpt-1'`).run()
     ).toThrow(/append-only/u);
-    // Every write-once table declares the pair; a new one cannot be added
-    // without them.
     const triggers = new Set(
       (
         db

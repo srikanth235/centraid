@@ -3,9 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import { buildCreateAutomationEditorData } from "./automationEditorCreateData.js";
 import { buildAutomationHarnessEditorData } from "./automationEditorHarnessData.js";
 
-// The route module transitively imports the whole gateway-client surface; only
-// the pure create-mode DTO builder is under test, so stub the client and the
-// import needs no live gateway. `vi.mock` is hoisted above the imports.
 vi.mock(import("../../../gateway-client.js"), () => ({}));
 vi.mock(import("../../../assist-oauth-handoff.js"), () => ({}));
 

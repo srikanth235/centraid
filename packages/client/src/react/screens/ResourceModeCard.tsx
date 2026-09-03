@@ -25,13 +25,6 @@ import a11y from "../styles/a11y.module.css";
 import buttonCss from "../ui/Button.module.css";
 import styles from "./GatewayScreen.module.css";
 
-// Owner Resource mode control (#521). Writes `gateway.resourceMode` through the
-// device prefs store; the gateway reads it at serve boot and reports the active
-// mode on the hardware-profile health component + metrics. The card is a
-// compact choose-and-glance surface: pick a mode, read the one-line budget, and
-// open a dialog to Compare all modes or see How we sized this (#528
-// follow-up) — the dense tables no longer stack in the card body.
-
 export type { ResourceMode } from "./resource-summary.js";
 
 export const RESOURCE_MODE_PREF_KEY = "gateway.resourceMode";
@@ -95,40 +88,16 @@ const PAUSE_ICON = (
 export interface ResourceModeCardProps {
   loadMode: () => Promise<ResourceMode>;
   saveMode: (mode: ResourceMode) => Promise<void>;
-  /** Resolved class from the last health poll, when known. */
   resolvedClass?: string;
-  /** Active mode reported by health metrics (boot-applied). */
   activeMode?: string;
-  /**
-   * Structured resource profile from `health.metrics.resourceProfile` (issue
-   * #528). Present on modern gateways only — when absent the card renders the
-   * mode picker + running-vs-desired note, but no L1 budget summary and no
-   * "How we sized this" dialog opener.
-   */
   resourceProfile?: ResourceProfileDTO;
-  /**
-   * Background-work pause state from `health.metrics.backgroundPause` (issue
-   * #528). Absent → the pause control is hidden entirely (older gateway).
-   */
   backgroundPause?: BackgroundPauseDTO;
-  /**
-   * Power-context posture from `health.metrics.powerContext` (#528 Phase
-   * D). Present on modern gateways only.
-   */
   powerContext?: PowerContextState;
-  /** Hot-apply a background-work pause; absent ⇒ no pause control. */
   onPause?: (
     durationMs?: number
   ) => Promise<{ paused: boolean; until: string | null }>;
-  /** Lift a background-work pause; absent ⇒ no pause control. */
   onResume?: () => Promise<{ paused: boolean }>;
-  /**
-   * Load saved knob overrides for the L3 "Tune" rung (#528),
-   * shown inside the "How we sized this" dialog. Absent (or a profile without
-   * `sources`/`bounds`) hides the Advanced section.
-   */
   loadKnobPrefs?: () => Promise<ResourceKnobPrefs>;
-  /** Persist a knob override; `null` clears it back to Linked. */
   saveKnobPrefs?: (
     patch: Partial<Record<TunableKnobKey, number | null>>
   ) => Promise<void>;
@@ -168,12 +137,8 @@ export default function ResourceModeCard({
   const [savedNote, setSavedNote] = useState<string | null>(null);
   const [compareOpen, setCompareOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  // Sync guard for in-flight loadMode resolves: a late GET must not clobber an
-  // optimistic selection or mid-save mode (Gateway Overview re-renders every
-  // second for uptime counters).
   const busyRef = useRef(false);
 
-  // ── Pause background work (L0, #528) ──
   const [pauseState, setPauseState] = useState<BackgroundPauseDTO | null>(
     backgroundPause ?? null
   );
@@ -182,10 +147,6 @@ export default function ResourceModeCard({
   const pauseBusyRef = useRef(false);
   const pauseControlOn = Boolean(backgroundPause && onPause && onResume);
 
-  // A fresh server snapshot replaces the local one, unless a pause/resume is
-  // mid-flight (then the optimistic value stands and the snapshot is dropped —
-  // the next one supersedes it). Adjusted during render so the snapshot paints
-  // straight away; `pauseBusy` is the render-readable twin of `pauseBusyRef`.
   const [seenBackgroundPause, setSeenBackgroundPause] =
     useState(backgroundPause);
   if (seenBackgroundPause !== backgroundPause) {

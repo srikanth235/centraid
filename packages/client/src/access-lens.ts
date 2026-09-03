@@ -1,13 +1,3 @@
-/**
- * THE ACCESS LENS (#883, ruling V-dashboard): one row per standing answer.
- *
- * ABSENT IS NEVER EMPTY — a refused or storeless read is `unreadable`, never
- * an empty list; "nobody has access" and "we could not ask" are opposite facts.
- *
- * Revoke sentences are the vault's (`grant/phrases.ts`); this file composes
- * none.
- */
-
 import { GRANT_LOCI } from "@centraid/blueprints/apps/_shared/grant-transport";
 import type { GrantLocus } from "@centraid/blueprints/apps/_shared/grant-transport";
 
@@ -34,7 +24,6 @@ const PRINCIPAL_KINDS: readonly AccessPrincipalKind[] = [
   "device",
 ];
 
-/** Ruling V-dashboard: `person` and `circle` are ONE group — one question. */
 export interface AccessGroup {
   id: "audiences" | "harnesses" | "devices";
   title: string;
@@ -76,8 +65,6 @@ export interface AccessReader {
   ) => Promise<{ rows: readonly { values: Record<string, unknown> }[] }>;
 }
 
-/** RAW: `grant-door.ts` is not importable here, so the body is parsed
- *  against the wire's own `GRANT_LOCI`. */
 export interface AccessRegistryReader {
   subjects: () => Promise<unknown>;
 }
@@ -117,7 +104,6 @@ function parseAnswer(
   );
   const authorityId = text(values.authority_id);
   const verb = text(values.verb);
-  // A drifted row is DROPPED, never half-drawn.
   if (!principalKind || !authorityId || !verb) return undefined;
   return {
     authorityId,
@@ -134,7 +120,6 @@ function parseAnswer(
   };
 }
 
-/** FLAT rows — what the phone's replica hook hands back. */
 export function parseAccessAnswers(
   rows: readonly Record<string, unknown>[]
 ): AccessAnswer[] {
@@ -144,7 +129,6 @@ export function parseAccessAnswers(
   });
 }
 
-/** A device's subject is the whole vault, so `subject_id` is empty. */
 export const DEVICE_SUBJECT_TYPE = "core.vault";
 
 export function deviceStandings(
@@ -154,8 +138,6 @@ export function deviceStandings(
   for (const answer of answers) {
     if (answer.principalKind !== "device" || !isStanding(answer)) continue;
     if (answer.subjectType !== DEVICE_SUBJECT_TYPE) continue;
-    // A refusal outranks a grant: a device the member cut off must never read
-    // back as one that can reach in.
     const held = byDevice.get(answer.principalId);
     if (held && held.decision === "declined") continue;
     byDevice.set(answer.principalId, answer);
@@ -163,7 +145,6 @@ export function deviceStandings(
   return byDevice;
 }
 
-/** `undefined` is "no answer here" — never drawn as a refusal. */
 export function deviceReachLabel(
   answer: AccessAnswer | undefined
 ): string | undefined {
@@ -207,7 +188,6 @@ export async function loadAccessLens(
       reason: error instanceof Error ? error.message : String(error),
     };
   }
-  // May fail on its own: the rows the member can SEE still show.
   let loci: AccessLocusCopy = {};
   try {
     loci = parseLociBody(await registry.subjects());

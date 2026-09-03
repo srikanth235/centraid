@@ -32,9 +32,6 @@ type Subscriber = {
   attachVersion: number;
   feed?: VaultFeed;
   listener: (message: VaultChangeMessage) => void;
-  /** The scope this subscriber is PINNED to. Each replica session's feed must
-   *  follow that session, not the shell's ambient focused-vault pointer; only
-   *  an unpinned subscriber is re-bound when the pointer moves (#599). */
   scope?: GatewayAuth;
 };
 
@@ -58,7 +55,7 @@ function readStoredCursor(key: string): VaultChangeCursor {
     const stored = window.sessionStorage.getItem(cursorStorageKey(key));
     if (stored) return parseCursor(JSON.parse(stored)) ?? INITIAL_CURSOR;
   } catch {
-    /* Session storage is optional in hardened/browser-private contexts. */
+    // Intentionally empty.
   }
   return INITIAL_CURSOR;
 }
@@ -70,11 +67,10 @@ function storeCursor(key: string, cursor: VaultChangeCursor): void {
       JSON.stringify(cursor)
     );
   } catch {
-    /* The in-memory cursor still keeps this stream resumable until teardown. */
+    // Intentionally empty.
   }
 }
 
-/** Remove a revoked scope's resumable cursor along with its replica storage. */
 export function clearVaultChangeCursor(gatewayAuth: GatewayAuth): void {
   const key = scopeKey(gatewayAuth);
   feeds.get(key)?.close();
@@ -83,7 +79,7 @@ export function clearVaultChangeCursor(gatewayAuth: GatewayAuth): void {
   try {
     window.sessionStorage.removeItem(cursorStorageKey(key));
   } catch {
-    /* Session storage is optional in hardened/browser-private contexts. */
+    // Intentionally empty.
   }
 }
 
@@ -112,7 +108,6 @@ function changeStreamPath(
     since: `${cursor.epoch}:${cursor.seq}`,
     stream: "1",
   });
-  // Presence is significant: `shapeIds=` attests a persisted empty catalog.
   if (shapeIds) params.set("shapeIds", shapeIds.join(","));
   return `/centraid/_vault/changes?${params}`;
 }
@@ -125,7 +120,6 @@ class VaultFeed {
   private reconnectTimer?: ReturnType<typeof setTimeout>;
   private rebootstrapRequired = false;
   private stopped = false;
-  /** Invalidates late responses/frames from an aborted scope or catalog generation. */
   private generation = 0;
 
   constructor(
@@ -146,7 +140,6 @@ class VaultFeed {
     if (this.listeners.size === 0) this.stop();
   }
 
-  /** Permanently tear down a revoked scope, even while subscribers still exist. */
   close(): void {
     this.listeners.clear();
     this.stop();
@@ -179,7 +172,7 @@ class VaultFeed {
       try {
         listener(message);
       } catch {
-        /* A broken frame must not starve the other managed app frames. */
+        // Intentionally empty.
       }
     }
   }
@@ -271,9 +264,6 @@ class VaultFeed {
           try {
             detail = await response.json();
           } catch {
-            // Chromium `setOffline` and captive portals surface as empty/HTML
-            // 4xx, not a thrown fetch: a disconnect, not a lost replica, so
-            // retry the stream instead of wiping durable state.
             throw new Error(
               `vault change stream failed (HTTP ${response.status})`
             );
@@ -302,9 +292,7 @@ class VaultFeed {
           controller.signal
         );
       })
-      .catch(() => {
-        /* Reconnect below; individual app frames remain mounted and subscribed. */
-      })
+      .catch(() => {})
       .finally(() => {
         if (this.abortController === controller)
           this.abortController = undefined;
@@ -369,7 +357,7 @@ async function attach(subscriber: Subscriber): Promise<void> {
     subscriber.feed = feed;
     feed.add(subscriber.listener);
   } catch {
-    /* App URL resolution shows the gateway error; the feed retries on the next scope event. */
+    // Intentionally empty.
   }
 }
 
@@ -379,11 +367,6 @@ function detach(subscriber: Subscriber): void {
   subscriber.feed = undefined;
 }
 
-/**
- * The focused-scope pointer moved. Only AMBIENT subscribers follow it: a pinned
- * subscriber belongs to a session that is still mounted, and tearing its stream
- * down would stop delivering changes for every scope but the focused one (#599).
- */
 function rescopeSubscribers(): void {
   for (const subscriber of subscribers) {
     if (subscriber.scope) continue;
@@ -392,11 +375,6 @@ function rescopeSubscribers(): void {
   }
 }
 
-/**
- * Subscribe a shell consumer; every consumer in one gateway/vault shares one
- * HTTP stream. Pass `scope` to pin the subscription to one gateway/vault
- * instead of following the shell's ambient focused-scope pointer.
- */
 export function subscribeVaultChanges(
   listener: (message: VaultChangeMessage) => void,
   scope?: GatewayAuth
@@ -418,7 +396,6 @@ export function subscribeVaultChanges(
   };
 }
 
-/** Resume a feed after bootstrap commits its stable snapshot cursor. */
 export async function resumeVaultChanges(
   cursor: VaultChangeCursor,
   scope?: GatewayAuth
@@ -429,11 +406,6 @@ export async function resumeVaultChanges(
   feeds.get(key)?.resume(cursor);
 }
 
-/**
- * Attest the catalog persisted for one gateway/vault on every SSE reconnect.
- * `undefined` means no local catalog is available yet; `[]` attests an empty
- * catalog. Without `scope` this addresses the ambient focused scope.
- */
 export async function setVaultChangeShapeIds(
   shapeIds?: readonly string[],
   scope?: GatewayAuth
@@ -447,15 +419,6 @@ export async function setVaultChangeShapeIds(
 
 let scopeSwitchInstalled = false;
 
-/**
- * Scope switches keep mounted app routes alive, so re-bind their subscriptions:
- * the old vault/gateway stream closes and the new scope gets exactly one.
- *
- * LAZY, not module-eval, and THE ORDER IS LOAD-BEARING (#883): the auth-cache
- * reset must be installed first, so a scope switch drops the stale auth before
- * `rescopeSubscribers` re-attaches and asks for it. Installing both from one
- * function states that dependency instead of leaving it to import order.
- */
 function ensureScopeSwitchSubscribed(): void {
   if (scopeSwitchInstalled) return;
   scopeSwitchInstalled = true;

@@ -1,5 +1,3 @@
-// Password-manager CSV parser unit tests (#545).
-
 import { describe, expect, test } from "vitest";
 
 import { isPasswordsCsvHeader, parsePasswordsCsv } from "./passwords-csv.js";

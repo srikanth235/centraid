@@ -1,9 +1,3 @@
-// Core party commands (§03): the "new contact" path, letting a consent-granted
-// app mint the identity row and its identifiers rather than wait for an
-// owner-side import. Identifier binding reuses `social.resolve_identity`'s
-// invariant: a (scheme, value) pair claimed by a different party is an identity
-// fork, refused and never merged silently.
-
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { bindContactReach, partyForReach } from "./contact-reach.js";
@@ -20,8 +14,6 @@ const ADD_PARTY: CommandDefinition = {
     additionalProperties: false,
     properties: {
       display_name: { type: "string", minLength: 1 },
-      // Agents enroll through their own path (consent.agent); apps mint people
-      // and the organisations/groups those people belong to.
       kind: { type: "string", enum: ["person", "org", "group"] },
       sort_name: { type: "string" },
       birth_date: { type: "string" },
@@ -48,8 +40,6 @@ const ADD_PARTY: CommandDefinition = {
       identifiers_bound: { type: "integer" },
     },
   },
-  // Array input cannot ride templated precondition SQL; the handler throws,
-  // landing as a receipted deny.
   preconditions: [],
   postconditions: [
     {
@@ -74,10 +64,6 @@ function addParty(ctx: HandlerCtx): Record<string, unknown> {
     identifiers?: { scheme: string; value: string; label?: string }[];
   };
   const identifiers = input.identifiers ?? [];
-  // An identifier already bound to any party is a fork, not a new contact —
-  // surface who owns it so the app can offer that party instead. Asked of
-  // the reach store as well as the register (#883): an email is a channel,
-  // and a register-only check would mint a second person.
   for (const id of identifiers) {
     const claimedBy = partyForReach(ctx.db, id.scheme, id.value, ctx.now);
     if (claimedBy !== null) {
@@ -107,8 +93,6 @@ function addParty(ctx: HandlerCtx): Record<string, unknown> {
   ctx.wrote("core.party", partyId);
   const seenSchemes = new Set<string>();
   for (const id of identifiers) {
-    // Reach binds as a channel, an identity key as a register row (#883). The
-    // command's INPUT vocabulary is unchanged.
     const channelId = bindContactReach(ctx.db, {
       channelId: ctx.newId(),
       partyId,
@@ -163,7 +147,6 @@ const UPDATE_PARTY: CommandDefinition = {
   },
   preconditions: [
     {
-      // Agent identity rows are managed by enrollment, not by contact apps.
       name: "party_exists_and_editable",
       sql: `SELECT count(*) AS n FROM core_party WHERE party_id = :party_id AND kind != 'agent'`,
       column: "n",
@@ -173,7 +156,6 @@ const UPDATE_PARTY: CommandDefinition = {
   ],
   postconditions: [
     {
-      // Each field either wasn't asked for, or reads back exactly as sent.
       name: "edits_applied",
       sql: `SELECT (
               (SELECT CASE WHEN :display_name IS NULL THEN 1
@@ -221,9 +203,6 @@ function updateParty(ctx: HandlerCtx): Record<string, unknown> {
       .prepare(`UPDATE core_party SET ${sets.join(", ")} WHERE party_id = ?`)
       .run(...values, input.party_id);
   }
-  // One logical fact with two surfaces (#441): `birth_date` and any People
-  // "Birthday" row. Reconcile the MM-DD so they cannot disagree;
-  // `add_important_date` reconciles the other direction.
   if (input.birth_date !== undefined) {
     const md =
       /(?<monthDay>\d{2}-\d{2})$/u.exec(input.birth_date)?.groups?.monthDay ??
@@ -257,6 +236,5 @@ function updateParty(ctx: HandlerCtx): Record<string, unknown> {
 export function registerPartyCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_PARTY);
   gateway.registerCommand(UPDATE_PARTY);
-  // Entity resolution rides the party family (#290).
   registerMergeCommands(gateway);
 }

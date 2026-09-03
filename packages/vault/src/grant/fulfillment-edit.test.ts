@@ -96,15 +96,11 @@ describe("grant/fulfillment-edit", () => {
       commandInput: { group_id: groupId },
     });
     if (!route) throw new Error("the shared group routed nowhere");
-    // The CONTAINER question folds both grants together, so it refuses
-    // nothing: something shared here does carry edit.
     expect(route.grants).toHaveLength(2);
     expect(route.refusal).toBeUndefined();
 
     const grantsFor = (partyId: string) =>
       route.grants.filter((grant) => grant.audience.id === partyId);
-    // The ACTOR question is answered per audience: Asha holds view only, and
-    // Ravi's edit grant next door does not lend her its capability.
     expect(shareGrantEditRefusal(route, grantsFor(asha))).toBe(
       `tally.add_expense writes into tally.group ${groupId}, which is shared for view only`
     );
@@ -187,9 +183,6 @@ describe("grant/fulfillment-edit", () => {
       members: [{ partyId: ravi, capability: "read+write" }],
       now,
     });
-    // `view`, because the registry offers a folder nothing else (#825, ruling
-    // G-edit): albums and folders are view-capable and their edit strategy is
-    // deferred, so an `edit` grant over one cannot be minted at all.
     createShareGrant(origin.vault, {
       audience: { kind: "party", id: ravi },
       subjectType: "docs.folder",
@@ -199,10 +192,6 @@ describe("grant/fulfillment-edit", () => {
       grantedBy: originBoot.ownerPartyId,
     });
 
-    // Adding a document to someone else's shared folder, and editing one
-    // already inside it, refuse for the SAME reason in v1: the folder is
-    // shared for view. The commons rail is live either way — it is the grant
-    // that stops short, not the routing.
     expect(
       routeShareGrantEdit(origin.vault, {
         command: "core.add_document",
@@ -211,8 +200,6 @@ describe("grant/fulfillment-edit", () => {
     ).toBe(
       `core.add_document writes into docs.folder ${folderId}, which is shared for view only`
     );
-    // A REAL document to file (#916): a tag's (target_type, target_id) is a
-    // composite foreign key into the entity supertype.
     const documentId = uuidv7();
     const documentContentId = uuidv7();
     origin.vault
@@ -250,9 +237,6 @@ describe("grant/fulfillment-edit", () => {
       `core.edit_document writes into docs.folder ${folderId}, which is shared for view only`
     );
 
-    // The co-contribution guard behind that refusal is still real: asked with
-    // an edit-bearing audience, the folder still answers "not offered in v1".
-    // Defence in depth for a grant row minted before the registry narrowed.
     expect(
       shareGrantEditRefusal(
         routeShareGrantEdit(origin.vault, {

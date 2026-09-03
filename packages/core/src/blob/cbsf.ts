@@ -3,7 +3,6 @@ export const CBSF_VERSION = 2;
 export const CBSF_HEADER_BYTES = 37;
 export const CBSF_TRAILER_BYTES = 13;
 export const CBSF_NONCE_BYTES = 12;
-/** Canonical preview-ladder edges shared by gateway and browser capture. */
 export const BLOB_TINY_EDGE = 256;
 export const BLOB_MEDIUM_EDGE = 2_048;
 

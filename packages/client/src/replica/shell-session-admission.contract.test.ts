@@ -361,8 +361,6 @@ describe("shell-session-admission", () => {
         return intent;
       };
       const replica = coordinator({
-        // A durable, ordered outbox: the head keeps its place across a failed
-        // attempt, which is what leaves later writes unclaimed.
         enqueue: vi.fn<ShellReplicaCoordinator["enqueue"]>(async (input) => {
           const intent: ReplicaIntent = {
             ...queuedIntent(input.intentId ?? "unnamed"),
@@ -399,8 +397,6 @@ describe("shell-session-admission", () => {
         }),
       });
       const fetcher = vi.fn<ReplicaFetcher>((_baseUrl, _pathname, init) => {
-        // The harness severs the transport, not `navigator.onLine`: the tab
-        // still believes it is online, so every write takes the drain path.
         if (severed) throw new TypeError("Harness gateway is unreachable");
         const intentId = (JSON.parse(String(init.body)) as { intentId: string })
           .intentId;
@@ -469,10 +465,6 @@ function responseFor(
   );
 }
 
-/**
- * Bound the wait in ticks, not seconds: the #846 measurement waited 30s for a
- * settlement that never came, and a slow settlement is the same defect.
- */
 async function settledWithinTicks<T>(
   work: Promise<T>,
   turns = 3

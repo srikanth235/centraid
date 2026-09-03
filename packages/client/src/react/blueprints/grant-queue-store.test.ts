@@ -1,6 +1,3 @@
-// The queue's law is tested in `@centraid/blueprints`; this seat pins
-// durability and order.
-
 import { IDBFactory } from "fake-indexeddb";
 import { describe, expect, it } from "vitest";
 
@@ -39,13 +36,10 @@ describe("the browser seat's grant queue", () => {
     expect((await queue.list()).map((held) => held.intentId)).toStrictEqual([
       "b",
     ]);
-    // Not an error: a drain may race a reload.
     await expect(queue.remove("gone")).resolves.toBeUndefined();
   });
 
   it("answers undefined where nothing durable can hold an intent", async () => {
-    // Never a silent in-memory queue: a store that forgets on reload must not
-    // tell a member their share is on its way.
     await expect(openGrantIntentQueue(undefined)).resolves.toBeUndefined();
   });
 });

@@ -1,20 +1,3 @@
-// Value equality for the JSON-shaped DTOs the shell passes to screens
-// (#659). Used to decide "did this projection actually change?" so a
-// re-projection that produced an identical value can hand back the PREVIOUS
-// object, keeping React's identity checks (memo, dep arrays) meaningful.
-//
-// Why a comparison and not a hand-written signature: a signature that forgets
-// a field renders stale UI forever, and nothing catches it. Comparing the
-// finished value cannot miss a field by construction. It stays cheap because
-// large strings that were themselves memoized (the rich-answer HTML) compare
-// by reference in one step, and the walk short-circuits on the first
-// difference.
-
-/**
- * Deep value equality over JSON-shaped data: primitives, plain objects and
- * arrays. Functions, Maps, Sets, Dates and class instances are compared by
- * reference — the DTOs this serves carry none of them.
- */
 export function structuralEqual(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
   if (

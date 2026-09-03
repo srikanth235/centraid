@@ -1,7 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit — this test is the single cross-emitter contrast matrix for shell, blueprint, kit, and native ink pairings; splitting its coupled floors would weaken the shared regression evidence.
-// WCAG floors for every ramp this package ships, measured against the EMITTED
-// CSS, never literals copied out of it: 4.5:1 body text, 3:1 large text and
-// non-text UI. Every rung is measured on every surface it can land on.
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -32,11 +29,9 @@ const TEXT_FLOORS = {
   "--text": AA_BODY,
   "--text-soft": AA_BODY,
   "--text-faint": AA_BODY,
-  // Placeholders and hairline icons; never body copy.
   "--text-ghost": AA_LARGE,
 } as const;
 
-/** Native needs no parser: it lowers concrete values. */
 function resolve(value: string, scope: Record<string, string>): string {
   return value
     .replace(
@@ -145,8 +140,6 @@ describe("shell token contrast floors", () => {
     });
 
     test(`${name}: semantic states clear the BODY floor on every surface`, () => {
-      // Not AA_LARGE: the states are painted on 9–13.7px prose, under every
-      // large-text exemption in 1.4.3. Non-text uses are easier at 3:1.
       for (const token of SEMANTIC_STATES) {
         const value = resolve(tokens[token] ?? "", scope);
         for (const surface of surfaces) {
@@ -154,7 +147,6 @@ describe("shell token contrast floors", () => {
             contrastRatio(value, surface),
             `${name} ${token} on ${surface}`
           ).toBeGreaterThanOrEqual(AA_BODY);
-          // …and on a wash of ITSELF, which is strictly harder than bare.
           expect(
             contrastRatio(value, selfTint(value, surface)),
             `${name} ${token} on its own ${SELF_TINT * 100}% tint over ${surface}`
@@ -163,7 +155,6 @@ describe("shell token contrast floors", () => {
       }
     });
 
-    // Split from the floor test: it would name the wrong cause.
     test(`${name}: semantic states still read as their role`, () => {
       for (const token of SEMANTIC_STATES) {
         const value = resolve(tokens[token] ?? "", scope);
@@ -201,7 +192,6 @@ describe("shell token contrast floors", () => {
     });
 
     test(`${name}: --net stays legible ON its own wash`, () => {
-      // Faint enough that its ink and the ramp beside it still read on top.
       const washed = resolve(tokens["--net-wash"] ?? "", scope);
       expect(washed, `${name} --net-wash is emitted`).toMatch(/^rgba\(/u);
       for (const surface of surfaces) {
@@ -216,8 +206,6 @@ describe("shell token contrast floors", () => {
     });
 
     test(`${name}: the hover rungs step the way their job requires`, () => {
-      // `--net`'s hover moves AWAY from the paper: a warning that quietens
-      // under the pointer is wrong. The accent is at its ramp's end.
       const page = surfaces[0] ?? "";
       const net = resolve(tokens["--net"] ?? "", scope);
       const netHover = resolve(tokens["--net-hover"] ?? "", scope);
@@ -277,8 +265,6 @@ describe("blueprint token contrast floors", () => {
     });
 
     test(`${name}: semantic states clear the BODY floor on card and track`, () => {
-      // Re-measured off the OTHER emitter: they share one surface ramp, so a
-      // floor held on one says nothing about the other.
       for (const token of SEMANTIC_STATES) {
         const value = resolve(tokens[token] ?? "", scope);
         expect(tokens[token], `blueprint ${name} ${token}`).toBeDefined();
@@ -338,9 +324,6 @@ describe("blueprint token contrast floors", () => {
     });
   });
 
-  // ── The one filled action, which is INK ────────────────────────────────
-  //
-  // The accent IS the ink, so this grid walks one pairing rather than a wheel.
   describe("the filled ink action carries its ink", () => {
     test.each([
       ["light", light],
@@ -354,7 +337,6 @@ describe("blueprint token contrast floors", () => {
       const card = evalColorMix(resolve(tokens["--bg-elev"] ?? "", {}));
 
       expect(contrastRatio(ink, fill), "rest").toBeGreaterThanOrEqual(AA_BODY);
-      // Hover moves AWAY from the ink; the reverse is the failure this pins.
       expect(contrastRatio(ink, hover), "hover").toBeGreaterThanOrEqual(
         contrastRatio(ink, fill)
       );
@@ -366,13 +348,8 @@ describe("blueprint token contrast floors", () => {
     });
   });
 
-  // ── The palette hues as TEXT ────────────────────────────────────────────
-  //
-  // `--c-*` are icon FILLS and measure 2.2:1–4.8:1 as `color:`, so a raw fill is
-  // never ink. `--c-<name>-text` is the solved rung (#686).
   describe("every palette hue has a legible TEXT rung", () => {
     const TINT = 0.12;
-    // Past this cap a rung has stopped being its hue.
     const RECOGNISABLE = 12;
 
     const tint = (hue: string, bg: string): string => {
@@ -421,10 +398,6 @@ describe("blueprint token contrast floors", () => {
       );
 
       test(`${theme}: the rung is its fill's hue, moved only in lightness`, () => {
-        // "Darken until it passes" is safe only while hue and saturation hold:
-        // a desaturating solver converges eight hues on one grey that clears
-        // every floor and codes nothing. It cannot promise two hues stay apart —
-        // that is gated where the set is chosen (`kind-colours.test.ts`).
         for (const [name, fillHex] of Object.entries(ring)) {
           const ink = evalColorMix(
             resolve(tokens[`--c-${name}-text`] ?? "", scope)
@@ -451,9 +424,6 @@ describe("blueprint token contrast floors", () => {
       });
 
       test(`${theme}: the file-kind hues stay apart as text`, () => {
-        // Solving to a shared floor pulls hues together, silently, since every
-        // rung still passes AA. `ochre` is deliberately NOT in the set: it is
-        // `amber` at lower chroma.
         const KINDS = [
           "rose",
           "teal",
@@ -488,10 +458,6 @@ describe("blueprint token contrast floors", () => {
   });
 });
 
-// ── The kit rules the grids above assume ───────────────────────────────────
-//
-// The token grids prove the PAIRINGS are legible; they cannot see which pairing
-// a stylesheet writes. This pins the absent destructive fill and the ink one.
 describe("kit.css honours the ink contract for filled states", () => {
   const css = readFileSync(
     path.resolve(import.meta.dirname, "elements/kit.css"),

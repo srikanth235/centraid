@@ -1,11 +1,3 @@
-// The `media.location` policy at closure READ (#726 P3 decision 8,
-// threat 8): a `strip` origin must not let GPS cross a CROSS-OWNER boundary
-// through `exif_json`, even though `projection-ingest.ts` already stops the
-// AUDIENCE from re-deriving a `place_id` from it — the coordinates themselves
-// still rode the wire before that gate ever ran. Same-owner edges (the local
-// placement plane) are the owner's own data moving between their own vaults,
-// so they must see no redaction at all, regardless of the origin's policy.
-
 import { afterEach, describe, expect, test } from "vitest";
 
 import { updateBlobStoreSettings } from "../host.js";
@@ -51,8 +43,6 @@ describe("media.location policy at closure read", () => {
     const exif = JSON.parse(asset.exif_json!) as Record<string, unknown>;
     expect(exif.latitude).toBeUndefined();
     expect(exif.longitude).toBeUndefined();
-    // A boolean fact, not a coordinate — survives exactly as ingest-time
-    // stripping already leaves it (pipeline.ts).
     expect(exif.has_location).toBe(true);
     expect(exif.width).toBe(800);
   });
@@ -67,7 +57,6 @@ describe("media.location policy at closure read", () => {
       originVaultId: "vault-priya",
       itemType: "media.asset",
       itemIds: [photo.assetId],
-      // crossOwner omitted — same-owner default.
     });
 
     const asset = closure.rows.mediaAssets[0]!;
@@ -80,7 +69,6 @@ describe("media.location policy at closure read", () => {
     const { origin, originBoot } = household();
     const photo = seedPhoto(origin, originBoot, "gps-keep");
     withGps(origin, photo.assetId);
-    // media.location defaults to 'keep' — no explicit patch needed.
 
     const closure = readShareClosure(origin.vault, {
       originVaultId: "vault-priya",

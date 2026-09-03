@@ -15,7 +15,6 @@ let gw: Gateway;
 let boot: BootstrapResult;
 let owner: Credential;
 
-// A 1x1 transparent PNG as an inline data URI — the shape a blueprint sends.
 const PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
@@ -91,8 +90,6 @@ describe("attachments", () => {
     expect(content.media_type).toBe("image/png");
     expect(content.title).toBe("preview.png");
     expect(content.byte_size).toBeGreaterThan(0);
-    // Binary bytes spill to the CAS (#296): the row keeps the address,
-    // custody keeps the bytes, and the sha is of the RAW bytes.
     expect(content.content_uri).toMatch(/^blob:sha256-[0-9a-f]{64}$/u);
     const sha = content.content_uri.slice("blob:sha256-".length);
     expect(db.blobs.hasSync(sha)).toBe(true);

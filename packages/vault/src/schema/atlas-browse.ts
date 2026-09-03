@@ -1,26 +1,3 @@
-// The Vault Atlas — Browse read side (#441). A vault-aware
-// table editor's read surface: the table picker, a keyset-paginated row grid,
-// single-row reads, per-column metadata (declared type, notnull, pk, FK
-// target, sealed flag), an FK reference-picker search, and the dependent
-// preview a delete confirmation needs.
-//
-// Two invariants run through everything here:
-//   1. NO user input ever becomes SQL text. Table names resolve through the
-//      logical↔physical registry (`resolveEntity`) — an unknown name is a
-//      denial, never a query. Column names in ORDER BY / keyset predicates are
-//      validated against the live `PRAGMA table_info` whitelist. Values are
-//      always bound parameters.
-//   2. Sealed columns (#293) are masked on read — the same
-//      `SEALED_PLACEHOLDER` the consent-checked read path shows. Plaintext
-//      takes the `reveal` verb, never a Browse read.
-//
-// The dependent preview is the shared seam with Part A: engine FKs are found
-// by a reverse `PRAGMA foreign_key_list` walk, and the polymorphic `(type,id)`
-// mechanisms — engine keys since #916's rung ten, but keyed on `core_entity`,
-// so a reverse walk cannot name them — by `ENTITY_POINTERS`. That is the
-// acceptance criterion "counts polymorphic dependents via the registry, not
-// only engine FKs".
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { maskSealed } from "./atlas-browse-mask.js";
@@ -30,18 +7,10 @@ import { sealedColumnsOf } from "./sealed.js";
 import { resolveEntity } from "./tables.js";
 import type { EntityRef } from "./tables.js";
 
-/** Hard cap on a Browse page — some tables are 40k+ rows (#441). */
 export const BROWSE_MAX_LIMIT = 100;
 export const BROWSE_DEFAULT_LIMIT = 50;
-/** Cap on the FK reference-picker result set. */
 export const BROWSE_REF_SEARCH_LIMIT = 20;
 
-/**
- * The display-field heuristic the whole Browse surface shares (#441):
- * the human-facing label of a row is the first present of these columns, else
- * the primary key. Lives here so the FK reference-picker and the column
- * metadata agree on what a row "reads as".
- */
 export const DISPLAY_FIELD_CANDIDATES: readonly string[] = [
   "display_name",
   "name",
@@ -98,7 +67,6 @@ function countRows(vault: DatabaseSync, physical: string): number {
   }
 }
 
-/** The pk columns of a table in declared order (`pk` is 1-based, 0 = not pk). */
 export function primaryKeyColumns(
   vault: DatabaseSync,
   physical: string
@@ -109,12 +77,6 @@ export function primaryKeyColumns(
     .map((c) => c.name);
 }
 
-/**
- * The keyset key of a table: its single TEXT PK when it has exactly one pk
- * column, otherwise `rowid` (composite-PK tables like `tally_expense_split`,
- * and the rare pk-less table). Keyset pagination always rides a unique,
- * non-null key so a page boundary is totally stable.
- */
 export function keysetKey(
   vault: DatabaseSync,
   physical: string
@@ -125,12 +87,10 @@ export function keysetKey(
     : { column: "rowid", rowid: true };
 }
 
-/** The display field for a table given its columns, per the shared heuristic. */
 export function displayFieldOf(columns: readonly string[], pk: string): string {
   return DISPLAY_FIELD_CANDIDATES.find((c) => columns.includes(c)) ?? pk;
 }
 
-/** Resolve a logical name to a vault-file table, or throw a clean rejection. */
 export function resolveBrowseTable(
   vault: DatabaseSync,
   logical: string
@@ -142,7 +102,6 @@ export function resolveBrowseTable(
   return ref;
 }
 
-/** A clean, mappable failure — the route turns `code` into a status. */
 export class BrowseError extends Error {
   constructor(
     readonly code: "unknown_table" | "bad_request" | "not_found",
@@ -153,10 +112,6 @@ export class BrowseError extends Error {
   }
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// Table picker
-// ───────────────────────────────────────────────────────────────────────────
-
 export interface BrowseTableEntry {
   logical: string;
   physical: string;
@@ -165,17 +120,10 @@ export interface BrowseTableEntry {
   packKind: AtlasPackKind;
   label: string;
   rows: number;
-  /** Machinery bands are read-only by default (#441). */
   machinery: boolean;
-  /** True when the table has a single TEXT pk (the common keyset case). */
   singlePk: boolean;
 }
 
-/**
- * Every registered vault-file table with its pack classification and live row
- * count — the Browse table picker, grouped ontology-packs-first with machinery
- * bands below by the caller. Derived from `atlasTables()`; never hand-listed.
- */
 export function browseTableList(vault: DatabaseSync): BrowseTableEntry[] {
   return atlasTables().map((e) => ({
     logical: e.logical,
@@ -190,24 +138,15 @@ export function browseTableList(vault: DatabaseSync): BrowseTableEntry[] {
   }));
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// Column metadata
-// ───────────────────────────────────────────────────────────────────────────
-
 export interface BrowseColumn {
   name: string;
-  /** Declared SQLite type (STRICT tables carry a concrete affinity). */
   type: string;
   notnull: boolean;
-  /** 0 = not pk; else 1-based position in a (possibly composite) pk. */
   pk: number;
   defaultValue: string | null;
-  /** FK target as `physical.column`, or null. */
   fkTable: string | null;
   fkColumn: string | null;
-  /** The FK target's logical `schema.table`, for the reference picker. */
   fkLogical: string | null;
-  /** Sealed cell (#293): never editable/displayed in plaintext. */
   sealed: boolean;
 }
 
@@ -215,9 +154,7 @@ export interface BrowseColumnsResult {
   logical: string;
   physical: string;
   columns: BrowseColumn[];
-  /** The keyset key column (single pk or `rowid`). */
   keysetKey: string;
-  /** The human display field the FK picker uses for this table. */
   displayField: string;
   machinery: boolean;
 }
@@ -261,16 +198,10 @@ export function browseColumns(
   };
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// Row list — keyset pagination
-// ───────────────────────────────────────────────────────────────────────────
-
 export interface BrowseRowsParams {
   table: string;
   limit?: number;
-  /** Opaque keyset cursor from a prior page's `nextCursor`. */
   after?: string;
-  /** A real column to order by; defaults to the keyset key. */
   orderBy?: string;
   dir?: "asc" | "desc";
 }
@@ -280,7 +211,6 @@ export interface BrowseRowsResult {
   physical: string;
   rows: Record<string, unknown>[];
   columns: string[];
-  /** Cursor for the next page, or null when the page is the last. */
   nextCursor: string | null;
   orderBy: string;
   dir: "asc" | "desc";
@@ -288,9 +218,7 @@ export interface BrowseRowsResult {
 }
 
 interface Cursor {
-  /** The ordered column's value at the page boundary (null-safe). */
   o: string | number | null;
-  /** The keyset key's value at the page boundary (always non-null). */
   k: string | number;
 }
 
@@ -312,13 +240,6 @@ function decodeCursor(raw: string): Cursor {
   }
 }
 
-/**
- * One keyset-paginated page. The order is `(orderBy, keysetKey)` — a real
- * column then the unique key as tiebreaker, both in `dir`, so ties never split
- * a row across two pages and the boundary is exact. The `after` predicate is
- * NULL-aware (SQLite sorts NULLs first ASC, last DESC) so a nullable orderBy
- * column paginates without dropping rows at the NULL boundary.
- */
 export function browseRows(
   vault: DatabaseSync,
   params: BrowseRowsParams
@@ -330,7 +251,6 @@ export function browseRows(
   const dir: "asc" | "desc" = params.dir === "desc" ? "desc" : "asc";
   const cmp = dir === "desc" ? "<" : ">";
 
-  // orderBy is a real column only (registry/PRAGMA whitelist) or the key.
   const orderBy = params.orderBy ?? key.column;
   if (
     orderBy !== key.column &&
@@ -339,7 +259,6 @@ export function browseRows(
   ) {
     throw new BrowseError("bad_request", `unknown order column "${orderBy}"`);
   }
-  // When ordering by the key itself, the tuple collapses to one column.
   const singleKey = orderBy === key.column;
 
   const limit = Math.min(
@@ -356,18 +275,14 @@ export function browseRows(
       where.push(`"${key.column}" ${cmp} ?`);
       bind.push(cur.k);
     } else {
-      // Row-value tuple keyset, NULL-aware. See the doc comment above.
       const oExpr = `"${orderBy}"`;
       const kExpr = `"${key.column}"`;
       if (cur.o === null) {
         if (dir === "asc") {
-          // After a NULL boundary ascending: remaining NULLs (k > kv), then
-          // every non-null row.
           where.push(
             `((${oExpr} IS NULL AND ${kExpr} ${cmp} ?) OR ${oExpr} IS NOT NULL)`
           );
         } else {
-          // Descending, NULLs last: only later NULLs remain.
           where.push(`(${oExpr} IS NULL AND ${kExpr} ${cmp} ?)`);
         }
         bind.push(cur.k);
@@ -376,7 +291,6 @@ export function browseRows(
         if (dir === "asc") {
           where.push(`(${oExpr} IS NOT NULL AND ${tail})`);
         } else {
-          // Descending, NULLs last: non-null comparisons, then trailing NULLs.
           where.push(
             `(${oExpr} IS NULL OR (${oExpr} IS NOT NULL AND ${tail}))`
           );
@@ -411,7 +325,6 @@ export function browseRows(
       : ((last[orderBy] ?? null) as string | number | null);
     nextCursor = encodeCursor({ o: oValue, k: kValue });
   }
-  // The synthetic rowid selector is an implementation detail, not a column.
   if (key.rowid) for (const r of pageRows) delete r["__rowid"];
 
   return {
@@ -426,10 +339,6 @@ export function browseRows(
   };
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// Single row
-// ───────────────────────────────────────────────────────────────────────────
-
 export interface BrowseRowResult {
   logical: string;
   physical: string;
@@ -437,7 +346,6 @@ export interface BrowseRowResult {
   columns: string[];
 }
 
-/** One row by primary key. Composite PKs take a JSON array of pk values. */
 export function browseRow(
   vault: DatabaseSync,
   table: string,

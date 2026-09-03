@@ -1,12 +1,3 @@
-/*
- * Framing (FORMAT.md § Chunk payload framing, #405): compression sits INSIDE
- * encryption as `[algo-id][body]`, kept only if strictly smaller, so the
- * worst case is one byte. Identity keys off RAW plaintext — id, nonce and dedup
- * are untouched — and `ZSTD_LEVEL` is pinned so retries re-frame identically.
- * Id bytes are format-normative; every READER decodes all (restores run
- * elsewhere).
- */
-
 import zlib from "node:zlib";
 
 export const ALGO_STORE = 0x00;

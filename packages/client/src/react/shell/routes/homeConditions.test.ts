@@ -80,9 +80,6 @@ describe("shell/routes/homeConditions", () => {
 
   describe("the conflict list Home reads", () => {
     it("is empty until a conflict record carries both versions (named seam)", () => {
-      // `ReplicaConflict` has only expected/actual VERSION NUMBERS, so there
-      // is nothing to show either side of. Showing a disagreement without its
-      // two bodies is the one thing this state exists to prevent.
       expect(HOME_CONFLICTS).toStrictEqual([]);
     });
   });

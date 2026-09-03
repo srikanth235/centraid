@@ -1,6 +1,3 @@
-// oklab colour maths for the contrast grids. The accent and state ramps are
-// `color-mix()` over a runtime hue, so an `hsl()`-only test cannot see them.
-
 import { parseColor, rgbToHsl, SELF_TINT, toHex } from "./color.js";
 
 type Triple = [number, number, number];
@@ -51,9 +48,6 @@ const inGamut = (rgb: Triple): boolean =>
     (channel) => channel >= -IN_GAMUT_EPSILON && channel <= 1 + IN_GAMUT_EPSILON
   );
 
-/** Resolved at BUILD TIME: React Native has no `oklch()` or `color-mix()`.
- *  Chroma is bisected to the largest in-gamut value because clipping channels
- *  shifts the HUE; lightness and hue stay exact. */
 export function oklchToHex(
   lightness: number,
   chroma: number,
@@ -67,7 +61,6 @@ export function oklchToHex(
   if (!inGamut(at(chroma))) {
     let low = 0;
     let high = chroma;
-    // 24 halvings resolve chroma far finer than the 1/255 the hex can carry.
     for (let step = 0; step < 24; step++) {
       const mid = (low + high) / 2;
       if (inGamut(at(mid))) low = mid;
@@ -82,7 +75,6 @@ export function oklchToHex(
   return toHex([rgb[0] ?? 0, rgb[1] ?? 0, rgb[2] ?? 0]);
 }
 
-/** Depth-0 commas only — a nested `hsl(a, b, c)` must survive. */
 function topLevelArgs(body: string): string[] {
   const out: string[] = [];
   let depth = 0;
@@ -100,8 +92,6 @@ function topLevelArgs(body: string): string[] {
   return out.map((s) => s.trim());
 }
 
-/** Innermost first. Only the oklab form — another space must not be silently
- *  averaged in the wrong one. */
 export function evalColorMix(value: string): string {
   let out = value;
   for (;;) {
@@ -153,7 +143,6 @@ export function alphaOver(color: string, bg: string, share: number): string {
   );
 }
 
-/** CSS measurement only; React Native never parses this syntax. */
 export function resolveVars(
   value: string,
   scope: Record<string, string>
@@ -185,15 +174,10 @@ export function declarations(
   return out;
 }
 
-// ── semantic states ──
 export const SEMANTIC_STATES = ["--danger", "--success", "--warning"] as const;
 export { SELF_TINT } from "./color.js";
-/** Past this a state is near-black or near-white, not its hue. */
 export const RECOGNISABLE_STATE = 12;
-/** Desaturation is the other cheat: a grey clears every floor and codes
- *  nothing. Bands are wide but closed. */
 export const STATE_HUE = {
-  // Red, wrapping 0.
   "--danger": [340, 20],
   "--success": [70, 160],
   "--warning": [20, 60],

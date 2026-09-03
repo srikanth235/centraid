@@ -1,16 +1,3 @@
-/**
- * PARITY ON THE REFUSALS, AND ON THE RULED DIVERGENCES (#883 C3).
- *
- * The other half of `read-plan-parity.test.ts`. Where that suite proves the two
- * engines return the same ROWS, this one proves they refuse the same INPUTS —
- * withheld and oversized fields, an unbreakable ORDER BY tie under an opaque
- * primary key — which is the harder half, because a pushdown that quietly
- * answered those would look correct on every row-count assertion ever written.
- *
- * And where the engines are RULED to differ, the divergence is asserted here in
- * the same terms `REPLICA_PUSHDOWN_DIVERGENCES` states it, so a silent change
- * of mind about one fails a test rather than passing review.
- */
 import { describe, expect, test } from "vitest";
 
 import { OnlineOnlyError, ReplicaProtocolError } from "./errors.js";
@@ -81,7 +68,6 @@ describe("replica read pushdown refusals", () => {
       } as ReplicaReadRequest);
       expect(pushed).toStrictEqual(oracle);
     }
-    // Anti-vacuity: the masked reads really do refuse rather than answer.
     expect(
       fixture.both({
         shapeId: shape.shapeId,
@@ -163,8 +149,6 @@ describe("replica read pushdown refusals", () => {
         where: [{ column: "label", op: "in", value: ["plain", 7] }],
       };
       const { pushed, oracle } = fixture.both(request);
-      // The evaluator's answer here is a function of the ARRAY ORDER: "plain"
-      // matches before 7 is ever compared for the row that has it.
       expect(oracle.kind).toBe("threw");
       expect(pushed).toMatchObject({
         kind: "threw",

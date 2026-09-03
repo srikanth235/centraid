@@ -1,9 +1,3 @@
-// Pure-math CTC greedy decode, shared by the ocr recognition postprocess.
-// Takes already-normalized per-timestep class probabilities (softmax done by
-// the caller, typically the ONNX model's own output or a manual softmax over
-// its logits) so this module has nothing to do with ONNX and can be tested
-// directly with synthetic tensors.
-
 export interface ArgMaxResult {
   index: number;
   value: number;
@@ -27,18 +21,9 @@ export function argmax(row: readonly number[]): ArgMaxResult {
 
 export interface CtcDecodeResult {
   text: string;
-  /** Mean probability of the kept (non-blank, de-duplicated) characters, 0..1. */
   confidence: number;
 }
 
-/**
- * Greedy CTC decode: argmax each timestep, collapse consecutive repeats,
- * then drop the blank symbol (PaddleOCR/PP-OCR dictionaries reserve index 0
- * as CTC blank, with `dictionary[i]` giving the character for class `i`).
- * Confidence is the mean probability of the characters that survive both
- * the repeat-collapse and the blank-removal — i.e. exactly the characters
- * that end up in `text`.
- */
 export function ctcGreedyDecode(
   probs: readonly (readonly number[])[],
   dictionary: readonly string[],

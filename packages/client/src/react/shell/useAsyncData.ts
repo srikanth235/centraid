@@ -13,8 +13,6 @@ function sameDeps(a: readonly unknown[], b: readonly unknown[]): boolean {
 }
 
 export interface AsyncDataOptions {
-  /** Keep settled data visible while a deps-change refetch runs, not a
-   *  spinner swap (SSE tick doorbells). Off by default. */
   keepPreviousData?: boolean;
 }
 
@@ -23,7 +21,6 @@ export function useAsyncData<T>(
   deps: readonly unknown[] = EMPTY_DEPS,
   options: AsyncDataOptions = {}
 ): AsyncState<T> {
-  // Stamped with fetch-time deps; a change reads as loading during render.
   const [settled, setSettled] = useState<{
     deps: readonly unknown[];
     state: AsyncState<T>;
@@ -32,7 +29,6 @@ export function useAsyncData<T>(
   const depsRef = useRef(deps);
   const depsKey = JSON.stringify(deps);
 
-  // Refreshed every commit; fetching keys on the value signature only.
   useEffect(() => {
     loadRef.current = load;
     depsRef.current = deps;

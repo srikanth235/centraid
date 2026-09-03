@@ -1,8 +1,3 @@
-// The LOCAL orphan reclaim (#599 / #439 R4). The link count is the cross-vault
-// refcount, so each vault reclaims only its OWN entries; tombstone-then-delete
-// can only over-retain. The live model is NOT the whole root set — archived
-// segments and retained snapshots pin bytes it dropped.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { conversationArchiveShas } from "../conversation-archive-roots.js";
@@ -13,7 +8,6 @@ import { liveBlobShasCached } from "./read.js";
 
 export interface LocalOrphanSweepTarget {
   vault: DatabaseSync;
-  /** The audit band — same file as `vault` (#916); named for what it holds. */
   audit: DatabaseSync;
   blobs: {
     local: Pick<LocalBlobStore, "listSync">;
@@ -41,7 +35,6 @@ export function sweepLocalOrphans(
   options: LocalOrphanSweepOptions
 ): LocalOrphanSweepResult {
   const now = options.now ?? Date.now();
-  // Read-only and shared (#659): other roots are consulted beside it.
   const live = liveBlobShasCached(db.vault);
   const archived = archivedSegmentShas(db.audit);
   const conversation = conversationArchiveShas(db.audit);

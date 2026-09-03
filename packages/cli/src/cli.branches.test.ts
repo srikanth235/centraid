@@ -1,8 +1,3 @@
-/**
- * Branch-depth tests for packages/cli `main` (#545):
- * unknown verb, missing --url/token paths, non-2xx health/list, --help/--version.
- */
-
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -48,7 +43,6 @@ describe("cli.branches", () => {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
     }
-    // Clear token env unless the test supplies it.
     if (!("CENTRAID_TOKEN" in env)) {
       prev.CENTRAID_TOKEN = process.env.CENTRAID_TOKEN;
       delete process.env.CENTRAID_TOKEN;
@@ -167,10 +161,6 @@ describe("cli.branches", () => {
       vi.fn(async () =>
         jsonResponse(200, {
           version: "9.0.0",
-          // Deliberately a future gateway this build must refuse — stated
-          // against the shared constant so it stays ahead no matter where
-          // the floor moves, rather than a literal that could someday BE
-          // the floor.
           protocolVersion: GATEWAY_PROTOCOL_VERSION + 1,
           minSupportedProtocol: GATEWAY_PROTOCOL_VERSION + 1,
         })

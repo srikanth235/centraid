@@ -2,9 +2,6 @@ import { useCallback, useState } from "react";
 
 import { Store } from "./store.js";
 
-// Starred apps/automations. Backed by the local Store ('home.starred' — an
-// id→true map); reactive so toggling a star re-renders Home. Keyed by app id
-// or automation ref.
 export interface StarController {
   isStarred: (id: string) => boolean;
   toggleStar: (id: string) => void;

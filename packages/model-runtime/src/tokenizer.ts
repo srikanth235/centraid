@@ -1,9 +1,3 @@
-// CLIP BPE tokenizer matching OpenAI `simple_tokenizer.py` (MIT,
-// https://github.com/openai/CLIP — same source as the ViT-B/32 weights;
-// LICENSES.md). From the published algorithm, not a vendored port.
-// Generic over vocab/merges so tests use a hand-computable synthetic
-// vocabulary rather than asserting unverified CLIP token ids.
-
 const START_OF_TEXT = "<|startoftext|>";
 const END_OF_TEXT = "<|endoftext|>";
 
@@ -115,8 +109,6 @@ export function bpeMerge(
   return word;
 }
 
-// CLIP pre-tokenize: specials, contractions, letter runs, single digits, other.
-// `u` is required for `\p{...}` (docs/toolchain.md).
 const PRETOKENIZE_PATTERN =
   /<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|\p{L}+|\p{N}|[^\s\p{L}\p{N}]+/gu;
 
@@ -150,7 +142,6 @@ export function createClipTokenizer(data: ClipTokenizerData): ClipTokenizer {
       "createClipTokenizer: vocab is missing <|startoftext|> or <|endoftext|>"
     );
   }
-  // Re-bind: control-flow narrowing does not carry into the nested `encode` closure.
   const startId: number = maybeStartId;
   const endId: number = maybeEndId;
 

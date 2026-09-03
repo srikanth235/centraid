@@ -1,9 +1,3 @@
-// Pure-math greedy non-maximum suppression, shared by the faces (YuNet) and
-// ocr detection postprocess paths. No ONNX/sharp import here on purpose —
-// this module is exercised directly by vitest with synthetic boxes, without
-// needing `bun run setup` (#724 W8: the vitest suite must pass with no
-// onnxruntime-node installed).
-
 export interface Box {
   x: number;
   y: number;
@@ -20,7 +14,6 @@ export function boxArea(box: Box): number {
   return Math.max(0, box.width) * Math.max(0, box.height);
 }
 
-/** Intersection-over-union of two axis-aligned boxes in [x, y, w, h] form. */
 export function iou(a: Box, b: Box): number {
   const ax2 = a.x + a.width;
   const ay2 = a.y + a.height;
@@ -44,18 +37,10 @@ export function iou(a: Box, b: Box): number {
 }
 
 export interface NmsOptions {
-  /** Boxes whose IoU with a kept box exceeds this are suppressed. */
   iouThreshold: number;
-  /** Optional cap on the number of boxes returned, applied after sorting by score. */
   topK?: number;
 }
 
-/**
- * Greedy NMS: sort by score descending, then repeatedly keep the top-scoring
- * remaining box and drop every other box that overlaps it above
- * `iouThreshold`. Standard formulation used by both YuNet (faces) and DB
- * (ocr) reference implementations.
- */
 export function nonMaxSuppression(
   boxes: readonly ScoredBox[],
   options: NmsOptions

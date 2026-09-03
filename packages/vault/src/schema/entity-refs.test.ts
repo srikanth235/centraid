@@ -1,15 +1,3 @@
-// Closure guard for the entity supertype (#916, rung ten) — the successor to
-// `poly-refs.test.ts`.
-//
-// The A1 bug was an UNKNOWN UNKNOWN: each polymorphic `(type, id)` mechanism
-// was added by a different issue, each purge clause written for the case in
-// front of its author, and nothing enumerated the set — so `enrich_embedding`
-// and `sync_external_entity` were simply never cleaned. Rung ten closes the
-// CLASS in the engine instead of the instances in a sweep: it scans the live
-// DDL of BOTH files for every `(X_type, X_id)` sibling pair and asserts each
-// is either a real composite foreign key into `core_entity` or listed in
-// `ENTITY_REF_EXCLUSIONS` with a reason. A fourteenth mechanism added as bare
-// columns fails here — the supertype cannot silently rot back into a registry.
 import type { DatabaseSync } from "node:sqlite";
 
 import { describe, expect, test } from "vitest";
@@ -62,13 +50,6 @@ function foreignKeysOf(db: DatabaseSync, table: string): ForeignKeyRow[] {
     .all() as unknown as ForeignKeyRow[];
 }
 
-/**
- * Every `(X_type, X_id)` sibling pair in a database — a column ending `_type`
- * whose same-prefix `_id` sibling also exists. Deliberately generic: it does
- * not hard-code the known prefixes (entity/target/subject/from/to/object), so
- * a mechanism introduced under a NEW prefix (`owner_type`/`owner_id`) is still
- * caught and forced to a decision.
- */
 function detectPairs(db: DatabaseSync): DetectedPair[] {
   const pairs: DetectedPair[] = [];
   for (const table of tablesOf(db)) {
@@ -82,17 +63,8 @@ function detectPairs(db: DatabaseSync): DetectedPair[] {
   return pairs;
 }
 
-/**
- * Coincidental `(X_type, X_id)` column pairs that are neither a reference nor
- * an audit value — the generic scan cannot tell a logical-entity pointer from
- * a domain enum beside its own primary key. The one live example was
- * `health_vital.vital_type`, and it left the ontology with `health.*` (#916,
- * ruling ONT-06). The list stays, empty: the shape recurs, and an empty
- * allow-list is the honest statement that nothing currently needs it.
- */
 const NON_POINTER_PAIRS: readonly DetectedPair[] = [];
 
-/** The composite key `(typeCol, idCol) -> core_entity`, or undefined. */
 function compositeKey(
   db: DatabaseSync,
   pair: DetectedPair
@@ -117,8 +89,6 @@ describe("entity-refs", () => {
     const { vault, close } = openVaultDb();
     try {
       const detected = detectPairs(vault).map((p) => ({ ...p, db: vault }));
-      // Sanity: the scan actually finds the known mechanisms (guards against a
-      // detection bug that would make the assertion below vacuously pass).
       expect(detected.length).toBeGreaterThanOrEqual(10);
       const unaccounted = detected.filter((pair) => {
         if (ENTITY_REF_EXCLUSIONS.has(pair.table)) return false;
@@ -144,8 +114,6 @@ describe("entity-refs", () => {
   });
 
   test("every declared pointer carries the key, with the cascade", () => {
-    // The inverse guard: an entry naming a dropped or renamed table or column
-    // would leave Browse counting dependents that cannot exist.
     const { vault, close } = openVaultDb();
     try {
       for (const pointer of ENTITY_POINTERS) {
@@ -210,8 +178,6 @@ describe("entity-refs", () => {
               `${logical}'s membership key is ${membership[0]?.on_delete} — deleting the supertype row must delete the entity row`
             );
           }
-          // A projection is only honest if it still hangs off its parent — its
-          // own, or the supertype where the parent is polymorphic.
           const parent = declaration.projectionOf?.replace(".", "_");
           if (parent !== undefined && !keys.some((fk) => fk.table === parent)) {
             violations.push(
@@ -239,7 +205,6 @@ describe("entity-refs", () => {
           .map(([logical]) => logical)
           .sort()
       );
-      // The supertype and its vocabulary are declared machinery, not entities.
       expect(LOCAL_TABLES.has("core_entity")).toBe(true);
       expect(LOCAL_TABLES.has("core_entity_kind")).toBe(true);
     } finally {
@@ -248,12 +213,6 @@ describe("entity-refs", () => {
   });
 
   test("one name for a pointer: target_type / target_id", () => {
-    // ONT-09 (#916): the mechanism had three spellings. Rung nine renamed the
-    // `item_*` pair, and this is where the rule stays one line long — a
-    // fourteenth mechanism calling its pointer something else fails here.
-    //
-    // `core_link` is the single exception and is not a naming lapse: a link
-    // has two ends, and neither of them is "the target".
     const violations: string[] = [];
     for (const pointer of ENTITY_POINTERS) {
       if (pointer.table === "core_link") continue;
@@ -289,10 +248,6 @@ describe("entity-refs", () => {
   });
 
   test("every registered party pointer exists and is still FK-less", () => {
-    // Two ways an entry goes stale, and both are silent: the column is dropped
-    // or renamed (the merge's UPDATE throws), or someone gives it a real
-    // foreign key (the merge's FK walk now re-points it too, and this entry
-    // becomes a second, redundant pass over the same rows).
     const { vault, close } = openVaultDb();
     try {
       for (const pointer of PARTY_POINTER_REGISTRY) {
@@ -307,8 +262,6 @@ describe("entity-refs", () => {
           ),
           `${pointer.table}.${pointer.column} now has a core_party foreign key — the FK walk re-points it, so drop this entry`
         ).toStrictEqual([]);
-        // `revoke` dates the loser shut rather than deleting it, so the table
-        // has to have somewhere to write that date.
         expect(
           pointer.collision !== "revoke" || cols.has("revoked_at"),
           `${pointer.table} has no revoked_at, so a 'revoke' collision would throw`

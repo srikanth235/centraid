@@ -23,10 +23,8 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
   getUserPrefs: () => Promise.resolve({}),
-  // Features ON; gated-off shell lives in App.capabilities.test.tsx.
   readGatewayCapabilities: () =>
     Promise.resolve({ automations: true, connectors: true }),
-  // `undefined` = no scopes plane (#599) → falls through to listVaults.
   listAppScopes: apiMocks.listAppScopes,
   listVaults: apiMocks.listVaults,
   saveUserPrefs: () => Promise.resolve(undefined),
@@ -104,7 +102,6 @@ function seedShellGlobals(): void {
   (globalThis as unknown as { ICON_PALETTE: unknown }).ICON_PALETTE = {
     violet: "#7C5BD9",
   };
-  // CentraidApi must exist before the first App graph import.
   (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
     onGatewayChanged: () => {},
     onVaultChanged: () => {},
@@ -119,7 +116,6 @@ function seedShellGlobals(): void {
   };
 }
 describe("App suite", () => {
-  // Import once: first transform can exceed a short per-test hook budget.
   beforeAll(async () => {
     seedShellGlobals();
     ({ default: App } = await import("./App.js"));
@@ -175,7 +171,6 @@ describe("App suite", () => {
       expect(stem.textContent).not.toContain("Connectors");
       expect(stem.textContent).not.toContain("Copies");
       expect(stem.textContent).not.toContain("System");
-      // Assistant is a pinned app, not a stem place (#707).
       expect(stem.textContent).not.toContain("Assistant");
       expect(stem.textContent).not.toContain("Starred");
       const activeHome = stem.querySelector('[data-active="true"]');
@@ -199,7 +194,6 @@ describe("App suite", () => {
       await act(async () => {
         starred.click();
       });
-      // Unpinned destinations must not light a stem row.
       expect(el.querySelector('.stem [data-active="true"]')).toBeNull();
       await act(async () => {
         await Promise.resolve();
@@ -231,7 +225,6 @@ describe("App suite", () => {
       });
       const bar = el.querySelector(".appBar")!;
       expect(bar.textContent).toContain("Automations");
-      // Stub gateway has no automations endpoint: error withdraws the commit.
       expect(bar.textContent).not.toContain("New automation");
       expect(bar.textContent).toContain("Templates");
       expect(el.querySelector(".opsCount")).toBeNull();
@@ -250,7 +243,6 @@ describe("App suite", () => {
       );
       expect(el.querySelector(".appBar")?.textContent).toContain("Templates");
 
-      // Loading withdraws both verbs — acting on an unread page is acting on nothing.
       await act(async () => {
         publishVitals("automations", { state: "loading" });
       });
@@ -339,7 +331,6 @@ describe("App suite", () => {
     });
 
     it("hides the stem on request, and never on its own", async () => {
-      // Stem is never a drawer: no scrim, navigating does not dismiss it (#707).
       const el = await mount();
       expect(el.querySelector(".stem")).not.toBeNull();
       const win = el.querySelector<HTMLElement>(".window")!;
@@ -399,7 +390,6 @@ describe("App suite", () => {
       expect(setActiveVault).toHaveBeenCalledWith({ vaultId: "personal" });
     });
 
-    // #665 — switcher is vaults only, flattened across gateways.
     it("lists the vaults of every registered gateway in one list, and picking one on another gateway switches both", async () => {
       apiMocks.listVaults.mockResolvedValue([
         {

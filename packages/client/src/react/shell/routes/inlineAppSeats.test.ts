@@ -8,11 +8,6 @@ import {
   isDisabledOnSeat,
 } from "./inlineAppSeats.js";
 
-// Cross-checks the synchronous table above against the real manifests it
-// mirrors — the drift tripwire the module's own doc comment promises. Walks
-// UP from this test file rather than importing @centraid/blueprints, since
-// that package's runtime entry pulls in Node-only app-engine validation that
-// the client package must not depend on; a raw fs read of app.json is safe.
 const BLUEPRINTS_APPS_DIR = path.resolve(
   import.meta.dirname,
   "../../../../../../packages/blueprints/apps"
@@ -41,8 +36,6 @@ describe("inline app disabled seats", () => {
       const disabledOn = disabledOnFromManifest(id);
       if (disabledOn.length > 0) fromManifests[id] = disabledOn;
     }
-    // Only apps that actually declare a restriction show up on either side —
-    // an app.json with an empty `disabledOn` needs no entry in the table.
     expect(INLINE_APP_DISABLED_SEATS).toStrictEqual(fromManifests);
   });
 

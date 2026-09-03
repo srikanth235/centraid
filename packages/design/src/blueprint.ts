@@ -1,16 +1,3 @@
-// Blueprint CSS lowering.
-//
-// Blueprint apps share the same role NAMES and now the same VALUES as the
-// shell: the Binding Layer has one ink ramp and one paper, and an app surface
-// that quietly re-tuned its own greys was the mechanism by which "one product"
-// stopped being true. The two remaining blueprint adaptations are real ones —
-// host-relative type units (rem, so 200% OS text scale works), and the fact
-// that an app owns an identity hue while the shell owns none.
-//
-// The surface ramp is NOT parameterised by `--app-hue`: that hue is only the
-// app's slot on the OKLCH identity wheel, and the neutrals are the system's
-// literal paper.
-
 import {
   DENSITY_TIERS,
   metrics,
@@ -52,8 +39,6 @@ function block(selector: string, props: Record<string, string>): string {
   return lines.join("\n");
 }
 
-/** The role cells that flip with the theme — identical in shape for both, so
- *  a role can never exist on one ramp and not the other. */
 function themeProps(theme: Theme): Record<string, string> {
   const props: Record<string, string> = {
     "--accent": theme.accent,
@@ -85,7 +70,6 @@ function themeProps(theme: Theme): Record<string, string> {
     "--net-wash": theme.netWash,
     "--on-accent": theme.textInv,
     "--seam": theme.seam,
-    // The media stage is fixed across themes; its foreground is too.
     "--on-stage": ON_STAGE,
     "--on-stage-soft": ON_STAGE_SOFT,
     "--scrim": theme.scrim,
@@ -117,29 +101,19 @@ function themeProps(theme: Theme): Record<string, string> {
 function lightProps(): Record<string, string> {
   const touchType = blueprintTypeForSurface(true);
   const props: Record<string, string> = {
-    // Hue 0 is the wheel origin an app inherits when it declares none; the
-    // shipped neutrals no longer read it, so leaving it unset costs nothing.
     "--app-hue": "0",
     "--dur-1": "140ms",
     "--dur-2": "280ms",
     "--ease": EASE,
     "--ease-entry": EASE_ENTRY,
-    // From `metrics`, never re-typed — the shell sheet reads the same three.
     "--h-control": `${metrics.control}px`,
     "--h-row": `${metrics.row}px`,
     "--h-segmented": `${metrics.segmented}px`,
-    // The app navigation rail (v16). Its width is one number on every seat
-    // that draws it; its ROW is touch-first like `--target-min` — the 44 rung
-    // here, stepped down to `metrics.appRailRow` under `(pointer: fine)` — so
-    // a coarse surface that draws the rail at all draws it as targets.
     "--w-app-rail": `${metrics.appRail}px`,
     "--h-app-rail-row": `${metrics.row}px`,
     "--density-row": `${DENSITY_TIERS.comfortable.row}px`,
     "--density-pad": `${DENSITY_TIERS.comfortable.pad}px`,
     "--o-disabled": "0.45",
-    // An app draws its own pages, so it needs the margin the rest of the
-    // product uses. Without it a blueprint has to invent a number, and Photos
-    // did — 20px, which is neither rung.
     "--page-margin": `${pageMargin.mobile}px`,
     "--target-min": `${metrics.controlTouch}px`,
     ...themeProps(lightTheme),
@@ -150,8 +124,6 @@ function lightProps(): Record<string, string> {
   for (const [key, value] of Object.entries(spacing)) {
     props[`--sp-${key}`] = `${value}px`;
   }
-  // The two named sub-base seams (v7 §E) — same namespace, same reason as the
-  // shell sheet: an app pane may not invent a third value under the base.
   for (const [key, value] of Object.entries(subBase)) {
     props[`--sp-${key}`] = `${value}px`;
   }
@@ -199,8 +171,6 @@ export function toBlueprintCss(): string {
       "}",
     ].join("\n"),
     densities,
-    // Same one axis as the shell sheet — 44 on touch, `metrics.control` under
-    // a pointer (v7 §C). See css.ts for why 32px was not a rung.
     [
       "@media (pointer: fine) {",
       block(":root", pointerProps)

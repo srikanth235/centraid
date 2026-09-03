@@ -100,7 +100,6 @@ describe("ui/BarsBlock", () => {
     act(() => root?.unmount());
     root = null;
     container?.remove();
-    // Real dates, and only two of them: the caller's axis, not the block's.
     const dated = mount(
       <BarsBlock
         ariaLabel="Spend per day"

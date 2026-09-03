@@ -178,8 +178,6 @@ describe("docs.folder Commons command boundary", () => {
         .all(grant.grantId)
     ).toMatchObject([{ command: "core.add_document" }]);
 
-    // The member's write takes the one write rail; both refusals below are
-    // decided and sequenced before any document command runs.
     const memberWrite = (
       command: string,
       commandInput: Record<string, unknown>

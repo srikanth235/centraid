@@ -1,8 +1,3 @@
-// S5 — Evidence: every read and every command leaves rows, allowed or
-// denied. Receipts (Kantara-style, hash-chained), provenance (W3C PROV) per
-// write, evidence + explanation per invocation. Unskippable because there is
-// no other door. All writers here append to the audit band and never UPDATE.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { nowIso, sha256Hex, uuidv7 } from "../ids.js";
@@ -14,23 +9,11 @@ export interface ReceiptInput {
   action: string;
   objectType: string;
   objectId: string | null;
-  /** The purpose that APPLIED — callers record the defaulted notation (#306). */
   purpose: string | null | undefined;
   decision: "allow" | "deny";
   detail?: Record<string, unknown>;
 }
 
-/**
- * The L4 attribution fragment for one invocation's receipt detail (#599
- * decisions 7–8; #726): the owner the write is attributable to, spread into
- * `detail` beside the app/agent that carried it — so an agent turn journals
- * as "agent, for <owner>".
- *
- * The owner arrives two ways and they agree: `InvokeRequest.actingOwnerId`
- * is the host-resolved device→owner binding, and `Identity.onBehalfOfOwner`
- * is the agent turn's authenticated on-behalf-of principal. Empty when neither
- * is known (a scheduler-fired automation), never guessed.
- */
 export function actingOwnerDetail(
   identity: Pick<Identity, "onBehalfOfOwner">,
   request: { actingOwnerId?: string }
@@ -39,22 +22,6 @@ export function actingOwnerDetail(
   return ownerId === undefined ? {} : { actingOwner: ownerId };
 }
 
-/**
- * Append an access.receipt, chaining its hash to the previous receipt.
- *
- * THE HASH COVERS THE WHOLE BODY (#916, review 5.3). It used to cover seven
- * columns — the chain proved the action and its object, and left
- * `detail_json`, `grant_id`, `invocation_id` and the purpose outside, so the
- * WHY of a decision could be rewritten without breaking the chain that exists
- * to prove it was not. Every column the row carries is hashed, in a fixed
- * order, so tampering with any of them is detectable.
- *
- * `seq` is the chain POSITION (#916, R13 / review 5.4). The head used to be
- * found with `ORDER BY receipt_id DESC`, correct only because ids happen to be
- * UUIDv7 and therefore happen to sort by time — an accident of the id scheme
- * holding up the integrity of the chain. It is monotonic per file, assigned
- * here, and the head is read by it.
- */
 export function writeReceipt(audit: DatabaseSync, input: ReceiptInput): string {
   const receiptId = uuidv7();
   const occurredAt = nowIso();
@@ -104,11 +71,6 @@ export function writeReceipt(audit: DatabaseSync, input: ReceiptInput): string {
   return receiptId;
 }
 
-/**
- * Recompute a receipt's hash from the row as stored, for a verifier. The one
- * definition of what the chain covers lives above; this is its inverse, so the
- * two can never drift apart.
- */
 export function receiptHash(row: {
   prevHash: string | null;
   receiptId: string;
@@ -141,11 +103,6 @@ export function receiptHash(row: {
   );
 }
 
-/**
- * Append access.provenance for one written row, chained per entity. Ingest
- * passes agentKind 'import' (W3C PROV agent class) regardless of which
- * enrolled identity carried the batch in.
- */
 export function writeProvenance(
   audit: DatabaseSync,
   identity: Identity,
@@ -181,7 +138,6 @@ export function writeProvenance(
   return provId;
 }
 
-/** Append an agent.invocation_check row (pre or post, S3/S4). */
 export function writeCheck(
   audit: DatabaseSync,
   invocationId: string,
@@ -206,7 +162,6 @@ export function writeCheck(
     );
 }
 
-/** Append agent.evidence rows for a command's citations. */
 export function writeEvidence(
   audit: DatabaseSync,
   invocationId: string,
@@ -228,7 +183,6 @@ export function writeEvidence(
   }
 }
 
-/** Append the one agent.explanation for an invocation. */
 export function writeExplanation(
   audit: DatabaseSync,
   invocationId: string,

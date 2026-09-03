@@ -1,7 +1,3 @@
-/**
- * React format helpers + parity pin with app-format relativeTime (#545).
- */
-
 import { describe, expect, it } from "vitest";
 
 import { relativeTime as appRelativeTime } from "../app-format.js";

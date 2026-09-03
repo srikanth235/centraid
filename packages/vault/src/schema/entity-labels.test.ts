@@ -1,7 +1,3 @@
-// THE LABEL GATE (#883 O-label): the table registry is the one owner of what an
-// entity is CALLED, and an undeclared label fails validation. The red case runs
-// against a SCRATCH registry — the gate takes the registry it checks.
-
 import { describe, expect, test } from "vitest";
 
 import { ATLAS_KIND_FRIENDLY, atlasTablesByLogical } from "./atlas.js";
@@ -78,7 +74,6 @@ describe("entity labels", () => {
     for (const [logical, entry] of byLogical) {
       expect(entry.friendly).toBe(entityDeclaration(logical)!.label);
     }
-    // The curated map is exactly the blurb-carrying subset of the registry.
     for (const [logical, friendly] of Object.entries(ATLAS_KIND_FRIENDLY)) {
       const declaration = entityDeclaration(logical)!;
       expect(friendly.name).toBe(declaration.label);
@@ -87,8 +82,6 @@ describe("entity labels", () => {
   });
 
   test("the registry is an allow-list before it is a name table", () => {
-    // A prototype key is not a declaration. `[schema]?.[table]` would answer
-    // truthy here and hand back a physical table name nothing declared.
     expect(resolveEntity("core.constructor")).toBeUndefined();
     expect(entityDeclaration("core.toString")).toBeUndefined();
     expect(resolveEntity("constructor.party")).toBeUndefined();

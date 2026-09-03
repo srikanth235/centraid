@@ -5,11 +5,6 @@ import { cx } from "../ui/cx.js";
 import mainScrollCss from "../styles/mainScroll.module.css";
 import styles from "./PageScroll.module.css";
 
-// The standard `.has-wall > .cd-main-scroll` page body the shell frame hosts,
-// with an optional `.cd-page-head` title row. Screens that own their own
-// header (Insights) omit title/subtitle. `flush` drops the standard page
-// padding for screens whose content owns its own spacing (the Day-1 home
-// hero).
 export default function PageScroll({
   title,
   subtitle,

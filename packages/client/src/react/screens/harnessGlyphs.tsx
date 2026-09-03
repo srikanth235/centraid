@@ -1,20 +1,5 @@
 import type { JSX } from "react";
 
-// Harness identity glyphs for the user-facing Agents console.
-//
-// Glyphs are vendored from the ACP registry CDN
-// (cdn.agentclientprotocol.com/registry/v1/latest/<id>.svg) — one monochrome
-// mark per supported harness kind. Every glyph is drawn with `currentColor` and
-// carries NO hardcoded colour, so each one inherits the card's accent (or the
-// muted ink token when the harness is unavailable) through the `color` the
-// `HarnessGlyph` wrapper sets. Each entry keeps the source SVG's own `viewBox`
-// so the wrapper can frame it correctly; `body` is the SVG's inner markup
-// (its `<path>` / `<g>` children) verbatim, without the outer `<svg>` element.
-//
-// This is cosmetic polish only, exactly like `ACCENT_BY_KIND`: a kind absent
-// here still renders a complete card and falls back to a neutral generic glyph.
-// It never gates or filters the gateway's harness list.
-
 interface Glyph {
   readonly viewBox: string;
   readonly body: string;
@@ -87,14 +72,6 @@ export const HARNESS_GLYPHS: Record<string, Glyph> = {
   },
 };
 
-/**
- * The identity glyph for one harness kind, drawn in `currentColor`. `color` is
- * the card accent when the harness is connected and a muted ink token otherwise,
- * so the glyph tints exactly like the rest of the card. An unrecognised kind
- * (a gateway newer than this build) falls back to a neutral generic mark rather
- * than rendering nothing — the same "unknown kind is a newer gateway, not a
- * broken one" stance as `ACCENT_BY_KIND`.
- */
 export function HarnessGlyph({
   kind,
   accent,
@@ -107,8 +84,6 @@ export function HarnessGlyph({
   const glyph = HARNESS_GLYPHS[kind];
   const color = connected ? accent : "var(--text-ghost)";
   const viewBox = glyph?.viewBox ?? "0 0 16 16";
-  // Verbatim vendored inner markup for a known kind; a plain filled circle for
-  // an unknown one. Both are `currentColor`, so `color` above is the only tint.
   const body =
     glyph?.body ?? '<circle cx="8" cy="8" r="4.5" fill="currentColor"/>';
   return (

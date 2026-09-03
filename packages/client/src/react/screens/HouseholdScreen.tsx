@@ -37,11 +37,6 @@ import { custodyCounts, custodyLine } from "./vault-custody.js";
 
 import styles from "./HouseholdScreen.module.css";
 
-// Devices (#599, #726) — which machines hold a copy of this vault, and whose.
-// Identity (title, count, verbs, health) is published to the frame via
-// `routeVitals`; nothing here draws its own header. "Other gateways" and
-// nominee recovery are non-goals (#726).
-
 const NO_DEVICES = async (): Promise<CentraidGatewayDevice[]> => [];
 const NO_REVOKE = async (): Promise<{ removed: boolean }> => ({
   removed: false,
@@ -57,8 +52,6 @@ export interface HouseholdScreenProps {
   vaultsLoading?: boolean;
   onOpenStorage: () => void;
   onNewVault?: () => void;
-  /** Default vault only: that page edits whichever vault the client resolves
-   *  to, so another row's would be the wrong one. */
   onOpenVaultSettings?: () => void;
   loadDevices?: DeviceRosterWiring["loadDevices"];
   onRevokeDevice?: DeviceRosterWiring["onRevokeDevice"];
@@ -71,9 +64,7 @@ export interface HouseholdScreenProps {
   onUpdateDeviceCompute?: DeviceRosterWiring["onUpdateCompute"];
   loadDeviceWorkStatus?: DeviceRosterWiring["loadWorkStatus"];
   sharing?: SharingCardProps;
-  /** One section of the merged Vault surface: no frame, no publishing. */
   embedded?: boolean;
-  /** `null` until the census answers — omit the clause, never guess. */
   records?: number | null;
   onReport?: (report: HouseholdReport) => void;
   collapsed?: boolean;
@@ -103,14 +94,11 @@ function otherSide(
   const mineIsA = ownVaultIds.includes(link.vaultA);
   return {
     label:
-      (mineIsA ? link.labelB : link.labelA) ??
-      // An unlabelled link names the relationship, never a wire id.
-      "Someone you are linked with",
+      (mineIsA ? link.labelB : link.labelA) ?? "Someone you are linked with",
     mineApproved: mineIsA ? link.approvedByA : link.approvedByB,
   };
 }
 
-/** A parked incoming SHARE never counts: no copy-as-share (#825, G-copy). */
 function pendingRequests(
   links: readonly GatewayLink[],
   ownVaultIds: readonly string[]
@@ -154,8 +142,6 @@ function usePendingRequests(
   );
 }
 
-/** One action per row. Capacity is NOT here: it is one gateway-wide fact, so
- *  it is one row under the group. */
 function VaultRows({
   vaults,
   defaultScopeId,
@@ -206,8 +192,6 @@ function VaultRows({
   return <RowsBlock rows={rows} />;
 }
 
-/** One row long, and drawn anyway: a member must be able to check that "who
- *  can reach these bytes" is still one person. */
 function PeopleRows({
   people,
 }: {
@@ -246,8 +230,7 @@ export default function HouseholdScreen(
       ? { onUpdateCompute: props.onUpdateDeviceCompute }
       : {}),
   });
-  /* What a revoke here can promise is the vault's own boundary sentence, read
-     from the grant registry; unread, it is simply not said (#883). */
+
   const [boundaryPromise, setBoundaryPromise] = useState<string>("");
   useEffect(() => {
     if (!hasRoster) return undefined;
@@ -266,8 +249,6 @@ export default function HouseholdScreen(
   const ownVaultIds = useMemo(() => vaults.map((vault) => vault.id), [vaults]);
   const requests = usePendingRequests(sharing, ownVaultIds);
 
-  // A consent surface's healthy first state, not a failure; no device plane is
-  // a different sentence, said below.
   const onlyThisDevice =
     roster.deviceCount === 0 ||
     (roster.deviceCount === 1 && roster.self?.devices[0]?.current === true);
@@ -286,8 +267,6 @@ export default function HouseholdScreen(
   }, []);
   const openPairing = useCallback(() => setPairing(true), []);
 
-  // Count and status ship in ONE publish: the bar must not read "4 devices"
-  // over a status line still reading "Reading…".
   const devices = `${roster.deviceCount} device${roster.deviceCount === 1 ? "" : "s"}`;
   const people = `${roster.personCount} ${roster.personCount === 1 ? "person" : "people"}`;
   const health = useMemo(
@@ -309,8 +288,6 @@ export default function HouseholdScreen(
       ? "This device only"
       : `${devices} · ${people} · ${requests.length} pending`;
 
-  // COPIES AND ENROLMENT ARE TWO NUMBERS: state both; drop the record clause
-  // rather than guess.
   const everyDevice = useMemo(
     () => [
       ...(roster.self?.devices ?? []),
@@ -325,7 +302,6 @@ export default function HouseholdScreen(
 
   const { embedded = false, onReport } = props;
   useEffect(() => {
-    // Embedded, the surface above owns both slots; never publish here.
     if (embedded) return;
     publishRouteSignals("household", {
       count,
@@ -333,7 +309,6 @@ export default function HouseholdScreen(
       state,
       ...(requests.length > 0 ? { tone: "seam" as const } : {}),
     });
-    // `health` is rebuilt each render; the channel drops identical republishes.
   }, [count, embedded, health, requests.length, state]);
   useEffect(() => {
     if (embedded) return undefined;
@@ -341,13 +316,10 @@ export default function HouseholdScreen(
   }, [embedded]);
   useEffect(() => {
     if (embedded) return;
-    // This page's panel, not the shell's modal: it refreshes the roster.
     publishRouteVerbs("household", {
       onCommit: openPairing,
-      // "Recovery" is the sharing card's ceremony; withhold it when absent.
       ...(hasSharing ? { onSecondary: reviewPending } : {}),
     });
-    // `hasSharing`, not the props object: the route rebuilds that each tick.
   }, [embedded, hasSharing, openPairing, reviewPending]);
 
   const report = useMemo<HouseholdReport>(
@@ -372,8 +344,6 @@ export default function HouseholdScreen(
       state,
     ]
   );
-  // Keep the block body: an expression arrow hands the reporter's return value
-  // to React as an effect destructor.
   useEffect(() => {
     onReport?.(report);
   }, [onReport, report]);
@@ -489,7 +459,6 @@ export default function HouseholdScreen(
     </>
   );
 
-  // Embedded: head, custody line, disclosure — never a page frame.
   if (embedded)
     return (
       <>

@@ -1,9 +1,4 @@
 import { renameSync, rmSync } from "node:fs";
-// Key custody lifecycle (#298 items 1, 2, 8): the fingerprint stamped
-// at first seal makes a missing or regenerated key a loud open-time error,
-// never a silent re-mint discovered as GCM garbage at reveal; the reseal
-// verb rotates the DEK across the live and draft bands atomically; and the
-// sealed-value predicate is structural, so user input cannot satisfy it.
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -44,9 +39,6 @@ describe("seal-custody", () => {
   beforeEach(() => {
     root = tempDirSync("seal-custody-");
     vaultDir = path.join(root, "vault-a");
-    // autoClose:false: this suite deliberately closes and REOPENS `db` inside
-    // tests (see reopen()), so the handle the kit would have registered is
-    // stale by the time the test ends. Its own afterEach owns the close.
     ({ db, boot } = bootstrappedVault(
       { openVaultDb, bootstrapVault },
       { dir: vaultDir, ownerName: "Priya", autoClose: false }
@@ -88,8 +80,6 @@ describe("seal-custody", () => {
     return openVaultDb({ dir: vaultDir });
   }
 
-  // ── fingerprint stamping ────────────────────────────────────────────────
-
   test("a vault that never sealed carries no fingerprint; first seal stamps it", () => {
     expect(readSealKeyFingerprint(db.vault)).toBeNull();
     addLogin();
@@ -105,8 +95,6 @@ describe("seal-custody", () => {
     expect(loadSealKey(keyFile)).not.toBeNull();
   });
 
-  // ── open-time detection (issue #298 item 1) ─────────────────────────────
-
   test("once sealed, a missing key file is a loud SealKeyError at OPEN, never a re-mint", () => {
     addLogin();
     rmSync(sealKeyFileFor(vaultDir));
@@ -120,7 +108,6 @@ describe("seal-custody", () => {
     expect(caught).toBeInstanceOf(SealKeyError);
     expect((caught as SealKeyError).code).toBe("missing");
     expect((caught as SealKeyError).message).toContain("unrecoverable");
-    // reopen with the ephemeral override so afterEach can close cleanly
     db = openVaultDb({ dir: vaultDir, sealKey: Buffer.alloc(32) });
   });
 
@@ -169,8 +156,6 @@ describe("seal-custody", () => {
     db = openVaultDb({ dir: vaultDir, sealKey: Buffer.alloc(32) });
   });
 
-  // ── reseal (issue #298 item 8) ──────────────────────────────────────────
-
   test("reseal rotates every sealed cell and the stamped fingerprint; old key stops working", () => {
     const itemId = addLogin("rotate-me-1234");
     const before = Buffer.from(db.sealKey);
@@ -179,7 +164,6 @@ describe("seal-custody", () => {
     expect(result.oldFingerprint).toBe(sealKeyFingerprint(before));
     expect(result.newFingerprint).toBe(readSealKeyFingerprint(db.vault));
     expect(result.newFingerprint).not.toBe(result.oldFingerprint);
-    // Live handle keeps working (buffer swapped in place)…
     const revealed = gw.reveal(owner, {
       entity: "locker.item",
       entityId: itemId,
@@ -187,7 +171,6 @@ describe("seal-custody", () => {
       purpose: PURPOSE,
     });
     expect(revealed.values["password"]).toBe("rotate-me-1234");
-    // …and so does a fresh open from the rotated key file.
     db = reopen();
     const gw2 = createGateway(db);
     registerLockerCommands(gw2);
@@ -245,8 +228,6 @@ describe("seal-custody", () => {
   test("an interrupted rotation (sidecar present, rename missed) heals at next open", () => {
     const itemId = addLogin("heal-me-5678");
     resealVaultKey(db);
-    // Simulate the crash window: put the rotated key back into the sidecar
-    // position and restore a stale key file.
     const keyFile = sealKeyFileFor(vaultDir);
     renameSync(keyFile, `${keyFile}.next`);
     writeSealKeyFile(keyFile, Buffer.alloc(32, 9)); // stale/wrong
@@ -264,8 +245,6 @@ describe("seal-custody", () => {
     });
     expect(revealed.values["password"]).toBe("heal-me-5678");
   });
-
-  // ── structural predicate (issue #298 item 8) ────────────────────────────
 
   test("a password that literally starts with sealed:v1: no longer satisfies the predicate — it gets sealed", () => {
     const devious = `${SEALED_PREFIX}my actual password!`;
@@ -293,15 +272,8 @@ describe("seal-custody", () => {
     expect(isSealedValue(raw.otp_seed)).toBe(true);
   });
 
-  // ── error scrub (issue #298 item 7) ─────────────────────────────────────
-
   test("a handler error echoing a sealed input reaches journal and response scrubbed", () => {
     const secret = "super-secret-echo-9";
-    // locker.add_item with a bad type fails schema BEFORE any seal — instead
-    // drive the scrub through a constraint-style failure: duplicate star on a
-    // nonexistent item throws with input echoed? Use precondition-free edit of
-    // a missing item, whose handler throws mentioning nothing. So test the
-    // scrub unit directly through a schema violation that echoes the value.
     const out = gw.invoke(owner, {
       command: "locker.add_item",
       input: {
@@ -324,8 +296,6 @@ describe("seal-custody", () => {
     expect(receipts.detail_json).not.toContain(secret);
   });
 
-  // ── transcript-sensitive derivative output (issue #298 item 6) ──────────
-
   test("totp_code returns the live code but receipts only a replay-safe redaction", () => {
     const itemId = addLogin();
     const invocationId = "ordinary-totp-replay";
@@ -339,7 +309,6 @@ describe("seal-custody", () => {
     const code = (out as { output: { code: string } }).output.code;
     expect(code).toMatch(/^\d{6}$/u); // the live caller gets the real 6 digits
 
-    // …but the journal receipt (a durable, replayable store) must not hold it.
     const receipt = db.audit
       .prepare(
         "SELECT detail_json FROM access_receipt ORDER BY receipt_id DESC LIMIT 1"
@@ -399,8 +368,6 @@ describe("seal-custody", () => {
     });
   });
 
-  // ── stable connector aliases (issue #298 item 4) ────────────────────────
-
   test("reveal resolves a stable alias to the live item", () => {
     addLogin("by-alias-secret", "github-token");
     const out = gw.reveal(owner, {
@@ -414,13 +381,11 @@ describe("seal-custody", () => {
 
   test("delete+recreate heals an alias binding — the rotation gesture", () => {
     const oldId = addLogin("old-token", "github-token");
-    // Trash the old login (soft delete) — the alias frees for its successor.
     gw.invoke(owner, {
       command: "locker.trash_item",
       input: { item_id: oldId },
       purpose: PURPOSE,
     });
-    // A reveal by alias now fails: no live item holds it.
     expect(() =>
       gw.reveal(owner, {
         entity: "locker.item",
@@ -429,7 +394,6 @@ describe("seal-custody", () => {
         purpose: PURPOSE,
       })
     ).toThrow(/no live locker item/u);
-    // Add the replacement with the SAME alias — the binding heals, no manifest edit.
     addLogin("new-token", "github-token");
     const healed = gw.reveal(owner, {
       entity: "locker.item",
@@ -447,7 +411,6 @@ describe("seal-custody", () => {
       input: { item_id: firstId },
       purpose: PURPOSE,
     });
-    // The partial unique index only constrains live rows, so this succeeds.
     const secondId = addLogin("second", "shared-alias");
     expect(secondId).not.toBe(firstId);
   });

@@ -1,21 +1,6 @@
-// The data_uri compatibility door (#296): commands still accept a
-// small inline payload — one call, no fetch orchestration — but the ROW
-// never swallows binary bytes again. Text stays inline (the FTS triggers
-// decode it in-transaction); anything else spills synchronously into the
-// local CAS and the row keeps only `blob:sha256-<hex>`. Identity is the
-// sha256 of the RAW DECODED bytes for both classes — never the data: URI —
-// which is also what fixes the old dedup hole (same bytes, different
-// declared mime type, two rows).
-
 import type { HandlerCtx } from "../gateway/types.js";
 import { sha256OfBytes, blobUriFor } from "./store.js";
 
-/**
- * Decoded-size cap for the inline door: ~256 KB of content, ~350 KB of
- * base64. Anything larger takes the staging route (POST /_vault/blobs).
- * A vault WITH a blob store refuses to swallow big payloads through command
- * JSON, because the journal records every input.
- */
 export const MAX_INLINE_DATA_URI_CHARS = 360_000;
 
 export interface DecodedDataUri {
@@ -23,7 +8,6 @@ export interface DecodedDataUri {
   bytes: Buffer;
 }
 
-/** Parse and DECODE a data: URI — the bytes are identity now, not the text. */
 export function decodeDataUri(uri: string): DecodedDataUri {
   if (!uri.startsWith("data:")) throw new Error("payload must be a data: URI");
   const comma = uri.indexOf(",");
@@ -46,11 +30,6 @@ export interface MintedContent {
   deduped: 0 | 1;
 }
 
-/**
- * Dedupe-or-insert the canonical content item behind an inline payload.
- * Re-presenting known bytes restores them from trash (re-upload = restore,
- * media.add_asset's rule) and optionally retitles.
- */
 export function mintContentFromDataUri(
   ctx: HandlerCtx,
   uri: string,
@@ -83,7 +62,6 @@ export function mintContentFromDataUri(
       deduped: 1,
     };
   }
-  // Text stays in the row (the FTS feed); binary bytes spill to the CAS.
   let contentUri: string;
   if (mediaType.startsWith("text/")) {
     contentUri = uri;

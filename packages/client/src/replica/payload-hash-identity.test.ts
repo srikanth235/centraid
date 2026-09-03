@@ -1,8 +1,3 @@
-// Intent idempotency pairs `intentId` + `payloadHash` at the gateway: a web and
-// a native client that hash the same payload differently would collide as a
-// ReplicaProtocolError after a device swap. This pins the canonical form and
-// the exact digest, and proves an independently implemented digest (the shape
-// `expo-crypto` fills on Hermes) reproduces it byte for byte.
 import { createHash } from "node:crypto";
 
 import { describe, expect, test } from "vitest";
@@ -21,7 +16,6 @@ const CANONICAL =
 const EXPECTED_HASH =
   "9fb4ce111fbf05254e7437936d9e5082d6888dd4112fe38c8254c6d1beff844f";
 
-/** Stand-in for `expo-crypto`'s `digestStringAsync(SHA256, input)` — hex over UTF-8. */
 const nodeDigest: ReplicaDigest = (input) =>
   Promise.resolve(createHash("sha256").update(input, "utf8").digest("hex"));
 

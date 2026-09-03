@@ -2,11 +2,6 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { sealedColumnsOf } from "../schema/sealed.js";
 
-/**
- * Host protocol credentials are identity material, not app data. They are
- * intentionally unavailable to every replica even though they predate the
- * sealed-column registry and therefore are not ciphertext-backed cells.
- */
 const REPLICA_PROTOCOL_CREDENTIAL_COLUMNS: Readonly<
   Record<string, readonly string[]>
 > = {
@@ -15,7 +10,6 @@ const REPLICA_PROTOCOL_CREDENTIAL_COLUMNS: Readonly<
   "access.device": ["public_key"],
 };
 
-/** One structural deny-list shared by log snapshots, bootstrap, and lazy reads. */
 export function replicaUnavailableColumnsOf(
   entity: string,
   vault?: DatabaseSync

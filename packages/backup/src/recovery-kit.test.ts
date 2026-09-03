@@ -1,15 +1,4 @@
 import crypto from "node:crypto";
-/*
- * The recovery-kit READER (#439) — the counterpart to
- * `wrapRecoveryKit`. A kit is the ONLY thing standing between a blank machine
- * and a vault, so the parser is strict: a wrong kind, an unsupported version, a
- * malformed keyring, or a target missing its addressing is refused HERE, not
- * three phases into a restore. These pin exactly that.
- *
- * There is no unwrapped acceptance path (#568), so the document validator is
- * reached through `wrapRecoveryKit` (which validates before sealing) and
- * through a successful unwrap.
- */
 import path from "node:path";
 
 import { describe, expect, test } from "vitest";
@@ -57,12 +46,6 @@ describe("recovery-kit", () => {
     expect(doc.targets).toStrictEqual(targets);
   });
 
-  /*
-   * An unwrapped-document branch silently ignores the password, so
-   * `vaults:restore`, `vaults:initialize/verify` and the kit-confirmed
-   * transition would each gain a password-free acceptance path — passable by
-   * anyone holding the plaintext kit file (#568).
-   */
   test("refuses an unwrapped kit even with the right shape and a password", async () => {
     const keyring = await createKeyring(await tempFile("keyring.json"));
     const plain = {
@@ -175,9 +158,6 @@ describe("recovery-kit", () => {
     ).not.toBe(recoveryKitFingerprint(base));
   });
 
-  // The document validator runs on the way IN to a wrapped kit (and again on
-  // the decrypted plaintext), so `wrapRecoveryKit` is where these refusals are
-  // observable from outside the module.
   const wrap =
     (document: unknown): (() => unknown) =>
     () =>

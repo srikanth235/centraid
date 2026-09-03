@@ -4,7 +4,6 @@ export interface ClosableVault {
   close: () => void;
 }
 
-/** Injected: avoids a vault dependency cycle. */
 export interface VaultBootstrapApi<TDb extends ClosableVault, TBoot> {
   openVaultDb: (options?: { dir?: string }) => TDb;
   bootstrapVault: (
@@ -14,11 +13,9 @@ export interface VaultBootstrapApi<TDb extends ClosableVault, TBoot> {
 }
 
 export interface BootstrappedVaultOptions {
-  /** Omitted = in-memory posture. */
   dir?: string;
   ownerName?: string;
   vaultId?: string;
-  /** False only for beforeAll fixtures. */
   autoClose?: boolean;
 }
 
@@ -28,7 +25,6 @@ export interface BootstrappedVault<TDb extends ClosableVault, TBoot> {
   close: () => void;
 }
 
-/** Close exactly once, registered at creation so throws cannot leak. */
 export function bootstrappedVault<TDb extends ClosableVault, TBoot>(
   api: VaultBootstrapApi<TDb, TBoot>,
   options: BootstrappedVaultOptions = {}

@@ -1,4 +1,3 @@
-/** Spread standing duties so many mounted vaults do not wake and fsync together. */
 export function jitterDelayMs(
   delayMs: number,
   random: () => number = Math.random,

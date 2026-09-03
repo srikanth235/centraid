@@ -12,12 +12,6 @@ import type { BlobRange, BlobStore } from "./store.js";
 
 const REMOTE_STREAM_CHUNK_BYTES = 4 * 1024 * 1024;
 
-/**
- * Stream a remote-only blob without a whole-object Buffer. Full reads verify
- * the content address before completion; ranged framed reads retain per-frame
- * AEAD integrity. Each provider read is capped so aborts retain at most one
- * bounded chunk while Readable.from supplies response backpressure.
- */
 export function createRemoteBlobStream(
   remote: RemoteTier,
   store: BlobStore,

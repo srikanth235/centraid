@@ -1,19 +1,5 @@
-// The durable replica protocol band (#406), in the vault file so a base-table
-// mutation and its change entry share one transaction. `refreshReplicaTriggers`
-// generates the per-entity triggers from the logical registry, which keeps this
-// DDL free of primary-key names and covers live ext tables.
-
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
-/**
- * Build-time replica contract epoch, deliberately independent of PRAGMA
- * user_version: any incompatible wire/trigger change bumps it and rotates
- * every cursor. An invalidation number, not a migration ladder.
- */
-// 1 is the v0 contract. `core_entity` is NOT replicated: it is declared local
-// (schema/local-tables.ts) because a replica re-derives it from the entity
-// rows through the same membership triggers. The `audit` and `ledger`
-// machinery bands are excluded by band and never ship to a seat.
 export const REPLICA_SCHEMA_EPOCH = 1;
 
 export const REPLICA_DDL = `

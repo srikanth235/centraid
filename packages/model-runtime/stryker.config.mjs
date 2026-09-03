@@ -1,4 +1,3 @@
-/** Mutation scope for deterministic ML math; model execution stays in the weekly live lane. */
 export default {
   packageManager: "npm",
   testRunner: "vitest",

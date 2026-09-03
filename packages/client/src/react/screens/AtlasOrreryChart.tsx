@@ -21,21 +21,13 @@ import type { BearingLayout, ViewTransform } from "./atlasOrreryGeometry.js";
 
 import styles from "./AtlasRelationsTab.module.css";
 
-// Orrery inline-SVG chart body (#441): stateless leaf. Geometry + invariants
-// live in atlasOrreryGeometry.ts; state + animation in the parent.
-
-/** Hover/focus readout target — parent + side panel light the same element. */
 export type Readout =
   | { kind: "idle" }
   | { kind: "node"; node: AtlasGraphNode; hop: number | null }
   | { kind: "edge"; edge: AtlasFkEdge };
 
-/** Question-chip highlight: applied via the same dim/hot machinery as hover;
- *  never changes geometry, and a live readout wins over it. */
 export interface AtlasHighlight {
-  /** Physical table names to keep lit; every other node dims. */
   lit: ReadonlySet<string>;
-  /** Predicate for the edges to keep lit; every other edge dims. */
   edgeLit: (edge: AtlasFkEdge) => boolean;
 }
 
@@ -59,19 +51,12 @@ export interface AtlasOrreryChartProps {
   hops: Map<string, number | null>;
   rows: Map<string, number>;
   packs: readonly string[];
-  /** At the `everything` level only: a small second label with the physical
-   *  SQL table name under the friendly name. */
   showPhysical: boolean;
   overlayArcs: readonly { id: string; d: string }[];
   readout: Readout;
-  /** Active question-chip highlight, or `null`; applied only while idle. */
   highlight: AtlasHighlight | null;
-  /** Pan/zoom camera for the single viewport `<g>`; never changes geometry. */
   view: ViewTransform;
-  /** Native wheel handler (see effect below): React binds `wheel` as passive,
-   *  so `preventDefault` needs our own `{ passive: false }` listener. */
   onWheel: (ev: WheelEvent) => void;
-  /** Pointer-drag pan bookkeeping lives in the parent; these forward raw events. */
   onPointerDown: (ev: PointerEvent<SVGSVGElement>) => void;
   onPointerMove: (ev: PointerEvent<SVGSVGElement>) => void;
   onPointerUp: (ev: PointerEvent<SVGSVGElement>) => void;
@@ -108,15 +93,10 @@ export default function AtlasOrreryChart({
   onReadout,
   onRecenter,
 }: AtlasOrreryChartProps): JSX.Element {
-  // Unique per-mount prefix: two mounted orreries must not share element ids.
   const uid = useId();
 
-  // A live readout (hover/focus) overrides a question highlight — the two
-  // lensing systems never fight over the same node.
   const questionActive = highlight != null && readout.kind === "idle";
 
-  // The one imperative seam in an otherwise declarative leaf: React attaches
-  // `wheel` to the root as PASSIVE, where preventDefault is inert.
   const svgRef = useRef<SVGSVGElement | null>(null);
   useEffect(() => {
     const el = svgRef.current;
@@ -183,7 +163,6 @@ export default function AtlasOrreryChart({
             const pad = Math.min(2.4, s.spanDeg * 0.16);
             const tickIn = polar(s.startDeg, ORRERY.dialTickIn);
             const tickOut = polar(s.startDeg, ORRERY.dialTickOut);
-            // Label arc wider than the sector so textPath doesn't clip long names.
             const labelR = flip ? ORRERY.sectorLabelR + 7 : ORRERY.sectorLabelR;
             const hot = readout.kind === "node" && readout.node.pack === s.pack;
             const empty =
@@ -335,10 +314,8 @@ export default function AtlasOrreryChart({
           const b = ((bearing % 360) + 360) % 360;
           const flip = b > 90 && b < 270;
           const big = (rows.get(n.physical) ?? 0) > 4000;
-          // Label stagger keeps dense sectors legible.
           const labelGap =
             layout.labelTier.get(n.physical) === 1 ? nr + 14 : nr + 5;
-          // Reveal: rings bloom outward, clockwise from 12 o'clock per ring.
           const dly =
             (hop === null ? 4 : hop) * 110 + (((b + 90) % 360) / 360) * 220;
           const lit =
@@ -349,7 +326,6 @@ export default function AtlasOrreryChart({
               (readout.edge.fromTable === n.physical ||
                 readout.edge.toTable === n.physical)) ||
             lit;
-          // Hover never dims nodes; `dim` is question-only.
           const dim = questionActive && !lit;
           const display = n.friendly ?? n.label;
           return (

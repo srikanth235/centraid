@@ -1,10 +1,3 @@
-// Revision 3 component recipes.
-//
-// Recipes describe interaction grammar, not content.  Web/blueprint renderers
-// lower this table to CSS and native composes the same states with typed
-// values.  A recipe must name its rest and every supported state so a client
-// cannot silently invent a one-off hover, focus, disabled, or loading state.
-
 export const RECIPE_NAMES = [
   "Button",
   "IconButton",
@@ -64,12 +57,6 @@ export interface Recipe {
   haptics?: "affirm" | "change" | "destructive" | "none";
 }
 
-// State roles, after the Binding Layer flip:
-//   • focus is the RING, at 2px with a 2px offset — never a wash, because a
-//     wash under a filled ink control is invisible;
-//   • selection is the reserved LINK hue, the one hue allowed off a control;
-//   • disabled takes its own leaf token, never a container opacity;
-//   • a state change is `--dur-1` (140ms), an entry is `--dur-2` (280ms).
 const baseStates = (
   rest: readonly string[],
   overrides: Partial<Record<RecipeState, readonly string[]>> = {}
@@ -239,9 +226,6 @@ export const RECIPES: Readonly<Record<RecipeName, Recipe>> = {
       "--text-faint",
     ],
     {
-      // The determinate bar for a long local operation: track then fill,
-      // never a spinner. A state change (message swap, bar width) is the
-      // one-line update-in-place transition, not an entry animation.
       loading: ["--bg-elev", "--text", "--dur-1", "--ease"],
     },
     [

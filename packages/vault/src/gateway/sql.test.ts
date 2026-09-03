@@ -1,8 +1,4 @@
 import { rmSync } from "node:fs";
-// The owner's whole-model SQL surface: read-only by construction (lexical
-// gate + query_only execution on disk vaults), owner-only at identity, row
-// capped, receipted. The queries in here look like what the vault
-// assistant actually writes — joins, CTEs, window functions.
 
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
@@ -89,8 +85,6 @@ describe("sql", () => {
           `SELECT decision, object_type FROM access_receipt WHERE receipt_id = ?`
         )
         .get(result.receiptId) as { decision: string; object_type: string };
-      // node:sqlite hands back null-prototype rows; spreading compares the column
-      // data (which is the contract) without asserting the driver's prototype.
       expect({ ...receipt }).toStrictEqual({
         decision: "allow",
         object_type: "vault.sql",
@@ -103,8 +97,6 @@ describe("sql", () => {
             SELECT n, SUM(n) OVER (ORDER BY n) AS running FROM seq`,
       });
       expect(cte.rows).toHaveLength(5);
-      // node:sqlite hands back null-prototype rows; spreading compares the column
-      // data (which is the contract) without asserting the driver's prototype.
       expect({ ...cte.rows[4] }).toStrictEqual({ n: 5, running: 15 });
     });
 
@@ -182,10 +174,6 @@ describe("sql", () => {
     });
 
     test("query_only refuses anything that slips the gate", () => {
-      // A CTE-shaped body the lexical screen would let through if the write
-      // keywords ever regressed still fails at execution on the dedicated
-      // connection. (Here the gate already refuses; assert the belt too by
-      // checking the connection cannot write via a gate-passing statement.)
       expect(() =>
         gw.sql(owner, {
           sql: `SELECT * FROM core_party WHERE party_id = (DELETE FROM core_party)`,

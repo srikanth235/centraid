@@ -23,7 +23,6 @@ describe("paletteConversationSearch", () => {
         debounceMs: 100,
       });
 
-      // Nothing cached yet.
       expect(src.results("budget")).toStrictEqual([]);
       src.ensure("budget");
       src.ensure("budget"); // coalesced
@@ -36,7 +35,6 @@ describe("paletteConversationSearch", () => {
         { id: "budget-1", title: "budget", snippet: "⟦x⟧" },
       ]);
 
-      // A second ensure for the same (now cached) query is a no-op.
       src.ensure("budget");
       await vi.advanceTimersByTimeAsync(100);
       expect(search).toHaveBeenCalledOnce();
@@ -72,7 +70,6 @@ describe("paletteConversationSearch", () => {
       expect(src.results("trip")).toStrictEqual([]);
       expect(onResults).toHaveBeenCalledWith();
       src.reset();
-      // After reset the same query fetches again.
       src.ensure("trip");
       await vi.advanceTimersByTimeAsync(50);
       expect(search).toHaveBeenCalledTimes(2);

@@ -2,16 +2,6 @@ import { deleteApp, updateAppMeta } from "../../../gateway-client.js";
 import type { ShellActions } from "../actions.js";
 import { openPrompt } from "../prompt.js";
 
-// The two app-management flows behind an inline app's settings panel.
-//
-// Extracted from `InlineAppRoute` to keep that host under the file cap: they
-// are dialogue and gateway calls, not frame integration, and nothing in them
-// touches the mounted app.
-//
-// Both report on the ONE status line — `showToast` is that line's imperative
-// alias (`App.tsx` binds it to `postStatus`), so there is no toast here despite
-// the name. New callers should reach for the status line directly.
-
 export interface InlineAppFlowDeps {
   app: AppMetaResolvedType;
   confirm: ShellActions["confirm"];
@@ -41,9 +31,6 @@ export async function renameInlineApp({
   }
 }
 
-/** Code-store apps only: the panel gives a bundled app no danger zone at all
- *  (#708 — it reinstalls at every vault mount, so there is nothing an
- *  uninstall could durably mean). */
 export async function deleteInlineApp({
   app,
   confirm,

@@ -1,8 +1,3 @@
-// GC roots for the conversation-ledger band (#438 decision 6). Mirrors
-// the retained-snapshot pin test (blob/blob.test.ts): an archive-row sha must
-// read as reachable so the reconcile sweep never deletes the only durable copy
-// of pruned rows. Also covers the missing-table guard.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { describe, expect, test } from "vitest";
@@ -11,10 +6,6 @@ import { sha256OfBytes } from "./blob/store.js";
 import { conversationArchiveShas } from "./conversation-archive-roots.js";
 import { openVaultDb } from "./db.js";
 
-// Minimal slice of the app-engine-owned band the roots reader touches. Inlined
-// (not imported from @centraid/server/engine) because the vault package must never
-// depend on app-engine — the reader reaches the table by SQL precisely so the
-// layering stays one-way.
 function ensureLedger(journal: DatabaseSync): void {
   journal.exec(`
     CREATE TABLE IF NOT EXISTS conversations (
@@ -85,8 +76,6 @@ describe("conversation-archive-roots", () => {
 
   test("returns the empty set when the ledger band has not been created yet", () => {
     const db = openVaultDb({});
-    // No ensureLedger — the vault opened the journal before app-engine ensured
-    // the conversation band. The guard must not throw "no such table".
     expect(conversationArchiveShas(db.audit).size).toBe(0);
     db.close();
   });

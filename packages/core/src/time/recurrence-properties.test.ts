@@ -1,17 +1,3 @@
-/**
- * Recurrence parsing + expansion laws (#656 Layer 3 mutation seed).
- *
- * `recurrence.test.ts` pins six concrete expansions. Those prove the engine
- * runs; they do not prove it detects. A mutant that drops the `emitted >=
- * rule.count` guard, flips `value >= from` to `>`, or removes the
- * `firstPeriodAtOrAfter` back-off still reproduces every asserted array.
- *
- * These tests state the laws instead: the parser's normalisation contract,
- * monotonicity, the COUNT/UNTIL bounds, cadence spacing, and BYDAY membership
- * — each for arbitrary inputs. The occurrence lifecycle (nextOccurrence,
- * summaries, collapse) and the exception algebra live in
- * `recurrence-lifecycle-properties.test.ts`.
- */
 import { describe, expect, test } from "vitest";
 
 import { fc } from "@centraid/test-kit/fast-check";
@@ -23,7 +9,6 @@ import { canonicalizeRrule, parseRrule, rruleLine } from "./rrule-support.js";
 const FREQS = ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] as const;
 const DAYS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
 
-/** All-day expansion over a wide window — pure civil arithmetic, no zone. */
 function expandAllDay(rrule: string, start: string, maxInstances = 40) {
   return expandRecurrence({
     rrule,
@@ -105,7 +90,6 @@ describe("rrule normalisation", () => {
       }),
       { numRuns: 60, seed: 65613 }
     );
-    // A non-numeric INTERVAL falls back to the default of 1, not NaN.
     expect(parseRrule("FREQ=DAILY;INTERVAL=x")?.interval).toBe(1);
     expect(parseRrule("FREQ=DAILY;COUNT=x")?.count).toBeUndefined();
   });
@@ -171,9 +155,6 @@ describe("rrule normalisation", () => {
       ),
       { numRuns: 60, seed: 65615 }
     );
-    // Natural phrasing for interval 1, plural otherwise — the count/until tail
-    // is mutually exclusive (COUNT wins over UNTIL) and never leaks the raw
-    // rule string into a member-facing surface.
     expect(describeRecurrence("FREQ=DAILY")).toBe("Daily");
     expect(describeRecurrence("FREQ=DAILY;INTERVAL=3")).toBe("Every 3 days");
     expect(
@@ -196,7 +177,6 @@ describe("expansion laws", () => {
           const out = expandAllDay(`FREQ=${freq};INTERVAL=${interval}`, start);
           expect(out.length).toBeGreaterThan(0);
           const starts = out.map((instance) => instance.start);
-          // Strictly increasing, and never before the anchor.
           expect([...starts].sort()).toStrictEqual(starts);
           expect(new Set(starts).size).toBe(starts.length);
           expect(starts.every((value) => value >= start)).toBe(true);
@@ -337,7 +317,6 @@ describe("expansion laws", () => {
             semantics: "all-day",
           })
         ).toStrictEqual([]);
-        // An empty (from === to) window is empty too.
         expect(
           expandRecurrence({
             rrule: `FREQ=${freq}`,
@@ -367,7 +346,6 @@ describe("expansion laws", () => {
         })
       ).toStrictEqual([]);
     }
-    // Zoned semantics without a timeZone cannot resolve a civil clock.
     expect(
       expandRecurrence({
         rrule: "FREQ=DAILY",
@@ -379,8 +357,6 @@ describe("expansion laws", () => {
   });
 
   test("the analytic fast-forward lands on the same instances as a full walk", () => {
-    // firstPeriodAtOrAfter only runs for unbounded rules; it must never skip
-    // an occurrence the naive walk would have produced.
     fc.assert(
       fc.property(
         fc.constantFrom(...FREQS),
@@ -421,7 +397,6 @@ describe("expansion laws", () => {
       rangeTo: "2026-12-01T00:00:00.000Z",
       timeZone: "America/New_York",
     });
-    // Same civil 09:00 on both sides of the fall-back; the UTC instant moves.
     expect(out.map((i) => i.wallStart)).toStrictEqual([
       "2026-10-30T09:00:00",
       "2026-10-31T09:00:00",

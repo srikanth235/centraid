@@ -10,7 +10,6 @@ import { boundedMemo } from "../boundedMemo.js";
 import asstPreCss from "../../styles/asstPre.module.css";
 import styles from "./assistantRich.module.css";
 
-// Shell class names for the renderer's slots; asstPre shared with the tool timeline. Tests run non-scoped.
 const CLASSES: AssistantRichClassOverrides = {
   asstRich: styles.asstRich,
   asstP: styles.asstP,
@@ -41,14 +40,12 @@ const CLASSES: AssistantRichClassOverrides = {
   asstCopyBtn: styles.asstCopyBtn,
 };
 
-// Pure mapping; uncached, a 900-token turn re-parses answers 900× (#659).
 const RICH_ANSWER_CACHE_ENTRIES = 200;
 const richAnswerCache = boundedMemo(
   (text: string) => sharedRichAnswerHtml(text, CLASSES),
   RICH_ANSWER_CACHE_ENTRIES
 );
 
-/** Full answer → HTML. Memoized: identical text → identical reference (O(1) transcript compare). */
 export function richAnswerHtml(text: string): string {
   return richAnswerCache(text);
 }

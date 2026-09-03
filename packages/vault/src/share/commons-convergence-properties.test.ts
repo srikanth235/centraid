@@ -28,10 +28,6 @@ import { closeOpenVaults, household, seedPhoto } from "./placement-fixture.js";
 const NOW = "2031-02-03T04:05:06.000Z";
 const INTERLEAVING_RUNS = 20;
 const CONVERGENCE_RUNS = 10;
-// Each generated example opens real encrypted vaults. The focused file runs in
-// roughly 22 seconds, while the affected suite deliberately contends with five
-// other packages doing the same SQLite/crypto work; keep the property workload
-// unchanged and give that bounded, measured contention room to finish.
 const PROPERTY_TIMEOUT_MS = 180_000;
 
 type GrantKey = "a" | "b";
@@ -244,10 +240,6 @@ describe("commons ordered-convergence property", () => {
                 now: NOW,
               }),
             };
-            // A CURSOR HANGS OFF A GRANT (#916): the audience seat tracks a
-            // grant it HOLDS, so `share_commons_cursor.grant_id` is a real
-            // foreign key. The seat's own copy of each grant row is what a
-            // real projection would have left behind.
             const audienceCircle = uuidv7();
             audience.vault
               .prepare(
@@ -330,9 +322,6 @@ describe("commons ordered-convergence property", () => {
             };
 
             for (const delivery of deliveries) deliver(appended[delivery]!);
-            // Catch-up may replay entries already buffered. The cursor advances
-            // only when the missing next sequence arrives, then drains the
-            // now-contiguous suffix in order.
             for (const operation of appended) deliver(operation);
 
             for (const grantKey of ["a", "b"] as const) {

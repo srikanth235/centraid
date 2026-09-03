@@ -8,10 +8,6 @@ import type { AutomationEditorBridgeProps } from "../screen-contracts.js";
 import AutomationEditorScreen from "./AutomationEditorScreen.js";
 import { addTrigger, makeData, makeProps } from "./automationEditorTestKit.js";
 
-// Data trigger authoring coverage for AutomationEditorScreen. Create form
-// only adds Schedule (cron) and Data change — condition/webhook stay
-// editable when already present on a loaded automation.
-
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 describe("AutomationEditorTriggers", () => {

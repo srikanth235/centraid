@@ -1,13 +1,3 @@
-/*
- * Fixed-size part splitting (FORMAT.md § Parts — centraid-snapshot/2).
- * The part boundary math is format-normative: same bytes MUST produce the
- * same parts (and therefore the same keyed part ids) everywhere, forever
- * within the format — so these tests pin exact boundary arithmetic, not just
- * "it splits". The aliasing tests exist because the engine's readFileStream
- * reuses one read buffer across yields: a part that aliases the source
- * buffer would silently back up bytes from the WRONG read.
- */
-
 import { describe, expect, test } from "vitest";
 
 import { PART_BYTES, partBuffer, partStream } from "./parts.js";
@@ -25,7 +15,6 @@ async function* pieces(...arrays: Uint8Array[]): AsyncIterable<Uint8Array> {
   for (const a of arrays) yield a;
 }
 
-/** Deterministic distinguishable bytes: value = (offset + i) mod 251 (prime, so no 256-alignment). */
 function seq(length: number, offset = 0): Uint8Array {
   const out = new Uint8Array(length);
   for (let i = 0; i < length; i++) out[i] = (offset + i) % 251;
@@ -52,11 +41,9 @@ describe("part size constant", () => {
 
 describe("partStream boundary math", () => {
   test("re-frames ragged pieces into exact partBytes slices, last part short", async () => {
-    // 40+40+40+10 = 130 bytes → parts of 64, 64, 2.
     const input = [seq(40, 0), seq(40, 40), seq(40, 80), seq(10, 120)];
     const parts = await collect(pieces(...input), 64);
     expect(parts.map((p) => p.length)).toStrictEqual([64, 64, 2]);
-    // Byte-exact reassembly: no bytes lost, duplicated, or reordered.
     expect([...concatAll(parts)]).toStrictEqual([...seq(130, 0)]);
   });
 
@@ -118,9 +105,6 @@ describe("partStream boundary math", () => {
 
 describe("source-buffer aliasing (engine readFileStream reuses its read buffer)", () => {
   test("tail-buffered parts hold the bytes as-of-yield, not later mutations", async () => {
-    // The source yields the SAME 40-byte buffer three times, refilled between
-    // yields — exactly readFileStream's shape. 120 bytes at partBytes 64:
-    // part 0 = 40×1 ‖ 24×2, part 1 = 16×2 ‖ 40×3.
     const buf = new Uint8Array(40);
     async function* reused(): AsyncGenerator<Uint8Array> {
       buf.fill(1);
@@ -143,9 +127,6 @@ describe("source-buffer aliasing (engine readFileStream reuses its read buffer)"
   });
 
   test("a part spanning exactly one full source piece is copied, never aliased", async () => {
-    // Dangerous fast path: a lone piece of exactly partBytes could be yielded
-    // as a live view of the source buffer; the next refill would then rewrite
-    // the already-yielded part. Backup-corrupting if it ever regresses.
     const buf = new Uint8Array(64);
     async function* reused(): AsyncGenerator<Uint8Array> {
       buf.fill(1);

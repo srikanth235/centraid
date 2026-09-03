@@ -1,10 +1,3 @@
-// The records table (v9 §9, #765) — the Data route's document rows.
-//
-// Three columns: a flexible Record column and two fixed ones. The header is a
-// 32px sunken band whose Record label is inset past the row's leading glyph,
-// so the head aligns with the row's TEXT rather than with its padding edge.
-// On the compact form factor the header goes away entirely and the two fixed
-// columns fold into one snip line under the title.
 import { useCallback } from "react";
 import type { JSX, MouseEvent } from "react";
 
@@ -22,34 +15,23 @@ import styles from "./DocTable.module.css";
 
 export interface DocTableRow {
   id: string;
-  /** The record's own name. Truncates rather than wrapping — a table row is
-   *  one line. */
   title: string;
-  /** The Kind column, and the first half of the compact snip line. */
   kind: string;
-  /** The Written column, and the second half of the snip line. Numeric. */
   written: string;
-  /** The leading glyph the header's inset steps past. */
   icon?: IconName;
 }
 
 export interface DocTableProps {
   rows: readonly DocTableRow[];
-  /** Column headers. Copy is the caller's, like every other string in the kit. */
   headers: { record: string; kind: string; written: string };
-  /** The line under the table — how much of the whole this page is showing. */
   caption?: string;
-  /** The per-row overflow menu. Omit for a table with no row actions. */
   menu?: readonly (CtxItem | "sep")[];
   onMenuPick?: (rowId: string, itemId: string) => void;
-  /** Prefix for each row's overflow-button accessible name ("More for …"). */
   menuLabel?: string;
   ariaLabel: string;
   className?: string;
 }
 
-/** The records table — one implementation, header inset and trailing spacer
- *  included, so the row menu and the header's trailing slot line up. */
 export default function DocTable({
   rows,
   headers,
@@ -74,8 +56,6 @@ export default function DocTable({
   );
 
   return (
-    // `<fieldset>` is the native element behind `role="group"` (a11y profile:
-    // the element, not the role); its UA box is reset in styles.css.
     <fieldset
       aria-label={ariaLabel}
       className={cx(styles.table, className)}

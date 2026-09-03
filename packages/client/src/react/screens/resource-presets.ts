@@ -1,20 +1,8 @@
-// Client-side mirror of the gateway's BUDGET_PRESETS
-// (packages/server/src/serve/hardware-profile.ts). The gateway resolves only
-// the ACTIVE mode against the host and reports it on health
-// (`resourceProfile.resolved`); to let an owner SEE what each mode grants
-// before committing, the Compare dialog needs every preset's baseline. These
-// knob values are host-independent (only the derived memory cap / core count
-// vary with the machine), so mirroring them is faithful. Keep in sync with the
-// gateway table if the presets ever change (#528 follow-up).
-
 import { formatMbAsGb } from "./resource-summary.js";
 
-/** The three concrete presets. `auto` is not a preset — it defers to one of these. */
 export type PresetMode = "conserve" | "balanced" | "performance";
 
-/** One budget preset — the knobs a mode selects, before host resolution. */
 export interface ResourcePreset {
-  /** Fraction of the granted host CPU the gateway may use. */
   cpuShare: number;
   workerMaxConcurrent: number;
   workerMaxOldGenerationMb: number;
@@ -61,7 +49,6 @@ export const RESOURCE_PRESETS: Record<PresetMode, ResourcePreset> = {
   },
 };
 
-/** Whole-hour / whole-minute intervals read cleaner as `2 h` / `1 min` than `120 min`. */
 export function formatInterval(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return "—";
   if (ms >= HOUR) {
@@ -75,22 +62,15 @@ export function formatInterval(ms: number): string {
   return `${Math.round(ms / 1000)}s`;
 }
 
-/**
- * The compact hint under each mode chip: workers · memory ceiling (e.g.
- * `8 · 2.0 GB`). `auto` has no fixed budget — it detects — so it reads
- * `detect`.
- */
 export function presetHint(mode: "auto" | PresetMode): string {
   if (mode === "auto") return "detect";
   const p = RESOURCE_PRESETS[mode];
   return `${p.workerMaxConcurrent} · ${formatMbAsGb(p.workerMaxConcurrent * p.workerMaxOldGenerationMb)}`;
 }
 
-/** One attribute row of the Compare dialog: a label, a tooltip, and a value per preset. */
 export interface CompareRow {
   key: string;
   label: string;
-  /** Plain-English gloss shown on hover (title attr). */
   hint: string;
   values: Record<PresetMode, string>;
 }
@@ -111,7 +91,6 @@ function byPreset(
   };
 }
 
-/** The full comparison, top (most tangible) to bottom (most technical). */
 export function resourceCompareRows(): CompareRow[] {
   return [
     {

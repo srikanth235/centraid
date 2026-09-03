@@ -6,13 +6,6 @@ import type {
   InlineAppModule,
   InlineScope,
 } from "@centraid/blueprints/apps/inline-types";
-// The inline `window.centraid` every blueprint app talks to, backed by the
-// shell replica session. Writes carry the caller's `intentId` VERBATIM — #406
-// dedupe lives in the session/route and is never re-minted here.
-//
-// MULTI-SCOPE (#599): an app may be mounted over N scopes, each with its own
-// replica session. Bindings are ordered, FIRST is the primary: `read` hits the
-// primary, `readAll` fans out, `write` names one scope, `onChange` tags each.
 import {
   appActionPath,
   appQueryPath,
@@ -29,8 +22,6 @@ import {
   VAULT_HEADER,
 } from "../../gateway-client-core.js";
 import type { GatewayAuth } from "../../gateway-client-core.js";
-// Types only — erased at build, so declaring the import doors below never pulls
-// the staged-import transport onto the eager shell graph (see `lazyVaultImports`).
 import type {
   VaultImportBatch,
   VaultImportRow,
@@ -91,12 +82,10 @@ export interface InlineScopeBinding {
   session: InlineScopeSession;
 }
 
-/** One scope's answer in a `readAll` fan-out. Never throws — errors are data. */
 export type InlineScopeRead<T> =
   | { scope: string; ok: true; data: T }
   | { scope: string; ok: false; error: { code?: string; message: string } };
 
-/** `expired` and `cancelled` are settled states like `denied`. */
 export interface InlineCommonsIntent {
   intentId: string;
   grantId: string;
@@ -110,21 +99,17 @@ export interface InlineCommonsIntent {
   settledAt?: string;
 }
 
-/** The steward's answer to one intent (#872), as the decide door returns it. */
 export interface InlineCommonsIntentDecision {
   intentId: string;
   grantId: string;
   decision: "approve" | "decline";
-  /** The intent's status AFTER the answer — read off the seat, never assumed. */
   status: InlineCommonsIntent["status"];
-  /** `false` when the request had already settled before this answer arrived. */
   decided: boolean;
   reason?: string;
   sequence?: number;
   receiptId: string;
 }
 
-/** What staging one dropped file into a draft batch answers with (#290). */
 export interface InlineImportStaged {
   batchId: string;
   kind: string;
@@ -133,7 +118,6 @@ export interface InlineImportStaged {
   unrouted: string[];
 }
 
-/** What publishing a reviewed draft batch answers with. */
 export interface InlineImportPublished {
   created: number;
   updated: number;
@@ -157,7 +141,6 @@ export interface InlineShareCircle {
   }>;
 }
 
-/** A refusal the app is expected to render, not a crash. */
 export class InlineScopeError extends Error {
   constructor(
     readonly code: "INVALID_INPUT" | "SCOPE_READONLY" | "UNKNOWN_SCOPE",
@@ -189,51 +172,26 @@ export interface InlineCentraidClient {
     intentId?: string;
     signal?: AbortSignal;
     scope?: string;
-    /** Bypass every replica/outbox path for sealed or non-durable input. */
     onlineOnly?: boolean;
   }) => Promise<T>;
   retryPendingWrite: (intentId: string, scope?: string) => Promise<boolean>;
   discardPendingWrite: (intentId: string, scope?: string) => Promise<boolean>;
   openApprovals?: () => void;
-  /** Handing the member to another first-party app is navigation, never a second copy of that room's UI (#834). */
   openApp?: (appId: string, focus?: { taskId?: string }) => void;
   commonsIntents: (opts?: {
     scope?: string;
     signal?: AbortSignal;
   }) => Promise<InlineCommonsIntent[]>;
-  /** Idempotent: the guard only moves a still-open intent, so read the outcome off the result rather than assuming the cancel won. */
   cancelCommonsIntent: (opts: {
     intentId: string;
     scope?: string;
   }) => Promise<{ status: string; cancelled: boolean }>;
-  /**
-   * The STEWARD's answer to one member request (#872). Optional so an older
-   * host parses this shape unchanged and a surface without the door draws no
-   * Approve/Decline — feature detection, never a fallback path.
-   *
-   * `scope` names the seat the answer is given FROM; the gateway refuses anyone
-   * who is not that grant's steward. Approving re-enters the signed rail, so a
-   * refusal there returns `decided: true` with the rail's reason, not an error.
-   */
   decideCommonsIntent?: (opts: {
     intentId: string;
     decision: "approve" | "decline";
-    /** The steward's own words on a decline; the member reads them verbatim. */
     reason?: string;
     scope?: string;
   }) => Promise<InlineCommonsIntentDecision>;
-  /**
-   * THE STAGED-IMPORT WORKFLOW (#290), as five doors. First contact with a
-   * dropped file is always a DRAFT: stage, review the rows, publish or discard.
-   *
-   * ONLINE-ONLY BY CONSTRUCTION — never a replica session or the pending-write
-   * outbox: the payload is the raw file, secrets and all.
-   *
-   * ACTIVE-VAULT SCOPED, so they take NO `scope`: the import plane is
-   * owner-tier and answers for whichever vault the gateway has mounted, which
-   * is not an app's scope axis. A multi-scope app cannot stage into a secondary
-   * audience, and the missing argument says so.
-   */
   stageImport?: (file: File) => Promise<InlineImportStaged>;
   importBatches?: () => Promise<VaultImportBatch[]>;
   importRows?: (batchId: string) => Promise<VaultImportRow[]>;
@@ -273,11 +231,9 @@ export interface InlineCentraidClient {
     circleId?: string;
   }) => Promise<InlineCommonsShareResult>;
   shareTargets: () => Promise<InlineShareTarget[]>;
-  /** Online-only: resolves only with a settled party id, never a pending overlay id. */
   quickAddPerson: (opts: {
     name: string;
   }) => Promise<{ partyId: string; label: string }>;
-  /** Implicit per-container circles are excluded by construction. */
   shareCircles: () => Promise<InlineShareCircle[]>;
   commonsResidents: (actorVaultId?: string) => Promise<InlineCommonsResident[]>;
   retainCommonsItem: (opts: {
@@ -307,7 +263,6 @@ function canFallbackOnline(error: unknown): boolean {
   return typeof code === "string" && FALLBACK_CODES.has(code);
 }
 
-/** Name the scope explicitly, or the gateway answers for whichever vault is FOCUSED and a secondary scope renders the primary's rows. */
 async function gatewayRead(
   appId: string,
   query: string,
@@ -326,7 +281,6 @@ async function gatewayRead(
   return readJson<unknown>(res, `read ${query}`);
 }
 
-/** Never hands its payload to a replica session: sealed input must not queue. */
 async function gatewayAction(
   appId: string,
   action: string,
@@ -347,16 +301,8 @@ async function gatewayAction(
   return readJson(response, `write ${action}`);
 }
 
-/** Wildcard the coordinator emits for bootstrap, commit, purge or scope
- *  teardown: "everything here may have moved". Never a table name. */
 const EVERYTHING = "*";
 
-/**
- * One invalidation as the page-side change event. `tables` carries the actual
- * entity, so an app whose declared list omits it does not re-derive; the
- * wildcard must collapse to the EMPTY list, which `onDataChange` fires on
- * unconditionally, because `["*"]` would match nobody (#883).
- */
 function toChangeDetail(
   invalidation: ReplicaInvalidation,
   scope: string
@@ -438,7 +384,6 @@ async function loadShareTargets(
 
 const QUICK_ADD_CADENCE_DAYS = 30;
 
-/** Only an `executed` intent has a real identity: queued/parked are still waiting, denied/expired/cancelled never happened, and a `pending:` id names nobody. */
 export function settledPartyIdFromOutcome(outcome: unknown): string {
   const settled = outcome as {
     status?: unknown;
@@ -508,7 +453,6 @@ async function loadShareCircles(
       continue;
     if (partyId === ownerPartyId) continue;
     const target = targetByParty.get(partyId);
-    // The steward is implicit in createCommonsGrant. Every other member must resolve exactly: a partial roster is not offered as reusable.
     if (!target) {
       incomplete.add(circleId);
       continue;
@@ -538,14 +482,12 @@ async function loadShareCircles(
   });
 }
 
-/** Its scope id is empty, which every scope-addressed transport reads as the ambient scope. */
 const AMBIENT_SCOPE: InlineScope = { id: "", label: "Library", canWrite: true };
 
 export interface CreateInlineCentraidOptions {
   appId: string;
   pendingProjection?: PendingProjectionDeclaration;
   queries: InlineAppModule["queries"];
-  /** Mounted scopes, primary first. Mutually exclusive with `session`. */
   scopes?: readonly InlineScopeBinding[];
   session?: InlineScopeSession;
   isOnline?: () => boolean;
@@ -562,13 +504,11 @@ function bindingsOf(
   throw new Error("An inline client needs at least one mounted scope");
 }
 
-/** Kept OFF the client object so an app can never reach them. Secondary scopes hydrate after first paint; only the primary blocks first render. */
 interface InlineClientControls {
   add: (binding: InlineScopeBinding) => void;
 }
 const controls = new WeakMap<object, InlineClientControls>();
 
-/** Grant-plane transport stays off the eager shell graph: methods `import()` it on first call so Tasks/Home never pay for it. Queued (#883): an offline grant is held durably until the gateway is reachable, else the plain wire. */
 function lazyGrantBridge(getAuth: () => Promise<GatewayAuth>): GrantBridge {
   let pending: Promise<GrantBridge> | undefined;
   const loaded = (): Promise<GrantBridge> =>
@@ -586,9 +526,6 @@ function lazyGrantBridge(getAuth: () => Promise<GatewayAuth>): GrantBridge {
   };
 }
 
-/** Staged-import transport stays off the eager shell graph for the same reason
- *  `lazyGrantBridge` does: Tasks and Home must not pay for a door they never
- *  open. One module-level promise, so five doors share one load. */
 let pendingVaultImports:
   | Promise<typeof import("../../gateway-client-vault-imports.js")>
   | undefined;
@@ -599,19 +536,11 @@ function lazyVaultImports(): Promise<
     import("../../gateway-client-vault-imports.js"));
 }
 
-/** The gateway's own ceiling (`MAX_IMPORT_BYTES`, import-routes.ts). Refused
- *  HERE so a 128 MiB body is never read into memory only to be rejected. */
 const MAX_IMPORT_BYTES = 128 * 1024 * 1024;
 
-/**
- * Extensions the staging spine reads as TEXT. Everything else travels base64:
- * a zip or a photo is bytes, and the route's UTF-8 decode would refuse it.
- * Declared, not sniffed — the same posture as the commons routing table.
- */
 const TEXT_IMPORT_EXTENSIONS =
   /\.(?:csv|tsv|txt|json|ndjson|md|mdown|vcf|ics|eml|mbox)$/iu;
 
-/** Chunked so a large buffer never blows the argument list on `String.fromCharCode`. */
 function base64Of(bytes: Uint8Array): string {
   const chunk = 0x8000;
   let binary = "";
@@ -620,7 +549,6 @@ function base64Of(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-/** One dropped file as the stage route's body: exactly one of `text`/`base64`. */
 async function importBodyFor(
   file: File
 ): Promise<{ filename: string; text?: string; base64?: string }> {
@@ -638,7 +566,6 @@ async function importBodyFor(
   };
 }
 
-/** Extends existing `onChange` listeners to the new scope and then announces it, so an app refetches exactly the scope that appeared. */
 export function addInlineScope(
   client: unknown,
   binding: InlineScopeBinding
@@ -666,8 +593,6 @@ export function createInlineCentraidClient(
     (() =>
       typeof navigator === "undefined" ? true : navigator.onLine !== false);
 
-  /** The import doors never queue: an offline refusal is honest, and falling
-   *  back to the outbox would durably store a file's plaintext. */
   const requireOnline = (what: string): void => {
     if (!isOnline())
       throw new Error(
@@ -725,10 +650,8 @@ export function createInlineCentraidClient(
 
   const client: InlineCentraidClient = {
     appId,
-    // The SAME array the app holds, so a hydrated scope appears to a captured ref.
     scopes: bindings.map((binding) => binding.scope),
 
-    // `async` deliberately: an unmounted-scope refusal must REJECT, not throw.
     async read<T>(opts: {
       query: string;
       input?: Record<string, unknown>;
@@ -738,7 +661,6 @@ export function createInlineCentraidClient(
       return readIn<T>(bindingFor(opts.scope), opts);
     },
 
-    /** Settled per scope: one unreachable audience must never blank the whole surface. */
     async readAll<T>(opts: {
       query: string;
       input?: Record<string, unknown>;
@@ -768,14 +690,12 @@ export function createInlineCentraidClient(
       onlineOnly?: boolean;
     }) {
       const binding = bindingFor(opts.scope);
-      // Refused HERE, not at the gateway, so the app gets a typed code for a disabled control instead of a 403 after the user committed.
       if (!binding.scope.canWrite) {
         throw new InlineScopeError(
           "SCOPE_READONLY",
           `${binding.scope.label} is read-only here.`
         );
       }
-      // Sealed inputs must never cross the durable session boundary; a network failure cannot fall back to queueing.
       if (opts.onlineOnly === true) {
         return (await gatewayAction(
           appId,
@@ -803,7 +723,6 @@ export function createInlineCentraidClient(
           ? { baseVersions: projected.baseVersions }
           : {}),
       });
-      // The durable intentId is the app's `invocationId` (pending-add key); handler output rides through unchanged.
       const outcome = result as {
         intentId: string;
         status: string;
@@ -873,7 +792,7 @@ export function createInlineCentraidClient(
           if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
             input = parsed as Record<string, unknown>;
         } catch {
-          // A malformed historical row stays visible with an empty payload: the overlay must not vanish because it cannot be drawn.
+          // Intentionally empty.
         }
         const stewardLabel = intent.stewardLabel ?? undefined;
         const reason =
@@ -914,9 +833,6 @@ export function createInlineCentraidClient(
 
     async decideCommonsIntent(opts) {
       const binding = bindingFor(opts.scope);
-      // A scope with no vault id is the ambient single-scope host: it cannot
-      // name the seat the answer is given from, so it refuses rather than
-      // posting a decision nobody can attribute.
       if (!binding.scope.id)
         throw new InlineScopeError(
           "INVALID_INPUT",
@@ -1018,12 +934,10 @@ export function createInlineCentraidClient(
           "INVALID_INPUT",
           "A person needs a name before they can be added."
         );
-      // No offline queue: the sheet needs the settled party id now, and an overlay id names nobody.
       if (!isOnline())
         throw new Error(
           "Adding a person needs a gateway connection on web; add them from the People app on the native seat."
         );
-      // Written under the PEOPLE app's identity, so no app manifest grows a People grant.
       const outcome = await primary.session.write("people", {
         action: "add-person",
         input: {
@@ -1084,7 +998,6 @@ export function createInlineCentraidClient(
       return authorizeBlobText(pathname, id || undefined);
     },
 
-    // Passed through, never bound to the primary: defaulting it would stage an audience's upload into the member's own CAS (#599).
     stageBlob,
     stageDerivative,
   };
@@ -1113,11 +1026,9 @@ export function createInlineCentraidClient(
 
 export interface InstallInlineCentraidOptions extends CreateInlineCentraidOptions {
   target?: { centraid?: unknown };
-  /** The route host keeps THIS client, so later hydration extends it rather than whatever is on `window` by then. */
   onInstalled?: (client: InlineCentraidClient) => void;
 }
 
-/** Restoring one on teardown is the goHome hang: Home painted, `window.centraid` still bound. */
 const publishedClients = new WeakSet<object>();
 
 function isPublishedClient(value: unknown): boolean {
@@ -1138,7 +1049,6 @@ export function installInlineCentraid(
   target.centraid = client;
   options.onInstalled?.(client);
   return () => {
-    // A successor may install while this client is still published: only the live client may clear the slot.
     if (target.centraid !== client) return;
     target.centraid = isPublishedClient(previous) ? undefined : previous;
   };

@@ -16,8 +16,6 @@ import controlsCss from "../styles/controls.module.css";
 import buttonCss from "../ui/Button.module.css";
 import styles from "./StorageLimitsPanel.module.css";
 
-// Ledger limit only (#544). Disk budget is warn-only; its row survives only to unset a stored value.
-
 const LEDGER_PRESETS: readonly { label: string; bytes: number }[] = [
   { label: "256 MB", bytes: 256 * 1024 ** 2 },
   { label: "1 GB", bytes: 1024 ** 3 },
@@ -168,8 +166,6 @@ function LimitControl({
   );
 }
 
-/** ONE file (#916): the ledger band's size IS the vault file's size, which is
- *  the figure the archival duty compares against the limit. */
 function ledgerBytes(report: LocalUsageReportDTO | null): number | null {
   if (!report) return null;
   let total = 0;

@@ -10,11 +10,6 @@ import {
   shortTimeZoneName,
 } from "./cron.js";
 
-// Cron is evaluated against the LOCAL calendar (the basis the scheduler in
-// `packages/server/src/automation/fire/cron-match.ts` matches on), so these assert on
-// local wall-clock fields rather than ISO strings. Constructing the clock from
-// local components and reading it back the same way keeps the suite green in
-// any TZ — an ISO literal would only pass on a UTC runner.
 const at = (y: number, mo: number, d: number, h: number, mi: number): Date =>
   new Date(y, mo - 1, d, h, mi);
 const local = (d: Date): string =>
@@ -102,16 +97,12 @@ describe(cronNextRuns, () => {
   });
 
   it("reads the hour field as local time, matching the scheduler", () => {
-    // The scheduler matches `getHours()`, and `relativeRunLabel` formats with
-    // `toLocaleTimeString`. Off-by-the-UTC-offset previews (a 7pm job listed as
-    // "12:30 AM" on IST) came from evaluating this in UTC instead.
     const runs = cronNextRuns("0 19 * * *", 1, at(2026, 1, 1, 0, 0));
     expect(runs[0]?.getHours()).toBe(19);
     expect(local(runs[0]!)).toBe("2026-01-01 19:00");
   });
 
   it("skips the current minute (search begins at from + 1 minute)", () => {
-    // Already 09:00 exactly → the next 09:00 is tomorrow, not right now.
     const runs = cronNextRuns("0 9 * * *", 1, at(2026, 1, 1, 9, 0));
     expect(runs.map(local)).toStrictEqual(["2026-01-02 09:00"]);
   });
@@ -127,7 +118,6 @@ describe(cronNextRuns, () => {
   });
 
   it("treats day-of-month and day-of-week as OR when both are restricted", () => {
-    // 2026-01-01 is a Thursday. "9am on the 1st OR on a Monday."
     const runs = cronNextRuns("0 9 1 * 1", 3, at(2026, 1, 1, 0, 0));
     const days = runs.map(day);
     expect(days[0]).toBe("2026-01-01"); // the 1st (dom hit)
@@ -141,7 +131,6 @@ describe(cronNextRuns, () => {
   });
 
   it("restricts a weekday range to Mon–Fri", () => {
-    // 2026-01-01 is a Thursday, so: Thu, Fri, then skip the weekend to Mon.
     const runs = cronNextRuns("0 19 * * 1-5", 3, at(2026, 1, 1, 0, 0));
     expect(runs.map(local)).toStrictEqual([
       "2026-01-01 19:00",
@@ -151,22 +140,17 @@ describe(cronNextRuns, () => {
   });
 
   it("same expression + same resolved tz yields identical absolute instants under two viewer host clocks", () => {
-    // Absolute `from` in UTC — wall-clock next-run in America/New_York must not
-    // depend on the process host zone (the two "viewers").
     const from = new Date("2026-01-15T12:00:00.000Z");
     const a = cronNextRuns("0 9 * * *", 2, from, "America/New_York");
     const b = cronNextRuns("0 9 * * *", 2, from, "America/New_York");
     expect(a.map((d) => d.getTime())).toStrictEqual(b.map((d) => d.getTime()));
     expect(a).toHaveLength(2);
-    // 09:00 America/New_York on those days.
     expect(zoneParts(a[0]!, "America/New_York")).toMatch(/09:00$/u);
     expect(zoneParts(a[1]!, "America/New_York")).toMatch(/09:00$/u);
-    // And the absolute instants are stable (not viewer-local).
     expect(a[0]!.toISOString()).toBe(b[0]!.toISOString());
   });
 
   it("fires at the trigger zone wall clock, not the host zone", () => {
-    // 09:00 America/Los_Angeles — assert the zone wall clock, not host getters.
     const from = new Date("2026-06-01T00:00:00.000Z");
     const runs = cronNextRuns("0 9 * * *", 1, from, "America/Los_Angeles");
     expect(runs).toHaveLength(1);
@@ -237,7 +221,6 @@ describe(cronRunLabel, () => {
       now: new Date("2026-01-15T05:00:00.000Z"),
     });
     expect(label).toMatch(/Today,/u);
-    // Zone short name appears when viewer ≠ schedule.
     expect(label).toMatch(
       /\b(?:EST|EDT|GMT[-+]\d+|America\/New_York|New York)\b/u
     );

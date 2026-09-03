@@ -1,25 +1,3 @@
-// The CONVERSATION LEDGER band (#190, #438) — `conversation ⊃ turn ⊃ item`,
-// the append-heavy transcript of every chat, build and automation run.
-//
-// It lives in the vault file like every other band (#916, one file): the vault
-// package owns every table in vault.db, and the engine (packages/server) owns
-// the STORE CODE over these tables and receives the vault connection. The band
-// is MACHINERY, registered names-only: it is excluded from the portable export
-// and from the replica BY BAND, exactly as the audit band is.
-//
-// The band is MUTABLE, unlike `audit` — a turn is amended as it streams — so
-// it carries no append-only triggers. Retention is not optional: the
-// archive/prune pass declared in `audit.ts` (`RETENTION_WINDOWS`) seals cold
-// turn ranges into a content-addressed segment in the blob CAS and prunes the
-// raw rows, which is what keeps the sovereign file small now that there is
-// only one of them.
-//
-// `turns.conversation_id`, `items.turn_id` and `attachments.item_id` are
-// CASCADE foreign keys; `turns.parent_turn_id` stays a plain column because a
-// sub-run's parent may be recorded after this row in one batch. None of this
-// is reachable from a handler `db` or from the `vault_sql` tool.
-
-/** Every physical table of the `ledger` band. */
 export const LEDGER_BAND_TABLES: readonly string[] = [
   "conversations",
   "turns",

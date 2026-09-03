@@ -21,8 +21,6 @@ import styles from "./AppSettingsPanel.module.css";
 
 type Tab = "appearance" | "automations" | "vault" | "enrichment" | "manage";
 
-// The shared icon set lacks palette/wrench glyphs, so the tab strip carries
-// small inline SVGs.
 const TAB_GLYPH: Record<Tab, string> = {
   appearance:
     '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2a10 10 0 0 0 0 20 2.5 2.5 0 0 0 2-4 2.5 2.5 0 0 1 2-4h2a4 4 0 0 0 4-4 10 10 0 0 0-10-8z"/></svg>',
@@ -123,7 +121,6 @@ function ManageItem({
   );
 }
 
-/** One standing-order card — run-now, toggle, and a lazily-mounted runs host. */
 function OrderCard({
   order,
   onRun,
@@ -210,13 +207,6 @@ function OrderCard({
   );
 }
 
-/**
- * App-view settings popover (#325). The app-view host keeps the iframe,
- * chrome, and per-app chat. The route owns all gateway I/O and pushes a
- * snapshot on each change; the two deep sub-trees (per-order run history, the
- * vault consent pane) are rendered imperatively into host divs this component
- * provides — see `onMountRuns`.
- */
 export default function AppSettingsPanel(
   props: AppSettingsBridgeProps
 ): JSX.Element {
@@ -277,11 +267,7 @@ export default function AppSettingsPanel(
   };
   const visibleTabs = TABS.filter((t) => {
     if (t.id === "vault") return snap.vaultVisible;
-    // Same rule as the vault tab above: a tab the gateway cannot serve is
-    // absent, never present-and-empty.
     if (t.id === "automations") return automationsVisible;
-    // Same rule again: an app whose data shape has no enrichment capabilities
-    // gets no Enrichment tab (#807).
     if (t.id === "enrichment") return Boolean(onMountEnrichment);
     return true;
   });

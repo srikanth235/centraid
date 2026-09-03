@@ -1,11 +1,3 @@
-// The shell under a gateway that does NOT advertise the experimental
-// features (C1, docs/platform-gating.md).
-//
-// Automations and connectors ship in the binary and default off for v0, so
-// this is the SHAPE MOST GATEWAYS HAVE — the launcher without those rows, and
-// a wall for anything that still addresses them. It is its own suite rather
-// than a flag on the main App suite because the two describe different
-// products: App.test.tsx asserts what an opted-in gateway looks like.
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -22,7 +14,6 @@ import {
 import type * as TypeImport_caps from "./App.js";
 import { resetVitals } from "./routeVitals.js";
 
-/** Flipped per test BEFORE mounting — the shell reads the map once at boot. */
 const caps = vi.hoisted(() => ({
   value: { automations: false, connectors: false } as
     | Record<string, boolean>
@@ -37,9 +28,6 @@ vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
   listVaults: () => Promise.resolve([]),
   listApps: () =>
     Promise.resolve([{ id: "todos", name: "Todos", kind: "app" }]),
-  // Deliberately rejecting: with the gate off the gateway does not mount
-  // `/centraid/_automations`, so any surface that still reads it is a bug this
-  // suite should surface as a failure rather than absorb.
   listAutomations: () => Promise.reject(new Error("route not mounted")),
   getNotifications: () =>
     Promise.resolve({
@@ -99,7 +87,6 @@ function seedShellGlobals(): void {
   };
 }
 
-/** The `window.Centraid` shim an app (or a stale bookmark) navigates through. */
 function shim(): Record<string, () => void> {
   return (window as unknown as { Centraid: Record<string, () => void> })
     .Centraid;
@@ -148,7 +135,6 @@ describe("the shell on a gateway without the experimental features", () => {
     expect(stem.textContent).toContain("Vault");
     expect(stem.textContent).not.toContain("Automations");
     expect(stem.textContent).not.toContain("Connectors");
-    // Analytics reads the run rollup, which lives behind the same gate.
     expect(stem.textContent).not.toContain("Analytics");
 
     await act(async () => {
@@ -164,15 +150,11 @@ describe("the shell on a gateway without the experimental features", () => {
 
   it("walls a deep link into a gated route instead of failing silently", async () => {
     const el = await mount();
-    // The `window.Centraid` shim is exactly the path a stale bookmark, an
-    // older notification, or an app's own "open my automations" takes.
     await act(async () => {
       shim().openAutomations!();
     });
     expect(el.textContent).toContain("aren’t enabled on this gateway");
     expect(el.textContent).toContain("untouched");
-    // The frame still names where you are — a blank bar over the wall would
-    // read as a broken screen — but offers no verb it cannot honour.
     const bar = el.querySelector(".appBar")!;
     expect(bar.textContent).toContain("Automations");
     expect(bar.textContent).not.toContain("New automation");
@@ -188,11 +170,6 @@ describe("the shell on a gateway without the experimental features", () => {
   });
 
   it("keeps gated surfaces discoverable when the gateway advertises them", async () => {
-    // The opted-in gateway, from the same seam — the launcher restores the
-    // member's pins exactly as they arranged them, and nothing is walled. What
-    // those routes then RENDER is App.test.tsx's ground, so this stops at the
-    // frame rather than mounting a surface whose reads this suite deliberately
-    // leaves unmocked.
     caps.value = { automations: true, connectors: true };
     const el = await mount();
     await act(async () => {
@@ -208,9 +185,6 @@ describe("the shell on a gateway without the experimental features", () => {
   });
 
   it("reads an absent flag as off — an older gateway handshakes clean", async () => {
-    // The two keys are OPTIONAL on the wire, so a gateway that predates them
-    // says nothing at all rather than saying false. Same verdict, and never a
-    // malformed-handshake path.
     caps.value = undefined;
     const el = await mount();
     expect(el.querySelector(".stem")!.textContent).not.toContain("Automations");

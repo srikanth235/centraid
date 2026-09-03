@@ -1,18 +1,3 @@
-/*
- * The portable export's CUSTODY KIT (#630, closing the 10.1 finding).
- *
- * A portable bundle carries sealed cells as ciphertext and NOTHING that opens
- * them. The vault's data-encryption key leaves only here: password-wrapped
- * with the same scrypt→AES-256-GCM machinery the backup recovery kit uses
- * (`@centraid/backup`'s `wrapPasswordDocument`), so there is one wrap, one KDF
- * cost, and one "no unwrapped acceptance path" rule (#568) rather than two.
- *
- * The kit rides INSIDE the bundle at `custody/recovery-kit.json`. That is safe
- * precisely because it is wrapped: the zip is then password-protected exactly
- * where it matters and readable everywhere else. Without a passphrase the
- * export simply has no kit, and its manifest says `sealed: "ciphertext-only"`.
- */
-
 import { createHash } from "node:crypto";
 
 import { unwrapPasswordDocument, wrapPasswordDocument } from "@centraid/backup";
@@ -21,7 +6,6 @@ import type { WrappedPasswordDocument } from "@centraid/backup";
 import { sealKeyFingerprint } from "../schema/sealed.js";
 import { canonicalJson } from "./portability.js";
 
-/** Where the wrapped kit lives inside the bundle. */
 export const PORTABLE_CUSTODY_KIT_PATH = "custody/recovery-kit.json";
 
 const KIT_KIND = "centraid-portable-custody-kit";
@@ -30,16 +14,12 @@ const WRAP_AAD = Buffer.from("centraid-portable-custody-wrap-v1", "utf8");
 const KIT_LABEL = "portable export custody kit";
 const KEY_BYTES = 32;
 
-/** The plaintext document — it exists only between the wrap and the unwrap. */
 export interface PortableCustodyKit {
   version: 1;
   kind: typeof KIT_KIND;
   createdAt: string;
-  /** The vault the key belongs to, so a mismatched kit is caught by a human. */
   vaultId: string;
-  /** Non-secret identity of the key below; also re-derived on unwrap. */
   sealKeyFingerprint: string;
-  /** base64 of the 32-byte DEK. */
   sealKey: string;
 }
 
@@ -78,7 +58,6 @@ function parsePlainKit(value: unknown): PortableCustodyKit {
   };
 }
 
-/** Capability fingerprint: which vault, which key — never the key itself. */
 function kitFingerprint(kit: PortableCustodyKit): string {
   return createHash("sha256")
     .update(
@@ -91,7 +70,6 @@ function kitFingerprint(kit: PortableCustodyKit): string {
     .digest("hex");
 }
 
-/** Wrap one vault's DEK for the bundle. The plaintext never reaches disk. */
 export function wrapPortableCustodyKit(
   input: { vaultId: string; sealKey: Buffer; createdAt: string },
   passphrase: string
@@ -120,7 +98,6 @@ export function wrapPortableCustodyKit(
   };
 }
 
-/** Open a wrapped kit. A wrong password stays a loud, distinguishable error. */
 export function parsePortableCustodyKit(
   value: unknown,
   passphrase: string
@@ -136,7 +113,6 @@ export function parsePortableCustodyKit(
   });
 }
 
-/** The DEK a parsed kit carries, as bytes. */
 export function custodyKitSealKey(kit: PortableCustodyKit): Buffer {
   return Buffer.from(kit.sealKey, "base64");
 }

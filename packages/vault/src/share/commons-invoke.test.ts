@@ -18,7 +18,6 @@ describe("ordinary invoke is Commons-aware", () => {
   test("member writes queue without local mutation; steward writes sequence once", () => {
     const { origin, originBoot, audience, audienceBoot } = household();
     const now = nowIso();
-    // The remote party id is already the owner id of their own vault.
     const bob = audienceBoot.ownerPartyId;
     origin.vault
       .prepare(

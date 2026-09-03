@@ -1,8 +1,3 @@
-// Home springboard tile content (#708), from the daily brief and the replica
-// shell session. Each read settles independently into the designed empty body:
-// an empty tile beats a plausible number.
-
-// The Tasks app's OWN predicates (#834): no second answer to "Today".
 import { dueLabel, landsToday } from "@centraid/blueprints/apps/tasks/when";
 
 import type { DailyBrief } from "../../../gateway-client.js";
@@ -25,10 +20,6 @@ export interface HomeTileReader {
     }
   ) => Promise<{ rows: readonly { values: Record<string, unknown> }[] }>;
 }
-
-// TRAP (#708): `purpose` is a SHAPE SELECTOR, not an audit label — an
-// unregistered value matches nothing and the read throws silently. Omit it
-// for `DEFAULT_REPLICA_PURPOSE`.
 
 const WINDOW = { faces: 24, mosaic: 24, recent: 8, tasks: 24 } as const;
 
@@ -58,9 +49,6 @@ async function rowsOf(
   return result.rows.filter((row) => isLive(row.values));
 }
 
-// A `blob:` handle pins its Blob until revoked, so each load revokes the
-// previous load's once its own are ready; a decoded `<img>` keeps painting,
-// so the mosaic never blanks (#883).
 let liveMosaicUrls: readonly string[] = [];
 
 function swapMosaicUrls(next: readonly string[]): readonly string[] {
@@ -69,19 +57,17 @@ function swapMosaicUrls(next: readonly string[]): readonly string[] {
     try {
       URL.revokeObjectURL(url);
     } catch {
-      // Revoking twice is a no-op, not an error.
+      // Intentionally empty.
     }
   }
   liveMosaicUrls = next;
   return next;
 }
 
-/** Call on Home unmount and on re-scope: no handle outlives its vault. */
 export function releaseHomeTileBlobs(): void {
   swapMosaicUrls([]);
 }
 
-/** Falls back to the ORIGINAL until the thumb derivative exists (#708). */
 async function photoThumbs(
   reader: HomeTileReader
 ): Promise<{ total: number; thumbs: string[] }> {
@@ -125,7 +111,6 @@ async function peopleFaces(
   const directory = rows
     .filter((row) => text(row.values.kind) === "person")
     .map((row) => ({
-      // The face hue derives from the party id, so a rename keeps its colour.
       id: text(row.values.party_id) || text(row.values.display_name),
       name: text(row.values.display_name),
     }))
@@ -133,8 +118,6 @@ async function peopleFaces(
   return { directory, total: directory.length };
 }
 
-/** NOT DERIVED HERE (#834): `landsToday` and `dueLabel` come from the Tasks
- *  app, so the tile cannot disagree with it. */
 async function taskBoard(reader: HomeTileReader): Promise<{
   total: number;
   rows: HomeTileTaskRow[];
@@ -199,8 +182,6 @@ async function lockerState(
   };
 }
 
-/** A zero balance cannot be told from a ledger never used; only the count
- *  says one exists. */
 async function tallyCount(reader: HomeTileReader): Promise<number> {
   return (await rowsOf(reader, "tally", "tally.expense", WINDOW.faces)).length;
 }
@@ -218,7 +199,6 @@ function dataUriText(uri: string): string {
   const payload = uri.slice(comma + 1);
   try {
     if (!meta.includes(";base64")) return decodeURIComponent(payload);
-    // `atob` yields latin1 units; the bytes are UTF-8.
     const bytes = Uint8Array.from(
       atob(payload),
       (ch) => ch.codePointAt(0) ?? 0
@@ -278,7 +258,6 @@ function clipToExcerpt(prose: string): string {
   return `${cut.slice(0, space > 0 ? space : EXCERPT_MAX).trimEnd()}…`;
 }
 
-/** [] when any link is missing — the designed title-only fallback. */
 async function contentProse(
   reader: HomeTileReader,
   appId: string,
@@ -331,7 +310,6 @@ async function newestNote(
   const rows = await rowsOf(reader, "notes", "knowledge.note", WINDOW.recent);
   const newest = [...rows].sort(byRecency("updated_at"))[0];
   if (!newest) return { total: rows.length };
-  // Headings KEPT, unlike Docs: a note's opening heading appears nowhere else.
   const [first] = await contentProse(
     reader,
     "notes",
@@ -346,7 +324,6 @@ async function newestNote(
   };
 }
 
-/** One app's missing grant must not blank the other tiles. */
 export async function loadHomeTileContent(input: {
   reader: HomeTileReader;
   brief?: DailyBrief | undefined;
@@ -378,7 +355,6 @@ export async function loadHomeTileContent(input: {
     ...(locker ? { locker } : {}),
     ...(notes ? { notes } : {}),
     ...(people ? { people } : {}),
-    // The brief counts TODAY's imports; the tile counts all.
     ...(photos
       ? { photos }
       : brief

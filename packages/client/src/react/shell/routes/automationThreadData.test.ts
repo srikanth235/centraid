@@ -20,10 +20,6 @@ import {
   loadAutomationThreadData,
 } from "./automationThreadData.js";
 
-// `automationThreadData.ts` imports the gateway-client barrel; stub it so
-// pulling the module in doesn't run gateway-client-core's load-time
-// `window.CentraidApi` side effect (same guard automationsData.test.ts uses).
-// `vi.mock` is hoisted above these imports by vitest.
 vi.mock(import("../../../gateway-client.js"), () => ({
   confirmVaultParked: vi.fn<typeof confirmVaultParked>(),
   decideOutboxItem: vi.fn<typeof decideOutboxItem>(),
@@ -75,7 +71,6 @@ describe(filterConsentForAutomation, () => {
           verb: "send",
         },
         {
-          // Same display name, but the vault ASSISTANT — must not leak in.
           actor: "Daily Digest",
           actorId: "assistant-1",
           actorKind: "assistant",
@@ -90,7 +85,6 @@ describe(filterConsentForAutomation, () => {
           verb: "send",
         },
         {
-          // A different automation entirely — name doesn't match.
           actor: "Weekly Report",
           actorId: "agent-2",
           actorKind: "agent",
@@ -274,9 +268,6 @@ describe(loadAutomationThreadData, () => {
     });
   });
 
-  // The load-bearing half of the run-screen / compile-screen split: a compile
-  // turn is the COMPILER working and must never appear in the run history. It
-  // is distilled into an inert `plan` status instead.
   it("keeps compile turns out of the run history and reports them as plan status", async () => {
     vi.mocked(readAutomation).mockResolvedValue(row());
     const now = Date.now();
@@ -325,7 +316,6 @@ describe(loadAutomationThreadData, () => {
       "ask-1",
       "r-exec",
     ]);
-    // An interactive turn is the owner asking, not the automation firing.
     expect(result?.data.runs.find((r) => r.runId === "ask-1")?.entryKind).toBe(
       "ask"
     );
@@ -337,7 +327,6 @@ describe(loadAutomationThreadData, () => {
       label: "Compile failed",
       state: "failed",
     });
-    // The header reports the AUTOMATION, not its last compile.
     expect(result?.data.header.statusLabel).not.toBe("Compile failed");
   });
 

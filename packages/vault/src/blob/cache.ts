@@ -1,8 +1,3 @@
-// CACHE MODEL (#405): the local tier is a BOUNDED SPOOL, not a full mirror.
-// Tinies are pinned, replicated mediums are admission-evictable, originals are
-// evictable ONLY by the post-reconciliation sweep. Admission never trusts a
-// possibly stale replica-index row to delete an original's last local copy.
-
 import { availableParallelism, totalmem } from "node:os";
 import type { DatabaseSync } from "node:sqlite";
 
@@ -19,7 +14,6 @@ import { OrphanTombstoneIndex } from "./orphan-tombstone.js";
 import { AccessIndex, ReplicaIndex } from "./replica-index.js";
 
 export interface BlobCacheSettings {
-  /** Explicit 0 is "unset", NOT "evict everything". */
   budgetBytes?: number;
 }
 
@@ -69,7 +63,6 @@ export interface CacheStatfs {
 }
 
 export interface BlobCacheOptions {
-  /** Absent ⇒ no disk to measure, so the budget is UNLIMITED. */
   statfs?: () => CacheStatfs | null;
   settings?: () => BlobCacheSettings;
   policy?: () => BackupPolicy;
@@ -108,7 +101,6 @@ export class BlobCache {
   private evictedBytes = 0;
   private backpressureEvents = 0;
 
-  // Bulk replication parks while either is "hot" (#405).
   private interactiveReads = 0;
   private lastInteractiveAtMs = 0;
 
@@ -139,8 +131,6 @@ export class BlobCache {
         }));
   }
 
-  /** Initialized ONCE by a lazy scan, then adjusted purely on put/delete, so
-   *  no query ever rescans. */
   spoolBytes(): number {
     if (this.spool === null) {
       let total = 0;
@@ -196,9 +186,6 @@ export class BlobCache {
     return stat.bavail * stat.bsize;
   }
 
-  /** An explicit `budgetBytes` wins; else half of what the volume could hold
-   *  with the spool emptied, clamped so a tiny disk still gets a working set
-   *  and a huge one is not eaten by this cache; else UNLIMITED. */
   budgetBytes(): number {
     const explicit =
       this.options.policy?.().cacheBudgetBytes ?? this.settings().budgetBytes;
@@ -220,8 +207,6 @@ export class BlobCache {
     return this.replica.has(sha);
   }
 
-  /** BOTH limits applied: a budget-only floor would claim "1 GiB available"
-   *  on a volume with 100 MiB free. */
   admissionCapacity(
     reservedBytes = 0,
     diskReservedBytes = reservedBytes
@@ -248,9 +233,6 @@ export class BlobCache {
     };
   }
 
-  /** Un-replicated bytes are NEVER deleted, so a backlog that holds the space
-   *  throws `VaultBlobBackpressureError` and the caller paces against the
-   *  uplink instead of losing data. */
   admit(
     incoming: number,
     reservedBytes = 0,
@@ -281,12 +263,6 @@ export class BlobCache {
     }
   }
 
-  /**
-   * Admission may shed only reconstructible LRU previews; the post-reconciliation
-   * scope may then shed LRU originals. That keeps STALE replica evidence from
-   * authorizing an original's deletion before a deep remote listing has healed
-   * it. Pinned, staged, pending-offsite and evidence-free blobs are unevictable.
-   */
   runEviction(
     incoming = 0,
     reservedBytes = 0,
@@ -318,8 +294,6 @@ export class BlobCache {
       !pinned.has(sha) &&
       !staging.has(sha) &&
       !pendingOutbox.has(sha);
-    // Mediums first; originals only when the caller just reconciled the
-    // replica index against remote truth.
     const previews = [...preview].filter(evictable);
     const originals =
       scope === "reconciled-sweep"

@@ -10,8 +10,6 @@ import {
 import { closeOpenVaults, household } from "../share/placement-fixture.js";
 import { channelForParty } from "./channel.js";
 
-/** A commons roster ask, which is NOT a channel: #903 retired the reading of
- *  this row as one, and the tests below hold that line. */
 function pendingInvitation(
   db: DatabaseSync,
   partyId: string,
@@ -59,11 +57,6 @@ describe("grant/channel", () => {
   });
 
   test("binding a peer makes them a PERSON the People roster can see", () => {
-    // The roster is driven by `people_profile`, one per canonical party. A
-    // linked peer with only a `core_party` row was invisible there while the
-    // share sheet — which reads `core.party` — still listed them, so one
-    // sheet showed two same-named rows and `Linked` stayed empty beside a
-    // live binding.
     const { origin } = household();
     const partyId = uuidv7();
     bindPartyToVault(origin.vault, {
@@ -79,7 +72,6 @@ describe("grant/channel", () => {
           `SELECT cadence_days, deleted_at FROM people_profile WHERE party_id = ?`
         )
         .get(partyId),
-      // Cadence 0 is "never": linking is not a request to be nagged.
     }).toStrictEqual({ cadence_days: 0, deleted_at: null });
   });
 
@@ -111,10 +103,6 @@ describe("grant/channel", () => {
   });
 
   test("a pending invitation does not resurrect a severed channel", () => {
-    // It used to: a commons ask read back as an `invited` channel, which is
-    // how sharing reached people the member had never linked (#903 retired
-    // it). The row still exists for the commons roster, so this is the guard
-    // that it can no longer speak for the link.
     const { origin } = household();
     const now = nowIso();
     const partyId = uuidv7();

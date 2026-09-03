@@ -1,12 +1,3 @@
-/*
- * Shared iroh identity loader (#555).
- *
- * The persistence backend owns atomicity, wrapping, and permission repair.
- * This module owns the cross-consumer invariant: an endpoint secret is
- * exactly 32 bytes, and every caller chooses its corruption policy
- * explicitly.
- */
-
 import { randomBytes } from "node:crypto";
 
 export type EndpointSecretCorruptionPolicy = "refuse" | "remint";

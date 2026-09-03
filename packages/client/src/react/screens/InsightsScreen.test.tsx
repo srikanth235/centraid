@@ -15,12 +15,6 @@ import { WEB_INSIGHT_WORDS } from "./insights-model.js";
 import InsightsScreen from "./InsightsScreen.js";
 import type { ResourceUsageDTO } from "./resource-summary.js";
 
-// Analytics (v9, #765). The assertions are about INTENT, not the old markup:
-// one window picker, one chart that is one image, facts in the numeric
-// register, and a page that says what it cannot measure instead of drawing it.
-
-// A fixed rollup clock, so the day folding is the same in every timezone the
-// suite might run in.
 const GENERATED_AT = Date.UTC(2026, 5, 10, 12, 0, 0);
 const day = (offset: number): string =>
   new Date(GENERATED_AT + offset * 86_400_000).toISOString().slice(0, 10);
@@ -237,8 +231,6 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     expect(plot?.getAttribute("aria-label")).toBe(
       "Spend per day over the last 30 days"
     );
-    // ONE COLUMN PER DAY (#775) — thirty days, thirty columns, so a single
-    // expensive afternoon is its own column rather than a smear over four.
     const columns = [...el.querySelectorAll(".column")];
     expect(columns).toHaveLength(30);
     expect(columns.at(-1)?.getAttribute("title")).toBe(
@@ -249,7 +241,6 @@ describe("screens/InsightsScreen (v9, #765)", () => {
   it("gives a day's failed spend its own segment, and only that day's", () => {
     const el = screen();
     const columns = [...el.querySelectorAll(".column")];
-    // 9 Jun spent $0.40, half of it on two failed runs.
     const failedDay = columns.at(-2);
     expect(failedDay?.querySelector(".fail")).not.toBeNull();
     expect(
@@ -260,7 +251,6 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     expect(failedDay?.getAttribute("title")).toBe(
       "9 Jun · $0.40 · 5 runs · 2 failed"
     );
-    // The quiet day keeps ONE segment: a zero-height fail spends a colour.
     expect(columns.at(-1)?.querySelector(".fail")).toBeNull();
   });
 
@@ -271,7 +261,6 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     act(() => root?.unmount());
     root = null;
     container?.remove();
-    // A window whose days hold no failure gets no legend at all.
     const quiet = screen({
       summary: {
         ...summary,
@@ -298,7 +287,6 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     act(() => root?.unmount());
     root = null;
     container?.remove();
-    // An old vault that timed nothing shows no row — never "0s".
     const untimed = screen();
     expect(
       [...untimed.querySelectorAll(".factKey")].map((n) => n.textContent)
@@ -326,8 +314,6 @@ describe("screens/InsightsScreen (v9, #765)", () => {
   });
 
   it("still states the window's failure count in words above the chart", () => {
-    // The per-column split is the day's; the meta line remains the only place
-    // the WINDOW's total is stated, so the two never have to be read together.
     expect(screen().textContent).toContain("42 runs · 2 failed");
   });
 
@@ -356,7 +342,6 @@ describe("screens/InsightsScreen (v9, #765)", () => {
       "Spend by model",
       "Spend by effort",
     ]);
-    // Every row states its share in words, not only as a bar width.
     expect(el.textContent).toContain("claude-code");
     expect(el.textContent).toContain("100% of spend");
     expect(el.textContent).toContain("$2.50 · 11k · 7 runs");
@@ -371,9 +356,6 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     expect(el.querySelector(".figureQualifier")?.textContent).toBe(
       "$2.10 harness-reported · $1.30 estimated · 1 unpriced."
     );
-    // The retries and the cost of the failures are on the wire and now on the
-    // page — a page about spend that cannot say what failure cost is missing
-    // the number a member would act on.
     expect(el.textContent).toContain("42 · 3 retried");
     expect(el.textContent).toContain("2 · $0.40 spent");
   });
@@ -402,7 +384,6 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     expect(rows[0]?.dataset.net).toBeUndefined();
     expect(rows[1]?.dataset.net).toBe("true");
     expect(rows[0]?.textContent).toContain("Succeeded · Chat · claude-code");
-    // Only the automation run has a ref to deep-link to.
     const actions = [...el.querySelectorAll(".row button")];
     expect(actions).toHaveLength(1);
     act(() => (actions[0] as HTMLButtonElement).click());
@@ -411,7 +392,6 @@ describe("screens/InsightsScreen (v9, #765)", () => {
 
   it("gives the gateway's numbers a denominator, and each row its own caveat", () => {
     const el = screen({ resourceUsage: usage });
-    // "120s of CPU" is unremarkable over a week and alarming over a minute.
     const heads = [...el.querySelectorAll(".meta")].map((n) => n.textContent);
     expect(heads.some((head) => head?.startsWith("since "))).toBe(true);
     expect(
@@ -426,8 +406,6 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     expect(keys).toContain("memory now");
     expect(keys).toContain("harness runs");
     expect(keys).toContain("wakeups, last hour");
-    // No disk and no shared-compute row: the gateway serves neither, so the
-    // page omits them rather than inventing a number.
     expect(keys).not.toContain("disk");
     expect(keys).not.toContain("compute shared");
     expect(el.textContent).toContain(
@@ -446,8 +424,6 @@ describe("screens/InsightsScreen (v9, #765)", () => {
     expect(el.textContent).toContain(
       "Once automations and the assistant start doing work, their volume and outcomes appear here."
     );
-    // Empty offers NO action — there is nothing to do here but wait — but the
-    // window picker stays, or a member who picked 7 days could not leave it.
     expect(el.querySelectorAll(".empty button")).toHaveLength(0);
     expect(el.querySelectorAll(".chip")).toHaveLength(3);
   });

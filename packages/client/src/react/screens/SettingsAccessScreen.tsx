@@ -11,20 +11,10 @@ import { DrawerGroup } from "./settings-controls.js";
 
 import sc from "./settings-controls.module.css";
 
-/**
- * Settings → Access: the ONE dashboard over the authority plane (#883, ruling
- * V-dashboard), grouped by who the answer is about — the axis the promise a
- * withdrawal can keep varies on (ruling V-locus). It words no phrase of its
- * own; every promise is the vault's, taken from the wire. It never draws an
- * empty table over a failed read: "nobody has access" and "we could not ask"
- * are opposite facts.
- */
-
 export interface SettingsAccessScreenProps {
   load: () => Promise<AccessLens>;
 }
 
-/** Never invents a subject name: the id is what this plane stores. */
 function answerLine(answer: AccessAnswer): string {
   const verb =
     answer.decision === "declined"

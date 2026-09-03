@@ -16,20 +16,6 @@ import type {
 
 import chrome from "./chrome.module.css";
 
-// Tier 2 — All apps (#707).
-//
-// A searchable sheet listing EVERY destination the shell has, each as a 44px
-// row with its icon and a pin switch. Pinning adds the destination to the
-// stem (and to the compact band); unpinning removes it. Nothing here is
-// hidden or unavailable — the sheet is what lets the stem stay short.
-//
-// An unpinned row reads as a LIGHTER name, never a dimmed one: container
-// `opacity` composites every descendant and silently invalidates token-level
-// contrast, so the recessive state is a colour token on the leaf.
-//
-// Desktop gets a centred dialog, compact gets a bottom sheet. One scrim, one
-// Esc handler, and the panel is the shared kit modal with a labelled title.
-
 const ROW_ICON = 28;
 const GLYPH_SIZE = 16;
 
@@ -39,10 +25,6 @@ export interface AllAppsSheetProps {
   onSelect: (destination: LauncherDestination) => void;
   onClose: () => void;
   compact?: boolean;
-  /** What this gateway offers (C1). The sheet is the complete index of the
-   *  places the shell can go, so a gated-off feature has to leave it too —
-   *  a stem that hid Automations while the sheet still listed it would be two
-   *  answers to one question. */
   capabilities?: ShellCapabilities;
 }
 
@@ -128,9 +110,7 @@ export default function AllAppsSheet({
                 >
                   <span
                     className={chrome.sheetRowChip}
-                    /* No hue and no tint: this sheet lists FRAME destinations,
-                       and the identity wheel belongs to the apps. See the
-                       header of `launcherModel.ts`. */
+
                     style={
                       {
                         "--chip-radius": `${iconChipRadius(ROW_ICON)}px`,

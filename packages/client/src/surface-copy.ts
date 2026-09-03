@@ -1,5 +1,3 @@
-// Shared operational copy (#805).
-
 export const READING_HEALTH = "Reading from the gateway";
 
 export const EMPTY_HEALTH = "Nothing to attend to";

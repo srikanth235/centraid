@@ -1,22 +1,3 @@
-// Access plane DDL — schema `access` (#916, owner decision D4).
-//
-// WHY THE NAME. This plane was called `consent` for four releases and had
-// stopped being about consent: `access_app` is an install register,
-// `access_device` an enrolment register, `access_app_ext` an app's own table
-// declarations. What the plane actually decides is ACCESS — who may read
-// what, for how long, under which purpose — and a member's standing ANSWER
-// has lived in `share_authority` since #883. A plane whose name describes a
-// third of its rows makes every scope string a small lie, so the physical
-// prefix, the logical schema, the Atlas label and the scope strings the
-// bootstrap seeds all moved together.
-//
-// `access_grant` became `access_grant`, not `access_access_grant`:
-// the old table name carried the plane because the plane was called something
-// else, and with the prefix saying `access` the qualifier is already there.
-//
-// The plane's evidence stream moved with it: `access_provenance` and
-// `access_receipt` are the audit band's tables (`audit.ts`), in the same file
-// and under the same one name. Only the MODEL half is here.
 export const ACCESS_DDL = `
 CREATE TABLE access_app (
   app_id       TEXT PRIMARY KEY,
@@ -122,21 +103,6 @@ CREATE TABLE access_device (
 CREATE INDEX IF NOT EXISTS idx_device_owner_party ON access_device(owner_party_id);
 `;
 
-// #308 A3/A4: access memory for the install-grant top-up.
-//
-// `access_scope_tombstone` — the owner's "no", made durable. #306's top-up
-// diffed declared scopes against ACTIVE grants only, so an owner-revoked
-// scope was silently re-minted on the next mount/sync/publish. A revocation
-// now writes one tombstone per scope triple; the top-up (and the widening
-// request below) skip tombstoned triples, and only an explicit owner
-// re-approval clears them. Uninstall clears the app's tombstones — a
-// reinstall is a fresh answer.
-//
-// `access_scope_request` — a manifest that widens BEYOND the last owner answer
-// parks here as a blocking item instead of auto-granting: agents author their
-// own manifests, so "install was the answer" must not be bypassable by the
-// very actor the answer contains. One open request per (plane, app);
-// re-publishes replace the open request's scope set.
 export const ACCESS_INSTALL_MEMORY_DDL = `
 CREATE TABLE IF NOT EXISTS access_scope_tombstone (
   tombstone_id     TEXT PRIMARY KEY,

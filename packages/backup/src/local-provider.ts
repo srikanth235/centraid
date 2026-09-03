@@ -1,9 +1,3 @@
-/*
- * Filesystem `BackupProvider`: `objects/<targetId>/` + `registry.json`. Local disk is api-key-equivalent custody — `purgeAuthTier: 'api-key'` succeeds directly (PROTOCOL.md).
- * Re-read `registry.json` on EVERY operation — no in-memory cache (a stale read is the generation-fencing bug). Each public method loads once, mutates that copy, `persist()`s that SAME object.
- * TOCTOU across operations/processes is out of scope: `persist()` atomic-renames keep the file well-formed, not concurrent-writer-safe. Single-writer-per-operation is the deployment assumption.
- */
-
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -42,7 +36,6 @@ const SOFT_DELETE_WINDOW_DAYS = 14;
 const CAPABILITIES: ProviderCapabilities = {
   protocol: ["centraid-storage-provider/1"],
   dataPlane: "s3",
-  // No separate wire-grant (`openDataPlane` IS the grant); every store class and real usage are still advertised offline.
   capabilities: [
     "backup",
     "cas",
@@ -65,7 +58,6 @@ const CAPABILITIES: ProviderCapabilities = {
 
 /* oxlint-disable max-classes-per-file -- (#354) the read-only wrapper is a small
    adapter colocated with the provider it serves (#247 convention). */
-/** `put`/`delete` refused; everything else passes through. */
 class ReadOnlyObjectStore implements ObjectStore {
   constructor(private readonly inner: ObjectStore) {}
   async put(): Promise<void> {
@@ -96,7 +88,6 @@ export class LocalBackupProvider implements BackupProvider {
   private readonly rootDir: string;
   private readonly registryFile: string;
   private readonly objectsRoot: string;
-  /** Serializes this instance's temp-file-then-rename (not cross-process RMW; see header). */
   private writeChain: Promise<void> = Promise.resolve();
 
   constructor(options: LocalBackupProviderOptions) {
@@ -105,7 +96,6 @@ export class LocalBackupProvider implements BackupProvider {
     this.objectsRoot = path.join(this.rootDir, "objects");
   }
 
-  /** Re-read from disk — no cache. Call once per public method and thread through to `persist()`. */
   private async load(): Promise<Registry> {
     try {
       const raw = await fs.readFile(this.registryFile, "utf8");
@@ -125,7 +115,6 @@ export class LocalBackupProvider implements BackupProvider {
   }
 
   private async persist(registry: Registry): Promise<void> {
-    // Serialize this instance's persist() calls on the temp-file rename — not another process (header).
     this.writeChain = this.writeChain.then(async () => {
       await fs.mkdir(this.rootDir, { recursive: true });
       const tmp = `${this.registryFile}.${process.pid}.${Date.now()}.tmp`;
@@ -228,7 +217,6 @@ export class LocalBackupProvider implements BackupProvider {
   }
 
   async purgeTarget(targetId: string): Promise<void> {
-    // Local disk is the user's own custody — api-key tier suffices. A remote provider MUST reject this with 403.
     const registry = await this.load();
     const target = this.requireTargetIn(registry, targetId);
     await fs.rm(path.join(this.objectsRoot, targetId), {
@@ -244,7 +232,6 @@ export class LocalBackupProvider implements BackupProvider {
     await this.persist(registry);
   }
 
-  /** Per-store isolated prefixes (PROTOCOL.md Layer 1): `objects/<targetId>/<store>/`. */
   private storeRoot(targetId: string, store: StoreClass): string {
     return path.join(this.objectsRoot, targetId, store);
   }
@@ -279,7 +266,6 @@ export class LocalBackupProvider implements BackupProvider {
         `target "${targetId}" was purged`
       );
 
-    // Idempotency replay BEFORE the fencing check (spec-mandated order).
     const existing = registry.idempotency[targetId]?.[reg.idempotencyKey];
     if (existing) return existing;
 
@@ -357,7 +343,6 @@ export class LocalBackupProvider implements BackupProvider {
     };
   }
 
-  /** Layer 2 usage for the `backup` subtree only — `cas` is `usageReport`. */
   async usage(
     targetId: string
   ): Promise<{ usage: Usage; accountStatus: AccountStatus }> {
@@ -371,7 +356,6 @@ export class LocalBackupProvider implements BackupProvider {
       usage: {
         storedBytes: bytesStored,
         objectCount,
-        // quotaBytes omitted — local disk has no product-declared quota (field optional on the wire).
         meteredAt: Math.floor(Date.now() / 1000),
       },
       accountStatus: "ok",
@@ -392,7 +376,6 @@ export class LocalBackupProvider implements BackupProvider {
     return { bytesStored, objectCount };
   }
 
-  /** `quotaBytes: null` (unmetered); `period` is target creation → now (no billing period). */
   async usageReport(targetId: string): Promise<UsageByStore> {
     const registry = await this.load();
     const target = this.requireTargetIn(registry, targetId);

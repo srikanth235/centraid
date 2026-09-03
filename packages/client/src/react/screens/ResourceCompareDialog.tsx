@@ -15,12 +15,6 @@ import a11y from "../styles/a11y.module.css";
 import buttonCss from "../ui/Button.module.css";
 import styles from "./ResourceDialogs.module.css";
 
-// Compare dialog (#528 follow-up): every resource mode side by side so the
-// owner sees the consequence BEFORE committing — the gap the inline card left,
-// which only ever showed the already-active mode's numbers. Read from the
-// static preset mirror (resource-presets.ts); selecting + Apply routes back
-// through the card's saveMode. Esc / backdrop / Cancel dismiss.
-
 const MODE_COLUMNS: readonly ResourceMode[] = ["auto", ...PRESET_MODES];
 const MODE_LABEL: Record<ResourceMode, string> = {
   auto: "Auto",
@@ -45,9 +39,7 @@ const X_ICON = (
 );
 
 export interface ResourceCompareDialogProps {
-  /** The mode currently saved on the card — the initial selection. */
   current: ResourceMode;
-  /** Persist the chosen mode (the card's saveMode path), then close. */
   onApply: (mode: ResourceMode) => void;
   onClose: () => void;
 }

@@ -1,15 +1,7 @@
-// Inline-body threshold (#367): notes, draft messages, and data: URI door
-// commands mint `core_content_item` rows inline. Binary already spills to the
-// blob CAS unconditionally (blob/mint.ts); this guard closes the gap for
-// text/*, which CANNOT redirect to the CAS (FTS sync triggers decode
-// `content_uri` in-transaction and cannot do I/O). Tighter second gate below
-// the MAX_INLINE_DATA_URI_CHARS door check.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { decodeDataUri } from "../blob/mint.js";
 
-/** Default inline-body budget: ~64KB of decoded text. */
 export const INLINE_BODY_BUDGET_BYTES = 64 * 1024;
 
 export class InlineBodyTooLargeError extends Error {
@@ -28,7 +20,6 @@ export class InlineBodyTooLargeError extends Error {
   }
 }
 
-/** Guard for commands that build the body themselves as raw text (notes, draft messages). */
 export function assertTextBodyWithinBudget(
   bodyText: string,
   mediaType: string,
@@ -39,8 +30,6 @@ export function assertTextBodyWithinBudget(
     throw new InlineBodyTooLargeError(byteSize, budgetBytes, mediaType);
 }
 
-/** `data:` URI inline door: decode media type + length WITHOUT minting;
- *  budget enforced for text/* only — binary spills to CAS regardless. */
 export function assertInlineDataUriWithinBudget(
   dataUri: string,
   budgetBytes: number = INLINE_BODY_BUDGET_BYTES
@@ -52,8 +41,6 @@ export function assertInlineDataUriWithinBudget(
 }
 
 export interface InlineBodyViolationEntry {
-  /** Referencing entity ("knowledge.note", "social.message", "core.document"),
-   *  or "core.content_item" for unattributed rows. */
   entity: string;
   count: number;
   bytes: number;
@@ -65,8 +52,6 @@ export interface InlineBodyViolationScan {
   byEntity: InlineBodyViolationEntry[];
 }
 
-/** Diagnostics scan (#367): pre-existing inline text bodies over budget.
- *  Read-only; `byte_size` is exact decoded-bytes, not an approximation. */
 export function scanInlineBodyViolations(
   vault: DatabaseSync,
   budgetBytes: number = INLINE_BODY_BUDGET_BYTES
@@ -106,8 +91,6 @@ export function scanInlineBodyViolations(
       .all(...ids) as { content_id: string }[];
     for (const h of hits) add(entity, h.content_id);
   }
-  // Over budget but owned by no known body column (e.g. an attachment whose
-  // declared type is text/* — rare but real) still counts, bucketed generically.
   for (const contentId of ids) {
     if (!attributed.has(contentId)) add("core.content_item", contentId);
   }

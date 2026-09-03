@@ -1,9 +1,3 @@
-// Every column renting a `core.content_item`'s bytes (#883): a missing entry
-// is bytes reclaimed under a live row. `health_workout.route_content_id` and
-// `consent_export_job.artifact_content_id` left with their tables (#916,
-// ruling ONT-06) — a renter that no longer exists cannot hold bytes down. `onlyLive` is the trash clamp;
-// `documentHead` is the head the sweep walks past instead (#352).
-
 export interface ContentReference {
   table: string;
   column: string;

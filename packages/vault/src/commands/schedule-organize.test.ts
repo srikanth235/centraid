@@ -126,9 +126,6 @@ describe("schedule organization commands", () => {
         }).status
       ).toBe("executed");
     }
-    // THE KEY IS THE SERIES-LOCAL WALL CLOCK (#916, R5): the series runs in
-    // Asia/Kolkata, so 03:30Z is 09:00 there — and that, not the instant, is
-    // what identifies the occurrence across an edit that moves the series.
     const rows = db.vault
       .prepare(
         `SELECT original_start_local, recurrence_semantics, action, override_json
@@ -241,7 +238,6 @@ describe("schedule organization commands", () => {
         .get(eventId)
     ).toMatchObject({ status: "cancelled", sequence: 2 });
 
-    // Idempotent series skip on an already-cancelled series.
     expect(
       invoke("schedule.edit_event_occurrence", {
         event_id: eventId,

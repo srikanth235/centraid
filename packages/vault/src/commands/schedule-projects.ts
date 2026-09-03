@@ -1,8 +1,3 @@
-// Tasks organized: projects, sections and the ordering spine (#630). Split
-// from `schedule-organize.ts`, which keeps the EVENT half — the series, its
-// occurrence exceptions and the wall-clock identity that makes them stable.
-// Two different subjects that only shared a file.
-
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 
 const STRING = { type: "string", minLength: 1 } as const;
@@ -169,9 +164,6 @@ function organizeTask(ctx: HandlerCtx): Record<string, unknown> {
     recurrence_anchor?: string;
     tz?: string;
   };
-  // Placement columns are COALESCE'd: omitting project_id/section_id leaves
-  // the current filing in place. Explicit clear_* flags are the only NULL path
-  // so agents can retune recurrence without unfiling into Notifications.
   const clearProject = input.clear_project === true;
   const clearSection = clearProject || input.clear_section === true;
   ctx.db

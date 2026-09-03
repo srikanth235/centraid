@@ -1,18 +1,12 @@
-// Anchored popover menu (Docs' openPopover, shared). One popover at a time:
-// opening a second closes the first, and every app's layered Escape handler
-// asks `isPopoverOpen()` before claiming the key.
-
 import { el, h } from "./dom.js";
 
 let popoverEl: HTMLElement | null = null;
 let popoverCleanup: (() => void) | null = null;
 
-/** Whether a kit popover is open — layered Escape handlers ask before closing. */
 export function isPopoverOpen(): boolean {
   return popoverEl != null;
 }
 
-/** Close the open kit popover (no-op when none is open). */
 export function closePopover(): void {
   if (!popoverEl) return;
   popoverCleanup?.();
@@ -21,10 +15,6 @@ export function closePopover(): void {
   popoverCleanup = null;
 }
 
-/** Open a popover anchored to `anchor`: right-aligned, flips above when out of
- *  viewport, closes on outside click / scroll / resize / Escape. Options:
- *  `focus` first field; `className` width/spacing override; `role` default
- *  menu; `onClose` runs once on any close path (teardown point). */
 export function openPopover(
   anchor: HTMLElement,
   build: (box: HTMLElement) => void,
@@ -71,7 +61,6 @@ export function openPopover(
     if (!box.contains(target) && !anchor.contains(target)) closePopover();
   };
   const onScroll = (e: Event): void => {
-    // Scroll inside the popover or the kit's @-mention list must not close it.
     if (box.contains(e.target as Node)) return;
     if (e.target instanceof Element && e.target.closest?.(".kit-mention-pop"))
       return;
@@ -92,7 +81,6 @@ export function openPopover(
     box.querySelector<HTMLElement>("input, select, textarea, button")?.focus();
 }
 
-/** One menu row for `openPopover`: label + optional icon, dot, danger tone. */
 export function popItem(
   label: string,
   onClick: (event: MouseEvent) => void,
@@ -101,8 +89,6 @@ export function popItem(
     disabled = false,
     iconHtml = null,
     dotColor = null,
-    /** Trailing slot: current-choice ✓ or shortcut. Trailing on purpose — a
-     *  leading dot would indent every other row past it. */
     trailing = null,
   }: {
     danger?: boolean;
@@ -124,7 +110,6 @@ export function popItem(
     btn.appendChild(
       h("span", { class: "kit-dotmini", style: `background:${dotColor};` })
     );
-  // The label takes the slack so the trailing slot sits on the far edge.
   btn.appendChild(h("span", { class: "kit-popover-label" }, label));
   if (trailing)
     btn.appendChild(h("span", { class: "kit-popover-key" }, trailing));

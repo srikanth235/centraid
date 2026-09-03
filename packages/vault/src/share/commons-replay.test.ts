@@ -1,13 +1,3 @@
-// Local-rail command-tail replay (#750 invariant 7): `compileCommons`
-// catches a co-hosted seat up by RE-EXECUTING the operations it missed, so the
-// steward never walks or projects the whole closure to describe a change and
-// the seat's own derived rows (OCR/embeddings/FTS) for unchanged items survive
-// untouched.
-//
-// The load-bearing safety property is that replay is never fatal: an operation
-// this build cannot re-execute falls back to the full scrub + re-project,
-// which repairs any state. A grant can never be wedged by one bad op.
-
 import { afterEach, describe, expect, test } from "vitest";
 
 import { nowIso } from "../ids.js";
@@ -34,8 +24,6 @@ describe("Commons command-tail replay, local rail (issue #750 invariant 7)", () 
     expect(memberOcrHits(fixture, "memberocrneedle")).toBe(1);
     const unchanged = fixture.documents.slice(1);
 
-    // k = 3 writes, none of which the member is present for: the local seat
-    // is deliberately left out of the fan-out so it falls behind.
     const detached: CommonsMemberInput[] = [];
     fixture.write(
       "core.rename_document",
@@ -60,8 +48,6 @@ describe("Commons command-tail replay, local rail (issue #750 invariant 7)", () 
       )?.sequence
     ).toBe(0);
 
-    // The steward ships the OPERATIONS: what travels is O(k), and it never
-    // mentions a document that did not move.
     const frame = exportCommonsSyncFrame({
       steward: fixture.home.origin.vault,
       identitySeed: fixture.home.origin.identitySeed,
@@ -78,7 +64,6 @@ describe("Commons command-tail replay, local rail (issue #750 invariant 7)", () 
 
     fixture.compile();
 
-    // The member converged through re-execution…
     expect(fixture.documentTitle(fixture.documents[0]!)).toBe("Renamed twice");
     expect(
       fixture.home.audience.vault
@@ -87,9 +72,6 @@ describe("Commons command-tail replay, local rail (issue #750 invariant 7)", () 
         )
         .get()
     ).toMatchObject({ n: 1 });
-    // …and nothing seat-local for the unchanged documents was deleted or
-    // re-derived: embeddings intact, member OCR/FTS intact, and no enrichment
-    // re-enqueued for content the steward never touched.
     expect(memberEmbeddings(fixture)).toBe(before.embeddings);
     expect(memberOcrHits(fixture, "memberocrneedle")).toBe(1);
     expect(
@@ -109,9 +91,6 @@ describe("Commons command-tail replay, local rail (issue #750 invariant 7)", () 
       { document_id: fixture.documents[0]!, title: "Before the skew" },
       { seats: detached }
     );
-    // Version skew: an operation naming a command this build does not host.
-    // The steward's own state already moved (above); the replica must still
-    // converge, through the one path that repairs arbitrary state.
     appendCommonsOperation({
       steward: fixture.home.origin.vault,
       grantId: fixture.grantId,
@@ -133,8 +112,6 @@ describe("Commons command-tail replay, local rail (issue #750 invariant 7)", () 
         .prepare("SELECT COUNT(*) AS n FROM core_document")
         .get()
     ).toMatchObject({ n: 3 });
-    // NOT wedged: the seat is re-baselined at the head, so the very next
-    // ordinary write replays again instead of re-hitting the same operation.
     fixture.write("core.rename_document", {
       document_id: fixture.documents[1]!,
       title: "After the skew",
@@ -153,8 +130,6 @@ describe("Commons command-tail replay, local rail (issue #750 invariant 7)", () 
 
   test("a replica whose projection the tail cannot resolve falls back to the full re-baseline", () => {
     const fixture = folderCommons(2);
-    // Corrupt the member's projection out from under the replay: the document
-    // a rename addresses is gone, so its precondition cannot hold.
     fixture.home.audience.vault
       .prepare("DELETE FROM core_document WHERE document_id = ?")
       .run(fixture.documents[0]!);
@@ -162,7 +137,6 @@ describe("Commons command-tail replay, local rail (issue #750 invariant 7)", () 
       document_id: fixture.documents[0]!,
       title: "Repaired",
     });
-    // The full path repaired the seat: both documents back, rename applied.
     expect(
       fixture.home.audience.vault
         .prepare("SELECT COUNT(*) AS n FROM core_document")
@@ -201,8 +175,6 @@ describe("Commons command-tail replay, local rail (issue #750 invariant 7)", () 
       document_id: fixture.documents[0]!,
       title: "Reconciled",
     });
-    // Drift the member under a row no operation names — only a projection can
-    // see it, which is what the force flag exists for.
     fixture.home.audience.vault
       .prepare(
         "UPDATE core_document SET title = 'drifted' WHERE document_id = ?"

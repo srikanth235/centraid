@@ -34,28 +34,15 @@ import {
 
 import styles from "./AtlasRecordsSection.module.css";
 
-// Records section of the Data route (#441 B3, v9 #765, full grid #775): one
-// kind as `ui/GridBlock`, with row editor, dependent-aware delete dialog and
-// the machinery lock. Every write rides the gateway's journalled command path,
-// never raw SQL. The kind comes from the Kinds list above — this component
-// takes one logical name. Rows APPEND, never replace ("scrolls rather than
-// pages"); a sort REPLACES them, since the store orders the whole kind.
-
 export interface AtlasRecordsSectionProps {
-  /** The logical `schema.table` this section is showing. */
   logical: string;
-  /** The kind's own name, for the section head. */
   label: string;
-  /** The census' record count for this kind — the caption's denominator. */
   records: number;
 }
 
 const errText = (e: unknown): string =>
   e instanceof Error ? e.message : String(e);
 
-/** The machinery lock. Plumbing rows are readable but not writable until the
- *  owner says so out loud, because hand-editing them can break invariants the
- *  engine assumes. */
 function MachineryBar({
   unlocked,
   onToggle,
@@ -95,12 +82,8 @@ export default function AtlasRecordsSection({
   const [cols, setCols] = useState<BrowseColumnsResult | null>(null);
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
-  // What the LAST LANDED PAGE was ordered by, per the store — never what was
-  // asked for; the arrow must not move before the rows do.
   const [sort, setSort] = useState<GridSortData | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
-  // The mount read is already in flight on the first render, so the section
-  // starts pending rather than being flipped by an effect.
   const [loading, setLoading] = useState(true);
   const [moreLoading, setMoreLoading] = useState(false);
 
@@ -119,10 +102,6 @@ export default function AtlasRecordsSection({
   const isMachinery = cols?.machinery ?? false;
   const writesLocked = isMachinery && !unlockMachinery;
 
-  // One page. `after` appends, anything else replaces: a keyset cursor only
-  // means something inside the order it was minted in. `orderBy`/`dir` come
-  // back off the page, not echoed from the request — the grid tells the truth
-  // about the rows it returned.
   const fetchRows = useCallback(
     async (
       table: string,
@@ -155,8 +134,6 @@ export default function AtlasRecordsSection({
     []
   );
 
-  // A kind change resets everything kind-scoped during render, so the table
-  // never paints the previous kind's rows under the new kind's name.
   const [seen, setSeen] = useState(logical);
   if (seen !== logical) {
     setSeen(logical);
@@ -178,7 +155,6 @@ export default function AtlasRecordsSection({
         const meta = await browseColumns(logical);
         if (cancelled || !mountedRef.current) return;
         setCols(meta);
-        // Newest first is the OPENING order, not the only one.
         await fetchRows(
           logical,
           { dir: "desc", key: defaultSortKey(meta) },
@@ -196,7 +172,6 @@ export default function AtlasRecordsSection({
     };
   }, [logical, fetchRows]);
 
-  /** The order the grid is in, or the one it opens in before a page lands. */
   const order = useMemo<GridSortData | null>(
     () => (cols ? (sort ?? { dir: "desc", key: defaultSortKey(cols) }) : null),
     [cols, sort]
@@ -207,8 +182,6 @@ export default function AtlasRecordsSection({
     void fetchRows(logical, order, null);
   }, [fetchRows, logical, order]);
 
-  /** A header ask, or the head's own direction toggle. Both replace the rows:
-   *  the store orders the whole kind, not the page in hand. */
   const reorder = useCallback(
     (next: GridSortData) => {
       void fetchRows(logical, next, null);
@@ -216,7 +189,6 @@ export default function AtlasRecordsSection({
     [fetchRows, logical]
   );
 
-  // ── Delete flow ──
   const askDelete = useCallback(
     (row: Record<string, unknown>) => {
       if (!cols) return;
@@ -270,8 +242,6 @@ export default function AtlasRecordsSection({
         refresh();
         return;
       }
-      // Race: dependents appeared between ask and confirm (409) — show the
-      // fresh set and block.
       setDel((d) =>
         d
           ? {
@@ -293,7 +263,6 @@ export default function AtlasRecordsSection({
     });
   }, [del, logical, unlockMachinery, refresh]);
 
-  // ── The row menu: delete withheld, not shown-and-refused, while writes are locked. ──
   const menu: (CtxItem | "sep")[] = [
     { icon: "Eye", id: "open", label: "Open the record" },
     { icon: "Copy", id: "copy", label: "Copy the id" },
@@ -330,8 +299,6 @@ export default function AtlasRecordsSection({
     [cols, rows]
   );
 
-  // The head's trailing verb flips the coarse sort beside the grid's
-  // per-column headers (the fine one); both write the SAME single sort.
   const orderWords =
     order && cols ? sortLabel(order, defaultSortKey(cols)) : "";
 

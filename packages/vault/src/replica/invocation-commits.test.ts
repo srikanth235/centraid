@@ -191,8 +191,6 @@ describe("replica invocation commit receipt", () => {
           )
           .get("invocation-reopen")
       ).toMatchObject({ status: "executed", receipt_id: expect.any(String) });
-      // node:sqlite hands back null-prototype rows; spreading compares the column
-      // data (which is the contract) without asserting the driver's prototype.
       expect({
         ...db.audit
           .prepare(
@@ -210,10 +208,6 @@ describe("replica invocation commit receipt", () => {
   });
 
   test("repairs a marker whose handler wrote its own receipt beside the invocation's", () => {
-    // `HandlerCtx.receipt` grants every handler ONE receipt of its own (#883),
-    // and `share.grant` takes it. Reading every receipt on the invocation
-    // counted that one as corruption, so sharing a document left a marker no
-    // reopen could repair — and the vault then refused to open at all.
     const dir = tempVaultDir();
     let db: VaultDb | undefined;
     try {

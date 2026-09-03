@@ -1,6 +1,3 @@
-// Binding Layer states (#708 A). Offline is NOT a component — the status line
-// (#707) and `commitAvailability` already own it. No overlay, spinner, toast,
-// or focus trap.
 import type { CSSProperties, JSX } from "react";
 
 import Button from "./Button.js";
@@ -12,9 +9,7 @@ const count = (n: number): string => n.toLocaleString();
 
 export interface WorkingStateProps {
   label: string;
-  /** Omit ONLY while total is unknown — then skeletons, never a spinner. */
   progress?: { done: number; total: number; unit?: string };
-  /** Never a shimmer. */
   skeletonRows?: number;
   className?: string;
 }
@@ -43,7 +38,6 @@ export function WorkingState({
         ) : null}
       </div>
       {progress ? (
-        // Bar is decoration; COUNTS are the announcement (`aria-live`).
         <div className={styles.workingTrack} aria-hidden="true">
           <div
             className={styles.workingFill}
@@ -63,7 +57,6 @@ export function WorkingState({
 }
 
 export interface DisagreeVersion {
-  /** Device NAME. "MacBook Pro", never a device id. */
   device: string;
   at: string;
   body: string;
@@ -72,7 +65,6 @@ export interface DisagreeVersion {
 export interface DevicesDisagreeProps {
   subject: string;
   versions: readonly [DisagreeVersion, DisagreeVersion];
-  /** Three equal-weight options, no default, nothing destructive. */
   choices: readonly { id: string; label: string }[];
   onChoose: (id: string) => void;
   className?: string;
@@ -129,9 +121,7 @@ export interface OutOfRoomProps {
   consequence: string;
   usedLabel: string;
   limitLabel: string;
-  /** 0–1. Above 1 the meter takes the danger role rather than overflowing. */
   fractionUsed: number;
-  /** One action. A list of remedies is a way of not choosing one. */
   action: { label: string; run: () => void };
   className?: string;
 }

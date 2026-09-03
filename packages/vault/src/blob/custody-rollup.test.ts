@@ -1,9 +1,3 @@
-// The custody rollup (#711): the arithmetic, and — the part that
-// matters — the free-up safety rule. A byte with no PROVEN copy elsewhere is
-// never counted as freeable, and every one of the five vetoes is exercised
-// individually, because a predicate that is right for the wrong reason stops
-// being right the moment someone edits it.
-
 import { describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -21,7 +15,6 @@ function newVault(): VaultDb {
   return db;
 }
 
-/** Declare a remote tier, which is what makes anything freeable at all. */
 function setS3(db: VaultDb): void {
   updateBlobStoreSettings(db, {
     blob_store: {
@@ -33,11 +26,6 @@ function setS3(db: VaultDb): void {
   });
 }
 
-/**
- * A live content item plus its custody-mirror row — the two rows the rollup
- * reads. `resident` also puts the bytes in the local CAS, which is what makes
- * the sha a candidate for the local buckets at all.
- */
 function addContent(
   db: VaultDb,
   options: {
@@ -65,7 +53,6 @@ function addContent(
   return sha;
 }
 
-/** Durable evidence that `sha` reached the remote tier under a store class. */
 function markReplica(db: VaultDb, sha: string, store = "cas"): void {
   db.vault
     .prepare(
@@ -158,15 +145,12 @@ describe("custody rollup arithmetic", () => {
       count: 0,
       bytes: 0,
     });
-    // …but it is still reported as custody, so the surface can say where it is.
     expect(rollup.buckets["remote-only"].count).toBe(1);
     db.close();
   });
 });
 
 describe("free-up safety rule: no proven copy elsewhere, never offered", () => {
-  /** The one arrangement in which a byte IS freeable. Every test below breaks
-   *  exactly one clause of it and asserts the offer disappears. */
   function provenlySafe(): { db: VaultDb; sha: string } {
     const db = newVault();
     setS3(db);
@@ -199,8 +183,6 @@ describe("free-up safety rule: no proven copy elsewhere, never offered", () => {
       state: "local-only",
       resident: true,
     });
-    // Stale evidence from a tier that has since been removed must not license
-    // a delete — this is the clause `blobCustodyProven` does not have.
     markReplica(db, sha);
     const rollup = refreshCustodyRollup(db);
     expect(rollup.buckets.freeable).toStrictEqual({ count: 0, bytes: 0 });

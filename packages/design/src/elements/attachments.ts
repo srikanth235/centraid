@@ -1,10 +1,3 @@
-// Small files ride inline as data: URIs, larger ones by sha (#296).
-//
-// WHY THE BYTES LEAVE THROUGH THE HOST.
-// The app document is not the gateway origin, so a relative `fetch` resolves
-// nowhere and carries no credential. This layer owns the flow's shape, never
-// its transport.
-
 import { applyInOrder } from "./dom.js";
 import { armConfirm } from "./feedback.js";
 import type { VaultOutcome } from "./feedback.js";
@@ -41,7 +34,6 @@ export function fileToDataUri(file: File): Promise<string> {
   });
 }
 
-/** Strict policy acknowledges success only after provider custody. */
 export function isPendingOffsite(
   staged: StagedBlob | null | undefined
 ): boolean {
@@ -52,8 +44,6 @@ export function isPendingOffsite(
   );
 }
 
-/** `hash` (default) declares the sha up front so the host ships zero bytes when
- *  custody exists. `scope` (#599): never stage into the member's own CAS. */
 export async function stageFileBytes(
   file: File,
   extra = "",
@@ -75,16 +65,14 @@ export async function stageDerivative(
   return stage(parentSha, variant, body, mediaType);
 }
 
-// The shell's generic observer misses a tile's download `<a href>`.
 const stripObjectUrls = new WeakMap<HTMLElement, string[]>();
-// Without it a stale render's `.then` clobbers the live list, leaking URLs.
 const stripGeneration = new WeakMap<HTMLElement, number>();
 
 function revokeObjectUrl(url: string): void {
   try {
     URL.revokeObjectURL(url);
   } catch {
-    /* already revoked */
+    // Intentionally empty.
   }
 }
 
@@ -100,8 +88,6 @@ function authorizeStrip(stripEl: HTMLElement, generation: number): void {
   for (const target of targets) {
     const attr = target instanceof HTMLImageElement ? "src" : "href";
     const raw = target.getAttribute(attr);
-    // Root-relative, never the blob prefix: the host answers `null` for a path
-    // it does not own.
     if (!raw?.startsWith("/")) continue;
     void blobUrl(raw).then((objectUrl) => {
       if (!objectUrl) return;
@@ -128,7 +114,6 @@ export function renderAttachments(
   const generation = (stripGeneration.get(stripEl) ?? 0) + 1;
   stripGeneration.set(stripEl, generation);
 
-  // Carry armed state, or a refresh mid-confirm eats the owner's second click.
   const armed = new Set(
     [
       ...stripEl.querySelectorAll<HTMLElement>(
@@ -169,7 +154,6 @@ export function renderAttachments(
       rm.title = "Remove";
       rm.setAttribute("aria-label", "Remove attachment");
       rm.dataset.kitAttachmentId = String(a.attachment_id);
-      // Void, not async: DOM expects void (`typescript(no-misused-promises)`).
       rm.addEventListener("click", () => {
         void (async () => {
           if (!armConfirm(rm, { armedLabel: "Sure?" })) return;
@@ -186,7 +170,6 @@ export function renderAttachments(
   authorizeStrip(stripEl, generation);
 }
 
-/** `narrate` returning false stops the batch. */
 export function wireAttachInput(
   inputEl: HTMLInputElement,
   getSubjectId: () => string | null | undefined,

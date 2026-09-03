@@ -1,7 +1,3 @@
-// @vitest-environment jsdom
-// The one feedback channel, and the states that stand in for content. The
-// status line's contract is that it is ONE element updated in place — so most
-// of these assertions are about what does NOT accumulate.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
@@ -76,7 +72,6 @@ describe("status line", () => {
   it("reverts to quiet on its own duration, and a newer call owns the timer", () => {
     statusLine("early", { duration: 1000 });
     vi.advanceTimersByTime(500);
-    // The older call's pending clear must not wipe this newer message.
     statusLine("later", { duration: 1000 });
     vi.advanceTimersByTime(600);
     expect(text()).toBe("later");
@@ -160,8 +155,6 @@ describe("stand-in states", () => {
     box.innerHTML = "<p>stale</p>";
     showSkeleton(box, 5);
     expect(box.querySelector("p")).toBeNull();
-    // The same `.kit-skeleton` rows `_shared/LoadingSkeleton.tsx` renders in
-    // React (#799).
     expect(box.querySelectorAll(".kit-skeleton")).toHaveLength(5);
     expect(box.children).toHaveLength(5);
   });
@@ -172,7 +165,6 @@ describe("stand-in states", () => {
     readFailed(banner);
     expect(banner.hidden).toBe(false);
     expect(banner.textContent).toContain("Couldn’t reach the vault");
-    // A missing banner is a no-op, never a throw: an app without one still reads.
     expect(() => readFailed(null)).not.toThrow();
   });
 });
@@ -228,7 +220,6 @@ describe(runBulk, () => {
       "Deleting 2 of 3…",
       "Deleting 3 of 3…",
     ]);
-    // No failures: the notice is cleared rather than left mid-progress.
     expect(notices.at(-1)).toBe("");
     expect(text()).toBe(
       "Deleted 2 of 3 photos · receipted. 1 waiting for approval."
@@ -261,3 +252,4 @@ describe(runBulk, () => {
     expect(afterRuns).toBe(1);
   });
 });
+// @vitest-environment jsdom

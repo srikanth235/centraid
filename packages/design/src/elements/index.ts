@@ -1,6 +1,3 @@
-// ELEMENT layer; never re-exported from src/index.ts, no react-native
-// condition — tokens stay DOM-free (native-contract.test.ts asserts it).
-
 export { el, h } from "./dom.js";
 export {
   armConfirm,

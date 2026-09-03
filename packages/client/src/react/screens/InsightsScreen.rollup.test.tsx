@@ -3,12 +3,6 @@ import { describe, expect, it } from "vitest";
 import type { InsightsSummary } from "../screen-contracts.js";
 import { webBars } from "./insights-model.js";
 
-// Analytics (v9, #765). The assertions are about INTENT, not the old markup:
-// one window picker, one chart that is one image, facts in the numeric
-// register, and a page that says what it cannot measure instead of drawing it.
-
-// A fixed rollup clock, so the day folding is the same in every timezone the
-// suite might run in.
 const GENERATED_AT = Date.UTC(2026, 5, 10, 12, 0, 0);
 const day = (offset: number): string =>
   new Date(GENERATED_AT + offset * 86_400_000).toISOString().slice(0, 10);
@@ -135,7 +129,6 @@ describe("screens/InsightsScreen — folding the rollup into columns", () => {
   it("folds by calendar offset, so a quiet week does not slide the busy days", () => {
     const bars = webBars(summary, 30, false);
     expect(bars).toHaveLength(30);
-    // day(-29) is the window's first day; day(-1)/day(0) are its last.
     expect(bars[0]?.ok).toBeGreaterThan(0);
     expect(bars[1]?.ok).toBe(0);
     expect(bars.at(-1)?.label).toBe("10 Jun · $0.20 · 3 runs");
@@ -143,11 +136,8 @@ describe("screens/InsightsScreen — folding the rollup into columns", () => {
 
   it("draws SPEND, so a cheap busy day cannot outrank an expensive quiet one", () => {
     const bars = webBars(summary, 30, false);
-    // A column's HEIGHT is its spend share; the outcome split divides that
-    // height, so the two segments are read together to compare two days.
     const height = (bar: { ok: number; fail?: number }): number =>
       bar.ok + (bar.fail ?? 0);
-    // day(-1) cost the most ($0.40) though day(0) is not far behind in runs.
     expect(height(bars.at(-2)!)).toBe(100);
     expect(height(bars.at(-1)!)).toBe(50);
     expect(bars.every((b) => height(b) >= 0 && height(b) <= 100)).toBe(true);
@@ -157,7 +147,6 @@ describe("screens/InsightsScreen — folding the rollup into columns", () => {
     const folded = webBars(summary, 90, true);
     expect(folded).toHaveLength(10);
     expect(folded[0]?.label).toContain(" – ");
-    // Under a pointer a ninety-day window is ninety columns.
     expect(webBars(summary, 90, false)).toHaveLength(90);
   });
 });

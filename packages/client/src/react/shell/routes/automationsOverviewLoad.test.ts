@@ -85,8 +85,6 @@ describe("automationsOverviewLoad", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listAutomationsMock.mockResolvedValue([DIGEST_ROW]);
-    // The rows now ride back with the run feed — the loader no longer fetches
-    // the automation list a second time of its own.
     collectRunsMock.mockResolvedValue({ rows: [DIGEST_ROW], entries: [] });
     getBlockingMock.mockResolvedValue({ parked: [], outbox: [] });
     listOutboxGrantsMock.mockResolvedValue([]);
@@ -101,8 +99,6 @@ describe("automationsOverviewLoad", () => {
       expect(data.rows).toHaveLength(1);
       expect(data.rows[0]!.name).toBe("Daily Digest");
       expect(data.rows[0]!.attentionCount).toBe(0);
-      // The automation list costs a request; the overview must pay for it
-      // once — `collectAutomationRuns` is the only place it is fetched.
       expect(listAutomationsMock).not.toHaveBeenCalled();
       expect(collectRunsMock).toHaveBeenCalledOnce();
       expect(getBlockingMock).toHaveBeenCalledOnce();
@@ -149,7 +145,6 @@ describe("automationsOverviewLoad", () => {
       listOutboxGrantsMock.mockResolvedValue([]);
       const data = await loadAutomationsOverviewData();
       expect(data.rows[0]!.ref).toBe("auto.digest/digest");
-      // 1 parked for agent-1 + 1 outbox for agent-1 (other agent parked ignored).
       expect(data.rows[0]!.attentionCount).toBe(2);
     });
   });

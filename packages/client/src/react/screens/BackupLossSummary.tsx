@@ -6,12 +6,6 @@ import type { LossSummary } from "./backupMetrics.js";
 
 import styles from "./BackupCard.module.css";
 
-// Leads the Backups screen with LOSS, not exposure (#708): the
-// first thing on the surface answers "if this device died right now, what
-// would I lose?" — everything else (the five-metric health readout, the
-// device list, the copy/encryption cards) supports that one line rather
-// than the other way around.
-
 const HEADLINE: Record<LossSummary["tone"], (s: LossSummary) => string> = {
   unconfigured: () =>
     "If this device died right now, you would lose everything.",

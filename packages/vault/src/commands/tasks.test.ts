@@ -443,7 +443,6 @@ describe("tasks", () => {
       purpose: "dpv:ServiceProvision",
     });
     expect(outcome.status).toBe("executed");
-    // Trashing is not cancelling: the status is untouched.
     const rows = db.vault
       .prepare(
         `SELECT task_id, status, deleted_at IS NOT NULL AS trashed,

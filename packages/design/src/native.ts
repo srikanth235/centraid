@@ -1,13 +1,3 @@
-// Typed native lowering of the product grammar.
-//
-// This module is deliberately independent of CSS.  Every value returned here
-// is concrete and ready for React Native; there is no var(), calc(),
-// color-mix(), oklch(), stylesheet parser, or runtime override layer in the
-// mobile path.
-//
-// `toNativeTheme` takes no accent key: the accent is ink, so there is no
-// product accent to pick.
-
 import { borders } from "./borders";
 import { rgbaHex } from "./color";
 import { DENSITY_TIERS, metrics, pageMargin, spacing } from "./density";
@@ -86,8 +76,6 @@ export interface NativeTypeStyle {
   letterSpacing?: string;
   textTransform?: "uppercase";
   variantNumeric?: "tabular-nums";
-  /** Only the numeric role carries these two — pin the mono role's own
-   *  reading direction so it does not reorder under RTL. */
   direction?: "ltr";
   unicodeBidi?: "isolate";
 }
@@ -103,14 +91,6 @@ export interface NativeTheme {
   borders: typeof borders;
   spacing: typeof spacing;
   metrics: typeof metrics;
-  /**
-   * The phone's page margin — the horizontal inset from the viewport edge to
-   * page content. `pageMargin.mobile`, not a `spacing` rung: the handoff keeps
-   * gaps and page margins on separate scales (`R.gap` vs `R.margin`, handoff
-   * line 3356), and 18 deliberately does not sit on the 4px gap scale. Only
-   * the mobile value is lowered here, because native never draws the desktop
-   * margin.
-   */
   pageMargin: number;
   density: typeof DENSITY_TIERS;
   type: Record<NativeTypeKey, NativeTypeStyle>;
@@ -127,14 +107,6 @@ function identityRing(scheme: NativeScheme): Record<`c${string}`, string> {
   ) as Record<`c${string}`, string>;
 }
 
-// `rgbaHex` — the concrete form of the emitters' `color-mix(… N%,
-// transparent)`, evaluated here rather than at render — lives in `./color`
-// beside `parseColor`, because `--net-wash` is built from it in the theme
-// registry too and two spellings of one wash is the defect it prevents.
-
-/** An opaque composite of `hex` at `alpha` over `over` — RN has no
- *  `color-mix()`, and a wash that lands on an unknown surface is a wash whose
- *  contrast nobody measured. */
 function mixOver(hex: string, over: string, alpha: number): string {
   const channels = (value: string) =>
     [0, 2, 4].map((offset) =>
@@ -179,12 +151,8 @@ function colorsFor(scheme: NativeScheme): NativeColors {
     link: theme.link,
     net: theme.net,
     netHover: theme.netHover,
-    // Already an `rgba()` in the registry — no `color-mix()` to evaluate here,
-    // because this wash's alpha is a theme value rather than an emitter one.
     netWash: theme.netWash,
     onAccent: theme.textInv,
-    // Same literal in both themes — the media ground does not follow the
-    // theme (Photos handoff v4 §B).
     onStage: ON_STAGE,
     onStageSoft: ON_STAGE_SOFT,
     focusRingColor: theme.ring,

@@ -14,12 +14,6 @@ const sha64: fc.Arbitrary<string> = fc
   .uint8Array({ minLength: 32, maxLength: 32 })
   .map((b) => Buffer.from(b).toString("hex"));
 
-/**
- * CBSF wire properties (#532 core expansion).
- *
- * Model: directory encode/decode is bijective for valid inputs; AAD strings
- * are pure functions of (sha, index, count) and must not collide across frames.
- */
 describe("CBSF wire property", () => {
   test("directory encode/decode round-trips", () => {
     fc.assert(
@@ -116,13 +110,8 @@ describe("CBSF wire property", () => {
   });
 
   test("decode rejects when encodedCount disagrees even if byte length matches", () => {
-    // Craft a directory whose outer length matches `frameCount` but whose
-    // internal encodedCount field was written for a different count — kills
-    // the `encodedCount !== frameCount` guard mutants.
     const sealedLens = [10, 20, 30];
     const bytes = encodeCbsfDirectory(512, 1024, sealedLens);
-    // Reinterpret with a larger frameCount would fail size check first.
-    // Instead: keep length for 3 frames, overwrite encodedCount to 2.
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     view.setUint32(12, 2, false);
     expect(() => decodeCbsfDirectory(bytes, 3)).toThrow(/metadata mismatch/u);

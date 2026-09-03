@@ -19,9 +19,6 @@ import type { BlobStore } from "./store.js";
 import type { OutboxRow, BlobTransferState } from "./transfer-state.js";
 
 const PART_BYTES = 16 * 1024 * 1024;
-// Match the S3 driver's single-PUT ceiling. Larger outbox residents use a
-// restartable multipart upload directly at the final SHA key; temporary keys
-// are reserved for hash-unknown stream-through ingress.
 const DIRECT_FINAL_PUT_MAX_BYTES = 32 * 1024 * 1024;
 
 function partsOf(row: OutboxRow): MultipartPart[] {
@@ -47,7 +44,6 @@ export interface OutboxDrainDeps {
   remote: () => RemoteTier | null;
   onReplicated: (sha256: string) => void;
   settlementAllowed?: () => boolean;
-  /** The store class a sha's bytes belong in (#425). Default cas. */
   desiredStore?: (sha256: string) => ReplicaStore;
 }
 
@@ -73,9 +69,6 @@ async function confirmFinal(
       });
     } else {
       if (final.size !== row.byte_size) return false;
-      // Plaintext stores do not expose a provider checksum through BlobStat.
-      // Compare bounded head/tail samples with the authoritative local CAS;
-      // confirmation stays O(1) egress instead of downloading a 500 MiB body.
       const sample = Math.min(64 * 1024, row.byte_size);
       if (sample > 0) {
         const ranges = [
@@ -100,13 +93,8 @@ async function confirmFinal(
       }
     }
   } catch {
-    // A stale zero/truncated/tampered object is not a custody receipt. The
-    // resumable writer below replaces it from the still-present local source.
     return false;
   }
-  // `stat` and integrity reads can outlive a synchronous database close.
-  // Recheck the fence at the actual settlement boundary so no late promise
-  // writes replica evidence or deletes the durable restart obligation.
   if (deps.settlementAllowed?.() === false) return true;
   deps.cache.replica.mark(row.sha256, row.byte_size, storeClass);
   deps.state.completeOutbox(row.sha256);
@@ -151,8 +139,6 @@ async function uploadViaDurableFinalMultipart(
 
   let uploadId = row.upload_id;
   if (!uploadId) {
-    // The class rides the CreateMultipartUpload — the object-creating call — so
-    // a resume (uploadId already set) keeps the class fixed at creation.
     uploadId = await transfer.beginShaUpload(row.sha256, storageClass);
     if (deps.settlementAllowed?.() === false) return;
     deps.state.setOutboxUpload(row.sha256, uploadId);
@@ -183,8 +169,6 @@ async function uploadViaDurableFinalMultipart(
   const totalParts = encryptionKey
     ? Math.max(1, frameCount)
     : Math.ceil(row.byte_size / PART_BYTES);
-  // Persist each completed part before moving on: a crash must leave a prefix
-  // the next drain can resume, never an unrecorded concurrent set of uploads.
   const uploadNextPart = async (partNumber: number): Promise<void> => {
     if (partNumber > totalParts) return;
     if (!saved.has(partNumber)) {
@@ -242,15 +226,12 @@ async function uploadViaDurableFinalMultipart(
     .map(([number, etag]) => ({ partNumber: number, etag }))
     .sort((a, b) => a.partNumber - b.partNumber);
   if (parts.length === 0) {
-    // Only possible for an unencrypted zero-byte object.
     await transfer.abortShaUpload(row.sha256, uploadId).catch(() => undefined);
     await remote.store.put(row.sha256, Buffer.alloc(0));
   } else {
     await transfer.completeShaUpload(row.sha256, uploadId, parts);
   }
   if (deps.settlementAllowed?.() === false) return;
-  // The durable multipart path is cas-only (large originals); binary derivatives
-  // never reach it, so it always confirms + marks under the cas store.
   if (!(await confirmFinal(deps, remote, row, remote.store, "cas"))) {
     throw new Error(
       `provider did not expose ${row.sha256} after final multipart completion`
@@ -300,7 +281,6 @@ async function uploadViaCasStore(
   }
 }
 
-/** Drain one durable custody obligation; transient failures remain resumable. */
 export async function drainOutboxRow(
   deps: OutboxDrainDeps,
   row: OutboxRow
@@ -308,10 +288,6 @@ export async function drainOutboxRow(
   const remote = deps.remote();
   if (!remote)
     throw new Error("remote CAS is not currently reachable/configured");
-  // Route by the sha's store class (#425): a binary derivative
-  // lands under the derived prefix when the tier grants one, else cas — the
-  // resolver caps size + degrades gracefully, so `store`/`storeClass` always
-  // agree with where the bytes go, and the preflight HEADs the same store.
   const desired = deps.desiredStore?.(row.sha256) ?? "cas";
   const { store, storeClass } = resolveWriteStore(
     remote,
@@ -319,11 +295,6 @@ export async function drainOutboxRow(
     row.byte_size
   );
   if (await confirmFinal(deps, remote, row, store, storeClass)) return; // preflight/dedupe
-  // Direct-to-cold heuristic (#425): a large media original writes
-  // to STANDARD_IA when the target declares it. Computed once here and threaded
-  // to whichever door serves it — both the single-PUT and the multipart path are
-  // cas-only, so a derived write never resolves a class (`storageClassFor`
-  // returns undefined for the derived store class).
   const storageClass = remote.storageClassFor?.(row.sha256, storeClass);
   await deps.cache.qosWait(); // interactive reads preempt bulk custody traffic
   if (deps.settlementAllowed?.() === false) return;

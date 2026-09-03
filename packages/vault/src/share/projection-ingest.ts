@@ -1,8 +1,3 @@
-// PROJECTION IS INGEST (#726 D11): a row arriving over a share edge takes the
-// SAME door an authored row takes — the closure NULLs every cross-vault key.
-// Hooks run inside the projection's transaction, so a replicating device never
-// sees a row before registration. KEYED BY ENTITY TYPE, NEVER BY APP.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { mediaLocationPolicyForVault } from "../blob/staging.js";
@@ -11,20 +6,15 @@ import { uuidv7 } from "../ids.js";
 import type { ProjectedItem, ShareableItemType } from "./closure.js";
 
 export interface ProjectionIngestContext {
-  /** The projection's instant, so one share is one instant. */
   now: string;
 }
 
-/** Runs INSIDE the projection transaction; writes only the audience. */
 export type ProjectionIngestHook = (
   audience: DatabaseSync,
   item: ProjectedItem,
   ctx: ProjectionIngestContext
 ) => void;
 
-/** A `place_id` names a row in the ORIGIN's graph, so the audience re-derives
- *  its own. A `strip` policy gets none: a share is no way around the
- *  audience's own rule. */
 function linkProjectedPlace(
   audience: DatabaseSync,
   assetId: string,
@@ -41,7 +31,6 @@ function linkProjectedPlace(
   try {
     exif = JSON.parse(row.exif_json) as { latitude?: unknown };
   } catch {
-    // Unparseable EXIF is a fact about the origin's row, not a failed share.
     return;
   }
   const { latitude, longitude } = exif as {
@@ -51,7 +40,6 @@ function linkProjectedPlace(
   if (typeof latitude !== "number" || typeof longitude !== "number") return;
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
   const placeId = findOrCreatePlaceTx(
-    // A share emits no receipt: the replica commit bracket records this.
     { vault: audience, now: ctx.now, newId: uuidv7, wrote: () => undefined },
     latitude,
     longitude
@@ -61,11 +49,6 @@ function linkProjectedPlace(
     .run(placeId, assetId);
 }
 
-/**
- * EMBEDDING ONLY: captions and faces are consent-gated, and a placement must
- * never manufacture an owner's consent. `required_capability` stays NULL,
- * since a device-lease row would hand gateway work to a paired device.
- */
 function requestProjectedEnrichment(
   audience: DatabaseSync,
   assetId: string,
@@ -105,7 +88,6 @@ export function projectionIngest(
   return HOOKS.get(itemType);
 }
 
-/** A DEDUPED row is skipped: it went through this door once already. */
 export function runProjectionIngest(
   audience: DatabaseSync,
   projected: readonly ProjectedItem[],

@@ -1,5 +1,3 @@
-// The runs chart (v9 §9, #765). Two outcomes only: ok `--text-faint`, fail `--net`.
-// No third colour, no SVG. Assistive tech reads one image (`role="img"` + a sentence).
 import type { CSSProperties, JSX } from "react";
 
 import { barStack } from "@centraid/design/blocks";
@@ -8,29 +6,22 @@ import { cx } from "./cx.js";
 
 import styles from "./BarsBlock.module.css";
 
-/** Past this many, tighten to hairline rather than dropping columns. */
 const DENSE_COLUMNS = 30;
 
 export interface BarDatum {
   id: string;
   label: string;
   ok: number;
-  /** 0 draws nothing — empty is not a zero-height segment. */
   fail?: number;
 }
 
 export interface BarsBlockProps {
   bars: readonly BarDatum[];
   ariaLabel: string;
-  /** Oldest → newest. TWO OR MORE; the count is the caller's (#775). */
   axis: readonly string[];
   note?: string;
   legend?: { ok: string; fail: string };
   compact?: boolean;
-  /**
-   * Series has not filled its window (#765). Default `flex: 1` stretches a
-   * short series into slabs; cap and pack against the newest end.
-   */
   partial?: boolean;
   className?: string;
 }

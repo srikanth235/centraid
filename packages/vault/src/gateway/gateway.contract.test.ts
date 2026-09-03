@@ -158,7 +158,6 @@ describe("gateway", () => {
         appId: app.appId,
         signingKey: app.signingKey,
       };
-      // 2 = the bootstrap-minted default "Personal" calendar + seedCalendar()'s.
       expect(
         gw.read(cred, {
           entity: "schedule.calendar",
@@ -171,7 +170,6 @@ describe("gateway", () => {
           purpose: "dpv:ServiceProvision",
         })
       ).toThrow(/deny/u);
-      // Wrong purpose on a valid scope is also a deny (purpose limitation).
       expect(() =>
         gw.read(cred, { entity: "schedule.calendar", purpose: "dpv:Billing" })
       ).toThrow(/deny/u);
@@ -203,7 +201,6 @@ describe("gateway", () => {
         appId: app.appId,
         signingKey: app.signingKey,
       };
-      // Tentative event filtered out by the grant's row filter.
       expect(
         gw.read(cred, { entity: "core.event", purpose: "dpv:ServiceProvision" })
           .rows
@@ -285,8 +282,6 @@ describe("gateway", () => {
       expect(
         journalExec.mock.calls.filter(([sql]) => sql === "COMMIT")
       ).toHaveLength(1);
-      // node:sqlite hands back null-prototype rows; spreading compares the column
-      // data (which is the contract) without asserting the driver's prototype.
       expect({
         ...db.audit
           .prepare(
@@ -426,8 +421,6 @@ describe("gateway", () => {
       });
       expect(outcome.status).toBe("failed");
       if (outcome.status !== "failed") return;
-      // The app-facing outcome carries the precondition's owner-facing
-      // message, not the raw `name: column op value` predicate string.
       expect(outcome.predicate).toBe("That calendar doesn't exist.");
       const events = db.vault
         .prepare("SELECT count(*) AS n FROM core_event")
@@ -441,8 +434,6 @@ describe("gateway", () => {
         )
         .get(outcome.invocationId) as { status: string };
       expect(inv.status).toBe("failed");
-      // The raw technical predicate is still recorded in the checks-table
-      // audit trail, unaffected by the friendly outward message.
       const check = db.audit
         .prepare(
           `SELECT predicate FROM agent_invocation_check WHERE invocation_id = ? AND passed = 0`
@@ -644,13 +635,6 @@ describe("gateway", () => {
         "output"
       );
 
-      // Rewind only the derived audit side to model a process dying after the
-      // vault COMMIT and before any post-check/S5 row committed. The marker
-      // remains the canonical proof and carries redacted reconstruction data.
-      //
-      // The band is append-only and lets rows out ONLY through the archive
-      // pass (#916), which is exactly the door a crash does not use — so the
-      // rewind opens it deliberately, and shuts it again.
       db.audit
         .prepare("INSERT INTO audit_archive_pass (active) VALUES (1)")
         .run();
@@ -690,8 +674,6 @@ describe("gateway", () => {
         )
         .run(invocationId);
 
-      // Abort late in repair. Every earlier insert must roll back with it, the
-      // proof stamp must remain NULL, and replay must not claim success.
       db.audit.exec(`
       CREATE TRIGGER fail_repair_evidence
       BEFORE INSERT ON agent_evidence
@@ -718,9 +700,6 @@ describe("gateway", () => {
             n: number;
           }
         ).n;
-      // The abort took every earlier insert of the repair with it. Asserted as
-      // one shape so a partial rollback shows which band survived, not just the
-      // first row that happens to be checked.
       const journalRows = (): Record<string, number> => ({
         postChecks: count(
           "agent_invocation_check",
@@ -741,8 +720,6 @@ describe("gateway", () => {
         evidence: 0,
         explanations: 0,
       });
-      // node:sqlite hands back null-prototype rows; spreading compares the column
-      // data (which is the contract) without asserting the driver's prototype.
       expect({
         ...db.audit
           .prepare(
@@ -952,11 +929,6 @@ describe("gateway", () => {
           .get(invocationId),
       }).toStrictEqual({ n: 0 });
     });
-
-    // The judgment veto left with `agent.judgment` (#916, ruling ONT-06): the
-    // learn loop had a table, commands and no caller, so no correction was
-    // ever distilled into a rule and no call was ever vetoed. R08 gets a test
-    // again when it gets a producer.
   });
 
   describe("confirmation routing + revocation + sweeps", () => {
@@ -987,8 +959,6 @@ describe("gateway", () => {
       };
       gw = createGateway(db, deps);
       registerScheduleCommands(gw);
-      // Mark the command loud-on-purpose (#306): confirmation is a
-      // property of the command's capability row, not of its risk.
       db.vault
         .prepare(
           `UPDATE agent_capability SET requires_confirmation=1
@@ -1015,8 +985,6 @@ describe("gateway", () => {
       if (parked.status !== "parked") return;
       const listed = gw.listParked();
       expect(listed).toHaveLength(1);
-      // The consent surface names WHO wants the act and WHAT it is, so the
-      // owner reads what they're confirming, not just an opaque id.
       expect(listed[0]).toMatchObject({
         invocationId: parked.invocationId,
         command: "schedule.propose_event",
@@ -1024,8 +992,6 @@ describe("gateway", () => {
         caller: "assistant",
         input: proposeInput(),
       });
-      // The approval payload is vault state, not process memory: a daemon
-      // restart must leave the same review surface and resumable invocation.
       gw = createGateway(db, deps);
       registerScheduleCommands(gw);
       expect(gw.listParked()).toMatchObject(listed);
@@ -1096,9 +1062,6 @@ describe("gateway", () => {
         )
         .run();
 
-      // The vault assistant's own enrolled identity — `enrollment_key = '_assistant'`
-      // (VaultPlane.invokeAsAssistant) — rides the same `kind: 'agent'`
-      // credential shape as an automation, but callerKind must tell them apart.
       const assistantAgent = enrollAgent(db, {
         name: "_assistant",
         modelRef: "centraid-assistant",
@@ -1129,7 +1092,6 @@ describe("gateway", () => {
       expect(assistantParked.status).toBe("parked");
       if (assistantParked.status !== "parked") return;
 
-      // An ordinary automation agent, for contrast.
       const { cred: automationCred } = grantedAgent();
       const automationParked = gw.invoke(automationCred, {
         command: "schedule.propose_event",
@@ -1154,8 +1116,6 @@ describe("gateway", () => {
     });
 
     test("install-time scopes execute without parking; risk is journaled as salience (issue #306)", () => {
-      // propose_event is medium risk; the agent has no ceiling anymore — the
-      // granted command executes, and the receipt carries the risk marker.
       const { cred } = grantedAgent();
       const outcome = gw.invoke(cred, {
         command: "schedule.propose_event",
@@ -1184,7 +1144,6 @@ describe("gateway", () => {
         )
         .get(outcome.receiptId) as { purpose_concept_id: string | null };
       expect(receipt.purpose_concept_id).toBe("dpv:ServiceProvision");
-      // A purposeless read rides the same default and still receipts it.
       const read = gw.read(cred, { entity: "schedule.calendar" });
       const readReceipt = db.audit
         .prepare(
@@ -1210,7 +1169,6 @@ describe("gateway", () => {
       expect(denied.status).toBe("denied");
       assert(denied.status === "denied");
       expect(denied.reason).toContain("policy forbids");
-      // The defaulted purpose satisfies the same policy.
       const allowed = gw.invoke(cred, {
         command: "schedule.propose_event",
         input: proposeInput(),
@@ -1389,8 +1347,6 @@ describe("gateway", () => {
       });
       if (parked.status !== "parked") throw new Error("expected parked");
 
-      // Model a process crash after the grant row committed but before the
-      // revocation cascade removed this durable parked payload.
       db.vault
         .prepare(
           `UPDATE access_grant
@@ -1425,7 +1381,6 @@ describe("gateway", () => {
 
     test("revocation cascade: agent goes dark instantly, receipts remain", () => {
       const { cred, grantId } = grantedAgent();
-      // 2 = the bootstrap-minted default "Personal" calendar + seedCalendar()'s.
       expect(
         gw.read(cred, {
           entity: "schedule.calendar",
@@ -1468,8 +1423,6 @@ describe("gateway", () => {
          VALUES ('c-old', 'text/plain', 'file:///x', 'h1', 1, '2020-01-01T00:00:00Z', '2020-01-02T00:00:00Z', '2019-12-31T00:00:00Z')`
         )
         .run();
-      // Tags on the doomed row (its folder filing, its star) purge with it —
-      // classification on a gone row is noise, not history (#274).
       db.vault
         .prepare(
           `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_at)
@@ -1494,8 +1447,6 @@ describe("gateway", () => {
     });
 
     test("sweep purges a lapsed trashed asset on its own clock while its rented bytes live on", () => {
-      // Live content (an avatar also rents it) + an asset whose grace window
-      // has passed: the asset row purges, the bytes stay (#274).
       db.vault
         .prepare(
           `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
@@ -1591,7 +1542,6 @@ describe("gateway", () => {
         ],
       });
 
-      // Bootstrap: no rows, a watermark to persist.
       const boot1 = gw.changes(agentCred, {
         entities: ["core.event"],
         purpose: "dpv:ServiceProvision",
@@ -1599,7 +1549,6 @@ describe("gateway", () => {
       });
       expect(boot1.changes).toStrictEqual([]);
 
-      // A write lands (owner proposes an event) …
       const outcome = gw.invoke(owner, {
         command: "schedule.propose_event",
         input: proposeInput({ calendar_id: cal }),
@@ -1607,7 +1556,6 @@ describe("gateway", () => {
       });
       expect(outcome.status).toBe("executed");
 
-      // … and the feed surfaces it exactly once.
       const pull = gw.changes(agentCred, {
         entities: ["core.event"],
         purpose: "dpv:ServiceProvision",
@@ -1615,10 +1563,6 @@ describe("gateway", () => {
       });
       expect(pull.changes.length).toBeGreaterThan(0);
       expect(pull.changes.every((c) => c.entity === "core.event")).toBe(true);
-      // cursor is a monotonically-ordered string (last prov_id consumed), not a
-      // number/bigint, so toBeGreaterThan asserts its operand types and throws;
-      // the string comparison is named here and the boolean is what gets
-      // asserted. The second expect() argument is the message on failure.
       const cursorAdvanced = pull.cursor > boot1.cursor;
       expect(cursorAdvanced, `${pull.cursor} > ${boot1.cursor}`).toBe(true);
       const again = gw.changes(agentCred, {
@@ -1628,7 +1572,6 @@ describe("gateway", () => {
       });
       expect(again.changes).toStrictEqual([]);
 
-      // An entity outside the grant denies the WHOLE pull, receipted.
       expect(() =>
         gw.changes(agentCred, {
           entities: ["core.event", "core.transaction"],
@@ -1660,7 +1603,6 @@ describe("gateway", () => {
         deviceId: boot.deviceId,
         deviceKey: boot.deviceKey,
       });
-      // Each agent invokes once (disjoint windows — no busy conflict).
       [a, b].forEach((agent, i) => {
         const outcome = gw.invoke(credFor(agent), {
           command: "schedule.propose_event",

@@ -6,10 +6,6 @@ export interface ReplicaLocalSearchSpec {
   deletedColumn?: string;
 }
 
-/**
- * A document BODY stays online-only; the TITLE is eager, so titles rank offline.
- * Never name a column or entity the vault's FTS registry does not (#883).
- */
 export const REPLICA_LOCAL_SEARCH: Readonly<
   Record<string, ReplicaLocalSearchSpec>
 > = {
@@ -51,11 +47,6 @@ export function replicaLocalSearchSpec(entity: string): ReplicaLocalSearchSpec {
   return spec;
 }
 
-/**
- * A MIRROR of `ftsMatchExpression`: one query compiles to one FTS5 program
- * online and off (#846). Split on WHITESPACE only, and admit a token only for a
- * letter or digit — word-run splitting or `\p{M}` diverges the two planes.
- */
 export function replicaSearchTokens(query: string): string[] {
   if (typeof query !== "string")
     throw new ReplicaProtocolError("Search query must be a string");
@@ -108,8 +99,6 @@ function searchWords(value: string): SearchWord[] {
   });
 }
 
-/** A quoted PHRASE of word runs; the punctuation split belongs HERE, not in
- *  {@link replicaSearchTokens}. */
 function tokenPhrase(token: string): string[] {
   return [...token.matchAll(/[\p{L}\p{N}\p{M}]+/gu)].map((match) =>
     foldSearchText(match[0])
@@ -130,7 +119,6 @@ function phraseIndex(words: readonly SearchWord[], phrase: string[]): number {
   return -1;
 }
 
-/** Adjacency is per FIELD, never across the flattened list. */
 export function replicaPendingSearchMatch(
   row: ReplicaRow,
   spec: ReplicaLocalSearchSpec,
@@ -155,7 +143,6 @@ export function replicaPendingSearchMatch(
   const source = fields.find(
     ({ words }) => phraseIndex(words, firstPhrase) !== -1
   ) ?? { value: fields[0]?.value ?? "", words: [] };
-  // The whole phrase is the hit: `don't` highlights `don't`, not `don`.
   const at = phraseIndex(source.words, firstPhrase);
   const first = at === -1 ? undefined : source.words[at];
   const last =

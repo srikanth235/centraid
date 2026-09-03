@@ -1,7 +1,3 @@
-// Blob egress resolution (#296). Byte-read authorization is DERIVED, never
-// granted: content serves iff some edge links it to a subject row, trashed
-// edges included.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { contentReferenceExists } from "../schema/content-references.js";
@@ -13,13 +9,8 @@ import {
 import type { BinaryDerivativeVariant } from "./derivatives.js";
 import { shaOfBlobUri } from "./store.js";
 
-// A literal: blob/ stays free of command-layer imports.
 const RELATIONS_SCHEME_URI = "urn:duaility:relations";
 
-/** The ONE content-reference list without its live-rows-only clamp: trash
- *  renders until it purges (#352). A superseded page serves while some live
- *  document's history names it — walked FROM THE REQUESTED PAGE toward newer
- *  `revises` edges, since seeding from every head costs the whole closure. */
 const SERVE_REFERENCES: string[] = [
   ...contentReferenceExists({
     idExpression: "i.content_id",
@@ -130,8 +121,6 @@ export interface DerivativeRef {
 
 const DERIVATIVE_IN_CHUNK = 500;
 
-/** Many ids in one indexed sweep (#405). CALLERS filter to reachable ids
- *  first: this does not re-run serve-reachability. */
 export function resolveDerivativeShas(
   vault: DatabaseSync,
   contentIds: readonly string[],
@@ -200,8 +189,6 @@ interface LiveShaMemo {
 
 const liveShaMemo = new WeakMap<DatabaseSync, LiveShaMemo>();
 
-/** `data_version` moves on another connection's commit, `total_changes` on
- *  this one's. */
 function vaultWriteKey(vault: DatabaseSync): string {
   const dataVersion = (
     vault.prepare("PRAGMA data_version").get() as { data_version: number }
@@ -212,7 +199,6 @@ function vaultWriteKey(vault: DatabaseSync): string {
   return `${dataVersion}:${totalChanges}`;
 }
 
-/** Once per write position (#659). READ-ONLY: it is shared. */
 export function liveBlobShasCached(vault: DatabaseSync): ReadonlySet<string> {
   const writeKey = vaultWriteKey(vault);
   const memo = liveShaMemo.get(vault);

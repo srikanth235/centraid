@@ -12,9 +12,6 @@ import {
   sanitizeHeaders,
 } from "./protocol.js";
 
-/** Tunnel wire properties (#532): length-prefixed JSON header frames;
- * fail-closed pair QR parse; hop-by-hop headers never cross the tunnel.
- */
 describe("tunnel wire property", () => {
   test("encodeHeaderFrame length prefix matches JSON byte length", () => {
     fc.assert(
@@ -32,9 +29,6 @@ describe("tunnel wire property", () => {
           const frame = Buffer.from(encodeHeaderFrame(header));
           const len = frame.readUInt32BE(0);
           expect(len).toBe(frame.length - 4);
-          // Compare decoded frame vs `header` re-encoded the same way — the
-          // wire contract; sidesteps shrinker null-prototype objects that
-          // toStrictEqual would reject.
           const encodedHeader: unknown = JSON.parse(
             JSON.stringify(header) as string
           );
@@ -211,12 +205,7 @@ describe("tunnel wire property", () => {
     }
   });
 
-  /*
-   * The guard's own edges (#846 P6/P7), asserted HERE: this is the
-   * tunnel's mutation seed.
-   */
   test("a dot inside a segment is not a dot segment", () => {
-    // The `.`/`..` rule is about SEGMENTS; `a.b` is an ordinary name.
     for (const target of [
       `${PEER_PLANE_PREFIX}blobs/a.b`,
       `${PEER_PLANE_PREFIX}route/v1.2/assert`,
@@ -225,7 +214,6 @@ describe("tunnel wire property", () => {
     ])
       expect(isPeerPlaneTarget(target)).toBe(true);
 
-    // …while a real dot segment stays refused wherever it sits.
     for (const target of [
       `${PEER_PLANE_PREFIX}../x`,
       `${PEER_PLANE_PREFIX}./x`,
@@ -237,20 +225,14 @@ describe("tunnel wire property", () => {
   });
 
   test("the path must extend the prefix, not merely start with it", () => {
-    // #846 P6: a lone `?` or `#` addresses no resource — a bare prefix is refused.
     expect(isPeerPlaneTarget(PEER_PLANE_PREFIX)).toBe(false);
     expect(isPeerPlaneTarget(`${PEER_PLANE_PREFIX}?a=1`)).toBe(false);
     expect(isPeerPlaneTarget(`${PEER_PLANE_PREFIX}#f`)).toBe(false);
-    // One character past the prefix is a resource, with or without a query.
     expect(isPeerPlaneTarget(`${PEER_PLANE_PREFIX}x`)).toBe(true);
     expect(isPeerPlaneTarget(`${PEER_PLANE_PREFIX}x?a=1`)).toBe(true);
   });
 
   test("a target the Rust lane cannot represent is refused", () => {
-    /*
-     * #846 P7: the Rust guard reads a `&str`, so a lone surrogate is judged
-     * on the code units themselves — re-encoding would rewrite it to U+FFFD.
-     */
     const high = "\u{D800}";
     const highLast = "\u{DBFF}";
     const low = "\u{DC00}";
@@ -268,7 +250,6 @@ describe("tunnel wire property", () => {
     ])
       expect(isPeerPlaneTarget(`${PEER_PLANE_PREFIX}${suffix}`)).toBe(false);
 
-    // A well-formed pair stays admitted — "no LONE surrogate", not "no surrogate".
     for (const pair of [
       `${high}${low}`,
       `${high}${lowLast}`,
@@ -278,7 +259,6 @@ describe("tunnel wire property", () => {
     ])
       expect(isPeerPlaneTarget(`${PEER_PLANE_PREFIX}${pair}`)).toBe(true);
 
-    // A pair does not shield what follows it: the scan resumes after the low half.
     expect(isPeerPlaneTarget(`${PEER_PLANE_PREFIX}${high}${low}${high}`)).toBe(
       false
     );
@@ -288,7 +268,6 @@ describe("tunnel wire property", () => {
   });
 
   test("encodeHeaderFrame and alpnBytes count UTF-8 bytes, not code units", () => {
-    // A wrong-encoding length prefix desynchronises the frame reader.
     const frame = Buffer.from(
       encodeHeaderFrame({
         method: "GET",
@@ -311,7 +290,6 @@ describe("tunnel wire property", () => {
     expect(alpnBytes("centraid/1")).toStrictEqual([
       ...Buffer.from("centraid/1", "utf8"),
     ]);
-    // Two bytes for one code unit — latin1 would give one, and be wrong.
     expect(alpnBytes("é")).toStrictEqual([0xc3, 0xa9]);
   });
 });

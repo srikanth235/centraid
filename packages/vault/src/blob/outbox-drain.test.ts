@@ -157,7 +157,6 @@ describe("outbox-drain", () => {
     const key = Buffer.alloc(32, 0x5b);
     local.putSync(sha, plain);
     state.enqueue(sha, plain.length);
-    // Record the sha as a binary derivative so `desiredStoreForSha` → 'derived'.
     db.vault
       .prepare(
         `INSERT INTO blob_staging

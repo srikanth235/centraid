@@ -1,17 +1,8 @@
-// `blob_orphan` (#439): GC MUST NOT delete an orphan until N days have
-// elapsed since it was FIRST observed orphaned. Stamp on first pass, age
-// against that stamp, clear when live/pinned or deleted. The stamp is
-// always ≥ true dereference time, so the rule can only over-retain.
-
 import type { DatabaseSync } from "node:sqlite";
 
 export class OrphanTombstoneIndex {
   constructor(private readonly db: DatabaseSync) {}
 
-  /**
-   * INSERT OR IGNORE: a second call keeps the original stamp so the grace
-   * clock never resets while the sha stays continuously orphaned.
-   */
   markFirstSeen(sha: string, nowMs: number): number {
     this.db
       .prepare(
@@ -19,7 +10,6 @@ export class OrphanTombstoneIndex {
          ON CONFLICT (sha256) DO NOTHING`
       )
       .run(sha, nowMs);
-    // Read back rather than trust `nowMs`: a pre-existing row wins the conflict.
     return this.read(sha)!;
   }
 

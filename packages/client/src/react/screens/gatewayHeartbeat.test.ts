@@ -35,16 +35,12 @@ describe(buildHeartbeatStrip, () => {
   it("caps a long ring at the column count and covers every probe", () => {
     const strip = buildHeartbeatStrip(ring(240), NOW);
     expect(strip?.bars).toHaveLength(HEARTBEAT_COLUMNS);
-    // 240 probes over 30 columns — every column carries the same weight of
-    // evidence, and none of them is empty.
     expect(strip?.bars.every((bar) => bar.ok + (bar.fail ?? 0) === 100)).toBe(
       true
     );
   });
 
   it("colours a column by the SHARE of the bucket that went unanswered", () => {
-    // 60 probes over 30 columns = 2 probes each; probe 0 failed, so the first
-    // column is half red and the rest are clean.
     const strip = buildHeartbeatStrip(ring(60, [0]), NOW);
     expect(strip?.bars[0]?.fail).toBe(50);
     expect(strip?.bars[0]?.ok).toBe(50);
@@ -65,7 +61,6 @@ describe(buildHeartbeatStrip, () => {
 
     const broken = buildHeartbeatStrip(ring(10, [3, 4]), NOW);
     expect(broken?.note).toContain("2 of 10 heartbeats went unanswered");
-    // The LAST failure, not the first — "when did it stop" is the question.
     expect(broken?.note).toContain("the last at");
   });
 

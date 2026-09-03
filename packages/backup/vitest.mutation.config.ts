@@ -1,6 +1,5 @@
 import { defineConfig } from "vitest/config";
 
-/** Standalone Stryker test root for backup (defineConfig, not defineProject). */
 export default defineConfig({
   test: {
     name: "@centraid/backup-mutation",

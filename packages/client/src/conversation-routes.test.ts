@@ -1,5 +1,3 @@
-// Unit tests for the persisted-conversation route builders (#420) — the
-// ONE place the `_centraid-conversations` paths are minted.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -22,7 +20,6 @@ describe("route builders", () => {
     expect(conversationSearchPath("todo", "a b", 5)).toBe(
       "/_centraid-conversations/apps/todo/sessions/search?q=a+b&limit=5"
     );
-    // Turn-settle poll for reconnect catch-up (#420).
     expect(conversationStatusPath("todo", "abc")).toBe(
       "/_centraid-conversations/apps/todo/sessions/abc/status"
     );

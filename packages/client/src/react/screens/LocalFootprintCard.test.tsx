@@ -8,16 +8,8 @@ import type {
 } from "../../gateway-client-local-storage.js";
 import LocalFootprintCard from "./LocalFootprintCard.js";
 
-// Over time the gateway will ship component ids this client build has never
-// heard of. Such a value may not throw a TypeError on the
-// footprint card — `footprintSlices`' legend and the per-vault rows both
-// index component presentation by an id that arrives over the wire
-// unchecked, so both paths are exercised here.
 const GB = 1024 ** 3;
 
-/** A component id the wire sent that this build's `LocalComponentId` union
- *  does not name — exactly what a newer gateway can do, since the union is
- *  a compile-time-only guarantee over what is really just a JSON string. */
 const unknown = (id: string): LocalComponentId =>
   id as unknown as LocalComponentId;
 

@@ -1,16 +1,3 @@
-// Framed remote-blob seal (#405 §1): a Range on a cold blob fetches only the
-// covering frames. Wire layout, integers big-endian:
-//
-//   [ header    ] magic (4) | version (1) | plaintext sha (32)   = 37 bytes
-//   [ frame i   ] nonce (12) | ciphertext | tag (16)
-//   [ directory ] SEALED nonce | ct | tag over frameSize (4) |
-//                 totalSize (8) | frameCount (4) | sealedLen[i] (4 each)
-//   [ trailer   ] magic (4) | version (1) | dirLen (4) | count (4) = 13 bytes
-//
-// INTEGRITY: each frame's AAD binds `blob:<sha>`, version, frame index AND total
-// count, so no frame can be reordered, truncated, or transplanted. A ranged read
-// cannot recompute the whole-blob sha, so that AAD is the integrity story.
-
 import { createCipheriv, createDecipheriv, createHmac } from "node:crypto";
 import * as zlib from "node:zlib";
 
@@ -40,8 +27,6 @@ export const ALGO_STORE = 0x00;
 export const ALGO_ZSTD = 0x01;
 export const ALGO_DEFLATE = 0x02;
 
-// Feature-detected; deflate-raw is the fallback. The READER handles all three
-// ids whichever the writer chose.
 const zstdCompress = (zlib as { zstdCompressSync?: (b: Buffer) => Buffer })
   .zstdCompressSync;
 const zstdDecompress = (zlib as { zstdDecompressSync?: (b: Buffer) => Buffer })
@@ -60,8 +45,7 @@ function nonceFor(key: Buffer, aad: Buffer, plaintext: Buffer): Buffer {
     createHmac("sha256", key)
       .update("cbsf-nonce\0")
       .update(aad)
-      // A sha can be sealed by the store-only and the compressed path both, so
-      // bind the plaintext: never reuse a nonce for other bytes.
+      // Bind plaintext to prevent nonce reuse across codec paths.
       .update("\0")
       .update(createHmac("sha256", key).update(plaintext).digest())
       .digest()
@@ -69,8 +53,6 @@ function nonceFor(key: Buffer, aad: Buffer, plaintext: Buffer): Buffer {
   );
 }
 
-/** Keep the codec's output ONLY if it shrank the frame. The algorithm id rides
- *  INSIDE the seal, and the sha is fixed, so addresses never move. */
 function compressFrame(plain: Buffer): { algoId: number; payload: Buffer } {
   if (plain.length === 0) return { algoId: ALGO_STORE, payload: plain };
   let algoId: number;

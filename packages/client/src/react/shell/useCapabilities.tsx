@@ -1,4 +1,3 @@
-// C1: one handshake read. Nothing re-derives "automations gateway" on its own.
 import { createContext, useContext, useEffect, useState } from "react";
 import type { JSX, ReactNode } from "react";
 
@@ -26,7 +25,6 @@ export function CapabilitiesProvider({
   );
 }
 
-// Outside a provider everything is ON — unmounted/test, not a gateway that said no.
 export function useShellCapabilities(): ShellCapabilities {
   return useContext(CapabilitiesContext);
 }
@@ -36,7 +34,6 @@ export interface GatewayCapabilitiesState {
   resolved: boolean;
 }
 
-// Re-read on gateway/vault change. Failed read → off and resolved, not hung.
 export function useGatewayCapabilities(): GatewayCapabilitiesState {
   const [state, setState] = useState<GatewayCapabilitiesState>({
     capabilities: CAPABILITIES_OFF,

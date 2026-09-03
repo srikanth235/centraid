@@ -1,7 +1,3 @@
-// Feature gates (C1, docs/platform-gating.md): detected ONCE at boot, and every
-// surface reads that verdict. `insights` sits behind `automations` — both its
-// routes unmount with that gate.
-
 import type { GatewayCapabilities } from "@centraid/core/protocol";
 
 export type ExperimentalCapability = "automations" | "connectors";

@@ -58,7 +58,6 @@ const SELECT = `SELECT invocation_id, intent_id, identity_json, request_sealed,
   grant_id, command_id, command_name, reason, parked_at
   FROM replica_parked_payload`;
 
-/** Persist the encrypted resumption payload before returning `parked`. */
 export function saveDurableParkedPayload(
   db: VaultDb,
   payload: DurableParkedPayload
@@ -134,13 +133,6 @@ interface ParkedDenialReceiptRow {
   detail_json: string | null;
 }
 
-/**
- * Read an audit-proven terminal denial for a formerly parked invocation.
- * This check deliberately does not depend on vault settlement: the audit band
- * is what a confirmation denial commits, so a durable denial row is the
- * recovery authority if the process dies before payload deletion/outcome
- * publication.
- */
 export function readDurableParkedDenial(
   db: VaultDb,
   invocationId: string
@@ -190,12 +182,6 @@ export interface RecordDurableParkedDenialInput {
   reason: string;
 }
 
-/**
- * Atomically write the complete journal side of a parked denial. Retrying
- * after this commit returns the existing receipt instead of appending a
- * second receipt/explanation. The vault payload is settled separately and
- * may safely lag this transaction across a crash.
- */
 export function recordDurableParkedDenial(
   db: VaultDb,
   input: RecordDurableParkedDenialInput
@@ -270,11 +256,6 @@ export interface DurableParkedIntentSettlement {
   outcome: TransitionReplicaIntentOutcomeInput;
 }
 
-/**
- * Remove a resumable confirmation payload and publish its terminal device
- * outcome atomically. A crash may leave both pending or both settled, never a
- * permanently parked outcome whose encrypted resumption payload is gone.
- */
 export function settleDurableParkedPayload(
   db: VaultDb,
   invocationId: string,
@@ -301,7 +282,6 @@ export function settleDurableParkedPayload(
   }
 }
 
-/** Delete every pending payload riding a revoked grant; returns invocation ids. */
 export function deleteDurableParkedPayloadsForGrant(
   db: VaultDb,
   grantId: string

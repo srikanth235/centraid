@@ -25,7 +25,4 @@ export function homeOutOfRoom(
   };
 }
 
-// SEAM — no client-readable conflict record carries both row bodies and a
-// device name. Showing a disagreement without both sides is the one thing this
-// state exists to prevent, so Home reports none until the record does.
 export const HOME_CONFLICTS: readonly DevicesDisagreeProps[] = [];

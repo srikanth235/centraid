@@ -97,10 +97,6 @@ async function ffmpegPath(): Promise<string> {
 
 async function decodePcm(bytes: Buffer): Promise<Float32Array> {
   const executable = await locateFfmpeg();
-  // Input and output use pipes, so the handler's short-lived local decoder
-  // never writes member media to disk or sends it over the network. `-t` and
-  // maxBuffer bound adversarial containers whose compressed size is small but
-  // whose declared/decompressed duration is enormous.
   const result = runFfmpeg(
     executable,
     [
@@ -179,7 +175,6 @@ function outputText(
   return typeof text === "string" ? text.trim() : "";
 }
 
-/** Runs local Whisper inference. It never fetches a model or calls a service. */
 export async function transcript(
   input: TranscriptItem
 ): Promise<ItemResult<TranscriptResult>> {

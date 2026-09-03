@@ -1,10 +1,5 @@
 import { createHash } from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit (#408) one real-vault capture suite — every case drives the same openVaultDb + bootstrapVault + real-WAL fixture through a different guarantee; sharding it would clone that fixture per file and let the copies drift
-// WAL shipper capture correctness (#408): G1/G2/G3 capture, G4
-// backpressure, rollover + closers, and the end-to-end capture→seal→replay
-// round-trip over a REAL vault (openVaultDb + bootstrapVault, real
-// node:sqlite, real files — no mocks). Detector (G5), crash-ordering (G7)
-// and generation-lifecycle tests live in wal-shipper-detectors.test.ts.
 import {
   copyFileSync,
   existsSync,
@@ -48,8 +43,6 @@ describe("wal-shipper", () => {
     vaultDir = path.join(root, "vault-a");
     db = openVaultDb({ dir: vaultDir });
     bootstrapVault(db, { ownerName: "Priya" });
-    // Scratch tables the tests write through — created BEFORE the shipper so
-    // they are part of the first-run base snapshot.
     db.vault.exec(
       "CREATE TABLE _walship_probe (id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT)"
     );
@@ -63,7 +56,7 @@ describe("wal-shipper", () => {
     try {
       db.close();
     } catch {
-      /* some tests close the vault themselves */
+      // Intentionally empty.
     }
     rmSync(root, { recursive: true, force: true });
   });
@@ -80,7 +73,6 @@ describe("wal-shipper", () => {
       stmt.run(`${marker}-${i}-${"x".repeat(size)}`);
   }
 
-  /** The audit band, written through its own handle — ONE FILE, one WAL. */
   function insertAudit(rows: number, size = 100, marker = "j"): void {
     const stmt = db.audit.prepare("INSERT INTO _walship_jprobe (v) VALUES (?)");
     for (let i = 0; i < rows; i++)
@@ -95,7 +87,6 @@ describe("wal-shipper", () => {
     return existsSync(walPath()) ? statSync(walPath()).size : 0;
   }
 
-  /** Local segment files in replay (offset) order. */
   function segsOf(shipper: WalShipper): UploadableWalFile[] {
     return shipper
       .listUploadable()
@@ -107,15 +98,12 @@ describe("wal-shipper", () => {
       );
   }
 
-  /** A well-behaved second connection (out-of-process writer stand-in). */
   function openSecondWriter(): DatabaseSync {
     const c = new DatabaseSync(path.join(vaultDir, "vault.db"));
     c.exec("PRAGMA busy_timeout = 5000");
     c.exec("PRAGMA wal_autocheckpoint = 0");
     return c;
   }
-
-  // ─────────────────────────────────────────────────────────────── G1/G2/G3
 
   test("[G1] a committed write ships a segment byte-identical to the live WAL range", () => {
     const shipper = makeShipper();
@@ -159,20 +147,16 @@ describe("wal-shipper", () => {
 
     const segs = segsOf(shipper);
     expect(segs).toHaveLength(3);
-    // Gapless chain: start of each == end of previous, from 0 — so every
-    // committed byte appears exactly once across the segments.
     let at = 0;
     for (const seg of segs) {
       expect(seg.addr!.startOffset).toBe(at);
       at = seg.addr!.endOffset;
     }
-    // Concatenation is byte-identical to the WAL file prefix.
     const concat = Buffer.concat(segs.map((s) => readFileSync(s.file)));
     expect(at).toBe(walSize());
     const wal = readFileSync(walPath()).subarray(0, at);
     expect(Buffer.compare(concat, wal)).toBe(0);
 
-    // A tick with no new writes ships nothing (and breaks nothing).
     clock += 1000;
     const idle = shipper.tick();
     expect(idle.shipped).toStrictEqual([]);
@@ -194,13 +178,11 @@ describe("wal-shipper", () => {
       const ins = c2.prepare("INSERT INTO _walship_jprobe (v) VALUES (?)");
       for (let i = 0; i < 200; i++)
         ins.run(`uncommitted-${i}-${"u".repeat(1000)}`);
-      // The open transaction's frames really are in the WAL file...
       expect(walSize()).toBeGreaterThan(committedHead);
 
       clock += 1000;
       const r1 = shipper.tick();
       expect(r1.errors).toStrictEqual([]);
-      // ...but the shipped boundary stopped at the last COMMIT.
       const segs1 = segsOf(shipper);
       expect(segs1).toHaveLength(1);
       expect(segs1[0]!.addr!.endOffset).toBe(committedHead);
@@ -213,7 +195,6 @@ describe("wal-shipper", () => {
       expect(segs2).toHaveLength(2);
       expect(segs2[1]!.addr!.startOffset).toBe(committedHead);
       expect(segs2[1]!.addr!.endOffset).toBe(walSize());
-      // Both segments together still equal the WAL prefix byte for byte.
       const concat = Buffer.concat(segs2.map((s) => readFileSync(s.file)));
       const wal = readFileSync(walPath()).subarray(
         0,
@@ -246,7 +227,6 @@ describe("wal-shipper", () => {
     } finally {
       c2.close();
     }
-    // The next transaction overwrites the rolled-back frames in place.
     insertAudit(3, 100, "KEEPME");
 
     clock += 1000;
@@ -257,21 +237,13 @@ describe("wal-shipper", () => {
     expect(segs).toHaveLength(2);
     const seg2 = segs[1]!;
     expect(seg2.addr!.startOffset).toBe(e1); // still chains gaplessly
-    // Decoded latin1 so `toContain` gets a string haystack: on a Buffer it
-    // would compare against the byte elements and never match a string needle.
-    // latin1 (not utf8) because the WAL is binary — every byte maps 1:1 and no
-    // invalid sequence is replaced, so a needle present in the bytes is present
-    // in the decoding.
     const seg2Bytes = readFileSync(seg2.file).toString("latin1");
     expect(seg2Bytes).not.toContain("ROLLBACKME");
     expect(seg2Bytes).toContain("KEEPME");
-    // And the shipped prefix still matches the live file exactly.
     const concat = Buffer.concat(segs.map((s) => readFileSync(s.file)));
     const wal = readFileSync(walPath()).subarray(0, seg2.addr!.endOffset);
     expect(Buffer.compare(concat, wal)).toBe(0);
   });
-
-  // ───────────────────────────────────────────────────────────────────── G4
 
   test("[G4] a failed segment write reports an error, moves nothing, and retries the same range", () => {
     const shipper = makeShipper();
@@ -291,12 +263,6 @@ describe("wal-shipper", () => {
       status.generation,
       "00000000"
     );
-    // Fault injection that no uid can bypass: stash the group dir aside and
-    // leave a regular FILE in its place. The shipper's durable segment write
-    // starts with `mkdirSync(dirname(file), { recursive: true })`, which
-    // refuses to treat a non-directory as a directory for root exactly as for
-    // anyone else. A permission bit would not do: root ignores directory mode
-    // bits, so the write the assertions below expect to fail would succeed.
     const stashedGroupDir = `${groupDir}.stashed`;
     renameSync(groupDir, stashedGroupDir);
     writeFileSync(groupDir, "");
@@ -309,7 +275,6 @@ describe("wal-shipper", () => {
         []
       );
       expect(r.markers).toStrictEqual([]); // a one-sided/error cut is never certified
-      // Offset did not advance, and the WAL keeps every byte (no checkpoint).
       expect(shipper.status().stream!.offset).toBe(offsetBefore);
       expect(walSize()).toBe(walSizeBefore);
     } finally {
@@ -317,7 +282,6 @@ describe("wal-shipper", () => {
       renameSync(stashedGroupDir, groupDir);
     }
 
-    // With the group dir back, the SAME range ships.
     clock += 1000;
     const r2 = shipper.tick();
     expect(r2.errors).toStrictEqual([]);
@@ -328,8 +292,6 @@ describe("wal-shipper", () => {
     expect(last.addr!.startOffset).toBe(offsetBefore);
     expect(shipper.status().stream!.offset).toBe(last.addr!.endOffset);
   });
-
-  // ──────────────────────────────────────────────────────── rollover + closers
 
   test("rollover: exceeding walSizeThresholdBytes closes the group with a closer and truncates the WAL", () => {
     const shipper = makeShipper({ walSizeThresholdBytes: 8192 });
@@ -352,8 +314,6 @@ describe("wal-shipper", () => {
     expect(after.offset).toBe(0);
     expect(walSize()).toBe(0); // live WAL truncated
 
-    // The closer marker sits in the OLD group dir and lists as kind 'closer'
-    // under its exact object key.
     const closerFile = path.join(
       shipDir(),
       "segments",
@@ -372,7 +332,6 @@ describe("wal-shipper", () => {
         endOffset: rolled!.endOffset,
       })
     );
-    // The closed group's segments end exactly at the closer's offset.
     const group0 = segsOf(shipper).filter((s) => s.addr!.group === 0);
     expect(group0.at(-1)!.addr!.endOffset).toBe(rolled!.endOffset);
   });
@@ -417,7 +376,6 @@ describe("wal-shipper", () => {
       for (let i = 0; i < 200; i++) ins.run(`held-${i}-${"h".repeat(1000)}`);
       expect(walSize()).toBeGreaterThan(8192);
 
-      // Active writer ⇒ TRUNCATE returns busy; nothing advances, nothing rolls.
       clock += 1000;
       const r1 = shipper.tick();
       expect(r1.busy).toBe(true);
@@ -430,8 +388,6 @@ describe("wal-shipper", () => {
       c2.close();
     }
 
-    // Now the truncate succeeds — but offset was 0 (nothing shipped in this
-    // group), so the group MUST NOT advance and no closer may exist for it.
     clock += 1000;
     const r2 = shipper.tick();
     expect(r2.busy).toBe(false);
@@ -472,8 +428,6 @@ describe("wal-shipper", () => {
     expect(shipper.status().stream!.group).toBe(1);
   });
 
-  // ───────────────────────────────────────────────── end-to-end (the money test)
-
   test("end-to-end: capture → seal → replay round-trips the real vault byte-exactly", async () => {
     const shipper = makeShipper({ walSizeThresholdBytes: 8192 }); // force multi-group streams
     shipper.tick(); // first-run: mints generations + bases
@@ -495,9 +449,7 @@ describe("wal-shipper", () => {
     expect(closeReport.errors).toStrictEqual([]);
     expect(closeReport.busy).toBe(false);
 
-    // The whole run stayed inside one generation (no breaks after first-run).
     expect(shipper.status().stream!.generation).toBe(generation);
-    // The rollovers actually happened — the replay below crosses group closers.
     expect(shipper.status().stream!.group).toBeGreaterThan(1);
 
     const liveVaultRows = db.vault
@@ -508,7 +460,6 @@ describe("wal-shipper", () => {
       .all();
     expect(liveVaultRows).toHaveLength(8);
 
-    // Seal every uploadable exactly as the gateway uploader would.
     const dataKey = new Uint8Array(32).fill(7);
     const store = new FsObjectStore(path.join(root, "objects"));
     const uploadables = shipper.listUploadable();
@@ -518,8 +469,6 @@ describe("wal-shipper", () => {
     expect(
       uploadables.filter((i) => i.kind === "closer").length
     ).toBeGreaterThan(1);
-    // Tick markers ride the same drain — without them the restore has no
-    // proved point to cut at and lands on the base.
     expect(
       uploadables.filter((i) => i.kind === "marker").length
     ).toBeGreaterThan(0);
@@ -535,7 +484,6 @@ describe("wal-shipper", () => {
       })
     );
 
-    // Materialize the bases into a fresh directory and let SQLite replay.
     const destDir = path.join(root, "restore");
     mkdirSync(destDir, { recursive: true });
     copyFileSync(basePath, path.join(destDir, "vault.db"));
@@ -561,13 +509,9 @@ describe("wal-shipper", () => {
       expect(
         restored.prepare("SELECT id, v FROM _walship_probe ORDER BY id").all()
       ).toStrictEqual(liveVaultRows);
-      // The audit band rode the same stream and comes back with it — one file,
-      // so a receipt can never be restored without the row it names.
       expect(
         restored.prepare("SELECT id, v FROM _walship_jprobe ORDER BY id").all()
       ).toStrictEqual(liveAuditRows);
-      // The recorded base sha256 marker verifies against the exact bytes the
-      // restore started from (what a real engine checks before replaying).
       const base = shipper.currentBase()!;
       expect(base.sha256).toBe(
         createHash("sha256").update(readFileSync(base.file)).digest("hex")

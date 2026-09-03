@@ -1,53 +1,19 @@
-/*
- * Wire protocol for the centraid tunnel (#263). THIS FILE is the reference the
- * Swift and Kotlin implementations mirror. The peer ALPN is deliberately ABSENT
- * from fixtures/wire-golden.json, the mobile conformance suites' to-do list.
- */
-
 export const TUNNEL_ALPN = "centraid/tunnel/1";
 export const PAIR_ALPN = "centraid/pair/1";
-/** Byte-mirrored in Rust, pinned by `alpn-parity.test.ts`: drift surfaces only
- *  at ALPN negotiation, in production (#726). */
 export const PEER_LINK_ALPN = "centraid/gw-link/1";
 export const TUNNEL_AUTH_MODE_HEADER = "x-centraid-tunnel-auth-mode";
 export const TUNNEL_AUTH_WEB_SESSION = "web-session";
 
-/*
- * LOOPBACK IS NOT AN IDENTITY (#568): a forwarder delivers a REMOTE peer to a
- * loopback listener, so the socket address proves nothing. Each forwarder MUST
- * delete any client-supplied copy of these before stamping its own.
- */
 export const DEVICE_IDENTITY_HEADER = "x-centraid-device";
 export const DEVICE_PROOF_HEADER = "x-centraid-device-proof";
-/** Stamped by EVERY forwarder; its presence disqualifies host-only
- *  capabilities. */
 export const TUNNEL_FORWARDED_HEADER = "x-centraid-tunnel-forwarded";
 
-/*
- * The forwarded `target` is PEER-SUPPLIED and concatenated onto the local
- * upstream URL: without this guard a link addresses the whole owner surface.
- * Enforced TWICE on purpose — Rust relay and JS endpoint (#726).
- */
 export const PEER_PLANE_PREFIX = "/centraid/_peer/";
 
 export const PEER_ENDPOINT_HEADER = "x-centraid-peer-endpoint";
 export const PEER_PROOF_HEADER = "x-centraid-peer-proof";
-/**
- * Peer vault hint named by the Rust relay's forwarder-owned set
- * (`data-plane/src/iroh_wire.rs::FORWARDER_OWNED_HEADERS`). The TS endpoint
- * deliberately never stamps it, but strips client copies on every lane so a
- * caller cannot smuggle a peer-vault claim past the HTTP layer (#865).
- */
 export const PEER_VAULT_HEADER = "x-centraid-peer-vault";
 
-/**
- * Constraints mirrored BYTE-FOR-BYTE in Rust (#846). Well-formed UTF-16: a Rust
- * `&str` holds no lone surrogate, so a guard judging the UTF-8 re-encoding would
- * judge a different string. The PATH, not the whole target, must EXTEND the
- * prefix, or a lone `?` stands in for the extension. No percent escape,
- * backslash, or byte ≤ 0x20 — admitting them means re-implementing URL
- * normalisation identically twice. No `.`/`..` segment.
- */
 export function isPeerPlaneTarget(target: unknown): target is string {
   if (typeof target !== "string") return false;
   if (!isWellFormedTarget(target)) return false;
@@ -62,7 +28,6 @@ export function isPeerPlaneTarget(target: unknown): target is string {
     .every((segment) => segment !== "." && segment !== "..");
 }
 
-/** `String#isWellFormed` is ES2024; this module targets an older lib. */
 function isWellFormedTarget(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
     const code = value.charCodeAt(index);
@@ -152,7 +117,6 @@ interface ChunkRecv {
   read: (sizeLimit: number) => Promise<Array<number>>;
 }
 
-// Stryker disable all
 export async function readHeaderFrame<T>(recv: FrameRecv): Promise<T> {
   const lenBytes = Buffer.from(await recv.readExact(4));
   const len = lenBytes.readUInt32BE(0);
@@ -169,7 +133,6 @@ export async function readBody(
   maxBytes = Number.POSITIVE_INFINITY
 ): Promise<void> {
   let total = 0;
-  // ORDERED: backpressure from `onChunk` must settle before the next read.
   const readNext = async (): Promise<void> => {
     const chunk = await recv.read(READ_CHUNK_BYTES);
     if (!chunk || chunk.length === 0) return;

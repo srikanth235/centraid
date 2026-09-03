@@ -1,8 +1,5 @@
 import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
 
-// Run-view snapshot derivation. Pure: turns the live run model (row + run
-// record + node map + streamed text) into the RunViewSnapshot the RunViewScreen
-// renders in both timeline + log modes, so the screen formats nothing itself.
 import {
   fmtTokens,
   formatDuration,
@@ -22,30 +19,18 @@ import { automationTurnMessages } from "./automationTurnMessages.js";
 export { automationTurnMessages } from "./automationTurnMessages.js";
 
 export function buildRunSnapshot(
-  // `null` when the run's parent automation was deleted — the Automations
-  // overview deliberately keeps those runs visible (raw-ref fallback name),
-  // so this must degrade gracefully instead of requiring a live row.
   row: CentraidAutomationRow | null,
   run: CentraidAutomationTurnRecord,
   nodes: readonly CentraidAutomationItem[],
   liveText: Map<number, string>
 ): RunViewSnapshot {
   const deleted = row === null;
-  // Matches the Automations overview's orphan-run label (InsightsRoute does
-  // the same fallback for the same reason).
   const fallbackRef = run.automationId ?? run.turnId;
   const identityId = row === null ? fallbackRef : row.id;
   const inFlight = run.endedAt === undefined;
-  // `requires.model` is `provider/model-id`; show the readable model id (the
-  // part after the last '/'). When unset the gateway auto-selects, so the
-  // honest label is 'Auto' — never the brand name 'Centraid', which is the
-  // assistant/actor, not a model.
   const rawModel = row === null ? undefined : row.manifest.requires.model;
   const model = rawModel ? (rawModel.split("/").pop() ?? rawModel) : "Auto";
   const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
-  // Deterministic / zero-usage runs (fixed output, no model step) have no
-  // meaningful tokens/cost/steps — the Usage card collapses those rows to a
-  // single caption instead of showing a wall of dashes/zeros.
   const hasUsage =
     tokens > 0 ||
     (run.totalCostUsd ?? 0) > 0 ||
@@ -64,8 +49,6 @@ export function buildRunSnapshot(
     row !== null &&
     row.triggers.some((t) => t.kind === "webhook") &&
     !row.triggers.some((t) => t.kind === "cron");
-  // Deleted automation: prefer the run's own last-known name over the raw
-  // ref (matches the Automations overview's orphan-run fallback).
   const crumbName =
     row === null ? (run.automationName ?? fallbackRef) : row.name;
   const promptInstr =

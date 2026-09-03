@@ -75,8 +75,6 @@ describe("household audience placement", () => {
   test("shares an album when the cover bytes already exist under another content id", () => {
     const { origin, originBoot, audience } = household();
     const first = seedPhoto(origin, originBoot, "cover-dedupe");
-    // Pre-seed the same bytes in the audience under a different content id so
-    // projection dedupes by sha256 — the album cover must use that audience id.
     const foreignContentId = uuidv7();
     const now = nowIso();
     const originContent = origin.vault

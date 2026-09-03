@@ -1,15 +1,7 @@
-// The ONE contact-reach module (#883 O-contact). AN IDENTIFIER IS NOT A
-// CHANNEL: a key someone IS (DID, site, IBAN, claimed handle) lives in
-// `core_party_identifier`; an address they can be REACHED at lives in
-// `social_contact_channel`. They differ on dedupe, display and sharing, so
-// reach needs one normalization every reader agrees on.
-
 import type { DatabaseSync } from "node:sqlite";
 
 export type ChannelKind = "phone" | "email" | "address" | "handle";
 
-// `handle` is deliberately absent: only the CALL SITE knows whether a handle is
-// reach or a claimed identity key.
 export const REACH_SCHEME_KIND: Readonly<Record<string, ChannelKind>> = {
   email: "email",
   tel: "phone",
@@ -20,14 +12,10 @@ export function reachKindOf(scheme: string): ChannelKind | undefined {
   return REACH_SCHEME_KIND[scheme];
 }
 
-// Never throws — an imported address is still an address. Member-facing
-// validation is a command-input concern, in `normalizeContactChannel`.
 export function contactReachKey(kind: ChannelKind, rawValue: string): string {
   const value = rawValue.trim();
   if (kind === "email") return value.toLocaleLowerCase("en-US");
   if (kind === "phone") {
-    // Rung seven's SQL carries this exact rule, so a migrated identifier and
-    // a typed number land on one key.
     const prefix = value.startsWith("+") ? "+" : "";
     return `${prefix}${value.replace(/[\s().-]/gu, "").replace(/^\+/u, "")}`;
   }
@@ -71,7 +59,6 @@ export function normalizeContactChannel(
   return normalized;
 }
 
-// `null` only for an identity scheme: the caller falls through to the register.
 export function bindContactReach(
   vault: DatabaseSync,
   binding: {
@@ -159,7 +146,6 @@ export function partyForReach(
   return row?.party_id ?? null;
 }
 
-// Deliberately NOT a merge: `core.merge_party` (#290) re-points every FK.
 export function duplicatePartyIds(
   vault: DatabaseSync,
   partyId: string,

@@ -1,13 +1,3 @@
-// THE LIFECYCLE CLOSURE (#916, ruling ONT-08 and ONT-15).
-//
-// Every registry declaration says what a row's life may be. This asserts the
-// SHAPE OF A FRESH VAULT agrees with what was declared — and, for the
-// append-only half, that no source file quietly edits one in place. That
-// second half is why the ruling exists: `deleted_at`/`purge_at` and
-// `updated_at` were adopted "as tables are touched" for four releases, so
-// what a table's life actually was could only be discovered by reading every
-// writer of it. A convention with no test drifts by construction.
-
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -48,7 +38,6 @@ function triggerNames(
   ).map((row) => row.name);
 }
 
-/** Every ontology-pack entity, as [logical, physical, lifecycle]. */
 function ontologyEntities(): [string, string, string][] {
   const packs = new Set(ONTOLOGY_PACKS);
   return Object.entries(VAULT_ENTITIES)
@@ -65,13 +54,6 @@ function ontologyEntities(): [string, string, string][] {
     );
 }
 
-/**
- * Non-test source files of the two packages that hold live write paths.
- * `commands/atlas.ts` is excluded BY DECLARATION, not by exception: the
- * generic Browse editor now refuses an append-only entity itself (see
- * `refuseAppendOnly` there), so the one `UPDATE` it contains is a template
- * over whatever the registry allows rather than a hand-written write path.
- */
 function liveSourceFiles(): string[] {
   const roots = [
     path.resolve(import.meta.dirname, ".."),
@@ -109,10 +91,8 @@ function inPlaceWritersOf(physical: string): string[] {
 
 describe("lifecycle declarations (#916, ruling ONT-08)", () => {
   test("the closure covers the whole ontology and the whole source tree", () => {
-    // A closure test that silently walked nothing would pass forever.
     expect(ontologyEntities().length).toBeGreaterThan(50);
     expect(SOURCES.length).toBeGreaterThan(20);
-    // And the scanner sees a real in-place writer where one exists.
     expect(inPlaceWritersOf("core_party").length).toBeGreaterThan(0);
   });
 
@@ -139,8 +119,6 @@ describe("lifecycle declarations (#916, ruling ONT-08)", () => {
           )
           .get(physical) as { sql: string }
       ).sql;
-      // The guard that makes the pair a PAIR: a purge date without a trash
-      // date would schedule a live row for deletion.
       expect(sql.replace(/\s+/gu, " "), `${logical} purge_at CHECK`).toContain(
         "purge_at IS NULL OR deleted_at IS NOT NULL"
       );
@@ -169,23 +147,6 @@ describe("lifecycle declarations (#916, ruling ONT-08)", () => {
     db.close();
   });
 
-  // ONE `updated_at`, everywhere (#916, ruling ONT-08, rung nine).
-  //
-  // The column had three shapes at once: NOT NULL with the canonical default
-  // (Tally, and People after #821), bare NOT NULL (every writer had to
-  // remember to pass it), and — after rung eight's ADD COLUMNs — nullable with
-  // a stamp trigger standing in for the default it could not carry. Rung nine
-  // rebuilt all of them into the first shape, so the rule below needs no
-  // allow-list and no lifecycle split: if a column is called `updated_at`, in
-  // EITHER file, this is what it is.
-  //
-  // `replica_meta` is the one exception, and it is a mechanism exception, not
-  // a taste one: every replica change-log trigger in the vault reads that
-  // table — including the ones generated at runtime for live ext-band tables,
-  // whose names no build-time list can know — so the rebuild's rename pass
-  // would have to re-parse triggers this build cannot enumerate. Its
-  // `updated_at` is also not a generic changed-at: the replica protocol writes
-  // it explicitly on every epoch transition.
   const UPDATED_AT_EXCEPTIONS: ReadonlyMap<string, string> = new Map([
     [
       "replica_meta",
@@ -209,11 +170,6 @@ describe("lifecycle declarations (#916, ruling ONT-08)", () => {
         );
         if (!column) continue;
         if (UPDATED_AT_EXCEPTIONS.has(name)) continue;
-        // The `ledger` band is engine-owned and runs on the gateway's epoch-ms
-        // clock, like `core_share_origin.shared_at` and `blob_orphan.
-        // first_orphaned_at`: its `updated_at` is an INTEGER, not the
-        // ontology's ISO-8601 TEXT, and the store code stamps it explicitly on
-        // every write. The ontology's one shape is a rule about ontology rows.
         if (LEDGER_BAND_TABLES.includes(name)) continue;
         const declaration = (sql ?? "")
           .split("\n")
@@ -233,7 +189,6 @@ describe("lifecycle declarations (#916, ruling ONT-08)", () => {
       }
     }
     expect(violations, violations.join("\n")).toStrictEqual([]);
-    // The exception list is a claim about the file; a stale entry is a lie.
     for (const table of UPDATED_AT_EXCEPTIONS.keys()) {
       expect(
         columnsOf(db.vault, table).map((c) => c.name),
@@ -242,16 +197,6 @@ describe("lifecycle declarations (#916, ruling ONT-08)", () => {
     }
     db.close();
   });
-
-  // `CREATION_COLUMNS` (schema/entity.ts) names the tables whose creation
-  // stamp has a DOMAIN name. `created_at` is the rule (#916, ruling ONT-08,
-  // rung nine): a row that records when it changed but not when it began
-  // answers half a question. These predate the rule and already answer the
-  // whole one — `tagged_at` IS when the tag was made — so renaming them would
-  // be churn that costs every reader. A table with neither is a violation, not
-  // an entry there. The map lives beside the supertype because rung ten's
-  // membership trigger reads the same column to stamp `core_entity.created_at`,
-  // and two copies of that list would drift.
 
   test("every ontology-pack table records when the row began", () => {
     const db = openVaultDb();
@@ -312,8 +257,6 @@ describe("lifecycle declarations (#916, ruling ONT-08)", () => {
       unaccounted,
       `unregistered and undeclared: ${unaccounted.join(", ")} — add the entity to the registry, or name it in LOCAL_TABLES with the reason it stays out of the canonical walk`
     ).toStrictEqual([]);
-    // And the reverse: a local declaration for a table that no longer exists
-    // is a stale claim about the file.
     const live = new Set(physical);
     expect(
       [...LOCAL_TABLES.keys()].filter((name) => !live.has(name))

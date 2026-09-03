@@ -8,15 +8,8 @@ import type {
   OnboardingPath,
 } from "./OnboardingScreen.js";
 
-// Chooser = step ZERO of onboarding; it wears onboarding's sheet, not
-// RecoverScreen's.
 import styles from "./OnboardingScreen.module.css";
 
-/**
- * Branches on PLATFORM, not gateway state (#603): desktop gets a chooser
- * (fresh vs join with a ticket); web can only join and renders the ticket
- * path directly. Profile details are optional Settings choices, not a gate.
- */
 export interface FirstRunGateProps {
   onOnboardingComplete: (
     input: OnboardingCompleteInput

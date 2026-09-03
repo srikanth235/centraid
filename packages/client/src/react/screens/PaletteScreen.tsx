@@ -21,7 +21,6 @@ function Row({
   const ref = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (activeIsThis) {
-      // Optional-call: jsdom (tests) doesn't implement scrollIntoView.
       ref.current?.scrollIntoView?.({ block: "nearest" });
     }
   }, [activeIsThis]);
@@ -33,7 +32,6 @@ function Row({
       data-variant={row.variant}
       data-active={String(activeIsThis)}
       onMouseDown={(e) => {
-        // Keep focus in the input; run on click.
         e.preventDefault();
       }}
       onClick={onRun}
@@ -79,12 +77,6 @@ function Row({
   );
 }
 
-/**
- * Command palette (⌘K). This screen owns the overlay, the search field, and
- * up/down + Enter keyboard navigation; the route supplies `buildGroups(query)`
- * (data + per-row `run` closures) and `onClose`. Styles are co-located in
- * `PaletteScreen.module.css`.
- */
 export default function PaletteScreen({
   buildGroups,
   onClose,
@@ -101,15 +93,11 @@ export default function PaletteScreen({
     onReady?.(refresh);
   }, [onReady]);
 
-  // Computed inline (not memoized) so an async `refresh()` re-runs buildGroups.
   const groups = buildGroups(query.trim());
   const rows = groups.flatMap((g) => g.items);
 
-  // Empty-state suggestion chips (#708) — read only while the field
-  // is empty; a query in progress has its own results to show instead.
   const chips = query.trim() ? [] : (suggestions?.() ?? []);
 
-  // Keep the active index in range as results shrink.
   const clampedActive =
     active >= rows.length ? Math.max(0, rows.length - 1) : active;
 
@@ -117,10 +105,6 @@ export default function PaletteScreen({
     row?.run();
   };
 
-  // Escape must close the dialog no matter where focus sits — the input's
-  // onKeyDown below only fires while the input has focus, and a click on the
-  // results whitespace or the footer hint bar moves focus off it, stranding
-  // the palette open (backdrop click aside).
   useEffect(() => {
     const onDocKey = (e: KeyboardEvent): void => {
       if (e.key === "Escape") {
@@ -133,8 +117,6 @@ export default function PaletteScreen({
   }, [onClose]);
 
   const onKeyDown = (e: React.KeyboardEvent): void => {
-    // Escape is handled by the document-level listener above (it also
-    // covers the input-focused case — keydown bubbles to document).
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setActive((a) => Math.min(rows.length - 1, a + 1));
@@ -147,9 +129,6 @@ export default function PaletteScreen({
     }
   };
 
-  // Where each group starts in the flattened `rows` list — the keyboard cursor
-  // indexes `rows`, so a group's items need their flat offset. Precomputed
-  // rather than counted with a mutable cursor inside the JSX map.
   const groupStarts = groups.reduce<number[]>(
     (starts, _g, i) => [
       ...starts,

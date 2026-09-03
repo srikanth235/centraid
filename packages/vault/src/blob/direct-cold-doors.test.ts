@@ -1,15 +1,5 @@
 import { randomBytes } from "node:crypto";
 import { rmSync } from "node:fs";
-// Direct-to-IA storage class for large media originals (#425) — the
-// remote-primary ingress doors, where the CAS object is minted
-// BEFORE the staging row exists, so the class is resolved from a media hint the
-// door hands in directly:
-//   - the low-level S3 CopyObject unit (direct-upload promotion), and
-//   - the gateway-mediated multipart stream-through (beginIngress →
-//     commitIngress), covered end-to-end here.
-// The pure eligibility resolver and the local-first outbox-drain doors that
-// resolve the class from an already-written `blob_staging` row live alongside in
-// direct-cold-originals.test.ts.
 import http from "node:http";
 import path from "node:path";
 
@@ -54,8 +44,6 @@ describe("direct-cold-doors", () => {
       bytes.subarray(range.start, (range.end ?? bytes.length - 1) + 1)
     );
   }
-
-  // ────────── the CopyObject (direct-upload promotion) door ──────────
 
   interface FakeS3 {
     url: string;
@@ -123,19 +111,10 @@ describe("direct-cold-doors", () => {
     expect(copy?.method).toBe("PUT");
     expect(copy?.storageClass).toBe("STANDARD_IA");
 
-    // No override + no instance class ⇒ a class-less copy.
     await transfer.copyTemporaryToSha("direct-2", sha);
     const bare = fake.requests.findLast((r) => r.copySource !== null);
     expect(bare?.storageClass).toBeNull();
   });
-
-  // ────────── the gateway-mediated stream-through door (end-to-end-ish) ──────────
-  //
-  // The large-media originals the heuristic targets take the streaming path, and a
-  // streamed original's CAS object is minted BEFORE its `blob_staging` row exists —
-  // so a sha-only DB lookup would be empty at promote time. This drives the real
-  // coordinator (seal → temp multipart → CopyObject promote → verify → record) and
-  // asserts the promote carries STANDARD_IA off the media hint the door hands in.
 
   interface StreamHarness {
     db: VaultDb;
@@ -295,7 +274,6 @@ describe("direct-cold-doors", () => {
     const plain = randomBytes(4096);
     const sha = await streamThroughIngress(h.coordinator(), plain, "video/mp4");
     expect(h.classOf.get(sha)).toBe("STANDARD_IA");
-    // The final CAS object still round-trips: the class rides alongside the bytes.
     expect(
       unsealBlob(h.keys.getOrCreate(sha), sha, h.objects.get(sha)!)
     ).toStrictEqual(plain);
@@ -305,7 +283,6 @@ describe("direct-cold-doors", () => {
     const policy = resolveBackupPolicy({
       directToColdOriginals: { minBytes: 1024 },
     });
-    // Non-media original at size — sniffs application/pdf, so it never goes cold.
     const h = openStreamHarness(policy, SUPPORTED);
     const sha = await streamThroughIngress(
       h.coordinator(),

@@ -1,13 +1,3 @@
-// The library card family — one app card, one automation card, and the grid
-// they sit in.
-//
-// Home is the springboard now (#708): a grid of CONTENT tiles, not a
-// shelf of icons. The card that answers "which things do I own" outlived that
-// shelf — Starred lays out the starred subset and the automations overview
-// lays out every automation — so the cards live here, on their own, rather
-// than inside a screen that no longer renders them. Two surfaces drawing the
-// same card from the same module is what keeps a starred tile identical to the
-// tile it was starred from.
 import type { JSX } from "react";
 
 import type { IconName } from "@centraid/design";
@@ -91,10 +81,6 @@ export function AppCard({
       <button
         type="button"
         className={cx(cardCss.card, cardCss.small)}
-        // The tile's name sits four levels down, past the icon plate, so the
-        // control had no name a static reader could find. Point at the name
-        // node rather than retyping it into an aria-label — the accessible
-        // name then always matches what the tile shows.
         aria-labelledby={`app-tile-name-${a.id}`}
         data-testid="app-tile"
         data-kind="app"

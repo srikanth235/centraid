@@ -101,7 +101,6 @@ describe("sqlite-store", () => {
             {
               entity: "core.event",
               primaryKey: "event_id",
-              // Local search only honours columns the shape carries.
               columns: [
                 "event_id",
                 "summary",
@@ -173,8 +172,6 @@ describe("sqlite-store", () => {
           durability: "durable",
         });
         expect(store.catalog()).toStrictEqual([]);
-        // sqlite-wasm hands back null-prototype rows; spreading compares the
-        // column data, the contract, not the driver's prototype.
         expect(
           db
             .exec({

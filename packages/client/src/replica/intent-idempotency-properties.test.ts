@@ -21,12 +21,6 @@ const payloadArb = fc.record({
   }),
 });
 
-/**
- * Replica intent idempotency properties (#532).
- *
- * Model: same intentId + equal payload replays dedupe; same intentId with a
- * different payload fails closed; distinct intentIds never collide.
- */
 describe("replica intent generated-payload property", () => {
   test("equal replays dedupe and mutated replays fail closed for every generated payload", async () => {
     await fc.assert(
@@ -101,7 +95,6 @@ describe("replica intent generated-payload property", () => {
           action: "create",
           input,
         });
-        // Each replay must observe the prior deduped durable row.
         await forEachSequentially([0, 1], async () => {
           const again = await queue.enqueue({
             intentId,
@@ -200,8 +193,6 @@ describe("replica intent generated-payload property", () => {
         payloadArb,
         async (ids, input) => {
           const queue = new IntentQueue(new MemoryIntentStore());
-          // This property models an ordered client outbox; enqueue each intent
-          // before asserting the ledger contains the full sequence.
           await forEachSequentially(ids, async (intentId) => {
             await queue.enqueue({
               intentId,

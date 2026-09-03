@@ -1,7 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit the outbox lifecycle is one closed set validating each other's risk and state invariants (#306)
-// The outbox commands (#306): external writes as artifacts. `stage` is INERT;
-// `decide` is the owner's act on the thing itself; `record_result` is one
-// drain's receipt. The read-only ceiling on connector fires (#304) stands.
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -9,7 +6,6 @@ import { sha256Hex } from "../ids.js";
 import { resolveEntity } from "../schema/tables.js";
 import { partyForReach } from "./contact-reach.js";
 
-/** The vault owner's party id. */
 function ownerPartyId(ctx: HandlerCtx): string {
   const owner = ctx.db
     .prepare("SELECT self_party_id FROM core_vault LIMIT 1")
@@ -18,13 +14,10 @@ function ownerPartyId(ctx: HandlerCtx): string {
   return owner.self_party_id;
 }
 
-/** Reach lives on channels and identity keys in the register; one call asks
- *  both, so an address the member typed in People resolves too (#883). */
 function partyForAddress(ctx: HandlerCtx, value: string): string | null {
   return partyForReach(ctx.db, null, value, ctx.now);
 }
 
-/** The wire shape a staged external call must fit (placeholders, no tokens). */
 const REQUEST_SCHEMA = {
   type: "object",
   required: ["method", "url"],
@@ -45,20 +38,12 @@ const STAGE: CommandDefinition = {
     required: ["kind", "label", "verb", "target", "artifact", "request"],
     additionalProperties: false,
     properties: {
-      // Names the connection whose credential will carry the drain.
       kind: { type: "string", minLength: 1 },
       label: { type: "string", minLength: 1 },
-      // Semantic verb, e.g. `gmail.send` / `gcal.create_event` — one half of
-      // the standing-grant key.
       verb: { type: "string", minLength: 1 },
-      // Semantic destination (recipient, calendar id) — the other half.
       target: { type: "string", minLength: 1 },
-      // The thing itself, as the owner reads it (to/subject/body, payload…).
       artifact: { type: "object" },
       request: REQUEST_SCHEMA,
-      // Graph joins (#310): the canonical row this write is ABOUT
-      // (both-or-neither) + resolved destination person; typed refs an
-      // agent can walk.
       subject_type: { type: "string", minLength: 1 },
       subject_id: { type: "string", minLength: 1 },
       recipient_party_id: { type: "string", minLength: 1 },
@@ -115,8 +100,6 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
       `no connection (${input.kind}, ${input.label}) — an outbox item drains through an existing connection's credential`
     );
   }
-  // Typed refs (#310): the subject must be a real canonical row —
-  // an opaque pointer would be the old silo back under a new name.
   if ((input.subject_type === undefined) !== (input.subject_id === undefined)) {
     throw new Error("subject_type and subject_id come together or not at all");
   }
@@ -140,8 +123,6 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
     if (!live)
       throw new Error(`no ${input.subject_type} with id ${input.subject_id}`);
   }
-  // The destination person: explicit, or resolved from the wire address the
-  // way ingest resolves handles — never a duplicate party per channel.
   let recipientPartyId = input.recipient_party_id ?? null;
   if (recipientPartyId) {
     const live = ctx.db
@@ -151,9 +132,6 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
   } else {
     recipientPartyId = partyForAddress(ctx, input.target);
   }
-  // Standing grants (#306 phase 3): a live (actor, verb, target) rule
-  // approves at staging time — still drains through the executor, never
-  // silently.
   const grant = ctx.db
     .prepare(
       `SELECT grant_id FROM outbox_grant
@@ -214,11 +192,8 @@ const DECIDE: CommandDefinition = {
     properties: {
       item_id: { type: "string", minLength: 1 },
       decision: { type: "string", enum: ["approve", "discard"] },
-      // Edit-then-send is free — both halves replace together or not at all.
       artifact: { type: "object" },
       request: REQUEST_SCHEMA,
-      // "Always allow this actor this kind of write to this target": mints
-      // the standing (actor, verb, target) grant from this concrete item.
       always_allow: { type: "boolean" },
       note: { type: "string" },
     },
@@ -265,9 +240,6 @@ function decideItem(ctx: HandlerCtx): Record<string, unknown> {
     always_allow?: boolean;
     note?: string;
   };
-  // The owner approves THE THING ITSELF — an edit replacing only the
-  // human-readable artifact while the original request goes on the wire
-  // breaks that quietly (#308 A5). Both halves replace together or refused.
   if ((input.artifact === undefined) !== (input.request === undefined)) {
     throw new Error(
       "an edited outbox item replaces artifact and request TOGETHER — editing one half lets the approved artifact diverge from the wire request (issue #308 A5)"
@@ -380,8 +352,6 @@ const RECORD_RESULT: CommandDefinition = {
 };
 
 function recordResult(ctx: HandlerCtx): Record<string, unknown> {
-  // The executor rides the host's owner credential — a staging actor can
-  // never mark its own item drained.
   requireOwner(ctx, "only the executor (owner plane) records drains");
   const input = ctx.input as {
     item_id: string;
@@ -405,8 +375,6 @@ function recordResult(ctx: HandlerCtx): Record<string, unknown> {
       input.item_id
     );
   ctx.wrote("outbox.item", input.item_id);
-  // A sent message-shaped artifact becomes a canonical social_message
-  // (#310) — not JSON stranded in result_json until a provider re-import.
   let messageId: string | null = null;
   if (input.disposition === "sent") {
     messageId = publishSentMessage(ctx, input.item_id);
@@ -430,12 +398,6 @@ function recordResult(ctx: HandlerCtx): Record<string, unknown> {
   };
 }
 
-/**
- * Publish one drained, message-shaped item into the social spine: sha-deduped
- * body, thread per (connection, target), participants owner + resolved
- * recipient, `external_id` `outbox:<item_id>` so a replay finds the row.
- * Returns null for non-message artifacts.
- */
 function publishSentMessage(ctx: HandlerCtx, itemId: string): string | null {
   const item = ctx.db
     .prepare(
@@ -470,7 +432,6 @@ function publishSentMessage(ctx: HandlerCtx, itemId: string): string | null {
   const subject =
     typeof artifact.subject === "string" ? artifact.subject : null;
 
-  // Body bytes: sha-deduped canonical content, inline data: URI.
   const sha = sha256Hex(bodyText);
   let contentId = (
     ctx.db
@@ -497,7 +458,6 @@ function publishSentMessage(ctx: HandlerCtx, itemId: string): string | null {
     ctx.wrote("core.content_item", contentId);
   }
 
-  // One thread per (connection, wire address): repeated sends converse.
   const externalRef = `outbox:${item.connection_id}:${item.target}`;
   const channel = /mail/u.test(item.verb) ? "email" : "dm";
   let threadId = (
@@ -600,8 +560,6 @@ const REVOKE_GRANT: CommandDefinition = {
       value: 1,
     },
     {
-      // Revocation retro-invalidates (#308): nothing this grant
-      // approved may still be waiting to drain.
       name: "no_approved_items_ride_the_grant",
       sql: `SELECT count(*) AS n FROM outbox_item WHERE grant_id = :grant_id AND status = 'approved'`,
       column: "n",
@@ -618,8 +576,6 @@ const REVOKE_GRANT: CommandDefinition = {
       .prepare("UPDATE outbox_grant SET revoked_at = ? WHERE grant_id = ?")
       .run(ctx.now, input.grant_id);
     ctx.wrote("outbox.grant", input.grant_id);
-    // Undrained approved items park back to pending (#308): revoking the
-    // rule withdraws the consent it minted, not just future matches.
     const undrained = ctx.db
       .prepare(
         `SELECT item_id FROM outbox_item WHERE grant_id = ? AND status = 'approved'`
@@ -646,10 +602,6 @@ const REVOKE_GRANT: CommandDefinition = {
   },
 };
 
-// Approval staleness (#308): consent to THE THING is not consent to any
-// future moment. Called when an approved item has sat undrained past the
-// staleness window — it parks back to pending and the owner decides again
-// with the delay in view. Owner-plane only, like `record_result`.
 const REPARK: CommandDefinition = {
   name: "outbox.repark",
   ownerSchema: "outbox",
@@ -711,11 +663,6 @@ const REPARK: CommandDefinition = {
   },
 };
 
-/**
- * Owner-only commands enforced in the handler: a schema-wide `act` grant on
- * `outbox` lets an actor STAGE, never decide/drain — the asymmetry is the
- * consent story.
- */
 function requireOwner(ctx: HandlerCtx, refusal: string): void {
   if (ctx.identity.kind !== "owner-device") throw new Error(refusal);
 }

@@ -8,15 +8,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { COMPACT_MAX_WIDTH, useCompactLayout } from "./useCompactLayout.js";
 
-// A controllable MediaQueryList stand-in: jsdom has no layout, so the only
-// honest way to test a breakpoint hook is to own the matcher and fire the
-// change ourselves.
 function stubMatchMedia(initial: boolean): { set: (v: boolean) => void } {
   let matches = initial;
   const listeners = new Set<() => void>();
   vi.stubGlobal("matchMedia", (query: string) => ({
-    // A getter, not a snapshot: the hook re-reads `.matches` from the list it
-    // subscribed to, so a captured boolean would never change.
     get matches() {
       return matches;
     },
@@ -38,9 +33,6 @@ function stubMatchMedia(initial: boolean): { set: (v: boolean) => void } {
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 
-/** Renders the hook's answer into the DOM and reads it back, rather than
- *  writing to a captured variable (which the react-compiler lint rightly
- *  rejects — a render must not mutate anything outside itself). */
 function renderProbe(): () => boolean {
   function Probe(): string {
     return useCompactLayout() ? "compact" : "docked";
@@ -83,15 +75,7 @@ describe("useCompactLayout suite", () => {
     });
   });
 
-  // The breakpoint is necessarily written twice — a CSS module cannot read a
-  // JS constant. If they drift, the shell mounts a scrim over a docked rail
-  // (or leaves a drawer with no way to dismiss it), so pin them together.
   it("agrees with the drawer breakpoint in chrome.module.css", () => {
-    // vitest runs this file from two different working directories — the
-    // per-package suite (packages/client) and the repo-root diff-coverage run
-    // — so the path is resolved against both rather than assuming either. A
-    // `?raw` import can't stand in here: the CSS-modules transform claims
-    // `.module.css` and hands back the class-name proxy, not the source.
     const candidates = [
       "src/react/shell/chrome.module.css",
       "packages/client/src/react/shell/chrome.module.css",

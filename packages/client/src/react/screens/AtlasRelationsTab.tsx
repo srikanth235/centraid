@@ -36,15 +36,8 @@ import type { SampleRowsFetcher } from "./atlasSampleRows.js";
 
 import styles from "./AtlasRelationsTab.module.css";
 
-// The orrery (#441 B2, #519). Rings are hop distance, bearings are FIXED per
-// pack, and a re-centre animates radius ONLY — the anti-hairball invariant
-// (atlasOrreryGeometry.ts). The authored-link overlay (core_link) is a SEPARATE
-// mechanism behind the relation chips, never conflated with the FK edges.
-
 export interface AtlasRelationsTabProps {
-  /** `null` before `/_vault/atlas/graph` lands, and on error. */
   graph: AtlasGraphPayload | null;
-  /** Omitting it drops the "A few of yours" section. The CENTRE only. */
   fetchSampleRows?: SampleRowsFetcher;
 }
 
@@ -68,7 +61,6 @@ export default function AtlasRelationsTab({
     () => edges.reduce((m, e) => Math.max(m, e.fill), 1),
     [edges]
   );
-  // Authored endpoints carry an ontology type: match logical OR physical.
   const nodeByType = useMemo(() => {
     const m = new Map<string, (typeof nodes)[number]>();
     for (const n of nodes) {
@@ -83,16 +75,11 @@ export default function AtlasRelationsTab({
   const [readout, setReadout] = useState<Readout>({ kind: "idle" });
   const [activeRels, setActiveRels] = useState<Set<string>>(new Set());
   const [question, setQuestion] = useState<QuestionKey | null>(null);
-  // A per-mount FILTER; turning it must never reset the camera or centre.
   const [level, setLevel] = useState<AtlasDetailLevel>("simple");
 
-  // A lens over the chart body, never a layout change (atlasOrreryCamera.ts).
-  // `consumeDrag()` swallows the click a pan would fire as a re-centre.
   const { view, resetView, consumeDrag, zoomBy, handlers } = useOrreryCamera();
   const { onWheel, onPointerDown, onPointerMove, onPointerUp } = handlers;
 
-  // Re-seat during render (React's "adjust state on prop change"), so the old
-  // centre is never painted against a new graph's nodes for a frame.
   const [seenGraph, setSeenGraph] = useState(graph);
   if (seenGraph !== graph) {
     setSeenGraph(graph);
@@ -117,14 +104,12 @@ export default function AtlasRelationsTab({
     return m;
   }, [nodes, hops]);
 
-  // Bearings never animate: only radius eases to the new ring.
   const radiusOf = useRecenterAnimation(center, targetRadius, reduced);
 
   const recenter = useCallback(
     (physical: string) => {
       if (physical === center) return;
       setCenter(physical);
-      // Reset the camera, or a prior pan/zoom leaves the new centre off-screen.
       resetView();
       setTrail((prev) => {
         const i = prev.indexOf(physical);
@@ -139,7 +124,6 @@ export default function AtlasRelationsTab({
     [center, nodeByPhysical, resetView]
   );
 
-  // `consumeDrag()` swallows the click a pan trails; keyboard never trips it.
   const onNodeRecenter = useCallback(
     (physical: string) => {
       if (consumeDrag()) return;
@@ -157,7 +141,6 @@ export default function AtlasRelationsTab({
     [graph]
   );
 
-  // A pair naming unrendered kinds is skipped, never faked.
   const overlayArcs = useMemo(() => {
     if (activeRels.size === 0) return [];
     const out: { id: string; d: string }[] = [];
@@ -171,7 +154,6 @@ export default function AtlasRelationsTab({
       const toDeg = layout.bearing.get(to.physical) ?? 0;
       const a = polar(fromDeg, radiusOf(from.physical));
       const b = polar(toDeg, radiusOf(to.physical));
-      // Deeper than FK edges, but still `edgeBow`-scaled to avoid hairpins.
       const bow = Math.max(0.7, edgeBow(fromDeg, toDeg) - 0.08);
       out.push({ id: `${key}-${i}`, d: edgePath(a.x, a.y, b.x, b.y, bow) });
     });
@@ -187,8 +169,6 @@ export default function AtlasRelationsTab({
     });
   }, []);
 
-  // A chip resolves to a `highlight` lens through the same machinery hover
-  // uses (hover wins), derived from real payload numbers, never a guess.
   const toggleQuestion = useCallback((q: QuestionKey) => {
     setQuestion((prev) => (prev === q ? null : q));
   }, []);
@@ -205,7 +185,6 @@ export default function AtlasRelationsTab({
       };
     }
     if (question === "heaviest") {
-      // Kinds whose row count is >= 40% of the busiest kind's.
       let max = 0;
       for (const v of rows.values()) if (v > max) max = v;
       const threshold = max * 0.4;
@@ -216,7 +195,6 @@ export default function AtlasRelationsTab({
         edgeLit: (e: AtlasFkEdge) => lit.has(e.fromTable) && lit.has(e.toTable),
       };
     }
-    // unused — ghost edges + kinds with zero or unknown row counts.
     const lit = new Set<string>();
     for (const n of nodes) {
       const r = rows.get(n.physical);
@@ -252,22 +230,16 @@ export default function AtlasRelationsTab({
   const isRoot = center === graph.center;
   const centerNode = nodeByPhysical.get(center);
 
-  // A pure FILTER over the real schema (`visibleAtLevel`), never an
-  // aggregation, and never hiding the centre. Bearings and hops are computed
-  // over the FULL graph, so the dial only adds and removes.
   const visCtx = { center, hops, rows, edges };
   const visibleNodes = nodes.filter(
     (n) => n.physical !== center && visibleAtLevel(level, n, visCtx)
   );
 
-  // Both endpoints visible; self-refs are a glyph, not a loop.
   const visibleSet = new Set([...visibleNodes.map((n) => n.physical), center]);
   const drawEdges = edges.filter((e) =>
     edgeVisibleAtLevel(level, e, visibleSet)
   );
 
-  // Every number derived against the FULL schema, never hardcoded.
-  // `everything` hides nothing, so it names what it revealed instead.
   const nonCenterKinds = nodes.filter((n) => n.physical !== center).length;
   const hiddenKinds = nonCenterKinds - visibleNodes.length;
   const drawableEdges = edges.filter((e) => !e.selfRef).length;

@@ -19,7 +19,6 @@ function mount(node: JSX.Element): HTMLDivElement {
   return container;
 }
 
-/** `useCompactLayout` reads `matchMedia`; jsdom has none by default. */
 function setViewport(compact: boolean): void {
   vi.stubGlobal("matchMedia", (query: string) => ({
     addEventListener: () => {},

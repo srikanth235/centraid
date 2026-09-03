@@ -10,19 +10,6 @@ import type {
   SettingsEnrichmentScreenProps,
 } from "./SettingsEnrichmentScreen.js";
 
-/*
- * Settings → Enrichment (#807, reshaped for v11). The behaviour that
- * matters is that this page is a PROJECTION: every control writes through the
- * store that owns its path and renders what came back, the resolver's answer is
- * what a row shows rather than a fold done here, and the faces capability is
- * offered no delegate at all.
- *
- * v11 removed the per-domain CEILING CONTROL — enrichment runs on the gateway,
- * and where it runs is not a member's choice. The ceiling itself did not go
- * anywhere, so the row a stored ceiling stops still says so; that pair is what
- * these tests pin.
- */
-
 const CARD: HarnessCardDTO = {
   kind: "codex",
   title: "Codex",
@@ -161,11 +148,6 @@ function control(el: HTMLElement, label: string): HTMLElement {
   return found as HTMLElement;
 }
 
-/**
- * The engine pill of one row, by the words it currently states. Matched on the
- * prefix: the pill's last child is its disclosure caret, which is decoration
- * the member reads as part of the control rather than part of the sentence.
- */
 function pill(el: HTMLElement, label: string): HTMLButtonElement {
   const found = [...el.querySelectorAll("button")].find((button) =>
     button.textContent?.startsWith(label)
@@ -174,7 +156,6 @@ function pill(el: HTMLElement, label: string): HTMLButtonElement {
   return found;
 }
 
-/** One engine chip inside an opened pill. */
 function chip(el: HTMLElement, label: string): HTMLButtonElement {
   const found = [...el.querySelectorAll(".capChip")].find(
     (button) => button.textContent === label
@@ -207,10 +188,7 @@ describe(SettingsEnrichmentScreen, () => {
     const el = await mount(makeProps());
     expect(el.textContent).toContain("Text in photos");
     expect(el.textContent).toContain("receipts, signs, whiteboards");
-    // The head states how many of its own rows are on.
     expect(el.textContent).toContain("2 of 2 on");
-    // The recorded answer reads as a sentence about what may happen, not a
-    // decision enum beside an egress class.
     expect(el.textContent).toContain("Declined · built-in engine only");
   });
 
@@ -223,8 +201,6 @@ describe(SettingsEnrichmentScreen, () => {
 
   it("states only the egress that matters — a provider, and nothing otherwise", async () => {
     const el = await mount(makeProps());
-    // The built-in engines run on the gateway, which is not a fact worth a
-    // line: the row would otherwise wear a label for the only place work runs.
     expect(el.textContent).not.toContain("on your gateway");
     expect(el.textContent).not.toContain("at a provider");
   });
@@ -255,9 +231,6 @@ describe(SettingsEnrichmentScreen, () => {
   });
 
   it("says at the row when a stored ceiling will refuse it", async () => {
-    // The ceiling lost its control, not its teeth: photos is stored at
-    // `on-device` while the bundled OCR engine is gateway-lane, so the row
-    // states the gate rather than reading as on and quietly never running.
     const el = await mount(makeProps());
     expect(el.textContent).toContain(
       "Stopped by a stored ceiling: no further than this device."
@@ -265,9 +238,6 @@ describe(SettingsEnrichmentScreen, () => {
   });
 
   it("does not call an agent-backed row refused — provider egress is a consent question, not a ceiling one", async () => {
-    // `provider` outranks every ceiling, so measuring the delegate's class
-    // against it would mark every agent row dead. The gate compares the
-    // enricher's LANE, which is the built-in profile's class.
     const el = await mount(
       makeProps({
         load: vi.fn<SettingsEnrichmentScreenProps["load"]>().mockResolvedValue(
@@ -367,8 +337,6 @@ describe(SettingsEnrichmentScreen, () => {
       .fn<SettingsEnrichmentScreenProps["setRule"]>()
       .mockResolvedValue(undefined);
     const el = await mount(makeProps({ saveProfile, setRule }));
-    // The engine is collapsed behind one pill — reading "Built in" while the
-    // bundled engine runs — and the chips only exist once it is pressed.
     await act(async () => {
       pill(el, "Built in").click();
     });
@@ -417,7 +385,6 @@ describe(SettingsEnrichmentScreen, () => {
       control(el, "Model for Text in photos") as HTMLSelectElement,
       "gpt-5"
     );
-    // Same key the Agents page writes — one pin, not a second copy of it.
     expect(setEngineModel.mock.lastCall).toStrictEqual(["codex", "gpt-5"]);
   });
 
@@ -445,8 +412,6 @@ describe(SettingsEnrichmentScreen, () => {
     expect(showToast.mock.lastCall?.[0]).toContain(
       "enrich.policy.write refused"
     );
-    // The switch is back where the gateway has it — the row renders the
-    // resolver's answer, never a local optimistic copy.
     expect((control(el, "Faces") as HTMLInputElement).checked).toBe(true);
   });
 

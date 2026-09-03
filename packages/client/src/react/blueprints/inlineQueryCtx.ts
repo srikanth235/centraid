@@ -12,8 +12,6 @@ import type {
   ShellReplicaReadRequest,
   ShellReplicaSearchRequest,
 } from "../../replica/shell-session.js";
-// Inline query ctx over the shell replica. Touching a field the shape does
-// not carry marks ONLINE_ONLY so the caller can fall back with the same error.
 import type {
   ReplicaReadWireResult,
   ReplicaRowEnvelope,
@@ -59,8 +57,6 @@ export function createOnlineGuard(): InlineOnlineGuard {
   return guard;
 }
 
-// Throws ONLINE_ONLY on oversized or undisclosed fields — same conditions as
-// the iframe path's `guardedRow`.
 const PENDING_ROW_PROVENANCE = Symbol("centraid.pending-row-provenance");
 
 function guardedRow(
@@ -72,7 +68,6 @@ function guardedRow(
   for (const key of envelope.oversizedFields ?? [])
     missing.set(key, `oversized field ${key}`);
   const undisclosed = envelope.hasUnavailableFields === true;
-  // Enumerable symbol follows object spreads but cannot leak onto JSON.
   const values: Record<string, unknown> & {
     [PENDING_ROW_PROVENANCE]?: PendingRowMarker;
   } = { ...(envelope.values as Record<string, unknown>) };
@@ -165,8 +160,6 @@ function carriedPendingMarker(
   const exact = source[PENDING_ROW_PROVENANCE];
   if (exact && typeof exact === "object") return exact as PendingRowMarker;
 
-  // Projections drop the symbol. Match field+value; refuse ambiguity — never
-  // assign a parent's controls to its child.
   for (const [field, value] of Object.entries(carried)) {
     if (field !== "id" && !field.endsWith("_id")) continue;
     const candidates = markers.filter(
@@ -179,8 +172,6 @@ function carriedPendingMarker(
   return undefined;
 }
 
-// Pending identity is shell-owned: carry it across product-field projections
-// by row identity. Apps never copy overlay fields by hand.
 function carryPendingRows(
   value: unknown,
   markers: readonly PendingRowMarker[],
@@ -205,7 +196,6 @@ function carryPendingRows(
   };
 }
 
-// `resolve` NEVER rejects — `{ cards: [] }` rather than blanking the board.
 export function buildInlineCtx(
   options: InlineCtxOptions,
   guard: InlineOnlineGuard,
@@ -244,7 +234,6 @@ export function buildInlineCtx(
         receiptId: receiptIdFor(result),
       };
     },
-    // No client-side card resolver; empty cards, never blank (#505 P4).
     resolve(): Promise<{ cards: ReplicaValue[] }> {
       return Promise.resolve({ cards: [] });
     },
@@ -263,7 +252,6 @@ export function buildInlineCtx(
     fetch: (): Promise<never> =>
       Promise.reject(guard.mark("fetch is online-only")),
     vault,
-    // Same civil-time engine as the gateway worker — in-process, identical summary.
     time: {
       applyRecurrenceExceptions,
       collapseMissedOccurrences,

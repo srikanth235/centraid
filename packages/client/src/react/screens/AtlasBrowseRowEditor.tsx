@@ -22,12 +22,6 @@ import type { EditorState } from "./atlasBrowseData.js";
 
 import styles from "./AtlasRecordsSection.module.css";
 
-// The row editor drawer (#441), split out of the records section. An
-// insert or edit form whose writes ride the gateway's journalled command path — never
-// raw SQL. Sealed columns render as read-only chips and are never written; pk
-// columns are auto-minted on insert; FK columns get a reference-picker combobox.
-
-// ── Row editor ───────────────────────────────────────────────────────────────
 export function RowEditor({
   table,
   cols,
@@ -251,9 +245,6 @@ function Field({
   );
 }
 
-// FK reference picker — searches the target table as the owner types, shows the
-// target's display field, and stores its id. A pasted id that never matches a
-// hit is kept verbatim, so manual entry still works.
 function FkField({
   fkTable,
   fkLabel,

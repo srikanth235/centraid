@@ -1,7 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit one suite over the whole sync command surface — staging consent (#290) and broker-credential lifecycle (#304) share the connection fixture, so the scenarios stay together
-// The one-shot pull consent story (#290): an agent stages
-// parsed rows freely (risk low), but PUBLISHING them exceeds every agent's
-// ceiling and parks for the owner — the pause between draft and send.
 
 import { beforeEach, describe, expect, test } from "vitest";
 
@@ -87,7 +84,6 @@ describe("sync", () => {
     const batchId = (staged as { output: { batch_id: string } }).output
       .batch_id;
 
-    // Nothing landed — staging is reviewable state.
     expect(
       (
         db.vault.prepare("SELECT count(*) AS n FROM core_event").get() as {
@@ -116,7 +112,6 @@ describe("sync", () => {
       .prepare("SELECT summary FROM core_event WHERE ical_uid = ?")
       .get("gcal-evt-1") as { summary: string };
     expect(event.summary).toBe("Flight to Goa");
-    // The map recorded the pull's identity — a re-stage skips.
     const again = gw.invoke(agent, {
       command: "sync.stage_rows",
       input: {
@@ -214,8 +209,6 @@ describe("sync", () => {
       true
     );
     expect(published.status).toBe("executed");
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({
       ...db.vault
         .prepare("SELECT title, media_type, content_uri FROM core_content_item")
@@ -330,8 +323,6 @@ describe("sync", () => {
       });
       expect(finish.status).toBe("executed");
 
-      // The mismatch REFUSES via output (not a thrown rollback — the
-      // needs-auth flip must survive the invocation).
       const wrong = beginRun("other@example.com");
       expect(wrong.status).toBe("executed");
       expect((wrong as { output: { refused: string } }).output.refused).toBe(
@@ -342,14 +333,11 @@ describe("sync", () => {
           `SELECT status, principal FROM sync_connection WHERE kind = 'mcp.gmail'`
         )
         .get() as { status: string; principal: string };
-      // node:sqlite hands back null-prototype rows; spreading compares the column
-      // data (which is the contract) without asserting the driver's prototype.
       expect({ ...conn }).toStrictEqual({
         status: "needs-auth",
         principal: "me@example.com",
       });
 
-      // A matching re-auth restores the connection to active.
       const recovered = beginRun("me@example.com");
       expect(recovered.status).toBe("executed");
       expect(
@@ -431,8 +419,6 @@ describe("sync", () => {
     });
   });
 
-  // ── Broker-owned credentials (issue #304) ────────────────────────────────
-
   describe("sync.configure_credential + sync.store_tokens (issue #304)", () => {
     test("oauth2 configure seals the client secret, pins hosts, starts in needs-auth", () => {
       const outcome = gw.invoke(owner, {
@@ -466,7 +452,6 @@ describe("sync", () => {
         allowed_hosts: string;
       };
       expect(cred.cred_kind).toBe("oauth2");
-      // Sealed at rest — never the plaintext.
       expect(cred.client_secret).toMatch(/^sealed:v1:/u);
       expect(cred.client_secret).not.toContain("GOCSPX");
       expect(JSON.parse(cred.allowed_hosts)).toStrictEqual([
@@ -514,8 +499,6 @@ describe("sync", () => {
         client_id: string;
         client_secret: string | null;
       };
-      // node:sqlite hands back null-prototype rows; spreading compares the column
-      // data (which is the contract) without asserting the driver's prototype.
       expect({ ...row }).toStrictEqual({
         oauth_mode: "assist",
         client_id: "shared.apps.googleusercontent.com",
@@ -635,7 +618,6 @@ describe("sync", () => {
       };
       expect(row.access_token).toMatch(/^sealed:v1:/u);
       expect(row.refresh_token).toMatch(/^sealed:v1:/u);
-      // Issue #865: the capability seals beside the token it authenticates.
       expect(row.refresh_capability).toMatch(/^sealed:v1:/u);
       expect(
         (
@@ -644,14 +626,12 @@ describe("sync", () => {
           }
         ).status
       ).toBe("active");
-      // A revived connection carries no stale complaint.
       expect(
         db.vault.prepare("SELECT auth_note FROM sync_connection_health").get()
       ).toBeUndefined();
       const originalRefreshCipher = row.refresh_token;
       const originalCapabilityCipher = row.refresh_capability;
 
-      // A non-rotating refresh: no refresh_token in the response.
       const second = gw.invoke(owner, {
         command: "sync.store_tokens",
         input: {
@@ -671,12 +651,10 @@ describe("sync", () => {
         refresh_token: string;
         refresh_capability: string;
       };
-      // A non-rotating refresh keeps BOTH the stored token and its capability.
       expect(row.refresh_token).toBe(originalRefreshCipher);
       expect(row.refresh_capability).toBe(originalCapabilityCipher);
       expect(row.access_token).toMatch(/^sealed:v1:/u);
 
-      // The append-only journal carries hash tokens, never the capability.
       const journal = db.audit
         .prepare("SELECT input_json FROM agent_command_invocation")
         .all() as { input_json: string }[];
@@ -728,7 +706,6 @@ describe("sync", () => {
       expect(row.client_secret).toBe("«sealed»");
       expect(row.cred_kind).toBe("oauth2");
 
-      // The append-only journal never carries the plaintext (sealedInput).
       const journal = db.audit
         .prepare(
           "SELECT input_json FROM agent_command_invocation ORDER BY rowid DESC LIMIT 1"
@@ -763,7 +740,6 @@ describe("sync", () => {
       expect(
         db.vault.prepare("SELECT * FROM sync_connection_health").get()
       ).toBeUndefined();
-      // The connection itself survives detachment.
       expect({
         ...db.vault.prepare("SELECT count(*) AS n FROM sync_connection").get(),
       }).toStrictEqual({
@@ -827,8 +803,6 @@ describe("sync", () => {
         },
         purpose: "dpv:ServiceProvision",
       });
-      // The note is what the member reads; `updated_at` is stamped by the
-      // touch trigger every table gained in #916, so it MOVES on any write.
       const health = db.vault
         .prepare("SELECT auth_note, updated_at FROM sync_connection_health")
         .get() as { auth_note: string; updated_at: string };
@@ -869,10 +843,6 @@ describe("sync", () => {
     });
   });
 
-  // Issue #308 A1/A2: post-#306 only `confirm: true` parks — risk never does.
-  // The credential-touching pair must park for every non-owner caller, because
-  // `allowed_hosts` is #304's structural pin and the token pair is what every
-  // drain rides. The needs-auth honesty flip stays unparked (deliberate).
   describe("credential commands are confirm-gated (issue #308 A1/A2)", () => {
     test("an agent proposing configure_credential parks; owner approval lands it", () => {
       const proposed = gw.invoke(agent, {
@@ -890,7 +860,6 @@ describe("sync", () => {
         purpose: "dpv:ServiceProvision",
       });
       expect(proposed.status).toBe("parked");
-      // Nothing moved while parked — the pin is untouched.
       expect(
         db.vault.prepare("SELECT * FROM sync_connection_credential").get()
       ).toBeUndefined();
@@ -979,8 +948,6 @@ describe("sync", () => {
     });
   });
 
-  // Issue #304 UI's missing delete: `sync.remove_connection` is the real
-  // delete, distinct from `configure_credential({cred_kind:'none'})`'s detach.
   describe("sync.remove_connection", () => {
     function makeConnection(): string {
       const outcome = gw.invoke(owner, {
@@ -1055,7 +1022,6 @@ describe("sync", () => {
       expect((outcome as { reason: string }).reason).toMatch(
         /awaiting a decision/u
       );
-      // Nothing moved — the connection survives a refused removal.
       expect({
         ...db.vault.prepare("SELECT count(*) AS n FROM sync_connection").get(),
       }).toStrictEqual({
@@ -1095,7 +1061,6 @@ describe("sync", () => {
       }).toStrictEqual({
         n: 1,
       });
-      // The receipted outbox row is untouched — history is never shredded.
       expect({
         ...db.vault.prepare("SELECT count(*) AS n FROM outbox_item").get(),
       }).toStrictEqual({
@@ -1150,7 +1115,6 @@ describe("sync", () => {
       expect(
         db.vault.prepare("SELECT * FROM sync_connection").get()
       ).toBeUndefined();
-      // The login itself survives; only the service anchor is cleared.
       const item = db.vault
         .prepare(
           "SELECT connection_id, title FROM locker_item WHERE item_id = ?"

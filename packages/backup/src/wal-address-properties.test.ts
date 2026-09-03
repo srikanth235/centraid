@@ -23,12 +23,6 @@ import {
 } from "./wal-format.js";
 import type { WalGroupCloser, WalSegmentAddress } from "./wal-format.js";
 
-/**
- * WAL addressing properties (#532 core expansion).
- *
- * Model: segment / closer / tick-marker keys are injective encodings of their
- * address fields — parse(encode(x)) === x for every valid address.
- */
 describe("WAL address property", () => {
   test("segment key round-trips for every valid address", () => {
     fc.assert(
@@ -44,9 +38,6 @@ describe("WAL address property", () => {
     fc.assert(
       fc.property(closerAddr, (closer) => {
         const key = walGroupCloserKey(closer);
-        // fast-check's shrinker can hand back a counterexample built with a
-        // null prototype; spreading both sides compares the address fields
-        // (the contract) without asserting either object's prototype.
         expect({ ...parseWalCloserKey(key) }).toStrictEqual({ ...closer });
       }),
       { numRuns: 40, seed: 53251 }
@@ -131,7 +122,6 @@ describe("WAL encoder totality (L1)", () => {
     fc.assert(
       fc.property(fc.oneof(segmentAddr, corruptSegmentAddr), (addr) => {
         const key = emitted(walSegmentKey, addr);
-        // Refused ⇒ nothing was published. Emitted ⇒ it names exactly `addr`.
         expect(key === null ? addr : parseWalSegmentKey(key)).toStrictEqual(
           addr
         );
@@ -195,9 +185,6 @@ describe("WAL encoder totality (L1)", () => {
   });
 
   test("parsers refuse a well-formed key that names an empty byte range", () => {
-    // The encoder can never produce this, but a provider can serve it. A
-    // zero-or-negative-length segment names no bytes, so replay must treat it
-    // as "not a segment" rather than as a zero-byte hole in the stream.
     fc.assert(
       fc.property(
         dbName,
@@ -210,13 +197,10 @@ describe("WAL encoder totality (L1)", () => {
           const keyFor = (end: number) =>
             `wal/${db}/${generation}/${pad(group, 8)}/` +
             `${pad(offset, 12)}-${pad(end, 12)}-${pad(0, 13)}`;
-          // end === start: zero bytes. Not "an empty segment" — not a segment.
           expect(parseWalSegmentKey(keyFor(offset))).toBeNull();
-          // end < start: a negative-length range, always nonsense.
           expect(
             parseWalSegmentKey(keyFor(Math.max(0, offset - back - 1)))
           ).toBeNull();
-          // end > start by one byte: the smallest real segment there is.
           expect(parseWalSegmentKey(keyFor(offset + 1))).not.toBeNull();
         }
       ),
@@ -226,10 +210,6 @@ describe("WAL encoder totality (L1)", () => {
 });
 
 describe("WAL address domain boundaries", () => {
-  // The zero end of each domain is legal and must round-trip: group 0 is the
-  // first group of every generation, startOffset 0 is the first byte of every
-  // group, and tick 0 is a legal (if unlikely) epoch. An encoder that refused
-  // them would make the very first segment of a fresh stream unaddressable.
   const generation = "0".repeat(32);
 
   test("group 0, startOffset 0 and tickMs 0 are addressable", () => {
@@ -254,8 +234,6 @@ describe("WAL address domain boundaries", () => {
     expect({ ...parseWalCloserKey(walGroupCloserKey(closer)) }).toStrictEqual({
       ...closer,
     });
-    // A closer says "this group is durably captured up to N bytes". N = 0 is
-    // not a closed group, it is an untouched one — the two must not share a key.
     expect(() => walGroupCloserKey({ ...closer, endOffset: 0 })).toThrow(
       /closer end/u
     );
@@ -332,8 +310,6 @@ describe("WAL refusals name the field they refused (L3)", () => {
 
   test("tick-marker refusals identify the generation and the tick", () => {
     const marker = { generation, tickMs: 5 };
-    // A marker naming a generation that cannot exist would be listed under a
-    // base no restore can ever match.
     expect(() => walTickMarkerKey({ ...marker, generation: "x" })).toThrow(
       /generation/u
     );

@@ -1,7 +1,5 @@
 import type { ShellRoute } from "../../../app-shell-context.js";
 
-/** Member-facing page context for the companion chip. Persisted route ids are
- * deliberately translated here rather than exposed as product language. */
 export function assistantContextLabel(route: ShellRoute): string {
   switch (route.kind) {
     case "home":

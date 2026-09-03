@@ -198,13 +198,10 @@ describe("key-store", () => {
       .filter((entry) => entry.isFile())
       .map((entry) => path.join(entry.parentPath, entry.name));
     expect(files).not.toHaveLength(0);
-    // Every file on disk — key-store or not — must be free of raw secret bytes.
     for (const file of files) {
       for (const secret of secrets)
         expect(readFileSync(file)).not.toContain(secret);
     }
-    // The key-store's own files carry the envelope header and are never a bare
-    // 32-byte secret. Filtered up front so both assertions always run.
     const stored = files.filter((file) =>
       file.startsWith(`${keys.dir}${path.sep}`)
     );

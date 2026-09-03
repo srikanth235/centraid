@@ -197,8 +197,6 @@ describe("AutomationEditorAccountChoice", () => {
       workButton.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     );
 
-    // Refresh the catalog: the work account has been revoked, so only
-    // `personal` survives.
     await act(async () =>
       connectorsButton.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     );
@@ -211,8 +209,6 @@ describe("AutomationEditorAccountChoice", () => {
       });
     });
 
-    // The binding is NOT silently re-pointed at the surviving account — that
-    // would change the principal the automation acts as. It is surfaced (#541).
     const refreshed = el.querySelector(
       '[data-testid="automation-connectors-picker"]'
     );
@@ -220,12 +216,10 @@ describe("AutomationEditorAccountChoice", () => {
       refreshed?.querySelector('[data-testid="connector-account-dangling"]')
     ).toBeTruthy();
     expect(refreshed?.textContent).toContain("no longer configured");
-    // The row must not claim the automation is on `personal`…
     expect(refreshed?.textContent).toContain("Bound account unavailable");
     expect(refreshed?.textContent).not.toContain(
       "Connected · GitHub · personal"
     );
-    // …and the surviving account is offered as an explicit choice.
     expect(
       refreshed?.querySelector('[data-connection-id="conn-personal"]')
     ).toBeTruthy();
@@ -233,7 +227,6 @@ describe("AutomationEditorAccountChoice", () => {
       '[data-connection-id="conn-personal"]'
     );
     expect((survivor as HTMLElement | null)?.dataset.chosen).toBe("false");
-    // The dangling kind stops offering a connector-event trigger.
     const addTrigger = [...el.querySelectorAll("button")].find(
       (candidate) => candidate.textContent === "+ Add Trigger"
     ) as HTMLButtonElement;
@@ -367,10 +360,6 @@ describe("AutomationEditorAccountChoice", () => {
     expect(el.textContent).toContain("Use default (codex)");
     expect(el.textContent).toContain("Work ACP");
 
-    // The harness/model selects are named by their wrapping <label> ("Agent"
-    // / "Model") rather than a duplicate aria-label (#708 aria-label
-    // discipline — a control already named by visible text doesn't also get
-    // one), so they're picked up here by field order instead.
     const harnessPickerSelects = el.querySelectorAll("select");
     setSelectValue(harnessPickerSelects[0] as HTMLSelectElement, "acp");
     expect(el.textContent).toContain("Use default (acp-default)");

@@ -1,8 +1,3 @@
-// Cheap PDF text backstop for the ingress spool. This is deliberately not a
-// renderer: it recognizes text-showing operators in clear or Flate-compressed
-// content streams, which covers the common born-digital PDF path without
-// putting an unbounded document or decompression bomb in gateway memory.
-
 import { inflateSync } from "node:zlib";
 
 const MIB = 1024 * 1024;
@@ -15,7 +10,6 @@ const MAX_TEXT_PARTS = 5000;
 const STREAM_TOKEN = Buffer.from("stream", "ascii");
 const END_STREAM_TOKEN = Buffer.from("endstream", "ascii");
 
-/** Extract a bounded useful-text candidate from one PDF byte probe. */
 export function extractPdfText(bytes: Buffer): string | null {
   const probe = bytes.subarray(0, Math.min(bytes.length, MAX_SCAN_BYTES));
   const parts = textShowingParts(probe.toString("latin1"));
@@ -43,8 +37,7 @@ export function extractPdfText(bytes: Buffer): string | null {
       inflatedBytes += inflated.length;
       parts.push(...textShowingParts(inflated.toString("latin1")));
     } catch {
-      // Unsupported filters, truncated probes and oversized output are a
-      // clean miss. A device/pdf.js enricher may still contribute later.
+      // Intentionally empty.
     }
   }
   const text = parts
@@ -112,11 +105,6 @@ function compressedStream(
   return bytes.subarray(dataStart, payloadEnd);
 }
 
-/**
- * Collect PDF string operands of Tj / TJ operators without nested-quantifier
- * regexes (Sonar S5852 / ReDoS). Literals and bracket arrays are walked in
- * linear time with explicit escape handling.
- */
 function textShowingParts(raw: string): string[] {
   const parts: string[] = [];
   let i = 0;
@@ -162,7 +150,6 @@ function skipPdfWs(raw: string, from: number): number {
   return i;
 }
 
-/** Read a `(...)` PDF string starting at `open` (`(`). */
 function readPdfLiteral(
   raw: string,
   open: number
@@ -197,7 +184,6 @@ function readPdfLiteral(
   return null;
 }
 
-/** Matching `]` for a `[` at `open`, skipping nested PDF string literals. */
 function findPdfArrayClose(raw: string, open: number): number {
   let i = open + 1;
   while (i < raw.length) {
@@ -209,7 +195,6 @@ function findPdfArrayClose(raw: string, open: number): number {
       continue;
     }
     if (c === "]") return i;
-    // Nested arrays are rare in TJ operands; still skip them linearly.
     if (c === "[") {
       const nested = findPdfArrayClose(raw, i);
       if (nested < 0) return -1;

@@ -312,8 +312,31 @@ node scripts/check-comment-density-ratchet.mjs       # after final --write: shar
   and format clean repo-wide; server typecheck 19/19 and server tests 10/10
   green; density 14.74% → 14.56% after the server+photos slices.
 
+- Wave 2 follows the rebase onto `origin/main` at `cf616a09a`: 4,115 files
+  changed in the working tree, with approximately 55,700 comment lines removed
+  and 808 comments retained in changed non-generated source. The measured
+  repository share is 1.19% by characters and 0.58% by non-blank lines.
+- Six recognition bundles were regenerated because the repository's bundle
+  drift test is sensitive to source text while minifying; unrelated generated
+  handlers and all fixtures remain untouched. The OAuth mutation range was
+  updated from `889-969` to `853-933` to keep the same pure guard block after
+  comment and blank-line removal.
+- Retained comments are machine directives, `Intentionally empty` markers for
+  lint-required empty callbacks, governance/license directives, and two vault
+  invariants: nonce binding across codec paths and refused-seat successor
+  roster behavior.
+- The density ratchet still reports nine existing fixture/ledger pin rises;
+  those fixture files were not changed per scope and require a separate
+  approved baseline update.
+
 ## Audit
 
 Pending — fresh-context auditor runs after the final wave.
 
 ## Session
+
+### Identifiers
+
+| date | harness | session |
+| --- | --- | --- |
+| 2026-09-03 | codex | 01a06592-92d5-7c11-a13e-3a8ee1a2afdd |

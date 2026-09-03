@@ -14,9 +14,6 @@ import type { ArtifactFile } from "./AutomationCompileArtifacts.js";
 import au from "../styles/automation.module.css";
 import styles from "./AutomationCompilePane.module.css";
 
-// Compiler readout. The rail reads; it does not author. Compile is not a
-// fire-and-forget side effect of Save — a failure has to be readable here.
-
 export interface AutomationCompilePaneProps {
   mode: "create" | "edit";
   dirty: boolean;
@@ -203,7 +200,6 @@ export default function AutomationCompilePane({
       .finally(() => setPhase("idle"));
   }, [follow, onCompile]);
 
-  // Save bumps the nonce; skip the initial 0 so mount never auto-compiles.
   const seenNonce = useRef(compileNonce);
   useEffect(() => {
     if (compileNonce === seenNonce.current) return;
@@ -220,7 +216,6 @@ export default function AutomationCompilePane({
       .finally(() => setPhase("idle"));
   };
 
-  // `phase` is this mount; `latest.status` covers a compile already in flight.
   const attemptRunning = latest?.status === "running";
   const busy = phase !== "idle" || attemptRunning;
   const failure =

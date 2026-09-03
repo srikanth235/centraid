@@ -5,7 +5,6 @@ export {
   PEER_PROTOCOL_VERSION,
   PEER_MIN_PROTOCOL_VERSION,
 } from "./version.js";
-/** Client-facing aliases (product display / protocol floor). */
 export { GATEWAY_VERSION as EXPECTED_GATEWAY_VERSION } from "./version.js";
 export { GATEWAY_PROTOCOL_VERSION as EXPECTED_PROTOCOL_VERSION } from "./version.js";
 

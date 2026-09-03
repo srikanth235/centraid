@@ -1,5 +1,3 @@
-// Transcript tail window (#659): same objects; same array when nothing is hidden.
-
 export const TRANSCRIPT_WINDOW = 60;
 
 export interface TranscriptWindow<T> {

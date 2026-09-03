@@ -6,8 +6,6 @@ import {
   pushKnobToInlineRoot,
 } from "./appSettingsData.js";
 
-// `vi.mock` is hoisted above the import by vitest, so gateway-client-core's
-// load-time side-effect never runs.
 vi.mock(import("../../../gateway-client.js"), () => ({}));
 
 describe(manifestVaultBlock, () => {

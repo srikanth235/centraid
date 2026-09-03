@@ -1,12 +1,3 @@
-// Runtime schema gate for ingest publisher payloads (#374 Tier 3).
-// `publishers.ts`/`enrich-publishers.ts` cannot trust a staged payload's
-// shape on a compile-time `as unknown as X` cast. csv.ts happens to
-// hand off real JS numbers today, so this seam is dormant — these tests
-// hand-craft StageCandidates the way a FUTURE connector could (a decimal
-// STRING amount, a payload missing a required field) to prove
-// assertPayload rejects them before any SQL runs, the same way a declared
-// command's input schema violation would.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -34,8 +25,6 @@ describe("payload-schemas", () => {
     };
   });
 
-  /** Stage + immediately publish one hand-built candidate — bypasses every
-   * file parser so the payload shape is exactly what the test asserts. */
   function publishOne(candidate: StageCandidate) {
     const connectionId = ensureConnectionTx(db.vault, {
       kind: "test",
@@ -127,8 +116,6 @@ describe("payload-schemas", () => {
         externalId: "txn-bad-amount",
         postedAt: "2026-07-01T00:00:00Z",
         description: "Groceries",
-        // A future connector staging a decimal STRING — the exploitable seam
-        // this gate exists for. Must fail schema validation, not reach SQLite.
         amountMinor: "19.99",
         currency: "INR",
         direction: "debit",
@@ -151,10 +138,6 @@ describe("payload-schemas", () => {
   });
 
   test("a payload missing a required field is rejected", () => {
-    // `identifiers` stays present and valid so the domain-native probe (which
-    // reads it directly, ahead of any write) resolves cleanly to "no match" —
-    // isolating the assertion to create()'s runtime gate, the seam this suite
-    // covers (#374 Tier 3 scopes the gate to WRITE paths).
     const result = publishOne({
       entityType: "core.party",
       externalId: "email:missing@example.com",
@@ -164,7 +147,6 @@ describe("payload-schemas", () => {
         identifiers: [
           { scheme: "email", value: "missing@example.com", label: null },
         ],
-        // `fn` omitted entirely.
       },
     });
     expect(result.created).toBe(0);
@@ -173,7 +155,6 @@ describe("payload-schemas", () => {
       /PartyPayload payload failed schema validation/u
     );
     expect(result.failed[0]!.error).toMatch(/missing required "fn"/u);
-    // Nothing landed beyond the owner party bootstrapVault already minted.
     const parties = db.vault
       .prepare("SELECT count(*) AS n FROM core_party")
       .get() as { n: number };
@@ -190,7 +171,6 @@ describe("payload-schemas", () => {
         username: "user",
         password: "hunter2",
         otpSeed: null,
-        // `notes` omitted entirely.
       },
     });
     expect(result.created).toBe(0);

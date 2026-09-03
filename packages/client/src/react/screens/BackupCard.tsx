@@ -33,11 +33,6 @@ import buttonCss from "../ui/Button.module.css";
 import styles from "./BackupCard.module.css";
 import gwStyles from "./GatewayScreen.module.css";
 
-// Gateway → Backups: renders EXACTLY the §6 contract's five metrics (#436)
-// via `BackupHealthMetrics`; everything else lives behind the collapsed
-// "Diagnostics" disclosure. The recovery-kit gate stays primary — losing the
-// seal key makes every offsite byte unrecoverable.
-
 export interface BackupVaultStatusDTO {
   vaultId: string;
   name?: string;
@@ -46,7 +41,6 @@ export interface BackupVaultStatusDTO {
   lastWalDrainAt?: string;
   lastError?: string;
   running?: boolean;
-  /** Required on the v0 wire; optional here for terse fixtures. */
   policy?: BackupPolicyDTO;
   destination?: BackupDestinationDTO;
   pendingOffsite?: { count: number; bytes: number };
@@ -55,7 +49,6 @@ export interface BackupVaultStatusDTO {
 }
 
 export interface RecoveryKitStatusDTO {
-  /** Epoch SECONDS the operator last confirmed, or `null` if never. */
   confirmedAt: number | null;
 }
 
@@ -64,15 +57,12 @@ export interface BackupStatusDTO {
   provider?: string;
   vaults: BackupVaultStatusDTO[];
   recoveryKit?: RecoveryKitStatusDTO;
-  /** Provider retention + restore-egress promises (#436); absent ⇒ neutral. */
   home?: GatewayHomeDiscoveryDTO;
 }
 
 export interface BackupCardProps {
-  /** Live clock (parent ticks it) — drives the humanized ages. */
   now: number;
   loadStatus: () => Promise<BackupStatusDTO>;
-  /** Provider-reported usage (Cost metric source); null before first poll. */
   loadUsage?: () => Promise<UsageInput | null>;
   streamCustody?: (onChange: () => void, signal: AbortSignal) => Promise<void>;
   onRunNow: () => Promise<{ accepted: boolean; alreadyRunning?: boolean }>;
@@ -87,28 +77,18 @@ export interface BackupCardProps {
   onExportRecoveryKit?: (input: {
     password: string;
   }) => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
-  /** Verifies the re-selected wrapped file, password, and loss consent. */
   onConfirmRecoveryKit: (input: {
     kit: unknown;
     password: string;
     lossConsent: true;
   }) => Promise<{ confirmedAt: number }>;
   onOpenSettings?: () => void;
-  /** Paired-device roster (#708 A2); absent only when the caller has no
-   *  device plane to offer. */
   loadDevices?: () => Promise<CentraidGatewayDevice[]>;
-  /**
-   * Restore from an offsite copy. Absent today everywhere — restore is a
-   * gateway-side/CLI act (docs/recovery/backup-restore.md) — so render
-   * disabled WITH THAT REASON, never hidden (#708 A2).
-   */
   onRestore?: () => void;
   readOnly?: boolean;
 }
 
-/** Matches useGatewayHealth's poll magnitude. */
 const POLL_MS = 10_000;
-/** Follow-up poll after a run; small backups often land inside it. */
 const FOLLOWUP_MS = 1500;
 
 function ageLabel(iso: string | undefined, now: number): string {
@@ -128,7 +108,6 @@ const DEFAULT_POLICY: BackupPolicyDTO = {
   walBaseRollHours: 24,
 };
 
-/** One diagnostic custody clock as a plain labelled age. */
 function VaultRow({
   vault,
   now,
@@ -212,7 +191,6 @@ export default function BackupCard({
   const [runError, setRunError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
 
-  // Guards poll + follow-up `setTimeout` against post-unmount setState.
   const mountedRef = useRef(true);
   const followupTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined
@@ -234,16 +212,13 @@ export default function BackupCard({
         .then((u) => {
           if (mountedRef.current) setUsage(u);
         })
-        .catch(() => {
-          // Best-effort — Cost falls back to unmetered/zero.
-        });
+        .catch(() => {});
     }
   }, [loadStatus, loadUsage]);
 
   useEffect(() => {
     mountedRef.current = true;
     refresh();
-    // Suspended while the tab is hidden, caught up on return (#659).
     const stop = startVisibilityTicker(refresh, POLL_MS);
     return () => {
       mountedRef.current = false;
@@ -256,9 +231,7 @@ export default function BackupCard({
   useEffect(() => {
     if (!streamCustody) return;
     const controller = new AbortController();
-    void streamCustody(refresh, controller.signal).catch(() => {
-      // The regular poll is the transport-independent fallback.
-    });
+    void streamCustody(refresh, controller.signal).catch(() => {});
     return () => controller.abort();
   }, [refresh, streamCustody]);
 
@@ -305,11 +278,9 @@ export default function BackupCard({
     (status?.configured ?? false) ||
     (status?.vaults.some((v) => v.lastBackupAt) ?? false);
   const clocks = metrics?.freshness.clocks;
-  // The headline (#708) — same `metrics` source as every other readout.
   const lossSummary =
     status && metrics ? deriveLossSummary(status, metrics) : null;
 
-  // WHEN IT LAST RAN IS THE META; newest vault clock = freshest copy.
   const lastRunAt = (status?.vaults ?? [])
     .map((vault) => (vault.lastBackupAt ? Date.parse(vault.lastBackupAt) : NaN))
     .filter((at) => Number.isFinite(at))
@@ -343,7 +314,6 @@ export default function BackupCard({
       />
       {/* THE FOUR ANSWERS FIRST, then the diagnosis. */}
       {status ? (
-        // A run verb needs a destination: withheld until configured.
         <BackupSummaryRows
           status={status}
           now={now}

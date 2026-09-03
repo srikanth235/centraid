@@ -1,8 +1,3 @@
-// Pure-math DB postprocess for PP-OCR — no ONNX import.
-// Axis-aligned boxes only: the wire contract is `[x, y, w, h]` with no
-// rotation, and recovering a minAreaRect would also need warp crops
-// upstream of recognition. Honest absence; README names the gap.
-
 export interface Box {
   x: number;
   y: number;
@@ -28,7 +23,6 @@ export interface ConnectedComponent {
   area: number;
 }
 
-/** 4-connected flood fill; iterative so a large mask cannot blow the stack. */
 export function findConnectedComponents(
   mask: ArrayLike<number>,
   width: number,
@@ -94,10 +88,6 @@ export function findConnectedComponents(
   return components;
 }
 
-/**
- * Approximate DB unclip: `distance = area * unclipRatio / perimeter` as
- * uniform padding. Default 1.5 matches PP-OCR `unclip_ratio`.
- */
 export function unclipBox(box: Box, area: number, unclipRatio = 1.5): Box {
   const perimeter = 2 * (box.width + box.height);
   if (perimeter <= 0) {
@@ -125,7 +115,6 @@ export function clampBoxToImage(box: Box, width: number, height: number): Box {
   };
 }
 
-/** Mean probability over the ORIGINAL (unclipped) box — never the padded crop. */
 export function meanProbabilityInBox(
   probs: ArrayLike<number>,
   width: number,

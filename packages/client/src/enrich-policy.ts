@@ -1,9 +1,3 @@
-/*
- * Enrichment vocabulary, client side. Keep it import-free, or the authenticated
- * transport lands in every render test. Every enum is a RESTATED mirror of the
- * vault's and the gate's; the route 400s the rest.
- */
-
 export type EnrichTier = "off" | "device" | "gateway";
 
 export const ENRICH_DOMAINS = ["photos", "docs"] as const;
@@ -11,7 +5,6 @@ export type EnrichDomain = (typeof ENRICH_DOMAINS)[number];
 
 export type EnrichPolicy = Record<EnrichDomain, EnrichTier>;
 
-/** Order is the cascade order. */
 export const ENRICH_SCOPE_TYPES = [
   "vault",
   "domain",
@@ -23,13 +16,11 @@ export type EnrichScopeType = (typeof ENRICH_SCOPE_TYPES)[number];
 export const ENRICH_TRIGGERS = ["on-ingest", "on-view", "on-demand"] as const;
 export type EnrichTrigger = (typeof ENRICH_TRIGGERS)[number];
 
-/** `ref` is `''` at vault scope. */
 export interface EnrichScope {
   type: EnrichScopeType;
   ref: string;
 }
 
-/** `null` means inherit. */
 export interface EnrichPolicyRule {
   scope: EnrichScope;
   capability: string;
@@ -51,14 +42,12 @@ export type EnrichEgressClass = (typeof ENRICH_EGRESS_CLASSES)[number];
 export interface EnrichConsentRecord {
   capability: string;
   egress: EnrichEgressClass;
-  /** `''` covers the whole vault. */
   scopeRef: string;
   decision: "granted" | "declined";
   decidedAt: string;
   receiptId: string | null;
 }
 
-/** A report, never permission. */
 export interface ResolvedEnrichPolicy {
   capability: string;
   enabled: boolean;
@@ -67,7 +56,6 @@ export interface ResolvedEnrichPolicy {
   egressCeiling: EnrichEgressCeiling;
 }
 
-/** `harness` is gateway-supplied; never an enum here. */
 export type EnrichEngine =
   | { kind: "built-in" }
   | {
@@ -78,7 +66,6 @@ export type EnrichEngine =
       promptRev?: string;
     };
 
-/** `egress` is COMPUTED by the gateway: render it, never offer to set it. */
 export interface EnrichEngineProfile {
   id: string;
   label: string;
@@ -86,11 +73,8 @@ export interface EnrichEngineProfile {
   engine: EnrichEngine;
   egress: EnrichEgressClass;
   builtIn: boolean;
-  /** `false` means a delegate profile is legal but inert; Settings says so. */
   delegateCapable: boolean;
 }
-
-// Restated from the phone's Settings, not shared; the two must read alike.
 
 export const ENRICH_DOMAIN_LABELS: Readonly<Record<EnrichDomain, string>> = {
   docs: "Documents",
@@ -133,12 +117,10 @@ export const ENRICH_CAPABILITY_BLURBS: Readonly<Record<string, string>> = {
   transcript: "Writes out what is said in your videos and voice notes.",
 };
 
-// True because `DELEGATE_REFUSALS` refuses a delegate engine for faces.
 export const ENRICH_CAPABILITY_NOTES: Readonly<Record<string, string>> = {
   faces: "Named only by you, and never sent to a provider.",
 };
 
-// A DISPLAY mirror of `enrich-resolve.ts`, never a second gate.
 const EGRESS_RANK: Readonly<Record<EnrichEgressCeiling, number>> = {
   gateway: 2,
   off: 0,

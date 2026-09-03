@@ -1,27 +1,3 @@
-// Memories v0 (#724) — a REBUILDABLE, DERIVED, NEVER-AUTHORED projection, same
-// mold as `clusters.ts`: the standing sweep rebuilds `media_memory` /
-// `media_memory_member` from source tables alone, so both are always safe to
-// delete. No ML dependency; every input is a pre-existing column.
-//
-// 'on-this-day' groups by day-of-year, never by "today": the sweep holds no
-// wall-clock opinion, so a January rebuild emits byte-identical July rows and
-// clients narrow at READ time. 'trip' is a run of days whose modal place
-// differs from home; TRIP_GAP_DAYS bridges photo-less days so one vacation is
-// not three memories, and its MEMBERS are every dated asset in the away range,
-// not just those that supplied the away signal. 'similar' unions phash-cluster
-// and capture-group groups, so a Live Photo pair and a burst surface as one
-// memory even when only one signal fired.
-//
-// HONEST ABSENCE. A NULL `captured_at` can never enter 'on-this-day' or 'trip'
-// — both are date-keyed — but may enter 'similar', which keys on identity.
-//
-// DETERMINISTIC IDS, NO WALL CLOCK IN GROUPING. `memory_id` is composite and
-// readable: `otd:<day_key>`, `trip:<first away day>` (a day starts at most one
-// trip), `similar:<lowest asset_id>`. No `randomblob`, and grouping never reads
-// `options.now` — only the `computed_at` audit column does.
-//
-// The pass fingerprints source AND persisted projection rows, so a deleted or
-// corrupted projection still invalidates the memo and is repaired (#792).
 import type { DatabaseSync } from "node:sqlite";
 
 import { nowIso } from "../ids.js";
@@ -32,16 +8,12 @@ import type {
 } from "./memories-fingerprint.js";
 import { beginMemoryProjectionPass } from "./memories-fingerprint.js";
 
-/** Photo-less days that still keep the SAME trip going (header). */
 export const TRIP_GAP_DAYS = 2;
 
-/** Distinct AWAY days a trip needs; one day out is a day, not a trip. */
 export const TRIP_MIN_AWAY_DAYS = 2;
 
-/** One photo is not a "similar moment". */
 export const SIMILAR_MIN_GROUP_SIZE = 2;
 
-/** Distinct years required: one year on a day is no "on this day". */
 export const ON_THIS_DAY_MIN_YEARS = 2;
 
 export type MemoriesRebuildResult = MemoryProjectionResult;
@@ -61,11 +33,6 @@ interface PhashRow {
 
 type MemoryDraft = MemoryProjectionDraft;
 
-/**
- * Shifts by `tz_offset_min` when the camera recorded one (as
- * `timeline-model.ts`'s `captureLocalDay` does), else the raw UTC slice —
- * there is no viewing device on the server to fall back to.
- */
 function captureLocalDay(
   capturedAt: string,
   tzOffsetMin: number | null
@@ -91,7 +58,6 @@ function compareCapturedAt(
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-/** Ties break on the lowest key — determinism, see the header. */
 function modalKey(counts: ReadonlyMap<string, number>): string | null {
   let best: string | null = null;
   let bestCount = -1;
@@ -104,7 +70,6 @@ function modalKey(counts: ReadonlyMap<string, number>): string | null {
   return best;
 }
 
-/** `null` when no place signal exists at all: nothing to call "away". */
 function resolveHomePlace(
   vault: DatabaseSync,
   assets: readonly AssetRow[]
@@ -128,7 +93,6 @@ function buildOnThisDay(assets: readonly AssetRow[]): MemoryDraft[] {
   const capturedAtByAsset = new Map<string, string | null>();
   for (const asset of assets) {
     capturedAtByAsset.set(asset.asset_id, asset.captured_at);
-    // Honest absence: no captured_at, no day to group by.
     if (asset.captured_at === null) continue;
     const localDay = captureLocalDay(asset.captured_at, asset.tz_offset_min);
     const dayKey = localDay.slice(5);
@@ -164,7 +128,6 @@ function daysBetween(earlier: string, later: string): number {
   return Math.round((Date.parse(later) - Date.parse(earlier)) / 86_400_000);
 }
 
-/** Nothing without a home place to compare against. */
 function buildTrips(
   assets: readonly AssetRow[],
   homePlaceId: string | null
@@ -218,7 +181,6 @@ function buildTrips(
     for (const [day, ids] of assetsByDay) {
       if (day >= startDay && day <= endDay) members.push(...ids);
     }
-    // Never empty: an away day carries a dated asset by construction.
     members.sort((a, b) => compareCapturedAt(a, b, capturedAtByAsset));
     const placeCounts = new Map<string, number>();
     for (const day of run) {
@@ -240,10 +202,6 @@ function buildTrips(
   return drafts;
 }
 
-/**
- * `UnionFind.add` runs only for assets in one of the two source groupings, so
- * an unrelated photograph never becomes a spurious singleton "memory".
- */
 function buildSimilar(
   assets: readonly AssetRow[],
   phashRows: readonly PhashRow[]
@@ -313,11 +271,6 @@ function buildSimilar(
   return drafts;
 }
 
-/**
- * A mismatch deletes and reinserts both projection tables in one transaction.
- * `options.now` stamps `computed_at` only — never grouping or comparison, so
- * logical rows stay byte-stable across sweeps.
- */
 export function rebuildMemories(
   vault: DatabaseSync,
   options: { now?: string } = {}

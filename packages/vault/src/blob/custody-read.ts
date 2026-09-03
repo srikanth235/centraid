@@ -1,5 +1,3 @@
-// Remote read-through for framed sealed blobs (#405 §1, §4); coalescing state in BlobCustody's maps.
-
 import {
   coveringFrames,
   decodeTrailer,
@@ -11,7 +9,6 @@ import type { FrameDirectory } from "./seal-frames.js";
 import { resolveRange } from "./store.js";
 import type { BlobRange, BlobStore } from "./store.js";
 
-/** Whole-object GET, unsealed; caller verifies + promotes so single-flight shares one. */
 export async function fetchRemoteWhole(
   store: BlobStore,
   key: Buffer | undefined,
@@ -23,7 +20,6 @@ export async function fetchRemoteWhole(
   return key ? unseal(key, sha, raw) : raw;
 }
 
-/** Footer via two ranged requests; null on raced delete. */
 export async function fetchFrameDirectory(
   store: BlobStore,
   key: Buffer,
@@ -46,7 +42,6 @@ export async function fetchFrameDirectory(
   return openDirectory(key, sha, frameCount, dirBytes);
 }
 
-/** Range via ONLY covering frames; never promotes (partial read can't verify the whole-blob sha); dir pre-fetched for caller coalescing. */
 export async function fetchRemoteRange(
   store: BlobStore,
   key: Buffer,

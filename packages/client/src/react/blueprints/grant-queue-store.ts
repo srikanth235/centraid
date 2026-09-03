@@ -1,9 +1,3 @@
-/**
- * The browser seat's durable store for the offline grant queue (#883).
- * AUTO-INCREMENT KEYS ARE THE ORDER: `getAll()` answers in key order, so a
- * same-millisecond pair keeps its insertion order.
- */
-
 import type {
   GrantIntentQueue,
   QueuedGrantIntent,
@@ -51,8 +45,6 @@ export async function openGrantIntentQueue(
     const request = factory.open(DB_NAME, VERSION);
     request.addEventListener("upgradeneeded", () => {
       const db = request.result;
-      // Additive — never drop the store: a queued grant matters most when a
-      // reload lands mid-rollout.
       const store = db.objectStoreNames.contains(STORE)
         ? request.transaction!.objectStore(STORE)
         : db.createObjectStore(STORE, { autoIncrement: true });

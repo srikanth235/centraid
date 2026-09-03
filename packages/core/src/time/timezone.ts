@@ -90,10 +90,6 @@ function offsetAt(instantMs: number, timeZone: string): number {
   return wallEpoch(zonedParts(instantMs, timeZone)) - instantMs;
 }
 
-/**
- * Resolve a civil clock value into an instant. A gap returns null. An overlap
- * resolves to the earlier instant and is marked so callers can explain it.
- */
 export function resolveWallTime(
   value: WallTime,
   timeZone: string

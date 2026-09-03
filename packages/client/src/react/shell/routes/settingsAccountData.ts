@@ -3,16 +3,13 @@ import type { IconName } from "@centraid/design";
 import { listVaults } from "../../../gateway-client.js";
 import type { PhoneBridgeProps } from "../../screen-contracts.js";
 
-/** ACTIVE vault only. Cross-vault list lives on the switcher. */
 export interface ActiveVaultData {
   vaultId: string;
   name: string;
   icon: IconName;
   color: string;
   blurb: string;
-  /** False when this is the last vault on its gateway — never delete the only one. */
   deletable: boolean;
-  /** Present only on a REMOTE connection; primordial local has no disconnect (#665). */
   connection?: RemoteConnectionData;
 }
 
@@ -40,7 +37,6 @@ export async function loadThisDeviceData(): Promise<ThisDeviceData> {
   };
 }
 
-/** Only what this build can truthfully produce — never a hard-coded version. */
 export async function loadSettingsStamp(): Promise<string> {
   const version = await window.CentraidApi.getChangelog?.()
     .then((changelog) => changelog.currentVersion.replace(/^v/iu, ""))
@@ -68,7 +64,6 @@ export async function setOfflineCopy(enabled: boolean): Promise<boolean> {
   return result.rememberDevice;
 }
 
-/** `removeGateway` purges local state; clearing `onboardingCompletedAt` returns the shell to onboarding. */
 export async function forgetThisDeviceLocally(
   gatewayId: string | undefined
 ): Promise<void> {
@@ -96,7 +91,6 @@ export async function loadActiveVaultData(): Promise<ActiveVaultData | null> {
   };
 }
 
-/** Remote only. `listVaults()` is the sibling set. Local resolves to `{}`. */
 async function loadRemoteConnection(
   activeVaultId: string,
   vaultList: readonly { vaultId: string; name: string }[]
@@ -118,8 +112,6 @@ async function loadRemoteConnection(
     },
   };
 }
-
-// Phone bridge: tunnel endpoint outlives renderer reloads. No Import pane (#807).
 
 export function phoneCallbacks(
   showToast: (m: string) => void

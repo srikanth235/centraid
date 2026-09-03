@@ -78,8 +78,6 @@ async function* temporaryPlaintext(input: {
   if (directory.totalSize !== input.expectedSize) {
     throw new Error("hash-pending plaintext size does not match its session");
   }
-  // Frames are authenticated and emitted in plaintext order; do not fetch a
-  // later frame before the preceding one has been validated and yielded.
   const readNextFrame = async function* (
     index: number
   ): AsyncGenerator<Buffer> {
@@ -101,10 +99,6 @@ async function* temporaryPlaintext(input: {
   yield* readNextFrame(0);
 }
 
-/**
- * Low-disk bare-stream lane: seal under an ephemeral identity while hashing,
- * then range-read/re-key provider temp frames once the content address exists.
- */
 export async function streamThroughUnknownHash(
   deps: UnknownStreamDeps,
   input: {
@@ -206,7 +200,7 @@ export async function streamThroughUnknownHash(
             ...(input.stagedBy ? { stagedBy: input.stagedBy } : {}),
           });
         } catch {
-          // Custody is complete; a declined/failed preview remains backfillable.
+          // Intentionally empty.
         }
       }
       deps.emit();
@@ -245,10 +239,6 @@ export async function streamThroughUnknownHash(
       plain.pipe(sealBlobStream(finalKey, sha, received, remote.frameSize)),
       received
     );
-    // Direct-to-cold heuristic (#425): the CopyObject that mints
-    // the final CAS object carries STANDARD_IA for an eligible large original.
-    // The sha is only known post-stream and the staging row is written after
-    // custody, so the media type + size are handed in directly for the resolver.
     const storageClass = remote.storageClassFor?.(sha, "cas", {
       mediaType,
       byteSize: received,

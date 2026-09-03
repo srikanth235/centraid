@@ -1,9 +1,3 @@
-// Proves the ReplicaSqliteStore core is driver-neutral: the same corpus runs
-// against the sqlite-wasm adapter (the web engine) and a node:sqlite adapter
-// (the CI stand-in for op-sqlite, which cannot load under vitest on macOS/node).
-// This half is the row, change-batch and search spec; the windowed bootstrap
-// walk and page reclamation are `store-core-bootstrap-walk.test.ts`, and the
-// node-driver maintenance suite is `store-core-storage-lifecycle.test.ts`.
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import type { Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { beforeAll, describe, expect, test } from "vitest";
@@ -315,12 +309,6 @@ describe("store-core", () => {
     });
 
     test("an index churned by upserts and deletes answers like a freshly built one", () => {
-      // The FTS index is addressed by rowid rather than rescanned (see the DDL
-      // note on `replica_row.row_key`). Rowid discipline is only worth anything
-      // if it leaves the SAME index behind: this drives one store through
-      // update, delete and re-add, builds a second store directly at the
-      // resulting row set, and compares the search answers whole — hit set,
-      // order, bm25 `_rank` and `_snippet` included.
       const churned = makeStore();
       const clean = makeStore();
       try {
@@ -384,7 +372,6 @@ describe("store-core", () => {
             clean.search({ ...query, query: text }).rows
           );
         }
-        // Not vacuously equal: the churn really did move the hit set.
         expect(
           churned
             .search({ ...query, query: "garden" })

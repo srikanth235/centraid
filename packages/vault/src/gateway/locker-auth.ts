@@ -1,21 +1,3 @@
-/**
- * Locker user-presence authentication (#630).
- *
- * Credentials are verified with scrypt over an HMAC keyed by the vault seal
- * key. The database therefore contains no verifier that can be attacked from
- * a vault.db copy alone. Unlock sessions and one-time item permits exist only
- * in this gateway instance's memory; restarting the gateway always relocks.
- *
- * The derivation is ASYNC (#659). scrypt at N=2^15 is ~100 ms of
- * deliberate CPU, and `scryptSync` spent it on the event loop: one unlock
- * froze every other request, SSE subscriber, and automation tick on the
- * gateway — the exact shape docs/coding-standards.md D1 names. `scrypt` does
- * the same work on libuv's threadpool. Parameters, the peppering HMAC, the
- * equal-cost fake derivation for unknown credential ids, and the
- * constant-time compare are all unchanged: this is a latency fix, and it must
- * never become an auth-behaviour change.
- */
-
 import { createHmac, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
@@ -35,7 +17,6 @@ const SCRYPT_OPTIONS = {
   p: 1,
   maxmem: 64 * 1024 * 1024,
 } as const;
-/** Same KDF, same parameters, off the event loop (#659). */
 const scryptAsync = promisify(scrypt) as (
   password: Buffer,
   salt: Uint8Array,
@@ -75,7 +56,6 @@ export interface LockerAuthResult {
   ok: boolean;
   configured: boolean;
   authenticated?: boolean;
-  /** True when any unlock session is live on this gateway (not caller-specific). */
   unlocked?: boolean;
   sessionToken?: string;
   itemToken?: string;
@@ -149,29 +129,15 @@ export class LockerAuthentication {
     }
   }
 
-  /** True once a passphrase or device credential has been configured. */
   isConfigured(): boolean {
     return this.configured();
   }
 
-  /**
-   * True while any unlock session is still live on this gateway process.
-   * Companion fill and candidate listing use this so the locked state is
-   * data-keyed rather than caller-keyed at the HTTP layer.
-   */
   isUnlocked(): boolean {
     this.sweep();
     return this.sessions.size > 0;
   }
 
-  /**
-   * Gate every Locker sealed-column reveal when authentication is configured.
-   *
-   * - UI / agent reveals consume a one-time item permit bound to the session.
-   * - Companion fill only requires the vault to be unlocked (any live session);
-   *   the origin re-check still lives on the fill query. While locked, fill
-   *   cannot harvest passwords from a paired device.
-   */
   authorizeReveal(
     authentication: { sessionToken?: string; itemToken?: string } | undefined,
     itemId: string,
@@ -188,11 +154,6 @@ export class LockerAuthentication {
     this.consumeItemPermit(authentication, itemId);
   }
 
-  /**
-   * Consume one item permit before plaintext leaves the vault. A permit is
-   * bound to both the unlock session and item id, expires in 30 seconds, and
-   * is deleted before reveal so retries cannot replay it.
-   */
   consumeItemPermit(
     authentication: { sessionToken?: string; itemToken?: string } | undefined,
     itemId: string
@@ -225,9 +186,6 @@ export class LockerAuthentication {
   }
 
   private status(sessionToken?: string): LockerAuthResult {
-    // Status is a passive read — do not slide the session timeout, or any
-    // automation/device writing to locker.item (which triggers client refresh)
-    // would keep the unlock window open with nobody at the keyboard.
     const authenticated = sessionToken ? this.peekSession(sessionToken) : false;
     const unlocked = this.sessions.size > 0;
     this.receipt("status", authenticated || unlocked ? "allow" : "deny", null, {
@@ -486,9 +444,6 @@ export class LockerAuthentication {
   private async verify(credentialId: string, secret: string): Promise<boolean> {
     const row = this.credential(credentialId);
     if (!row) {
-      // Equal-cost fake derivation prevents a missing id from becoming a
-      // credential-enumeration timing oracle. Awaited for the same reason it
-      // is computed at all: the cost must be PAID, not merely started.
       await this.derive(secret, Buffer.alloc(16));
       return false;
     }
@@ -513,7 +468,6 @@ export class LockerAuthentication {
     return { sessionToken, expiresAt: iso(expiresAt) };
   }
 
-  /** Read-only session check — does not extend expiry. */
   private peekSession(sessionToken: string): boolean {
     const session = this.sessions.get(sessionToken);
     if (!session || session.expiresAt <= this.clock()) {

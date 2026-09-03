@@ -1,7 +1,3 @@
-// The vault.db size ladder (#659), mirroring journal-limit's shape:
-// no limit set behaves exactly like the pre-ladder daily gate, and an
-// over-limit file narrows one rung per sweep down to a hard floor.
-
 import { describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "./bootstrap.js";
@@ -51,7 +47,6 @@ describe("vault size ladder", () => {
         rung,
         dailyGateElapsed: false,
       });
-      // The daily gate is bypassed while over the limit.
       expect(decision.run).toBe(true);
       expect(decision.overLimit).toBe(true);
       windows.push(decision.keepDays);

@@ -1,8 +1,3 @@
-// The headless block layer, pinned once (#765).
-//
-// The claims shared by both kits are asserted here and nowhere else: the kit
-// tests keep their render assertions (which node takes `net`, which style
-// takes the touch floor) and do not restate the arithmetic.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -95,8 +90,6 @@ describe(barShares, () => {
   });
 
   it("never draws a day that measured something as nothing", () => {
-    // $0.004 against a $4 peak is 0.1% — below the rounding floor, and the
-    // whole point of the chart is that it is not the same as a $0 day.
     expect(barShares([4, 0.004, 0])).toStrictEqual([100, 1, 0]);
   });
 
@@ -121,7 +114,6 @@ describe(dayFold, () => {
     expect(buckets).toHaveLength(30);
     expect(buckets[0]?.date).toBe(day(-29));
     expect(buckets.at(-1)?.date).toBe(day(0));
-    // The spike is its own column, which is the whole reason not to sample.
     expect(buckets.at(-2)?.costUsd).toBeCloseTo(0.4);
     expect(buckets.at(-1)?.runs).toBe(3);
   });
@@ -183,8 +175,6 @@ describe(distributionRows, () => {
       "codex",
       "gemini-cli",
     ]);
-    // $2.50 of $3.404 is 73%, NOT the 100% a bar drawn against the maximum
-    // would give the leading row.
     expect(rows.map((row) => row.share)).toStrictEqual([73, 26, 1]);
     expect(rows[0]?.value).toBe("$2.50 · 11k");
   });

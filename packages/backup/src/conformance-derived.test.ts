@@ -1,8 +1,3 @@
-/**
- * Direct naming of conformance-derived.ts (#545).
- * Runs the derived cases against LocalBackupProvider (same as the suite spread).
- */
-
 import { promises as fs } from "node:fs";
 
 import { describe, expect, test } from "vitest";
@@ -30,7 +25,6 @@ describe("providerDerivedConformanceCases (direct)", () => {
 
   test.each(cases.map((c) => [c.name, c] as const))("%s", async (_name, c) => {
     await c.run();
-    // requireAssertions: capability-gated cases may no-op without expects.
     expect(c.name.length).toBeGreaterThan(0);
   });
 });

@@ -1,11 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); social owns the whole conversation loop, so it is large by design.
-// Social domain commands (§07): the domain resolves raw addresses to parties
-// (never a duplicate person per channel) and owns conversation state. The
-// message state machine — draft → sent → delivered → read | failed — moves
-// outbound only via social.send_message, the highest-risk command in the
-// model: risk=high, so apps and agents park for owner confirmation while the
-// owner acts directly. Sending marks state; transport is a projection-side
-// concern (the gateway keeps no byte custody and opens no sockets).
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -13,7 +6,6 @@ import { sha256Hex } from "../ids.js";
 import { bindContactReach } from "./contact-reach.js";
 import { assertTextBodyWithinBudget } from "./inline-body-guard.js";
 
-/** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
   if (ctx.identity.partyId) return ctx.identity.partyId;
   const owner = ctx.db
@@ -23,7 +15,6 @@ function actorPartyId(ctx: HandlerCtx): string {
   return owner.self_party_id;
 }
 
-/** `:scheme` as the channel axis names it — `tel` is `phone` on a channel. */
 const REACH_KIND_OF_SCHEME_SQL = `CASE :scheme WHEN 'tel' THEN 'phone' ELSE :scheme END`;
 
 const RESOLVE_IDENTITY: CommandDefinition = {
@@ -58,9 +49,6 @@ const RESOLVE_IDENTITY: CommandDefinition = {
       value: 1,
     },
     {
-      // A handle bound to a DIFFERENT party is an identity fork. Asked of
-      // BOTH stores: reach lives in channels, claimed handles in the
-      // register, and half the forks hide in whichever is not consulted.
       name: "handle_not_claimed_elsewhere",
       sql: `SELECT (
               (SELECT count(*) FROM core_party_identifier
@@ -103,8 +91,6 @@ function resolveIdentity(ctx: HandlerCtx): Record<string, unknown> {
     value: string;
     label?: string;
   };
-  // Email and phone are REACH and bind as channels; a claimed handle is an
-  // identity KEY in the register (#883). One call decides which.
   const channelId = bindContactReach(ctx.db, {
     channelId: ctx.newId(),
     partyId: input.party_id,
@@ -144,8 +130,6 @@ function resolveIdentity(ctx: HandlerCtx): Record<string, unknown> {
       ctx.wrote("core.party_identifier", identifierId);
     }
   } else ctx.wrote("social.contact_channel", channelId);
-  // Backfill identity without rewriting the messages: the raw handle stays
-  // for audit.
   const participants = ctx.db
     .prepare(
       "UPDATE social_thread_participant SET party_id = ? WHERE handle = ? AND party_id IS NULL"
@@ -194,7 +178,6 @@ const DRAFT_MESSAGE: CommandDefinition = {
   },
   preconditions: [
     {
-      // Either an existing thread or a recipient to open one with.
       name: "thread_or_recipient_exists",
       sql: `SELECT (CASE
               WHEN :thread_id IS NOT NULL THEN (SELECT count(*) FROM social_thread WHERE thread_id = :thread_id)
@@ -238,7 +221,6 @@ function draftMessage(ctx: HandlerCtx): Record<string, unknown> {
       )
       .run(threadId, input.channel ?? "dm", input.subject ?? null, ctx.now);
     ctx.wrote("social.thread", threadId);
-    // A self-thread is one participant, not a UNIQUE collision.
     for (const partyId of new Set([
       sender,
       input.recipient_party_id as string,
@@ -253,10 +235,6 @@ function draftMessage(ctx: HandlerCtx): Record<string, unknown> {
       ctx.wrote("social.thread_participant", tpId);
     }
   }
-  // Rent the bytes, own the reference (P2): identical bodies dedupe on sha256.
-  // text/plain stays inline forever (the FTS trigger reads content_uri
-  // in-transaction, no CAS redirect possible) — refuse rather than let an
-  // unbounded draft body bloat vault.db (#367).
   assertTextBodyWithinBudget(input.body_text, "text/plain");
   const bodyBytes = Buffer.from(input.body_text, "utf8");
   const sha = sha256Hex(input.body_text);
@@ -324,7 +302,6 @@ const SEND_MESSAGE: CommandDefinition = {
   },
   preconditions: [
     {
-      // Only drafts send: sent/delivered/read/failed are provider-sync states.
       name: "message_is_draft",
       sql: `SELECT count(*) AS n FROM social_message WHERE message_id = :message_id AND delivery = 'draft'`,
       column: "n",
@@ -342,8 +319,6 @@ const SEND_MESSAGE: CommandDefinition = {
     },
   ],
   idempotency: "once",
-  // Tier 3 semantic egress (#306): structure cannot verify a send, so it
-  // parks for every non-owner caller.
   risk: "high",
   confirm: true,
   handler: sendMessage,
@@ -371,10 +346,6 @@ function sendMessage(ctx: HandlerCtx): Record<string, unknown> {
   });
   return { message_id: input.message_id, delivery: "sent" };
 }
-
-// There is deliberately no card command (#883): the role line and nickname
-// belong to `people.edit_person`, the note to `people.add_note`, the favourite
-// to `people.star_person`. A second writer is how two copies disagree.
 
 const MARK_THREAD_READ: CommandDefinition = {
   name: "social.mark_thread_read",
@@ -413,8 +384,6 @@ const MARK_THREAD_READ: CommandDefinition = {
       value: 1,
     },
   ],
-  // Opening a thread re-stamps the cursor with a newer instant every time —
-  // repeated marks are the normal case, not a replay to refuse.
   idempotency: "idempotent",
   risk: "low",
   handler: markThreadRead,
@@ -427,9 +396,6 @@ function markThreadRead(ctx: HandlerCtx): Record<string, unknown> {
     .get() as {
     self_party_id: string;
   };
-  // The owner reads their own inbox: a missing participant row means the
-  // owner simply hasn't spoken in this thread yet — joining as a silent
-  // participant keeps the projection true (drafting later reuses the row).
   const existing = ctx.db
     .prepare(
       "SELECT tp_id FROM social_thread_participant WHERE thread_id = ? AND party_id = ?"

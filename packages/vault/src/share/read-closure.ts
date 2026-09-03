@@ -1,7 +1,3 @@
-// ORIGIN half of a share (#726): read a closure, write nothing — result is
-// `WireClosure` (closure.ts). ONE closure covers a SET of items: pooled row
-// tables mean re-imported photographs yield one content item.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { mediaLocationPolicyForVault } from "../blob/staging.js";
@@ -32,10 +28,6 @@ const CONTENT_ITEM_COLUMNS = `content_id, media_type, content_uri, sha256, byte_
 const DERIVATIVE_COLUMNS = `derivative_id, content_id, variant, sha256, media_type,
        byte_size, text_content, created_at`;
 
-// The STAR does not travel (#916). It was a `favorite` column on the asset and
-// rode the closure like any other field; it is now one `starred` flags tag,
-// and a tag is the ORIGIN member's judgment about their own copy. An audience
-// receives the photograph, not the sender's opinion of it.
 const MEDIA_ASSET_COLUMNS = `asset_id, content_id, kind, captured_at, tz_offset_min,
        capture_group_id, width, height, duration_s, exif_json,
        archived_at, deleted_at, purge_at`;
@@ -46,7 +38,6 @@ const COLLECTION_ENTRY_TYPES = new Set<ShareableItemType>([
   "core.content_item",
 ]);
 
-/** The pooled row tables, keyed by primary key while the read runs. */
 interface ClosureDraft {
   contentItems: Map<string, ContentItemRow>;
   derivatives: Map<string, DerivativeRow>;
@@ -73,12 +64,6 @@ function draft(): ClosureDraft {
   };
 }
 
-/**
- * Pool one content item, its derivatives, and their CAS addresses (only
- * blob-backed items earn a manifest entry, same rule as `liveBlobShas`).
- * False when the origin lacks the row — a fact for a Tally receipt; an error
- * when asked for by name.
- */
 function poolContent(
   origin: DatabaseSync,
   into: ClosureDraft,
@@ -107,7 +92,6 @@ function poolContent(
     .all(contentId) as unknown as DerivativeRow[];
   for (const derivative of derivatives) {
     into.derivatives.set(derivative.derivative_id, derivative);
-    // Binary variants live in the CAS; semantic ones are inline text.
     if (derivative.sha256 === null || into.blobs.has(derivative.sha256))
       continue;
     into.blobs.set(derivative.sha256, {
@@ -136,11 +120,6 @@ function absent(itemType: ShareableItemType, itemId: string): VaultShareError {
   );
 }
 
-/**
- * Strip `latitude`/`longitude` from EXIF per the ORIGIN's `media.location`
- * policy (threat 8), mirroring projection-ingest.ts. Boolean `has_location`
- * survives; unparseable JSON passes through unchanged.
- */
 function stripGpsFromExif(exifJson: string | null): string | null {
   if (exifJson === null) return null;
   let exif: Record<string, unknown>;
@@ -228,10 +207,6 @@ function poolCollection(
 
 const DOCS_FOLDER_SCHEME_URI = "https://centraid.dev/schemes/folders";
 
-/**
- * Pool the Docs folder closure. A folder owns every document filed below it,
- * so re-reading after an ordinary `core.add_document` follows the new child.
- */
 function poolDocsFolder(
   origin: DatabaseSync,
   into: ClosureDraft,
@@ -337,23 +312,12 @@ function poolItem(
 }
 
 export interface ReadShareClosureInput {
-  /** Gateway id of the origin vault, carried as provenance to the audience. */
   originVaultId: string;
   itemType: ShareableItemType;
-  /** Row ids in the ORIGIN vault. Repeats collapse to one item. */
   itemIds: readonly string[];
-  /**
-   * True only for a cross-owner edge (#726 P3 threat 8): gates the ORIGIN's
-   * `media.location` policy against `exif_json`. Same-owner edges move data
-   * exactly as ingested. Defaults false; only `judgeEdgeCrossing` opts in.
-   */
   crossOwner?: boolean;
 }
 
-/**
- * Resolve everything a share of `itemIds` needs. READ-ONLY: an unknown item is
- * refused with nothing placed anywhere.
- */
 export function readShareClosure(
   origin: DatabaseSync,
   input: ReadShareClosureInput

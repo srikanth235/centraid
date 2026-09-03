@@ -1,9 +1,3 @@
-/**
- * THE REPLICA READ GRAMMAR, COMPILED TO SQL (#883): a clause compiles to a
- * VERDICT — -1 dropped, 0 kept, >0 escalates — because a value this seat
- * cannot compare as the canonical vault would must rerun online. SQLite's own
- * BINARY collation over UTF-8 bytes IS that comparison.
- */
 import { OnlineOnlyError, ReplicaProtocolError } from "./errors.js";
 import {
   assertColumn,
@@ -21,7 +15,6 @@ import {
   UNORDERED_TYPES,
 } from "./read-plan-clauses.js";
 import type { PlanBuilder, ReplicaEscalation } from "./read-plan-clauses.js";
-// Type-only: erases the `store-core.ts` cycle.
 import type { ReplicaBindValue } from "./store-core.js";
 import { REPLICA_SYNTHETIC_PRIMARY_KEY } from "./types.js";
 import type { ReplicaEntitySchema, ReplicaReadRequest } from "./types.js";
@@ -42,7 +35,6 @@ export type {
 
 export interface ReplicaOverlayBinding {
   rowIds: string;
-  /** `{i,p,o,v}`: row id, payload, oversized fields, version. */
   rows: string;
 }
 
@@ -51,11 +43,8 @@ export interface ReplicaOrderGuard {
   escalation: ReplicaEscalation;
 }
 
-/** ONE DATABASE'S COPY OF THE ENTITY (#883): a composed scan UNION ALLs one
- *  arm per source, ordered and limited ONCE, so guards span EVERY one. */
 export interface ReplicaPlanSource {
   table?: string;
-  /** THIS database's shape id; vaults differ. */
   shapeId: string;
   overlay?: ReplicaOverlayBinding;
 }
@@ -67,7 +56,6 @@ export const REPLICA_PLAN_SOURCE_COLUMN = "source_index";
 export interface ReplicaReadPlan {
   sql: string;
   binds: ReplicaBindValue[];
-  /** Verdict code `n` names `escalations[n - 1]`. */
   escalations: ReplicaEscalation[];
   orderGuards: ReplicaOrderGuard[];
   tieCensus?: { sql: string; binds: ReplicaBindValue[] };
@@ -101,7 +89,6 @@ export function assertReplicaPage(
 ): void {
   const first = rows[0];
   if (first === undefined) return;
-  // Escalating rows sort first: row zero is necessary and sufficient.
   if (first.verdict > 0) {
     const escalation = plan.escalations[first.verdict - 1];
     if (!escalation) {
@@ -116,8 +103,6 @@ export function assertReplicaPage(
   }
 }
 
-/** A tie under an opaque primary key makes `ORDER BY ... LIMIT` unstable.
- *  NULLs form ONE group. */
 export function assertReplicaTieCensus(row: ReplicaTieCensusRow): void {
   const groups = row.distinct_values + (row.non_null < row.kept ? 1 : 0);
   if (row.kept > groups) {
@@ -162,7 +147,6 @@ function orderGuards(
         ? "orderBy requires scalar values"
         : "primary-key orderBy tie-break requires scalar values",
   });
-  // D3: either class ALONE is fine, hence the PRODUCT of two maxima.
   const alias = `${role}_straddle`;
   select.push(
     `(max(CASE WHEN ${jsonType(column)} IN (${quoted(TEXT_TYPES)})` +
@@ -180,7 +164,6 @@ function orderGuards(
   return guards;
 }
 
-/** Local SQLite rows, not a network response; a ten-year library exceeds 10k. */
 export const REPLICA_MAX_LOCAL_ROWS = 100_000;
 export const REPLICA_DEFAULT_LOCAL_ROWS = 1000;
 
@@ -209,8 +192,6 @@ function sourceSql(
   const base = `SELECT ${SOURCE_COLUMNS} FROM ${table}
                  WHERE shape_id = ? AND entity = ?`;
   if (!overlay) return { sql: base, binds: [] };
-  // O(mutations), never O(rows), bound as ONE JSON value, so filter, order
-  // and limit still run once.
   return {
     sql: `${base} AND row_id NOT IN (SELECT value FROM json_each(?))
        UNION ALL
@@ -221,7 +202,6 @@ function sourceSql(
   };
 }
 
-/** `now` is threaded in to keep `within-days` pure. */
 export function planReplicaRead(
   schema: ReplicaEntitySchema,
   request: ReplicaReadRequest,
@@ -233,7 +213,6 @@ export function planReplicaRead(
   ]);
 }
 
-/** Clauses compile ONCE and repeat per arm: one verdict code, every source. */
 export function planComposedReplicaRead(
   schema: ReplicaEntitySchema,
   request: ReplicaReadRequest,
@@ -260,7 +239,6 @@ export function planComposedReplicaRead(
     branches.push(
       ...guards,
       ...body.guards,
-      // `IFNULL`: a comparison against SQL NULL is NULL, and reads as false.
       `WHEN NOT IFNULL(${body.match}, 0) THEN -1`
     );
   }
@@ -272,7 +250,6 @@ export function planComposedReplicaRead(
   if (composed) select.push(REPLICA_PLAN_SOURCE_COLUMN);
   const guards: ReplicaOrderGuard[] = [];
   const order: string[] = [];
-  // Only when a clause can escalate: an unfiltered read keeps index order.
   if (builder.escalations.length > 0) order.push("(verdict = 0) ASC");
   if (request.orderBy) {
     const column = request.orderBy.column;
@@ -285,18 +262,15 @@ export function planComposedReplicaRead(
     if (visiblePrimaryKey !== undefined && visiblePrimaryKey !== column) {
       assertColumn(schema, visiblePrimaryKey);
       guards.push(...orderGuards(visiblePrimaryKey, "key", schema, select));
-      // Mirrors the canonical read's fixed ASC tie-break; keeps paging stable.
       order.push(`${jsonValue(visiblePrimaryKey)} ASC`);
     }
   }
-  // D6: unordered the source is the OUTER key, ordered the INNERMOST.
   if (composed && !request.orderBy)
     order.push(`${REPLICA_PLAN_SOURCE_COLUMN} ASC`);
   order.push("row_id ASC");
   if (composed && request.orderBy)
     order.push(`${REPLICA_PLAN_SOURCE_COLUMN} ASC`);
 
-  // Bind order follows STATEMENT order: the CASE precedes its source, per arm.
   const scanBinds: ReplicaBindValue[] = [];
   const scan = sources
     .map((entry, index) => {

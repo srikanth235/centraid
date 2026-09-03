@@ -1,8 +1,3 @@
-// Headless Insights aggregation (#775, widened #883) — the two kits share these
-// folds AND the sentences built on them. The screens keep their own number
-// formats and row shapes, lent through `InsightWords`; every rule that turns a
-// rollup into a figure, a fact, a column or a breakdown lives here.
-
 import { barShares, dayFold, dayMark } from "./bars";
 import type {
   DistributionDatum,
@@ -22,7 +17,6 @@ export interface InsightSourceRollup {
   bucket: InsightSourceBucket;
   runs: number;
   costUsd: number;
-  /** `null` means the window had no runs to use as a denominator. */
   sharePercent: number | null;
 }
 
@@ -38,7 +32,6 @@ function sourceBucket(kind: string): InsightSourceBucket {
   return "apps";
 }
 
-/** Coalesce source rows into the three buckets in the product's fixed order. */
 export function insightSourceRollups(
   rows: readonly InsightSourceDatum[]
 ): InsightSourceRollup[] {
@@ -84,13 +77,10 @@ export interface InsightMeasuredDatum {
 
 export interface InsightBreakdown {
   rows: DistributionDatum[];
-  /** Appended to each row's percentage — "73% of spend". */
   unit: string;
-  /** The section head's count line — what the rows are ordered by. */
   meta: string;
 }
 
-/** Word one breakdown using the caller's platform-specific number formats. */
 export function insightBreakdown(
   items: readonly InsightMeasuredDatum[],
   formatCost: (value: number) => string,
@@ -111,8 +101,6 @@ export function insightBreakdown(
   };
 }
 
-/** The host's own number words — `insK` says "12k" where `formatCount` says
- *  "12.3k". `forecastNote` rides along: copy lives with the surfaces. */
 export interface InsightWords {
   cost: (value: number) => string;
   count: (value: number) => string;
@@ -133,7 +121,6 @@ export interface InsightRollupKpis {
   failedCostUsd: number;
   unpricedRuns: number;
   unreportedRuns: number;
-  /** ABSENT when nothing finished — withheld, never zeroed. */
   medianRunMs?: number;
 }
 
@@ -146,7 +133,6 @@ export interface InsightDayRow {
   failedCostUsd: number;
 }
 
-/** Both seats' `InsightsSummary` satisfies this structurally. */
 export interface InsightRollup {
   generatedAt: number;
   kpis: InsightRollupKpis;
@@ -186,13 +172,10 @@ export interface InsightRollup {
   attention?: { label: string; share: number };
 }
 
-/** "1 run" / "12 runs" — the count every breakdown row ends with. */
 export function insightRunWord(runs: number): string {
   return `${runs.toLocaleString()} ${runs === 1 ? "run" : "runs"}`;
 }
 
-/** ONE COLUMN PER DAY up to `max` (#775): sampling averages away the expensive
- *  afternoon this chart exists to show. */
 export function insightColumnCount(windowDays: number, max: number): number {
   return Math.max(1, Math.min(windowDays, max));
 }
@@ -200,25 +183,16 @@ export function insightColumnCount(windowDays: number, max: number): number {
 export interface InsightColumn {
   key: string;
   label: string;
-  /** 0–100 of the tallest column's spend. */
   share: number;
-  /** The failed part OF `share`, so the two stack to the column. */
   failed: number;
 }
 
-/**
- * A column measures SPEND, so its failed slice is failed SPEND: the run ratio
- * would paint one cheap failure as most of the day. A FLOOR where spend is
- * partly archived — digests carry no failure-cost split.
- */
 function failedShare(
   columnShare: number,
   failedCostUsd: number,
   costUsd: number
 ): number {
   if (columnShare <= 0 || failedCostUsd <= 0 || costUsd <= 0) return 0;
-  // Any failed spend takes at least the one-percent floor `barShares` gives:
-  // a segment rounded away lies.
   return Math.min(
     columnShare,
     Math.max(1, Math.round((failedCostUsd / costUsd) * columnShare))
@@ -228,12 +202,9 @@ function failedShare(
 export interface InsightColumnOptions {
   windowDays: number;
   columns: number;
-  /** Only ever used for an UNSTAMPED rollup. */
   now: number;
 }
 
-/** SPEND per day, not runs: by volume, twenty cheap chats and one long build
- *  are the same column. */
 export function insightColumns(
   rollup: InsightRollup,
   options: InsightColumnOptions,
@@ -245,8 +216,6 @@ export function insightColumns(
     windowDays: options.windowDays,
   };
   const buckets = dayFold(rollup.daily, fold);
-  // The fold measures ONE metric per pass, so the failed arm is a SECOND pass
-  // with the same options — column i lines up by construction.
   const failedBuckets = dayFold(
     rollup.daily.map((day) => ({
       costUsd: day.failedCostUsd,
@@ -281,7 +250,6 @@ export function insightColumns(
   });
 }
 
-/** Real dates, oldest → newest, so a spike can be checked against a day. */
 export function insightAxisMarks(
   rollup: InsightRollup,
   windowDays: number,
@@ -301,7 +269,6 @@ export function insightAxisMarks(
   return marks;
 }
 
-/** The only place a column's value is stated — the plot has no value axis. */
 export function insightPeakNote(
   rollup: InsightRollup,
   words: InsightWords
@@ -316,7 +283,6 @@ export function insightPeakNote(
   ].join(" · ");
 }
 
-/** Never "free" for what could not be priced: an unpriced run is unknown. */
 export function insightPricingLine(
   rollup: InsightRollup,
   words: InsightWords
@@ -338,7 +304,6 @@ export function insightPricingLine(
   return `${parts.join(" · ")}.`;
 }
 
-/** "At least" while any run is unpriced. */
 export function insightSpendFigure(
   rollup: InsightRollup,
   windowDays: number,
@@ -379,14 +344,11 @@ export function insightSpendFacts(
       value: words.cost(kpis.forecastCostUsd),
     },
   ];
-  // Withheld, not zeroed: a window holding no finished run has no typical
-  // duration, and "0s" would be a claim about runs nobody timed.
   if (kpis.medianRunMs !== undefined)
     facts.push({ key: "typical run", value: words.duration(kpis.medianRunMs) });
   if (kpis.failedRuns > 0)
     facts.push({
       key: "failed",
-      // The one fact that is bad news, so the one that takes `net`.
       net: true,
       value: `${String(kpis.failedRuns)} · ${words.cost(kpis.failedCostUsd)} spent`,
     });
@@ -398,7 +360,6 @@ export function insightSpendFacts(
   return facts;
 }
 
-/** No per-source failure count: the rollup does not attribute failures. */
 export function insightSourceFacts(
   rollup: InsightRollup,
   words: InsightWords
@@ -416,7 +377,6 @@ export interface InsightBreakdowns {
   effort: InsightBreakdown;
 }
 
-/** The page's four distributions, worded once. */
 export function insightBreakdowns(
   rollup: InsightRollup,
   words: InsightWords
@@ -449,9 +409,6 @@ export function insightBreakdowns(
 
 const CSV_HEADER = "date,runs,failed_runs,tokens,cost_usd,failed_cost_usd";
 
-/** The numbers the chart is drawn from, in the order it draws them — the
- *  outcome split included, or the export would omit half of what a column
- *  shows. `failed_cost_usd` is the same floor the segment is. */
 export function insightRollupCsv(rollup: InsightRollup): string {
   const rows = rollup.daily.map((day) =>
     [

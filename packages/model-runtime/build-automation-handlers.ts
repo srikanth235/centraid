@@ -1,9 +1,5 @@
 import path from "node:path";
 
-// Where the generated bundles land. The repo root by default; the drift check
-// in `automation-handlers/bundle-drift.test.ts` (#781) points it at a temp
-// directory so it can rebuild and diff against the committed bundles without
-// writing into the working tree.
 const root = process.env.CENTRAID_AUTOMATION_BUNDLE_ROOT
   ? path.resolve(process.env.CENTRAID_AUTOMATION_BUNDLE_ROOT)
   : path.resolve(import.meta.dirname, "../..");
@@ -20,17 +16,7 @@ const handlers = [
     ),
   },
   ...(
-    [
-      "embed-image",
-      "embed-text",
-      "faces",
-      // Not a model recipe: `place-names` inlines a vendored settlement table
-      // (`src/gazetteer-data.ts`) instead of loading weights, so its bundle is
-      // large where the others are small and needs no `runtime/` assets at all.
-      // The build is the same one — one entrypoint, minified, self-contained.
-      "place-names",
-      "transcript",
-    ] as const
+    ["embed-image", "embed-text", "faces", "place-names", "transcript"] as const
   ).map((id) => ({
     entrypoint: path.join(import.meta.dirname, `automation-handlers/${id}.js`),
     output: path.join(

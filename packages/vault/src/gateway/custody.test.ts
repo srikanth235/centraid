@@ -1,9 +1,4 @@
 import { createHash } from "node:crypto";
-// File custody (§10): `backupVault` is the user-facing export ramp — VACUUM
-// INTO copies of the two SQLite files plus the blob CAS, hashed so the copy
-// is verifiable with standard tools. (`stageVaultDbs`, the old offsite
-// staging half, left with #408 — the backup path ships WAL segments
-// via wal-shipper.ts instead of rewriting the database per snapshot.)
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -51,15 +46,11 @@ describe("custody", () => {
     expect(existsSync(path.join(destDir, "blobs"))).toBe(true);
     expect(result.receiptId).toBeTruthy();
 
-    // "Verifiable independently" means the recorded hash IS the file's
-    // SHA-256 — what `shasum -a 256` prints — not an implementation artifact.
     const rawHash = createHash("sha256")
       .update(readFileSync(result.vaultPath))
       .digest("hex");
     expect(result.vaultSha256).toBe(rawHash);
 
-    // The copy is a real, independently openable SQLite file carrying the
-    // vault's own row — not just bytes that happen to exist.
     const copy = new DatabaseSync(result.vaultPath, { readOnly: true });
     try {
       const row = copy
@@ -70,7 +61,6 @@ describe("custody", () => {
       copy.close();
     }
 
-    // The receipt landed in the journal (appended, not overwritten).
     const receiptRow = db.audit
       .prepare("SELECT action FROM access_receipt WHERE receipt_id = ?")
       .get(result.receiptId) as { action: string } | undefined;

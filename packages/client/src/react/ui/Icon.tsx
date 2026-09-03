@@ -6,21 +6,10 @@ import type { IconName } from "@centraid/design";
 export interface IconProps {
   name: IconName;
   size?: number;
-  /**
-   * Stroke/fill color. Defaults to `currentColor` so the glyph inherits the
-   * surrounding CSS `color`. Mobile passes an explicit color; on the web we
-   * lean on inheritance.
-   */
   color?: string;
   strokeWidth?: number;
 }
 
-/**
- * Line icon, mirroring the mobile `<Icon>` API. Path data is the single
- * source of truth in @centraid/design, so desktop + mobile draw the same
- * glyphs. Emits the same SVG shape `iconSvg()` builds as a string — keep the
- * two in step so a component-drawn icon and a string-built one are pixel-equal.
- */
 export default function Icon({
   name,
   size = 20,

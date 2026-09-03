@@ -1,15 +1,3 @@
-/**
- * Civil-time laws for `timezone.ts` (#656 Layer 3 mutation seed).
- *
- * `recurrence.ts` is only correct if the wall-clock primitives underneath it
- * are, and reaching `timezone.ts` transitively through table-driven recurrence
- * cases is execution, not detection: swapping `<` for `<=` in the overlap sort,
- * dropping the day-clamp in `addWallMonths`, or padding the year to 2 digits
- * all still produce the same six asserted strings.
- *
- * Each test below states a law the module must obey for ALL inputs, never a
- * literal the current implementation happens to emit.
- */
 import { describe, expect, test } from "vitest";
 
 import { fc } from "@centraid/test-kit/fast-check";
@@ -37,11 +25,8 @@ const wallTime = fc
     second: fc.integer({ min: 0, max: 59 }),
     millisecond: fc.constant(0),
   })
-  // Spread into a plain object — fast-check records carry a null prototype,
-  // which `toStrictEqual` treats as a difference.
   .map((w): WallTime => ({ ...w }));
 
-/** Zones with distinct DST behaviour: none, southern, northern, half-hour. */
 const ZONES = [
   "Etc/UTC",
   "Asia/Kolkata",
@@ -56,8 +41,6 @@ describe("wall-clock algebra", () => {
     fc.assert(
       fc.property(wallTime, (wall) => {
         const parsed = parseWallIso(wallIso(wall));
-        // Round-trip must preserve EVERY field — a dropped pad or a swapped
-        // month/day would still produce a parseable string.
         expect(parsed).toStrictEqual(wall);
       }),
       { numRuns: 200, seed: 65601 }
@@ -77,8 +60,6 @@ describe("wall-clock algebra", () => {
   });
 
   test("years below 1000 keep four digits so ISO strings stay sortable", () => {
-    // String comparison is how `applyRecurrenceExceptions` orders future-scope
-    // exceptions; a 3-digit year would sort after every 4-digit one.
     const wall = parseWallIso("0999-01-02T03:04:05");
     expect(wall).not.toBeNull();
     expect(wallIso(wall as WallTime, false)).toBe("0999-01-02");
@@ -86,8 +67,6 @@ describe("wall-clock algebra", () => {
   });
 
   test("parseWallIso rejects a calendar date that does not exist", () => {
-    // Date.UTC silently rolls 2026-02-30 into March; the round-trip guard is
-    // the only thing that turns that into a rejection.
     expect(parseWallIso("2026-02-30")).toBeNull();
     expect(parseWallIso("2026-13-01")).toBeNull();
     expect(parseWallIso("2025-02-29")).toBeNull();
@@ -135,13 +114,11 @@ describe("wall-clock algebra", () => {
           const months =
             (moved.year - anchor.year) * 12 + (moved.month - anchor.month);
           expect(months).toBe(n);
-          // The day never overflows into the next month, and never grows.
           const movedLast = new Date(
             Date.UTC(moved.year, moved.month, 0)
           ).getUTCDate();
           expect(moved.day).toBeLessThanOrEqual(movedLast);
           expect(moved.day).toBe(Math.min(anchor.day, movedLast));
-          // Time of day is untouched by calendar arithmetic.
           expect(moved.hour).toBe(anchor.hour);
           expect(moved.minute).toBe(anchor.minute);
         }
@@ -178,9 +155,6 @@ describe("zone resolution", () => {
           const wall = zonedParts(instant, zone);
           const resolved = resolveWallTime(wall, zone);
           expect(resolved).not.toBeNull();
-          // The resolved instant must show the SAME wall clock in that zone.
-          // (During a fall-back overlap it is the earlier of the two, which
-          // still reads back identically.)
           expect(
             zonedParts(
               Date.parse((resolved as { instant: string }).instant),
@@ -194,21 +168,17 @@ describe("zone resolution", () => {
   });
 
   test("an overlap resolves to the EARLIER of the two instants", () => {
-    // 2026-11-01 01:30 America/New_York happens twice (EDT then EST).
     const wall = parseWallIso("2026-11-01T01:30:00") as WallTime;
     const resolved = resolveWallTime(wall, "America/New_York");
     expect(resolved?.overlap).toBe(true);
     const earlier = Date.parse(resolved?.instant as string);
-    // EDT is UTC-4, EST is UTC-5 — the earlier instant is the UTC-4 one.
     expect(new Date(earlier).toISOString()).toBe("2026-11-01T05:30:00.000Z");
     expect(earlier).toBeLessThan(Date.parse("2026-11-01T06:30:00.000Z"));
   });
 
   test("a spring-forward gap has no instant at all", () => {
-    // 2026-03-08 02:30 America/New_York never occurs.
     const wall = parseWallIso("2026-03-08T02:30:00") as WallTime;
     expect(resolveWallTime(wall, "America/New_York")).toBeNull();
-    // The same civil time one day later does occur.
     expect(
       resolveWallTime(
         parseWallIso("2026-03-09T02:30:00") as WallTime,
@@ -226,7 +196,6 @@ describe("zone resolution", () => {
   test("a non-overlapping instant is never flagged as an overlap", () => {
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 28 }), (day) => {
-        // July has no DST transition in any of the sampled zones.
         const wall = parseWallIso(
           `2026-07-${String(day).padStart(2, "0")}T09:00:00`
         ) as WallTime;

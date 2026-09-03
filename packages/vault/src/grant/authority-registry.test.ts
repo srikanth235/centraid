@@ -1,6 +1,3 @@
-// The registry is a CLOSURE claim (#883 V-registry), so what it must be tested
-// for is the absences: a triple it does not carry cannot be written.
-
 import { describe, expect, test } from "vitest";
 
 import {
@@ -27,7 +24,6 @@ describe("grant/authority-registry", () => {
           subject.fulfillment.edit
         );
       }
-    // One place declares a share verb; this is what proves the two agree.
     const shareTriples = AUTHORITY_REGISTRY.filter(
       (triple) =>
         triple.principalKind === "person" || triple.principalKind === "circle"
@@ -36,13 +32,9 @@ describe("grant/authority-registry", () => {
   });
 
   test("a structural exclusion is an ABSENCE, never a triple that refuses", () => {
-    // `locker.item` IS shareable and has no triple: secrets are never a
-    // standing grant (#750).
     expect(authorityTriple("person", "locker.item")).toBeUndefined();
     expect(isRegisteredAuthority("person", "locker.item", "view")).toBe(false);
     expect(registeredVerbs("person", "locker.item")).toStrictEqual([]);
-    // `app` is not a principal kind at all (V-split), and the cast is the
-    // point: the compiler refuses the comparison outright.
     expect(
       AUTHORITY_REGISTRY.some(
         (triple) => (triple.principalKind as string) === "app"
@@ -81,7 +73,6 @@ describe("grant/authority-registry", () => {
       false
     );
     expect(subjectWokenBy("media.asset", new Set(["media.asset"]))).toBe(true);
-    // A grant over an album is membership, not a snapshot (#825 G-membership).
     expect(
       subjectWokenBy("core.collection", new Set(["core.collection_entry"]))
     ).toBe(true);

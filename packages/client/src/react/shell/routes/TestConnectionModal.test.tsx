@@ -5,12 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import TestConnectionModal from "./TestConnectionModal.js";
 
-// connectFlowIO.js (pulled in transitively for local-vault loading elsewhere
-// in the module) imports gateway-client.js, which registers an
-// `onGatewayChanged` listener at module-load time — stub it so that load-time
-// side effect doesn't reach for a `window.CentraidApi` this file only wires
-// up inside `beforeEach` (same trap vaultModals.test.ts / ConnectFlow.test.tsx
-// sidestep).
 vi.mock(import("../../../gateway-client.js"), () => ({
   listVaults: () => Promise.resolve([]),
 }));

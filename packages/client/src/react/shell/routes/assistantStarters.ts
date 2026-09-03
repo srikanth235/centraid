@@ -1,13 +1,3 @@
-/*
- * Prompt starters for the assistant empty state (#420).
- *
- * Configurable via the gateway prefs store under `assistant.starters` (a JSON
- * string array), falling back to these defaults when unset/empty. Chosen over
- * deriving from installed apps because there is no cheap "recent activity"
- * source at the shell today — a prefs slot is the smallest honest surface and
- * mirrors the existing `model.<kind>.<subsystem>` prefs pattern.
- */
-
 export const DEFAULT_STARTERS: readonly string[] = [
   "What did I spend the most on last month?",
   "Who have I not talked to in a while?",
@@ -15,11 +5,6 @@ export const DEFAULT_STARTERS: readonly string[] = [
   "Which notes mention travel plans?",
 ];
 
-/**
- * Resolve the empty-state starters from prefs. Non-string / blank entries are
- * dropped and the list is capped; an absent or all-blank pref yields the
- * defaults.
- */
 export function resolveStarters(
   prefs: Record<string, unknown> | undefined
 ): string[] {

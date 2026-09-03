@@ -51,7 +51,6 @@ describe("tally", () => {
       .party_id;
   }
   function members(groupId: string): string[] {
-    // Membership lives on the group's circle (#310).
     return (
       db.vault
         .prepare(
@@ -82,8 +81,6 @@ describe("tally", () => {
   });
 
   test("avatar_color is stored exactly once per party — on people_profile, never on tally_friend (issue #441 A3)", () => {
-    // The same party is both a Tally friend and a People CRM contact; give it a
-    // people_profile carrying a hue (the one surviving home for a stored hue).
     const pid = addFriend("Dual Party");
     db.vault
       .prepare(
@@ -92,7 +89,6 @@ describe("tally", () => {
       )
       .run("profile-dual", pid, new Date().toISOString());
 
-    // tally_friend has no hue column at all — the consolidation dropped it.
     const tallyCols = (
       db.vault.prepare("PRAGMA table_info('tally_friend')").all() as {
         name: string;
@@ -100,7 +96,6 @@ describe("tally", () => {
     ).map((c) => c.name);
     expect(tallyCols).not.toContain("avatar_color");
 
-    // people_profile is the single home for a stored hue.
     const profileCols = (
       db.vault.prepare("PRAGMA table_info('people_profile')").all() as {
         name: string;
@@ -108,7 +103,6 @@ describe("tally", () => {
     ).map((c) => c.name);
     expect(profileCols).toContain("avatar_color");
 
-    // Exactly one stored hue exists for this party across the two 1:1 tables.
     const hues = db.vault
       .prepare(
         "SELECT avatar_color FROM people_profile WHERE party_id = ? AND avatar_color IS NOT NULL"
@@ -312,26 +306,19 @@ describe("tally", () => {
       })
     ).group_id;
     const xid = addRentExpense(gid, priya);
-    // A live expense refuses the group deletion.
     expect(invoke("tally.delete_group", { group_id: gid }).status).toBe(
       "failed"
     );
-    // delete_expense now soft-deletes (#441). The decision: a TRASHED
-    // (recoverable) expense STILL blocks group deletion until it purges — it is
-    // money history the owner could restore, so the group cannot be torn out from
-    // under it.
     out(invoke("tally.delete_expense", { expense_id: xid }));
     expect(invoke("tally.delete_group", { group_id: gid }).status).toBe(
       "failed"
     );
-    // Restore proves it round-trips losslessly, then re-trash + purge it.
     out(invoke("tally.restore_expense", { expense_id: xid }));
     out(invoke("tally.delete_expense", { expense_id: xid }));
     db.vault
       .prepare("UPDATE tally_expense SET purge_at = ? WHERE expense_id = ?")
       .run("2000-01-01T00:00:00Z", xid);
     gw.sweep(owner);
-    // Purged: the row and its splits (ON DELETE CASCADE) are gone.
     expect(
       (
         db.vault
@@ -352,7 +339,6 @@ describe("tally", () => {
           .get(xid) as { n: number }
       ).n
     ).toBe(0);
-    // Now the group is genuinely empty and deletes.
     expect(invoke("tally.delete_group", { group_id: gid }).status).toBe(
       "executed"
     );
@@ -368,7 +354,6 @@ describe("tally", () => {
       })
     ).group_id;
     const xid = addRentExpense(gid, priya);
-    // A memo is a knowledge_annotation targeting the canonical 'tally.expense' row.
     out(
       invoke("tally.set_expense_memo", {
         expense_id: xid,
@@ -384,14 +369,11 @@ describe("tally", () => {
           .get(xid) as { n: number }
       ).n;
     expect(memoCount()).toBe(1);
-    // Trash, lapse the grace window, sweep.
     out(invoke("tally.delete_expense", { expense_id: xid }));
     db.vault
       .prepare("UPDATE tally_expense SET purge_at = ? WHERE expense_id = ?")
       .run("2000-01-01T00:00:00Z", xid);
     gw.sweep(owner);
-    // The expense purged, and its memo annotation went with it — no dangling
-    // polymorphic pointer left behind.
     expect(
       (
         db.vault
@@ -433,8 +415,6 @@ describe("tally", () => {
         .status
     ).toBe("failed");
   });
-
-  // ── The finance bridge (issue #310 S1) ─────────────────────────────────
 
   test("settle_up involving the owner emits a canonical transaction and binds it", () => {
     const priya = addFriend();
@@ -526,7 +506,6 @@ describe("tally", () => {
         ],
       })
     ).expense_id;
-    // An "imported" canonical transaction, as a bank sync would land it.
     db.vault
       .prepare(
         `INSERT INTO core_account (account_id, owner_party_id, name, kind, currency, is_asset)

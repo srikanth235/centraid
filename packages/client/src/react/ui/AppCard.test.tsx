@@ -10,9 +10,6 @@ if (!app) {
   throw new Error("design-tokens must ship at least one built-in app");
 }
 
-// Vitest's `classNameStrategy: 'non-scoped'` returns the module-local names
-// (`styles.card` → 'card'), so these assertions match the authored classes.
-
 describe(AppCard, () => {
   it("emits the tile structure and the app name/blurb", () => {
     const html = renderToStaticMarkup(<AppCard app={app} stamp="2h ago" />);

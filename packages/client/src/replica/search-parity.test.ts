@@ -1,12 +1,3 @@
-/*
- * The replica's local search surface is a PROJECTION of the vault's FTS specs
- * (#883, ruling O-label): WHICH entities rank offline is this seat's decision,
- * but their names and columns are the vault's, and this pins them.
- *
- * A SOURCE SCAN, not an import: `@centraid/vault` is Node-only and not a
- * dependency of this package.
- */
-
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -21,7 +12,6 @@ const FTS_PATH = path.resolve(
 
 interface ScannedSpec {
   entity: string;
-  /** Direct columns only: a content body is never held eagerly. */
   columns: string[];
   deletedColumn?: string;
 }
@@ -92,7 +82,6 @@ describe("replica local search mirrors the vault's FTS specs", () => {
   const specs = scanFtsSpecs();
 
   it("the scan found the vault's live spec list", () => {
-    // Anti-vacuity: a regex that stopped matching would pass every claim below.
     expect(specs.size).toBeGreaterThanOrEqual(
       Object.keys(REPLICA_LOCAL_SEARCH).length
     );

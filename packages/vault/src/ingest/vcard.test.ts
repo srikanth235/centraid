@@ -1,5 +1,3 @@
-// vCard parser unit tests (#545).
-
 import { describe, expect, test } from "vitest";
 
 import { normalizeHandle, parseVcards } from "./vcard.js";

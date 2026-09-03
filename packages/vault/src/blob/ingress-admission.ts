@@ -7,7 +7,6 @@ import type { BlobTransferState } from "./transfer-state.js";
 
 const AVAILABILITY_PROBE_SHA = "0".repeat(64);
 
-/** A transfer interface alone is not availability; prove the provider answers a HEAD. */
 export async function requireRemote(
   remote: RemoteTier | null,
   capacityError: VaultBlobBackpressureError,
@@ -22,7 +21,6 @@ export async function requireRemote(
   return remote as RemoteTier & { transfer: RemoteBlobTransfer };
 }
 
-/** Apply both physical headroom and logical outbox-budget admission. */
 export function assertSpoolAdmission(
   deps: {
     cache: BlobCache;

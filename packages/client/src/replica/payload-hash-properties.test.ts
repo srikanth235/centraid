@@ -11,8 +11,6 @@ import type { ReplicaValue } from "./types.js";
 const nodeDigest: ReplicaDigest = (input) =>
   Promise.resolve(createHash("sha256").update(input, "utf8").digest("hex"));
 
-/** JSON-safe finite values (no NaN/Infinity, which fail closed in the hasher). */
-// Cast: fc.dictionary/letrec widen nested records to Record<string, unknown>.
 const jsonSafe = fc.letrec((tie) => ({
   value: fc.oneof(
     { depthSize: "small", withCrossShrink: true },
@@ -28,12 +26,6 @@ const jsonSafe = fc.letrec((tie) => ({
   ),
 })).value as fc.Arbitrary<ReplicaValue>;
 
-/**
- * Payload-hash properties (#532 core expansion — kills sort/key mutants).
- *
- * Model: canonical JSON is key-order independent; hash is pure over
- * (appId, action, input); non-finite numbers fail closed.
- */
 describe("replica payload-hash property", () => {
   test("object key insertion order never changes canonical JSON", () => {
     fc.assert(

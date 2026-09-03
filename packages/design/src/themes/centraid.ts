@@ -1,7 +1,3 @@
-// Literal ramps — do not derive dark from `hsl(0 0% calc(...))`; `#171716`
-// is warm paper, not greyscale. Paper, not elevation: light raised is
-// darker than the page, dark raised is lighter.
-
 import { palette, paletteDark } from "../palette";
 import {
   ACCENT_HOVER,
@@ -50,7 +46,6 @@ export const lightTheme: Theme = {
   bg: PAGE.light,
   bgApp: WALL.light,
   bgElev: "#F5F4F2",
-  // Deeper than this and `--text-faint` on the groove fails AA.
   bgSunken: "#F9F8F6",
   bgWall: WALL.light,
   deviceWall:
@@ -72,7 +67,6 @@ export const lightTheme: Theme = {
   netWash: NET_WASH,
   ring: RING,
   seam: SEAM,
-  // Warm 0.3 — do not "fix" to cool ink or 0.48 (reads as a grey plate).
   scrim: "rgba(26,24,21,0.3)",
   palette,
   shadowLg: "0 24px 48px -16px rgba(20,20,20,.16)",
@@ -97,7 +91,6 @@ export const darkTheme: Theme = {
   attention: ATTENTION_DARK,
   bg: PAGE.dark,
   bgApp: WALL.dark,
-  // Lighter than the page — validate `--text-faint` against this, not `--bg`.
   bgElev: "#171716",
   bgSunken: "#121211",
   bgWall: WALL.dark,
@@ -120,7 +113,6 @@ export const darkTheme: Theme = {
   netWash: NET_WASH_DARK,
   ring: RING_DARK,
   seam: SEAM_DARK,
-  // 0.62 — do not raise toward 0.72 (near-black page would vanish).
   scrim: "rgba(0,0,0,0.62)",
   palette: paletteDark,
   shadowLg: "0 30px 70px -24px rgba(0,0,0,.7)",

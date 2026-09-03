@@ -1,12 +1,3 @@
-// The preview ladder's orchestration + gateway backstop (#405). The
-// raster codec is STUBBED here — the vault package is dependency-free, so the
-// real jpeg-js/pngjs codec (and its own round-trip tests) live in the gateway
-// package. What these tests pin is everything AROUND the codec: which items
-// the backstop selects, that it stages both rungs through the existing
-// ingest/promote path, idempotency, unsupported-type skipping, the batch
-// bound, missing-bytes accounting, and that `sweepBlobs` runs the backstop and
-// reports its yield in the receipt.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -25,16 +16,11 @@ import { backfillPreviews } from "./preview.js";
 import type { PreviewCodec } from "./preview.js";
 import { shaOfBlobUri } from "./store.js";
 
-// A 1×1 PNG — appending zero bytes keeps the PNG signature (so it still sniffs
-// `image/png`) while giving each item a distinct sha + distinct byte length.
 const PNG_BYTES = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
   "base64"
 );
 
-// A stub codec: real JPEG magic prefix so the staged derivative sniffs back as
-// `image/jpeg`, distinct output per (edge, source) so the two rungs never
-// collide, and `null` for `image/gif` to exercise the unsupported-skip path.
 const stubCodec: PreviewCodec = {
   downscale(source, mediaType, maxEdge) {
     if (mediaType === "image/gif") return null;
@@ -52,7 +38,6 @@ const stubCodec: PreviewCodec = {
   },
   thumbhash(source, mediaType) {
     if (mediaType === "image/gif") return null;
-    // A deterministic, canonical 21-byte (→28 char, unpadded) placeholder.
     return Buffer.alloc(21, source.length & 0xff)
       .toString("base64")
       .replace(/=+$/u, "");
@@ -77,8 +62,6 @@ describe("preview", () => {
     };
   });
 
-  /** Stage `bytes` as an original and claim it as a media asset — a client-less
-   *  ingest, exactly the shape a Takeout import or connector produces. */
   function addImage(bytes: Buffer): string {
     const staged = gw.stageBlob(owner, { bytes, filename: "pixel.png" });
     const out = gw.invoke(owner, {
@@ -90,7 +73,6 @@ describe("preview", () => {
     return (out as { output: { content_id: string } }).output.content_id;
   }
 
-  /** The original blob sha behind a content item. */
   function originalSha(contentId: string): string {
     const row = db.vault
       .prepare("SELECT content_uri FROM core_content_item WHERE content_id = ?")
@@ -148,7 +130,6 @@ describe("preview", () => {
     expect(first.phashesGenerated).toBe(1);
     const rungs = derivativeShas(contentId);
     expect(Object.keys(rungs).sort()).toStrictEqual(["preview", "thumb"]);
-    // Both derivative blobs actually landed in the CAS (so they replicate).
     expect(db.blobs.hasSync(rungs.thumb!)).toBe(true);
     expect(db.blobs.hasSync(rungs.preview!)).toBe(true);
     const expectedPhash = await stubCodec.perceptualHash(
@@ -157,7 +138,6 @@ describe("preview", () => {
     );
     expect(inlinePhash(contentId)).toBe(expectedPhash);
     expect(mediaPhash(contentId)).toBe(expectedPhash);
-    // The ThumbHash hole gets filled too (#419), inline like the phash.
     expect(first.thumbhashesGenerated).toBe(1);
     const expectedThumbhash = await stubCodec.thumbhash(
       Buffer.concat([PNG_BYTES, Buffer.alloc(1)]),
@@ -165,7 +145,6 @@ describe("preview", () => {
     );
     expect(inlineThumbhash(contentId)).toBe(expectedThumbhash);
 
-    // Second pass finds nothing missing — the backstop only fills holes.
     const second = await backfillPreviews(db, stubCodec);
     expect(second.scanned).toBe(0);
     expect(second.generated).toBe(0);
@@ -175,7 +154,6 @@ describe("preview", () => {
 
   test("a client-supplied rung is never overwritten — the backstop only fills the gap", async () => {
     const contentId = addImage(Buffer.concat([PNG_BYTES, Buffer.alloc(2)]));
-    // Simulate a client thumb that beat the sweep: stage it directly.
     const clientThumb = gw.stageBlob(owner, {
       bytes: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]),
       variant: "thumb",
@@ -210,7 +188,6 @@ describe("preview", () => {
 
   test("unsupported media type is skipped whole (null codec result), counted once", async () => {
     const contentId = addImage(Buffer.concat([PNG_BYTES, Buffer.alloc(3)]));
-    // Force this item to read as a gif so the stub declines it.
     db.vault
       .prepare(
         "UPDATE core_content_item SET media_type = 'image/gif' WHERE content_id = ?"
@@ -291,8 +268,6 @@ describe("preview", () => {
 
     await gw.sweepBlobs(owner);
     expect(derivativeShas(contentId).preview).toBeUndefined();
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({
       ...db.vault
         .prepare("SELECT drained_at FROM enrich_request WHERE request_id = ?")

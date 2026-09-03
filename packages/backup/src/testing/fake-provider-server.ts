@@ -79,7 +79,6 @@ function numberParam(url: URL, name: string): number | undefined {
   return raw === null ? undefined : Number(raw);
 }
 
-/** Reusable in-process implementation of every advertised provider route. */
 export async function startFakeProviderServer(): Promise<FakeProviderServer> {
   const targets = new Map<string, FakeTarget>();
   const snapshots = new Map<string, SnapshotRow[]>();

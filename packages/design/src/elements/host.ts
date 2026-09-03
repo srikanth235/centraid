@@ -1,5 +1,3 @@
-// Do not import the shell client (downstream). No `declare global` (blueprints).
-
 export interface CentraidChangeDetail {
   tables?: string[];
   source?: string;
@@ -44,6 +42,6 @@ export function haptic(kind: string): void {
   try {
     host()?.haptic?.[kind]?.();
   } catch {
-    /* bridge absent or refused */
+    // Intentionally empty.
   }
 }

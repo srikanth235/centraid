@@ -1,6 +1,5 @@
 import { randomBytes } from "node:crypto";
 import { rmSync } from "node:fs";
-/** Direct-to-IA eligibility and local-first outbox replication doors for large media originals. */
 import path from "node:path";
 
 import { afterEach, describe, expect, test } from "vitest";

@@ -1,6 +1,3 @@
-// The Storage page's presentation derivation (#544). Colour is assigned per
-// component id, never per rank, so the palette never reshuffles between polls.
-
 import { formatBytes } from "../../format.js";
 import type {
   LocalComponentId,
@@ -17,7 +14,6 @@ export interface ComponentPresentation {
   blurb: string;
 }
 
-/** Key order is the tiebreak order for equal byte counts. */
 export const COMPONENT_PRESENTATION: Readonly<
   Record<LocalComponentId, ComponentPresentation>
 > = Object.freeze({
@@ -79,8 +75,6 @@ const COMPONENT_ORDER = Object.keys(
   COMPONENT_PRESENTATION
 ) as LocalComponentId[];
 
-/** The wire can carry an id newer than this build's union — never index
- *  `COMPONENT_PRESENTATION` directly. */
 export function presentationFor(component: string): ComponentPresentation {
   return (
     COMPONENT_PRESENTATION[component as LocalComponentId] ?? {
@@ -98,11 +92,9 @@ export interface FootprintSlice {
   blurb: string;
   bytes: number;
   fraction: number;
-  /** A read failure under this component, verbatim. */
   unreadable?: string;
 }
 
-/** One legend, largest first; zero-byte components drop out. */
 export function footprintSlices(report: LocalUsageReportDTO): FootprintSlice[] {
   const totals = new Map<
     LocalComponentId,
@@ -149,13 +141,11 @@ export type FootprintScaleKind = "budget" | "disk" | "none";
 export interface FootprintScale {
   kind: FootprintScaleKind;
   againstBytes: number | null;
-  /** Clamped, so an over-budget bar stays in its box. */
   fillFraction: number;
   over: boolean;
   warnFraction: number | null;
 }
 
-/** Budget, else disk, else nothing: an invented denominator is a fiction. */
 export function footprintScale(report: LocalUsageReportDTO): FootprintScale {
   const budget = report.limits.totalLimitBytes;
   if (budget !== null && budget > 0) {
@@ -168,7 +158,6 @@ export function footprintScale(report: LocalUsageReportDTO): FootprintScale {
       warnFraction: Math.min(1, report.limits.warnAtPercent / 100),
     };
   }
-  // Disk total, not free space: free space moves when anything else writes.
   const diskTotal = report.disk?.totalBytes ?? 0;
   if (diskTotal > 0) {
     return {
@@ -188,7 +177,6 @@ export function footprintScale(report: LocalUsageReportDTO): FootprintScale {
   };
 }
 
-/** `null` for anything unparseable — the inputs refuse rather than guess. */
 export function parseBytes(
   input: string,
   defaultUnit: "MB" | "GB" = "GB"
@@ -211,7 +199,6 @@ export function parseBytes(
   return Math.round(value * (scale[unit] ?? 1));
 }
 
-/** Over-budget must say what is NOT happening: nothing is blocked. */
 export function budgetSummary(
   report: LocalUsageReportDTO,
   limits: StorageLimitsDTO

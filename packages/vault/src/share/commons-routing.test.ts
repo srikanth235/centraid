@@ -1,11 +1,3 @@
-// Conformance between the DECLARED commons routing table and the REAL
-// registered command schemas (#750). The defect this test exists for:
-// routing decided by string heuristics over the command name and a
-// hand-maintained list of container-id keys lets a renamed input key silently
-// bypass the commons rail — the write lands private and the next compile
-// reverts it. Here the table is data, and this test walks the
-// command registry every command pack actually installs.
-
 import { afterEach, describe, expect, test } from "vitest";
 
 import { registerAttachmentCommands } from "../commands/attachments.js";
@@ -31,8 +23,6 @@ interface RegisteredCommand {
   inputKeys: Set<string>;
 }
 
-/** Read back from `agent_command`, the registry the gateway authorizes
- *  against. */
 function registeredCommands(): Map<string, RegisteredCommand> {
   const { origin } = household();
   const gateway = createGateway(origin);
@@ -132,8 +122,6 @@ describe("Commons routing conformance", () => {
   });
 
   test("actability is a declared subset of routing, never a name pattern", () => {
-    // A container's declared write surface never includes a command that
-    // deletes the shared root, and routing a command is not declaring it.
     expect(isCommonsCommandActable("docs.folder", "core.delete_folder")).toBe(
       false
     );
@@ -144,8 +132,6 @@ describe("Commons routing conformance", () => {
     expect(isCommonsCommandActable("tally.group", "tally.add_expense")).toBe(
       true
     );
-    // Deleting a child document does not delete the docs.folder root, so it
-    // stays declared for the folder that survives it.
     expect(isCommonsCommandActable("docs.folder", "core.trash_document")).toBe(
       true
     );

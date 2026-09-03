@@ -1,13 +1,3 @@
-// Issue #872: the steward's per-intent answer. Approving must go back through
-// the SIGNED RAIL rather than around it, declining must settle `denied` with
-// the steward's words, and neither may be reachable by the wrong party.
-//
-// The seats are the real three-vault world `commons-intent.test-fixtures.ts`
-// builds — Priya stewards a Tally group Bob and Cara are read+write members of
-// — so the intents decided here are genuine `share_commons_intent` rows written
-// by `queueCommonsIntent` into the member's OWN vault, and an approval's effect
-// is a genuine `tally_expense` row on the steward's seat.
-
 import { rmSync } from "node:fs";
 
 import { afterEach, describe, expect, test } from "vitest";
@@ -116,8 +106,6 @@ describe("issue #872: per-intent steward decision", () => {
     });
     expect(answer.reason).toBeUndefined();
     expect(answer.sequence).toBeTypeOf("number");
-    // The member's row settled, and the domain row actually landed on the
-    // steward's seat — approving is the rail, not a status flip.
     expect(seats.statusOf("decide-approve")).toMatchObject({
       status: "executed",
     });
@@ -128,8 +116,6 @@ describe("issue #872: per-intent steward decision", () => {
         )
         .get(seats.groupId, "Ferry tickets")
     ).toMatchObject({ paid_by: seats.bob.boot.ownerPartyId });
-    // The op is attributed to BOB, who composed it — approving does not make
-    // the steward the author.
     expect(
       seats.priya.db.vault
         .prepare(
@@ -172,8 +158,6 @@ describe("issue #872: per-intent steward decision", () => {
         )
         .get("Private taxi")
     ).toMatchObject({ n: 0 });
-    // A decline is a policy answer, not a rail refusal: it appends no operation
-    // and therefore never advances the grant's ordered sequence.
     expect(
       seats.priya.db.vault
         .prepare(
@@ -199,11 +183,9 @@ describe("issue #872: per-intent steward decision", () => {
     const seats = world();
     seats.queueForBob("decide-not-steward", "Snacks");
 
-    // Bob is on the roster but is not the steward.
     expect(() =>
       seats.decideAs("bob", "decide-not-steward", "approve")
     ).toThrow(/only the commons steward/u);
-    // …and the row is untouched by the refusal.
     expect(seats.statusOf("decide-not-steward")).toMatchObject({
       status: "queued",
     });
@@ -245,9 +227,6 @@ describe("issue #872: per-intent steward decision", () => {
       status: "cancelled",
     });
 
-    // `cancelCommonsIntent`'s `WHERE status IN ('queued','parked')` is the
-    // MEMBER's guard; the steward's settle is unconditional, so the person who
-    // owns the commons still gets the last word on what was in their queue.
     const answered = seats.decideAs(
       "priya",
       "decide-race-cancel",
@@ -256,8 +235,6 @@ describe("issue #872: per-intent steward decision", () => {
     );
     expect(answered).toMatchObject({ decided: true, status: "denied" });
 
-    // The other direction: an intent the rail already executed is settled, and
-    // a late decision reports the truth rather than rewriting it.
     seats.queueForBob("decide-race-executed", "Already through");
     seats.decideAs("priya", "decide-race-executed", "approve");
     const late = seats.decideAs("priya", "decide-race-executed", "decline");

@@ -1,8 +1,3 @@
-/**
- * Apply work in input order, starting an item only after the preceding item
- * succeeds. Use this for ordered I/O boundaries; use `Promise.all` when the
- * work is independent.
- */
 export function applyInOrder<T>(
   values: Iterable<T>,
   apply: (value: T, index: number) => void | PromiseLike<void>
@@ -14,10 +9,6 @@ export function applyInOrder<T>(
   );
 }
 
-/**
- * Consume an asynchronous source in source order. The recursive form keeps
- * the ordering contract visible without putting a raw await in a loop.
- */
 export async function applyAvailableInOrder<T>(
   values: AsyncIterable<T>,
   apply: (value: T, index: number) => void | PromiseLike<void>
@@ -39,10 +30,6 @@ export async function applyAvailableInOrder<T>(
   }
 }
 
-/**
- * Map independent work with an explicit in-flight limit and stable result
- * order. Use `applyInOrder` instead when starting later work early is unsafe.
- */
 export async function mapWithConcurrency<T, R>(
   values: Iterable<T>,
   limit: number,

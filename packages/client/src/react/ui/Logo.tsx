@@ -4,19 +4,6 @@ export interface LogoProps {
   size?: number;
 }
 
-/**
- * The product mark — the orbit glyph, drawn in INK.
- *
- * The Binding Layer's third invariant (#707) is that the shell spends no
- * colour at all, so that every hue on screen provably belongs to an app; a
- * brand-teal mark sitting at the top of the stem would be the one exception,
- * and the exception is what would make the rule unreadable. The mark inherits
- * `currentColor` — the stem paints it `--accent`, which IS `--text` — so it
- * flips with the ramp and costs the palette nothing.
- *
- * Self-contained (no stylesheet, no token import) so the shell can render it
- * before any CSS is available.
- */
 export default function Logo({ size = 32 }: LogoProps): JSX.Element {
   return (
     <svg

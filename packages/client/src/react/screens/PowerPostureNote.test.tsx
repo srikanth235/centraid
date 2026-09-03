@@ -6,10 +6,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import PowerPostureNote from "./PowerPostureNote.js";
 import type { PowerContextState } from "./resource-summary.js";
 
-// Power-context posture note (#528): battery/thermal chrome only
-// when the gateway host has a battery; a mains/server host shows a CPU-steal
-// fact or nothing. Copy is attributed to the gateway HOST, never the viewer.
-
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 describe("screens/PowerPostureNote", () => {

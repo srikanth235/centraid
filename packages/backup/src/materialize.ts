@@ -1,9 +1,3 @@
-/*
- * materializeSnapshotBlobs (#439): stream specific blob shas from an authenticated snapshot into a
- * vault's blob store via restoreSnapshot's exact decrypt/keyed-id path — recover-reconcile re-pins
- * dropped blobs without re-hydrating or hand-rolling crypto (FORMAT.md). Lacking shas → `absent`.
- */
-
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -30,7 +24,6 @@ export interface MaterializeSnapshotBlobsOptions {
   vaultId: string;
   seq: number;
   shas: readonly string[];
-  /** Entries written at `<destDir>/<entry.path>` — where `FsBlobStore(<destDir>/blobs)` looks. */
   destDir: string;
   log?: EngineLogger;
 }
@@ -82,7 +75,6 @@ export async function materializeSnapshotBlobs(
       absent.push(sha);
       return;
     }
-    // Same re-check restoreSnapshot applies at disk-touch time.
     if (!isSafeEntryPath(entry.path)) {
       throw new Error(
         `materializeSnapshotBlobs: entry path rejected: "${entry.path}"`
@@ -94,7 +86,6 @@ export async function materializeSnapshotBlobs(
     const handle = await fs.open(dest, "w");
     try {
       await applyInOrder(entry.chunks, async (id) => {
-        // Decompression precedes the integrity check, as in restore.
         const plain = unframeChunkPayload(
           decrypt(dataKey, await store.get(`chunks/${id}`))
         );

@@ -1,18 +1,3 @@
-// The assistant rich-answer renderer (#420) — the ONE string→HTML renderer for
-// the transcript, framework-free so the memoizing shell adapter
-// (react/shell/routes/assistantRich.ts) can call it outside React. Turns the
-// model's `@[Title](ref:type/id)` citations and ```block:*``` JSON fences into
-// ref-chips and typed blocks; GFM from gfm.ts, highlighting code-highlight.ts.
-//
-// ── SECURITY CONTRACT (model output is UNTRUSTED input) ─────────────────────
-// Output is injected via `dangerouslySetInnerHTML`. Every path must escape text
-// (`escapeHtml`) BEFORE matching or tag injection and emit only the closed tag
-// set built here; route link/image URLs through `sanitizeUrl` (gfm.ts); give
-// external links `rel="noopener noreferrer"`; leave code-highlight.ts's static
-// `hl…` spans the only markup around fenced source; parse block:* JSON under
-// try/catch degrading to an escaped code block, never eval. Adversarial
-// coverage: assistant-sanitize.test.ts.
-
 import { highlightCode } from "./code-highlight.js";
 import { cx, el, blockNodes } from "./gfm.js";
 
@@ -90,7 +75,6 @@ export const DEFAULT_CLASSES: AssistantRichClasses = {
   asstCopyBtn: "asstCopyBtn",
 };
 
-/** Highlighting adds only `hl…` spans, so the copy button still yields source. */
 function codeBlock(
   code: string,
   lang: string,
@@ -276,12 +260,10 @@ function chartBlock(
   return wrap;
 }
 
-/** Untrusted input — see the SECURITY CONTRACT above. */
 export function richAnswerHtml(
   text: string,
   classes?: AssistantRichClassOverrides
 ): string {
-  // Only truthy overrides win; an `undefined` slot must not blank a class name.
   let C = DEFAULT_CLASSES;
   if (classes) {
     const merged = { ...DEFAULT_CLASSES };
@@ -359,7 +341,6 @@ export function hydrateRefs(
     .catch(() => undefined);
 }
 
-/** `data-copy-wired` keeps the delegated handler idempotent across re-hydration. */
 export function wireCodeCopy(
   host: HTMLElement,
   options: { copyClass?: string } = {}
@@ -384,9 +365,7 @@ export function wireCodeCopy(
           btn.textContent = "Copy";
         }, 1400);
       },
-      () => {
-        /* clipboard write failed — leave the button as-is */
-      }
+      () => {}
     );
   });
 }

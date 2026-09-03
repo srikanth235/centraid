@@ -1,9 +1,3 @@
-// #656 Layer 4 — the three test seams that oxlint now makes mandatory.
-//
-// Each helper exists because the hand-rolled form leaked something when a test
-// failed. These tests assert the leak-proofing, not the happy path: a clock
-// that advances is easy, a clock that restores itself after a throwing test is
-// the whole point.
 import { describe, expect, test } from "vitest";
 
 import { useFakeClock } from "./fake-clock.js";
@@ -17,11 +11,6 @@ interface StubDb {
   close: () => void;
 }
 
-/**
- * The injected shape, not the real vault: `@centraid/test-kit` must not depend
- * on `@centraid/vault` (that edge is already the other way round for vault's
- * own tests). The real wiring is proven by the suites that adopted the helper.
- */
 function stubApi(log: string[]): VaultBootstrapApi<StubDb, { owner: string }> {
   return {
     openVaultDb: (options) => {
@@ -70,9 +59,6 @@ describe(bootstrappedVault, () => {
     expect(vault.db.closes).toBe(1);
   });
 
-  // The defect the helper removes: `openVaultDb()` succeeded, `bootstrapVault()`
-  // threw, and the hand-written `afterEach` never saw a handle to close — so the
-  // SQLite files stayed open for the rest of the file.
   test("a bootstrap that throws still leaves the handle registered for close", () => {
     const log: string[] = [];
     const api = stubApi(log);
@@ -83,8 +69,6 @@ describe(bootstrappedVault, () => {
       },
     };
     expect(() => bootstrappedVault(failing)).toThrow("schema refused");
-    // `onTestFinished` runs after this body, so assert the registration
-    // happened by driving the same path without auto-close and closing by hand.
     const manual = bootstrappedVault(stubApi(log), { autoClose: false });
     manual.close();
     expect(manual.db.closes).toBe(1);
@@ -155,10 +139,6 @@ describe(useFakeClock, () => {
     expect(Date.now()).toBeGreaterThan(1_700_000_000_000);
   });
 
-  // The leak the ban exists for, stated as an ordered pair: the first test
-  // installs a clock and never restores it by hand, and the second — which
-  // vitest runs immediately after, in the same file and worker — must still
-  // see real time. Before the kit owned the restore, this second test hung.
   test("leak probe: a clock is installed and never restored by hand", () => {
     useFakeClock(0);
     expect(Date.now()).toBe(0);
@@ -176,7 +156,6 @@ describe(seededRandom, () => {
     const first = Array.from({ length: 8 }, () => one.next());
     const second = Array.from({ length: 8 }, () => two.next());
     expect(second).toStrictEqual(first);
-    // A replayable sequence that never moves would also satisfy the above.
     expect(new Set(first).size).toBe(8);
   });
 

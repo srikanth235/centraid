@@ -7,12 +7,6 @@ import type {
   ShellCapabilities,
 } from "./capabilities.js";
 
-// The COMPLETE set of places the shell can go (#707): stem, All-apps sheet and
-// ⌘K all read it, so a destination missing here is unreachable. Rows are named
-// for what the member finds, never the internal model (#667) — `page` carries
-// the internal key. NOTHING HERE CARRIES A HUE (invariant 3): identity hues
-// belong to the apps, hence no `colorKey` field at all.
-
 export type ShellPage =
   | "home"
   | "assistant"
@@ -28,24 +22,16 @@ export type ShellPage =
   | "settings";
 
 export interface LauncherDestination {
-  /** Stable pin/test key, independent of the label. */
   id: ShellPage;
   label: string;
   shortLabel?: string;
   icon: IconName;
   page: ShellPage;
   route: ShellRoute;
-  /** Capability gate (C1, `capabilities.ts`); absent means always available. */
   requires?: ExperimentalCapability;
-  /** Surface merged into another's. The row stays because its id is a persisted
-   *  pin key; `visibleDestinations` drops it from every view. Unifying the two
-   *  ids is a pin-set migration, deliberately not done here. */
   retired?: true;
 }
 
-/* Order is the sheet's reading order and, filtered by pins, the stem's; keep it
-   stable. Marks come from `DESTINATION_MARKS`, never a literal: the phone's own
-   list must agree on which glyph stands for which place. */
 export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
   {
     icon: DESTINATION_MARKS.home,
@@ -98,7 +84,6 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
     id: "insights",
     label: "Activity",
     page: "insights",
-    // Both of Activity's reads live behind the automations gate.
     requires: "automations",
     route: { kind: "insights" },
   },
@@ -110,8 +95,6 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
     route: { kind: "atlas" },
   },
   {
-    // Merged into Vault; the route still resolves, so an old pin and an old
-    // deep link both land on the surviving surface.
     icon: DESTINATION_MARKS.devices,
     id: "household",
     label: "Vault",
@@ -135,27 +118,20 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
   },
 ];
 
-/* Home is absent because it is pinned by law (`isPinned`); Assistant because
-   #707 settled it as a pinned APP, not a launcher row. */
 export const DEFAULT_PINS: readonly ShellPage[] = [
   "approvals",
   "insights",
   "atlas",
 ];
 
-/** Band cap INCLUDING Home; More is a sixth control, not a destination. */
 export const BAND_MAX_ITEMS = 5;
 
 export type PinSet = Readonly<Record<string, boolean>>;
 
-/** Encoded here, not in the toggle, so stem, sheet and persistence agree. */
 export function isPinned(pins: PinSet, id: ShellPage): boolean {
   return id === "home" || pins[id] === true;
 }
 
-/** Every other reader goes through this one, so a gated-off feature leaves stem,
- *  band, sheet and palette together. Capabilities are PASSED IN, never read from
- *  a module global — that would be a second detection site (C1). */
 export function visibleDestinations(
   capabilities: ShellCapabilities
 ): readonly LauncherDestination[] {
@@ -166,8 +142,6 @@ export function visibleDestinations(
   );
 }
 
-/** Gating filters the VIEW, never the stored pin: turning a feature off is not
- *  the member unpinning it. */
 export function pinnedDestinations(
   pins: PinSet,
   capabilities: ShellCapabilities
@@ -175,8 +149,6 @@ export function pinnedDestinations(
   return visibleDestinations(capabilities).filter((d) => isPinned(pins, d.id));
 }
 
-/** Overflow is never dropped — it moves behind "More", which opens the same
- *  All-apps sheet. */
 export function bandDestinations(
   pins: PinSet,
   capabilities: ShellCapabilities

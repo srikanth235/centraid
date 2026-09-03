@@ -1,9 +1,3 @@
-// The ext band (#286): app-declared tables INSIDE vault.db.
-// What must hold: the gateway applies + diffs DDL from specs (never the
-// app); consent scopes on `ext.<appId>` gate app reads and the typed write
-// trio; links/tags/search/export/vault_sql treat ext rows like canonical
-// ones; drafts are scratch copies; uninstall retains, purge deletes.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
@@ -141,13 +135,11 @@ describe("ext", () => {
       const names = gw.discover(owner).map((c) => c.name);
       expect(names).toContain(`ext.${APP}.insert`);
 
-      // The assistant's map shows the band: DDL, the ext note, the commands.
       const context = buildAssistantContext(db);
       expect(context).toContain("ext_gym_log_workout");
       expect(context).toContain("App extension tables");
       expect(context).toContain(`ext.${APP}.insert`);
 
-      // vault_sql reads it like any table.
       const sql = gw.sql(owner, {
         sql: `SELECT count(*) AS n FROM ext_gym_log_workout`,
       });
@@ -239,11 +231,6 @@ describe("ext", () => {
         },
         purpose: PURPOSE,
       }) as { output: { id: string } };
-      // AN EXT ROW IS AN APP'S, NOT AN ENTITY (#916). A link's endpoints are
-      // composite foreign keys into `core_entity`, and an ext-band table has
-      // no supertype row and never will — so the relation is refused rather
-      // than written and then swept. What used to happen instead was a link
-      // the dangling-link duty had to end-date when the app deleted its row.
       const link = gw.invoke(owner, {
         command: "core.link_entities",
         input: {
@@ -347,7 +334,6 @@ describe("ext", () => {
       });
       expect(draft.rows).toHaveLength(1); // seeded from live
 
-      // Re-seeding is idempotent: rows survive; a schema edit diff-applies.
       const evolved = specs();
       evolved[0]?.columns.push({ name: "mood", type: "text" });
       const again = gw.seedAppExtDraft(owner, APP, evolved);
@@ -356,7 +342,6 @@ describe("ext", () => {
         gw.read(owner, { entity: `extdraft.${APP}.workout`, purpose: PURPOSE })
           .rows
       ).toHaveLength(1);
-      // An explicit reset re-snapshots from live.
       gw.seedAppExtDraft(owner, APP, specs(), { reset: true });
 
       gw.invoke(owner, {
@@ -394,7 +379,6 @@ describe("ext", () => {
         },
       ];
       gw.seedAppExtDraft(owner, APP, next);
-      // Publish = apply the draft's specs to the live band + drop the draft.
       const outcome = gw.applyAppExt(owner, APP, next);
       expect(outcome.created).toStrictEqual(["plan"]);
       gw.dropAppExtDraft(owner, APP);
@@ -416,13 +400,11 @@ describe("ext", () => {
       expect(gw.discover(owner).map((c) => c.name)).not.toContain(
         `ext.${APP}.insert`
       );
-      // The rows are still the owner's — reachable via SQL.
       const kept = gw.sql(owner, {
         sql: "SELECT count(*) AS n FROM ext_gym_log_workout",
       });
       expect(kept.rows[0]?.n).toBe(1);
 
-      // Re-apply (reinstall) revives band + commands over the same data.
       gw.applyAppExt(owner, APP, specs());
       expect(gw.discover(owner).map((c) => c.name)).toContain(
         `ext.${APP}.insert`
@@ -471,8 +453,6 @@ describe("ext", () => {
         .all() as {
         notes: string;
       }[];
-      // node:sqlite hands back null-prototype rows; spreading compares the column
-      // data (which is the contract) without asserting the driver's prototype.
       expect(rows.map((row) => ({ ...row }))).toStrictEqual([
         { notes: "portable" },
       ]);
@@ -480,10 +460,6 @@ describe("ext", () => {
     });
   });
 
-  // Issue #374 (SQLite hardening): ext tables are STRICT, and every `integer`
-  // column carries a generated CHECK clamping it to Number.MAX_SAFE_INTEGER —
-  // node:sqlite's default reads throw on an INTEGER past that bound, so an
-  // out-of-range write would otherwise poison the row for every future read.
   describe("STRICT + the JS-safe-integer bound", () => {
     test("generated table DDL ends STRICT; a type-violating insert is rejected", () => {
       gw.applyAppExt(owner, APP, specs());
@@ -493,8 +469,6 @@ describe("ext", () => {
         )
         .get() as { sql: string };
       expect(row.sql.trim().endsWith("STRICT")).toBe(true);
-      // 'reps' is declared `integer`; a TEXT value that isn't an integer
-      // literal violates the STRICT type and the whole insert rejects.
       expect(() =>
         db.vault
           .prepare(
@@ -515,7 +489,6 @@ describe("ext", () => {
           )
           .run("w1", 9007199254740993n)
       ).toThrow(/CHECK/iu);
-      // The bound itself, and everything under it, still writes fine.
       expect(() =>
         db.vault
           .prepare(

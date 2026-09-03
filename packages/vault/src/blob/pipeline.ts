@@ -1,14 +1,6 @@
-// Spool pipeline (#296): what the gateway learns from bytes in the local
-// spool. Dependency-free, synchronous; declared types are hints, content
-// decides; failures degrade, never block.
-//
-// GPS is policy: presence always reported, coordinates only with
-// `keepLocation` (`media.location` setting).
-
 import { parseIsoBmffMetadata, parseMediaMetadata } from "./media-metadata.js";
 import { extractPdfText } from "./pdf-text.js";
 
-/** Prefix → type. Order matters. */
 const MAGIC: { offset: number; bytes: number[]; type: string }[] = [
   { offset: 0, bytes: [0xff, 0xd8, 0xff], type: "image/jpeg" },
   {
@@ -66,10 +58,6 @@ function looksLikeText(bytes: Buffer): boolean {
   }
 }
 
-/**
- * Real media type: magic bytes → containers → plausible hint → extension →
- * text probe.
- */
 export function sniffMediaType(
   bytes: Buffer,
   declared?: string,
@@ -79,8 +67,6 @@ export function sniffMediaType(
   for (const m of MAGIC) {
     if (bytes.length < m.offset + m.bytes.length) continue;
     if (m.bytes.every((b, i) => bytes[m.offset + i] === b)) {
-      // EBML is a container signature, not a track kind: keep the browser's
-      // honest audio/video declaration when present.
       if (
         m.type === "video/webm" &&
         (hint === "audio/webm" || hint === "video/webm")
@@ -100,13 +86,10 @@ export function sniffMediaType(
 export interface BlobMeta {
   width?: number;
   height?: number;
-  /** EXIF DateTimeOriginal, ISO-8601 camera-local (no zone). */
   captured_at?: string;
-  /** Whether EXIF carried GPS tags — reported even when stripped. */
   has_location?: boolean;
   latitude?: number;
   longitude?: number;
-  /** Bounded extracted document text → the `text` variant. */
   text?: string;
   duration_s?: number;
   codec?: string;
@@ -117,7 +100,6 @@ export interface BlobMeta {
 
 const MAX_EXTRACT_CHARS = 200_000;
 
-/** Meta from one payload; `keepLocation` gates GPS coordinates (default keep). */
 export function extractBlobMeta(
   bytes: Buffer,
   mediaType: string,
@@ -153,15 +135,11 @@ export function extractBlobMeta(
       Object.assign(meta, parseMediaMetadata(bytes, mediaType));
     }
   } catch {
-    // A malformed header degrades to a metadata-less blob, never a refusal.
+    // Intentionally empty.
   }
   return meta;
 }
 
-/**
- * Bounded streaming twin: head probe + tail probe for `moov` past a huge
- * `mdat`.
- */
 export function extractBlobMetaFromProbes(
   head: Buffer,
   tail: Buffer,
@@ -203,14 +181,12 @@ export function extractBlobMetaFromProbes(
 }
 
 function pngDimensions(bytes: Buffer): Pick<BlobMeta, "width" | "height"> {
-  // IHDR is always the first chunk: length(4) "IHDR"(4) width(4) height(4).
   if (bytes.length < 24 || bytes.toString("latin1", 12, 16) !== "IHDR")
     return {};
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
 function jpegDimensions(bytes: Buffer): Pick<BlobMeta, "width" | "height"> {
-  // Walk the segment chain to the first SOF marker.
   let i = 2;
   while (i + 9 < bytes.length) {
     if (bytes[i] !== 0xff) break;
@@ -236,7 +212,6 @@ interface JpegExif {
   longitude?: number;
 }
 
-/** TIFF/EXIF walk: DateTimeOriginal (0x9003) and GPS rationals. */
 function parseJpegExif(bytes: Buffer): JpegExif {
   const out: JpegExif = {};
   let i = 2;
@@ -284,10 +259,8 @@ function parseJpegExif(bytes: Buffer): JpegExif {
     }
     return entries;
   };
-  // TIFF value widths: BYTE/ASCII 1, SHORT 2, LONG 4, RATIONAL 8.
   const TYPE_BYTES: Record<number, number> = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8 };
   const valueAt = (entry: Entry): number => {
-    // >4-byte values live at a pointed-to offset.
     const size = TYPE_BYTES[entry.type] ?? 4;
     return entry.count * size <= 4
       ? entry.valueOffset
@@ -317,7 +290,6 @@ function parseJpegExif(bytes: Buffer): JpegExif {
     const dto =
       sub.find((e) => e.tag === 0x9003) ?? ifd0.find((e) => e.tag === 0x0132);
     if (dto && dto.type === 2) {
-      // "YYYY:MM:DD HH:MM:SS" → ISO-8601 local.
       const raw = ascii(dto);
       const m =
         /^(?<year>\d{4}):(?<month>\d{2}):(?<day>\d{2}) (?<time>\d{2}:\d{2}:\d{2})$/u.exec(

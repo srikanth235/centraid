@@ -1,15 +1,3 @@
-// The #872 backend additions to how an expense is ENTERED: split-method
-// provenance, typed lines without a photo, multiple payers, group-less 1:1
-// expenses, and receipt re-allocation. The group-life commands (leave,
-// archive, simplification opt-in) and the prepared reminder are in
-// `tally-ledger-groups.test.ts`; both ride the same fixture
-// (`tally-ledger-test-kit.ts`).
-//
-// Everything here is about what the VAULT refuses. The client resolves a
-// division into shares; these tests exist to prove a projection cannot smuggle
-// an unbalanced split, an out-of-scope participant, a payer set that does not
-// add up, or a re-allocation that leaves the stated arithmetic unreconciled.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { tallyLedgerFixture } from "./tally-ledger-test-kit.js";
@@ -116,7 +104,6 @@ describe("tally — #872 expense entry", () => {
         )
         .all(expense_id) as { line_item_id: string; receipt_id: null }[];
       expect(lines).toHaveLength(2);
-      // No photo: the lines stand on their own.
       for (const line of lines) expect(line.receipt_id).toBeNull();
       const method = fx.db.vault
         .prepare("SELECT split_method FROM tally_expense WHERE expense_id = ?")
@@ -442,7 +429,6 @@ describe("tally — #872 expense entry", () => {
         })
       );
       expect(reason).toContain("splits must sum to the amount");
-      // The refusal rolled the line rewrite back with it.
       const lines = fx.db.vault
         .prepare(
           "SELECT description FROM tally_expense_line_item WHERE expense_id = ?"

@@ -54,10 +54,6 @@ function parseAmount(line: string): {
   };
 }
 
-/**
- * Deterministic first pass over untrusted OCR text. It never publishes: the
- * caller presents every line, allocation, and total for review first.
- */
 export function parseReceiptText(raw: string): ReceiptDraft {
   const rows = raw
     .split(/\r?\n/u)
@@ -115,7 +111,6 @@ export function parseReceiptText(raw: string): ReceiptDraft {
   };
 }
 
-/** Equal allocation with deterministic remainder assignment to earlier parties. */
 export function allocateMinorUnits(
   amountMinor: number,
   partyIds: readonly string[]

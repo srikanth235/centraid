@@ -1,5 +1,3 @@
-// Legacy card finishes for non-identity surfaces (desktop identity uses AppMark).
-
 import { palette, paletteText } from "./palette";
 
 export type TileVariant = "solid" | "gradient" | "glassy" | "flat";
@@ -12,21 +10,16 @@ export const TILE_VARIANTS = [
 ] as const satisfies readonly TileVariant[];
 
 export interface TileFinish {
-  /** May be a gradient. */
   background: string;
-  /** Solid fallback (RN). */
   backgroundColor: string;
   glyphColor: string;
-  /** Optional; RN splits it. */
   boxShadow?: string;
-  /** RN unsupported. */
   backdropFilter?: string;
 }
 
 export function tileFinish(color: string, variant: TileVariant): TileFinish {
   switch (variant) {
     case "gradient":
-      // -36/channel per the design system reference.
       return {
         background: `linear-gradient(180deg, ${color} 0%, ${shade(color, -36)} 100%)`,
         backgroundColor: color,
@@ -86,22 +79,13 @@ function shade(hex: string, amount: number): string {
   return `#${out}`;
 }
 
-// ── App icon chips ─────────────────────────────────────────────────────────
-//
-// Single-tone stroke in a rounded square: hue at 13%/20% over surface, solved
-// text rung as mark. Tint composited HERE — `color-mix` is absent in RN; both
-// platforms must compute the same chip.
-
-/** App-hue share in the chip container, per theme. */
 export const ICON_CHIP_TINT = { dark: 0.2, light: 0.13 } as const;
 
 export interface IconChipFinish {
-  /** Hue composited over `surface`. */
   backgroundColor: string;
   markColor: string;
 }
 
-/** Binding Layer handoff geometry. */
 export const APP_MARK_VIEWBOX = 24;
 export const APP_MARK_STROKE = 1.6;
 export const APP_MARK_SMALL_STROKE = 1.75;

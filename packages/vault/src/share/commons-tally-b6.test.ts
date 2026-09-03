@@ -118,7 +118,7 @@ describe("B6 Tally Commons flagship", () => {
       try {
         opened.pop()?.close();
       } catch {
-        // The lost-device leg deliberately closes one handle early.
+        // Intentionally empty.
       }
     }
     for (const root of roots.splice(0))
@@ -329,8 +329,6 @@ describe("B6 Tally Commons flagship", () => {
         balances(priya.db, groupId)
       );
 
-    // Bob's own backup is taken while current. Cara then writes while Bob's
-    // device is gone, so the restored copy must catch up from steward truth.
     const backupDir = path.join(root, "bob-own-backup");
     mkdirSync(backupDir, { recursive: true });
     const bobSealKey = Buffer.from(bob.db.sealKey);

@@ -25,23 +25,13 @@ import VaultModal, {
 import { addVault } from "./vaultModals.js";
 import { startVisibilityTicker } from "./visibility-ticker.js";
 
-// React-owned Household route (#599, Decision 14; ownership #726). The
-// roster half is the device/owner surface; the vaults half reads the owner's
-// scope registry, which is also what
-// every "which vault?" picker resolves against — one source, so the page and
-// the pickers can never disagree about what this owner can reach.
-/** How often the humanized ages advance. Minute granularity, because that is
- *  the granularity `seenAge` actually reports. */
 const AGE_TICK_MS = 60_000;
 
 export interface HouseholdRouteProps {
-  /** Drawn as the "Where it lives" section of the merged Vault surface. */
   embedded?: boolean;
-  /** Embedded only — the section's disclosure and its report upward. */
   collapsed?: boolean;
   onToggle?: () => void;
   onReport?: (report: HouseholdReport) => void;
-  /** Embedded only — the census's record count, for the custody line. */
   records?: number | null;
 }
 
@@ -55,18 +45,10 @@ export default function HouseholdRoute({
   const { navigate, showToast } = useShellActions();
   const scopes = useOwnerScopes();
   const [now, setNow] = useState(() => Date.now());
-  // "New vault" lives here with the rest of the vault vocabulary. `addVault`
-  // operates on the gateway this client already addresses, which is the one
-  // Household is describing, so there is no gateway to pick first.
   const [newVaultOpen, setNewVaultOpen] = useState(false);
   const canCreateVault = typeof window.CentraidApi.createVault === "function";
   const ownVaultIds = scopes.scopes.map((scope) => scope.id);
 
-  // A MINUTE, not a second (v11). The roster's ages are bare and singular now
-  // — "an hour ago", "yesterday", "2 days ago" — so a second-by-second tick
-  // recomputed a string that changes once an hour, sixty times a minute. It
-  // stays suspended while the tab is hidden (#528 Phase D wakeup hygiene) and
-  // catches up the moment it returns.
   useEffect(
     () => startVisibilityTicker(() => setNow(Date.now()), AGE_TICK_MS),
     []

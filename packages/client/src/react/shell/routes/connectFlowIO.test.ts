@@ -1,7 +1,4 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
-/**
- * Connect flow IO error folding (#545).
- */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -112,9 +109,6 @@ describe("connectFlowIO scenarios", () => {
       });
     });
 
-    // Issue #603 W4: an unreachable gateway must not fold into an empty list,
-    // which the UI would render as "no vaults here" and offer to create one
-    // against. Failure must stay distinguishable from an empty registry.
     it("reports a transport failure instead of an empty list", async () => {
       listVaults.mockRejectedValue(new Error("down"));
       const result = await loadLocalVaults();
@@ -179,10 +173,6 @@ describe("connectFlowIO scenarios", () => {
       });
     });
 
-    // Issue #603 C10: a reinstall over data founded before the `personal`
-    // marker has no "Personal" vault either — it was renamed on the first
-    // first-run — and `vaults[0]` is the OLDEST vault, i.e. "Shared". Entering
-    // there is fine; onboarding never renames it or any other vault.
     it("connectFreshLocalGateway enters the oldest fallback vault", async () => {
       listVaults.mockResolvedValue([
         {

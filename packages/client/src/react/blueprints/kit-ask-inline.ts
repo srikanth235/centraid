@@ -1,19 +1,5 @@
 import type { InlineKitAsk } from "@centraid/blueprints/apps/inline-types";
 
-// The inline "Ask your <app>" panel — the only per-app Ask surface. It
-// mounts against the gateway conversation surface: turns stream through
-// `streamTurn(appId, …, register:'ask')`. Any write the harness parks belongs to
-// the canonical Notifications; this conversational surface never forks decision state.
-//
-// Strictly online-only and lazy: `installInlineAsk` performs NO network on the
-// mount path (it only builds DOM + click handlers), so the route host can fire
-// it without awaiting and first paint never blocks on it. Everything that talks
-// to the gateway happens on user interaction.
-//
-// Scope: the single-conversation core — send + stream, one conversation per
-// mount. Per-app conversation history, a per-app model picker and per-turn
-// attachments are deliberate non-goals here (#799); the assistant route owns
-// the full conversation surface.
 import { createConversation, streamTurn } from "../../gateway-client.js";
 import type { TurnStreamEvent } from "../../gateway-client.js";
 import {
@@ -23,7 +9,6 @@ import {
 import { openConfirm } from "../shell/confirm.js";
 
 export interface InstallInlineAskOptions {
-  /** The app root element; the panel mounts into its `[data-ask-mount]`. */
   appRoot: HTMLElement;
   appId: string;
   config: InlineKitAsk;
@@ -35,7 +20,6 @@ function elFrom(html: string): HTMLElement {
   return template.content.firstElementChild as HTMLElement;
 }
 
-/** Install the inline ask affordance; returns a teardown. */
 export function installInlineAsk(options: InstallInlineAskOptions): () => void {
   const { appRoot, appId, config } = options;
   const mount = appRoot.querySelector<HTMLElement>("[data-ask-mount]");
@@ -100,11 +84,7 @@ export function installInlineAsk(options: InstallInlineAskOptions): () => void {
     const signal = controller.signal;
     const assistantEl = { el: null as HTMLElement | null };
     try {
-      // Accumulated across this send: a consent-gated failover asks for a
-      // second provider, and resending without the first loops forever (#567).
       let approvedProviders: string[] = [];
-      // Every consent changes the provider credential wire for the next turn,
-      // so retries are one ordered conversation state machine.
       const streamWithConsent = async (): Promise<void> => {
         let requiredProvider: string | undefined;
         const providerConsent = providerConsentWire(approvedProviders);
@@ -125,9 +105,6 @@ export function installInlineAsk(options: InstallInlineAskOptions): () => void {
         );
         const provider = requiredProvider;
         if (!provider) return;
-        // Apps mount into the SHELL document — there is no iframe anywhere in
-        // the app path (#505, #799) — so the shell's own confirm dialog is
-        // reachable here.
         const approved = await openConfirm({
           confirmLabel: "Allow provider",
           title: `Send to ${provider}?`,

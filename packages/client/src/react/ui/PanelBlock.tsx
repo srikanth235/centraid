@@ -1,4 +1,3 @@
-// Consent/explanation panel (v9 §8–9, #765). `tone="net"`: net BORDER, never a net fill.
 import type { JSX } from "react";
 
 import type {
@@ -25,22 +24,16 @@ export interface PanelBlockProps {
   eyebrow?: string;
   title?: string;
   body?: string;
-  /** Draw the body as a quotation behind a rule. */
   quote?: boolean;
-  /** Promote ONE fact to display type. */
   figure?: PanelFigure;
   facts?: readonly PanelFact[];
-  /** Edge tone; `net`/`seam` never fill. */
   tone?: PanelTone;
-  /** Drop the 62ch reading cap. */
   wide?: boolean;
-  /** Filled only for the view's one commit. */
   action?: PanelAction;
   action2?: PanelAction;
   className?: string;
 }
 
-/** Bordered explanation panel with an optional fact list. */
 export default function PanelBlock({
   eyebrow,
   title,

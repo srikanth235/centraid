@@ -1,23 +1,13 @@
-// Bounded-parallel replication with QoS preemption (#405 §4/§7), held outside
-// custody.ts (governance line-cap). Push N blobs at a time: one-at-a-time
-// trickles a large import; unbounded collapses the uplink. Between blobs each
-// worker awaits `qosWait()`, which parks while an interactive read-through is
-// in flight — blob-boundary granularity only, but it keeps interactive reads
-// alive during bulk replication.
-
 export type QosWait = () => Promise<void>;
 
 export interface ReplicateDriverOptions {
   want: readonly string[];
-  /** Shas already on the remote tier — skipped. */
   alreadyThere: Set<string>;
-  /** Push exactly one sha; true when it moved, false when it raced a delete. */
   pushOne: (sha: string) => Promise<boolean>;
   concurrency: number;
   qosWait: QosWait;
 }
 
-/** Fixed worker pool over the backlog, each worker gated by `qosWait` before claiming its next sha. Returns shas that actually moved (unordered). */
 export async function driveReplication(
   options: ReplicateDriverOptions
 ): Promise<string[]> {

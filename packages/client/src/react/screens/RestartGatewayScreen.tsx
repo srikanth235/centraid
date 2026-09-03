@@ -6,19 +6,6 @@ import NoteBlock from "../ui/NoteBlock.js";
 import PanelBlock from "../ui/PanelBlock.js";
 import type { PanelFact } from "../ui/PanelBlock.js";
 
-/**
- * System → Restart the gateway (#351; binding layer v11).
- *
- * NOT A BUTTON THAT JUST DOES IT. Restarting the gateway takes the vault out
- * of reach of every device for about twenty seconds — a phone mid-upload,
- * another machine mid-sync, every open app on this one. That is a consequence
- * worth stating BEFORE it happens, which is why this is a page: the row on
- * Identity opens it, and the commit lives here, in front of the sentence that
- * explains it.
- *
- * The refusal path: a remote gateway answers `{ok: false}` with an
- * explanation, which is rendered as the panel's own error rather than thrown.
- */
 export default function RestartGatewayScreen({
   gatewayLabel,
   uptimeMs,
@@ -26,10 +13,8 @@ export default function RestartGatewayScreen({
   onCancel,
 }: {
   gatewayLabel: string;
-  /** The gateway's own uptime clock — what the restart is about to reset. */
   uptimeMs?: number;
   onRestart: () => Promise<{ ok: boolean; error?: string }>;
-  /** "Not now" — back to the overview without touching anything. */
   onCancel: () => void;
 }): JSX.Element {
   const [pending, setPending] = useState(false);

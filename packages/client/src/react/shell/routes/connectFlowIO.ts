@@ -8,8 +8,6 @@ import type {
 } from "./connectFlow-core.js";
 import { connectGateway } from "./gatewayModals.js";
 
-// Impure ConnectFlow IO (#382). `ConnectFlowBridge` is declared here; the renderer does not own centraid-api.d.ts.
-
 const PERSONAL_VAULT_NAME = "Personal";
 
 export interface ConnectFlowBridge {
@@ -22,7 +20,6 @@ function bridge(): ConnectFlowBridge {
   return window.CentraidApi as unknown as ConnectFlowBridge;
 }
 
-/** Never throws — missing bridge or reject both fold to failed `reach`. */
 export async function runConnectivityTest(
   input: ConnectTestInput
 ): Promise<ConnectivityReport> {
@@ -52,7 +49,6 @@ export async function runConnectivityTest(
   }
 }
 
-/** Do not fold unreachable into an empty list — the vault step would auto-commit a create (#603). */
 export async function loadLocalVaults(): Promise<LocalVaultsResult> {
   try {
     const vaults = await listVaults();
@@ -86,12 +82,10 @@ export async function connectFreshLocalGateway(): Promise<ConnectFlowResult> {
   await ensureLocalGatewayActive();
   const loaded = await loadLocalVaults();
   if (!loaded.ok) throw new Error(loaded.message);
-  // `personal` is written at founding; name match is fallback for pre-marker dirs.
   const personal =
     loaded.vaults.find((v) => v.personal) ??
     loaded.vaults.find((v) => v.name === PERSONAL_VAULT_NAME) ??
     null;
-  // Reinstall may find no personal vault; oldest remaining is the entry.
   const target = personal ?? loaded.vaults[0] ?? null;
   if (!target) {
     throw new Error(
@@ -119,8 +113,6 @@ export async function commitConnectFlow(
 }
 
 async function ensureLocalGatewayActive(): Promise<void> {
-  // Always the explicit call: first run defers starting the local gateway
-  // until this act (#603). Skipping when id already matches leaves it unstarted.
   await window.CentraidApi.setActiveGateway({ id: "local" });
 }
 

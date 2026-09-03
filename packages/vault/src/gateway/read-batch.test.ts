@@ -1,12 +1,3 @@
-// Gateway.readBatch (#916). A gateway read is a WRITER: it appends an
-// access.receipt, and SQLite commits every one of them on its own — so a
-// background scan that reads five entities pays five fsyncs and five copies of
-// the same b-tree leaf pages in the WAL. `readBatch` puts the scan's reads in
-// one transaction so the SAME receipts land in one commit. These tests pin the
-// three properties that make that safe: the receipts are all still there, a
-// refusal's receipt survives the throw that follows it, and the batch refuses
-// to nest inside an open transaction rather than corrupting one.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
@@ -58,7 +49,6 @@ describe("gateway read batch", () => {
     ]);
     expect(rows).toHaveLength(3);
     expect(receiptCount()).toBe(before + 3);
-    // Committed, not merely pending: the batch leaves no open transaction.
     expect(db.vault.isTransaction).toBe(false);
   });
 
@@ -70,8 +60,6 @@ describe("gateway read batch", () => {
         return gw.read(owner, { entity: "no.such_entity", purpose: PURPOSE });
       })
     ).toThrow(GatewayError);
-    // The allow receipt AND the deny receipt the refusal wrote — rolling the
-    // batch back would destroy exactly the evidence the deny exists to leave.
     expect(receiptCount()).toBe(before + 2);
     expect(db.vault.isTransaction).toBe(false);
     const last = db.vault
@@ -89,7 +77,6 @@ describe("gateway read batch", () => {
     expect(() => gw.readBatch(() => gw.readBatch(() => 1))).toThrow(
       /cannot nest/u
     );
-    // The outer batch still closes cleanly after the inner one refused.
     expect(db.vault.isTransaction).toBe(false);
   });
 });

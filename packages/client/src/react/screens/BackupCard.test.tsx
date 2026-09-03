@@ -133,8 +133,6 @@ describe("screens/BackupCard", () => {
           .mockResolvedValue({ configured: false, vaults: [] }),
         onRunNow: neverRun,
       });
-      // The head's own meta says it, in the place a reader looks first - no
-      // banner underneath repeating it in a sentence (binding layer v11).
       expect(el.textContent).toContain("no copies yet");
       expect(el.textContent).toContain(
         "Backup isn’t configured on this gateway"
@@ -146,8 +144,6 @@ describe("screens/BackupCard", () => {
           b.textContent?.includes("Back up now")
         )
       ).toBe(false);
-      // Not configured means there's no keyring to have exported a kit
-      // from yet — the confirm button (which would 409) is withheld.
       expect(
         [...el.querySelectorAll("button")].some((b) =>
           b.textContent?.includes("I've saved my recovery kit")
@@ -320,9 +316,6 @@ describe("screens/BackupCard", () => {
             {
               vaultId: "v1",
               name: "Main",
-              // Snapshot backup is remote while the active CAS remains local.
-              // Inventory must not disappear merely because the two stores use
-              // different destinations.
               destination: { kind: "gateway-local" },
               reconciliation,
             },
@@ -796,7 +789,6 @@ describe("screens/BackupCard", () => {
       });
 
       expect(el.textContent).toContain("gateway unreachable");
-      // Still gated — the failed verification didn't flip the state.
       expect(
         el.querySelector('[data-testid="recovery-kit-gate"]')
       ).not.toBeNull();
@@ -829,7 +821,6 @@ describe("screens/BackupCard", () => {
           name: "Main",
           policy: POLICY,
           destination: { kind: "provider", connectionId: "p1" },
-          // All four clocks recent so freshness reads green.
           lastBackupAt: new Date(NOW - 60_000).toISOString(),
           lastVerifyAt: new Date(NOW - 60_000).toISOString(),
           lastWalDrainAt: new Date(NOW - 60_000).toISOString(),
@@ -861,27 +852,22 @@ describe("screens/BackupCard", () => {
         onRunNow: neverRun,
       });
 
-      // Freshness — green "everything safe as of T".
       const freshness = el.querySelector('[data-testid="metric-freshness"]');
       expect(freshness?.textContent).toContain("Everything safe as of");
       expect(freshness?.querySelector('[data-tone="ok"]')).not.toBeNull();
 
-      // Recovery window — the ladder's daily rung (30 days).
       expect(
         el.querySelector('[data-testid="metric-recovery"]')?.textContent
       ).toContain("Undo anything from the last 30 days");
 
-      // Privacy — the structural constant.
       expect(
         el.querySelector('[data-testid="metric-privacy"]')?.textContent
       ).toContain("Your provider cannot read your data");
 
-      // Cost — aggregate bytes / quota with a bar.
       const cost = el.querySelector('[data-testid="metric-cost"]');
       expect(cost?.textContent).toContain("2.0 GB of 10.0 GB");
       expect(cost?.querySelector('[data-testid="cost-bar"]')).not.toBeNull();
 
-      // Exit — always-available export + honest metered note.
       expect(
         el.querySelector('[data-testid="export-everything"]')
       ).not.toBeNull();
@@ -964,7 +950,6 @@ describe("screens/BackupCard", () => {
       );
       expect(diagnostics?.tagName).toBe("DETAILS");
       expect(diagnostics?.open).toBe(false); // collapsed by default
-      // The clocks live inside it, not on the primary surface.
       expect(
         diagnostics?.querySelector('[data-testid="freshness-clocks"]')
       ).not.toBeNull();

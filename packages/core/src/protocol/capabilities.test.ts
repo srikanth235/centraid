@@ -5,8 +5,6 @@ import {
   isGatewayCapabilities,
 } from "./capabilities.js";
 
-// Titled in prose, not `describe(DEFAULT_GATEWAY_CAPABILITIES)`: the constant
-// is an object, and `describe` only accepts a string or a function.
 describe("the default gateway capabilities", () => {
   it("is frozen and advertises the modern loopback surface", () => {
     expect(Object.isFrozen(DEFAULT_GATEWAY_CAPABILITIES)).toBe(true);
@@ -54,8 +52,6 @@ describe(isGatewayCapabilities, () => {
         crossVaultPlacements: true,
       })
     ).toBe(true);
-    // Experimental flags are optional: absent reads as off, present must be
-    // boolean.
     expect(
       isGatewayCapabilities({
         webSessions: true,

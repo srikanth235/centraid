@@ -43,8 +43,6 @@ describe("route vitals", () => {
   });
 
   it("owns the loading line itself, whatever the route passed", () => {
-    // Six pages that each invented their own "one moment…" is exactly what
-    // one generic sentence prevents.
     publishVitals("atlas", { count: "9 kinds", state: "loading" });
     expect(readVitals("atlas")?.count).toBe(LOADING_COUNT_LINE);
     expect(LOADING_COUNT_LINE).toBe("Reading from the gateway");
@@ -55,7 +53,6 @@ describe("route vitals", () => {
     publishVitals("insights", { lastReadAt: at, state: "error" });
     expect(readVitals("insights")?.count).toBe(lastReadLine(at));
     expect(lastReadLine(at)).toContain("Last read at");
-    // Nothing to claim about when it was last right → it claims nothing.
     publishVitals("connectors", { state: "error" });
     expect(readVitals("connectors")?.count).toBe("");
   });
@@ -74,8 +71,6 @@ describe("route vitals", () => {
   it("hands the bar one snapshot object, replaced rather than mutated", () => {
     const before = readAllVitals();
     publishVitals("atlas", { count: "9 kinds", state: "ready" });
-    // Identity is what `useSyncExternalStore` compares; a mutated map would
-    // never re-render the bar.
     expect(readAllVitals()).not.toBe(before);
   });
 
@@ -120,7 +115,6 @@ describe("route vitals", () => {
       expect(readRouteHealth()?.action).toBeUndefined();
       publishRouteSignals("connectors", { state: "error", health });
       expect(readRouteHealth()).toStrictEqual({ text: ERROR_HEALTH });
-      // The two sentences that are the same on all six pages.
       expect(EMPTY_HEALTH).toBe("Nothing to attend to");
       expect(ERROR_HEALTH).toBe("This page could not load");
     });

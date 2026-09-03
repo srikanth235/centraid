@@ -1,17 +1,3 @@
-// Removing a projection — the unshare half of share-by-placement (#599
-// decision 11).
-//
-// Unshare deletes the projected rows in the AUDIENCE vault and nothing else.
-// The origin row and its bytes are untouched: the origin holds its own
-// directory entry onto the same inode, so unlinking the audience's entry can
-// never free the owner's bytes. The audience's own blob goes orphaned and its
-// existing GC unlinks it on schedule — this module never touches the CAS.
-//
-// The content item is deleted only when nothing ELSE in the audience vault
-// still references it. That check walks the live schema (`PRAGMA
-// foreign_key_list`) rather than a remembered list of referrers, so a table
-// added later is covered without anyone having to update a sweep clause here.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { isBlobUri } from "../blob/store.js";
@@ -23,11 +9,6 @@ interface ForeignKeyRow {
   on_delete: string;
 }
 
-/**
- * Every `(table, column)` in this vault that FKs `core_content_item`, minus
- * the ones that clean themselves up (`ON DELETE CASCADE`). Derived from the
- * live schema so it cannot rot.
- */
 function contentItemReferrers(
   db: DatabaseSync
 ): { table: string; column: string }[] {
@@ -46,9 +27,6 @@ function contentItemReferrers(
     for (const fk of fks) {
       if (fk.table !== "core_content_item") continue;
       if (fk.on_delete === "CASCADE") continue;
-      // A derivative is dependent cache/output, never an ownership claim on
-      // its source. Counting it here would make every enriched content item
-      // immortal and leave its vector/FTS state behind on unshare.
       if (table === "core_content_derivative") continue;
       referrers.push({ table, column: fk.from });
     }
@@ -68,13 +46,9 @@ function isReferenced(db: DatabaseSync, contentId: string): boolean {
   return false;
 }
 
-/** What a removal actually did in the audience vault. */
 export interface RemovalResult {
-  /** False when the projected row was already gone. */
   removed: boolean;
-  /** False when another audience row still claims the content item. */
   contentItemRemoved: boolean;
-  /** Content addresses the removed rows had been claiming. */
   shas: string[];
 }
 
@@ -84,10 +58,6 @@ const ABSENT: RemovalResult = {
   shas: [],
 };
 
-/**
- * Delete a projected closure from the audience vault. The caller owns the
- * transaction (unshare is one single-DB transaction, same as share).
- */
 export function deleteProjectedClosure(
   audience: DatabaseSync,
   itemType: ShareableItemType,
@@ -142,9 +112,6 @@ export function deleteProjectedClosure(
     if (derivative.sha256 !== null) shas.add(derivative.sha256);
   }
 
-  // Root-specific state can always leave with the projected wrapper. A raw
-  // core.content_item is also the shared underlying row, so defer that state
-  // until the live FK scan proves no receiver-owned wrapper still needs it.
   if (itemType !== "core.content_item")
     scrubProjectedTarget(audience, itemType, itemId);
   if (itemType === "media.asset") {
@@ -153,13 +120,9 @@ export function deleteProjectedClosure(
       .all(itemId) as Array<{ region_id: string }>;
     for (const region of regions)
       scrubProjectedTarget(audience, "media.face_region", region.region_id);
-    // Face rows do not cascade from the asset. Their own clusters do, so
-    // remove the regions before deleting the projected asset.
     audience
       .prepare("DELETE FROM media_face_region WHERE asset_id = ?")
       .run(itemId);
-    // This row belongs to the receiver, not the projection: preserve it and
-    // sever only the reference to the departing shared photo.
     audience
       .prepare(
         "UPDATE media_asset SET source_asset_id = NULL WHERE source_asset_id = ?"
@@ -184,10 +147,6 @@ export function deleteProjectedClosure(
   return { removed: true, contentItemRemoved, shas: [...shas] };
 }
 
-/** Unshare is a privacy erasure, not the ordinary lifecycle purge: every local
- * enrichment request for a departing projection goes away, drained history
- * included — which is why it is explicit rather than left to the composite
- * foreign key's cascade, whose `target_id` may only be nulled. */
 function scrubProjectedTarget(
   audience: DatabaseSync,
   targetType: string,

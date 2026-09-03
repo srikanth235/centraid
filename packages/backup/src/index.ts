@@ -1,4 +1,3 @@
-// Provider seam (PROTOCOL.md).
 export {
   BackupProviderError,
   CODE_STATUS,
@@ -36,15 +35,11 @@ export type {
 } from "./provider.js";
 export { MIN_POLICY_RPO_SECONDS } from "./provider-observability.js";
 
-// Data plane.
 export { assertSafeKey, FsObjectStore } from "./object-store.js";
 export type { ObjectListEntry, ObjectStore } from "./object-store.js";
 export { S3ObjectStore } from "./s3-store.js";
 export type { S3ObjectStoreOptions } from "./s3-store.js";
 
-// Layer-1 generic grant path (PROTOCOL.md § Credential grant) — for a
-// consumer (e.g. a `cas` store client) that wants a grant without pulling in
-// the snapshot engine or `BackupProvider`.
 export {
   requestCasGrant,
   requestDerivedGrant,
@@ -56,10 +51,8 @@ export type {
   RequestStorageGrantOptions,
 } from "./cas-grant.js";
 
-// Parts (FORMAT.md § Parts — fixed-size, /1 boundaries kept in /2).
 export { PART_BYTES, partBuffer, partStream } from "./parts.js";
 
-// Entropy-gated chunk payload framing (FORMAT.md § Chunk payload framing — /2, #405 §1).
 export {
   ALGO_DEFLATE,
   ALGO_STORE,
@@ -69,7 +62,6 @@ export {
   zstdAvailable,
 } from "./compress.js";
 
-// WAL segments (FORMAT.md § WAL segments — /1, #408).
 export {
   isWalGeneration,
   lastCommitBoundary,
@@ -115,7 +107,6 @@ export type {
 export { replayWalSegments } from "./wal-restore.js";
 export type { ReplayWalOptions, WalReplayOutcome } from "./wal-restore.js";
 
-// Crypto + keyring (FORMAT.md § Key custody, § Encryption).
 export {
   activeMasterKey,
   chunkId,
@@ -134,7 +125,6 @@ export {
 } from "./crypto.js";
 export type { Keyring, KeyringEpoch } from "./crypto.js";
 
-// Manifest (FORMAT.md § Manifest).
 export {
   canonicalJson,
   isSafeEntryPath,
@@ -154,7 +144,6 @@ export type {
   StoredManifest,
 } from "./manifest.js";
 
-// Engine (snapshot / restore / verify / recovery kit).
 export {
   assertCompatibleAppMeta,
   createSnapshot,
@@ -173,8 +162,6 @@ export type {
   VerifySnapshotResult,
 } from "./engine.js";
 
-// Recovery kit reader + password wrapper (#439, #555). A kit is always
-// password-wrapped; the reader refuses anything else.
 export {
   parseRecoveryKit,
   recoveryKitFingerprint,
@@ -186,9 +173,6 @@ export type {
   WrappedRecoveryKitDocument,
 } from "./recovery-kit.js";
 
-// The password wrap under the kit (#439, generalised for #630): scrypt →
-// AES-256-GCM over canonical JSON. Shared so the vault's portable-export
-// custody kit is the SAME wrap, not a second copy of the crypto.
 export {
   PASSWORD_WRAP_SCRYPT,
   unwrapPasswordDocument,
@@ -196,15 +180,12 @@ export {
 } from "./password-wrap.js";
 export type { WrappedPasswordDocument } from "./password-wrap.js";
 
-// Targeted blob re-pin (#439) — materialize specific shas from a
-// snapshot, for the adopt-time inventory reconcile.
 export { materializeSnapshotBlobs } from "./materialize.js";
 export type {
   MaterializeSnapshotBlobsOptions,
   MaterializeSnapshotBlobsResult,
 } from "./materialize.js";
 
-// Providers.
 export {
   LocalBackupProvider,
   openLocalBackupProvider,
@@ -216,6 +197,5 @@ export {
 } from "./remote-provider.js";
 export type { RemoteBackupProviderOptions } from "./remote-provider.js";
 
-// Conformance kit (PROTOCOL.md § Conformance).
 export { providerConformanceCases } from "./conformance.js";
 export type { ConformanceCase, ConformanceHarness } from "./conformance.js";

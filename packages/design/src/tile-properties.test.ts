@@ -1,20 +1,3 @@
-/**
- * Tile-finish value laws (#656 Layer 3 mutation seed).
- *
- * `tileFinish` is the only real arithmetic in this package — hex parsing,
- * channel shading with a clamp, and alpha composition — and it is done in TS
- * precisely so web and native produce the same pixels. It had no test in this
- * package at all (the nearest one lives in `packages/client`, which cannot
- * defend a design-tokens mutant). Every mutant in the file was uncovered.
- *
- * These assert the laws: channel order, clamping at both ends, per-variant
- * alpha, and glyph contrast — never a literal box-shadow string.
- *
- * NOTE: swept with a seeded generator rather than `@centraid/test-kit
- * /fast-check` — design-tokens has no `"type": "module"`, so importing the
- * ESM-only fast-check re-export fails `tsc` (TS1479). The sweep is
- * deterministic either way.
- */
 import { describe, expect, test } from "vitest";
 
 import { palette, paletteText } from "./palette.js";
@@ -28,7 +11,6 @@ import type { TileVariant } from "./tile.js";
 
 const HUES = Object.values(palette);
 
-/** Deterministic hex sweep — a fixed LCG so a failure always reproduces. */
 function hexSamples(count: number, seed: number): string[] {
   let state = seed >>> 0;
   const byte = (): number => {
@@ -49,13 +31,10 @@ function rgbaChannels(value: string): [number, number, number, number] {
   return [Number(g.r), Number(g.g), Number(g.b), Number(g.a)];
 }
 
-/** Every palette hue plus a seeded sweep, and the two clamp extremes. */
 const SWEEP = [...HUES, ...hexSamples(60, 65650), "#000000", "#ffffff"];
 
 describe("tile variants", () => {
   test("the exported variant list is exactly the set tileFinish handles", () => {
-    // A variant added to the union but not the list (or vice versa) would let
-    // a picker render an undefined finish.
     expect(new Set(TILE_VARIANTS)).toStrictEqual(
       new Set<TileVariant>(["solid", "gradient", "glassy", "flat"])
     );
@@ -67,8 +46,6 @@ describe("tile variants", () => {
       for (const variant of TILE_VARIANTS) {
         const finish = tileFinish(color, variant);
         expect(finish.background, `${color}/${variant}`).not.toBe("");
-        // RN cannot paint a gradient — the solid fallback must always be a
-        // colour, never a gradient string.
         expect(finish.backgroundColor, `${color}/${variant}`).not.toContain(
           "gradient"
         );
@@ -110,7 +87,6 @@ describe("tile variants", () => {
       for (const i of [0, 1, 2]) {
         const from = channel(color, i);
         const to = channel(stops[1] as string, i);
-        // Never lighter, never below zero, and exactly -36 unless clamped.
         expect(to, `${color}[${i}]`).toBeLessThanOrEqual(from);
         expect(to, `${color}[${i}]`).toBeGreaterThanOrEqual(0);
         expect(to, `${color}[${i}]`).toBe(Math.max(0, from - 36));
@@ -125,7 +101,6 @@ describe("tile variants", () => {
       (m) => m[0]
     );
     expect(stops[1]).toBe("#000000");
-    // A near-black channel clamps to 00, not to a two's-complement value.
     const dark = tileFinish("#0a0a0a", "gradient").background;
     expect(dark).toContain("#000000");
     expect(dark).not.toMatch(/#-|NaN/u);
@@ -136,7 +111,6 @@ describe("tile variants", () => {
       const shaded = [
         ...tileFinish(color, "gradient").background.matchAll(/#[0-9a-f]{6}/giu),
       ].map((m) => m[0]);
-      // A missing padStart would emit `#a0b0` for single-digit channels.
       expect(shaded[1], color).toMatch(/^#[0-9a-f]{6}$/u);
     }
   });
@@ -154,14 +128,11 @@ describe("tile variants", () => {
       ] as const) {
         const finish = tileFinish(color, variant);
         const [r, g, b, a] = rgbaChannels(finish.background);
-        // Channel ORDER matters: a swapped slice would paint the wrong hue.
         expect([r, g, b], `${color}/${variant}`).toStrictEqual(expected);
         expect(a, `${color}/${variant}`).toBe(alpha);
-        // The solid fallback matches the gradient-free background exactly.
         expect(finish.backgroundColor, `${color}/${variant}`).toBe(
           finish.background
         );
-        // Tinted variants read the glyph in the hue, not white.
         expect(finish.glyphColor, `${color}/${variant}`).toBe(color);
       }
     }
@@ -201,8 +172,6 @@ describe("tile variants", () => {
   });
 
   test("every variant that layers over content carries an inset hairline", () => {
-    // The 0.5px inset ring is what separates a tile from the surface behind
-    // it; only `solid`/`gradient` may rely on their own fill for that.
     for (const variant of TILE_VARIANTS) {
       expect(tileFinish("#4950f6", variant).boxShadow, variant).toContain(
         "inset"

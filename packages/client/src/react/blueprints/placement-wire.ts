@@ -1,14 +1,3 @@
-// The `/placements` → `/edges` wire translation `centraid-inline.ts`'s
-// `place()` needs (#726). `place()`'s result shape is the `/placements`
-// vocabulary, and callers read `result.status === "executed"` /
-// `result.reason` — this module is the whole translation, and the only place
-// the two vocabularies are allowed to meet.
-
-/**
- * `/edges` answers queued|in-flight|established|parked|denied|revoked|
- * completed|failed; `/placements` callers check for `executed`. Translate the
- * one terminal-success value and pass every other value through unchanged.
- */
 export function toPlacementStatus(status: unknown): string {
   return status === "completed" || status === "established"
     ? "executed"
@@ -17,8 +6,6 @@ export function toPlacementStatus(status: unknown): string {
       : "failed";
 }
 
-/** Fold one `/edges` response (always one item, from this facade) back into
- *  the `/placements` wire shape every existing `place()` caller still reads. */
 export function placementWireFromEdge(
   edge: Record<string, unknown>,
   opts: {

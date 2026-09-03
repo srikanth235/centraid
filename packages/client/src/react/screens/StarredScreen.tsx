@@ -19,11 +19,6 @@ export interface StarredScreenProps {
   onAutomationMenu: (ref: string, anchor: HomeMenuAnchor) => void;
 }
 
-/**
- * Starred library — the card grid narrowed to starred apps + automations.
- * The route filters the DTOs; this just lays them out with the shared cards,
- * so a starred tile looks identical here and wherever else it is drawn.
- */
 export default function StarredScreen({
   appItems,
   automationItems,

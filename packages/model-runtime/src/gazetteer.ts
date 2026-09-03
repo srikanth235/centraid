@@ -1,18 +1,11 @@
-// NEAREST SETTLEMENT on this device: a bundled table plus arithmetic. A
-// reverse-geocoding API answers better and mails a stranger the coordinates of
-// a member's home, so that trade is not available here.
-
 import { GAZETTEER_RECORDS } from "./gazetteer-data.js";
 
 export { GAZETTEER_ROW_COUNT, GAZETTEER_SNAPSHOT } from "./gazetteer-data.js";
 
 export const GAZETTEER_SOURCE = "geonames-cities15000";
 
-/** Wide on purpose; the hedge is in the copy, which prints "near", never "in". */
 export const GAZETTEER_MAX_KM = 50;
 
-/** Inside this band the more populous wins: a kilometre is the width of the
- *  towns, so the closer one is only whichever centroid GeoNames chose. */
 const TIE_BAND_KM = 1;
 
 const EARTH_RADIUS_KM = 6371.0088;
@@ -71,7 +64,6 @@ export function gazetteerSize(): number {
   return load().name.length;
 }
 
-/** A deliberate second copy: this bundle must not reach a blueprint. */
 function distanceKm(
   aLat: number,
   aLng: number,
@@ -99,7 +91,6 @@ function lowerBound(lat: Float64Array, value: number): number {
   return lo;
 }
 
-/** No country name, on purpose. */
 export function gazetteerDisplayName(settlement: {
   name: string;
   admin: string;
@@ -109,8 +100,6 @@ export function gazetteerDisplayName(settlement: {
     : `${settlement.name}, ${settlement.admin}`;
 }
 
-/** Latitude window only; longitude deliberately NOT windowed, so there is no
- *  antimeridian case. */
 export function nearestSettlement(
   lat: number,
   lng: number,

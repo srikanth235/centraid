@@ -1,11 +1,3 @@
-// The Vault Atlas Browse backend (#441): read side + the
-// journalled write trio. Proves the acceptance criteria for Browse —
-// keyset pagination stability, unknown-table rejection, sealed mask on read +
-// refusal on write, machinery read-only behind an unlock flag, polymorphic
-// dependents via the A1 registry, delete blocked by engine FKs, and the hard
-// requirement: a Browse write lands in the replica change log AND records
-// operator provenance.
-
 import { afterEach, assert, beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -79,7 +71,6 @@ describe("atlas", () => {
   }
 
   let tagSeq = 0;
-  /** Attach a core_tag (a POLYMORPHIC pointer) directly onto a party. */
   function tagParty(partyId: string, label: string): void {
     const now = new Date().toISOString();
     const schemeId = `sch-${tagSeq}`;
@@ -103,8 +94,6 @@ describe("atlas", () => {
       .run(`tag-${conceptId}`, partyId, conceptId, now);
   }
 
-  // --- read: table picker + column metadata --------------------------------
-
   test("browseTableList classifies packs and flags machinery bands", () => {
     const tables = browseTableList(db.vault);
     const party = tables.find((t) => t.logical === "core.party");
@@ -113,7 +102,6 @@ describe("atlas", () => {
     expect(party?.singlePk).toBe(true);
     const blob = tables.find((t) => t.logical === "blob.custody_state");
     expect(blob?.machinery).toBe(true);
-    // Composite-pk table honestly reports it (tally_expense_split).
     const split = tables.find((t) => t.logical === "tally.expense_split");
     expect(split?.singlePk).toBe(false);
   });
@@ -150,8 +138,6 @@ describe("atlas", () => {
     expect(out.status).toBe("failed");
   });
 
-  // --- read: keyset pagination ---------------------------------------------
-
   function addScheme(id: string, title: string): void {
     const out = invoke("atlas.insert_row", {
       table: "core.concept_scheme",
@@ -160,7 +146,6 @@ describe("atlas", () => {
     expect(out.status).toBe("executed");
   }
 
-  /** Walk every page of a keyset paginated read into one ordered id list. */
   function paginateAll(
     params: { table: string; orderBy?: string; dir?: "asc" | "desc" },
     idCol: string,
@@ -184,8 +169,6 @@ describe("atlas", () => {
   test("keyset pagination is stable — every row once, in order, matching a full read", () => {
     for (const id of ["s01", "s02", "s03", "s04", "s05", "s06", "s07"])
       addScheme(id, `Scheme ${id}`);
-    // The full (single-page) order is ground truth; a small-page walk must
-    // reproduce it exactly — no duplicates across boundaries, no dropped rows.
     const full = browseRows(db.vault, {
       table: "core.concept_scheme",
       limit: 100,
@@ -199,7 +182,6 @@ describe("atlas", () => {
   });
 
   test("keyset pagination over a non-key orderBy stays stable with ties", () => {
-    // A shared title on several rows forces the pk tiebreaker to carry the order.
     addScheme("a1", "Zed");
     addScheme("a2", "Zed");
     addScheme("a3", "Zed");
@@ -217,12 +199,9 @@ describe("atlas", () => {
     );
     expect(paged).toStrictEqual(fullIds);
     expect(new Set(paged).size).toBe(paged.length);
-    // The three tied 'Zed' rows are contiguous and ordered by their pk tiebreaker.
     const zeds = paged.filter((id) => ["a1", "a2", "a3"].includes(id));
     expect(zeds).toStrictEqual(["a1", "a2", "a3"]);
   });
-
-  // --- read: sealed masking -------------------------------------------------
 
   test("sealed columns read as a placeholder, never plaintext", () => {
     const now = new Date().toISOString();
@@ -238,8 +217,6 @@ describe("atlas", () => {
     const page = browseRows(db.vault, { table: "locker.item" });
     expect(page.rows[0]!["password"]).toBe("«sealed»");
   });
-
-  // --- write: sealed refusal + machinery lock -------------------------------
 
   test("a write to a sealed column is refused", () => {
     const now = new Date().toISOString();
@@ -258,12 +235,6 @@ describe("atlas", () => {
     expect((out as { reason: string }).reason).toMatch(/sealed/u);
   });
 
-  // A COLUMN NAME IS AN IDENTIFIER (#916). The write statements interpolate the
-  // caller's JSON keys into quoted identifiers, so a key carrying a double
-  // quote closed the quote and smuggled a second assignment into the SET list
-  // — the sealed set, asked about the whole crafted key, said no, and the
-  // sealed column was written in plaintext anyway. The guard matches every
-  // touched key against the table's live columns BEFORE the seal check.
   test("a crafted column name cannot smuggle a write past the sealed check", () => {
     const now = new Date().toISOString();
     db.vault
@@ -279,7 +250,6 @@ describe("atlas", () => {
     });
     expect(out.status).toBe("failed");
     expect((out as { reason: string }).reason).toMatch(/unknown column/u);
-    // The point of the refusal: the sealed column is still untouched.
     const raw = db.vault
       .prepare(`SELECT password FROM locker_item WHERE item_id = 'L3'`)
       .get() as { password: string | null };
@@ -344,8 +314,6 @@ describe("atlas", () => {
     expect(locked.status).toBe("failed");
     expect((locked as { reason: string }).reason).toMatch(/machinery/u);
 
-    // With the unlock flag the guard is passed; the write then fails (or not) on
-    // the table's OWN constraints — the point is it is no longer machinery-blocked.
     const unlocked = invoke("atlas.insert_row", {
       table: "blob.custody_state",
       values: { content_id: "c1" },
@@ -354,8 +322,6 @@ describe("atlas", () => {
     assert(unlocked.status === "failed");
     expect((unlocked as { reason: string }).reason).not.toMatch(/machinery/u);
   });
-
-  // --- write: journalled path (replica + provenance) — THE hard requirement --
 
   test("a Browse write lands in the replica change log and records operator provenance", () => {
     const out = invoke("atlas.insert_row", {
@@ -369,7 +335,6 @@ describe("atlas", () => {
     });
     expect(out.status).toBe("executed");
 
-    // Replica visibility: a replica pulled after the edit sees it.
     const page = readReplicaChanges(db.vault);
     const change = page.changes.find(
       (c) =>
@@ -379,7 +344,6 @@ describe("atlas", () => {
     );
     expect(change).toBeDefined();
 
-    // Operator provenance: agent_kind='owner', a distinguishable atlas activity.
     const prov = db.audit
       .prepare(
         `SELECT prov_activity, agent_kind FROM access_provenance
@@ -398,11 +362,8 @@ describe("atlas", () => {
     expect(out.status).toBe("failed");
   });
 
-  // --- dependents: engine FKs + polymorphic registry ------------------------
-
   test("dependents count polymorphic mechanisms via the registry, not only engine FKs", () => {
     addParty("p1", "Ravi");
-    // A core_tag on the party — a POLYMORPHIC pointer invisible to PRAGMA.
     tagParty("p1", "Family");
 
     const deps = browseDependents(db.vault, "core.party", "p1");
@@ -443,9 +404,7 @@ describe("atlas", () => {
 
     const out = invoke("atlas.delete_row", { table: "core.party", id: "p3" });
     expect(out.status).toBe("executed");
-    // The row is gone…
     expect(() => browseRow(db.vault, "core.party", "p3")).toThrow(BrowseError);
-    // …and its tag was swept, not left dangling (#441 A1 hygiene).
     const tags = db.vault
       .prepare(
         `SELECT COUNT(*) AS n FROM core_tag WHERE target_type = 'core.party' AND target_id = 'p3'`
@@ -454,15 +413,12 @@ describe("atlas", () => {
     expect(tags.n).toBe(0);
   });
 
-  // --- FK reference-picker search -------------------------------------------
-
   test("browseRefSearch returns {id, display} hits from a FK target table", () => {
     addParty("p4", "Ravi Kumar");
     addParty("p5", "Sunita");
     const hits = browseRefSearch(db.vault, "core.party", "Ravi");
     expect(hits).toHaveLength(1);
     expect(hits[0]).toStrictEqual({ id: "p4", display: "Ravi Kumar" });
-    // Empty query lists rows by display field.
     expect(
       browseRefSearch(db.vault, "core.party", "").length
     ).toBeGreaterThanOrEqual(2);

@@ -4,9 +4,6 @@ import { listAppScopes, listVaults } from "../../gateway-client.js";
 import type { OwnerScope } from "./ownerScope.js";
 import { useAsyncData } from "./useAsyncData.js";
 
-// Owner scope registry (#726). `GET /_vault/scopes` is the source; an older
-// gateway degrades to `listVaults()` and those entries are treated writable.
-
 export interface OwnerScopesController {
   scopes: OwnerScope[];
   primary: OwnerScope | undefined;
@@ -27,7 +24,6 @@ interface ScopesSnapshot {
 }
 
 async function loadScopes(): Promise<OwnerScope[]> {
-  // Wrap the CALL: an unwired host throws synchronously, not as a rejection.
   let fromPlane: Awaited<ReturnType<typeof listAppScopes>>;
   try {
     fromPlane = await listAppScopes();
@@ -83,7 +79,6 @@ export function useOwnerScopes(): OwnerScopesController {
     const api = window.CentraidApi as typeof window.CentraidApi | undefined;
     const offVault = api?.onVaultChanged?.(refresh);
     const offGateway = api?.onGatewayChanged?.(refresh);
-    // Metadata-only: do not trip App.tsx `reScope` (onVaultChanged = pointer moved).
     const offMetadata = api?.onVaultMetadataChanged?.(refresh);
     return () => {
       offVault?.();

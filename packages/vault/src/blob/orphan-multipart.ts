@@ -22,11 +22,6 @@ export interface OrphanMultipartCleanupOptions {
   graceMs?: number;
 }
 
-/**
- * Reap provider multipart uploads that have no matching durable local upload.
- * The grace window closes the unavoidable create-response -> SQLite-write
- * race: a fresh provider upload is never mistaken for an orphan.
- */
 export async function cleanupOrphanedMultipartUploads(
   options: OrphanMultipartCleanupOptions
 ): Promise<number> {
@@ -52,6 +47,5 @@ export async function cleanupOrphanedMultipartUploads(
       options.transfer.abortTemporaryUpload(upload.tempId, upload.uploadId)
     )
   );
-  // Best-effort GC: one provider race/failure must not block custody drain.
   return results.filter((result) => result.status === "fulfilled").length;
 }

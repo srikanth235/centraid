@@ -1,7 +1,3 @@
-/**
- * Replica purge selector storage helpers (#545).
- */
-
 import { describe, expect, it } from "vitest";
 
 import {

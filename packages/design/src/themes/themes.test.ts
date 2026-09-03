@@ -1,7 +1,3 @@
-/**
- * Theme registry invariants (#608 group O): exactly two presets; shell CSS
- * keys literally on `[data-theme='dark']`.
- */
 import { describe, expect, test } from "vitest";
 
 import { parseColor, relativeLuminance } from "../color.js";
@@ -22,7 +18,6 @@ describe("theme registry", () => {
   });
 
   test("a registry key equals its kind, so `[data-theme='dark']` is exact", () => {
-    // Selectors use theme NAME but mean KIND; this test pins that link.
     for (const [name, theme] of Object.entries(themes)) {
       expect(theme.kind, `theme '${name}' declares kind '${theme.kind}'`).toBe(
         name

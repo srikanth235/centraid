@@ -1,11 +1,3 @@
-// The addressed-vault pointer (`addressedGatewayAuth`).
-//
-// The replica keys its local store by (gatewayId, vaultId), and an unpaired
-// same-origin install leaves `vaultId` unset — only the pairing path writes one
-// into the connection. So every replica read resolved the vault over the
-// NETWORK, and with the gateway down that read does not fail fast: Home threw
-// "An addressed vault is required" and painted the day-one empty state over a
-// fully synced replica.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as TypeImport_vault from "../gateway-client-vault.js";
@@ -17,7 +9,6 @@ vi.mock(import("../gateway-client-vault.js"), async (importOriginal) => ({
   vaultStatus: () => vaultStatus(),
 }));
 
-/** The gateway's answer for `vaults.current()`; only the id matters here. */
 const status = (vaultId: string): TypeImport_vault.VaultStatus => ({
   fresh: false,
   name: "Vault",
@@ -27,7 +18,6 @@ const status = (vaultId: string): TypeImport_vault.VaultStatus => ({
 
 const POINTER_KEY = "centraid.v1.replica.addressedVault";
 
-/** A same-origin install with no paired gateway: no id, no vault. */
 function installHost(vaultId?: string): void {
   Object.assign(window, {
     CentraidApi: {
@@ -43,7 +33,6 @@ function installHost(vaultId?: string): void {
   });
 }
 
-/** A fresh module graph — a reload, as far as the session map is concerned. */
 async function reboot(): Promise<typeof TypeImport_shellSession> {
   vi.resetModules();
   return import("./shell-session.js");
@@ -74,13 +63,10 @@ describe("addressedGatewayAuth", () => {
     const first = await reboot();
     await first.addressedGatewayAuth();
 
-    // Next launch, gateway stopped. The ask still goes out; the answer does not
-    // wait for it to time out.
     const offline = await reboot();
     vaultStatus.mockRejectedValue(new Error("offline"));
     const gatewayAuth = await offline.addressedGatewayAuth();
     expect(gatewayAuth.vaultId).toBe("vault-7");
-    // And it is a real identity, not a protocol error.
     expect(offline.replicaIdentityForGatewayAuth(gatewayAuth)).toStrictEqual({
       gatewayId: "url:https://gateway.example/",
       vaultId: "vault-7",
@@ -88,9 +74,6 @@ describe("addressedGatewayAuth", () => {
   });
 
   it("also remembers a vault the host itself already addresses", async () => {
-    // The paired browser: the id is in the connection, so no network read
-    // happens at all — but the pointer still has to be written, or the purge
-    // paths would have nothing consistent to clear.
     installHost("vault-9");
     const mod = await reboot();
     expect((await mod.addressedGatewayAuth()).vaultId).toBe("vault-9");

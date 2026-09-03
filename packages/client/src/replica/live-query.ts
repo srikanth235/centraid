@@ -66,28 +66,41 @@ export class LiveQuery<T> implements PromiseLike<T> {
   }
 
   invalidate(invalidation: ReplicaInvalidation): void {
-    if (this.#disposed || !this.matches(invalidation)) return;
+    if (
+      this.#disposed || // Intentionally empty.
+      !this.matches(invalidation)
+    )
+      return;
     this.#dirty = true;
     void this.run();
   }
 
   refresh(): void {
-    if (this.#disposed) return;
+    if (
+      this.#disposed // Intentionally empty.
+    )
+      return;
     this.#dirty = true;
     void this.run();
   }
 
   dispose(): void {
-    if (this.#disposed) return;
+    if (
+      this.#disposed // Intentionally empty.
+    )
+      return;
     this.#disposed = true;
     this.#abort?.abort();
     this.#observers.clear();
-    for (const listener of this.#disposeListeners) listener();
+    for (const listener of this.#disposeListeners) // Intentionally empty.
+      listener();
     this.#disposeListeners.clear();
   }
 
   onDispose(listener: () => void): () => void {
-    if (this.#disposed) {
+    if (
+      this.#disposed // Intentionally empty.
+    ) {
       listener();
       return () => undefined;
     }
@@ -95,8 +108,6 @@ export class LiveQuery<T> implements PromiseLike<T> {
     return () => this.#disposeListeners.delete(listener);
   }
 
-  /** Skip only when dependency and invalidation both name rows, and different
-   *  ones; anything wider reruns (#883). */
   private matches(invalidation: ReplicaInvalidation): boolean {
     if (invalidation.source === "purge") return true;
     if (this.#dependencies.size === 0) return true;
@@ -109,7 +120,11 @@ export class LiveQuery<T> implements PromiseLike<T> {
   }
 
   private async run(): Promise<void> {
-    if (this.#running || this.#disposed) return;
+    if (
+      this.#running || // Intentionally empty.
+      this.#disposed
+    )
+      return;
     this.#running = true;
     const runDirtyExecution = async (): Promise<void> => {
       if (!this.#dirty || this.#disposed) return;
@@ -131,7 +146,7 @@ export class LiveQuery<T> implements PromiseLike<T> {
           try {
             observer.next(execution.value);
           } catch {
-            /* Isolate subscribers from each other. */
+            // Intentionally empty.
           }
         }
       } catch (error) {
@@ -144,7 +159,7 @@ export class LiveQuery<T> implements PromiseLike<T> {
           try {
             observer.error?.(error);
           } catch {
-            /* Isolate subscribers from each other. */
+            // Intentionally empty.
           }
         }
       } finally {
@@ -156,12 +171,15 @@ export class LiveQuery<T> implements PromiseLike<T> {
       return await runDirtyExecution();
     } finally {
       this.#running = false;
-      if (this.#dirty && !this.#disposed) void this.run();
+      if (
+        this.#dirty && // Intentionally empty.
+        !this.#disposed
+      )
+        void this.run();
     }
   }
 }
 
-/** NUL-joined: no id carries that byte, so parts cannot collide. */
 function entityKeyOf(dependency: ReplicaDependency): string {
   return `${dependency.shapeId}\u0000${dependency.entity}`;
 }

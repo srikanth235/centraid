@@ -1,6 +1,3 @@
-// Restartable/direct S3 transfer surface (#414). Kept out of s3.ts so
-// the ordinary CAS driver remains below the repository's 500-line ceiling.
-
 import type {
   MultipartPart,
   RemoteBlobTransfer,
@@ -16,7 +13,6 @@ const PART_BYTES = 16 * 1024 * 1024;
 const MULTIPART_AT = 32 * 1024 * 1024;
 const TEMP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 
-/** Canonical path-style namespace advertised to trusted native carriers. */
 export function s3TemporaryUploadPrefix(input: {
   bucket: string;
   prefix?: string;
@@ -119,7 +115,6 @@ export class S3TransferStore implements RemoteBlobTransfer {
     storageClass?: string
   ): Promise<string> {
     void label;
-    // Per-call override wins (#425), else the instance default.
     const cls = storageClass ?? this.options.storageClass;
     return this.pipeline.beginMultipart(
       key,
@@ -359,8 +354,6 @@ export class S3TransferStore implements RemoteBlobTransfer {
     storageClass?: string
   ): Promise<void> {
     const source = `/${this.options.bucket}/${encodeKeyPath(this.tempKey(tempId))}`;
-    // The CopyObject is the object-creating call for the direct-to-CAS door, so
-    // the class rides HERE (#425); override wins over the default.
     const cls = storageClass ?? this.options.storageClass;
     const response = await this.send("PUT", this.shaKey(sha), {
       headers: {

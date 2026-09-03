@@ -85,7 +85,6 @@ describe("ingest pure parsers (#545 B6)", () => {
   });
 
   test("readZipEntries reads stored local-file entries", () => {
-    // Minimal single-entry stored zip built by hand (method 0).
     const name = Buffer.from("hello.txt");
     const data = Buffer.from("hello zip");
     const local = Buffer.alloc(30 + name.length + data.length);
@@ -133,7 +132,6 @@ describe("ingest pure parsers (#545 B6)", () => {
     eocd.writeUInt32LE(local.length, 16);
     eocd.writeUInt16LE(0, 20);
 
-    // Also exercise deflate path: stored is enough for B6 direct coverage.
     void deflateRawSync;
     const zip = Buffer.concat([local, cdir, eocd]);
     const entries = readZipEntries(zip);

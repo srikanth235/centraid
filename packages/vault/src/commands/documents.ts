@@ -1,23 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); documents own the whole drive loop (13 commands with their contracts), so it is large by design.
-// Document commands (core §01, #352): a document has identity SEPARATE
-// from its bytes — core_document wraps a canonical core_content_item exactly
-// like knowledge_note wraps a note body (the wrapper pattern), so a document
-// can be edited in place with a walkable version history instead of forcing
-// every edit to mint a brand-new document. Folders are SKOS concepts in the
-// owner's centraid folders scheme (broader_concept_id is the parent), and
-// filing is one core_tag row per document — everything the ontology already
-// models, nothing invented. The scheme's `root` concept is the drive's top
-// level; every document carries exactly one folders-scheme tag.
-//
-// Version lineage is a `revises` core.link between CONTENT ITEMS (NEW ->
-// OLD, #272's relation fabric), never a column on core_document —
-// core_document.current_content_id only ever names the HEAD; the chain
-// behind it is walked through core_link. History never rewrites (rule R3):
-// restoring an old version asserts a new link forward, it never touches the
-// old ones. Trash is the DOCUMENT row's own deleted_at/purge_at lifecycle;
-// superseded content items are durable — never auto-purged while their
-// document lives — and purge with the document only once nothing else still
-// needs them (gateway/duties.ts sweepLifecycle's lapsedDocuments pass).
 
 import {
   MAX_INLINE_DATA_URI_CHARS,
@@ -31,17 +12,12 @@ import { assertInlineDataUriWithinBudget } from "./inline-body-guard.js";
 import { RELATIONS_SCHEME_URI_SQL } from "./links.js";
 import { recordRevision } from "./revisions.js";
 
-/** Soft-deleted documents linger this long before the lifecycle sweep purges. */
 const PURGE_AFTER_DAYS = 30;
 
-// An https URI, not a urn: one — this literal is interpolated into
-// condition SQL, where `:folders` would read as a named parameter.
 export const FOLDER_SCHEME_URI = "https://centraid.dev/schemes/folders";
 
-/** Document identity marks the wrapper row, never the raw content item. */
 export const DOCUMENT_TARGET_TYPE = "core.document";
 
-/** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
   if (ctx.identity.partyId) return ctx.identity.partyId;
   const owner = ctx.db
@@ -57,7 +33,6 @@ function purgeAt(now: string): string {
   ).toISOString();
 }
 
-/** The folders scheme, created on first use. */
 function folderSchemeId(ctx: HandlerCtx): string {
   const existing = ctx.db
     .prepare("SELECT scheme_id FROM core_concept_scheme WHERE uri = ?")
@@ -73,7 +48,6 @@ function folderSchemeId(ctx: HandlerCtx): string {
   return schemeId;
 }
 
-/** The drive's top level — the scheme's `root` concept, created on first use. */
 function rootFolderId(ctx: HandlerCtx): string {
   const schemeId = folderSchemeId(ctx);
   const existing = ctx.db
@@ -92,7 +66,6 @@ function rootFolderId(ctx: HandlerCtx): string {
   return conceptId;
 }
 
-/** Re-file a document: exactly one folders-scheme tag per document. */
 function fileInto(
   ctx: HandlerCtx,
   documentId: string,
@@ -117,11 +90,9 @@ function fileInto(
   ctx.wrote("core.tag", tagId);
 }
 
-/** Condition fragment: the id is a live document. */
 const DOCUMENT_EXISTS_SQL = `
   SELECT count(*) AS n FROM core_document WHERE document_id = :document_id AND deleted_at IS NULL`;
 
-/** Condition fragment: `:content_id` is the current content of `:document_id`. */
 const IS_CURRENT_CONTENT_SQL = `
   SELECT count(*) AS n FROM core_document
    WHERE document_id = :document_id AND current_content_id = :content_id`;
@@ -134,9 +105,7 @@ const ADD_DOCUMENT: CommandDefinition = {
     required: ["title"],
     additionalProperties: false,
     properties: {
-      /** Small inline bytes. Exactly one of data_uri / staged_sha (#296). */
       data_uri: { type: "string", minLength: 6 },
-      /** Staged bytes: claim what POST /_vault/blobs hashed into the CAS. */
       staged_sha: { type: "string", minLength: 64, maxLength: 64 },
       title: { type: "string", minLength: 1 },
       folder_id: { type: "string", minLength: 1 },
@@ -168,8 +137,6 @@ const ADD_DOCUMENT: CommandDefinition = {
       value: 1,
     },
     {
-      // The inline door is for SMALL payloads (#296): the journal
-      // records every input, so big documents take the staging route.
       name: "within_size_cap",
       sql: `SELECT CASE WHEN :data_uri IS NULL THEN 1 ELSE (length(:data_uri) <= ${MAX_INLINE_DATA_URI_CHARS}) END AS n`,
       column: "n",
@@ -226,11 +193,6 @@ function addDocument(ctx: HandlerCtx): Record<string, unknown> {
     folder_id?: string;
     extracted_text?: string;
   };
-  // Staged bytes claim their content item (#296); small inline
-  // payloads mint one. A document's identity is the wrapper row, not the
-  // content item — re-presenting known bytes dedupes the BYTES (deduped: 1)
-  // but always mints a fresh document, because two documents may
-  // legitimately share identical bytes.
   if (input.data_uri !== undefined)
     assertInlineDataUriWithinBudget(input.data_uri);
   const minted = input.staged_sha
@@ -321,7 +283,6 @@ const MOVE_DOCUMENT: CommandDefinition = {
     additionalProperties: false,
     properties: {
       document_id: { type: "string", minLength: 1 },
-      // Omitted folder_id means back to the drive's top level.
       folder_id: { type: "string", minLength: 1 },
     },
   },
@@ -352,7 +313,6 @@ const MOVE_DOCUMENT: CommandDefinition = {
   ],
   postconditions: [
     {
-      // Filed exactly once — the move replaced, never duplicated.
       name: "filed_once",
       sql: `SELECT count(*) AS n FROM core_tag t
               JOIN core_concept c ON c.concept_id = t.concept_id
@@ -394,8 +354,6 @@ const TRASH_DOCUMENT: CommandDefinition = {
     },
   },
   preconditions: [
-    // Only a live document can be trashed — a double-delete fails loudly
-    // instead of silently re-stamping the trash date.
     {
       name: "document_exists",
       sql: DOCUMENT_EXISTS_SQL,
@@ -422,9 +380,6 @@ const TRASH_DOCUMENT: CommandDefinition = {
 function trashDocument(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { document_id: string };
   const until = purgeAt(ctx.now);
-  // Content is untouched here (retention stance, #352): the wrapper
-  // trashes, its bytes — current AND every superseded revision — stay live
-  // until the document itself purges (gateway/duties.ts lapsedDocuments).
   ctx.db
     .prepare(
       "UPDATE core_document SET deleted_at = ?, purge_at = ?, updated_at = ? WHERE document_id = ?"
@@ -456,7 +411,6 @@ const RESTORE_DOCUMENT: CommandDefinition = {
   preconditions: [
     {
       name: "document_in_trash",
-      // RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5).
       sql: `SELECT count(*) AS n FROM core_document
              WHERE document_id = :document_id AND deleted_at IS NOT NULL
                AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
@@ -506,8 +460,6 @@ const STAR_DOCUMENT: CommandDefinition = {
     properties: { document_id: { type: "string" } },
   },
   preconditions: [
-    // A trashed document refuses state changes (same rule as rename/move),
-    // but an already-starred one keeps its tag through trash and restore.
     {
       name: "document_exists",
       sql: DOCUMENT_EXISTS_SQL,
@@ -603,7 +555,6 @@ const EDIT_DOCUMENT: CommandDefinition = {
     },
   },
   preconditions: [
-    // A trashed document is frozen: restore first, then edit.
     {
       name: "document_exists",
       sql: DOCUMENT_EXISTS_SQL,
@@ -612,8 +563,6 @@ const EDIT_DOCUMENT: CommandDefinition = {
       value: 1,
     },
     {
-      // Only text-editable media types take the structured body_text door;
-      // a scanned PDF or image goes through replace_document_content.
       name: "current_content_is_text",
       sql: `SELECT count(*) AS n FROM core_document d
               JOIN core_content_item c ON c.content_id = d.current_content_id
@@ -660,9 +609,6 @@ function editDocument(ctx: HandlerCtx): Record<string, unknown> {
     | { content_id: string; media_type: string }
     | undefined;
   if (!doc) throw new Error("document vanished between check and execute");
-  // Same mint path add_document takes (#296): text stays inline, the
-  // FTS triggers decode it in-transaction. The media type carries forward —
-  // an edit changes the words, never the format.
   const dataUri = `data:${doc.media_type};charset=utf-8,${encodeURIComponent(input.body_text)}`;
   assertInlineDataUriWithinBudget(dataUri);
   const minted = mintContentFromDataUri(ctx, dataUri, {});
@@ -703,9 +649,7 @@ const REPLACE_DOCUMENT_CONTENT: CommandDefinition = {
     additionalProperties: false,
     properties: {
       document_id: { type: "string", minLength: 1 },
-      /** Small inline bytes. Exactly one of data_uri / staged_sha (#296). */
       data_uri: { type: "string", minLength: 6 },
-      /** Staged bytes: claim what POST /_vault/blobs hashed into the CAS. */
       staged_sha: { type: "string", minLength: 64, maxLength: 64 },
       title: { type: "string", minLength: 1 },
     },
@@ -823,10 +767,6 @@ function replaceDocumentContent(ctx: HandlerCtx): Record<string, unknown> {
   return { document_id: input.document_id, content_id: contentId };
 }
 
-// core.document_history is deliberately NOT a command — the chain is a plain
-// read: walk core_link WHERE from_type='core.content_item' AND relation
-// notation 'revises' starting at the document's current_content_id. See
-// documents.test.ts for the exact SQL an app-plane read would run.
 const RESTORE_DOCUMENT_VERSION: CommandDefinition = {
   name: "core.restore_document_version",
   ownerSchema: "core",
@@ -836,7 +776,6 @@ const RESTORE_DOCUMENT_VERSION: CommandDefinition = {
     additionalProperties: false,
     properties: {
       document_id: { type: "string", minLength: 1 },
-      /** A content item in this document's own history, not the current one. */
       content_id: { type: "string", minLength: 1 },
     },
   },
@@ -864,13 +803,6 @@ const RESTORE_DOCUMENT_VERSION: CommandDefinition = {
       value: 0,
     },
     {
-      // The target must be a genuine ancestor of the current content, walked
-      // through live `revises` links — never an arbitrary content item.
-      // Restoring an old version can make that version's content id gain a
-      // NEW outgoing edge (restore IS a revision, rule R3), which cycles the
-      // graph back through content already visited — UNION (not UNION ALL)
-      // is load-bearing here: SQLite's recursive CTE drops repeat rows, so
-      // the walk still terminates instead of looping the cycle forever.
       name: "target_in_chain",
       sql: `WITH RECURSIVE chain(content_id) AS (
               SELECT current_content_id FROM core_document WHERE document_id = :document_id
@@ -919,8 +851,6 @@ function restoreDocumentVersion(ctx: HandlerCtx): Record<string, unknown> {
     )
     .get(input.document_id) as { current_content_id: string } | undefined;
   if (!doc) throw new Error("document vanished between check and execute");
-  // Restore is itself a new revision (rule R3): the old chain stays exactly
-  // as it was, and this link only ever appends forward.
   recordRevision(ctx, input.content_id, doc.current_content_id);
   ctx.db
     .prepare(
@@ -966,8 +896,6 @@ const CREATE_FOLDER: CommandDefinition = {
       value: 1,
     },
     {
-      // Sibling folders keep distinct names — a receipted refusal beats
-      // two "Taxes" folders side by side.
       name: "name_unused_among_siblings",
       sql: `SELECT count(*) AS n FROM core_concept c
               JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
@@ -1028,7 +956,6 @@ const RENAME_FOLDER: CommandDefinition = {
   },
   preconditions: [
     {
-      // The root's name is the drive's, not a folder's.
       name: "folder_exists_and_not_root",
       sql: `SELECT count(*) AS n FROM core_concept c
               JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
@@ -1086,7 +1013,6 @@ const DELETE_FOLDER: CommandDefinition = {
       value: 1,
     },
     {
-      // Only empty folders delete — move or trash the contents first.
       name: "folder_is_empty",
       sql: `SELECT (
               EXISTS(SELECT 1 FROM core_tag WHERE concept_id = :folder_id)

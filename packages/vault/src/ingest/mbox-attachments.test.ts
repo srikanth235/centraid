@@ -1,7 +1,3 @@
-// The import spine's blob door (#296): mbox MIME attachments stage
-// into the CAS with a batch hold, publish claims them onto the message, and
-// discard releases the hold so the TTL sweep reclaims the bytes.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { sweepBlobStaging } from "../blob/staging.js";
@@ -70,8 +66,6 @@ describe("mbox-attachments", () => {
     expect(msg.body).toBe("Here is the receipt you asked for.");
     expect(msg.attachments).toHaveLength(1);
     expect(msg.attachments[0]!.filename).toBe("receipt.png");
-    // The email's declared type is not echoed verbatim (issue #865) —
-    // parsing declares nothing; staging settles the type from the bytes.
     expect(msg.attachments[0]!.mediaType).toBe("application/octet-stream");
     expect(msg.attachments[0]!.data.equals(PNG_BYTES)).toBe(true);
   });
@@ -105,7 +99,6 @@ describe("mbox-attachments", () => {
     const row = db.vault
       .prepare("SELECT media_type FROM blob_staging WHERE sha256 = ?")
       .get(sha) as { media_type: string };
-    // The message said text/html; the bytes say image/png — bytes win.
     expect(row.media_type).toBe("image/png");
   });
 
@@ -115,7 +108,6 @@ describe("mbox-attachments", () => {
       data: mboxWithAttachment(),
     });
     const sha = sha256OfBytes(PNG_BYTES);
-    // Staged with the batch hold — the review pause outlasts any TTL.
     const hold = db.vault
       .prepare("SELECT held_by_batch FROM blob_staging WHERE sha256 = ?")
       .get(sha) as { held_by_batch: string | null };
@@ -140,9 +132,6 @@ describe("mbox-attachments", () => {
     expect(attachment.content_uri).toBe(blobUriFor(sha));
     expect(attachment.media_type).toBe("image/png");
     expect(attachment.title).toBe("receipt.png");
-    // Claimed: the staging row is gone, the bytes stay (a content item owns them).
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({
       ...db.vault.prepare("SELECT count(*) AS n FROM blob_staging").get(),
     }).toStrictEqual({

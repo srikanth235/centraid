@@ -1,7 +1,3 @@
-// Demo-data purge (#290): loading is safe because unloading is one act.
-// Same lifecycle duties as any hard delete (#272/#274). Provenance records
-// the purge; receipts stay — history is never rewritten.
-
 import type { VaultDb } from "../db.js";
 import { SEED_PURGE_ACTIVITY } from "../schema/seed.js";
 import { resolveEntity } from "../schema/tables.js";
@@ -12,25 +8,14 @@ import type { Identity } from "./types.js";
 export interface DemoPurgeResult {
   purged: number;
   missing: number;
-  /** Non-demo FK still holds these — left in place, still registered. */
   blocked: { entityType: string; entityId: string }[];
   receiptId: string;
 }
 
-/**
- * Clear these FIRST or the parent FK refuses. Same doctrine as
- * gateway/duties.ts: derivatives go with their parent. Without this, a
- * seeded image's `core_content_derivative` hostage-holds the content item
- * and one-click purge reports blocked forever. Only rebuildable projections
- * (thumb/phash regenerate from bytes).
- */
 const DEPENDENT_ROWS: Record<string, { table: string; column: string }[]> = {
   "core.content_item": [
     { table: "core_content_derivative", column: "content_id" },
   ],
-  // Import rows cannot outlive the batch (FK). Without this, Photos' staged
-  // face proposals (#712) block purge forever. Not rebuildable, but the
-  // batch is going — a line item of a deleted batch describes nothing.
   "sync.import_batch": [{ table: "sync_import_row", column: "batch_id" }],
 };
 
@@ -50,11 +35,6 @@ export function demoStatus(db: VaultDb): { appId: string; rows: number }[] {
   return rows.map((r) => ({ appId: r.app_id, rows: r.n }));
 }
 
-/**
- * Newest-first (UUIDv7 = insertion order, children after parents), then
- * repeat until a pass makes no progress. Remainder is a NON-demo FK —
- * refuse rather than force-delete; the owner may have built on a demo row.
- */
 export function purgeDemoRows(
   db: VaultDb,
   owner: Identity,
@@ -82,14 +62,12 @@ export function purgeDemoRows(
     for (const row of remaining) {
       const ref = resolveEntity(row.target_type, db.vault);
       if (!ref) {
-        // Unresolvable (purged ext band): retire the registry entry.
         dropSeed.run(row.seed_id);
         missing += 1;
         progressed = true;
         continue;
       }
       const pk = pkColumn(db.vault, ref.physical);
-      // Savepoint: derived rows stay if the parent is blocked.
       db.vault.exec("SAVEPOINT demo_purge_row");
       try {
         for (const dep of DEPENDENT_ROWS[row.target_type] ?? [])
@@ -108,7 +86,6 @@ export function purgeDemoRows(
         progressed = true;
         db.vault.exec("RELEASE demo_purge_row");
       } catch {
-        // FK still holds. Another pass may free it; otherwise report.
         db.vault.exec("ROLLBACK TO demo_purge_row");
         db.vault.exec("RELEASE demo_purge_row");
         blocked.push(row);

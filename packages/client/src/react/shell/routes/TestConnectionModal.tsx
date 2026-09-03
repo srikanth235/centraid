@@ -19,18 +19,12 @@ export interface TestConnectionModalProps {
   onClose: () => void;
 }
 
-/** The switcher overflow menu's "Test connection…" action (#382) — the
- *  same handshake-ladder moment ConnectFlow's test step uses, run standalone
- *  against an already-registered gateway (`{kind:'gateway', gatewayId}`). */
 export default function TestConnectionModal({
   gatewayId,
   gatewayLabel,
   onClose,
 }: TestConnectionModalProps): JSX.Element {
   const [attempt, setAttempt] = useState(0);
-  // The report is stamped with the (gateway, attempt) that produced it, so a
-  // retry reads as pending during render rather than needing the effect to
-  // clear the previous report first.
   const [settled, setSettled] = useState<{
     key: string;
     report: ConnectivityReport;

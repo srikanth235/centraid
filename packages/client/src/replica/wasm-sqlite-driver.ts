@@ -2,7 +2,6 @@ import type { BindingSpec, Database } from "@sqlite.org/sqlite-wasm";
 
 import type { ReplicaBindValue, ReplicaSqliteDriver } from "./store-core.js";
 
-/** Drives the platform-neutral store core against a `@sqlite.org/sqlite-wasm` handle. */
 export class WasmSqliteDriver implements ReplicaSqliteDriver {
   constructor(private readonly db: Database) {}
 

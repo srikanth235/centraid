@@ -13,14 +13,10 @@ import {
 import { type } from "./typography.js";
 
 describe("Expo reachability", () => {
-  // The `.` export runs where DOM globals don't exist (react-native condition);
-  // the element layer is the DOM half. Guards: tsconfig without DOM lib, plus
-  // this walk catching globalThis casts / element-barrel re-exports.
   const SRC = path.resolve(import.meta.dirname);
   const DOM_GLOBALS =
     /\b(?:document|customElements|HTMLElement|ResizeObserver|FileReader|MutationObserver|localStorage)\b/u;
 
-  /** The source file a relative specifier names, extensionless or `.js`. */
   function resolveSpec(dir: string, spec: string): string {
     const base = path.resolve(dir, spec.replace(/\.js$/u, ""));
     for (const candidate of [`${base}.ts`, path.join(base, "index.ts")])
@@ -46,7 +42,6 @@ describe("Expo reachability", () => {
   test("nothing the root barrel reaches touches a DOM global", () => {
     for (const file of reachableFrom(path.join(SRC, "index.ts"))) {
       const body = readFileSync(file, "utf8")
-        // Prose may name the browser; only live code may not reach for it.
         .replaceAll(/\/\*[\s\S]*?\*\//gu, "")
         .replaceAll(/\/\/.*$/gmu, "");
       expect(body, path.relative(SRC, file)).not.toMatch(DOM_GLOBALS);
@@ -99,7 +94,6 @@ describe("native product-grammar lowering", () => {
   });
 
   test("native carries the whole ramp — no profile-only type role", () => {
-    // Shared ramp: a role only one surface renders has stopped being shared (how hero/greeting became desktop-only).
     const nativeType = toNativeTheme("light").type;
     expect(Object.keys(nativeType).sort()).toStrictEqual(
       Object.keys(type).sort()
@@ -109,7 +103,6 @@ describe("native product-grammar lowering", () => {
   });
 
   test("the numeric register is tabular on native too", () => {
-    // RN will not infer tabular numerics or uppercase — lowering must carry them.
     expect(toNativeTheme("light").type.mono.variantNumeric).toBe(
       "tabular-nums"
     );
@@ -140,33 +133,24 @@ describe("native product-grammar lowering", () => {
   });
 
   test("the native rule is a FULL point, not the platform hairline", () => {
-    // Handoff draws borders as `1px solid`; RN's `hairlineWidth` is one
-    // PHYSICAL pixel. lint-hairline.mjs keeps call sites off it; this keeps the token at 1.
     for (const scheme of ["light", "dark"] as const) {
       expect(toNativeTheme(scheme).borders.hairline, scheme).toBe(1);
     }
   });
 
   test("the page margin is lowered, and is NOT a spacing rung", () => {
-    // R.margin:{d:32,m:18} (handoff line 3356) parallels R.gap, not part of it;
-    // snapping onto the gap ladder trips the assertion below.
     for (const scheme of ["light", "dark"] as const) {
       expect(toNativeTheme(scheme).pageMargin, scheme).toBe(18);
     }
-    // A separate scale: if 18 is ever snapped onto the 4px gap ladder, this
-    // assertion notices.
     expect(Object.values(toNativeTheme("light").spacing)).not.toContain(18);
   });
 
   test("the scrim is the handoff's veil, not a heavier cold plate", () => {
-    // Handoff line 5101 specifies these exact alphas.
     expect(toNativeTheme("light").colors.scrim).toBe("rgba(26,24,21,0.3)");
     expect(toNativeTheme("dark").colors.scrim).toBe("rgba(0,0,0,0.62)");
   });
 
   test("the stage carries its own sunken rung, one literal in both themes", () => {
-    // Handoff line 4479: stage-local sunken '#1A1A19' for the transport's empty
-    // track; a hairline is tuned to be SEEN, a trough to recede under its fill.
     for (const scheme of ["light", "dark"] as const) {
       expect(toNativeTheme(scheme).colors.stageSunken, scheme).toBe("#1A1A19");
     }

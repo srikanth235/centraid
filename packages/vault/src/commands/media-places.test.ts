@@ -12,9 +12,6 @@ import { registerMediaCommands } from "./media.js";
 
 const PIXEL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-/** A second, differently coloured 1×1 PNG — content dedupe adopts identical
- *  bytes onto the existing asset, so a test that needs two assets needs two
- *  payloads. */
 const OTHER_PIXEL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGPgEpEDAABoAD1UCKP3AAAAAElFTkSuQmCC";
 let db: VaultDb;
@@ -208,9 +205,6 @@ describe("media: places", () => {
     ).not.toBe("executed");
   });
 
-  // The inline door carries no spool metadata, so before these an asset added
-  // as a `data_uri` could never have a place — which is why a fully seeded
-  // vault still showed an empty Places shelf.
   test("an asserted coordinate places an inline asset", () => {
     const { asset_id } = addAsset({
       data_uri: PIXEL,
@@ -224,9 +218,6 @@ describe("media: places", () => {
           WHERE a.asset_id = ?`
       )
       .get(asset_id) as { lat: number; lng: number } | undefined;
-    // Field by field: a `node:sqlite` row is a null-prototype object, so a
-    // whole-object comparison fails on the prototype while reporting "no
-    // visual difference" — which is a worse test AND a worse failure message.
     expect(row?.lat).toBe(38.9542);
     expect(row?.lng).toBe(-120.1094);
   });
@@ -237,11 +228,6 @@ describe("media: places", () => {
       latitude: 39.0021,
       longitude: -120.1131,
     });
-    // Same spot to 4dp — the ~11m identity rung — via a different 6dp pair,
-    // which is what a second shutter click at one overlook actually looks
-    // like. A per-photo place row would make the shelf a list of duplicates.
-    // Distinct BYTES matter here: identical content is adopted onto the first
-    // asset, and one asset cannot demonstrate two assets sharing anything.
     const second = addAsset({
       data_uri: OTHER_PIXEL,
       latitude: 39.00212,
@@ -253,10 +239,6 @@ describe("media: places", () => {
     expect(rows[0]?.place_id).toBe(rows[1]?.place_id);
   });
 
-  // A vault holds named places from the rest of the product — a home, an
-  // office, a venue on an event. A photograph taken at one of them belongs to
-  // it, and the alternative is that a member who carefully named where they
-  // live still gets a shelf of coordinate strings.
   test("a photograph adopts a place the member already named nearby", () => {
     db.vault
       .prepare(
@@ -264,7 +246,6 @@ describe("media: places", () => {
          VALUES ('home', 'Home', 'home', 37.4419, -122.143, datetime('now'))`
       )
       .run();
-    // ~90m up the garden: a different coordinate, the same place.
     const { asset_id } = addAsset({
       data_uri: PIXEL,
       latitude: 37.4427,
@@ -274,7 +255,6 @@ describe("media: places", () => {
       .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
       .get(asset_id) as { place_id: string };
     expect(row.place_id).toBe("home");
-    // And no second row was minted beside it.
     expect(
       (
         db.vault.prepare("SELECT count(*) AS n FROM core_place").get() as {
@@ -285,9 +265,6 @@ describe("media: places", () => {
   });
 
   test("a coordinate-labelled place is not a name, so it is not adopted", () => {
-    // The label this command mints itself. Adopting one would smear a
-    // meaningless string across a neighbourhood and hide the row from the
-    // geocoding sweep that is looking for exactly this shape.
     db.vault
       .prepare(
         `INSERT INTO core_place (place_id, name, kind, geo_lat, geo_lng, created_at)
@@ -323,10 +300,6 @@ describe("media: places", () => {
     expect(row.place_id).not.toBe("home");
   });
 
-  // NAMING A PLACE (#816) — the write that turns a coordinate into a
-  // location. Every surface phrases a place from this row at render, so the
-  // only thing these tests have to hold is that the row says what the member
-  // said and nothing else moved.
   describe("media.name_place", () => {
     function seedPlace(
       placeId: string,
@@ -421,8 +394,6 @@ describe("media: places", () => {
       expect(
         invoke("media.name_place", { place_id: "coord", name: "   " }).status
       ).not.toBe("executed");
-      // And the row still carries the label it had: a refused write wrote
-      // nothing, rather than half-naming the place.
       expect(placeRow("coord").name).toBe("37.4419, -122.1430");
     });
 
@@ -443,10 +414,6 @@ describe("media: places", () => {
       ).not.toBe("executed");
     });
 
-    // THE INVARIANT THIS COMMAND EXISTS TO KEEP. A member-entered name outranks
-    // a derived one for DISPLAY; it does not delete it. `address_json` is a
-    // gazetteer's finding with its own writer, and a rename that cleared it
-    // would destroy a fact on the strength of a label about the same point.
     test("naming a place does not clear the gazetteer's derived address", () => {
       const address = JSON.stringify({ locality: "Truckee", region: "CA" });
       seedPlace("derived", "37.4419, -122.1430", { addressJson: address });
@@ -467,9 +434,6 @@ describe("media: places", () => {
       expect(
         invoke("media.name_place", { place_id: "coord", name: "Home" }).status
       ).toBe("executed");
-      // ~90m up the garden: `findOrCreatePlaceTx` refuses to adopt a
-      // coordinate-labelled row and adopts a named one, so the SAME row that
-      // was unnameable a moment ago now gathers the photographs around it.
       const { asset_id } = addAsset({
         data_uri: PIXEL,
         latitude: 37.4427,

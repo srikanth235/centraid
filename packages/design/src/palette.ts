@@ -1,7 +1,3 @@
-// One hue per app on one OKLCH ring: only the hue moves, so no app out-shouts
-// another. Resolved to hex at build time — React Native has no `oklch()`. Keys
-// are hue families, never app names.
-
 import {
   AA_SOLVED_TEXT,
   composite,
@@ -17,7 +13,6 @@ import { oklchToHex } from "./oklab";
 
 const LIGHT_L = 0.5;
 const DARK_L = 0.72;
-/** Ceiling for every identity hue, third-party included. */
 export const IDENTITY_CHROMA = 0.09;
 
 export const APP_HUES = {
@@ -34,8 +29,6 @@ export const APP_HUES = {
 export type ColorKey = keyof typeof APP_HUES;
 export type ColorHex = string;
 
-/** The seam for third-party app installation — clamp a manifest's hue at
- *  admission, not at render. No call site yet. */
 export function clampIdentityHue(
   submitted: { hue: number; chroma?: number },
   scheme: "light" | "dark"
@@ -67,7 +60,6 @@ export function paletteFor(kind: "light" | "dark"): Record<ColorKey, string> {
   return kind === "dark" ? paletteDark : palette;
 }
 
-/** Wash is of the BASE, not the candidate: a chip is tinted with the fill. */
 function paletteTextShade(base: string, kind: SemanticRamp): string {
   const surface = toHex(
     composite(
@@ -92,7 +84,6 @@ function paletteTextShades(kind: SemanticRamp): Record<ColorKey, string> {
   ) as Record<ColorKey, string>;
 }
 
-/** Hues are fills; on type read `--c-<name>-text`, never `--c-<name>`. */
 export const paletteText = {
   dark: paletteTextShades("dark"),
   light: paletteTextShades("light"),

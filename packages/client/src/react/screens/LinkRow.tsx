@@ -14,13 +14,6 @@ import buttonCss from "../ui/Button.module.css";
 import deviceStyles from "./DevicesCard.module.css";
 import styles from "./SharingCard.module.css";
 
-/**
- * One link row. There is no per-link "Receive gives" control (#825, ruling
- * G-copy): nothing arrives over a link for a preference to govern, because a
- * grant is a standing permission the audience accepts through its channel
- * invitation, not a push it pre-authorizes. The link's own standing is what
- * there is to say.
- */
 export default function LinkRow({
   link,
   otherLabel,
@@ -78,7 +71,6 @@ function shortId(id: string): string {
 }
 
 export interface LinkTicketPanelProps {
-  /** Vaults the caller owns and may mint a ticket for or redeem one into. */
   ownVaultIds: readonly string[];
   onMintTicket: (
     vaultId: string
@@ -87,16 +79,9 @@ export interface LinkTicketPanelProps {
     vaultId: string,
     ticket: string
   ) => Promise<RedeemLinkTicketOutcome>;
-  /** A link just landed — the parent's own list needs a fresh load. */
   onLinked: () => void;
 }
 
-/**
- * The remote link ceremony's owner-facing door (#726 audit finding 1): show
- * a one-time ticket (QR + pasteable text — the P1 pairing panel's own idiom,
- * `DevicePairPanel.tsx`), or paste/redeem one someone showed you. Split out
- * of `SharingCard.tsx` for the same file-size reason `LinkRow` itself was.
- */
 export function LinkTicketPanel({
   ownVaultIds,
   onMintTicket,

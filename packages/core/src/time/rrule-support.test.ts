@@ -1,14 +1,3 @@
-/**
- * The refusal contract (review lens 3.2).
- *
- * Two claims, and they are opposite halves of one rule. First: every RRULE part
- * the expander cannot honour is REFUSED, by name — the defect these tests exist
- * to prevent is not a crash, it is `FREQ=MONTHLY;BYSETPOS=-1` being accepted as
- * a plain monthly rule and expanding to dates the member never asked for.
- * Second: every rule the engine already supported parses to exactly the same
- * object it did before, because a strictness change that quietly narrows the
- * supported set is the same silent breakage pointed the other way.
- */
 import { describe, expect, it, test } from "vitest";
 
 import { describeRecurrence } from "./recurrence-summary.js";
@@ -21,7 +10,6 @@ import {
   UnsupportedRruleError,
 } from "./rrule-support.js";
 
-/** Every refused part, with a rule that carries it and nothing else exotic. */
 const REFUSED_PARTS = [
   ["BYSETPOS", "FREQ=MONTHLY;BYSETPOS=-1"],
   ["BYMONTHDAY", "FREQ=MONTHLY;BYMONTHDAY=1"],
@@ -41,7 +29,6 @@ describe("inspectRrule refuses what the expander cannot honour", () => {
       reason: "unsupported-part",
       part,
     });
-    // The three read surfaces agree: no rule, no cadence sentence, no dates.
     expect(parseRrule(rrule)).toBeNull();
     expect(describeRecurrence(rrule)).toBeNull();
     expect(
@@ -124,8 +111,6 @@ describe("BYDAY is honoured only where the expander reads it", () => {
 });
 
 describe("WKST", () => {
-  // Refused rather than implemented: WKST only changes an expansion when a
-  // period spans more than one week, and the engine's week starts on Sunday.
   it("is refused above INTERVAL=1, where it would move the whole series", () => {
     expect(
       inspectRrule("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;WKST=MO")
@@ -185,7 +170,6 @@ describe(assertSupportedRrule, () => {
       reason: "unsupported-part",
       part: "BYSETPOS",
     });
-    // The member-facing half: the message names the part and quotes the rule.
     expect(error.message).toContain("BYSETPOS");
     expect(error.message).toContain("FREQ=MONTHLY;BYSETPOS=-1");
   });

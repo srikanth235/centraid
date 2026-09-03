@@ -1,6 +1,3 @@
-// Pure geometry for the Relations orrery (#441). The invariant: a kind's
-// BEARING never changes on re-centre, only its RADIUS — the anti-hairball rule.
-
 import type {
   AtlasAuthoredLink,
   AtlasFkEdge,
@@ -22,7 +19,6 @@ export const ORRERY = {
   sectorLabelR: 292,
 } as const;
 
-/** A CAMERA, not a layout change: pan/zoom never touch bearings, radii or paths. */
 export interface ViewTransform {
   x: number;
   y: number;
@@ -62,7 +58,6 @@ export function panView(
   return { x: view.x + dx, y: view.y + dy, k: view.k };
 }
 
-/** Avoids `getScreenCTM` (absent under jsdom); null on a degenerate rect. */
 export function clientToViewBox(
   rect: { left: number; top: number; width: number; height: number },
   viewSize: number,
@@ -106,13 +101,11 @@ export interface PackSector {
 }
 
 export interface BearingLayout {
-  /** physical table name → bearing in degrees (0 = 3 o'clock, clockwise). */
   bearing: Map<string, number>;
   labelTier: Map<string, 0 | 1>;
   sectors: PackSector[];
 }
 
-/** Runs ONCE over the whole node set, never per-centre: the anti-hairball rule. */
 export function allocateBearings(
   nodes: readonly AtlasGraphNode[]
 ): BearingLayout {
@@ -158,7 +151,6 @@ export function allocateBearings(
   return { bearing, labelTier, sectors };
 }
 
-/** UNDIRECTED, self-references excluded. Memoize per centre in the caller. */
 export function bfsHops(
   center: string,
   edges: readonly AtlasFkEdge[],

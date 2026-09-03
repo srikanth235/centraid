@@ -58,13 +58,6 @@ import type { StoreGroup, StoreHolderDTO } from "./privacyStores.js";
 
 import styles from "./ApprovalsScreen.module.css";
 
-// The desktop UI for the vault's consent surface (#815). TWO REGISTERS:
-// everything blocking is a decision CARD, everything decided is reference
-// material below. Two rules that shape keeps — an irreversible verb confirms IN
-// PLACE, and a background refresh never takes work out of a member's hands, so
-// arrivals wait in a held tray while anything is mid-edit, ticked or confirming.
-// Identity is the FRAME's; this screen is presentational.
-
 export interface ApprovalsOutboxRowDTO {
   itemId: string;
   connectionLabel: string;
@@ -77,12 +70,9 @@ export interface ApprovalsOutboxRowDTO {
   fields: readonly { key: string; label: string; value: string }[];
   stagedAgo: string;
   note: string | null;
-  /** Never null: falls back to the raw kind string, refined by the gateway. */
   caller: string;
   callerKind: string;
-  /** Gates "Edit and approve"; `false` renders it disabled with the honest fact. */
   canEdit: boolean;
-  /** Seeds the edit draft and lets non-editable fields ride through unchanged. */
   artifact: Record<string, unknown>;
 }
 
@@ -136,10 +126,6 @@ export interface ApprovalsActivityRowDTO {
   action: string;
 }
 
-/**
- * READ back, never re-given: the row carries no action, and a declined answer
- * renders as legibly as a granted one.
- */
 export interface ApprovalsEnrichConsentRowDTO {
   id: string;
   title: string;
@@ -156,8 +142,6 @@ export interface NoticeRowDTO {
   detailText: string | null;
   sourceLabel: string | null;
   severity: "info" | "warning" | "high";
-  /** `share`: somebody's answer about the member's access, not an app's own
-   *  report about itself (#883). */
   sourceType: "automation" | "agent" | "app" | "share";
   count: number;
   firstAt: string;
@@ -172,20 +156,15 @@ export interface ApprovalsScreenProps {
   parked: readonly ApprovalsParkedRowDTO[];
   scopeRequests: readonly ApprovalsScopeRequestRowDTO[];
   grants: readonly ApprovalsGrantRowDTO[];
-  /** Every declared store is present, even with no holders. */
   storeGrants: readonly StoreGroup[];
   enrichConsent?: readonly ApprovalsEnrichConsentRowDTO[];
-  /** An empty section would claim nothing was ever answered — a different fact. */
   enrichConsentReadable?: boolean;
   activity: readonly ApprovalsActivityRowDTO[];
   notices?: readonly NoticeRowDTO[];
   activityTruncated?: boolean;
   busyId: string | null;
-  /** In the words of the route that performs it, where the decision is made. */
   discardConsequence?: string;
-  /** The item returns with the member's edit; `nonce` makes a repeat a fresh event. */
   refusal?: { itemId: string | null; message: string; nonce: number } | null;
-  /** Present only for an edit-then-approve; the gateway rebuilds the request. */
   onApproveOutbox: (
     itemId: string,
     alwaysAllow: boolean,
@@ -196,24 +175,15 @@ export interface ApprovalsScreenProps {
   onConfirmParked: (invocationId: string, approve: boolean) => void;
   onDecideScopeRequest: (requestId: string, approve: boolean) => void;
   onRevokeGrant: (grantId: string) => void;
-  /** The row stays, struck through, rather than vanishing (#708). */
   onRevokeStoreGrant: (holder: StoreHolderDTO) => void;
   onReadNotice?: (noticeId: string) => void;
   onArchiveNotice?: (noticeId: string) => void;
   onOpenNotice?: (notice: NoticeRowDTO) => void;
   onSeeAllActivity?: () => void;
   onOpenAlertHistory?: () => void;
-  /**
-   * A null or already-closed itemId clears the filter rather than pointing at
-   * nothing; `nonce` makes a repeat tap a new request.
-   */
   focusOutbox?: { itemId: string | null; nonce: number } | null;
-  /** Not a navigation: it drops the filter and opens the first staged write. */
   reviewAll?: { nonce: number } | null;
 }
-
-// ── Copy that states a rule ────────────────────────────────────────────────
-// Shared sentences live in `../../approvals-copy.js` (#805); this is desktop's.
 
 const LEDGER_NOTE =
   "Everything an app can reach — revoking takes effect at once.";
@@ -274,19 +244,14 @@ export default function ApprovalsScreen(
     const open = pointerDefaultOpen();
     return { activity: open, egress: open, grants: open, ledger: open };
   });
-  // Revoke deletes the grant row, so keeping the row as it looked at revoke is
-  // what keeps it visible, struck through (#708).
   const [revokedStoreHolders, setRevokedStoreHolders] = useState<
     ReadonlyMap<string, StoreHolderDTO>
   >(new Map());
-  /** Non-null means a refresh is being held back. */
   const [held, setHeld] = useState<Blocking | null>(null);
 
   const focusRef = useRef<HTMLDivElement | null>(null);
   const grantsRef = useRef<HTMLDivElement | null>(null);
 
-  // Adjusted while rendering, not in an effect: the move must share the paint
-  // with the tap, and a nonce-keyed effect cascades a render.
   if (focusOutbox && focusOutbox.nonce !== seenFocusNonce) {
     const { itemId } = focusOutbox;
     const stillOpen =
@@ -304,7 +269,6 @@ export default function ApprovalsScreen(
     setConfirming(null);
     setExpandedId(outbox[0]?.itemId ?? null);
   }
-  // A refused write comes BACK with the member's edit, which never left state.
   if (refusal && refusal.nonce !== seenRefusalNonce) {
     setSeenRefusalNonce(refusal.nonce);
     if (refusal.itemId !== null) {
@@ -313,9 +277,6 @@ export default function ApprovalsScreen(
     }
   }
 
-  // ── The held tray ───────────────────────────────────────────────────────
-  // "Part-way through" is exactly three things: an edit in progress, a ticked
-  // "always allow", or an open confirm. A merely expanded card is reading.
   const partWay =
     confirming !== null ||
     editingId !== null ||
@@ -323,8 +284,6 @@ export default function ApprovalsScreen(
     (expandedId !== null && drafts[expandedId] !== undefined);
 
   const incoming: Blocking = { needsAuth, outbox, parked, scopeRequests };
-  // `held` is the queue as the member found it, released the moment they
-  // finish, so nothing is swapped out from under them.
   if (held === null && partWay) setHeld(incoming);
   if (held !== null && !partWay) setHeld(null);
   const shown = held ?? incoming;
@@ -332,7 +291,6 @@ export default function ApprovalsScreen(
 
   useEffect(() => {
     const el = focusRef.current;
-    // `scrollIntoView` is absent under jsdom; opening the card is assertable.
     if (el && typeof el.scrollIntoView === "function") {
       el.scrollIntoView({ block: "nearest" });
     }
@@ -342,8 +300,6 @@ export default function ApprovalsScreen(
   const archivedNotices = notices.filter(
     (notice) => notice.archivedAt !== null
   );
-  // "Waiting" means it requires a decision: an info notice is news, not a
-  // demand, so it sits in Notices rather than the queue (#665).
   const attentionNotices = activeNotices.filter(
     (notice) => notice.severity !== "info"
   );
@@ -399,10 +355,8 @@ export default function ApprovalsScreen(
     onApproveOutbox(row.itemId, alwaysAllow[row.itemId] === true, artifact);
   };
 
-  // ── One staged write's facts ────────────────────────────────────────────
   const statedFacts = (row: ApprovalsOutboxRowDTO): DecideFact[] => {
     const facts: DecideFact[] = [];
-    // Address facts first, so nothing staged is hidden from the approver.
     const addressed = ["to", "cc", "bcc", "from"];
     for (const key of addressed) {
       const field = row.fields.find((f) => f.key === key);
@@ -459,9 +413,6 @@ export default function ApprovalsScreen(
     row.fields.find((f) => f.key === "body")?.value ??
     row.bodyPreview ??
     row.target;
-
-  // ── The verbs, in the three shapes every kind shares ────────────────────
-  // An empty row while a decision is in flight: a second press is a second send.
 
   const reviewVerb = (id: string): DecideAction => ({
     commits: false,
@@ -778,7 +729,6 @@ export default function ApprovalsScreen(
     shownWaiting < totalWaiting
       ? `showing ${shownWaiting} of ${totalWaiting}`
       : `${totalWaiting} waiting`;
-  // The chip row earns its place only when the queue is long enough to scroll.
   const showChips = totalWaiting > WAITING_CHIPS.length;
 
   const grantRows: RowDef[] = grants.map((row) => ({
@@ -853,7 +803,6 @@ export default function ApprovalsScreen(
             </div>
           </dl>
           {row.grantId ? (
-            // One revoke, in one place, rather than a second one down here.
             <div className={styles.detailActions}>
               <Button
                 commit={false}
@@ -899,10 +848,6 @@ export default function ApprovalsScreen(
     () =>
       setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  /**
-   * A row has nowhere to put a consequence and two verbs, so the confirm opens in
-   * a panel above the group.
-   */
   const rowConfirm = (
     title: string,
     body: string,
@@ -919,9 +864,6 @@ export default function ApprovalsScreen(
     />
   );
 
-  // ── The reference tail ──────────────────────────────────────────────────
-  // Reference material, not a queue: these render in every state, including empty.
-  // A consent surface that hides what it consented to is not a record.
   const grantConfirmId =
     confirming?.verb === "revoke-grant" ? confirming.id : null;
   const holderConfirmKey =
@@ -1001,7 +943,6 @@ export default function ApprovalsScreen(
               {storeGrants.map((group) => {
                 const merged = mergeRevokedHolders(group, revokedStoreHolders);
                 const count = merged.holders.length;
-                // One lookup, so the sentence and the act can never name two different rows.
                 const confirmed = merged.holders.find(
                   (holder) =>
                     revokedHolderKey(group.storeId, holder.grantId) ===
@@ -1203,7 +1144,6 @@ export default function ApprovalsScreen(
     </>
   );
 
-  // ── The three conditional panels, above everything ──────────────────────
   const heads = (
     <>
       {refusal ? (
@@ -1218,8 +1158,6 @@ export default function ApprovalsScreen(
       {held !== null && arrived > 0 ? (
         <div data-testid="held-tray">
           <PanelBlock
-            // Re-baseline rather than release: the member is still part-way through, so
-            // dropping the hold would snapshot again on the next render.
             action={{ label: "Add them", onClick: () => setHeld(incoming) }}
             body={APPROVALS_HELD_BODY}
             eyebrow="Live"

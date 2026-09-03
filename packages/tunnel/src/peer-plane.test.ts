@@ -1,15 +1,3 @@
-/*
- * Peer-plane transport (#726): path confinement, lane separation,
- * and the per-link budget, proved over two real iroh endpoints on loopback.
- *
- * The two traps this suite exists to keep closed:
- *  1. a linked gateway addressing anything outside `/centraid/_peer/`;
- *  2. a linked gateway arriving at the HTTP layer wearing a DEVICE identity.
- * Both regress silently — the wire keeps working, it just carries more
- * authority than a link is supposed to have — so each has an assertion here
- * that fails the moment the guard is loosened.
- */
-
 import crypto from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -35,7 +23,6 @@ const TOKEN = crypto.randomBytes(16).toString("hex");
 const PEER_PROOF = "peer-proof-secret";
 const DEVICE_PROOF = "device-proof-secret";
 
-/** Echoes back the path and the headers the forwarder actually delivered. */
 function startEchoUpstream(): Promise<{
   server: http.Server;
   baseUrl: string;
@@ -76,8 +63,6 @@ describe("peer plane over iroh", () => {
     links.add(linkedPeer.endpointId);
     gateway = await startGatewayEndpoint({
       upstream: () => ({ baseUrl: upstream.baseUrl, token: TOKEN }),
-      // The device lane admits NOBODY here: everything this suite proves must
-      // be true of the peer lane on its own merits.
       authorize: () => false,
       requestHeaders: (endpointId) => ({
         [DEVICE_IDENTITY_HEADER]: endpointId,
@@ -122,7 +107,6 @@ describe("peer plane over iroh", () => {
     expect(body.headers[PEER_PROOF_HEADER]).toBe(PEER_PROOF);
   });
 
-  /* TRAP 2. A link is not a pairing. */
   it("never lets a peer arrive wearing a device identity", async () => {
     const response = await call("/centraid/_peer/link/hello", {
       [DEVICE_IDENTITY_HEADER]: "forged-device",
@@ -143,7 +127,6 @@ describe("peer plane over iroh", () => {
     expect(body.headers[PEER_PROOF_HEADER]).toBe(PEER_PROOF);
   });
 
-  /* TRAP 1. Every one of these reaches owner-tier surface if the guard goes. */
   it.each([
     "/centraid/_gateway/tunnel/authorize",
     "/centraid/_gateway/devices",
@@ -177,12 +160,6 @@ describe("peer plane over iroh", () => {
 });
 
 describe("peer plane path confinement", () => {
-  /*
-   * The same table the Rust guard asserts in
-   * `iroh_relay.rs::peer_targets_are_confined_to_the_peer_plane`. Two
-   * implementations, one rule: if either side is edited alone, one of the two
-   * suites goes red.
-   */
   it.each([
     "/centraid/_peer/link/redeem",
     "/centraid/_peer/blobs/a1b2c3?range=0-1023",
@@ -231,7 +208,6 @@ describe("per-link budget", () => {
     expect(bucket.take("peer-a")).toBe(true);
     expect(bucket.take("peer-a")).toBe(false);
     expect(bucket.retryAfterMs("peer-a")).toBe(1000);
-    // One link's spending never bounds another's.
     expect(bucket.take("peer-b")).toBe(true);
     now += 1000;
     expect(bucket.take("peer-a")).toBe(true);

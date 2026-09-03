@@ -70,8 +70,6 @@ describe("screens/SettingsDiagnosticsScreen", () => {
           .fn<SettingsDiagnosticsBridgeProps["loadHealth"]>()
           .mockResolvedValue(makeHealth()),
       });
-      // The HEAD answers the page's question before a row is read - there is
-      // no banner over it saying the same thing in a badge (binding layer v11).
       expect(el.textContent).toContain("3 · all answering");
       const rows = el
         .querySelector('[data-testid="diag-components"]')!
@@ -118,12 +116,8 @@ describe("screens/SettingsDiagnosticsScreen", () => {
           .mockResolvedValue(health),
       });
       expect(el.textContent).toContain("2 · 1 in trouble");
-      // The failing row leads with its actionable last error, not the detail.
       expect(el.textContent).toContain("outbox drain failed: ECONNREFUSED");
-      // The tally is a READING now, not a cell: "3 errs" beside a badge is a
-      // number the reader has to assemble a meaning for.
       expect(el.textContent).toContain("3 errors since the gateway started");
-      // The row's own word carries its state - no separate health dot.
       expect(el.textContent).toContain("failing");
       expect(el.textContent).toContain("1 since the gateway started");
     });
@@ -174,8 +168,6 @@ describe("screens/SettingsDiagnosticsScreen", () => {
           .mockResolvedValue(health),
         onJumpToLogs,
       });
-      // The verb is named for where it GOES; the row it sits on already names
-      // the component, so "View in logs" was saying the row's own subject twice.
       const jumpButtons = [...el.querySelectorAll("button")].filter(
         (b) => b.textContent === "Logs"
       );
@@ -202,8 +194,6 @@ describe("screens/SettingsDiagnosticsScreen", () => {
     });
 
     it("renders a long multi-item detail string (disk/vaults) in full, with a title fallback", async () => {
-      // The `disk`/`vaults` components (#351) bake everything into one
-      // detail string — long enough that the row must not ellipsis-clip it.
       const longDetail =
         "vault 019f5079-vault-one: 42.3 MB (vault.db 30.1 MB, blobs 12.2 MB); " +
         "vault 019f5079-vault-two: 118.7 MB (vault.db 90.0 MB, blobs 28.7 MB); " +
@@ -223,10 +213,6 @@ describe("screens/SettingsDiagnosticsScreen", () => {
           .fn<SettingsDiagnosticsBridgeProps["loadHealth"]>()
           .mockResolvedValue(health),
       });
-      // IN FULL, and with no title-attribute fallback behind it. The row used
-      // to ellipsis-clip this and hang the whole string off `title=`, which is
-      // a tooltip on a touch surface that has no hover. The kit's row wraps
-      // instead, so the text on screen IS the detail.
       expect(el.textContent).toContain(longDetail);
       expect(el.querySelector(`[title="${longDetail}"]`)).toBeNull();
     });
@@ -285,15 +271,10 @@ describe("screens/SettingsDiagnosticsScreen", () => {
       expect(metrics?.textContent).toContain("200.0 MB");
       expect(metrics?.textContent).toContain("p99 12.5 ms");
       expect(metrics?.textContent).toContain("3.2 ms");
-      // Lower case, like every other meta in the kit: the class is a fact
-      // about the gateway, not a badge shouting over it.
       expect(metrics?.textContent).toContain("Conserve · constrained");
     });
   });
 
-  // Connections — host plumbing (#665). Every management act against a
-  // host lives here and nowhere else, so "the three acts fire against the row
-  // that was clicked" is the contract this section has to keep.
   describe("connections section", () => {
     const rows = (): GatewayRow[] =>
       buildGatewayRows(
@@ -350,10 +331,6 @@ describe("screens/SettingsDiagnosticsScreen", () => {
       return { el, onRemove, onRename, onTest };
     }
 
-    // The shared row block publishes no per-row test attribute, deliberately:
-    // one row component serves every ops page, and a hook for each caller's
-    // domain id would be a kit that knows about gateways. A row is found the
-    // way a reader finds it - by the name it prints.
     const rowFor = (el: HTMLElement, label: string): HTMLElement =>
       [
         ...el.querySelectorAll<HTMLElement>(
@@ -375,11 +352,9 @@ describe("screens/SettingsDiagnosticsScreen", () => {
       const local = rowFor(el, "This Mac");
       expect(local.textContent).toContain("This Mac");
       expect(local.textContent).toContain("active");
-      // Names, not just a count: the vaults are what the owner recognises.
       expect(local.textContent).toContain("2 vaults · Shared, Personal");
       const office = rowFor(el, "Office");
       expect(office.textContent).toContain("iroh");
-      // The switcher's status vocabulary, reused rather than reinvented.
       expect(office.textContent).toContain("Offline");
     });
 

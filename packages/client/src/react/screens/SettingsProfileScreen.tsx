@@ -10,14 +10,6 @@ import a11y from "../styles/a11y.module.css";
 import drawerGroupCss from "../styles/drawerGroup.module.css";
 import styles from "./SettingsProfileScreen.module.css";
 
-/*
- * Settings → You, profile group: the person, not the device.
- *
- * No Save button: colour writes on the pick; name writes on DONE (blur/
- * Enter), never per keystroke. An empty name is NOT a save — clearing and
- * leaving restores the prior name (the roster has no "unnamed" state).
- */
-
 const AVATAR_PALETTE = IDENTITY_COLORS;
 
 export function initials(name: string): string {
@@ -38,12 +30,10 @@ export default function SettingsProfileScreen({
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
-  // Saved values ARE the new baseline; a re-fetch would unmount mid-confirmation.
   const [baseline, setBaseline] = useState(profile);
 
   const trimmed = name.trim();
 
-  // One write for both fields: send the saved name, not the on-screen draft.
   const commit = (next: { name: string; avatarColor: string }): void => {
     if (
       next.name === baseline.name &&
@@ -129,7 +119,6 @@ export default function SettingsProfileScreen({
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
-                // Blur, not direct commit: Enter and clicking away take one path.
                 event.currentTarget.blur();
               }
             }}
@@ -150,7 +139,6 @@ export default function SettingsProfileScreen({
                 key={color}
                 className={styles.swatch}
                 data-selected={color === avatarColor ? "true" : "false"}
-                // `color` drives the selected ring via `currentcolor`.
                 style={{ background: color, color }}
               >
                 <input
@@ -161,7 +149,6 @@ export default function SettingsProfileScreen({
                   checked={color === avatarColor}
                   onChange={() => {
                     setAvatarColor(color);
-                    // A pick is finished the moment it is made.
                     commit({
                       avatarColor: color,
                       name: trimmed || baseline.name,

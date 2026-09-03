@@ -10,7 +10,6 @@ export type ReplicaValue =
 export type ReplicaRow = Record<string, ReplicaValue>;
 
 export interface ReplicaIdentity {
-  /** Stable, transport-independent gateway/profile identity. */
   gatewayId: string;
   vaultId: string;
 }
@@ -23,9 +22,7 @@ export interface ReplicaCursor {
 export interface ReplicaEntitySchema {
   entity: string;
   primaryKey: string;
-  /** Columns remaining after the daemon has applied the shape's field mask. */
   columns: string[];
-  /** Undisclosed fields exist; neither their names nor values are replicated. */
   hasUnavailableFields?: boolean;
 }
 
@@ -41,16 +38,10 @@ export interface ReplicaSnapshotRow {
   entity: string;
   rowId: string;
   values: ReplicaRow;
-  /** Latest canonical change sequence for this row in the current epoch. */
   rowVersion?: number;
   oversizedFields?: string[];
 }
 
-/**
- * Everything a replica needs before any row lands: identity, schema epoch, shape
- * catalog. A snapshot carries it with its rows; a windowed bootstrap takes it
- * from page 1.
- */
 export interface ReplicaBootstrapHeader {
   protocolVersion: typeof REPLICA_PROTOCOL_VERSION;
   vaultId: string;
@@ -61,7 +52,6 @@ export interface ReplicaBootstrapHeader {
 export interface ReplicaSnapshot extends ReplicaBootstrapHeader {
   cursor: ReplicaCursor;
   rows: ReplicaSnapshotRow[];
-  /** Device-scoped durable results reconcile an IDB outbox after a long offline period. */
   outcomes?: IntentOutcome[];
 }
 
@@ -102,7 +92,6 @@ export interface IntentOutcome {
   reason?: string;
   output?: ReplicaValue;
   conflict?: ReplicaConflict;
-  /** Durable local settlement time, when retained by an outbox journal. */
   settledAt?: string;
 }
 
@@ -113,7 +102,6 @@ export interface ReplicaChangeBatch {
   to: ReplicaCursor;
   changes: ReplicaChange[];
   outcomes?: IntentOutcome[];
-  /** True when another complete commit group remains after this page. */
   hasMore?: boolean;
 }
 
@@ -138,7 +126,6 @@ export interface ReplicaFilterClause {
 
 export interface ReplicaOrderBy {
   column: string;
-  /** Default `asc`. Ties use an exposed scalar primary key ascending; opaque ties rerun online. */
   dir?: "asc" | "desc";
 }
 
@@ -151,10 +138,6 @@ export interface ReplicaReadRequest {
   purpose?: string;
 }
 
-/**
- * Bounded local equivalent of the vault search plane. Eligible only where the
- * shape holds the complete indexed text; anything else fails OnlineOnlyError.
- */
 export interface ReplicaSearchRequest {
   shapeId: string;
   entity: string;
@@ -167,8 +150,6 @@ export interface ReplicaSearchRequest {
 export interface ReplicaDependency {
   shapeId: string;
   entity: string;
-  /** The one row this dependency is confined to. ABSENT MEANS THE WHOLE
-   *  ENTITY, which is what the engine emits today (#883). */
   rowId?: string;
 }
 
@@ -196,7 +177,6 @@ export interface ReplicaSearchWireResult {
 
 export interface ReplicaReadResult {
   rows: ReplicaRow[];
-  /** No consent receipt locally; the cursor makes the origin inspectable. */
   receiptId: string;
   dependency: ReplicaDependency;
   coverage?: ReplicaCoverage;
@@ -204,7 +184,6 @@ export interface ReplicaReadResult {
 
 export interface ReplicaSearchResult {
   rows: ReplicaRow[];
-  /** No consent receipt locally; the cursor makes the origin inspectable. */
   receiptId: string;
   dependency: ReplicaDependency;
   coverage?: ReplicaCoverage;
@@ -219,7 +198,6 @@ export interface ReplicaWorkerOpenOptions {
   dbName: string;
   vaultId: string;
   remember: boolean;
-  /** Terminal cleanup mode: OPFS must open and no memory fallback is allowed. */
   purgeOnly?: boolean;
 }
 
@@ -229,7 +207,6 @@ export interface ReplicaStatus {
   schemaEpoch: string | null;
   coverage?: ReplicaCoverage;
   durability?: ReplicaDurability;
-  /** Durability of the intent outbox, which is a separate browser store. */
   intentDurability?: ReplicaDurability;
 }
 
@@ -261,7 +238,6 @@ export type IntentState =
 
 export interface ReplicaIntent {
   intentId: string;
-  /** SHA-256 of canonical {appId, action, input, baseVersions}; daemon verifies id reuse. */
   payloadHash: string;
   appId: string;
   action: string;
@@ -269,14 +245,11 @@ export interface ReplicaIntent {
   state: IntentState;
   createdOrder: number;
   attempts: number;
-  /** First admission, ISO-8601. Absent on rows queued before the stamp existed. */
   enqueuedAt?: string;
   optimistic: OptimisticMutation[];
-  /** App-visible replica reads that must receive this intent's settlement signal. */
   dependencies?: ReplicaDependency[];
   reason?: string;
   output?: ReplicaValue;
-  /** Optional optimistic concurrency preconditions captured by the app. */
   baseVersions?: ReplicaBaseVersion[];
   conflict?: ReplicaConflict;
 }
@@ -301,7 +274,6 @@ export interface EnqueueIntentInput {
 export interface ReplicaInvalidation extends ReplicaDependency {
   rowId?: string;
   source: "canonical" | "overlay" | "purge";
-  /** Present for local optimistic/outcome invalidations so apps can narrate settlement. */
   intentId?: string;
   intentState?: IntentState;
 }

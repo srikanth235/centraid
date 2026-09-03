@@ -1,8 +1,3 @@
-// The execution clamp (#541): a host-owned, per-execution attenuation of
-// an automation's durable grant. It may only ever NARROW what the owner
-// granted — every declared restriction bites, none of them is dropped because
-// another scope happened to sort first.
-
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
@@ -33,7 +28,6 @@ describe("execution-clamp", () => {
     });
   });
 
-  /** The owner's durable grant — the upper bound every clamp is cut against. */
   function grant(scopes: Parameters<typeof createGrant>[1]["scopes"]): void {
     createGrant(db, {
       granteePartyId: agent.partyId,
@@ -124,8 +118,6 @@ describe("execution-clamp", () => {
       ],
       fieldMask: ["task_id", "title"],
     };
-    // The intersection is what it is regardless of which order the host listed
-    // its scopes in — row filters AND, field masks intersect.
     expect(readTask(caller([schemaWide, anchored]))).toMatchObject(expected);
     expect(readTask(caller([anchored, schemaWide]))).toMatchObject({
       ...expected,
@@ -155,13 +147,10 @@ describe("execution-clamp", () => {
       verbs: "read",
       rowFilter: [{ column: "task_id", op: "in", value: [id] }],
     });
-    // A union ("t1 or t2") has to be ONE `in` filter — as two scopes it would
-    // AND to nothing, so the clamp refuses instead of silently picking one.
     expect(() => readTask(caller([pin("t1"), pin("t2")]))).toThrow(
       GatewayError
     );
     expect(() => readTask(caller([pin("t1"), pin("t2")]))).toThrow(/task_id/u);
-    // Written as the bounded union it is, it reads both rows.
     expect(
       readTask(
         caller([
@@ -219,14 +208,12 @@ describe("execution-clamp", () => {
         {
           schema: "core",
           verbs: "read",
-          // The manifest asks for a field the owner never granted…
           fieldMask: ["task_id", "title", "body"],
         },
       ])
     );
     expect(decision).toMatchObject({
       decision: "allow",
-      // …the grant's own filter survives, and the mask is the intersection.
       rowFilter: [{ column: "archived_at", op: "is-null" }],
       fieldMask: ["task_id", "title"],
     });

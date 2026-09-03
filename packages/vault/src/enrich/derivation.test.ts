@@ -1,6 +1,3 @@
-// Derivation provenance (#724) — behaviour: what a stamp says after
-// a re-run, and which targets a version bump hands back to the sweep.
-
 import { describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
@@ -15,11 +12,6 @@ import {
 const T0 = "2026-07-15T00:00:00.000Z";
 const T1 = "2026-07-16T00:00:00.000Z";
 
-/**
- * A REAL asset to stamp (#916): `(target_type, target_id)` is a composite
- * foreign key into `core_entity` now, so a derivation cannot be stamped for a
- * row that does not exist — which is what a ghost stamp always was.
- */
 function seedAsset(db: VaultDb, assetId: string): void {
   const contentId = `content-${assetId}`;
   db.vault
@@ -162,8 +154,6 @@ describe("derivation", () => {
           WHERE target_id = ? ORDER BY profile`
       )
       .all("asset-1") as unknown as { profile: string; model: string }[];
-    // Re-shaped rather than compared directly: node:sqlite hands back
-    // null-prototype rows, which no strict equality accepts.
     expect(
       rows.map((row) => ({ profile: row.profile, model: row.model }))
     ).toStrictEqual([
@@ -202,8 +192,6 @@ describe("derivation", () => {
       variant: "caption",
     };
     stamp(db, "asset-1", "qwen-vl@3", { profile: "ocr-llm" });
-    // Only a foreign profile has run: it is what a reader gets, rather than
-    // the absence a built-in-only lookup would report.
     expect(preferredDerivation(db.vault, query)?.model).toBe("qwen-vl@3");
     stamp(db, "asset-1", "tess@1");
     expect(preferredDerivation(db.vault, query)?.profile).toBe(
@@ -213,7 +201,6 @@ describe("derivation", () => {
       preferredDerivation(db.vault, { ...query, preferredProfile: "ocr-llm" })
         ?.model
     ).toBe("qwen-vl@3");
-    // A preference nothing has derived under falls back rather than failing.
     expect(
       preferredDerivation(db.vault, { ...query, preferredProfile: "absent" })
         ?.model

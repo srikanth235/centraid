@@ -1,11 +1,3 @@
-/*
- * `media.set_place_gazetteer` (#816) — the derived half of a place's name.
- *
- * The invariant this file exists for is member authority IN STORAGE: whatever
- * the opt-in automation finds, the row's `name` and `kind` are the member's and
- * come out of the transaction exactly as they went in. The handler's half of the
- * same rule is `packages/model-runtime/automation-handlers/place-names.test.ts`.
- */
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -50,7 +42,6 @@ describe("media.set_place_gazetteer", () => {
     });
   }
 
-  /** A place row, minted directly: this command is not how places are created. */
   function seedPlace(
     placeId: string,
     fields: { name?: string; kind?: string | null; addressJson?: string } = {}
@@ -128,9 +119,6 @@ describe("media.set_place_gazetteer", () => {
     const row = readPlace("p1");
     expect(row.name).toBe("Grandma's house");
     expect(row.kind).toBe("home");
-    // Both claims are true about the point, and both are readable. The ladder
-    // (place-phrase.ts) prefers the member's for display; nothing deleted the
-    // machine's, and nothing overwrote the member's.
     expect(gazetteerOf("p1").name).toBe("Truckee, CA");
   });
 
@@ -151,8 +139,6 @@ describe("media.set_place_gazetteer", () => {
     >;
     expect(parsed.street).toBe("10 Somewhere Road");
     expect(parsed.postcode).toBe("96161");
-    // Only this key is replaced, and wholly — a stale record does not merge
-    // with a fresh one field by field.
     expect(parsed.gazetteer).toMatchObject({ name: "Truckee, CA" });
     expect(parsed.gazetteer).not.toHaveProperty("checked_at", "2020-01-01");
   });

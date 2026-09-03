@@ -1,8 +1,3 @@
-// The batched derivative resolve (#405): "tinies for these N content
-// ids in one pass". Rows are inserted directly (no command pipeline) — this is
-// a pure query test, so it pins the contract in isolation: variant filtering,
-// absent ids, and the >500-id chunk boundary the IN list splits on.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
@@ -22,7 +17,6 @@ describe("read", () => {
     db = openVaultDb();
   });
 
-  /** Insert a bare content item and (optionally) one binary rung for it. */
   function seed(
     contentId: string,
     shaLocal: string,
@@ -107,8 +101,6 @@ describe("read", () => {
     expect(resolveDerivativeShas(db.vault, [], "thumb").size).toBe(0);
   });
 
-  // ── issue #659 L5: the live set is derived once per write ─────────────
-
   function seedBlobBacked(contentId: string, shaLocal: string): void {
     db.vault
       .prepare(
@@ -123,7 +115,6 @@ describe("read", () => {
     seedBlobBacked("c-live", sha(1));
     const first = liveBlobShasCached(db.vault);
     const second = liveBlobShasCached(db.vault);
-    // Same object: N consumers in one sweep pay for one derivation.
     expect(second).toBe(first);
     expect(first.has(sha(1))).toBe(true);
 
@@ -131,7 +122,6 @@ describe("read", () => {
     const afterWrite = liveBlobShasCached(db.vault);
     expect(afterWrite).not.toBe(first);
     expect(afterWrite.has(sha(2))).toBe(true);
-    // The uncached derivation agrees — the memo is a cache, not a policy.
     expect([...afterWrite].sort()).toStrictEqual(
       [...liveBlobShas(db.vault)].sort()
     );

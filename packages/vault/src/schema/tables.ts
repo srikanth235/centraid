@@ -1,6 +1,3 @@
-// Logical ↔ physical name resolution over the entity catalog.
-// The declarations themselves live in `entity-catalog.ts`.
-
 import type { DatabaseSync } from "node:sqlite";
 
 import { VAULT_ENTITIES, VAULT_TABLES } from "./entity-catalog.js";
@@ -18,11 +15,6 @@ export {
 } from "./entity-catalog.js";
 export { LOCAL_TABLES } from "./local-tables.js";
 
-/**
- * The member-facing name (and, for ontology kinds, the blurb) of a registered
- * entity. `undefined` for anything the registry does not carry — including an
- * ext-band table, which is an app's own and never named by this file.
- */
 export function entityDeclaration(
   logical: string
 ): VaultEntityDeclaration | undefined {
@@ -33,12 +25,6 @@ export function entityDeclaration(
   return declaredIn(VAULT_ENTITIES, schema, table);
 }
 
-/**
- * OWN keys only. The registry is an allow-list before it is a name table, and
- * a plain object inherits `constructor` and `toString` from its prototype — so
- * a `[schema]?.[table]` probe would answer truthy for `core.constructor` and
- * hand a caller a physical table name the registry never declared.
- */
 function declaredIn(
   registry: EntityRegistry,
   schema: string,
@@ -49,16 +35,6 @@ function declaredIn(
   return Object.hasOwn(entities, table) ? entities[table] : undefined;
 }
 
-/**
- * THE LABEL GATE (#883, ruling O-label). An entity with no label declaration
- * fails here rather than reaching a surface that has to invent one — which is
- * how the same table came to be named in four maps by hand. Takes the registry
- * so the gate can be demonstrated red against a scratch one.
- *
- * Names are unique within a pack: two rows called "Tasks" in one section of the
- * Atlas is not a display bug to fix downstream, it is two entities the member
- * cannot tell apart.
- */
 export function assertRegistryLabels(
   registry: EntityRegistry,
   file = "vault"
@@ -91,21 +67,12 @@ export function assertRegistryLabels(
 
 let labelsChecked = false;
 
-/**
- * The gate, once per process. Called by the schema build (`migrateVault`), so
- * an unlabelled entity fails when the vault is opened rather than when a
- * surface tries to draw it.
- */
 export function assertVaultRegistryLabels(): void {
   if (labelsChecked) return;
   assertRegistryLabels(VAULT_ENTITIES, "vault");
   labelsChecked = true;
 }
 
-/**
- * The audit band's readable streams, by logical name. Names only: the band's
- * shape is `schema/audit.ts`'s, and nothing here may enumerate it.
- */
 const AUDIT_BAND_ENTITIES: ReadonlySet<string> = new Set([
   "access.provenance",
   "access.receipt",
@@ -118,19 +85,9 @@ const AUDIT_BAND_ENTITIES: ReadonlySet<string> = new Set([
 export interface EntityRef {
   schema: string;
   table: string;
-  /** Physical SQLite table name, e.g. `core_party`. */
   physical: string;
 }
 
-/**
- * Resolve a logical `schema.table` name. Returns undefined for anything not
- * in the registry — callers treat that as a denial, never as SQL.
- *
- * Ext-band names (`ext.<appId>.<table>`, draft twin `extdraft.…`) resolve
- * only when the caller passes its vault handle — the dynamic half lives in
- * `access_app_ext`. Both bands report the consent schema `ext.<appId>`:
- * the draft copy is the same data class under the same grant.
- */
 export function resolveEntity(
   logical: string,
   vault?: DatabaseSync
@@ -142,12 +99,6 @@ export function resolveEntity(
   if (declaredIn(VAULT_ENTITIES, schema, table)) {
     return { schema, table, physical: `${schema}_${table}` };
   }
-  // The AUDIT band RESOLVES but is not ENUMERATED (#916). It is excluded from
-  // the registry so the export walk and the replica change log leave it alone
-  // — it is this vault's evidence, not the member's data to copy — but a grant
-  // may still name `access.provenance`, and the activity read is exactly that
-  // read. Excluding it from the walk and refusing to resolve it are two
-  // different decisions; only the first is the band's.
   if (AUDIT_BAND_ENTITIES.has(logical)) {
     return { schema, table, physical: `${schema}_${table}` };
   }
@@ -169,17 +120,12 @@ export function resolveEntity(
         };
       }
     } catch {
-      // Pre-v5 file or a non-vault handle: no dynamic half to consult.
+      // Intentionally empty.
     }
   }
   return undefined;
 }
 
-/**
- * All logical vault-file entity names, `schema.table`. With a handle, the
- * live ext band is enumerated too (retained tables included — export covers
- * everything); the draft band is scratch and never enumerated.
- */
 export function listVaultEntities(vault?: DatabaseSync): string[] {
   const canonical = Object.entries(VAULT_TABLES).flatMap(([schema, tables]) =>
     tables.map((t) => `${schema}.${t}`)

@@ -59,8 +59,6 @@ function comparable(
   return typeof value === "boolean" ? (value ? 1 : 0) : value;
 }
 
-// Lifting surrogates above `U+FFFF` makes UTF-16 unit order match UTF-8 byte
-// order (SQLite BINARY). Well-formed text only.
 const SURROGATE_LIFT = 0x28_00;
 
 function compareBinaryText(left: string, right: string): number {
@@ -87,8 +85,6 @@ function compare(
   if (a === undefined) return -1;
   if (b === undefined) return 1;
   if (typeof a === "number" && typeof b === "number") return a - b;
-  // No column affinity on the wire: mixed TEXT/NUMERIC can differ from the
-  // canonical read — rerun online, never invent a JS type order.
   if (typeof a !== typeof b) {
     throw new OnlineOnlyError(
       "mixed-type comparison requires canonical SQLite affinity"
@@ -198,8 +194,6 @@ export function applyOptimisticMutations(
     try {
       validateOptimisticMutation(mutation, schema, rows.has(mutation.rowId));
     } catch (error) {
-      // A bad durable intent must not poison every read of its entity; new
-      // ones are rejected at enqueue.
       if (
         error instanceof ReplicaProtocolError ||
         error instanceof OnlineOnlyError
@@ -256,11 +250,6 @@ export function validateOptimisticMutation(
   }
 }
 
-/**
- * Fixed-grammar local equivalent of ctx.vault.read. No caller text becomes SQL.
- * The store compiles the grammar to SQL (`read-plan.ts`); with no production
- * caller left, this survives as the pushdown parity oracle.
- */
 export function evaluateReplicaRead(
   canonical: ReplicaRowEnvelope[],
   schema: ReplicaEntitySchema,
@@ -302,8 +291,6 @@ export function evaluateReplicaRead(
       );
       if (ordered !== 0) return dir === "desc" ? -ordered : ordered;
       if (!visiblePrimaryKey || visiblePrimaryKey === column) return 0;
-      // Canonical reads tie-break on the exposed scalar PK, ascending BINARY —
-      // mirror it or ORDER BY ... LIMIT drifts across refreshes.
       return compare(
         scalar(left.values[visiblePrimaryKey], "primary-key orderBy tie-break"),
         scalar(right.values[visiblePrimaryKey], "primary-key orderBy tie-break")
@@ -325,16 +312,10 @@ export function evaluateReplicaRead(
   if (!Number.isSafeInteger(requestedLimit)) {
     throw new ReplicaProtocolError("Read limit must be a safe integer");
   }
-  // Local SQLite-derived data, not a network response; a ten-year Photos
-  // library exceeds 10k rows.
   const limit = Math.min(Math.max(requestedLimit, 1), 100_000);
   return rows.slice(0, limit);
 }
 
-/**
- * Wrap one row so touching a field this replica does not hold escalates online
- * instead of reading `undefined`. Never gate it behind a dev flag.
- */
 export function guardReplicaRow(
   envelope: ReplicaRowEnvelope,
   guard: OnlineOnlyGuard

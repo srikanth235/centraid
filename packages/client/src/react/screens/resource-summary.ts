@@ -1,7 +1,3 @@
-// Pure formatting for the Resource card's disclosure ladder (#528). Keep it
-// React-free: the math is unit-tested here, and the components stay under the
-// governance line cap only because it lives out of them.
-
 import { formatBytes } from "../../format.js";
 
 export type ResourceMode = "auto" | "conserve" | "balanced" | "performance";
@@ -9,7 +5,6 @@ export type ResourceMode = "auto" | "conserve" | "balanced" | "performance";
 export interface ResourceProfileHost {
   cores: number;
   totalMemoryBytes: number;
-  /** `null` when never measured. */
   storageFsyncMs: number | null;
 }
 
@@ -31,7 +26,6 @@ export type ResourceKnobKey =
 
 export interface ResourceKnobSource {
   source: "env" | "prefs" | "preset";
-  /** Set only when `source === 'env'`. */
   envVar?: string;
 }
 
@@ -45,14 +39,12 @@ export interface ResourceProfileDTO {
   mode: "auto" | "conserve" | "balanced" | "performance";
   host: ResourceProfileHost;
   resolved: ResourceProfileResolved;
-  /** Absent on older gateways; the L3 "Tune" rung then does not render. */
   sources?: Record<ResourceKnobKey, ResourceKnobSource>;
   bounds?: Record<ResourceKnobKey, ResourceKnobBounds>;
 }
 
 export interface BackgroundPauseDTO {
   paused: boolean;
-  /** ISO; `null` means indefinite or not paused. */
   until: string | null;
 }
 
@@ -61,7 +53,6 @@ export interface ResourceFactRow {
   value: string;
 }
 
-/** Proxies only (CPU time, bytes, activity), never wattage. */
 export interface ResourceUsageDTO {
   sinceMs: number;
   process: {
@@ -74,7 +65,6 @@ export interface ResourceUsageDTO {
     replication: { passes: number; bytesReplicated: number; busyMs: number };
     backup: { drains: number; bytesUploaded: number; busyMs: number };
     sweeps: { passes: number; busyMs: number };
-    /** `cpuSeconds` is `null`: harness runs are not CPU-accounted. */
     harnessRuns: { runs: number; busyMs: number; cpuSeconds: number | null };
   };
   backgroundTimerFiresLastHour: number | null;
@@ -108,7 +98,6 @@ export function formatFriendlyMs(ms: number): string {
   return `${Number.isInteger(minutes) ? minutes : minutes.toFixed(1)} min`;
 }
 
-/** The caller attributes this to the GATEWAY host, never the browser. */
 export function formatBudgetSummary(profile: ResourceProfileDTO): string {
   const { workerMaxConcurrent, workerMaxOldGenerationMb } = profile.resolved;
   const memGb = formatMbAsGb(workerMaxConcurrent * workerMaxOldGenerationMb);
@@ -175,15 +164,10 @@ export function resolvedKnobRows(
 
 export const PAUSE_ONE_HOUR_MS = MS_PER_HOUR;
 
-// Battery/thermal chrome appears ONLY when the gateway host has a battery; a
-// mains/server host shows CPU steal, or nothing.
-
 export type PowerContextKind = "battery" | "mains" | "server";
 
-/** The gateway HOST, never the browser or phone viewing the screen. */
 export interface PowerContextState {
   kind: PowerContextKind;
-  /** `null` ⇒ no battery on the host — no battery chrome, ever. */
   battery: { percent: number | null; charging: boolean | null } | null;
   deferringBackgroundWork: boolean;
   reason: "on-battery" | "low-battery" | "thermal" | null;
@@ -192,11 +176,8 @@ export interface PowerContextState {
   updatedAt: number | null;
 }
 
-/** Below this, the steal fact is noise. */
 const STEAL_NOTE_THRESHOLD_PCT = 5;
 
-/** Battery/thermal chrome needs BOTH a battery and active posture; a server
- *  host gets the steal fact instead. Host-neutral copy. */
 export function powerPostureLine(power: PowerContextState): string | null {
   if (power.battery !== null) {
     if (!power.deferringBackgroundWork) return null;
@@ -213,7 +194,6 @@ export function powerPostureLine(power: PowerContextState): string | null {
         return null;
     }
   }
-  // No battery: never battery/thermal chrome.
   if (
     power.kind === "server" &&
     power.stealPercent !== null &&
@@ -249,8 +229,6 @@ export function processUsageRows(usage: ResourceUsageDTO): ResourceUsageRow[] {
   ];
 }
 
-/** Keep the harness-runs caveat: Conserve must never appear to promise what it
- *  cannot govern. */
 export function subsystemUsageRows(
   usage: ResourceUsageDTO
 ): ResourceUsageRow[] {
@@ -286,7 +264,6 @@ export type TunableKnobKey =
   | "workerPoolSize"
   | "replicationConcurrency";
 
-/** `null` ⇒ Linked (no override). */
 export type ResourceKnobPrefs = Record<TunableKnobKey, number | null>;
 
 export const RESOURCE_KNOB_PREF_PREFIX = "gateway.resource.";
@@ -322,7 +299,6 @@ export interface KnobRowFacts {
   envVar?: string;
 }
 
-/** `null` when the gateway sent no `sources`/`bounds`: the L3 rung then hides. */
 export function knobRowsFromProfile(
   profile: ResourceProfileDTO
 ): KnobRowFacts[] | null {
@@ -343,7 +319,6 @@ export function knobRowsFromProfile(
   });
 }
 
-/** Non-positive-integers read back as Linked. */
 export function parseResourceKnobPrefs(
   prefs: Record<string, unknown>
 ): ResourceKnobPrefs {
@@ -361,7 +336,6 @@ export function parseResourceKnobPrefs(
   };
 }
 
-/** Positive integers within bounds only. */
 export function validateKnobDraft(
   raw: string,
   bounds: ResourceKnobBounds
@@ -377,7 +351,6 @@ export function validateKnobDraft(
   return { ok: true, value: n };
 }
 
-/** Env knobs never go pending: the operator variable wins. */
 export function knobPending(
   running: number,
   desired: number | null,
@@ -388,7 +361,6 @@ export function knobPending(
   return bootSource === "prefs";
 }
 
-/** Amber, never blocking. `effectiveMemMb` is the PER-WORKER heap. */
 export function knobSoftWarnings(params: {
   effectiveConcurrent: number;
   effectiveMemMb: number;

@@ -33,7 +33,6 @@ export interface HomeDeps {
   tileVariant: AppearancePrefs["tileVariant"];
 }
 
-/** Derive the Home app-card DTOs from the resolved app list. */
 export function buildHomeAppItems(
   apps: readonly AppMetaResolvedType[],
   deps: HomeDeps
@@ -53,7 +52,6 @@ export function buildHomeAppItems(
   });
 }
 
-/** Derive the Home automation-card DTOs from the rows + their last-run feed. */
 export function buildHomeAutoItems(
   rows: readonly CentraidAutomationRow[],
   entries: readonly AutomationFeedEntry[],

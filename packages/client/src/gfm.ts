@@ -1,6 +1,3 @@
-// GFM parser for the rich-answer renderer (#420). Escape first, then match;
-// `sanitizeUrl` allowlists http/https(/mailto) + relative paths.
-
 export interface GfmClasses {
   asstP: string;
   asstH: string;
@@ -67,7 +64,6 @@ export function sanitizeUrl(url: string, isImage: boolean): string | null {
 
 export function inlineHtml(raw: string, C: GfmClasses): string {
   let s = escapeHtml(raw);
-  // Extract inline code first so `*`/`[` inside it stay literal.
   const codes: string[] = [];
   s = s.replace(/`(?<code>[^`]+)`/gu, (_m, code: string) => {
     codes.push(code);

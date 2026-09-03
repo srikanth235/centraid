@@ -1,7 +1,4 @@
 import { execFileSync } from "node:child_process";
-// REAL disk-full round-trip (#351): putSync against an ACTUAL full APFS
-// volume (hdiutil) — genuine ENOSPC. Gated behind CENTRAID_DISKFULL_E2E=1
-// (darwin only); hdiutil scratch is always cleaned up in a finally.
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
@@ -66,7 +63,6 @@ describe("disk-full", () => {
       attached = true;
 
       const store = new FsBlobStore(mount);
-      // Fill with distinct 1 MiB blobs until one write genuinely ENOSPCs.
       let failure: unknown;
       for (let i = 0; i < 64 && failure === undefined; i++) {
         const sha = i.toString(16).padStart(64, "0");
@@ -82,7 +78,6 @@ describe("disk-full", () => {
       expect(failure).toBeInstanceOf(VaultDiskFullError);
       expect((failure as VaultDiskFullError).context).toBe("blob CAS write");
 
-      // No stray `.tmp` anywhere under the fan-out tree.
       const strayTmp = listFilesRecursive(mount).filter((f) =>
         f.endsWith(".tmp")
       );
@@ -92,7 +87,7 @@ describe("disk-full", () => {
         try {
           execFileSync("hdiutil", ["detach", mount, "-force"]);
         } catch {
-          /* best-effort — a leaked test volume from a killed run is a known cost */
+          // Intentionally empty.
         }
       }
       rmSync(work, { recursive: true, force: true });

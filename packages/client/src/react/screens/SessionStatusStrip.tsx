@@ -10,10 +10,6 @@ export interface SessionStatusStripProps {
   busy: boolean;
 }
 
-/**
- * Shared conversation-session telemetry. The gauge follows the latest ACP
- * snapshot exactly, including decreases after compaction.
- */
 export default function SessionStatusStrip({
   leading,
   model,

@@ -1,13 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// This suite exercises the generic blob-image authorizer (#505).
 import { flushMacrotasks } from "@centraid/test-kit/flush";
 
 import type * as TypeImport_oycips from "../../gateway-client-core.js";
 import { installInlineBlobImages } from "./inline-blob-images.js";
 
-// gateway-client-core is the choke point authorizeBlobUrl routes through; stub
-// it and hand back a fake blob per request.
 const { doFetch, readJson } = vi.hoisted(() => ({
   doFetch: vi.fn<(...args: unknown[]) => Promise<Response>>(),
   readJson: vi.fn<(res: Response, op: string) => Promise<unknown>>(),
@@ -17,9 +14,6 @@ vi.mock(import("../../gateway-client-core.js") as Promise<unknown>, () => ({
     baseUrl: "https://gw.test",
     token: "tok",
   })),
-  // Explicit `Record<string, string>` return type (matching the real
-  // `authHeaders`) so the empty-object branch isn't narrowed to
-  // `{ Authorization?: undefined }`, which isn't assignable to it.
   authHeaders: (token?: string): Record<string, string> =>
     token ? { Authorization: `Bearer ${token}` } : {},
   doFetch: (...args: unknown[]) => doFetch(...args),
@@ -45,7 +39,6 @@ describe("inline-blob-images", () => {
     created = [];
     revoked = [];
     seq = 0;
-    // jsdom implements neither createObjectURL nor revokeObjectURL — supply both.
     (
       URL as unknown as { createObjectURL: (b: Blob) => string }
     ).createObjectURL = () => {

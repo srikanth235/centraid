@@ -1,8 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit one suite over the enrichment spine — staging, attribution injection, owner auto-publish, and the content primitive share the one bootstrapped vault (#299)
-// Enrichment spine, vault side (#299): derived rows through staging;
-// attribution injected server-side; owner assertions terminal; auto-publish
-// trust lets captions land without a review click; visual originals stay
-// unreachable while bounded AV sources serve ASR.
 
 import { DatabaseSync } from "node:sqlite";
 
@@ -108,7 +104,6 @@ describe("enrich", () => {
     return (outcome as { output: T }).output;
   }
 
-  /** Stage a pixel + claim it as a photo; returns asset + content ids. */
   function addPhoto(phash?: string): { assetId: string; contentId: string } {
     const staged = gw.stageBlob(owner, {
       bytes: PNG_BYTES,
@@ -194,7 +189,6 @@ describe("enrich", () => {
         ).n
       ).toBe(0);
 
-      // Agent proposing to widen its own trust PARKS (risk high).
       const proposal = invoke(agent, "sync.set_connection_trust", {
         connection_id: stagedOut.connection_id,
         trust: "auto-publish",
@@ -217,7 +211,6 @@ describe("enrich", () => {
       ).published;
       expect(published.created).toBe(1);
 
-      // Attribution is the ENRICHER's agent party, injected server-side.
       const annotation = db.vault
         .prepare(
           "SELECT author_party_id, body_text FROM knowledge_annotation WHERE target_id = ?"
@@ -321,13 +314,11 @@ describe("enrich", () => {
       expect(tag.confidence).toBeCloseTo(0.92);
       expect(tag.tagged_by_party_id).toBeNull(); // machine tag, never a person
 
-      // The owner asserts the same concept: convert to an owner tag.
       db.vault
         .prepare(
           "UPDATE core_tag SET tagged_by_party_id = ?, confidence = NULL WHERE target_id = ?"
         )
         .run(boot.ownerPartyId, assetId);
-      // The enricher re-runs with a different confidence — terminal, skipped.
       invoke(agent, "sync.stage_rows", {
         kind: "enrichment.vision",
         label: "photos",
@@ -442,9 +433,6 @@ describe("enrich", () => {
         answer: "reject",
       });
       expect(rejected.status).toBe("executed");
-      // Rejection is a STATE, not a deletion (#712): the row survives so the
-      // answer can be remembered, and it drops its proposed party so no
-      // per-person count still sees it.
       const afterReject = db.vault
         .prepare(
           "SELECT review_state, party_id, confirmed_by_party_id FROM media_face_region WHERE region_id = ?"
@@ -460,8 +448,6 @@ describe("enrich", () => {
     });
 
     test("an answered face is never re-proposed by a later enricher run", () => {
-      // Sabotage (#712): after dismiss, same external id AND a fresh one must
-      // not put the region back in a review queue.
       const { assetId } = addPhoto();
       const propose = (externalId: string, x: number) =>
         invoke(agent, "sync.stage_rows", {
@@ -498,7 +484,6 @@ describe("enrich", () => {
       });
       expect(dismissed.status).toBe("executed");
 
-      // Same external id → update path, which may only touch a still-`proposed` region.
       propose(`${assetId}:face:0`, 0.9);
       const rows = db.vault
         .prepare(
@@ -630,9 +615,6 @@ describe("enrich", () => {
     });
 
     test("filing a WRAPPED content item retargets title + folder tag onto its core_document", () => {
-      // #352: filing a content id that is already a document's current head
-      // must land on the document, not the content item — else the tag is
-      // invisible to every document-scoped read.
       const staged = gw.stageBlob(owner, {
         bytes: Buffer.from("scan scan scan"),
         filename: "scan_001.txt",
@@ -696,8 +678,6 @@ describe("enrich", () => {
     });
 
     test("filing an UNWRAPPED content item still tags the content item directly", () => {
-      // Unwrapped content (media asset, or ingest not through core.add_document)
-      // keeps content-item-scoped filing.
       const staged = gw.stageBlob(owner, {
         bytes: PNG_BYTES,
         filename: "loose.png",
@@ -785,8 +765,6 @@ describe("enrich", () => {
     });
 
     test("re-extraction gets a fresh derivative_id so a bounded embed cursor can catch the rewrite (issue #731)", () => {
-      // embed-text walks `derivative_id > cursor`. An in-place UPDATE would
-      // leave the rewritten id behind an advanced cursor — stale vectors.
       const staged = gw.stageBlob(owner, {
         bytes: PNG_BYTES,
         filename: "scan2.png",
@@ -816,9 +794,6 @@ describe("enrich", () => {
         )
         .get(doc.content_id) as { derivative_id: string };
       expect(after.derivative_id).not.toBe(before.derivative_id);
-      // uuidv7 is lexicographically time-ordered. Prove it the way embed-text
-      // queries (`derivative_id > cursor`), not string order: a cursor parked
-      // at the pre-rewrite id must find the rewritten row.
       const rescanned = db.vault
         .prepare(
           `SELECT count(*) AS n FROM core_content_derivative
@@ -854,7 +829,6 @@ describe("enrich", () => {
         model: "ocr@1",
         regions: [
           { text: "Total", box: [10, 10, 20, 20] },
-          // x + w = 110 > width 100 — out of bounds.
           { text: "Out of bounds", box: [90, 70, 20, 20], confidence: 0.5 },
         ],
       });
@@ -869,7 +843,6 @@ describe("enrich", () => {
       };
       expect(payload.regions).toStrictEqual([
         { text: "Total", box: [10, 10, 20, 20] },
-        // Box dropped, not clamped; confidence preserved, never invented.
         { text: "Out of bounds", confidence: 0.5 },
       ]);
     });
@@ -902,8 +875,6 @@ describe("enrich", () => {
       );
       expect(thumb.mediaType).toBe("image/jpeg");
 
-      // `original` exists for ASR, but a visual source stays unreachable so
-      // EXIF/GPS-bearing bytes never cross this rail.
       await expect(
         gw.contentForAgent(agent, {
           contentId: asset.content_id,
@@ -1020,9 +991,6 @@ describe("enrich", () => {
     });
 
     test("upsert_embedding stamps an optional source_version alongside the model (issue #731)", () => {
-      // `source_version` distinguishes "embedding is current" from "model is
-      // current but the source derivative was rewritten" — a model-only stamp
-      // cannot see a same-model text rewrite.
       const { assetId } = addPhoto();
       invoke(agent, "enrich.upsert_embedding", {
         entity_type: "media.asset",
@@ -1076,7 +1044,6 @@ describe("enrich", () => {
       expect(open).toHaveLength(1);
       expect(open[0]!.detail).toBe("sunset lake");
 
-      // Agent-plane misses are the agent's business, never queue spam.
       gw.search(agent, {
         entity: "knowledge.annotation",
         query: "agent query",
@@ -1107,8 +1074,6 @@ describe("enrich", () => {
     });
 
     test("a gateway backstop cannot drain a live device lease but may resume after expiry", () => {
-      // A REAL content item (#916): the request's (entity_type, entity_id) is
-      // a composite foreign key into the entity supertype.
       db.vault
         .prepare(
           `INSERT OR IGNORE INTO core_content_item
@@ -1168,14 +1133,10 @@ describe("enrich", () => {
       ).toThrow(/must be one of/u);
     });
 
-    // Settings bag is owner-only (GET/PATCH /centraid/_vault/enrich);
-    // `enrich_policy` mirrors the one column apps can reach via consent-checked read.
     test("enrich_policy mirrors the settings bag, seeded gateway at bootstrap and readable via gw.read", () => {
       const seeded = db.vault
         .prepare("SELECT domain, tier FROM enrich_policy ORDER BY domain")
         .all() as { domain: string; tier: string }[];
-      // node:sqlite returns null-prototype rows; spreading compares columns
-      // without asserting the driver's prototype.
       expect(seeded.map((row) => ({ ...row }))).toStrictEqual([
         { domain: "docs", tier: "gateway" },
         { domain: "photos", tier: "gateway" },
@@ -1196,8 +1157,6 @@ describe("enrich", () => {
       ]);
     });
 
-    // Enforceable read: fire path asks this off the owner plane. Anything
-    // that is not a legible tier reads as `undefined` — the gate refuses.
     test("readEnrichPolicyTier answers the owner's tier and fails closed on anything else", () => {
       expect(readEnrichPolicyTier(db.vault, "photos")).toBe("gateway");
       updateEnrichSettings(db, { photos: "device" });
@@ -1208,8 +1167,6 @@ describe("enrich", () => {
         .run("docs");
       expect(readEnrichPolicyTier(db.vault, "docs")).toBeUndefined();
 
-      // A tier this build cannot honour is not a tier. CHECK stops live
-      // writers; the guard is for a file shaped by another build.
       const foreign = new DatabaseSync(":memory:");
       foreign.exec(
         "CREATE TABLE enrich_policy (domain TEXT PRIMARY KEY, tier TEXT NOT NULL, updated_at TEXT NOT NULL)"
@@ -1221,8 +1178,6 @@ describe("enrich", () => {
       foreign.close();
     });
 
-    // One read path for the one gate (#807): tier + cascade rules together;
-    // this read resolves nothing — it hands the gate its material.
     test("readEnrichPolicyResolutionInput reads tier + the chain's rules, and resolves nothing", () => {
       putEnrichPolicyRule(db.vault, {
         scope: { type: "vault", ref: "" },
@@ -1253,8 +1208,6 @@ describe("enrich", () => {
       ]);
       expect(read.rules[1]?.enabled).toBe(false);
 
-      // Caller with an item passes the longer chain; this module never guesses
-      // which collection an item is in.
       const deep = readEnrichPolicyResolutionInput(db.vault, "photos", "ocr", [
         { type: "vault", ref: "" },
         { type: "domain", ref: "photos" },
@@ -1264,8 +1217,6 @@ describe("enrich", () => {
       expect(deep.rules[2]?.enabled).toBe(true);
     });
 
-    // Fail-closed, cascade included: unreadable tier stays unreadable no
-    // matter how many rules sit beside it. The gate needs `undefined`.
     test("readEnrichPolicyResolutionInput still fails closed on an unreadable tier", () => {
       db.vault
         .prepare("DELETE FROM enrich_policy WHERE domain = ?")
@@ -1285,14 +1236,7 @@ describe("enrich", () => {
       expect(read.rules).toHaveLength(1);
     });
 
-    // [C5 sabotage, migration half] Pre-#712 `local` meant "no model turn".
-    // Mapping it to `gateway` would be an unconsented widening: automated
-    // fire has only the tier gate (S9 per-capability is not wired past the
-    // manual `enrich_request` queue). Rename ships WITHOUT migrating `local`
-    // up — it reads as conservative `device`. Gate half:
-    // `packages/server/src/serve/enrich-tier-control.test.ts`.
     test("[C5 sabotage] a legacy 'local' row reads as device, not gateway", () => {
-      // CHECK stays permissive of the legacy token (schema/enrich.ts header).
       db.vault
         .prepare(
           "UPDATE enrich_policy SET tier = 'local' WHERE domain = 'photos'"
@@ -1301,14 +1245,10 @@ describe("enrich", () => {
 
       expect(readEnrichPolicyTier(db.vault, "photos")).toBe("device");
 
-      // Owner raising the tier through Settings is what reaches the wider
-      // lane; this migration never does it for them.
       updateEnrichSettings(db, { photos: "gateway" });
       expect(readEnrichPolicyTier(db.vault, "photos")).toBe("gateway");
     });
 
-    // Legacy `model` already meant the wider tier — map to `gateway`, no
-    // narrowing of a prior explicit choice.
     test("[C5] a legacy 'model' row reads as gateway — no narrowing of a prior explicit choice", () => {
       db.vault
         .prepare(
@@ -1318,10 +1258,6 @@ describe("enrich", () => {
       expect(readEnrichPolicyTier(db.vault, "photos")).toBe("gateway");
     });
 
-    // Consent scope (schema/enrich.ts `capability`): an on-demand ask names
-    // the enricher, so face-detection consent cannot be drained by the
-    // captioner. System signals stay untagged and broadcast — they are not
-    // consent.
     test("a manual enrichment request must name the capability it consents to", () => {
       const asked = invoke(owner, "enrich.request_enrichment", {
         entity_type: "media.asset",
@@ -1336,8 +1272,6 @@ describe("enrich", () => {
       };
       expect(tagged.capability).toBe("faces");
 
-      // Untagged owner ask refused: it would read as consent for every
-      // enabled enricher.
       const refused = invoke(owner, "enrich.request_enrichment", {
         entity_type: "media.asset",
         reason: "manual",
@@ -1363,8 +1297,6 @@ describe("enrich", () => {
       expect(broadcast.capability).toBeNull();
     });
 
-    // Egress consent, re-keyed (#807): the photos panel's one write becomes
-    // a ledger row keyed capability × egress class.
     test("a manual request re-keys the member's answer into the egress ledger", () => {
       expect(
         invoke(owner, "enrich.request_enrichment", {
@@ -1379,7 +1311,6 @@ describe("enrich", () => {
         egress: "on-device",
       });
       expect(answer?.decision).toBe("granted");
-      // Panel answer is ON-DEVICE. Unasked gateway/provider is not a grant.
       expect(
         readEnrichConsent(db.vault, { capability: "faces", egress: "gateway" })
       ).toBeNull();
@@ -1395,7 +1326,6 @@ describe("enrich", () => {
     });
   });
 
-  // ─── egress-consent ledger's one writer (#807) ─────
   describe("enrich.record_consent", () => {
     test("records an answer, and a re-answer replaces it rather than piling up", () => {
       const first = invoke(owner, "enrich.record_consent", {
@@ -1417,8 +1347,6 @@ describe("enrich", () => {
       expect(again.status).toBe("executed");
       const rows = listEnrichConsent(db.vault);
       expect(rows).toHaveLength(1);
-      // A mind changed is a new DECISION, not a second row. Decline stays:
-      // "asked and told no" ≠ "never asked".
       expect(rows[0]?.decision).toBe("declined");
     });
 

@@ -1,7 +1,3 @@
-// Minimal vCard 3.0/4.0 parsing for ingest customs (§10): FN, N (for
-// sort_name), BDAY, EMAIL, TEL. Same stance as ics.ts — a border post, not a
-// full implementation; unknown properties pass by untouched.
-
 export interface VcardIdentifier {
   scheme: "email" | "tel";
   value: string;
@@ -31,7 +27,6 @@ function unfold(text: string): string[] {
   return lines;
 }
 
-/** Normalize a handle: lowercase emails, strip separators from tel. */
 export function normalizeHandle(
   scheme: "email" | "tel",
   value: string
@@ -40,7 +35,6 @@ export function normalizeHandle(
   return value.replace(/[\s().-]/gu, "");
 }
 
-/** Parse every VCARD in a document. */
 export function parseVcards(text: string): Vcard[] {
   const cards: Vcard[] = [];
   let current: Vcard | null = null;
@@ -50,7 +44,6 @@ export function parseVcards(text: string): Vcard[] {
     const left = line.slice(0, colon);
     const value = line.slice(colon + 1);
     const [rawName, ...paramParts] = left.split(";");
-    // Strip vCard 2.1/3.0 grouping prefix (item1.EMAIL).
     const name = (rawName ?? "").replace(/^[^.]+\./u, "").toUpperCase();
     const params = paramParts.join(";").toUpperCase();
     if (name === "BEGIN" && value.toUpperCase() === "VCARD") {
@@ -69,7 +62,6 @@ export function parseVcards(text: string): Vcard[] {
         current.fn = value.trim();
         break;
       case "N": {
-        // Family;Given;… → "Family, Given" collation form.
         const [family, given] = value.split(";");
         if (family || given)
           current.sortName = [family, given].filter(Boolean).join(", ");

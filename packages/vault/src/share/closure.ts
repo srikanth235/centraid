@@ -1,12 +1,3 @@
-// Share closure contract (#599 decision 11, #726): readShareClosure(origin) →
-// WireClosure → projectShareClosure(audience), sharing no db handle — so
-// WireClosure must stay plain JSON (no Buffers, handles, functions).
-// STRUCTURAL ONLY: item + content item + derivatives, never tags, links,
-// annotations or enrichment; the audience derives its own via
-// projection-ingest.ts. Cross-vault FKs (party/device/place/camera) project
-// NULL — provenance lives on core_share_origin.shared_by. Projected rows are
-// INDEPENDENT; nothing syncs back.
-
 export type ShareableItemType =
   | "core.collection"
   | "core.content_item"
@@ -26,21 +17,10 @@ const SHAREABLE_ITEM_TYPES: readonly ShareableItemType[] = [
   "media.asset",
 ];
 
-/**
- * The ENTITY a shareable item is. `docs.folder` is Docs' word for a
- * `core.concept`, and `core_share_origin.(target_type, target_id)` is a
- * composite foreign key into the entity supertype (#916), so provenance names
- * the entity rather than the app's word for it.
- */
 export function shareOriginEntityType(itemType: ShareableItemType): string {
   return itemType === "docs.folder" ? "core.concept" : itemType;
 }
 
-/**
- * The inverse of `shareOriginEntityType`, for the sweeps that read provenance
- * back. In the share plane a projected `core.concept` is a Docs folder: no
- * other kind of concept crosses a vault boundary.
- */
 export function shareableItemTypeOfEntity(
   entityType: string
 ): ShareableItemType | undefined {
@@ -52,7 +32,6 @@ export function isShareableItemType(value: string): value is ShareableItemType {
   return (SHAREABLE_ITEM_TYPES as readonly string[]).includes(value);
 }
 
-/** Only accepted version — no ladder, no COMPAT shim; refuse anything else. */
 export const CLOSURE_FORMAT_VERSION = 2;
 
 export type WireValue = string | number | null;
@@ -72,7 +51,6 @@ export interface ContentItemRow {
   created_at: string;
 }
 
-/** `content_id` is required: derivatives pool across the whole closure. */
 export interface DerivativeRow {
   derivative_id: string;
   content_id: string;
@@ -110,13 +88,11 @@ export interface DocumentRow {
   purge_at: string | null;
 }
 
-/** Every entry's TARGET must be a row in `WireRows`. */
 export interface WireCollection {
   row: WireRow;
   entries: WireRow[];
 }
 
-/** `folders` = concept then descendants; `tags` file docs into them. */
 export interface WireDocsFolder {
   scheme: WireRow;
   folders: WireRow[];
@@ -140,7 +116,6 @@ export interface WireTallyGroup {
   lineAllocations: WireRow[];
 }
 
-/** Deduped across the closure: each content item and derivative appears ONCE. */
 export interface WireRows {
   contentItems: ContentItemRow[];
   derivatives: DerivativeRow[];
@@ -148,7 +123,6 @@ export interface WireRows {
   documents: DocumentRow[];
   docsFolders: WireDocsFolder[];
   collections: WireCollection[];
-  /** Sealed under the ORIGIN DEK: needs both keys, so local-only, never UI-placeable. */
   lockerItems: WireRow[];
   tallyGroups: WireTallyGroup[];
 }
@@ -159,7 +133,6 @@ export interface BlobManifestEntry {
   size: number;
 }
 
-/** Named in ORIGIN ids. */
 export interface WireItem {
   itemType: ShareableItemType;
   itemId: string;
@@ -175,17 +148,12 @@ export interface WireClosure {
 
 export interface ProjectedItem {
   itemType: ShareableItemType;
-  /** ORIGIN vault row id. */
   originItemId: string;
-  /** AUDIENCE vault row id. */
   itemId: string;
-  /** Audience already held it (idempotent re-share). */
   deduped: boolean;
-  /** Audience-side content id; for media assets `itemId` is the asset, so covers FK this. */
   contentId?: string;
 }
 
 export interface ProjectResult {
-  /** One entry per `WireClosure.items`, in the same order. */
   items: ProjectedItem[];
 }

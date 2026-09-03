@@ -8,15 +8,9 @@ import SectionBlock from "../ui/SectionBlock.js";
 import controlsCss from "../styles/controls.module.css";
 import styles from "./LogsScreen.module.css";
 
-// System → Logs: gateway realtime diagnostics (SSE, replay-then-live).
-// Prop-driven: transport injected (`streamLogs`), this file owns view +
-// stream lifecycle. The stream stays a stream (binding layer v11) — do not
-// fold two thousand live lines into the row block.
-
 export type LogLevelDTO = "info" | "warn" | "error";
 
 export interface LogEntryDTO {
-  /** Monotonic gateway sequence — resume/dedupe cursor. */
   seq: number;
   ts: number;
   level: LogLevelDTO;
@@ -24,23 +18,12 @@ export interface LogEntryDTO {
 }
 
 export interface LogsBridgeProps {
-  /**
-   * Replay past `after`, then live-stream until `signal` aborts.
-   * Resolves/rejects on stream close — the screen schedules the reconnect.
-   */
   streamLogs: (
     onEntry: (entry: LogEntryDTO) => void,
     signal: AbortSignal,
     after?: number
   ) => Promise<void>;
-  /**
-   * Cross-link jump. `nonce` is bumped on every jump (even a repeat of the
-   * same text) so the effect reapplies; the stream keeps running.
-   */
   focusQuery?: { text: string; nonce: number };
-  /**
-   * Save `/centraid/_gateway/diagnostics` (#351). Omitted → no toolbar button.
-   */
   onExportDiagnostics?: () => Promise<
     | { ok: true; path: string }
     | { ok: false; canceled?: boolean; error?: string }
@@ -49,10 +32,8 @@ export interface LogsBridgeProps {
 
 type StreamStatus = "connecting" | "live" | "reconnecting";
 
-/** Client-side cap — matches the gateway ring. */
 const MAX_ENTRIES = 2000;
 
-/** Matching lines in the DOM at once (#659). Newest window; the rest are one click away. */
 const LOG_WINDOW = 300;
 const RECONNECT_MS = 2000;
 const FOLLOW_SLACK = 48;
@@ -92,8 +73,6 @@ export default function LogsScreen({
   const [entries, setEntries] = useState<LogEntryDTO[]>([]);
   const [status, setStatus] = useState<StreamStatus>("connecting");
   const [filter, setFilter] = useState<LevelFilter>("all");
-  // Search box baseline is the incoming jump: typed value wins only for the
-  // CURRENT nonce. A fresh jump re-applies even when the text is unchanged.
   const [typed, setTyped] = useState<{
     nonce: number | undefined;
     text: string;
@@ -113,7 +92,6 @@ export default function LogsScreen({
     | { kind: "error"; message: string }
   >({ kind: "idle" });
 
-  // Resume cursor + follow flag in refs so the stream effect never restarts on render-state.
   const lastSeqRef = useRef(0);
   const followRef = useRef(true);
   useEffect(() => {
@@ -163,7 +141,6 @@ export default function LogsScreen({
           setStatus("reconnecting");
           retryTimer = setTimeout(connect, RECONNECT_MS);
         });
-      // A silent-but-healthy stream (no lines yet) still counts as live.
       setStatus((s) => (s === "connecting" ? "live" : s));
     };
 
@@ -183,7 +160,6 @@ export default function LogsScreen({
     );
   }, [entries, filter, query]);
 
-  // Windowing (#659): reading is the TAIL of the matches; a filter change starts over.
   const [windowSize, setWindowSize] = useState(LOG_WINDOW);
   const [seenWindowReset, setSeenWindowReset] = useState("");
   const windowReset = `${filter} ${query}`;

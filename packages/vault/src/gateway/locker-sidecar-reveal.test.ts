@@ -1,9 +1,3 @@
-// Locker's sealed SIDECARS ride the same one-shot permit as the item (#873).
-// `locker_item_field.value_sealed`, the previous password in a revision, and
-// `locker_item_passkey.private_key` are secrets that hang off an item, so the
-// reveal gate is keyed on the locker SCHEMA, not on `locker.item` alone — and
-// the permit a sidecar reveal spends is the OWNING item's.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
@@ -26,7 +20,6 @@ let owner: Credential;
 const PURPOSE = "dpv:ServiceProvision";
 const SECRET = "correct horse battery staple";
 
-/** The failing reason, with the per-call receipt id stripped off. */
 function refusal(run: () => unknown): string {
   try {
     run();
@@ -170,7 +163,6 @@ describe("locker sidecar reveal", () => {
       authentication: { sessionToken, itemToken },
       purpose: PURPOSE,
     });
-    // One-shot: the same token no longer opens the item itself…
     expect(() =>
       gw.reveal(owner, {
         entity: "locker.item",
@@ -180,7 +172,6 @@ describe("locker sidecar reveal", () => {
         purpose: PURPOSE,
       })
     ).toThrow(/authorization expired/u);
-    // …nor the field again.
     expect(() =>
       gw.reveal(owner, {
         entity: "locker.item_field",
@@ -291,12 +282,6 @@ describe("locker sidecar reveal", () => {
     ).toThrow(/authorization expired/u);
   });
 
-  // HISTORY IS REVISIONS (#916, D2): `locker_item_history` was a second
-  // revision mechanism, so its `password` cell was a second sealed surface
-  // with its own reveal path. The previous password rides a
-  // `core_entity_revision` snapshot of the item row — ciphertext under the
-  // ITEM's additional data — and `locker.export` is what unseals it, under the
-  // export's own confirmation, rather than a per-row reveal.
   test("the previous password survives a rotation as sealed ciphertext", () => {
     const itemId = addLogin("first-p4ssword");
     const edited = gw.invoke(owner, {
@@ -317,8 +302,6 @@ describe("locker sidecar reveal", () => {
       password?: string;
     };
     expect(snapshot.password).toBeTypeOf("string");
-    // Sealed at rest: the history of a secret is as much a secret as the
-    // current value.
     expect(snapshot.password).not.toContain("first-p4ssword");
   });
 
@@ -345,7 +328,6 @@ describe("locker sidecar reveal", () => {
       purpose: PURPOSE,
     });
     expect(revealed.values.private_key).toBe("pk-material-xyz");
-    // The passkey's PK IS the item, so no separate item id is receipted.
     const detail = db.audit
       .prepare("SELECT detail_json FROM access_receipt WHERE receipt_id = ?")
       .get(revealed.receiptId) as { detail_json: string };
@@ -369,7 +351,6 @@ describe("locker sidecar reveal", () => {
          VALUES (?, 'api_key', ?, '[]', ?)`
       )
       .run("conn-1", "ak-live-123", nowIso());
-    // Locker is configured and holds no permit: a locker.* reveal would refuse.
     await configure();
 
     const revealed = gw.reveal(owner, {

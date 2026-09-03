@@ -11,9 +11,6 @@ const FIRST_PARTY_IDS: ReadonlySet<string> = new Set(
   FIRST_PARTY_APPS.map((app) => app.id)
 );
 
-// `null` means UNKNOWN, never `""`: an empty string compares unequal to every
-// real vault id, so an offline boot would look like a vault switch and empty
-// the persisted pin list.
 async function activeVaultKey(): Promise<string | null> {
   try {
     const auth = await window.CentraidApi.getGatewayAuth();
@@ -62,7 +59,6 @@ async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
   if (projs === null) {
     const active = await activeVaultKey();
     const cached = readInstalledCache(active ?? lastKnownVaultKey());
-    // A NAMED vault differing from the one on screen must show empty.
     const known = lastKnownVaultKey();
     if (cached.length === 0 && (active === null || active === known))
       return null;
@@ -70,8 +66,6 @@ async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
   }
   const liveIds = new Set(projs.map((p) => p.id));
   let pins = Store.get<UserAppMeta[]>("home.userApps", []);
-  // Park the outgoing vault's pins BEFORE the orphan prune below, or every old
-  // pin looks deleted against the new listing and the prune destroys it.
   const vid = await activeVaultKey();
   const pinsVault = lastKnownVaultKey();
   if (vid !== null && pinsVault !== null && pinsVault !== vid) {
@@ -85,7 +79,6 @@ async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
     Store.set("home.userApps", pins);
   }
   if (vid !== null && pinsVault !== vid) Store.set("home.userApps.vault", vid);
-  // Overlay name/description too, or a rename never reaches the pin (#263).
   const reconciled = pins
     .filter(
       (a) =>
@@ -107,8 +100,6 @@ async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
     });
   if (reconciled.length !== pins.length) Store.set("home.userApps", reconciled);
 
-  // From the LISTING, and deliberately NOT persisted (#708): written back as
-  // pins these would survive a real uninstall.
   const pinnedIds = new Set(
     reconciled.flatMap((a) =>
       a.centraidAppId ? [a.id, a.centraidAppId] : [a.id]
@@ -139,14 +130,12 @@ export interface ShellAppsController {
   loading: boolean;
   refresh: () => Promise<void>;
   setUserApps: (next: UserAppMeta[]) => void;
-  /** A rejection restores the lists and RETHROWS (#659). */
   mutateApps: (
     apply: (snapshot: ShellAppsSnapshot) => ShellAppsSnapshot,
     commit: () => Promise<unknown>
   ) => Promise<void>;
 }
 
-// Pins live in the local Store; `refresh()` reconciles them with the gateway.
 export function useShellApps(): ShellAppsController {
   const [userApps, setUserApps] = useState<UserAppMeta[]>(() =>
     Store.get<UserAppMeta[]>("home.userApps", [])
@@ -193,7 +182,6 @@ export function useShellApps(): ShellAppsController {
     ) =>
       optimisticUpdate<ShellAppsSnapshot>({
         read: () => latest.current,
-        // NOT persisted: the reconcile owns what gets written.
         write: (next) => {
           latest.current = next;
           setUserApps(next.userApps);

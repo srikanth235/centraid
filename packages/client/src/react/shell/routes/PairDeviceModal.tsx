@@ -14,7 +14,6 @@ export interface PairDeviceModalProps {
   onClose: () => void;
 }
 
-/** Self-pair (#726); mirrors the Devices panel. */
 export default function PairDeviceModal({
   onClose,
 }: PairDeviceModalProps): JSX.Element {

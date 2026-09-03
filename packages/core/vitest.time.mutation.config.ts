@@ -1,6 +1,5 @@
 import { defineConfig } from "vitest/config";
 
-/** Standalone Stryker test root for civil-time recurrence. */
 export default defineConfig({
   test: {
     name: "@centraid/core/time-mutation",

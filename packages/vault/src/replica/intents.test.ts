@@ -119,8 +119,6 @@ describe("intents", () => {
     expect(
       readReplicaIntentOutcome(vault, identity.intentId, identity.deviceId)
     ).not.toHaveProperty("output");
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({
       ...vault
         .prepare(

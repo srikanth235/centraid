@@ -44,7 +44,6 @@ describe("host", () => {
     expect(boot2.concepts["dpv:ServiceProvision"]).toBe(
       boot1.concepts["dpv:ServiceProvision"]
     );
-    // The recovered credential authenticates: an owner read succeeds.
     const gw = createGateway(second);
     const cred = {
       kind: "device",
@@ -74,13 +73,7 @@ describe("host", () => {
     expect(again.signingKey).toBe(first.signingKey);
     expect(lookupAppByName(db, "expense-tracker")?.appId).toBe(first.appId);
     expect(lookupAppByName(db, "never-registered")).toBeUndefined();
-    // `name` stays the enrollment slug — a wide swath of the desktop renderer
-    // key-equates it to the app id — but the raw slug still self-heals onto
-    // `access_app.display_name` (surfaced via a parked invocation's
-    // `caller`, never through `.name`).
     expect(first.name).toBe("expense-tracker");
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({
       ...db.vault
         .prepare("SELECT display_name FROM access_app WHERE app_id = ?")
@@ -133,7 +126,6 @@ describe("host", () => {
     expect(lookupAgentByName(db, "briefing")?.agentId).toBe(first.agentId);
     expect(lookupAgentByName(db, "never-enrolled")).toBeUndefined();
 
-    // Deny-by-default: the enrolled agent reads nothing until a grant lands.
     const cred = {
       kind: "agent",
       agentId: first.agentId,
@@ -157,7 +149,6 @@ describe("host", () => {
     expect(grants).toHaveLength(1);
     expect(grants[0]).toMatchObject({ purpose: "dpv:ServiceProvision" });
 
-    // The grant covers reads AND typed commands under the schedule schema.
     const read = gw.read(cred, {
       entity: "schedule.task",
       purpose: "dpv:ServiceProvision",
@@ -170,7 +161,6 @@ describe("host", () => {
     });
     expect(outcome.status).toBe("executed");
 
-    // Retiring the enrollment drops authentication entirely.
     markAgentRevoked(db, first.agentId);
     expect(lookupAgentByName(db, "briefing")).toBeUndefined();
     expect(() =>
@@ -189,9 +179,6 @@ describe("host", () => {
     cleanups.push(() => db.close());
     bootstrapVault(db, { ownerName: "Priya" });
 
-    // No caller has the automation's real manifest name yet — the fallback
-    // beats a raw id slug (the exact complaint: Approvals showed
-    // "e2e-agent-purge-demo" with no indication of who was asking).
     const first = ensureAgentEnrolled(db, "e2e-agent-purge-demo");
     expect(first.created).toBe(true);
     expect(first.name).toBe("E2e Agent Purge Demo");
@@ -199,9 +186,6 @@ describe("host", () => {
       "E2e Agent Purge Demo"
     );
 
-    // A caller with the real pretty name upserts it in place — same agent
-    // identity (every grant/receipt against its party survives), not a
-    // second enrollment.
     const named = ensureAgentEnrolled(db, "e2e-agent-purge-demo", {
       displayName: "Purge Demo",
     });
@@ -213,9 +197,6 @@ describe("host", () => {
       "Purge Demo"
     );
 
-    // A dev vault enrolled before this fix stored the raw slug as the
-    // display name outright — the very next enrollment touch heals it,
-    // with no re-enrollment ceremony.
     db.vault
       .prepare(`UPDATE core_party SET display_name = ? WHERE party_id = ?`)
       .run("e2e-agent-purge-demo", first.partyId);

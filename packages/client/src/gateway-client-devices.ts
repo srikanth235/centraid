@@ -1,9 +1,3 @@
-/*
- * Renderer-side client for the gateway's paired-device surface (#376). The
- * roster is scoped to the caller's plane: a device token sees only its own
- * vaults' devices. No device plane 404s, reported here as an empty roster.
- */
-
 import { readDirectBlob } from "./device-blob-source.js";
 import type { DirectBlobDownloadPlan } from "./device-blob-source.js";
 import {
@@ -47,8 +41,6 @@ export interface DeviceEnrichmentLease {
   entityId: string | null;
   reason: "search-miss" | "on-view" | "manual";
   detail: string | null;
-  /** Narrowed to the device lane (#724): model-shaped work runs on the
-   *  gateway's recognition automation and is never leased to a device. */
   capability: "previews" | "poster" | "pdfText";
   contributionVariant: string | null;
   deviceId: string;
@@ -57,7 +49,6 @@ export interface DeviceEnrichmentLease {
   attempt: number;
 }
 
-/** Ownership replaces roles (#726): nothing per-vault is left to grant. */
 export interface GatewayDeviceVault {
   vaultId: string;
   vaultName?: string;
@@ -76,7 +67,6 @@ export interface CentraidGatewayDevice {
   addedAt?: string;
   lastUsedAt?: string;
   current?: boolean;
-  /** A device tombstone, never a role (#726). */
   revoked: boolean;
   rememberDevice: boolean;
   grantProfile?: string[];
@@ -118,22 +108,14 @@ export interface GatewayDeviceTicket {
   expiresAt: string;
 }
 
-/**
- * Ownership admits no cross-person grant (#726): a ticket lands on the CALLER's
- * own owner. `forPerson` is the one exception and excludes `vaultId`/`vaultIds`.
- */
 export interface GatewayDeviceTicketInput {
   vaultId?: string;
   vaultIds?: string[];
   forPerson?: { label: string; vaultName?: string };
-  /** REQUIRED with `forPerson` (#750): one key per intended mint, reused on
-   *  retry, so no retry mints a second owner/vault. */
   operationId?: string;
   ttlMinutes?: number;
 }
 
-/** Either a SELF-PAIR or a `forPerson` mint; no third shape exists, so a
- *  ticket can never land another EXISTING person in the caller's vaults. */
 export async function createGatewayDeviceTicket(
   input?: GatewayDeviceTicketInput
 ): Promise<GatewayDeviceTicket> {
@@ -149,11 +131,6 @@ export async function createGatewayDeviceTicket(
   );
 }
 
-/**
- * Revoke one DEVICE: the person and their other devices are untouched, and the
- * row survives as a tombstone so prior attribution still resolves. Revoking a
- * vault's last live device 409s until `confirmLastDevice` echoes its name.
- */
 export async function revokeGatewayDevice(
   deviceId: string,
   options?: { confirmLastDevice?: string }
@@ -358,8 +335,6 @@ export async function readGatewayDeviceWorkSource(input: {
   if (direct.status === 401 || direct.status === 403) {
     await readJson<never>(direct, "authorize direct device read");
   }
-  // Local-primary vaults have no provider URL: their permanent fallback is
-  // the content-id route, which is never addressed by sha.
   const res = await doFetch(
     baseUrl,
     `/centraid/_vault/blobs/${enc(input.contentId)}`,

@@ -1,11 +1,7 @@
-// Records GRID logic (#775): cells are classified here, never in a kit.
-
 import type { GridColumnData, GridSortData } from "./contracts";
 
-/** Both seats clip at the same place. */
 export const GRID_CLIP_AT = 48;
 
-/** `null` (no value) and `blank` ("") are different facts, only one a gap. */
 export type GridCellKind = "value" | "null" | "blank" | "sealed";
 
 export interface GridCell {
@@ -21,7 +17,6 @@ function asText(value: unknown): string {
   return String(value);
 }
 
-/** `sealed` wins over absence: never advertise which rows are empty. */
 export function gridCell(
   value: unknown,
   options: { sealed?: boolean; clipAt?: number } = {}
@@ -45,7 +40,6 @@ export function gridCell(
   };
 }
 
-/** Ascending first; only a second ask on the same column reverses. */
 export function gridSortNext(
   current: GridSortData | null | undefined,
   key: string

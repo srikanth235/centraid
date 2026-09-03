@@ -78,15 +78,6 @@ describe("single icon registry", () => {
   });
 });
 
-// ── App-icon silhouette contract (handoff brief, "App icons") ──────────────
-//
-// The brief's two-tone filled mark — evenodd knockouts plus a 50%-opacity
-// decorative path — is not what this repo ships: icons are single-tone strokes,
-// so a test for "identity absent from the secondary path" would pass vacuously.
-// This suite pins the stronger guarantee the current model does give: no path
-// carries baked-in colour, only `currentColor`. `fillRule` is the seam —
-// `pathMarkup` already emits it, so the contract activates the day a filled
-// mark is authored.
 describe("app-icon silhouette contract", () => {
   const appIconNames = [...new Set(apps.map((app) => app.iconKey))];
 
@@ -119,12 +110,9 @@ describe("app-icon silhouette contract", () => {
     expect(markup).toContain('fill-rule="evenodd"');
   });
 
-  // Legibility at 14px is human-verified; these two proxies only rule out the
-  // failure modes a heuristic can see. Necessary, never sufficient.
   const SMALLEST_SIZE_IN_USE = 14;
   const VIEW_BOX = 24;
   const MIN_DEVICE_STROKE_PX = 0.75;
-  // Margin above the densest shipped icon (AddressBook, 18 commands).
   const MAX_PATH_COMMANDS = 24;
   const countCommands = (d: string): number =>
     (d.match(/[a-df-z]/giu) ?? []).length;
@@ -148,10 +136,6 @@ describe("app-icon silhouette contract", () => {
   });
 });
 
-// ── Photos v4 handoff icon keys (CHANGELOG v4 - Photos.md §B2) ─────────────
-//
-// The lowercase names are the binding part, so these are checked by literal key
-// and deliberately never through the PascalCase `ICON_CONCEPTS` layer.
 describe("Photos v4 handoff icon keys", () => {
   const PHOTOS_ICON_KEYS = [
     "heart",
@@ -176,7 +160,6 @@ describe("Photos v4 handoff icon keys", () => {
   });
 
   test("reused artwork does not duplicate or restyle the existing marks", () => {
-    // Aliases share exact path data rather than drawing a competing glyph.
     expect(icons.add.map((p) => p.d)).toStrictEqual(icons.Plus.map((p) => p.d));
     expect(icons.trash.map((p) => p.d)).toStrictEqual(
       icons.Trash.map((p) => p.d)
@@ -230,7 +213,6 @@ describe("Photos v4 handoff icon keys", () => {
     }
   });
 
-  // Shared artwork on purpose; every other key must be distinct.
   const REUSED_ALIASES = new Set([
     "add",
     "trash",

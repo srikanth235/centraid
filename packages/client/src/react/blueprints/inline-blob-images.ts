@@ -1,7 +1,3 @@
-// Inline, a relative `/_vault/blobs/<id>` reference carries no credential and
-// resolves to the SPA's index.html, so an observer swaps every blob sink to an
-// authed `blob:` URL (#505). `data-prefetch-src` MUST be rewritten before
-// media-observer promotes it into `src`. Import the leaf `blob-auth.js` only.
 import { authorizeBlobUrl, SCOPE_ATTR } from "./blob-auth.js";
 
 const BLOB_PREFIX = "/centraid/_vault/blobs";
@@ -9,7 +5,6 @@ const BG_URL_RE =
   /url\((?<quote>['"]?)(?<url>\/centraid\/_vault\/blobs[^'")]*)\k<quote>\)/u;
 const BG_OBJECT_URL_RE = /url\((?<quote>['"]?)(?<url>blob:[^'")]*)\k<quote>\)/u;
 
-// Each swap stamps its origin pathname back on; keep these out of the filter.
 const ORIGIN_SRC = "blobOriginSrc";
 const ORIGIN_PREFETCH = "blobOriginPrefetch";
 const ORIGIN_BG = "blobOriginBg";
@@ -17,9 +12,6 @@ const BG_SELECTOR = '[style*="_vault/blobs"], [data-blob-origin-bg]';
 
 const FRAMED_SELECTOR = "iframe, video, audio";
 
-// While an authorization is in flight the element carries `data-blob-pending`,
-// and apps must neither promote a staged raw path into `src` nor read an
-// `error` on one as terminal. A failure re-fires `error` once it clears.
 const PENDING_ATTR = "data-blob-pending";
 
 interface Assigned {
@@ -33,7 +25,6 @@ function scopeOf(el: Element): string | undefined {
   return value ? value : undefined;
 }
 
-/** MUST include the scope: content ids collide across vaults by design. */
 function sourceKey(scope: string | undefined, pathname: string): string {
   return `${scope ?? ""}\u0000${pathname}`;
 }
@@ -44,7 +35,6 @@ export function installInlineBlobImages(root: HTMLElement): () => void {
   const prefetchMap = new WeakMap<Element, Assigned>();
   const bgMap = new WeakMap<Element, Assigned>();
   const live = new Set<string>(); // every un-revoked object URL, for teardown
-  // A COUNT, not a flag: clearing on the first sink unblocks the app too early.
   const inflight = new WeakMap<Element, number>();
   let stopped = false;
 
@@ -70,7 +60,7 @@ export function installInlineBlobImages(root: HTMLElement): () => void {
     try {
       URL.revokeObjectURL(url);
     } catch {
-      // Revoking an already-revoked URL is a no-op, not an error.
+      // Intentionally empty.
     }
   };
 
@@ -85,7 +75,6 @@ export function installInlineBlobImages(root: HTMLElement): () => void {
     const source = sourceKey(scope, pathname);
     const prev = map.get(el);
     if (prev?.source === source) return;
-    // BEFORE the fetch: an authorization that never settles still leaves a mark.
     if (el instanceof HTMLElement) el.dataset[originKey] = pathname;
     map.set(el, { source, objectUrl: prev?.objectUrl ?? "" });
     markPending(el);
@@ -100,7 +89,7 @@ export function installInlineBlobImages(root: HTMLElement): () => void {
         try {
           URL.revokeObjectURL(objectUrl);
         } catch {
-          // Revoking an already-revoked URL is a no-op, not an error.
+          // Intentionally empty.
         }
         return;
       }
@@ -111,7 +100,6 @@ export function installInlineBlobImages(root: HTMLElement): () => void {
     });
   };
 
-  /** A `blob:` URL this install does not own is dead bytes — re-authorize it. */
   const isStaleObjectUrl = (url: string | null | undefined): url is string =>
     !!url && url.startsWith("blob:") && !live.has(url);
 

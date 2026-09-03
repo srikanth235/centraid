@@ -8,26 +8,13 @@ import { iconSvg } from "./iconSvg.js";
 
 import styles from "./gatewaySwitcher.module.css";
 
-// The sidebar switcher (#608, #665): VAULTS ONLY, flattened across gateways.
-// A gateway is transport, not a pick — selecting a vault on another gateway
-// switches both pointers. SWITCHES and nothing else; disconnect lives on
-// Settings → Vault, host plumbing in Gateway → Components. Always reachable
-// with one vault, so Add vault and its shortcut never hide.
-//
-// Body-portal: the sidebar clips `overflow: hidden`; `backdrop-filter` traps
-// fixed descendants. IO-free; renders any `GatewayRow[]`
-// (`gatewayRegistry.ts` owns fetch/cache/merge).
-
 export interface GatewaySwitcherOpts {
   anchor: DOMRect;
-  /** The active gateway's owner scopes — the only vaults whose OWNERSHIP is known. */
   scopes: ReadonlyArray<OwnerVaultScope>;
   activeGatewayId: string;
   rows: GatewayRow[];
-  /** May differ from the active gateway: switch both then. */
   onSelectVault: (gatewayId: string, vaultId: string) => void;
   onAddGateway: () => void;
-  /** Called once on close — drop `data-open` styling. */
   onClose?: () => void;
 }
 
@@ -104,7 +91,6 @@ function renderRows(): void {
   for (const row of rows) listEl.append(buildRow(row, opts));
 }
 
-/** Patch an open popover's rows in place; no-op when closed. */
 export function updateGatewaySwitcherRows(rows: GatewayRow[]): void {
   if (!isGatewaySwitcherOpen() || !opts) return;
   opts = { ...opts, rows };
@@ -145,7 +131,6 @@ export function openGatewaySwitcher(o: GatewaySwitcherOpts): void {
   const add = document.createElement("button");
   add.type = "button";
   add.className = styles.action ?? "";
-  // "Add vault…": the member's words; same callback behind it.
   add.innerHTML = `${iconSvg("Plug", 15)}<span>Add vault…</span>`;
   add.addEventListener("click", () => {
     closeGatewaySwitcher();
@@ -155,7 +140,6 @@ export function openGatewaySwitcher(o: GatewaySwitcherOpts): void {
 
   document.body.append(popEl);
 
-  // Below the trigger, flipping above on overflow (as contextMenu.ts).
   const a = o.anchor;
   popEl.style.left = `${Math.max(8, a.left)}px`;
   let top = a.bottom + 6;

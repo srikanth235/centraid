@@ -1,10 +1,3 @@
-/**
- * THE ONE FEEDBACK CHANNEL (#707, invariant 5): toasts are banned, and
- * everything lands on ONE line that updates in place. Imperative, not a
- * context — the callers are not components. Each seat re-exports this module,
- * so each bundle keeps its own channel state.
- */
-
 export interface StatusAction {
   label: string;
   run: () => void;
@@ -22,7 +15,6 @@ export interface StatusNote {
   progress?: StatusProgress;
 }
 
-/** A SECOND slot: health holds while a note decays; never via `postStatus`. */
 export interface RouteHealthNote extends StatusNote {
   tone?: "net" | "seam";
 }
@@ -35,7 +27,6 @@ const subscribers = new Set<() => void>();
 const NOTE_TTL_MS = 6000;
 
 function emit(): void {
-  // Snapshot: unsubscribing mid-notify would mutate the set.
   const listeners = Array.from(subscribers);
   for (const fn of listeners) fn();
 }

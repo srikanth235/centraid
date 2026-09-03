@@ -6,22 +6,6 @@ import { formatDuration } from "../shell/routes/gatewayData.js";
 
 import styles from "./BackupCard.module.css";
 
-// The brief's device list (#708): every device with its size, scope,
-// and last-seen — last-seen in the mono/tabular register. This reuses the
-// paired-device roster (`gateway-client-devices.ts`, the same data
-// DevicesCard shows) rather than inventing a new device concept: "what would
-// I lose" is answered by the offsite copy (the health metrics above), this
-// list is "what else already has a copy." There is no role column: ownership
-// (#726) leaves nothing per-device to distinguish — every listed device
-// already reaches everything its owner owns.
-//
-// SEAM: the device-pairing wire (`CentraidGatewayDevice`) carries no
-// per-device storage footprint and no declared replica shape/scope — those
-// never needed representing before an owner needed to reason about them as
-// backup surface. Both columns fall back to honest "not reported" copy
-// instead of a guessed number; closing the seam is enrollment-plane work
-// (`packages/server/src/routes/devices-routes.ts`), not a client reshape.
-
 function lastSeenLabel(iso: string | undefined, now: number): string {
   if (!iso) return "never";
   const at = Date.parse(iso);
@@ -87,8 +71,6 @@ export default function BackupDeviceList({
     };
   }, [loadDevices]);
 
-  // No device plane at all (desktop embed) — nothing honest to show, so this
-  // section quietly absents itself rather than rendering an empty shell.
   if (devices !== null && devices.length === 0) return null;
 
   return (

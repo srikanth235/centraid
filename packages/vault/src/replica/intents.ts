@@ -38,7 +38,6 @@ export interface RecordReplicaIntentOutcomeInput {
   deviceId: string;
   appId: string;
   action: string;
-  /** Hash of the client payload; raw payloads and secrets never enter this table. */
   payloadHash: string;
   status: ReplicaIntentStatus;
   invocationId?: string;
@@ -117,10 +116,6 @@ function assertIdentity(
   }
 }
 
-/**
- * Record one outcome inside the caller's transaction. The table's replica
- * trigger appends the observable `replica.intent` entry atomically.
- */
 export function recordReplicaIntentOutcomeInTransaction(
   vault: DatabaseSync,
   input: RecordReplicaIntentOutcomeInput
@@ -174,9 +169,6 @@ export function recordReplicaIntentOutcomeInTransaction(
         now
       );
   }
-  // A terminal device outcome proves protocol dedupe, but it does not prove
-  // the audit band survived the post-canonical crash window. Reclaim only a
-  // marker whose atomic audit repair has been verified and proof-stamped.
   if (TERMINAL.has(input.status)) {
     vault
       .prepare(
@@ -193,7 +185,6 @@ export function recordReplicaIntentOutcomeInTransaction(
   return outcomeOf(row);
 }
 
-/** Record one outcome as its own durable transaction. */
 export function recordReplicaIntentOutcome(
   vault: DatabaseSync,
   input: RecordReplicaIntentOutcomeInput
@@ -220,11 +211,6 @@ export interface TransitionReplicaIntentOutcomeInput {
   now?: Date;
 }
 
-/**
- * Transition an already-admitted intent while retaining its immutable
- * device/app/action/hash identity. Owner confirmation uses this path days
- * after the original HTTP request is gone.
- */
 export function transitionReplicaIntentOutcomeInTransaction(
   vault: DatabaseSync,
   intentId: string,
@@ -246,7 +232,6 @@ export function transitionReplicaIntentOutcomeInTransaction(
   });
 }
 
-/** Transition an admitted intent as its own durable transaction. */
 export function transitionReplicaIntentOutcome(
   vault: DatabaseSync,
   intentId: string,
@@ -270,7 +255,6 @@ export function transitionReplicaIntentOutcome(
   }
 }
 
-/** Device-scoped read; a wrong device id is indistinguishable from absence. */
 export function readReplicaIntentOutcome(
   vault: DatabaseSync,
   intentId: string,
@@ -285,7 +269,6 @@ export interface ListReplicaIntentOutcomesOptions {
   limit?: number;
 }
 
-/** Device-scoped recovery list for reconnecting an outbox. */
 export function listReplicaIntentOutcomes(
   vault: DatabaseSync,
   deviceId: string,
@@ -317,7 +300,6 @@ export function listReplicaIntentOutcomes(
   return rows.map(outcomeOf);
 }
 
-/** Wipe protocol outcomes when a device is revoked or unpaired. */
 export function deleteReplicaIntentOutcomesForDevice(
   vault: DatabaseSync,
   deviceId: string
@@ -326,10 +308,6 @@ export function deleteReplicaIntentOutcomesForDevice(
   let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   try {
     replicaCommit = beginReplicaCommit(vault);
-    // A parked payload is executable authority, not merely presentation
-    // state. Remove it while the device -> intent ownership rows still exist,
-    // in the same transaction that forgets those rows. Once a device is
-    // revoked or unpaired, an owner must not be able to approve its old act.
     vault
       .prepare(
         `DELETE FROM replica_parked_payload
@@ -338,11 +316,6 @@ export function deleteReplicaIntentOutcomesForDevice(
           )`
       )
       .run(deviceId);
-    // Revocation removes device-visible outcomes, but an unfinished marker
-    // must survive so startup repair cannot mistake protocol deletion for a
-    // complete journal audit. Detach it from the now-deleted device intent:
-    // after journal proof is stamped it follows the ordinary non-intent GC
-    // rule, while the marker itself is never removed before that proof.
     vault
       .prepare(
         `UPDATE replica_invocation_commit
@@ -353,8 +326,6 @@ export function deleteReplicaIntentOutcomesForDevice(
             )`
       )
       .run(deviceId);
-    // Already proof-stamped markers are disposable under the existing device
-    // revocation rule and need no startup work.
     vault
       .prepare(
         `DELETE FROM replica_invocation_commit

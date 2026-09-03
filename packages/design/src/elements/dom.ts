@@ -1,16 +1,9 @@
-// The tiny DOM builders shared by every blueprint app.
-
-/** Parse an HTML string and return its first element. */
 export function el(html: string): HTMLElement {
   const t = document.createElement("template");
   t.innerHTML = html.trim();
   return t.content.firstElementChild as HTMLElement;
 }
 
-/**
- * Hyperscript element builder: `h('div', { class, html, style, on* }, ...kids)`.
- * Null/false props and kids are skipped; string kids become text nodes.
- */
 export function h(
   tag: string,
   props: Record<string, unknown> = {},
@@ -37,7 +30,6 @@ export function h(
   return e;
 }
 
-/** Apply side effects in source order when later work must not start early. */
 export function applyInOrder<T>(
   values: Iterable<T>,
   apply: (value: T, index: number) => void | PromiseLike<void>

@@ -1,11 +1,8 @@
-// Markdown-lite → HTML for release notes; escape raw input FIRST, then reintroduce only our tags.
-
 const escapeHtml = (s: string): string =>
   s.replace(/[&<>"']/gu, (c) => `&#${c.charCodeAt(0)};`);
 
 function inline(raw: string): string {
   let s = escapeHtml(raw);
-  // Links first; restore `&#38;` in hrefs so query URLs work.
   s = s.replace(
     /\[(?<label>[^\]]+)\]\((?<url>https?:\/\/[^\s)]+)\)/gu,
     (_m, label: string, url: string) => {
@@ -26,7 +23,6 @@ function inline(raw: string): string {
   return s;
 }
 
-/** ATX headings (all one level), `-`/`*` bullets, blank-line paragraphs. */
 export function changelogNotesToHtml(md: string): string {
   const lines = md.replace(/\r\n/gu, "\n").split("\n");
   const out: string[] = [];

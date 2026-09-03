@@ -26,7 +26,6 @@ const payloadBytes: fc.Arbitrary<Buffer> = fc
   .uint8Array({ minLength: 1, maxLength: 64 })
   .map((arr) => Buffer.from(arr));
 
-/** SQLite bootstrap per property case is expensive under parallel package tests. */
 const PROP_TIMEOUT_MS = 60_000;
 
 function openBootstrappedDb(remote: boolean) {
@@ -76,13 +75,6 @@ function applyCustodyState(
   return sha;
 }
 
-/**
- * Blob custody / CAS fail-closed properties (#532).
- *
- * Model: remote tier ⇒ durable replica and no pending outbox; local-only ⇒
- * local CAS presence. Generative suites + corner properties keep the latch
- * under-constrained only if a mutant survives every case.
- */
 describe("blob custody generated-state property", () => {
   test(
     "fails closed for every remote/local/replica/pending combination",
@@ -148,7 +140,6 @@ describe("blob custody generated-state property", () => {
         fc.property(payloadBytes, (bytes) => {
           const db = openBootstrappedDb(false);
           const sha = sha256OfBytes(bytes);
-          // never ingest
           expect(blobCustodyProven(db, sha)).toBe(false);
           db.close();
         }),
@@ -253,7 +244,6 @@ describe("blob custody generated-state property", () => {
               replica,
               pending,
             });
-            // local tier: only local CAS matters
             expect(blobCustodyProven(db, sha)).toBe(true);
             db.close();
           }

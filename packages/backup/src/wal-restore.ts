@@ -1,11 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit (#408) WAL restore is one integrity boundary: authenticated planning, checksum-verified spooling, SQLite replay, and marked-cut validation must remain auditable as one pipeline
-/*
- * WAL replay (#408). SQLITE does the replay: concatenate `vault.db-wal`, open,
- * TRUNCATE-checkpoint, close. Never apply pages here. The cut is the newest
- * TICK MARKER the stream can prove it reached. A download failure is REMOVED
- * FROM THE LISTING and the cut re-planned. Never infer the tip from the
- * listing — an absent segment and an absent write look identical.
- */
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -47,14 +40,8 @@ export interface WalReplayOutcome {
   integrityCheck: string;
   foreignKeyViolations: number;
   damaged: string[];
-  /** Tick the stream was cut at; -1 at the base floor. */
   cutTickMs: number;
   newestMarkerTickMs: number;
-  /**
-   * Newest surviving marker, floored by `walTipTickMs`.
-   * `cutTickMs < expectedCutMs` is the ONLY truncation signal that survives a
-   * provider deleting the marker stream.
-   */
   expectedCutMs: number;
 }
 
@@ -63,22 +50,12 @@ export interface ReplayWalOptions {
   dataKey: Uint8Array;
   vaultId: string;
   destDir: string;
-  /** Absent ⇒ a base with no shipped stream: nothing to replay. */
   generation?: string;
-  /**
-   * Newest marker tick the producer saw accepted. Missing it is lost
-   * acknowledged objects: restore still succeeds at the older point (G6),
-   * but must not be silent.
-   */
   walTipTickMs?: number;
   pointInTimeMs?: number;
   log?: EngineLogger;
 }
 
-/**
- * Missing/tampered closer is absent: planner refuses to advance past its
- * group — degrade rather than mix pages.
- */
 async function listStream(
   store: ObjectStore,
   dataKey: Uint8Array,
@@ -116,10 +93,6 @@ async function listStream(
   return { segments, closers };
 }
 
-/**
- * Markers minted while exactly this base was current. A failed tag is
- * dropped, never evidence — walk back, the safe direction.
- */
 async function listTickMarkers(
   store: ObjectStore,
   dataKey: Uint8Array,
@@ -147,11 +120,6 @@ async function listTickMarkers(
   return markers;
 }
 
-/**
- * Damaged segment is removed FROM THE LISTING and the cut re-planned at the
- * SAME instant — never lower the tick cut (the unusable object could still
- * satisfy a marker). Each pass succeeds or shrinks the listing.
- */
 async function spoolSegments(opts: {
   store: ObjectStore;
   dataKey: Uint8Array;
@@ -187,7 +155,7 @@ async function spoolSegments(opts: {
         await fs.access(spoolPath);
         return;
       } catch {
-        /* not yet spooled */
+        // Intentionally empty.
       }
       try {
         const sealed = await opts.store.get(key);
@@ -243,7 +211,6 @@ async function replayDb(
     const scan = validateCommittedWal(walBytes);
     const conn = new DatabaseSync(dbPath);
     try {
-      // Checkpoint is the first access that triggers recovery; next group's WAL layers on it.
       const result = conn.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as {
         busy: number;
         log: number;
@@ -297,10 +264,6 @@ const noopLog: Required<EngineLogger> = {
   warn: () => undefined,
 };
 
-/**
- * FORMAT.md requires both `integrity_check` and `foreign_key_check`. An FK
- * violation is as fatal as physical corruption.
- */
 export async function replayWalSegments(
   opts: ReplayWalOptions
 ): Promise<WalReplayOutcome> {
@@ -352,7 +315,6 @@ export async function replayWalSegments(
       log,
     });
     const { plan, cutTickMs, newestMarkerTickMs } = result;
-    // Tip floors what the store owes, only inside the restored window. PITR is not truncation.
     const tipInWindow =
       opts.walTipTickMs !== undefined &&
       (opts.pointInTimeMs === undefined ||
@@ -390,10 +352,6 @@ export async function replayWalSegments(
       segmentsApplied: plan.segments.length,
       groupsApplied,
       lastTickMs: plan.lastTickMs,
-      // With a marker to prove the tip, falling short of it IS the truncation
-      // signal (damage beyond the cut is irrelevant). With no marker at all
-      // there is nothing to fall short of, so a broken chain or an unusable
-      // object is the only evidence left.
       truncated:
         expectedCutMs >= 0
           ? cutTickMs < expectedCutMs

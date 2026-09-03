@@ -11,16 +11,6 @@ import type { AtlasDetailLevel } from "./atlasOrreryGeometry.js";
 import AtlasRelationsTab from "./AtlasRelationsTab.js";
 import type { AtlasRelationsTabProps } from "./AtlasRelationsTab.js";
 
-// Shared test kit for the Relations "Map" suites (#519). Fixtures, the
-// mount harness, and the DOM query helpers live here so the pure-geometry suite
-// (atlasOrreryGeometry.test) and the component suite (AtlasRelationsTab.test)
-// share one payload and one set of selectors — and neither file grows unwieldy.
-
-// ── Sample payload ────────────────────────────────────────────────────────
-// A slice of the real vault graph: core_party at the hub, the
-// media_asset → core_content_item → core_party chain (the readout example), a
-// self-referencing concept, one ghost edge, and the genuinely-disconnected
-// locker/sync island.
 export const node = (
   physical: string,
   pack: string,
@@ -67,8 +57,6 @@ export function makeGraph(
   over: Partial<AtlasGraphPayload> = {}
 ): AtlasGraphPayload {
   const nodes: AtlasGraphNode[] = [
-    // friendly/blurb are optional on the type — set only where a test reads them
-    // (the human-language layer: People over core_party, a curated blurb, etc.)
     node("core_party", "core", "ontology", {
       friendly: "People",
       blurb: "Everyone your vault knows about.",
@@ -103,27 +91,23 @@ export function makeGraph(
       childRows: 742,
       fill: 742,
     }),
-    // makes core_concept reachable (hop 2 via knowledge_note)
     edge("knowledge_note", "topic_concept_id", "core_concept", {
       notnull: false,
       childRows: 742,
       fill: 520,
     }),
-    // a ghost: nullable column no row ever sets
     edge("knowledge_note", "cover_content_id", "core_party", {
       notnull: false,
       childRows: 742,
       fill: 0,
       ghost: true,
     }),
-    // self-reference — drawn as a glyph, not a loop edge
     edge("core_concept", "broader_concept_id", "core_concept", {
       notnull: false,
       childRows: 342,
       fill: 297,
       selfRef: true,
     }),
-    // the isolated island
     edge("locker_item", "connection_id", "sync_connection", {
       childRows: 63,
       fill: 63,
@@ -162,11 +146,9 @@ export function makeGraph(
   };
 }
 
-// ── Mount harness (mirrors AtlasScreen.test) ────────────────────────────────
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 
-/** Tear down the mounted tree — call from each suite's `afterEach`. */
 export function cleanupTab(): void {
   act(() => root?.unmount());
   root = null;
@@ -190,9 +172,6 @@ export async function mountTab(
   return container;
 }
 
-// Drain a few microtask turns so an injected async fetcher's `.then` settles and
-// its state update re-renders (the sample-rows fetch resolves off the mount). A
-// fixed unrolled sequence — four sequential turns is enough for the chain.
 export const flush = async (): Promise<void> => {
   const turn = async (): Promise<void> => {
     await act(async () => {
@@ -222,9 +201,6 @@ export const nodeEl = (el: HTMLElement, physical: string): HTMLElement | null =>
     `[data-testid="atlas-node"][data-physical="${physical}"]`
   );
 
-// The detail dial defaults to `simple`; several facts are true only at
-// `standard` (reachable machinery, ghost edges, the full island). Click a dial
-// segment to switch the lens — it never resets the centre or camera.
 export const setLevel = async (
   el: HTMLElement,
   level: AtlasDetailLevel
@@ -236,7 +212,6 @@ export const setLevel = async (
     "click"
   );
 
-/** The dial position currently pressed (which segment has aria-pressed=true). */
 export const dialLevel = (el: HTMLElement): string | undefined =>
   el.querySelector<HTMLElement>(
     '[data-testid="atlas-detail-dial"] [aria-pressed="true"]'

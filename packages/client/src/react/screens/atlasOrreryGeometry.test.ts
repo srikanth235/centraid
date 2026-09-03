@@ -19,7 +19,6 @@ import {
 import type { AtlasDetailLevel } from "./atlasOrreryGeometry.js";
 import { edge, makeGraph, node } from "./atlasRelationsTestKit.js";
 
-// ── Geometry (pure functions) ───────────────────────────────────────────────
 describe("atlasOrreryGeometry", () => {
   it("undirected BFS unreached set equals the payload island for the default centre", () => {
     const g = makeGraph();
@@ -55,7 +54,6 @@ describe("atlasOrreryGeometry", () => {
     for (const n of g.nodes) {
       expect(a.bearing.get(n.physical)).toBe(b.bearing.get(n.physical));
     }
-    // sectors partition a full turn, packs in stable name order
     const names = a.sectors.map((s) => s.pack);
     expect(names).toStrictEqual([...names].sort());
   });
@@ -67,13 +65,10 @@ describe("atlasOrreryGeometry", () => {
     expect(ringRadius(null)).toBeGreaterThan(ringRadius(4));
   });
 
-  // ── Pan/zoom camera maths ─────────────────────────────────────────────────
   it("zoomView clamps k at both bounds (no zooming past the stops)", () => {
-    // pushing past the ceiling pins k at ZOOM_MAX
     expect(
       zoomView({ x: 0, y: 0, k: ZOOM_MAX }, 310, 310, 2, ZOOM_MIN, ZOOM_MAX).k
     ).toBe(ZOOM_MAX);
-    // pushing past the floor pins k at ZOOM_MIN
     expect(
       zoomView({ x: 0, y: 0, k: ZOOM_MIN }, 310, 310, 0.1, ZOOM_MIN, ZOOM_MAX).k
     ).toBe(ZOOM_MIN);
@@ -84,10 +79,8 @@ describe("atlasOrreryGeometry", () => {
     const px = 200;
     const py = 150;
     const v1 = zoomView(v0, px, py, 1.7, ZOOM_MIN, ZOOM_MAX);
-    // the local point under (px,py) before the zoom…
     const qx = (px - v0.x) / v0.k;
     const qy = (py - v0.y) / v0.k;
-    // …must still map to (px,py) after the zoom
     expect(v1.x + v1.k * qx).toBeCloseTo(px, 6);
     expect(v1.y + v1.k * qy).toBeCloseTo(py, 6);
     expect(v1.k).toBeGreaterThan(v0.k);
@@ -102,11 +95,9 @@ describe("atlasOrreryGeometry", () => {
   });
 
   it("clientToViewBox maps by ratio and returns null on a degenerate rect", () => {
-    // jsdom reports zero-size rects — must fall back to null (→ centre zoom)
     expect(
       clientToViewBox({ left: 0, top: 0, width: 0, height: 0 }, 620, 10, 10)
     ).toBeNull();
-    // a full-size square rect maps client px straight onto viewBox coords
     expect(
       clientToViewBox(
         { left: 0, top: 0, width: 620, height: 620 },
@@ -118,7 +109,6 @@ describe("atlasOrreryGeometry", () => {
       x: 155,
       y: 310,
     });
-    // an offset, half-scale rect maps its top-left corner to the origin
     expect(
       clientToViewBox(
         { left: 100, top: 50, width: 310, height: 310 },
@@ -133,7 +123,6 @@ describe("atlasOrreryGeometry", () => {
   });
 });
 
-// ── Detail-dial filter predicates (pure) ────────────────────────────────────
 describe("detail-dial filter predicates", () => {
   it("kindCarriesData: known rows>0 carry; zero/unknown need a live incident edge", () => {
     const rows = new Map<string, number>([
@@ -141,9 +130,7 @@ describe("detail-dial filter predicates", () => {
       ["b_zero", 0],
     ]);
     const edges: AtlasFkEdge[] = [
-      // b_zero has no rows of its own but a live edge leaves it → carries data
       edge("b_zero", "target_id", "c_target", { childRows: 0, fill: 5 }),
-      // d_lonely's only edge is a ghost (fill 0) → no proof of data
       edge("d_lonely", "x_id", "e_dead", {
         notnull: false,
         fill: 0,
@@ -190,7 +177,6 @@ describe("detail-dial filter predicates", () => {
         ctx
       )
     ).toBe(false);
-    // reachable machinery is still plumbing → hidden at simple
     expect(
       visibleAtLevel(
         "simple",

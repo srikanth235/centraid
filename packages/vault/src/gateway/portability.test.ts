@@ -40,7 +40,6 @@ describe("portability", () => {
     };
   });
 
-  /** Populate the vault across several schemas so the round-trip is honest. */
   function seedLife(): void {
     const calendarId = uuidv7();
     db.vault
@@ -112,8 +111,6 @@ describe("portability", () => {
     seedLife();
     const first = gw.exportVault(owner);
     expect(first.artifact.verifyHash).toMatch(/^[0-9a-f]{64}$/u);
-    // The export's record is its RECEIPT (#916, ruling ONT-06): the
-    // export-job table was a second copy of it and left the ontology.
     const receipt = db.audit
       .prepare(
         "SELECT object_type, object_id, detail_json FROM access_receipt WHERE receipt_id = ?"
@@ -133,7 +130,6 @@ describe("portability", () => {
         .verifyHash
     ).toBe(first.artifact.verifyHash);
 
-    // Rebuild a fresh vault from the artifact — identities intact.
     const restored = openVaultDb();
     const { imported } = importVaultExport(restored, first.artifact);
     expect(imported).toBeGreaterThan(20);
@@ -147,7 +143,6 @@ describe("portability", () => {
       display_name: "Priya",
     });
 
-    // The restored vault serves the same owner credential through its own gateway.
     const gw2 = createGateway(restored);
     const events = gw2.read(owner, {
       entity: "core.event",
@@ -155,8 +150,6 @@ describe("portability", () => {
     });
     expect(events.rows).toHaveLength(1);
 
-    // Re-export: identical data hash — the export contains no self-reference,
-    // and the reimport lost nothing. This is the losslessness proof.
     const second = gw2.exportVault(owner);
     expect(second.artifact.verifyHash).toBe(first.artifact.verifyHash);
     restored.close();
@@ -164,9 +157,6 @@ describe("portability", () => {
 
   test("portable restore retains every Commons truth and mechanics table", () => {
     const now = "2026-08-10T00:00:00.000Z";
-    // A REAL document to share (#916): a commons lineage row's
-    // `(target_type, target_id)` is a composite foreign key into the entity
-    // supertype, so a made-up container id is refused at the statement.
     const documentId = uuidv7();
     const contentId = uuidv7();
     db.vault
@@ -270,8 +260,6 @@ describe("portability", () => {
         now
       );
 
-    // A BINDING IS ABOUT SOMEONE ELSE (#916, R9): a vault holds no row for
-    // its own party at its own vault, so the peer is stated explicitly.
     const peerPartyId = uuidv7();
     db.vault
       .prepare(
@@ -324,23 +312,6 @@ describe("portability", () => {
     restored.close();
   });
 
-  /*
-   * The schema/export audit for the column #846 P1 added.
-   *
-   * `share_fulfillment.delivered_at` is the memory that lets a revocation know
-   * a projection was ever handed over — the whole fix is that this fact is
-   * REMEMBERED rather than re-inferred from a live freshness reading. A
-   * restore that dropped the column would restore exactly the pre-fix defect,
-   * silently and only for restored vaults: a fulfillment whose state had since
-   * degraded to `syncing` would settle `removed` while the audience vault kept
-   * the projection, and the owner would be told a share was gone when it was
-   * not.
-   *
-   * `exportVault` walks `SELECT *` over every registered canonical table, so
-   * the column rides along with no code change. That is exactly why it is
-   * asserted rather than assumed: nothing else would notice if the walk ever
-   * became a column list.
-   */
   test("a delivered fulfillment's delivery memory survives export and restore", () => {
     const deliveredAt = "2026-08-11T09:30:00.000Z";
     const subjectId = uuidv7();
@@ -359,9 +330,6 @@ describe("portability", () => {
       state: "delivered",
       updatedAt: deliveredAt,
     });
-    // …and then reach is lost, which is the state the defect read as
-    // never-delivered. The memory must outlive both the degrade and the
-    // restore.
     setFulfillmentState(db.vault, {
       grantId: created.grant.grantId,
       peerVaultId: "portable-audience-vault",
@@ -390,20 +358,6 @@ describe("portability", () => {
     restored.close();
   });
 
-  /*
-   * The schema/export audit for the column #865 added.
-   *
-   * `sync_connection_credential.refresh_capability` is the HMAC a stored
-   * Assist refresh token is redeemable with. A restore that dropped the
-   * column would restore tokens the Worker refuses (missing capability), so
-   * every Google connection would look withdrawn until the owner re-ran the
-   * ceremony.
-   *
-   * `exportVault` walks `SELECT *` over every registered canonical table, so
-   * the column rides along with no code change. That is exactly why it is
-   * asserted rather than assumed: nothing else would notice if the walk ever
-   * became a column list.
-   */
   test("an Assist refresh capability survives export and restore (issue #865)", () => {
     const connectionId = uuidv7();
     const capability = "cap-must-survive-export";
@@ -465,11 +419,6 @@ describe("portability", () => {
 
   test("a poisoned row on one table is skipped, not fatal to the whole export (§4.3 hardening)", () => {
     seedLife();
-    // Simulate node:sqlite's real failure mode reading back an out-of-range
-    // INTEGER (verified: .get()/.all() throw "Value is too large to be
-    // represented as a JavaScript number") by making exactly the `core_place`
-    // read throw. Everything else — including the `PRAGMA table_info` call
-    // that picks its primary key — passes through untouched.
     const originalPrepare = db.vault.prepare.bind(db.vault);
     const spy = vi
       .spyOn(db.vault, "prepare")
@@ -494,17 +443,11 @@ describe("portability", () => {
       artifact.skippedTables?.find((s) => s.entity === "core.place")?.error
     ).toContain("too large");
     expect(artifact.tables["core.place"]).toBeUndefined();
-    // Everything else still made it into the artifact — including a table
-    // that references `core_place` via an (unpopulated, so non-violating) FK.
     expect(artifact.tables["core.event"]?.length).toBeGreaterThan(0);
     expect(artifact.tables["core.party"]?.length).toBeGreaterThan(0);
 
-    // verifyHash covers exactly the tables that actually made it in, so
-    // round-trip verification stays sound against a partial artifact.
     expect(artifact.verifyHash).toBe(sha256Hex(canonicalJson(artifact.tables)));
 
-    // A partial artifact still imports cleanly — it just doesn't carry the
-    // skipped entity's rows.
     const restored = openVaultDb();
     expect(() => importVaultExport(restored, artifact)).not.toThrow();
     const places = restored.vault

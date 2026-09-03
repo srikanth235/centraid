@@ -12,10 +12,8 @@ import { useKeychainPromptExpected } from "./useKeychainPrompt.js";
 
 import styles from "./OnboardingScreen.module.css";
 
-/** Which gateway this first run is landing on. */
 export type OnboardingPath = "fresh" | "ticket";
 
-/** The only onboarding decision left after the connection succeeds. */
 export interface OnboardingCompleteInput {
   path: OnboardingPath;
 }
@@ -23,15 +21,9 @@ export interface OnboardingCompleteInput {
 export interface OnboardingScreenProps {
   path: OnboardingPath;
   onComplete: (input: OnboardingCompleteInput) => Promise<void> | void;
-  /** The desktop chooser passes this so its two options are not a one-way door. */
   onBack?: () => void;
 }
 
-/**
- * First-run onboarding is deliberately one act: connect, then enter Home.
- * Name and color are profile preferences, so Settings → You owns them and
- * a first-time user never has to invent identity data before seeing the app.
- */
 export default function OnboardingScreen({
   path,
   onComplete,
@@ -40,8 +32,6 @@ export default function OnboardingScreen({
   const step: "connect" | "connecting" =
     path === "fresh" ? "connecting" : "connect";
   const [dialAttempt, setDialAttempt] = useState(0);
-  // The fresh path starts already busy: it dials its embedded gateway on
-  // mount, so the first paint reads as working rather than idle.
   const [submitting, setSubmitting] = useState(path === "fresh");
   const [error, setError] = useState<string | null>(null);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
@@ -72,14 +62,10 @@ export default function OnboardingScreen({
     [onComplete, path]
   );
 
-  // Populate the continuation ref before the fresh-connect effect can resolve.
   useEffect(() => {
     afterConnectRef.current = afterConnect;
   }, [afterConnect]);
 
-  // A fresh client connects to its auto-founded gateway on mount. On failure it
-  // stays here with one recovery action; it never falls through to the ticket
-  // UI, which would ask a first-time desktop user for someone else's gateway.
   useEffect(() => {
     if (path !== "fresh") return;
     let cancelled = false;

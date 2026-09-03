@@ -1,5 +1,3 @@
-// Rebuildable custody-state projection (#352, #367 §C7).
-
 import type { DatabaseSync } from "node:sqlite";
 
 import type { VaultDb } from "../db.js";
@@ -7,10 +5,6 @@ import { nowIso } from "../ids.js";
 import type { CustodyState } from "./custody-types.js";
 import { shaOfBlobUri } from "./store.js";
 
-/**
- * Snapshot live originals only (not derivatives) after `reconcile()`. Full
- * delete+reinsert so a purged item's stale row cannot linger.
- */
 export async function refreshCustodyState(
   db: VaultDb
 ): Promise<{ updated: number }> {
@@ -29,7 +23,6 @@ export async function refreshCustodyState(
     shas.add(sha);
   }
   const status = await db.blobs.statusFor(shas);
-  // Outbox wins over the tier projection until HEAD-confirmed and drained.
   const pending = new Set(
     (
       db.vault.prepare("SELECT sha256 FROM blob_outbox").all() as {
@@ -80,7 +73,6 @@ export function custodyStateCounts(
   return counts;
 }
 
-/** Keep count vs byte return shapes separate. */
 export function custodyStateByteCounts(
   vault: DatabaseSync
 ): Record<CustodyState, number> {

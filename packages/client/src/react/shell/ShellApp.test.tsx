@@ -154,10 +154,6 @@ describe("shell/ShellApp", () => {
     });
   });
 
-  // Compact form factor (#707, invariant 1): the SAME stem element, mounted as
-  // the bottom band. What the old three-zone sidebar needed here — an open
-  // state, a scrim, a dismiss-on-navigate rule, and a rule about not writing
-  // the desktop preference — is all gone, because the stem never hides.
   describe("compact band", () => {
     function goCompact(): void {
       vi.stubGlobal("matchMedia", (query: string) => ({

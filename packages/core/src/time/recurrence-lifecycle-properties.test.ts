@@ -1,13 +1,3 @@
-/**
- * Occurrence lifecycle + exception laws (#656 Layer 3 mutation seed).
- *
- * The parser and expansion halves of the same seed live in
- * `recurrence-properties.test.ts`. This half states the laws downstream of
- * expansion: `nextOccurrence`'s strict-forward contract and its anchors, the
- * member-facing summary (never rule syntax), missed-period collapse, the
- * exception algebra's identity guarantees, and `shiftTemporal`'s invertibility
- * — each for arbitrary inputs.
- */
 import { describe, expect, test } from "vitest";
 
 import { fc } from "@centraid/test-kit/fast-check";
@@ -24,7 +14,6 @@ import {
 const FREQS = ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] as const;
 const DAYS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
 
-/** All-day expansion over a wide window — pure civil arithmetic, no zone. */
 function expandAllDay(rrule: string, start: string, maxInstances = 40) {
   return expandRecurrence({
     rrule,
@@ -88,7 +77,6 @@ describe("occurrence lifecycle laws", () => {
         timeZone: "Etc/UTC",
       })
     ).toBeNull();
-    // COUNT exhausted before `after` — the series is over.
     expect(
       nextOccurrence({
         rrule: "FREQ=DAILY;COUNT=2",
@@ -135,7 +123,6 @@ describe("occurrence lifecycle laws", () => {
           anchor: "scheduled",
           now,
         });
-        // One period per elapsed week, and exactly one occurrence still live.
         expect(scheduled.missed).toBe(weeks + 1);
         expect(Date.parse(scheduled.nextDue as string)).toBeGreaterThan(
           Date.parse(now)
@@ -189,7 +176,6 @@ describe("exception laws", () => {
         expect(out).toHaveLength(instances.length);
         const moved = out.find((i) => i.originalStart === target);
         expect(moved?.start).toBe("2026-12-25");
-        // Every other occurrence is byte-identical.
         for (const instance of out) {
           if (instance.originalStart === target) continue;
           expect(instance.start).toBe(instance.originalStart);
@@ -218,7 +204,6 @@ describe("exception laws", () => {
         start: "2026-07-05",
       },
     ]);
-    // +2 days from the third occurrence onward; the first two are untouched.
     expect(out.map((i) => i.start)).toStrictEqual([
       "2026-07-01",
       "2026-07-02",
@@ -256,7 +241,6 @@ describe("exception laws", () => {
           const delta = days * 86_400_000;
           const shifted = shiftTemporal(value, delta);
           expect(shiftTemporal(shifted, -delta)).toBe(value);
-          // A zoned instant stays zoned; a floating/all-day value stays naive.
           expect(shifted.endsWith("Z")).toBe(value.endsWith("Z"));
           expect(shifted.includes("T")).toBe(value.includes("T"));
         }

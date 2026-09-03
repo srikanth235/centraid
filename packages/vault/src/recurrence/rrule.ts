@@ -10,8 +10,6 @@ export type { ParsedRrule } from "@centraid/core/time";
 export function parseRrule(value: string): ParsedRrule | null {
   const parsed = parseSharedRrule(value);
   if (!parsed) return null;
-  // The old vault API exposed all optional keys, even when undefined. Preserve
-  // that observable shape while the shared core keeps its payload compact.
   return {
     ...parsed,
     count: parsed.count,
@@ -20,11 +18,6 @@ export function parseRrule(value: string): ParsedRrule | null {
   } as ParsedRrule;
 }
 
-/**
- * Compatibility facade for existing vault callers. New product surfaces use
- * `expandRecurrence` directly so they can select zoned, floating, or all-day
- * semantics; legacy rows are UTC instants and therefore use Etc/UTC.
- */
 export function expandRrule(
   rrule: string,
   dtstartIso: string,

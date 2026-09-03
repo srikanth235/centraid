@@ -22,12 +22,6 @@ export interface DevicePairPanelProps {
     input?: GatewayDeviceTicketInput
   ) => Promise<GatewayDeviceTicket>;
   onClose: () => void;
-  /**
-   * Mint a vault for a NEW person instead of self-pairing (#726 P1 "Add
-   * someone"). Adds the name field the mint needs and the hosting-posture
-   * sentences the minted ticket carries; everything else — TTL, the QR/ticket
-   * surface, copy — is the same self-pair panel unchanged.
-   */
   forPerson?: boolean;
 }
 
@@ -37,20 +31,6 @@ const TTL_PRESETS: readonly { label: string; minutes: number }[] = [
   { label: "24 hours", minutes: 1440 },
 ];
 
-/*
- * Pairing has exactly two shapes (#726, #726 P1) and this one panel renders
- * both, switched on `forPerson`:
- *
- *   self-pair (default) — pair another device for YOURSELF. Access is
- *     ownership: the only ticket a device may mint for itself lands on its
- *     own owner, reaching exactly the vaults it already owns. Nothing to
- *     name, nothing to choose beyond how long the ticket stays good for.
- *   Add someone (`forPerson`) — mint a NEW person a vault of their own,
- *     hosted on this machine. The one extra input is their name; the ticket
- *     that comes back is exactly the same QR/paste surface, plus two
- *     sentences stating what hosting someone else's vault does and doesn't
- *     confer (verbatim — also in SECURITY.md).
- */
 export default function DevicePairPanel({
   now,
   onCreateTicket,
@@ -63,9 +43,6 @@ export default function DevicePairPanel({
   const [error, setError] = useState<string | null>(null);
   const [ticket, setTicket] = useState<GatewayDeviceTicket | null>(null);
   const [copied, setCopied] = useState(false);
-  // The rendered QR is stored WITH the ticket it encodes, so "no ticket" and
-  // "a newer ticket than the last render" both read as "no QR yet" during
-  // render — no effect has to blank it out.
   const [qr, setQr] = useState<{
     ticket: GatewayDeviceTicket;
     svg: string;
@@ -98,9 +75,6 @@ export default function DevicePairPanel({
     };
   }, [ticket]);
 
-  // The mint's idempotency key (#750): minted once per INTENDED operation and
-  // reused on retry after a failure, so "press Generate again" can never mint
-  // a second owner/vault. A success clears it — "New ticket" is a new intent.
   const operationRef = useRef<string | null>(null);
 
   const generate = async (): Promise<void> => {
@@ -197,8 +171,6 @@ export default function DevicePairPanel({
               type="button"
               className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
               onClick={() => {
-                // Dropping the ticket drops its QR too — `qrSvg` is derived
-                // from the pair, so there is nothing else to clear.
                 setTicket(null);
                 setCopied(false);
               }}

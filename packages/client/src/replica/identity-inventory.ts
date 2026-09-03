@@ -106,8 +106,6 @@ export function createIndexedDbReplicaIdentityInventory(
 async function openInventory(factory: IDBFactory): Promise<IDBDatabase> {
   const request = factory.open(INVENTORY_DATABASE, INVENTORY_VERSION);
   request.addEventListener("upgradeneeded", () => {
-    // v0 has no migration contract: rebuild the inventory when its fresh
-    // record shape changes instead of carrying an upgrade ladder.
     for (const name of Array.from(request.result.objectStoreNames)) {
       request.result.deleteObjectStore(name);
     }

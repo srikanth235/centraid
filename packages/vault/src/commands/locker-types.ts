@@ -1,13 +1,3 @@
-// Locker item types as SETS OF SECTIONS AND FIELDS (GAPS §3.3 #1). The six
-// original types own nullable columns on `locker_item`; the nine this module
-// adds own NO columns — a type is a template of custom fields minted into
-// `locker_item_field` on create, and a `sealed` field lands in that table's
-// sealed column like any other secret.
-//
-// DEGRADATION (README-Locker §3) falls out of that: an unrecognised type loses
-// only its chip label. The rule is READ-side; this module owns the write side,
-// where the DDL CHECK keeps the type honest.
-
 export interface LockerTemplateField {
   section: string;
   label: string;
@@ -37,8 +27,6 @@ const TEXT = "text" as const;
 const DATE = "date" as const;
 const URL = "url" as const;
 
-/** Sealed where the value alone is the credential; a name, issuer or expiry
- *  is metadata, and sealing it costs the browsable half for nothing. */
 export const LOCKER_TYPE_TEMPLATES: Readonly<
   Record<string, readonly LockerTemplateField[]>
 > = {

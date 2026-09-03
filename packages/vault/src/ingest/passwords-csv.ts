@@ -1,10 +1,3 @@
-// Password-manager CSV parsing (#293 phase 2 of the sealed class):
-// the common export shapes — Chrome/1Password (`name,url,username,password`)
-// and Bitwarden (`login_uri,login_username,login_password,login_totp`) —
-// via header aliases, same discipline as the bank-statement parser. A CSV
-// routes here (not to transactions) when its header names a password column;
-// the staged rows' secret fields seal in the draft band immediately.
-
 import { assertNonFormulaCell, parseCsvRows } from "./csv.js";
 
 export interface CsvPasswordItem {
@@ -32,7 +25,6 @@ function findColumn(header: string[], aliases: string[]): number {
   return -1;
 }
 
-/** Does this CSV header look like a password-manager export? */
 export function isPasswordsCsvHeader(header: string[]): boolean {
   return (
     findColumn(header, PASSWORD_ALIASES) >= 0 &&
@@ -41,10 +33,6 @@ export function isPasswordsCsvHeader(header: string[]): boolean {
   );
 }
 
-/**
- * A bare `otpauth://` URI hides the seed in its `secret` param — extract it;
- * a plain base32 seed passes through.
- */
 function otpSeedOf(raw: string | null): string | null {
   if (!raw) return null;
   if (!raw.startsWith("otpauth://")) return raw;
@@ -55,7 +43,6 @@ function otpSeedOf(raw: string | null): string | null {
   }
 }
 
-/** Parse a password-manager CSV. Throws when the header does not match. */
 export function parsePasswordsCsv(text: string): CsvPasswordItem[] {
   const rows = parseCsvRows(text);
   const header = rows[0];

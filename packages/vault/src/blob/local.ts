@@ -1,7 +1,3 @@
-// The local tier of blob custody (#296): the only tier the synchronous command
-// pipeline may touch, hence the sync surface beside the async BlobStore. The
-// two-hex fan-out is a directory detail, never part of a key.
-
 import { randomBytes } from "node:crypto";
 import {
   closeSync,
@@ -28,8 +24,6 @@ import type { BlobRange, BlobStat, BlobStore } from "./store.js";
 
 /* oxlint-disable max-classes-per-file -- (#296) FsBlobStore + MemoryBlobStore are one LocalBlobStore contract, paired by design */
 
-/** `linked`: the link count is the cross-vault refcount. `exists`: CAS is
- *  write-once. `unsupported`: the caller falls back to a byte copy (#599). */
 export type BlobLinkOutcome = "linked" | "exists" | "unsupported";
 
 export interface LocalBlobStore extends BlobStore {
@@ -39,10 +33,8 @@ export interface LocalBlobStore extends BlobStore {
   deleteSync: (sha256: string) => void;
   listSync: () => string[];
   statSync: (sha256: string) => BlobStat | null;
-  /** Adopts a hash-verified temp file. False on a dedup hit. */
   adoptTempSync?: (sha256: string, tempPath: string) => boolean;
   promotionTempPathSync?: (sha256: string) => string;
-  /** `null` without a streaming seam — callers fall back to `getSync` (#367). */
   openReadStreamSync?: (
     sha256: string,
     range?: BlobRange
@@ -52,7 +44,6 @@ export interface LocalBlobStore extends BlobStore {
     range: { start: number; end: number };
   } | null;
   localPathSync?: (sha256: string) => string | null;
-  /** Share-by-placement (#599); absent on the memory tier, which copies. */
   linkFromSync?: (sha256: string, sourcePath: string) => BlobLinkOutcome;
 }
 
@@ -70,7 +61,6 @@ export class FsBlobStore implements LocalBlobStore {
     const file = this.fileFor(sha);
     if (existsSync(file)) return; // same key, same bytes
     mkdirSync(path.dirname(file), { recursive: true });
-    // Write-then-rename: a crash must never leave a half blob under its key.
     const tmp = `${file}.${randomBytes(6).toString("hex")}.tmp`;
     try {
       const fd = openSync(tmp, "w", 0o600);
@@ -192,8 +182,6 @@ export class FsBlobStore implements LocalBlobStore {
     }
   }
 
-  /** Attempt-and-catch, not a boot probe, and the catch stays NARROW: only
-   *  errnos meaning "will not link" become `unsupported`. */
   linkFromSync(sha: string, sourcePath: string): BlobLinkOutcome {
     const file = this.fileFor(sha);
     if (existsSync(file)) return "exists";
@@ -203,9 +191,7 @@ export class FsBlobStore implements LocalBlobStore {
       return "linked";
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      // A concurrent placer won the race; CAS is write-once.
       if (code === "EEXIST") return "exists";
-      // EXDEV: different filesystems; the rest: the fs refuses to link.
       if (
         code === "EXDEV" ||
         code === "EPERM" ||
@@ -248,7 +234,6 @@ export class FsBlobStore implements LocalBlobStore {
   }
 }
 
-/** In-memory twin for `:memory:` vaults — identical semantics. */
 export class MemoryBlobStore implements LocalBlobStore {
   readonly kind = "memory";
   private readonly blobs = new Map<string, Buffer>();

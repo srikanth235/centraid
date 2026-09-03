@@ -1,16 +1,3 @@
-// The sync domain (#290 phases 2–4): connections, the universal
-// external-id map, and the staging band every import flows through —
-// source → connector → staging → review/merge → live. File drops and live
-// connectors are the same shape; a file connection simply has no principal
-// and no cursor.
-//
-// Policy stances the schema encodes (#290 decision 6):
-//   - the vault wins conflicts: an upstream change lands as a staged
-//     `update` row for review, never an overwrite;
-//   - upstream deletions never delete: `gone_upstream` is a flag the owner
-//     acts on deliberately;
-//   - ingestion is one-way: nothing here models write-back.
-
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
 export const SYNC_DDL = `
@@ -104,22 +91,6 @@ CREATE INDEX IF NOT EXISTS idx_sync_connection_run_connection ON sync_connection
 ${touchUpdatedAt("sync_connection_cursor", "cursor_id")}
 `;
 
-// Broker-owned credentials (#304, amending #290 decision 4): a
-// connection may CARRY its credential instead of borrowing the harness's —
-// `oauth2` (BYO client: the owner registers their own OAuth app per
-// provider) or `api_key` (a static PAT). Both live in a SIDECAR keyed by
-// the connection (not columns on sync_connection — migration
-// re-runnability, the same call #298/#299 made): no row = today's
-// harness-ambient lane. Secret cells (client_secret, access_token,
-// refresh_token, api_key) are sealed columns — ciphertext at rest,
-// placeholder on read, hash in the journal — and are only ever INJECTED by
-// the gateway broker into `ctx.fetch` requests toward `allowed_hosts`;
-// connector code never sees a token.
-//
-// `sync_connection_health` carries WHY a connection sits in needs-auth
-// (refresh refused, scope withdrawn) so the reconnect surface is
-// actionable, not a mystery — its own sidecar because notes outlive and
-// predate credentials (a missing locker secret flips needs-auth too).
 export const SYNC_CREDENTIAL_DDL = `
 CREATE TABLE sync_connection_credential (
   connection_id    TEXT PRIMARY KEY REFERENCES sync_connection(connection_id) ON DELETE CASCADE,

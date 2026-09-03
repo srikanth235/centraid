@@ -3,33 +3,15 @@ import {
   renameGatewayOwner,
 } from "../../../gateway-client.js";
 
-/*
- * The signed-in person's own profile.
- *
- * A name belongs to the PERSON, not to the browser that typed it. Writing it
- * only into device-local settings leaves nothing rendering it and no other
- * surface able to see it — the roster keeps saying "You". These helpers read
- * and write the owner roster instead, and the local avatar colour rides along
- * through `updateProfileMetadata`.
- */
-
-/**
- * The label an auto-founded gateway gives its owner before anyone has said
- * who they are (`build-gateway.ts`). It is a placeholder, not a name, so an
- * owner still carrying it counts as "not set yet".
- */
 export const PLACEHOLDER_OWNER_LABEL = "You";
 
 export interface SelfProfile {
   ownerId: string;
-  /** Empty when the owner is still carrying the placeholder label. */
   name: string;
   avatarColor: string;
-  /** The gateway profile the avatar colour is written back to. */
   gatewayId: string;
 }
 
-/** Resolve the person this client acts as, via the device marked `current`. */
 export async function loadSelfProfile(): Promise<SelfProfile | undefined> {
   const [devices, auth] = await Promise.all([
     listGatewayDevices().catch(() => []),
@@ -49,11 +31,6 @@ export async function loadSelfProfile(): Promise<SelfProfile | undefined> {
   };
 }
 
-/**
- * Write the name to the owner roster and the colour to this client's gateway
- * profile. The rename is what makes the name visible to anyone else; the
- * colour stays local because it is chrome, not identity.
- */
 export async function saveSelfProfile(input: {
   ownerId: string;
   name: string;

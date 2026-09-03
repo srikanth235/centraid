@@ -22,9 +22,6 @@ describe("shell CSS lowering", () => {
     for (const [key, value] of Object.entries(radii)) {
       expect(root).toContain(`--r-${key}: ${value}px;`);
     }
-    // The load-bearing literal of the whole system: the action colour is INK.
-    // If a hue ever reappears here, every app identity colour stops meaning
-    // "this belongs to that app", and nothing else in the tree would notice.
     expect(root).toContain(`--accent: ${BRAND};`);
     expect(root).toContain(`--accent-fill: ${BRAND};`);
     expect(root).toContain("--target-min: 44px;");
@@ -53,25 +50,16 @@ describe("shell CSS lowering", () => {
   });
 
   test("follows the OS until `data-theme` is stamped", () => {
-    // The un-stamped first paint has to be able to be LIGHT. A hardcoded
-    // `data-theme` in index.html would beat the member's preference and make
-    // "follow the system" unhonourable, so this pair must stay emitted.
     const fallback = blockFor(":root:not([data-theme])");
     expect(css).toContain("@media (prefers-color-scheme: dark) {");
     expect(fallback).toContain(`--bg: ${themes.dark.bg};`);
     expect(fallback).toContain(`--text: ${themes.dark.text};`);
-    // `:not([data-theme])` stops matching the moment the attribute exists, so
-    // an explicit pick — including `light` on a dark machine — still wins.
     expect(blockFor("[data-theme='light']")).toContain(
       `--bg: ${themes.light.bg};`
     );
   });
 
   test("puts the density axis on an attribute, and emits no tone axis", () => {
-    // An app declares a density tier; ONLY row height and content padding
-    // move. A control below 34px stops being hittable, so control size is
-    // not on this axis. There is no surface-tone axis at all — one page, for
-    // the shell and every app in it.
     expect(css).not.toContain("data-tone");
     expect(css).not.toContain("--bg-tone");
     expect(css).toContain("[data-density='compact'] {");
@@ -102,9 +90,6 @@ describe("shell CSS lowering", () => {
       expect(css).toContain(`[data-theme='${name}'] {`);
     }
     const dark = blockFor("[data-theme='dark']");
-    // The dark ramp is warm-tinted paper (`#171716`), which a one-knob
-    // greyscale calc cannot express — so there is no lightness-anchor knob,
-    // and it is not to be faked with a saturation parameter.
     expect(dark).toContain(`--accent: ${BRAND_DARK};`);
     expect(dark).toContain("--bg: #0E0E0E;");
     expect(dark).toContain("--bg-elev: #171716;");

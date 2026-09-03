@@ -1,11 +1,3 @@
-/**
- * Every fallback-less `var()` in the shell's CSS resolves (#686).
- * Unresolvable `var()` with no fallback invalidates the declaration silently.
- * Fine when the name is in `SHELL_TOKEN_CONTRACT`, declared in shell CSS, or
- * in `RUNTIME_DECLARED` (set from TSX). A reference WITH a fallback is never
- * reported — the author chose the miss.
- */
-
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -21,13 +13,7 @@ import {
 const SRC = path.resolve(import.meta.dirname);
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".turbo"]);
 
-/**
- * Names TSX sets inline with no stylesheet default. Adding one claims both
- * halves (checked below). Do not list names that also have a CSS default —
- * that would hide a later default deletion.
- */
 const RUNTIME_DECLARED: Readonly<Record<string, string>> = {
-  // Per-render swatch; no CSS default — the ring is meaningless until a colour is chosen.
   "--profile-accent": "react/screens/SettingsProfileScreen.tsx",
 };
 
@@ -57,7 +43,6 @@ const resolved = new Set<string>([
 
 describe("shell CSS custom-property resolution", () => {
   test("finds the stylesheets it claims to police", () => {
-    // A walker matching nothing is a green suite asserting nothing.
     expect(cssFiles.length).toBeGreaterThan(80);
     expect(SHELL_TOKEN_CONTRACT.length).toBeGreaterThan(50);
   });

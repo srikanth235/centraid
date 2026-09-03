@@ -1,6 +1,3 @@
-// Shared type roles may adapt units per surface, but family and weight are
-// semantic meaning and therefore cannot drift between CSS lowerings.
-
 import { describe, expect, test } from "vitest";
 
 import { toBlueprintCss } from "./blueprint.js";
@@ -50,9 +47,6 @@ const shared = Object.keys(type).map(
 
 describe("type role parity across emitters", () => {
   test("every role is published by BOTH emitters", () => {
-    // The Binding Layer's ramp is the same on every profile, so there are no
-    // shell-only roles: `--t-hero` and `--t-greeting` are not in the scale,
-    // because the app surface cannot render them.
     for (const name of shared) {
       expect(shell[name], `${name} shell`).toBeDefined();
       expect(blueprint[name], `${name} blueprint`).toBeDefined();
@@ -71,12 +65,7 @@ describe("type role parity across emitters", () => {
   });
 
   test("the shell and blueprint both adapt units host-relatively", () => {
-    // The shell now lowers to `rem` too (#708): 15px / 22px ÷ 16.
     expect(shell["--t-body"]).toContain("0.9375rem/1.375rem");
-    // The blueprint's line-height stays a unitless ratio (÷ the role's own
-    // size, not the root) rather than a second `rem` value — a deliberate
-    // divergence the role-parity law permits, since it gates family and
-    // weight, not size (see typography.ts's `toBlueprintStyle`).
     expect(blueprint["--t-body"]).toContain("0.9375rem/1.4666666666666666");
     expect(parse(shell["--t-body"] ?? "").weight).toBe("400");
     expect(parse(blueprint["--t-body"] ?? "").weight).toBe("400");

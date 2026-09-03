@@ -1,9 +1,3 @@
-// Domain DDL — schemas `social`, `knowledge`, `media`.
-//
-// No `social_contact_card` (#883, ruling O-contact): a nickname is a
-// `people.profile` field and a reachable address is a
-// `social.contact_channel`, so the card had nothing of its own left to say.
-
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
 export const SOCIAL_DDL = `

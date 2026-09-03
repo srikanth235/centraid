@@ -1,8 +1,3 @@
-// Minimal RFC 5545 ICS parsing for ingest customs (§10): enough to round-trip
-// UID, SUMMARY, DESCRIPTION, DTSTART/DTEND (with TZID), STATUS and RRULE from
-// real calendar exports. Deliberately not a full iCalendar implementation —
-// unknown properties are ignored, never mangled.
-
 export interface IcsEvent {
   uid: string;
   summary: string;
@@ -17,7 +12,6 @@ export interface IcsEvent {
 const MAX_ICS_LINES = 500_000;
 const MAX_ICS_LINE_CHARS = 1024 * 1024;
 
-/** Unfold RFC 5545 folded lines (CRLF followed by space or tab). */
 function unfold(text: string): string[] {
   const lines = text
     .replace(/\r\n[ \t]/gu, "")
@@ -55,7 +49,6 @@ const ICS_DATE_RE = /^(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})$/u;
 const ICS_DATE_TIME_RE =
   /^(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})T(?<hour>\d{2})(?<minute>\d{2})(?<second>\d{2})(?<zulu>Z?)$/u;
 
-/** RFC 5545 date/date-time → ISO-8601 (UTC when the value carries Z). */
 function toIso(value: string): string {
   const dateOnly = ICS_DATE_RE.exec(value);
   if (dateOnly) {
@@ -81,7 +74,6 @@ function unescapeText(value: string): string {
   return value.replace(/\\[nN,;\\]/gu, (m) => TEXT_UNESCAPES[m] ?? m);
 }
 
-/** Parse every VEVENT in an ICS document. */
 export function parseIcs(text: string): IcsEvent[] {
   const events: IcsEvent[] = [];
   let current: Partial<IcsEvent> | null = null;

@@ -29,9 +29,6 @@ let host: HTMLElement | null = null;
 let ctl: PinController;
 
 function mount(): void {
-  // Assigned from an EFFECT, never from render: a render that mutates
-  // something outside itself is a side effect the react-compiler rightly
-  // rejects, and it would tear under a re-render.
   function Probe(): null {
     const next = usePins();
     useEffect(() => {
@@ -75,11 +72,7 @@ describe(usePins, () => {
   });
 
   it("DELETES the key on unpin rather than storing a false", () => {
-    // Absent means unpinned, so the blob stays the size of the member's actual
-    // choices — and a destination added in a later build is simply not in it.
     mount();
-    // A destination that IS in the default set; toggling an unpinned one would
-    // pin it rather than exercise the delete.
     act(() => ctl.togglePin("approvals"));
     expect(ctl.isPinned("approvals")).toBe(false);
     expect(Object.keys(store.get("launcher.pins") as object)).not.toContain(

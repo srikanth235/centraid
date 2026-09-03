@@ -1,10 +1,3 @@
-// Canonical property contracts for the two CSS lowerings.
-//
-// Semantic names come from the role registry.  The only names kept beside
-// that registry are mechanical scales and host adapters: they do not carry a
-// second color or type vocabulary.  This keeps a new role visible to both
-// emitters and makes a removed role fail the contract test immediately.
-
 import { spacing, subBase } from "./density";
 import { library } from "./library";
 import { palette } from "./palette";
@@ -27,8 +20,6 @@ const paletteNames = Object.keys(palette).flatMap((key) => [
 const commonScale = [
   ...Object.keys(radii).map((key) => `--r-${key}`),
   ...Object.keys(spacing).map((key) => `--sp-${key}`),
-  // The two named sub-base seams share the `--sp-` namespace with the six
-  // rungs, so they are part of the same contract rather than a side door.
   ...Object.keys(subBase).map((key) => `--sp-${key}`),
 ];
 

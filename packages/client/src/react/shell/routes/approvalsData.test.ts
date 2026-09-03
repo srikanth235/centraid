@@ -460,7 +460,6 @@ describe("what the frame says about Notifications", () => {
   });
 });
 
-// Egress-consent ledger rows (#807).
 describe(buildEnrichConsentRow, () => {
   it("reads an answer back as one line, refusals stated as plainly as grants", () => {
     const declined = buildEnrichConsentRow({

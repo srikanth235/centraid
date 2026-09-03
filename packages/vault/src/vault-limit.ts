@@ -1,10 +1,3 @@
-/*
- * Size ladder for `vault.db` (#659): over the owner's limit the daily gate is
- * bypassed and the retention window narrows a rung per sweep (90 → 30 → 14 →
- * 7). MAINTENANCE TOUCHES NO OWNER-AUTHORED ROW — only the two bounded
- * garbage collectors — so a narrow rung is safe. The rung is in-memory.
- */
-
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
@@ -69,7 +62,6 @@ export function decideVaultMaintenance(
   };
 }
 
-/** The WAL counts; a missing file reads as zero, i.e. under any limit. */
 export function vaultFileBytes(dir: string, fileName = "vault.db"): number {
   let total = 0;
   for (const name of [fileName, `${fileName}-wal`]) {

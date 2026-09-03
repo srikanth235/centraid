@@ -1,8 +1,3 @@
-// The photo-library import, end to end on the staging spine (#721):
-// a Takeout zip stages as one reviewable batch, publishes into
-// media_asset through media.add_asset's own primitives, and is
-// re-importable because the queue IS the database.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -15,10 +10,6 @@ import { stageFile } from "./stage-file.js";
 import { publishBatch } from "./staging.js";
 import { writeZipEntries } from "./zip.js";
 
-/**
- * A JPEG with nothing in it but a unique comment — enough for the sniffer to
- * call it `image/jpeg`, and enough for two of them to hash differently.
- */
 function jpeg(marker: string): Buffer {
   const text = Buffer.from(marker, "utf8");
   const length = Buffer.alloc(2);
@@ -31,7 +22,6 @@ function jpeg(marker: string): Buffer {
   ]);
 }
 
-/** A minimal ISO-BMFF header that sniffs as QuickTime — the motion half. */
 function quicktime(marker: string): Buffer {
   const text = Buffer.from(marker.padEnd(8, " "), "utf8").subarray(0, 8);
   return Buffer.concat([
@@ -41,11 +31,6 @@ function quicktime(marker: string): Buffer {
   ]);
 }
 
-/**
- * A JPEG whose APP1/EXIF block carries DateTimeOriginal and GPS 37°30'N
- * 122°15'W. Offsets are computed, not hand-counted, so the fixture cannot
- * drift out of agreement with the parser it exercises.
- */
 function exifJpeg(dateTimeOriginal: string): Buffer {
   const entrySize = 12;
   const ifd0At = 8;
@@ -117,7 +102,6 @@ function json(body: Record<string, unknown>): Buffer {
   return Buffer.from(JSON.stringify(body), "utf8");
 }
 
-/** The archive most of these tests import. */
 function takeoutZip(): Buffer {
   return writeZipEntries([
     {
@@ -188,8 +172,6 @@ describe("takeout photo import", () => {
       data: takeoutZip(),
     });
     expect(staged.kind).toBe("file.takeout");
-    // Three media entries; the sidecars and metadata.json were consumed as
-    // metadata, and only the genuinely unimportable entry is reported.
     expect(staged.staged.create).toBe(3);
     expect(staged.total).toBe(3);
     expect(staged.unrouted).toStrictEqual(["Takeout/archive_browser.html"]);
@@ -204,13 +186,9 @@ describe("takeout photo import", () => {
     const motion = rows.find((r) => r.title === "IMG_1.MOV")!;
     const undated = rows.find((r) => r.title === "IMG_2.jpg")!;
 
-    // Sidecar time, caption, star and place all landed on the still.
     expect(still.captured_at).toBe("2019-06-22T20:16:07.000Z");
     expect(still.kind).toBe("photo");
     expect(still.place_id).not.toBeNull();
-    // THE STAR IS ONE TAG, ON THE ASSET (#916): the sidecar's `favorited`
-    // arrives as a boolean and LANDS as the star, where the column and the tag
-    // used to be two truths kept in step by a helper importers forgot to call.
     const starred = db.vault
       .prepare(
         `SELECT t.target_id AS id FROM core_tag t
@@ -220,15 +198,12 @@ describe("takeout photo import", () => {
       .all() as { id: string }[];
     expect(starred.map((row) => row.id)).toStrictEqual([still.asset_id]);
 
-    // Live Photo: the still and its motion part share one capture group.
     expect(motion.kind).toBe("video");
     expect(motion.capture_group_id).toBe(still.capture_group_id);
     expect(still.capture_group_id).toMatch(/^takeout:/u);
 
-    // HONEST ABSENCE: "0" is not a capture time, so this one is undated.
     expect(undated.captured_at).toBeNull();
 
-    // The album folder became an album; the year folder did not.
     const album = db.vault
       .prepare(
         "SELECT collection_id, name, cover_content_id FROM core_collection"
@@ -278,7 +253,6 @@ describe("takeout photo import", () => {
       assets().map((row) => [row.title, row.captured_at])
     );
     expect(times["with-sidecar.jpg"]).toBe("2019-06-22T20:16:07.000Z");
-    // Zoneless local, exactly as the camera wrote it — the EXIF contract.
     expect(times["exif-only.jpg"]).toBe("2021-11-12T13:14:15");
   });
 
@@ -304,8 +278,6 @@ describe("takeout photo import", () => {
       filename: "takeout.zip",
       data: takeoutZip(),
     });
-    // Simulate the interruption: one photo's staged bytes are gone when
-    // publish reaches its row, exactly as a killed process would leave it.
     const victim = db.vault
       .prepare(
         `SELECT external_id, payload_json FROM sync_import_row
@@ -323,8 +295,6 @@ describe("takeout photo import", () => {
       victim.external_id,
     ]);
 
-    // The rest of the batch landed, so the next import only has the hole to
-    // fill: resumability is structural, not a retry loop.
     const second = stageFile(db, owner, {
       filename: "takeout.zip",
       data: takeoutZip(),
@@ -342,7 +312,6 @@ describe("takeout photo import", () => {
     });
     publishBatch(db, owner, first.batchId, PUBLISHERS);
 
-    // Different archive, different connection, different path — same bytes.
     const second = stageFile(db, owner, {
       filename: "takeout-002.zip",
       data: writeZipEntries([{ name: "Photos/B/renamed.jpg", data: same }]),
@@ -361,8 +330,6 @@ describe("takeout photo import", () => {
         { name: "Photos/A/IMG_9(1).jpg", data: same },
       ]),
     });
-    // Neither was in the vault when the batch was dispositioned, so both
-    // staged as creates; the second adopts the first at publish.
     expect(staged.staged.create).toBe(2);
     const published = publishBatch(db, owner, staged.batchId, PUBLISHERS);
     expect(published.failed).toStrictEqual([]);
@@ -387,11 +354,6 @@ describe("takeout photo import", () => {
   });
 
   test("a single dropped photo carries the CALLER's capture group (issue #724 A2)", () => {
-    // The mobile camera-roll importer stages a Live Photo's still and its
-    // paired video as two separate single-file imports (there is no archive
-    // here for `planTakeout`'s own pairing to run over), so it passes the
-    // group id it already computed (`live:<localId>`, `photos-backup.ts`'s
-    // convention) straight through on both calls.
     const still = stageFile(db, owner, {
       filename: "IMG_1234.HEIC",
       data: exifJpeg("2026:07:30 12:00:00"),
@@ -423,11 +385,9 @@ describe("takeout photo import", () => {
   });
 
   test("a media extension is a claim; the bytes settle it", () => {
-    // Bare drop: not a photograph, so it is not routed as one.
     expect(() =>
       stageFile(db, owner, { filename: "photo.heic", data: "not really" })
     ).toThrow(/no importer/u);
-    // Inside an archive the same file is reported, never invented into a row.
     const staged = stageFile(db, owner, {
       filename: "takeout.zip",
       data: writeZipEntries([
@@ -462,7 +422,6 @@ describe("takeout photo import", () => {
     });
     publishBatch(db, owner, first.batchId, PUBLISHERS);
 
-    // The owner captions the undated photo in Google Photos and re-exports.
     const edited = writeZipEntries([
       {
         name: "Takeout/Google Photos/Photos from 2019/IMG_2.jpg",
@@ -484,7 +443,6 @@ describe("takeout photo import", () => {
     expect(publishBatch(db, owner, second.batchId, PUBLISHERS).updated).toBe(1);
     const captioned = assets().find((r) => r.title === "The one nobody dated");
     expect(captioned).toBeDefined();
-    // A sidecar that still knows no capture time may not invent one.
     expect(captioned!.captured_at).toBeNull();
   });
 });

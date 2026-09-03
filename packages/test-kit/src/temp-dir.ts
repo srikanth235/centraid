@@ -14,14 +14,12 @@ afterAll(async () => {
   tracked.clear();
 });
 
-/** Create a test temp directory and remove it after the current test file. */
 export async function tempDir(prefix = "centraid-test-"): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), prefix));
   tracked.add(dir);
   return dir;
 }
 
-/** Synchronous companion for constructors and synchronous Vitest hooks. */
 export function tempDirSync(prefix = "centraid-test-"): string {
   const dir = mkdtempSync(path.join(tmpdir(), prefix));
   tracked.add(dir);

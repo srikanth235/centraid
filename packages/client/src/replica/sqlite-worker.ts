@@ -24,7 +24,6 @@ interface WorkerScope {
 }
 
 const scope = globalThis as unknown as WorkerScope;
-// WorkerGlobalScope.postMessage deliberately has no targetOrigin parameter.
 const postWorkerResponse = scope.postMessage.bind(scope);
 let store: SqliteReplicaStore | undefined;
 let mode: ReplicaMode | undefined;
@@ -121,13 +120,10 @@ async function open(options: ReplicaWorkerOpenOptions): Promise<ReplicaStatus> {
       await pool.reserveMinimumCapacity(4);
       db = new pool.OpfsSAHPoolDb(options.dbName);
     } catch (error) {
-      // A normal open failure must not turn recovery into an implicit wipe.
-      // Release handles while preserving the pool so a later purge/retry can
-      // make the terminal decision explicitly.
       try {
         pool?.pauseVfs();
       } catch {
-        /* A partially installed VFS has no safe cleanup action here. */
+        // Intentionally empty.
       }
       pool = undefined;
       db = undefined;

@@ -5,13 +5,6 @@ import type { PowerContextState } from "./resource-summary.js";
 
 import styles from "./GatewayScreen.module.css";
 
-// Power-context posture note on the Resource card (#528). Battery
-// and thermal chrome render ONLY when the gateway host actually has a battery;
-// a mains/server host shows a server-relevant fact (CPU steal) or nothing. The
-// copy is always attributed to the gateway's HOST, never the browser/phone
-// viewing the screen (the remote-gateway rule). Extracted so ResourceModeCard
-// stays comfortably under the 500-line cap.
-
 export interface PowerPostureNoteProps {
   power: PowerContextState;
 }

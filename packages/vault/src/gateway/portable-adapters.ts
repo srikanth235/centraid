@@ -1,9 +1,3 @@
-// The portable bundle's human-readable adapters (#630): vault truths re-spelled
-// in formats other software reads. Adapters are CONVENIENCE COPIES, never the
-// restore source — a restore reads the canonical JSON-LD in
-// `portable-export.ts`, so an adapter may flatten or omit. Kept out of that
-// file so it stays the completeness owner.
-
 import type { VaultDb } from "../db.js";
 import { serializeMarkdownNote } from "../ingest/markdown.js";
 import type { ZipEntry } from "../ingest/zip.js";
@@ -60,8 +54,6 @@ export function exportIcs(db: VaultDb): string {
     lines.push(`DTSTART${tz}:${icsDate(row.dtstart)}`);
     if (row.dtend) lines.push(`DTEND${tz}:${icsDate(row.dtend)}`);
     if (row.rrule) {
-      // Storage is bare `FREQ=…`; strip a legacy `RRULE:` so we never emit
-      // `RRULE:RRULE:…` for Google-sourced rows that were stored prefixed.
       const bare = row.rrule.replace(/^\s*RRULE:/iu, "").trim();
       if (bare) lines.push(`RRULE:${bare}`);
     }
@@ -91,8 +83,6 @@ export function exportVcards(db: VaultDb): string {
     sort_name: string | null;
     birth_date: string | null;
   }[];
-  // EMAIL and TEL are the reach half of a vCard, and reach lives on
-  // `social_contact_channel` (#883): the register would export an empty card.
   const channels = db.vault.prepare(
     `SELECT kind, value, label FROM social_contact_channel
       WHERE party_id = ? AND kind IN ('email','phone')
@@ -115,7 +105,6 @@ export function exportVcards(db: VaultDb): string {
       const params = channel.label
         ? `;TYPE=${channel.label.toUpperCase()}`
         : "";
-      // vCard says TEL; the channel axis says `phone`.
       const property = channel.kind === "phone" ? "TEL" : "EMAIL";
       lines.push(`${property}${params}:${escapeVcard(channel.value)}`);
     }
@@ -126,7 +115,6 @@ export function exportVcards(db: VaultDb): string {
 
 function csvCell(value: unknown): string {
   let text = value === null || value === undefined ? "" : String(value);
-  // CSV exits should never become spreadsheet commands on another machine.
   if (/^[\t\r ]*[=+\-@]/u.test(text)) text = `'${text}`;
   return `"${text.replaceAll('"', '""')}"`;
 }

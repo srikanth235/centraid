@@ -1,5 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); media owns the whole library loop (9 commands with their contracts), so it is large by design.
-// Media commands (§08). Asset = meaning over bytes (`media_asset` on `core_content_item`). Last remaining renter decides byte soft-delete (#274). Purge (#711) ends grace early.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -19,21 +18,8 @@ import {
 import { setStarred, starredExistsSql } from "./flags.js";
 import { assertInlineDataUriWithinBudget } from "./inline-body-guard.js";
 
-/**
- * THE STAR IS ONE TAG ON THE ASSET (#916).
- *
- * There were two truths and a mirror between them: a `media_asset.favorite`
- * column and a `starred` flags tag on the asset's CONTENT ITEM, kept in step
- * by a helper every writer had to remember to call — and which the importers
- * and the share projection did not. Two photographs of the same bytes also
- * shared one content item, so starring one starred the other.
- *
- * The column is gone and the tag anchors on `media.asset`: the entity Photos
- * actually shows, the one a member points at when they say "this one".
- */
 const ASSET_TARGET_TYPE = "media.asset";
 
-/** Soft-deleted bytes linger this long before the lifecycle sweep purges. */
 const PURGE_AFTER_DAYS = 30;
 
 function actorPartyId(ctx: HandlerCtx): string {
@@ -45,7 +31,6 @@ function actorPartyId(ctx: HandlerCtx): string {
   return owner.self_party_id;
 }
 
-/** Deps for media writes outside the command pipeline (#721). Same row/rules as `media.add_asset`. */
 export interface MediaWriteDeps {
   vault: DatabaseSync;
   now: string;
@@ -77,20 +62,16 @@ function purgeAt(now: string): string {
   ).toISOString();
 }
 
-/** ~11m identity precision so burst photos share one `core_place`. Row keeps precise coords (#352). */
 function roundCoord(v: number): number {
   return Math.round(v * 10_000) / 10_000;
 }
 
-/** ~170m: named-place adoption, looser than the ~11m identity rung. */
 const NAMED_PLACE_RADIUS_DEG = 0.0015;
 
-/** Coordinate-as-name is not a name — do not adopt it. */
 export function isCoordinateLabel(name: string | null | undefined): boolean {
   return /^-?\d{1,3}\.\d+,\s*-?\d{1,3}\.\d+$/u.test((name ?? "").trim());
 }
 
-/** Find-or-create place: named within ~170m, else rounded identity (~11m), else a coordinate-labelled row. Coords stay precise. */
 export function findOrCreatePlaceTx(
   deps: MediaWriteDeps,
   lat: number,
@@ -98,7 +79,6 @@ export function findOrCreatePlaceTx(
 ): string {
   const rLat = roundCoord(lat);
   const rLng = roundCoord(lng);
-  // Bounding box (SQLite has no trig); divide lng by cos(lat) so the box stays square.
   const lngRadius =
     NAMED_PLACE_RADIUS_DEG / Math.max(0.05, Math.cos((lat * Math.PI) / 180));
   const named = deps.vault
@@ -166,7 +146,6 @@ export interface MediaAssetRow {
   exifJson: string | null;
 }
 
-/** The one `media_asset` insert — `media.add_asset` and the import publisher share it. */
 export function insertMediaAssetTx(
   vault: DatabaseSync,
   row: MediaAssetRow
@@ -192,7 +171,6 @@ export function insertMediaAssetTx(
     );
 }
 
-/** UNIQUE `content_id`: adopt, do not duplicate. Do not stamp `source_asset_id` (#711) — these bytes already are that asset. */
 export function adoptAssetForContentTx(
   deps: MediaWriteDeps,
   contentId: string,
@@ -228,12 +206,6 @@ export function adoptAssetForContentTx(
   return existing.asset_id;
 }
 
-/**
- * Does nothing rent these bytes any more? The LAST reference decides whether
- * bytes soft-delete, and the reference list is the one in
- * `schema/content-references.ts` (#883, ruling O-attach) rather than a copy
- * that could fall behind a new byte-bearing column.
- */
 export function contentUnreferenced(
   ctx: HandlerCtx,
   contentId: string
@@ -250,7 +222,6 @@ export function contentUnreferenced(
   return true;
 }
 
-/** Collapse grace to now when unrented — handler has no CAS delete; sweep reclaims. */
 function releaseContentNow(ctx: HandlerCtx, contentId: string): boolean {
   if (!contentUnreferenced(ctx, contentId)) return false;
   ctx.db
@@ -264,7 +235,6 @@ function releaseContentNow(ctx: HandlerCtx, contentId: string): boolean {
   return true;
 }
 
-/** Soft-delete a content item's bytes if nothing rents them any more. */
 export function releaseContentIfUnreferenced(
   ctx: HandlerCtx,
   contentId: string
@@ -286,35 +256,25 @@ const ADD_ASSET: CommandDefinition = {
     type: "object",
     additionalProperties: false,
     properties: {
-      /** Small inline bytes. Exactly one of data_uri / staged_sha (#296). */
       data_uri: { type: "string", minLength: 6 },
-      /** Staged bytes: claim what POST /_vault/blobs hashed into the CAS. */
       staged_sha: { type: "string", minLength: 64, maxLength: 64 },
       kind: { type: "string", enum: ["photo", "video", "audio", "scan"] },
       captured_at: { type: "string" },
-      // Capture-local UTC offset (#419), read off the same EXIF as the time.
       tz_offset_min: { type: "integer", minimum: -1080, maximum: 1080 },
       capture_group_id: { type: "string", minLength: 1, maxLength: 200 },
-      // Edit lineage (#711): the asset these bytes were derived FROM. The
-      // editor saves an edit as a new asset dated today, and this is what makes
-      // that copy's provenance a fact rather than a promise.
       source_asset_id: { type: "string", minLength: 1, maxLength: 200 },
       title: { type: "string" },
       width: { type: "integer", minimum: 1 },
       height: { type: "integer", minimum: 1 },
       duration_s: { type: "number", minimum: 0 },
-      // Caller-asserted location, not extraction — media.location strips GPS read from a file.
       latitude: { type: "number", minimum: -90, maximum: 90 },
       longitude: { type: "number", minimum: -180, maximum: 180 },
-      // Perceptual hash (#299 §2, Tier 0) — hex, producer-agnostic.
       phash: {
         type: "string",
         minLength: 4,
         maxLength: 64,
         pattern: "^[0-9a-f]+$",
       },
-      // ThumbHash placeholder (#419) — unpadded base64, lands as an inline
-      // derivative beside the client's thumb.
       thumbhash: {
         type: "string",
         minLength: 6,
@@ -341,9 +301,6 @@ const ADD_ASSET: CommandDefinition = {
       value: 1,
     },
     {
-      // A coordinate is a PAIR. Half of one is no location at all, and
-      // dropping it silently would let a caller believe it placed a photograph
-      // it had not.
       name: "coordinate_pair_complete",
       sql: "SELECT ((:latitude IS NULL) = (:longitude IS NULL)) AS n",
       column: "n",
@@ -358,8 +315,6 @@ const ADD_ASSET: CommandDefinition = {
       value: 1,
     },
     {
-      // The inline door is for SMALL payloads (#296): a 4K video takes the
-      // staging route, never command JSON — the journal records inputs.
       name: "within_size_cap",
       sql: `SELECT CASE WHEN :data_uri IS NULL THEN 1 ELSE (length(:data_uri) <= ${MAX_INLINE_DATA_URI_CHARS}) END AS n`,
       column: "n",
@@ -376,9 +331,6 @@ const ADD_ASSET: CommandDefinition = {
       value: 1,
     },
     {
-      // A claimed source must be a real asset in THIS vault (#711). Named here
-      // rather than left to the FK, so a mistyped lineage names the failing
-      // precondition instead of a raw constraint error mid-insert.
       name: "source_asset_exists",
       sql: `SELECT CASE WHEN :source_asset_id IS NULL THEN 1 ELSE
               EXISTS(SELECT 1 FROM media_asset WHERE asset_id = :source_asset_id) END AS n`,
@@ -421,8 +373,6 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     latitude?: number;
     longitude?: number;
   };
-  // Staged claims carry spool metadata (#296): the gateway sniffed the type and
-  // read EXIF server-side. Explicit input still wins.
   const spoolMeta = input.staged_sha
     ? (ctx.blobs.staged(input.staged_sha)?.meta ?? {})
     : {};
@@ -451,9 +401,6 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     longitude?: number;
   };
   const assetId = ctx.newId();
-  // Spool GPS already passed the media.location policy gate at staging time
-  // (pipeline.ts), so it only rides here when the owner kept it. An explicit
-  // pair wins, like every other field on this command.
   const lat = input.latitude ?? meta.latitude;
   const lng = input.longitude ?? meta.longitude;
   const placeId =
@@ -470,8 +417,6 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
       (meta as { tz_offset_min?: number }).tz_offset_min ??
       null,
     captureGroupId: input.capture_group_id ?? null,
-    // Edit lineage (#711). Only the caller knows it — nothing in the bytes says
-    // "I was cropped out of that one" — so there is deliberately no fallback.
     sourceAssetId: input.source_asset_id ?? null,
     placeId,
     width: input.width ?? meta.width ?? null,
@@ -479,8 +424,6 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     durationS: input.duration_s ?? meta.duration_s ?? null,
     exifJson: exifJsonForMeta(meta),
   });
-  // Perceptual hash (#299 §2, Tier 0): producer-agnostic like thumbs. Derived
-  // data in a sidecar; near-duplicates are one vault_hamming JOIN away.
   const contributedPhash = ctx.db
     .prepare(
       `SELECT text_content FROM core_content_derivative
@@ -496,9 +439,6 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
       )
       .run(assetId, phash, ctx.now);
   }
-  // Device-contributed ThumbHash (#419) lands ONLY in the inline derivative
-  // row. Canonicalize through the staging door's validator so a client-supplied
-  // value is exactly the stored form.
   if (input.thumbhash) {
     const contribution = validateDerivativeContribution({
       variant: "thumbhash",
@@ -541,10 +481,7 @@ const UPDATE_ASSET: CommandDefinition = {
     properties: {
       asset_id: { type: "string", minLength: 1 },
       captured_at: { type: "string" },
-      // The caption lives on the canonical content item as its title.
       title: { type: "string" },
-      // The star is a `starred` flags tag on the asset (#916); the input
-      // stays a boolean because that is what a member's toggle is.
       favorite: { type: "integer", enum: [0, 1] },
       archived: { type: "integer", enum: [0, 1] },
     },
@@ -630,17 +567,12 @@ const SET_ASSET_PLACE: CommandDefinition = {
     additionalProperties: false,
     properties: {
       asset_id: { type: "string", minLength: 1 },
-      // Omitted place_id CLEARS the asset's place (#352) — the same "omit to
-      // reset" convention core.move_document uses for folder_id.
       place_id: { type: "string", minLength: 1 },
     },
   },
   outputSchema: {
     type: "object",
     required: ["asset_id"],
-    // place_id is string | null; the validator's `type` is a single string, so
-    // it is left unconstrained. outputSchema is documentation only — never
-    // runtime-validated, unlike inputSchema.
     properties: { asset_id: { type: "string" }, place_id: {} },
   },
   preconditions: [
@@ -693,13 +625,8 @@ function setAssetPlace(ctx: HandlerCtx): Record<string, unknown> {
   return { asset_id: input.asset_id, place_id: placeId };
 }
 
-/** Place kinds a member may declare. CHECK also permits `'virtual'` — not offered (not a photo location). */
 const PLACE_KINDS = ["home", "work", "venue", "city", "region", "other"];
 
-/**
- * Name a place (#816) — the write that turns a coordinate into a location. Writes `name`/`kind` only;
- * do not clear `address_json`/`geohash`/`tz` (gazetteer has its own writers). Name outranks derived name for display only.
- */
 const NAME_PLACE: CommandDefinition = {
   name: "media.name_place",
   ownerSchema: "media",
@@ -709,8 +636,6 @@ const NAME_PLACE: CommandDefinition = {
     additionalProperties: false,
     properties: {
       place_id: { type: "string", minLength: 1 },
-      // 120 is a signage ceiling, not a storage one: a heading no surface can
-      // draw is not a name anybody typed on purpose.
       name: { type: "string", minLength: 1, maxLength: 120 },
       kind: { type: "string", enum: PLACE_KINDS },
     },
@@ -733,8 +658,6 @@ const NAME_PLACE: CommandDefinition = {
       value: 1,
     },
     {
-      // `minLength` catches `""`; only SQL catches "   ". A whitespace name
-      // reads as named everywhere and says nothing.
       name: "name_not_blank",
       sql: "SELECT CASE WHEN trim(:name) <> '' THEN 1 ELSE 0 END AS n",
       column: "n",
@@ -761,9 +684,6 @@ const NAME_PLACE: CommandDefinition = {
 function namePlace(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { place_id: string; name: string; kind?: string };
   const name = input.name.trim();
-  // Two statements rather than one COALESCE, so an absent `kind` cannot be
-  // confused with a member clearing it: this command cannot say "no kind", and
-  // rewriting the column on every rename would undo a declared "this is home".
   ctx.db
     .prepare("UPDATE core_place SET name = ? WHERE place_id = ?")
     .run(name, input.place_id);
@@ -806,8 +726,6 @@ const DELETE_ASSET: CommandDefinition = {
   },
   preconditions: [
     {
-      // Only a live asset can be trashed — a double-delete must fail loudly
-      // rather than silently re-stamp the trash date.
       name: "asset_exists_live",
       sql: `SELECT count(*) AS n FROM media_asset
              WHERE asset_id = :asset_id AND deleted_at IS NULL`,
@@ -818,8 +736,6 @@ const DELETE_ASSET: CommandDefinition = {
   ],
   postconditions: [
     {
-      // The standard soft-delete pair (#274): the asset carries its own grace
-      // window even when its bytes stay rented elsewhere.
       name: "asset_trashed",
       sql: `SELECT count(*) AS n FROM media_asset
              WHERE asset_id = :asset_id AND deleted_at IS NOT NULL AND purge_at IS NOT NULL`,
@@ -839,8 +755,6 @@ function deleteAsset(ctx: HandlerCtx): Record<string, unknown> {
     .prepare("SELECT content_id FROM media_asset WHERE asset_id = ?")
     .get(input.asset_id) as { content_id: string } | undefined;
   if (!asset) throw new Error("asset vanished between check and execute");
-  // Collections whose cover this was fall back to their next media entry
-  // (covers are content ids — the asset's canonical bytes).
   const covered = ctx.db
     .prepare(
       "SELECT collection_id FROM core_collection WHERE cover_content_id = ?"
@@ -864,9 +778,6 @@ function deleteAsset(ctx: HandlerCtx): Record<string, unknown> {
       .run(collection.collection_id, collection.collection_id);
     ctx.wrote("core.collection", collection.collection_id);
   }
-  // The asset row only TRASHES here — restore_asset (or re-uploading the same
-  // bytes) brings it back with its metadata, and the lifecycle sweep purges it
-  // alongside its content once the purge date passes.
   ctx.db
     .prepare(
       "UPDATE media_asset SET deleted_at = ?, purge_at = ? WHERE asset_id = ?"
@@ -898,9 +809,7 @@ const RESTORE_ASSET: CommandDefinition = {
   },
   preconditions: [
     {
-      // Restoring a live asset fails loudly — trash is the only source.
       name: "asset_is_trashed",
-      // RESTORE REFUSES A LAPSED WINDOW (#916, review 1.5).
       sql: `SELECT count(*) AS n FROM media_asset
              WHERE asset_id = :asset_id AND deleted_at IS NOT NULL
                AND (purge_at IS NULL OR purge_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
@@ -938,8 +847,6 @@ function restoreAsset(ctx: HandlerCtx): Record<string, unknown> {
     )
     .run(input.asset_id);
   ctx.wrote("media.asset", input.asset_id);
-  // Un-soft-delete the bytes too. Album membership is NOT restored, matching
-  // the benchmark's trash model.
   ctx.db
     .prepare(
       `UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL
@@ -955,13 +862,6 @@ function restoreAsset(ctx: HandlerCtx): Record<string, unknown> {
   return { asset_id: input.asset_id };
 }
 
-/**
- * `media.purge_asset` — hard-delete an already-trashed asset (#711). No live-asset door.
- * Goes: faces, phash CASCADE, poly-refs (`cleanupPolyRefs`), cover hand-off. Bytes do NOT go here:
- * collapse content grace to now if unrented; sweep owns CAS. Independent lifecycles (#274).
- * `source_asset_id` self-FK: `no_derived_assets` refuses while any child names this source.
- * Not `confirm: true` — owner confirmation is in front of the command.
- */
 const PURGE_ASSET: CommandDefinition = {
   name: "media.purge_asset",
   ownerSchema: "media",
@@ -976,7 +876,6 @@ const PURGE_ASSET: CommandDefinition = {
     required: ["asset_id"],
     properties: {
       asset_id: { type: "string" },
-      /** 1 when the bytes were handed to the sweep, 0 when still rented. */
       content_released: { type: "integer" },
     },
   },
@@ -1011,9 +910,6 @@ const PURGE_ASSET: CommandDefinition = {
       value: 0,
     },
     {
-      // Nothing may still point at the row (#441): engine FKs, the self-FK and
-      // every polymorphic mechanism in ONE predicate, so a sweep clause dropped
-      // in a later edit fails here rather than in a member's library.
       name: "nothing_references_the_asset",
       sql: `SELECT (
               (SELECT count(*) FROM media_face_region WHERE asset_id = :asset_id)
@@ -1046,8 +942,6 @@ function purgeAsset(ctx: HandlerCtx): Record<string, unknown> {
     .prepare("SELECT content_id FROM media_asset WHERE asset_id = ?")
     .get(input.asset_id) as { content_id: string } | undefined;
   if (!asset) throw new Error("asset vanished between check and execute");
-  // Covers hand off BEFORE the entries go, as delete_asset does: an asset can
-  // be filed into an album while trashed, so membership may still exist.
   const covered = ctx.db
     .prepare(
       "SELECT collection_id FROM core_collection WHERE cover_content_id = ?"
@@ -1072,11 +966,6 @@ function purgeAsset(ctx: HandlerCtx): Record<string, unknown> {
       .run(collection.collection_id, collection.collection_id);
     ctx.wrote("core.collection", collection.collection_id);
   }
-  // Face regions have no ON DELETE CASCADE from the asset, so they go by hand;
-  // everything that POINTS AT a region (vectors, derivation stamps) is a
-  // composite foreign key into `core_entity` since #916, so the engine
-  // cascades those away as each region row goes — no orphan face vector may
-  // outlive the photograph it was cut from.
   ctx.db
     .prepare("DELETE FROM media_face_region WHERE asset_id = ?")
     .run(input.asset_id);
@@ -1112,9 +1001,6 @@ const SET_FAVORITE: CommandDefinition = {
   },
   preconditions: [
     {
-      // A TRASHED asset is not editable (#916, adversarial BUG-7): the
-      // precondition asked only that the row exist, so Photos could star and
-      // archive a photograph the member had already thrown away.
       name: "live_asset_exists",
       sql: "SELECT count(*) AS n FROM media_asset WHERE asset_id = :asset_id AND deleted_at IS NULL",
       column: "n",
@@ -1124,7 +1010,6 @@ const SET_FAVORITE: CommandDefinition = {
   ],
   postconditions: [
     {
-      // ONE truth (#916): the star is the tag, and the tag says what was asked.
       name: "favorite_applied",
       sql: `SELECT (CASE WHEN :favorite = 1
                          THEN ${starredExistsSql(ASSET_TARGET_TYPE, ":asset_id")}
@@ -1166,7 +1051,6 @@ const SET_ARCHIVED: CommandDefinition = {
   },
   preconditions: [
     {
-      // A TRASHED asset is not editable (#916, adversarial BUG-7).
       name: "live_asset_exists",
       sql: "SELECT count(*) AS n FROM media_asset WHERE asset_id = :asset_id AND deleted_at IS NULL",
       column: "n",
@@ -1234,8 +1118,6 @@ function createAlbum(ctx: HandlerCtx): Record<string, unknown> {
   const albumId = ctx.newId();
   ctx.db
     .prepare(
-      // An album is a top-level collection; sort_order is sibling-scoped
-      // (IS, not =, so NULL parents group together).
       `INSERT INTO core_collection (collection_id, owner_party_id, name, cover_content_id, parent_collection_id, sort_order, created_at)
        VALUES (?, ?, ?, NULL, NULL, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM core_collection
                                       WHERE parent_collection_id IS NULL), ?)`
@@ -1415,8 +1297,6 @@ const DELETE_ALBUM: CommandDefinition = {
       value: 1,
     },
     {
-      // The album surface manages flat collections only; a nested one came from
-      // the notebook surface and keeps its children until they move.
       name: "album_has_no_children",
       sql: `SELECT count(*) AS n FROM core_collection
              WHERE parent_collection_id = :album_id`,
@@ -1427,7 +1307,6 @@ const DELETE_ALBUM: CommandDefinition = {
   ],
   postconditions: [
     {
-      // The curation is gone; the members it pointed at are untouched.
       name: "album_removed",
       sql: "SELECT count(*) AS n FROM core_collection WHERE collection_id = :album_id",
       column: "n",
@@ -1582,7 +1461,6 @@ const ADD_TO_ALBUM: CommandDefinition = {
       value: 1,
     },
     {
-      // A receipted refusal beats a UNIQUE-constraint throw.
       name: "not_already_in_album",
       sql: `SELECT count(*) AS n FROM core_collection_entry
              WHERE collection_id = :album_id AND target_type = 'media.asset' AND target_id = :asset_id`,
@@ -1608,7 +1486,6 @@ const ADD_TO_ALBUM: CommandDefinition = {
 
 function addToAlbum(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { album_id: string; asset_id: string };
-  // Position is one ordered list per collection, across member types.
   const tail = ctx.db
     .prepare(
       "SELECT COALESCE(MAX(position) + 1, 0) AS p FROM core_collection_entry WHERE collection_id = ?"
@@ -1622,8 +1499,6 @@ function addToAlbum(ctx: HandlerCtx): Record<string, unknown> {
     )
     .run(entryId, input.album_id, input.asset_id, tail.p, ctx.now);
   ctx.wrote("core.collection_entry", entryId);
-  // The first photo into a coverless collection becomes its cover — the cover
-  // is the asset's canonical content item.
   ctx.db
     .prepare(
       `UPDATE core_collection SET cover_content_id =
@@ -1688,7 +1563,6 @@ function removeFromAlbum(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare("DELETE FROM core_collection_entry WHERE entry_id = ?")
     .run(entry.entry_id);
-  // A cover that just left the collection hands off to the next media entry.
   const asset = ctx.db
     .prepare("SELECT content_id FROM media_asset WHERE asset_id = ?")
     .get(input.asset_id) as { content_id: string } | undefined;
@@ -1713,11 +1587,6 @@ function removeFromAlbum(ctx: HandlerCtx): Record<string, unknown> {
   return { album_id: input.album_id, asset_id: input.asset_id };
 }
 
-/**
- * Face-delete gate (#724 W5). Must cascade through every derived row keyed to that identity — no soft delete, no leftover vector.
- * Four mechanisms: `media_face_region` (both party columns), `enrich_embedding` (face_region), `enrich_derivation`, `media_face_cluster`.
- * Does NOT delete `core_party` — that is `people.trash_person`. `high` + `once` postcondition: zero rows across all four; a fifth mechanism without a clause fails the gate.
- */
 const FORGET_PERSON: CommandDefinition = {
   name: "media.forget_person",
   ownerSchema: "media",
@@ -1749,8 +1618,6 @@ const FORGET_PERSON: CommandDefinition = {
   ],
   postconditions: [
     {
-      // The gate, in one predicate: every table that can name the party through
-      // a face, counted together. A non-zero total is an incomplete cascade.
       name: "no_face_data_names_the_party",
       sql: `SELECT (
               (SELECT count(*) FROM media_face_region
@@ -1769,15 +1636,9 @@ const FORGET_PERSON: CommandDefinition = {
       value: 0,
     },
   ],
-  // Retry-safe rather than `once`: a second call finds nothing and says so with
-  // a zero count. Refusing it as a replay would leave a member unsure whether
-  // the first landed with no way to make sure.
   idempotency: "retry-safe",
   risk: "high",
   confirm: true,
-  // NOTHING IS KEPT (#916): a pre-mutation snapshot of a forgotten face is a
-  // copy of exactly what the member asked to be destroyed, sitting where the
-  // next export would carry it out.
   erasure: true,
   handler: forgetPerson,
 };
@@ -1801,18 +1662,12 @@ function forgetPerson(ctx: HandlerCtx): Record<string, unknown> {
     embeddings += Number(
       (countVectors.get(region.region_id) as { n: number }).n
     );
-    // Projection first (it FKs the region), then the region: every
-    // polymorphic pointer at the region — its vectors, its derivation stamps —
-    // is a composite foreign key into `core_entity` (#916), so the engine
-    // carries them away with it, through a set complete by construction.
     ctx.db
       .prepare("DELETE FROM media_face_cluster WHERE region_id = ?")
       .run(region.region_id);
     ctx.db
       .prepare("DELETE FROM media_face_region WHERE region_id = ?")
       .run(region.region_id);
-    // One provenance entry per forgotten region: the audit trail of a
-    // destructive act is the one thing that must survive it.
     ctx.wrote("media.face_region", region.region_id);
   }
   ctx.cite({

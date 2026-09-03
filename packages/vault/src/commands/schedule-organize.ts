@@ -106,23 +106,11 @@ const EDIT_EVENT: CommandDefinition = {
     },
   ],
   idempotency: "idempotent",
-  // Same parking contract as schedule.reschedule_event: non-owner callers
-  // with the install-time grant must not move a shared commitment silently.
   risk: "medium",
   confirm: true,
   handler: editEvent,
 };
 
-/**
- * THE OCCURRENCE'S OWN IDENTITY IS ITS WALL CLOCK (#916, R5 / review 3.1 /
- * adversarial BUG-3).
- *
- * An exception used to be keyed on the RESOLVED UTC instant, which is a
- * function of the series' anchor and zone rather than of the occurrence — so
- * an edit that moved the series orphaned every skip on it and the removed
- * occurrences came back. And the write took any instant at all: `1999-01-01`
- * landed as an exception on a 2026 series and simply never matched.
- */
 function eventSeries(
   ctx: HandlerCtx,
   eventId: string
@@ -177,8 +165,6 @@ function occurrenceWallStart(
   );
 }
 
-/** Exceptions whose wall clock no longer lands on an occurrence of the series
- *  as it now stands. */
 function strandedExceptions(ctx: HandlerCtx, eventId: string): number {
   const rows = ctx.db
     .prepare(
@@ -206,7 +192,6 @@ function strandedExceptions(ctx: HandlerCtx, eventId: string): number {
   return stamps.filter((stamp) => !live.has(stamp)).length;
 }
 
-/** Refuse a series edit that would leave its exceptions matching nothing. */
 function assertNoStrandedExceptions(ctx: HandlerCtx, eventId: string): void {
   const stranded = strandedExceptions(ctx, eventId);
   if (stranded > 0)
@@ -252,8 +237,6 @@ function editEvent(ctx: HandlerCtx): Record<string, unknown> {
   sets.push("sequence = ?", "updated_at = ?");
   values.push(sequence, ctx.now, input.event_id);
   if (input.clear_rrule) {
-    // Dropping the rule leaves every exception on it excepting nothing
-    // (#916, adversarial BUG-3).
     const orphaned = ctx.db
       .prepare(
         `SELECT count(*) AS n FROM schedule_recurrence_exception
@@ -391,9 +374,6 @@ const EDIT_OCCURRENCE: CommandDefinition = {
   ],
   postconditions: [],
   idempotency: "idempotent",
-  // Series skip cancels the event; occurrence/future overrides restate times.
-  // Park like cancel_event / reschedule_event so agents cannot bypass owner
-  // confirmation with the newer agenda command surface.
   risk: "medium",
   confirm: true,
   handler: editOccurrence,
@@ -446,8 +426,6 @@ function editOccurrence(ctx: HandlerCtx): Record<string, unknown> {
     attendee_party_ids?: string[];
   };
   if (input.scope === "series") {
-    // Series-wide skip is cancellation of the series identity — same terminal
-    // state as schedule.cancel_event, with SEQUENCE bump and audit cite.
     if (input.action === "skip") {
       const current = ctx.db
         .prepare("SELECT sequence, status FROM core_event WHERE event_id = ?")

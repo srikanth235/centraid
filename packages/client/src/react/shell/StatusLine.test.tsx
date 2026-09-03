@@ -33,8 +33,6 @@ describe("shell/StatusLine", () => {
       const line = el.querySelector(".statusLine")!;
       expect(line.textContent).toContain("Synced");
       expect(el.querySelector(".statusDot")).not.toBeNull();
-      // The whole line is the announcement channel, so it is announced once,
-      // politely, without stealing focus.
       expect(line.getAttribute("aria-live")).toBe("polite");
       expect(line.tagName.toLowerCase()).toBe("output");
     });
@@ -45,7 +43,6 @@ describe("shell/StatusLine", () => {
       expect(el.querySelector(".statusText")?.textContent).toBe(
         "Renamed · Groceries"
       );
-      // One line, so the note REPLACES rather than stacking beside.
       expect(el.querySelectorAll(".statusText")).toHaveLength(1);
     });
 
@@ -57,12 +54,9 @@ describe("shell/StatusLine", () => {
         })
       );
       const bar = el.querySelector<HTMLElement>(".statusBar")!;
-      // A ratio the track resolves — determinate, because a local-first
-      // product always knows the size of its own work.
       expect(bar.style.getPropertyValue("--status-progress")).toBe(
         String(412 / 1904)
       );
-      // Grouped, because "1904" and "1,904" are not equally readable at 11.5px.
       expect(el.querySelector(".statusCounts")?.textContent).toBe(
         "412 of 1,904 photos"
       );
@@ -99,8 +93,6 @@ describe("shell/StatusLine", () => {
         act(() => setRouteHealth({ ...health, tone: "seam" }));
         const action = el.querySelector<HTMLButtonElement>(".statusAction")!;
         expect(action.textContent).toBe("Open the failure");
-        // The route's verb ends the sentence; the shell's own controls (undo,
-        // check gateway) keep the bounded shape.
         expect(action.dataset.inline).toBe("true");
         expect(action.dataset.tone).toBe("seam");
         act(() => action.click());
@@ -114,7 +106,6 @@ describe("shell/StatusLine", () => {
         expect(el.querySelector(".statusText")?.textContent).toBe(
           "Renamed · Groceries"
         );
-        // A note over the health line takes the bounded shape back.
         expect(
           el.querySelector<HTMLElement>(".statusAction")?.dataset.inline
         ).toBeUndefined();
@@ -151,7 +142,6 @@ describe("shell/StatusLine", () => {
         const el = render(<StatusLine {...offlineProps} />);
         const line = el.querySelector<HTMLElement>(".statusLine")!;
         expect(line.dataset.offline).toBe("true");
-        // Inline, never a tooltip: a tooltip has no mobile.
         expect(line.textContent).toContain("commits are disabled");
         expect(el.querySelector(".statusAction")?.textContent).toBe(
           "Check gateway"

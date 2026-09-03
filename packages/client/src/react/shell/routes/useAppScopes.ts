@@ -1,6 +1,3 @@
-// Inline-app scopes (#599). Owner + household audiences (#726). Cap hydrated
-// scopes (each = replica session + SAH + SSE). 404/failure → ambient scope.
-
 import type { InlineScope } from "@centraid/blueprints/apps/inline-types";
 
 import { auth } from "../../../gateway-client-core.js";
@@ -17,7 +14,6 @@ import type { ReplicaIdentity } from "../../../replica/types.js";
 import { useAsyncData } from "../useAsyncData.js";
 import type { AsyncState } from "../useAsyncData.js";
 
-/** Concurrent hydrate cap. Raising it is a resource decision, not correctness. */
 export const MAX_MOUNTED_SCOPES = 4;
 
 export interface ResolvedAppScope {
@@ -34,11 +30,9 @@ function toResolved(entry: AppScopeEntry, gatewayId: string): ResolvedAppScope {
     scope: {
       id: entry.vaultId,
       label: entry.label,
-      // Pass through as answered: omit ≠ false, or every scope looks foreign (#711).
       ...(entry.personal === undefined ? {} : { personal: entry.personal }),
       ...(entry.color ? { color: entry.color } : {}),
       ...(entry.icon ? { icon: entry.icon } : {}),
-      // Gateway-sourced (#726) — never derived client-side from a role.
       canWrite: entry.canWrite,
     },
     identity: { gatewayId, vaultId: entry.vaultId },
@@ -73,8 +67,6 @@ export async function resolveAppScopes(
     plane = undefined;
   }
   const entries = plane?.scopes;
-  // `installed === false` is unmountable; `undefined` means the gateway did
-  // not answer — take it at face value (a no-enrolment replica would hang).
   const mountable = (entries ?? []).filter(
     (entry) => entry.installed !== false
   );
@@ -95,7 +87,6 @@ export function scopeSetKey(scopes: readonly ResolvedAppScope[]): string {
     .join(",");
 }
 
-/** One resolve per app; drop wholesale on gateway flip (roster + credentials). */
 const resolved = new Map<string, Promise<ResolvedAppScopes>>();
 window.CentraidApi?.onGatewayChanged?.(() => resolved.clear());
 

@@ -11,11 +11,9 @@ import {
 } from "./automationsOverviewLoad.js";
 import { loadOverviewSuggestions } from "./templatesData.js";
 
-// Automations overview (#387): app-bar verbs publish here, not just as App.tsx shell fallback.
 export default function AutomationsRoute(): JSX.Element {
   const { navigate, showToast } = useShellActions();
 
-  // Stable identity: an inline async would re-fire per render, thrashing error/Retry (e2e 8.2).
   const loadData = useCallback(() => loadAutomationsOverviewData(), []);
 
   const useSuggestion = useCallback(
@@ -43,7 +41,6 @@ export default function AutomationsRoute(): JSX.Element {
     [navigate]
   );
 
-  // Handlers only; labels static (opsBar.ts); stable deps keep the bar's store quiet.
   useEffect(() => {
     publishRouteVerbs("automations", {
       onCommit: newAutomation,

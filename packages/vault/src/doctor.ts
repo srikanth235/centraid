@@ -1,21 +1,3 @@
-/*
- * `vault doctor` — the structural invariant sweep over a LIVE vault (#892).
- *
- * `restore-check.ts` answers "is this directory a sound restore?"; this answers
- * "is this vault internally consistent right now?" over an already-open handle, so
- * it can ride at the end of any harness that touched a vault. That is what turns
- * the existing suite into a data-corruption detector.
- *
- * Three classes. `integrity` and `foreign-keys` are what SQLite knows about —
- * and since the entity supertype landed (#916) that is EVERY pointer: the
- * polymorphic `(target_type, target_id)` pairs the old sweep had to walk by
- * hand are composite foreign keys into `core_entity`, so `PRAGMA
- * foreign_key_check` is the check and a hand-written registry walk could only
- * disagree with the engine. `blobs` catches custody rows naming content with
- * no location.
- *
- * Findings carry a count and a sample, never rows: this ends up in CI logs.
- */
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -24,18 +6,14 @@ export type DoctorClass = "integrity" | "foreign-keys" | "blobs";
 
 export interface DoctorFinding {
   class: DoctorClass;
-  /** One line naming the invariant that does not hold. */
   detail: string;
-  /** How many rows are implicated. */
   count: number;
-  /** At most a handful of opaque ids, for the person who has to go looking. */
   sample: string[];
 }
 
 export interface DoctorReport {
   ok: boolean;
   findings: DoctorFinding[];
-  /** What was actually looked at, so a vacuous pass is visible as one. */
   checked: {
     foreignKeys: number;
     tablesWithBlobRefs: number;
@@ -83,8 +61,6 @@ function checkIntegrity(db: DatabaseSync): DoctorFinding[] {
   return findings;
 }
 
-/** How many real foreign keys the engine was asked about, so a vacuous pass
- * is visible as one. */
 function foreignKeyCount(vault: DatabaseSync): number {
   const tables = vault
     .prepare(
@@ -100,11 +76,6 @@ function foreignKeyCount(vault: DatabaseSync): number {
   return total;
 }
 
-/**
- * Blob custody accounting. A `blob_custody_state` row whose hash has no
- * `blob_replica` row is a vault claiming content it has no location for — what a
- * member experiences as a file that will not open.
- */
 function checkBlobs(vault: DatabaseSync): {
   findings: DoctorFinding[];
   tables: number;
@@ -148,7 +119,6 @@ function checkBlobs(vault: DatabaseSync): {
   return { findings, tables };
 }
 
-/** Read-only by construction — every statement is a `PRAGMA` or a `SELECT`. */
 export function vaultDoctor(pair: { vault: DatabaseSync }): DoctorReport {
   const findings: DoctorFinding[] = [...checkIntegrity(pair.vault)];
   const blobs = checkBlobs(pair.vault);
@@ -163,7 +133,6 @@ export function vaultDoctor(pair: { vault: DatabaseSync }): DoctorReport {
   };
 }
 
-/** The report as one readable block, for a CI log or a thrown error. */
 export function formatDoctorReport(report: DoctorReport): string {
   if (report.ok) {
     return (
@@ -181,10 +150,6 @@ export function formatDoctorReport(report: DoctorReport): string {
   return lines.join("\n");
 }
 
-/**
- * Throw unless the vault is sound. A sweep whose report nobody reads is a slower
- * no-op, so the harness-facing entry point is the one that fails.
- */
 export function assertVaultHealthy(pair: {
   vault: DatabaseSync;
 }): DoctorReport {
@@ -193,7 +158,6 @@ export function assertVaultHealthy(pair: {
   return report;
 }
 
-/** Every directory under a root that holds a `vault.db`. */
 function vaultPairsUnder(root: string, depth = 4): string[] {
   if (depth < 0 || !existsSync(root)) return [];
   const found: string[] = [];
@@ -211,7 +175,6 @@ function vaultPairsUnder(root: string, depth = 4): string[] {
   return found;
 }
 
-/** Open one vault read-only and run the sweep over it. */
 function inspectVaultDir(dir: string): DoctorReport {
   const vault = new DatabaseSync(path.join(dir, "vault.db"), {
     readOnly: true,
@@ -223,20 +186,11 @@ function inspectVaultDir(dir: string): DoctorReport {
   }
 }
 
-/**
- * Sweep every vault under a tree and throw when any is unhealthy — the
- * harness-facing entry point (#892). Opened `readOnly` and AFTER the gateway has
- * closed: a doctor that migrated the vault it inspected would measure its own
- * effect. Returns the dirs it checked, so a vacuous zero is visible.
- */
 export function assertVaultTreeHealthy(root: string): {
   checked: string[];
   reports: DoctorReport[];
 } {
   const dirs = vaultPairsUnder(root);
-  // Sweep EVERY vault before deciding, rather than throwing on the first bad
-  // one: a host with several vaults mounted wants the whole picture, and a
-  // report that stops at the first finding hides the ones behind it.
   const swept = dirs.map((dir) => ({ dir, report: inspectVaultDir(dir) }));
   const unhealthy = swept.filter((entry) => !entry.report.ok);
   if (unhealthy.length > 0) {

@@ -1,5 +1,3 @@
-// Direct edge-sealed upload unit tests (#545) — mocked remote tier.
-
 import { createHash, randomBytes } from "node:crypto";
 
 import { afterEach, assert, beforeEach, describe, expect, test } from "vitest";

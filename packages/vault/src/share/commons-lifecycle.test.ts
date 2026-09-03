@@ -39,9 +39,6 @@ import {
 } from "./commons.js";
 import { closeOpenVaults, household, seedPhoto } from "./placement-fixture.js";
 
-// This fixture repeatedly creates full encrypted vaults. The pre-push gate
-// deliberately runs package suites concurrently, where cold SQLite setup can
-// exceed Vitest's small unit default without changing the deterministic work.
 vi.setConfig({ testTimeout: 30_000 });
 
 function addParty(
@@ -65,8 +62,6 @@ describe("commons lifecycle and logical cursors", () => {
   test("per-grant member offsets advance monotonically above one vault replica", () => {
     const { audience, audienceBoot } = household();
     const now = nowIso();
-    // A cursor hangs off a real grant (#916): `share_commons_cursor.grant_id`
-    // is a foreign key, so the seat has to hold the grant it is tracking.
     const circleId = uuidv7();
     audience.vault
       .prepare(
@@ -92,9 +87,6 @@ describe("commons lifecycle and logical cursors", () => {
     expect(
       readCommonsCursor(audience.vault, "grant-a", "vault-family")
     ).toMatchObject({ sequence: 7, updatedAt: now });
-    // A delayed or replayed tail acknowledges an OLDER sequence. The offset is
-    // monotonic, so it cannot move the seat backward; the acknowledgement
-    // instant is honestly the one this late tail arrived at.
     const late = "2000-01-01T00:00:00.000Z";
     acknowledgeCommonsSeatCursor({
       steward: audience.vault,
@@ -243,9 +235,6 @@ describe("commons lifecycle and logical cursors", () => {
       seats: [ownerSeat, memberSeat],
       now,
     });
-    // Checkpoints now advance on their own cadence, not on every compile
-    // (#750 defect c): forcing full pruning first requires forcing the
-    // checkpoint event that covers the pruned sequences.
     checkpointCommonsState({
       steward: origin,
       stewardVaultId: "vault-priya",
@@ -283,8 +272,6 @@ describe("commons lifecycle and logical cursors", () => {
         now,
       })
     ).toBe(audienceBoot.ownerPartyId);
-    // The compact nonce ledger answers the replay on the one write rail,
-    // before the command could reach the gateway at all.
     const audienceGateway = createGateway(audience);
     const audienceCredential: Credential = {
       kind: "device",
@@ -331,8 +318,6 @@ describe("commons lifecycle and logical cursors", () => {
       seats: [memberSeat],
       now,
     });
-    // Same cadence rule at the successor (#750 defect c): full pruning first
-    // requires the successor to cut the checkpoint covering those sequences.
     checkpointCommonsState({
       steward: audience,
       stewardVaultId: "vault-family",
@@ -473,8 +458,6 @@ describe("commons lifecycle and logical cursors", () => {
     const grant = createCommonsGrant({
       origin: origin.vault,
       ownerPartyId: originBoot.ownerPartyId,
-      // The steward's own vault binding is what a member verifies the signed
-      // checkpoint against (#731).
       ownerVaultId: "vault-priya",
       ownerVault: origin,
       containerType: "media.asset",
@@ -862,9 +845,6 @@ describe("commons lifecycle and logical cursors", () => {
         now,
       })
     ).toMatchObject({ retained: false, grantIds: [grant.grantId] });
-    // A DIVERGENCE the audience's retained copy must keep: the star is one
-    // flags tag now (#916) and does not travel, so the origin's edit rides a
-    // column that does — the caption on the shared content item.
     origin.vault
       .prepare(
         `UPDATE core_content_item SET title = 'Re-titled at the origin'

@@ -6,12 +6,10 @@ import styles from "./KindBadge.module.css";
 
 export interface KindBadgeProps {
   kind: "app" | "automation" | "assistant";
-  /** Badge content — a label, optionally led by a small glyph. */
   children: ReactNode;
   className?: string;
 }
 
-/** Small uppercase APP / AUTOMATION / ASSISTANT classifier chip. */
 export default function KindBadge({
   kind,
   children,

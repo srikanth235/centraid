@@ -1,5 +1,3 @@
-// Bank-statement CSV parser unit tests (#545).
-
 import { describe, expect, test } from "vitest";
 
 import { parseCsvRows, parseTransactionsCsv } from "./csv.js";

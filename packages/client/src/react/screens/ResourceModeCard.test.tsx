@@ -62,8 +62,6 @@ describe("screens/ResourceModeCard", () => {
     btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   }
 
-  // The mode chips are native radios inside styled <label>s (#573): the
-  // <input> carries the checked state, the wrapping <label> the visible text.
   function radioByText(el: HTMLElement, text: string): HTMLInputElement {
     const label = [...el.querySelectorAll("label")].find((l) =>
       l.textContent?.includes(text)
@@ -127,8 +125,6 @@ describe("screens/ResourceModeCard", () => {
     });
 
     it("does not re-fetch when the parent re-renders with a stable loadMode", async () => {
-      // Mirrors GatewayRoute: 1s now-tick re-renders with the same useCallback
-      // loadMode. A deps=[props] refresh would re-call getUserPrefs every second.
       const loadMode = vi
         .fn<ResourceModeCardProps["loadMode"]>()
         .mockResolvedValue("auto" as ResourceMode);
@@ -167,13 +163,11 @@ describe("screens/ResourceModeCard", () => {
       );
 
       const el = await mount({ loadMode, saveMode });
-      // Initial load still pending — selection starts before it settles.
       const performance = radioByText(el, "Performance");
       await act(async () => performance.click());
       expect(saveMode).toHaveBeenCalledWith("performance");
       expect(checkedRadioText(el)).toContain("Performance");
 
-      // Stale GET returns Auto; must not snap the radio back mid-save.
       await act(async () => {
         resolveLoad("auto");
         await Promise.resolve();
@@ -215,7 +209,6 @@ describe("screens/ResourceModeCard", () => {
         saveMode: vi.fn<ResourceModeCardProps["saveMode"]>(),
         resourceProfile: sampleProfile,
       });
-      // Closed by default — no dialog, no body in the tree.
       expect(
         el.querySelector('[data-testid="resource-details-dialog"]')
       ).toBeNull();
@@ -261,11 +254,9 @@ describe("screens/ResourceModeCard", () => {
       expect(
         el.querySelector('[data-testid="resource-details-open"]')
       ).toBeNull();
-      // Compare works off static presets, so its opener is always present.
       expect(
         el.querySelector('[data-testid="resource-compare-open"]')
       ).not.toBeNull();
-      // The card still renders its mode chips.
       expect(el.querySelectorAll('input[type="radio"]')).toHaveLength(4);
     });
   });
@@ -293,7 +284,6 @@ describe("screens/ResourceModeCard", () => {
         '[data-testid="resource-compare-dialog"]'
       );
       expect(dialog).not.toBeNull();
-      // Static preset values from the mirror are visible side by side.
       expect(dialog?.textContent).toContain("Replication");
       expect(dialog?.textContent).toContain("Relaxed");
 
@@ -309,7 +299,6 @@ describe("screens/ResourceModeCard", () => {
       );
 
       expect(saveMode).toHaveBeenCalledWith("performance");
-      // Applying closes the dialog.
       expect(
         el.querySelector('[data-testid="resource-compare-dialog"]')
       ).toBeNull();
@@ -413,7 +402,6 @@ describe("screens/ResourceModeCard", () => {
       ).toContain("Paused until 14:05");
       await act(async () => clickByText(el, "Resume"));
       expect(onResume).toHaveBeenCalledOnce();
-      // Optimistic flip back to the idle "Pause background work" affordance.
       expect(
         el.querySelector('[data-testid="resource-pause-open"]')
       ).not.toBeNull();
@@ -434,7 +422,6 @@ describe("screens/ResourceModeCard", () => {
         el.querySelector('[data-testid="resource-pause-open"]')
       ).not.toBeNull();
 
-      // The 15s poll lands a paused snapshot from another surface.
       await act(async () => {
         root?.render(
           <ResourceModeCard

@@ -1,9 +1,3 @@
-// Blob custody end-to-end (#296): staging → command claim → derived
-// egress rule → lifecycle. The invariants under test are the issue's spine:
-// the journal never swallows bytes again, identity is the raw-bytes sha,
-// extracted text feeds the PARENT's search row, trash still renders, and
-// the purge sweep reclaims the CAS.
-
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -79,16 +73,12 @@ describe("flow", () => {
     expect(content.content_uri).toBe(blobUriFor(staged.sha256));
     expect(content.sha256).toBe(staged.sha256); // identity = raw bytes
     expect(content.title).toBe("pixel.png"); // original filename as default title
-    // Spool EXIF landed on the asset row without the caller supplying it.
     const asset = db.vault
       .prepare("SELECT width, height, kind FROM media_asset WHERE asset_id = ?")
       .get(out.asset_id) as Record<string, unknown>;
     expect(asset.width).toBe(1);
     expect(asset.height).toBe(1);
     expect(asset.kind).toBe("photo");
-    // The staging row is claimed, and the journal recorded a sha, not bytes.
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({
       ...db.vault.prepare("SELECT count(*) AS n FROM blob_staging").get(),
     }).toStrictEqual({
@@ -118,8 +108,6 @@ describe("flow", () => {
       mediaType: "image/x-weird",
     });
     expect(second.existingContentId).toBe(a.content_id);
-    // A second document over the same bytes still dedupes the CONTENT — it's a
-    // brand-new document, but wraps the identical content item (#352).
     const b = executed<{ content_id: string; deduped: number }>(
       invoke("core.add_document", {
         staged_sha: second.sha256,
@@ -165,7 +153,6 @@ describe("flow", () => {
       .get(p.content_id) as { content_uri: string };
     expect(pngRow.content_uri).toBe(blobUriFor(sha256OfBytes(PNG_BYTES)));
 
-    // Oversized inline payloads are refused at the contract — staging exists.
     const big = `data:application/octet-stream;base64,${"A".repeat(400_000)}`;
     const refused = invoke("core.attach", {
       subject_type: "schedule.task",
@@ -189,7 +176,6 @@ describe("flow", () => {
         title: "Depreciation",
       })
     );
-    // The text variant exists and the OWNING document (not a shadow row) matches.
     const variant = db.vault
       .prepare(
         "SELECT text_content FROM core_content_derivative WHERE content_id = ? AND variant = 'text'"
@@ -202,8 +188,6 @@ describe("flow", () => {
       purpose: "dpv:ServiceProvision",
     });
     expect(hits.rows.map((r) => r.document_id)).toContain(doc.document_id);
-    // A rename rebuilds the FTS row — extracted text must survive (the
-    // derivative-aware COALESCE, not a title-only rebuild).
     executed(
       invoke("core.rename_document", {
         document_id: doc.document_id,
@@ -231,14 +215,11 @@ describe("flow", () => {
     assert(ok.status === "ok");
     expect(ok.blob.sha256).toBe(staged.sha256);
     expect(db.blobs.getSync(ok.blob.sha256)?.equals(PNG_BYTES)).toBe(true);
-    // Trash keeps rendering until the purge sweep actually reclaims.
     executed(invoke("core.trash_document", { document_id: doc.document_id }));
     expect(gw.resolveBlob(owner, doc.content_id).status).toBe("ok");
-    // A variant nobody produced is a clean miss, not an error.
     expect(
       gw.resolveBlob(owner, doc.content_id, { variant: "thumb" }).status
     ).toBe("no-variant");
-    // A content id that doesn't exist.
     expect(gw.resolveBlob(owner, "nope").status).toBe("not-found");
   });
 
@@ -278,7 +259,6 @@ describe("flow", () => {
         title: "late.png",
       })
     );
-    // The slow thumb arrives after the claim — it must not sit until the TTL.
     const thumbBytes = Buffer.from("late-thumb-bytes");
     gw.stageBlob(owner, {
       bytes: thumbBytes,
@@ -290,7 +270,6 @@ describe("flow", () => {
     expect(thumb.status).toBe("ok");
     assert(thumb.status === "ok");
     expect(db.blobs.getSync(thumb.blob.sha256)?.equals(thumbBytes)).toBe(true);
-    // And its staging row was consumed, not left for the sweep.
     expect({
       ...db.vault.prepare("SELECT count(*) AS n FROM blob_staging").get(),
     }).toStrictEqual({
@@ -310,9 +289,6 @@ describe("flow", () => {
       })
     );
     executed(invoke("core.trash_document", { document_id: doc.document_id }));
-    // Ripen the trash, then sweep — the DOCUMENT purges (content is untouched
-    // while it lives, #352), which in turn releases its exclusively-
-    // owned content since nothing else rents it.
     db.vault
       .prepare("UPDATE core_document SET purge_at = ? WHERE document_id = ?")
       .run("2000-01-01T00:00:00.000Z", doc.document_id);
@@ -328,7 +304,6 @@ describe("flow", () => {
       n: 0,
     });
 
-    // Unclaimed staging past the TTL loses rows AND bytes; a held row stays.
     const loose = gw.stageBlob(owner, { bytes: Buffer.from("never claimed") });
     const held = gw.stageBlob(owner, {
       bytes: Buffer.from("held by review"),
@@ -363,20 +338,17 @@ describe("flow", () => {
       bucket: "b",
     });
     expect(mediaLocationPolicy(db)).toBe("strip");
-    // Clearing restores the local-only default.
     updateBlobStoreSettings(db, { blob_store: null, media_location: null });
     expect(readBlobStoreSettings(db.vault)).toStrictEqual({});
     expect(mediaLocationPolicy(db)).toBe("keep");
   });
 
   test("readonly devices cannot stage; blob maintenance sweep replicates and reports", async () => {
-    // The owner stages; a remote tier appears via settings + resolver.
     const staged = gw.stageBlob(owner, { bytes: PNG_BYTES });
     executed(
       invoke("core.add_document", { staged_sha: staged.sha256, title: "p.png" })
     );
     const swept = await gw.sweepBlobs(owner);
-    // No remote tier configured: nothing replicates, nothing is missing.
     expect(swept.replicated).toStrictEqual([]);
     expect(swept.missing).toStrictEqual([]);
     expect(swept.receiptId).toBeTruthy();
@@ -399,7 +371,6 @@ describe("flow", () => {
       sha256: staged.sha256,
       custody_state: "local-only",
     });
-    // Read via the registered logical entity — the same surface an app uses.
     const read = gw.read(owner, {
       entity: "blob.custody_state",
       where: [{ column: "content_id", op: "eq", value: doc.content_id }],
@@ -407,8 +378,6 @@ describe("flow", () => {
     });
     expect(read.rows).toHaveLength(1);
 
-    // Purging the document's content releases the mirror row too (ON DELETE
-    // CASCADE), not a stale entry the app plane would misread.
     await gw.sweepBlobs(owner); // idempotent re-run, still one row
     expect(
       (

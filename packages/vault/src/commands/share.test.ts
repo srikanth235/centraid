@@ -1,8 +1,3 @@
-// The `share.*` pack is the plane's ONE writer (#883, ruling V-writer), so what
-// this pins is what "through the pack" buys that a direct store write did not:
-// a journalled invocation, a receipt naming the grant, a registry gate in the
-// ruled vocabulary, and a refusal that is a row rather than an absence.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -65,9 +60,6 @@ describe("commands/share", () => {
                  '2026-01-01T00:00:00.000Z')`
       )
       .run(ravi);
-    // A person is grantable only through a live link (#903), so every grant
-    // below needs one; the refusals at the end of this file are what happens
-    // without it.
     bindPartyToVault(db.vault, {
       partyId: ravi,
       vaultId: "vault-ravi",
@@ -111,7 +103,6 @@ describe("commands/share", () => {
       revokedAt: null,
     });
 
-    // The invocation is in the journal like every other vault write.
     const commandId = (
       db.vault
         .prepare("SELECT command_id FROM agent_command WHERE name = ?")
@@ -126,7 +117,6 @@ describe("commands/share", () => {
         .get(commandId)
     ).toMatchObject({ n: 1 });
 
-    // ONE receipt stream, every entry naming `grant_id` (ruling V-receipts).
     const receipts = receiptsFor(grantId);
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toMatchObject({
@@ -143,8 +133,6 @@ describe("commands/share", () => {
       decisionRecorded: "granted",
     });
 
-    // Said twice is the same standing answer, and a repeat is not a decision:
-    // receipting it would inflate the stream "last used" is counted from.
     const again = grant();
     expect((again as { output: { outcome: string } }).output.outcome).toBe(
       "exists"
@@ -160,7 +148,6 @@ describe("commands/share", () => {
     );
     const edit = grant({ subject_type: "media.asset", verb: "edit" });
     expect(edit.status).toBe("failed");
-    // Names what it CAN do, rather than refusing blankly (ruling V-phrases).
     expect((edit as { reason: string }).reason).toContain(
       "can be shared for view, not for edit"
     );
@@ -177,7 +164,6 @@ describe("commands/share", () => {
     expect((widened as { reason: string }).reason).toContain(
       "already shared for view; withdraw that first"
     );
-    // Refused, so the standing answer is untouched — no silent upgrade.
     expect(readShareGrant(db.vault, grantId)).toMatchObject({
       capability: "view",
     });
@@ -202,7 +188,6 @@ describe("commands/share", () => {
     expect(declined.status).toBe("executed");
     const refusalId = (declined as { output: { authority_id: string } }).output
       .authority_id;
-    // "Asked and told no" must not read as "never asked" (ruling V-table).
     expect(
       db.vault
         .prepare(
@@ -212,7 +197,6 @@ describe("commands/share", () => {
         .get(refusalId)
     ).toMatchObject({ decision: "declined", revoked_at: null });
     expect(receiptsFor(refusalId)).toHaveLength(1);
-    // A refusal is not a grant: the share lens must not read one back as one.
     expect(
       readLiveShareGrant(
         db.vault,
@@ -222,8 +206,6 @@ describe("commands/share", () => {
       )
     ).toBeUndefined();
 
-    // The live-answer index spans BOTH decisions, so a grant collides with the
-    // earlier refusal unless it is revoked — revoked, never deleted (V-mask).
     const yes = grant();
     expect(yes.status).toBe("executed");
     expect(
@@ -252,7 +234,6 @@ describe("commands/share", () => {
     expect((again as { output: { outcome: string } }).output.outcome).toBe(
       "already-revoked"
     );
-    // An answer that never stood cannot be revoked twice into the stream.
     expect(receiptsFor(grantId)).toHaveLength(2);
     const absent = invoke("share.revoke", { grant_id: uuidv7() });
     expect((absent as { output: { outcome: string } }).output.outcome).toBe(
@@ -260,10 +241,6 @@ describe("commands/share", () => {
     );
   });
 
-  // The channel gate (#903). Sharing no longer opens a way to someone: the
-  // People link ceremony is the only thing that does, so a grant naming an
-  // unreachable person is refused HERE rather than left standing as a promise
-  // no fulfillment pass could keep.
   test("a grant to a person with no linked account is refused, and names the act that would fix it", () => {
     const uma = uuidv7();
     db.vault
@@ -281,8 +258,6 @@ describe("commands/share", () => {
     };
     expect(refused.status).toBe("failed");
     expect(refused.reason).toContain("Uma has no linked account");
-    // Refused means REFUSED: no row stands, so nothing later reads it back as
-    // an answer the member gave.
     expect(
       db.vault
         .prepare(

@@ -3,12 +3,6 @@ import type { ReplicaDigest } from "./digest.js";
 import { ReplicaProtocolError } from "./errors.js";
 import type { ReplicaBaseVersion, ReplicaValue } from "./types.js";
 
-/**
- * Hashes the canonical JSON of an intent payload. The gateway pairs
- * `intentId` + `payloadHash` for idempotency, so this value must be identical
- * on every platform: the canonical form below is the contract, and any injected
- * digest must be plain hex SHA-256 over its UTF-8 bytes.
- */
 export async function intentPayloadHash(
   input: {
     appId: string;

@@ -1,6 +1,5 @@
 import { defineConfig } from "vitest/config";
 
-/** Standalone Stryker test root for token value logic (defineConfig, not defineProject). */
 export default defineConfig({
   test: {
     name: "design-mutation",

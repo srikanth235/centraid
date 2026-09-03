@@ -23,9 +23,6 @@ import { listVaultEntities, resolveEntity } from "./tables.js";
 
 describe("schema/migrate", () => {
   test("the ontology contract version is the file-and-contract version (ONT-04)", () => {
-    // Not a per-row stamp (#916): `core_party` does not carry it, and the one
-    // table that does — `agent_command` — is the one the gateway checks for
-    // equality.
     expect(ONTOLOGY_VERSION).toBe("1.0");
     const db = openVaultDb();
     expect(columnNames(db.vault, "core_party")).not.toContain(
@@ -53,8 +50,6 @@ describe("schema/migrate", () => {
       expect(ref, logical).toBeDefined();
       expect(tables.has(ref?.physical ?? ""), logical).toBe(true);
     }
-    // ONE FILE (#916): the audit band and the conversation ledger are bands of
-    // vault.db, not a sibling database.
     for (const physical of [...AUDIT_BAND_TABLES, ...LEDGER_BAND_TABLES]) {
       expect(tables.has(physical), physical).toBe(true);
     }
@@ -63,11 +58,6 @@ describe("schema/migrate", () => {
 
   test("editable domain rows expose and maintain updated_at consistently", () => {
     const db = openVaultDb();
-    // Every domain table that carries `updated_at`, including the thirteen
-    // rung seven gave a trigger to (#883, ruling O-updated) — the tables the
-    // ruling names were exactly the ones a member could edit and watch the
-    // stamp stand still. `social_contact_card`, `tally_expense_receipt` and the
-    // ten home/business tables left the ontology in that same rung.
     for (const table of EDITABLE_DOMAIN_TABLES) {
       const columns = db.vault.prepare(`PRAGMA table_info(${table})`).all() as {
         name: string;
@@ -115,8 +105,6 @@ describe("schema/migrate", () => {
 
   test("migrations are idempotent via user_version", () => {
     const db = openVaultDb();
-    // openVaultDb already migrated: user_version lands exactly on the top of
-    // the ladder.
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
@@ -175,8 +163,6 @@ describe("schema/migrate", () => {
         table
       ).toBeTruthy();
     }
-    // A baseline states the shape it wants; it does not create a store it then
-    // has to drop. Nothing below was ever in a v0 file (#916).
     for (const gone of [
       "people_merge",
       "share_grant",
@@ -276,8 +262,6 @@ describe("schema/migrate", () => {
 
   test("receipt line items hang off the attachment spine, not an app-local table", () => {
     const db = openVaultDb();
-    // A receipt is the `role='receipt'` attachment on the expense (#883); typed
-    // lines belong to the EXPENSE, and their `receipt_id` names an attachment.
     expect(
       db.vault
         .prepare(
@@ -300,22 +284,18 @@ describe("schema/migrate", () => {
       .all() as { table: string; from: string; on_delete: string }[];
     const receiptFk = foreignKeys.find((fk) => fk.from === "receipt_id");
     expect(receiptFk?.table).toBe("core_attachment");
-    // SET NULL, not CASCADE: a by-line division is legal without a photo.
     expect(receiptFk?.on_delete).toBe("SET NULL");
     db.close();
   });
 
   test("the orphan-grace tombstone table exists on a fresh vault (issue #439 R4)", () => {
     const db = openVaultDb();
-    // `blob_orphan` is plumbing, not a registered entity, so the registry sweep
-    // above cannot cover it.
     const row = db.vault
       .prepare(
         `SELECT name FROM sqlite_master WHERE type='table' AND name='blob_orphan'`
       )
       .get() as { name: string } | undefined;
     expect(row?.name).toBe("blob_orphan");
-    // A valid row round-trips as INTEGER ms.
     db.vault
       .prepare(
         `INSERT INTO blob_orphan (sha256, first_orphaned_at) VALUES (?, ?)`
@@ -346,7 +326,6 @@ describe("schema/migrate", () => {
         )
         .run()
     ).toThrow(/CHECK/u);
-    // Floors at 0, not 1 (#821): zero is a storable "never reach out".
     const now = new Date().toISOString();
     db.vault
       .prepare(
@@ -378,10 +357,6 @@ describe("schema/migrate", () => {
   });
 
   test("extend-don't-fork: extension FK uniqueness prevents two extensions of one core row", () => {
-    // `health.workout` used to be the example; it left the ontology in rung
-    // eight (#916, ruling ONT-06), so R02 is demonstrated on the extension
-    // that carries the most traffic instead — a profile decorates exactly one
-    // party, and a second one is unrepresentable.
     const db = openVaultDb();
     const now = new Date().toISOString();
     db.vault
@@ -407,9 +382,6 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  // A scratch ladder rather than VAULT_MIGRATIONS: the vault's FTS triggers
-  // need `openVaultDb`'s custom SQL function, so a bare handle cannot run the
-  // baseline directly, and what is under test is `migrate()` itself.
   const SCRATCH: readonly string[] = [
     "CREATE TABLE scratch_one (x TEXT) STRICT;",
     "CREATE TABLE scratch_two (x TEXT) STRICT;",
@@ -449,9 +421,6 @@ describe("schema/migrate", () => {
   });
 
   test("a fresh file on disk reopens with no second rung and no schema drift", () => {
-    // ONE BASELINE (#916): "reopen is a no-op" is the whole compatibility
-    // story a v0 file has. On a REAL file — the replay above re-runs `migrate`
-    // on a handle that never left the process.
     const dir = tempDirSync();
     const first = openVaultDb({ dir });
     const shapeOf = (db: ReturnType<typeof openVaultDb>): string =>
@@ -477,9 +446,6 @@ describe("schema/migrate", () => {
   });
 
   test("a fresh baseline satisfies its own foreign keys", () => {
-    // Thirteen pointer pairs became composite keys (#916) and bootstrap is
-    // the first writer to travel them; `foreign_key_check` is the engine's own
-    // verdict on every row the baseline leaves behind.
     const db = openVaultDb();
     expect(db.vault.prepare("PRAGMA foreign_key_check").all()).toStrictEqual(
       []
@@ -508,7 +474,6 @@ describe("schema/migrate", () => {
 
     expect(() => openVaultDb({ dir })).toThrow(VaultSchemaAheadError);
 
-    // A refused downgrade must leave the artificially bumped file untouched.
     expect(userVersionOf(vaultFile)).toBe(bumped);
   });
 });

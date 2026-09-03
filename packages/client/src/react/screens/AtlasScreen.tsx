@@ -40,14 +40,10 @@ import type { KindRow } from "./atlasScreenModel.js";
 
 import styles from "./AtlasScreen.module.css";
 
-// The Data route (#765): kinds → note → relations → the browsed kind's rows.
-// Identity and condition belong to the app bar via `routeVitals`, not the body.
-
 export interface AtlasScreenProps {
   loadStats: () => Promise<AtlasCensusPayload>;
   loadPulse: () => Promise<AtlasPulsePayload>;
   loadGraph: () => Promise<AtlasGraphPayload>;
-  /** Failure is silent: drop the "Last backup" clause, never fail the page. */
   loadLastBackupAt?: () => Promise<string | null>;
   embedded?: boolean;
   onReport?: (report: AtlasReport) => void;
@@ -58,7 +54,6 @@ export interface AtlasScreenProps {
 export interface AtlasReport {
   state: OpsState;
   count: string;
-  /** `null` until the census answers — omit the clause, never guess it. */
   records: number | null;
   health: RouteHealth | null;
 }
@@ -67,7 +62,6 @@ const FULL_AT = 8;
 
 const EXPORT_PAGE_CAP = 40;
 
-// `all` means all (#775): never-written kinds included; `never` isolates them.
 const CHIPS = [
   { id: "all", label: "All kinds" },
   { id: "largest", label: "Largest" },
@@ -117,12 +111,9 @@ export default function AtlasScreen({
   const [chip, setChip] = useState<ChipId>("all");
   const [picked, setPicked] = useState<string | null>(null);
   const [relationsOpen, setRelationsOpen] = useState(false);
-  // When THIS PAGE read the census, not the payload's `generatedAt`: the
-  // gateway may serve a cached one, and Refresh must move the stamp.
   const [censusReadAt, setCensusReadAt] = useState<string | null>(null);
   const mountedRef = useRef(true);
 
-  // The pulse is enhancement-only; only a census failure is the page's error.
   const loadCensus = useCallback(() => {
     void Promise.allSettled([loadStats(), loadPulse()]).then(([s, p]) => {
       if (!mountedRef.current) return;
@@ -131,8 +122,6 @@ export default function AtlasScreen({
         setStatsError(null);
         setCensusReadAt(new Date().toISOString());
       } else if (s.status === "fulfilled") {
-        // A 200 that is not a census is an error: passing it on throws in
-        // kindRowsFrom, taking the merged Vault surface down.
         setStats(null);
         setStatsError("The host did not return a vault census.");
       } else
@@ -172,7 +161,6 @@ export default function AtlasScreen({
     [stats, pulse]
   );
   const shown = useMemo(() => filterKinds(kinds, chip), [kinds, chip]);
-  // Declared-but-unwritten kinds still mean an EMPTY vault: count these.
   const written = useMemo(() => kinds.filter(kindWritten), [kinds]);
 
   const state =
@@ -189,7 +177,6 @@ export default function AtlasScreen({
   const selected =
     written.find((k) => k.logical === picked) ?? written[0] ?? null;
 
-  // Embedded, the surface above owns both slots; never publish from here.
   const health = useMemo<RouteHealth | null>(
     () =>
       state === "ready" || state === "full"
@@ -223,13 +210,10 @@ export default function AtlasScreen({
     }),
     [health, state, stats]
   );
-  // Keep the block body: an expression arrow hands the reporter's return
-  // value to React as an effect destructor.
   useEffect(() => {
     onReport?.(report);
   }, [onReport, report]);
 
-  // A copy-out, not a commit — Data declares no filled control.
   const exportKind = useCallback(() => {
     if (!selected) return;
     const { logical, label } = selected;
@@ -262,13 +246,10 @@ export default function AtlasScreen({
   }, [selected]);
 
   useEffect(() => {
-    // Merged, the bar's verbs belong to the surface; export is a row instead.
     if (embedded) return;
     publishRouteVerbs("atlas", { onSecondary: exportKind });
   }, [embedded, exportKind]);
 
-  // Merged, a whole-page state is only the section's body: head, census
-  // sentence and disclosure stay drawn.
   const frame = (body: JSX.Element): JSX.Element =>
     embedded ? (
       <>

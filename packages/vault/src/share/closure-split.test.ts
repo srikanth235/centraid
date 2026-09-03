@@ -1,10 +1,3 @@
-// The closure split (#726): an origin-side READ that writes nothing and
-// serialises, and an audience-side PROJECTION that is the vault's own ingest
-// door. What is pinned here is the three claims the split is FOR — one closure
-// covers a set of items, a projected row is re-registered rather than
-// inheriting the origin's derived state, and the wire path is the same code as
-// the in-process one.
-
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
@@ -28,7 +21,6 @@ import { readShareClosure } from "./read-closure.js";
 
 const extra: VaultDb[] = [];
 
-/** A second audience vault beside the fixture's, for A/B projection. */
 function secondAudience(root: string): VaultDb {
   const dir = path.join(root, "vaults", "family-b");
   mkdirSync(dir, { recursive: true });
@@ -52,9 +44,6 @@ describe("closure split", () => {
     const { origin, originBoot, audience } = household();
     const photo = seedPhoto(origin, originBoot, "pooled");
     const now = nowIso();
-    // Two documents over the SAME content item — the case that proves pooling
-    // is by row identity, not by item: three photographs with distinct bytes
-    // would dedupe nothing.
     const first = uuidv7();
     const second = uuidv7();
     const write = origin.vault.prepare(
@@ -72,8 +61,6 @@ describe("closure split", () => {
       itemIds: [first, second, first],
     });
 
-    // A repeated id is one item; the shared content item and its thumb cross
-    // once each, and so do their bytes.
     expect(closure.items.map((item) => item.itemId)).toStrictEqual([
       first,
       second,
@@ -151,8 +138,6 @@ describe("closure split", () => {
     const { origin, originBoot, audience } = household();
     const photo = seedPhoto(origin, originBoot, "gps");
     const now = nowIso();
-    // The origin's own derived state: a place it filed the photo under, and a
-    // caption an enricher wrote about it.
     const originPlaceId = uuidv7();
     origin.vault
       .prepare(
@@ -192,8 +177,6 @@ describe("closure split", () => {
       now: () => Date.parse("2026-08-08T00:00:00.000Z"),
     });
 
-    // The place is RE-DERIVED from the camera's own testimony, under the
-    // audience's ontology — never the origin's place id.
     const projectedPlace = audience.vault
       .prepare(
         `SELECT p.place_id, p.name, p.geo_lat FROM media_asset a
@@ -209,8 +192,6 @@ describe("closure split", () => {
     expect(projectedPlace.name).toBe("12.9716, 77.5946");
     expect(projectedPlace.geo_lat).toBeCloseTo(12.9716, 4);
 
-    // The enrichment the audience cannot inherit is ASKED for, in its own
-    // queue, tagged as having arrived by projection.
     expect(
       rowsOf(
         audience,
@@ -230,12 +211,9 @@ describe("closure split", () => {
       },
     ]);
 
-    // The owner's curation of their own library stayed there.
     expect(
       rowsOf(audience, "SELECT COUNT(*) AS n FROM knowledge_annotation")
     ).toStrictEqual([{ n: 0 }]);
-    // Re-sharing is idempotent all the way through the door: a deduped row is
-    // already registered, so it is not re-queued.
     shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
@@ -299,10 +277,6 @@ describe("closure split", () => {
     });
     // oxlint-disable-next-line unicorn/prefer-structured-clone -- the point of this test IS the JSON wire path; structuredClone doesn't serialize the same way and would test something else
     const wire = JSON.parse(JSON.stringify(closure)) as typeof closure;
-    // Plain JSON: nothing in the closure is a Buffer, a Date, an undefined or
-    // a class instance, so the round-trip changes no value. `toEqual`, not
-    // `toStrictEqual`, because the driver hands back rows on its own prototype
-    // and JSON normalises that — a difference of provenance, not of data.
     // oxlint-disable-next-line vitest/prefer-strict-equal -- see comment above: toStrictEqual fails on prototype provenance, not on data
     expect(wire).toEqual(closure);
 
@@ -316,11 +290,6 @@ describe("closure split", () => {
     });
 
     expect(overWire).toStrictEqual(inProcess);
-    // `updated_at` is a LOCAL fact (#916, ruling ONT-08): the projector writes
-    // the origin's columns and the receiving vault stamps when the row landed
-    // in IT. Two separately-projected vaults are stamped microseconds apart,
-    // and that difference is the column doing its job — the claim under test
-    // is that the wire path projects the same CONTENT as the in-process one.
     for (const sql of [
       "SELECT content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at FROM core_content_item",
       "SELECT derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at FROM core_content_derivative",
@@ -354,17 +323,9 @@ describe("closure split", () => {
     ).toStrictEqual([{ n: 0 }]);
   });
 
-  // #916, audit F1. Entity ids are ONE namespace, and the ids on the wire are
-  // PEER-CONTROLLED: an id the audience already holds as a place is not free
-  // for an incoming asset just because `media_asset` has no row under it. The
-  // membership trigger refuses the cross-kind collision outright, so `freeId`
-  // has to ask `core_entity` — asking only the destination table left the
-  // projection to abort mid-closure on a share that is perfectly legal.
   test("an id the audience holds under ANOTHER kind is minted fresh, not reused", () => {
     const { origin, originBoot, audience } = household();
     const photo = seedPhoto(origin, originBoot, "collision");
-    // The audience's own, unrelated place — filed under the id the origin's
-    // asset happens to carry.
     audience.vault
       .prepare(
         `INSERT INTO core_place (place_id, name, created_at) VALUES (?, 'Beach', ?)`
@@ -383,7 +344,6 @@ describe("closure split", () => {
 
     const projectedId = shared.items[0]!.itemId;
     expect(projectedId).not.toBe(photo.assetId);
-    // The place is untouched, and still the only holder of that entity id.
     expect(
       rowsOf(
         audience,
@@ -393,7 +353,6 @@ describe("closure split", () => {
     expect(
       rowsOf(audience, "SELECT COUNT(*) AS n FROM core_place")
     ).toStrictEqual([{ n: 1 }]);
-    // ...and the asset really landed, under its own id.
     expect(
       rowsOf(
         audience,

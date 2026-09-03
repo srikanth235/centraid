@@ -1,8 +1,3 @@
-// The fixture the Tally #872 ledger suites share (`tally-ledger.test.ts` and
-// `tally-ledger-groups.test.ts`). `refusal` is why this is a module: a refusal
-// arrives as `denied` when a PRECONDITION caught it and as `failed` when the
-// handler's own guard threw and rolled back; both files accept either.
-
 import { expect } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";

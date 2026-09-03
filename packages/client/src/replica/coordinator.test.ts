@@ -868,14 +868,6 @@ describe(ReplicaCoordinator, () => {
     await replica.close();
   });
 
-  /**
-   * Boot regression: the gateway answers a not-yet-bootstrapped replica with a
-   * `rebootstrap` frame, which lands while the shell is already walking a
-   * windowed bootstrap. Wiping the store there deletes
-   * `replica_bootstrap_progress` between two pages, and the walk then dies with
-   * "No replica bootstrap is open" — a bootstrap killed by the very demand it
-   * was already satisfying.
-   */
   test("a feed rebootstrap demand does not wipe an open windowed bootstrap", async () => {
     const store = promisedStore(
       new ReplicaSqliteStore(new NodeSqliteDriver(), "vault-a", "memory")
@@ -902,14 +894,11 @@ describe(ReplicaCoordinator, () => {
     });
     await flushMacrotasks();
 
-    // The walk must still own the store.
     await replica.bootstrapPage([]);
     const cursor: ReplicaCursor = { epoch: "replica-1", seq: 2 };
     await expect(
       replica.bootstrapCommit(cursor, header)
     ).resolves.toStrictEqual(cursor);
-    // …and the demand is honoured once the walk seals, not swallowed: the wipe
-    // and the notification both land, just after the commit instead of under it.
     expect(onRebootstrapRequired).toHaveBeenCalledWith({
       reason: "schema-mismatch",
     });
@@ -952,9 +941,6 @@ describe(ReplicaCoordinator, () => {
     await replica.close();
   });
 
-  // `syncNow` is the pull-on-demand inverse of the push-driven feed above: a
-  // caller that just finished a gateway-side write (Home's sample seed) awaits
-  // it so its very next read sees the rows, instead of racing the SSE nudge.
   test("syncNow pulls to the gateway head without waiting for a feed nudge", async () => {
     const worker = new StateWorker();
     const { client } = await ReplicaWorkerClient.connect(
@@ -972,9 +958,6 @@ describe(ReplicaCoordinator, () => {
       {
         pullChanges: async (cursor): Promise<ReplicaChangeBatch> => {
           pulledFrom.push(cursor);
-          // Two pages, then caught up: the loop must follow `hasMore` rather
-          // than stopping at the first batch, or a seed bigger than one commit
-          // group would still paint half-empty tiles.
           const seq = cursor.seq + 1;
           return {
             protocolVersion: 1,
@@ -1019,8 +1002,6 @@ describe(ReplicaCoordinator, () => {
       { pullChanges }
     );
 
-    // No cursor yet: the bootstrap walk owns the first fill, and pulling
-    // changes from nowhere is a protocol error waiting to happen.
     await replica.syncNow();
 
     expect(pullChanges).not.toHaveBeenCalled();
@@ -1054,7 +1035,6 @@ describe(ReplicaCoordinator, () => {
 
     await replica.syncNow();
 
-    // Nothing beyond the cursor: no batch is applied and no loop spins.
     expect(
       worker.requests.filter((request) => request.op === "apply-changes")
     ).toHaveLength(0);
@@ -1064,8 +1044,6 @@ describe(ReplicaCoordinator, () => {
   test("a disk-full delta parks the feed instead of retrying it forever", async () => {
     const core = new ReplicaSqliteStore(new NodeSqliteDriver(), "vault");
     const base = promisedStore(core);
-    // What op-sqlite's driver hands up once normalized (#708): the name is the
-    // contract this package classifies on.
     const diskFull = Object.assign(new Error("database or disk is full"), {
       name: "ReplicaStorageFullError",
     });
@@ -1078,8 +1056,6 @@ describe(ReplicaCoordinator, () => {
       },
     };
     const feed = createFeed();
-    // Plain recorders, not mocks: what this test is about is the notice the
-    // surface receives and how many times the loop pulled, and both are state.
     const storageFullNotices: unknown[] = [];
     const onStorageFull = (error: unknown): void => {
       storageFullNotices.push(error);
@@ -1111,7 +1087,6 @@ describe(ReplicaCoordinator, () => {
     await vi.waitFor(() =>
       expect(storageFullNotices).toStrictEqual([diskFull])
     );
-    // The 1 s retry cadence would have run this many times over by now.
     await flushMacrotasks();
     await flushMacrotasks();
 
@@ -1119,13 +1094,11 @@ describe(ReplicaCoordinator, () => {
     expect(pulls).toBe(1);
     expect(replica.storageFull).toBe(true);
     expect(replica.storageFullError).toBe(diskFull);
-    // Nothing was wiped: the rows and the cursor are exactly as they were.
     expect((await store.status()).cursor).toStrictEqual({
       epoch: "epoch",
       seq: 0,
     });
 
-    // A later feed frame must not restart the loop either.
     feed.emit({
       type: "centraid:vault-cursor",
       cursor: { epoch: "epoch", seq: 2 },
@@ -1204,13 +1177,6 @@ function windowedHeader(): ReplicaBootstrapHeader {
   };
 }
 
-/**
- * The synchronous store core behind the async `ReplicaStore` seam — the same
- * adapter shape the web worker and the native store fill. The coordinator under
- * test therefore drives a REAL replica, which is what makes "a bootstrap is
- * open" enforceable; a hand-rolled fake would have to restate the invariant it
- * is supposed to be proving.
- */
 function promisedStore(core: ReplicaSqliteStore): ReplicaStore {
   return {
     status: () => Promise.resolve(core.status() as ReplicaStatus),

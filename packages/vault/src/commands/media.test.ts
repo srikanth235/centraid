@@ -89,8 +89,6 @@ describe("media", () => {
       .prepare("SELECT kind, capture_group_id FROM media_asset ORDER BY kind")
       .all() as Array<{ kind: string; capture_group_id: string }>;
     expect([photo.asset_id, clip.asset_id]).toHaveLength(2);
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect(groups.map((row) => ({ ...row }))).toStrictEqual([
       { kind: "photo", capture_group_id: "live:camera-42" },
       { kind: "video", capture_group_id: "live:camera-42" },
@@ -102,7 +100,6 @@ describe("media", () => {
       data_uri: PIXEL,
       captured_at: "2026-03-04T09:00:00Z",
     });
-    // A crop of it: different bytes, saved today, pointing at its source.
     const edited = addAsset({
       data_uri: CLIP,
       captured_at: "2026-08-05T12:00:00Z",
@@ -114,7 +111,6 @@ describe("media", () => {
       )
       .all() as Array<{ asset_id: string; source_asset_id: string | null }>;
     expect(rows.map((row) => ({ ...row }))).toStrictEqual([
-      // The original was derived from nothing, and says so.
       { asset_id: original.asset_id, source_asset_id: null },
       { asset_id: edited.asset_id, source_asset_id: original.asset_id },
     ]);
@@ -125,8 +121,6 @@ describe("media", () => {
       data_uri: PIXEL,
       source_asset_id: "asset-that-never-existed",
     });
-    // A missed precondition is a `failed` outcome, not a raw FK error from
-    // the middle of the insert — and nothing lands.
     expect(outcome.status).toBe("failed");
     const count = db.vault
       .prepare("SELECT count(*) AS n FROM media_asset")
@@ -194,7 +188,6 @@ describe("media", () => {
         asset_id: "not-a-member",
       }).status
     ).toBe("failed");
-    // Twice into the same album is a receipted refusal, not a UNIQUE throw.
     const dup = invoke("media.add_to_album", {
       album_id: albumId,
       asset_id: a.asset_id,
@@ -329,8 +322,6 @@ describe("media", () => {
       )
       .get(albumId) as { cover_content_id: string | null };
     expect(album.cover_content_id).toBeNull();
-    // The asset row survives in the trash with its own grace window (issue
-    // #274) — restore can bring it back whole.
     const asset = db.vault
       .prepare(
         "SELECT deleted_at, purge_at FROM media_asset WHERE asset_id = ?"
@@ -348,18 +339,12 @@ describe("media", () => {
     };
     expect(content.deleted_at).not.toBeNull();
     expect(content.purge_at).not.toBeNull();
-    // Trash is one-way per asset: a second delete fails its precondition.
     const again = invoke("media.delete_asset", { asset_id });
     expect(again.status).toBe("failed");
   });
 
   test("the star is one tag on the asset; archive stays a column (#916)", () => {
     const { asset_id } = addAsset({ data_uri: PIXEL });
-    // ONE TRUTH (#916). There was a `media_asset.favorite` column AND a
-    // `starred` flags tag on the asset's CONTENT ITEM, kept in step by a
-    // mirror helper every writer had to remember; the importers and the share
-    // projection did not. The column is gone and the tag anchors on
-    // `media.asset` — the entity Photos shows, and the one a member points at.
     const starred = () =>
       (
         db.vault
@@ -383,7 +368,6 @@ describe("media", () => {
     expect(starred()).not.toContain(asset_id);
     expect(archivedAt()).toBeNull();
 
-    // update_asset stays the general editor; set_favorite is the focused toggle.
     expect(invoke("media.update_asset", { asset_id, favorite: 1 }).status).toBe(
       "executed"
     );
@@ -397,7 +381,6 @@ describe("media", () => {
     );
     expect(starred()).not.toContain(asset_id);
 
-    // Archive is a nullable timestamp; toggling on stamps it, off clears it.
     expect(invoke("media.set_archived", { asset_id, archived: 1 }).status).toBe(
       "executed"
     );
@@ -411,8 +394,6 @@ describe("media", () => {
   test("a TRASHED asset can be neither starred nor archived (#916)", () => {
     const { asset_id } = addAsset({ data_uri: PIXEL });
     expect(invoke("media.delete_asset", { asset_id }).status).toBe("executed");
-    // Photos could star and archive a photograph the member had already
-    // thrown away: the precondition asked only that the row exist.
     expect(invoke("media.set_favorite", { asset_id, favorite: 1 }).status).toBe(
       "failed"
     );
@@ -449,7 +430,6 @@ describe("media", () => {
       data_uri: PIXEL,
       captured_at: "2026-01-01T00:00:00Z",
     });
-    // Restoring a live asset is a receipted refusal.
     expect(invoke("media.restore_asset", { asset_id }).status).toBe("failed");
     invoke("media.delete_asset", { asset_id });
     const outcome = invoke("media.restore_asset", { asset_id });
@@ -475,7 +455,6 @@ describe("media", () => {
 
   test("delete_asset keeps bytes another canonical row still rents", () => {
     const { asset_id, content_id } = addAsset({ data_uri: PIXEL });
-    // The same bytes also ride as an attachment on the owner party.
     const attach = invoke("core.attach", {
       subject_type: "core.party",
       subject_id: boot.ownerPartyId,

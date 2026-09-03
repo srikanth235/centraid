@@ -22,13 +22,6 @@ import type {
 import controlsCss from "../styles/controls.module.css";
 import styles from "./SettingsDiagnosticsScreen.module.css";
 
-// Gateway → Components: which subsystem stopped working, with its last error
-// and the gateway's warn/error tail. Prop-driven — the view and refresh state
-// live here, the gateway I/O in `routes/settingsDiagnosticsData.ts`.
-//
-// BUILT FROM THE BLOCK KIT, never its own furniture: status is a row's lower-case
-// meta plus `net`, so no badge or colour dot may say it a second time.
-
 export type HealthStatus = "ok" | "degraded" | "error";
 
 export interface HealthComponentDTO {
@@ -60,11 +53,8 @@ export interface HealthMetricsDTO {
   storageFsyncMs?: number;
   hardwareProfileClass?: string;
   resourceMode?: string;
-  /** Modern gateways only; the Resource card's disclosure gates on it (#528). */
   resourceProfile?: ResourceProfileDTO;
-  /** Absent hides the Resource card's pause control (#528). */
   backgroundPause?: BackgroundPauseDTO;
-  /** Drives the Resource card's posture note; modern gateways only (#528). */
   powerContext?: PowerContextState;
   uptimeMs: number;
 }
@@ -75,17 +65,13 @@ export interface GatewayHealthDTO {
   uptimeMs: number;
   components: HealthComponentDTO[];
   recentEvents: HealthEventDTO[];
-  /** Present on modern gateways; optional for older heartbeats/tests. */
   metrics?: HealthMetricsDTO;
 }
 
-/** The one place host plumbing may be visible (#665); omitted drops the section. */
 export interface DiagnosticsConnectionsProps {
-  /** Resolves with cached rows to paint now, then calls `onUpdate` per probe. */
   loadConnections: (
     onUpdate: (rows: GatewayRow[]) => void
   ) => Promise<GatewayRow[]>;
-  /** Bumped on a committed rename/remove so the list re-reads. */
   refreshKey?: number;
   onTest?: (gatewayId: string, label: string) => void;
   onRename?: (gatewayId: string, label: string) => void;
@@ -94,13 +80,11 @@ export interface DiagnosticsConnectionsProps {
 
 export interface SettingsDiagnosticsBridgeProps {
   loadHealth: () => Promise<GatewayHealthDTO>;
-  /** Omitted when the caller has nowhere to send the click. */
   onJumpToLogs?: (component: string) => void;
   onOpenAlerts?: () => void;
   connections?: DiagnosticsConnectionsProps;
 }
 
-/** Lower case, like every meta in the kit — a fact, not a badge. */
 const STATUS_WORD: Record<HealthStatus, string> = {
   ok: "healthy",
   degraded: "degraded",
@@ -120,7 +104,6 @@ const COMPONENT_LABEL: Record<string, string> = {
   "load-shed": "Background load",
   disk: "Disk space",
   "storage-latency": "Storage latency",
-  // The component namespace is the GATEWAY's: stays `backups`, not `storage`.
   backups: "Backups",
   "storage-limit": "Disk budget",
   enrichment: "Media enrichment",
@@ -192,7 +175,6 @@ function eventClock(iso: string): string {
   });
 }
 
-/** The sub-line carries the actionable thing: last error, else probe detail. */
 function componentRow(
   row: HealthComponentDTO,
   onJumpToLogs?: (component: string) => void
@@ -202,7 +184,6 @@ function componentRow(
       ? (row.detail ??
         (row.lastOkAt ? `last ok ${relativeTime(row.lastOkAt)}` : undefined))
       : (row.lastError ?? row.detail);
-  // The tally belongs in the sentence, never in a cell of its own.
   const tally =
     row.errorCount > 0
       ? `${row.errorCount} error${row.errorCount === 1 ? "" : "s"} since the gateway started`
@@ -256,7 +237,6 @@ function metricFacts(metrics: HealthMetricsDTO): PanelFact[] {
   ];
 }
 
-/** A still-probing host must not borrow a healthy verdict. */
 function connectionWord(row: GatewayRow): string {
   const rail = railStatus(row);
   if (rail === "ready") return "reachable";
@@ -296,8 +276,6 @@ function ConnectionsPanel({
     };
   }, [loadConnections, refreshKey]);
 
-  // Three acts, each about this host in particular: they go under the row and
-  // none can be promoted to a section verb without losing its subject.
   const rowsFor = (list: GatewayRow[]): RowDef[] =>
     list.map((row) => ({
       id: row.gatewayId,
@@ -384,7 +362,6 @@ export default function SettingsDiagnosticsScreen({
 }: SettingsDiagnosticsBridgeProps): JSX.Element {
   const [health, setHealth] = useState<GatewayHealthDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // The mount read is already in flight at first render, so busy starts true.
   const [busy, setBusy] = useState(true);
 
   const load = useCallback((): void => {
@@ -429,8 +406,6 @@ export default function SettingsDiagnosticsScreen({
         ? `${health.components.length} · all answering`
         : `${health.components.length} · ${troubled.length} in trouble`;
 
-  // The Logs row names the component it focuses on: a bare "Logs" landing on
-  // an unfiltered stream takes the reader nowhere.
   const firstTroubled = troubled[0];
   const foot: RowDef[] = [];
   if (onJumpToLogs)

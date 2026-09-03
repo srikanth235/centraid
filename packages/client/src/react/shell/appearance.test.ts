@@ -25,7 +25,6 @@ describe("appearance prefs", () => {
     const got = pickAppearance({
       theme: "dark",
       cards: "elevated",
-      // Retired #608 / #707 — must read as noise, not resurrect as a pref.
       surfaceTemp: "warm",
       accentKey: "rose",
       bgL: 22,
@@ -43,20 +42,16 @@ describe("appearance prefs", () => {
   });
 
   it("drops a stored theme naming a preset this build no longer registers", () => {
-    // #608 O — presets cut to two; degrade silently.
     expect(pickAppearance({ theme: "monokai" })).toStrictEqual({});
   });
 
   it("defaults to following the OS, not to dark", () => {
-    // First run follows the OS; `dark` made light first run unreachable.
     expect(DEFAULT_PREFS.themeMode).toBe("system");
-    // `theme` re-derived on mount/OS flip; no matchMedia → dark.
     expect(["light", "dark"]).toContain(DEFAULT_PREFS.theme);
   });
 
   it("re-resolves the applied theme when the stored mode is `system`", () => {
     stubScheme(true);
-    // The saved `theme` may be stale; the mode wins.
     expect(
       pickAppearance({ themeMode: "system", theme: "dark" })
     ).toStrictEqual({ themeMode: "system", theme: "light" });
@@ -89,13 +84,10 @@ describe("appearance prefs", () => {
     });
     const html = document.documentElement;
     expect(html.dataset.theme).toBe("light");
-    // Nothing writes a surface temperature.
     expect(html.dataset.surfaceTemp).toBeUndefined();
   });
 
   describe("the theme block is the only colour authority", () => {
-    // #608 P / #707 — applying prefs may not touch a single custom property;
-    // inline styles once outranked every theme block.
     it("writes no inline colour of any kind", () => {
       applyPrefsToDocument({ ...DEFAULT_PREFS, theme: "light" });
       applyPrefsToDocument(DEFAULT_PREFS);

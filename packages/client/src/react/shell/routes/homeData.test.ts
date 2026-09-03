@@ -3,8 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AutomationFeedEntry } from "./automationsData.js";
 import { buildHomeAppItems, buildHomeAutoItems } from "./homeData.js";
 
-// `vi.mock` is hoisted above the imports by vitest, so the gateway stub is in
-// place before homeData.js pulls gateway-client-core's load-time side-effect.
 vi.mock(import("../../../gateway-client.js"), () => ({}));
 
 describe("homeData", () => {
@@ -62,7 +60,6 @@ describe("homeData", () => {
         starred: true,
         tone: null,
       });
-      // Not in `userApps`, so there is no edit stamp to resolve.
       expect(items[1]).toMatchObject({ id: "notes", starred: false });
     });
 

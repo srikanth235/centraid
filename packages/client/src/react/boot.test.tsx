@@ -3,10 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { flushMacrotasks } from "@centraid/test-kit/flush";
 
-// Boot's first paint is what this file is about, so everything boot merely
-// *installs* on the way past is stubbed: the replica lifecycle and the
-// enrichment worker are dynamic-import side effects with no bearing on which
-// screen appears, and the assist handoff would otherwise open a dialog.
 vi.mock(import("../replica/shell-session.js"), () => ({
   installReplicaStorageLifecycle: () => undefined,
 }));
@@ -17,21 +13,10 @@ vi.mock(import("../assist-oauth-handoff.js"), () => ({
   consumeInitialAssistHandoff: () => Promise.resolve({ status: "none" }),
   installDesktopAssistHandoff: () => () => undefined,
 }));
-// The shell is a whole application; boot's contract is only that it is the
-// thing that gets mounted once the settings read says the member is set up.
 vi.mock(import("./shell/App.js"), () => ({
   default: () => <div data-testid="app-shell">home</div>,
 }));
 
-/**
- * Which screen boot paints, and — the point of this file — which one it must
- * NEVER paint.
- *
- * A settings read that FAILS carries no information about whether this member
- * has onboarded. Rendering the first-run chooser in that case tells someone
- * with a full vault that they are new here and offers them "Start fresh on this
- * Mac". Observed live on a set-up machine whose gateway could not be assessed.
- */
 describe("boot first paint suite", { timeout: 30_000 }, () => {
   let shell: HTMLElement;
 
@@ -81,11 +66,9 @@ describe("boot first paint suite", { timeout: 30_000 }, () => {
     expect(shell.querySelector("[data-testid='first-run-choice']")).toBeNull();
     const error = shell.querySelector("[data-testid='startup-error']");
     expect(error).not.toBeNull();
-    // Nothing on this screen may read as "start over".
     expect(error?.textContent ?? "").not.toMatch(
       /fresh|erase|reset|start over/iu
     );
-    // The host's own words survive, minus Electron's IPC wrapper.
     expect(error?.textContent ?? "").toContain(
       "gateway.db is locked but the daemon is not answering"
     );
@@ -136,17 +119,6 @@ describe("boot first paint suite", { timeout: 30_000 }, () => {
     expect(shell.querySelector("[data-testid='startup-error']")).toBeNull();
   });
 
-  /**
-   * The read is not the thing that broke.
-   *
-   * On the desktop the settings read fails because the local gateway would not
-   * start, and after a burst of failures the host's supervisor gives up — from
-   * then on every read fails instantly with the same latched message, whatever
-   * the member has since fixed. A "Try again" that only re-read was therefore
-   * dead on arrival: observed live with the cause removed entirely (the
-   * process holding gateway.db killed; the device credential file restored),
-   * still on the error screen 90 seconds later.
-   */
   it("asks the host to restart the gateway before re-reading, and recovers", async () => {
     const order: string[] = [];
     let gatewayUp = false;
@@ -175,7 +147,6 @@ describe("boot first paint suite", { timeout: 30_000 }, () => {
     );
 
     expect(shell.querySelector("[data-testid='startup-error']")).not.toBeNull();
-    // Nothing on the screen may send this reader to a place they cannot reach.
     expect(
       shell.querySelector("[data-testid='startup-error']")?.textContent ?? ""
     ).not.toContain("Settings");
@@ -190,15 +161,12 @@ describe("boot first paint suite", { timeout: 30_000 }, () => {
     });
 
     expect(retryGatewayStart).toHaveBeenCalledOnce();
-    // Order matters: re-reading first would just hit the latch again.
     expect(order).toStrictEqual(["read", "retry-start", "read"]);
     expect(shell.querySelector("[data-testid='app-shell']")).not.toBeNull();
     expect(shell.querySelector("[data-testid='startup-error']")).toBeNull();
   });
 
   it("still re-reads on a host that has no local gateway to retry", async () => {
-    // The web PWA does not define `retryGatewayStart` — its gateway is someone
-    // else's process. The button must stay a plain re-read there, not throw.
     let attempts = 0;
     await bootWith(() => {
       attempts += 1;

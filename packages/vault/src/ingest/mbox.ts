@@ -1,9 +1,3 @@
-// Minimal RFC 4155 MBOX parsing — enough for the mail people actually export
-// (Google Takeout, Thunderbird): `From ` separator lines, unfolded headers,
-// MIME multiparts walked for the text body AND the attachments (#296:
-// the import spine is the real volume source of blobs — an mbox door that
-// drops attachments would re-open the gap the staging band closes).
-
 export interface MboxAttachment {
   filename: string;
   mediaType: string;
@@ -11,19 +5,15 @@ export interface MboxAttachment {
 }
 
 export interface MboxMessage {
-  /** Message-ID header, or a stable hash key when absent. */
   messageId: string;
   subject: string | null;
   fromName: string | null;
   fromEmail: string | null;
-  /** ISO timestamp (Date header, else the From-line date, else epoch). */
   sentAt: string;
   body: string;
-  /** Decoded MIME parts carrying a filename — the email's files. */
   attachments: MboxAttachment[];
 }
 
-/** Unfold RFC 5322 headers: continuation lines start with WSP. */
 function splitHeadersBody(
   raw: string,
   options: { trim?: boolean } = {}
@@ -46,7 +36,6 @@ function splitHeadersBody(
   return { headers, body: options.trim === false ? body : body.trim() };
 }
 
-/** `"Meera Pillai" <meera@example.com>` → name + lowercased address. */
 export function parseAddress(raw: string | undefined): {
   name: string | null;
   email: string | null;
@@ -73,10 +62,7 @@ function isoDate(raw: string | undefined): string {
     : new Date(parsed).toISOString();
 }
 
-/** Strip Re:/Fwd: chains and case — the thread grouping key. */
 export function threadKey(subject: string | null): string {
-  // Iterative single-prefix strip stays linear-time. A nested quantifier
-  // (e.g. `^(?:\s*(?:re|fwd?)\s*:)+`) is ReDoS-prone on crafted subjects.
   let s = (subject ?? "(no subject)").trim();
   const once = /^(?:re|fwd?|aw)\s*:\s*/iu;
   for (let n = 0; n < 64; n += 1) {
@@ -87,13 +73,11 @@ export function threadKey(subject: string | null): string {
   return s.toLowerCase();
 }
 
-/** `content-type: multipart/mixed; boundary="b1"` → `b1`, or null. */
 function boundaryOf(contentType: string | undefined): string | null {
   const m = contentType?.match(/boundary\s*=\s*"?(?<boundary>[^";]+)"?/iu);
   return m?.groups?.boundary ?? null;
 }
 
-/** `filename="tax.pdf"` (content-disposition) or `name=` (content-type). */
 function filenameOf(headers: Map<string, string>): string | null {
   const disp = headers.get("content-disposition");
   const ct = headers.get("content-type");
@@ -104,7 +88,6 @@ function filenameOf(headers: Map<string, string>): string | null {
   return m?.groups?.value?.trim() || null;
 }
 
-/** Decode one MIME part body per its content-transfer-encoding. */
 function decodePart(body: string, encoding: string | undefined): Buffer {
   const enc = (encoding ?? "").trim().toLowerCase();
   if (enc === "base64") return Buffer.from(body.replace(/\s+/gu, ""), "base64");
@@ -120,13 +103,11 @@ function decodePart(body: string, encoding: string | undefined): Buffer {
 }
 
 interface WalkedMime {
-  /** Best text body found (text/plain wins over text/html). */
   text: string | null;
   html: string | null;
   attachments: MboxAttachment[];
 }
 
-/** Walk a MIME tree: multiparts recurse, filenames become attachments. */
 function walkMime(
   headers: Map<string, string>,
   rawBody: string,
@@ -137,8 +118,6 @@ function walkMime(
   const contentType = headers.get("content-type") ?? "text/plain";
   const boundary = boundaryOf(contentType);
   if (contentType.toLowerCase().startsWith("multipart/") && boundary) {
-    // Parts sit between `--boundary` markers; the closing `--boundary--`
-    // (and any preamble/epilogue) falls away naturally.
     const marker = `--${boundary}`;
     const segments = rawBody.split(
       new RegExp(`^${escapeRegExp(marker)}(?:--)?[ \\t]*$`, "mu")
@@ -156,10 +135,6 @@ function walkMime(
   if (filename) {
     into.attachments.push({
       filename,
-      // An email Content-Type header is attacker testimony (issue #865): a
-      // message can label an attachment `text/html` and the gateway would
-      // stage and later serve those bytes under that type. Declare nothing —
-      // staging sniffs the bytes and falls back to octet-stream.
       mediaType: "application/octet-stream",
       data: decodePart(rawBody, encoding),
     });
@@ -177,7 +152,6 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
-/** Parse an MBOX file into messages. */
 export function parseMbox(text: string): MboxMessage[] {
   const chunks: string[] = [];
   const lines = text.split("\n");
@@ -191,7 +165,6 @@ export function parseMbox(text: string): MboxMessage[] {
       current = [];
       continue;
     }
-    // mboxrd quoting: leading `>From ` unescapes one level.
     current.push(line.replace(/^>(?<fromLine>>*From )/u, "$<fromLine>"));
   }
   if (current.length > 0) chunks.push(current.join("\n"));
@@ -207,8 +180,6 @@ export function parseMbox(text: string): MboxMessage[] {
     const messageId =
       headers.get("message-id")?.replace(/[<>]/gu, "").trim() ||
       `mbox-${sentAt}-${(subject ?? "").slice(0, 40)}`;
-    // Walk the MIME tree: plain body preferred, html as fallback, every
-    // filename-bearing part decoded as an attachment.
     const walked: WalkedMime = { text: null, html: null, attachments: [] };
     walkMime(headers, body, walked);
     messages.push({

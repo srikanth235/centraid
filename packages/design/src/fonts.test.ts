@@ -1,8 +1,3 @@
-// The bundled faces are only a design decision while the bytes are actually
-// present and actually the ones the lockfile pins. A missing file does not
-// throw anywhere — the browser silently falls through the stack — so this is
-// the only place the vendoring can be checked.
-
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -32,8 +27,6 @@ describe("bundled font seam", () => {
   });
 
   it("vendors no bytes for the platform code stack", () => {
-    // `mono` is a family the stacks name, not a face this package ships. If a
-    // file ever appears for it, the two-download win has been quietly undone.
     expect(FONT_FILES.some((f) => (f.genus as string) === "mono")).toBe(false);
     expect(
       existsSync(path.join(FONTS_DIR, "dm-mono-latin-400-normal.woff2"))
@@ -64,18 +57,11 @@ describe("bundled font seam", () => {
         `src: url(/centraid/fonts/${file.fileName}) format('woff2');`
       );
     }
-    // A CDN reference is the whole failure this bundling exists to prevent.
     expect(css).not.toMatch(/https?:\/\//u);
     expect(css).toContain(FONT_SUBSET_RANGE.latin);
     expect(css).toContain(FONT_SUBSET_RANGE["latin-ext"]);
   });
 
-  // Electron's preload runs in the SANDBOXED renderer, where `node:path` does
-  // not resolve. When `toFontFaceCss` shared a module with `FONTS_DIR`, the
-  // desktop preload pulled `require("node:path")` into its bundle, failed to
-  // load, and took the entire app down — no tokens, no icons, no IPC bridge
-  // (#707). Nothing in the type layer prevents that regression; the file
-  // boundary is the only thing that does, so it is asserted here.
   it("the browser-safe font module reaches for no node builtin", () => {
     const source = readFileSync(
       path.join(import.meta.dirname, "font-faces.ts"),

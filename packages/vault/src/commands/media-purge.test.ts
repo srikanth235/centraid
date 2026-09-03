@@ -1,10 +1,3 @@
-// `media.purge_asset` — the one owner-driven hard delete in the media pack
-// (#711). It destroys member data with no undo, so its guards are what
-// this file is about: only the trash may be purged, only a caller the grant
-// lets act may purge it, and nothing may be left pointing at the row
-// afterwards. Kept out of media.test.ts because those are library-loop tests
-// and these are destruction tests — one file, one subject.
-
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
@@ -110,7 +103,6 @@ describe("media: purge_asset", () => {
         asset.asset_id
       )
     ).toBe(0);
-    // No dangling reference of any kind is left behind.
     expect(
       count(
         "SELECT count(*) AS n FROM media_face_region WHERE asset_id = ?",
@@ -135,9 +127,6 @@ describe("media: purge_asset", () => {
         asset.asset_id
       )
     ).toBe(0);
-    // THE RELATION GOES WITH ITS ENDPOINT (#916, superseding #272): an
-    // end-dated edge onto a purged row still named it, and let an id reused
-    // later inherit a relation nobody drew.
     expect(
       db.vault
         .prepare("SELECT valid_to FROM core_link WHERE link_id = 'link-1'")
@@ -158,9 +147,6 @@ describe("media: purge_asset", () => {
       deleted_at: string | null;
       purge_at: string | null;
     };
-    // The row survives the command — only the lifecycle sweep may delete a
-    // content item, because only it can reclaim the CAS blob behind it. Its
-    // grace window is collapsed to now, so the very next sweep takes it.
     expect(content.deleted_at).not.toBeNull();
     expect(content.purge_at).not.toBeNull();
     expect(Date.parse(content.purge_at!)).toBeLessThanOrEqual(Date.now());
@@ -207,7 +193,6 @@ describe("media: purge_asset", () => {
       )
     ).toBe(1);
 
-    // Purging the copy first clears the lineage, and the source then goes.
     expect(
       invoke("media.delete_asset", { asset_id: edit.asset_id }).status
     ).toBe("executed");
@@ -227,8 +212,6 @@ describe("media: purge_asset", () => {
       appId: app.appId,
       signingKey: app.signingKey,
     };
-    // A read-everything, purge-nothing grant: the shape a viewer-role mount
-    // has, and the one that must never destroy a photograph.
     createGrant(db, {
       appId: app.appId,
       purposeConceptId: boot.concepts["dpv:ServiceProvision"] ?? "",
@@ -267,8 +250,6 @@ describe("media: purge_asset", () => {
         }).status
       ).toBe("executed");
     }
-    // Trash drops the cover's membership and hands the cover over already;
-    // put it back so purge is the thing under test, not delete.
     expect(
       invoke("media.delete_asset", { asset_id: cover.asset_id }).status
     ).toBe("executed");

@@ -223,9 +223,6 @@ describe("app-level multi-device convergence", () => {
               await queue.transportFailed(intent.intentId, reason);
               return undefined;
             }
-            // The canonical batch is derived at the reconnect boundary from
-            // the claimed durable intent. It is not a disconnected fixture
-            // applied later by the test.
             const acceptedBatch = batch(index + 1, writer);
             await queue.awaitingChange(intent.intentId);
             await queue.applyOutcomes([
@@ -251,8 +248,6 @@ describe("app-level multi-device convergence", () => {
       accepted.sort(
         (left, right) => left.changes.from.seq - right.changes.from.seq
       );
-      // Both replicas consume exactly the canonical batches returned by the
-      // successful reconnects, in gateway order.
       for (const store of [phone, laptop]) {
         for (const outcome of accepted) store.applyChanges(outcome.changes);
       }

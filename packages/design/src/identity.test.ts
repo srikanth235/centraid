@@ -1,6 +1,3 @@
-// Shared person-identity derivation (#708): a stable hue per person, inverse
-// ink clearing AA in BOTH themes.
-
 import { describe, expect, test } from "vitest";
 
 import { contrastRatio } from "./color";
@@ -16,13 +13,11 @@ import {
 import { APP_HUES, paletteFor } from "./palette";
 import { darkTheme, lightTheme } from "./themes";
 
-/** WCAG AA for the 13px initials in a circle. */
 const AA = 4.5;
 
 describe(identityHueKey, () => {
   test("every key is a real point on the shipped hue wheel", () => {
     for (const key of IDENTITY_HUE_KEYS) expect(APP_HUES).toHaveProperty(key);
-    // The BRAND ink default is deliberately absent.
     expect([...IDENTITY_HUE_KEYS].sort()).toStrictEqual(
       Object.keys(APP_HUES).sort()
     );
@@ -66,7 +61,6 @@ describe(identityFill, () => {
   });
 
   test("carries `textInv` at AA in both themes", () => {
-    // The `--c-*` ring, not the `-text` rung.
     for (const [theme, scheme] of [
       [lightTheme, "light"],
       [darkTheme, "dark"],
@@ -83,9 +77,6 @@ describe(identityFill, () => {
 });
 
 describe(partyHueKey, () => {
-  // ONE HUE PER PARTY (O-identity): the person and VAULT wheels are one hash
-  // under different moduli, so the wrong one moves the person — and its extra
-  // place can draw them as a black disc.
   const PARTIES = [
     "01JQ7Z0000000000000000000A",
     "01JQ7Z0000000000000000000B",
@@ -107,8 +98,6 @@ describe(partyHueKey, () => {
   });
 
   test("the vault wheel is a DIFFERENT question and stays different", () => {
-    // Not to be unified: `identityColor` colours a vault, which is allowed
-    // the ink default.
     expect(IDENTITY_COLORS).not.toHaveLength(IDENTITY_HUE_KEYS.length);
     expect(IDENTITY_COLORS).toContain(identityColor("any-vault", "brand"));
   });
@@ -120,8 +109,6 @@ describe(partyHueKey, () => {
   });
 
   test("a stored literal the wheel does not name answers null, not a guess", () => {
-    // The cue to use it verbatim: an imported hex is the member's choice, and
-    // a KEY cannot carry it.
     expect(partyHueKey("whoever", "#8c4c61")).toBeNull();
     expect(partyHueKey("whoever", "var(--c-not-a-hue)")).toBeNull();
   });

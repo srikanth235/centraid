@@ -194,7 +194,6 @@ describe("B6 Docs folder Commons on one machine", () => {
     });
     expect(claim.invitation.memberVaultId).toBeUndefined();
 
-    // Install/create happens only after the raw one-time invite URI exists.
     writer = openSeat(root, "vault-writer", "Wren");
     const claimed = claimCommonsInvitation({
       steward: origin.db.vault,
@@ -337,8 +336,6 @@ describe("B6 Docs folder Commons on one machine", () => {
       reason: "this commons is read-only for this member",
     });
 
-    // Derivatives and FTS are seat-local and must disappear with the reader's
-    // projection; the writer deliberately retains the root as receiver-owned.
     reader.db.vault
       .prepare(
         `INSERT INTO core_content_derivative

@@ -1,8 +1,3 @@
-/*
- * Async FTS bridge for the synchronous ⌘K palette (#420): results() reads a
- * sync cache; ensure() debounces fetches into it and fires onResults().
- */
-
 export interface PaletteConversationHit {
   id: string;
   title: string;
@@ -10,11 +5,9 @@ export interface PaletteConversationHit {
 }
 
 export interface PaletteConversationSearch {
-  /** Cached hits for the trimmed query. */
   results: (query: string) => PaletteConversationHit[];
   ensure: (query: string) => void;
   reset: () => void;
-  /** Rebind the "hits landed" callback; refresh() exists only post-mount. */
   setOnResults: (fn: (() => void) | null) => void;
 }
 
@@ -48,7 +41,6 @@ export function createPaletteConversationSearch(
         cache.set(key, hits);
       })
       .catch(() => {
-        // Cache empty so a broken endpoint isn't hammered.
         cache.set(key, []);
       })
       .finally(() => {

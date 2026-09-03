@@ -1,6 +1,3 @@
-// Turns `(app|agent) -> grants[] -> scopes[]` sideways into `store -> holders[]`
-// (#708 A2). Anything unmatched falls into the "Shared identifiers" catch-all.
-
 import type {
   VaultAgentEntry,
   VaultAppEntry,
@@ -42,7 +39,6 @@ const DOCS_CORE_TABLES = new Set([
   "restore_document_version",
 ]);
 
-/** `core` tables outside `DOCS_CORE_TABLES`/`party` are shared plumbing. */
 function storeIdForScope(scope: VaultScope): string {
   switch (scope.schema) {
     case "media":
@@ -72,8 +68,6 @@ function modeForVerbs(verbs: string): GrantMode {
 }
 
 export interface StoreHolderDTO {
-  /** An app's revocable `grantId`; an agent's `agentId` — agents have no
-   *  per-scope grant. */
   grantId: string;
   holderKind: "app" | "agent";
   holderId: string;
@@ -93,7 +87,6 @@ function holdersFromEntry(
   holderLabel: string,
   grants: readonly { grantId: string; scopes: readonly VaultScope[] }[]
 ): Map<string, StoreHolderDTO> {
-  // One row per holder per store, at the strongest mode.
   const byStore = new Map<string, StoreHolderDTO>();
   for (const grant of grants) {
     for (const scope of grant.scopes) {
@@ -114,7 +107,6 @@ function holdersFromEntry(
   return byStore;
 }
 
-/** A store with no holders stays in the list; the caller renders that. */
 export function groupGrantsByStore(
   apps: readonly VaultAppEntry[],
   agents: readonly VaultAgentEntry[]
@@ -148,8 +140,6 @@ export function groupGrantsByStore(
     ),
   }));
 }
-
-// A revoke DELETES the grant server-side; the snapshot keeps the row visible.
 
 export function revokedHolderKey(storeId: string, grantId: string): string {
   return `${storeId}:${grantId}`;

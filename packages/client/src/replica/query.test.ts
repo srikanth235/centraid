@@ -200,10 +200,6 @@ describe("replica query evaluation", () => {
     const guard = new OnlineOnlyGuard();
     const guarded = guardReplicaRow(rows()[0]!, guard);
     expect(guarded.title).toBe("A");
-    // `toThrow` swallows the error exactly like handler code that try/catches
-    // around a field read — the point of the test is that swallowing it does
-    // NOT clear the guard. Asserting through `toThrow` (rather than inside a
-    // `catch`) also means the assertion still runs if the read stops throwing.
     expect(() => {
       void guarded.body;
     }).toThrow(OnlineOnlyError);

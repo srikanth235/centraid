@@ -173,9 +173,6 @@ export default function BackupInventoryPanel({
   const [current, setCurrent] = useState(reconciliation);
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // A fresh reconciliation from the server replaces the locally verified one.
-  // Adjusted during render (the React "state derived from a prop" pattern), so
-  // the new payload paints immediately instead of one cascading render later.
   const [seenReconciliation, setSeenReconciliation] = useState(reconciliation);
   if (seenReconciliation !== reconciliation) {
     setSeenReconciliation(reconciliation);

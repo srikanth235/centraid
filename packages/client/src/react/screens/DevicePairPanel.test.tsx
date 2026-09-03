@@ -7,10 +7,6 @@ import type { GatewayDeviceTicket } from "../../gateway-client.js";
 import DevicePairPanel from "./DevicePairPanel.js";
 import type { DevicePairPanelProps } from "./DevicePairPanel.js";
 
-// Pairing another device is always for YOURSELF (#726): access is ownership,
-// so there is no person picker and no role ladder — just how long the ticket
-// stays good for.
-
 const NOW = Date.UTC(2026, 6, 13, 12, 0, 0);
 
 const TICKET: GatewayDeviceTicket = {
@@ -23,7 +19,6 @@ const TICKET: GatewayDeviceTicket = {
   expiresAt: new Date(NOW + 900_000).toISOString(),
 };
 
-/** What "Add someone" (#726) mints back: a NEW owner+vault, not the caller's. */
 const PERSON_TICKET: GatewayDeviceTicket = {
   ticket: "CENTRAID-TICKET-PERSON",
   ownerId: "o-new",
@@ -115,7 +110,6 @@ describe("DevicePairPanel suite", () => {
       await generate(el);
       expect(onCreateTicket).toHaveBeenCalledWith({ ttlMinutes: 15 });
       expect(el.textContent).toContain("CENTRAID-TICKET-XYZ");
-      // The issued ticket states whose it is and what it reaches.
       expect(el.textContent).toContain("Priya");
       expect(el.textContent).toContain("Personal");
     });
@@ -214,10 +208,8 @@ describe("DevicePairPanel suite", () => {
       expect(onCreateTicket).toHaveBeenCalledWith({
         ttlMinutes: 15,
         forPerson: { label: "Priya" },
-        // The mint's idempotency key (#750), generated at call initiation.
         operationId: expect.any(String),
       });
-      // The minted ticket names the new person, not whoever is hosting.
       expect(el.textContent).toContain("Priya");
     });
 
@@ -235,7 +227,6 @@ describe("DevicePairPanel suite", () => {
       const firstId = onCreateTicket.mock.calls[0]![0]!.operationId;
       const retryId = onCreateTicket.mock.calls[1]![0]!.operationId;
       expect(firstId).toBeTruthy();
-      // Same intent → same key: the gateway replays instead of re-minting.
       expect(retryId).toBe(firstId);
     });
 

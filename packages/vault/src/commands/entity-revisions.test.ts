@@ -1,7 +1,3 @@
-// Undo-window garbage collection for the P5 revision ledger (#659).
-// The law: a pass deletes exactly the snapshots the store's own reader
-// already refuses (`undo_until < now`), bounded per run.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
@@ -60,7 +56,6 @@ describe(pruneExpiredEntityRevisions, () => {
 
     const first = pruneExpiredEntityRevisions(db.vault, NOW, { limit: 3 });
     expect(first).toStrictEqual({ deleted: 3, capped: true });
-    // Oldest first, so a capped pass drains in undo-window order.
     expect(remaining()).toStrictEqual(["rev-3", "rev-4", "rev-5", "rev-6"]);
 
     pruneExpiredEntityRevisions(db.vault, NOW, { limit: 3 });

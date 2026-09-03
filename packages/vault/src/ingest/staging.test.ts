@@ -1,7 +1,3 @@
-// The staging spine (#290): stage → review → publish/discard,
-// the external-id map that turns append-on-dedup into true sync, and the
-// file-drop customs for MBOX, statement CSV and Takeout zips.
-
 import { deflateRawSync } from "node:zlib";
 
 import { beforeEach, describe, expect, test } from "vitest";
@@ -50,12 +46,10 @@ describe("staging", () => {
     });
     expect(staged.kind).toBe("file.ics");
     expect(staged.staged).toMatchObject({ create: 1, update: 0, skip: 0 });
-    // Nothing landed yet — staging is reviewable state.
     const before = db.vault
       .prepare("SELECT count(*) AS n FROM core_event")
       .get() as { n: number };
     expect(before.n).toBe(0);
-    // The batch is owner-readable for review.
     const rows = gw.read(owner, {
       entity: "sync.import_row",
       purpose: "dpv:ServiceProvision",
@@ -108,7 +102,6 @@ describe("staging", () => {
       .get("evt-1@example.com") as { summary: string; sequence: number };
     expect(event.summary).toBe("Dentist — moved to Friday");
     expect(event.sequence).toBe(1);
-    // One event total — the map re-targeted, never duplicated.
     const count = db.vault
       .prepare("SELECT count(*) AS n FROM core_event")
       .get() as { n: number };
@@ -174,7 +167,6 @@ describe("staging", () => {
       )
       .get() as { n: number };
     expect(meera.n).toBe(1); // one sender party across both messages
-    // Re-import: everything skips via the map.
     const again = gw.stageImportFile(owner, {
       filename: "inbox.mbox",
       data: MBOX,
@@ -214,8 +206,6 @@ describe("staging", () => {
       direction: string;
       posted_at: string;
     }[];
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect(txns.map((row) => ({ ...row }))).toStrictEqual([
       {
         amount_minor: 184250,
@@ -233,7 +223,6 @@ describe("staging", () => {
         posted_at: "2026-07-03T00:00:00Z",
       },
     ]);
-    // Idempotent on the Reference column.
     const again = gw.stageImportFile(owner, {
       filename: "hdfc-june.csv",
       data: CSV,
@@ -243,7 +232,6 @@ describe("staging", () => {
     expect(again.staged).toMatchObject({ create: 0, skip: 3 });
   });
 
-  /** Build an in-memory zip (deflate) — the Takeout shape. */
   function zipOf(entries: { name: string; text: string }[]): Buffer {
     const chunks: Buffer[] = [];
     const central: Buffer[] = [];

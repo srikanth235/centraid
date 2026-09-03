@@ -1,8 +1,3 @@
-// The demo register (#290): scenario data enters through the
-// normal command pipeline but stays separable forever — seed.demo provenance,
-// vault-side seed registry, invisible to the automation plane, purgeable in
-// one receipted act.
-
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrappedVault } from "@centraid/test-kit/vault";
@@ -221,7 +216,6 @@ describe("demo", () => {
     });
 
     test("a row held by non-demo data is reported blocked, not force-deleted", () => {
-      // A demo task that a real (non-demo) subtask still references.
       const parent = addTask("Demo parent", true);
       const parentId = (parent as { output: { task_id: string } }).output
         .task_id;
@@ -236,7 +230,6 @@ describe("demo", () => {
       expect(result.blocked).toStrictEqual([
         { entityType: "schedule.task", entityId: parentId },
       ]);
-      // Still registered — a later purge (after the owner deletes the child) succeeds.
       expect(gw.demoStatus(owner)).toStrictEqual([{ appId: "tasks", rows: 1 }]);
     });
 
