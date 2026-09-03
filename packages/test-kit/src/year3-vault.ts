@@ -1,7 +1,4 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
 
 import { seedYear3Distributions } from "./year3-distributions.js";
 import {
@@ -17,25 +14,10 @@ import type {
 
 // One public subpath: `./year3-vault` stays the whole vocabulary's front door,
 // so splitting the module changed no import anywhere else in the tree.
+export * from "./year3-fixture-cache.js";
 export * from "./year3-shape.js";
 
-/**
- * 2 — the golden artifact (#927 P4). Version 1 declared row COUNTS only; the
- * golden year-3 vault declares DISTRIBUTIONS as well (long note bodies over
- * the replica's 64 KiB value ceiling, grantees with live bindings and standing
- * authority, a year of receipts in the audit band, the five-vault footprint),
- * so a fixture cached under version 1 is a different artifact and is not
- * reusable. `year3FixtureCacheKey` carries the version, so the bump alone
- * invalidates every cached directory.
- */
-export const YEAR3_FIXTURE_VERSION = 2;
-
-/**
- * Stand-in for a caller that names no schema. Distinct from any real ladder
- * length so a fixture cached without a schema can never be mistaken for one
- * cached with a matching schema.
- */
-const UNVERSIONED_SCHEMA = -1;
+/** The one seed every golden artifact is generated from. */
 export const YEAR3_DEFAULT_SEED = 679_003;
 
 /**
@@ -373,89 +355,4 @@ export function goldenYear3Profile(
     photos: YEAR3_DISTRIBUTIONS.dailyPathPhotos,
     distributions: YEAR3_DISTRIBUTIONS,
   };
-}
-
-/**
- * Where materialized fixtures live. `CENTRAID_YEAR3_CACHE_DIR` is the CI
- * override (a cached workflow path); otherwise the host's scratch dir, which
- * survives between local runs and so gives a warm build on the second run.
- *
- * ONE way to name the cache: every rig calls this rather than repeating the
- * env-var-or-temp-dir dance, which is how `artifacts/year3-cache` ended up
- * spelled out in rig bodies in the first place.
- */
-export function year3FixtureCacheRoot(): string {
-  return (
-    process.env.CENTRAID_YEAR3_CACHE_DIR ??
-    path.join(tmpdir(), "centraid-year3-fixture-cache")
-  );
-}
-
-/**
- * Content address of a materialized fixture.
- *
- * `schemaVersion` is part of the identity, and has to be: the fixture IS a
- * vault on disk, so the schema that produced it is as much of its content as
- * the profile is. Without it a cached fixture built before a migration rung
- * lands is reused afterwards and opened by newer code — which is how the
- * nightly restore lane failed with `no such table: main.enrich_policy_rule`,
- * a table a later rung added. Callers pass `VAULT_MIGRATIONS.length`;
- * `test-kit` deliberately does not depend on `@centraid/vault`, so the number
- * arrives as an argument rather than an import.
- */
-export function year3FixtureCacheKey(
-  profile: Year3VaultProfile,
-  schemaVersion: number
-): string {
-  return createHash("sha256")
-    .update(
-      JSON.stringify({
-        version: YEAR3_FIXTURE_VERSION,
-        schemaVersion,
-        ...profile,
-      })
-    )
-    .digest("hex");
-}
-
-/**
- * Materialize a generated fixture once under a content-addressed cache.
- * `generate` must close its handles after checkpointing; the atomic rename
- * means readers never copy a live SQLite database beside an uncheckpointed WAL.
- */
-export async function materializeYear3Fixture(
-  cacheRoot: string,
-  generate: (targetDir: string) => Promise<void>,
-  profile = year3VaultProfile(),
-  schemaVersion: number = UNVERSIONED_SCHEMA
-): Promise<{ dir: string; cacheHit: boolean }> {
-  const key = year3FixtureCacheKey(profile, schemaVersion);
-  const dir = path.join(cacheRoot, key);
-  const ready = path.join(dir, "READY.json");
-  try {
-    const value = JSON.parse(await readFile(ready, "utf8")) as { key?: string };
-    if (value.key === key) return { dir, cacheHit: true };
-  } catch {
-    // Cache miss or interrupted prior generation.
-  }
-  await mkdir(cacheRoot, { recursive: true });
-  const temporary = `${dir}.tmp-${process.pid}-${Date.now()}`;
-  await rm(temporary, { recursive: true, force: true });
-  await mkdir(temporary, { recursive: true });
-  try {
-    await generate(temporary);
-    await writeFile(
-      path.join(temporary, "READY.json"),
-      `${JSON.stringify({ key, version: YEAR3_FIXTURE_VERSION, schemaVersion })}\n`,
-      "utf8"
-    );
-    try {
-      await rename(temporary, dir);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    }
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
-  }
-  return { dir, cacheHit: false };
 }

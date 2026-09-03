@@ -1,4 +1,4 @@
-import { cp, stat } from "node:fs/promises";
+import { cp, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -108,6 +108,19 @@ export async function createTestVault(
 export const GOLDEN_YEAR3_SEAL_KEY = Buffer.alloc(32, 0x67);
 const GOLDEN_YEAR3_OWNER = "Year 3 owner";
 
+/**
+ * The artifact as BUILT: a directory in the content-addressed cache that no
+ * rig may open. Opening it would write a WAL and an identity key into the
+ * bytes every other rig measures against.
+ */
+export interface GoldenYear3Build {
+  readonly cacheDir: string;
+  readonly cacheHit: boolean;
+  readonly buildMs: number;
+  readonly profile: Year3VaultProfile;
+  readonly sealKey: Buffer;
+}
+
 export interface GoldenYear3Vault {
   /** A WRITABLE copy of the fixture; `vault.db` sits at its root. */
   readonly dir: string;
@@ -115,7 +128,8 @@ export interface GoldenYear3Vault {
   readonly cacheDir: string;
   readonly cacheHit: boolean;
   readonly buildMs: number;
-  readonly copyMs: number;
+  /** What MOUNTING cost — the copy, not the build. */
+  readonly mountMs: number;
   readonly bytes: number;
   readonly profile: Year3VaultProfile;
   readonly sealKey: Buffer;
@@ -151,18 +165,23 @@ function bootstrapCompanionVault(root: string, index: number): void {
   }
 }
 
+const GOLDEN_YEAR3_COMPANIONS = YEAR3_DISTRIBUTIONS.mountedVaults - 1;
+
 /**
- * Materialize (or reuse) the golden year-3 vault and hand back a private copy.
+ * BUILD the golden year-3 vault: after this the artifact exists in the
+ * content-addressed cache. Nothing is copied and nothing is opened.
  *
  * The cache is content-addressed on the profile, the fixture version and the
  * schema ladder length, so a migration rung or a distribution change rebuilds
- * it and nothing else does.
+ * it and nothing else does. Building is separated from mounting because they
+ * have different costs and different frequencies: one build per run at most —
+ * the kit's warm set holds it — against one mount per rig that needs to write.
+ * A caller that only needs to KNOW the artifact exists (the golden replica,
+ * whose own cache may already hold the answer) must not pay a mount to find
+ * out.
  */
-export async function goldenYear3Vault(
-  options: { copy?: boolean } = {}
-): Promise<GoldenYear3Vault> {
+export async function buildGoldenYear3Vault(): Promise<GoldenYear3Build> {
   const profile = goldenYear3Profile();
-  const companions = YEAR3_DISTRIBUTIONS.mountedVaults - 1;
   const startedBuild = performance.now();
   const materialized = await materializeYear3Fixture(
     year3FixtureCacheRoot(),
@@ -180,35 +199,48 @@ export async function goldenYear3Vault(
       } finally {
         seeded.close();
       }
-      for (let index = 1; index <= companions; index += 1) {
+      for (let index = 1; index <= GOLDEN_YEAR3_COMPANIONS; index += 1) {
         bootstrapCompanionVault(target, index);
       }
     },
     profile,
     VAULT_MIGRATIONS.length
   );
-  const buildMs = performance.now() - startedBuild;
-  const startedCopy = performance.now();
-  const dir =
-    options.copy === false
-      ? materialized.dir
-      : await tempDir("golden-year3-vault-");
-  if (dir !== materialized.dir) {
-    await cp(materialized.dir, dir, { recursive: true });
-  }
   return {
-    dir,
     cacheDir: materialized.dir,
     cacheHit: materialized.cacheHit,
-    buildMs,
-    copyMs: performance.now() - startedCopy,
-    bytes: (await stat(path.join(dir, "vault.db"))).size,
+    buildMs: performance.now() - startedBuild,
     profile,
     sealKey: GOLDEN_YEAR3_SEAL_KEY,
-    companionDirs: Array.from({ length: companions }, (_value, index) =>
-      path.join(dir, "companions", `vault-${index + 1}`)
+  };
+}
+
+/** MOUNT a built artifact: a private, writable copy the caller may open. */
+export async function mountGoldenYear3Vault(
+  build: GoldenYear3Build
+): Promise<GoldenYear3Vault> {
+  const startedMount = performance.now();
+  const dir = await tempDir("golden-year3-vault-");
+  await cp(build.cacheDir, dir, { recursive: true });
+  return {
+    dir,
+    cacheDir: build.cacheDir,
+    cacheHit: build.cacheHit,
+    buildMs: build.buildMs,
+    mountMs: performance.now() - startedMount,
+    bytes: (await stat(path.join(dir, "vault.db"))).size,
+    profile: build.profile,
+    sealKey: build.sealKey,
+    companionDirs: Array.from(
+      { length: GOLDEN_YEAR3_COMPANIONS },
+      (_value, index) => path.join(dir, "companions", `vault-${index + 1}`)
     ),
   };
+}
+
+/** Build if needed, then mount — what a rig that opens the vault wants. */
+export async function goldenYear3Vault(): Promise<GoldenYear3Vault> {
+  return mountGoldenYear3Vault(await buildGoldenYear3Vault());
 }
 
 export interface GoldenYear3Replica {
@@ -225,9 +257,20 @@ export interface GoldenYear3Replica {
 }
 
 /**
- * The SQLite file a phone holds after a full bootstrap of the golden vault,
- * plus `pendingIntents` queued intents in its outbox — the converge journey's
- * N (#927 journey table: 1, 10, 40).
+ * What the built replica knows about itself, written beside `replica.db`.
+ *
+ * Without it a warm run has to mount the golden vault and walk 50,000 rows to
+ * rediscover the row count and cursor of an artifact it already has on disk —
+ * which is most of what building one costs. Part of the artifact's shape, so
+ * `YEAR3_FIXTURE_VERSION` covers it.
+ */
+interface GoldenReplicaMeta {
+  readonly rows: number;
+  readonly cursor: { epoch: string; seq: number };
+}
+
+/**
+ * Write the golden phone replica into `target`, walking the golden vault.
  *
  * Built through the REAL path and nothing else: the vault's own
  * `readReplicaRows` produces the pages, `ReplicaSqliteStore.bootstrap` applies
@@ -236,13 +279,12 @@ export interface GoldenYear3Replica {
  * with `VACUUM INTO`, so the artifact on disk is a real, fully checkpointed
  * replica file rather than a copy of a live handle.
  */
-export async function goldenYear3Replica(
-  options: { pendingIntents?: number } = {}
-): Promise<GoldenYear3Replica> {
-  const pendingIntents = options.pendingIntents ?? 0;
+async function buildGoldenReplicaInto(
+  target: string,
+  pendingIntents: number
+): Promise<void> {
   const vault = await goldenYear3Vault();
   const source = openVaultDb({ dir: vault.dir, sealKey: vault.sealKey });
-  const started = performance.now();
   try {
     const state = currentReplicaLogState(source.vault);
     const vaultId = (
@@ -283,57 +325,85 @@ export async function goldenYear3Replica(
         entities: YEAR3_REPLICA_ENTITIES,
       }
     );
-    // One content address covers both halves: the replica's key is the VAULT's
-    // key plus what makes this replica different from another built off it.
-    const replicaProfile: Year3VaultProfile = {
-      ...vault.profile,
-      generatedAt: `replica:${year3ReplicaCacheKey(
-        year3FixtureCacheKey(vault.profile, VAULT_MIGRATIONS.length),
-        pendingIntents
-      )}`,
-    };
-    const materialized = await materializeYear3Fixture(
-      year3FixtureCacheRoot(),
-      async (target) => {
-        const driver = new NodeSqliteDriver();
-        const store = new ReplicaSqliteStore(driver, vaultId);
-        try {
-          store.bootstrap(snapshot as never);
-          const outbox = SqliteIntentStore.create(driver);
-          const intents = await year3PendingIntents(
-            pendingIntents,
-            (payload) => intentPayloadHash(payload as never),
-            vault.profile.seed
-          );
-          for (const intent of intents) {
-            // Sequential by construction: the outbox's `created_order` is
-            // assigned on add, and the queue's order IS the artifact.
-            // oxlint-disable-next-line no-await-in-loop
-            await outbox.add(intent as never);
-          }
-          driver.exec(
-            `VACUUM INTO '${path.join(target, "replica.db").replaceAll("'", "''")}'`
-          );
-        } finally {
-          store.close();
-        }
-      },
-      replicaProfile,
-      VAULT_MIGRATIONS.length
-    );
-    const file = path.join(materialized.dir, "replica.db");
-    return {
-      dir: materialized.dir,
-      file,
-      cacheDir: materialized.dir,
-      cacheHit: materialized.cacheHit,
-      buildMs: performance.now() - started,
-      bytes: (await stat(file)).size,
+    const driver = new NodeSqliteDriver();
+    const store = new ReplicaSqliteStore(driver, vaultId);
+    try {
+      store.bootstrap(snapshot as never);
+      const outbox = SqliteIntentStore.create(driver);
+      const intents = await year3PendingIntents(
+        pendingIntents,
+        (payload) => intentPayloadHash(payload as never),
+        vault.profile.seed
+      );
+      for (const intent of intents) {
+        // Sequential by construction: the outbox's `created_order` is
+        // assigned on add, and the queue's order IS the artifact.
+        // oxlint-disable-next-line no-await-in-loop
+        await outbox.add(intent as never);
+      }
+      driver.exec(
+        `VACUUM INTO '${path.join(target, "replica.db").replaceAll("'", "''")}'`
+      );
+    } finally {
+      store.close();
+    }
+    const meta: GoldenReplicaMeta = {
       rows: snapshot.rows.length,
-      pendingIntents,
       cursor: snapshot.cursor,
     };
+    await writeFile(
+      path.join(target, "meta.json"),
+      `${JSON.stringify(meta)}\n`,
+      "utf8"
+    );
   } finally {
     source.close();
   }
+}
+
+/**
+ * The SQLite file a phone holds after a full bootstrap of the golden vault,
+ * plus `pendingIntents` queued intents in its outbox — the converge journey's
+ * N (#927 journey table: 1, 10, 40).
+ *
+ * The content address is computed BEFORE anything is opened — the replica's
+ * key is the vault's key plus what makes this replica different from another
+ * built off it, and both are functions of the profile alone. A warm run
+ * therefore answers out of the cache without mounting the golden vault or
+ * walking one row.
+ */
+export async function goldenYear3Replica(
+  options: { pendingIntents?: number } = {}
+): Promise<GoldenYear3Replica> {
+  const pendingIntents = options.pendingIntents ?? 0;
+  const profile = goldenYear3Profile();
+  const replicaProfile: Year3VaultProfile = {
+    ...profile,
+    generatedAt: `replica:${year3ReplicaCacheKey(
+      year3FixtureCacheKey(profile, VAULT_MIGRATIONS.length),
+      pendingIntents
+    )}`,
+  };
+  const started = performance.now();
+  const materialized = await materializeYear3Fixture(
+    year3FixtureCacheRoot(),
+    (target) => buildGoldenReplicaInto(target, pendingIntents),
+    replicaProfile,
+    VAULT_MIGRATIONS.length
+  );
+  const file = path.join(materialized.dir, "replica.db");
+  const meta = JSON.parse(
+    await readFile(path.join(materialized.dir, "meta.json"), "utf8")
+  ) as GoldenReplicaMeta;
+  return {
+    dir: materialized.dir,
+    file,
+    cacheDir: materialized.dir,
+    cacheHit: materialized.cacheHit,
+    buildMs: performance.now() - started,
+    bytes: (await stat(file)).size,
+    rows: meta.rows,
+    pendingIntents,
+    cursor: meta.cursor,
+  };
 }
