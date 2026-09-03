@@ -33,28 +33,72 @@ const TEST_FILE_RE = /(?:\.test|\.test-fixtures)\.[^./]+$/u;
  * the shell document, and the eight other `*-copy.ts` modules are the words a
  * member reads. An allowlist would have dropped every one of them silently,
  * which is how a gate stops enforcing. So the default stays what it was —
- * everything under `packages/client` is a surface — and only subtrees READ and
+ * everything under `packages/client` is a surface — and only paths READ and
  * confirmed to render nothing are named below. Adding a path here is a claim
- * about a specific file; the surrounding cases in validate-ui-receipt.test.mjs
+ * about specific files; the surrounding cases in validate-ui-receipt.test.mjs
  * pin what must stay outside it.
+ *
+ * THE LINE THE SWEEP DREW. Every excluded file was read for prose-shaped string
+ * literals, and each hit judged by one question: is this string composed for a
+ * member to read, or is it a diagnostic explaining a fault to whoever is
+ * debugging? Composed copy makes the file a surface — that is why
+ * `replica/rebootstrap-copy.ts`, `gateway-client-edges.ts` and
+ * `gateway-client-push.ts` are carved back out below. A diagnostic does not,
+ * even though `react/shell/ErrorBoundary.tsx` and several toasts echo
+ * `error.message` verbatim when something breaks: every module in the package
+ * throws, so "a thrown string can reach a screen" would make the whole package
+ * a surface again and no refinement of this shape would be possible for anyone.
+ * The per-file verdicts are in receipts/issue-931-gates-that-enforce-nowhere.md.
  *
  * The screenshot requirement itself is untouched: this narrows WHICH files are
  * surfaces, not what a surface change owes.
  */
+
+/**
+ * Paths carved BACK IN because they hold composed member copy, even though the
+ * broader pattern below would sweep them up. Checked first, so a pattern can
+ * never win over one of these.
+ */
+const CLIENT_COPY_EXCEPTIONS = [
+  // "WHAT A MEMBER IS TOLD WHEN THEIR REPLICA STARTS OVER" (#883 C6): the
+  // notice headline/detail strings, e.g. "This device is downloading its whole
+  // library again — your unsent changes stay queued."
+  "packages/client/src/replica/rebootstrap-copy.ts",
+  // `RECOVERY_REFUSALS`, commented "the member reads a reason, not a code" —
+  // "You already run this shared space." and three siblings, thrown to
+  // react/shell/routes/InlineAppRoute.tsx. Carved out by name rather than
+  // moved into a `*-copy.ts`: moving it is a product refactor across two files
+  // for a gate's benefit, and leaving the module watched is the conservative
+  // direction — a false demand is never a hole.
+  "packages/client/src/gateway-client-edges.ts",
+  // `showNotification(..., { body: "Task reminder" })` — a Web Push body a
+  // member reads on a lock screen, which is as member-visible as copy gets.
+  "packages/client/src/gateway-client-push.ts",
+];
+
 const CLIENT_NOT_A_SURFACE = [
-  // The replica store and its transport: no DOM, no copy, no markup.
+  // The replica store and its transport: no DOM, no copy, no markup. Its
+  // remaining prose-shaped strings are thrown diagnostics
+  // (`shell-session.ts`'s admission reasons reach no UI — `ShellReplicaWriteResult`
+  // has no consumer outside that module and its tests) or invariant messages.
   /^packages\/client\/src\/replica\//u,
   // The renderer-side HTTP client hub and its per-surface modules, plus the
   // credential handover, the SSE/turn streams, the change feeds, the protocol
-  // handshake and the device compute/blob sources beside them. Each was read
-  // for DOM calls, markup and user-visible strings before being named here.
+  // handshake and the device compute/blob sources beside them.
   /^packages\/client\/src\/gateway-client[\w.-]*\.ts$/u,
   /^packages\/client\/src\/(?:gateway-auth|turn-stream|vault-change-feed|vault-change-sse|version-handshake|device-blob-source|device-enrichment-worker|device-roster)\.ts$/u,
+  // The inline query ENGINE under react/blueprints/ (#922 wave 1's ctx-core
+  // refactor is the case: it moves query planning between modules that render
+  // nothing and was made to photograph a screen that had not changed). BY FILE
+  // NAME, never the folder — `centraid-inline.ts` posts status a member reads,
+  // and the app-root wiring beside it is a surface.
+  /^packages\/client\/src\/react\/blueprints\/(?:inlineQueryCtx|inline-query-ctx-core[\w.-]*)\.ts$/u,
 ];
 
 /** Does this path draw something a member can see? */
 function isClientSurface(file) {
   if (!file.startsWith("packages/client/")) return false;
+  if (CLIENT_COPY_EXCEPTIONS.includes(file)) return true;
   return !CLIENT_NOT_A_SURFACE.some((pattern) => pattern.test(file));
 }
 

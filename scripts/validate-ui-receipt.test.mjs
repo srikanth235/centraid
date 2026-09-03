@@ -87,6 +87,16 @@ test("UI receipt evidence: a packages/client drawing change still demands a scre
     "packages/client/src/index.html",
     // Copy, not transport: it carries an "Undo" action label.
     "packages/client/src/status-channel.ts",
+    // Swept up by a broader pattern and carved back out, because each holds
+    // copy composed for a member: the #883 C6 rebootstrap notice strings,
+    // `RECOVERY_REFUSALS` ("the member reads a reason, not a code"), and the
+    // Web Push body a member reads on a lock screen.
+    "packages/client/src/replica/rebootstrap-copy.ts",
+    "packages/client/src/gateway-client-edges.ts",
+    "packages/client/src/gateway-client-push.ts",
+    // react/blueprints/ is excluded BY FILE NAME, never as a folder: this one
+    // posts status a member reads.
+    "packages/client/src/react/blueprints/centraid-inline.ts",
   ]) {
     assert.deepEqual(
       validateUiReceipt({
@@ -108,6 +118,10 @@ test("UI receipt evidence: a packages/client data-client change needs no screens
         "packages/client/src/replica/apply.ts",
         "packages/client/src/turn-stream.ts",
         "packages/client/src/version-handshake.ts",
+        // The inline query engine: #922 wave 1's ctx-core refactor moves query
+        // planning between modules that render nothing.
+        "packages/client/src/react/blueprints/inlineQueryCtx.ts",
+        "packages/client/src/react/blueprints/inline-query-ctx-core.ts",
         receipt,
       ],
       readText: () => "",
