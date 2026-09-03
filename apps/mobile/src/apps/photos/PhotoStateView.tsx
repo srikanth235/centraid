@@ -67,13 +67,14 @@ export default function PhotoStateView({
   // Person mode: confirmed faces, not an asset flag — same join FaceReview/PhotosCollectionsView use; one call site, kept local.
   const faces = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "media.face_region" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "media.face_region" }), [])
   );
   // Lineage for purge ORDER only (#711): timeline has no `source_asset_id`; vault refuses a source while a copy still names it.
   const trashedRows = useReplicaQuery(
     "photos",
     useMemo(
       () => ({
+        acceptTruncation: true,
         entity: "media.asset",
         where: [{ column: "deleted_at", op: "not-null" as const }],
       }),

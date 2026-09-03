@@ -148,11 +148,13 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     // Joins are `in`-bounded by the matched ids (#337 drives `is_you`).
     const [exts, attachments, attendeesRes, vaultRes] = await Promise.all([
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "schedule.event_ext",
         where: [{ column: "event_id", op: "in", value: eventIds }],
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.attachment",
         where: [
           { column: "target_type", op: "eq", value: "core.event" },
@@ -161,11 +163,12 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "schedule.attendee",
         where: [{ column: "event_id", op: "in", value: eventIds }],
         purpose,
       }),
-      ctx.vault.read({ entity: "core.vault", purpose }),
+      ctx.vault.read({ acceptTruncation: true, entity: "core.vault", purpose }),
     ]);
     const attendeeRows = (attendeesRes.rows ?? []) as unknown as RawAttendee[];
     const mePartyId =
@@ -176,6 +179,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const partiesRes =
       attendeePartyIds.length > 0
         ? await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.party",
             where: [{ column: "party_id", op: "in", value: attendeePartyIds }],
             purpose,
@@ -198,6 +202,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const contents =
       contentIds.length > 0
         ? await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
             purpose,

@@ -62,11 +62,14 @@ export default function AlbumDetail({
   const timeline = usePhotoTimeline();
   const collections = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.collection" }), [])
   );
   const entries = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection_entry" }), [])
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "core.collection_entry" }),
+      []
+    )
   );
   const [selection, setSelection] = useState(new Set<string>());
   const [renameOpen, setRenameOpen] = useState(false);

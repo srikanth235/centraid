@@ -138,12 +138,14 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
           purpose,
         }),
         ctx.vault.read({
+          acceptTruncation: true,
           entity: "schedule.project",
           where: [{ column: "archived_at", op: "is-null" }],
           orderBy: { column: "sort_order", dir: "asc" },
           purpose,
         }),
         ctx.vault.read({
+          acceptTruncation: true,
           entity: "schedule.section",
           orderBy: { column: "sort_order", dir: "asc" },
           purpose,
@@ -167,6 +169,7 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
     ];
     if (missingParentIds.length > 0) {
       const parents = await ctx.vault.read({
+        acceptTruncation: true,
         entity: "schedule.task",
         where: [{ column: "task_id", op: "in", value: missingParentIds }],
         purpose,
@@ -183,6 +186,7 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       .map((t) => t.task_id);
     if (topLevelIds.length > 0) {
       const children = await ctx.vault.read({
+        acceptTruncation: true,
         entity: "schedule.task",
         where: [{ column: "parent_task_id", op: "in", value: topLevelIds }],
         purpose,
@@ -197,6 +201,7 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
     const attachments =
       taskIds.length > 0
         ? await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.attachment",
             where: [
               { column: "target_type", op: "eq", value: "schedule.task" },
@@ -213,6 +218,7 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
     const contents =
       contentIds.length > 0
         ? await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
             purpose,
@@ -231,6 +237,7 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
     const links =
       taskIds.length > 0
         ? await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.link",
             where: [
               { column: "from_type", op: "eq", value: "schedule.task" },
@@ -243,6 +250,7 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
     const tags =
       taskIds.length > 0
         ? await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.tag",
             where: [
               { column: "target_type", op: "eq", value: "schedule.task" },
@@ -256,6 +264,7 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
     const tagConcepts =
       tagConceptIds.length > 0
         ? await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.concept",
             where: [{ column: "concept_id", op: "in", value: tagConceptIds }],
             purpose,
@@ -299,6 +308,7 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
         : Promise.resolve({ cards: [] as Array<Record<string, unknown>> }),
       linkRows.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.link_anchor",
             where: [
               {

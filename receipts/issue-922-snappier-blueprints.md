@@ -483,3 +483,243 @@ bash .governance/run.sh                   # 22/22 directives
   `apps/mobile/src`; all four pass. Not scope creep — no blueprints file changed.
 - `docs/decisions.md` still records `SB-loader` as **Open**. Correct for this slice (the
   edit is out of scope and the root's); flagged so it is not forgotten.
+
+## 0a — no silent truncation, on any seat, at any layer
+
+The 1,000-row default window is KEPT as a bound (#262); what is deleted is its silence. Every clause of the acceptance criterion holds: No read on any seat truncates silently: the replica read plan and the gateway read report `truncated` when the default cap fills, undeclared unbounded reads are refused at the kit boundary, and the honesty grammar renders the truncation (test per layer).
+
+The mechanism is one probe row. Both engines now fetch `limit + 1` and drop the extra before answering. A row count alone cannot tell a window that FILLED apart from a set that merely ends there, so a `rows.length === limit` test would announce "there is more" to a member whose library is exactly 1,000 rows — an over-report is as dishonest as a missing one. The probe answers exactly, and costs exactly one row per read.
+
+*The replica layer*
+
+- `packages/client/src/replica/read-plan.ts` — `ReplicaReadPlan` gains `limit` (the window applied) and `limitDefaulted` (whether it came from `REPLICA_DEFAULT_LOCAL_ROWS` or the request); `plannedLimit` returns both; the statement binds `limit + 1`. New exports: `trimReplicaPage(rows, plan)` → `{ rows, truncated }`, the one place the probe is dropped; `UnboundedReplicaReadError` (`code: "UNBOUNDED_READ"`, carrying `entity`); and `assertBoundedReplicaRead(request)`, the one boundary rule both seats call so neither can drift. The bound's VALUE is unchanged.
+- `packages/client/src/replica/types.ts` — `ReplicaReadRequest` gains `acceptTruncation?: boolean`. New `ReplicaTruncation` (`truncated?`, `appliedLimit?`), extended by `ReplicaReadWireResult` and `ReplicaReadResult`. Additive and absent when nothing was cut off.
+- `packages/client/src/replica/store-core.ts` — `read()` routes the planned rows through `trimReplicaPage` and reports `truncated`/`appliedLimit`. (Two lines plus the trim; the read function only.)
+- `packages/client/src/replica/worker-client.ts` — the guarded `read()` carries `truncated`/`appliedLimit` across the worker hop, so the shell sees what the worker saw.
+- `apps/mobile/src/lib/replica/multi-vault-reader.ts` — `runPlan` returns a `ReplicaPage` instead of raw rows; the mounted read reports `truncated` when the statement's window filled OR when dedupe/badge composition left more rows than the caller asked for.
+
+*The gateway layer*
+
+- `packages/vault/src/gateway/types.ts` — `GATEWAY_DEFAULT_READ_ROWS` (1000) and `GATEWAY_MAX_READ_ROWS` (10_000) replace the two inline literals; `ReadRequest` accepts `acceptTruncation` so ONE query module can be handed to both the gateway and the replica; `ReadResult` gains `truncated?`/`appliedLimit?`.
+- `packages/vault/src/gateway/gateway.ts` — `read()` only: the clamp reads the two named constants, the statement selects `LIMIT ${limit + 1}`, the probe is sliced off, and the result carries `truncated`/`appliedLimit`. The access receipt's `rowCount` still counts the rows the caller got, never the probe. Nothing else in the file is restructured.
+
+*The kit boundary — a refusal, on both seats*
+
+- `packages/client/src/react/blueprints/inlineQueryCtx.ts` — `ctx.vault.read` (which is what every web `queries/*.ts` and therefore `window.centraid.read` reaches the replica through) calls `assertBoundedReplicaRead` BEFORE the read, so a silently capped page never exists, and posts the truncation line when one comes back.
+- `packages/client/src/react/blueprints/centraid-inline.ts` — `UNBOUNDED_READ` is deliberately kept out of `FALLBACK_CODES`: falling back online would answer the refused read from the gateway, capped at the same 1,000 rows and just as silently. Documented at the set.
+- `apps/mobile/src/kit/hooks/useReplicaQuery.ts` — the same rule on the phone. The refusal is STATE (`error`), not a throw: every consumer already renders `error`, while an exception would blank the screen instead of naming the entity and the fix. A truncated answer posts the line and is exposed structurally.
+- `apps/mobile/src/kit/hooks/replica-query-state.ts` — `ReplicaQueryState` gains `truncated`, `appliedLimit`, `truncationNotice`; `combineReplicaQueryStates` folds them conservatively (one truncated part truncates the composed screen; the notice shown names the smallest window in play).
+
+*The honesty grammar — one phrase, both seats*
+
+- `packages/blueprints/apps/_shared/shared-copy.ts` — `truncatedListNotice(appliedLimit)` → `Showing the newest 1,000; more not loaded`. One clause, matching the StatusLine budget in DESIGN.md § Copy and the register of the neighbouring `replicaCoverageRow` line; no banned filler, no reassurance, no action (there is nothing to tap). It lands on the one feedback channel (`@centraid/client/status-channel`), which is the single surface both the phone's `StatusLine.tsx` and the shell's render — so no per-app screen was touched.
+- `packages/blueprints/types/centraid.d.ts` — `VaultReadRequest` gains `acceptTruncation`, `VaultReadResult` gains `truncated`/`appliedLimit`, so the shared handler contract types the flag on both hosts.
+
+*Making the existing debt greppable instead of invisible*
+
+`acceptTruncation: true` was added to every call site that is unbounded TODAY, and to nothing else, so no shipped screen changes behaviour in this slice. 223 flag additions across production files: 138 `ctx.vault.read` sites in 32 web query files (people 43, agenda 18, photos 16, notes 16, docs 16, tasks 12, locker 10, tally 7) and 85 `useReplicaQuery` sites in 22 mobile files. That list is E2's work order.
+
+*Keeping the existing gate sighted*
+
+`tests/quality/user-facing-qualities.test.ts` — `acceptTruncation` is added to `REPLICA_REQUEST_KEYS`. The P3 walk skips any object whose top-level keys are not all request vocabulary; without this entry a request carrying the flag would stop looking like a request and the gate would go blind on exactly the reads the flag marks as debt. The gate's strictness is unchanged: `acceptTruncation` does not make a read bounded, and all five existing waivers in `tests/quality/unbounded-query-waivers.json` still match.
+
+*Tests, one per layer*
+
+- `packages/client/src/replica/read-plan-truncation.test.ts` — default cap fills → `truncated` with the applied limit; under cap → absent; a set of EXACTLY the cap → absent (the over-report case); an explicit window that fills → that window; the plan binds `limit + 1` and names its own window; and the boundary rule refuses / admits.
+- `packages/vault/src/gateway/read-truncation.test.ts` — the same three cases at the gateway, plus the receipt's `rowCount` excluding the probe.
+- `packages/client/src/react/blueprints/inline-read-truncation.test.ts` — the web seat: unbounded → typed refusal before the session is touched, naming the entity and both fixes; `acceptTruncation` → allowed and the truncation spoken; `limit` → allowed; a clean read stays quiet.
+- `apps/mobile/src/kit/hooks/useReplicaQuery.truncation.test.tsx` — the phone seat, the same three cases through the real hook, plus a RENDERING test that mounts the phone's `StatusLine` and asserts the phrase on screen.
+- `packages/client/src/replica/read-plan-parity.test.ts` — the two sabotage runs now trim the probe with `trimReplicaPage` so they still judge the page a caller would see; parity itself is untouched and green.
+- `apps/mobile/src/screens/home/home-tile-reads.test.ts` — the "nothing is fetched only to be discarded" assertions now read `limit + 1` and say why: exactly one probe row, and no more.
+- `packages/client/src/react/blueprints/inlineQueryCtx.test.ts` and `centraid-inline-scopes.test.ts` — their in-test query stubs declare the flag, because the boundary they exercise is now real.
+- `apps/web/tests/e2e/tasks.spec.ts` — ONE added `test()`: 21 open tasks written through the app's own rail, the real `board` query asked for a window of 20 through `window.centraid.read`, the phrase read off the frame's status line, and the `artifacts/e2e/ui-impact/issue-922-web-truncation-status.png` frame emitted. It runs in CI like every other case in the file; nothing is skipped.
+- `apps/web/tests/e2e/playwright.config.ts` — an optional `CENTRAID_E2E_CHROMIUM` executable-path override under `use.launchOptions`. Unset, which is the case in CI where the workflow installs the matching browser, it changes nothing; set, it lets a dev container whose Chromium build number differs from the pinned Playwright's actually launch one. This is the same fix shape [#931](https://github.com/srikanth235/centraid/issues/931) item 3 needs, kept minimal here so that issue can adopt it rather than invent a second one. The file is not in `toolchain-config-protection`'s pattern list, but the commit carries the `allow-toolchain-config` line anyway so the change is greppable with every other toolchain edit.
+
+*Docs*
+
+- `docs/mobile-offline.md` — the bound and the honesty rule as current state: the probe row and its one-row cost, `truncated`/`appliedLimit`, why truncation is not `coverage`, the phrase, and the kit refusal with its no-online-fallback rule.
+- `apps/web/tests/e2e/playwright.config.ts`
+- `apps/web/tests/e2e/tasks.spec.ts`
+- `docs/protocol.md` — `truncated`, `appliedLimit` and `acceptTruncation` recorded beside `coverage` in the replica-specific additive fields. All three are optional additive fields an older reader ignores, so the protocol version does not bump.
+
+### Numbers
+
+0a's "before" is the count of reads that were silently capped and are now explicit. Provenance: static scan of the worktree at this commit (a paren-balanced walk of each `ctx.vault.read(` / `useReplicaQuery(` argument, `limit:` absent), cross-checked against the applied diff.
+
+| Seat | Call sites | Previously silently capped (now explicit) |
+| --- | --- | --- |
+| Web `packages/blueprints/apps/*/queries/*.ts` | 208 `ctx.vault.read` | **138** — people 43, agenda 18, photos 16, notes 16, docs 16, tasks 12, locker 10, tally 7 |
+| Phone `apps/mobile/src/**` | 122 `useReplicaQuery` | **85** — photos 40 across 14 screens, people 21, notes 8, docs 6, `screens/Scan` 5, `screens/Capture` 3, agenda 1, tasks 1 |
+
+The 14 remaining phone sites that the syntactic scan flags are false positives, verified by hand: the hook's own definition, and Home's thirteen tile reads, whose request constants in `home-tile-reads.ts` already declare a `limit` the scan cannot see through the indirection.
+
+The cost bought: **+1 row fetched per read**, at every layer, forever. Measured structurally, not by clock: `home-tile-reads.test.ts` asserts each tile's statement returns exactly `limit + 1` rows and one `LIMIT ?`, so the over-fetch is bounded at one and pinned by a test rather than by review. No hot-path timing changed hands in this slice; there is nothing here for #927's ledger to hold yet.
+
+### Out of scope for 0a
+
+- 0b (deferred text) — `packages/vault/src/replica/snapshot.ts`, `replica-shape.ts` and the `oversizedFields` path are its slice, not this one.
+- E2 (a declared window per hook) — this slice makes the debt explicit and counts it; it does not window anything. The 223 flagged sites above are E2's work order.
+- E6 (virtualisation) — the truncation line is on the shared status channel today because that is the one surface both seats already render, with no per-app screen touched. **The persistent per-list placement is E6's**, on its list primitive; the root ruled that split, and `ReplicaQueryState.truncationNotice` is already there for it to render.
+- **The phone's direct-`session.read` bypass is E2's.** The refusal lives in `useReplicaQuery`, so a screen calling `session.read` straight through `multi-vault-session.read` (`apps/mobile/src/lib/replica/native-session.ts`) is not refused. One such caller exists today — `apps/mobile/src/apps/photos/timeline-engine.ts`, already bounded at 100,000 — so nothing is unbounded through it now. Moving the guard down to the session is routed to E2's contract.
+- The gateway's other functions; `gateway.ts` is touched only inside `read()`'s clamp and result shaping, because another slice instruments that file next.
+- `coverage` semantics beyond surfacing truncation beside them; the two stay distinct facts.
+- Any change to the bound's VALUE, on either layer.
+
+### Decisions
+
+- **The probe row rather than a full-page test.** `rows.length === limit` needs no SQL change but lies on a set of exactly `limit` rows, and "showing the newest 1,000 of more" when there is no more is the same class of wrong screen 0a exists to delete. `limit + 1` is exact. The cost is one row per read, bounded by a test.
+- **Refusal is state on the phone, a throw on the web.** The two seats differ because their consumers do: `useReplicaQuery` already surfaces `error` and a throw inside a hook blanks the screen; a blueprint query's caller already catches, and a rejected promise is what carries the code. The RULE is one function (`assertBoundedReplicaRead`) so the two cannot drift.
+- **`UNBOUNDED_READ` does not fall back online.** Every other replica refusal code does, because the gateway can genuinely answer it. This one it cannot: the gateway applies the same 1,000-row default, so falling back would answer the refused read just as silently, over the network. It is a bug in the calling query and reaches the app.
+- **Three files were touched outside the slice contract's list, minimally and for one reason each.** `store-core.ts` and `multi-vault-reader.ts` are the only two callers of the read plan, so the plan cannot report truncation without them (and, having gained a probe row, would return one row too many if left alone); each change is inside one function. `packages/blueprints/types/centraid.d.ts` is the shared handler contract the 138 web flag additions must typecheck against. Reported to the root rather than left silent.
+- **One gate edit, which tightens nothing and loosens nothing.** `REPLICA_REQUEST_KEYS` gains `acceptTruncation`. Without it the P3 unbounded-read walk stops recognising a flagged request as a request and skips it — the gate would go blind on the reads the flag marks. `acceptTruncation` still does not count as a bound, and the waiver file is unchanged.
+- **No "deliberate" seam kept.** The one ruling this slice re-judged is the register's `1,000-row silent default cap, both layers`. Bounding keeps a named property — a phone's frame budget and the mounted reader's page cost both depend on it, and `home-tile-reads.test.ts` pins that dependence. Silence had no dependent and is deleted.
+
+### Verification
+
+Run from the worktree root, serially, on this branch rebased onto `origin/main` at [#930](https://github.com/srikanth235/centraid/issues/930) + the wave-1 rulings commit.
+
+```sh
+bun run format
+bun run lint
+bun run --cwd packages/client test        # 266 files, 2432 tests
+bun run --cwd packages/client typecheck
+bun run --cwd packages/vault test         # 201 files, 1576 tests
+bun run --cwd packages/vault typecheck
+bun run --cwd packages/vault build
+bun run --cwd packages/blueprints test    # 207 files, 6588 tests
+bun run --cwd packages/blueprints typecheck
+bun run --cwd apps/mobile test            # 272 files, 2359 tests
+bun run --cwd apps/mobile typecheck
+bun run build
+bun run test:qualities                    # 10 files, 60 tests (U-ratchets, P3 unbounded-read gate)
+bun run check:push
+bun run check:ui-receipt
+
+# the web e2e case, with the local browser fallback this slice added
+CENTRAID_E2E_CHROMIUM=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell \
+  bun run --cwd apps/web e2e -- tasks.spec.ts   # 2 passed (57.6s); the new case 33.4s
+bun run --cwd apps/web typecheck
+```
+
+**Demonstrated red.** The web case was run against a seeded defect before it was trusted: `trimReplicaPage`'s verdict was forced to `false` (`rows.length > plan.limit && plan.limit < 0`), `packages/client` and `apps/web` rebuilt so the browser actually served it, and the case failed on the missing line while the neighbouring board journey stayed green — so it is the phrase it fails on, not the app. Restored, rebuilt, green again at the counts above.
+
+`bash .governance/run.sh` passes all 22 directives; `bun run lint:product` passes **39/39** product gates in 3.1 s, `check:ui-receipt` and `lint:ledgers` / `test:ratchet` included. Before the rebase those three were red — the first because this slice had no screenshot yet, the other two because #930's ledger fix had not landed; the first is fixed here, the other two by #930.
+
+`design:gallery` is the one gate still red on this host, and it is environmental: the pinned Playwright looks for a Chromium build number that is not the one installed (`Executable doesn't exist at /opt/pw-browsers/chromium_headless_shell-1234/...`, while `chromium_headless_shell-1194` is present). It fails the same way on a clean `origin/main` checkout. The `CENTRAID_E2E_CHROMIUM` override this slice adds is the fix shape for it; wiring the gallery lane through the same override is [#931](https://github.com/srikanth235/centraid/issues/931) item 3's, not this slice's.
+
+An earlier `check:push` run showed timeouts in `apps/mobile`'s RNTL tier, three `packages/vault` suites and `tests/quality/kill-mid-write.integration.test.ts`. All were 30–70 s host-contention timeouts, not assertion failures, from two gate runs racing on a 4-core host; every one of those suites is green on a serial re-run (counts above).
+
+The four new suites, named per layer:
+
+```sh
+bun run --cwd packages/client test -- read-plan-truncation
+bun run --cwd packages/vault test -- read-truncation
+bun run --cwd packages/client test -- inline-read-truncation
+bun run --cwd apps/mobile test -- useReplicaQuery.truncation
+```
+
+The before-number is reproducible as a static scan:
+
+```sh
+# call sites whose request object declares no `limit:`
+grep -ro "acceptTruncation: true" packages/blueprints/apps/*/queries/*.ts | wc -l   # 138
+grep -rlo "acceptTruncation: true" apps/mobile/src --include=*.ts --include=*.tsx \
+  | grep -v "\.test\." | xargs grep -o "acceptTruncation: true" | wc -l           # 85
+```
+
+Files changed in this slice:
+
+- `apps/mobile/src/apps/agenda/useAgenda.ts`
+- `apps/mobile/src/apps/docs/useDocs.ts`
+- `apps/mobile/src/apps/docs/useVersionChain.ts`
+- `apps/mobile/src/apps/notes/useNotes.ts`
+- `apps/mobile/src/apps/people/usePeople.ts`
+- `apps/mobile/src/apps/photos/AlbumDetail.tsx`
+- `apps/mobile/src/apps/photos/FaceReview.tsx`
+- `apps/mobile/src/apps/photos/MemoriesView.tsx`
+- `apps/mobile/src/apps/photos/PhotoLightbox.tsx`
+- `apps/mobile/src/apps/photos/PhotoPicker.tsx`
+- `apps/mobile/src/apps/photos/PhotoStateView.tsx`
+- `apps/mobile/src/apps/photos/PhotosCollectionsView.tsx`
+- `apps/mobile/src/apps/photos/PhotosHome.tsx`
+- `apps/mobile/src/apps/photos/PhotosLibrary.tsx`
+- `apps/mobile/src/apps/photos/PhotosPeopleView.tsx`
+- `apps/mobile/src/apps/photos/PhotosSearch.tsx`
+- `apps/mobile/src/apps/photos/PlaceDetail.tsx`
+- `apps/mobile/src/apps/photos/PlacesMap.tsx`
+- `apps/mobile/src/apps/photos/PlacesView.tsx`
+- `apps/mobile/src/apps/tasks/useTasks.ts`
+- `apps/mobile/src/kit/hooks/replica-query-state.ts`
+- `apps/mobile/src/kit/hooks/useReplicaQuery.truncation.test.tsx`
+- `apps/mobile/src/kit/hooks/useReplicaQuery.ts`
+- `apps/mobile/src/lib/replica/multi-vault-reader.ts`
+- `apps/mobile/src/screens/Capture.tsx`
+- `apps/mobile/src/screens/Scan.tsx`
+- `apps/mobile/src/screens/home/home-tile-reads.test.ts`
+- `docs/mobile-offline.md`
+- `docs/protocol.md`
+- `packages/blueprints/apps/_shared/shared-copy.ts`
+- `packages/blueprints/apps/agenda/queries/day-context.ts`
+- `packages/blueprints/apps/agenda/queries/parties.ts`
+- `packages/blueprints/apps/agenda/queries/search.ts`
+- `packages/blueprints/apps/agenda/queries/upcoming.ts`
+- `packages/blueprints/apps/docs/queries/_shared.ts`
+- `packages/blueprints/apps/docs/queries/activity.ts`
+- `packages/blueprints/apps/docs/queries/drive.ts`
+- `packages/blueprints/apps/docs/queries/history.ts`
+- `packages/blueprints/apps/docs/queries/search.ts`
+- `packages/blueprints/apps/locker/queries/item-sidecars.ts`
+- `packages/blueprints/apps/locker/queries/item.ts`
+- `packages/blueprints/apps/locker/queries/items.ts`
+- `packages/blueprints/apps/notes/queries/history.ts`
+- `packages/blueprints/apps/notes/queries/library.ts`
+- `packages/blueprints/apps/notes/queries/search.ts`
+- `packages/blueprints/apps/people/queries/dashboard.ts`
+- `packages/blueprints/apps/people/queries/journal.ts`
+- `packages/blueprints/apps/people/queries/people.ts`
+- `packages/blueprints/apps/people/queries/person.ts`
+- `packages/blueprints/apps/people/queries/search.ts`
+- `packages/blueprints/apps/people/queries/trash.ts`
+- `packages/blueprints/apps/photos/queries/_shared.ts`
+- `packages/blueprints/apps/photos/queries/duplicates.ts`
+- `packages/blueprints/apps/photos/queries/enrichment-status.ts`
+- `packages/blueprints/apps/photos/queries/face-queue.ts`
+- `packages/blueprints/apps/photos/queries/library.ts`
+- `packages/blueprints/apps/photos/queries/people.ts`
+- `packages/blueprints/apps/photos/queries/search.ts`
+- `packages/blueprints/apps/photos/queries/storage.ts`
+- `packages/blueprints/apps/tally/queries/dashboard.ts`
+- `packages/blueprints/apps/tasks/queries/board.ts`
+- `packages/blueprints/apps/tasks/queries/search.ts`
+- `packages/blueprints/types/centraid.d.ts`
+- `packages/client/src/react/blueprints/centraid-inline-scopes.test.ts`
+- `packages/client/src/react/blueprints/centraid-inline.ts`
+- `packages/client/src/react/blueprints/inline-read-truncation.test.ts`
+- `packages/client/src/react/blueprints/inlineQueryCtx.test.ts`
+- `packages/client/src/react/blueprints/inlineQueryCtx.ts`
+- `packages/client/src/replica/read-plan-parity.test.ts`
+- `packages/client/src/replica/read-plan-truncation.test.ts`
+- `packages/client/src/replica/read-plan.ts`
+- `packages/client/src/replica/store-core.ts`
+- `packages/client/src/replica/types.ts`
+- `packages/client/src/replica/worker-client.ts`
+- `packages/vault/src/gateway/gateway.ts`
+- `packages/vault/src/gateway/read-truncation.test.ts`
+- `packages/vault/src/gateway/types.ts`
+- `tests/quality/user-facing-qualities.test.ts`
+
+### Audit
+
+REFUTED — no fresh-context verifier has adjudicated this slice yet. The root runs the verifier against the worktree separately and replaces this verdict; the slice does not self-certify, and the directive's default when uncertain is REFUTED.
+
+## User impact
+
+**One new line, and one refusal a member will never see.** Nothing a shipped screen shows changes in this slice except this: when a list is cut short by its window, the seat now says so on its one status line — `Showing the newest 1,000; more not loaded` — instead of drawing a shorter list that looks complete. That is the whole visible surface. A member with fewer than a thousand contacts, notes or photographs in any one entity sees nothing new at all, because nothing was ever hidden from them.
+
+The case it fixes is the one the member cannot detect: a 5,000-contact roster drew 1,000 rows and said nothing, so counting the screen gave the wrong answer and searching it missed people who exist. The line does not fix the missing rows — E2 and E6 do that — but it stops the screen from lying about them, which is the part that has to land first.
+
+The refusal is a developer-facing guard, not a member-facing state: every read that exists today declares `acceptTruncation: true`, so no shipped screen can reach it. It fires only on a read a future change adds without declaring a window, and it names the entity and both fixes.
+
+**First-run: unchanged.** A new vault has no entity anywhere near a thousand rows, so no window fills, `truncated` is absent on every read, and no line is drawn. Day one looks exactly as it did.
+
+**Evidence:** `artifacts/e2e/ui-impact/issue-922-web-truncation-status.png`, published by `apps/web/tests/e2e/tasks.spec.ts`. That case seeds 21 open tasks through the app's own write rail against the real harness gateway, asks the real `board` query for a window of 20 through `window.centraid.read`, and reads the phrase off the frame's one status line before capturing the frame. Twenty-one against twenty is the smallest honest way to fill a window end to end: the board clamps its open read to a floor of 20, and a thousand real writes would be a fixture this slice has no reason to add. The same phrase is asserted on the phone by `apps/mobile/src/kit/hooks/useReplicaQuery.truncation.test.tsx`, which mounts the real `StatusLine` over the render host and reads the text off it.

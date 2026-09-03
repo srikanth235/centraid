@@ -155,7 +155,12 @@ import type {
   SearchRequest,
   SearchResult,
 } from "./types.js";
-import { DEFAULT_PURPOSE, GatewayError } from "./types.js";
+import {
+  DEFAULT_PURPOSE,
+  GATEWAY_DEFAULT_READ_ROWS,
+  GATEWAY_MAX_READ_ROWS,
+  GatewayError,
+} from "./types.js";
 
 /** Non-owner provenance reads (#352) must scope to one (entity_type, entity_id) and hold read on that entity's table. */
 function provenanceScopeFailure(
@@ -704,7 +709,10 @@ export class Gateway {
       exposedPrimaryKey
     );
     const select = applyFieldMask(target, ref.physical, access.fieldMask);
-    const limit = Math.min(Math.max(request.limit ?? 1000, 1), 10_000);
+    const limit = Math.min(
+      Math.max(request.limit ?? GATEWAY_DEFAULT_READ_ROWS, 1),
+      GATEWAY_MAX_READ_ROWS
+    );
     // The automation plane never sees demo data (#290): a fake "rent due" row
     // must not fire a real reminder. Narrows, never widens.
     const demoExclusion =
@@ -712,15 +720,20 @@ export class Gateway {
         ? ` AND NOT EXISTS (SELECT 1 FROM access_seed_row _s
              WHERE _s.target_type = ? AND _s.target_id = "${ref.physical}"."${pkColumn(target, ref.physical)}")`
         : "";
-    const rows = target
+    // One row past the window: TRUNCATION IS NEVER SILENT (#922 0a). A page of
+    // exactly `limit` rows is not evidence of anything — the probe row is, and
+    // it never reaches the caller.
+    const probed = target
       .prepare(
-        `SELECT ${select} FROM "${ref.physical}" WHERE ${grantFilter.where} AND ${callerFilter.where}${demoExclusion}${order} LIMIT ${limit}`
+        `SELECT ${select} FROM "${ref.physical}" WHERE ${grantFilter.where} AND ${callerFilter.where}${demoExclusion}${order} LIMIT ${limit + 1}`
       )
       .all(
         ...grantFilter.params,
         ...callerFilter.params,
         ...(demoExclusion ? [request.entity] : [])
       ) as Record<string, unknown>[];
+    const truncated = probed.length > limit;
+    const rows = truncated ? probed.slice(0, limit) : probed;
     // Sealed columns never ride a read (#293): reads show a placeholder;
     // plaintext takes the `reveal` verb and its per-item receipt.
     if (sealedCols.length > 0) {
@@ -741,7 +754,11 @@ export class Gateway {
       decision: "allow",
       detail: { filter: request.where ?? [], rowCount: rows.length },
     });
-    return { rows, receiptId };
+    return {
+      rows,
+      receiptId,
+      ...(truncated ? { truncated: true, appliedLimit: limit } : {}),
+    };
   }
 
   /**

@@ -46,19 +46,22 @@ export default function PhotosPeopleView({
 
   const faces = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "media.face_region" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "media.face_region" }), [])
   );
   const parties = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.party" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.party" }), [])
   );
   const clusters = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "media.face_cluster" }), [])
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "media.face_cluster" }),
+      []
+    )
   );
   const policies = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "enrich.policy" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "enrich.policy" }), [])
   );
 
   const [enrichBusy, setEnrichBusy] = useState(false);

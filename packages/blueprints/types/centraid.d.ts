@@ -65,12 +65,23 @@ interface VaultReadRequest {
   orderBy?: { column: string; dir?: "asc" | "desc" };
   limit?: number;
   purpose: string;
+  /**
+   * "Give me the default window and tell me when it fills" (#922 0a). A read
+   * declaring neither `limit` nor this is REFUSED at the inline seat's
+   * boundary: the default cap is a bound a caller may take, never one the
+   * engine applies behind their back.
+   */
+  acceptTruncation?: boolean;
 }
 
 /** `ctx.vault.read` result: the projected rows plus the read's receipt id. */
 interface VaultReadResult {
   rows: Record<string, unknown>[];
   receiptId?: string;
+  /** Set only when the window cut rows off (#922 0a); absent means it did not. */
+  truncated?: boolean;
+  /** The window `rows` was produced under. */
+  appliedLimit?: number;
 }
 
 /** Full-text search over a text-indexed entity (each row carries `_snippet`). */

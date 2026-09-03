@@ -184,11 +184,14 @@ export default function PhotosHome({
 
   const collections = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.collection" }), [])
   );
   const entries = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection_entry" }), [])
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "core.collection_entry" }),
+      []
+    )
   );
   const memories = useMemo(() => onThisDay(timeline.assets), [timeline.assets]);
   const visibleSections = useMemo(
@@ -221,7 +224,7 @@ export default function PhotosHome({
   // `detectFacesFor` is the gateway question, not `deviceAnswerFor` (#724).
   const enrichPolicies = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "enrich.policy" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "enrich.policy" }), [])
   );
   const detectFacesAvailability = detectFacesFor(
     enrichPolicies.loading

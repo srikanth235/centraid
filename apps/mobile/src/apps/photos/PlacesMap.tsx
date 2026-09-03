@@ -49,7 +49,7 @@ export default function PlacesMap({
   } = useMenuAnchor();
   const places = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.place" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.place" }), [])
   );
   const { assets } = usePhotoTimeline();
 

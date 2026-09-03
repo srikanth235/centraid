@@ -1,4 +1,5 @@
 import { PENDING_OVERLAY_FIELDS } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
 import type { InlineQueryModule } from "@centraid/blueprints/apps/inline-types";
 import {
   applyRecurrenceExceptions,
@@ -8,6 +9,7 @@ import {
   shiftTemporal,
 } from "@centraid/core/time";
 
+import { assertBoundedReplicaRead } from "../../replica/read-plan.js";
 import type {
   ShellReplicaReadRequest,
   ShellReplicaSearchRequest,
@@ -20,6 +22,7 @@ import type {
   ReplicaSearchWireResult,
   ReplicaValue,
 } from "../../replica/types.js";
+import { postStatus } from "../../status-channel.js";
 
 export interface InlineReplicaSession {
   read: (
@@ -219,7 +222,17 @@ export function buildInlineCtx(
     async read(
       request: ShellReplicaReadRequest
     ): Promise<{ rows: unknown[]; receiptId: string }> {
+      // THE WEB SEAT'S BOUNDARY (#922 0a). A query that declares no window and
+      // does not accept the default one is refused HERE, where the caller's
+      // own file is named in the stack, rather than answered with a page
+      // silently capped at 1,000 rows.
+      assertBoundedReplicaRead(request);
       const result = await session.read(appId, request);
+      // Honesty is not optional and not the app's to forget: a window that cut
+      // rows off says so on the one status line, from the read itself.
+      if (result.truncated && result.appliedLimit !== undefined) {
+        postStatus(truncatedListNotice(result.appliedLimit));
+      }
       const rows = result.rows.map((row) => {
         const marker = pendingMarker(row);
         if (marker) pendingRows.push(marker);

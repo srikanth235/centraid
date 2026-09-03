@@ -149,6 +149,12 @@ export interface ReplicaReadRequest {
   orderBy?: ReplicaOrderBy;
   limit?: number;
   purpose?: string;
+  /**
+   * "I have not declared a window; give me the default one and tell me when it
+   * fills." The kit boundary refuses a read that sets neither this nor `limit`
+   * (#922 0a) — the engine never silently caps a caller that did not ask.
+   */
+  acceptTruncation?: boolean;
 }
 
 /**
@@ -180,7 +186,22 @@ export interface ReplicaRowEnvelope {
   rowVersion?: number;
 }
 
-export interface ReplicaReadWireResult {
+/**
+ * TRUNCATION IS NEVER SILENT (#922 0a). `coverage` answers "does this device
+ * hold the whole library yet"; these two answer the different question "did
+ * THIS read's window cut the answer short" — a fully bootstrapped replica
+ * still truncates a 5,000-contact roster at the default 1,000. Both are
+ * additive and absent when the window did not fill.
+ */
+export interface ReplicaTruncation {
+  /** Set only when rows were left behind. Absent is not `false` by accident:
+   *  a producer that cannot tell must not claim completeness. */
+  truncated?: boolean;
+  /** The window that produced `rows`, so a surface can name the number. */
+  appliedLimit?: number;
+}
+
+export interface ReplicaReadWireResult extends ReplicaTruncation {
   rows: ReplicaRowEnvelope[];
   cursor: ReplicaCursor;
   dependency: ReplicaDependency;
@@ -194,7 +215,7 @@ export interface ReplicaSearchWireResult {
   coverage?: ReplicaCoverage;
 }
 
-export interface ReplicaReadResult {
+export interface ReplicaReadResult extends ReplicaTruncation {
   rows: ReplicaRow[];
   /** No consent receipt locally; the cursor makes the origin inspectable. */
   receiptId: string;

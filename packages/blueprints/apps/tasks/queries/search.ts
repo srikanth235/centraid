@@ -59,6 +59,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     // Attachments only for the matched tasks — the join stays as narrow as
     // the match set, never a whole-table pull.
     const attachments = await ctx.vault.read({
+      acceptTruncation: true,
       entity: "core.attachment",
       where: [
         { column: "target_type", op: "eq", value: "schedule.task" },
@@ -72,6 +73,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const contents =
       contentIds.length > 0
         ? await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
             purpose,

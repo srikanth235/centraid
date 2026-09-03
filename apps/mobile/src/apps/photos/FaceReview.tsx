@@ -64,16 +64,16 @@ export default function FaceReview({
 
   const facesQuery = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "media.face_region" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "media.face_region" }), [])
   );
   const partiesQuery = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.party" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.party" }), [])
   );
   // Metadata only — no bytes over the replica.
   const assetsQuery = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "media.asset" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "media.asset" }), [])
   );
 
   const names = useMemo(

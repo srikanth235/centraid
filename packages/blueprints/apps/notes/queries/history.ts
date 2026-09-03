@@ -42,8 +42,16 @@ export default async function noteHistory({ input, ctx }: HandlerArgs) {
     if (!note) return { versions: [] };
 
     const [schemes, concepts] = await Promise.all([
-      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
-      ctx.vault.read({ entity: "core.concept", purpose }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.concept_scheme",
+        purpose,
+      }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.concept",
+        purpose,
+      }),
     ]);
     const relationId = findSchemeConcept(
       schemes.rows as Array<{ scheme_id: string; uri: string }>,
@@ -89,6 +97,7 @@ export default async function noteHistory({ input, ctx }: HandlerArgs) {
     }
 
     const contents = await ctx.vault.read({
+      acceptTruncation: true,
       entity: "core.content_item",
       where: [{ column: "content_id", op: "in", value: chain }],
       purpose,

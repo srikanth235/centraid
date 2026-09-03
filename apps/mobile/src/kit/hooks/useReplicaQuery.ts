@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { truncatedListNotice } from "@centraid/blueprints/apps/_shared/shared-copy";
+import { UnboundedReplicaReadError } from "@centraid/client/replica/native";
 import type {
   ReplicaRow,
   ReplicaReadWireResult,
@@ -7,6 +9,7 @@ import type {
 
 import { coalesceWork } from "../../lib/coalesce";
 import type { NativeReadRequest } from "../../lib/replica/native-session";
+import { postStatus } from "../components/status-line";
 import { useReplica } from "../replica/ReplicaProvider";
 import type { ReplicaContextValue } from "../replica/ReplicaProvider";
 import { replicaQueryConnection } from "./replica-query-state";
@@ -67,10 +70,29 @@ export function useReplicaQuery(
     };
   }, []);
 
+  // THE PHONE'S BOUNDARY (#922 0a). A screen that declares no window and does
+  // not accept the default one is refused before the read runs: a page silently
+  // capped at 1,000 renders a roster the member believes is complete. The
+  // refusal is state, not a crash — this hook's consumers already render
+  // `error`, and a thrown exception here would blank the screen instead of
+  // naming the entity and the fix.
+  const refusal = useMemo(
+    () =>
+      request.limit === undefined && request.acceptTruncation !== true
+        ? new UnboundedReplicaReadError(request.entity)
+        : undefined,
+    [request]
+  );
+
   const refresh = useCallback(async () => {
     // Nothing to read without a session; `loading` is derived from the session's
     // presence below, so there is no state to settle here either.
     if (!session) return;
+    if (refusal) {
+      setError(refusal.message);
+      setLoading(false);
+      return;
+    }
     const ticket = (sequence.current += 1);
     const current = (): boolean =>
       mounted.current && ticket === sequence.current;
@@ -79,6 +101,11 @@ export function useReplicaQuery(
       if (!current()) return;
       setResult(next);
       setError(undefined);
+      // The one status line both seats own carries the truncation; a member
+      // never counts a capped list and believes it is the whole set.
+      if (next.truncated && next.appliedLimit !== undefined) {
+        postStatus(truncatedListNotice(next.appliedLimit));
+      }
     } catch (caughtError) {
       if (!current()) return;
       setError(
@@ -87,7 +114,7 @@ export function useReplicaQuery(
     } finally {
       if (current()) setLoading(false);
     }
-  }, [appId, request, session]);
+  }, [appId, refusal, request, session]);
 
   useEffect(() => {
     if (!session) return;
@@ -120,6 +147,8 @@ export function useReplicaQuery(
   // Dropping it (as this hook did) is how an offline relaunch mid-backfill
   // rendered a truncated library that claimed to be the whole thing.
   const coverage = result?.coverage ?? replica.coverage;
+  const truncated = result?.truncated === true;
+  const appliedLimit = result?.appliedLimit;
 
   return {
     rows,
@@ -128,6 +157,13 @@ export function useReplicaQuery(
     ...(!session && replica.error ? { unavailableReason: replica.error } : {}),
     ...(lastSyncedAt ? { lastSyncedAt } : {}),
     ...(coverage ? { coverage } : {}),
+    // Structural for a list that wants to render the fact itself (E6), worded
+    // once so no screen can phrase it differently.
+    ...(truncated ? { truncated } : {}),
+    ...(appliedLimit === undefined ? {} : { appliedLimit }),
+    ...(truncated && appliedLimit !== undefined
+      ? { truncationNotice: truncatedListNotice(appliedLimit) }
+      : {}),
     ...(error ? { error } : {}),
     refresh,
   };

@@ -76,11 +76,13 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const assetIds = assetsRaw.map((a) => a.asset_id);
     const [contents, entries, albums, places, joins] = await Promise.all([
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.content_item",
         where: [{ column: "content_id", op: "in", value: contentIds }],
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.collection_entry",
         where: [
           { column: "target_type", op: "eq", value: "media.asset" },
@@ -88,7 +90,11 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         ],
         purpose,
       }),
-      ctx.vault.read({ entity: "core.collection", purpose }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.collection",
+        purpose,
+      }),
       readPlaces({ ctx, purpose }),
       readAssetJoins({ ctx, purpose, assetIds, contentIds }),
     ]);

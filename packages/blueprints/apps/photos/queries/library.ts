@@ -77,7 +77,11 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           limit: 200,
           purpose,
         }),
-        ctx.vault.read({ entity: "core.collection", purpose }),
+        ctx.vault.read({
+          acceptTruncation: true,
+          entity: "core.collection",
+          purpose,
+        }),
         readPlaces({ ctx, purpose }),
         before
           ? { rows: [] }
@@ -97,6 +101,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     const [entries, contents, joins, memoryMembers] = await Promise.all([
       assetIds.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.collection_entry",
             where: [
               { column: "target_type", op: "eq", value: "media.asset" },
@@ -107,6 +112,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         : { rows: [] },
       contentIds.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
             purpose,

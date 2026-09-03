@@ -193,7 +193,11 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           purpose,
         }),
         // Notebooks are collections (#274) — the one curation mechanism.
-        ctx.vault.read({ entity: "core.collection", purpose }),
+        ctx.vault.read({
+          acceptTruncation: true,
+          entity: "core.collection",
+          purpose,
+        }),
         // Rides this Promise.all so the exclusion costs no extra round trip.
         readJournalNoteIds(ctx.vault, purpose),
       ]);
@@ -233,6 +237,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     const [placements, attachments, links, backlinks, tags] = await Promise.all(
       [
         ctx.vault.read({
+          acceptTruncation: true,
           entity: "core.collection_entry",
           where: [
             { column: "target_type", op: "eq", value: "knowledge.note" },
@@ -241,6 +246,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           purpose,
         }),
         ctx.vault.read({
+          acceptTruncation: true,
           entity: "core.attachment",
           where: [
             { column: "target_type", op: "eq", value: "knowledge.note" },
@@ -249,6 +255,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           purpose,
         }),
         ctx.vault.read({
+          acceptTruncation: true,
           entity: "core.link",
           where: [
             { column: "from_type", op: "eq", value: "knowledge.note" },
@@ -258,6 +265,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           purpose,
         }),
         ctx.vault.read({
+          acceptTruncation: true,
           entity: "core.link",
           where: [
             { column: "to_type", op: "eq", value: "knowledge.note" },
@@ -267,6 +275,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           purpose,
         }),
         ctx.vault.read({
+          acceptTruncation: true,
           entity: "core.tag",
           where: [
             { column: "target_type", op: "eq", value: "knowledge.note" },
@@ -286,6 +295,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     const concepts =
       conceptIds.length > 0
         ? await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.concept",
             where: [{ column: "concept_id", op: "in", value: conceptIds }],
             purpose,
@@ -337,6 +347,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         : Promise.resolve({ cards: [] as Array<Record<string, unknown>> }),
       linkRows.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.link_anchor",
             where: [
               {
@@ -405,6 +416,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     const contents =
       contentIds.length > 0
         ? await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
             purpose,

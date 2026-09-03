@@ -109,6 +109,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
 
     const [profiles, parties, tags, concepts, schemes] = await Promise.all([
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "people.profile",
         where: [
           { column: "party_id", op: "in", value: order },
@@ -117,11 +118,13 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.party",
         where: [{ column: "party_id", op: "in", value: order }],
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.tag",
         where: [
           { column: "target_type", op: "eq", value: "core.party" },
@@ -129,8 +132,16 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         ],
         purpose,
       }),
-      ctx.vault.read({ entity: "core.concept", purpose }),
-      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.concept",
+        purpose,
+      }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.concept_scheme",
+        purpose,
+      }),
     ]);
 
     const profileRows = (profiles.rows ?? []) as unknown as RawProfile[];

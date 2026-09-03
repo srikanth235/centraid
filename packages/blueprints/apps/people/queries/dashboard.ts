@@ -102,8 +102,16 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         limit: window,
         purpose,
       }),
-      ctx.vault.read({ entity: "core.concept", purpose }),
-      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.concept",
+        purpose,
+      }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.concept_scheme",
+        purpose,
+      }),
     ]);
     const profileRows = (profiles.rows ?? []) as unknown as RawProfile[];
     const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
@@ -135,11 +143,13 @@ export default async function dashboard({ ctx }: HandlerArgs) {
 
     const [parties, tags, dates, activityLinks, bindings] = await Promise.all([
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.party",
         where: [{ column: "party_id", op: "in", value: partyIds }],
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.tag",
         where: [
           { column: "target_type", op: "eq", value: "core.party" },
@@ -148,6 +158,7 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "people.important_date",
         where: [
           { column: "party_id", op: "in", value: partyIds },
@@ -156,6 +167,7 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.link",
         where: [
           { column: "from_type", op: "eq", value: "core.activity" },
@@ -186,6 +198,7 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         : Promise.resolve({ rows: [] }),
       activityIds.length
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "knowledge.annotation",
             where: [
               { column: "target_type", op: "eq", value: "core.activity" },

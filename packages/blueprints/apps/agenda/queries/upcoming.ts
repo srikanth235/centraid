@@ -398,7 +398,11 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
         limit: RECURRING_ANCHOR_CAP,
         purpose,
       }),
-      ctx.vault.read({ entity: "schedule.calendar", purpose }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "schedule.calendar",
+        purpose,
+      }),
     ]);
     const windowedById = new Map<string, RawEvent>(
       ((events.rows ?? []) as unknown as RawEvent[]).map((e) => [e.event_id, e])
@@ -415,11 +419,13 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
     const [exts, attachments, attendeesRes, vaultRes, exceptionsRes] =
       await Promise.all([
         ctx.vault.read({
+          acceptTruncation: true,
           entity: "schedule.event_ext",
           where: [{ column: "event_id", op: "in", value: eventIds }],
           purpose,
         }),
         ctx.vault.read({
+          acceptTruncation: true,
           entity: "core.attachment",
           where: [
             { column: "target_type", op: "eq", value: "core.event" },
@@ -428,12 +434,18 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
           purpose,
         }),
         ctx.vault.read({
+          acceptTruncation: true,
           entity: "schedule.attendee",
           where: [{ column: "event_id", op: "in", value: eventIds }],
           purpose,
         }),
-        ctx.vault.read({ entity: "core.vault", purpose }),
         ctx.vault.read({
+          acceptTruncation: true,
+          entity: "core.vault",
+          purpose,
+        }),
+        ctx.vault.read({
+          acceptTruncation: true,
           entity: "schedule.recurrence_exception",
           where: [
             { column: "target_type", op: "eq", value: "core.event" },
@@ -451,6 +463,7 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
     const partiesRes =
       attendeePartyIds.length > 0
         ? await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.party",
             where: [{ column: "party_id", op: "in", value: attendeePartyIds }],
             purpose,
@@ -472,6 +485,7 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
     const contents =
       contentIds.length > 0
         ? await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
             purpose,

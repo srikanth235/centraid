@@ -143,23 +143,26 @@ export default function PhotoLightbox({
   const { assets } = usePhotoTimeline();
   const collections = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.collection" }), [])
   );
   const entries = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection_entry" }), [])
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "core.collection_entry" }),
+      []
+    )
   );
   const places = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.place" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.place" }), [])
   );
   const faces = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "media.face_region" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "media.face_region" }), [])
   );
   const parties = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.party" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.party" }), [])
   );
   // By asset identity, never raw index: this timeline is still loading, so
   // device pages land after mount and shift every index.

@@ -71,6 +71,66 @@ export interface ReplicaReadPlan {
   escalations: ReplicaEscalation[];
   orderGuards: ReplicaOrderGuard[];
   tieCensus?: { sql: string; binds: ReplicaBindValue[] };
+  /**
+   * The window this answer is bounded by. TRUNCATION IS NEVER SILENT (#922
+   * 0a): `binds` end with `limit + 1`, so one probe row past the window is the
+   * exact, statement-level evidence that rows were left behind — a full page is
+   * not, because a set of exactly `limit` rows fills one without hiding
+   * anything. `trimReplicaPage` drops the probe and reports the verdict.
+   */
+  limit: number;
+  /** True when `limit` is `REPLICA_DEFAULT_LOCAL_ROWS`, not a declared window. */
+  limitDefaulted: boolean;
+}
+
+/** One page's window verdict: the answer, and whether it hid anything. */
+export interface ReplicaPage<Row> {
+  rows: Row[];
+  truncated: boolean;
+}
+
+/**
+ * Drop the probe row and say whether it was there. Every consumer of a plan
+ * MUST route its rows through this — the plan over-fetches by one on purpose,
+ * so a caller that returns the raw rows returns one row too many.
+ */
+export function trimReplicaPage<Row>(
+  rows: readonly Row[],
+  plan: ReplicaReadPlan
+): ReplicaPage<Row> {
+  const truncated = rows.length > plan.limit;
+  return { rows: truncated ? rows.slice(0, plan.limit) : [...rows], truncated };
+}
+
+/**
+ * A read that declares no window and does not accept truncation, refused at the
+ * seat's boundary rather than answered with a silently capped page (#922 0a).
+ * The message names the entity and the two ways out, because the caller that
+ * has to fix it is reading this string in a log or an error state.
+ */
+export class UnboundedReplicaReadError extends Error {
+  readonly code = "UNBOUNDED_READ";
+  constructor(readonly entity: string) {
+    super(
+      `Unbounded read of ${entity}: declare \`limit\` for the window this screen renders, ` +
+        `or \`acceptTruncation: true\` to take the default ${REPLICA_DEFAULT_LOCAL_ROWS}-row window and render the truncation.`
+    );
+    this.name = "UnboundedReplicaReadError";
+  }
+}
+
+/**
+ * The one boundary rule, shared by both seats so neither can drift: a read is
+ * admissible when it declares its window or accepts the default one.
+ */
+export function assertBoundedReplicaRead(request: {
+  entity: string;
+  limit?: number;
+  acceptTruncation?: boolean;
+}): void {
+  if (request.limit === undefined && request.acceptTruncation !== true) {
+    throw new UnboundedReplicaReadError(request.entity);
+  }
 }
 
 export interface ReplicaPlannedRow {
@@ -184,12 +244,18 @@ function orderGuards(
 export const REPLICA_MAX_LOCAL_ROWS = 100_000;
 export const REPLICA_DEFAULT_LOCAL_ROWS = 1000;
 
-function plannedLimit(request: ReplicaReadRequest): number {
+function plannedLimit(request: ReplicaReadRequest): {
+  limit: number;
+  defaulted: boolean;
+} {
   const requested = request.limit ?? REPLICA_DEFAULT_LOCAL_ROWS;
   if (!Number.isSafeInteger(requested)) {
     throw new ReplicaProtocolError("Read limit must be a safe integer");
   }
-  return Math.min(Math.max(requested, 1), REPLICA_MAX_LOCAL_ROWS);
+  return {
+    limit: Math.min(Math.max(requested, 1), REPLICA_MAX_LOCAL_ROWS),
+    defaulted: request.limit === undefined,
+  };
 }
 
 const SOURCE_COLUMNS = `row_id, ${PAYLOAD}, ${OVERSIZED}, server_version`;
@@ -250,7 +316,7 @@ export function planComposedReplicaRead(
   if (dir !== "asc" && dir !== "desc") {
     throw new ReplicaProtocolError(`Unknown order direction ${String(dir)}`);
   }
-  const limit = plannedLimit(request);
+  const { limit, defaulted } = plannedLimit(request);
 
   const builder: PlanBuilder = { binds: [], escalations: [] };
   const branches: string[] = [];
@@ -318,9 +384,12 @@ export function planComposedReplicaRead(
            WHERE verdict >= 0
            ORDER BY ${order.join(", ")}
            LIMIT ?`,
-    binds: [...scanBinds, limit],
+    // One row past the window: the probe `trimReplicaPage` drops (#922 0a).
+    binds: [...scanBinds, limit + 1],
     escalations: builder.escalations,
     orderGuards: guards,
+    limit,
+    limitDefaulted: defaulted,
   };
   if (request.orderBy && schema.primaryKey === REPLICA_SYNTHETIC_PRIMARY_KEY) {
     const ordered = jsonValue(request.orderBy.column);

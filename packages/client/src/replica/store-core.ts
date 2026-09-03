@@ -11,6 +11,7 @@ import {
   assertReplicaPage,
   assertReplicaTieCensus,
   planReplicaRead,
+  trimReplicaPage,
 } from "./read-plan.js";
 import type {
   ReplicaOverlayBinding,
@@ -605,8 +606,12 @@ export class ReplicaSqliteStore {
       now,
       this.overlay(request, schema, relevant)
     );
-    const planned = this.all<ReplicaPlannedRow>(plan.sql, plan.binds);
-    assertReplicaPage(planned, plan);
+    const probed = this.all<ReplicaPlannedRow>(plan.sql, plan.binds);
+    assertReplicaPage(probed, plan);
+    // The plan over-fetches by one row; that probe is dropped HERE and reported
+    // as `truncated`, never swallowed (#922 0a).
+    const page = trimReplicaPage(probed, plan);
+    const planned = page.rows;
     if (plan.tieCensus) {
       const census = this.one<ReplicaTieCensusRow>(
         plan.tieCensus.sql,
@@ -632,6 +637,7 @@ export class ReplicaSqliteStore {
         ...(confinedRowId === undefined ? {} : { rowId: confinedRowId }),
       },
       coverage: completeMeta ? "complete" : "partial",
+      ...(page.truncated ? { truncated: true, appliedLimit: plan.limit } : {}),
     };
   }
 

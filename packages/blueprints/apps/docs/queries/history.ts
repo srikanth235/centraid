@@ -56,8 +56,16 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
     if (!doc) return { versions: [] };
 
     const [schemes, concepts] = await Promise.all([
-      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
-      ctx.vault.read({ entity: "core.concept", purpose }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.concept_scheme",
+        purpose,
+      }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.concept",
+        purpose,
+      }),
     ]);
     const revisesConceptId = findSchemeConcept(
       (schemes.rows ?? []) as unknown as SchemeRow[],
@@ -100,6 +108,7 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
     }
 
     const contents = await ctx.vault.read({
+      acceptTruncation: true,
       entity: "core.content_item",
       where: [{ column: "content_id", op: "in", value: chainIds }],
       purpose,

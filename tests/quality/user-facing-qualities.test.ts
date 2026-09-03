@@ -229,6 +229,11 @@ function scanCopy(
 // allowlist. Comments are stripped first, so neither a commented-out `limit:`
 // nor prose can decide a verdict.
 const REPLICA_REQUEST_KEYS = new Set([
+  // `acceptTruncation` belongs to the request vocabulary as of #922 0a. Without
+  // it here, a request carrying the flag stops looking like a request at all
+  // and this walk skips it -- the gate would go blind on exactly the reads the
+  // flag marks as debt, which is the opposite of what the flag is for.
+  "acceptTruncation",
   "entity",
   "limit",
   "orderBy",

@@ -95,7 +95,11 @@ export async function readPlaces({
   ctx: HandlerCtx;
   purpose: string;
 }) {
-  const result = await ctx.vault.read({ entity: "core.place", purpose });
+  const result = await ctx.vault.read({
+    acceptTruncation: true,
+    entity: "core.place",
+    purpose,
+  });
   // Coordinates for the map — `null`, never 0°,0°; `kind` and gazetteer
   // because a location is a PHRASE before it is a pin.
   const rows = ((result.rows ?? []) as unknown as RawPlace[]).map((p) => ({
@@ -122,10 +126,15 @@ export async function readAssetJoins({
   contentIds: string[];
 }) {
   const [schemes, concepts, custody] = await Promise.all([
-    ctx.vault.read({ entity: "core.concept_scheme", purpose }),
-    ctx.vault.read({ entity: "core.concept", purpose }),
+    ctx.vault.read({
+      acceptTruncation: true,
+      entity: "core.concept_scheme",
+      purpose,
+    }),
+    ctx.vault.read({ acceptTruncation: true, entity: "core.concept", purpose }),
     contentIds.length > 0
       ? ctx.vault.read({
+          acceptTruncation: true,
           entity: "blob.custody_state",
           where: [{ column: "content_id", op: "in", value: contentIds }],
           purpose,
@@ -161,6 +170,7 @@ export async function readAssetJoins({
   // rail and the star are two readings of the same rows.
   if (assetIds.length > 0) {
     const assetTags = await ctx.vault.read({
+      acceptTruncation: true,
       entity: "core.tag",
       where: [
         { column: "target_type", op: "eq", value: "media.asset" },

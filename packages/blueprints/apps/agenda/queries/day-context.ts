@@ -170,6 +170,7 @@ export default async function dayContext({
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.concept_scheme",
         where: [{ column: "uri", op: "eq", value: FLAGS_SCHEME_URI }],
         purpose,
@@ -183,6 +184,7 @@ export default async function dayContext({
     );
     const concepts = flagsScheme
       ? await ctx.vault.read({
+          acceptTruncation: true,
           entity: "core.concept",
           where: [
             { column: "scheme_id", op: "eq", value: flagsScheme.scheme_id },

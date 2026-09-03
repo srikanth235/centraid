@@ -69,6 +69,7 @@ export async function readLabelsByDocument({
     )
   );
   const labelTags = await ctx.vault.read({
+    acceptTruncation: true,
     entity: "core.tag",
     where: [
       { column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
@@ -106,6 +107,7 @@ export async function readCustodyByContent({
 }): Promise<Map<string, string>> {
   if (contentIds.length === 0) return new Map();
   const custody = await ctx.vault.read({
+    acceptTruncation: true,
     entity: "blob.custody_state",
     where: [{ column: "content_id", op: "in", value: contentIds }],
     purpose,
@@ -486,6 +488,7 @@ export async function readOriginsByDocument({
 }): Promise<Map<string, SharedFromEntry> | null> {
   try {
     const origins = await ctx.vault.read({
+      acceptTruncation: true,
       entity: "core.share_origin",
       where: [{ column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE }],
       orderBy: { column: "shared_at", dir: "desc" },

@@ -168,9 +168,17 @@ describe("inlineQueryCtx", () => {
       {
         default: async ({ ctx }: { ctx: unknown }) => {
           const local = ctx as {
-            vault: { read: () => Promise<{ rows: Record<string, unknown>[] }> };
+            vault: {
+              read: (request: {
+                entity: string;
+                acceptTruncation?: boolean;
+              }) => Promise<{ rows: Record<string, unknown>[] }>;
+            };
           };
-          const read = await local.vault.read();
+          const read = await local.vault.read({
+            entity: "schedule.task",
+            acceptTruncation: true,
+          });
           return {
             people: read.rows.map((row) => ({
               party_id: row.party_id,
@@ -239,14 +247,20 @@ describe("inlineQueryCtx", () => {
         default: async ({ ctx }: { ctx: unknown }) => {
           const local = ctx as {
             vault: {
-              read: (request: {
-                entity: string;
-              }) => Promise<{ rows: Record<string, unknown>[] }>;
+              read: (
+                request: ShellReplicaReadRequest
+              ) => Promise<{ rows: Record<string, unknown>[] }>;
             };
           };
           const [tasks, projects] = await Promise.all([
-            local.vault.read({ entity: "schedule.task" }),
-            local.vault.read({ entity: "schedule.project" }),
+            local.vault.read({
+              entity: "schedule.task",
+              acceptTruncation: true,
+            }),
+            local.vault.read({
+              entity: "schedule.project",
+              acceptTruncation: true,
+            }),
           ]);
           const task = tasks.rows[0]!;
           return {

@@ -108,19 +108,22 @@ export default function PhotosLibrary({
   const { assets } = usePhotoTimeline();
   const collections = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.collection" }), [])
   );
   const faces = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "media.face_region" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "media.face_region" }), [])
   );
   const places = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.place" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.place" }), [])
   );
   const entries = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection_entry" }), [])
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "core.collection_entry" }),
+      []
+    )
   );
   const [keptAlbums, setKeptAlbums] = useState<string[]>([]);
   const [pinsReady, setPinsReady] = useState(false);

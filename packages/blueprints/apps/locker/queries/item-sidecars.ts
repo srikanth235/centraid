@@ -68,6 +68,7 @@ async function rowsOf<T>(
 ): Promise<T[]> {
   try {
     const result = await ctx.vault.read({
+      acceptTruncation: true,
       entity,
       where: [{ column, op: "eq", value: itemId }],
       purpose,
@@ -258,6 +259,7 @@ export async function readHistory(
   let rows: RevisionRow[] = [];
   try {
     const result = await ctx.vault.read({
+      acceptTruncation: true,
       entity: "core.entity_revision",
       where: [
         { column: "entity_type", op: "eq", value: "locker.item" },
@@ -305,6 +307,7 @@ export async function readAttachments(
   let edges: AttachmentRow[] = [];
   try {
     const result = await ctx.vault.read({
+      acceptTruncation: true,
       entity: "core.attachment",
       where: [
         { column: "target_type", op: "eq", value: "locker.item" },
@@ -320,6 +323,7 @@ export async function readAttachments(
   let contents: ContentRow[] = [];
   try {
     const result = await ctx.vault.read({
+      acceptTruncation: true,
       entity: "core.content_item",
       where: [
         {

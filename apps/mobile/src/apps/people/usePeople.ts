@@ -51,16 +51,17 @@ export interface PeopleData extends RosterProjection {
 export function usePeople(): PeopleData {
   const profiles = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "people.profile" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "people.profile" }), [])
   );
   const parties = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "core.party" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.party" }), [])
   );
   const tags = useReplicaQuery(
     APP,
     useMemo(
       () => ({
+        acceptTruncation: true,
         entity: "core.tag",
         where: [
           { column: "target_type", op: "eq" as const, value: "core.party" },
@@ -71,20 +72,27 @@ export function usePeople(): PeopleData {
   );
   const concepts = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "core.concept" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.concept" }), [])
   );
   const schemes = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "core.concept_scheme" }), [])
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "core.concept_scheme" }),
+      []
+    )
   );
   const dates = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "people.important_date" }), [])
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "people.important_date" }),
+      []
+    )
   );
   const partyNotes = useReplicaQuery(
     APP,
     useMemo(
       () => ({
+        acceptTruncation: true,
         entity: "knowledge.annotation",
         where: [
           { column: "target_type", op: "eq" as const, value: "core.party" },
@@ -97,6 +105,7 @@ export function usePeople(): PeopleData {
     APP,
     useMemo(
       () => ({
+        acceptTruncation: true,
         entity: "core.link",
         where: [
           { column: "from_type", op: "eq" as const, value: "core.activity" },
@@ -108,12 +117,13 @@ export function usePeople(): PeopleData {
   );
   const activities = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "core.activity" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.activity" }), [])
   );
   const activityNotes = useReplicaQuery(
     APP,
     useMemo(
       () => ({
+        acceptTruncation: true,
         entity: "knowledge.annotation",
         where: [
           { column: "target_type", op: "eq" as const, value: "core.activity" },
@@ -125,7 +135,10 @@ export function usePeople(): PeopleData {
   // The one share read the roster needs. NOT in the combined state below.
   const bindings = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "share.party_vault_binding" }), [])
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "share.party_vault_binding" }),
+      []
+    )
   );
 
   const queryState = combineReplicaQueryStates([
@@ -227,12 +240,16 @@ export function usePerson(partyId: string): PersonData {
   const people = usePeople();
   const channels = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "social.contact_channel" }), [])
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "social.contact_channel" }),
+      []
+    )
   );
   const partyNotes = useReplicaQuery(
     APP,
     useMemo(
       () => ({
+        acceptTruncation: true,
         entity: "knowledge.annotation",
         where: [
           { column: "target_type", op: "eq" as const, value: "core.party" },
@@ -246,6 +263,7 @@ export function usePerson(partyId: string): PersonData {
     APP,
     useMemo(
       () => ({
+        acceptTruncation: true,
         entity: "core.link",
         where: [
           { column: "from_type", op: "eq" as const, value: "core.activity" },
@@ -258,12 +276,13 @@ export function usePerson(partyId: string): PersonData {
   );
   const activities = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "core.activity" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.activity" }), [])
   );
   const activityNotes = useReplicaQuery(
     APP,
     useMemo(
       () => ({
+        acceptTruncation: true,
         entity: "knowledge.annotation",
         where: [
           { column: "target_type", op: "eq" as const, value: "core.activity" },
@@ -274,16 +293,17 @@ export function usePerson(partyId: string): PersonData {
   );
   const concepts = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "core.concept" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.concept" }), [])
   );
   const parties = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "core.party" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.party" }), [])
   );
   const dates = useReplicaQuery(
     APP,
     useMemo(
       () => ({
+        acceptTruncation: true,
         entity: "people.important_date",
         where: [{ column: "party_id", op: "eq" as const, value: partyId }],
       }),
@@ -296,11 +316,17 @@ export function usePerson(partyId: string): PersonData {
   // live in `PersonGrants.tsx`.
   const bindings = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "share.party_vault_binding" }), [])
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "share.party_vault_binding" }),
+      []
+    )
   );
   const invitations = useReplicaQuery(
     APP,
-    useMemo(() => ({ entity: "share.commons_invitation" }), [])
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "share.commons_invitation" }),
+      []
+    )
   );
 
   const queryState = combineReplicaQueryStates([

@@ -106,8 +106,16 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
         limit: window + 1,
         purpose,
       }),
-      ctx.vault.read({ entity: "core.concept", purpose }),
-      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.concept",
+        purpose,
+      }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.concept_scheme",
+        purpose,
+      }),
     ]);
 
     const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
@@ -147,11 +155,13 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
 
     const [parties, tags, dates, bindings] = await Promise.all([
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.party",
         where: [{ column: "party_id", op: "in", value: partyIds }],
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.tag",
         where: [
           { column: "target_type", op: "eq", value: "core.party" },
@@ -160,6 +170,7 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "people.important_date",
         where: [
           { column: "party_id", op: "in", value: partyIds },

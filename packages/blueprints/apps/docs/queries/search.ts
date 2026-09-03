@@ -58,6 +58,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const documentIds = hits.map((d) => d.document_id);
     const [tags, concepts, schemes] = await Promise.all([
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.tag",
         where: [
           { column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
@@ -65,8 +66,16 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         ],
         purpose,
       }),
-      ctx.vault.read({ entity: "core.concept", purpose }),
-      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.concept",
+        purpose,
+      }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.concept_scheme",
+        purpose,
+      }),
     ]);
     const tagRows = (tags.rows ?? []) as unknown as TagRow[];
     const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
@@ -116,6 +125,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const [contents, custodyByContent, sharesByDoc] = await Promise.all([
       contentIds.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
             purpose,

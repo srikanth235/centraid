@@ -47,8 +47,16 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
   try {
     // Owner-curated and small, so unbounded; they bound the rest.
     const [concepts, schemes] = await Promise.all([
-      ctx.vault.read({ entity: "core.concept", purpose }),
-      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.concept",
+        purpose,
+      }),
+      ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.concept_scheme",
+        purpose,
+      }),
     ]);
     const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
     const schemeRows = (schemes.rows ?? []) as unknown as SchemeRow[];
@@ -130,12 +138,14 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
     // while those scopes park for approval (#821).
     const [documentsRes, starTags, tagsByDoc, sharesByDoc] = await Promise.all([
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.document",
         where: [{ column: "document_id", op: "in", value: windowedIds }],
         purpose,
       }),
       starredConcept
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.tag",
             where: [
               {
@@ -176,6 +186,7 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
     const [contents, custodyByContent] = await Promise.all([
       contentIds.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
             purpose,

@@ -45,11 +45,14 @@ export default function PhotoPicker({
   const timeline = usePhotoTimeline();
   const collections = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.collection" }), [])
   );
   const entries = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection_entry" }), [])
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "core.collection_entry" }),
+      []
+    )
   );
   const [picked, setPicked] = useState(new Set<string>());
   const [adding, setAdding] = useState(false);

@@ -34,7 +34,7 @@ export default function PlaceDetail({
   const { assets: timelineAssets } = usePhotoTimeline();
   const places = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.place" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.place" }), [])
   );
   const { placeKey, placeName } = route.params;
   const [naming, setNaming] = useState(false);

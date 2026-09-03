@@ -123,27 +123,30 @@ export function PhotosSearchView({
 
   const collections = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.collection" }), [])
   );
   const entries = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.collection_entry" }), [])
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "core.collection_entry" }),
+      []
+    )
   );
   const faces = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "media.face_region" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "media.face_region" }), [])
   );
   const parties = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.party" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.party" }), [])
   );
   const places = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.place" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.place" }), [])
   );
   const contentItems = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "core.content_item" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.content_item" }), [])
   );
 
   // `searching` is set in the handler, never in the effect, so no effect writes

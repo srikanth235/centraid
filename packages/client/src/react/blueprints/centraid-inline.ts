@@ -295,6 +295,12 @@ export interface InlineCentraidClient {
   stageDerivative: typeof stageDerivative;
 }
 
+/**
+ * `UNBOUNDED_READ` is deliberately NOT here (#922 0a). Falling back online for
+ * an undeclared window would answer the refused read from the gateway — capped
+ * at the same 1,000 rows, over the network, and just as silently. The refusal
+ * is a bug in the calling query, so it reaches the app.
+ */
 const FALLBACK_CODES = new Set([
   "ONLINE_ONLY",
   "REPLICA_UNAVAILABLE",

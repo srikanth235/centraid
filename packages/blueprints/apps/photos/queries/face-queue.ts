@@ -96,6 +96,7 @@ export default async function faceQueue({ ctx }: HandlerArgs) {
     ];
     const contentsResult = contentIds.length
       ? await ctx.vault.read({
+          acceptTruncation: true,
           entity: "core.content_item",
           where: [{ column: "content_id", op: "in", value: contentIds }],
           purpose,
