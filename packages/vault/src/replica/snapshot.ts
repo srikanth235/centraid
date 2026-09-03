@@ -1,19 +1,38 @@
 import type { DatabaseSync } from "node:sqlite";
 
+import { DEFAULT_REPLICA_TEXT_CEILING_BYTES } from "../schema/entity-declaration.js";
 import { sealedColumnsOf } from "../schema/sealed.js";
 import { resolveEntity } from "../schema/tables.js";
 import { currentReplicaLogState } from "./change-log.js";
 import type { ReplicaLogState } from "./change-log.js";
 import { replicaUnavailableColumnsOf } from "./unavailable-columns.js";
+import { replicaValuePolicyOf } from "./value-policy.js";
+import type { ReplicaValuePolicy } from "./value-policy.js";
 
-export const DEFAULT_REPLICA_MAX_VALUE_BYTES = 64 * 1_024;
+/**
+ * The text ceiling an entity gets when its declaration states none.
+ *
+ * It is a DEFAULT, not the rule: since #922 (ruling SB-text) the ceiling that
+ * decides whether a text value rides in full is declared per entity in
+ * `schema/entity-catalog.ts`, and a caller's `maxValueBytes` is only the
+ * baseline for entities that declare nothing. The number lives beside the
+ * declaration it defaults; this is the replica lane's re-export of it, and it
+ * replaces `DEFAULT_REPLICA_MAX_VALUE_BYTES`, which named a flat cap that no
+ * longer exists.
+ */
+export { DEFAULT_REPLICA_TEXT_CEILING_BYTES } from "../schema/entity-declaration.js";
 
 export interface ReplicaRow {
   rowId: string;
   values: Record<string, unknown>;
   /** Last change-log sequence for this row in the current replica epoch. */
   rowVersion?: number;
-  /** Oversized and binary values omitted from `values`; fetch them on demand. */
+  /**
+   * Values omitted from `values`: a column the entity declares LAZY (bytes,
+   * never text) or a text value above the entity's declared ceiling. Both
+   * clients turn a deferred column into a refusal that names it
+   * (`guardReplicaRow`), so a deferred value is absent but never silent.
+   */
   deferredColumns: string[];
 }
 
@@ -104,7 +123,8 @@ function valueBytes(value: unknown): number {
 function publicRow(
   raw: Record<string, unknown>,
   shape: EntityShape,
-  maxValueBytes: number,
+  ceilingBytes: number,
+  policy: ReplicaValuePolicy,
   rowVersion: number
 ): ReplicaRow {
   const values: Record<string, unknown> = {};
@@ -113,8 +133,17 @@ function publicRow(
     const value = raw[column];
     // Binary data is never eager on the JSON replica lane. Canonical
     // photo/document rows carry blob URIs, so their metadata still arrives;
-    // byte bodies take the dedicated lazy blob/cache path.
-    if (value instanceof Uint8Array || valueBytes(value) > maxValueBytes) {
+    // byte bodies take the dedicated lazy blob/cache path. The declaration is
+    // the primary answer (#922, SB-text); the `Uint8Array` test behind it is
+    // the safety net for the dynamic ext band, which has no declaration.
+    if (policy.lazyColumns.has(column) || value instanceof Uint8Array) {
+      deferredColumns.push(column);
+      continue;
+    }
+    // TEXT rides in FULL up to the ceiling THIS entity declares. A flat 64 KiB
+    // cap here is how a note body over ~48 KiB of prose reached no device and
+    // nothing fetched it back — the hole #922 0b closes.
+    if (valueBytes(value) > ceilingBytes) {
       deferredColumns.push(column);
     } else {
       values[column] = value;
@@ -158,7 +187,7 @@ function validateOptions(options: ReadReplicaRowsOptions): {
 } {
   const limit = options.limit ?? 1_000;
   const maxValueBytes =
-    options.maxValueBytes ?? DEFAULT_REPLICA_MAX_VALUE_BYTES;
+    options.maxValueBytes ?? DEFAULT_REPLICA_TEXT_CEILING_BYTES;
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10_000) {
     throw new RangeError(
       "replica row page limit must be an integer between 1 and 10000"
@@ -173,8 +202,29 @@ function validateOptions(options: ReadReplicaRowsOptions): {
 }
 
 /**
+ * The ceiling in force for one entity: the entity's DECLARED text ceiling when
+ * it has one, else the caller's baseline. A declaration wins over the caller
+ * because it is a fact about the table, not about this read.
+ */
+function ceilingFor(
+  entity: string,
+  baselineBytes: number
+): {
+  ceilingBytes: number;
+  policy: ReplicaValuePolicy;
+} {
+  const policy = replicaValuePolicyOf(entity);
+  const declared =
+    policy.textCeilingBytes !== DEFAULT_REPLICA_TEXT_CEILING_BYTES;
+  return {
+    ceilingBytes: declared ? policy.textCeilingBytes : baselineBytes,
+    policy,
+  };
+}
+
+/**
  * Shape-neutral row page. Sealed columns are absent structurally (never
- * placeholder/ciphertext), and oversized/binary values are marked deferred.
+ * placeholder/ciphertext); lazy and over-ceiling values are marked deferred.
  */
 export function readReplicaRows(
   vault: DatabaseSync,
@@ -221,11 +271,13 @@ export function readReplicaRows(
     rowIds,
     currentReplicaLogState(vault).epoch
   );
+  const { ceilingBytes, policy } = ceilingFor(entity, maxValueBytes);
   const rows = pageRows.map((row) =>
     publicRow(
       row,
       shape,
-      maxValueBytes,
+      ceilingBytes,
+      policy,
       versions.get(rowIdOf(row, shape.primaryKey)) ?? 0
     )
   );
@@ -273,7 +325,8 @@ export function readReplicaRow(
     .get(currentReplicaLogState(vault).epoch, entity, canonicalRowId) as {
     seq: number | null;
   };
-  return publicRow(raw, shape, maxValueBytes, version.seq ?? 0);
+  const { ceilingBytes, policy } = ceilingFor(entity, maxValueBytes);
+  return publicRow(raw, shape, ceilingBytes, policy, version.seq ?? 0);
 }
 
 export interface ReplicaSnapshotReader {

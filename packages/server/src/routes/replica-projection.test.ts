@@ -384,3 +384,67 @@ describe("replica projection under retention compaction", () => {
     ).toStrictEqual([]);
   });
 });
+
+// #922 0b, ruling SB-text: text a screen renders rides the replica lane in
+// FULL up to the ceiling its entity declares. Before this the projection
+// stripped any value over a flat 64 KiB and listed it as deferred, so a note
+// body past roughly 48 KiB of prose reached no device and nothing fetched it
+// back. `core.content_item` is where a note body actually lives — a `data:`
+// URI in `content_uri` — which is why it is the entity that declares.
+describe("replica projection of declared long text", () => {
+  afterEach(async () => {
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
+      cleanup()
+    );
+  });
+
+  test("a note body over the old 64 KiB cap reaches the device in full", async () => {
+    const dir = await tempDir(`replica-long-text-${crypto.randomUUID()}-`);
+    const vault = openVaultPlane({
+      bootstrap: true,
+      dir,
+      logger,
+      enableWalShipper: false,
+    });
+    cleanups.push(
+      () => fs.rm(dir, { recursive: true, force: true }),
+      () => vault.stop()
+    );
+    vault.approveGrant("planner", {
+      purpose: "dpv:ServiceProvision",
+      scopes: [
+        {
+          schema: "core",
+          table: "content_item",
+          verbs: "read",
+          fieldMask: ["title", "content_uri", "media_type"],
+        },
+      ],
+    });
+    const since = currentReplicaLogState(vault.db.vault).watermark;
+    const body = "a".repeat(200 * 1_024);
+    const uri = `data:text/markdown;base64,${Buffer.from(body, "utf8").toString("base64")}`;
+    vault.db.vault
+      .prepare(
+        `INSERT INTO core_content_item
+           (content_id, media_type, content_uri, sha256, byte_size, title,
+            created_at)
+         VALUES ('long-note', 'text/markdown', ?, ?, ?, 'Long note',
+                 '2026-01-01T00:00:00.000Z')`
+      )
+      .run(uri, "f".repeat(64), Buffer.byteLength(body));
+
+    const page = projectReplicaPage(vault.db.vault, access, since);
+    const change = page.batch.changes.find(
+      (candidate) =>
+        candidate.op === "upsert" && candidate.entity === "core.content_item"
+    );
+    expect(change).toStrictEqual(
+      expect.objectContaining({
+        op: "upsert",
+        values: expect.objectContaining({ content_uri: uri }),
+      })
+    );
+    expect(change).not.toHaveProperty("oversizedFields");
+  });
+});

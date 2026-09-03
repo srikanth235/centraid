@@ -55,3 +55,18 @@ export function retryInSeconds(seconds: number): string {
 export function truncatedListNotice(appliedLimit: number): string {
   return `Showing the newest ${appliedLimit.toLocaleString("en-US")}; more not loaded`;
 }
+
+/**
+ * A field this device does not hold, named where a screen reached for it
+ * (#922, ruling SB-text).
+ *
+ * Since 0b, TEXT rides the replica lane in full up to the ceiling its entity
+ * declares, so the only fields that reach this line are bytes a column
+ * declares lazy and text past a declared ceiling. It is an error string, not
+ * reassurance: what happened, and the one thing that changes it. Both clients
+ * raise it through `guardReplicaRow`, so the phone and the shell say the same
+ * sentence about the same absence.
+ */
+export function fieldNotOnThisDevice(field: string): string {
+  return `${field} is not on this device — open it online.`;
+}

@@ -476,6 +476,13 @@ export {
   type EntityLifecycle,
   type VaultEntityDeclaration,
 } from "./schema/tables.js";
+// What an entity's values may be on the JSON replica lane (#922, SB-text):
+// the declared text ceiling and the columns that are bytes, never text.
+export {
+  replicaValuePolicyOf,
+  type ReplicaValuePolicy,
+} from "./replica/value-policy.js";
+export { type VaultEntityReplicaValues } from "./schema/entity-declaration.js";
 // The two BANDS in `vault.db` beside the life data (#916): evidence and the
 // conversation ledger. Names only — a host excludes them by band from the
 // portable export, the replica and the support bundle, and the retention
@@ -591,7 +598,7 @@ export {
   type PartyPointer,
 } from "./schema/party-pointers.js";
 export {
-  DEFAULT_REPLICA_MAX_VALUE_BYTES,
+  DEFAULT_REPLICA_TEXT_CEILING_BYTES,
   readReplicaRow,
   readReplicaRows,
   withReplicaSnapshot,

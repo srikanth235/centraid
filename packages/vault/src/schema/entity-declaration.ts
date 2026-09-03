@@ -58,6 +58,48 @@ export interface EntityRevisionPolicy {
 /** The count every entity keeps unless its declaration says otherwise. */
 export const DEFAULT_REVISION_RETAIN = 20;
 
+/**
+ * The replica value policy of ONE entity (#922, ruling SB-text).
+ *
+ * Until #922 every value above a flat 64 KiB was stripped out of the JSON
+ * replica lane and listed as deferred, and nothing fetched it back: a note
+ * body over the ceiling was simply absent on the phone, which is the one thing
+ * a replica exists to prevent. The ruling splits the two cases that had been
+ * conflated. TEXT a screen renders RIDES IN FULL, up to a ceiling the entity
+ * DECLARES — the entity knows what its longest column can honestly weigh, and
+ * a number declared beside the table is a number a page-budget can reason
+ * about. Genuinely BINARY values never ride the JSON lane at all, and that is
+ * a property of the COLUMN, so it is declared as one.
+ */
+export interface VaultEntityReplicaValues {
+  /**
+   * What one TEXT value of this entity may weigh, in bytes, and still ride the
+   * replica lane. Omitted means {@link DEFAULT_REPLICA_TEXT_CEILING_BYTES}.
+   *
+   * Raise it wherever the product stores long member text: the ceiling is a
+   * promise about the entity, not a device limit, and a value above it is
+   * deferred — never silently, because both clients turn a deferred field into
+   * a refusal that names it (`guardReplicaRow`).
+   */
+  readonly textCeilingBytes?: number;
+  /**
+   * Columns whose values are BYTES, not text: never eager on the JSON lane
+   * whatever they weigh. Declared per column because that is what the fact is
+   * about; `snapshot.ts` also defers an undeclared value that arrives as a
+   * `Uint8Array`, which is the safety net for the dynamic ext band that has no
+   * declaration to read.
+   */
+  readonly lazyColumns?: readonly string[];
+}
+
+/**
+ * The text ceiling an entity gets when it declares none. It is the pre-#922
+ * flat cap, kept as the DEFAULT rather than as the rule: an entity that stores
+ * long member text raises it (see `core.content_item`), and an entity that has
+ * never held more than a title has no reason to.
+ */
+export const DEFAULT_REPLICA_TEXT_CEILING_BYTES = 64 * 1_024;
+
 export interface VaultEntityDeclaration {
   label: string;
   blurb?: string;
@@ -85,6 +127,13 @@ export interface VaultEntityDeclaration {
    * pair, so its parent key is the composite one into `core_entity`.
    */
   projectionOf?: string;
+  /**
+   * What this entity's values are allowed to be on the replica lane (#922,
+   * ruling SB-text). Omitted means the default text ceiling and no lazy
+   * column; read it through `replicaValuePolicyOf` rather than defaulting at
+   * each call site.
+   */
+  replicaValues?: VaultEntityReplicaValues;
 }
 
 export type EntityRegistry = Readonly<
@@ -96,4 +145,17 @@ export function revisionPolicyOf(
   declaration: VaultEntityDeclaration
 ): EntityRevisionPolicy {
   return declaration.revisions ?? { retain: DEFAULT_REVISION_RETAIN };
+}
+
+/** The replica value policy a declaration asks for, or the one it did not state. */
+export function replicaValuesOf(
+  declaration: VaultEntityDeclaration
+): Required<Pick<VaultEntityReplicaValues, "textCeilingBytes">> &
+  VaultEntityReplicaValues {
+  const declared = declaration.replicaValues;
+  return {
+    textCeilingBytes:
+      declared?.textCeilingBytes ?? DEFAULT_REPLICA_TEXT_CEILING_BYTES,
+    ...(declared?.lazyColumns ? { lazyColumns: declared.lazyColumns } : {}),
+  };
 }
