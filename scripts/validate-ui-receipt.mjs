@@ -6,12 +6,24 @@ import path from "node:path";
 const root = path.resolve(import.meta.dirname, "..");
 const SCREENSHOT_RE = /artifacts\/e2e\/ui-impact\/[^\s)]+\.png/giu;
 
+/*
+ * A blueprint app's SUITE is not one of its surfaces (#930). Every other path
+ * this gate watches is something a member can see; `queries.test.ts` and the
+ * `*.test-fixtures.ts` module it reads are not, and the only exit from this
+ * gate is a screenshot emitted by a changed e2e harness — so before this, a
+ * change that split an over-long test file (or merely deleted a comment in
+ * one) had to photograph a screen that had not moved. The component,
+ * stylesheet and handler files beside them are still user-facing, which the
+ * cases in validate-ui-receipt.test.mjs pin.
+ */
+const TEST_FILE_RE = /(?:\.test|\.test-fixtures)\.[^./]+$/u;
+
 export function validateUiReceipt({ changed, readText }) {
   const touchesUi = changed.some(
     (file) =>
       file.startsWith("packages/client/") ||
       /^apps\/[^/]+\/.*\.(?:tsx|css)$/u.test(file) ||
-      file.startsWith("packages/blueprints/apps/")
+      (file.startsWith("packages/blueprints/apps/") && !TEST_FILE_RE.test(file))
   );
   if (!touchesUi) return [];
   const errors = [];

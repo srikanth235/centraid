@@ -1218,6 +1218,8 @@
         "pending-projection.ts",
         "permits.test.ts",
         "permits.ts",
+        "queries-reveal-access.test.ts",
+        "queries.test-fixtures.ts",
         "queries.test.ts",
         "queries/access.ts",
         "queries/auth.ts",
