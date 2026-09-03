@@ -30,7 +30,7 @@ const APP_ID = "tasks";
 function useTasksEntity(entity: string): ReplicaQueryState {
   return useReplicaQuery(
     APP_ID,
-    useMemo(() => ({ entity }), [entity])
+    useMemo(() => ({ acceptTruncation: true, entity }), [entity])
   );
 }
 

@@ -26,6 +26,7 @@ export default async function trashPeople({ ctx }: HandlerArgs) {
       ids.length === 0
         ? { rows: [] }
         : await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.party",
             where: [{ column: "party_id", op: "in", value: ids }],
             purpose,

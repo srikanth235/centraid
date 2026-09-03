@@ -18,7 +18,7 @@ import { buildNotes } from "./notes-model";
 export function useNotes() {
   const notes = useReplicaQuery(
     "notes",
-    useMemo(() => ({ entity: "knowledge.note" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "knowledge.note" }), [])
   );
   // Bound the content_item read to the note body ids. An unbounded read is
   // capped at 1000 rows server-side, so at photo-scale vaults most note bodies
@@ -52,11 +52,11 @@ export function useNotes() {
   );
   const links = useReplicaQuery(
     "notes",
-    useMemo(() => ({ entity: "core.link" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.link" }), [])
   );
   const anchors = useReplicaQuery(
     "notes",
-    useMemo(() => ({ entity: "core.link_anchor" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.link_anchor" }), [])
   );
   // The People-journal marker, resolved on this seat exactly as the web
   // queries resolve it: the scheme by URI, its `entry` concept, then the note
@@ -64,15 +64,18 @@ export function useNotes() {
   // library below is filtered by this set rather than merged with it.
   const schemes = useReplicaQuery(
     "notes",
-    useMemo(() => ({ entity: "core.concept_scheme" }), [])
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "core.concept_scheme" }),
+      []
+    )
   );
   const concepts = useReplicaQuery(
     "notes",
-    useMemo(() => ({ entity: "core.concept" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.concept" }), [])
   );
   const tags = useReplicaQuery(
     "notes",
-    useMemo(() => ({ entity: "core.tag" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.tag" }), [])
   );
   const journalNoteIds = useMemo(() => {
     const schemeId = schemes.rows.find(
@@ -94,12 +97,13 @@ export function useNotes() {
   // Notebooks are collections (#274); the spine must name every one of them.
   const collections = useReplicaQuery(
     "notes",
-    useMemo(() => ({ entity: "core.collection" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.collection" }), [])
   );
   const placements = useReplicaQuery(
     "notes",
     useMemo(
       () => ({
+        acceptTruncation: true,
         entity: "core.collection_entry",
         where: [{ column: "target_type", op: "eq", value: "knowledge.note" }],
       }),

@@ -19,6 +19,16 @@ export interface ReplicaQueryState {
   lastSyncedAt?: string;
   /** `partial` means these rows are a readable preview, not the whole library. */
   coverage?: ReplicaCoverage;
+  /**
+   * This read's WINDOW cut the answer short (#922 0a) — a different fact from
+   * `coverage`, which is about the device's copy of the library. A fully
+   * bootstrapped phone still truncates a 5,000-contact roster at 1,000.
+   */
+  truncated?: boolean;
+  /** The window that produced `rows`. */
+  appliedLimit?: number;
+  /** The truncation line, already worded, so no screen phrases it its own way. */
+  truncationNotice?: string;
   refresh: () => Promise<void>;
 }
 
@@ -29,6 +39,10 @@ export interface CombinedReplicaQueryState {
   unavailableReason?: string;
   lastSyncedAt?: string;
   coverage?: ReplicaCoverage;
+  /** Any part truncated truncates the screen: a composed view is as short as
+   *  its shortest window (#922 0a). */
+  truncated?: boolean;
+  truncationNotice?: string;
 }
 
 export function replicaQueryConnection(input: {
@@ -91,6 +105,15 @@ export function combineReplicaQueryStates(
       : coverages.every((entry) => entry === "complete")
         ? "complete"
         : "partial";
+  // Conservative like coverage above: one truncated part makes the composed
+  // screen truncated, and the notice shown is the smallest window in play —
+  // the one that actually cut the answer short.
+  const truncatedStates = states.filter((state) => state.truncated === true);
+  const truncationNotice = truncatedStates
+    .flatMap((state) => (state.truncationNotice ? [state] : []))
+    .sort(
+      (a, b) => (a.appliedLimit ?? 0) - (b.appliedLimit ?? 0)
+    )[0]?.truncationNotice;
   return {
     loading: states.some((state) => state.loading),
     connection,
@@ -98,5 +121,7 @@ export function combineReplicaQueryStates(
     ...(unavailableReason ? { unavailableReason } : {}),
     ...(lastSyncedAt ? { lastSyncedAt } : {}),
     ...(coverage ? { coverage } : {}),
+    ...(truncatedStates.length > 0 ? { truncated: true } : {}),
+    ...(truncationNotice ? { truncationNotice } : {}),
   };
 }

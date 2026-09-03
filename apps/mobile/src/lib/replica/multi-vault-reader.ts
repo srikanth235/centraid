@@ -14,7 +14,10 @@ import {
   replicaLocalSearchSpec,
   ReplicaProtocolError,
   REPLICA_DEFAULT_LOCAL_ROWS,
+  REPLICA_DEFAULT_SEARCH_ROWS,
   REPLICA_MAX_LOCAL_ROWS,
+  REPLICA_MAX_SEARCH_ROWS,
+  trimReplicaPage,
 } from "@centraid/client/replica/native";
 import type {
   OptimisticMutation,
@@ -23,6 +26,7 @@ import type {
   ReplicaEntitySchema,
   ReplicaIntent,
   ReplicaOverlayBinding,
+  ReplicaPage,
   ReplicaPlannedRow,
   ReplicaPlanSource,
   ReplicaReadRequest,
@@ -290,12 +294,13 @@ export class MultiVaultReplicaReader {
     const badgeRisk = contentHashed && schemas.length > 1;
     const degraded: MountedReadDegradation[] = [];
     if (badgeRisk) degraded.push(mountedReadDegradation("content-hash-badges"));
-    let planned = await this.runPlan(
+    let page = await this.runPlan(
       schema,
       planRequest,
       sources,
       badgeRisk ? REPLICA_MAX_LOCAL_ROWS : requested
     );
+    let planned = page.rows;
     let rows = this.compose(planned, schemas);
     // A short page proves there is nothing more only when nothing was cut off.
     // One vault's own duplicates can collapse a full page; pay for the whole
@@ -307,12 +312,13 @@ export class MultiVaultReplicaReader {
       planned.length === requested
     ) {
       degraded.push(mountedReadDegradation("dedupe-collapse"));
-      planned = await this.runPlan(
+      page = await this.runPlan(
         schema,
         planRequest,
         sources,
         REPLICA_MAX_LOCAL_ROWS
       );
+      planned = page.rows;
       rows = this.compose(planned, schemas);
     }
     const aggregate = this.aggregateState();
@@ -322,12 +328,17 @@ export class MultiVaultReplicaReader {
     const clamped =
       (request.limit ?? 0) > REPLICA_MAX_LOCAL_ROWS &&
       planned.length === REPLICA_MAX_LOCAL_ROWS;
+    // Two ways this answer hides rows: the statement's own window filled, or
+    // dedupe/badge composition left more than the caller asked for. Either one
+    // is a truncation the surface must be able to say out loud (#922 0a).
+    const truncated = page.truncated || rows.length > requested;
     return {
       rows: rows.slice(0, requested),
       cursor: aggregate.cursor,
       dependency: { shapeId: shapeId!, entity: request.entity },
       coverage: clamped ? "partial" : aggregate.coverage,
       ...(degraded.length > 0 ? { degraded } : {}),
+      ...(truncated ? { truncated: true, appliedLimit: requested } : {}),
     };
   }
 
@@ -337,17 +348,17 @@ export class MultiVaultReplicaReader {
     request: ReplicaReadRequest,
     sources: readonly ReplicaPlanSource[],
     limit: number
-  ): Promise<ReplicaPlannedRow[]> {
+  ): Promise<ReplicaPage<ReplicaPlannedRow>> {
     const plan = planComposedReplicaRead(
       schema,
       { ...request, limit },
       new Date(),
       sources
     );
-    const rows = await this.query<ReplicaPlannedRow>(plan.sql, plan.binds);
+    const probed = await this.query<ReplicaPlannedRow>(plan.sql, plan.binds);
     // Escalating rows sort ahead of the whole union, so one page proves every
     // mounted database clean or names the first refusal.
-    assertReplicaPage(rows, plan);
+    assertReplicaPage(probed, plan);
     if (plan.tieCensus) {
       const census = await this.query<ReplicaTieCensusRow>(
         plan.tieCensus.sql,
@@ -355,7 +366,9 @@ export class MultiVaultReplicaReader {
       );
       if (census[0]) assertReplicaTieCensus(census[0]);
     }
-    return rows;
+    // The plan over-fetches by one; that probe is the exact evidence the window
+    // cut something off, and it never reaches a caller (#922 0a).
+    return trimReplicaPage(probed, plan);
   }
 
   /** The statement's order is the answer's order; dedupe preserves it. */
@@ -415,7 +428,10 @@ export class MultiVaultReplicaReader {
     const schemas = await this.schemasForAll(appId, purpose, request.entity);
     const overlays = await this.overlaysForAll(appId, request.entity, schemas);
     const indexed = new Set(required);
-    const limit = Math.min(Math.max(request.limit ?? 100, 1), 1_000);
+    const limit = Math.min(
+      Math.max(request.limit ?? REPLICA_DEFAULT_SEARCH_ROWS, 1),
+      REPLICA_MAX_SEARCH_ROWS
+    );
     // Only a delete or an upsert that touches an INDEXED column can take a
     // canonical hit out of the composed page; every other pending mutation
     // leaves the FTS ranking alone. Over-fetch by that count rather than by the
@@ -428,7 +444,10 @@ export class MultiVaultReplicaReader {
         mutations.filter((mutation) => displaces(mutation, indexed)).length,
       0
     );
-    const fetchLimit = Math.min(limit + displacing, MAX_SEARCH_FETCH_ROWS);
+    // `+ 1` is the truncation probe (#922 0a): a ranked page of exactly `limit`
+    // proves nothing, one hit past the window proves the window cut the answer
+    // short. It is dropped before the caller sees it.
+    const fetchLimit = Math.min(limit + 1 + displacing, MAX_SEARCH_FETCH_ROWS);
     const match = replicaFtsMatchExpression(request.query);
     const parameters: ReplicaBindValue[] = [];
     const union = this.#scopes
@@ -554,12 +573,11 @@ export class MultiVaultReplicaReader {
           .map((row) => replicaScopeEnvelope(scope, row))
       );
     }
-    const rows = dedupeReplicaRowsByContent(hits)
-      .sort(
-        (left, right) =>
-          Number(left.values._rank ?? 0) - Number(right.values._rank ?? 0)
-      )
-      .slice(0, limit);
+    const ranked = dedupeReplicaRowsByContent(hits).sort(
+      (left, right) =>
+        Number(left.values._rank ?? 0) - Number(right.values._rank ?? 0)
+    );
+    const rows = ranked.slice(0, limit);
     const aggregate = this.aggregateState();
     return {
       rows,
@@ -569,6 +587,9 @@ export class MultiVaultReplicaReader {
         entity: request.entity,
       },
       coverage: aggregate.coverage,
+      ...(ranked.length > limit
+        ? { truncated: true, appliedLimit: limit }
+        : {}),
     };
   }
 

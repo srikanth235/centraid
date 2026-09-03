@@ -300,8 +300,12 @@ describe("Home tile reads", () => {
     // One arm per attached vault, one page across their union.
     expect(paged.sql.match(/UNION ALL/gu)).toHaveLength(SCOPES.length - 1);
     expect(paged.sql.match(/LIMIT \?/gu)).toHaveLength(1);
-    // The page is the answer: nothing is fetched only to be discarded.
-    expect(paged.rows).toBe(tile.limit);
+    // The page is the answer, plus ONE probe row and no more: the statement
+    // over-fetches by exactly one so a filled window can be told apart from a
+    // set that merely ends there, and that row is dropped before the caller
+    // sees it (#922 0a). Anything beyond `limit + 1` would be fetched only to
+    // be discarded.
+    expect(paged.rows).toBe(tile.limit + 1);
 
     expect(page.rows).toHaveLength(tile.limit);
     // Four scopes share one day sequence, so the global newest `limit` rows
@@ -320,7 +324,8 @@ describe("Home tile reads", () => {
 
     const paged = onePage(driver);
     expect(paged.sql.match(/LIMIT \?/gu)).toHaveLength(1);
-    expect(paged.rows).toBe(HOME_TILE_LIMITS.tasks);
+    // `limit + 1`: the one probe row that makes truncation visible (#922 0a).
+    expect(paged.rows).toBe(HOME_TILE_LIMITS.tasks + 1);
     expect(page.rows).toHaveLength(HOME_TILE_LIMITS.tasks);
     reader.close();
   });

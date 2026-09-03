@@ -166,6 +166,12 @@ export class ReplicaWorkerClient implements ReplicaStore {
         receiptId: `replica:${result.cursor.epoch}:${result.cursor.seq}`,
         dependency: result.dependency,
         coverage: result.coverage,
+        // Truncation survives the guard hop: a page that hid rows says so
+        // wherever it is consumed (#922 0a).
+        ...(result.truncated ? { truncated: true } : {}),
+        ...(result.appliedLimit === undefined
+          ? {}
+          : { appliedLimit: result.appliedLimit }),
       };
     } catch (error) {
       if (error instanceof OnlineOnlyError) guard.mark(error);

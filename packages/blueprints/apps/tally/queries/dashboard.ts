@@ -175,11 +175,19 @@ export async function loadTally(
     receiptAllocationsRes,
     nudgesRes,
   ] = await Promise.all([
-    ctx.vault.read({ entity: "core.vault", purpose }),
-    ctx.vault.read({ entity: "tally.friend", purpose }),
-    ctx.vault.read({ entity: "tally.group", purpose }),
-    ctx.vault.read({ entity: "social.circle", purpose }),
-    ctx.vault.read({ entity: "social.circle_member", purpose }),
+    ctx.vault.read({ acceptTruncation: true, entity: "core.vault", purpose }),
+    ctx.vault.read({ acceptTruncation: true, entity: "tally.friend", purpose }),
+    ctx.vault.read({ acceptTruncation: true, entity: "tally.group", purpose }),
+    ctx.vault.read({
+      acceptTruncation: true,
+      entity: "social.circle",
+      purpose,
+    }),
+    ctx.vault.read({
+      acceptTruncation: true,
+      entity: "social.circle_member",
+      purpose,
+    }),
     ctx.vault.read({
       entity: "tally.expense",
       // Trashed expenses (#441) drop out of every balance and ledger —
@@ -283,6 +291,7 @@ export async function loadTally(
   const partiesRes =
     partyIds.length > 0
       ? await ctx.vault.read({
+          acceptTruncation: true,
           entity: "core.party",
           where: [{ column: "party_id", op: "in", value: partyIds }],
           purpose,
@@ -383,6 +392,7 @@ export async function loadTally(
   const receiptContents =
     receiptContentIds.length > 0
       ? await ctx.vault.read({
+          acceptTruncation: true,
           entity: "core.content_item",
           where: [{ column: "content_id", op: "in", value: receiptContentIds }],
           purpose,

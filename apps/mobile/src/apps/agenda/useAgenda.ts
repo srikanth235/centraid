@@ -21,7 +21,7 @@ export type NativeAgendaEvent = AgendaEventModel & { raw: ReplicaRow };
 function useAgendaEntity(entity: string) {
   return useReplicaQuery(
     "agenda",
-    useMemo(() => ({ entity }), [entity])
+    useMemo(() => ({ acceptTruncation: true, entity }), [entity])
   );
 }
 

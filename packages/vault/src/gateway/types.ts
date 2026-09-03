@@ -83,6 +83,14 @@ export interface OrderBy {
   dir?: "asc" | "desc";
 }
 
+/**
+ * The window an undeclared read gets, and the ceiling a declared one is clamped
+ * to. Bounding is the point (#262); SILENCE never was (#922 0a) — a read whose
+ * window fills says so in `ReadResult.truncated`.
+ */
+export const GATEWAY_DEFAULT_READ_ROWS = 1000;
+export const GATEWAY_MAX_READ_ROWS = 10_000;
+
 export interface ReadRequest {
   entity: string;
   /** Caller-supplied filter, ANDed with the grant's row filter. */
@@ -92,6 +100,13 @@ export interface ReadRequest {
   limit?: number;
   /** Declared DPV purpose. Absent = `DEFAULT_PURPOSE` (#306). */
   purpose?: string;
+  /**
+   * The caller knowingly took the default window (#922 0a). The gateway answers
+   * either way and always reports truncation; the flag is the CLIENT boundary's
+   * vocabulary, accepted here so ONE query module can be handed to both the
+   * gateway and the replica without a second request shape.
+   */
+  acceptTruncation?: boolean;
 }
 
 /**
@@ -134,6 +149,10 @@ export interface InvokeRequest {
 export interface ReadResult {
   rows: Record<string, unknown>[];
   receiptId: string;
+  /** Set only when the window cut rows off (#922 0a); absent means it did not. */
+  truncated?: boolean;
+  /** The window `rows` was produced under, so a surface can name the number. */
+  appliedLimit?: number;
 }
 
 /**

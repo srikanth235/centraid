@@ -58,6 +58,15 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:4173",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    // LOCAL-ONLY BROWSER FALLBACK (#922, #931 item 3). A dev container often
+    // carries a Chromium whose build number is not the one this pinned
+    // Playwright downloads, and the launch then fails on a path that does not
+    // exist rather than on anything about the test. Unset — which is the case
+    // in CI, where the workflow installs the matching browser — this changes
+    // nothing at all.
+    ...(process.env.CENTRAID_E2E_CHROMIUM
+      ? { launchOptions: { executablePath: process.env.CENTRAID_E2E_CHROMIUM } }
+      : {}),
   },
   // chromium stays first and unconditional, so a bare `bun run e2e` keeps its
   // Chromium-only meaning; webkit + firefox append only under the flag.

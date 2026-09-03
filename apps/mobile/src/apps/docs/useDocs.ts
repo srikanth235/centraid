@@ -26,7 +26,7 @@ const APP_ID = "docs";
 function useDocsEntity(entity: string): ReplicaQueryState {
   return useReplicaQuery(
     APP_ID,
-    useMemo(() => ({ entity }), [entity])
+    useMemo(() => ({ acceptTruncation: true, entity }), [entity])
   );
 }
 

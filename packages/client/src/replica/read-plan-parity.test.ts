@@ -23,7 +23,7 @@ import {
   PARITY_ROWS,
   rowIds,
 } from "./read-plan-parity.test-fixtures.js";
-import { planReplicaRead } from "./read-plan.js";
+import { planReplicaRead, trimReplicaPage } from "./read-plan.js";
 import type { OptimisticMutation, ReplicaReadRequest } from "./types.js";
 
 describe("replica read pushdown parity", () => {
@@ -87,10 +87,16 @@ describe("replica read pushdown parity", () => {
     const escalationPlan = planReplicaRead(fixture.schema, escalating, NOW);
     const unguarded = escalationPlan.sql.replace("(verdict = 0) ASC, ", "");
     expect(unguarded).not.toBe(escalationPlan.sql);
-    const answered = fixture.driver.all<{ row_id: string; verdict: number }>(
-      unguarded,
-      escalationPlan.binds
-    );
+    // The plan over-fetches one probe row (#922 0a); a sabotage run is judged
+    // on the page a caller would see, so it is trimmed exactly as the store
+    // trims it.
+    const answered = trimReplicaPage(
+      fixture.driver.all<{ row_id: string; verdict: number }>(
+        unguarded,
+        escalationPlan.binds
+      ),
+      escalationPlan
+    ).rows;
     expect(answered).toHaveLength(1);
     // Verdict zero: no evidence on the page, so `assertReplicaPage` lets it by.
     expect(answered[0]!.verdict).toBe(0);
@@ -111,9 +117,10 @@ describe("replica read pushdown parity", () => {
     );
     expect(flipped).not.toBe(orderPlan.sql);
     expect(
-      fixture.driver
-        .all<{ row_id: string }>(flipped, orderPlan.binds)
-        .map((row) => row.row_id)
+      trimReplicaPage(
+        fixture.driver.all<{ row_id: string }>(flipped, orderPlan.binds),
+        orderPlan
+      ).rows.map((row) => row.row_id)
     ).not.toStrictEqual(rowIds(honest.oracle));
     fixture.store.close();
   });

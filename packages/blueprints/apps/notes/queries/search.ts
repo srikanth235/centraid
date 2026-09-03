@@ -161,6 +161,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const noteIds = hits.map((n) => n.note_id);
     const [placements, notebooks, attachments] = await Promise.all([
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.collection_entry",
         where: [
           { column: "target_type", op: "eq", value: "knowledge.note" },
@@ -169,8 +170,13 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         purpose,
       }),
       // Notebooks are collections (#274) — the one curation mechanism.
-      ctx.vault.read({ entity: "core.collection", purpose }),
       ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.collection",
+        purpose,
+      }),
+      ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.attachment",
         where: [
           { column: "target_type", op: "eq", value: "knowledge.note" },
@@ -189,6 +195,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       ]),
     ].filter((id): id is string => Boolean(id));
     const contents = await ctx.vault.read({
+      acceptTruncation: true,
       entity: "core.content_item",
       where: [{ column: "content_id", op: "in", value: contentIds }],
       purpose,

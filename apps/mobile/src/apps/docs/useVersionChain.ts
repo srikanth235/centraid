@@ -25,23 +25,26 @@ export interface UseVersionChainResult {
 export function useVersionChain(documentId: string): UseVersionChainResult {
   const documents = useReplicaQuery(
     APP_ID,
-    useMemo(() => ({ entity: "core.document" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.document" }), [])
   );
   const contents = useReplicaQuery(
     APP_ID,
-    useMemo(() => ({ entity: "core.content_item" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.content_item" }), [])
   );
   const links = useReplicaQuery(
     APP_ID,
-    useMemo(() => ({ entity: "core.link" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.link" }), [])
   );
   const concepts = useReplicaQuery(
     APP_ID,
-    useMemo(() => ({ entity: "core.concept" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "core.concept" }), [])
   );
   const schemes = useReplicaQuery(
     APP_ID,
-    useMemo(() => ({ entity: "core.concept_scheme" }), [])
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "core.concept_scheme" }),
+      []
+    )
   );
 
   const linksDenied =

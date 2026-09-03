@@ -20,6 +20,7 @@ import { TEST_IDS } from "../../kit/test-ids";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
+import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
 import {
   mapModeNote,
   MAP_MODE_CHIP,
@@ -47,10 +48,7 @@ export default function PlacesMap({
     anchorRef: modeAnchorRef,
     measureAnchor,
   } = useMenuAnchor();
-  const places = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "core.place" }), [])
-  );
+  const places = useReplicaQuery("photos", PHOTO_ENTITY_READS.places);
   const { assets } = usePhotoTimeline();
 
   // Id→row lookup stays inside the memo: hoisted out, it rebuilt every render

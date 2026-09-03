@@ -58,8 +58,13 @@ export default async function journalHandler({ ctx }: HandlerArgs) {
   try {
     const [journalNoteIds, concepts, activityLinks] = await Promise.all([
       readJournalNoteIds(ctx.vault, purpose),
-      ctx.vault.read({ entity: "core.concept", purpose }),
       ctx.vault.read({
+        acceptTruncation: true,
+        entity: "core.concept",
+        purpose,
+      }),
+      ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.link",
         where: [
           { column: "from_type", op: "eq", value: "core.activity" },
@@ -79,6 +84,7 @@ export default async function journalHandler({ ctx }: HandlerArgs) {
       await Promise.all([
         noteIds.length > 0
           ? ctx.vault.read({
+              acceptTruncation: true,
               entity: "knowledge.note",
               where: [
                 { column: "note_id", op: "in", value: noteIds },
@@ -90,6 +96,7 @@ export default async function journalHandler({ ctx }: HandlerArgs) {
           : Promise.resolve({ rows: [] }),
         activityIds.length > 0
           ? ctx.vault.read({
+              acceptTruncation: true,
               entity: "core.activity",
               where: [{ column: "activity_id", op: "in", value: activityIds }],
               orderBy: { column: "started_at", dir: "desc" },
@@ -98,6 +105,7 @@ export default async function journalHandler({ ctx }: HandlerArgs) {
           : Promise.resolve({ rows: [] }),
         activityIds.length > 0
           ? ctx.vault.read({
+              acceptTruncation: true,
               entity: "knowledge.annotation",
               where: [
                 { column: "target_type", op: "eq", value: "core.activity" },
@@ -108,6 +116,7 @@ export default async function journalHandler({ ctx }: HandlerArgs) {
           : Promise.resolve({ rows: [] }),
         partyIds.length > 0
           ? ctx.vault.read({
+              acceptTruncation: true,
               entity: "core.party",
               where: [{ column: "party_id", op: "in", value: partyIds }],
               purpose,
@@ -115,6 +124,7 @@ export default async function journalHandler({ ctx }: HandlerArgs) {
           : Promise.resolve({ rows: [] }),
         partyIds.length > 0
           ? ctx.vault.read({
+              acceptTruncation: true,
               entity: "people.profile",
               where: [{ column: "party_id", op: "in", value: partyIds }],
               purpose,
@@ -126,6 +136,7 @@ export default async function journalHandler({ ctx }: HandlerArgs) {
     const contents =
       contentIds.length > 0
         ? await ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.content_item",
             where: [{ column: "content_id", op: "in", value: contentIds }],
             purpose,

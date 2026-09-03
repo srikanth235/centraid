@@ -30,6 +30,7 @@ import { spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import { buildPeopleShelf } from "./people-model";
+import { PHOTO_ENTITY_READS } from "./photo-entity-reads";
 import PhotosScreen from "./PhotosScreen";
 
 /** Identity colour on a person card; unloaded album covers do not keep one. */
@@ -44,21 +45,18 @@ export default function PhotosPeopleView({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { session } = useReplica();
 
-  const faces = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "media.face_region" }), [])
-  );
-  const parties = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "core.party" }), [])
-  );
+  const faces = useReplicaQuery("photos", PHOTO_ENTITY_READS.faceRegions);
+  const parties = useReplicaQuery("photos", PHOTO_ENTITY_READS.parties);
   const clusters = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "media.face_cluster" }), [])
+    useMemo(
+      () => ({ acceptTruncation: true, entity: "media.face_cluster" }),
+      []
+    )
   );
   const policies = useReplicaQuery(
     "photos",
-    useMemo(() => ({ entity: "enrich.policy" }), [])
+    useMemo(() => ({ acceptTruncation: true, entity: "enrich.policy" }), [])
   );
 
   const [enrichBusy, setEnrichBusy] = useState(false);

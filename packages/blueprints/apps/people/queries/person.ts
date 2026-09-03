@@ -19,6 +19,7 @@ import {
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
 import { PENDING_OVERLAY_FIELDS } from "../../_shared/pending-overlay.ts";
+import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import { readPersonShareLinks } from "./_shared.ts";
 
 interface RawProfile {
@@ -127,6 +128,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
   try {
     const [profiles, parties] = await Promise.all([
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "people.profile",
         where: [
           { column: "party_id", op: "eq", value: partyId },
@@ -135,6 +137,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.party",
         where: [{ column: "party_id", op: "eq", value: partyId }],
         purpose,
@@ -168,6 +171,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         limit: 2000,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.link",
         where: [
           { column: "from_type", op: "eq", value: "core.party" },
@@ -177,6 +181,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.link",
         where: [
           { column: "to_type", op: "eq", value: "core.party" },
@@ -186,6 +191,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "people.important_date",
         where: [
           { column: "party_id", op: "eq", value: partyId },
@@ -194,6 +200,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "knowledge.annotation",
         where: [
           { column: "target_type", op: "eq", value: "core.party" },
@@ -203,6 +210,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "tally.obligation",
         where: [
           { column: "from_party", op: "eq", value: partyId },
@@ -211,6 +219,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "tally.obligation",
         where: [
           { column: "to_party", op: "eq", value: partyId },
@@ -219,6 +228,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         purpose,
       }),
       ctx.vault.read({
+        acceptTruncation: true,
         entity: "core.tag",
         where: [
           { column: "target_type", op: "eq", value: "core.party" },
@@ -226,9 +236,8 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         ],
         purpose,
       }),
-      ctx.vault.read({ entity: "core.concept", purpose }),
-      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
-      ctx.vault.read({ entity: "core.vault", purpose }),
+      ...conceptTaxonomyReads(ctx.vault, purpose),
+      ctx.vault.read({ acceptTruncation: true, entity: "core.vault", purpose }),
       // Null when the sharing plane is unreadable — never a thrown denial.
       readPersonShareLinks(ctx.vault, partyId),
     ]);
@@ -310,6 +319,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
     ] = await Promise.all([
       relationLinks.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.party",
             where: [
               {
@@ -323,6 +333,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         : Promise.resolve({ rows: [] }),
       duplicatePartyIds.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.party",
             where: [
               {
@@ -336,6 +347,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         : Promise.resolve({ rows: [] }),
       taskIds.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "schedule.task",
             where: [{ column: "task_id", op: "in", value: taskIds }],
             purpose,
@@ -343,6 +355,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         : Promise.resolve({ rows: [] }),
       activityIds.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "core.activity",
             where: [{ column: "activity_id", op: "in", value: activityIds }],
             orderBy: { column: "started_at", dir: "desc" },
@@ -351,6 +364,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         : Promise.resolve({ rows: [] }),
       activityIds.length > 0
         ? ctx.vault.read({
+            acceptTruncation: true,
             entity: "knowledge.annotation",
             where: [
               { column: "target_type", op: "eq", value: "core.activity" },

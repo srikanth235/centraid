@@ -115,6 +115,7 @@ export default async function itemHandler({
   let sidecarValue: string | null = null;
   try {
     const res = await ctx.vault.read({
+      acceptTruncation: true,
       entity: "locker.item",
       where: [{ column: "item_id", op: "eq", value: itemId }],
       purpose,

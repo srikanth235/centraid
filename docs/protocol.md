@@ -44,6 +44,7 @@ The offline replica extends the additive wire contract with fields that are safe
 - `rowVersion` is the current-epoch change sequence for a row. Clients apply upserts and deletes monotonically, ignoring stale replay data.
 - `baseVersions` on an intent is an optimistic concurrency precondition. A stale precondition produces a structured `conflict` outcome, not a generic transport failure, and does not dispatch the action.
 - `coverage` distinguishes a readable partial preview from a complete replica; `durability` distinguishes persistent storage from an in-memory fallback. These values are status/result metadata, not permission signals.
+- `truncated` and `appliedLimit` on a read result say that the read's own window cut the answer short, and name the window that produced the rows. They answer a different question from `coverage`, which is about how much of the library this device holds: a fully bootstrapped replica still truncates a 5,000-row roster at the 1,000-row default. Both are absent when nothing was cut off, and `acceptTruncation` on a read request is the caller declaring it will take the default window (#922). All three are optional additive fields — an older reader ignores them and behaves exactly as it did — so they do not bump the protocol version.
 
 The browser outbox migration is additive: it never drops the pending-intent store. Settling an intent atomically records its sanitized outcome and removes the queued input, so conflict details survive a reload without retaining the original payload.
 

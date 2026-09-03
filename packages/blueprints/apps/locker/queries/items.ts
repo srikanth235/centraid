@@ -196,6 +196,7 @@ export async function readAliases(
   if (ids.length === 0) return map;
   try {
     const result = await ctx.vault.read({
+      acceptTruncation: true,
       entity: "locker.item_alias",
       where: [{ column: "item_id", op: "in", value: ids }],
       purpose,
@@ -238,8 +239,12 @@ export async function readConceptTables(
   purpose: string
 ): Promise<ConceptTables> {
   const [concepts, schemes] = await Promise.all([
-    ctx.vault.read({ entity: "core.concept", purpose }),
-    ctx.vault.read({ entity: "core.concept_scheme", purpose }),
+    ctx.vault.read({ acceptTruncation: true, entity: "core.concept", purpose }),
+    ctx.vault.read({
+      acceptTruncation: true,
+      entity: "core.concept_scheme",
+      purpose,
+    }),
   ]);
   return {
     concepts: (concepts.rows ?? []) as unknown as ConceptRow[],
@@ -258,6 +263,7 @@ export async function readTags(
   if (ids.length === 0) return map;
   const vocab = tables ?? (await readConceptTables(ctx, purpose));
   const tags = await ctx.vault.read({
+    acceptTruncation: true,
     entity: "core.tag",
     where: [
       { column: "target_type", op: "eq", value: ITEM_TYPE },
@@ -300,6 +306,7 @@ export async function readStarred(
   );
   if (!starredConcept) return starred;
   const tags = await ctx.vault.read({
+    acceptTruncation: true,
     entity: "core.tag",
     where: [
       { column: "concept_id", op: "eq", value: starredConcept.concept_id },

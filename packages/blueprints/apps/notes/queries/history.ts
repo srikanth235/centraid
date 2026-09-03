@@ -5,6 +5,7 @@ import {
   RELATIONS_SCHEME_URI,
   findSchemeConcept,
 } from "../../_shared/concept-scheme-kit.ts";
+import { conceptTaxonomyReads } from "../../_shared/taxonomy-reads.ts";
 import { decodeNoteBody } from "../note-body.ts";
 
 const REVISES_NOTATION = "revises";
@@ -41,10 +42,9 @@ export default async function noteHistory({ input, ctx }: HandlerArgs) {
     const note = ((notes.rows ?? []) as unknown as NoteRow[])[0];
     if (!note) return { versions: [] };
 
-    const [schemes, concepts] = await Promise.all([
-      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
-      ctx.vault.read({ entity: "core.concept", purpose }),
-    ]);
+    const [concepts, schemes] = await Promise.all(
+      conceptTaxonomyReads(ctx.vault, purpose)
+    );
     const relationId = findSchemeConcept(
       schemes.rows as Array<{ scheme_id: string; uri: string }>,
       concepts.rows as Array<{
@@ -89,6 +89,7 @@ export default async function noteHistory({ input, ctx }: HandlerArgs) {
     }
 
     const contents = await ctx.vault.read({
+      acceptTruncation: true,
       entity: "core.content_item",
       where: [{ column: "content_id", op: "in", value: chain }],
       purpose,
